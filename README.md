@@ -96,8 +96,6 @@ Use [GitHub Discussions](../../discussions) for ideas, questions and setups that
 EternalVR is free and stays free. If you want to support it:
 [ko-fi.com/FanciestPeanut](https://ko-fi.com/FanciestPeanut).
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2S727LT47)
-
 ## Layout
 - `docs/SCOPE.md`: what we are building, requirements, in and out of scope
 - `docs/DECISIONS.md`: decision log
