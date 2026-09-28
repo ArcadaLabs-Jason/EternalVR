@@ -101,12 +101,13 @@ TestInput parseTestInput(std::string_view text) {
             }
             h.stick = Axis2{std::clamp(v[0], -1.0f, 1.0f), std::clamp(v[1], -1.0f, 1.0f)};
         } else if (key == "aim") {
-            if (v.size() != 2 || std::fabs(v[1]) > 90.0f) {
-                issue("expected yaw, pitch in degrees (pitch within 90)");
+            if ((v.size() != 2 && v.size() != 3) || std::fabs(v[1]) > 90.0f) {
+                issue("expected yaw, pitch[, roll] in degrees (pitch within 90)");
                 continue;
             }
             h.aimYawDegrees = v[0];
             h.aimPitchDegrees = v[1];
+            h.aimRollDegrees = v.size() == 3 ? v[2] : 0.0f;
         } else if (key == "position") {
             if (v.size() != 3 || std::fabs(v[0]) > 3.0f || std::fabs(v[1]) > 3.0f || std::fabs(v[2]) > 3.0f) {
                 issue("expected x, y, z in metres (within 3)");
@@ -127,7 +128,8 @@ std::optional<Pose> testHandPose(const TestInput& input, Hand hand, Vec3 headPos
     }
     const Quat yaw = Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, *h.aimYawDegrees * kRadiansPerDegree);
     const Quat pitch = Quat::fromAxisAngle({1.0f, 0.0f, 0.0f}, *h.aimPitchDegrees * kRadiansPerDegree);
-    return Pose{normalize(yaw * pitch), headPosition + h.position.value_or(restPosition(hand))};
+    const Quat roll = Quat::fromAxisAngle({0.0f, 0.0f, 1.0f}, h.aimRollDegrees * kRadiansPerDegree);
+    return Pose{normalize(yaw * pitch * roll), headPosition + h.position.value_or(restPosition(hand))};
 }
 
 void applyTestInput(const TestInput& input, InputFrame& frame) {
@@ -145,6 +147,8 @@ void applyTestInput(const TestInput& input, InputFrame& frame) {
         if (const auto pose = testHandPose(input, which, head)) {
             h.poseValid = true;
             h.aimPose = *pose;
+            h.gripValid = true;
+            h.gripPose = *pose;
             h.velocityValid = true;
             h.linearVelocity = {};
         }

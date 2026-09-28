@@ -22,6 +22,10 @@ namespace EternalVR.Launcher.Core
         public string Logs => Path.Combine(Root, "logs");
         public string Snapshots => Path.Combine(Root, "snapshots");
         public string SaveBackups => Path.Combine(Root, "save-backups");
+        /// <summary>The player's controller maps and a copy of the built-in ones (<see cref="Settings.ControlsFolder"/>).</summary>
+        public string Controls => Path.Combine(Root, "controls");
+        /// <summary>The player profiles (<see cref="Settings.ProfileStore"/>).</summary>
+        public string Profiles => Path.Combine(Root, "profiles");
         /// <summary>Present while a VR session's restore has not completed (T-036, T-093).</summary>
         public string SessionMarker => Path.Combine(Root, "SESSION_PENDING");
         /// <summary>Present while an HKCU layer registration may exist (flag-gated route only).</summary>

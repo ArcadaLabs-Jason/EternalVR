@@ -4,7 +4,11 @@
 // state): settings, the view record carried with each image, ring slots, swapchain and command state, and
 // the OpenXR function table.
 
+#include "common/pose.hpp"
+#include "common/vector.hpp"
+#include "common/xr_recovery.hpp"
 #include "features/input/cutscene_skip.hpp"
+#include "features/menu/enter_tick.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/log.hpp"
@@ -81,6 +85,18 @@ struct Settings {
     ui_layer::UiSettings ui; // ETERNALVR_UI_LAYER and the quad's placement
     // ETERNALVR_MIRROR: what the game's window shows during stereo pairs (presenter_mirror.hpp).
     stereo_seq::Mirror mirror = stereo_seq::Mirror::Left;
+    // ETERNALVR_TEST_XR_LOSS=seconds: once the session has run this long, the worker takes it as lost (as
+    // if the headset had gone away) and reconnects, for testing the recovery on a desktop runtime.
+    float testLossSeconds = 0.0f;
+};
+
+// The session ended, and why (XR worker only; presenter_reconnect.cpp brings VR back when it can).
+struct XrLossState {
+    bool lost = false; // the worker leaves its frame loop
+    xr_recovery::Loss kind = xr_recovery::Loss::Session;
+    std::uint32_t reconnects = 0; // sessions made again after a loss
+    LONGLONG runningSinceQpc = 0; // when the current session began running
+    bool testLossDone = false;    // ETERNALVR_TEST_XR_LOSS has been applied
 };
 
 // What one game frame was rendered with: written by the camera hook, carried with the presented image
@@ -147,11 +163,36 @@ double qpcSeconds(LONGLONG delta);
 // The folder this DLL was loaded from (openxr_loader.dll sits next to it).
 std::wstring moduleDirectory();
 
+// The menu pointer's beam and dot (presenter_menu.cpp), in LOCAL.
+struct MenuPointer {
+    bool visible = false; // draw the beam (and the dot when it hits)
+    Vec3 from;            // the hand
+    Vec3 to;              // the hit, or a point along the ray when it misses
+    Vec3 eye;             // the head, which the beam turns to face
+    bool hit = false;
+    Pose dot;
+    float dotSide = 0.0f;
+};
+
+// What the menu pointer keeps from frame to frame, unlike MenuPointer (presenter_menu.cpp).
+struct MenuPointerKept {
+    XrSwapchain beamSwapchain = XR_NULL_HANDLE;
+    bool beamFailed = false;
+    std::array<menu::EnterTick, 2> enterTicks{}; // each hand's vibration tick onto the panel
+};
+
 struct SwapchainState {
     std::vector<VkImage> images;
     std::vector<VkSemaphore> presentSemaphores; // one per image (T-081, T-091)
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkExtent2D extent{};
+};
+
+// A game swapchain image whose present was handed back instead of reaching the window (presenter_window.cpp).
+struct HeldImage {
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    std::uint32_t image = 0;
+    std::uint64_t value = 0; // the ring copy that last used it
 };
 
 struct FamilyCommands {

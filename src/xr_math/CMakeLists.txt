@@ -8,6 +8,7 @@ evr_add_module(evr_xr_math
         hand_aim.cpp
         head_aim.cpp
         head_view.cpp
+        offhand_pose.cpp
         weapon_pose.cpp
         projection.cpp
         stereo_view.cpp

@@ -79,6 +79,12 @@ Settings readSettings() {
             EVR_LOG("mirror: ETERNALVR_MIRROR is not left, right or off; left");
         }
     }
+    if (readEnv(L"ETERNALVR_TEST_XR_LOSS", value) && !value.empty()) {
+        const float seconds = std::wcstof(value.c_str(), nullptr);
+        if (std::isfinite(seconds) && seconds > 0.0f) {
+            s.testLossSeconds = seconds;
+        }
+    }
     if (readEnv(L"ETERNALVR_TEST_HEAD_SWAY", value) && !value.empty()) {
         float yaw = 0.0f, pitch = 0.0f, period = 0.0f, base = 0.0f;
         if (swscanf_s(value.c_str(), L"%f,%f,%f,%f", &yaw, &pitch, &period, &base) >= 3 &&

@@ -31,6 +31,16 @@ TEST_CASE("a hand faster than the threshold toward head-forward punches") {
     CHECK(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f})));
 }
 
+TEST_CASE("the hand that punched is reported, for its vibration") {
+    PunchDetector detector;
+    detector.update(restingFrame());
+    CHECK(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f})));
+    CHECK(detector.punched()[1]);
+    CHECK_FALSE(detector.punched()[0]);
+    detector.update(restingFrame());
+    CHECK_FALSE(detector.punched()[1]);
+}
+
 TEST_CASE("the default threshold is 2.8 m/s") {
     PunchDetector detector;
     detector.update(restingFrame());

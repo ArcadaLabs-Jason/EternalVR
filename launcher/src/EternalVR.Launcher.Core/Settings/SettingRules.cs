@@ -7,16 +7,16 @@ namespace EternalVR.Launcher.Core.Settings
     public enum Setting
     {
         // Play: comfort
-        Turning, TurnSpeed, SnapAngle, WalkInRoom, RecenterHold, SkipCutscenes,
+        Turning, TurnSpeed, SnapAngle, Vignette, WalkInRoom, RecenterHold, SkipCutscenes,
         // Play: body
         PlayPosition, EyeHeight,
         // Play: controls
-        AimWith, WeaponHand, MoveToward, XButton, AimSteadiness, AimDot,
+        AimWith, WeaponHand, MoveToward, XButton, AimSteadiness, AimDot, Vibration, ButtonLayout,
         // Play: picture
         Resolution, AntiAliasing,
         // Advanced
         VrMode, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape,
-        HudDistance, HudSize, HudHeight,
+        HudDistance, HudSize, HudHeight, HudPlace,
         MotionControllers, ShotsFrom, AimDotSize, MenuLaser, GameFolder, Runtime, ExtraArguments,
     }
 
@@ -44,10 +44,13 @@ namespace EternalVR.Launcher.Core.Settings
             switch (setting)
             {
                 case Setting.Turning:
+                case Setting.Vignette:
                 case Setting.RecenterHold:
                 case Setting.WeaponHand:
                 case Setting.MoveToward:
                 case Setting.XButton:
+                case Setting.Vibration:
+                case Setting.ButtonLayout:
                     return s.Controllers ? null : NeedsControllers;
                 case Setting.TurnSpeed:
                     return !s.Controllers ? NeedsControllers : s.Turn == TurnMode.Smooth ? null : NeedsSmoothTurn;
@@ -65,6 +68,7 @@ namespace EternalVR.Launcher.Core.Settings
                     if (!stereo) return NeedsStereo;
                     return setting == Setting.AimDotSize && !s.AimDot ? "Only with the aim dot on (Play tab)." : null;
                 case Setting.MenuLaser:
+                case Setting.HudPlace:
                     return !s.Controllers ? NeedsControllers : stereo ? null : NeedsStereo;
                 case Setting.Resolution:
                 case Setting.AntiAliasing:
@@ -110,6 +114,21 @@ namespace EternalVR.Launcher.Core.Settings
         {
             for (int i = 0; i < Values.Length; i++)
                 if (Math.Abs(Values[i] - smoothing) < 0.005) return i;
+            return -1;
+        }
+    }
+
+    /// <summary>"Vibration": named steps of the controllers' vibration strength (0 off to 1 the strongest).</summary>
+    public static class Vibration
+    {
+        public static readonly string[] Names = { "Off", "Light", "Medium", "Strong" };
+        public static readonly double[] Values = { 0.0, 0.35, 0.6, 1.0 };
+
+        /// <summary>The step of <paramref name="strength"/>, or -1 for a value that is none of them (set in the file by hand).</summary>
+        public static int IndexOf(double strength)
+        {
+            for (int i = 0; i < Values.Length; i++)
+                if (Math.Abs(Values[i] - strength) < 0.005) return i;
             return -1;
         }
     }

@@ -168,6 +168,10 @@ void onViewmodel(const HookRegisters& regs) {
     safeCopy(originAt, newOrigin, sizeof(newOrigin));
     safeCopy(axisAt, newAxis, sizeof(newAxis));
     s.viewmodelWrites.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::lock_guard lock(s.viewMutex);
+        s.model = {true, nowQpc(), placed}; // the off hand's joint is placed relative to this
+    }
     if (g_loggedPlacements.fetch_add(1) < 5) {
         EVR_LOG("%s: viewmodel: game origin (%.2f %.2f %.2f) -> hand (%.2f %.2f %.2f); eye (%.2f %.2f %.2f)",
                 kTag, gameOrigin[0], gameOrigin[1], gameOrigin[2], newOrigin[0], newOrigin[1], newOrigin[2],
@@ -238,6 +242,25 @@ void endGameView(std::byte* renderView,
                      ? xr_math::controllerRelativeToEye(body, headOffset, p.head, p.grip[hand], unitsPerMetre)
                      : world.aim;
     world.grip.axis = world.aim.axis;
+    // The off hand (the left arm, offhand_hook.cpp): its grip with its own orientation.
+    const std::size_t off = 1 - hand;
+    world.offValid = p.gripValid[off] || p.aimValid[off];
+    if (world.offValid) {
+        world.offGrip = xr_math::controllerRelativeToEye(
+            body, headOffset, p.head, p.gripValid[off] ? p.grip[off] : p.aim[off], unitsPerMetre);
+        // The head's yaw frame in the world: the shoulder and the elbow's bend follow the head's heading.
+        const xr_math::IdViewAxis headAxis =
+            xr_math::composeHeadAxis(body, xr_math::openXrToIdTech(normalize(p.head.orientation)));
+        const xr_math::IdViewAxis yaw = xr_math::yawOnly(headAxis).value_or(body);
+        const auto inYaw = [&yaw](const game::WeaponOffset& o) {
+            return yaw.forward * o.forward + yaw.left * o.left + yaw.up * o.up;
+        };
+        // Given for the left hand; mirrored with the weapon in the left hand.
+        world.offShoulder =
+            headOffset +
+            inYaw(input::offhandOffsetFor(cfg.offhandShoulderOffset, cfg.handedness)) * unitsPerMetre;
+        world.offElbow = inYaw(input::offhandOffsetFor(cfg.offhandElbow, cfg.handedness));
+    }
     world.unitsPerMetre = unitsPerMetre;
     world.qpc = nowQpc();
     world.valid = true;

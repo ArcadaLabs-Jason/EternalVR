@@ -42,6 +42,10 @@ void install() {
         s.xinputHook = installXInputHook();
         s.xinputActive.store(s.xinputHook, std::memory_order_release);
     }
+    // The game's rumble for the vibration; the signature is its own check.
+    if (cfg.haptics > 0.0f) {
+        s.rumbleHook = installRumbleHook();
+    }
     if (knownBuild) {
         bool fire = false;
         s.setViewAnglesHook = installAimHooks(fire);
@@ -49,12 +53,17 @@ void install() {
         if (cfg.viewmodel) {
             s.viewmodelHook = installViewmodelHook();
         }
+        // The off hand on the game's left arm needs the arms at the weapon hand (docs/VR_HANDS_HUD.md).
+        if (s.viewmodelHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)) {
+            s.offhandHook = installOffhandHook();
+        }
     }
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
-        "%s",
+        "%s, off hand %s (%s), rumble %s",
         kTag, onOff(s.userCmdHook), onOff(s.angleHook), onOff(s.xinputActive.load()),
-        onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook));
+        onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook), onOff(s.offhandHook),
+        input::offhandModeName(cfg.offhand), onOff(s.rumbleHook));
     if (!s.userCmdHook && !s.xinputActive.load()) {
         EVR_LOG("%s: no input path to the game: controller buttons and movement do nothing", kTag);
     }
@@ -69,6 +78,15 @@ XrSpace weaponAimSpace() {
     }
     std::shared_lock lock(s.xrMutex);
     return s.xr.aimSpaces[weaponHand() == input::Hand::Left ? 0 : 1];
+}
+
+XrSpace offHandGripSpace() {
+    State& s = state();
+    if (!settings().enabled || !s.attached.load()) {
+        return XR_NULL_HANDLE;
+    }
+    std::shared_lock lock(s.xrMutex);
+    return s.xr.gripSpaces[weaponHand() == input::Hand::Left ? 1 : 0];
 }
 
 void installGameHooks() {

@@ -22,6 +22,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\data\*.txt" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The built-in controller maps (data/input/controllers at the repository root), the defaults of the controls folder. -->
+    <None Include="..\..\..\data\input\controllers\*.toml" Link="data\controllers\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\..\branding\eternalvr.ico" LogicalName="EternalVR.Launcher.eternalvr.ico" Link="Resources\eternalvr.ico" />

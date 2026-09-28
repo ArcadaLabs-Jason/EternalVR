@@ -113,14 +113,20 @@ void report() {
     auto w = [](int eye, int kind) {
         return static_cast<unsigned long long>(g_counters.world[eye][kind].exchange(0));
     };
-    auto s = [](int eye) { return static_cast<unsigned long long>(g_counters.screen[eye].exchange(0)); };
-    auto c = [](int eye) { return static_cast<unsigned long long>(g_counters.commits[eye].exchange(0)); };
-    EVR_LOG("%s: world GUI draws (persistent / per-frame current / one behind / older): eye L %llu / %llu / %llu / "
-            "%llu, eye R %llu / %llu / %llu / %llu, mono %llu / %llu / %llu / %llu; %llu eye R draw(s) given eye L's "
+    auto s = [](int eye) {
+        return static_cast<unsigned long long>(g_counters.screen[eye].exchange(0));
+    };
+    auto c = [](int eye) {
+        return static_cast<unsigned long long>(g_counters.commits[eye].exchange(0));
+    };
+    EVR_LOG("%s: world GUI draws (persistent / per-frame current / one behind / older): eye L %llu / %llu / "
+            "%llu / "
+            "%llu, eye R %llu / %llu / %llu / %llu, mono %llu / %llu / %llu / %llu; %llu eye R draw(s) given "
+            "eye L's "
             "commit; screen GUI draws L %llu R %llu mono %llu; GUI model commits L %llu R %llu mono %llu",
-            kTag, w(1, 0), w(1, 1), w(1, 2), w(1, 3), w(2, 0), w(2, 1), w(2, 2), w(2, 3), w(0, 0), w(0, 1), w(0, 2),
-            w(0, 3), static_cast<unsigned long long>(g_counters.moved.exchange(0)), s(1), s(2), s(0), c(1), c(2),
-            c(0));
+            kTag, w(1, 0), w(1, 1), w(1, 2), w(1, 3), w(2, 0), w(2, 1), w(2, 2), w(2, 3), w(0, 0), w(0, 1),
+            w(0, 2), w(0, 3), static_cast<unsigned long long>(g_counters.moved.exchange(0)), s(1), s(2), s(0),
+            c(1), c(2), c(0));
 }
 
 // On `bt rbx, 0x1F`: counts every GUI surface the check sees, by caller and eye.
@@ -131,7 +137,8 @@ void onProbe(const HookRegisters& r) {
     } else if (((r.rbx >> 31) & 1u) == 0 || r.r8 == 0 || r.rdx == 0) {
         ++g_counters.world[row][0];
     } else {
-        const auto stamp = stereo_seq::classifyWorldGuiStamp(readU32(r.rdx + kStamp), readU32(r.r8 + kFrameNumber));
+        const auto stamp =
+            stereo_seq::classifyWorldGuiStamp(readU32(r.rdx + kStamp), readU32(r.r8 + kFrameNumber));
         ++g_counters.world[row][1 + static_cast<int>(stamp)];
     }
     report();
@@ -144,7 +151,8 @@ void onStampCheck(HookRegisters& r) {
         return;
     }
     const auto current = static_cast<std::uint32_t>(r.rax);
-    const std::uint32_t frame = stereo_seq::worldGuiFrameFor(g_mode, backendEye(), readU32(r.rdx + kStamp), current);
+    const std::uint32_t frame =
+        stereo_seq::worldGuiFrameFor(g_mode, backendEye(), readU32(r.rdx + kStamp), current);
     if (frame != current) {
         r.rax = (r.rax & ~std::uintptr_t{0xFFFFFFFF}) | frame;
         ++g_counters.moved;

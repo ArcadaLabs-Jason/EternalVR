@@ -68,7 +68,7 @@ bool gestureActive(StickGesture gesture, const TurnStickOutput& output) {
 InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
     : profile_(std::move(profile)), settings_(sanitized(settings)), turnStick_(settings_.turnStick),
       turn_(settings_.turn), handsJump_(settings_.handsJump), punch_(settings_.punch),
-      captureChord_(settings_.trigger), stickChord_(settings_.buttonHoldSeconds) {
+      captureChord_(settings_.trigger, settings_.captureButtons), stickChord_(settings_.buttonHoldSeconds) {
     for (HandButtons& hand : hands_) {
         hand.trigger = AnalogButton(settings_.trigger);
         hand.grip = AnalogButton(settings_.grip);
@@ -92,12 +92,16 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         game::add(input.down, game::GameAction::Recenter);
     }
 
-    // Left Menu held + a trigger pulled: the capture. That Menu press neither pauses nor recenters, and the
-    // triggers are held back meanwhile (capture_chord.hpp).
+    // Left Menu (or under SteamVR Y) held + a trigger pulled: the capture. That press neither taps nor holds,
+    // and the trigger is held back meanwhile (capture_chord.hpp).
     const CaptureChordOutput chord = captureChord_.update(frame);
     input.capture = chord.capture;
+    HandButtons& left = hands_[handIndex(Hand::Left)];
     if (chord.cancelMenu) {
-        hands_[handIndex(Hand::Left)].tapHold[buttonIndex(ButtonInput::Menu)].cancel();
+        left.tapHold[buttonIndex(ButtonInput::Menu)].cancel();
+    }
+    if (chord.cancelSecondary) {
+        left.tapHold[buttonIndex(ButtonInput::Secondary)].cancel();
     }
 
     for (const Hand hand : {Hand::Left, Hand::Right}) {
@@ -132,6 +136,7 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     }
     if (punch_.update(frame)) {
         game::add(input.down, game::GameAction::Melee);
+        input.punch = punch_.punched();
     }
 
     input.pressed = input.down & ~previousDown_;

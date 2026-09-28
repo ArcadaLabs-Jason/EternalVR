@@ -2,7 +2,9 @@
 # into the game's own mouse and key input while a menu is up. No OpenXR or Windows here.
 evr_add_module(evr_menu
     SOURCES
+        enter_tick.cpp
         map_drag.cpp
+        panel_follow.cpp
         menu_router.cpp
         panel_pointer.cpp
         wheel_cursor.cpp

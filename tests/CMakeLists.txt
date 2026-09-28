@@ -21,6 +21,7 @@ evr_add_test(evr_common_tests
         common/quat_tests.cpp
         common/result_tests.cpp
         common/retire_queue_tests.cpp
+        common/xr_recovery_tests.cpp
     DEPENDS evr_common)
 
 evr_add_test(evr_xr_math_tests
@@ -33,6 +34,7 @@ evr_add_test(evr_xr_math_tests
         xr_math/head_aim_tests.cpp
         xr_math/forced_view_tests.cpp
         xr_math/head_view_tests.cpp
+        xr_math/offhand_pose_tests.cpp
         xr_math/weapon_pose_tests.cpp
         xr_math/projection_tests.cpp
         xr_math/stereo_view_tests.cpp
@@ -86,6 +88,11 @@ evr_add_test(evr_roomscale_tests
         features/roomscale/roomscale_settings_tests.cpp
     DEPENDS evr_roomscale)
 
+evr_add_test(evr_comfort_tests
+    SOURCES
+        features/comfort/vignette_tests.cpp
+    DEPENDS evr_comfort)
+
 evr_add_test(evr_foveation_tests
     SOURCES
         features/foveation/foveation_preset_tests.cpp
@@ -108,9 +115,13 @@ evr_add_test(evr_input_tests
         features/input/dossier_press_tests.cpp
         features/input/forced_angles_tests.cpp
         features/input/hands_jump_tests.cpp
+        features/input/haptics_policy_tests.cpp
         features/input/input_mapper_stick_tests.cpp
+        features/input/input_mapper_chord_tests.cpp
         features/input/input_mapper_tests.cpp
         features/input/locomotion_direction_tests.cpp
+        features/input/offhand_policy_tests.cpp
+        features/input/player_controller_data_tests.cpp
         features/input/punch_detector_tests.cpp
         features/input/stick_chord_tests.cpp
         features/input/stick_response_tests.cpp
@@ -124,6 +135,16 @@ evr_add_test(evr_input_tests
         features/input/wheel_mouse_tests.cpp
         features/input/xr_action_set_tests.cpp
     DEPENDS evr_input)
+
+evr_add_test(evr_arm_tests
+    SOURCES
+        features/arm/arm_frames_tests.cpp
+        features/arm/arm_skeleton_tests.cpp
+        features/arm/arm_solve_tests.cpp
+        features/arm/hand_offset_tests.cpp
+        features/arm/mod_room_tests.cpp
+        features/arm/two_bone_ik_tests.cpp
+    DEPENDS evr_arm)
 
 evr_add_test(evr_layer_gate_tests
     SOURCES
@@ -173,6 +194,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/eye_pairing_tests.cpp
         stereo_seq/eye_tags_tests.cpp
         stereo_seq/eye_view_plan_tests.cpp
+        stereo_seq/keep_prev_tests.cpp
         stereo_seq/moved_flag_tests.cpp
         stereo_seq/object_prev_tests.cpp
         stereo_seq/world_gui_tests.cpp
@@ -187,10 +209,12 @@ evr_add_test(evr_stereo_seq_tests
 
 evr_add_test(evr_menu_tests
     SOURCES
+        features/menu/enter_tick_tests.cpp
         features/menu/map_drag_tests.cpp
         features/menu/menu_router_map_tests.cpp
         features/menu/menu_router_popup_tests.cpp
         features/menu/menu_router_tests.cpp
+        features/menu/panel_follow_tests.cpp
         features/menu/panel_pointer_tests.cpp
         features/menu/panel_reanchor_tests.cpp
         features/menu/wheel_cursor_tests.cpp
@@ -207,8 +231,11 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/additive_wash_tests.cpp
         ui_layer/backdrop_tests.cpp
         ui_layer/gui_target_tests.cpp
+        ui_layer/hud_regions_tests.cpp
         ui_layer/layout_tracker_tests.cpp
+        ui_layer/motion_target_tests.cpp
         ui_layer/ui_settings_tests.cpp
+        ui_layer/wrist_hud_tests.cpp
     DEPENDS evr_ui_layer)
 
 evr_add_test(evr_gpu_timing_tests

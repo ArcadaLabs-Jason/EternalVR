@@ -3,7 +3,8 @@
 // State shared by the controller sources (controllers.hpp): input_xr.cpp (OpenXR actions and the
 // snapshot), game_view_poses.cpp (the poses at the camera hook's time, aim smoothing), usercmd_hook.cpp
 // (the mapper and the user command), aim_hooks.cpp (forced angles, hand aim, shots), viewmodel_hook.cpp
-// (the weapon at the hand, weapon FOV) and xinput_hook.cpp (virtual gamepad).
+// (the weapon at the hand, weapon FOV), xinput_hook.cpp (virtual gamepad) and haptics_xr.cpp with
+// rumble_hook.cpp (vibration).
 //
 // Threads: the XR worker (attach, sync, detach), the camera hook (beginGameView, aimAngles, endGameView),
 // the game's user-command build (the user-command and angle hooks), the game's weapon code (fire and
@@ -16,6 +17,7 @@
 #include "features/input/cutscene_skip.hpp"
 #include "features/input/forced_angles.hpp"
 #include "features/input/game_input.hpp"
+#include "features/input/haptics_policy.hpp"
 #include "features/input/input_mapper.hpp"
 #include "features/input/test_input.hpp"
 #include "features/input/usercmd_injection.hpp"
@@ -40,6 +42,7 @@
 #include <optional>
 #include <shared_mutex>
 #include <string>
+#include <vector>
 
 namespace evr::vkcore::controllers {
 
@@ -70,6 +73,8 @@ struct XrInput {
     PFN_xrLocateSpace xrLocateSpace = nullptr;
     PFN_xrDestroySpace xrDestroySpace = nullptr;
     PFN_xrResultToString xrResultToString = nullptr;
+    PFN_xrApplyHapticFeedback xrApplyHapticFeedback = nullptr;
+    PFN_xrStopHapticFeedback xrStopHapticFeedback = nullptr;
 
     XrInstance instance = XR_NULL_HANDLE;
     XrSession session = XR_NULL_HANDLE;
@@ -90,6 +95,17 @@ struct Snapshot {
     game::Controller controller = game::Controller::OculusTouch;
 };
 
+// What happened for the vibration since the XR worker's last sync (haptics_xr.cpp).
+struct HapticEvents {
+    bool fireHeld = false; // the fire action as the mapper last sent it (a level)
+    LONGLONG fireQpc = 0;  // when; 0 for never
+    std::array<bool, 2> punch{};
+    bool capture = false;
+    std::array<input::MenuTick, 2> menu{};
+    input::GameRumble rumble; // the game's motors as its rumble hook last saw them (a level)
+    LONGLONG rumbleQpc = 0;   // when; 0 for never
+};
+
 // The controllers at the time the camera hook predicted the head for (tracking space).
 struct GameViewPoses {
     bool valid = false;
@@ -106,7 +122,20 @@ struct WorldHand {
     LONGLONG qpc = 0;
     xr_math::EyeRelativePose aim;  // the aim ray: origin offset and axis (forward = the ray)
     xr_math::EyeRelativePose grip; // the grip position with the aim axis (the barrel follows the ray)
+    bool offValid = false;
+    xr_math::EyeRelativePose offGrip; // the off hand's grip (position and orientation)
+    // The off-hand arm's IK (offhand_hook.cpp): the shoulder fixed to the head (relative to the eye) and
+    // the elbow's bend direction (world), both in the head's yaw frame.
+    Vec3 offShoulder;
+    Vec3 offElbow;
     float unitsPerMetre = 1.0f;
+};
+
+// Where the viewmodel hook last placed the arms model (relative to the eye), for the off hand.
+struct ModelPlacement {
+    bool valid = false;
+    LONGLONG qpc = 0;
+    xr_math::EyeRelativePose pose;
 };
 
 struct State {
@@ -143,6 +172,7 @@ struct State {
     std::mutex viewMutex;
     GameViewPoses poses;
     WorldHand world;
+    ModelPlacement model;
     // The game view's yaw in tracking space (radians, locomotion_direction.hpp convention), for the mapper.
     std::atomic<float> viewYawTracking{0.0f};
 
@@ -169,6 +199,11 @@ struct State {
     // (heldActions).
     std::atomic<std::uint64_t> heldActionBits{0};
     std::atomic<LONGLONG> heldActionsQpc{0};
+    // The turn rate and move magnitude at the last mapper run, after a menu held them back, and when
+    // (artificialMotion).
+    std::atomic<float> motionTurnRate{0.0f};
+    std::atomic<float> motionMove{0.0f};
+    std::atomic<LONGLONG> motionQpc{0};
     // Skipping a cutscene by hand: the camera hook's flag, and the skip key's state (mapperMutex).
     std::atomic<bool> skippableCutscene{false};
     input::CutsceneSkip cutsceneSkip;
@@ -191,9 +226,22 @@ struct State {
     bool setViewAnglesHook = false;
     bool fireHook = false;
     bool viewmodelHook = false;
+    bool offhandHook = false;
     bool xinputHook = false;
+    bool rumbleHook = false;
     std::atomic<bool> xinputActive{false}; // the virtual gamepad feeds the game
     PlayerAim player;                      // the idPlayer vtable check
+
+    // Vibration: the events wait under hapticsMutex for the XR worker, which alone runs the policy (created
+    // on its first sync) and keeps the summary's state.
+    std::mutex hapticsMutex;
+    HapticEvents hapticEvents;
+    std::optional<input::HapticsPolicy> haptics;
+    std::array<std::atomic<std::uint64_t>, input::kHapticSourceCount> hapticPulses{};
+    std::atomic<std::uint64_t> hapticRefused{0};
+    ULONGLONG hapticLogTicks = 0;
+    std::uint64_t hapticLoggedTotal = 0;
+    std::uint64_t hapticLoggedRefused = 0;
 
     // Statistics.
     std::atomic<std::uint64_t> syncs{0};
@@ -204,6 +252,7 @@ struct State {
     std::atomic<std::uint64_t> shotsRewritten{0};
     std::atomic<std::uint64_t> shotsOverHalfDegree{0};
     std::atomic<std::uint64_t> viewmodelWrites{0};
+    std::atomic<std::uint64_t> offhandWrites{0};
     std::atomic<std::uint64_t> padReads{0};
 };
 
@@ -224,7 +273,8 @@ const char* xrText(XrResult result, char (&buffer)[XR_MAX_RESULT_STRING_SIZE]);
     } while (0)
 
 // Controller families (input_profiles.cpp). Every family's data: the built-in files, with a player's file
-// (ETERNALVR_CONTROLLER_DATA) in place of the family whose profile it names.
+// (ETERNALVR_CONTROLLER_DATA, a file or every *.toml in a folder) in place of the family whose profile it
+// names.
 FamilyData loadControllerData(const input::ControllerSettings& settings);
 // Suggests the bindings of every family whose profile the instance has, and logs which were suggested and
 // which skipped. True when at least one profile was accepted.
@@ -278,6 +328,9 @@ MappedInput runMapper();
 
 // The whole of a small text file named by a setting (UTF-8 path), or nullopt.
 std::optional<std::string> readTextFile(const std::string& utf8Path);
+// The names of the files directly inside a folder (UTF-8 path; no subfolders), or nullopt when the path is
+// not a folder.
+std::optional<std::vector<std::string>> folderFileNames(const std::string& utf8Path);
 
 // Camera hook and XR worker: re-reads the ETERNALVR_TEST_INPUT file when it has changed (cheap; call every
 // frame).
@@ -288,10 +341,19 @@ std::optional<input::TestInput> testInput();
 // Camera hook: feeds this frame's forced-view signals to the gate and sets `yielding`.
 void updateForcedView(const std::byte* player, bool cutscene);
 
+// Vibration (haptics_xr.cpp). The mapper, after a menu held its actions back: the actions sent and the
+// command's punch and capture.
+void noteMapperHaptics(const game::GameActionSet& sent, const input::GameInput& input);
+// XR worker, inside sync under the shared xrMutex: runs the policy on the events and sends its pulses (none
+// while the session is not focused).
+void updateHaptics(const XrInput& xr, bool focused);
+
 // Installers (each logs what it did); `image` checks were made by the caller.
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
 bool installAimHooks(bool& fireInstalled);
 bool installViewmodelHook();
+bool installOffhandHook();
 bool installXInputHook();
+bool installRumbleHook();
 
 } // namespace evr::vkcore::controllers

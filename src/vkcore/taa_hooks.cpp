@@ -3,6 +3,7 @@
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
+#include "vkcore/motion_capture.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/scatter_hooks.hpp"
@@ -17,7 +18,6 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
-#include <cwchar>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -71,6 +71,7 @@ std::byte* g_antialiasing = nullptr;
 std::byte* g_safeMode = nullptr;
 std::byte* g_jitter = nullptr;
 std::byte* g_antiGhosting = nullptr;
+std::byte* g_dlssQuality = nullptr;
 
 std::atomic<bool> g_perEye{false};
 // The history target the history selector answered last on this thread: the render-view job asks for it
@@ -102,24 +103,6 @@ int latchedSide(const std::byte* renderView) {
     float offset = 0.0f;
     std::memcpy(&offset, renderView + render_view_object::kProjection + 2 * sizeof(float), sizeof(offset));
     return offset < -0.01f ? 0 : (offset > 0.01f ? 2 : 1);
-}
-
-std::string narrow(const std::wstring& text) {
-    std::string out;
-    for (const wchar_t c : text) {
-        out.push_back(c < 0x80 ? static_cast<char>(c) : '?');
-    }
-    return out;
-}
-
-// ETERNALVR_STEREO_DLSS=1: DLSS per eye instead of TAA.
-bool dlssRequested() {
-    static const bool requested = [] {
-        std::wstring value;
-        readEnv(L"ETERNALVR_STEREO_DLSS", value);
-        return stereo_seq::switchValue(narrow(value), false);
-    }();
-    return requested;
 }
 
 std::byte* cvarByName(std::string_view name) {
@@ -325,6 +308,7 @@ void onExposureIndex(const HookRegisters& regs) {
     }
     auto* context = reinterpret_cast<std::byte*>(regs.rsi);
     std::memcpy(context + kPostProcessExposureIndex, &index, sizeof(index));
+    noteMotionTarget(*tag, context); // ETERNALVR_CAPTURE_MOTION
 }
 
 // ---- Cvars ----
@@ -382,19 +366,6 @@ stereo_seq::TaaReadiness readiness() {
 
 } // namespace
 
-bool taaRequested() {
-    static const bool requested = [] {
-        std::wstring mode;
-        std::wstring experiment;
-        std::wstring taa;
-        readEnv(L"ETERNALVR_STEREO_TAA", taa);
-        return readEnv(L"ETERNALVR_MODE", mode) && _wcsicmp(mode.c_str(), L"stereo") == 0 &&
-               !(readEnv(L"ETERNALVR_STEREO_EXPERIMENT", experiment) && !experiment.empty()) &&
-               stereo_seq::switchValue(narrow(taa), true);
-    }();
-    return requested;
-}
-
 void installTaaEarly() {
     std::call_once(g_earlyOnce, [] {
         if (!taaRequested()) {
@@ -444,8 +415,8 @@ bool installTaaHooks() {
                 g_cvarNames.push_back(c.name);
             }
         }
-        for (const std::string_view name :
-             {"r_TAANumSubSamples", "r_jitter", "r_antialiasing", "r_TAASafeMode", "r_TAAAntiGhosting"}) {
+        for (const std::string_view name : {"r_TAANumSubSamples", "r_jitter", "r_antialiasing",
+                                            "r_TAASafeMode", "r_TAAAntiGhosting", "r_dlssQuality"}) {
             g_cvarNames.push_back(name);
         }
         g_cvars = findCvarObjects(image, g_cvarNames);
@@ -454,6 +425,7 @@ bool installTaaHooks() {
         g_antialiasing = cvarByName("r_antialiasing");
         g_safeMode = cvarByName("r_TAASafeMode");
         g_antiGhosting = cvarByName("r_TAAAntiGhosting");
+        g_dlssQuality = cvarByName("r_dlssQuality");
         std::string error;
         if (!installInlineHook(const_cast<std::byte*>(engine.outputSelector),
                                reinterpret_cast<void*>(&outputSelector),
@@ -533,12 +505,17 @@ void taaOnStereoTick() {
     // DLSS without a per-eye feature for eye R would mix the eyes: temporal AA instead (per eye).
     const bool dlssPerEye = g_ngxHooked && !ngxTwinFailed();
     const int current = cvarInt(g_antialiasing);
-    const int held = stereo_seq::heldAntialiasing(current, dlssRequested(), dlssPerEye);
+    const int held = stereo_seq::heldAntialiasing(current, taaDlssRequested(), dlssPerEye);
     if (held != current) {
         if (held == 1 && current == 2 && !g_dlssFallbackDone.exchange(true)) {
             EVR_LOG("%s: DLSS has no per-eye feature for eye R; temporal AA instead", kTag);
         }
         setCvar("r_antialiasing", held == 2 ? "2" : "1");
+    }
+    // The launcher's DLSS quality (ETERNALVR_STEREO_DLSS_QUALITY) over the game's saved one.
+    const int quality = taaDlssQuality();
+    if (held == 2 && quality >= 0 && g_dlssQuality && cvarInt(g_dlssQuality) != quality) {
+        setCvar("r_dlssQuality", std::to_string(quality).c_str());
     }
 }
 

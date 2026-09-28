@@ -79,21 +79,30 @@ void XrPresenter::Impl::startMenu() {
             settings.ui.menuDistanceMetres, settings.ui.menuBeam ? "" : "; no beam");
 }
 
-bool XrPresenter::Impl::placeMenuPanel(XrTime time) {
+std::optional<Pose> XrPresenter::Impl::locateHead(XrTime time) const {
     XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
     constexpr XrSpaceLocationFlags needed =
         XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT;
     if (XR_FAILED(xr.xrLocateSpace(viewSpace, localSpace, time, &location)) ||
         (location.locationFlags & needed) != needed) {
-        return false;
+        return std::nullopt;
     }
     Pose head;
     head.orientation = {location.pose.orientation.x, location.pose.orientation.y, location.pose.orientation.z,
                         location.pose.orientation.w};
     head.position = {location.pose.position.x, location.pose.position.y, location.pose.position.z};
-    menuPanel.pose = xr_math::cinemaQuadPose(head, settings.ui.menuDistanceMetres);
+    return head;
+}
+
+bool XrPresenter::Impl::placeMenuPanel(XrTime time) {
+    const std::optional<Pose> head = locateHead(time);
+    if (!head) {
+        return false;
+    }
+    menuPanel.pose = xr_math::cinemaQuadPose(*head, settings.ui.menuDistanceMetres);
     menuPanel.pose.position.y += settings.ui.offsetYMetres;
     menuPanelPlaced = true;
+    menuFollow.reset();
     return true;
 }
 
@@ -192,12 +201,21 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     // A re-anchor while the panel is up (the runtime moved LOCAL, or the room transform jumped: a recenter or
     // the height after standing up or sitting down): the panel goes in front of the head again. The panel
     // and the rays are both in LOCAL, so they agree either way; this keeps the panel where the player is.
+    // So does turning away from the panel for a while (ETERNALVR_MENU_FOLLOW, panel_follow.hpp).
     if ((menuOn || menuHeld) && frame) {
         const bool runtimeMoved = menuReplace.exchange(false, std::memory_order_relaxed);
-        if (runtimeMoved || (menuRoom && reanchored(*menuRoom, frame->roomFromLocal))) {
+        bool turnedAway = false;
+        if (settings.ui.menuFollow) {
+            if (const std::optional<Pose> head = locateHead(time)) {
+                turnedAway = menuFollow.update(menu::horizontalAngleTo(*head, menuPanel.pose.position), now);
+            }
+        }
+        if (runtimeMoved || turnedAway || (menuRoom && reanchored(*menuRoom, frame->roomFromLocal))) {
             if (placeMenuPanel(time)) {
                 EVR_LOG("menu: %s; the panel is placed again in front of the head at (%.2f, %.2f, %.2f)",
-                        runtimeMoved ? "the runtime moved LOCAL" : "the room was re-anchored",
+                        runtimeMoved ? "the runtime moved LOCAL"
+                        : turnedAway ? "the head turned away from the panel"
+                                     : "the room was re-anchored",
                         menuPanel.pose.position.x, menuPanel.pose.position.y, menuPanel.pose.position.z);
             }
         }
@@ -235,6 +253,33 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
         }
     }
     const menu::RouterOutput out = menuRouter->update(routed);
+    // Vibration: a light tick on the pointing hand as its ray comes onto the panel (enter_tick.hpp: a frame
+    // without controller data is not a miss), and on a click.
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        menu::EnterTick& enter = menuPointerKept.enterTicks[static_cast<std::size_t>(hand)];
+        if (!menuOn) {
+            // While the panel is only held (the cursor went a moment), the ray is off it: a cursor that
+            // flickers back does not tick again. A closed menu starts afresh.
+            if (menuHeld) {
+                enter.update(false, now);
+            } else {
+                enter.reset();
+            }
+            continue;
+        }
+        std::optional<bool> hit;
+        if (frame && frame->hand(hand).poseValid) {
+            hit = in.hands[static_cast<std::size_t>(hand)].hit.has_value();
+        }
+        if (enter.update(hit, now) && hand == out.pointerHand) {
+            controllers::noteMenuHaptic(hand, input::MenuTick::Enter);
+        }
+    }
+    for (const menu::RouterEvent& e : out.events) {
+        if (e.kind == menu::RouterEvent::Kind::ButtonDown) {
+            controllers::noteMenuHaptic(out.pointerHand, input::MenuTick::Click);
+        }
+    }
     for (const menu::PopupActionKey& k : out.popupKeys) {
         const std::string_view action = game::gameActionName(k.action);
         const std::string_view key = game::keyName(k.key);
@@ -306,20 +351,21 @@ std::uint32_t XrPresenter::Impl::fillPointerQuads(XrCompositionLayerQuad* first)
         return 0;
     }
     std::uint32_t count = 0;
-    if (settings.ui.menuBeam && !beamFailed) {
-        if (!beamSwapchain &&
-            !createStaticImage(beamSwapchain, menu::beamImage(kBeamWidthPixels, kBeamHeightPixels),
-                               kBeamWidthPixels, kBeamHeightPixels, "menu beam")) {
-            beamFailed = true;
+    if (settings.ui.menuBeam && !menuPointerKept.beamFailed) {
+        if (!menuPointerKept.beamSwapchain &&
+            !createStaticImage(menuPointerKept.beamSwapchain,
+                               menu::beamImage(kBeamWidthPixels, kBeamHeightPixels), kBeamWidthPixels,
+                               kBeamHeightPixels, "menu beam")) {
+            menuPointerKept.beamFailed = true;
         }
         const auto beam =
             menu::beamQuad(menuPointer.from, menuPointer.to, menuPointer.eye, kBeamThicknessMetres);
-        if (!beamFailed && beam) {
+        if (!menuPointerKept.beamFailed && beam) {
             XrCompositionLayerQuad& quad = first[count++];
             quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
             quad.space = localSpace;
             quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-            quad.subImage.swapchain = beamSwapchain;
+            quad.subImage.swapchain = menuPointerKept.beamSwapchain;
             quad.subImage.imageRect = {
                 {0, 0},
                 {static_cast<std::int32_t>(kBeamWidthPixels), static_cast<std::int32_t>(kBeamHeightPixels)}};
@@ -369,11 +415,11 @@ void XrPresenter::Impl::logMenuStats() {
 }
 
 void XrPresenter::Impl::destroyMenuXrObjects() {
-    if (beamSwapchain) {
-        xr.xrDestroySwapchain(beamSwapchain);
-        beamSwapchain = XR_NULL_HANDLE;
+    if (menuPointerKept.beamSwapchain) {
+        xr.xrDestroySwapchain(menuPointerKept.beamSwapchain);
+        menuPointerKept.beamSwapchain = XR_NULL_HANDLE;
     }
-    beamFailed = false;
+    menuPointerKept.beamFailed = false;
 }
 
 } // namespace evr::vkcore

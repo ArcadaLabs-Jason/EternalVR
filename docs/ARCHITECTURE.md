@@ -463,9 +463,19 @@ Rules:
   false it still calls `xrWaitFrame`, `xrBeginFrame` and `xrEndFrame` with zero layers, as the OpenXR
   spec requires, and skips only the copies. Before the session begins, in IDLE, in STOPPING once
   `xrEndSession` is called, in LOSS_PENDING and in EXITING, it makes no frame calls and never blocks;
-  the game keeps rendering to its window. Recovery from session and instance loss (destroying the
-  session and swapchains, a worker thread polling `xrGetSystem`, recreating the instance off the
-  present thread, the LUID re-check, and recreating the D3D12 device and ring) is T-110.
+  the game keeps rendering to its window. Recovery from session and instance loss is T-110, built as
+  follows (`vkcore/presenter_reconnect.cpp`, `common/xr_recovery.hpp`): after LOSS_PENDING, an instance
+  loss event, or `XR_ERROR_SESSION_LOST`, `_INSTANCE_LOST` or `XR_ERROR_RUNTIME_FAILURE` from any call,
+  the XR worker (never the present thread) waits for its last D3D12 copy, destroys every OpenXR object
+  including the instance, and tries again after 1, 2, 3, 4, 5 s and then every 5 s: a new instance,
+  `xrGetSystem`, the runtime's adapter LUID checked against the presenter's D3D12 device, and a new
+  session with its spaces, controllers, swapchains and room objects. The D3D12 device, its fences and
+  the shared ring stay, so nothing is imported into the game's Vulkan device again; the ring's size is
+  kept, and a headset whose maximum swapchain is smaller waits. The game's presents pass through
+  meanwhile and the new LOCAL space re-anchors yaw as after a recenter. EXITING is the runtime closing
+  the application's VR and stays flat. `ETERNALVR_TEST_XR_LOSS=<seconds>` takes the running session as
+  lost once, which exercises the whole path on the OpenXR Simulator (rig run rc1: back in 1.1 s,
+  head-tracked frames and controller input as before).
 - **Why not a dedicated XR thread.** R01 section 7 D3 proposed one. R02 section 9 and R11 section 8.2
   recommend starting with this shape, and a separate XR worker thread risks Win32 message deadlocks
   (seen with the OpenXR Simulator's lifecycle thread). A dedicated-thread variant is v1.x (T-059),

@@ -166,6 +166,13 @@ namespace EternalVR.Launcher
             {
                 ctx.Log.Error("saving settings failed: " + e.Message);
             }
+            // The active player's own copy (MainForm.Profiles.cs).
+            if (ctx.Settings.Profile.Length == 0) return;
+            try { Profiles.Save(ctx.Settings.Profile, ctx.Settings); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException)
+            {
+                ctx.Log.Error("saving player profile '" + ctx.Settings.Profile + "' failed: " + e.Message);
+            }
         }
 
         /// <summary>Greys out the rows that do not apply and puts the reason first in their tooltip.</summary>

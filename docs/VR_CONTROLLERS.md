@@ -29,7 +29,8 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
 - **OpenXR input** (`src/vkcore/input_xr.cpp`, the families in `input_profiles.cpp`). When the session
   exists, the `gameplay` and `menu` action sets of `features/input/xr_action_set.hpp` are created with both hands as subaction paths, the
   suggested bindings of every controller data file in `data/input/controllers/` (one per family, below;
-  a player's file through `ETERNALVR_CONTROLLER_DATA` replaces the one with the same profile) are
+  a player's file, or each `*.toml` of a player's folder, through `ETERNALVR_CONTROLLER_DATA` replaces
+  the one with the same profile) are
   suggested, the sets are attached and aim and grip spaces are created per hand. A family whose profile
   comes with an extension is suggested only when the instance has it (below), and a profile the runtime
   refuses is logged without stopping the others. Every XR frame the worker syncs `gameplay` and publishes
@@ -124,6 +125,34 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   game's own stick look turns (smooth only). It maps onto the game's default pad binds, so direct weapon slots and next/previous weapon are not
   available through it. It is used only when the user-command hook cannot be installed, or with
   `ETERNALVR_XINPUT=1`; the turn hook works with either path.
+- **Vibration** (`ETERNALVR_HAPTICS`, `features/input/haptics_policy.hpp`, `src/vkcore/haptics_xr.cpp`).
+  Short pulses on the gameplay set's `haptic` action (`xrApplyHapticFeedback`, frequency unspecified),
+  sent by the XR worker after each sync and only while the session is focused: the weapon hand when fire
+  goes down (0.6 x strength, 40 ms) and every 0.15 s while it is held (0.35, 30 ms); the hand that punched
+  (1.0, 80 ms); the pointing hand when its ray comes onto a menu panel (0.2, 15 ms) and on a click (0.35,
+  20 ms; ticks at least 60 ms apart); both hands for the capture chord (0.8, 120 ms). The game's own rumble
+  comes from a detour on `idRumbleComponent::GetMagnitudes` (RVA 0xAAE730, `src/vkcore/rumble_hook.cpp`,
+  `docs/rig-findings/haptics.md`), which the game runs every frame for the local player whatever the input
+  device: its low-frequency motor goes to both hands and its high-frequency one to the weapon hand, as
+  0.1 s pulses renewed while the level lasts and stopped when it ends; none while a menu holds gameplay
+  back. Each hand gets the strongest pulse of a frame, and a weaker one never cuts a stronger one from
+  another source short. The strength (0 off, default 0.6) scales every pulse. Log: `haptics: on, strength
+  S`, `haptics: rumble hook at RVA 0x...`, `haptics: the game's first rumble: low L, high H`, and every
+  10 s with something new `haptics: N pulses (fire a, punch b, menu c, game d, capture e), r refused`.
+- **Comfort vignette** (`ETERNALVR_VIGNETTE`, `src/features/comfort/vignette.hpp`,
+  `src/vkcore/presenter_vignette.cpp`). While the stick turns or moves the player, or the game moves the
+  camera itself (the dash action held, or a forced view: a glory kill, the Meathook pull, a scripted
+  camera), the edges of the view darken and leave a clear centre; head motion never counts. Each mapper run
+  publishes the turn rate (the turn's degrees over the frame) and the move stick's magnitude, both zero
+  while a menu holds the controllers back. The XR worker turns them into an amount (full from 120 degrees
+  per second or two thirds of the stick; in within 0.2 s, out within 0.5 s) and shows the nearest of 8
+  images made at start (256 x 256, premultiplied black) on a head-locked quad 5 m ahead that spans 75
+  degrees each way. It sits right over the game's view, under the HUD, the aim dot and the collision fade,
+  so the HUD stays readable. Never with a menu up or on the flat screen (cutscenes, the multiplayer guard).
+  `light` closes to 40 degrees with 80 % dark edges, `strong` to 25 degrees with black edges. Log:
+  `vignette: <look>, 8 level(s) of 256x256 ready ...` once, then every 10 s `vignette: <look>, shown N of
+  M frame(s), max level L of 8; turn up to D deg/s, move up to X, game camera G frame(s), H frame(s) held
+  back (menu)`.
 - **Multiplayer guard.** Every hook is installed only while the guard is armed (`installGameHooks` is
   called next to the camera hook's install), and every callback that writes asks
   `mp_guard::allowsGameTouch()` first and again just before it writes (`docs/rig-findings/mp-guard.md`).
@@ -141,17 +170,20 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_TURN` | `smooth` / `snap` / `off` | `smooth` |
 | `ETERNALVR_TURN_RATE` | smooth turn, 150 to 400 degrees per second | 230 |
 | `ETERNALVR_SNAP_DEGREES` | 30, 45, 90 (15 to 90 accepted) | 45 |
+| `ETERNALVR_VIGNETTE` | `off`, `light`, `strong`: the comfort vignette (above) | `off` |
 | `ETERNALVR_HANDEDNESS` | `right`, `left` (triggers, grips and clicks swap), `left_mirror` (sticks and face buttons swap too) | `right` |
 | `ETERNALVR_DOSSIER` | `hold`: X tap switches equipment, X hold (0.25 s) opens the Dossier; `tap`: the other way round (below) | `hold` |
 | `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
 | `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
 | `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |
+| `ETERNALVR_HAPTICS` | controller vibration strength, `0` (off) to `1`; the launcher's Vibration: Off 0, Light 0.35, Medium 0.6, Strong 1 | `0.6` |
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
 | `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning) | the table |
-| `ETERNALVR_CONTROLLER_DATA` | a player's controller data file | built in |
+| `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes its controls folder (`<data>\controls`) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
+| `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Y pause and the Y capture) | none |
 | `ETERNALVR_CONTROLLERS_TRACE` | `1`: log the eye, view angles, body and hand 4 times a second, the game's own command bits, and the turns | `0` |
 
 A value that cannot be used is logged with its name and the default is kept
@@ -179,6 +211,7 @@ A value that cannot be used is logged with its name and the default is kept
 | Left Menu tap | Pause | the Escape key |
 | Both sticks pressed, held 2 s | Recenter the room (below, docs/VR_ROOMSCALE.md) | the layer's own |
 | Left Menu held + a trigger | Save a capture of each eye for a bug report (below) | the layer's own |
+| Y held + a trigger (SteamVR) | The same capture, since SteamVR keeps the left Menu button (below) | the layer's own |
 | A physical punch | Melee | as the stick click |
 
 While a menu is up the controllers drive the menu instead (laser pointer, trigger clicks, B / Y back, the
@@ -219,7 +252,13 @@ which a capture fired neither pauses on its release nor recenters (a player's ow
 the left Menu button in every handedness (the right one belongs to the system on Touch; on Index it is
 the firm left trackpad press), and it works in gameplay and in menus (`GameInput::capture`, outside the
 actions a menu holds back; the menu pointer runs its own `CaptureChord` to drop the trigger's click).
-A double tap of Menu was the first idea; Virtual Desktop already uses it (it switches to the desktop
+Under SteamVR the left Menu button opens SteamVR's dashboard and never reaches the game, so with that
+runtime the left secondary button (Y on Touch, B on the left Index controller) chords too
+(`CaptureButtons::MenuOrSecondary`, `captureButtonsFor` in `features/input/dashboard_pause.hpp`; the mapper
+and the menu pointer both take it from the runtime's name). Y differs from Menu in two ways: it holds back
+only a trigger pulled while it is down (a Y tap while firing keeps firing), and the pull has to come
+before Y's hold (0.25 s, the SteamVR pause) completes; a Y press with a capture neither taps (switch weapon
+mod) nor holds (pause). A double tap of Menu was the first idea; Virtual Desktop already uses it (it switches to the desktop
 view), so it is not used.
 
 The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`,
@@ -314,6 +353,7 @@ right.trigger = 1          # 0..1 (also grip)
 left.stick = 0, 1          # x, y
 right.primary = 1          # primary, secondary, click (stick click), menu
 right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOCAL)
+left.aim = 0, 0, 90        # an optional roll, counter-clockwise as the user sees it: the left palm up
 right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)
 ```
 
@@ -367,6 +407,7 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 9 | Virtual gamepad (`ETERNALVR_XINPUT=1`, `+in_joystick 1`) | Pass: A jumps, the left stick walks, the trigger fires (16 to 14), turning goes through the turn hook |
 | 10 | Guard trip (`ETERNALVR_GUARD_TEST_TRIP_MS=40000`) | Pass: after the trip the trace and the action log stop, the view stays where it was, and a held trigger fires nothing (15 stays 15) |
 | 11 | Weapon wheel through the cursor: in e1m2 with two or more weapons, the file `right.stick = 0, -1` for 1 s, then `right.stick = 1, 0` for 1 s, then `right.stick = 0, 0` | Pending. Expect `action weapon_wheel`, about 0.25 s later `the weapon wheel is up`, `weapon wheel: pointing down (motion 0, 200)`, then `pointing right (motion 200, -200)`, then `weapon wheel released after N motion(s)` and a `held item` line for the weapon on the wheel's right; no `menu: the game shows its cursor` (if the game does show it: `menu: the weapon wheel is up: ...` and no panel); the `aim:` line's body yaw unchanged across the wheel |
+| 12 | Vibration: in e1m2, the file `right.trigger = 1` for 2 s, then `right.trigger = 0`; then `left.menu = 1` with `right.trigger = 1` (the capture), both back to 0; then the Menu button (pause), `right.aim = 0, 0` and a `right.trigger = 1` tap on the pause menu | Pending. Expect `haptics: on, strength 0.60 ...`, `haptics: rumble hook at RVA 0xAAE730` and `rumble on` in the `game hooks:` line, `haptics: the game's first rumble: low L, high H` on the first shot, then within 10 s `haptics: N pulses (fire a, punch 0, menu c, game d, capture e), r refused` with a up to 14 for 2 s held (one at the press, then every 0.15 s; fewer where the game's rumble on that hand is stronger), d above 0 while shooting, e 2 (both hands), c 1 or more after the click. A runtime without haptics shows the pulses as refused (the first one logged with its result). A punch needs hand velocity, which the file cannot give |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent
@@ -397,10 +438,13 @@ for seconds (below).
   selected).
 - **The virtual gamepad** depends on the game's default pad binds and, for the sticks, on `in_joystick`.
 - **One hand model.** The game's hands model holds both arms; placed at the weapon hand, the left arm
-  follows it (T-054: no off-hand model in v1).
+  follows it (T-054: no off-hand model in v1). `ETERNALVR_OFFHAND=free` poses the left arm at the off-hand
+  controller instead (docs/VR_HANDS_HUD.md, "Off hand"), mirrored to the right side with the weapon in the
+  left hand.
 - **Seated** offsets are chosen by `ETERNALVR_SEATED`; posture detection is not wired to them yet.
-- **Bindings from the player's profile** (REQ-11) come only through `ETERNALVR_CONTROLLER_DATA` until the
-  launcher writes profiles (M8). No haptics yet (v1 if time allows). Aim assist is not forced off (the
+- **Bindings from the player's profile** (REQ-11) come through `ETERNALVR_CONTROLLER_DATA`: the launcher's
+  Edit controls opens a folder for the player's edited copies of the built-in files
+  (docs/release/CONTROLS.md); the launcher has no binding editor yet. No haptics yet (v1 if time allows). Aim assist is not forced off (the
   injected turn does not use the stick path that gates it).
 - **Stereo.** Checked live with Route S (docs/VR_STEREO.md, re-test table): with hand aim and snap turn
   every action works as in mono, and the weapon is drawn at the hand in both eyes (Route S retargets the

@@ -8,6 +8,10 @@ bool runtimeTakesMenuButton(std::string_view runtimeName) {
     return runtimeName.find("SteamVR") != std::string_view::npos;
 }
 
+CaptureButtons captureButtonsFor(std::string_view runtimeName) {
+    return runtimeTakesMenuButton(runtimeName) ? CaptureButtons::MenuOrSecondary : CaptureButtons::Menu;
+}
+
 std::size_t applyDashboardPause(BindingProfile& profile) {
     std::size_t changed = 0;
     for (ButtonBinding& b : profile.buttons) {

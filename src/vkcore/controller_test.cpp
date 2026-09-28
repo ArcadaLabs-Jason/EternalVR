@@ -1,8 +1,9 @@
 // Motion controllers: scripted input for rig tests (ETERNALVR_TEST_INPUT, features/input/test_input.hpp),
-// and reading the small text files the controller settings name.
+// and reading the small text files (and folders of them) the controller settings name.
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "features/input/player_controller_data.hpp"
 #include "vkcore/log.hpp"
 
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace evr::vkcore::controllers {
 
@@ -26,6 +28,17 @@ std::wstring widen(const std::string& text) {
     return wide;
 }
 
+std::string narrow(const wchar_t* text) {
+    const int size = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 1) {
+        return {};
+    }
+    std::string out(static_cast<std::size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, out.data(), size, nullptr, nullptr);
+    out.pop_back(); // the terminator
+    return out;
+}
+
 } // namespace
 
 std::optional<std::string> readTextFile(const std::string& utf8Path) {
@@ -34,6 +47,26 @@ std::optional<std::string> readTextFile(const std::string& utf8Path) {
         return std::nullopt;
     }
     return std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+std::optional<std::vector<std::string>> folderFileNames(const std::string& utf8Path) {
+    const DWORD attributes = GetFileAttributesW(widen(utf8Path).c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+        return std::nullopt;
+    }
+    std::vector<std::string> names;
+    WIN32_FIND_DATAW found{};
+    const HANDLE find = FindFirstFileW(widen(input::joinFolderPath(utf8Path, "*")).c_str(), &found);
+    if (find == INVALID_HANDLE_VALUE) {
+        return names;
+    }
+    do {
+        if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+            names.push_back(narrow(found.cFileName));
+        }
+    } while (FindNextFileW(find, &found));
+    FindClose(find);
+    return names;
 }
 
 void refreshTestInput() {

@@ -6,6 +6,7 @@
 
 #include <ostream>
 
+using evr::input::CaptureButtons;
 using evr::input::CaptureChord;
 using evr::input::CaptureChordOutput;
 using evr::input::InputFrame;
@@ -75,4 +76,61 @@ TEST_CASE("a trigger resting below the press threshold does not capture") {
     chord.update(frameOf(true, 0.0f, 0.0f));
     CHECK_FALSE(chord.update(frameOf(true, 0.5f, 0.3f)).capture);
     CHECK(chord.update(frameOf(true, 0.6f, 0.3f)).capture);
+}
+
+namespace {
+
+InputFrame secondaryFrame(bool y, float leftTrigger, float rightTrigger) {
+    InputFrame frame = frameOf(false, leftTrigger, rightTrigger);
+    frame.left.secondaryButton = y;
+    return frame;
+}
+
+} // namespace
+
+TEST_CASE("Menu only: the secondary button does not chord") {
+    CaptureChord chord;
+    chord.update(secondaryFrame(true, 0.0f, 0.0f));
+    const CaptureChordOutput pull = chord.update(secondaryFrame(true, 0.0f, 1.0f));
+    CHECK_FALSE(pull.capture);
+    CHECK_FALSE(pull.triggerHeldBack[1]);
+    CHECK_FALSE(pull.cancelSecondary);
+}
+
+TEST_CASE("SteamVR: the secondary button held + a trigger pulled captures, and the pull never fires") {
+    CaptureChord chord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSecondary);
+    const CaptureChordOutput held = chord.update(secondaryFrame(true, 0.0f, 0.0f));
+    CHECK_FALSE(held.capture);
+    CHECK_FALSE(held.triggerHeldBack[1]); // Y alone holds nothing back
+    const CaptureChordOutput pull = chord.update(secondaryFrame(true, 0.0f, 1.0f));
+    CHECK(pull.capture);
+    CHECK(pull.triggerHeldBack[1]);
+    CHECK(pull.cancelSecondary);
+    CHECK_FALSE(pull.cancelMenu);
+    // Y up first: the pull stays held back until the trigger is let go, and the cancel ends with the press.
+    const CaptureChordOutput yUp = chord.update(secondaryFrame(false, 0.0f, 1.0f));
+    CHECK(yUp.triggerHeldBack[1]);
+    CHECK_FALSE(yUp.cancelSecondary);
+    CHECK_FALSE(chord.update(secondaryFrame(false, 0.0f, 0.0f)).triggerHeldBack[1]);
+    CHECK_FALSE(chord.update(secondaryFrame(false, 0.0f, 1.0f)).triggerHeldBack[1]); // firing again
+}
+
+TEST_CASE("SteamVR: a Y tap while firing keeps firing and captures nothing") {
+    CaptureChord chord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSecondary);
+    chord.update(secondaryFrame(false, 0.0f, 1.0f));
+    const CaptureChordOutput tap = chord.update(secondaryFrame(true, 0.0f, 1.0f));
+    CHECK_FALSE(tap.capture);
+    CHECK_FALSE(tap.triggerHeldBack[1]);
+    CHECK_FALSE(tap.cancelSecondary);
+    CHECK_FALSE(chord.update(secondaryFrame(false, 0.0f, 1.0f)).triggerHeldBack[1]);
+}
+
+TEST_CASE("SteamVR: the Menu chord still works where the Menu button arrives") {
+    CaptureChord chord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSecondary);
+    chord.update(frameOf(true, 0.0f, 0.0f));
+    CHECK(chord.update(frameOf(true, 0.0f, 0.0f)).triggerHeldBack[0]);
+    const CaptureChordOutput pull = chord.update(frameOf(true, 1.0f, 0.0f));
+    CHECK(pull.capture);
+    CHECK(pull.cancelMenu);
+    CHECK_FALSE(pull.cancelSecondary);
 }

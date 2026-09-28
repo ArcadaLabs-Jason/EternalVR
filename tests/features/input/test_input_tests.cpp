@@ -54,6 +54,20 @@ TEST_CASE("an aim makes the hand tracked, pointing where it says") {
     CHECK(approxEqual(frame.left.aimPose.position, Vec3{-0.1f, -0.2f, -0.4f}));
 }
 
+TEST_CASE("a roll turns the hand about its pointing axis") {
+    const auto input = parseTestInput("left.aim = 0, 0, 90\n");
+    REQUIRE(input.issues.empty());
+    InputFrame frame;
+    applyTestInput(input, frame);
+    REQUIRE(frame.left.gripValid);
+    // Still pointing ahead; the controller's right side (the left palm's normal) now faces up.
+    CHECK(approxEqual(evr::rotate(frame.left.gripPose.orientation, Vec3{0.0f, 0.0f, -1.0f}),
+                      Vec3{0.0f, 0.0f, -1.0f}));
+    CHECK(approxEqual(evr::rotate(frame.left.gripPose.orientation, Vec3{1.0f, 0.0f, 0.0f}),
+                      Vec3{0.0f, 1.0f, 0.0f}));
+    CHECK(parseTestInput("left.aim = 0, 0, 90, 1\n").issues.size() == 1);
+}
+
 TEST_CASE("hand positions are measured from the head") {
     const auto input = parseTestInput("right.aim = 0, 0\n");
     InputFrame frame;

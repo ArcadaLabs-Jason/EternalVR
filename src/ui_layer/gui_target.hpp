@@ -66,6 +66,7 @@ std::optional<std::uint32_t> candidateUsage(const ImageCreateDesc& desc);
 
 // A candidate image as created.
 struct ImageRecord {
+    std::int32_t format = 0; // VkFormat
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint32_t usage = 0;

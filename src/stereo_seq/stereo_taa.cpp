@@ -129,6 +129,26 @@ const std::vector<CvarExpectation>& stereoTaaCommandLineCvars() {
     return cvars;
 }
 
+int dlssQualityValue(std::string_view value) {
+    std::string lower;
+    for (const char c : value) {
+        lower.push_back(static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
+    }
+    if (lower == "ultra_performance" || lower == "0") {
+        return 0;
+    }
+    if (lower == "performance" || lower == "1") {
+        return 1;
+    }
+    if (lower == "balanced" || lower == "2") {
+        return 2;
+    }
+    if (lower == "quality" || lower == "3") {
+        return 3;
+    }
+    return -1;
+}
+
 bool switchValue(std::string_view value, bool fallback) {
     std::string lower;
     for (const char c : value) {

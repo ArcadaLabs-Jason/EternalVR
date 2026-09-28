@@ -25,17 +25,19 @@ constexpr const char* kTag = "seq-moved";
 // The list builder 0x18DEDB0 (signature at RVA 0x18DF0AA): `movzx ecx, byte [r14 + rsi + 8]` (the status
 // byte), `test cl, cl` (+0x6, the hook), `je skip` (+0x8, rel32 to 0x18DF548), ..., `cmp cl, 1`, `jne`,
 // the entity's flags, `and qword [rcx + rdx * 8], ~2` (the moved flag cleared).
-constexpr const char* kStatusSignature =
-    "41 0F B6 4C 36 08 84 C9 0F 84 ?? ?? ?? ?? 48 8B 86 E0 70 02 00 45 0F B6 94 36 58 71 18 00 45 0F B6 CA 44 "
-    "88 55 04 41 80 E1 01 4A 8B 3C F0 48 8B 86 10 71 0E 00 4A 8B 1C F0 80 F9 01 0F 85 ?? ?? ?? ?? 48 8B 43 28 "
-    "8B 53 30 48 C1 EA 08 48 8B 88 A8 00 00 00 48 83 24 D1 FD";
+constexpr const char* kStatusSignature = "41 0F B6 4C 36 08 84 C9 0F 84 ?? ?? ?? ?? 48 8B 86 E0 70 02 00 45 "
+                                         "0F B6 94 36 58 71 18 00 45 0F B6 CA 44 "
+                                         "88 55 04 41 80 E1 01 4A 8B 3C F0 48 8B 86 10 71 0E 00 4A 8B 1C F0 "
+                                         "80 F9 01 0F 85 ?? ?? ?? ?? 48 8B 43 28 "
+                                         "8B 53 30 48 C1 EA 08 48 8B 88 A8 00 00 00 48 83 24 D1 FD";
 constexpr std::size_t kStatusHook = 0x6;
-constexpr std::size_t kSkipJump = 0x8;         // je rel32
+constexpr std::size_t kSkipJump = 0x8;        // je rel32
 constexpr std::ptrdiff_t kSkipTarget = 0x49E; // 0x18DF548 - 0x18DF0AA
 
 // The surface rebuild's moved check in 0x1C8D050 (RVA 0x1C8D14D): `cmp byte [rbx], sil`, `je`; rbx is the
 // rebuild's key, whose first byte is the moved flag.
-constexpr const char* kRebuildSignature = "40 38 33 74 0C 48 8B 05 ?? ?? ?? ?? 8B 50 78 EB 02 8B D6 8B 4B 0C 0B 4B 10";
+constexpr const char* kRebuildSignature =
+    "40 38 33 74 0C 48 8B 05 ?? ?? ?? ?? 8B 50 78 EB 02 8B D6 8B 4B 0C 0B 4B 10";
 
 std::once_flag g_once;
 bool g_installed = false;
@@ -43,8 +45,8 @@ stereo_seq::MovedFlagMode g_mode = stereo_seq::MovedFlagMode::On;
 
 // Rows: mono, eye L, eye R.
 struct Counters {
-    std::atomic<std::uint64_t> cleanups[3]{};  // status-1 entities the list builder saw
-    std::atomic<std::uint64_t> kept{0};        // eye R cleanups skipped
+    std::atomic<std::uint64_t> cleanups[3]{};   // status-1 entities the list builder saw
+    std::atomic<std::uint64_t> kept{0};         // eye R cleanups skipped
     std::atomic<std::uint64_t> rebuilt[3][2]{}; // surface rebuilds [not moved, moved]
     std::atomic<std::uint64_t> lastReport{0};
 } g_counters;
@@ -77,14 +79,16 @@ void report() {
     if (now - last < 10000 || !g_counters.lastReport.compare_exchange_strong(last, now)) {
         return;
     }
-    auto c = [](int eye) { return static_cast<unsigned long long>(g_counters.cleanups[eye].exchange(0)); };
+    auto c = [](int eye) {
+        return static_cast<unsigned long long>(g_counters.cleanups[eye].exchange(0));
+    };
     auto r = [](int eye, int moved) {
         return static_cast<unsigned long long>(g_counters.rebuilt[eye][moved].exchange(0));
     };
     EVR_LOG("%s: moved-flag cleanups seen L %llu R %llu mono %llu, %llu kept for eye R; surface rebuilds "
             "(not moved / moved) L %llu / %llu, R %llu / %llu, mono %llu / %llu",
-            kTag, c(1), c(2), c(0), static_cast<unsigned long long>(g_counters.kept.exchange(0)), r(1, 0), r(1, 1),
-            r(2, 0), r(2, 1), r(0, 0), r(0, 1));
+            kTag, c(1), c(2), c(0), static_cast<unsigned long long>(g_counters.kept.exchange(0)), r(1, 0),
+            r(1, 1), r(2, 0), r(2, 1), r(0, 0), r(0, 1));
 }
 
 // On `test cl, cl` after the status byte's load: cl is the status.
@@ -123,7 +127,8 @@ bool installMovedFlagHooks() {
     std::call_once(g_once, [] {
         g_mode = requestedMode();
         if (g_mode == stereo_seq::MovedFlagMode::Off) {
-            EVR_LOG("%s: off (ETERNALVR_STEREO_MOVED=0): moving objects have no motion vectors in eye R", kTag);
+            EVR_LOG("%s: off (ETERNALVR_STEREO_MOVED=0): moving objects have no motion vectors in eye R",
+                    kTag);
             return;
         }
         if (!mp_guard::allowsGameTouch()) {
@@ -139,7 +144,8 @@ bool installMovedFlagHooks() {
         if (!locateGameImage(image, kTag)) {
             return;
         }
-        const std::byte* site = findUnique(image, kTag, "world list builder's status check", kStatusSignature);
+        const std::byte* site =
+            findUnique(image, kTag, "world list builder's status check", kStatusSignature);
         if (!site) {
             EVR_LOG("%s: not installed; moving objects have no motion vectors in eye R", kTag);
             return;
@@ -158,10 +164,12 @@ bool installMovedFlagHooks() {
         EVR_LOG("%s: world list builder's status check hooked (RVA 0x%X): %s", kTag,
                 image.rva(site + kStatusHook),
                 g_mode == stereo_seq::MovedFlagMode::Count
-                    ? "counting only (ETERNALVR_STEREO_MOVED=count); moving objects have no motion vectors in eye R"
+                    ? "counting only (ETERNALVR_STEREO_MOVED=count); moving objects have no motion vectors "
+                      "in eye R"
                     : "eye R keeps the moved flag, so moving objects write motion vectors in both eyes");
         // The rebuild count is a diagnostic: its absence changes nothing.
-        if (const std::byte* rebuild = findUnique(image, kTag, "surface rebuild's moved check", kRebuildSignature)) {
+        if (const std::byte* rebuild =
+                findUnique(image, kTag, "surface rebuild's moved check", kRebuildSignature)) {
             if (installMidHook(const_cast<std::byte*>(rebuild), &onRebuild, error)) {
                 EVR_LOG("%s: surface rebuilds counted (RVA 0x%X)", kTag, image.rva(rebuild));
             } else {

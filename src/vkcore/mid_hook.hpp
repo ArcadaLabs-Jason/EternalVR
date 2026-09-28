@@ -25,7 +25,7 @@ using MidHookEditCallback = void (*)(HookRegisters& registers);
 // Installs a hook at `target` that calls `callback`. Hooks stay installed for the life of the process
 // (the layer DLL is pinned first). At most kMaxMidHooks hooks exist. On failure `error` says why and
 // the game's code is left untouched.
-inline constexpr int kMaxMidHooks = 40;
+inline constexpr int kMaxMidHooks = 48;
 bool installMidHook(void* target, MidHookCallback callback, std::string& error);
 bool installMidHookEdit(void* target, MidHookEditCallback callback, std::string& error);
 

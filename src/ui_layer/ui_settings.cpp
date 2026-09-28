@@ -78,7 +78,93 @@ void readNumber(const EnvLookup& env,
     value = static_cast<float>(v);
 }
 
+// Three finite numbers "x,y,z", each in [low, high].
+void readVector(const EnvLookup& env,
+                const wchar_t* name,
+                float low,
+                float high,
+                Vec3& value,
+                std::vector<std::string>& warnings) {
+    const std::optional<std::wstring> text = env(name);
+    if (!text) {
+        return;
+    }
+    float parts[3] = {};
+    std::size_t count = 0;
+    bool ok = true;
+    std::wstring_view rest = trim(*text);
+    for (;;) {
+        const std::size_t comma = rest.find(L',');
+        const std::wstring item(trim(rest.substr(0, comma)));
+        wchar_t* end = nullptr;
+        const double v = item.empty() ? 0.0 : std::wcstod(item.c_str(), &end);
+        if (count == 3 || item.empty() || end != item.c_str() + item.size() || !std::isfinite(v) || v < low ||
+            v > high) {
+            ok = false;
+            break;
+        }
+        parts[count++] = static_cast<float>(v);
+        if (comma == std::wstring_view::npos) {
+            break;
+        }
+        rest = rest.substr(comma + 1);
+    }
+    if (!ok || count != 3) {
+        warnings.push_back(narrow(name) + " is not three numbers x,y,z between " + std::to_string(low) +
+                           " and " + std::to_string(high) + "; the default is kept");
+        return;
+    }
+    value = {parts[0], parts[1], parts[2]};
+}
+
+void readWrist(const EnvLookup& env, UiSettings& s, std::vector<std::string>& warnings) {
+    if (const std::optional<std::wstring> hud = env(L"ETERNALVR_HUD")) {
+        const std::wstring_view t = trim(*hud);
+        if (equalsNoCase(t, L"wrist")) {
+            s.hud = HudMode::Wrist;
+        } else if (equalsNoCase(t, L"panel")) {
+            s.hud = HudMode::Panel;
+        } else {
+            warnings.push_back("ETERNALVR_HUD is not wrist or panel; the default is kept");
+        }
+    }
+    WristSettings& w = s.wrist;
+    readSwitch(env, L"ETERNALVR_WRIST_ALWAYS", w.always, warnings);
+    readNumber(env, L"ETERNALVR_WRIST_ANGLE", 5.0f, 90.0f, w.showDegrees, warnings);
+    w.hideDegrees = w.showDegrees + kWristHysteresisDegrees;
+    readNumber(env, L"ETERNALVR_WRIST_GAZE", 5.0f, 90.0f, w.gazeShowDegrees, warnings);
+    w.gazeHideDegrees = w.gazeShowDegrees + kWristHysteresisDegrees;
+    readNumber(env, L"ETERNALVR_WRIST_FADE", 0.0f, 2.0f, w.fadeInSeconds, warnings);
+    w.fadeOutSeconds = w.fadeInSeconds * 1.5f;
+    readNumber(env, L"ETERNALVR_WRIST_WIDTH", 0.05f, 1.0f, w.widthMetres, warnings);
+    readVector(env, L"ETERNALVR_WRIST_OFFSET", -0.5f, 0.5f, w.offset, warnings);
+    readSwitch(env, L"ETERNALVR_WRIST_ABILITIES", w.abilities, warnings);
+}
+
+// The vignette: off, light or strong (any case).
+void readVignette(const EnvLookup& env, VignetteMode& value, std::vector<std::string>& warnings) {
+    const std::optional<std::wstring> text = env(L"ETERNALVR_VIGNETTE");
+    if (!text) {
+        return;
+    }
+    const std::wstring_view t = trim(*text);
+    if (equalsNoCase(t, L"off")) {
+        value = VignetteMode::Off;
+    } else if (equalsNoCase(t, L"light")) {
+        value = VignetteMode::Light;
+    } else if (equalsNoCase(t, L"strong")) {
+        value = VignetteMode::Strong;
+    } else {
+        warnings.push_back("ETERNALVR_VIGNETTE is not off, light or strong; the vignette stays off");
+        value = VignetteMode::Off;
+    }
+}
+
 } // namespace
+
+const char* hudModeName(HudMode mode) {
+    return mode == HudMode::Wrist ? "wrist" : "panel";
+}
 
 UiSettings readUiSettings(const EnvLookup& env, std::vector<std::string>& warnings) {
     UiSettings s;
@@ -101,8 +187,11 @@ UiSettings readUiSettings(const EnvLookup& env, std::vector<std::string>& warnin
     readNumber(env, L"ETERNALVR_MENU_DISTANCE", 0.3f, 10.0f, s.menuDistanceMetres, warnings);
     readNumber(env, L"ETERNALVR_MENU_WIDTH", 0.1f, 10.0f, s.menuWidthMetres, warnings);
     readSwitch(env, L"ETERNALVR_MENU_BEAM", s.menuBeam, warnings);
+    readSwitch(env, L"ETERNALVR_MENU_FOLLOW", s.menuFollow, warnings);
     readSwitch(env, L"ETERNALVR_UI_CROP", s.wideCrop, warnings);
     readSwitch(env, L"ETERNALVR_UI_WASH", s.removeWash, warnings);
+    readWrist(env, s, warnings);
+    readVignette(env, s.vignette, warnings);
     return s;
 }
 

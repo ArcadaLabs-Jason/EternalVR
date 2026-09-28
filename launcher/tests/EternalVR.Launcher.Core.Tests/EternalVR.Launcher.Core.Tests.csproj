@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\data\*.txt" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\data\input\controllers\*.toml" Link="data\controllers\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

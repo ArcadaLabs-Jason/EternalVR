@@ -37,6 +37,12 @@ namespace EternalVR.Launcher
 
         public bool TestMode => Options.TestExe != null;
 
+        /// <summary>The player's controls folder in the data folder.</summary>
+        public ControlsFolder Controls => new ControlsFolder(Paths.Controls);
+
+        /// <summary>The built-in controller maps shipped with the launcher, copied into the controls folder's defaults.</summary>
+        public string DefaultControlsDir => Path.Combine(ProgramDir, "data", "controllers");
+
         public static LauncherContext Create(LauncherOptions options, Log log)
         {
             var ctx = new LauncherContext(options, log);
@@ -221,6 +227,7 @@ namespace EternalVR.Launcher
                 Route = Options.RegisterHkcu ? LayerRoute.HkcuRegistration : LayerRoute.Environment,
                 Displays = WindowsSystem.Displays(),
                 RuntimeProbe = ProbeRuntime(g.LayerDecisions),
+                Controls = Controls,
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             if (plan.RenderSize?.Note != null) Log.Warn(plan.RenderSize.Note + " (" + plan.RenderSize.Reason + ")");

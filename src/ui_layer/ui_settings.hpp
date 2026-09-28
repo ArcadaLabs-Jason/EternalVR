@@ -3,6 +3,8 @@
 // Settings of the UI layer (docs/rig-findings/ui-layer.md): the game's 2D target (HUD, menus, subtitles)
 // captured every frame and shown on its own OpenXR quad instead of inside the eye images.
 
+#include "common/vector.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -11,6 +13,45 @@
 #include <vector>
 
 namespace evr::ui_layer {
+
+// ETERNALVR_HUD: where the HUD is (docs/VR_HANDS_HUD.md). `Panel`: the whole GUI target on the head-locked
+// quad. `Wrist`: the corner blocks (health, armor, ammo, equipment) under the off hand's wrist while it
+// faces the head, the rest (subtitles, prompts, boss bars, markers, damage) on the head-locked quad.
+enum class HudMode : std::uint8_t { Panel, Wrist };
+
+const char* hudModeName(HudMode mode);
+
+// The wrist HUD (ui_layer/wrist_hud.hpp).
+struct WristSettings {
+    // ETERNALVR_WRIST_ALWAYS=1: shown whenever the hand is tracked, whichever way the wrist turns.
+    bool always = false;
+    // ETERNALVR_WRIST_ANGLE: shown once the angle between the panel's normal and the direction to the head
+    // is at most this; hidden again above it plus kWristHysteresisDegrees.
+    float showDegrees = 40.0f;
+    float hideDegrees = 55.0f;
+    // ETERNALVR_WRIST_GAZE: and once the panel is at most this far from the middle of the view (the head's
+    // forward); hidden again above it plus kWristHysteresisDegrees.
+    float gazeShowDegrees = 40.0f;
+    float gazeHideDegrees = 55.0f;
+    // ETERNALVR_WRIST_FADE: fade-in time in seconds; the fade-out takes 1.5 times as long.
+    float fadeInSeconds = 0.12f;
+    float fadeOutSeconds = 0.18f;
+    // ETERNALVR_WRIST_WIDTH: the width of the vitals + weapon row in metres.
+    float widthMetres = 0.16f;
+    // ETERNALVR_WRIST_OFFSET=x,y,z: the row's centre in the left hand's grip frame, metres (+X out of the
+    // palm, +Y out of the thumb side, +Z toward the elbow); x is mirrored for the right hand.
+    Vec3 offset{0.04f, 0.0f, 0.13f};
+    // ETERNALVR_WRIST_ABILITIES: the crosshair's ability rings (cooldowns) above the row.
+    bool abilities = true;
+};
+inline constexpr float kWristHysteresisDegrees = 15.0f;
+
+// The comfort vignette (features/comfort/vignette.hpp): off, or how far it closes in.
+enum class VignetteMode : std::uint8_t {
+    Off,
+    Light,
+    Strong,
+};
 
 struct UiSettings {
     // ETERNALVR_UI_LAYER (default: on in Route S stereo).
@@ -38,6 +79,8 @@ struct UiSettings {
     float menuDistanceMetres = 1.5f;
     float menuWidthMetres = 2.0f;
     bool menuBeam = true;
+    // ETERNALVR_MENU_FOLLOW=0: the panel stays where it appeared even when the head turns away from it.
+    bool menuFollow = true;
     // ETERNALVR_UI_CROP: the UI quad and the menu panel show only the 16:9 band of the GUI target the game's
     // screens are laid out in (wideContentRect), not the empty rows above and below it on a near-square eye
     // image (T-031).
@@ -45,6 +88,13 @@ struct UiSettings {
     // ETERNALVR_UI_WASH: the full-screen additive wash (the red low-health vignette) is taken out of the
     // GUI image before it goes on the HUD quad (additive_wash.hpp); 0 shows the image as the game drew it.
     bool removeWash = true;
+    // ETERNALVR_HUD=panel|wrist (panel by default). The wrist needs the controllers: without a tracked off
+    // hand the whole HUD stays on the head-locked quad.
+    HudMode hud = HudMode::Panel;
+    WristSettings wrist;
+    // ETERNALVR_VIGNETTE (off, light, strong): the edges of the view darken while the stick moves or turns
+    // the player or the game moves the camera (a dash, a glory kill); off by default.
+    VignetteMode vignette = VignetteMode::Off;
 };
 
 // Looks up one environment variable: its text, or nullopt when unset.

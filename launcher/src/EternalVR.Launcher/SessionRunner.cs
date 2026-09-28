@@ -36,6 +36,12 @@ namespace EternalVR.Launcher
         /// <summary>Called on the session's thread once the game process has started (the window starts the finisher here).</summary>
         public Action GameStarted { get; set; }
 
+        /// <summary>
+        /// Asked on the session's thread when the runtime probe found no headset (the problem's text): true launches
+        /// anyway. Null (headless runs) launches with a warning.
+        /// </summary>
+        public Func<string, bool> ConfirmWithoutHeadset { get; set; }
+
         /// <summary>Session outcomes for the window (refusals, the game's start, the layer's state, the end); any thread.</summary>
         public event Action<SessionStatus> Status;
 
@@ -160,6 +166,16 @@ namespace EternalVR.Launcher
             if (LaunchPlanBuilder.WantsRenderSize(ctx.Settings))
                 Report(StatusKind.Info, $"Waiting for the headset runtime (up to {OpenXrProbe.DefaultTimeoutMs / 1000} s; SteamVR and Windows Mixed Reality can take a while to start)...");
             var plan = ctx.BuildPlan(g, id);
+            if (plan.HeadsetProblem != null)
+            {
+                Log.Warn("headset check: " + plan.HeadsetProblem);
+                if (ConfirmWithoutHeadset != null && !ConfirmWithoutHeadset(plan.HeadsetProblem))
+                {
+                    Report(StatusKind.Problem, "Not launched: " + plan.HeadsetProblem + " Put the headset on, start its runtime (for a Quest, Virtual Desktop or Meta Horizon Link) and press Launch VR again.");
+                    return false;
+                }
+                Log.Info("headset check: launching anyway");
+            }
             var marker = new SessionMarker { State = SessionState.Preparing, SessionId = id, GameExe = plan.ExePath };
             marker.Write(ctx.Paths.SessionMarker);
 

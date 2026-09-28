@@ -2,7 +2,7 @@
 
 # EternalVR
 
-> **Alpha.** Playable, rough in places, and changing fast. Read the known issues before you play.
+> **Alpha.** Testers welcome.
 
 **Hell in your headset.** A free VR mod for DOOM Eternal on PC (Steam), through OpenXR.
 
@@ -16,6 +16,7 @@
 - Room-scale: walk around your room and the Slayer walks with you.
 - The weapon wheel on the right stick, and every tutorial and popup action on a button.
 - The HUD and menus on panels in VR, with a laser pointer; cutscenes on a big screen.
+- Controller vibration for shots, punches, the game's own rumble and menu clicks.
 - A desktop window mirroring the game for people watching.
 - The full campaign and both DLC (single-player only).
 - A launcher that checks your game version, sets everything up for the session and restores your
@@ -25,13 +26,13 @@
 
 No dates yet:
 
+- **A more immersive VR HUD** (a priority): health, armour and ammo on your wrist or weapon instead of a
+  floating panel.
 - Full rigging for each arm: both arms follow your hands, with a free off hand and left-handed play.
 - More VR interactions with the world, beyond punching.
-- The HUD on your wrist or weapon instead of a floating panel.
 - Optimizations, especially on the processor side, for more frames on more PCs.
-- Improved DLSS, and anti-aliasing that is sharp in both eyes.
+- Improved DLSS.
 - Remapping the controls in the launcher.
-- Controller vibration.
 - More ways to use the weapon wheel (pointing or motion).
 
 ## Headsets, and we need testers

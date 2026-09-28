@@ -261,3 +261,17 @@ TEST_CASE("ui settings: the wash is removed by default and can be kept") {
     CHECK_FALSE(readUiSettings(envOf({{L"ETERNALVR_UI_WASH", L"0"}}), warnings).removeWash);
     CHECK(warnings.empty());
 }
+
+TEST_CASE("ui settings: the vignette is off by default, light or strong when asked") {
+    using evr::ui_layer::VignetteMode;
+    std::vector<std::string> warnings;
+    CHECK(readUiSettings(envOf({}), warnings).vignette == VignetteMode::Off);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_VIGNETTE", L"light"}}), warnings).vignette ==
+          VignetteMode::Light);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_VIGNETTE", L" Strong "}}), warnings).vignette ==
+          VignetteMode::Strong);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_VIGNETTE", L"off"}}), warnings).vignette == VignetteMode::Off);
+    CHECK(warnings.empty());
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_VIGNETTE", L"max"}}), warnings).vignette == VignetteMode::Off);
+    CHECK(warnings.size() == 1);
+}

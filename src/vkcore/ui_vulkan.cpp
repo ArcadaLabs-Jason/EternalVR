@@ -1,6 +1,7 @@
 #include "vkcore/ui_vulkan.hpp"
 
 #include "ui_layer/layout_tracker.hpp"
+#include "ui_layer/motion_target.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -47,6 +48,8 @@ std::mutex& g_recordsMutex = *new std::mutex;
 auto& g_records = *new std::unordered_map<VkImage, ui_layer::ImageRecord>;
 ui_layer::LayoutTracker& g_tracker = *new ui_layer::LayoutTracker;
 std::atomic<std::uint64_t> g_candidates{0};
+std::atomic<std::uint64_t> g_motionCandidates{0};
+std::atomic<std::uint64_t> g_motionNotFollowed{0};
 std::atomic<std::uint64_t> g_notFollowed{0};
 std::atomic<std::uint64_t> g_watchChanges{0};
 // The one image whose layout is followed: the GUI target the game uses now (set from the present hook).
@@ -89,8 +92,13 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
     desc.arrayLayers = pCreateInfo->arrayLayers;
     desc.samples = pCreateInfo->samples;
     desc.usage = pCreateInfo->usage;
-    const std::optional<std::uint32_t> usage =
-        d->isGame && mp_guard::allowsGameTouch() ? ui_layer::candidateUsage(desc) : std::nullopt;
+    const bool touch = d->isGame && mp_guard::allowsGameTouch();
+    std::optional<std::uint32_t> usage = touch ? ui_layer::candidateUsage(desc) : std::nullopt;
+    // The motion-vector capture: every image that could be a velocity target is prepared and followed.
+    const bool motion = !usage && touch && motionCaptureRequested() && ui_layer::motionCandidateUsage(desc);
+    if (motion) {
+        usage = ui_layer::motionCandidateUsage(desc);
+    }
     if (!usage) {
         return d->createImage(device, pCreateInfo, pAllocator, pImage);
     }
@@ -101,6 +109,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
         return result;
     }
     ui_layer::ImageRecord record;
+    record.format = info.format;
     record.width = info.extent.width;
     record.height = info.extent.height;
     record.usage = info.usage;
@@ -112,6 +121,16 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
     {
         std::lock_guard lock(g_recordsMutex);
         g_records[*pImage] = record;
+    }
+    if (motion) {
+        // Followed only once the capture finds it bound as velocity (follow()): the game makes many such
+        // images.
+        if (++g_motionCandidates <= 8) {
+            EVR_LOG("motion: image %p (%ux%u, format %d, usage 0x%X) prepared for copying",
+                    reinterpret_cast<void*>(*pImage), info.extent.width, info.extent.height, info.format,
+                    info.usage);
+        }
+        return result;
     }
     const std::uint64_t n = ++g_candidates;
     if (n <= 8) {
@@ -204,6 +223,14 @@ bool enabled() {
     return on;
 }
 
+bool motionCaptureRequested() {
+    static const bool on = [] {
+        std::wstring value;
+        return readEnv(L"ETERNALVR_CAPTURE_MOTION", value) && !value.empty();
+    }();
+    return on;
+}
+
 void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr, bool isGame) {
     if (!enabled()) {
         return;
@@ -288,6 +315,21 @@ void watch(VkImage image) {
     }
 }
 
+bool follow(VkImage image) {
+    const auto value = handleValue(image);
+    if (g_tracker.isCandidate(value)) {
+        return true;
+    }
+    if (!recordOf(image)) {
+        return false;
+    }
+    if (!g_tracker.addCandidate(value)) {
+        ++g_motionNotFollowed;
+        return false;
+    }
+    return true;
+}
+
 std::optional<ImageState> stateOf(VkImage image) {
     const auto s = g_tracker.stateOf(handleValue(image));
     if (!s) {
@@ -297,7 +339,8 @@ std::optional<ImageState> stateOf(VkImage image) {
 }
 
 Counters counters() {
-    return Counters{g_candidates.load(), g_notFollowed.load(), g_watchChanges.load()};
+    return Counters{g_candidates.load(), g_notFollowed.load(), g_watchChanges.load(),
+                    g_motionCandidates.load(), g_motionNotFollowed.load()};
 }
 
 } // namespace evr::vkcore::ui_vulkan

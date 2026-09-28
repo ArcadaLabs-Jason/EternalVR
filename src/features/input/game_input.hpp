@@ -6,6 +6,8 @@
 #include "features/input/axis2.hpp"
 #include "game/eternal/game_action.hpp"
 
+#include <array>
+
 namespace evr::input {
 
 struct GameInput {
@@ -22,6 +24,8 @@ struct GameInput {
     // One frame, when a trigger is pulled while the left Menu button is held (capture_chord.hpp): save the
     // next eye pair for a bug report (the layer's own, like the recenter; never sent to the game).
     bool capture = false;
+    // Per hand (indexed by Hand): a physical punch this frame (punch_detector.hpp), for its vibration.
+    std::array<bool, 2> punch{};
 };
 
 } // namespace evr::input

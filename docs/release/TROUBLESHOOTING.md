@@ -20,7 +20,7 @@ it to your GitHub issue if you have access, and say what you were doing. If the 
 three, zip that `logs\<session>` folder by hand as well.
 
 **Something looks wrong in one eye, or only in the headset?** Hold the left Menu button and pull a trigger
-while you see it. The mod saves a screenshot of each eye and of the HUD (the log says `capture: saved`),
+while you see it (under SteamVR: press Y and pull a trigger straight away). The mod saves a screenshot of each eye and of the HUD (the log says `capture: saved`),
 then carries on: the game does not pause, recenter or fire. Afterwards click **Export report...**: the newest captures go into the zip. Say
 which capture shows the problem (the file names hold the time).
 

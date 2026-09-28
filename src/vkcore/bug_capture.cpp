@@ -36,7 +36,7 @@ void request() {
     }
     g_requestQpc.store(now(), std::memory_order_relaxed);
     g_wanted.store(true, std::memory_order_release);
-    EVR_LOG("capture: asked for (left Menu + trigger); the next eye pair is saved");
+    EVR_LOG("capture: asked for (the capture chord); the next eye pair is saved");
 }
 
 bool wanted() {

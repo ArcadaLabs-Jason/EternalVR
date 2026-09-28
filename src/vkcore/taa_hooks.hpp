@@ -30,6 +30,11 @@ namespace evr::vkcore {
 
 // ETERNALVR_STEREO_TAA=1 with ETERNALVR_MODE=stereo and no stereo experiment.
 bool taaRequested();
+// ETERNALVR_STEREO_DLSS=1: DLSS per eye instead of TAA.
+bool taaDlssRequested();
+// ETERNALVR_STEREO_DLSS_QUALITY: the r_dlssQuality value held while DLSS runs (stereo_seq::dlssQualityValue),
+// -1 for the game's own.
+int taaDlssQuality();
 
 // From vkCreateInstance, after the multiplayer guard: hooks the device context's slot loop so that eye R's
 // images are built with the renderer. Does nothing unless requested and the guard allows game writes.

@@ -9,6 +9,7 @@
 // = pause and secondary hold = mission info on one hand) is left alone.
 
 #include "features/input/binding_profile.hpp"
+#include "features/input/capture_chord.hpp"
 
 #include <cstddef>
 #include <string_view>
@@ -17,6 +18,10 @@ namespace evr::input {
 
 // True for a runtime whose name says it keeps the Menu button for its dashboard (SteamVR).
 bool runtimeTakesMenuButton(std::string_view runtimeName);
+
+// The capture chord's buttons for the runtime: with one that keeps the Menu button, the secondary button
+// (Y on Touch) is the chord's button too (capture_chord.hpp).
+CaptureButtons captureButtonsFor(std::string_view runtimeName);
 
 // Turns each secondary-button hold that shows mission information into a pause, on every hand whose Menu
 // tap pauses. Returns the number of buttons changed.

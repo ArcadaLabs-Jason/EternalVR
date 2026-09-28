@@ -54,7 +54,10 @@ XR worker, every XR frame                                     game (message pump
   upgrade screen while standing, 2026-09-27). When the room is re-anchored while a panel is up (a recenter,
   ours or the runtime's, or the height after standing up or sitting down: the room transform jumps by more
   than 5 cm or 3 degrees, or the runtime moves LOCAL), the panel is placed again in front of the head
-  (`menu: the room was re-anchored; the panel is placed again ...`). The pointer is on the dominant hand
+  (`menu: the room was re-anchored; the panel is placed again ...`). It is also placed again when the
+  head has faced more than 60 degrees away from it (horizontally) for a second (`menu: the head turned away
+  from the panel; ...`, `features/menu/panel_follow.hpp`; `ETERNALVR_MENU_FOLLOW=0` keeps it where it
+  appeared). A glance away leaves it in place. The pointer is on the dominant hand
   (`ETERNALVR_HANDEDNESS`); pulling the other hand's trigger (or pressing A / X) while it points at the
   panel moves the pointer to that hand. A pale beam (a thin quad from the hand to the hit, turned to face
   the head; `ETERNALVR_MENU_BEAM=0` leaves it out) and a dot on the panel (the reticle image, 0.9 degrees)
@@ -218,6 +221,7 @@ weapon wheel's cursor is gone`.
 | `ETERNALVR_MENU_DISTANCE` | metres, 0.3 to 10 | `ETERNALVR_UI_DISTANCE` (1.5) |
 | `ETERNALVR_MENU_WIDTH` | metres, 0.1 to 10 | `ETERNALVR_UI_WIDTH` (2.0) |
 | `ETERNALVR_MENU_BEAM` | `1` / `0` | `1` |
+| `ETERNALVR_MENU_FOLLOW` | `1` / `0` | `1` |
 
 ## Log lines
 

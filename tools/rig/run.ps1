@@ -281,7 +281,14 @@ try {
     $run.phase = 'launching'
     Save-Run
     Invoke-RigAbortPoint $cfg 'launch'
-    foreach ($key in $envPairs.Keys) { [Environment]::SetEnvironmentVariable($key, $envPairs[$key], 'Process') }
+    # The game's variables are set on this process only for the start and restored right after it,
+    # so a caller that runs several games from one PowerShell process does not leak one run's
+    # ETERNALVR_* values into the next.
+    $envBefore = @{}
+    foreach ($key in $envPairs.Keys) {
+        $envBefore[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+        [Environment]::SetEnvironmentVariable($key, $envPairs[$key], 'Process')
+    }
     # ShellExecute start: the game inherits no handles of this process (callers' pipes close on our
     # exit), and the path is taken literally.
     $psi = New-Object Diagnostics.ProcessStartInfo
@@ -289,7 +296,11 @@ try {
     $psi.WorkingDirectory = $workDir
     $psi.Arguments = $argString
     $psi.UseShellExecute = $true
-    $proc = [Diagnostics.Process]::Start($psi)
+    try {
+        $proc = [Diagnostics.Process]::Start($psi)
+    } finally {
+        foreach ($key in $envBefore.Keys) { [Environment]::SetEnvironmentVariable($key, $envBefore[$key], 'Process') }
+    }
     $run.processes += [ordered]@{ pid = $proc.Id; name = $exeName; path = $exePath; startFileTimeUtc = (Get-RigProcessStartFileTime $proc); role = 'started' }
     $run.phase = 'started'
     Save-Run

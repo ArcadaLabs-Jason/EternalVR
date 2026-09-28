@@ -122,6 +122,11 @@ bool switchValue(std::string_view value, bool fallback);
 // TAA whenever DLSS is asked for but eye R cannot have one.
 int heldAntialiasing(int current, bool dlssOption, bool dlssPerEye);
 
+// The r_dlssQuality value (0 ultra performance, 1 performance, 2 balanced, 3 quality) for a quality name or
+// number ("quality", "balanced", "performance", "ultra_performance", or "0" to "3", any case); -1 for
+// anything else, unset and empty included (the game's own setting stays).
+int dlssQualityValue(std::string_view value);
+
 // The pieces per-eye TAA needs; the first one missing, or nullptr when all are there.
 struct TaaReadiness {
     bool selectors = false;  // both accumulation selectors hooked

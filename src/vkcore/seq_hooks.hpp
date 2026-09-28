@@ -69,6 +69,11 @@ stereo_seq::PresentMatch seqTakePresent();
 // counter it will present with (the counter read now, plus one). nullopt when it has none.
 std::optional<stereo_seq::RenderTag> seqTagInFlight();
 
+// The tag of the frame that will present with `backendFrame`, wherever the backend is now: for code that
+// knows its own frame's counter (the render-view job runs ahead of the backend, so the counter read there
+// can be an older frame's under load). nullopt when it has none.
+std::optional<stereo_seq::RenderTag> seqTagForBackendFrame(std::uint32_t backendFrame);
+
 struct SeqCounters {
     std::uint64_t frameEnds = 0;       // wrapper calls in the engine's own chain
     std::uint64_t stereoTicks = 0;     // eye R renders started

@@ -220,3 +220,18 @@ TEST_CASE("stereo TAA: the held anti-aliasing mode") {
     CHECK(heldAntialiasing(0, true, false) == 1);
     CHECK(heldAntialiasing(7, false, true) == 1);
 }
+
+TEST_CASE("stereo TAA: the DLSS quality names and numbers map to r_dlssQuality") {
+    using evr::stereo_seq::dlssQualityValue;
+    CHECK(dlssQualityValue("ultra_performance") == 0);
+    CHECK(dlssQualityValue("Performance") == 1);
+    CHECK(dlssQualityValue("BALANCED") == 2);
+    CHECK(dlssQualityValue("quality") == 3);
+    CHECK(dlssQualityValue("0") == 0);
+    CHECK(dlssQualityValue("3") == 3);
+    // Unset, empty or unknown: the game's own setting stays.
+    CHECK(dlssQualityValue("") == -1);
+    CHECK(dlssQualityValue("4") == -1);
+    CHECK(dlssQualityValue("dlaa") == -1);
+    CHECK(dlssQualityValue("ultra performance") == -1);
+}

@@ -144,8 +144,8 @@ void keepFrameOnScreen(int& x, int& y, int width, int height, const RECT& frame)
     if (moved.x != x || moved.y != y) {
         static std::atomic<bool> logged{false};
         if (!logged.exchange(true)) {
-            EVR_LOG("mirror: the window's frame is kept on the screen: moved from %d,%d to %d,%d", x, y, moved.x,
-                    moved.y);
+            EVR_LOG("mirror: the window's frame is kept on the screen: moved from %d,%d to %d,%d", x, y,
+                    moved.x, moved.y);
         }
         x = moved.x;
         y = moved.y;

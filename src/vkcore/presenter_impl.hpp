@@ -1,19 +1,19 @@
 #pragma once
 
-// Internal state of the XR presenter (xr_presenter.hpp), shared by its source files:
-// xr_presenter.cpp (settings, shutdown, public entry points), presenter_copy.cpp (the present hook's
-// copy into the ring), presenter_ring.cpp (the shared ring: creation, import, rebuild),
-// presenter_head.cpp (the camera hook, head aim, the render latch), presenter_xr.cpp (OpenXR start-up
-// and events), presenter_frame.cpp (the XR worker and its frame loop), presenter_stereo.cpp (the per-eye
-// hook, stereo settings and experiments), presenter_seq.cpp (Route S: eye pairs in the ring),
-// presenter_ui.cpp (the UI layer: the game's GUI target on its own quad), presenter_reticle.cpp (the
-// hand-aim dot and static images), presenter_menu.cpp (menus), presenter_window.cpp (which presents reach
-// the game's window, the render size's statistics) and keep_active.cpp. The plain types they
-// share are in presenter_types.hpp.
+// Internal state of the XR presenter (xr_presenter.hpp), shared by its source files: xr_presenter.cpp
+// (settings, shutdown, public entry points), presenter_copy.cpp (the present hook's copy into the ring),
+// presenter_ring.cpp (the shared ring: creation, import, rebuild, its slots), presenter_head.cpp (the camera
+// hook, head aim, the render latch), presenter_xr.cpp (OpenXR start-up and events), presenter_frame.cpp (the
+// XR worker and its frame loop), presenter_stereo.cpp (the per-eye hook, stereo settings and experiments),
+// presenter_seq.cpp (Route S: eye pairs in the ring), presenter_ui.cpp (the UI layer: the game's GUI target
+// on its own quad), presenter_reticle.cpp (the hand-aim dot and static images), presenter_menu.cpp (menus),
+// presenter_window.cpp (which presents reach the game's window, the render size's statistics) and
+// keep_active.cpp. The plain types they share are in presenter_types.hpp.
 
 #include "common/retire_queue.hpp"
 #include "features/input/capture_chord.hpp"
 #include "features/menu/menu_router.hpp"
+#include "features/menu/panel_follow.hpp"
 #include "features/menu/panel_pointer.hpp"
 #include "stereo_seq/centered_matrix.hpp"
 #include "stereo_seq/eye_pairing.hpp"
@@ -24,11 +24,14 @@
 #include "vkcore/controllers.hpp"
 #include "vkcore/eye_capture.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/motion_capture.hpp"
 #include "vkcore/player_aim.hpp"
 #include "vkcore/presenter_fade.hpp"
 #include "vkcore/presenter_mirror.hpp"
 #include "vkcore/presenter_stereo.hpp"
 #include "vkcore/presenter_types.hpp"
+#include "vkcore/presenter_vignette.hpp"
+#include "vkcore/presenter_wrist.hpp"
 #include "vkcore/room_scale.hpp"
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/stereo_hooks.hpp"
@@ -152,7 +155,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     XrFunctions xr;
     XrInstance instance = XR_NULL_HANDLE;
     controllers::ProfileSupport controllerProfiles; // the instance's controller-profile extensions
-    bool perfCounterTime = false; // XR_KHR_win32_convert_performance_counter_time enabled
+    bool perfCounterTime = false;                   // XR_KHR_win32_convert_performance_counter_time enabled
     XrSystemId systemId = XR_NULL_SYSTEM_ID;
     XrSession session = XR_NULL_HANDLE;
     XrSpace localSpace = XR_NULL_HANDLE;
@@ -161,10 +164,11 @@ struct XrPresenter::Impl final : ViewHookSink,
     XrSwapchain xrSwapchain = XR_NULL_HANDLE;
     std::int64_t xrSwapchainFormat = 0;
     FadeLayer fadeLayer;
+    VignetteLayer vignette; // ETERNALVR_VIGNETTE (presenter_vignette.hpp)
     std::vector<ID3D12Resource*> xrImages;
     XrSessionState sessionState = XR_SESSION_STATE_UNKNOWN;
     bool sessionRunning = false;
-    bool sessionLost = false;
+    XrLossState loss; // presenter_types.hpp
     std::int64_t acquiredIndex = -1;
     bool acquiredWaited = false;
     bool hasImage = false;
@@ -320,7 +324,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint32_t pendingSlot = kRingSize; // slot holding the left half of the pending pair
     std::uint64_t pairsWithoutRecord = 0;
     EyeCapture capture;
-    DesktopMirror mirror; // the game's window shows one eye (ETERNALVR_MIRROR)
+    MotionCapture motionCapture; // ETERNALVR_CAPTURE_MOTION: both eyes' velocity images with eye R's copy
+    DesktopMirror mirror;        // the game's window shows one eye (ETERNALVR_MIRROR)
     ULONGLONG lastSeqStatsTicks = 0;
     SeqCounters lastSeqCounters;
     std::uint64_t lastSeqGameTicks = 0;
@@ -422,6 +427,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     // True while the UI quad has a GUI image fresh enough to show.
     [[nodiscard]] bool uiFresh() const;
 
+    WristHud wrist; // worker only: ETERNALVR_HUD=wrist (presenter_wrist.hpp)
     // ---- Menus (presenter_menu.cpp, docs/VR_MENUS.md) -----------------------------------------------
 
     // Worker only.
@@ -435,25 +441,16 @@ struct XrPresenter::Impl final : ViewHookSink,
     bool menuDossier = false;     // the menu is the Dossier the controllers asked for (opens on its map)
     bool menuMapPage = false;     // the router takes the Dossier's map page to be up (logged on change)
     std::optional<Pose> menuRoom; // the room transform last seen with the panel up (re-anchor check)
+    menu::PanelFollow menuFollow; // the panel comes back when the head turns away from it (panel_follow.hpp)
     std::atomic<bool> menuReplace{false}; // the runtime moved LOCAL: an open panel is placed again
     // Worker writes, present hook reads: a menu is up (the cursor, the panel or its hold); no crosshair
     // mask meanwhile.
     std::atomic<bool> menuUp{false};
     std::optional<menu::MenuRouter> menuRouter;
-    input::CaptureChord menuChord; // the capture chord's hold on the triggers (capture_chord.hpp)
-    struct MenuPointer {
-        bool visible = false; // draw the beam (and the dot when it hits)
-        Vec3 from;            // the hand
-        Vec3 to;              // the hit, or a point along the ray when it misses
-        Vec3 eye;             // the head, which the beam turns to face
-        bool hit = false;
-        Pose dot;
-        float dotSide = 0.0f;
-    };
-    MenuPointer menuPointer;
-    XrSwapchain beamSwapchain = XR_NULL_HANDLE;
-    bool beamFailed = false;
-    double menuPanelSeen = 0.0; // when a panel last had something to show (qpc seconds)
+    input::CaptureChord menuChord;   // the capture chord's hold on the triggers (capture_chord.hpp)
+    MenuPointer menuPointer;         // rebuilt every frame
+    MenuPointerKept menuPointerKept; // the beam's image and the vibration ticks, kept across frames
+    double menuPanelSeen = 0.0;      // when a panel last had something to show (qpc seconds)
     std::uint64_t menuFrames = 0;
     ULONGLONG lastMenuStatsTicks = 0;
     // Worker, once the multiplayer guard is armed: locates the game's cursor.
@@ -465,6 +462,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     // game's menus are laid out in (ETERNALVR_UI_CROP, ui_layer::wideContentRect).
     void placeOnMenuPanel(XrCompositionLayerQuad& quad) const;
     bool placeMenuPanel(XrTime time); // the panel in front of the head (yaw only); false: no head pose
+    std::optional<Pose> locateHead(XrTime time) const; // the head in LOCAL; nullopt when not tracked
     // Worker: the part of the game's image the menu panel shows (its 16:9 band, or all of it).
     [[nodiscard]] ui_layer::PixelRect menuContent() const;
     // Worker: the beam and the dot; the number of quads filled (0 to 2), written from `first` on.
@@ -481,11 +479,6 @@ struct XrPresenter::Impl final : ViewHookSink,
     stereo_seq::WindowPresentGate windowPresents;
     bool windowHold = false; // this present is handed back (decideWindow; read by present())
     std::uint64_t lastSubmittedValue = 0;
-    struct HeldImage {
-        VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-        std::uint32_t image = 0;
-        std::uint64_t value = 0; // the ring copy that last used it
-    };
     std::vector<HeldImage> heldImages;
     std::uint64_t imagesHandedBack = 0;
     std::uint64_t handBackFailures = 0;
@@ -563,7 +556,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     // Under `mutex`, after a build: asks for another rebuild if the game's swapchain changed meanwhile.
     void requestRebuildIfStale();
     bool loadOpenXr();
-    bool createXrInstance();
+    bool createXrInstance(bool quiet = false); // quiet: failures are neither logged nor shown
     // Replaces localSpace with an upright space from STAGE when the runtime's LOCAL is tilted
     // (xr_math/upright_space.hpp). Called once, right after localSpace is created.
     void makeLocalUpright();
@@ -575,12 +568,14 @@ struct XrPresenter::Impl final : ViewHookSink,
     void awaitRenderSize();
     static constexpr ULONGLONG kRenderSizeWaitMs = 3000;
     bool createD3D12AndSession();
+    // Worker, after a loss (presenter_reconnect.cpp); createSession is createD3D12AndSession's session half.
+    bool reconnect();
+    bool createSession();
     bool createRing();
     void pollEvents();
     void frame();
-    // A frame call or xrPollEvent returned a result that means the runtime or the session is gone
-    // (XR_ERROR_SESSION_LOST, XR_ERROR_INSTANCE_LOST, XR_ERROR_RUNTIME_FAILURE): the same path as a lost
-    // session (the game continues flat, the worker leaves its loop). False for any other result.
+    // A frame call or xrPollEvent returned XR_ERROR_SESSION_LOST, _INSTANCE_LOST or XR_ERROR_RUNTIME_FAILURE:
+    // the same path as a lost session (the worker leaves its loop to reconnect). False for any other result.
     bool loseOnRuntimeFailure(XrResult result, const char* call);
     std::uint32_t endFrameFailures = 0;
     void placeQuad(XrTime time);

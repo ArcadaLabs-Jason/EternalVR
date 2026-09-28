@@ -100,11 +100,17 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Contains("+r_windowWidth 1280 +r_windowHeight 720", p.CommandLine);
             Assert.Equal("Headset not detected; the render size is decided in-game.", p.RenderSize.Note);
             Assert.Contains("render:  render size auto, decided in-game (the runtime did not answer: xrGetSystem: XR_ERROR_FORM_FACTOR_UNAVAILABLE)", p.Describe());
-            // Not asked at all (no probe): the same.
+            Assert.Equal("The headset runtime reports no headset: it is off, asleep or not connected.", p.HeadsetProblem);
+            // A runtime that does not answer at all: asked about too.
+            i.RuntimeProbe = OpenXrProbeResult.Failed("xrCreateInstance: XR_ERROR_RUNTIME_UNAVAILABLE");
+            p = LaunchPlanBuilder.Build(i);
+            Assert.Equal("The headset runtime did not answer (xrCreateInstance: XR_ERROR_RUNTIME_UNAVAILABLE). Is it installed and running?", p.HeadsetProblem);
+            // Not asked at all (no probe): the same size, and nothing to ask about.
             i.RuntimeProbe = null;
             p = LaunchPlanBuilder.Build(i);
             Assert.Equal("auto", Env(p)["ETERNALVR_RENDER_SIZE"]);
             Assert.NotNull(p.RenderSize.Note);
+            Assert.Null(p.HeadsetProblem);
         }
 
         [Fact]
@@ -115,6 +121,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("2064x2208", Env(p)["ETERNALVR_RENDER_SIZE"]);
             Assert.Contains("+r_windowWidth 2064 +r_windowHeight 2208", p.CommandLine);
             Assert.Null(p.RenderSize.Note);
+            Assert.Null(p.HeadsetProblem);
             // Fitted to the runtime's limits as the layer would (the simulator: 4096 wide for both eyes).
             i.RuntimeProbe = Probe(1280, 1400, 4096);
             p = LaunchPlanBuilder.Build(i);

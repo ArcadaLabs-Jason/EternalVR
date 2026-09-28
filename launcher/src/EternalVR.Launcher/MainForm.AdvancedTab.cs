@@ -27,6 +27,7 @@ namespace EternalVR.Launcher
         private readonly NumericUpDown hudDistance = Number(LauncherSettings.MinHudDistance, LauncherSettings.MaxHudDistance, 0.1, 2);
         private readonly NumericUpDown hudWidth = Number(LauncherSettings.MinHudWidth, LauncherSettings.MaxHudWidth, 0.1, 2);
         private readonly NumericUpDown hudHeight = Number(LauncherSettings.MinHudHeight, LauncherSettings.MaxHudHeight, 0.05, 2);
+        private readonly ComboBox hudPlace = Choices(Setting.HudPlace);
         private readonly CheckBox controllers = new CheckBox { AutoSize = true };
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
         private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
@@ -79,7 +80,10 @@ namespace EternalVR.Launcher
                     s => s.HudWidth = (double)hudWidth.Value),
                 Row(Setting.HudHeight, WithUnit(hudHeight, "m"),
                     s => hudHeight.Value = Clamped(s.HudHeight, hudHeight, 0.0),
-                    s => s.HudHeight = (double)hudHeight.Value));
+                    s => s.HudHeight = (double)hudHeight.Value),
+                Row(Setting.HudPlace, hudPlace,
+                    s => hudPlace.SelectedIndex = (int)s.Hud,
+                    s => s.Hud = (HudMode)hudPlace.SelectedIndex));
             var hands = Group("Controllers",
                 Row(Setting.MotionControllers, controllers,
                     s => controllers.Checked = s.Controllers,

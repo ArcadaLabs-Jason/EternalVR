@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 namespace evr::vkcore::ui_engine {
 
@@ -34,6 +35,16 @@ bool skipHookInstalled();
 // The GUI target's colour image as the game holds it now; nullopt when not located, the guard is off, or
 // a pointer on the way is null or unreadable.
 std::optional<ui_layer::GuiImageFields> readTarget();
+
+// An engine pointer that is either a render target (width and height first, its colour image at +0x10) or an
+// image, resolved to the image's fields; `viaTarget` says which it was. Nullopt when neither reads as one.
+// Reads only; used by the motion-vector capture.
+std::optional<ui_layer::GuiImageFields> readImageOrTarget(std::uintptr_t pointer, bool* viaTarget = nullptr);
+
+// An image set's active member (flags bit 8: idImage + 0xE8 is the set, whose first int is the index of the
+// member in use and whose VkImages start at + 0x108, as the engine's barrier builder 0x1C49270 reads them):
+// {index, VkImage}. Nullopt when unreadable or the index is out of 0..15.
+std::optional<std::pair<int, std::uint64_t>> readSetMember(std::uint64_t set);
 
 // Requested by the XR worker every frame the UI quad shows the captured target; a request lasts 250 ms, so
 // the game composites its GUI again on its own if the worker stops renewing it.

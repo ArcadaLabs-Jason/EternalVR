@@ -33,6 +33,8 @@ namespace EternalVR.Launcher.Core.Launch
         public IReadOnlyList<DisplayArea> Displays { get; set; } = new DisplayArea[0];
         /// <summary>The runtime's answer for the render size (<see cref="OpenXrProbe"/>); null when it was not asked.</summary>
         public OpenXrProbeResult RuntimeProbe { get; set; }
+        /// <summary>The player's controls folder; its maps are used when it holds any (null: the built-in controls).</summary>
+        public ControlsFolder Controls { get; set; }
     }
 
     /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
@@ -48,6 +50,11 @@ namespace EternalVR.Launcher.Core.Launch
         public StereoWindowPlan Window { get; set; }
         /// <summary>The stereo render size; null in mono and with the render size off.</summary>
         public RenderSizeChoice RenderSize { get; set; }
+        /// <summary>
+        /// Why the headset looks unready from the runtime probe ("no headset", the runtime not answering), for the
+        /// window to ask before the launch; null when the probe found it, or none was made.
+        /// </summary>
+        public string HeadsetProblem { get; set; }
 
         public string CommandLine => string.Join(" ", Arguments.Select(QuoteIfNeeded));
 
@@ -146,6 +153,8 @@ namespace EternalVR.Launcher.Core.Launch
             if (stereo) Set("ETERNALVR_MODE", "stereo");
             // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md).
             if (stereo) Set("ETERNALVR_UI_LAYER", "1");
+            // The HUD on the off hand's wrist needs the UI layer and the controllers (docs/VR_HANDS_HUD.md).
+            if (stereo) Set("ETERNALVR_HUD", LauncherSettings.HudName(s.Controllers ? s.Hud : HudMode.Panel));
             Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
             // Hand aim needs the controllers; without them the head aims.
             Set("ETERNALVR_AIM", LauncherSettings.AimName(s.Aim == AimMode.Hand && !s.Controllers ? AimMode.Head : s.Aim));
@@ -173,13 +182,17 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_TURN", LauncherSettings.TurnName(s.Turn));
             Set("ETERNALVR_SNAP_DEGREES", LauncherSettings.ClampSnapDegrees(s.SnapDegrees).ToString("0", CultureInfo.InvariantCulture));
             Set("ETERNALVR_TURN_RATE", LauncherSettings.ClampTurnRate(s.TurnRate).ToString("0", CultureInfo.InvariantCulture));
+            Set("ETERNALVR_VIGNETTE", LauncherSettings.VignetteName(s.Vignette));
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
+            // The player's own maps, each in place of the built-in one for its controllers (docs/release/CONTROLS.md).
+            if (s.Controllers && inputs.Controls != null && inputs.Controls.HasPlayerMaps) Set("ETERNALVR_CONTROLLER_DATA", inputs.Controls.Dir);
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");
             // The settings of the Play and Advanced tabs, always explicit (the layer's own defaults may change).
             Set("ETERNALVR_BODY_FOLLOW", s.BodyFollow ? "1" : "0");
             Set("ETERNALVR_AIM_SMOOTHING", Number(s.AimSmoothing, 0.0, 1.0, LauncherSettings.DefaultAimSmoothing));
+            Set("ETERNALVR_HAPTICS", Number(s.Vibration, 0.0, 1.0, LauncherSettings.DefaultVibration));
             Set("ETERNALVR_UI_DISTANCE", Number(s.HudDistance, LauncherSettings.MinHudDistance, LauncherSettings.MaxHudDistance, LauncherSettings.DefaultHudDistance));
             Set("ETERNALVR_UI_WIDTH", Number(s.HudWidth, LauncherSettings.MinHudWidth, LauncherSettings.MaxHudWidth, LauncherSettings.DefaultHudWidth));
             Set("ETERNALVR_UI_OFFSET_Y", Number(s.HudHeight, LauncherSettings.MinHudHeight, LauncherSettings.MaxHudHeight, 0.0));
@@ -189,7 +202,11 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_SHOT_ORIGIN", LauncherSettings.ShotOriginName(s.Shots));
             Set("ETERNALVR_MENU_BEAM", s.MenuBeam ? "1" : "0");
             // The per-eye temporal set holds r_antialiasing at run time; it keeps DLSS (2) only when asked to (taa_hooks.cpp).
-            if (stereo && s.AntiAliasing == AntiAliasingMode.Dlss) Set("ETERNALVR_STEREO_DLSS", "1");
+            if (stereo && s.AntiAliasing == AntiAliasingMode.Dlss)
+            {
+                Set("ETERNALVR_STEREO_DLSS", "1");
+                Set("ETERNALVR_STEREO_DLSS_QUALITY", LauncherSettings.DlssQualityName(s.Dlss));
+            }
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             var ipd = LauncherSettings.ClampIpd(s.IpdMm);
@@ -207,7 +224,17 @@ namespace EternalVR.Launcher.Core.Launch
                 Route = inputs.Route,
                 Window = window,
                 RenderSize = renderChoice,
+                HeadsetProblem = HeadsetProblemOf(inputs.RuntimeProbe),
             };
+        }
+
+        /// <summary>What the window says before a launch whose runtime probe found no headset; null when it did, or none was made.</summary>
+        public static string HeadsetProblemOf(OpenXrProbeResult probe)
+        {
+            if (probe == null || probe.Ok) return null;
+            return probe.HeadsetUnavailable
+                ? "The headset runtime reports no headset: it is off, asleep or not connected."
+                : "The headset runtime did not answer (" + probe.Error + "). Is it installed and running?";
         }
 
         /// <summary>The <c>r_antialiasing</c> value of DLSS; the layer then runs the game's DLSS once per eye (taa_ngx.cpp).</summary>

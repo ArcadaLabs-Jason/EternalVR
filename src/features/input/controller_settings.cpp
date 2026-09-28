@@ -151,6 +151,7 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                                                                    {"eye", ShotOrigin::Eye}};
     r.choice("ETERNALVR_SHOT_ORIGIN", kShot, s.shotOrigin);
     r.range("ETERNALVR_AIM_SMOOTHING", 0.0f, 1.0f, s.aimSmoothing);
+    r.range("ETERNALVR_HAPTICS", 0.0f, 1.0f, s.haptics);
 
     r.flag("ETERNALVR_VIEWMODEL", s.viewmodel);
     r.flag("ETERNALVR_WEAPON_FOV", s.weaponFov);
@@ -166,6 +167,48 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                      "expected forward,left,up[,pitch,yaw,roll] (metres, degrees); the table is used");
         }
     }
+    static constexpr std::pair<const char*, OffhandMode> kOffhand[] = {
+        {"game", OffhandMode::Game}, {"free", OffhandMode::Free}, {"probe", OffhandMode::Probe}};
+    r.choice("ETERNALVR_OFFHAND", kOffhand, s.offhand);
+    if (r.get("ETERNALVR_OFFHAND_OFFSET") && !game::parseOffsetList(r.raw(), s.offhandOffset)) {
+        s.offhandOffset = kDefaultOffhandOffset;
+        r.report("ETERNALVR_OFFHAND_OFFSET",
+                 "expected forward,left,up[,pitch,yaw,roll] (metres, degrees); the default is kept");
+    }
+    if (const auto v = r.get("ETERNALVR_OFFHAND_SHOULDER")) {
+        game::WeaponOffset offset;
+        if (*v == "head") {
+            s.offhandShoulder = ShoulderAnchor::Head;
+        } else if (*v == "model") {
+            s.offhandShoulder = ShoulderAnchor::Model;
+        } else if (game::parseOffsetList(r.raw(), offset)) {
+            s.offhandShoulder = ShoulderAnchor::Head;
+            s.offhandShoulderOffset = offset;
+        } else {
+            r.report("ETERNALVR_OFFHAND_SHOULDER",
+                     "expected head, model or forward,left,up (metres from the head); the default is kept");
+        }
+    }
+    if (r.get("ETERNALVR_OFFHAND_ELBOW")) {
+        game::WeaponOffset elbow;
+        if (game::parseOffsetList(r.raw(), elbow) &&
+            std::fabs(elbow.forward) + std::fabs(elbow.left) + std::fabs(elbow.up) > 1e-3f) {
+            s.offhandElbow = elbow;
+        } else {
+            r.report("ETERNALVR_OFFHAND_ELBOW",
+                     "expected forward,left,up (a direction); the default is kept");
+        }
+    }
+    if (r.get("ETERNALVR_OFFHAND_PROBE")) {
+        game::WeaponOffset probe;
+        if (game::parseOffsetList(r.raw(), probe)) {
+            s.offhandProbe = probe;
+        } else {
+            r.report("ETERNALVR_OFFHAND_PROBE", "expected forward,left,up (metres); the default is kept");
+        }
+    }
+    r.range("ETERNALVR_OFFHAND_BLEND", 0.0f, 1.0f, s.offhandBlendSeconds);
+    r.flag("ETERNALVR_OFFHAND_TRACE", s.offhandTrace);
     if (const auto path = lookup("ETERNALVR_CONTROLLER_DATA"); path && !path->empty()) {
         s.controllerDataPath = *path;
     }
@@ -185,6 +228,25 @@ const char* aimSourceName(AimSource aim) {
         return "view";
     }
     return "head";
+}
+
+const char* shoulderAnchorName(ShoulderAnchor anchor) {
+    return anchor == ShoulderAnchor::Model ? "model" : "head";
+}
+
+game::WeaponOffset offhandOffsetFor(const game::WeaponOffset& offset, game::Handedness handedness) {
+    if (handedness == game::Handedness::Right) {
+        return offset;
+    }
+    game::WeaponOffset mirrored = offset;
+    mirrored.left = -offset.left;
+    mirrored.yaw = -offset.yaw;
+    mirrored.roll = -offset.roll;
+    return mirrored;
+}
+
+ShoulderAnchor shoulderAnchorFor(ShoulderAnchor anchor, game::Handedness handedness) {
+    return handedness == game::Handedness::Right ? anchor : ShoulderAnchor::Head;
 }
 
 const char* inputPathName(InputPath path) {

@@ -84,12 +84,59 @@ Stereo runs with one cvar each (`ETERNALVR_DEBUG_CVARS`), same view and sampling
 - The 0x1D476C0 family, 7 times hotter per tick than mono, does not change with any of the three and is still
   to be named.
 
-## 5. Next steps
+## 5. Shared culling, tried: no gain
 
-- Name the 0x1D476C0 family (more A/Bs: `r_skipGPUTriangleCulling`, `r_skipModelGPUCulling`, streaming,
-  decals), and the stereo-only particle-model work.
-- Find Umbra's per-view query entry (under 0x2271C10 / 0x1D1A020) and what it is handed (a frustum or a view),
-  for the shared-culling lever.
-- Prototype lever 3 behind a switch, measuring the tick with `ETERNALVR_CPU_TIMING=1` and GPU timing, and do
-  the ghost and shadow checks for eye R.
-- Plan lever 1 on paper against the per-render state list before any code.
+Umbra's per-view query was found and shared between the eyes on a test branch (not merged):
+
+- The kick wrapper (RVA 0x1D19280, `kick(context, idRenderView, origin, axis)`, returns at once for a null
+  view) hands the query setup (0x1D18BC0) the view's latched origin (+0x28A64), axis (+0x28A70) and
+  projection (+0x29340). The setup builds the Umbra camera, submits the query as up to 16 job slices (the
+  job at 0x1D15C90) and clears the context's result arrays; the finish (0x1D1A5A0) waits for the job and
+  rebuilds the results from the slices. The context comes from the world by view index, so both eyes use the
+  same one. With the default `r_umbraJobKickoff` 2 the kick runs in the screen-views loop (0x1C758F9).
+- The test ran eye L's query with one frustum enclosing both eyes (the outermost tangent on each side, the
+  apex set back behind the eyes' midpoint just far enough that every side plane passes outside both eyes,
+  plus 2% headroom for float rounding) and let eye R skip its query and take eye L's results. Eye R reused
+  them on every tick.
+- Measured over interleaved pairs (the Release layer, 1280 x 1400 per eye): off 152.8 ticks/s, on 143.1.
+  Eye R's render did not get shorter, and the CPU and GPU per tick went up (both eyes draw the wider set).
+
+With the default kickoff the query runs as parallel jobs on otherwise idle workers, off the tick's critical
+path. The per-function profile above counts CPU samples, not time on the critical path, so it overstated
+this lever. Umbra's cvars (kickoff 0, 1 and 3, the adaptive threshold off, the job split) did not beat the
+defaults either, nor did the job system's (`jobs_parkAfterUs` 1000 and 5000, `jobs_numThreads` 6) or
+`r_threadedRenderGui` 1 (median 151.5 against 150.8 ticks/s over eight pairs).
+
+## 6. The critical path
+
+The tick is latency-bound: eye R's render takes about 3 ms of wall time and 0.1 ms of CPU on the thread that
+starts it, with about 4.8 of 8 cores busy. A second sampling mode finds where the time goes: in each round it
+samples every busy thread and counts it idle (the job workers' spin loop, or a thread inside a kernel wait)
+or working. Rounds with exactly one working thread are the serial stretches, and that thread's function is on
+the critical path.
+
+- 21 to 33% of the rounds have one working thread.
+- The serial stretches are mostly the recording and submission of each eye's command buffers: the Vulkan
+  driver 6 to 13% of all rounds, called from the render graph's passes (0x1C65AF0, 0x1C32860, 0x1C33320) and
+  the per-object draw path (0x1C2C470); win32u 4 to 5% (the kernel's queue submits and sync-object waits and
+  signals); and 0x1C497A0 3 to 6.5%, which walks a global resource list for every pass's pipeline barriers
+  (0x1C65AF0 is between the "Pre pipeline" and "Post pipeline" markers).
+- The layer's own share of the serial stretches is about 1% with a Release build (the present's copy
+  submission). A Debug build of the layer adds several percent here, and is also about 5% slower overall:
+  measure with the Release layer.
+- The serial work runs on whichever job worker is free; no single thread owns it.
+
+## 7. What is left
+
+- **Both eyes in one render.** The engine can process several render views at once
+  (`r_allowParallelViewProcessing`), but its per-view storage is sized for one view (`stereo-reentry.md`, E4),
+  so this needs the device context's per-view slots enlarged: about 30 renderer sites index them.
+- **Overlap eye R with the next tick's game frame.** The game frame outside the renders is small (a stereo
+  render costs about what a whole mono frame costs), so this gains little.
+- **Share eye L's shadow casters with eye R** (lever 3): worth measuring the same way before building, since
+  shadow gathering also runs as parallel jobs.
+- **The layer's per-present copy**: record the copy command buffers once per ring slot and swapchain image
+  instead of for every present (about 1% of the serial stretches).
+- Simulator runs of the same build land in one of two groups (about 134 and 150 ticks/s, with more CPU and
+  GPU work per tick in the slow group, from the same view path). Compare interleaved pairs, at least four of
+  each, by median.

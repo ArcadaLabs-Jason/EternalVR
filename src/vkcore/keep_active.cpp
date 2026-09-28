@@ -201,10 +201,11 @@ void placeGameWindow(HWND hwnd) {
         AdjustWindowRectEx(&frame, style, FALSE, exStyle);
         int outerX = x + frame.left;
         int outerY = y + frame.top;
-        mirror_place::keepFrameOnScreen(outerX, outerY, frame.right - frame.left, frame.bottom - frame.top, frame);
-        const BOOL ok = SetWindowPos(hwnd, nullptr, outerX, outerY, frame.right - frame.left,
-                                     frame.bottom - frame.top,
-                                     SWP_NOZORDER | SWP_NOACTIVATE | (frameless ? SWP_FRAMECHANGED : 0u));
+        mirror_place::keepFrameOnScreen(outerX, outerY, frame.right - frame.left, frame.bottom - frame.top,
+                                        frame);
+        const BOOL ok =
+            SetWindowPos(hwnd, nullptr, outerX, outerY, frame.right - frame.left, frame.bottom - frame.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE | (frameless ? SWP_FRAMECHANGED : 0u));
         RECT after{};
         GetClientRect(hwnd, &after);
         EVR_LOG("window: placed at %d,%d with client %ldx%ld (was %ldx%ld)%s", x, y, after.right,

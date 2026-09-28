@@ -1,8 +1,9 @@
-// OpenXR start-up on the XR worker: loader, instance, system, the D3D12 device and session, the XR
-// swapchain, and session events.
+// OpenXR start-up on the XR worker: loader, instance, system, the D3D12 device and session, and the XR
+// swapchain. Session events: presenter_xr_events.cpp.
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "features/input/dashboard_pause.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/status_file.hpp"
@@ -128,15 +129,19 @@ void XrPresenter::Impl::makeLocalUpright() {
     }
     xr.xrDestroySpace(localSpace);
     localSpace = replacement;
-    EVR_LOG("xr: the runtime's LOCAL is not upright (orientation in STAGE %.3f %.3f %.3f %.3f, up axis %.2f); "
-            "using an upright space from STAGE at its origin (%.2f %.2f %.2f) with its heading "
-            "(ETERNALVR_XR_UPRIGHT=0 keeps LOCAL)",
-            o.x, o.y, o.z, o.w, xr_math::upCosine(localInStage), location.pose.position.x,
-            location.pose.position.y, location.pose.position.z);
+    EVR_LOG(
+        "xr: the runtime's LOCAL is not upright (orientation in STAGE %.3f %.3f %.3f %.3f, up axis %.2f); "
+        "using an upright space from STAGE at its origin (%.2f %.2f %.2f) with its heading "
+        "(ETERNALVR_XR_UPRIGHT=0 keeps LOCAL)",
+        o.x, o.y, o.z, o.w, xr_math::upCosine(localInStage), location.pose.position.x,
+        location.pose.position.y, location.pose.position.z);
 }
 
-bool XrPresenter::Impl::createXrInstance() {
+bool XrPresenter::Impl::createXrInstance(bool quiet) {
     std::uint32_t count = 0;
+    if (quiet && XR_FAILED(xr.xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr))) {
+        return false; // no runtime to ask yet
+    }
     EVR_XR_CHECK(xr.xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr));
     std::vector<XrExtensionProperties> props(count, {XR_TYPE_EXTENSION_PROPERTIES});
     EVR_XR_CHECK(xr.xrEnumerateInstanceExtensionProperties(nullptr, count, &count, props.data()));
@@ -144,9 +149,11 @@ bool XrPresenter::Impl::createXrInstance() {
         return std::strcmp(p.extensionName, XR_KHR_D3D12_ENABLE_EXTENSION_NAME) == 0;
     });
     if (!hasD3D12) {
-        status::flat(
-            "the headset runtime does not support Direct3D 12 sharing (pick another OpenXR runtime)");
-        EVR_LOG("xr: the runtime does not offer %s; VR off", XR_KHR_D3D12_ENABLE_EXTENSION_NAME);
+        if (!quiet) {
+            status::flat(
+                "the headset runtime does not support Direct3D 12 sharing (pick another OpenXR runtime)");
+            EVR_LOG("xr: the runtime does not offer %s; VR off", XR_KHR_D3D12_ENABLE_EXTENSION_NAME);
+        }
         return false;
     }
     // The controller profiles' extensions the runtime offers; a profile without its extension gets no
@@ -156,10 +163,18 @@ bool XrPresenter::Impl::createXrInstance() {
     // Optional: turns a Windows performance counter into an XrTime, so LOCAL can be checked for being
     // upright before the first frame (makeLocalUpright).
     perfCounterTime = std::any_of(props.begin(), props.end(), [](const XrExtensionProperties& p) {
-        return std::strcmp(p.extensionName, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME) == 0;
+        return std::strcmp(p.extensionName, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME) ==
+               0;
     });
     if (perfCounterTime) {
         extensions.push_back(XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+    }
+    // Optional: a colour scale on quad layers, for the wrist HUD's fade (docs/VR_HANDS_HUD.md).
+    wrist.colorScaleBias = std::any_of(props.begin(), props.end(), [](const XrExtensionProperties& p) {
+        return std::strcmp(p.extensionName, XR_KHR_COMPOSITION_LAYER_COLOR_SCALE_BIAS_EXTENSION_NAME) == 0;
+    });
+    if (wrist.colorScaleBias) {
+        extensions.push_back(XR_KHR_COMPOSITION_LAYER_COLOR_SCALE_BIAS_EXTENSION_NAME);
     }
     for (const std::string& name : controllerProfiles.extensions) {
         extensions.push_back(name.c_str());
@@ -179,17 +194,22 @@ bool XrPresenter::Impl::createXrInstance() {
         r = xr.xrCreateInstance(&info, &instance);
     }
     if (XR_FAILED(r) && extensions.size() > 1) { // an extension listed but refused: the core profiles only
-        EVR_LOG("xr: xrCreateInstance failed (%d); retrying without the optional extensions",
-                static_cast<int>(r));
+        if (!quiet) {
+            EVR_LOG("xr: xrCreateInstance failed (%d); retrying without the optional extensions",
+                    static_cast<int>(r));
+        }
         controllerProfiles.extensions.clear();
         perfCounterTime = false;
+        wrist.colorScaleBias = false;
         info.enabledExtensionCount = 1;
         r = xr.xrCreateInstance(&info, &instance);
     }
     controllerProfiles.api11 = info.applicationInfo.apiVersion == XR_API_VERSION_1_1;
     if (XR_FAILED(r)) {
-        status::flat("the headset runtime would not start (is it installed and running?)");
-        EVR_LOG("xr: xrCreateInstance failed: %d", static_cast<int>(r));
+        if (!quiet) {
+            status::flat("the headset runtime would not start (is it installed and running?)");
+            EVR_LOG("xr: xrCreateInstance failed: %d", static_cast<int>(r));
+        }
         return false;
     }
 #define EVR_XR_LOAD(name)                                                                                    \
@@ -206,6 +226,8 @@ bool XrPresenter::Impl::createXrInstance() {
             XR_VERSION_MINOR(ip.runtimeVersion), XR_VERSION_PATCH(ip.runtimeVersion),
             info.applicationInfo.apiVersion == XR_API_VERSION_1_1 ? "1.1" : "1.0");
     setXrRuntimeName(ip.runtimeName);
+    // The menu pointer's capture chord drops the trigger click of the same buttons the mapper chords.
+    menuChord = input::CaptureChord(input::kTriggerThresholds, input::captureButtonsFor(xrRuntimeName()));
     return true;
 }
 
@@ -393,7 +415,10 @@ bool XrPresenter::Impl::createD3D12AndSession() {
         return false;
     }
     copyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    return createSession();
+}
 
+bool XrPresenter::Impl::createSession() {
     XrGraphicsBindingD3D12KHR binding{XR_TYPE_GRAPHICS_BINDING_D3D12_KHR};
     binding.device = d3dDevice.Get();
     binding.queue = d3dQueue.Get();
@@ -546,130 +571,6 @@ bool XrPresenter::Impl::createXrSwapchain() {
             static_cast<int>(chosen->swapchain), count, quadSize.width, quadSize.height,
             kScreenDistanceMetres);
     return true;
-}
-
-bool XrPresenter::Impl::loseOnRuntimeFailure(XrResult result, const char* call) {
-    if (result != XR_ERROR_SESSION_LOST && result != XR_ERROR_INSTANCE_LOST &&
-        result != XR_ERROR_RUNTIME_FAILURE) {
-        return false;
-    }
-    if (!sessionLost) {
-        char text[XR_MAX_RESULT_STRING_SIZE];
-        EVR_LOG("xr: %s: %s; the runtime or the session is gone, the game continues flat", call,
-                xrText(result, text));
-        status::flat("the headset disconnected or its runtime stopped; quit the game and start again from "
-                     "the launcher");
-    }
-    trackingReady.store(false);
-    disableKeepActive();
-    sessionRunning = false;
-    sessionLost = true;
-    return true;
-}
-
-void XrPresenter::Impl::pollEvents() {
-    XrEventDataBuffer event{XR_TYPE_EVENT_DATA_BUFFER};
-    XrResult polled = XR_SUCCESS;
-    while ((polled = xr.xrPollEvent(instance, &event)) == XR_SUCCESS) {
-        switch (event.type) {
-        case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
-            const auto& changed = reinterpret_cast<const XrEventDataSessionStateChanged&>(event);
-            sessionState = changed.state;
-            sessionFocused.store(sessionState == XR_SESSION_STATE_FOCUSED, std::memory_order_relaxed);
-            EVR_LOG("xr: session state %d", static_cast<int>(sessionState));
-            if (sessionState == XR_SESSION_STATE_READY) {
-                XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
-                begin.primaryViewConfigurationType = viewConfig;
-                const XrResult r = xr.xrBeginSession(session, &begin);
-                sessionRunning = XR_SUCCEEDED(r);
-                EVR_LOG("xr: xrBeginSession: %d", static_cast<int>(r));
-                if (sessionRunning) {
-                    status::vr("the headset shows the game");
-                }
-                if (sessionRunning && settings.keepActive) {
-                    enableKeepActive();
-                }
-            } else if (sessionState == XR_SESSION_STATE_STOPPING) {
-                trackingReady.store(false);
-                disableKeepActive();
-                xr.xrEndSession(session);
-                sessionRunning = false;
-                EVR_LOG("xr: session ended");
-            } else if (sessionState == XR_SESSION_STATE_EXITING ||
-                       sessionState == XR_SESSION_STATE_LOSS_PENDING) {
-                trackingReady.store(false);
-                disableKeepActive();
-                sessionRunning = false;
-                sessionLost = true;
-                status::flat("the headset disconnected or its runtime stopped; quit the game and start again "
-                             "from the launcher");
-                EVR_LOG("xr: session %s; the game continues flat",
-                        sessionState == XR_SESSION_STATE_EXITING ? "exiting" : "lost");
-            }
-            break;
-        }
-        case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
-            trackingReady.store(false);
-            disableKeepActive();
-            sessionRunning = false;
-            sessionLost = true;
-            status::flat("the headset runtime stopped; quit the game and start again from the launcher");
-            EVR_LOG("xr: instance loss pending; the game continues flat");
-            break;
-        case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING: {
-            const auto& change = reinterpret_cast<const XrEventDataReferenceSpaceChangePending&>(event);
-            if (change.referenceSpaceType != XR_REFERENCE_SPACE_TYPE_LOCAL) {
-                EVR_LOG("xr: reference space %d change pending", static_cast<int>(change.referenceSpaceType));
-                break;
-            }
-            quadPlaced = false;
-            placeAttempts = 0;
-            menuReplace.store(true, std::memory_order_relaxed);
-            const XrPosef& p = change.poseInPreviousSpace;
-            // T-063: every recenter re-anchors yaw; the room keeps its height across the runtime's move.
-            room.onSpaceChange(change.poseValid
-                                   ? std::optional<Pose>(Pose{Quat{p.orientation.x, p.orientation.y,
-                                                                   p.orientation.z, p.orientation.w},
-                                                              Vec3{p.position.x, p.position.y, p.position.z}})
-                                   : std::nullopt);
-            EVR_LOG("xr: LOCAL change pending (pose %s: (%.3f %.3f %.3f)); re-placing the screen and "
-                    "re-anchoring the room's heading",
-                    change.poseValid ? "valid" : "not given", p.position.x, p.position.y, p.position.z);
-            break;
-        }
-        default:
-            break;
-        }
-        event = {XR_TYPE_EVENT_DATA_BUFFER};
-    }
-    if (polled != XR_EVENT_UNAVAILABLE) {
-        loseOnRuntimeFailure(polled, "xrPollEvent");
-    }
-}
-
-void XrPresenter::Impl::placeQuad(XrTime time) {
-    XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
-    if (XR_FAILED(xr.xrLocateSpace(viewSpace, localSpace, time, &location))) {
-        return;
-    }
-    constexpr XrSpaceLocationFlags needed =
-        XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT;
-    if ((location.locationFlags & needed) != needed) {
-        if (++placeAttempts == 90) {
-            EVR_LOG("xr: head pose not valid yet; the screen stays at the default place");
-        }
-        return;
-    }
-    Pose head;
-    head.orientation = {location.pose.orientation.x, location.pose.orientation.y, location.pose.orientation.z,
-                        location.pose.orientation.w};
-    head.position = {location.pose.position.x, location.pose.position.y, location.pose.position.z};
-    const Pose quad = xr_math::cinemaQuadPose(head, kScreenDistanceMetres);
-    quadPose.orientation = {quad.orientation.x, quad.orientation.y, quad.orientation.z, quad.orientation.w};
-    quadPose.position = {quad.position.x, quad.position.y, quad.position.z};
-    quadPlaced = true;
-    EVR_LOG("xr: screen placed at (%.2f, %.2f, %.2f) in LOCAL", quadPose.position.x, quadPose.position.y,
-            quadPose.position.z);
 }
 
 } // namespace evr::vkcore

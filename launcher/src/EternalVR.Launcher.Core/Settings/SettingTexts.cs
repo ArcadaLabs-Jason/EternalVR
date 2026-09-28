@@ -29,6 +29,11 @@ namespace EternalVR.Launcher.Core.Settings
                 "How fast smooth turning turns with the stick pushed all the way, in degrees per second."),
             [Setting.SnapAngle] = new Text("Snap angle",
                 "How far one flick of the stick turns you with snap turning, in degrees."),
+            [Setting.Vignette] = new Text("Vignette",
+                "Darkens the edges of your view while the stick moves or turns you (and during a dash or a glory kill), "
+                + "leaving the middle clear. Less motion at the edges of your eyes helps if moving with the stick makes you "
+                + "feel sick. Strong narrows the view more than light. Moving your head never shows it.",
+                "Off", "Light", "Strong"),
             [Setting.WalkInRoom] = new Text("Room-scale",
                 "Walking around your room moves the Slayer with you. Off: you can still lean and peek about 60 cm from where "
                 + "you recentered; past that the view fades until you step back or recenter."),
@@ -64,16 +69,28 @@ namespace EternalVR.Launcher.Core.Settings
                 AimSteadiness.Names),
             [Setting.AimDot] = new Text("Aim dot",
                 "A dot where your weapon hand aims, in place of the game's crosshair."),
+            [Setting.Vibration] = new Text("Vibration",
+                "How strongly the controllers vibrate. They pulse when you fire, punch, point at and click menus, and when the "
+                + "game rumbles. Off turns vibration off.",
+                Vibration.Names),
+            [Setting.ButtonLayout] = new Text("Button layout",
+                "Change which button does what. Edit controls opens your controls folder, with a copy of the built-in controls "
+                + "in its defaults folder: copy the file for your controllers into the controls folder, edit it and start the "
+                + "game. Delete your copy to go back to the built-in controls."),
             [Setting.Resolution] = new Text("Resolution",
                 "The detail each eye is rendered with. 1.00 is your headset's recommended size, kept within what a fast card "
                 + "can render at the headset's refresh rate. Raise it for a sharper picture if your card has headroom; lower it "
                 + "if the frame rate drops."),
             [Setting.AntiAliasing] = new Text("Anti-aliasing",
-                "How edges are smoothed in each eye. Off (recommended) turns anti-aliasing and the game's other temporal "
-                + "effects off: sharp in both eyes, with some shimmer on edges and shiny surfaces. TAA is the game's own: "
-                + "smoother edges, but moving demons can look smeared in the right eye for now. DLSS is experimental and "
-                + "needs an NVIDIA RTX card.",
-                "TAA", "DLSS (experimental)", "Off (recommended)"),
+                "How edges are smoothed in each eye. TAA (recommended) is the game's own: smooth edges, with each eye "
+                + "keeping its own history. Off turns anti-aliasing and the game's other temporal effects off: sharp, "
+                + "with some shimmer on edges and shiny surfaces, and a little lighter on the graphics card. DLSS is "
+                + "experimental and "
+                + "needs an NVIDIA RTX card: it renders a smaller image and scales it up (Quality the least, Ultra "
+                + "Performance the most), which helps only when the graphics card is what limits the frame rate; when the "
+                + "processor is, it can be slower than TAA. Choose it here: the game's own DLSS setting in its video menu "
+                + "is not used in VR, and it may show DLSS as off.",
+                "TAA (recommended)", "DLSS Quality", "DLSS Balanced", "DLSS Performance", "DLSS Ultra Performance", "Off"),
             [Setting.VrMode] = new Text("VR mode",
                 "Stereo renders one image per eye, for real depth. Mono renders one image for both eyes: flat, but faster.",
                 "Stereo (one image per eye)", "Mono (one for both eyes)"),
@@ -112,6 +129,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "How wide the HUD panel is, in metres. The menus take the same size."),
             [Setting.HudHeight] = new Text("HUD height",
                 "Moves the HUD panel up or down from eye level, in metres (negative is lower)."),
+            [Setting.HudPlace] = new Text("Health and ammo",
+                "Where health, armour and ammo are shown: on the HUD panel with the rest, or on the inside of your off hand's "
+                + "wrist, shown when you turn it toward you (experimental).",
+                "On the HUD panel", "On your wrist"),
             [Setting.MotionControllers] = new Text("Motion controllers",
                 "Play with your headset's controllers. Off: keyboard, mouse or a gamepad, as in the flat game."),
             [Setting.ShotsFrom] = new Text("Shots come from",

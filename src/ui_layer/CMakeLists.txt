@@ -5,5 +5,10 @@ evr_add_module(evr_ui_layer
         additive_wash.cpp
         backdrop.cpp
         gui_target.cpp
+        hud_regions.cpp
         layout_tracker.cpp
-        ui_settings.cpp)
+        motion_target.cpp
+        ui_settings.cpp
+        wrist_hud.cpp
+    DEPENDS
+        evr_common)

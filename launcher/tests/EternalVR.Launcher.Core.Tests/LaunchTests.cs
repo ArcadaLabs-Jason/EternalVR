@@ -54,9 +54,10 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("1", env["ETERNALVR_CONTROLLERS"]);
             Assert.Equal("hand", env["ETERNALVR_AIM"]);
             Assert.Equal("1", env["ETERNALVR_UI_LAYER"]);
-            // The stereo cvars, anti-aliasing Off by default (docs/VR_STEREO.md), and a small desktop mirror: each eye
+            Assert.Equal("panel", env["ETERNALVR_HUD"]);
+            // The stereo cvars with per-eye temporal history, TAA by default (docs/VR_STEREO.md), and a small desktop mirror: each eye
             // renders at the headset's size (the render size, docs/rig-findings/render-size.md), not the window's.
-            foreach (var arg in new[] { "+r_TAASafeMode 0", "+r_antialiasing 0", "+r_TAAAntiGhosting 0", "+rs_enable 0", "+r_swapInterval 0",
+            foreach (var arg in new[] { "+r_TAASafeMode 0", "+r_antialiasing 1", "+r_TAAAntiGhosting 0", "+rs_enable 0", "+r_swapInterval 0",
                                         "+r_fullscreen 0", "+r_windowWidth 1280", "+r_windowHeight 720" })
                 Assert.Contains(arg, p.CommandLine);
             Assert.Equal("auto", env["ETERNALVR_RENDER_SIZE"]);
@@ -105,6 +106,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.False(env.ContainsKey("ETERNALVR_MODE"));
             Assert.False(env.ContainsKey("ETERNALVR_WINDOW"));
             Assert.False(env.ContainsKey("ETERNALVR_UI_LAYER"));
+            Assert.False(env.ContainsKey("ETERNALVR_HUD"));
             Assert.Equal("head", env["ETERNALVR_AIM"]);
             Assert.Null(p.Window);
             foreach (var name in new[] { "r_TAASafeMode", "r_antialiasing", "r_TAAAntiGhosting", "rs_enable", "r_swapInterval", "r_fullscreen", "r_windowWidth" })
@@ -118,6 +120,19 @@ namespace EternalVR.Launcher.Core.Tests
             var env = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Controllers = false })));
             Assert.Equal("0", env["ETERNALVR_CONTROLLERS"]);
             Assert.Equal("head", env["ETERNALVR_AIM"]);
+        }
+
+        [Fact]
+        public void WristHudNeedsTheControllers()
+        {
+            Assert.Equal("wrist", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Wrist })))["ETERNALVR_HUD"]);
+            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Wrist, Controllers = false })))["ETERNALVR_HUD"]);
+            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Panel })))["ETERNALVR_HUD"]);
+            Assert.Equal(HudMode.Panel, LauncherSettings.Parse(new LauncherSettings { Hud = HudMode.Panel }.Serialize()).Hud);
+            Assert.Equal(HudMode.Wrist, LauncherSettings.Parse(new LauncherSettings { Hud = HudMode.Wrist }.Serialize()).Hud);
+            // A file from before the key, or a value this version does not know: the default (the panel).
+            Assert.Equal(HudMode.Panel, LauncherSettings.Parse("schema_version = 2\nworld_scale = 1.10\n").Hud);
+            Assert.Equal(HudMode.Panel, LauncherSettings.Parse("hud = elbow").Hud);
         }
 
         [Fact]

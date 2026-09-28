@@ -8,6 +8,7 @@
 
 #include "vkcore/controllers.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/taa_hooks.hpp"
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/ui_vulkan.hpp"
 
@@ -42,6 +43,26 @@ void XrPresenter::Impl::startUi() {
             located ? "on" : "OFF (reason above)", settings.ui.widthMetres, settings.ui.distanceMetres,
             settings.ui.offsetYMetres,
             ui_engine::skipHookInstalled() ? "skipped while the quad shows" : "kept");
+    const ui_layer::WristSettings& w = settings.ui.wrist;
+    EVR_LOG("ui: HUD %s%s; wrist: %s (facing %.0f/%.0f deg, gaze %.0f/%.0f deg), %.2f m row at (%.3f, %.3f, "
+            "%.3f), fade %.2f s %s, abilities %s",
+            ui_layer::hudModeName(settings.ui.hud),
+            settings.ui.hud == ui_layer::HudMode::Wrist ? " (corner blocks on the off hand's wrist)" : "",
+            w.always ? "always shown" : "shown while facing the head", w.showDegrees, w.hideDegrees,
+            w.gazeShowDegrees, w.gazeHideDegrees, w.widthMetres, w.offset.x, w.offset.y, w.offset.z,
+            w.fadeInSeconds, wrist.colorScaleBias ? "(colour scale)" : "(no colour scale: switched)",
+            w.abilities ? "on" : "off");
+    std::wstring motion;
+    if (ui_vulkan::motionCaptureRequested() && readEnv(L"ETERNALVR_CAPTURE_MOTION", motion)) {
+        const auto setting = stereo_seq::parseCaptureSetting(motion);
+        std::lock_guard lock(mutex);
+        if (setting && taaRequested()) {
+            motionCapture.configure(*setting);
+        } else {
+            EVR_LOG("motion: ETERNALVR_CAPTURE_MOTION needs <dir>[,<every N pairs>] and per-eye TAA "
+                    "(ETERNALVR_STEREO_TAA); motion capture off");
+        }
+    }
     std::wstring text;
     if (located && readEnv(L"ETERNALVR_CAPTURE_UI", text) && !text.empty()) {
         const auto setting = stereo_seq::parseCaptureSetting(text);
@@ -181,6 +202,7 @@ void XrPresenter::Impl::destroyUiImages() {
     uiReady = false;
     uiCapture.destroy(dev);
     uiBackdrop.destroy(dev);
+    motionCapture.destroy(dev);
 }
 
 // ---- Present hook (render thread, under `mutex`): the GUI target into the slot ------------------------

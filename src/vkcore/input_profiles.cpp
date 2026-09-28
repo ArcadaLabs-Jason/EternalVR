@@ -5,6 +5,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/interaction_profiles.hpp"
+#include "features/input/player_controller_data.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
 
@@ -24,7 +25,8 @@ namespace {
 
 constexpr const char* kTag = "controllers";
 
-// A player's controller data file, or nullopt (logged) when it cannot be read or has issues.
+// A player's controller data file, or nullopt (logged) when it cannot be read or has issues (in the file,
+// or in compiling one of its control maps).
 std::optional<input::ControllerData> readPlayerData(const std::string& path) {
     const auto text = readTextFile(path);
     if (!text) {
@@ -35,6 +37,14 @@ std::optional<input::ControllerData> readPlayerData(const std::string& path) {
     if (!data.ok()) {
         for (const auto& issue : data.issues) {
             EVR_LOG("%s: %s line %d: %s", kTag, path.c_str(), issue.line, issue.message.c_str());
+        }
+        EVR_LOG("%s: '%s' has issues; the built-in data is used", kTag, path.c_str());
+        return std::nullopt;
+    }
+    const std::vector<input::BindingIssue> mapIssues = input::controlMapIssues(data);
+    if (!mapIssues.empty()) {
+        for (const auto& issue : mapIssues) {
+            EVR_LOG("%s: %s: %s", kTag, path.c_str(), issue.message.c_str());
         }
         EVR_LOG("%s: '%s' has issues; the built-in data is used", kTag, path.c_str());
         return std::nullopt;
@@ -126,19 +136,39 @@ FamilyData loadControllerData(const input::ControllerSettings& settings) {
         data[static_cast<std::size_t>(family)] =
             input::parseControllerData(game::builtinControllerData(family));
     }
-    if (!settings.controllerDataPath.empty()) {
-        if (auto player = readPlayerData(settings.controllerDataPath)) {
-            bool placed = false;
-            for (input::ControllerData& d : data) {
-                if (d.profilePath == player->profilePath) {
-                    d = std::move(*player);
-                    placed = true;
-                    break;
-                }
-            }
-            EVR_LOG("%s: controller data '%s' %s", kTag, settings.controllerDataPath.c_str(),
-                    placed ? "replaces the built-in data of its profile"
-                           : "names no supported profile; unused");
+    const std::string& path = settings.controllerDataPath;
+    if (path.empty()) {
+        return data;
+    }
+    // A folder: every *.toml directly inside it, in name order; a file: that file alone.
+    std::vector<std::string> files;
+    if (auto names = folderFileNames(path)) {
+        for (const std::string& name : input::controllerDataFileOrder(std::move(*names))) {
+            files.push_back(input::joinFolderPath(path, name));
+        }
+        if (files.empty()) {
+            EVR_LOG("%s: the controller data folder '%s' has no .toml files; the built-in data is used", kTag,
+                    path.c_str());
+        }
+    } else {
+        files.push_back(path);
+    }
+    std::vector<std::string> sources;
+    for (const std::string& file : files) {
+        auto player = readPlayerData(file);
+        if (!player) {
+            continue;
+        }
+        const input::PlayerDataPlacement placement =
+            input::placePlayerData(data, sources, file, std::move(*player));
+        if (!placement.replaced.empty()) {
+            EVR_LOG(
+                "%s: controller data '%s' replaces '%s', which names the same profile (the later file wins)",
+                kTag, file.c_str(), placement.replaced.c_str());
+        } else {
+            EVR_LOG("%s: controller data '%s' %s", kTag, file.c_str(),
+                    placement.placed ? "replaces the built-in data of its profile"
+                                     : "names no supported profile; unused");
         }
     }
     return data;

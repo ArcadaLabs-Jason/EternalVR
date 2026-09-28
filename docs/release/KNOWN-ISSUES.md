@@ -6,7 +6,9 @@ them is worse for you than described here.
 ## The big ones
 
 - **The HUD is on a floating panel.** Health, armour, ammo and the rest of the HUD are shown on a flat
-  panel in front of you that follows your head. A HUD on your wrist or on the weapon is not done yet.
+  panel in front of you that follows your head. "Health and ammo" on the launcher's Advanced tab can put
+  health, armour and ammo on the inside of your off hand's wrist instead; that is experimental and has
+  not been tried in a headset yet. A HUD on the weapon is not done yet.
 - **Glory kills keep the game's camera.** The game moves the camera during a glory kill; in VR the view
   follows it, facing the demon, and turns with your head from there. The kills are short, but if camera
   motion bothers you, this is where you will feel it. Cutscenes play on a flat 16:9 screen in front of you
@@ -25,12 +27,15 @@ them is worse for you than described here.
   controllers are new and untested on real hardware.** Please report how they work. The Vive wands have a
   reduced layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. Pimax and other
   controllers get whatever layout their runtime maps them to.
-- **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), VR stays off for the
-  rest of that game session. Quit the game and start it again from the launcher.
+- **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), the game carries on
+  flat on your desktop and VR comes back by itself once the headset and its runtime are back, usually
+  within a few seconds. This has been tested on a headset simulator, not yet with a real headset
+  dropping out; please tell me if VR does not come back. If you close VR for the game from the
+  headset's own menu, VR stays off until you start the game again from the launcher.
 - **A DOOM Eternal update turns VR off** until EternalVR supports the new build; the game then runs flat.
 - **SteamVR has had one test**, with a Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the
-  left Menu button opens SteamVR's dashboard, so hold Y to pause instead; the screenshot button (left Menu
-  + trigger) does not reach the game there.
+  left Menu button opens SteamVR's dashboard, so hold Y to pause instead, and take a screenshot with Y
+  held and a trigger pulled (instead of left Menu + trigger).
 - **Only tested with a Quest 3 through Virtual Desktop (VDXR).** SteamVR, Meta Horizon Link, other
   runtimes and other headsets are untested. The launcher lets you pick a runtime; please tell me what
   happens.
@@ -50,18 +55,22 @@ them is worse for you than described here.
 - **Some effects are off in stereo.** Motion blur, depth of field, chromatic aberration and vignette are
   off in VR, and so are the red tint and blur when you take damage (the arrows showing where the hit
   came from and the low health warning stay). The game's other screen overlays are off too: the red
-  edges at low health, double vision and screen shakes. A few temporal effects (screen-space ambient occlusion's temporal filter, water
-  reflections and refraction) are turned off because the two eyes would share their history. The picture looks slightly different from the flat game.
-- **DLSS is experimental.** The launcher's "Anti-aliasing" setting offers DLSS on NVIDIA RTX cards (Off is
-  the default). Each eye gets its own DLSS history. DLSS only helps when the graphics card
-  is what limits the frame rate: in stereo the processor is often the limit, even on a fast one, and then
-  DLSS runs slower than TAA. The game's own Video menu shows DLSS as off even while the mod runs it. If
-  DLSS cannot run per eye, the mod switches that session to TAA (the log says
-  `DLSS has no per-eye feature`).
-- **Anti-aliasing is off by default.** With TAA, moving demons still look slightly smeared in the right eye
-  only (some people feel it more than they see it), so the launcher's "Anti-aliasing" setting defaults to
-  Off: sharp in both eyes, with some shimmer on edges and shiny surfaces. TAA is still there if you prefer
-  smoother edges.
+  edges at low health, double vision and screen shakes. A few temporal effects (screen-space ambient
+  occlusion's temporal filter, water reflections and refraction) are turned off because the two eyes
+  would share their history. The picture looks slightly different from the flat game.
+- **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
+  for each eye, and moving demons look the same in both eyes. A few animated shapes, such as the damned
+  souls reaching out of the walls, can still look slightly different between the eyes. The launcher's
+  "Anti-aliasing" setting can switch to Off (sharp, with some shimmer on edges) or DLSS.
+- **Pickup camera animations do not play.** At a pickup that moves the camera (the chainsaw, for
+  example) the view holds still until the tutorial popup instead of playing the animation. The game
+  carries on normally afterwards.
+- **DLSS is experimental.** It is offered on NVIDIA RTX cards and helps only when the graphics card, not
+  the processor, is what holds the frame rate back; when the processor is, DLSS can be slower than TAA.
+  Each eye gets its own DLSS history. Pick the quality (Quality, Balanced, Performance or Ultra
+  Performance) in the launcher's "Anti-aliasing" setting: the game's own DLSS setting in its video menu is
+  not used in VR and may show DLSS as off. If DLSS cannot run per eye, the mod switches that session to
+  TAA (the log says `DLSS has no per-eye feature`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn.
 - **Shadows can pop in** on some walls as you turn your head.
@@ -75,30 +84,39 @@ them is worse for you than described here.
 
 - **Weapon placement** in your hand is one estimate for all weapons; some guns may sit a little off.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand.
+  `ETERNALVR_OFFHAND=free` lets the off arm reach for your off-hand controller instead. That is
+  experimental: it has not been tried in a headset, in glory kills or across a level change, and the
+  hand's angle and the shoulder are rough.
 - **Shots can pass through thin walls** if you push the gun through one; the shot starts at your hand
   and there is no wall check yet.
-- **No haptics** (controller vibration) yet.
-- **Remapping the controls isn't in the launcher yet.** You can change them with a text file; see
-  "Changing the controls" in `CONTROLS.md`.
-- **The weapon wheel sits right of centre** on the HUD panel, where the game lays it out. Selecting works:
-  hold the right stick down, push it toward a weapon, and let go.
+- **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
+  strength and feel may change.
+- **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
+  right of centre.
 - **The meathook and glory kills with hand aim** have had little testing.
 - **Index controllers** have bindings but have never been tried.
 
 ## Menus
 
-- The menu panel is flat and stays where it appeared; it does not follow you if you turn away.
+- The menu panel is flat. It stays where it appeared until you look away from it for a second, then it
+  comes back in front of you.
 - In the short pause menu of the very first mission (Load Checkpoint, Exit), neither B nor the Menu
   button closes it; the game does the same with Escape when played flat.
 
 ## Launcher and settings
 
-- **The launcher does not check that the headset is connected.** It checks that an OpenXR runtime is
-  set, not that it is running. Start the runtime and connect the headset before Launch VR.
+- **Start the headset's runtime and connect the headset before Launch VR.** When the runtime reports no
+  headset, or does not answer, the launcher asks before it starts the game.
 - **Steam Cloud warning.** If the launcher warns that "Steam's cloud record is stale", start DOOM Eternal
   once normally through Steam, let it reach the main menu, quit, then use the launcher again.
 - **A small game window sits on your desktop** during a VR session. That is normal. While the game is
   not the focused window, your mouse stays yours.
+- **No controls editor in the launcher yet.** To change the buttons, edit the files in your controls
+  folder (**Edit controls...** on the Play tab, see CONTROLS.md). The controls folder is shared by every
+  player: a player picked in the launcher's Player list keeps their own Play and Advanced settings, not
+  their own buttons.
+- **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
+  in a headset; its strength may change.
 - **Not code-signed.** Windows SmartScreen may warn the first time (`INSTALL.md`).
 
 ## The DLC (The Ancient Gods, parts one and two)

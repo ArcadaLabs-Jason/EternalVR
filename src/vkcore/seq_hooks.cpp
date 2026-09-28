@@ -5,6 +5,7 @@
 #include "stereo_seq/stack_budget.hpp"
 #include "vkcore/bin_tile_hooks.hpp"
 #include "vkcore/cpu_timing.hpp"
+#include "vkcore/keep_prev_hooks.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/moved_flag_hooks.hpp"
@@ -407,9 +408,10 @@ bool installSeqHooks(const SeqHookSettings& settings) {
         g_installed = true;
         g_active.store(true, std::memory_order_release);
         installBinTileHook(); // lights and decals binned in each eye's own frustum; a missing piece only logs
-        installObjectPrevHooks(); // eye R's moving objects moved from its own previous render
+        installObjectPrevHooks(); // the object ring, a slot per render: eye R's objects keep their motion
         installWorldGuiHook();    // world GUIs (holograms, screens) in eye R too
         installMovedFlagHooks();  // moving objects keep their motion vectors in eye R
+        installKeepPrevHooks();   // and their previous model matrix from eye L
         EVR_LOG("seq: frame-end job wrapped; per-eye previous matrices %s",
                 settings.prevMatrices ? "on" : "off");
     });
@@ -483,9 +485,15 @@ std::optional<stereo_seq::RenderTag> seqTagInFlight() {
     if (!g_active.load(std::memory_order_acquire)) {
         return std::nullopt;
     }
-    const std::uint32_t backend = backendFrame();
+    return seqTagForBackendFrame(backendFrame() + 1);
+}
+
+std::optional<stereo_seq::RenderTag> seqTagForBackendFrame(std::uint32_t frame) {
+    if (!g_active.load(std::memory_order_acquire)) {
+        return std::nullopt;
+    }
     std::lock_guard lock(g_tagMutex);
-    const stereo_seq::RenderTag* tag = g_tags.peek(backend + 1);
+    const stereo_seq::RenderTag* tag = g_tags.peek(frame);
     if (!tag) {
         return std::nullopt;
     }

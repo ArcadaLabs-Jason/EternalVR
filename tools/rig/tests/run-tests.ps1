@@ -727,6 +727,19 @@ Test-Case 'args-and-env-arrive-comma-joined-via-file' {
     Check ($r2.Code -eq 3) "several -Args values: exit code $($r2.Code), expected 3"
 }
 
+Test-Case 'game-env-does-not-leak-into-the-calling-process' {
+    $t = New-TestEnv 'env-restore'
+    # A batch caller runs several games from one PowerShell process: after run.ps1 returns, that
+    # process must hold its own values again (EVR_KEEP) and none of the game's (EVR_LEAK).
+    $cmd = "`$env:EVR_KEEP = 'mine'; & '{0}' -Exe '{1}' -Args '+logFile 2','--exit-now' -GameEnv 'EVR_LEAK=1','EVR_KEEP=game' | Out-Null; " -f (Join-Path $RigDir 'run.ps1'), $t.Exe
+    $cmd += "'LEAK=' + [Environment]::GetEnvironmentVariable('EVR_LEAK', 'Process'); 'KEEP=' + `$env:EVR_KEEP"
+    $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String
+    $run = Read-Json (Join-Path (@(Get-Runs $t)[-1]) 'run.json')
+    Check ($run.env.EVR_LEAK -eq '1' -and $run.env.EVR_KEEP -eq 'game') 'game env not recorded for the run'
+    Check ($out -match '(?m)^LEAK=\s*$') "EVR_LEAK leaked into the caller: $out"
+    Check ($out -match '(?m)^KEEP=mine\s*$') "EVR_KEEP not restored for the caller: $out"
+}
+
 Test-Case 'stop-waits-until-a-slowly-exiting-game-is-gone' {
     $t = New-TestEnv 'slow-exit' @{ EVR_RIG_GAME_PROCESSES = 'evr_rig_testapp' }
     $s = Start-TestRun $t @('-Args', '--slow-exit=2500')

@@ -14,6 +14,8 @@
 // - The viewmodel (viewmodel_hook.cpp): the game's arms and weapon at the controller with per-weapon
 //   offsets (T-054), drawn with the headset's FOV.
 // - The virtual gamepad (xinput_hook.cpp): the fallback when the user-command hooks cannot be installed.
+// - Vibration (haptics_xr.cpp): pulses for fire, punches, the menu pointer, the capture and the game's
+//   rumble, sent by the XR worker (features/input/haptics_policy.hpp).
 //
 // Everything is off unless ETERNALVR_CONTROLLERS=1. Every hook is installed only while the multiplayer
 // guard is armed, and every callback asks mp_guard::allowsGameTouch() before it writes (mp-guard.md).
@@ -21,6 +23,7 @@
 #include "common/pose.hpp"
 #include "common/vector.hpp"
 #include "features/input/controller_state.hpp"
+#include "features/input/haptics_policy.hpp"
 #include "game/eternal/game_action.hpp"
 #include "xr_math/head_aim.hpp"
 #include "xr_math/head_view.hpp"
@@ -78,6 +81,10 @@ input::Hand dominantHand();
 // on that ray; XR_NULL_HANDLE otherwise.
 XrSpace weaponAimSpace();
 
+// XR worker: the off hand's grip space while the controllers are attached, for the wrist HUD's quads (the
+// runtime places them at display time, whatever the recenter transform); XR_NULL_HANDLE otherwise.
+XrSpace offHandGripSpace();
+
 // XR worker, while the multiplayer guard is armed (head-tracked mode): installs the game hooks.
 void installGameHooks();
 
@@ -113,6 +120,11 @@ bool menuRequestedWithin(double seconds);
 // Any thread: the same for the Dossier (or the automap, one of its pages) alone.
 bool dossierRequestedWithin(double seconds);
 
+// XR worker (the menu pointer): a light tick on `hand` for the vibration (haptics_policy.hpp).
+void noteMenuHaptic(input::Hand hand, input::MenuTick tick);
+// Game thread (the rumble hook): the game's rumble motors this frame, 0..1 each.
+void noteGameRumble(float low, float high);
+
 // Any thread: the gameplay actions the controllers hold now, as the control map maps them before a menu
 // holds them back (in a tutorial popup the menu router presses their keys). Empty while the controllers are
 // off or the mapper has not run for a moment.
@@ -122,6 +134,16 @@ game::GameActionSet heldActions();
 // glory kill, the Meathook pull, a melee lunge, a scripted camera; forced_angles.hpp). False while the
 // controllers are off.
 bool forcedView();
+
+// Any thread: the artificial motion of the last mapper run, for the comfort vignette: the turn rate (degrees
+// per second, smooth or snap, either direction) and the move stick's magnitude after its response (0 to 1).
+// Zero while a menu holds the controllers back, while they are off or when the mapper has not run for a
+// moment.
+struct ArtificialMotion {
+    float turnDegreesPerSecond = 0.0f;
+    float move = 0.0f;
+};
+ArtificialMotion artificialMotion();
 
 // Camera hook, inside head aim: the angles the view follows. The head's own, or under hand aim the weapon
 // hand's ray; nullopt when hand aim yields this frame (forced view) and nothing may be written.

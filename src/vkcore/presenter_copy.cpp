@@ -246,6 +246,8 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     } else if (!target.keepOther) {
         slot.ui.written = false;
     }
+    // The motion-vector capture: with eye R's copy, both eyes of the pair have rendered.
+    motionCapture.record(dev, cb, family, target.kind == stereo_seq::PresentKind::EyeR);
     // The desktop mirror, after the eye is in the ring: keep this eye, or put the kept one in its place.
     const VkImageLayout sourceLayout =
         mirror.record(dev, cb, source, sc.format, sc.extent, panel.step, target.toWindow);
@@ -278,32 +280,6 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     return dev.vk.EndCommandBuffer(cb) == VK_SUCCESS;
 }
 
-std::uint32_t XrPresenter::Impl::acquireFreeSlot(const FamilyCommands& fc, std::uint64_t completed) {
-    // With two eyes per slot, never the newest published slot: the worker may not have taken it yet, and a
-    // left half written into it would mix with the pair it holds.
-    const auto newest = static_cast<std::uint32_t>(latest.load() & 3u);
-    const bool skipNewest = ringEyes == 2 && (latest.load() >> 2) != 0;
-    for (std::uint32_t n = 0; n < kRingSize; ++n) {
-        const std::uint32_t candidate = (nextSlot + n) % kRingSize;
-        if (skipNewest && candidate == newest) {
-            continue;
-        }
-        RingSlot& slot = ring[candidate];
-        int expected = kSlotFree;
-        if (!slot.state.compare_exchange_strong(expected, kSlotWriting)) {
-            continue;
-        }
-        if (completed < slot.value.load() || completed < fc.lastValue[candidate * 2] ||
-            completed < fc.lastValue[candidate * 2 + 1]) {
-            slot.state.store(kSlotFree);
-            continue;
-        }
-        nextSlot = (candidate + 1) % kRingSize;
-        return candidate;
-    }
-    return kRingSize;
-}
-
 std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
                                             std::uint32_t family,
                                             const VkPresentInfoKHR* info,
@@ -319,6 +295,7 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
     if (!recordCopy(cb, sc, sc.images[imageIndex], family, slot, target, captureBuffer)) {
         uiCapture.cancel();
         uiBackdrop.cancel();
+        motionCapture.cancel();
         return 0;
     }
     const std::uint64_t value = timelineValue + 1;
@@ -354,6 +331,7 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
     if (submitted != VK_SUCCESS) {
         uiCapture.cancel();
         uiBackdrop.cancel();
+        motionCapture.cancel();
         copyFailed = true;
         EVR_LOG("presenter: vkQueueSubmit failed (%d); copies off, presents pass through", submitted);
         return 0;
@@ -364,17 +342,10 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
         uiCapture.submitted(value);
         uiBackdrop.submitted(value);
     }
+    motionCapture.submitted(value); // only after a record
     fc.lastValue[buffer] = value;
     slot.value.store(value);
     return value;
-}
-
-void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value) {
-    RingSlot& slot = ring[slotIndex];
-    slot.value.store(value);
-    slot.state.store(kSlotFree);
-    latest.store((value << 2) | slotIndex);
-    ++framesCopied;
 }
 
 void XrPresenter::Impl::logCopyStats(const SwapchainState& sc, std::uint32_t family) {
@@ -474,6 +445,7 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     }
     uiCapture.poll(dev, completed);
     uiBackdrop.poll(dev, completed);
+    motionCapture.poll(dev, completed);
     logUiStats();
     handBackImages(completed);
 

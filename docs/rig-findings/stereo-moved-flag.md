@@ -58,4 +58,24 @@ in eye R (status 2) copy the current model matrix over the previous one (0x1C8AE
 equals eye L's; and the object ring's upload (0x1C00B40) is partial outside allocation changes, which can
 leave stale ring entries. `r_TAAAntiGhosting` is off in both eyes. So the launcher's anti-aliasing
 defaults to Off (no temporal history, sharp in both eyes), and the hook is installed only when per-eye
-TAA or DLSS is on.
+TAA or DLSS is on. The softness came from the object-transform ring (docs/rig-findings/stereo-object-motion.md):
+with each render on its own ring slot, eye R's demons are as sharp as eye L's in the headset (2026-09-28),
+and the launcher defaults to TAA again.
+
+## 5. Eye R's previous model matrix (`src/vkcore/keep_prev_hooks.*`, `src/stereo_seq/keep_prev.*`; default on with per-eye TAA or DLSS, `ETERNALVR_STEREO_KEEP_PREV=0` turns it off, `=count` only counts)
+
+The commit's model-matrix step (0x1C8ADE0, from the world commit 0x18D9FA0) copies the entity's current
+model matrix over its previous one (`[RWD+0xC0]` to `[RWD+0xF0]`, index * 64, four `movups` from RVA
+0x1C8AE60), then calls 0x399EB0 for the new current one. In mono that runs once per game frame. Under Route
+S the engine commits many entities again in eye R's world frame (status 2), and the second run sets their
+previous to eye L's current of the same tick: eye R's TAA then reprojects them with no object motion.
+
+A hook on the first copy stamps each entity eye L commits with the pair's number; in eye R it saves the
+previous matrix of an entity eye L committed in the same tick, and a hook after the call (RVA 0x1C8AEAC)
+puts it back. An entity only eye R commits keeps the engine's behaviour, and so does the copy that follows
+for an entity that does not interpolate (0x1C8AEB3).
+
+Rig, `e1m1_intro` (run kp1): per 10 s about 260,000 copies in eye L and 53,500 in eye R, of which 99.97%
+are entities eye L committed in the same tick; all of those now keep eye L's previous matrix. Stable for
+over three minutes at 118 to 180 stereo pairs per second. The headset check in the chainsaw training room
+(TAA on) is still to do.

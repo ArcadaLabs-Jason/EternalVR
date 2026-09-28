@@ -108,6 +108,7 @@ yet).
 | `ETERNALVR_SKIP_CINEMATICS` | 0 | 1 holds the skip key while a cutscene plays |
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
 | `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
+| `ETERNALVR_TEST_XR_LOSS` | unset | seconds: once the session has run this long, it is taken as lost (as if the headset had gone away) and the worker reconnects (ARCHITECTURE section 6, session state) |
 | `ETERNALVR_TEST_HEAD_SWAY` | unset | `yaw,pitch,period[,base]` (degrees, seconds): a sinusoidal head turn added to the tracked pose, for checking head tracking and head aim without a moving headset; `base` turns the head by that much yaw first, and a zero amplitude holds that view (`0,0,30,180`), so runs can be compared at one view (with a non-zero amplitude the view was seen to ignore the base: use the held form) |
 
 ## Render size

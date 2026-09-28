@@ -71,6 +71,10 @@ namespace EternalVR.Launcher
             ctx.Log.Line += AppendLog;
             runner.Status += ShowStatus;
             runner.GameStarted = () => FinishSession.Start(ctx);
+            runner.ConfirmWithoutHeadset = problem => (bool)Invoke(new Func<bool>(() =>
+                MessageBox.Show(this, problem + "\n\nLaunch anyway? VR starts once the headset is found, and the late size change "
+                    + "can fail on graphics cards with 12 GB or less.",
+                    "Headset not found", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes));
             launch.Click += (s, e) => StartSession();
             check.Click += (s, e) => RunPreflight();
             restoreSaves.Click += (s, e) => RestoreSaves();
@@ -149,8 +153,10 @@ namespace EternalVR.Launcher
             tips.SetToolTip(restoreSaves, "Puts back your save slots from a backup (one is made before every VR launch).");
             tips.SetToolTip(exportReport, "Saves a report (logs and checks, personal paths removed) to attach to a bug report.");
 
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.Controls.Add(ProfileStrip());
             root.Controls.Add(tabs);
             root.Controls.Add(buttons);
             // The header docks first (the last added docks first), the rest fills below it.
@@ -221,6 +227,7 @@ namespace EternalVR.Launcher
             check.Enabled = false;
             restoreSaves.Enabled = false;
             playPage.Enabled = false;
+            profileStrip.Enabled = false;
             advancedPage.Enabled = false;
             var token = closing.Token;
             session = Task.Run(() => runner.Run(token));
@@ -236,6 +243,7 @@ namespace EternalVR.Launcher
                 check.Enabled = true;
                 restoreSaves.Enabled = true;
                 playPage.Enabled = true;
+                profileStrip.Enabled = true;
                 advancedPage.Enabled = true;
                 // A restore deferred because a game process was still running is retried from here.
                 TryRecover();

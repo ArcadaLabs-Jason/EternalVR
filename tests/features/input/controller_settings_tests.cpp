@@ -124,6 +124,16 @@ TEST_CASE("aim smoothing is light by default, 0 turns it off, and it is kept wit
     CHECK(parse({{"ETERNALVR_AIM_SMOOTHING", "strong"}}).issues.size() == 1);
 }
 
+TEST_CASE("vibration strength is 0 to 1, 0.6 by default") {
+    CHECK(parse({}).settings.haptics == evr::input::kDefaultHapticStrength);
+    CHECK(parse({{"ETERNALVR_HAPTICS", "0"}}).settings.haptics == 0.0f);
+    CHECK(parse({{"ETERNALVR_HAPTICS", "0.35"}}).settings.haptics == doctest::Approx(0.35f));
+    const auto over = parse({{"ETERNALVR_HAPTICS", "2"}});
+    CHECK(over.issues.size() == 1);
+    CHECK(over.settings.haptics == evr::input::kDefaultHapticStrength);
+    CHECK(parse({{"ETERNALVR_HAPTICS", "on"}}).issues.size() == 1);
+}
+
 TEST_CASE("an unusable value is reported by name and value, and the default kept") {
     const auto result = parse({{"ETERNALVR_AIM", "feet"}, {"ETERNALVR_CONTROLLERS", "maybe"}});
     REQUIRE(result.issues.size() == 2);
@@ -157,4 +167,28 @@ TEST_CASE("the Dossier press is hold or tap; anything else keeps hold") {
     const auto bad = parse({{"ETERNALVR_DOSSIER", "double"}});
     CHECK(bad.issues.size() == 1);
     CHECK(bad.settings.dossier == evr::input::DossierPress::Hold);
+}
+
+TEST_CASE("the off-hand arm's offsets are mirrored with the weapon in the left hand") {
+    using evr::game::Handedness;
+    using evr::input::kDefaultOffhandShoulder;
+    const evr::game::WeaponOffset o{-0.08f, 0.035f, 0.01f, 5.0f, 10.0f, -20.0f};
+    CHECK(evr::input::offhandOffsetFor(o, Handedness::Right) == o);
+    for (const Handedness left : {Handedness::LeftButtonSwap, Handedness::LeftButtonAndStickSwap}) {
+        const auto m = evr::input::offhandOffsetFor(o, left);
+        CHECK(m == evr::game::WeaponOffset{-0.08f, -0.035f, 0.01f, 5.0f, -10.0f, 20.0f});
+        CHECK(evr::input::offhandOffsetFor(kDefaultOffhandShoulder, left).left ==
+              -kDefaultOffhandShoulder.left);
+    }
+}
+
+TEST_CASE("the game's shoulder anchors the off arm only with the weapon in the right hand") {
+    using evr::game::Handedness;
+    using evr::input::ShoulderAnchor;
+    CHECK(evr::input::shoulderAnchorFor(ShoulderAnchor::Model, Handedness::Right) == ShoulderAnchor::Model);
+    CHECK(evr::input::shoulderAnchorFor(ShoulderAnchor::Head, Handedness::Right) == ShoulderAnchor::Head);
+    CHECK(evr::input::shoulderAnchorFor(ShoulderAnchor::Model, Handedness::LeftButtonSwap) ==
+          ShoulderAnchor::Head);
+    CHECK(evr::input::shoulderAnchorFor(ShoulderAnchor::Model, Handedness::LeftButtonAndStickSwap) ==
+          ShoulderAnchor::Head);
 }

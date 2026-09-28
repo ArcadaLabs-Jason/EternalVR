@@ -14,9 +14,12 @@ evr_add_module(evr_input
         dossier_press.cpp
         forced_angles.cpp
         hands_jump.cpp
+        haptics_policy.cpp
         input_mapper.cpp
         interaction_profiles.cpp
         locomotion_direction.cpp
+        offhand_policy.cpp
+        player_controller_data.cpp
         punch_detector.cpp
         stick_chord.cpp
         stick_response.cpp

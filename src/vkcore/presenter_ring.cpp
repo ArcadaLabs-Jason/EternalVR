@@ -321,6 +321,40 @@ void XrPresenter::Impl::recreateRing() {
     requestRebuildIfStale();
 }
 
+std::uint32_t XrPresenter::Impl::acquireFreeSlot(const FamilyCommands& fc, std::uint64_t completed) {
+    // With two eyes per slot, never the newest published slot: the worker may not have taken it yet, and a
+    // left half written into it would mix with the pair it holds.
+    const auto newest = static_cast<std::uint32_t>(latest.load() & 3u);
+    const bool skipNewest = ringEyes == 2 && (latest.load() >> 2) != 0;
+    for (std::uint32_t n = 0; n < kRingSize; ++n) {
+        const std::uint32_t candidate = (nextSlot + n) % kRingSize;
+        if (skipNewest && candidate == newest) {
+            continue;
+        }
+        RingSlot& slot = ring[candidate];
+        int expected = kSlotFree;
+        if (!slot.state.compare_exchange_strong(expected, kSlotWriting)) {
+            continue;
+        }
+        if (completed < slot.value.load() || completed < fc.lastValue[candidate * 2] ||
+            completed < fc.lastValue[candidate * 2 + 1]) {
+            slot.state.store(kSlotFree);
+            continue;
+        }
+        nextSlot = (candidate + 1) % kRingSize;
+        return candidate;
+    }
+    return kRingSize;
+}
+
+void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value) {
+    RingSlot& slot = ring[slotIndex];
+    slot.value.store(value);
+    slot.state.store(kSlotFree);
+    latest.store((value << 2) | slotIndex);
+    ++framesCopied;
+}
+
 void XrPresenter::Impl::setRingExtent(VkExtent2D game) {
     // Each eye's image is the game's (T-031: the render size still follows the window); a Route S ring
     // holds two of them side by side.

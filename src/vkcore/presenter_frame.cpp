@@ -3,6 +3,8 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "features/comfort/vignette.hpp"
+#include "game/eternal/game_action.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/head_sweep.hpp"
@@ -17,7 +19,9 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace evr::vkcore {
 
@@ -251,19 +255,17 @@ void XrPresenter::Impl::frame() {
     XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     std::array<XrCompositionLayerProjectionView, 2> projectionViews{};
     XrCompositionLayerQuad fade{XR_TYPE_COMPOSITION_LAYER_QUAD};
+    XrCompositionLayerQuad vignetteQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     std::array<XrCompositionLayerQuad, 2> pointerQuads{};
     for (XrCompositionLayerQuad& q : pointerQuads) {
         q.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
     }
-    // Back to front: the projection (or the cinema quad), the UI quad, the reticle or the menu pointer (beam,
-    // dot), then the fade on top. Unused entries are overwritten as layers are added.
-    const XrCompositionLayerBaseHeader* layers[] = {
-        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad),
-        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&uiQuad),
-        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&reticleQuad),
-        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&fade),
-        nullptr,
-        nullptr};
+    std::array<XrCompositionLayerQuad, WristHud::kMaxQuads> hudQuads{}; // wrist mode: pieces and wrist quads
+    // Back to front: the projection (or the cinema quad), the comfort vignette, the UI quad (or in wrist mode
+    // its head-locked pieces and the wrist quads), the reticle or the menu pointer (beam, dot), then the fade
+    // on top. Entries are written as layers are added.
+    std::array<const XrCompositionLayerBaseHeader*, 5 + WristHud::kMaxQuads> layers{};
+    layers[0] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
     std::uint32_t layerCount = 0;
     const auto addPointer = [&] {
         const std::uint32_t n = fillPointerQuads(pointerQuads.data());
@@ -307,10 +309,42 @@ void XrPresenter::Impl::frame() {
             projection.views = projectionViews.data();
             layers[0] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&projection);
             layerCount = 1;
+            // The comfort vignette goes right over the game's view and under everything else: the HUD in the
+            // corners and the aim dot stay readable while the world at the edges darkens, and the collision
+            // fade still covers it all. Never with a menu up (the panel is what the player looks at then).
+            if (settings.ui.vignette != ui_layer::VignetteMode::Off) {
+                const controllers::ArtificialMotion stick = controllers::artificialMotion();
+                comfort::VignetteMotion motion;
+                motion.turnDegreesPerSecond = stick.turnDegreesPerSecond;
+                motion.moveMagnitude = stick.move;
+                motion.gameMotion = controllers::forcedView() ||
+                                    game::contains(controllers::heldActions(), game::GameAction::Dash);
+                const auto make = [this](XrSwapchain& swapchain, const std::vector<std::uint8_t>& pixels,
+                                         std::uint32_t width, std::uint32_t height, const char* what) {
+                    return createStaticImage(swapchain, pixels, width, height, what);
+                };
+                if (vignette.prepare(settings.ui.vignette, motion, !menuUp.load(std::memory_order_relaxed),
+                                     qpcSeconds(qpcNow()), viewSpace, make, vignetteQuad)) {
+                    layers[layerCount++] =
+                        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&vignetteQuad);
+                }
+            }
             // UI layer: the game's GUI on its own quad in front (only with a fresh GUI image).
             uiShown = settings.ui.enabled && fillUiQuad(uiQuad);
             if (uiShown) {
-                layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&uiQuad);
+                // Wrist mode (presenter_wrist.cpp): the UI quad's head-locked pieces and the wrist quads;
+                // not while the UI quad is the menu panel.
+                const std::uint32_t hud =
+                    menuOn || menuHeld
+                        ? 0
+                        : wrist.fill(settings.ui, uiExtent.width, uiExtent.height, uiQuad, hudQuads.data());
+                for (std::uint32_t i = 0; i < hud; ++i) {
+                    layers[layerCount++] =
+                        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&hudQuads[i]);
+                }
+                if (hud == 0) {
+                    layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&uiQuad);
+                }
                 if (menuOn) {
                     // A menu over the game (pause, the in-game screens): the UI quad becomes the
                     // world-locked menu panel, and the pointer replaces the hand-aim dot.
@@ -375,7 +409,7 @@ void XrPresenter::Impl::frame() {
     endInfo.displayTime = state.predictedDisplayTime;
     endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     endInfo.layerCount = layerCount;
-    endInfo.layers = layerCount ? layers : nullptr;
+    endInfo.layers = layerCount ? layers.data() : nullptr;
     const XrResult r = xr.xrEndFrame(session, &endInfo);
     if (XR_FAILED(r) && !loseOnRuntimeFailure(r, "xrEndFrame")) {
         // Every frame can fail the same way: the first ones, then one line per 900 (10 s at 90 Hz).
@@ -406,6 +440,7 @@ void XrPresenter::Impl::frame() {
         poseAgeCount = 0;
         logRates();
         logSizeStats();
+        vignette.logStats(settings.ui.vignette);
         if (frameLog) {
             std::fflush(frameLog);
         }
@@ -429,6 +464,7 @@ void XrPresenter::Impl::destroyXrObjects() {
     xrImages.clear();
     destroyUiXrObjects();
     fadeLayer.destroy(xr);
+    vignette.destroy(xr);
     if (floorSpace) {
         xr.xrDestroySpace(floorSpace);
         floorSpace = XR_NULL_HANDLE;
@@ -519,15 +555,22 @@ void XrPresenter::Impl::runWorker() {
         }
         consumerAlive.store(true);
         EVR_LOG("xr: presenter ready; waiting for the session to start");
-        while (!stop.load() && !sessionLost) {
-            if (resizeRequested.load()) {
-                recreateRing();
+        // A lost session leaves the inner loop; reconnect() returns once a new session exists (or at
+        // shutdown).
+        while (!stop.load()) {
+            while (!stop.load() && !loss.lost) {
+                if (resizeRequested.load()) {
+                    recreateRing();
+                }
+                pollEvents();
+                if (sessionRunning) {
+                    frame();
+                } else {
+                    Sleep(10);
+                }
             }
-            pollEvents();
-            if (sessionRunning) {
-                frame();
-            } else {
-                Sleep(10);
+            if (stop.load() || !xr_recovery::recovers(loss.kind) || !reconnect()) {
+                break;
             }
         }
     } else if (!stop.load()) {

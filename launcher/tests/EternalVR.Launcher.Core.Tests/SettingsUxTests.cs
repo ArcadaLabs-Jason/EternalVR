@@ -25,6 +25,7 @@ namespace EternalVR.Launcher.Core.Tests
             var env = Env();
             Assert.Equal("1", env["ETERNALVR_BODY_FOLLOW"]);
             Assert.Equal("0.30", env["ETERNALVR_AIM_SMOOTHING"]);
+            Assert.Equal("0.60", env["ETERNALVR_HAPTICS"]);
             Assert.Equal("1.50", env["ETERNALVR_UI_DISTANCE"]);
             Assert.Equal("2.00", env["ETERNALVR_UI_WIDTH"]);
             Assert.Equal("0.00", env["ETERNALVR_UI_OFFSET_Y"]);
@@ -33,6 +34,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("cinema", env["ETERNALVR_CUTSCENES"]);
             Assert.Equal("hand", env["ETERNALVR_SHOT_ORIGIN"]);
             Assert.Equal("1", env["ETERNALVR_MENU_BEAM"]);
+            Assert.Equal("off", env["ETERNALVR_VIGNETTE"]);
             // Mono too: the layer ignores what does not apply.
             Assert.Equal("left", Env(new LauncherSettings { Mode = VrMode.Mono })["ETERNALVR_MIRROR"]);
         }
@@ -43,10 +45,12 @@ namespace EternalVR.Launcher.Core.Tests
             var env = Env(new LauncherSettings
             {
                 BodyFollow = false, AimSmoothing = 3.0, HudDistance = 0.1, HudWidth = 12, HudHeight = -0.35, AimDotSize = 0.6,
-                Mirror = MirrorMode.Off, Cutscenes = CutsceneView.Immersive, Shots = ShotOrigin.Eye, MenuBeam = false,
+                Mirror = MirrorMode.Off, Cutscenes = CutsceneView.Immersive, Shots = ShotOrigin.Eye, MenuBeam = false, Vibration = -2.0,
+                Vignette = VignetteMode.Strong,
             });
             Assert.Equal("0", env["ETERNALVR_BODY_FOLLOW"]);
             Assert.Equal("1.00", env["ETERNALVR_AIM_SMOOTHING"]);
+            Assert.Equal("0.00", env["ETERNALVR_HAPTICS"]);
             Assert.Equal("0.30", env["ETERNALVR_UI_DISTANCE"]);
             Assert.Equal("10.00", env["ETERNALVR_UI_WIDTH"]);
             Assert.Equal("-0.35", env["ETERNALVR_UI_OFFSET_Y"]);
@@ -55,7 +59,11 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("immersive", env["ETERNALVR_CUTSCENES"]);
             Assert.Equal("eye", env["ETERNALVR_SHOT_ORIGIN"]);
             Assert.Equal("0", env["ETERNALVR_MENU_BEAM"]);
+            Assert.Equal("strong", env["ETERNALVR_VIGNETTE"]);
+            Assert.Equal("light", Env(new LauncherSettings { Vignette = VignetteMode.Light })["ETERNALVR_VIGNETTE"]);
             Assert.Equal("right", Env(new LauncherSettings { Mirror = MirrorMode.Right })["ETERNALVR_MIRROR"]);
+            Assert.Equal("1.00", Env(new LauncherSettings { Vibration = 5.0 })["ETERNALVR_HAPTICS"]);
+            Assert.Equal("0.35", Env(new LauncherSettings { Vibration = 0.35 })["ETERNALVR_HAPTICS"]);
         }
 
         [Fact]
@@ -64,11 +72,13 @@ namespace EternalVR.Launcher.Core.Tests
             var s = new LauncherSettings
             {
                 BodyFollow = false, AimSmoothing = 0.15, HudDistance = 2.25, HudWidth = 1.5, HudHeight = -0.2, AimDotSize = 1.5,
-                Mirror = MirrorMode.Right, Cutscenes = CutsceneView.Immersive, Shots = ShotOrigin.Eye, MenuBeam = false,
+                Mirror = MirrorMode.Right, Cutscenes = CutsceneView.Immersive, Shots = ShotOrigin.Eye, MenuBeam = false, Vibration = 0.35,
+                Vignette = VignetteMode.Light,
             };
             var back = LauncherSettings.Parse(s.Serialize());
             Assert.False(back.BodyFollow);
             Assert.Equal(0.15, back.AimSmoothing, 3);
+            Assert.Equal(0.35, back.Vibration, 3);
             Assert.Equal(2.25, back.HudDistance, 3);
             Assert.Equal(1.5, back.HudWidth, 3);
             Assert.Equal(-0.2, back.HudHeight, 3);
@@ -77,14 +87,21 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(CutsceneView.Immersive, back.Cutscenes);
             Assert.Equal(ShotOrigin.Eye, back.Shots);
             Assert.False(back.MenuBeam);
+            Assert.Equal(VignetteMode.Light, back.Vignette);
+            Assert.Equal(VignetteMode.Strong, LauncherSettings.Parse("schema_version = 2\nvignette = STRONG\n").Vignette);
             // A file without them (an older launcher's), or with junk, takes the defaults.
-            var old = LauncherSettings.Parse("schema_version = 2\naim_smoothing = lots\nmirror = sideways\nhud_width = -4\n");
+            var old = LauncherSettings.Parse("schema_version = 2\naim_smoothing = lots\nvibration = lots\nmirror = sideways\nhud_width = -4\n");
             Assert.True(old.BodyFollow);
             Assert.Equal(LauncherSettings.DefaultAimSmoothing, old.AimSmoothing);
+            Assert.Equal(LauncherSettings.DefaultVibration, old.Vibration);
+            Assert.Equal(LauncherSettings.DefaultVibration, LauncherSettings.Parse("schema_version = 2\n").Vibration);
+            Assert.Equal(1.0, LauncherSettings.Parse("schema_version = 2\nvibration = 3\n").Vibration);
             Assert.Equal(MirrorMode.Left, old.Mirror);
             Assert.Equal(LauncherSettings.MinHudWidth, old.HudWidth);
             Assert.Equal(CutsceneView.Cinema, old.Cutscenes);
             Assert.True(old.MenuBeam);
+            Assert.Equal(VignetteMode.Off, old.Vignette);
+            Assert.Equal(VignetteMode.Off, LauncherSettings.Parse("schema_version = 2\nvignette = maximum\n").Vignette);
             // Still schema 2: the new keys are optional, and an older launcher keeps them (it does too).
             Assert.Equal(2, LauncherSettings.SchemaVersion);
         }
@@ -123,7 +140,7 @@ namespace EternalVR.Launcher.Core.Tests
         public void ResetKeepsTheFoldersTheRuntimeAndUnknownKeys()
         {
             var s = LauncherSettings.Parse("schema_version = 2\ngame_dir = D:\\Games\\DOOMEternal\nlayer_dir = D:\\EVR\\layer\n"
-                + "runtime = C:\\rt\\openxr.json\nturn = off\nbody_follow = 0\nmirror = off\nextra_args = +com_showFPS 1\nnewer = x\n");
+                + "runtime = C:\\rt\\openxr.json\nturn = off\nvignette = strong\nbody_follow = 0\nmirror = off\nextra_args = +com_showFPS 1\nnewer = x\n");
             var reset = s.WithDefaults();
             Assert.Equal(@"D:\Games\DOOMEternal", reset.GameDir);
             Assert.Equal(@"D:\EVR\layer", reset.LayerDir);
@@ -131,6 +148,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("x", reset.UnknownKeys.Single().Value);
             var defaults = new LauncherSettings();
             Assert.Equal(defaults.Turn, reset.Turn);
+            Assert.Equal(VignetteMode.Off, reset.Vignette);
             Assert.Equal(defaults.BodyFollow, reset.BodyFollow);
             Assert.Equal(defaults.Mirror, reset.Mirror);
             Assert.Equal(string.Empty, reset.ExtraArguments);
@@ -161,8 +179,9 @@ namespace EternalVR.Launcher.Core.Tests
             var s = new LauncherSettings { Controllers = false };
             foreach (var setting in new[]
             {
-                Setting.Turning, Setting.TurnSpeed, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
-                Setting.XButton, Setting.AimSteadiness, Setting.AimDot, Setting.ShotsFrom, Setting.AimDotSize, Setting.MenuLaser,
+                Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
+                Setting.XButton, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
+                Setting.MenuLaser, Setting.HudPlace, Setting.Vibration,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
             Assert.Null(SettingRules.WhyNot(Setting.AimWith, s));
@@ -196,7 +215,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Resolution, Setting.AntiAliasing, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize, Setting.HudHeight,
-                Setting.MenuLaser,
+                Setting.MenuLaser, Setting.HudPlace,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime })
@@ -216,18 +235,22 @@ namespace EternalVR.Launcher.Core.Tests
             // The window maps a list's index to the enum value: one choice per value, in enum order.
             void Choices<T>(Setting setting) => Assert.Equal(Enum.GetValues(typeof(T)).Length, SettingTexts.For(setting).Choices.Count);
             Choices<TurnMode>(Setting.Turning);
+            Choices<VignetteMode>(Setting.Vignette);
             Choices<PostureMode>(Setting.PlayPosition);
             Choices<HeightMode>(Setting.EyeHeight);
             Choices<AimMode>(Setting.AimWith);
             Choices<Handedness>(Setting.WeaponHand);
             Choices<LocomotionMode>(Setting.MoveToward);
             Choices<DossierPress>(Setting.XButton);
-            Choices<AntiAliasingMode>(Setting.AntiAliasing);
+            // The anti-aliasing row: TAA, one choice per DLSS quality, then off (LauncherSettings.AntiAliasingChoice).
+            Assert.Equal(2 + Enum.GetValues(typeof(DlssQuality)).Length, SettingTexts.For(Setting.AntiAliasing).Choices.Count);
             Choices<VrMode>(Setting.VrMode);
             Choices<MirrorMode>(Setting.DesktopWindow);
             Choices<CutsceneView>(Setting.CutsceneView);
             Choices<ShotOrigin>(Setting.ShotsFrom);
+            Choices<HudMode>(Setting.HudPlace);
             Assert.Equal(AimSteadiness.Values.Length, SettingTexts.For(Setting.AimSteadiness).Choices.Count);
+            Assert.Equal(Vibration.Values.Length, SettingTexts.For(Setting.Vibration).Choices.Count);
             Assert.Contains("cannot be skipped", SettingTexts.For(Setting.SkipCutscenes).Tooltip);
         }
 
@@ -238,6 +261,18 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(2, AimSteadiness.IndexOf(LauncherSettings.DefaultAimSmoothing));
             Assert.Equal(0, AimSteadiness.IndexOf(0.0));
             Assert.Equal(-1, AimSteadiness.IndexOf(0.42));
+        }
+
+        [Fact]
+        public void VibrationStepsIncludeTheDefault()
+        {
+            Assert.Equal(new[] { 0.0, 0.35, 0.6, 1.0 }, Vibration.Values);
+            Assert.Equal(new[] { "Off", "Light", "Medium", "Strong" }, Vibration.Names);
+            Assert.Equal(2, Vibration.IndexOf(LauncherSettings.DefaultVibration));
+            Assert.Equal(0, Vibration.IndexOf(0.0));
+            Assert.Equal(-1, Vibration.IndexOf(0.8));
+            // Head aim or mono: the controllers still vibrate.
+            Assert.Null(SettingRules.WhyNot(Setting.Vibration, new LauncherSettings { Aim = AimMode.Head, Mode = VrMode.Mono }));
         }
     }
 }

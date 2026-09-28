@@ -28,6 +28,7 @@ using evr::render_size::Band;
 using evr::render_size::centredBand;
 using evr::render_size::DisplayChoice;
 using evr::render_size::Extent;
+using evr::render_size::keepFrameOnScreen;
 using evr::render_size::MirrorDisplay;
 using evr::render_size::MirrorSize;
 using evr::render_size::Monitor;
@@ -35,7 +36,6 @@ using evr::render_size::parseAspect;
 using evr::render_size::parseMirrorDisplay;
 using evr::render_size::parseMirrorSize;
 using evr::render_size::placeMirror;
-using evr::render_size::keepFrameOnScreen;
 using evr::render_size::shapeToImage;
 using evr::render_size::WindowRect;
 

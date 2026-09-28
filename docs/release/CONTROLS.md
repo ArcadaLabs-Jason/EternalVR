@@ -36,6 +36,7 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | Y, hold (under SteamVR only) | Pause menu too: SteamVR opens its own dashboard on the left Menu button, so holding Y pauses instead of showing mission information |
 | Both sticks pressed, hold 2 s | Recenter (turn the game to where you face, and reset your height, e.g. after standing up or sitting down) |
 | Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (that press then does not pause, and the trigger does not fire) |
+| Hold Y + pull a trigger (under SteamVR) | The same screenshot, since SteamVR keeps the left Menu button. Pull the trigger within ¼ s of pressing Y, before the pause; that Y press then neither switches the mod nor pauses, and the trigger does not fire |
 | A real punch with your hand | Melee |
 
 **The weapon wheel.** Push the right stick down and keep it there: after about half a second the wheel
@@ -127,6 +128,7 @@ pull that clicks Resume does not also fire the gun.
 | Either stick click | Centre the Dossier map on you (the game's C key) |
 | Left Menu button, tap | Pause / resume |
 | Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (no click) |
+| Hold Y + pull a trigger (under SteamVR) | The same screenshot (no click; Y also goes back a page) |
 
 The panel stays where it appeared; if you turn away, turn back to it. Sliders are set by clicking or
 dragging on them.
@@ -190,6 +192,11 @@ The launcher saves each setting as you change it. Hover over a setting for what 
 does not apply with your other choices, and its tooltip says why. **Reset to defaults** (Advanced tab)
 puts everything back except the game folder and the OpenXR runtime.
 
+**Players.** The Player list above the tabs keeps settings for more than one person. **New...** saves the
+settings shown now under a name; picking a name loads that player's Play and Advanced settings, and every
+change you make is saved to the player picked. The game folder, the OpenXR runtime and the controls folder
+are shared by everyone. **Delete** removes a player's saved settings; the settings shown stay in use.
+
 ### Play tab
 
 | Setting | Choices | Default |
@@ -197,6 +204,7 @@ puts everything back except the game folder and the OpenXR runtime.
 | Turning | Smooth, Snap, Off | Smooth |
 | Turn speed | Smooth turning's speed, 150 to 400 degrees per second | 230 |
 | Snap angle | Snap turning's step, 15 to 90 degrees | 45 |
+| Vignette | Off, Light, Strong: darkens the edges of your view while the stick moves or turns you (and during a dash or a glory kill), which helps if stick motion makes you feel sick; moving your head never shows it | Off |
 | Room-scale | Walking around your room moves you in the game; off, you can lean about 60 cm before the view fades | On |
 | Recenter hold | Hold both sticks pressed for 2 seconds to recenter | On |
 | Skip cutscenes | Skip cutscenes automatically (the start of the very first one cannot be skipped; off: hold B to skip one) | On |
@@ -207,8 +215,10 @@ puts everything back except the game folder and the OpenXR runtime.
 | Move toward | Where you look, Where your off hand points | Where you look |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims | On |
+| Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
+| Button layout | **Edit controls...** opens your controls folder ([Changing the controls](#changing-the-controls)) | Built-in controls |
 | Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
-| Anti-aliasing | Off (recommended: sharp in both eyes, some shimmer on edges and shiny surfaces), TAA (smoother edges; moving demons can look smeared in the right eye for now), DLSS (experimental, NVIDIA RTX only) | Off |
+| Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card), DLSS (experimental, NVIDIA RTX only) | TAA |
 
 ### Advanced tab
 
@@ -224,16 +234,15 @@ puts everything back except the game folder and the OpenXR runtime.
 | Aim dot size | 0.2 to 5 degrees | 1.0 |
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
 | HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m) | 1.5 m, 2 m, 0 |
+| Health and ammo | On the HUD panel, or On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you; needs Motion controllers) | On the HUD panel |
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |
 
-Custom controller bindings are not in the launcher yet.
-
 ## Changing the controls
 
-Each controller family's bindings and layouts are a text file in the `data/input/controllers` folder of
-the EternalVR source:
+You can change which button does what for your controllers. Each kind of controller has its own controls
+file:
 
 | Controllers | File |
 |---|---|
@@ -245,10 +254,49 @@ the EternalVR source:
 | HTC Vive wands | `htc_vive_wand.toml` |
 | Pico 4 | `pico4.toml` |
 
-Copy the file for your controllers, edit it (the comments at the top of `oculus_touch.toml` explain the
-format), and set the Windows environment variable `ETERNALVR_CONTROLLER_DATA` to the copy's full path
-before you start the launcher. Your copy replaces the built-in file for the controllers it names; the
-others keep theirs. If the copy has a mistake, the mod logs it and uses the built-in file.
+1. Press **Edit controls...** on the launcher's Play tab (Controls, Button layout). It opens your controls
+   folder, `%LOCALAPPDATA%\EternalVR\controls`. Its `defaults` folder holds a fresh copy of every built-in
+   file.
+2. Copy the file for your controllers from `defaults` into the `controls` folder (next to `README.txt`).
+   Leave the files in `defaults` alone: the launcher replaces them each time you press Edit controls.
+3. Open your copy in a text editor such as Notepad and change the lines under the `[map.right]`,
+   `[map.left_button_swap]` and `[map.left_full_mirror]` headings. The one that is used follows the
+   launcher's Weapon hand setting (Right, Left (buttons swapped), Left (buttons and sticks)). Leave the
+   `[profile]` section as it is: it tells your headset's software which buttons the controller has.
+4. Save the file and start the game from the launcher. Beside the button, the launcher says **Using your
+   own controls** while the folder holds a file of yours, and **Built-in controls** otherwise.
+
+A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
+
+```
+"right.trigger.press" = "fire"
+"left.primary.tap" = "switch_equipment"
+"left.primary.hold" = "dossier"
+```
+
+- **Hand:** `left` or `right`.
+- **Button:** `trigger`, `grip`, `stick_click`, `primary` (A or X), `secondary` (B or Y), `menu`.
+- **Press:** `press` (the action is held while the button is down), `tap` (a short press) or `hold` (held
+  for a quarter of a second). A button can have a tap and a hold, but not a press together with either.
+- **Stick lines:** `"<hand>.stick.role"` is `move`, `turn` or `none`. The turn stick also takes
+  `"<hand>.stick.up"`, `"<hand>.stick.down_tap"` and `"<hand>.stick.down_hold"`.
+- **Actions:** `fire`, `weapon_mod`, `switch_weapon_mod`, `jump`, `dash`, `melee`, `chainsaw`,
+  `flame_belch`, `equipment`, `switch_equipment`, `quick_switch`, `weapon_wheel`, `next_weapon`,
+  `previous_weapon`, `weapon_slot_1` to `weapon_slot_8`, `crucible`, `pause`, `dossier`, `mission_info`,
+  `automap`.
+
+To leave a button free, delete its line. Keep a `pause` line, or the pause menu has no button; on Touch
+controllers the left Menu button is the only Menu button the game can read.
+
+If your file has a mistake, the game uses the built-in controls for those controllers. The session log
+(`logs\<session>\eternalvr-*.log` in `%LOCALAPPDATA%\EternalVR`; **Open data folder** on the Checks and
+log tab) then has a `controllers:` line naming your file and the problem (with its line number, or the
+`[map...]` section it is in), followed by `controllers: '...' has issues; the built-in data is used`.
+When the file is read without problems the log says `controllers: controller data '...' replaces the
+built-in data of its profile`. Fix the line and start the game again.
+
+To go back to the built-in controls, delete your file from the `controls` folder (or move it somewhere
+else). Two files for the same controllers: the one whose name comes later in the alphabet is used.
 
 Under SteamVR you can also change which physical button drives each of the mod's inputs (Trigger, Grip,
 Primary button, Menu button and so on) in SteamVR's controller bindings screen ("Manage controller bindings") while the game runs.

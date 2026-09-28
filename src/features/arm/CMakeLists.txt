@@ -1,0 +1,11 @@
+evr_add_module(evr_arm
+    SOURCES
+        arm_frames.cpp
+        arm_skeleton.cpp
+        arm_solve.cpp
+        hand_offset.cpp
+        mod_room.cpp
+        two_bone_ik.cpp
+    DEPENDS
+        evr_common
+        evr_xr_math)

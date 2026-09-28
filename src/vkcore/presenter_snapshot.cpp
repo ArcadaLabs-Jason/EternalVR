@@ -124,6 +124,9 @@ bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
     if (settings.ui.enabled) {
         uiCapture.armOnce(shot.base + L"-UI.png");
     }
+    if (motionCapture.enabled() && !mono) {
+        motionCapture.armOnce(shot.base);
+    }
     capture.armOnce(std::move(shot));
     return true;
 }

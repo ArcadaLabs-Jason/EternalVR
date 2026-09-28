@@ -5,18 +5,18 @@
 | Milestone | What a player sees or plays | Needs a person? | Status |
 |---|---|---|---|
 | M0 Research and design | Documents only | Answers and decisions | Done |
-| M1 Rig bring-up and reconnaissance | Nothing new; the game launched by scripts | About 1 to 2 hours of play for routes, captures and baselines ([owner] items; the M2 path needs none of them) | Next |
-| M1.5 Offline stereo spike (parallel with M2 and M3) | Left and right still images of two scenes | [owner] check of the left and right images in a stereo viewer (optional; the disparity criterion is [scripted]) | Not started |
-| M2 Skeleton in the game | The flat game; a debug key turns the view without turning the aim | No, if command-line cvars reach the game (a level is loaded by `+map`); otherwise one short [owner] run into a level | Not started |
-| **M3 First head-tracked view** | **Looking around inside the game in the Quest 3 (mono, gamepad or mouse to play); optional debug stereo peek** | Wears the headset | Not started |
-| M4 Stereo | The game in 3D in the headset, head position tracked | Wears the headset | Not started |
-| **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | In progress: implemented, rig-checked on the simulator; headset checks next (`docs/VR_CONTROLLERS.md`) |
-| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | In progress: HUD quad and the menu panel with a laser pointer (`docs/VR_MENUS.md`) on the simulator |
-| M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | Not started |
-| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | Not started |
-| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | Not started |
-| M10 Beta and release | A public release | Code signing choice; going public | Not started |
-| M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Not started |
+| M1 Rig bring-up and reconnaissance | Nothing new; the game launched by scripts | About 1 to 2 hours of play for routes, captures and baselines ([owner] items; the M2 path needs none of them) | Done |
+| M1.5 Offline stereo spike (parallel with M2 and M3) | Left and right still images of two scenes | [owner] check of the left and right images in a stereo viewer (optional; the disparity criterion is [scripted]) | Done (the census chose sequential stereo, Route S) |
+| M2 Skeleton in the game | The flat game; a debug key turns the view without turning the aim | No, if command-line cvars reach the game (a level is loaded by `+map`); otherwise one short [owner] run into a level | Done |
+| **M3 First head-tracked view** | **Looking around inside the game in the Quest 3 (mono, gamepad or mouse to play); optional debug stereo peek** | Wears the headset | Done |
+| M4 Stereo | The game in 3D in the headset, head position tracked | Wears the headset | Done (per-eye TAA and DLSS, room-scale) |
+| **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for seven controller families, `docs/VR_CONTROLLERS.md`) |
+| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`); the wrist HUD is on a branch |
+| M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen or skipped, comfort effects off; glory kills not adapted yet |
+| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, player controller maps from its controls folder; no profiles or editor yet |
+| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye (experimental), stereo CPU profile; no foveation yet |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: public alpha v0.1.0, v0.1.1 and v0.1.2 (prereleases) |
+| M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
 
 ## How to read this file
 
@@ -442,7 +442,10 @@ Required for v1
       pointer through the game's own cursor, checked from the title screen through settings, a new game,
       pause and quit; still open: a curved panel, the rest of the R12 inventory, the headset
 - [ ] HUD split onto the wrist panel and the message panel (T-077); the body-locked HUD with look-down
-      reveal is available as an option
+      reveal is available as an option. Built and unit-tested, not yet run live (`docs/VR_HANDS_HUD.md`):
+      the corner blocks on the off hand's wrist (opt-in, `ETERNALVR_HUD=wrist`, until the live test), the rest on
+      the head-locked quad; the whole head-locked HUD stays the default; the free off hand behind
+      `ETERNALVR_OFFHAND=free`
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere
 - [ ] The UI image joins the presenter's shared-image slots, and its copy is added to `presenter.md`
 - [ ] Screen-projected markers (T-058): objective markers stay hidden; the interact prompt is checked in

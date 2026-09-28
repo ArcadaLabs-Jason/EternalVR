@@ -12,6 +12,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <utility>
 
 namespace evr::vkcore::ui_engine {
 
@@ -218,6 +219,54 @@ bool located() {
 
 bool skipHookInstalled() {
     return g_hooked;
+}
+
+std::optional<ui_layer::GuiImageFields> readImageOrTarget(std::uintptr_t pointer, bool* viaTarget) {
+    constexpr std::int32_t kMaxSize = 16384;
+    const auto sane = [](const ui_layer::GuiImageFields& f) {
+        return f.width > 0 && f.height > 0 && f.width <= kMaxSize && f.height <= kMaxSize;
+    };
+    if (!plausible(pointer)) {
+        return std::nullopt;
+    }
+    const auto* p = reinterpret_cast<const std::byte*>(pointer);
+    std::uintptr_t size = 0;
+    std::uintptr_t image = 0;
+    ui_layer::GuiImageFields fields;
+    if (readPointer(p, size) && readPointer(p + ui_layer::engine::kTargetColorImage, image) &&
+        plausible(image) && readImageFields(image, fields) && sane(fields) &&
+        static_cast<std::uint32_t>(size) == static_cast<std::uint32_t>(fields.width) &&
+        static_cast<std::uint32_t>(size >> 32) == static_cast<std::uint32_t>(fields.height)) {
+        if (viaTarget) {
+            *viaTarget = true;
+        }
+        return fields;
+    }
+    if (readImageFields(pointer, fields) && sane(fields)) {
+        if (viaTarget) {
+            *viaTarget = false;
+        }
+        return fields;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::pair<int, std::uint64_t>> readSetMember(std::uint64_t set) {
+    constexpr std::size_t kSetImages = 0x108;
+    std::uintptr_t head = 0;
+    std::uintptr_t image = 0;
+    if (!plausible(set) || !readPointer(reinterpret_cast<const std::byte*>(set), head)) {
+        return std::nullopt;
+    }
+    const auto index = static_cast<std::int32_t>(head);
+    if (index < 0 || index > 15 ||
+        !readPointer(reinterpret_cast<const std::byte*>(set) + kSetImages +
+                         static_cast<std::size_t>(index) * 8,
+                     image) ||
+        image == 0) {
+        return std::nullopt;
+    }
+    return std::make_pair(static_cast<int>(index), static_cast<std::uint64_t>(image));
 }
 
 std::optional<ui_layer::GuiImageFields> readTarget() {

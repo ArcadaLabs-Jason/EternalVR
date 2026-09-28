@@ -327,7 +327,8 @@ std::optional<input::BindingProfile> controlMap(const State& s, game::Controller
     }
     // SteamVR opens its dashboard on the left Menu button: holding Y pauses too (dashboard_pause.hpp).
     if (input::runtimeTakesMenuButton(xrRuntimeName()) && input::applyDashboardPause(built.profile) > 0) {
-        EVR_LOG("%s: the runtime keeps the Menu button for its dashboard: holding the Y button pauses too", kTag);
+        EVR_LOG("%s: the runtime keeps the Menu button for its dashboard: holding the Y button pauses too",
+                kTag);
     }
     // ETERNALVR_DOSSIER=tap: X taps open the Dossier and a hold switches equipment (dossier_press.hpp).
     if (s.settings.dossier == input::DossierPress::Tap &&
@@ -372,6 +373,15 @@ game::GameActionSet heldActions() {
         return {};
     }
     return game::GameActionSet(s.heldActionBits.load(std::memory_order_relaxed));
+}
+
+ArtificialMotion artificialMotion() {
+    const State& s = state();
+    const LONGLONG at = s.motionQpc.load(std::memory_order_relaxed);
+    if (at == 0 || secondsSince(at) > kHeldActionsStaleSeconds) {
+        return {};
+    }
+    return {s.motionTurnRate.load(std::memory_order_relaxed), s.motionMove.load(std::memory_order_relaxed)};
 }
 
 MappedInput runMapper() {
@@ -434,6 +444,8 @@ MappedInput runMapper() {
         mapperSettings.menuTapSeconds = recenterHold > 0.0f ? recenterHold : input::kMaxHoldSeconds;
         // Both sticks held: the recenter chord (off with the recenter hold).
         mapperSettings.stickChordRecenter = recenterHold > 0.0f;
+        // SteamVR keeps the left Menu button: Y held + a trigger is the capture too (capture_chord.hpp).
+        mapperSettings.captureButtons = input::captureButtonsFor(xrRuntimeName());
         s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
         EVR_LOG("%s: control map for %s controllers, %s-handed", kTag,
                 std::string(game::controllerName(snapshot.controller)).c_str(),
@@ -444,7 +456,8 @@ MappedInput runMapper() {
     context.posture = cfg.seated ? posture::Posture::Seated : roomPosture();
     out.input = s.mapper->update(snapshot.frame, context, dt);
     if (out.input.capture) {
-        bug_capture::request(); // left Menu held + a trigger pulled: the in-headset capture, in a menu too
+        bug_capture::request(); // the capture chord (capture_chord.hpp): the in-headset capture, in a menu
+                                // too
     }
     // The recenter binding is the layer's own: a long press re-anchors the room (docs/VR_ROOMSCALE.md).
     noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter));
@@ -467,10 +480,17 @@ MappedInput runMapper() {
         out.input.move = {};
         out.input.turnDegrees = 0.0f;
         out.input.wheelPointer = {};
+        out.input.punch = {};
         out.input.down = out.actions;
         out.turnStick = {};
     }
     s.viewQueue.add({0.0f, out.input.turnDegrees});
+    // The comfort vignette follows the motion sent (artificialMotion); the mapper counted at most this step.
+    const float mapDt = std::min(dt, input::kMaxFrameSeconds);
+    s.motionTurnRate.store(mapDt > 0.0f ? std::fabs(out.input.turnDegrees) / mapDt : 0.0f,
+                           std::memory_order_relaxed);
+    s.motionMove.store(std::min(1.0f, input::magnitude(out.input.move)), std::memory_order_relaxed);
+    s.motionQpc.store(now, std::memory_order_relaxed);
     if (cfg.trace && out.input.turnDegrees != 0.0f) {
         static std::uint64_t turns = 0;
         if (++turns <= 5 || turns % 50 == 0) {
@@ -498,6 +518,7 @@ MappedInput runMapper() {
             }
         }
     }
+    noteMapperHaptics(out.actions, out.input);
     s.lastSent = out.actions;
     s.lastInput = out.input;
     return out;

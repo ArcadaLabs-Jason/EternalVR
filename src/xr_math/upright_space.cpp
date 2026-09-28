@@ -23,7 +23,8 @@ Quaternion normalised(const Quaternion& q) {
 // v rotated by the unit quaternion q.
 Vec3 rotate(const Quaternion& q, const Vec3& v) {
     // t = 2 * cross(q.xyz, v); v' = v + w * t + cross(q.xyz, t)
-    const Vec3 t{2.0f * (q.y * v.z - q.z * v.y), 2.0f * (q.z * v.x - q.x * v.z), 2.0f * (q.x * v.y - q.y * v.x)};
+    const Vec3 t{2.0f * (q.y * v.z - q.z * v.y), 2.0f * (q.z * v.x - q.x * v.z),
+                 2.0f * (q.x * v.y - q.y * v.x)};
     return {v.x + q.w * t.x + (q.y * t.z - q.z * t.y), v.y + q.w * t.y + (q.z * t.x - q.x * t.z),
             v.z + q.w * t.z + (q.x * t.y - q.y * t.x)};
 }

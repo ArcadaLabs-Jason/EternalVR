@@ -10,11 +10,13 @@ launcher (Release), unless -NoBuild, then checks what it is about to ship:
   - the layer DLL is not older than any tracked source file and does not import a debug C runtime, and
     its version resource carries the same version (no -dev marker), which the launcher checks at launch;
   - the layer manifest names VK_LAYER_ETERNALVR and points at .\EternalVR.dll;
-  - the launcher's data files are byte-identical to launcher/data;
+  - the launcher's data files are byte-identical to launcher/data, and its data\controllers\*.toml to
+    data/input/controllers (the built-in controller maps the launcher's Edit controls copies out);
   - every shipped binary is ours or is named in THIRD_PARTY_NOTICES.md, and no other binary slipped in.
 Then it assembles EternalVR-<channel>-<version>-<shortsha>\ in the output folder:
 
-  EternalVR.Launcher.exe, EternalVR.Launcher.exe.config, EternalVR.Launcher.Core.dll, data\*.txt
+  EternalVR.Launcher.exe, EternalVR.Launcher.exe.config, EternalVR.Launcher.Core.dll, data\*.txt,
+  data\controllers\*.toml
   layer\EternalVR.dll, layer\VK_LAYER_ETERNALVR.json, layer\openxr_loader.dll
   README-ALPHA.md, docs\INSTALL.md, docs\CONTROLS.md, docs\KNOWN-ISSUES.md, docs\TROUBLESHOOTING.md
   LICENSE, THIRD_PARTY_NOTICES.md, BUILD-INFO.txt, SHA256SUMS.txt (every other file in the zip)
@@ -127,13 +129,15 @@ function Test-RelSources($state) {
     }
     $builds = @(Get-Content -LiteralPath (Join-Path $repo 'launcher\data\known-builds.txt') | Where-Object { $_ -match '^[0-9a-f]{64}\s*\|' })
     if ($builds.Count -eq 0) { Stop-Refused 'launcher\data\known-builds.txt lists no supported game build' }
+    $maps = @(Get-ChildItem -LiteralPath (Join-Path $repo 'data\input\controllers') -File -Filter '*.toml')
+    if ($maps.Count -eq 0) { Stop-Refused 'data\input\controllers holds no controller map for the launcher to ship' }
     $manifest = [IO.File]::ReadAllText((Join-Path $repo 'src\vkcore\VK_LAYER_ETERNALVR.json.in'))
     if ($manifest -notmatch '"name":\s*"VK_LAYER_ETERNALVR"') { Stop-Refused 'The layer manifest template does not name VK_LAYER_ETERNALVR' }
     $notices = [IO.File]::ReadAllText((Join-Path $repo 'THIRD_PARTY_NOTICES.md'))
     foreach ($name in $script:ThirdPartyBinaries) {
         if ($notices.IndexOf($name, [StringComparison]::OrdinalIgnoreCase) -lt 0) { Stop-Refused "THIRD_PARTY_NOTICES.md does not name $name" }
     }
-    Write-RelLog "sources: version $($state.Version) (layer and launcher agree), $($builds.Count) supported game build(s), docs and notices present"
+    Write-RelLog "sources: version $($state.Version) (layer and launcher agree), $($builds.Count) supported game build(s), $($maps.Count) controller map(s), docs and notices present"
     return $builds
 }
 
@@ -223,6 +227,20 @@ function Get-RelPayload($state) {
         $built = Join-Path $dataOut $f.Name
         if ((Get-RelSha256 $built) -ne (Get-RelSha256 $f.FullName)) { Stop-Refused "Stale launcher data file: $built differs from $($f.FullName)" }
         & $add $files $built ('data\' + $f.Name)
+    }
+    # The built-in controller maps, the defaults of the player's controls folder (Edit controls).
+    $mapsSrc = Join-Path $repo 'data\input\controllers'
+    $mapsOut = Join-Path $dataOut 'controllers'
+    $subdirs = @(Get-ChildItem -LiteralPath $dataOut -Directory -ErrorAction SilentlyContinue | Sort-Object Name)
+    if (($subdirs.Name -join '|') -ne 'controllers') { Stop-Refused "The launcher's data folder ($dataOut) must hold exactly one subfolder, controllers" }
+    $want = @(Get-ChildItem -LiteralPath $mapsSrc -File -Filter '*.toml' | Sort-Object Name)
+    $have = @(Get-ChildItem -LiteralPath $mapsOut -File -ErrorAction SilentlyContinue | Sort-Object Name)
+    if (($want.Name -join '|') -ne ($have.Name -join '|')) { Stop-Refused "The launcher's controller maps ($mapsOut) are not exactly data\input\controllers\*.toml" }
+    if (@(Get-ChildItem -LiteralPath $mapsOut -Directory).Count -gt 0) { Stop-Refused "Unexpected folder in $mapsOut" }
+    foreach ($f in $want) {
+        $built = Join-Path $mapsOut $f.Name
+        if ((Get-RelSha256 $built) -ne (Get-RelSha256 $f.FullName)) { Stop-Refused "Stale controller map: $built differs from $($f.FullName)" }
+        & $add $files $built ('data\controllers\' + $f.Name)
     }
 
     foreach ($name in 'EternalVR.dll', 'VK_LAYER_ETERNALVR.json', 'openxr_loader.dll') {

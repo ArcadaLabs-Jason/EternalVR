@@ -91,6 +91,8 @@ bool loadFunctions(XrInput& xr, PFN_xrGetInstanceProcAddr gipa) {
     EVR_LOAD(xrLocateSpace)
     EVR_LOAD(xrDestroySpace)
     EVR_LOAD(xrResultToString)
+    EVR_LOAD(xrApplyHapticFeedback)
+    EVR_LOAD(xrStopHapticFeedback)
 #undef EVR_LOAD
     return true;
 }
@@ -274,6 +276,7 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     h.menuButton = readBool(xr, input::XrActionId::Menu, path);
     h.poseValid = locate(xr, xr.aimSpaces[handIndex(hand)], time, h.aimPose, &h.linearVelocity,
                          &h.velocityValid, &room);
+    h.gripValid = locate(xr, xr.gripSpaces[handIndex(hand)], time, h.gripPose, nullptr, nullptr, &room);
     return h;
 }
 
@@ -430,17 +433,20 @@ void sync(XrTime predictedDisplayTime, bool focused) {
         input::applyTestInput(*test, next.frame);
     }
     const std::uint64_t syncs = s.syncs.fetch_add(1) + 1;
-    std::lock_guard snapshotLock(s.snapshotMutex);
-    next.controller = s.snapshot.controller;
-    if (next.valid && (syncs == 1 || syncs % kProfileCheckFrames == 0)) {
-        const auto family = currentFamily(xr, s);
-        if (family && *family != next.controller) {
-            EVR_LOG("%s: the runtime reports %s controllers", kTag,
-                    std::string(game::controllerName(*family)).c_str());
-            next.controller = *family;
+    {
+        std::lock_guard snapshotLock(s.snapshotMutex);
+        next.controller = s.snapshot.controller;
+        if (next.valid && (syncs == 1 || syncs % kProfileCheckFrames == 0)) {
+            const auto family = currentFamily(xr, s);
+            if (family && *family != next.controller) {
+                EVR_LOG("%s: the runtime reports %s controllers", kTag,
+                        std::string(game::controllerName(*family)).c_str());
+                next.controller = *family;
+            }
         }
+        s.snapshot = next;
     }
-    s.snapshot = next;
+    updateHaptics(xr, focused);
 }
 
 void setRoomFromLocal(const Pose& roomFromLocal) {

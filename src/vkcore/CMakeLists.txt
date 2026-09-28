@@ -46,6 +46,8 @@ add_library(evr_layer SHARED
     layer_entry.cpp
     log.cpp
     mirror_place.cpp
+    keep_prev_hooks.cpp
+    motion_capture.cpp
     moved_flag_hooks.cpp
     mp_guard.cpp
     object_prev_hooks.cpp
@@ -55,7 +57,9 @@ add_library(evr_layer SHARED
     presenter_fade.cpp
     presenter_mirror.cpp
     presenter_reticle.cpp
+    presenter_vignette.cpp
     presenter_window.cpp
+    ring_trace.cpp
     window_timing.cpp
     runtime_cvars.cpp
     presenter_frame.cpp
@@ -66,7 +70,10 @@ add_library(evr_layer SHARED
     presenter_snapshot.cpp
     presenter_stereo.cpp
     presenter_ui.cpp
+    presenter_wrist.cpp
+    presenter_reconnect.cpp
     presenter_xr.cpp
+    presenter_xr_events.cpp
     room_follow.cpp
     room_scale.cpp
     scatter_hooks.cpp
@@ -79,6 +86,7 @@ add_library(evr_layer SHARED
     stereo_present.cpp
     surface_entry.cpp
     swapchain_entry.cpp
+    taa_env.cpp
     taa_hooks.cpp
     taa_locate.cpp
     taa_ngx.cpp
@@ -97,8 +105,13 @@ target_sources(evr_layer PRIVATE
     controller_test.cpp
     controllers.cpp
     game_view_poses.cpp
+    haptics_xr.cpp
     input_profiles.cpp
     input_xr.cpp
+    offhand_arm.cpp
+    offhand_hook.cpp
+    offhand_mods.cpp
+    rumble_hook.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
     xinput_hook.cpp
@@ -108,7 +121,7 @@ target_sources(evr_layer PRIVATE
     menu_cursor.cpp
     menu_input.cpp
     presenter_menu.cpp)
-target_link_libraries(evr_layer PRIVATE evr_input evr_menu evr_roomscale)
+target_link_libraries(evr_layer PRIVATE evr_arm evr_comfort evr_input evr_menu evr_roomscale)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
 target_compile_features(evr_layer PRIVATE cxx_std_20)
 target_compile_definitions(evr_layer PRIVATE

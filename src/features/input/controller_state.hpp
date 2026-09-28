@@ -36,6 +36,10 @@ struct HandState {
     bool poseValid = false;
     Pose aimPose;
 
+    // The grip pose: +X out of the left palm (into the right one), -Z where the index finger points.
+    bool gripValid = false;
+    Pose gripPose;
+
     // Linear velocity of the controller in metres per second.
     bool velocityValid = false;
     Vec3 linearVelocity;

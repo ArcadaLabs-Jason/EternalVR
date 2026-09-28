@@ -26,14 +26,15 @@ PunchSettings sanitized(PunchSettings settings) {
 PunchDetector::PunchDetector(PunchSettings settings) : settings_(sanitized(settings)) {}
 
 bool PunchDetector::update(const InputFrame& frame) {
+    punched_ = {};
     if (!settings_.enabled || !frame.head.poseValid) {
         armed_ = {};
         return false;
     }
     const Vec3 headForward = transformDirection(frame.head.pose, {0.0f, 0.0f, -1.0f});
-    const bool left = updateHand(frame.left, headForward, armed_[0]);
-    const bool right = updateHand(frame.right, headForward, armed_[1]);
-    return left || right;
+    punched_[0] = updateHand(frame.left, headForward, armed_[0]);
+    punched_[1] = updateHand(frame.right, headForward, armed_[1]);
+    return punched_[0] || punched_[1];
 }
 
 bool PunchDetector::updateHand(const HandState& hand, Vec3 headForward, bool& armed) const {

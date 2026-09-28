@@ -34,12 +34,15 @@ public:
     bool update(const InputFrame& frame);
 
     [[nodiscard]] const PunchSettings& settings() const { return settings_; }
+    // The hands (indexed by Hand) that punched on the last update.
+    [[nodiscard]] const std::array<bool, 2>& punched() const { return punched_; }
 
 private:
     bool updateHand(const HandState& hand, Vec3 headForward, bool& armed) const;
 
     PunchSettings settings_;
     std::array<bool, 2> armed_{};
+    std::array<bool, 2> punched_{};
 };
 
 } // namespace evr::input

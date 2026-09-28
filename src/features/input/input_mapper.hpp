@@ -43,6 +43,8 @@ struct MapperSettings {
     float menuTapSeconds = 1.0f;
     // Both sticks pressed and held is the recenter chord (stick_chord.hpp): Recenter is down while it is.
     bool stickChordRecenter = true;
+    // The left buttons the capture chord takes (capture_chord.hpp): the secondary one too under SteamVR.
+    CaptureButtons captureButtons = CaptureButtons::Menu;
     StickResponse move = kMoveStickResponse;
     LocomotionFrame locomotionFrame = LocomotionFrame::Head;
     TurnSettings turn;
