@@ -6,6 +6,8 @@
 
 **Hell in your headset.** A free VR mod for DOOM Eternal on PC (Steam), through OpenXR.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2S727LT47)
+
 ## Features
 
 - True stereo, with 6DoF head tracking, seated or standing.
@@ -93,6 +95,8 @@ Use [GitHub Discussions](../../discussions) for ideas, questions and setups that
 
 EternalVR is free and stays free. If you want to support it:
 [ko-fi.com/FanciestPeanut](https://ko-fi.com/FanciestPeanut).
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2S727LT47)
 
 ## Layout
 - `docs/SCOPE.md`: what we are building, requirements, in and out of scope
