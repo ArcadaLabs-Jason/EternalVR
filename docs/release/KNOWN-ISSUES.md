@@ -21,11 +21,16 @@ them is worse for you than described here.
   tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds.
 - **Only tested on NVIDIA:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have not
   been tried.
-- **Only Touch and Index controllers have bindings.** Windows Mixed Reality, HTC Vive and Cosmos, and
-  Pimax controllers do nothing in the game yet.
+- **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands and Pico 4
+  controllers are new and untested on real hardware.** Please report how they work. The Vive wands have a
+  reduced layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. Pimax and other
+  controllers get whatever layout their runtime maps them to.
 - **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), VR stays off for the
   rest of that game session. Quit the game and start it again from the launcher.
 - **A DOOM Eternal update turns VR off** until EternalVR supports the new build; the game then runs flat.
+- **SteamVR has had one test**, with a Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the
+  left Menu button opens SteamVR's dashboard, so hold Y to pause instead; the screenshot button (left Menu
+  + trigger) does not reach the game there.
 - **Only tested with a Quest 3 through Virtual Desktop (VDXR).** SteamVR, Meta Horizon Link, other
   runtimes and other headsets are untested. The launcher lets you pick a runtime; please tell me what
   happens.

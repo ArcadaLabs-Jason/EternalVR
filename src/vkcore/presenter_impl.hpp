@@ -21,6 +21,7 @@
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/backdrop_probe.hpp"
 #include "vkcore/cinema_view.hpp"
+#include "vkcore/controllers.hpp"
 #include "vkcore/eye_capture.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/player_aim.hpp"
@@ -150,6 +151,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     HMODULE xrLoader = nullptr;
     XrFunctions xr;
     XrInstance instance = XR_NULL_HANDLE;
+    controllers::ProfileSupport controllerProfiles; // the instance's controller-profile extensions
+    bool perfCounterTime = false; // XR_KHR_win32_convert_performance_counter_time enabled
     XrSystemId systemId = XR_NULL_SYSTEM_ID;
     XrSession session = XR_NULL_HANDLE;
     XrSpace localSpace = XR_NULL_HANDLE;
@@ -561,6 +564,9 @@ struct XrPresenter::Impl final : ViewHookSink,
     void requestRebuildIfStale();
     bool loadOpenXr();
     bool createXrInstance();
+    // Replaces localSpace with an upright space from STAGE when the runtime's LOCAL is tilted
+    // (xr_math/upright_space.hpp). Called once, right after localSpace is created.
+    void makeLocalUpright();
     bool waitForSystem();
     // Worker, once the system is known: the runtime's view limits to the render size (virtual_client.hpp).
     void reportViewLimits();

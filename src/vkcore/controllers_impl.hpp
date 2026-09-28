@@ -23,6 +23,7 @@
 #include "features/input/xr_action_set.hpp"
 #include "game/eternal/controller_data.hpp"
 #include "game/eternal/weapon_offsets.hpp"
+#include "vkcore/controllers.hpp"
 #include "vkcore/player_aim.hpp"
 #include "xr_math/weapon_pose.hpp"
 
@@ -46,6 +47,9 @@ namespace evr::vkcore::controllers {
 inline constexpr double kSnapshotStaleSeconds = 0.25;
 // World hand poses older than this are not used by the fire and viewmodel hooks.
 inline constexpr double kWorldStaleSeconds = 0.1;
+
+// Every family's controller data, indexed by game::Controller.
+using FamilyData = std::array<input::ControllerData, game::kControllerCount>;
 
 struct XrInput {
     // Loaded in attach from the instance.
@@ -145,7 +149,7 @@ struct State {
     // The mapper, under mapperMutex (user-command hook, or the pad sampler in XInput mode). The controller
     // data (suggested bindings and control maps per family) is written by attach under the same lock.
     std::mutex mapperMutex;
-    std::array<input::ControllerData, 2> controllerData; // indexed by game::Controller
+    FamilyData controllerData;
     std::unique_ptr<input::InputMapper> mapper;
     game::Controller mapperController = game::Controller::OculusTouch;
     bool mapperBroken = false; // the control map for mapperController has issues (reported once)
@@ -204,6 +208,30 @@ struct State {
 };
 
 State& state();
+
+// The text of an OpenXR result, for logs.
+const char* xrText(XrResult result, char (&buffer)[XR_MAX_RESULT_STRING_SIZE]);
+
+// Returns false from the calling function, logged with the file's kTag, when an OpenXR call fails.
+#define EVR_XR_TRY(call)                                                                                     \
+    do {                                                                                                     \
+        const XrResult evr_r = (call);                                                                       \
+        if (XR_FAILED(evr_r)) {                                                                              \
+            char evr_text[XR_MAX_RESULT_STRING_SIZE];                                                        \
+            EVR_LOG("%s: %s failed: %s", kTag, #call, xrText(evr_r, evr_text));                              \
+            return false;                                                                                    \
+        }                                                                                                    \
+    } while (0)
+
+// Controller families (input_profiles.cpp). Every family's data: the built-in files, with a player's file
+// (ETERNALVR_CONTROLLER_DATA) in place of the family whose profile it names.
+FamilyData loadControllerData(const input::ControllerSettings& settings);
+// Suggests the bindings of every family whose profile the instance has, and logs which were suggested and
+// which skipped. True when at least one profile was accepted.
+bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const FamilyData& data);
+// The family whose profile the runtime reports for the right hand, if it is one we have data for (the
+// profile of each hand is logged when it changes; a profile without data once). XR worker only.
+std::optional<game::Controller> currentFamily(const XrInput& xr, const State& s);
 
 // The settings and the offset table, read once from the environment on first use.
 const input::ControllerSettings& settings();

@@ -1,9 +1,13 @@
 #pragma once
 
 // The inputs each supported OpenXR interaction profile has, per hand (OpenXR 1.1 specification,
-// section "Interaction Profile Paths"). A suggested binding to a path the profile does not list makes
-// xrSuggestInteractionProfileBindings fail for the whole profile, so bindings data is checked
-// against these lists before it reaches the runtime.
+// section "Interaction Profile Paths", and the registry's <interaction_profile> entries). A suggested
+// binding to a path the profile does not list makes xrSuggestInteractionProfileBindings fail for the
+// whole profile, so bindings data is checked against these lists before it reaches the runtime. The
+// lists hold the inputs we may bind, which for some profiles is fewer than the profile has.
+//
+// Some profiles come with an instance extension. Their bindings may be suggested only when that
+// extension is enabled, or on an OpenXR 1.1 instance when 1.1 made the profile core under the same path.
 
 #include "features/input/controller_state.hpp"
 #include "features/input/xr_action_set.hpp"
@@ -18,6 +22,10 @@ struct InteractionProfileInfo {
     // Leaf paths relative to /user/hand/<hand>, such as "/input/trigger/value".
     std::span<const std::string_view> left;
     std::span<const std::string_view> right;
+    // The instance extension that defines the profile; empty for a profile of OpenXR 1.0.
+    std::string_view extension;
+    // OpenXR 1.1 made the profile core under this path, so a 1.1 instance has it without the extension.
+    bool coreIn11 = false;
 
     [[nodiscard]] std::span<const std::string_view> inputs(Hand hand) const {
         return hand == Hand::Left ? left : right;
@@ -26,6 +34,12 @@ struct InteractionProfileInfo {
 
 std::span<const InteractionProfileInfo> knownInteractionProfiles();
 const InteractionProfileInfo* findInteractionProfile(std::string_view path);
+
+// True when bindings for the profile may be suggested on an instance with these extensions enabled
+// (`api11`: the instance was created for OpenXR 1.1).
+bool profileAvailable(const InteractionProfileInfo& profile,
+                      std::span<const std::string_view> enabledExtensions,
+                      bool api11);
 
 // True when `path` is one of the hand's leaf paths, or an input identifier that has leaves (such as
 // "/input/thumbstick" for "/input/thumbstick/x").

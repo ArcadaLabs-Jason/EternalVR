@@ -97,10 +97,12 @@ target_sources(evr_layer PRIVATE
     controller_test.cpp
     controllers.cpp
     game_view_poses.cpp
+    input_profiles.cpp
     input_xr.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
-    xinput_hook.cpp)
+    xinput_hook.cpp
+    xr_runtime.cpp)
 # Menus on a panel with a laser pointer (M6, docs/VR_MENUS.md).
 target_sources(evr_layer PRIVATE
     menu_cursor.cpp

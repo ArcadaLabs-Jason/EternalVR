@@ -26,14 +26,17 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
                                                                              the grip (0x13807EA)
 ```
 
-- **OpenXR input** (`src/vkcore/input_xr.cpp`). When the session exists, the `gameplay` and `menu` action
-  sets of `features/input/xr_action_set.hpp` are created with both hands as subaction paths, the
-  suggested bindings of every controller data file (`data/input/controllers/oculus_touch.toml`,
-  `valve_index.toml`; a player's file through `ETERNALVR_CONTROLLER_DATA` replaces the one with the same
-  profile) are suggested, the sets are attached and aim and grip spaces are created per hand. Every XR
-  frame the worker syncs `gameplay` and publishes a snapshot: triggers, grips, sticks, buttons, the aim
-  poses with velocity and the head, all in `LOCAL`. The runtime's current interaction profile picks the
-  family whose control map is used. Handles are destroyed before the presenter destroys its spaces.
+- **OpenXR input** (`src/vkcore/input_xr.cpp`, the families in `input_profiles.cpp`). When the session
+  exists, the `gameplay` and `menu` action sets of `features/input/xr_action_set.hpp` are created with both hands as subaction paths, the
+  suggested bindings of every controller data file in `data/input/controllers/` (one per family, below;
+  a player's file through `ETERNALVR_CONTROLLER_DATA` replaces the one with the same profile) are
+  suggested, the sets are attached and aim and grip spaces are created per hand. A family whose profile
+  comes with an extension is suggested only when the instance has it (below), and a profile the runtime
+  refuses is logged without stopping the others. Every XR frame the worker syncs `gameplay` and publishes
+  a snapshot: triggers, grips, sticks, buttons, the aim poses with velocity and the head, all in `LOCAL`.
+  The runtime's current interaction profile for the right hand picks the family whose control map is
+  used; the profile of each hand is logged when it changes (`controllers: the runtime reports ... for the
+  left hand`). Handles are destroyed before the presenter destroys its spaces.
 - **Mapper** (`src/vkcore/usercmd_hook.cpp`, `runMapper`). The control map of the family and handedness is
   compiled (`buildBindingProfile`; a map with conflicts is refused with its two-sided messages) and
   `InputMapper` runs once per user command. Its `GameInput` goes through `ActionHold` (a tap is held at
@@ -245,6 +248,60 @@ Every command with an action also carries BUTTON_ANY (1 << 57), as the keys' com
 The bits are what each action's default Slayer key is bound to in the game's shipped config (bindset 0:
 `E` is `_attack2 _use`, `R` is `_bfg`, `C` is `_quick3`, `G` is `_quick0`, `F` is `_reload`), so a
 command means exactly what that key press means; the player's own key binds do not matter.
+
+## Controller families
+
+One data file per OpenXR interaction profile (`src/game/eternal/controller_data.hpp`, the input lists in
+`features/input/interaction_profiles.cpp`, taken from the registry's `<interaction_profile>` entries in
+`reference/openxr/registry/xr.xml`). SteamVR and the other runtimes pick the suggested profile that fits
+the controllers in hand, so each family gets bindings made for its buttons instead of a runtime's guess
+from another profile, and SteamVR's "Manage controller bindings" starts from them.
+
+| Family | File | Profile | Extension | Maps |
+|---|---|---|---|---|
+| Meta Quest / Rift Touch | `oculus_touch.toml` | `oculus/touch_controller` | core | Touch |
+| Valve Index | `valve_index.toml` | `valve/index_controller` | core | Touch |
+| HP Reverb G2 | `hp_reverb_g2.toml` | `hp/mixed_reality_controller` | `XR_EXT_hp_mixed_reality_controller` | Touch |
+| Windows Mixed Reality | `windows_mixed_reality.toml` | `microsoft/motion_controller` | core | own (below) |
+| HTC Vive Cosmos | `htc_vive_cosmos.toml` | `htc/vive_cosmos_controller` | `XR_HTC_vive_cosmos_controller_interaction` | Touch |
+| HTC Vive wands | `htc_vive_wand.toml` | `htc/vive_controller` | core | reduced (below) |
+| Pico 4 | `pico4.toml` | `bytedance/pico4_controller` | `XR_BD_controller_interaction` | Touch |
+
+- **Extensions.** `createXrInstance` enables each profile's extension when
+  `xrEnumerateInstanceExtensionProperties` lists it (logged: `xr: controller extension ... enabled` or `not
+  offered by the runtime`); if the runtime then refuses the instance, it retries with the D3D12 extension
+  alone. `attach` suggests a profile when it is core in OpenXR 1.0, its extension is enabled, or the
+  instance is 1.1 and 1.1 made the profile core under the same path (the G2, Cosmos and Pico 4 ones). One
+  line lists what was suggested and what was skipped. From `reference/openxr/inventory`: SteamVR offers
+  the G2 and Cosmos extensions, WMR the G2 one, Meta's PC runtime and VDXR neither.
+- **Touch Pro and Touch Plus** (`XR_FB_touch_controller_pro`, `XR_META_touch_controller_plus`) are left
+  out on purpose. Meta's runtime reports them as Touch controllers when the application suggests nothing
+  for them, and a family of their own would only split the Touch data: a player's Touch file would stop
+  applying on a Quest 3 over Link.
+- **Touch-like families** (G2, Cosmos, Pico 4) keep the Touch maps; only `[profile]` differs. The Cosmos
+  grip is a click, read by the analog grip action as 0 or 1; its shoulder buttons are left free.
+- **The left Menu button is the pause on every family.** The capture chord reads it
+  (`features/input/capture_chord.hpp`), so no family puts a gameplay action on it.
+- **Windows Mixed Reality.** No A/B/X/Y. The trackpad click is the primary button on both hands (jump;
+  switch equipment tap, Dossier hold), the right Menu button is the right secondary button (dash; back in
+  menus), the left Menu button the pause. The missing left secondary button's jobs move: switch weapon mod
+  to a left stick-click tap and the Crucible to a left stick-click hold; mission info has no input. The
+  trackpad surface is unused (the stick moves and turns). In the full mirror the dash stays on the right
+  Menu button, because the left one is the pause.
+- **Vive wands, a reduced layout.** A trigger, a grip button, a trackpad and a Menu button per hand. The
+  trackpad is the stick action (`/input/trackpad` as the vector2, its click the stick click), so touching
+  the pad moves or turns and the turn pad's up and down gestures are the chainsaw and the weapon switch.
+  The right Menu button is the right secondary button (dash; back in menus). Right-handed: right trigger
+  fire, right grip weapon mod, right pad click melee, right Menu dash; left pad click jump, left trigger tap
+  equipment and hold Flame Belch, left grip tap switch equipment and hold the Dossier, left Menu pause.
+  Fire, jump, dash and melee stay instant presses; the tap and hold pairs go on the off hand, where a
+  quarter second matters least. Switch weapon mod, the Crucible and mission info have no input. The
+  handedness maps swap the triggers, grips and pad clicks (and in the full mirror the pads' move and
+  turn); the dash stays on the right Menu button.
+- **Tests** (`tests/game/eternal/controller_data_tests.cpp`): every file parses against its profile's
+  input list, binds each gameplay action on each hand unless the controller lacks the button, compiles
+  every map without issues, keeps the pause on the left Menu tap and reaches the essential actions (fire,
+  jump and dash, melee as instant presses) in every handedness.
 
 ## Scripted input for rig tests
 

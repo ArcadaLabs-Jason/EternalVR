@@ -31,7 +31,11 @@ using evr::test::restingFrame;
 namespace {
 
 constexpr float kFrame = 1.0f / 90.0f;
-constexpr std::array kControllers{Controller::OculusTouch, Controller::ValveIndex};
+// The families whose Dossier sits on the primary button (A/X, or the trackpad click on Windows Mixed
+// Reality). The Vive wands carry it on the grip, which controller_data_tests checks.
+constexpr std::array kControllers{Controller::OculusTouch, Controller::ValveIndex,
+                                  Controller::HpReverbG2,  Controller::WindowsMixedReality,
+                                  Controller::ViveCosmos,  Controller::Pico4};
 constexpr std::array kAllHandedness{Handedness::Right, Handedness::LeftButtonSwap,
                                     Handedness::LeftButtonAndStickSwap};
 

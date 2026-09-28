@@ -7,7 +7,9 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/xr_runtime.hpp"
 #include "xr_math/cinema_quad.hpp"
+#include "xr_math/upright_space.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -67,6 +69,72 @@ bool XrPresenter::Impl::loadOpenXr() {
     return xr.xrEnumerateInstanceExtensionProperties && xr.xrCreateInstance;
 }
 
+void XrPresenter::Impl::makeLocalUpright() {
+    std::wstring value;
+    if (readEnv(L"ETERNALVR_XR_UPRIGHT", value) && (value == L"0" || _wcsicmp(value.c_str(), L"off") == 0)) {
+        EVR_LOG("xr: LOCAL used as the runtime gives it (ETERNALVR_XR_UPRIGHT=0)");
+        return;
+    }
+    PFN_xrConvertWin32PerformanceCounterToTimeKHR toTime = nullptr;
+    if (perfCounterTime) {
+        xr.xrGetInstanceProcAddr(instance, "xrConvertWin32PerformanceCounterToTimeKHR",
+                                 reinterpret_cast<PFN_xrVoidFunction*>(&toTime));
+    }
+    if (!toTime) {
+        EVR_LOG("xr: LOCAL not checked for being upright (the runtime has no %s)",
+                XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+        return;
+    }
+    XrReferenceSpaceCreateInfo stageInfo{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+    stageInfo.poseInReferenceSpace.orientation.w = 1.0f;
+    stageInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+    XrSpace stage = XR_NULL_HANDLE;
+    if (XR_FAILED(xr.xrCreateReferenceSpace(session, &stageInfo, &stage))) {
+        EVR_LOG("xr: LOCAL not checked for being upright (no STAGE space)");
+        return;
+    }
+    LARGE_INTEGER counter{};
+    QueryPerformanceCounter(&counter);
+    XrTime time = 0;
+    XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
+    const bool located = XR_SUCCEEDED(toTime(instance, &counter, &time)) &&
+                         XR_SUCCEEDED(xr.xrLocateSpace(localSpace, stage, time, &location)) &&
+                         (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0 &&
+                         (location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0;
+    if (!located) {
+        xr.xrDestroySpace(stage);
+        EVR_LOG("xr: LOCAL not checked for being upright (the runtime could not place it in STAGE yet)");
+        return;
+    }
+    const XrQuaternionf& o = location.pose.orientation;
+    const xr_math::Quaternion localInStage{o.x, o.y, o.z, o.w};
+    const std::optional<xr_math::Quaternion> heading = xr_math::uprightReplacement(localInStage);
+    if (!heading) {
+        xr.xrDestroySpace(stage);
+        EVR_LOG("xr: LOCAL is upright (up axis %.2f)", xr_math::upCosine(localInStage));
+        return;
+    }
+    XrReferenceSpaceCreateInfo upright{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+    upright.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+    upright.poseInReferenceSpace.position = location.pose.position;
+    upright.poseInReferenceSpace.orientation = {heading->x, heading->y, heading->z, heading->w};
+    XrSpace replacement = XR_NULL_HANDLE;
+    xr.xrDestroySpace(stage);
+    if (XR_FAILED(xr.xrCreateReferenceSpace(session, &upright, &replacement))) {
+        EVR_LOG("xr: LOCAL is not upright (up axis %.2f) and no replacement could be made; the view may be "
+                "tilted",
+                xr_math::upCosine(localInStage));
+        return;
+    }
+    xr.xrDestroySpace(localSpace);
+    localSpace = replacement;
+    EVR_LOG("xr: the runtime's LOCAL is not upright (orientation in STAGE %.3f %.3f %.3f %.3f, up axis %.2f); "
+            "using an upright space from STAGE at its origin (%.2f %.2f %.2f) with its heading "
+            "(ETERNALVR_XR_UPRIGHT=0 keeps LOCAL)",
+            o.x, o.y, o.z, o.w, xr_math::upCosine(localInStage), location.pose.position.x,
+            location.pose.position.y, location.pose.position.z);
+}
+
 bool XrPresenter::Impl::createXrInstance() {
     std::uint32_t count = 0;
     EVR_XR_CHECK(xr.xrEnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr));
@@ -81,14 +149,28 @@ bool XrPresenter::Impl::createXrInstance() {
         EVR_LOG("xr: the runtime does not offer %s; VR off", XR_KHR_D3D12_ENABLE_EXTENSION_NAME);
         return false;
     }
-    const char* extensions[] = {XR_KHR_D3D12_ENABLE_EXTENSION_NAME};
+    // The controller profiles' extensions the runtime offers; a profile without its extension gets no
+    // bindings (controllers.hpp).
+    controllerProfiles.extensions = controllers::profileExtensions(props);
+    std::vector<const char*> extensions{XR_KHR_D3D12_ENABLE_EXTENSION_NAME};
+    // Optional: turns a Windows performance counter into an XrTime, so LOCAL can be checked for being
+    // upright before the first frame (makeLocalUpright).
+    perfCounterTime = std::any_of(props.begin(), props.end(), [](const XrExtensionProperties& p) {
+        return std::strcmp(p.extensionName, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME) == 0;
+    });
+    if (perfCounterTime) {
+        extensions.push_back(XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+    }
+    for (const std::string& name : controllerProfiles.extensions) {
+        extensions.push_back(name.c_str());
+    }
     XrInstanceCreateInfo info{XR_TYPE_INSTANCE_CREATE_INFO};
     strcpy_s(info.applicationInfo.applicationName, "EternalVR");
     info.applicationInfo.applicationVersion = 1;
     strcpy_s(info.applicationInfo.engineName, "idTech");
     info.applicationInfo.engineVersion = 7;
-    info.enabledExtensionCount = 1;
-    info.enabledExtensionNames = extensions;
+    info.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
+    info.enabledExtensionNames = extensions.data();
     info.applicationInfo.apiVersion = XR_API_VERSION_1_1;
     XrResult r = xr.xrCreateInstance(&info, &instance);
     if (r == XR_ERROR_API_VERSION_UNSUPPORTED) {
@@ -96,6 +178,15 @@ bool XrPresenter::Impl::createXrInstance() {
         info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
         r = xr.xrCreateInstance(&info, &instance);
     }
+    if (XR_FAILED(r) && extensions.size() > 1) { // an extension listed but refused: the core profiles only
+        EVR_LOG("xr: xrCreateInstance failed (%d); retrying without the optional extensions",
+                static_cast<int>(r));
+        controllerProfiles.extensions.clear();
+        perfCounterTime = false;
+        info.enabledExtensionCount = 1;
+        r = xr.xrCreateInstance(&info, &instance);
+    }
+    controllerProfiles.api11 = info.applicationInfo.apiVersion == XR_API_VERSION_1_1;
     if (XR_FAILED(r)) {
         status::flat("the headset runtime would not start (is it installed and running?)");
         EVR_LOG("xr: xrCreateInstance failed: %d", static_cast<int>(r));
@@ -114,6 +205,7 @@ bool XrPresenter::Impl::createXrInstance() {
     EVR_LOG("xr: runtime '%s' %u.%u.%u, api %s", ip.runtimeName, XR_VERSION_MAJOR(ip.runtimeVersion),
             XR_VERSION_MINOR(ip.runtimeVersion), XR_VERSION_PATCH(ip.runtimeVersion),
             info.applicationInfo.apiVersion == XR_API_VERSION_1_1 ? "1.1" : "1.0");
+    setXrRuntimeName(ip.runtimeName);
     return true;
 }
 
@@ -315,7 +407,8 @@ bool XrPresenter::Impl::createD3D12AndSession() {
     EVR_XR_CHECK(xr.xrCreateReferenceSpace(session, &spaceInfo, &localSpace));
     spaceInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
     EVR_XR_CHECK(xr.xrCreateReferenceSpace(session, &spaceInfo, &viewSpace));
-    controllers::attach({xr.xrGetInstanceProcAddr, instance, session, localSpace});
+    makeLocalUpright(); // before anything else takes localSpace
+    controllers::attach({xr.xrGetInstanceProcAddr, instance, session, localSpace, controllerProfiles});
 
     std::uint32_t viewCount = 0;
     EVR_XR_CHECK(

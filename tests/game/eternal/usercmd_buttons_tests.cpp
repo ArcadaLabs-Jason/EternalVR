@@ -163,7 +163,7 @@ TEST_CASE("distinct gameplay actions press distinct bits, except the two faces o
 }
 
 TEST_CASE("every action in the default control maps reaches the game or the layer") {
-    for (const Controller controller : {Controller::OculusTouch, Controller::ValveIndex}) {
+    for (const Controller controller : evr::game::kControllers) {
         const auto data = evr::input::parseControllerData(builtinControllerData(controller));
         REQUIRE(data.ok());
         for (const auto& [handedness, map] : data.maps) {

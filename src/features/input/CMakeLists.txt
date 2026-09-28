@@ -10,6 +10,7 @@ evr_add_module(evr_input
         controller_bindings.cpp
         controller_settings.cpp
         cutscene_skip.cpp
+        dashboard_pause.cpp
         dossier_press.cpp
         forced_angles.cpp
         hands_jump.cpp

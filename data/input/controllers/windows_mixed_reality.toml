@@ -1,0 +1,104 @@
+# Windows Mixed Reality motion controllers: the OpenXR suggested bindings and the default control maps.
+#
+# The file format is the one in oculus_touch.toml. These controllers have a stick and a trackpad but no
+# A/B/X/Y buttons, so the trackpad click and the Menu buttons take the face-button jobs:
+#   - the trackpad click is the primary button on both hands (A/X on Touch: jump, and switch equipment
+#     or the Dossier);
+#   - the right Menu button is the right secondary button (B on Touch: dash, and back in menus);
+#   - the left Menu button stays the pause, as on Touch;
+#   - the left secondary button (Y on Touch) has no input: switch weapon mod moves to a tap on the left
+#     stick click, the Crucible to a hold on it, and mission info is left out.
+# The grip is a button, not an analog squeeze. The trackpad's surface is not used.
+
+[profile]
+"path" = "/interaction_profiles/microsoft/motion_controller"
+"gameplay.left.trigger" = "/input/trigger/value"
+"gameplay.left.grip" = "/input/squeeze/click"
+"gameplay.left.thumbstick" = "/input/thumbstick"
+"gameplay.left.thumbstick_click" = "/input/thumbstick/click"
+"gameplay.left.primary" = "/input/trackpad/click"
+"gameplay.left.menu" = "/input/menu/click"
+"gameplay.left.aim_pose" = "/input/aim/pose"
+"gameplay.left.grip_pose" = "/input/grip/pose"
+"gameplay.left.haptic" = "/output/haptic"
+"gameplay.right.trigger" = "/input/trigger/value"
+"gameplay.right.grip" = "/input/squeeze/click"
+"gameplay.right.thumbstick" = "/input/thumbstick"
+"gameplay.right.thumbstick_click" = "/input/thumbstick/click"
+"gameplay.right.primary" = "/input/trackpad/click"
+"gameplay.right.secondary" = "/input/menu/click"
+"gameplay.right.aim_pose" = "/input/aim/pose"
+"gameplay.right.grip_pose" = "/input/grip/pose"
+"gameplay.right.haptic" = "/output/haptic"
+"menu.left.select" = "/input/trigger/value"
+"menu.left.scroll" = "/input/thumbstick"
+"menu.left.pointer_pose" = "/input/aim/pose"
+"menu.left.close" = "/input/menu/click"
+"menu.right.select" = "/input/trigger/value"
+"menu.right.back" = "/input/menu/click"
+"menu.right.scroll" = "/input/thumbstick"
+"menu.right.pointer_pose" = "/input/aim/pose"
+
+[map.right]
+"weapon_hand" = "right"
+"left.stick.role" = "move"
+"left.trigger.press" = "equipment"
+"left.grip.press" = "flame_belch"
+"left.stick_click.tap" = "switch_weapon_mod"
+"left.stick_click.hold" = "crucible"
+"left.primary.tap" = "switch_equipment"
+"left.primary.hold" = "dossier"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "fire"
+"right.grip.press" = "weapon_mod"
+"right.stick_click.press" = "melee"
+"right.primary.press" = "jump"
+"right.secondary.press" = "dash"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# Weapon in the left hand: triggers, grips and stick clicks swap sides; sticks, trackpads and Menu
+# buttons stay.
+[map.left_button_swap]
+"weapon_hand" = "left"
+"left.stick.role" = "move"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.primary.tap" = "switch_equipment"
+"left.primary.hold" = "dossier"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "equipment"
+"right.grip.press" = "flame_belch"
+"right.stick_click.tap" = "switch_weapon_mod"
+"right.stick_click.hold" = "crucible"
+"right.primary.press" = "jump"
+"right.secondary.press" = "dash"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# A full mirror: sticks and trackpad clicks swap too. The left Menu button stays the pause, so the dash
+# stays on the right Menu button.
+[map.left_full_mirror]
+"weapon_hand" = "left"
+"left.stick.role" = "turn"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.primary.press" = "jump"
+"left.menu.tap" = "pause"
+"left.stick.up" = "chainsaw"
+"left.stick.down_tap" = "quick_switch"
+"left.stick.down_hold" = "weapon_wheel"
+"right.stick.role" = "move"
+"right.trigger.press" = "equipment"
+"right.grip.press" = "flame_belch"
+"right.stick_click.tap" = "switch_weapon_mod"
+"right.stick_click.hold" = "crucible"
+"right.primary.tap" = "switch_equipment"
+"right.primary.hold" = "dossier"
+"right.secondary.press" = "dash"

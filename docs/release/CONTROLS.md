@@ -4,10 +4,11 @@ These are the default bindings, right-handed. A gamepad keeps working alongside 
 keyboard and mouse reach the game only while its window is the focused window on your desktop; otherwise
 the mod keeps them away from the game, so your PC stays usable while you play.
 
-Bindings exist for Meta Quest (Touch) controllers and Valve Index controllers, with the same layout. Other
-controllers have no bindings yet. Index controllers are untested; on Index the Menu button is a firm
-trackpad press, A and B on the left controller do the X and Y jobs, and the grip actions need a firm
-squeeze.
+The tables below are for Meta Quest (Touch) controllers. Valve Index, HP Reverb G2, HTC Vive Cosmos and
+Pico 4 controllers have the same layout. Windows Mixed Reality controllers and HTC Vive wands have fewer
+buttons and their own layouts ([Other controllers](#other-controllers)). Only Touch controllers have been
+tried; the others are untested. On Index the Menu button is a firm trackpad press, A and B on the left
+controller do the X and Y jobs, and the grip actions need a firm squeeze.
 
 ## In the game
 
@@ -32,6 +33,7 @@ squeeze.
 | Y, tap | Switch weapon mod |
 | Y, hold | Mission info (objectives; the map is a page of the Dossier) |
 | Left Menu button, press | Pause menu |
+| Y, hold (under SteamVR only) | Pause menu too: SteamVR opens its own dashboard on the left Menu button, so holding Y pauses instead of showing mission information |
 | Both sticks pressed, hold 2 s | Recenter (turn the game to where you face, and reset your height, e.g. after standing up or sitting down) |
 | Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (that press then does not pause, and the trigger does not fire) |
 | A real punch with your hand | Melee |
@@ -57,6 +59,53 @@ one does nothing and the first one's action has already gone out. The left Menu 
 to recenter: Virtual Desktop and the Quest watch a held Menu button and take you out of the game. The
 launcher's "Recenter hold" checkbox turns the stick recenter off. The first time the headset is on your
 head and still for a second, the mod recenters once by itself.
+
+## Other controllers
+
+**Valve Index, HP Reverb G2, HTC Vive Cosmos, Pico 4:** the Touch layout above. The left Menu button
+pauses; the G2's right Menu button and the Cosmos shoulder buttons do nothing.
+
+**Windows Mixed Reality** (no A, B, X or Y buttons; the trackpad clicks and Menu buttons take their jobs):
+
+| Controller | Action |
+|---|---|
+| Right trigger | Fire |
+| Right grip | Weapon mod |
+| Right stick | Turn; up: chainsaw; down: quick switch (tap) or weapon wheel (hold) |
+| Right stick click | Melee, Glory Kill, Blood Punch, use |
+| Right trackpad click | Jump |
+| Right Menu button | Dash (and Back in menus) |
+| Left stick | Move |
+| Left trigger | Equipment launcher |
+| Left grip | Flame Belch |
+| Left stick click, tap / hold | Switch weapon mod / Crucible |
+| Left trackpad click, tap / hold | Switch equipment / Dossier |
+| Left Menu button | Pause menu |
+
+Mission info has no button. The trackpads' surfaces do nothing; only their clicks count.
+
+**HTC Vive wands** (a trigger, a grip, a trackpad and a Menu button each; a reduced layout):
+
+| Controller | Action |
+|---|---|
+| Right trigger | Fire |
+| Right grip | Weapon mod |
+| Right trackpad, touch | Turn; top: chainsaw; bottom: quick switch (tap) or weapon wheel (hold) |
+| Right trackpad click | Melee, Glory Kill, Blood Punch, use |
+| Right Menu button | Dash (and Back in menus) |
+| Left trackpad, touch | Move |
+| Left trackpad click | Jump |
+| Left trigger, tap / hold | Equipment launcher / Flame Belch |
+| Left grip, tap / hold | Switch equipment / Dossier |
+| Left Menu button | Pause menu |
+
+Switch weapon mod, the Crucible and mission info have no button. Click the trackpads near their centre,
+so the click does not also turn you or start the chainsaw. Recentering is both trackpads pressed for 2
+seconds.
+
+With the weapon in your left hand, the triggers, grips and stick (or trackpad) clicks swap sides, as on
+Touch. On Windows Mixed Reality and the Vive wands the left Menu button stays the pause and the right one
+stays the dash in every handedness.
 
 ## In menus
 
@@ -180,3 +229,26 @@ puts everything back except the game folder and the OpenXR runtime.
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |
 
 Custom controller bindings are not in the launcher yet.
+
+## Changing the controls
+
+Each controller family's bindings and layouts are a text file in the `data/input/controllers` folder of
+the EternalVR source:
+
+| Controllers | File |
+|---|---|
+| Meta Quest / Rift (Touch) | `oculus_touch.toml` |
+| Valve Index | `valve_index.toml` |
+| HP Reverb G2 | `hp_reverb_g2.toml` |
+| Windows Mixed Reality | `windows_mixed_reality.toml` |
+| HTC Vive Cosmos | `htc_vive_cosmos.toml` |
+| HTC Vive wands | `htc_vive_wand.toml` |
+| Pico 4 | `pico4.toml` |
+
+Copy the file for your controllers, edit it (the comments at the top of `oculus_touch.toml` explain the
+format), and set the Windows environment variable `ETERNALVR_CONTROLLER_DATA` to the copy's full path
+before you start the launcher. Your copy replaces the built-in file for the controllers it names; the
+others keep theirs. If the copy has a mistake, the mod logs it and uses the built-in file.
+
+Under SteamVR you can also change which physical button drives each of the mod's inputs (Trigger, Grip,
+Primary button, Menu button and so on) in SteamVR's controller bindings screen ("Manage controller bindings") while the game runs.

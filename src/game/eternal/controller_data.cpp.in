@@ -2,33 +2,41 @@
 
 #include "game/eternal/controller_data.hpp"
 
+#include <cstddef>
+
 namespace evr::game {
 
 namespace {
 
-constexpr std::string_view kOculusTouch = R"evrdata(@EVR_CONTROLLER_DATA_oculus_touch@)evrdata";
-constexpr std::string_view kValveIndex = R"evrdata(@EVR_CONTROLLER_DATA_valve_index@)evrdata";
+struct BuiltinData {
+    std::string_view name;
+    std::string_view text;
+};
+
+// In the order of game::Controller.
+constexpr std::array<BuiltinData, kControllerCount> kData{{
+    {"oculus_touch", R"evrdata(@EVR_CONTROLLER_DATA_oculus_touch@)evrdata"},
+    {"valve_index", R"evrdata(@EVR_CONTROLLER_DATA_valve_index@)evrdata"},
+    {"hp_reverb_g2", R"evrdata(@EVR_CONTROLLER_DATA_hp_reverb_g2@)evrdata"},
+    {"windows_mixed_reality", R"evrdata(@EVR_CONTROLLER_DATA_windows_mixed_reality@)evrdata"},
+    {"htc_vive_cosmos", R"evrdata(@EVR_CONTROLLER_DATA_htc_vive_cosmos@)evrdata"},
+    {"htc_vive_wand", R"evrdata(@EVR_CONTROLLER_DATA_htc_vive_wand@)evrdata"},
+    {"pico4", R"evrdata(@EVR_CONTROLLER_DATA_pico4@)evrdata"},
+}};
+
+const BuiltinData& dataOf(Controller controller) {
+    const auto index = static_cast<std::size_t>(controller);
+    return kData[index < kData.size() ? index : 0];
+}
 
 } // namespace
 
 std::string_view controllerName(Controller controller) {
-    switch (controller) {
-    case Controller::ValveIndex:
-        return "valve_index";
-    case Controller::OculusTouch:
-        break;
-    }
-    return "oculus_touch";
+    return dataOf(controller).name;
 }
 
 std::string_view builtinControllerData(Controller controller) {
-    switch (controller) {
-    case Controller::ValveIndex:
-        return kValveIndex;
-    case Controller::OculusTouch:
-        break;
-    }
-    return kOculusTouch;
+    return dataOf(controller).text;
 }
 
 } // namespace evr::game

@@ -29,19 +29,36 @@
 
 #include <cstddef>
 #include <optional>
+#include <span>
+#include <string>
+#include <vector>
 
 namespace evr::vkcore::controllers {
+
+// The controller-profile extensions an instance was created with (interaction_profiles.hpp), and whether
+// it is an OpenXR 1.1 instance.
+struct ProfileSupport {
+    std::vector<std::string> extensions;
+    bool api11 = false;
+};
+
+// XR worker, before xrCreateInstance: the extensions of the controller profiles we have bindings for that
+// the runtime offers (each one logged as enabled or not offered).
+std::vector<std::string> profileExtensions(std::span<const XrExtensionProperties> offered);
 
 struct XrContext {
     PFN_xrGetInstanceProcAddr getInstanceProcAddr = nullptr;
     XrInstance instance = XR_NULL_HANDLE;
     XrSession session = XR_NULL_HANDLE;
     XrSpace localSpace = XR_NULL_HANDLE; // the presenter's LOCAL space; poses are located in it
+    ProfileSupport profiles;
 };
 
 // XR worker, once the session and LOCAL space exist: reads the settings, creates and attaches the action
-// sets, suggests every controller family's bindings and creates the pose spaces. False (logged) when
-// controllers are off or anything fails; the game then runs with the keyboard, mouse and pad only.
+// sets, suggests the bindings of every controller family whose profile the instance has (a profile whose
+// extension is missing is skipped, and one the runtime refuses does not stop the others) and creates the
+// pose spaces. False (logged) when controllers are off or anything fails; the game then runs with the
+// keyboard, mouse and pad only.
 bool attach(const XrContext& xr);
 
 // XR worker, before the session or the LOCAL space is destroyed. Waits for the camera hook's locates.

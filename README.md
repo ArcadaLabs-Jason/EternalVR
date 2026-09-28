@@ -31,14 +31,19 @@ No dates yet:
 - Remapping the controls in the launcher.
 - Controller vibration.
 - More ways to use the weapon wheel (pointing or motion).
-- Bindings for more controllers (Windows Mixed Reality, Vive, Pico and others).
 
 ## Headsets, and we need testers
 
-It should work with any PC VR headset that has an OpenXR runtime: Virtual Desktop, Meta Horizon Link,
-SteamVR and others. So far it has been tested on a Quest 3 through Virtual Desktop, with an RTX 4080 and
-an RTX 3080 Ti. Quest (Touch) and Valve Index controllers have bindings; other controllers need theirs
-added.
+It should work with any PC VR headset that has an OpenXR runtime: Virtual Desktop, SteamVR, Meta
+Horizon Link and others. So far it has been tested on a Quest 3, through Virtual Desktop and through
+SteamVR, with an RTX 4080 and an RTX 3080 Ti.
+
+Under SteamVR the left Menu button opens SteamVR's own dashboard, so **hold Y to pause** instead.
+
+Controllers with bindings: Quest (Touch) and Valve Index, plus HP Reverb G2, Windows Mixed Reality,
+HTC Vive Cosmos, HTC Vive wands and Pico 4. Only the Quest controllers have been tried so far; the rest
+are untested, so reports from anyone with them are especially welcome. Their layouts are in
+[`docs/release/CONTROLS.md`](docs/release/CONTROLS.md).
 
 If you try it on anything else (another headset or runtime, an AMD or Intel graphics card), please
 tell us how it went, good or bad, in an [issue](../../issues/new/choose) or in

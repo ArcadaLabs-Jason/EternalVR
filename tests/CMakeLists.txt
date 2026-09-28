@@ -36,6 +36,7 @@ evr_add_test(evr_xr_math_tests
         xr_math/weapon_pose_tests.cpp
         xr_math/projection_tests.cpp
         xr_math/stereo_view_tests.cpp
+        xr_math/upright_space_tests.cpp
     DEPENDS evr_xr_math)
 
 evr_add_test(evr_resolver_tests
@@ -103,6 +104,7 @@ evr_add_test(evr_input_tests
         features/input/controller_bindings_tests.cpp
         features/input/controller_settings_tests.cpp
         features/input/cutscene_skip_tests.cpp
+        features/input/dashboard_pause_tests.cpp
         features/input/dossier_press_tests.cpp
         features/input/forced_angles_tests.cpp
         features/input/hands_jump_tests.cpp

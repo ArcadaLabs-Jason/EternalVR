@@ -15,6 +15,7 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,6 @@ namespace evr::vkcore::controllers {
 namespace {
 
 constexpr const char* kTag = "controllers";
-constexpr std::array kFamilies{game::Controller::OculusTouch, game::Controller::ValveIndex};
 // How often the current interaction profile is asked for (XR frames).
 constexpr std::uint64_t kProfileCheckFrames = 90;
 
@@ -67,26 +67,6 @@ void readSettingsOnce() {
         EVR_LOG("%s: built-in viewmodel offsets: %s", kTag, issue.c_str());
     }
 }
-
-const char* xrText(XrResult result, char (&buffer)[XR_MAX_RESULT_STRING_SIZE]) {
-    const XrInput& xr = state().xr;
-    if (xr.xrResultToString && xr.instance &&
-        XR_SUCCEEDED(xr.xrResultToString(xr.instance, result, buffer))) {
-        return buffer;
-    }
-    std::snprintf(buffer, XR_MAX_RESULT_STRING_SIZE, "XrResult %d", static_cast<int>(result));
-    return buffer;
-}
-
-#define EVR_XR_TRY(call)                                                                                     \
-    do {                                                                                                     \
-        const XrResult evr_r = (call);                                                                       \
-        if (XR_FAILED(evr_r)) {                                                                              \
-            char evr_text[XR_MAX_RESULT_STRING_SIZE];                                                        \
-            EVR_LOG("%s: %s failed: %s", kTag, #call, xrText(evr_r, evr_text));                              \
-            return false;                                                                                    \
-        }                                                                                                    \
-    } while (0)
 
 bool loadFunctions(XrInput& xr, PFN_xrGetInstanceProcAddr gipa) {
 #define EVR_LOAD(name)                                                                                       \
@@ -153,67 +133,6 @@ bool createActions(XrInput& xr) {
         EVR_XR_TRY(xr.xrCreateAction(xr.sets[static_cast<std::size_t>(def.set)], &info,
                                      &xr.actions[static_cast<std::size_t>(def.id)]));
     }
-    return true;
-}
-
-// A player's controller data file, or nullopt (logged) when it cannot be read or has issues.
-std::optional<input::ControllerData> readPlayerData(const std::string& path) {
-    const auto text = readTextFile(path);
-    if (!text) {
-        EVR_LOG("%s: cannot read the controller data '%s'; the built-in data is used", kTag, path.c_str());
-        return std::nullopt;
-    }
-    input::ControllerData data = input::parseControllerData(*text);
-    if (!data.ok()) {
-        for (const auto& issue : data.issues) {
-            EVR_LOG("%s: %s line %d: %s", kTag, path.c_str(), issue.line, issue.message.c_str());
-        }
-        EVR_LOG("%s: '%s' has issues; the built-in data is used", kTag, path.c_str());
-        return std::nullopt;
-    }
-    return data;
-}
-
-// Every family's data: the built-in files, with a player's file in place of the family it names.
-std::array<input::ControllerData, 2> loadControllerData(const input::ControllerSettings& settings) {
-    std::array<input::ControllerData, 2> data;
-    for (const game::Controller family : kFamilies) {
-        data[static_cast<std::size_t>(family)] =
-            input::parseControllerData(game::builtinControllerData(family));
-    }
-    if (!settings.controllerDataPath.empty()) {
-        if (auto player = readPlayerData(settings.controllerDataPath)) {
-            bool placed = false;
-            for (input::ControllerData& d : data) {
-                if (d.profilePath == player->profilePath) {
-                    d = std::move(*player);
-                    placed = true;
-                    break;
-                }
-            }
-            EVR_LOG("%s: controller data '%s' %s", kTag, settings.controllerDataPath.c_str(),
-                    placed ? "replaces the built-in data of its profile"
-                           : "names no supported profile; unused");
-        }
-    }
-    return data;
-}
-
-bool suggestBindings(XrInput& xr, const input::ControllerData& data) {
-    XrPath profile = XR_NULL_PATH;
-    EVR_XR_TRY(xr.xrStringToPath(xr.instance, data.profilePath.c_str(), &profile));
-    std::vector<XrActionSuggestedBinding> bindings;
-    for (const input::SuggestedBinding& b : data.suggested) {
-        XrPath path = XR_NULL_PATH;
-        EVR_XR_TRY(xr.xrStringToPath(xr.instance, b.path.c_str(), &path));
-        bindings.push_back({xr.actions[static_cast<std::size_t>(b.action)], path});
-    }
-    XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
-    suggested.interactionProfile = profile;
-    suggested.countSuggestedBindings = static_cast<std::uint32_t>(bindings.size());
-    suggested.suggestedBindings = bindings.data();
-    EVR_XR_TRY(xr.xrSuggestInteractionProfileBindings(xr.instance, &suggested));
-    EVR_LOG("%s: %zu binding(s) suggested for %s", kTag, bindings.size(), data.profilePath.c_str());
     return true;
 }
 
@@ -358,34 +277,17 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     return h;
 }
 
-// The family whose profile the runtime reports for the right hand, if it is one we have data for; a
-// profile without data is logged once (its controllers do nothing).
-std::optional<game::Controller> currentFamily(const XrInput& xr, const State& s) {
-    XrInteractionProfileState profile{XR_TYPE_INTERACTION_PROFILE_STATE};
-    if (XR_FAILED(xr.xrGetCurrentInteractionProfile(xr.session, xr.handPaths[handIndex(input::Hand::Right)],
-                                                    &profile)) ||
-        profile.interactionProfile == XR_NULL_PATH) {
-        return std::nullopt;
-    }
-    char text[XR_MAX_PATH_LENGTH] = {};
-    std::uint32_t length = 0;
-    if (XR_FAILED(xr.xrPathToString(xr.instance, profile.interactionProfile, sizeof(text), &length, text))) {
-        return std::nullopt;
-    }
-    for (const game::Controller family : kFamilies) {
-        if (s.controllerData[static_cast<std::size_t>(family)].profilePath == text) {
-            return family;
-        }
-    }
-    static std::string loggedUnknown; // the input thread only
-    if (loggedUnknown != text) {
-        loggedUnknown = text;
-        EVR_LOG("input: no bindings for controller profile %s: its controllers do nothing", text);
-    }
-    return std::nullopt;
-}
-
 } // namespace
+
+const char* xrText(XrResult result, char (&buffer)[XR_MAX_RESULT_STRING_SIZE]) {
+    const XrInput& xr = state().xr;
+    if (xr.xrResultToString && xr.instance &&
+        XR_SUCCEEDED(xr.xrResultToString(xr.instance, result, buffer))) {
+        return buffer;
+    }
+    std::snprintf(buffer, XR_MAX_RESULT_STRING_SIZE, "XrResult %d", static_cast<int>(result));
+    return buffer;
+}
 
 State& state() {
     // Never destroyed: game threads can be inside a hook while the process exits.
@@ -432,12 +334,7 @@ bool attach(const XrContext& context) {
     xr.localSpace = context.localSpace;
     auto data = loadControllerData(cfg);
     const bool ok = loadFunctions(xr, context.getInstanceProcAddr) && createActions(xr);
-    bool anySuggested = false;
-    if (ok) {
-        for (const input::ControllerData& d : data) {
-            anySuggested = suggestBindings(xr, d) || anySuggested;
-        }
-    }
+    const bool anySuggested = ok && suggestAllBindings(xr, context.profiles, data);
     if (!ok || !anySuggested) {
         destroyHandles(xr);
         EVR_LOG("%s: OpenXR input could not be set up; the game keeps its own input only", kTag);

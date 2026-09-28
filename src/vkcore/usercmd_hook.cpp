@@ -13,6 +13,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/binding_compiler.hpp"
+#include "features/input/dashboard_pause.hpp"
 #include "features/input/dossier_press.hpp"
 #include "features/input/usercmd_motion.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
@@ -26,6 +27,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/room_scale.hpp"
+#include "vkcore/xr_runtime.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -322,6 +324,10 @@ std::optional<input::BindingProfile> controlMap(const State& s, game::Controller
     if (!built.ok()) {
         EVR_LOG("%s: the control map has conflicts; controllers send nothing until it is fixed", kTag);
         return std::nullopt;
+    }
+    // SteamVR opens its dashboard on the left Menu button: holding Y pauses too (dashboard_pause.hpp).
+    if (input::runtimeTakesMenuButton(xrRuntimeName()) && input::applyDashboardPause(built.profile) > 0) {
+        EVR_LOG("%s: the runtime keeps the Menu button for its dashboard: holding the Y button pauses too", kTag);
     }
     // ETERNALVR_DOSSIER=tap: X taps open the Dossier and a hold switches equipment (dossier_press.hpp).
     if (s.settings.dossier == input::DossierPress::Tap &&

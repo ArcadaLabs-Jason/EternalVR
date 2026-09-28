@@ -1,0 +1,96 @@
+# HTC Vive controllers (the wands): the OpenXR suggested bindings and the default control maps.
+#
+# The file format is the one in oculus_touch.toml. A wand has a trigger, a grip button, a trackpad and
+# a Menu button (System belongs to SteamVR), so this is a reduced layout:
+#   - the trackpad is the stick: touching it moves or turns, and clicking it is the stick click;
+#   - the left Menu button is the pause, as on Touch;
+#   - the right Menu button is the right secondary button (B on Touch: dash, and back in menus);
+#   - there is no primary button, and no left secondary button.
+# Jump moves to the left trackpad click and melee stays on the right one. The off hand's trigger and grip
+# carry two actions each, tap and hold: equipment and Flame Belch, switch equipment and the Dossier.
+# Switch weapon mod, the Crucible and mission info have no input.
+
+[profile]
+"path" = "/interaction_profiles/htc/vive_controller"
+"gameplay.left.trigger" = "/input/trigger/value"
+"gameplay.left.grip" = "/input/squeeze/click"
+"gameplay.left.thumbstick" = "/input/trackpad"
+"gameplay.left.thumbstick_click" = "/input/trackpad/click"
+"gameplay.left.menu" = "/input/menu/click"
+"gameplay.left.aim_pose" = "/input/aim/pose"
+"gameplay.left.grip_pose" = "/input/grip/pose"
+"gameplay.left.haptic" = "/output/haptic"
+"gameplay.right.trigger" = "/input/trigger/value"
+"gameplay.right.grip" = "/input/squeeze/click"
+"gameplay.right.thumbstick" = "/input/trackpad"
+"gameplay.right.thumbstick_click" = "/input/trackpad/click"
+"gameplay.right.secondary" = "/input/menu/click"
+"gameplay.right.aim_pose" = "/input/aim/pose"
+"gameplay.right.grip_pose" = "/input/grip/pose"
+"gameplay.right.haptic" = "/output/haptic"
+"menu.left.select" = "/input/trigger/click"
+"menu.left.scroll" = "/input/trackpad"
+"menu.left.pointer_pose" = "/input/aim/pose"
+"menu.left.close" = "/input/menu/click"
+"menu.right.select" = "/input/trigger/click"
+"menu.right.back" = "/input/menu/click"
+"menu.right.scroll" = "/input/trackpad"
+"menu.right.pointer_pose" = "/input/aim/pose"
+
+[map.right]
+"weapon_hand" = "right"
+"left.stick.role" = "move"
+"left.trigger.tap" = "equipment"
+"left.trigger.hold" = "flame_belch"
+"left.grip.tap" = "switch_equipment"
+"left.grip.hold" = "dossier"
+"left.stick_click.press" = "jump"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "fire"
+"right.grip.press" = "weapon_mod"
+"right.stick_click.press" = "melee"
+"right.secondary.press" = "dash"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# Weapon in the left hand: triggers, grips and trackpad clicks swap sides; the trackpads' move and turn
+# and the Menu buttons stay.
+[map.left_button_swap]
+"weapon_hand" = "left"
+"left.stick.role" = "move"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.tap" = "equipment"
+"right.trigger.hold" = "flame_belch"
+"right.grip.tap" = "switch_equipment"
+"right.grip.hold" = "dossier"
+"right.stick_click.press" = "jump"
+"right.secondary.press" = "dash"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# A full mirror: the trackpads swap move and turn too. The left Menu button stays the pause, so the dash
+# stays on the right Menu button.
+[map.left_full_mirror]
+"weapon_hand" = "left"
+"left.stick.role" = "turn"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.menu.tap" = "pause"
+"left.stick.up" = "chainsaw"
+"left.stick.down_tap" = "quick_switch"
+"left.stick.down_hold" = "weapon_wheel"
+"right.stick.role" = "move"
+"right.trigger.tap" = "equipment"
+"right.trigger.hold" = "flame_belch"
+"right.grip.tap" = "switch_equipment"
+"right.grip.hold" = "dossier"
+"right.stick_click.press" = "jump"
+"right.secondary.press" = "dash"

@@ -19,9 +19,10 @@ The exact version and commit are in `BUILD-INFO.txt`. Please quote them in every
 - **A headset with an OpenXR runtime.** Tested: Meta Quest 3 through Virtual Desktop, with Virtual
   Desktop's own OpenXR runtime (VDXR). SteamVR, Meta Horizon Link and every other runtime or headset are
   untested; they may work, and I would like to hear either way.
-- **Motion controllers:** Meta Touch controllers (Quest). Valve Index controllers have bindings but are
-  untested. Other controllers (Windows Mixed Reality, HTC Vive and Cosmos, Pimax) have no bindings yet and
-  do nothing in the game; the mod's log names the controller it saw.
+- **Motion controllers:** Meta Touch controllers (Quest). Valve Index, HP Reverb G2, Windows Mixed
+  Reality, HTC Vive Cosmos, HTC Vive wands and Pico 4 controllers have bindings but are untested. Other
+  controllers (Pimax, for one) get whatever layout their runtime maps them to; the mod's log names the
+  controller it saw.
 - **DOOM Eternal from Steam**, the current retail build: Steam build 25216728 (Rev 3.2), with
   `DOOMEternalx64vk.exe` having SHA-256
   `69dc13e88d1c19133ead7950dc64ebcbd4a5a3f6bd6f9c336ebffe56df6a1c11`. The launcher checks this and shows

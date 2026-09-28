@@ -11,5 +11,6 @@ evr_add_module(evr_xr_math
         weapon_pose.cpp
         projection.cpp
         stereo_view.cpp
+        upright_space.cpp
     DEPENDS
         evr_common)
