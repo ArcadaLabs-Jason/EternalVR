@@ -1,0 +1,352 @@
+# Motion controllers (M5)
+
+Builds on `docs/VR_HEAD_TRACKED.md`. The controllers drive the game: buttons, movement and turning go
+into the game's own user command, the view can follow the weapon hand instead of the head, shots leave
+the gun, and the game's arms and weapon are drawn at the controller. The hook points are
+`docs/rig-findings/input-aim.md` (build 25216728); the portable pieces are in `src/features/input/`,
+`src/game/eternal/` and `src/xr_math/`.
+
+**Status.** Built, unit-tested and checked live on the rig with OpenXR-Simulator and scripted input (the
+live checks below); on by default (`ETERNALVR_CONTROLLERS=0` turns it off). Still for the headset: glory
+kills and the meathook under hand aim, the viewmodel offsets per weapon, the aim error over a real play
+session, and the real controllers' bindings.
+
+## How it works
+
+```
+XR worker (every XR frame)          camera hook (every game frame)         game threads
+xrSyncActions -> snapshot  ----+    head located -> controller poses       user command build:
+  (buttons, sticks, aim poses,  |    at the same time                        mapper -> buttons ORed,
+   head; scripted test input    |    hand aim: view angles -> hand ray       move added (0x43E8DD)
+   laid over it)                |    world poses of the weapon hand          turn -> accumulated
+                                |    relative to the game's eye              angles (0x17FD3C0)
+                                +--> weapon FOV = headset FOV              FireWeapon: shot start and
+                                                                             axis = hand ray (0x135D733)
+                                                                           UpdatePosition: viewmodel at
+                                                                             the grip (0x13807EA)
+```
+
+- **OpenXR input** (`src/vkcore/input_xr.cpp`). When the session exists, the `gameplay` and `menu` action
+  sets of `features/input/xr_action_set.hpp` are created with both hands as subaction paths, the
+  suggested bindings of every controller data file (`data/input/controllers/oculus_touch.toml`,
+  `valve_index.toml`; a player's file through `ETERNALVR_CONTROLLER_DATA` replaces the one with the same
+  profile) are suggested, the sets are attached and aim and grip spaces are created per hand. Every XR
+  frame the worker syncs `gameplay` and publishes a snapshot: triggers, grips, sticks, buttons, the aim
+  poses with velocity and the head, all in `LOCAL`. The runtime's current interaction profile picks the
+  family whose control map is used. Handles are destroyed before the presenter destroys its spaces.
+- **Mapper** (`src/vkcore/usercmd_hook.cpp`, `runMapper`). The control map of the family and handedness is
+  compiled (`buildBindingProfile`; a map with conflicts is refused with its two-sided messages) and
+  `InputMapper` runs once per user command. Its `GameInput` goes through `ActionHold` (a tap is held at
+  least 50 ms and two commands, so the game samples it). Every action that starts is logged by name
+  (`controllers: action quick_switch`), which the weapon-swap protocol needs.
+- **User command** (L1). A mid-hook on the call of `idUserCmdMgr::PutUserCmd` (RVA 0x43E8DD; r8 the finished
+  command, ebx the local user, r14b set while the game suppresses buttons). For local user 0 the actions'
+  bits (`game/eternal/usercmd_buttons.hpp`) are ORed into `buttons` (+0x10) and the move is added to
+  `forwardmove` / `rightmove` (+0x18 / +0x19) with a clamp to the keys' +-127. The keyboard, mouse and a
+  pad keep working. Nothing is ORed while the game suppresses buttons. Pause is the Escape key (the game's
+  `toggleMainMenu` is a command, not a button), sent through key injection, also while buttons are
+  suppressed so the menu can be closed.
+- **Turning.** A mid-hook at the generator's angle conversion (RVA 0x17FD3C0): for local user 0's build
+  (`[rdi+0x8D0]`; the generator builds every local user's command) the turn (smooth, or snap in whole
+  steps) is added to the accumulated yaw at `[[rdi+0x8D8]+8]`, where mouse motion goes, so it
+  persists like mouse motion; the accumulated yaw is kept within +-3600 degrees.
+- **Weapon wheel** (`features/input/wheel_mouse.hpp`, `docs/rig-findings/menus.md` section 4). The game's
+  wheel selects with its menu cursor (the cursor's offset from the wheel's centre, clamped to 200 GUI
+  pixels, a segment past 50), and the cursor moves with relative mouse motion even while hidden. So while
+  `weapon_wheel` is held, from 0.25 s after it went down (the game opens the wheel 180 ms after the button
+  by default; mouse motion before that would still turn the view), the pointer stick's direction becomes
+  raw mouse motion through the key injection: the difference from a model of the cursor's offset to the rim
+  point in that direction when the direction turns by more than 3 degrees, and a 40-pixel push outward every
+  0.1 s while it holds (the game's clamp absorbs it and it corrects any drift from the model). Below half
+  deflection nothing is sent, so the stick springing back leaves the highlight, and the release of
+  `_changeWeapon` (the sweep ends at the centre) picks it. With the virtual gamepad the pointer goes on its
+  right stick instead. Log: `the weapon wheel is up`, `weapon wheel: pointing <direction> (motion dx, dy)`
+  at each change of the eight directions, `weapon wheel released after N motion(s)`.
+- **Locomotion.** The move stick is relative to the head or the off hand (`ETERNALVR_LOCOMOTION`) and is
+  rotated into the game's view yaw, which the camera hook measures each frame as the player's view yaw
+  less the body yaw, so hand aim never bends the direction of travel.
+- **Hand aim** (`ETERNALVR_AIM=hand`, `src/vkcore/aim_hooks.cpp`). Head aim's closed loop is reused: each
+  game frame the game's own angles (command + deltaViewAngles) are read back and moved to body + target,
+  where the target is the weapon hand's aim ray (`handAimAngles`) instead of the head. The render camera
+  stays `body * head`. A hand that loses tracking keeps its last angles for 0.5 s, then the head aims.
+- **Aim smoothing** (`ETERNALVR_AIM_SMOOTHING`, `features/input/aim_smoothing.hpp`,
+  `src/vkcore/game_view_poses.cpp`). Where the hands are located for a game view, the weapon hand's aim
+  orientation goes through a one-euro filter (Casiez et al. 2012) in LOCAL: a low-pass whose cutoff rises
+  with the hand's angular speed, so tremor and tracking noise are cut while the hand is still and a moving
+  hand is followed closely. The viewmodel, the shots, the aim angles and the reticle all read the filtered
+  ray. The strength runs from 0 (off) to 1 (strongest): the still cutoff falls from 8 Hz toward 0.5 Hz and
+  the speed gain from 20 toward 10 Hz per radian per second. The default 0.3 (3.5 Hz, 16 Hz per rad/s) cuts
+  a still hand's noise to about a third and lags 8 ms at 57 degrees per second, 3 ms in a quick flick
+  (`docs/rig-findings/aim-jitter.md`). The log's `controllers: on:` line shows the setting.
+- **Reticle.** Under hand aim the dot is placed from the shown frame's own weapon ray (smoothed, at that
+  frame's pose time), so it stays where the gun drawn in that frame points and its shots go
+  (`src/vkcore/presenter_reticle.cpp`).
+- **Forced views.** An entry hook on `idPlayer::SetViewAngles` (RVA 0x1454480) counts calls whose return
+  address is not the per-tick view update (0x14562A8, found as the only call to SetViewAngles inside
+  `UpdateViewAngles`) and whose player (rcx) is the one the camera hook sees; each distinct caller is
+  logged once. With the player's view inhibit bits
+  (`inhibitFlags & 0x108`, +0x87FC) and `renderView_t.inCutscene` they feed `ForcedAngleGate`, which
+  yields that frame and two more. While it yields, hand aim writes nothing (the camera keeps the body yaw
+  without the injected hand yaw, so it does not jump), shots keep the game's start and axis, and the
+  viewmodel keeps the game's own placement (glory kills and sync animations use it).
+- **Shots** (T-055). A mid-hook in `idHands::FireWeapon` just after `GetWeaponFireInfo` returns (RVA
+  0x135D733; the site is checked to call GetWeaponFireInfo with the fire axis at rbp+0x2B0 and the fire
+  position from `lea r9,[rsp+0x68]`). For the local player's hands (`idHands.owner`, +0x358, has
+  idPlayer's vtable), the fire axis becomes the hand ray. A shot the game starts at the eye (hitscan) is
+  moved to the player's first-person origin (+0x16580) plus the hand's offset from the eye (limited to
+  1 m); one it already starts at the muzzle (the Heavy Cannon, projectiles) keeps that start, because the
+  muzzle tag follows the viewmodel placed at the hand. One hook covers hitscan and
+  projectiles; spread, the muzzle offset for tracers and the multiplayer copy are applied by the game
+  afterwards. Each shot's angle between the game's own fire axis and the hand ray is counted (over 0.5
+  degrees, and the maximum, logged every 10 s): the M5 aim-error criterion. `ETERNALVR_SHOT_ORIGIN=eye`
+  keeps the game's start and changes only the direction.
+- **Viewmodel** (T-054, `src/vkcore/viewmodel_hook.cpp`). A mid-hook in `idHands::UpdatePosition` just
+  before the render model's stores (RVA 0x13807EA; the eight structure displacements of those stores are
+  checked). The final origin (`[rsp+0x48]`) becomes the grip position and the axis (`[rbp-0x30]`) the aim
+  ray's, both through the held weapon's offset; the game's own stores then carry them into the deferred
+  and current render-model pose. The held item is `idHands.rightItem.itemDecl` (+0x29B0 + 8) and its name
+  (`idResource::name`, +8) keys `data/weapons/viewmodel_offsets.toml`. The hand is kept relative to the
+  game's eye and re-added to the eye the game has when it places the weapon or fires, so the gun stays on
+  the hand while the player moves.
+- **Weapon FOV.** After the camera hook writes the headset FOV into `fov_x` / `fov_y`, the same values go
+  into `weaponFOVX/Y` (+0x30 / +0x34) and `customFOV2X/Y` (+0x38 / +0x3C), so the arms and weapon use the
+  world's projection. The launcher forces `hands_fovScale 1` (T-053) and
+  `meatHook_playerViewOverrideMode 1` (`launcher/data/forced-cvars.txt`).
+- **Virtual gamepad** (L2, `src/vkcore/xinput_hook.cpp`). The exe imports `XInputGetState` from
+  `XINPUT1_3.dll` by ordinal 2 only; that import slot is replaced. For pad 0 the real state is merged with
+  ours (`features/input/virtual_gamepad.hpp`: buttons ORed, triggers the larger, sticks added), the packet
+  number (our own counter) moves on when the merged state or the real pad's packet changes, and pad 0
+  reads as connected while the controllers are attached, even while their input is stale, so the game
+  never sees the pad come and go. Without the turn hook the turn stick goes to the right stick, so the
+  game's own stick look turns (smooth only). It maps onto the game's default pad binds, so direct weapon slots and next/previous weapon are not
+  available through it. It is used only when the user-command hook cannot be installed, or with
+  `ETERNALVR_XINPUT=1`; the turn hook works with either path.
+- **Multiplayer guard.** Every hook is installed only while the guard is armed (`installGameHooks` is
+  called next to the camera hook's install), and every callback that writes asks
+  `mp_guard::allowsGameTouch()` first and again just before it writes (`docs/rig-findings/mp-guard.md`).
+  Anything that cannot be located or validated stays off and the log says which.
+
+## Settings
+
+Environment variables for the game process (the rig passes them with `launch-ht.ps1 -ExtraEnv`):
+
+| Variable | Values | Default |
+|---|---|---|
+| `ETERNALVR_CONTROLLERS` | `1` / `0` | `1` |
+| `ETERNALVR_AIM` | `head` (view follows the head), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
+| `ETERNALVR_LOCOMOTION` | `head` / `hand` (the off hand) | `head` |
+| `ETERNALVR_TURN` | `smooth` / `snap` / `off` | `smooth` |
+| `ETERNALVR_TURN_RATE` | smooth turn, 150 to 400 degrees per second | 230 |
+| `ETERNALVR_SNAP_DEGREES` | 30, 45, 90 (15 to 90 accepted) | 45 |
+| `ETERNALVR_HANDEDNESS` | `right`, `left` (triggers, grips and clicks swap), `left_mirror` (sticks and face buttons swap too) | `right` |
+| `ETERNALVR_DOSSIER` | `hold`: X tap switches equipment, X hold (0.25 s) opens the Dossier; `tap`: the other way round (below) | `hold` |
+| `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
+| `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
+| `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |
+| `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
+| `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
+| `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
+| `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning) | the table |
+| `ETERNALVR_CONTROLLER_DATA` | a player's controller data file | built in |
+| `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
+| `ETERNALVR_CONTROLLERS_TRACE` | `1`: log the eye, view angles, body and hand 4 times a second, the game's own command bits, and the turns | `0` |
+
+A value that cannot be used is logged with its name and the default is kept
+(`features/input/controller_settings.hpp`).
+
+## Default control map (right-handed, Touch; Index keeps the layout)
+
+| Input | Action | What the game receives |
+|---|---|---|
+| Right trigger | Fire | `_attack1` 0x1 |
+| Right grip | Weapon mod | `_zoom _altfire` 0x10 \| 0x4 |
+| Right stick click | Melee, Glory Kill, Blood Punch, use | `_attack2 _use` 0x2 \| 0x8 |
+| A | Jump | `_jump` 0x100000000 and up-move 127 |
+| B | Dash | `_dash` 0x400000 |
+| B held during a cutscene | Skip the cutscene | the skip key R, held (below) |
+| Right stick left / right | Turn (smooth or snap) | accumulated yaw |
+| Right stick up | Chainsaw | `_quick3` 0x8000000 |
+| Right stick down, tap / hold | Quick switch / weapon wheel | `_changeWeapon` 0x40 |
+| Left stick | Move | forward / right move |
+| Left trigger | Equipment launcher | `_quickuse` 0x800000 |
+| Left grip | Flame Belch | `_bfg` 0x100000 |
+| Left stick click | Crucible | `_crucible` 0x400000000 |
+| X tap / hold | Switch equipment / Dossier (swapped with `ETERNALVR_DOSSIER=tap`) | `_quick0` 0x1000000 / `_inventory` 0x40000000 |
+| Y tap / hold | Switch weapon mod / mission info | `_reload` 0x80 / `_objectives` 0x8000000000 |
+| Left Menu tap | Pause | the Escape key |
+| Both sticks pressed, held 2 s | Recenter the room (below, docs/VR_ROOMSCALE.md) | the layer's own |
+| Left Menu held + a trigger | Save a capture of each eye for a bug report (below) | the layer's own |
+| A physical punch | Melee | as the stick click |
+
+While a menu is up the controllers drive the menu instead (laser pointer, trigger clicks, B / Y back, the
+grips switch tabs, sticks scroll and switch tabs or move the Dossier map, a stick click centres it) and
+these actions are held back: `docs/VR_MENUS.md`. In a tutorial popup the game raised by itself, press the
+button for the mechanic it introduces (or A / X): each gameplay button also sends its action's default
+Slayer key (Flame Belch R, chainsaw C, equipment Left Ctrl, dash Left Shift, switch weapon mod F, switch
+equipment G, weapon switch Q, the Crucible V, the weapon slots 1 to 8; `menu::popupActionKey`), held while
+the button is. Fire, the weapon mod and the sticks' movement and turning send no keys.
+
+**Recenter: both sticks held.** Recenter: hold both sticks pressed for 2 s, or use the headset's own
+recenter (hold the Meta / Oculus button). Holding the left Menu button used to recenter, but Virtual Desktop
+watches that button too: on the owner's Quest 3 (2026-09-27) the hold dropped him to the VD desktop. The
+chord is built into the mapper (`features/input/stick_chord.hpp`), not a binding, so it is the same in
+every handedness and on Index. A single stick click stays instant: melee and the Crucible see it the frame
+it goes down. Only a stick pressed while the other is already down waits, at most 0.15 s: pressed within
+0.15 s of the other or still held after 0.15 s, it is the chord, and both sticks' bindings are released
+until each is let go (the first stick's action has already gone out; a two-stick press cannot be told
+apart from a click at the first press); let go within 0.15 s, it is an ordinary click, sent late for one
+frame. The chord's `recenter` action goes down 0.25 s after the second stick (like a binding's hold) and
+the layer counts the rest of `ETERNALVR_RECENTER_HOLD` (2 s by default; 0 turns the chord off) as before
+(`noteRecenterBinding`). In a menu the router sends no C / E for the second stick of the chord. A player's
+own map can still bind `left.menu.hold = "recenter"`; the built-in maps no longer do.
+
+**X: tap or hold for the Dossier.** `ETERNALVR_DOSSIER=tap` swaps the two actions on the off hand's X
+(A in the full mirror): a tap opens the Dossier and a hold (0.25 s) switches equipment. The swap is made on
+the compiled control map (`features/input/dossier_press.hpp`), so it applies to Touch and Index in every
+handedness; a button a player remapped (no longer tap = switch equipment, hold = Dossier) is left alone.
+The choice is in the `controllers: on:` start-up line (`Dossier on X hold` or `tap`). The launcher's Play tab sets it (Controls, "X button"; `dossier` in `launcher.ini`).
+
+**The in-headset capture (left Menu held + a trigger).** Pulling either trigger while the left Menu
+button is held saves the next complete stereo pair for a bug report (an effect that shows in one eye only,
+blocky lighting), one capture per pull (`features/input/capture_chord.hpp`). The chord takes both buttons
+away from what they normally do: while Menu is held both triggers are held back (no fire, no equipment,
+no menu click; a trigger pulled meanwhile stays held back until it is let go), and a Menu press during
+which a capture fired neither pauses on its release nor recenters (a player's own Menu-hold recenter;
+`TapHoldDetector::cancel`). A Menu press without a trigger pull pauses on release as before. The chord is on
+the left Menu button in every handedness (the right one belongs to the system on Touch; on Index it is
+the firm left trackpad press), and it works in gameplay and in menus (`GameInput::capture`, outside the
+actions a menu holds back; the menu pointer runs its own `CaptureChord` to drop the trigger's click).
+A double tap of Menu was the first idea; Virtual Desktop already uses it (it switches to the desktop
+view), so it is not used.
+
+The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`,
+`presenter_snapshot.cpp`): `capture-<date>-<time>-p<pair>-t<tick>-L.png` and `-R.png` (the two eye images
+as presented), `-UI.png` (the game's GUI target, what the HUD quad shows, with its alpha) and `.txt` (the
+head and eye poses and FOVs, the render size, the TAA / DLSS state, the tick). In a menu or loading
+screen there is no stereo pair: after 0.3 s the next mono frame is saved as `-mono.png` instead. The
+copies are the periodic capture's (`ETERNALVR_CAPTURE_EYES`, `ETERNALVR_CAPTURE_UI`), the PNG files are
+written on a background thread and the log says `capture: saved eye L/R + UI to ...` with the render
+thread's share (a few ms of copying out of the host buffers) and the time since the trigger pull. At most
+50 captures per session; each is about 20 MB at 1280x1400 (the PNG files are not compressed). The
+launcher's Export report takes the newest captures, up to 48 MB.
+
+**Skipping a cutscene by hand.** With the automatic skip off (`ETERNALVR_SKIP_CINEMATICS=0`, the
+launcher's "Skip cutscenes automatically" unticked), holding the dash action (B on the weapon hand; the
+control map decides, so handedness and a player's own map apply) while a cutscene plays holds the game's
+skip key R (`features/input/cutscene_skip.hpp`, sent from the user-command hook with the pause key). The
+key goes up when the button does or when the cutscene ends; only a press that starts during the cutscene
+counts, so a dash held into one does not skip it. The first hold in each cutscene is logged (`controllers:
+dash held in a cutscene: holding the skip key`). The game skips after its own hold time, and parts of some
+cutscenes do not accept a skip: in the e1m1 intro (run `<workspace>\runs\20260927-155146-mr3`)
+a hold 14 s in did nothing, and one 38 s in ended the cutscene 1.0 s later (it runs 63 s or more unskipped;
+the automatic skip ends it about 24 s in).
+
+Every command with an action also carries BUTTON_ANY (1 << 57), as the keys' commands do.
+The bits are what each action's default Slayer key is bound to in the game's shipped config (bindset 0:
+`E` is `_attack2 _use`, `R` is `_bfg`, `C` is `_quick3`, `G` is `_quick0`, `F` is `_reload`), so a
+command means exactly what that key press means; the player's own key binds do not matter.
+
+## Scripted input for rig tests
+
+`ETERNALVR_TEST_INPUT=<file>` lays a small text file over the runtime's controllers; the camera hook
+re-reads it when its write time changes (every 10 game frames), so a script can drive a test by rewriting
+it. When the XR worker's snapshot is stale the mapper builds its frame from the file alone:
+
+```
+right.trigger = 1          # 0..1 (also grip)
+left.stick = 0, 1          # x, y
+right.primary = 1          # primary, secondary, click (stick click), menu
+right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOCAL)
+right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)
+```
+
+A hand given an aim is tracked there, with the grip at the same pose. Without the file the runtime's
+controllers are used alone. OpenXR-Simulator binds our actions but its own controller emulation is driven
+through files under the home directory, which the rig does not write; the scripted input covers the same
+ground. The simulator also turns some keyboard keys into controller buttons while it runs, so keys sent
+with `keys.ps1` during a test can press controller actions too.
+
+## Viewmodel offsets and tuning
+
+`data/weapons/viewmodel_offsets.toml` holds `[forward, left, up, pitch, yaw, roll]` per inventory decl
+name in the controller's aim frame (metres and degrees): the game draws each viewmodel relative to the
+eye, so the offset moves the model's origin back from the hand by how far the gun is drawn ahead, right
+and below the eye. The built-in values are one starting estimate for all weapons; per-weapon rows are
+added as each weapon is checked. To tune: run with `ETERNALVR_VIEWMODEL_OFFSET=f,l,u` and the test input
+holding a hand still, change the value between runs until the gun's grip sits on the controller, and write
+the row. The held item's name and offset are logged on each change.
+
+## Verified
+
+- Unit tests (`ctest`): the button table against the shipped binds (with BUTTON_ANY and the jump's up-move),
+  every default-map action reaching the game on Touch and Index in every handedness, the tap hold, the move
+  clamp, snap and smooth turns making a whole circle both ways through the accumulator (whole turns land
+  on the same 16-bit angle), the forced-view gate, the settings parser, the shot ray and the eye-relative
+  controller poses, the local offset maths, the offset table's lookup rules and the built-in table, the
+  virtual gamepad's mapping and merge, and the scripted input reader.
+- Offline against the exe of build 25216728: every signature above matches once in `.text`; the
+  viewmodel site's eight displacements, the fire site's fire-axis displacement and call target, and the
+  single SetViewAngles call in UpdateViewAngles (returning to 0x14562A8) hold.
+- Rig (2026-09-26, OpenXR-Simulator, mono head-tracked, e1m2, `ETERNALVR_HEAD_POSITION=0`, scripted input,
+  `ETERNALVR_CONTROLLERS_TRACE=1`): the live checks below. Evidence is the layer log's `controllers:`
+  lines (the trace logs the eye, the game's view angles, the body and the hand four times a second) and
+  window captures of the HUD.
+
+## Live checks (OpenXR-Simulator, `ETERNALVR_TEST_INPUT`)
+
+Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_battle/e1m2_battle
+-XrRuntimeJson <simulator json> -ExtraEnv ETERNALVR_TEST_INPUT=<file>,ETERNALVR_CONTROLLERS_TRACE=1[,...]`.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Every hook at its RVA; both profiles' bindings suggested | Pass: `user command 0x43E8DD`, `turn 0x17FD3C0`, `forced view 0x1454480` (per-tick return 0x14562A8), `fire 0x135D733`, `viewmodel 0x13807EA`; 28 bindings each for Touch and Index |
+| 2 | Buttons, real input kept, console suppression | Pass: the trigger fires (Combat Shotgun ammo 16 to 14); A jumps (eye z 14.66 to 15.89) after the fix below; with the trigger held and `keys.ps1 -Press SPACE` both happen (Heavy Cannon 60 to 49 while the eye rises to 16.01); with the console open the held trigger fires nothing (49 stays 49). B sends exactly the keyboard's dash bits (0x400000 with BUTTON_ANY); the dash did not move the player from the keyboard either at this point of e1m2 |
+| 3 | Locomotion, head and hand | Pass: head: the stick walks along the view yaw (45 degrees: x and y rise together); hand (`ETERNALVR_LOCOMOTION=hand`, `left.aim = 90, 0`): the walk goes along yaw 135 (x falls, y rises) with the view unchanged |
+| 4 | Snap and smooth turn | Pass: eight snaps right step the view yaw 45, 0, -45, ... 90, 45 (360 degrees), eight left return to the start, one left and one right step 45 to 90 and back; smooth turn at 230 degrees per second (about 1.7 degrees per frame at 135 fps) |
+| 5 | Weapon actions | Pass for the quick switch (Combat Shotgun to Heavy Cannon), the weapon wheel (opens on a held stick-down), Flame Belch (its HUD icon goes to cooldown), melee (the bits of `E`), pause and unpause (the Menu button opens and closes the pause menu through the Escape key). Chainsaw and equipment: the bits match the keyboard's `C` and `LCTRL` exactly (rig capture of the game's own command); no target or equipment was available to see them act. The wheel's pointer selection is not confirmed (it now goes through the game's cursor: live check 11) |
+| 6 | Hand aim and forced views | Pass: `right.aim = 20, -10` turns the view to yaw 65, pitch 10 (body 45) and holds; falling off a ledge (respawn) logged `forced view starts (forced view angles; inhibit 0xF)` then `ends`, and the view took the game's respawn yaw. Glory kill and meathook: not reached (no enemies near the e1m2 start) |
+| 7 | Shots | Pass: hitscan (Combat Shotgun): the start moves from the eye to the hand, the direction is the hand ray, view-to-hand error 0.00 degrees. Heavy Cannon: the game already starts it at the muzzle of the moved viewmodel (so the muzzle tag follows the viewmodel hook); that start is kept and only the direction is set (1.4 to 1.7 degrees between the game's converging axis and the hand ray) |
+| 8 | Viewmodel | Pass: the gun follows `right.aim` (60 degrees left, 40 up, 40 down, level) and `right.position`; placement at level aim is close to the game's own. Per-weapon tuning is for the headset |
+| 9 | Virtual gamepad (`ETERNALVR_XINPUT=1`, `+in_joystick 1`) | Pass: A jumps, the left stick walks, the trigger fires (16 to 14), turning goes through the turn hook |
+| 10 | Guard trip (`ETERNALVR_GUARD_TEST_TRIP_MS=40000`) | Pass: after the trip the trace and the action log stop, the view stays where it was, and a held trigger fires nothing (15 stays 15) |
+| 11 | Weapon wheel through the cursor: in e1m2 with two or more weapons, the file `right.stick = 0, -1` for 1 s, then `right.stick = 1, 0` for 1 s, then `right.stick = 0, 0` | Pending. Expect `action weapon_wheel`, about 0.25 s later `the weapon wheel is up`, `weapon wheel: pointing down (motion 0, 200)`, then `pointing right (motion 200, -200)`, then `weapon wheel released after N motion(s)` and a `held item` line for the weapon on the wheel's right; no `menu: the game shows its cursor` (if the game does show it: `menu: the weapon wheel is up: ...` and no panel); the `aim:` line's body yaw unchanged across the wheel |
+
+Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
+player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent
+with any action; the generator builds every local user's command and user 1's reaches the angle
+conversion first, so the turn is applied only to user 0's (`[gen+0x8D0]`); the scripted input is read on
+the camera hook and fed to the mapper directly, because OpenXR-Simulator's window can stall the XR worker
+for seconds (below).
+
+## Gaps and deviations
+
+- **OpenXR-Simulator stalls the XR worker.** Its preview window is pumped inside `xrReleaseSwapchainImage`
+  on our XR worker, and it sometimes blocks there for seconds or for good (seen in 5 of 11 runs; the
+  game keeps running, the headset image freezes). It is the simulator's window, not the layer's code
+  (stack: the presenter's `completeCopy` into the simulator's message loop). Scripted input no longer
+  depends on the worker; a real runtime is not affected.
+
+- **Aim through deltaViewAngles, not the accumulator.** input-aim.md recommends adding the aim correction
+  to the generator's accumulated angles; hand aim uses head aim's deltaViewAngles loop instead, because
+  that loop is verified live, already handles the game rewriting the delta around cutscenes, and keeps
+  the body frame in one place. The turn does go through the accumulator. If hand aim lags or fights the
+  game on the rig, the accumulator is the next step.
+- **No wall check for the shot start.** The shot starts at the hand (within 1 m of the eye) with no trace,
+  so a gun pushed through thin geometry can fire from behind it. T-062's "shots from the last valid head
+  position" needs a collision query; until then `ETERNALVR_SHOT_ORIGIN=eye` is the safe setting.
+- **Weapon wheel pointer** through the game's cursor (above) is found by static analysis and covered by
+  unit tests; selection in the headset is still to be confirmed. The first version moved the accumulated
+  angles, which the wheel does not read (the owner's Quest 3 session: the wheel opened, nothing could be
+  selected).
+- **The virtual gamepad** depends on the game's default pad binds and, for the sticks, on `in_joystick`.
+- **One hand model.** The game's hands model holds both arms; placed at the weapon hand, the left arm
+  follows it (T-054: no off-hand model in v1).
+- **Seated** offsets are chosen by `ETERNALVR_SEATED`; posture detection is not wired to them yet.
+- **Bindings from the player's profile** (REQ-11) come only through `ETERNALVR_CONTROLLER_DATA` until the
+  launcher writes profiles (M8). No haptics yet (v1 if time allows). Aim assist is not forced off (the
+  injected turn does not use the stick path that gates it).
+- **Stereo.** Checked live with Route S (docs/VR_STEREO.md, re-test table): with hand aim and snap turn
+  every action works as in mono, and the weapon is drawn at the hand in both eyes (Route S retargets the
+  hands-and-guns matrices to each eye's frustum). The weapon FOV copy is per game frame.
+- **Mid-hook slots.** With Route S the layer installs more mid-hooks than either alone; `kMaxMidHooks` is
+  24.

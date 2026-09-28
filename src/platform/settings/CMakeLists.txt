@@ -1,0 +1,11 @@
+evr_add_module(evr_settings
+    SOURCES
+        builtin.cpp
+        preset.cpp
+        profile.cpp
+        profile_name.cpp
+        profile_store.cpp
+        schema.cpp
+        setting_value.cpp
+    DEPENDS
+        evr_common)

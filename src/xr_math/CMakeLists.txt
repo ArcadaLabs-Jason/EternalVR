@@ -1,0 +1,15 @@
+evr_add_module(evr_xr_math
+    SOURCES
+        enclosing_fov.cpp
+        eye_clip_transform.cpp
+        cinema_quad.cpp
+        display_lead.cpp
+        fov.cpp
+        hand_aim.cpp
+        head_aim.cpp
+        head_view.cpp
+        weapon_pose.cpp
+        projection.cpp
+        stereo_view.cpp
+    DEPENDS
+        evr_common)

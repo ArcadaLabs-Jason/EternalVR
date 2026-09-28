@@ -1,0 +1,8 @@
+# Anti-cheat components in the game folder refuse VR (T-109). Matched case-insensitively against
+# file and folder names in the game root and its first-level folders.
+# name prefix | product
+EasyAntiCheat | Easy Anti-Cheat
+EOSAntiCheat | Easy Anti-Cheat (EOS)
+BattlEye | BattlEye
+BEService | BattlEye
+DenuvoAntiCheat | Denuvo Anti-Cheat

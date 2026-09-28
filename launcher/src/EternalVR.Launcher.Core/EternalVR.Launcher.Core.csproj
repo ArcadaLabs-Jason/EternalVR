@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Portable launcher logic, tested on any OS; the one native call is the OpenXR probe (Windows only, never in the tests). -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>EternalVR.Launcher.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The tests check the OpenXR probe's struct layouts against openxr.h. -->
+    <InternalsVisibleTo Include="EternalVR.Launcher.Core.Tests" />
+  </ItemGroup>
+</Project>

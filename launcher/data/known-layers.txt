@@ -1,0 +1,23 @@
+# Implicit Vulkan and OpenXR layers the launcher knows (T-095, T-110). The list is data; the
+# variable used to turn a layer off comes from its own manifest's disable_environment.
+# api | layer name (or prefix*) | ignore | warn | disable | disable-unless-vdxr | reason
+vulkan | VK_LAYER_ETERNALVR | warn | an EternalVR layer registered in the registry; the launcher loads its own copy through the environment
+vulkan | VK_LAYER_VALVE_steam_overlay* | ignore | Steam overlay
+vulkan | VK_LAYER_VALVE_steam_fossilize* | ignore | Steam shader pre-caching
+vulkan | VK_LAYER_EOS_Overlay | ignore | Epic Online Services overlay, inert outside Epic games
+vulkan | VK_LAYER_RENDERDOC_Capture | ignore | RenderDoc, inert unless capturing
+vulkan | VK_LAYER_KHARVOX* | disable | another VR layer for DOOM Eternal
+vulkan | VK_LAYER_RTSS | warn | RivaTuner overlay, not yet tested with EternalVR
+vulkan | VK_LAYER_OBS_HOOK | warn | OBS game capture, not yet tested with EternalVR
+vulkan | VK_LAYER_reshade* | disable | ReShade post-processing breaks the stereo image
+vulkan | VK_LAYER_OW_OVERLAY | disable | Overwolf overlay
+vulkan | VK_LAYER_OW_OBS_HOOK | disable | Overwolf capture
+vulkan | VK_LAYER_bandicam* | warn | Bandicam capture, not yet tested with EternalVR
+vulkan | VK_LAYER_NV_optimus | ignore | NVIDIA driver
+vulkan | VK_LAYER_NV_present | ignore | NVIDIA driver
+vulkan | VK_LAYER_AMD_switchable_graphics* | ignore | AMD driver
+openxr | XR_APILAYER_VIRTUALDESKTOP_oculus_compatibility | disable-unless-vdxr | Virtual Desktop's compatibility layer is for its own runtime only
+openxr | XR_APILAYER_NOVENDOR_toolkit | disable | OpenXR Toolkit is not supported with EternalVR
+openxr | XR_APILAYER_reshade* | disable | ReShade's OpenXR layer is not supported with EternalVR
+openxr | XR_APILAYER_NOVENDOR_XRNeckSafer | warn | not yet tested with EternalVR
+openxr | XR_APILAYER_MBUCCHIA_* | warn | not yet tested with EternalVR

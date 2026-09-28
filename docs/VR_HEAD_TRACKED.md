@@ -1,0 +1,221 @@
+# Head-tracked view (mono)
+
+Builds on `docs/VR_FIRST_LIGHT.md`. The game's camera follows the headset: mouse and stick yaw still
+turn the body, and the headset's yaw, pitch and roll are applied on top. By default the head also aims
+(head aim, below), so the crosshair and weapon follow the view. One image serves both eyes (no stereo
+yet).
+
+## How it works
+
+- `src/vkcore/view_hook.cpp`: two mid-function hooks (their callbacks are in `presenter_head.cpp`) (safetyhook, `THIRD_PARTY_NOTICES.md`) installed by
+  the XR worker, located by signature in the loaded `DOOMEternalx64vk.exe` (engine-facts.md section 5).
+  Each signature must match exactly once, and the structure displacements inside the matched
+  instructions must agree with each other; otherwise the hook stays off and the log says why.
+  - Game view: at the join after the render-view build point (RVA 0x6A31B7 in build 25216728), where
+    `players[0].view` holds the frame's final origin, axis and FOV. `renderView_t = r14 + d - 0x94`,
+    with `d` read from the matched `vieworg` store. Runs on the game-frame thread.
+  - Render latch: after `r = g` in `idRenderWorldLocal::Render` (RVA 0x1CE1464); read-only. It tells
+    which game view the renderer latched, and exposes the previous projection matrix as a check.
+- Each game frame the hook locates `VIEW` in `LOCAL` at the XR worker's latest `predictedDisplayTime`
+  plus one display period, and rewrites the view:
+  - `viewaxis = body * head`, where body is the game's axis with pitch and roll removed (yaw only), and
+    head is the headset orientation converted from OpenXR (+X right, +Y up, -Z forward) to id Tech
+    (+X forward, +Y left, +Z up): `id = (-z, -x, y)` for vectors and the quaternion's vector part.
+  - `vieworg += body * head position`, in game units at `ETERNALVR_WORLD_SCALE` units per metre
+    (default 1.0; id Tech 7 units are metres, docs/notes/eternal-unit-scale-evidence.md).
+  - `fov_x / fov_y` are set to the symmetric FOV that encloses both eyes (`xrLocateViews`, eye
+    orientations only, `enclosingFov(..., Symmetric)`). On the Quest 3 through VDXR that is 108 x 110
+    degrees (eyes: 54/40 horizontal, 44 up, 55 down).
+  - The frame's record (pose, pose time, FOV, the axis written) goes into a 32-entry history.
+- Present: the ring slot carries the record of the view the render latch matched most recently (the
+  newest view if the latch did not match), unless it is older than 250 ms.
+- XR worker: an image that carries a record is submitted as an `XrCompositionLayerProjection` whose two
+  views both have the record's pose and FOV (mono: the image is rendered from the head centre), so the
+  runtime reprojects it from the pose it was rendered with. Images without a record (menus, loading,
+  before tracking starts) are shown on the first-light cinema quad.
+- Head aim (`ETERNALVR_AIM=head`, the default): with the render-only view the weapon and crosshair stay
+  on the game's aim, so they appear to move against the head. Head aim moves the game's own view
+  angles instead. The build point's r15 is the player; when its vtable is `idPlayer`'s (RVA 0x2DB5698)
+  and the exe is build 25216728 (timestamp 0x6A7B9B8C), the hook reads `idHavokPhysics_Player`
+  (`idPlayer + 0x8A50`): the user command angles (+0x3DE0 + 0x1C, shorts), `viewAngles` (+0x3F10),
+  `deltaViewAngles` (+0x3F1C) and `current.deltaViewAngles` (+0x3F28 + 0x80). For the first 60 player
+  frames it only checks that `viewAngles = command + delta` holds for one of the two deltas (54 of 60),
+  then adds to that delta each frame: yaw by the change in head yaw since the last frame (the mouse
+  keeps turning the body), pitch to reach the head's pitch (the head owns pitch). The rendered axis is
+  then `body yaw * head` with `body = command yaw + delta yaw - the head yaw the delta holds`. The
+  game's own angles are read as command + delta, not from the frame's view angles: around cutscenes
+  the game builds the view angles before it rewrites the delta, or from a scripted source. When the
+  game rewrites the delta itself, the value decides how much head yaw it holds: the last 32 values
+  head aim wrote are remembered with the head yaw each carried, so a restore of one of them (after
+  the e1m1 intro the game holds the delta at its end-of-cutscene value for about 3 s) keeps the body
+  where it was. Any other value (glory kills, teleports, scripted views) is the game re-aiming the view
+  the player had, so it holds the head yaw injected last (kept while the game holds that value): the
+  view faces where the game put it and the body keeps its heading in the room. Until 2026-09-27 such a
+  value held no head yaw, which turned the view by the head's whole yaw in the room: a player standing
+  turned round in the room ended every glory kill facing backwards (session 5: body yaw 135, head yaw
+  170 after the kill at 297 s). Frames whose view is not the player's (the rendered forward more than 15
+  degrees from the view angles: glory-kill and cutscene cameras) and forced-view frames are not aimed;
+  their body is the camera's heading, or the game's yaw, without the head yaw it holds (`drivenBodyYaw`),
+  so the view faces where the game points it and turns with the head from there, instead of the camera
+  plus the head's yaw in the room. If any check fails, head aim stays off and the log says why. Roll is
+  render-only. `ETERNALVR_AIM=view` keeps the game's aim (the first build's behaviour).
+- Cutscenes: `renderView_t.inCutscene` (+0x15) changes are logged (`game: cutscene starts / ends`). With
+  `ETERNALVR_SKIP_CINEMATICS=1` the layer holds the skip key (R) while a cutscene plays, 2.5 s at a time,
+  without depending on desktop focus: the exe's `GetRawInputData` import is replaced, and a key event is
+  a `WM_INPUT` posted to the window raw keyboard input is registered to (else the game window) with a
+  handle only the replacement answers. The exe's `GetAsyncKeyState`, `GetKeyState` and
+  `GetKeyboardState` imports are replaced too, so a held injected key also polls as down
+  (`platform/key_injection`). The game ignores keyboard input while it believes its window is
+  inactive, so the skip needs the session's keep-active (below). The e1m1 intro accepts the skip only
+  about 24 s in (in every run, with the layer's key or with R held from outside); it then ends at once.
+- Cutscenes on the flat screen (`ETERNALVR_CUTSCENES=cinema`, the default) have a flat display's shape
+  (`ETERNALVR_CINEMA_ASPECT`, `vkcore/cinema_view.hpp`). The game keeps its vertical FOV across aspects and
+  stops narrowing the horizontal one at 1:1 (95 x 63.09 at 3840x2160, 63.09 x 63.09 at 2048x2100 and
+  1415x1440 in the rig logs), so a cutscene drawn into the near-square or tall eye image showed a narrow
+  slice of the flat view on a tall screen. The camera hook now gives each cutscene frame the flat display's
+  horizontal FOV (`2 atan(tan(fov_y / 2) * 16/9)`, 95 degrees for the default 63.09) across the image's
+  width, extended above and below with square pixels (99.3 degrees at 2056x2216), so the image's centred
+  16:9 band is exactly what a flat player sees, and the screen (2.4 m wide, as before) shows only that band.
+  Nothing is resized or re-viewported: the rows outside the band are drawn and not shown (the game's GUI,
+  subtitles included, sits in that band already, section 6 of docs/rig-findings/render-size.md). A game FOV
+  that is already taller than wide on a tall image (the game kept the width) keeps its horizontal FOV. The
+  log's `cinema: cutscene fov ...` line gives the game's FOV, the one drawn and the rows shown.
+- Window size: `ETERNALVR_WINDOW=x,y,width,height` moves the game window and sizes its client area in
+  `vkCreateWin32SurfaceKHR`, before the first swapchain. The game clamps `r_windowWidth/Height` to the
+  primary display's work area, so this is how a larger render (on the rig's virtual display) is set.
+- The ring and the XR swapchain are rebuilt when the game's swapchain changes size or format: presents
+  pass through meanwhile, and the old ring is freed once the shared fence and the D3D12 copy fence
+  show every copy done. A change that arrives while a ring is being built is picked up when the build
+  ends.
+- While the session runs, the game's window procedure does not see deactivation (`WM_ACTIVATEAPP`
+  false, `WM_ACTIVATE` inactive, `WM_KILLFOCUS`), so desktop focus changes do not pause the game. If the
+  window lost focus before the session started (the rig hands focus back right after launch), the game
+  already saw the deactivation and ignores input; the layer then posts `WM_ACTIVATEAPP` true,
+  `WM_ACTIVATE` active and `WM_SETFOCUS` to it once. The game does not capture or recentre the cursor
+  while it is not really in the foreground. The window is recorded from the game's
+  `vkCreateWin32SurfaceKHR`.
+
+## Settings (environment)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `ETERNALVR_MODE` | head-tracked | `cinema` restores first light: quad only, camera untouched, no hooks; `stereo` is an experiment harness (docs/VR_STEREO.md) and otherwise runs head-tracked |
+| `ETERNALVR_WORLD_SCALE` | 1.0 | game units per metre for the head position |
+| `ETERNALVR_HEAD_POSITION` | 1 | 0 keeps the game's eye position (rotation only) |
+| `ETERNALVR_SET_FOV` | 1 | 0 keeps the game's FOV (the projection views then use it) |
+| `ETERNALVR_KEEP_ACTIVE` | 1 | 0 lets focus changes reach the game (it pauses) |
+| `ETERNALVR_AIM` | head | `view` keeps the game's own aim (render-only head tracking) |
+| `ETERNALVR_SKIP_CINEMATICS` | 0 | 1 holds the skip key while a cutscene plays |
+| `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
+| `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
+| `ETERNALVR_TEST_HEAD_SWAY` | unset | `yaw,pitch,period[,base]` (degrees, seconds): a sinusoidal head turn added to the tracked pose, for checking head tracking and head aim without a moving headset; `base` turns the head by that much yaw first, and a zero amplitude holds that view (`0,0,30,180`), so runs can be compared at one view (with a non-zero amplitude the view was seen to ignore the base: use the held form) |
+
+## Render size
+
+The game renders the 108 x 110 degree FOV into its window, so pixels are stretched horizontally in the
+image and the runtime maps them back. On the owner's 2560x1440 display the window is 2542x1333, and
+vertical density is the limit (about 470 pixels per unit tangent against about 920 horizontally;
+VDXR's recommended 2496x2688 per eye is about 1120). The game clamps `r_windowWidth/Height` to the
+primary display's work area, and `r_windowPosX` does not change that. The rig's virtual display offers
+at most 3840x2160, so the larger render uses it with `ETERNALVR_WINDOW=2560,0,2560,2100` (client area,
+about 735 pixels per unit tangent vertically). Rendering independent of the window is PLAN 3.6 / T-031:
+`ETERNALVR_RENDER_SIZE=auto|WxH` (docs/rig-findings/render-size.md) renders at the headset's size whatever the
+window, in this mode too.
+
+## Verified on the rig (2026-09-25, build 25216728, Quest 3 via VDXR)
+
+- Hooks at RVA 0x6A31B7 and 0x1CE1464; `renderView_t = r14 - 0x9C8`.
+- The game's own axis rows are forward, left and up (first frame: fwd (0, 1, 0), left (-1, 0, 0),
+  up (0, 0, 1)).
+- The renderer uses `fov_x / fov_y` as given: the latched projection has [0][0] 0.7265 and [1][1] 0.7002,
+  exactly 1 / tan(54 deg) and 1 / tan(55 deg), with no off-axis terms.
+- Two latches per game view, on render job threads; at present time the latched view is one game
+  frame behind the newest.
+- Pose age (from the head locate in the camera hook to the `xrEndFrame` that shows the frame) averages
+  about 16 ms at 120 fps.
+- A Vulkan validation run showed no messages from the layer's calls. The messages it did show came
+  from the game: sampler min/max, ray tracing pipeline lookups, and the first swapchain's
+  layout transitions and semaphore reuse, which all happened before the layer's first copy.
+
+## Launch
+
+`tools\rig\launch-ht.ps1` wraps `run.ps1` with the settings below, captures the game window while the
+level starts (`<layer>-logs\shot-NNN.png`, through `PrintWindow`, so covered windows still show) and
+writes `timeline.txt` into the run folder with the layer's milestones and the display layout:
+
+```
+$layer = '<workspace>\tmp-vr\<build>'   # a staged copy of build\windows-msvc\src\vkcore
+& tools\rig\launch-ht.ps1 -Layer $layer -Label <label> -DisplayWidth 3840 -DisplayHeight 2160
+& tools\rig\stop.ps1 -Run latest
+```
+
+It starts the game with `+logFile 2 +com_skipKeyPressOnLoadScreens 1 +com_skipIntroVideo 1
++com_skipSignInManager 1 +r_hdrDisplay 0 +r_motionblur 0 +r_dof 0 +r_chromaticAberration 0 +r_vignette 0
++map game/sp/e1m1_intro/e1m1_intro` and `VK_ADD_IMPLICIT_LAYER_PATH`, `ETERNALVR_ENABLE_LAYER=1`,
+`ETERNALVR_LOG_DIR=<layer>-logs`, `ETERNALVR_SKIP_CINEMATICS=1`.
+
+- With `-DisplayWidth/-DisplayHeight` the virtual display is added (largest mode 3840x2160) and
+  `ETERNALVR_WINDOW` is derived from where it actually is on the desktop: its top-left corner, client
+  2560x2100 at most. Where it sits depends on the other monitors: with the owner's TV on it is right
+  of it (x = 2560); with the TV off it becomes the only, primary display at 0,0. `-Window x,y,w,h`
+  overrides. Without them the run uses no virtual display and `ETERNALVR_WINDOW` stays unset. End
+  the work block (`session.ps1 end`) afterwards so the virtual display goes away.
+- `-XrRuntimeJson <manifest>` points only the game process at another OpenXR runtime
+  (`XR_RUNTIME_JSON`); the system's active runtime is not changed. Without a headset:
+  OpenXR-Simulator 1.5.0 (github.com/elliotttate/OpenXR-Simulator) unpacked in
+  `<workspace>\tools\bin\openxr-simulator`, with a manifest whose `library_path` is
+  `./openxr_simulator.dll` (the release's manifest names the DLL bare, which the loader looks up on the
+  system path and fails with `XR_ERROR_RUNTIME_UNAVAILABLE`). The simulator's head stands 1.7 m above
+  `LOCAL`'s origin, so its runs add `-ExtraEnv ETERNALVR_HEAD_POSITION=0`; it opens a preview window
+  in the game process and runs at 90 Hz.
+- `-ExtraEnv`, `-ExtraArgs` add environment and game arguments; `-KeepFocus` leaves the game in the
+  foreground (not needed for the cinematic skip).
+- `tools\rig\keys.ps1 -MoveX 20 -Steps 50` turns the player with relative mouse moves (it focuses the
+  game for the moves and hands focus back).
+- Motion blur, depth of field, chromatic aberration and vignetting are off: head motion drives the
+  camera, and the game blurs camera motion.
+- Without `ETERNALVR_SKIP_CINEMATICS`, `tools\rig\keys.ps1 -Hold R -Ms 3000 -KeepFocus` skips a
+  cutscene when DOOM has keyboard focus (`launch-ht.ps1 -ExternalSkip` does that in a loop).
+The log directory also receives `eternalvr-frames-<pid>.csv`: one line per XR frame with the view it
+showed, its pose age and the prediction horizon (T-111), the pose lead, the view's head orientation and,
+under hand aim, the weapon hand's aim orientation as used (smoothed) and as tracked (zeros without one).
+`tools/frames/aim_jitter.py` summarises it (`docs/rig-findings/aim-jitter.md`). `ETERNALVR_POSE_LEAD=1`
+predicts the head and hands for when frames are measured to be shown instead of one display period ahead
+(`xr_math/display_lead.hpp`, off by default).
+
+## Verified on the rig without a headset (2026-09-26, OpenXR-Simulator)
+
+Runs under `<workspace>\runs\20260926-*-ht4h-*` (layer logs in `tmp-vr\ht4h-logs`).
+
+- Head aim: `aim: head aim on through the state deltaViewAngles (60/60 frames matched)`. With
+  `ETERNALVR_TEST_HEAD_SWAY=30,15,8` the game's view yaw is body + head and its pitch the head's
+  (body 90.0, head yaw 29.9 pitch -14.9: game view yaw 119.9 pitch -15.0) and the body stays at 90.0
+  through the post-cutscene hold (455 rewrites, 361 of them back to a value head aim wrote) and
+  60 s of play. 1000 counts of mouse to the right turned the body from 90.0 to 24.0, where it stayed.
+- Cinematic skip without focus: the game window had the foreground only for a moment at launch (the rig
+  hands it back before the session starts); `game: cutscene starts`
+  at 12.1 s, `cutscene ends` at 36.7 s, gameplay with the HUD after it.
+- Render size: `window: placed at 0,0 with client 2560x2100`, swapchain 2560x2100; the game presents
+  at 143-144 frames per second (the virtual display's 144 Hz, FIFO; the game's counter shows 145),
+  copied into the ring with none dropped. Resizing the window to 1920 wide and back rebuilt the ring
+  and the XR swapchain each time (`presenter: ring rebuilt for 1920x2119`, `... 2560x2119`) with no
+  frame lost. PresentMon records nothing on the rig without elevation, so the rate is the layer's.
+- Exit: `stop.ps1` closes the game in under a second (`xr: session exiting`), no error reports.
+- A run with the Khronos validation layer showed the same messages as the first validation run (the
+  game's sampler, ray tracing, query, semaphore reuse and first-swapchain transitions); none names a
+  call the layer makes (copies, imports, presents).
+
+## Known gaps
+
+- Mono: both eyes see the same image (stereo is next).
+- With `ETERNALVR_AIM=view` the weapon and hands follow the game's aim, not the head. With head aim the weapon
+  lags the head by one game frame, and mouse pitch is overridden by the head.
+- The HUD is drawn into the head-tracked image.
+- Recenter, posture, eye height and room-scale: `docs/VR_ROOMSCALE.md`.
+- Head aim was checked with the simulator's static head plus the test sway; it needs a headset run
+  (turning quickly, looking straight up and down, a teleport, a glory kill and another cutscene).
+- The multiplayer guard (`src/vkcore/mp_guard.cpp`, `docs/rig-findings/mp-guard.md`) is statically
+  verified only: it refuses multiplayer command lines, and head aim, camera writes, key injection and
+  keep-active act only while it is armed, turning off for the rest of the process on any online signal
+  (BATTLEMODE screens, lobby and game sessions, Steam joins, accepted invites, non-campaign map loads).
+  Until the offline experiments of `mp-guard.md` section 4 have passed, VR launches stay single-player.

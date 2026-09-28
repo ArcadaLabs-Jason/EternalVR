@@ -1,0 +1,17 @@
+{
+    "file_format_version": "1.2.0",
+    "layer": {
+        "name": "VK_LAYER_ETERNALVR",
+        "type": "GLOBAL",
+        "library_path": ".\\@EVR_LAYER_LIBRARY_NAME@",
+        "api_version": "1.3.0",
+        "implementation_version": "@PROJECT_VERSION_MAJOR@",
+        "description": "EternalVR: VR mod for DOOM Eternal",
+        "enable_environment": {
+            "ETERNALVR_ENABLE_LAYER": "1"
+        },
+        "disable_environment": {
+            "ETERNALVR_DISABLE_LAYER": "1"
+        }
+    }
+}

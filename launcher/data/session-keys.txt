@@ -1,0 +1,22 @@
+# Window and display keys the game writes itself during a VR session (T-036, T-092). They are not forced
+# on the command line: the layer places and sizes the stereo window (ETERNALVR_WINDOW), the game saves
+# where its window was when it quits (r_windowPosX "2569" on the virtual display), and a later flat launch
+# would open there, off screen. The launcher snapshots them and puts them back after the session like the
+# forced cvars (a key that was absent is removed); a change the player makes to them in VR is undone too.
+# Names from the 2024 KEX cvar list (github.com/Official-KEX/doom-eternal-full-cvarlist) and
+# docs/rig-findings/launch.md; forced cvars need not be repeated here.
+# name
+r_windowPosX
+r_windowPosY
+r_windowWidth
+r_windowHeight
+r_fullscreen
+r_mode
+r_displayRefresh
+# Knock-on keys: the game changes and saves these itself because of a stereo setting (runs on a second
+# test PC, 2026-09-27, config before and after each run): r_SSDO 0 and r_SSR 0 follow r_TAASafeMode 1
+# (0x1C6FCC0; the layer holds it while per-eye TAA is not active, and in the v1 fallback), r_blurRadialScale
+# 1 follows the forced r_motionblur 0. A player's flat game must not keep them.
+r_SSDO
+r_SSR
+r_blurRadialScale

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>EternalVR.Launcher</RootNamespace>
+    <AssemblyName>EternalVR.Launcher</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The EternalVR logo (branding/eternalvr.ico at the repository root, 16 to 256 px): the exe's icon in Explorer, the title bar and the taskbar. -->
+    <ApplicationIcon>..\..\..\branding\eternalvr.ico</ApplicationIcon>
+    <PlatformTarget>x64</PlatformTarget>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EternalVR.Launcher.Core\EternalVR.Launcher.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\data\*.txt" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\branding\eternalvr.ico" LogicalName="EternalVR.Launcher.eternalvr.ico" Link="Resources\eternalvr.ico" />
+    <!-- The window's header strip (branding/launcher-header-1440x240.png, drawn at half size). -->
+    <EmbeddedResource Include="..\..\..\branding\launcher-header-1440x240.png" LogicalName="EternalVR.Launcher.launcher-header.png" Link="Resources\launcher-header.png" />
+  </ItemGroup>
+</Project>

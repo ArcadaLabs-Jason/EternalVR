@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: Portable (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Check includes
+        run: python3 tools/check_includes.py
+
+      - name: Check file sizes
+        run: python3 tools/check_file_size.py
+
+      # One pinned version, because clang-format releases format some constructs differently. A venv
+      # keeps pip away from the runner's system Python.
+      - name: Check formatting (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/clang-format"
+          "$RUNNER_TEMP/clang-format/bin/pip" install --quiet clang-format==18.1.8
+          git ls-files -z '*.cpp' '*.hpp' | xargs -0 "$RUNNER_TEMP/clang-format/bin/clang-format" --dry-run --Werror
+
+      - name: Configure
+        run: cmake --preset dev
+
+      - name: Build
+        run: cmake --build --preset dev
+
+      - name: Test
+        run: ctest --preset dev
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+
+      - name: Configure
+        run: cmake --preset windows-msvc
+
+      - name: Build
+        run: cmake --build --preset windows-msvc
+
+      - name: Test
+        run: ctest --preset windows-msvc
+
+      # Sources only (versions agree, tester docs and notices present); no build, game or GPU needed.
+      - name: Validate release sources
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/make-release.ps1 -Validate
+
+  launcher:
+    name: Launcher (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # The portable core and its tests run on any OS (ARCHITECTURE section 15).
+      - name: Test launcher core
+        run: dotnet test launcher/tests/EternalVR.Launcher.Core.Tests -c Release
+
+      - name: Build launcher (Windows)
+        if: runner.os == 'Windows'
+        run: dotnet build launcher/EternalVR.sln -c Release

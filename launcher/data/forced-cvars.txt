@@ -1,0 +1,50 @@
+# Cvars a VR launch forces on the command line (T-092). The launcher restores these keys in the
+# game's text configs after the session (T-036). The list follows the rig's launch recipe
+# (docs/VR_HEAD_TRACKED.md on the head-tracked branch).
+# name | value
+logFile | 2
+com_skipIntroVideo | 1
+com_skipSignInManager | 1
+com_skipKeyPressOnLoadScreens | 1
+r_hdrDisplay | 0
+r_motionblur | 0
+r_dof | 0
+r_chromaticAberration | 0
+r_vignette | 0
+# Camera motion the head did not make (view bob, kicks, shakes; the last two are the game's defaults).
+pm_noBob | 1
+view_skipKicks | 1
+view_skipShakes | 1
+# Taking damage: no full-screen red tint and no blur (in VR the tint fills the HUD panel); the directional
+# damage arcs and the low health banner stay.
+view_skipDamageEffect | 1
+view_showPlayerDamageViewEffect | 0
+view_damageBlur | 0
+# The view effects' screen overlays (the low health red vignette, double vision, shakes); the HUD's
+# directional damage arcs stay.
+g_skipViewEffects | 1
+# M5 (docs/VR_CONTROLLERS.md): the weapon keeps the world's FOV (T-053), and the Meathook turns the view
+# only once, so hand aim is not fought during a pull.
+hands_fovScale | 1
+meatHook_playerViewOverrideMode | 1
+# Stereo (docs/VR_STEREO.md, "Per-eye temporal history"): temporal AA with a history per eye, the temporal
+# effects whose history the eyes would still share off, no dynamic resolution, no vsync (two renders per
+# tick), and a windowed game. With the render size (render_size auto, the default;
+# docs/rig-findings/render-size.md) $eye_width/$eye_height are the render size when the launcher knows it
+# (the game then starts at it), else the small desktop mirror; without it, one eye's image (the per-eye
+# setting fitted to the display). The layer places the real window with ETERNALVR_WINDOW.
+r_TAASafeMode | 0 | stereo
+r_antialiasing | 1 | stereo
+r_TAAAntiGhosting | 0 | stereo
+r_SSDOTemporalAA | 0 | stereo
+r_lightScatteringTAA | 0 | stereo
+r_dofTAA | 0 | stereo
+r_waterReflectionsTAA | 0 | stereo
+r_waterGridTAA | 0 | stereo
+r_refractionTAA | 0 | stereo
+r_raytracedReflectionsTemporalUpscaleQuality | 0 | stereo
+rs_enable | 0 | stereo
+r_swapInterval | 0 | stereo
+r_fullscreen | 0 | stereo
+r_windowWidth | $eye_width | stereo
+r_windowHeight | $eye_height | stereo

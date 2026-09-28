@@ -1,0 +1,14 @@
+# Extra command-line text that asks for multiplayer is refused (single-player only, T-109).
+# Matched case-insensitively as a substring of the argument text as the game receives it: quotes
+# removed, '\' read as '/', repeated slashes collapsed, and '+ cmd', '+set cmd', '+seta cmd' read as '+cmd'.
+# pattern | what it requests
+game/pvp/ | a BATTLEMODE map
+battlemode | BATTLEMODE
++connect | a multiplayer connection
++join | a multiplayer join
++lobby | a multiplayer lobby
++matchmaking | matchmaking
++party | a multiplayer party
++net_ | network settings
++si_ | multiplayer server settings
++g_gametype | a game type other than the campaign

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/ArcadaLabs-Jason/EternalVR/discussions
+    about: Ask a question, share an idea or a setup that works, in GitHub Discussions.
+  - name: Security problems
+    url: https://github.com/ArcadaLabs-Jason/EternalVR/security/advisories/new
+    about: Please report security problems privately (see SECURITY.md).

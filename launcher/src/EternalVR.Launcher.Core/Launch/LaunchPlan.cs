@@ -1,0 +1,309 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using EternalVR.Launcher.Core.Game;
+using EternalVR.Launcher.Core.Preflight;
+using EternalVR.Launcher.Core.Settings;
+
+namespace EternalVR.Launcher.Core.Launch
+{
+    public enum LayerRoute
+    {
+        /// <summary><c>VK_ADD_IMPLICIT_LAYER_PATH</c> in the game's environment only (default, proven on the rig).</summary>
+        Environment,
+        /// <summary>HKCU implicit-layer registration for the session (flag-gated, off by default).</summary>
+        HkcuRegistration,
+    }
+
+    public sealed class LaunchInputs
+    {
+        public string GameRoot { get; set; }
+        public string LayerDir { get; set; }
+        public string LogDir { get; set; }
+        public LauncherSettings Settings { get; set; } = new LauncherSettings();
+        public ForcedCvars ForcedCvars { get; set; } = new ForcedCvars(new ForcedCvar[0]);
+        /// <summary>False when no settings location was found: nothing is forced (T-094).</summary>
+        public bool ForceCvars { get; set; } = true;
+        public IReadOnlyList<LayerDecision> LayerDecisions { get; set; } = new LayerDecision[0];
+        public LayerRoute Route { get; set; } = LayerRoute.Environment;
+        /// <summary>The desktop's displays, for the stereo window (empty: placed at 0,0 at the full eye size).</summary>
+        public IReadOnlyList<DisplayArea> Displays { get; set; } = new DisplayArea[0];
+        /// <summary>The runtime's answer for the render size (<see cref="OpenXrProbe"/>); null when it was not asked.</summary>
+        public OpenXrProbeResult RuntimeProbe { get; set; }
+    }
+
+    /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
+    public sealed class LaunchPlan
+    {
+        public string ExePath { get; set; }
+        public string WorkingDirectory { get; set; }
+        public IReadOnlyList<string> Arguments { get; set; }
+        /// <summary>Variables added to (or replacing in) the launcher's own environment for the game process only.</summary>
+        public IReadOnlyList<KeyValuePair<string, string>> Environment { get; set; }
+        public LayerRoute Route { get; set; }
+        /// <summary>The stereo game window; null in mono.</summary>
+        public StereoWindowPlan Window { get; set; }
+        /// <summary>The stereo render size; null in mono and with the render size off.</summary>
+        public RenderSizeChoice RenderSize { get; set; }
+
+        public string CommandLine => string.Join(" ", Arguments.Select(QuoteIfNeeded));
+
+        public string Describe()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("exe:     " + ExePath);
+            sb.AppendLine("cwd:     " + WorkingDirectory);
+            sb.AppendLine("args:    " + CommandLine);
+            sb.AppendLine("route:   " + (Route == LayerRoute.Environment ? "environment (VK_ADD_IMPLICIT_LAYER_PATH)" : "HKCU registration"));
+            foreach (var kv in Environment) sb.AppendLine("env:     " + kv.Key + "=" + kv.Value);
+            if (Window != null)
+                sb.AppendLine("window:  " + Window.Width + "x" + Window.Height + (Window.Mirror ? " desktop mirror (each eye at the render size)" : " per eye")
+                    + (Window.Display == null ? " (no display known)" : " on " + Window.Display)
+                    + (Window.Reduced ? " (reduced to fit the display)" : string.Empty));
+            if (RenderSize != null) sb.AppendLine("render:  " + RenderSize.Describe());
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Quotes one argument for the Windows command line (the CommandLineToArgvW rules): backslashes
+        /// are doubled before an embedded quote and before the closing quote, so a path ending in a
+        /// backslash does not swallow the quote.
+        /// </summary>
+        public static string QuoteIfNeeded(string arg)
+        {
+            if (arg.Length > 0 && arg.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return arg;
+            var sb = new StringBuilder("\"");
+            int backslashes = 0;
+            foreach (char c in arg)
+            {
+                if (c == '\\') { backslashes++; continue; }
+                if (c == '"') sb.Append('\\', backslashes * 2 + 1).Append('"');
+                else sb.Append('\\', backslashes).Append(c);
+                backslashes = 0;
+            }
+            return sb.Append('\\', backslashes * 2).Append('"').ToString();
+        }
+    }
+
+    public static class LaunchPlanBuilder
+    {
+        /// <summary>
+        /// The desktop mirror at the chosen size, placed by the launcher (the layer then moves it to a chosen display).
+        /// Fill starts at the default size; the layer then covers the display with it.
+        /// </summary>
+        private static StereoWindowPlan MirrorPlan(IReadOnlyList<DisplayArea> displays, LauncherSettings s) =>
+            MirrorSettings.TryParseSize(s.MirrorSize, out int w, out int h)
+                ? StereoWindow.Mirror(displays, w, h)
+                : StereoWindow.Mirror(displays);
+
+        public static LaunchPlan Build(LaunchInputs inputs)
+        {
+            if (string.IsNullOrEmpty(inputs.GameRoot)) throw new ArgumentException("game root is not set");
+            if (string.IsNullOrEmpty(inputs.LayerDir)) throw new ArgumentException("layer folder is not set");
+            var s = inputs.Settings;
+            bool stereo = s.Mode == VrMode.Stereo;
+            // With the render size (the default) the eyes do not depend on the window: it is only the desktop mirror.
+            var renderSize = LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto;
+            bool mirror = stereo && renderSize != LauncherSettings.RenderSizeOff;
+            var window = !stereo ? null
+                : mirror ? MirrorPlan(inputs.Displays, s)
+                : StereoWindow.Fit(inputs.Displays, s.EyeWidth, s.EyeHeight);
+            // The game starts at its final render size when it is known before the launch: the layer applies a fixed
+            // size before the first swapchain and the game's video init takes its output size from r_windowWidth and
+            // r_windowHeight, so nothing is resized mid-session (a resize can fail on cards with 12 GB or less).
+            var renderChoice = mirror ? RenderSizeChoice.Decide(renderSize, s.RenderScale, inputs.RuntimeProbe) : null;
+            int outputWidth = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Width : window?.Width ?? 0;
+            int outputHeight = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Height : window?.Height ?? 0;
+
+            var args = new List<string>();
+            if (inputs.ForceCvars)
+                foreach (var cvar in inputs.ForcedCvars.For(stereo))
+                {
+                    args.Add("+" + cvar.Name);
+                    args.Add(cvar.Value == ForcedCvars.EyeWidth ? outputWidth.ToString(CultureInfo.InvariantCulture)
+                        : cvar.Value == ForcedCvars.EyeHeight ? outputHeight.ToString(CultureInfo.InvariantCulture)
+                        : IsAntiAliasing(cvar.Name) && stereo && s.AntiAliasing == AntiAliasingMode.Dlss ? DlssAntiAliasing
+                        : IsAntiAliasing(cvar.Name) && stereo && s.AntiAliasing == AntiAliasingMode.Off ? NoAntiAliasing
+                        : cvar.Value);
+                }
+            args.AddRange(SplitArguments(s.ExtraArguments));
+
+            var env = new List<KeyValuePair<string, string>>();
+            void Set(string k, string v)
+            {
+                env.RemoveAll(e => string.Equals(e.Key, k, StringComparison.OrdinalIgnoreCase));
+                env.Add(new KeyValuePair<string, string>(k, v));
+            }
+
+            Set("SteamAppId", GameLayout.SteamAppId);
+            if (inputs.Route == LayerRoute.Environment) Set("VK_ADD_IMPLICIT_LAYER_PATH", inputs.LayerDir);
+            Set("ETERNALVR_ENABLE_LAYER", "1");
+            if (!string.IsNullOrEmpty(inputs.LogDir)) Set("ETERNALVR_LOG_DIR", inputs.LogDir);
+            Set("ETERNALVR_WORLD_SCALE", LauncherSettings.ClampWorldScale(s.WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
+            if (stereo) Set("ETERNALVR_MODE", "stereo");
+            // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md).
+            if (stereo) Set("ETERNALVR_UI_LAYER", "1");
+            Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
+            // Hand aim needs the controllers; without them the head aims.
+            Set("ETERNALVR_AIM", LauncherSettings.AimName(s.Aim == AimMode.Hand && !s.Controllers ? AimMode.Head : s.Aim));
+            if (window != null) Set("ETERNALVR_WINDOW", window.EnvironmentValue);
+            if (mirror)
+            {
+                // docs/rig-findings/render-size.md: each eye at the headset's recommended size times the scale (worked
+                // out here from the runtime's answer, else by the layer: auto); the window stays the mirror. Without
+                // the render size the game renders at the mirror's size.
+                Set("ETERNALVR_RENDER_SIZE", renderChoice.EnvironmentValue);
+                Set("ETERNALVR_RENDER_SCALE", RenderSizeChoice.ScaleText(s.RenderScale));
+                Set("ETERNALVR_MIRROR_WINDOW", window.EnvironmentValue);
+                // The layer moves, sizes and crops the mirror from the launcher's rectangle (docs/rig-findings/render-size.md).
+                Set("ETERNALVR_MIRROR_DISPLAY", MirrorSettings.DisplayEnvironment(s.MirrorDisplay));
+                Set("ETERNALVR_MIRROR_SIZE", MirrorSettings.NormaliseSize(s.MirrorSize) ?? MirrorSettings.DefaultSize);
+                Set("ETERNALVR_MIRROR_CROP", s.MirrorCrop ? "16:9" : "full");
+            }
+            if (stereo) Set("ETERNALVR_CINEMA_ASPECT", MirrorSettings.CinemaName(s.Cinema));
+            Set("ETERNALVR_SKIP_CINEMATICS", s.SkipCinematics ? "1" : "0");
+            // Room-scale, posture and eye height (docs/VR_ROOMSCALE.md).
+            Set("ETERNALVR_POSTURE", LauncherSettings.PostureName(s.Posture));
+            Set("ETERNALVR_HEIGHT", LauncherSettings.HeightName(s.Height));
+            Set("ETERNALVR_RECENTER_HOLD", s.RecenterLongPress ? "2.0" : "0");
+            // Controls (docs/VR_CONTROLLERS.md): turning, the weapon hand, what forward means.
+            Set("ETERNALVR_TURN", LauncherSettings.TurnName(s.Turn));
+            Set("ETERNALVR_SNAP_DEGREES", LauncherSettings.ClampSnapDegrees(s.SnapDegrees).ToString("0", CultureInfo.InvariantCulture));
+            Set("ETERNALVR_TURN_RATE", LauncherSettings.ClampTurnRate(s.TurnRate).ToString("0", CultureInfo.InvariantCulture));
+            Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
+            Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
+            Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
+            Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");
+            // The settings of the Play and Advanced tabs, always explicit (the layer's own defaults may change).
+            Set("ETERNALVR_BODY_FOLLOW", s.BodyFollow ? "1" : "0");
+            Set("ETERNALVR_AIM_SMOOTHING", Number(s.AimSmoothing, 0.0, 1.0, LauncherSettings.DefaultAimSmoothing));
+            Set("ETERNALVR_UI_DISTANCE", Number(s.HudDistance, LauncherSettings.MinHudDistance, LauncherSettings.MaxHudDistance, LauncherSettings.DefaultHudDistance));
+            Set("ETERNALVR_UI_WIDTH", Number(s.HudWidth, LauncherSettings.MinHudWidth, LauncherSettings.MaxHudWidth, LauncherSettings.DefaultHudWidth));
+            Set("ETERNALVR_UI_OFFSET_Y", Number(s.HudHeight, LauncherSettings.MinHudHeight, LauncherSettings.MaxHudHeight, 0.0));
+            Set("ETERNALVR_UI_RETICLE_SIZE", Number(s.AimDotSize, LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, LauncherSettings.DefaultAimDotSize));
+            Set("ETERNALVR_MIRROR", LauncherSettings.MirrorName(s.Mirror));
+            Set("ETERNALVR_CUTSCENES", LauncherSettings.CutsceneName(s.Cutscenes));
+            Set("ETERNALVR_SHOT_ORIGIN", LauncherSettings.ShotOriginName(s.Shots));
+            Set("ETERNALVR_MENU_BEAM", s.MenuBeam ? "1" : "0");
+            // The per-eye temporal set holds r_antialiasing at run time; it keeps DLSS (2) only when asked to (taa_hooks.cpp).
+            if (stereo && s.AntiAliasing == AntiAliasingMode.Dlss) Set("ETERNALVR_STEREO_DLSS", "1");
+            // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
+            if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
+            var ipd = LauncherSettings.ClampIpd(s.IpdMm);
+            if (ipd > 0.0) Set("ETERNALVR_IPD", ipd.ToString("0.0", CultureInfo.InvariantCulture));
+            foreach (var kv in OpenXrEnvironment(s, inputs.LayerDecisions)) Set(kv.Key, kv.Value);
+            foreach (var d in inputs.LayerDecisions)
+                if (d.Action == LayerAction.Disable && d.Environment.HasValue) Set(d.Environment.Value.Key, d.Environment.Value.Value);
+
+            return new LaunchPlan
+            {
+                ExePath = Path.Combine(inputs.GameRoot, GameLayout.RetailExe),
+                WorkingDirectory = inputs.GameRoot,
+                Arguments = args,
+                Environment = env,
+                Route = inputs.Route,
+                Window = window,
+                RenderSize = renderChoice,
+            };
+        }
+
+        /// <summary>The <c>r_antialiasing</c> value of DLSS; the layer then runs the game's DLSS once per eye (taa_ngx.cpp).</summary>
+        public const string DlssAntiAliasing = "2";
+
+        /// <summary>The <c>r_antialiasing</c> value of no anti-aliasing.</summary>
+        public const string NoAntiAliasing = "0";
+
+        private static string Number(double v, double min, double max, double fallback) =>
+            LauncherSettings.Clamp(v, min, max, fallback).ToString("0.00", CultureInfo.InvariantCulture);
+
+        private static bool IsAntiAliasing(string cvar) => string.Equals(cvar, "r_antialiasing", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>A stereo launch with the render size on: the one that asks the runtime for its size first.</summary>
+        public static bool WantsRenderSize(LauncherSettings s) =>
+            s.Mode == VrMode.Stereo
+            && (LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto) != LauncherSettings.RenderSizeOff;
+
+        /// <summary>
+        /// The game's OpenXR environment: the chosen runtime (none: the system's active one) and the OpenXR API layers
+        /// switched off. The runtime probe runs with it, so it asks the same runtime, through the same layers.
+        /// </summary>
+        public static IReadOnlyList<KeyValuePair<string, string>> OpenXrEnvironment(LauncherSettings s, IEnumerable<LayerDecision> decisions)
+        {
+            var env = new List<KeyValuePair<string, string>>();
+            if (!IsSystemRuntime(s.Runtime)) env.Add(new KeyValuePair<string, string>("XR_RUNTIME_JSON", s.Runtime));
+            foreach (var d in decisions ?? new LayerDecision[0])
+                if (d.Action == LayerAction.Disable && d.Environment.HasValue && d.Layer.Api == LayerApi.OpenXR) env.Add(d.Environment.Value);
+            return env;
+        }
+
+        public static bool IsSystemRuntime(string runtime) =>
+            string.IsNullOrWhiteSpace(runtime) || string.Equals(runtime, LauncherSettings.SystemRuntime, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Virtual Desktop's own runtime (VDXR), judged by its manifest's file name.</summary>
+        public static bool IsVdxr(string runtimeManifest) =>
+            !string.IsNullOrEmpty(runtimeManifest)
+            && Path.GetFileName(runtimeManifest.Replace('\\', '/').Split('/').Last()).StartsWith("virtualdesktop-openxr", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Splits command-line text at whitespace, keeping double-quoted parts together.</summary>
+        public static IReadOnlyList<string> SplitArguments(string text)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrWhiteSpace(text)) return list;
+            var sb = new StringBuilder();
+            bool quoted = false, any = false;
+            foreach (char ch in text)
+            {
+                if (ch == '"') { quoted = !quoted; any = true; continue; }
+                if (!quoted && char.IsWhiteSpace(ch))
+                {
+                    if (any) list.Add(sb.ToString());
+                    sb.Clear();
+                    any = false;
+                    continue;
+                }
+                sb.Append(ch);
+                any = true;
+            }
+            if (any) list.Add(sb.ToString());
+            return list;
+        }
+    }
+
+    public enum StartOutcome
+    {
+        Running,
+        ExitedEarly,
+        HandOff,
+        Exited,
+        /// <summary>The started process exited early; still looking for a game process Steam may start.</summary>
+        WaitingForHandOff,
+    }
+
+    /// <summary>
+    /// Hand-off detection (T-109): the started process exits within the watch window while another game
+    /// process appears, which means Steam restarted the game without our environment: a named error,
+    /// never a silent flat launch. Steam starts the new process only after the first one has exited, so
+    /// an early exit is watched for <see cref="HandOffGraceSeconds"/> more before it counts as a plain
+    /// early exit.
+    /// </summary>
+    public static class StartWatch
+    {
+        public const int WatchSeconds = 10;
+        public const int HandOffGraceSeconds = 8;
+
+        public static StartOutcome Decide(bool startedProcessExited, double secondsSinceStart, double secondsSinceExit, bool otherGameProcessRunning)
+        {
+            if (!startedProcessExited) return StartOutcome.Running;
+            if (secondsSinceStart - secondsSinceExit > WatchSeconds) return StartOutcome.Exited;
+            if (otherGameProcessRunning) return StartOutcome.HandOff;
+            return secondsSinceExit < HandOffGraceSeconds ? StartOutcome.WaitingForHandOff : StartOutcome.ExitedEarly;
+        }
+
+        public const string HandOffMessage =
+            "The game was restarted by Steam without EternalVR (a hand-off). VR is not active in this game window. " +
+            "Quit the game, make sure Steam is running and logged in, and launch again from the EternalVR launcher.";
+    }
+}

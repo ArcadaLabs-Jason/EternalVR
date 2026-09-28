@@ -1,0 +1,14 @@
+evr_add_module(evr_roomscale
+    SOURCES
+        body_follow.cpp
+        driven_offset.cpp
+        eye_separation.cpp
+        follow_test_steps.cpp
+        head_fade.cpp
+        head_offset.cpp
+        long_press.cpp
+        room_anchor.cpp
+        roomscale_settings.cpp
+    DEPENDS
+        evr_common
+        evr_posture)

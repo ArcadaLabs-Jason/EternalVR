@@ -1,0 +1,107 @@
+# Meta Quest / Oculus Touch controllers: the OpenXR suggested bindings and the default control maps.
+#
+# [profile] binds our OpenXR actions (features/input/xr_action_set.hpp) to this interaction profile's
+# inputs. Keys are "<action set>.<hand>.<action>"; values are paths under /user/hand/<hand>.
+# [map.*] are the default control maps, one per handedness, in binding text
+# (features/input/binding_text.hpp). A player's profile stores only the entries they change.
+#
+# Jump on A and dash on B mirror the console layout, so thumb habits transfer. The chainsaw is up and
+# weapon selection down on the turn stick. The equipment launcher and Flame Belch are
+# shoulder-mounted and aim from the head, so they sit on the off hand. Only the left Menu button can
+# be read by an application on Touch controllers, so the pause stays there in every map.
+
+[profile]
+"path" = "/interaction_profiles/oculus/touch_controller"
+"gameplay.left.trigger" = "/input/trigger/value"
+"gameplay.left.grip" = "/input/squeeze/value"
+"gameplay.left.thumbstick" = "/input/thumbstick"
+"gameplay.left.thumbstick_click" = "/input/thumbstick/click"
+"gameplay.left.primary" = "/input/x/click"
+"gameplay.left.secondary" = "/input/y/click"
+"gameplay.left.menu" = "/input/menu/click"
+"gameplay.left.aim_pose" = "/input/aim/pose"
+"gameplay.left.grip_pose" = "/input/grip/pose"
+"gameplay.left.haptic" = "/output/haptic"
+"gameplay.right.trigger" = "/input/trigger/value"
+"gameplay.right.grip" = "/input/squeeze/value"
+"gameplay.right.thumbstick" = "/input/thumbstick"
+"gameplay.right.thumbstick_click" = "/input/thumbstick/click"
+"gameplay.right.primary" = "/input/a/click"
+"gameplay.right.secondary" = "/input/b/click"
+"gameplay.right.aim_pose" = "/input/aim/pose"
+"gameplay.right.grip_pose" = "/input/grip/pose"
+"gameplay.right.haptic" = "/output/haptic"
+"menu.left.select" = "/input/trigger/value"
+"menu.left.back" = "/input/y/click"
+"menu.left.scroll" = "/input/thumbstick"
+"menu.left.pointer_pose" = "/input/aim/pose"
+"menu.left.close" = "/input/menu/click"
+"menu.right.select" = "/input/trigger/value"
+"menu.right.back" = "/input/b/click"
+"menu.right.scroll" = "/input/thumbstick"
+"menu.right.pointer_pose" = "/input/aim/pose"
+
+[map.right]
+"weapon_hand" = "right"
+"left.stick.role" = "move"
+"left.trigger.press" = "equipment"
+"left.grip.press" = "flame_belch"
+"left.stick_click.press" = "crucible"
+"left.primary.tap" = "switch_equipment"
+"left.primary.hold" = "dossier"
+"left.secondary.tap" = "switch_weapon_mod"
+"left.secondary.hold" = "mission_info"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "fire"
+"right.grip.press" = "weapon_mod"
+"right.stick_click.press" = "melee"
+"right.primary.press" = "jump"
+"right.secondary.press" = "dash"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# Weapon in the left hand: triggers, grips and stick clicks swap sides; sticks and face buttons stay.
+[map.left_button_swap]
+"weapon_hand" = "left"
+"left.stick.role" = "move"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.primary.tap" = "switch_equipment"
+"left.primary.hold" = "dossier"
+"left.secondary.tap" = "switch_weapon_mod"
+"left.secondary.hold" = "mission_info"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "equipment"
+"right.grip.press" = "flame_belch"
+"right.stick_click.press" = "crucible"
+"right.primary.press" = "jump"
+"right.secondary.press" = "dash"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# A full mirror: sticks and face buttons swap too; the pause stays on the left Menu button.
+[map.left_full_mirror]
+"weapon_hand" = "left"
+"left.stick.role" = "turn"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.primary.press" = "jump"
+"left.secondary.press" = "dash"
+"left.menu.tap" = "pause"
+"left.stick.up" = "chainsaw"
+"left.stick.down_tap" = "quick_switch"
+"left.stick.down_hold" = "weapon_wheel"
+"right.stick.role" = "move"
+"right.trigger.press" = "equipment"
+"right.grip.press" = "flame_belch"
+"right.stick_click.press" = "crucible"
+"right.primary.tap" = "switch_equipment"
+"right.primary.hold" = "dossier"
+"right.secondary.tap" = "switch_weapon_mod"
+"right.secondary.hold" = "mission_info"

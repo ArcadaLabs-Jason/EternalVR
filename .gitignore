@@ -1,0 +1,39 @@
+# Build output
+build/
+out/
+.vs/
+*.user
+bin/
+obj/
+
+# Local reference library (third-party material, fetched by tools/fetch_references.sh); only its
+# index is tracked.
+reference/*
+!reference/MANIFEST.md
+
+# Game files and game-derived data never enter the repository (CONTRIBUTING.md,
+# docs/RIG_BRINGUP.md section 8). These patterns catch the common slips.
+*.exe
+*.dll
+*.pdb
+*.dmp
+*.gfxr
+*.rdc
+*.nsight-gfxproj
+*.ngfx-capture
+*.foz
+*.resources
+*.streamdb
+*.index
+*.snd
+*.pck
+*.bnk
+# Scratch folder for anything copied off the rig; never committed.
+rig-local/
+# Text dumps (type-info, strings, RTTI) cannot be caught by a pattern; the never-commit rule in
+# CONTRIBUTING.md covers them.
+
+.DS_Store
+
+# Python bytecode
+__pycache__/

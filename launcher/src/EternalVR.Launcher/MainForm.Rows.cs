@@ -1,0 +1,228 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Text;
+using System.Windows.Forms;
+using EternalVR.Launcher.Core.Settings;
+
+namespace EternalVR.Launcher
+{
+    /// <summary>
+    /// The settings rows of the Play and Advanced tabs: each row loads and reads one setting, saves on every change, and is
+    /// greyed out with the reason in its tooltip when the others make it not apply (<see cref="SettingRules"/>).
+    /// </summary>
+    public sealed partial class MainForm
+    {
+        private readonly ToolTip tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400, ReshowDelay = 100 };
+        private readonly List<SettingRow> rows = new List<SettingRow>();
+        /// <summary>True while the controls are filled from the settings: their change events save nothing.</summary>
+        private bool loading;
+
+        private sealed class SettingRow
+        {
+            public Setting Id;
+            public Label Label;
+            public Control Control;
+            public Action<LauncherSettings> Load;
+            public Action<LauncherSettings> Read;
+            /// <summary>The checks run again after a change (the runtime, the mode, the arguments).</summary>
+            public bool Preflight;
+        }
+
+        private SettingRow Row(Setting id, Control control, Action<LauncherSettings> load, Action<LauncherSettings> read, bool preflight = false)
+        {
+            control.AccessibleName = SettingTexts.For(id).Label;
+            // In a flow panel: a table row keeps a list's first height (FitListHeights).
+            if (control is ComboBox) control = WithUnit(control, null);
+            var row = new SettingRow
+            {
+                Id = id, Control = control, Load = load, Read = read, Preflight = preflight,
+                Label = new Label { Text = SettingTexts.For(id).Label, AutoSize = true, Anchor = AnchorStyles.Left },
+            };
+            // Label and control both centred in the row's height.
+            control.Anchor = AnchorStyles.Left;
+            rows.Add(row);
+            Watch(control, row);
+            return row;
+        }
+
+        /// <summary>A list control filled with the setting's choices (<see cref="SettingTexts"/>).</summary>
+        private static ComboBox Choices(Setting id, int width = 180)
+        {
+            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = width };
+            foreach (var c in SettingTexts.For(id).Choices) box.Items.Add(c);
+            return box;
+        }
+
+        private static NumericUpDown Number(double min, double max, double step, int decimals) => new NumericUpDown
+        {
+            Minimum = (decimal)min, Maximum = (decimal)max, Increment = (decimal)step, DecimalPlaces = decimals, Width = 70,
+        };
+
+        /// <summary>A control followed by its unit.</summary>
+        private static FlowLayoutPanel WithUnit(Control control, string unit)
+        {
+            var panel = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+            panel.Controls.Add(control);
+            if (unit != null) panel.Controls.Add(Caption(unit));
+            return panel;
+        }
+
+        private static Label Caption(string text) =>
+            new Label { Text = text, AutoSize = true, Padding = new Padding(0, 6, 0, 0), Margin = new Padding(2, 0, 2, 0) };
+
+        private void Watch(Control c, SettingRow row)
+        {
+            if (c is ComboBox combo) combo.SelectedIndexChanged += (s, e) => Changed(row);
+            else if (c is CheckBox box) box.CheckedChanged += (s, e) => Changed(row);
+            else if (c is NumericUpDown number) number.ValueChanged += (s, e) => Changed(row);
+            else if (c is TextBox text)
+            {
+                text.TextChanged += (s, e) => Changed(row, false);
+                text.Leave += (s, e) => { if (row.Preflight && !loading) RunPreflight(); };
+            }
+            else
+                foreach (Control child in c.Controls) Watch(child, row);
+        }
+
+        private void Changed(SettingRow row, bool preflight = true)
+        {
+            if (loading) return;
+            SaveSettings();
+            UpdateRules();
+            if (preflight && row.Preflight) RunPreflight();
+        }
+
+        /// <summary>A titled box of rows: labels on the left, controls on the right.</summary>
+        private static GroupBox Group(string title, params SettingRow[] groupRows)
+        {
+            var box = new GroupBox { Text = title, Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(6, 4, 6, 4) };
+            // Docked at the top: a box stretched to its neighbour's height keeps its rows together.
+            var grid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, AutoSize = true };
+            // Both columns sized to their contents: a percent column in an auto-sized table gets no width at all.
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            foreach (var r in groupRows)
+            {
+                grid.Controls.Add(r.Label);
+                grid.Controls.Add(r.Control);
+            }
+            box.Controls.Add(grid);
+            return box;
+        }
+
+        /// <summary>Two columns of group boxes, the page scrolling when the window is smaller than they are.</summary>
+        private static TabPage Page(string title, Control[] left, Control[] right, params Control[] below)
+        {
+            var page = new TabPage(title) { AutoScroll = true, Padding = new Padding(6) };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, AutoSize = true };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.Controls.Add(Column(left), 0, 0);
+            grid.Controls.Add(Column(right), 1, 0);
+            for (int i = 0; i < below.Length; i++)
+            {
+                grid.Controls.Add(below[i], 0, i + 1);
+                grid.SetColumnSpan(below[i], 2);
+            }
+            page.Controls.Add(grid);
+            return page;
+        }
+
+        private static Control Column(Control[] groups)
+        {
+            var column = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, AutoSize = true, Margin = Padding.Empty };
+            column.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            foreach (var g in groups) column.Controls.Add(g);
+            return column;
+        }
+
+        private void LoadSettingsIntoControls()
+        {
+            loading = true;
+            try
+            {
+                foreach (var r in rows) r.Load(ctx.Settings);
+                FillRuntimes();
+            }
+            finally
+            {
+                loading = false;
+            }
+            UpdateRules();
+        }
+
+        private void ReadControlsIntoSettings()
+        {
+            foreach (var r in rows) r.Read(ctx.Settings);
+        }
+
+        private void SaveSettings()
+        {
+            ReadControlsIntoSettings();
+            try { ctx.Settings.Save(ctx.Paths.SettingsFile); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is SettingsException)
+            {
+                ctx.Log.Error("saving settings failed: " + e.Message);
+            }
+        }
+
+        /// <summary>Greys out the rows that do not apply and puts the reason first in their tooltip.</summary>
+        private void UpdateRules()
+        {
+            foreach (var r in rows)
+            {
+                var why = SettingRules.WhyNot(r.Id, ctx.Settings);
+                var tip = Wrap(SettingTexts.For(r.Id).Tooltip);
+                r.Control.Enabled = why == null;
+                r.Label.ForeColor = why == null ? SystemColors.ControlText : SystemColors.GrayText;
+                tips.SetToolTip(r.Label, why == null ? tip : Wrap(why) + Environment.NewLine + Environment.NewLine + tip);
+                SetTip(r.Control, tip);
+            }
+            UpdateRowParts();
+        }
+
+        private void SetTip(Control c, string tip)
+        {
+            tips.SetToolTip(c, tip);
+            if (c is FlowLayoutPanel) foreach (Control child in c.Controls) SetTip(child, tip);
+        }
+
+        /// <summary>Breaks a tooltip into lines of about 70 characters (a tooltip does not wrap by itself).</summary>
+        private static string Wrap(string text, int width = 70)
+        {
+            var sb = new StringBuilder();
+            int line = 0;
+            foreach (var word in text.Split(' '))
+            {
+                if (line > 0 && line + 1 + word.Length > width)
+                {
+                    sb.Append(Environment.NewLine);
+                    line = 0;
+                }
+                else if (line > 0)
+                {
+                    sb.Append(' ');
+                    line++;
+                }
+                sb.Append(word);
+                line += word.Length;
+            }
+            return sb.ToString();
+        }
+
+        private void ResetToDefaults()
+        {
+            var answer = MessageBox.Show(this,
+                "Put every setting on the Play and Advanced tabs back to its default?\n\nThe game folder, the layer folder and the OpenXR runtime are kept.",
+                "Reset to defaults", MessageBoxButtons.OKCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.OK) return;
+            ctx.Settings = ctx.Settings.WithDefaults();
+            LoadSettingsIntoControls();
+            SaveSettings();
+            ctx.Log.Info("settings reset to the defaults (folders and runtime kept)");
+            RunPreflight();
+        }
+    }
+}

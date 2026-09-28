@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{04711406-1FC9-4DE5-A1C8-57F7FA3E40F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EternalVR.Launcher.Core", "src\EternalVR.Launcher.Core\EternalVR.Launcher.Core.csproj", "{B6719FD4-EE7E-410D-B21E-3CB3AE65EC48}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EternalVR.Launcher", "src\EternalVR.Launcher\EternalVR.Launcher.csproj", "{96120B95-921D-4FCE-8943-3B1B95FD9893}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{38E773A0-3031-4F5B-971F-BB22400830F6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EternalVR.Launcher.Core.Tests", "tests\EternalVR.Launcher.Core.Tests\EternalVR.Launcher.Core.Tests.csproj", "{555E416C-04FC-4BF8-9F15-F2CEF19A2198}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeGame", "tests\FakeGame\FakeGame.csproj", "{7B0F05F5-6544-4E4A-A971-F74AB6C8071D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B6719FD4-EE7E-410D-B21E-3CB3AE65EC48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B6719FD4-EE7E-410D-B21E-3CB3AE65EC48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B6719FD4-EE7E-410D-B21E-3CB3AE65EC48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B6719FD4-EE7E-410D-B21E-3CB3AE65EC48}.Release|Any CPU.Build.0 = Release|Any CPU
+		{96120B95-921D-4FCE-8943-3B1B95FD9893}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{96120B95-921D-4FCE-8943-3B1B95FD9893}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{96120B95-921D-4FCE-8943-3B1B95FD9893}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{96120B95-921D-4FCE-8943-3B1B95FD9893}.Release|Any CPU.Build.0 = Release|Any CPU
+		{555E416C-04FC-4BF8-9F15-F2CEF19A2198}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{555E416C-04FC-4BF8-9F15-F2CEF19A2198}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{555E416C-04FC-4BF8-9F15-F2CEF19A2198}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{555E416C-04FC-4BF8-9F15-F2CEF19A2198}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B0F05F5-6544-4E4A-A971-F74AB6C8071D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B0F05F5-6544-4E4A-A971-F74AB6C8071D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B0F05F5-6544-4E4A-A971-F74AB6C8071D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B0F05F5-6544-4E4A-A971-F74AB6C8071D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B6719FD4-EE7E-410D-B21E-3CB3AE65EC48} = {04711406-1FC9-4DE5-A1C8-57F7FA3E40F0}
+		{96120B95-921D-4FCE-8943-3B1B95FD9893} = {04711406-1FC9-4DE5-A1C8-57F7FA3E40F0}
+		{555E416C-04FC-4BF8-9F15-F2CEF19A2198} = {38E773A0-3031-4F5B-971F-BB22400830F6}
+		{7B0F05F5-6544-4E4A-A971-F74AB6C8071D} = {38E773A0-3031-4F5B-971F-BB22400830F6}
+	EndGlobalSection
+EndGlobal

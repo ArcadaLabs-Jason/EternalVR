@@ -1,0 +1,32 @@
+// The layer DLL's version resource, configured by src/vkcore/CMakeLists.txt from the project version.
+// The launcher reads ProductVersion without loading the DLL and refuses a release version that differs
+// from its own (launcher/src/EternalVR.Launcher.Core/Preflight/VersionCheck.cs).
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS @EVR_VERSION_FLAGS@
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_DLL
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "ArcadaLabs"
+            VALUE "FileDescription", "EternalVR Vulkan layer"
+            VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "InternalName", "EternalVR"
+            VALUE "OriginalFilename", "EternalVR.dll"
+            VALUE "ProductName", "EternalVR"
+            VALUE "ProductVersion", "@EVR_PRODUCT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

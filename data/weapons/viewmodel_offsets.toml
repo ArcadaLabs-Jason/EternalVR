@@ -1,0 +1,19 @@
+# Viewmodel offsets (T-054): where the game's arms-and-weapon model sits relative to the controller.
+#
+# Values are [forward, left, up, pitch, yaw, roll] in the controller's aim frame: metres along id Tech's
+# forward, left and up axes, then degrees (pitch positive down, yaw counter-clockwise). The game authors
+# each viewmodel relative to the eye, so the offset moves the model's origin (the eye) back from the hand
+# by the distance the gun is drawn ahead, right and below the eye.
+#
+# Keys are the held item's inventory decl name. Variants ("weapon/player/shotgun_secondary_full_auto")
+# use the entry of the longest key they start with followed by '_', then "default".
+#
+# The values below are starting estimates and are tuned on the rig with ETERNALVR_VIEWMODEL_OFFSET
+# (docs/VR_CONTROLLERS.md); per-weapon rows are added as each weapon is checked.
+
+[standing]
+"default" = [-0.25, 0.18, 0.22, 0, 0, 0]
+
+# Desk-safe placement while seated (T-074): the same shape, pulled 5 cm back toward the body.
+[seated]
+"default" = [-0.30, 0.18, 0.22, 0, 0, 0]

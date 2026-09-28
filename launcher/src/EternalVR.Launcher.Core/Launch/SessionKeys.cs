@@ -1,0 +1,41 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using EternalVR.Launcher.Core.Data;
+
+namespace EternalVR.Launcher.Core.Launch
+{
+    /// <summary>
+    /// Keys a VR session makes the game write that are not forced on the command line: the window and
+    /// display keys (the layer places the stereo window, and the game saves its position and mode on
+    /// exit). Kept as data in <c>data\session-keys.txt</c>, one name per line. The settings restore
+    /// puts these back together with the forced cvars (<see cref="RestoredKeys"/>).
+    /// </summary>
+    public sealed class SessionKeys
+    {
+        public SessionKeys(IEnumerable<string> names) { Names = names.ToList(); }
+
+        public IReadOnlyList<string> Names { get; }
+
+        public static SessionKeys Parse(string text)
+        {
+            var list = new List<string>();
+            foreach (var r in DataFile.ParseRecords(text))
+            {
+                var name = DataFile.Field(r, 0);
+                if (r.Length > 1) throw new FormatException("session-keys: one name per line: " + string.Join("|", r));
+                if (name.Length == 0 || name.StartsWith("+", StringComparison.Ordinal) || name.Contains(" "))
+                    throw new FormatException("session-keys: bad cvar name: " + name);
+                if (list.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    throw new FormatException("session-keys: listed twice: " + name);
+                list.Add(name);
+            }
+            return new SessionKeys(list);
+        }
+
+        /// <summary>Every key the settings restore puts back: the forced cvars, then these, without repeats.</summary>
+        public static IReadOnlyList<string> RestoredKeys(ForcedCvars forced, SessionKeys session) =>
+            forced.Names.Concat(session == null ? Enumerable.Empty<string>() : session.Names)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+}
