@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 namespace evr::input {
 
@@ -25,15 +26,20 @@ PunchSettings sanitized(PunchSettings settings) {
 
 PunchDetector::PunchDetector(PunchSettings settings) : settings_(sanitized(settings)) {}
 
-bool PunchDetector::update(const InputFrame& frame) {
+bool PunchDetector::update(const InputFrame& frame, const std::array<bool, 2>& heldBack) {
     punched_ = {};
     if (!settings_.enabled || !frame.head.poseValid) {
         armed_ = {};
         return false;
     }
     const Vec3 headForward = transformDirection(frame.head.pose, {0.0f, 0.0f, -1.0f});
-    punched_[0] = updateHand(frame.left, headForward, armed_[0]);
-    punched_[1] = updateHand(frame.right, headForward, armed_[1]);
+    for (std::size_t i = 0; i < heldBack.size(); ++i) {
+        if (heldBack[i]) {
+            armed_[i] = false;
+        }
+    }
+    punched_[0] = !heldBack[0] && updateHand(frame.left, headForward, armed_[0]);
+    punched_[1] = !heldBack[1] && updateHand(frame.right, headForward, armed_[1]);
     return punched_[0] || punched_[1];
 }
 

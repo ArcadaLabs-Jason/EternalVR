@@ -37,13 +37,13 @@ WeaponAim smoothWeaponAim(State& s, XrTime poseTime, Pose& roomAim) {
 
 } // namespace
 
-std::optional<WeaponAim>
-beginGameView(XrTime poseTime, const Pose& headTracking, const std::byte* player, bool cutscene) {
+std::optional<WeaponAim> beginGameView(
+    XrTime poseTime, const Pose& headTracking, const std::byte* player, bool cutscene, bool cameraAnimation) {
     State& s = state();
     if (!s.attached.load(std::memory_order_acquire)) {
         return std::nullopt;
     }
-    updateForcedView(player, cutscene);
+    updateForcedView(player, cutscene, cameraAnimation);
     refreshTestInput();
     GameViewPoses poses;
     {

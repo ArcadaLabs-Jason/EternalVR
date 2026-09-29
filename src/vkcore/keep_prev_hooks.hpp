@@ -10,6 +10,10 @@
 // the previous matrix of an entity eye L committed in the same tick; a hook after the call (RVA 0x1C8AEAC)
 // puts it back. The copy that follows when the entity does not interpolate (0x1C8AEB3) is left alone.
 //
+// With alternate eyes (ETERNALVR_ALTERNATE_EYES=1 or auto) the same two hooks instead leave every commit's
+// previous matrix at the entity's current matrix of two renders back, each eye's own last render
+// (stereo_seq/alternate_prev.hpp; docs/rig-findings/alternate-eye.md section 9.1).
+//
 // Located by signature and cross-checked; anything missing leaves the game untouched and logs why.
 
 namespace evr::vkcore {

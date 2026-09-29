@@ -6,7 +6,8 @@
 // along the head's forward, not total speed, keeps sideways sweeps of the weapon and reloading-style
 // motions from punching. One punch fires per crossing: the hand has to slow below a fraction of the
 // threshold before it can punch again, and a hand whose tracking starts or resumes mid-motion must
-// slow down first as well.
+// slow down first as well. So must a hand whose punch was held back for a throw or an overhead swing
+// (arm_gestures.hpp), so the end of that gesture never punches.
 
 #include "features/input/controller_state.hpp"
 
@@ -30,8 +31,9 @@ public:
     // re-arm fraction that is not finite or not in [0, 1] falls back to the default as well.
     explicit PunchDetector(PunchSettings settings = {});
 
-    // Returns true on the frame either hand crosses the threshold.
-    bool update(const InputFrame& frame);
+    // Returns true on the frame either hand crosses the threshold. A hand held back (indexed by Hand)
+    // never punches.
+    bool update(const InputFrame& frame, const std::array<bool, 2>& heldBack = {});
 
     [[nodiscard]] const PunchSettings& settings() const { return settings_; }
     // The hands (indexed by Hand) that punched on the last update.

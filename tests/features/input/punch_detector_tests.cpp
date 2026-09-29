@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
 #include <limits>
 #include <numbers>
 #include <ostream>
@@ -129,4 +130,21 @@ TEST_CASE("a re-arm fraction above one would punch on every frame") {
     detector.update(restingFrame());
     CHECK(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f})));
     CHECK_FALSE(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f})));
+}
+
+TEST_CASE("a held-back hand does not punch, and has to slow down before it can again") {
+    PunchDetector detector;
+    detector.update(restingFrame());
+    const std::array<bool, 2> rightHeldBack{false, true};
+    CHECK_FALSE(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f}), rightHeldBack));
+    CHECK_FALSE(detector.punched()[1]);
+    // Released while still fast: the end of a throw or a swing does not punch.
+    CHECK_FALSE(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f})));
+    CHECK_FALSE(detector.update(rightHandMoving({0.0f, 0.0f, -1.0f})));
+    CHECK(detector.update(rightHandMoving({0.0f, 0.0f, -3.0f})));
+    // The other hand punches as usual meanwhile.
+    detector.update(restingFrame());
+    InputFrame left = restingFrame();
+    left.left = trackedHand({-0.2f, 1.3f, -0.3f}, {0.0f, 0.0f, -3.0f});
+    CHECK(detector.update(left, rightHeldBack));
 }

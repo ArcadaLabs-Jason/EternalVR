@@ -2,6 +2,7 @@ evr_add_module(evr_xr_math
     SOURCES
         enclosing_fov.cpp
         eye_clip_transform.cpp
+        camera_anim.cpp
         cinema_quad.cpp
         display_lead.cpp
         fov.cpp

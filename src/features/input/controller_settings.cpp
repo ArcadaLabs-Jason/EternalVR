@@ -140,6 +140,16 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                                                                         {"tap", DossierPress::Tap}};
     r.choice("ETERNALVR_DOSSIER", kDossier, s.dossier);
 
+    static constexpr std::pair<const char*, WheelSelect> kWheel[] = {{"stick", WheelSelect::Stick},
+                                                                     {"hand", WheelSelect::Hand}};
+    r.choice("ETERNALVR_WHEEL_SELECT", kWheel, s.wheelSelect);
+    r.range("ETERNALVR_WHEEL_HAND_DEGREES", kMinWheelHandDegrees, kMaxWheelHandDegrees, s.wheelHandDegrees);
+
+    r.flag("ETERNALVR_THROW", s.throwGesture.enabled);
+    r.range("ETERNALVR_THROW_SPEED", kMinGestureSpeed, kMaxGestureSpeed, s.throwGesture.speed);
+    r.flag("ETERNALVR_SWING", s.swing.enabled);
+    r.range("ETERNALVR_SWING_SPEED", kMinGestureSpeed, kMaxGestureSpeed, s.swing.speed);
+
     static constexpr std::pair<const char*, InputPath> kPath[] = {{"auto", InputPath::Auto},
                                                                   {"0", InputPath::UserCmd},
                                                                   {"off", InputPath::UserCmd},

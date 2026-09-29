@@ -26,6 +26,7 @@ evr_add_test(evr_common_tests
 
 evr_add_test(evr_xr_math_tests
     SOURCES
+        xr_math/camera_anim_tests.cpp
         xr_math/cinema_quad_tests.cpp
         xr_math/display_lead_tests.cpp
         xr_math/enclosing_fov_tests.cpp
@@ -103,6 +104,7 @@ evr_add_test(evr_input_tests
     SOURCES
         features/input/aim_smoothing_tests.cpp
         features/input/analog_button_tests.cpp
+        features/input/arm_gestures_tests.cpp
         features/input/binding_compiler_tests.cpp
         features/input/binding_keys_tests.cpp
         features/input/binding_overrides_tests.cpp
@@ -132,6 +134,7 @@ evr_add_test(evr_input_tests
         features/input/usercmd_injection_tests.cpp
         features/input/usercmd_motion_tests.cpp
         features/input/virtual_gamepad_tests.cpp
+        features/input/wheel_hand_tests.cpp
         features/input/wheel_mouse_tests.cpp
         features/input/xr_action_set_tests.cpp
     DEPENDS evr_input)
@@ -165,9 +168,10 @@ evr_add_test(evr_key_injection_tests
 if(TARGET evr_device_features)
     evr_add_test(evr_vkcore_tests
         SOURCES
+            vkcore/debug_script_tests.cpp
             vkcore/device_features_tests.cpp
             vkcore/dump_format_tests.cpp
-        DEPENDS evr_device_features evr_dump_format)
+        DEPENDS evr_debug_script evr_device_features evr_dump_format evr_mp_policy)
 endif()
 
 # The shader census tool (tools/shader_census) is tested on synthetic SPIR-V, with no SDK needed.
@@ -188,9 +192,15 @@ endif()
 
 evr_add_test(evr_stereo_seq_tests
     SOURCES
+        stereo_seq/adaptive_eyes_tests.cpp
+        stereo_seq/adaptive_pairs_tests.cpp
+        stereo_seq/alternate_eyes_tests.cpp
+        stereo_seq/alternate_prev_tests.cpp
         stereo_seq/bin_tiles_tests.cpp
         stereo_seq/centered_matrix_tests.cpp
         stereo_seq/desktop_window_tests.cpp
+        stereo_seq/dlss_menu_tests.cpp
+        stereo_seq/drain_backoff_tests.cpp
         stereo_seq/eye_pairing_tests.cpp
         stereo_seq/eye_tags_tests.cpp
         stereo_seq/eye_view_plan_tests.cpp
@@ -211,6 +221,7 @@ evr_add_test(evr_menu_tests
     SOURCES
         features/menu/enter_tick_tests.cpp
         features/menu/map_drag_tests.cpp
+        features/menu/menu_kind_tests.cpp
         features/menu/menu_router_map_tests.cpp
         features/menu/menu_router_popup_tests.cpp
         features/menu/menu_router_tests.cpp
@@ -226,6 +237,11 @@ evr_add_test(evr_render_size_tests
         features/render_size/render_size_tests.cpp
     DEPENDS evr_render_size)
 
+evr_add_test(evr_dlss_dll_tests
+    SOURCES
+        features/dlss_dll/dlss_dll_tests.cpp
+    DEPENDS evr_dlss_dll)
+
 evr_add_test(evr_ui_layer_tests
     SOURCES
         ui_layer/additive_wash_tests.cpp
@@ -235,12 +251,15 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/layout_tracker_tests.cpp
         ui_layer/motion_target_tests.cpp
         ui_layer/ui_settings_tests.cpp
+        ui_layer/weapon_hud_tests.cpp
         ui_layer/wrist_hud_tests.cpp
     DEPENDS evr_ui_layer)
 
 evr_add_test(evr_gpu_timing_tests
     SOURCES
         gpu_timing/cpu_split_tests.cpp
+        gpu_timing/submit_census_tests.cpp
         gpu_timing/frame_stats_tests.cpp
+        gpu_timing/present_stall_tests.cpp
         gpu_timing/timestamps_tests.cpp
     DEPENDS evr_gpu_timing)

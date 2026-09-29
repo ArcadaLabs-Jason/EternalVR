@@ -6,12 +6,14 @@
 
 #include "features/roomscale/eye_separation.hpp"
 
+#include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/mp_guard.hpp"
 
 #include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <cwchar>
+#include <string>
 
 namespace evr::vkcore {
 
@@ -66,6 +68,15 @@ StereoSettings readStereoSettings() {
     s.seqView.discontinuous = stereoFlag(L"ETERNALVR_STEREO_DISCONTINUOUS", false);
     s.seqView.inhibitModelFov = s.inhibitModelFov;
     s.prevMatrices = stereoFlag(L"ETERNALVR_STEREO_PREV_MATRICES", true);
+    std::string alternate;
+    if (readEnv(L"ETERNALVR_ALTERNATE_EYES", value)) {
+        for (const wchar_t c : value) {
+            alternate.push_back(c < 0x80 ? static_cast<char>(c) : '?');
+        }
+    }
+    const stereo_seq::AlternateMode alternateMode = stereo_seq::alternateMode(alternate);
+    s.alternateEyes = alternateMode != stereo_seq::AlternateMode::Off;
+    s.adaptiveEyes = alternateMode == stereo_seq::AlternateMode::Auto;
     s.fixCentered = stereoFlag(L"ETERNALVR_STEREO_FIX_CENTERED", true);
     if (readEnv(L"ETERNALVR_CAPTURE_EYES", value) && !value.empty()) {
         s.capture = stereo_seq::parseCaptureSetting(value);
@@ -278,9 +289,10 @@ void XrPresenter::Impl::onEyeLatched(std::byte* renderView, int screenView) {
     if (screenView < 0 || screenView > 1 || (seqActive.load(std::memory_order_acquire) && screenView != 0)) {
         return;
     }
-    // Route S renders one screen view per frame; the eye is the chain's.
+    // Route S renders one screen view per frame; the eye is the render's (the chain's, or with alternate eyes
+    // the render frame's).
     const int viewIndex =
-        seqActive.load(std::memory_order_acquire) ? stereo_seq::eyeIndex(seqChainEye()) : screenView;
+        seqActive.load(std::memory_order_acquire) ? stereo_seq::eyeIndex(seqRenderEye()) : screenView;
     if (seqActive.load(std::memory_order_acquire)) {
         onSeqEyeLatched(renderView, viewIndex);
     }

@@ -2,15 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
 {
-    /// <summary>The Advanced tab: the view, the HUD panel, the controllers, the runtime and the arguments, and Reset to defaults.</summary>
+    /// <summary>The Advanced tab: the view, the HUD panel, the controllers, DLSS, the runtime and the arguments, and Reset to defaults.</summary>
     public sealed partial class MainForm
     {
         private readonly ComboBox mode = Choices(Setting.VrMode);
+        private readonly ComboBox alternateEyes = Choices(Setting.AlternateEyes, 300);
         private readonly NumericUpDown worldScale = Number(LauncherSettings.MinWorldScale, LauncherSettings.MaxWorldScale, 0.05, 2);
         private readonly CheckBox ipdOverride = new CheckBox { Text = "Set my own:", AutoSize = true };
         private readonly NumericUpDown ipd = Number(LauncherSettings.MinIpdMm, LauncherSettings.MaxIpdMm, 0.5, 1);
@@ -32,6 +34,11 @@ namespace EternalVR.Launcher
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
         private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
+        private readonly ComboBox dlssDll = Choices(Setting.DlssVersion, 130);
+        private readonly Button dlssChoose = new Button { Text = "Choose...", Width = 90, Height = 26 };
+        /// <summary>The chosen file's version, or why it cannot be used; the whole path is in its tooltip.</summary>
+        private readonly Label dlssFile = new Label { AutoSize = false, AutoEllipsis = true, Width = 226, Height = 18, Margin = new Padding(3, 0, 3, 4) };
+        private readonly ComboBox dlssPreset = Choices(Setting.DlssPreset, 226);
         private readonly ComboBox runtime = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
         private readonly TextBox extraArgs = new TextBox { Width = 510 };
         /// <summary>One line, cut with an ellipsis; the whole path and where it came from are in its tooltip.</summary>
@@ -54,6 +61,9 @@ namespace EternalVR.Launcher
                 Row(Setting.VrMode, mode,
                     s => mode.SelectedIndex = (int)s.Mode,
                     s => s.Mode = (VrMode)mode.SelectedIndex, preflight: true),
+                Row(Setting.AlternateEyes, alternateEyes,
+                    s => alternateEyes.SelectedIndex = (int)s.AlternateEyes,
+                    s => s.AlternateEyes = (AlternateEyesMode)alternateEyes.SelectedIndex),
                 Row(Setting.WorldSize, worldScale,
                     s => worldScale.Value = (decimal)LauncherSettings.ClampWorldScale(s.WorldScale),
                     s => s.WorldScale = (double)worldScale.Value),
@@ -96,13 +106,35 @@ namespace EternalVR.Launcher
                     s => s.AimDotSize = (double)dotSize.Value),
                 Row(Setting.MenuLaser, menuBeam, s => menuBeam.Checked = s.MenuBeam, s => s.MenuBeam = menuBeam.Checked));
 
+            // DLSS from a newer DLL of the player's own (docs/rig-findings/dlss-dll.md): the list, Choose... and the file's version below.
+            var dllLine = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+            dllLine.Controls.AddRange(new Control[] { dlssDll, dlssChoose });
+            var dllRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
+            dllRow.Controls.AddRange(new Control[] { dllLine, dlssFile });
+            dlssChoose.Click += (s, e) => ChooseDlssDll();
+            dlssDll.SelectedIndexChanged += (s, e) =>
+            {
+                // From a file with none chosen yet: pick one now, or stay with the game's.
+                if (!loading && dlssDll.SelectedIndex == (int)DlssDllChoice.File && string.IsNullOrWhiteSpace(ctx.Settings.DlssDllPath)
+                    && !ChooseDlssDll())
+                    dlssDll.SelectedIndex = (int)DlssDllChoice.Game;
+                ShowDlssFile();
+            };
+            var dlss = Group("DLSS",
+                Row(Setting.DlssVersion, dllRow,
+                    s => { dlssDll.SelectedIndex = (int)s.DlssDll; ShowDlssFile(); },
+                    s => s.DlssDll = (DlssDllChoice)Math.Max(0, dlssDll.SelectedIndex)),
+                Row(Setting.DlssPreset, dlssPreset,
+                    s => dlssPreset.SelectedIndex = DlssDll.PresetIndex(s.DlssPreset),
+                    s => s.DlssPreset = DlssDll.PresetValues[Math.Max(0, dlssPreset.SelectedIndex)]));
+
             var runtimeRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
             var browse = new Button { Text = "Browse...", Width = 90, Height = 26 };
             browse.Click += (s, e) => BrowseRuntime();
             runtimeRow.Controls.AddRange(new Control[] { runtime, browse });
             var folderRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
             var choose = new Button { Text = "Choose...", Width = 90, Height = 26 };
-            var find = new Button { Text = "Find through Steam", Width = 130, Height = 26 };
+            var find = new Button { Text = "Find automatically", Width = 130, Height = 26 };
             choose.Click += (s, e) => ChooseGameFolder();
             find.Click += (s, e) => { ctx.Settings.GameDir = string.Empty; SaveSettings(); RunPreflight(); };
             folderRow.Controls.AddRange(new Control[] { gameFolder, choose, find });
@@ -119,7 +151,47 @@ namespace EternalVR.Launcher
             reset.MinimumSize = reset.Size;
             reset.Click += (s, e) => ResetToDefaults();
             tips.SetToolTip(reset, "Puts every setting on the Play and Advanced tabs back to its default.\nThe game folder, the layer folder and the runtime are kept.");
-            return Page("Advanced", new Control[] { view, reset }, new Control[] { hands, hud }, system);
+            return Page("Advanced", new Control[] { view, reset }, new Control[] { hands, hud, dlss }, system);
+        }
+
+        /// <summary>Picks the player's nvngx_dlss.dll; false when none was chosen or the file cannot be used (said in a message).</summary>
+        private bool ChooseDlssDll()
+        {
+            using (var dlg = new OpenFileDialog { Filter = "DLSS DLL (" + DlssDll.FileName + ")|" + DlssDll.FileName, Title = "Choose a newer " + DlssDll.FileName })
+            {
+                if (!string.IsNullOrWhiteSpace(ctx.Settings.DlssDllPath)) dlg.InitialDirectory = Path.GetDirectoryName(ctx.Settings.DlssDllPath);
+                if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+                var check = DlssDll.Inspect(dlg.FileName);
+                if (!check.Ok)
+                {
+                    MessageBox.Show(this, check.Problem, "DLSS version", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+                ctx.Settings.DlssDllPath = dlg.FileName;
+                ctx.Log.Info("DLSS file chosen: " + dlg.FileName + " (version " + check.Version + ")");
+            }
+            loading = true;
+            try { dlssDll.SelectedIndex = (int)DlssDllChoice.File; }
+            finally { loading = false; }
+            SaveSettings();
+            MarkProfileChanged();
+            UpdateRules();
+            ShowDlssFile();
+            return true;
+        }
+
+        /// <summary>The line under the DLSS version: the file's version (or why it cannot be used), for the file chosen.</summary>
+        private void ShowDlssFile()
+        {
+            var path = ctx.Settings.DlssDllPath;
+            if (dlssDll.SelectedIndex != (int)DlssDllChoice.File || string.IsNullOrWhiteSpace(path))
+            {
+                dlssFile.Text = "Version 2.3, in the game folder";
+                tips.SetToolTip(dlssFile, "The DLSS the game ships.");
+                return;
+            }
+            dlssFile.Text = DlssDll.Describe(DlssDll.Inspect(path));
+            tips.SetToolTip(dlssFile, path);
         }
 
         private void LoadIpd(LauncherSettings s)
@@ -182,6 +254,7 @@ namespace EternalVR.Launcher
         private void UpdateRowParts()
         {
             ipd.Enabled = ipdOverride.Checked;
+            ShowDlssFile();
         }
 
         private static decimal Clamped(double v, NumericUpDown box, double fallback) =>

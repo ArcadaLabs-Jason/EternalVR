@@ -3,10 +3,12 @@
 #include <doctest/doctest.h>
 
 #include <ostream>
+#include <string>
 
 using evr::input::ForcedAngleGate;
 using evr::input::ForcedAngleSignals;
 using evr::input::ForcedReason;
+using evr::input::forcedReasonName;
 using evr::input::kInhibitViewMask;
 
 namespace {
@@ -77,6 +79,21 @@ TEST_CASE("a cutscene yields and names itself before the other signals") {
     s.inhibitFlags = 0x8;
     CHECK(gate.update(s));
     CHECK(gate.reason() == ForcedReason::Cutscene);
+}
+
+TEST_CASE("a hands animation that moves the camera yields, after the game's own signals") {
+    ForcedAngleGate gate(1);
+    ForcedAngleSignals s;
+    s.cameraAnimation = true;
+    CHECK(gate.update(s));
+    CHECK(gate.reason() == ForcedReason::CameraAnimation);
+    CHECK(std::string(forcedReasonName(gate.reason())) == "camera animation");
+    s.inhibitFlags = 0x8;
+    CHECK(gate.update(s));
+    CHECK(gate.reason() == ForcedReason::Inhibit);
+    CHECK(gate.update(quiet()));
+    CHECK(gate.reason() == ForcedReason::Settling);
+    CHECK_FALSE(gate.update(quiet()));
 }
 
 TEST_CASE("separate forced moments are separate episodes") {

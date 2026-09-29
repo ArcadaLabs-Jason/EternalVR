@@ -1,7 +1,9 @@
 #include "stereo_seq/seq_settings.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <cwctype>
 
 namespace evr::stereo_seq {
@@ -180,6 +182,62 @@ std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::strin
         held.push_back({"r_windowHeight", std::to_string(parts[3])});
     }
     return held;
+}
+
+std::vector<CvarHold> parseCvarList(std::string_view text) {
+    const auto strip = [](std::string_view s) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+            s.remove_prefix(1);
+        }
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+            s.remove_suffix(1);
+        }
+        return s;
+    };
+    std::vector<CvarHold> held;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        std::size_t end = text.find(';', at);
+        if (end == std::string_view::npos) {
+            end = text.size();
+        }
+        const std::string_view item = text.substr(at, end - at);
+        at = end + 1;
+        const std::size_t eq = item.find('=');
+        if (eq == std::string_view::npos) {
+            continue;
+        }
+        const std::string_view name = strip(item.substr(0, eq));
+        const std::string_view value = strip(item.substr(eq + 1));
+        if (name.empty()) {
+            continue;
+        }
+        bool replaced = false;
+        for (CvarHold& h : held) {
+            if (sameName(h.name, name)) {
+                h.value = std::string(value);
+                replaced = true;
+            }
+        }
+        if (!replaced) {
+            held.push_back({std::string(name), std::string(value)});
+        }
+    }
+    return held;
+}
+
+std::optional<float> parseCvarCap(std::string_view value) {
+    if (value.size() < 3 || value.substr(0, 2) != "<=" ||
+        std::isspace(static_cast<unsigned char>(value[2]))) {
+        return std::nullopt;
+    }
+    const std::string number(value.substr(2));
+    char* end = nullptr;
+    const float cap = std::strtof(number.c_str(), &end);
+    if (end == number.c_str() || end != number.c_str() + number.size() || !std::isfinite(cap)) {
+        return std::nullopt;
+    }
+    return cap;
 }
 
 std::optional<double> LaunchSizeWatch::onSwapchain(SwapchainSize size,

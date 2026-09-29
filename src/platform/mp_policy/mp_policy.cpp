@@ -16,7 +16,7 @@ struct ArgumentRule {
     std::string_view reason;
 };
 
-// launcher/data/refused-args.txt (launcher-v0), then what Steam passes for an invite and the other
+// launcher/data/refused-args.txt (launcher-v0), then what Steam and Xbox pass for an invite and the other
 // BATTLEMODE entry points this build accepts as console commands or startup cvars.
 constexpr std::array kRules{
     ArgumentRule{"game/pvp/", "a BATTLEMODE map"},
@@ -38,6 +38,11 @@ constexpr std::array kRules{
     ArgumentRule{"pvp_", "a BATTLEMODE map"},
     ArgumentRule{"tutorial_demons", "the BATTLEMODE demon tutorial"},
     ArgumentRule{"invasion", "Invasion"},
+    // Game Pass: what the GDK passes when the game is started from an Xbox invite or join.
+    ArgumentRule{"ms-xbl-", "an Xbox invite"},
+    ArgumentRule{"invitehandleaccept", "an Xbox invite"},
+    ArgumentRule{"activityhandlejoin", "an Xbox join"},
+    ArgumentRule{"handle=", "an Xbox invite"},
 };
 
 char narrowLower(wchar_t c) {
@@ -276,6 +281,10 @@ const char* toString(Signal signal) {
         return "Steam lobby join request";
     case Signal::SteamRichPresenceJoin:
         return "Steam rich presence join request";
+    case Signal::XboxInviteEvent:
+        return "Xbox invite or join";
+    case Signal::XboxInviteDecoded:
+        return "Xbox invite decoded";
     case Signal::InviteConsumed:
         return "invite accepted";
     case Signal::LobbySession:

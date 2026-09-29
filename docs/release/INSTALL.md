@@ -16,8 +16,11 @@ may say "Windows protected your PC". Click **More info**, then **Run anyway**.
 
 ## 2. Every time you play
 
-1. **Start Steam** and make sure you are logged in. The launcher refuses to start the game without it,
-   because the game would otherwise start its own Steam.
+1. **Steam copy: start Steam** and make sure you are logged in. The launcher refuses to start the Steam
+   copy without it, because the game would otherwise start its own Steam. The Game Pass or Microsoft Store
+   copy does not need Steam. With both installed the launcher uses the Steam copy; to play the other one,
+   pick its `Content` folder (for example `E:\XboxGames\Doom Eternal - PC\Content`) as the game folder on
+   the Advanced tab.
 2. **Start your headset's runtime.** On a Quest 3 with Virtual Desktop: start the Virtual Desktop
    Streamer on the PC, connect from the headset, and use VDXR as the OpenXR runtime. With another runtime
    (SteamVR, Meta Horizon Link), make it the active OpenXR runtime in its own settings. Untested, see
@@ -59,12 +62,14 @@ dynamic resolution.
 `PROFILE` file. After the game exits, every key it forced, and the window and display keys in
 `data\session-keys.txt`, are set back to what they were in the text configs; anything else you changed
 in the game's menus during the session stays. The Steam Cloud files (your profile and saves) are never
-written by the launcher; if they changed, that is logged and the game's version is kept.
+written by the launcher; if they changed, that is logged and the game's version is kept. The Game Pass or
+Microsoft Store copy keeps its settings in the same `Saved Games` folder.
 
 **Your saves.** Before each launch the save slots are copied into
 `%LOCALAPPDATA%\EternalVR\save-backups\` (the last five launches are kept). **Restore saves...** in the
 launcher puts a backup back, carefully, because the saves are Steam Cloud files; see
-`TROUBLESHOOTING.md`.
+`TROUBLESHOOTING.md`. The Game Pass or Microsoft Store saves are copied too, but never put back by the
+launcher, because the Xbox cloud sync owns them; the backup folder is there if you need it.
 
 **The game folder** is never modified.
 

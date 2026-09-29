@@ -9,6 +9,7 @@ evr_add_module(evr_ui_layer
         layout_tracker.cpp
         motion_target.cpp
         ui_settings.cpp
+        weapon_hud.cpp
         wrist_hud.cpp
     DEPENDS
         evr_common)

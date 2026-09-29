@@ -126,7 +126,12 @@ TO DISMISS", the owner's session of 2026-09-27) waits for the objectives key and
 the controllers (the pointer and the mapper's Y hold, `_objectives`, are held back in menu mode). The key
 goes up when Y is let go, or when the popup closes (`menu: key down 0xa4` / `up 0xa4`). A menu opened from the
 keyboard (Escape) is taken for a popup too: A then resumes the pause menu (Space does that there), which
-the rig showed; the trigger clicks as usual. The earlier fix (jump sends Space and melee E while the game
+the rig showed; the trigger clicks as usual. One menu changing screens hides the cursor for a moment
+(Settings from the pause menu: 0.25 s on the rig, 2026-09-29, in 1 of 9 opens), so a cursor back within 0.75 s of the last one
+going keeps that menu's kind (`features/menu/menu_kind.hpp`; `menu: the cursor is back after 0.25 s: the same
+menu (screen) on another screen`); before that the Settings screen was taken for a popup, and holding the turn
+stick down there sent Q (the game's previous tab) and B also sent Left Shift. The Dossier comes back as a plain
+screen, since its page is not known then. The earlier fix (jump sends Space and melee E while the game
 suppresses the user command's buttons, `usercmd: popup key`) never fired on the headset: in menu mode the
 controllers' gameplay actions are held back before they reach it.
 
@@ -203,7 +208,8 @@ still to be seen on a headset.
 ## The weapon wheel
 
 The weapon wheel is not a menu, although it selects with the same cursor (`docs/rig-findings/menus.md`
-section 4; the stick side is in `docs/VR_CONTROLLERS.md`, "Weapon wheel"). On the rig the wheel did not show
+section 4; the stick side, and pointing with the weapon hand instead (`ETERNALVR_WHEEL_SELECT=hand`), are
+in `docs/VR_CONTROLLERS.md`, "Weapon wheel"). On the rig the wheel did not show
 the cursor, so the router never saw it. Should the game show it while the controllers hold `weapon_wheel`
 and no menu is up, that cursor belongs to the wheel (`features/menu/wheel_cursor.hpp`): no panel, no
 pointer, no hold on gameplay input, so the stick's motion and the release that picks the weapon still reach

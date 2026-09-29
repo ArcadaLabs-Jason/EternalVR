@@ -4,7 +4,8 @@
 
 > **Alpha.** Testers welcome.
 
-**Hell in your headset.** A free VR mod for DOOM Eternal on PC (Steam), through OpenXR.
+**Hell in your headset.** A free VR mod for DOOM Eternal on PC (Steam, Game Pass or Microsoft Store),
+through OpenXR.
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2S727LT47)
 
@@ -32,14 +33,14 @@ No dates yet:
 - More VR interactions with the world, beyond punching.
 - Optimizations, especially on the processor side, for more frames on more PCs.
 - Improved DLSS.
-- Remapping the controls in the launcher.
 - More ways to use the weapon wheel (pointing or motion).
 
 ## Headsets, and we need testers
 
 It should work with any PC VR headset that has an OpenXR runtime: Virtual Desktop, SteamVR, Meta
 Horizon Link and others. So far it has been tested on a Quest 3, through Virtual Desktop and through
-SteamVR, with an RTX 4080 and an RTX 3080 Ti.
+SteamVR, with an RTX 4080 and an RTX 3080 Ti, and a tester has played it on a PlayStation VR2 with an RTX
+4060.
 
 Under SteamVR the left Menu button opens SteamVR's own dashboard, so **hold Y to pause** instead.
 
@@ -63,8 +64,9 @@ The code is MIT-licensed (`LICENSE`); the EternalVR name and logo are not (`bran
 ## Requirements
 
 - Windows 10 or 11.
-- DOOM Eternal on Steam, at the supported build (Steam build 25216728; the launcher shows whether yours
-  is supported).
+- DOOM Eternal on Steam (build 25216728), or on Game Pass or the Microsoft Store (version 1.0.56.0); the
+  launcher shows whether yours is supported. With both installed, it uses the Steam copy unless you pick
+  the other one's folder on the Advanced tab.
 - A PC VR headset with an OpenXR runtime (see above for what has been tested).
 
 ## Download and install
@@ -76,10 +78,10 @@ messages.
 
 ## Controls
 
-Every button is listed in [`docs/release/CONTROLS.md`](docs/release/CONTROLS.md). To change them, edit a
-text file: see
-["Changing the controls"](docs/release/CONTROLS.md#changing-the-controls) there. A remapping screen in
-the launcher is planned.
+Every button is listed in [`docs/release/CONTROLS.md`](docs/release/CONTROLS.md). To change them, click
+**Edit controls...** on the launcher's Play tab: it lists every button of your controllers and refuses
+controls the game could not use. See
+["Changing the controls"](docs/release/CONTROLS.md#changing-the-controls) there.
 
 ## Reporting bugs
 

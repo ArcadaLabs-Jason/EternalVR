@@ -82,9 +82,12 @@ struct WristQuad {
 std::vector<WristQuad> layoutWristQuads(
     const Pose& hand, std::uint32_t width, std::uint32_t height, const WristSettings& s, bool leftHand);
 
-// The rectangles of the target the head-locked quad keeps in wrist mode: `shown` (the UI quad's image
-// rectangle: the 16:9 band, or the whole target with ETERNALVR_UI_CROP=0) minus the corner blocks' cut
-// rectangles (hud_regions.hpp), as disjoint pieces.
-std::vector<PixelRect> headLockedPieces(const PixelRect& shown, std::uint32_t width, std::uint32_t height);
+// The rectangles of the target the head-locked quad keeps in wrist or weapon mode: `shown` (the UI quad's
+// image rectangle: the 16:9 band, or the whole target with ETERNALVR_UI_CROP=0) minus the cut rectangles
+// (hud_regions.hpp) of the blocks in `moved` (both corners for the wrist), as disjoint pieces.
+std::vector<PixelRect> headLockedPieces(const PixelRect& shown,
+                                        std::uint32_t width,
+                                        std::uint32_t height,
+                                        const std::vector<WristBlock>& moved);
 
 } // namespace evr::ui_layer

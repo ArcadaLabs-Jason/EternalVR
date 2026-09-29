@@ -1,3 +1,6 @@
-# Game builds the layer supports (T-094): a known hash is green; an unknown hash warns.
-# sha256 of DOOMEternalx64vk.exe | Steam build id | description
+# Game builds the layer supports (T-094): a known build is green; an unknown one refuses the launch.
+# Steam: sha256 of DOOMEternalx64vk.exe | Steam build id | description
 69dc13e88d1c19133ead7950dc64ebcbd4a5a3f6bd6f9c336ebffe56df6a1c11 | 25216728 | Steam, Rev 3.2, PE timestamp 2026-08-11
+# Game Pass (the exe cannot be read, so no hash): gamepass | package identity name | package version | description,
+# from the Identity element of Content\MicrosoftGame.Config.
+gamepass | BethesdaSoftworks.DOOMEternal-PC | 1.0.56.0 | Game Pass 1.0.56.0, PE timestamp 2026-03-19

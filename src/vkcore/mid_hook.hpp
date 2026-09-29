@@ -32,7 +32,7 @@ bool installMidHookEdit(void* target, MidHookEditCallback callback, std::string&
 // Detours the function at `target` to `destination`, which has the same signature; `original` receives a
 // trampoline that runs the game's own function. Installed for the life of the process like the mid hooks;
 // at most kMaxInlineHooks. On failure `error` says why and the game's code is left untouched.
-inline constexpr int kMaxInlineHooks = 8;
+inline constexpr int kMaxInlineHooks = 12;
 bool installInlineHook(void* target, void* destination, void** original, std::string& error);
 
 } // namespace evr::vkcore

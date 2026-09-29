@@ -202,3 +202,36 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
         }
     }
 }
+
+TEST_CASE("cvar list: name=value items, trimmed, a later item replaces an earlier one") {
+    const auto held = evr::stereo_seq::parseCvarList(
+        " r_shadowMaxStaleFrames = 1,1,1,2,2 ;r_skipPlayerShadow=1;;=5;noequals;R_SKIPPLAYERSHADOW=0;x=");
+    REQUIRE(held.size() == 3);
+    CHECK(held[0].name == "r_shadowMaxStaleFrames");
+    CHECK(held[0].value == "1,1,1,2,2");
+    CHECK(held[1].name == "r_skipPlayerShadow");
+    CHECK(held[1].value == "0");
+    CHECK(held[2].name == "x");
+    CHECK(held[2].value.empty());
+    CHECK(evr::stereo_seq::parseCvarList("").empty());
+    CHECK(evr::stereo_seq::parseCvarList("1").empty());
+    // "name=?" (only log the value) passes through.
+    const auto query = evr::stereo_seq::parseCvarList("r_lodScale=?");
+    REQUIRE(query.size() == 1);
+    CHECK(query[0].value == "?");
+}
+
+TEST_CASE("cvar cap: <=N is a cap, anything else is a plain value") {
+    using evr::stereo_seq::parseCvarCap;
+    REQUIRE(parseCvarCap("<=1").has_value());
+    CHECK(*parseCvarCap("<=1") == doctest::Approx(1.0f));
+    CHECK(*parseCvarCap("<=0.8") == doctest::Approx(0.8f));
+    CHECK(*parseCvarCap("<=2.25") == doctest::Approx(2.25f));
+    for (const char* plain : {"1", "", "<=", "<=x", "<=1,2", "<= 1", "=<1", "<=1.0f", "<=nan", "<=inf"}) {
+        CHECK_FALSE(parseCvarCap(plain).has_value());
+    }
+    // The list keeps the "<=" for the layer to see.
+    const auto held = evr::stereo_seq::parseCvarList("r_shadowsDistanceFadeMultiplier=<=1");
+    REQUIRE(held.size() == 1);
+    CHECK(held[0].value == "<=1");
+}

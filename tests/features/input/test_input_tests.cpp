@@ -77,6 +77,27 @@ TEST_CASE("hand positions are measured from the head") {
     CHECK(approxEqual(frame.right.aimPose.position, Vec3{0.7f, 1.35f, -0.3f}));
 }
 
+TEST_CASE("a velocity moves a hand given an aim; without one the hand is still") {
+    InputFrame still;
+    still.right.linearVelocity = {1.0f, 1.0f, 1.0f};
+    applyTestInput(parseTestInput("right.aim = 0, 0\n"), still);
+    CHECK(still.right.velocityValid);
+    CHECK(still.right.linearVelocity == Vec3{});
+
+    const auto input = parseTestInput("left.aim = 0, 0\nleft.velocity = 0, -0.5, -3\n");
+    REQUIRE(input.issues.empty());
+    InputFrame moving;
+    applyTestInput(input, moving);
+    CHECK(moving.left.velocityValid);
+    CHECK(moving.left.linearVelocity == Vec3{0.0f, -0.5f, -3.0f});
+    // No aim: the runtime's hand, velocity and all.
+    InputFrame runtime;
+    applyTestInput(parseTestInput("left.velocity = 0, 0, -3\n"), runtime);
+    CHECK_FALSE(runtime.left.velocityValid);
+    CHECK(parseTestInput("left.velocity = 0, 0\n").issues.size() == 1);
+    CHECK(parseTestInput("left.velocity = 0, 0, -30\n").issues.size() == 1);
+}
+
 TEST_CASE("a hand without an aim keeps the runtime's pose") {
     const auto input = parseTestInput("right.trigger = 0.5\n");
     CHECK_FALSE(testHandPose(input, Hand::Right, {}).has_value());

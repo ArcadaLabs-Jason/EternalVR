@@ -1,5 +1,6 @@
 #include "vkcore/view_hook.hpp"
 
+#include "vkcore/camera_anim_hook.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -135,6 +136,10 @@ ViewHookStatus installViewHooks(ViewHookSink* sink) {
         g_status.gameView = installGameViewHook(text);
         // Only useful with the game view hook (it matches the views that hook wrote).
         g_status.renderLatch = g_status.gameView && installRenderLatchHook(text);
+        // The hands animation's camera, read for the game view hook (camera_anim_hook.hpp).
+        if (g_status.gameView) {
+            camera_anim::install(text);
+        }
     });
     return g_status;
 }

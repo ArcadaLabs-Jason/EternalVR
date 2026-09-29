@@ -51,6 +51,11 @@ void taaOnStereoTick();
 // Per-eye history is in use: the per-eye hook writes the jitter phase and the resets.
 bool taaPerEyeActive();
 
+// For the game's video menu (dlss_menu_hooks.hpp): the first stereo tick failed closed (the v1 set,
+// r_antialiasing 0, is held), and DLSS can run per eye (the NGX twins are hooked and none failed).
+bool taaFailedClosed();
+bool taaDlssPerEyeReady();
+
 // r_TAANumSubSamples (32 when unknown).
 int taaNumSubSamples();
 
@@ -61,6 +66,8 @@ struct TaaCounters {
     std::uint64_t distortionBinds = 0; // distortionLastFrameMap bound to the eye's own history
     // Output picks by tag eye (L, R) and latched projection side (left, centred, right).
     std::uint64_t tagVsView[2][3] = {};
+    // Exposure index renders whose tag in flight names another eye than the render's own (by its counter).
+    std::uint64_t exposureInFlightDiffers = 0;
     std::uint64_t secondPairBuilds = 0;
     std::uint64_t twinCreates = 0; // eye R's DLSS features created
     std::uint64_t twinFailures = 0;

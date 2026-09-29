@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -19,10 +20,13 @@ namespace EternalVR.Launcher
         private readonly CheckBox skipCinematics = new CheckBox { AutoSize = true };
         private readonly ComboBox posture = Choices(Setting.PlayPosition);
         private readonly ComboBox height = Choices(Setting.EyeHeight);
+        private readonly CheckBox throwGesture = new CheckBox { AutoSize = true };
+        private readonly CheckBox swingGesture = new CheckBox { AutoSize = true };
         private readonly ComboBox aim = Choices(Setting.AimWith);
         private readonly ComboBox hand = Choices(Setting.WeaponHand);
         private readonly ComboBox locomotion = Choices(Setting.MoveToward);
         private readonly ComboBox xButton = Choices(Setting.XButton);
+        private readonly ComboBox wheel = Choices(Setting.WeaponWheel);
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly ComboBox vibration = Choices(Setting.Vibration);
@@ -61,6 +65,9 @@ namespace EternalVR.Launcher
                 Row(Setting.EyeHeight, height,
                     s => height.SelectedIndex = (int)s.Height,
                     s => s.Height = (HeightMode)height.SelectedIndex));
+            var gestures = Group("Gestures",
+                Row(Setting.ThrowGesture, throwGesture, s => throwGesture.Checked = s.ThrowGesture, s => s.ThrowGesture = throwGesture.Checked),
+                Row(Setting.SwingGesture, swingGesture, s => swingGesture.Checked = s.SwingGesture, s => s.SwingGesture = swingGesture.Checked));
             var controls = Group("Controls",
                 Row(Setting.AimWith, aim,
                     s => aim.SelectedIndex = (int)s.Aim,
@@ -74,19 +81,29 @@ namespace EternalVR.Launcher
                 Row(Setting.XButton, xButton,
                     s => xButton.SelectedIndex = (int)s.Dossier,
                     s => s.Dossier = (DossierPress)xButton.SelectedIndex),
+                Row(Setting.WeaponWheel, wheel,
+                    s => wheel.SelectedIndex = (int)s.Wheel,
+                    s => s.Wheel = (WheelSelect)wheel.SelectedIndex),
                 Row(Setting.AimSteadiness, steadiness, LoadSteadiness, ReadSteadiness),
                 Row(Setting.AimDot, aimDot, s => aimDot.Checked = s.AimDot, s => s.AimDot = aimDot.Checked),
                 Row(Setting.Vibration, vibration, LoadVibration, ReadVibration),
-                // Nothing to save: the button opens the controls folder, the caption says what it holds.
+                // Nothing to save: the buttons open the controls editor and the folder, the caption says what it holds.
                 Row(Setting.ButtonLayout, ControlsRow(), s => ShowControlsState(), s => { }));
-            var picture = Group("Picture",
+            var pictureRows = new List<SettingRow>
+            {
                 Row(Setting.Resolution, WithUnit(renderScale, "× the headset's size"),
                     s => renderScale.Value = (decimal)LauncherSettings.ClampRenderScale(s.RenderScale),
                     s => s.RenderScale = LauncherSettings.ClampRenderScale((double)renderScale.Value)),
                 Row(Setting.AntiAliasing, antiAliasing,
                     s => antiAliasing.SelectedIndex = LauncherSettings.AntiAliasingChoice(s),
-                    s => LauncherSettings.SetAntiAliasingChoice(s, antiAliasing.SelectedIndex)));
-            var page = Page("Play", new Control[] { comfort, body }, new Control[] { controls, picture });
+                    s => LauncherSettings.SetAntiAliasingChoice(s, antiAliasing.SelectedIndex)),
+            };
+            // Texture streaming and the processor saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
+            if (StreamingRow() is SettingRow streaming) pictureRows.Add(streaming);
+            var picture = Group("Picture", pictureRows.ToArray());
+            var left = new List<Control> { comfort, body, gestures };
+            if (SaverGroup() is GroupBox saver) left.Add(saver);
+            var page = Page("Play", left.ToArray(), new Control[] { controls, picture });
             // The player edits the folder in Explorer: looked at again on coming back to the window or the tab.
             tabs.Selected += (s, e) => { if (e.TabPage == page) ShowControlsState(); };
             Activated += (s, e) => ShowControlsState();
@@ -96,11 +113,14 @@ namespace EternalVR.Launcher
         private FlowLayoutPanel ControlsRow()
         {
             var edit = new Button { Text = "Edit controls...", Width = 110, Height = 26 };
+            var open = new Button { Text = "Open folder", Width = 90, Height = 26 };
             edit.Click += (s, e) => EditControls();
-            // Wraps to a second line rather than widening the column.
-            controlsState.MaximumSize = new Size(130, 0);
-            var row = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
-            row.Controls.AddRange(new Control[] { edit, controlsState });
+            open.Click += (s, e) => OpenControlsFolder();
+            var buttons = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+            buttons.Controls.AddRange(new Control[] { edit, open });
+            // Below the buttons, so the row is no wider than they are.
+            var row = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
+            row.Controls.AddRange(new Control[] { buttons, controlsState });
             return row;
         }
 
@@ -109,10 +129,9 @@ namespace EternalVR.Launcher
             controlsState.Text = ctx.Controls.HasPlayerMaps ? "Using your own controls" : "Built-in controls";
         }
 
-        /// <summary>Refreshes the controls folder (its README and the copy of the built-in maps), then opens it in Explorer.</summary>
-        private void EditControls()
+        /// <summary>Refreshes the controls folder (its README and the copy of the built-in maps); false, with a message, if it fails.</summary>
+        private bool PrepareControls(ControlsFolder controls)
         {
-            var controls = ctx.Controls;
             try
             {
                 controls.Prepare(ctx.DefaultControlsDir);
@@ -123,9 +142,32 @@ namespace EternalVR.Launcher
                 MessageBox.Show(this, "The controls folder could not be prepared:\n\n" + e.Message, "Edit controls",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 ShowControlsState();
-                return;
+                return false;
             }
             ctx.Log.Info("controls folder ready: " + controls.Dir);
+            return true;
+        }
+
+        /// <summary>
+        /// The controls editor (<see cref="ControlsDialog"/>), on the freshly prepared controls of the VR settings profile in
+        /// use. A profile still using the controls of (none) gets its own copy first, so the editor changes only its own.
+        /// </summary>
+        private void EditControls()
+        {
+            if (!AdoptControls(ctx.Settings.Profile)) return;
+            var controls = ctx.Controls;
+            if (!PrepareControls(controls)) return;
+            using (var dialog = new ControlsDialog(controls, ctx.Settings.Hand, ctx.Log))
+                dialog.ShowDialog(this);
+            ShowControlsState();
+        }
+
+        /// <summary>Opens the controls folder of the VR settings profile in use in Explorer, to edit the files by hand.</summary>
+        private void OpenControlsFolder()
+        {
+            if (!AdoptControls(ctx.Settings.Profile)) return;
+            var controls = ctx.Controls;
+            if (!PrepareControls(controls)) return;
             Process.Start("explorer.exe", "\"" + controls.Dir + "\"");
             ShowControlsState();
         }

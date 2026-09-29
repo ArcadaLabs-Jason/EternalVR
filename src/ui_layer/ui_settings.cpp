@@ -122,10 +122,12 @@ void readWrist(const EnvLookup& env, UiSettings& s, std::vector<std::string>& wa
         const std::wstring_view t = trim(*hud);
         if (equalsNoCase(t, L"wrist")) {
             s.hud = HudMode::Wrist;
+        } else if (equalsNoCase(t, L"weapon")) {
+            s.hud = HudMode::Weapon;
         } else if (equalsNoCase(t, L"panel")) {
             s.hud = HudMode::Panel;
         } else {
-            warnings.push_back("ETERNALVR_HUD is not wrist or panel; the default is kept");
+            warnings.push_back("ETERNALVR_HUD is not panel, wrist or weapon; the default is kept");
         }
     }
     WristSettings& w = s.wrist;
@@ -139,6 +141,13 @@ void readWrist(const EnvLookup& env, UiSettings& s, std::vector<std::string>& wa
     readNumber(env, L"ETERNALVR_WRIST_WIDTH", 0.05f, 1.0f, w.widthMetres, warnings);
     readVector(env, L"ETERNALVR_WRIST_OFFSET", -0.5f, 0.5f, w.offset, warnings);
     readSwitch(env, L"ETERNALVR_WRIST_ABILITIES", w.abilities, warnings);
+    WeaponHudSettings& g = s.weapon;
+    readNumber(env, L"ETERNALVR_WEAPON_HUD_ANGLE", 5.0f, 90.0f, g.showDegrees, warnings);
+    g.hideDegrees = g.showDegrees + kWristHysteresisDegrees;
+    readNumber(env, L"ETERNALVR_WEAPON_HUD_WIDTH", 0.03f, 0.5f, g.widthMetres, warnings);
+    readVector(env, L"ETERNALVR_WEAPON_HUD_OFFSET", -0.5f, 0.5f, g.offset, warnings);
+    readNumber(env, L"ETERNALVR_WEAPON_HUD_TILT", -90.0f, 90.0f, g.tiltDegrees, warnings);
+    readSwitch(env, L"ETERNALVR_WEAPON_HUD_VITALS", g.vitals, warnings);
 }
 
 // The vignette: off, light or strong (any case).
@@ -163,7 +172,15 @@ void readVignette(const EnvLookup& env, VignetteMode& value, std::vector<std::st
 } // namespace
 
 const char* hudModeName(HudMode mode) {
-    return mode == HudMode::Wrist ? "wrist" : "panel";
+    switch (mode) {
+    case HudMode::Wrist:
+        return "wrist";
+    case HudMode::Weapon:
+        return "weapon";
+    case HudMode::Panel:
+        break;
+    }
+    return "panel";
 }
 
 UiSettings readUiSettings(const EnvLookup& env, std::vector<std::string>& warnings) {

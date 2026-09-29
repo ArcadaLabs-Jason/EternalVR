@@ -39,6 +39,7 @@ constexpr std::size_t kSlotAccumulationTargets = 0x58;
 constexpr std::size_t kSlotOpaqueTarget = 0x68;
 constexpr std::uint32_t kSecondSlotIndex = 1; // its images are named "_accumulationBuffer10" and so on
 constexpr std::size_t kPostProcessExposureIndex = 0x140;
+constexpr std::size_t kPostProcessBackendFrame = 0x148;
 
 using SelectorFn = void* (*)(void* renderSystem, const std::byte* renderView);
 using SlotBuilderFn = void (*)(void* deviceContext, void* slot, std::uint64_t deviceContextIndex);
@@ -95,6 +96,7 @@ struct Counters {
     // Output picks by the tag's eye (L, R) and by the side the latched projection is shifted to (left of
     // centre, centred, right): each tag eye should see one side only.
     std::atomic<std::uint64_t> tagVsView[2][3]{};
+    std::atomic<std::uint64_t> exposureInFlightDiffers{0};
 } g_counters;
 
 // The horizontal offset of the view's latched projection (idRenderView projectionMatrix [0][2]): each eye's
@@ -297,7 +299,18 @@ void onExposureIndex(const HookRegisters& regs) {
     if (!g_perEye.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch()) {
         return;
     }
-    const std::optional<stereo_seq::RenderTag> tag = seqTagInFlight();
+    // The render's own tag, found by the backend frame counter the render-view job stored in the context for
+    // this render (RVA 0x1C570D2), the one the engine's own index was just chosen from. The tag in flight
+    // reads the counter again now and would name the next render if the render thread's swap came in
+    // between; the count of such renders is the self-check.
+    auto* context = reinterpret_cast<std::byte*>(regs.rsi);
+    std::uint32_t counter = 0;
+    std::memcpy(&counter, context + kPostProcessBackendFrame, sizeof(counter));
+    const std::optional<stereo_seq::RenderTag> tag = seqTagForBackendFrame(counter + 1u);
+    const std::optional<stereo_seq::RenderTag> inFlight = seqTagInFlight();
+    if ((inFlight ? inFlight->eye : stereo_seq::Eye::Mono) != (tag ? tag->eye : stereo_seq::Eye::Mono)) {
+        ++g_counters.exposureInFlightDiffers;
+    }
     if (!tag) {
         return;
     }
@@ -306,7 +319,6 @@ void onExposureIndex(const HookRegisters& regs) {
         std::lock_guard lock(g_exposureMutex);
         index = g_exposure.indexFor(*tag);
     }
-    auto* context = reinterpret_cast<std::byte*>(regs.rsi);
     std::memcpy(context + kPostProcessExposureIndex, &index, sizeof(index));
     noteMotionTarget(*tag, context); // ETERNALVR_CAPTURE_MOTION
 }
@@ -523,6 +535,14 @@ bool taaPerEyeActive() {
     return g_perEye.load(std::memory_order_acquire) && mp_guard::allowsGameTouch();
 }
 
+bool taaFailedClosed() {
+    return g_failedClosed.load();
+}
+
+bool taaDlssPerEyeReady() {
+    return g_ngxHooked && !ngxTwinFailed();
+}
+
 int taaNumSubSamples() {
     const int n = g_numSubSamples ? cvarInt(g_numSubSamples) : 0;
     return n > 0 ? n : 32;
@@ -540,6 +560,7 @@ TaaCounters taaCounters() {
             c.tagVsView[e][s] = g_counters.tagVsView[e][s].load();
         }
     }
+    c.exposureInFlightDiffers = g_counters.exposureInFlightDiffers.load();
     c.secondPairBuilds = g_counters.secondPairBuilds.load();
     const NgxCounters n = ngxCounters();
     c.twinCreates = n.twinCreates;

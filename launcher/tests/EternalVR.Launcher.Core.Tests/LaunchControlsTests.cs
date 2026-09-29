@@ -41,6 +41,56 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheWeaponWheelIsPointedAtWithTheStickUnlessTheHandIsChosen()
+        {
+            Assert.Equal(WheelSelect.Stick, new LauncherSettings().Wheel);
+            Assert.Equal("stick", Env(LaunchPlanBuilder.Build(Inputs()))["ETERNALVR_WHEEL_SELECT"]);
+            var hand = new LauncherSettings { Wheel = WheelSelect.Hand };
+            Assert.Equal("hand", Env(LaunchPlanBuilder.Build(Inputs(hand)))["ETERNALVR_WHEEL_SELECT"]);
+            Assert.Contains("wheel_select = hand", hand.Serialize());
+            Assert.Equal(WheelSelect.Hand, LauncherSettings.Parse(hand.Serialize()).Wheel);
+            Assert.Equal(WheelSelect.Stick, LauncherSettings.Parse(new LauncherSettings().Serialize()).Wheel);
+            // A file without the key (an older launcher's) or with a value this launcher does not know keeps the stick.
+            Assert.Equal(WheelSelect.Stick, LauncherSettings.Parse("schema_version = 2\n").Wheel);
+            Assert.Equal(WheelSelect.Stick, LauncherSettings.Parse("schema_version = 2\nwheel_select = feet\n").Wheel);
+            Assert.Equal(WheelSelect.Hand, LauncherSettings.Parse("schema_version = 2\nwheel_select = Hand\n").Wheel);
+            // A known key: not kept among the unknown ones, so it is not written twice.
+            Assert.Empty(LauncherSettings.Parse("schema_version = 2\nwheel_select = hand\n").UnknownKeys);
+            // Reset to defaults goes back to the stick.
+            Assert.Equal(WheelSelect.Stick, hand.WithDefaults().Wheel);
+        }
+
+        [Fact]
+        public void TheArmGesturesAreOffUnlessTurnedOn()
+        {
+            var off = new LauncherSettings();
+            Assert.False(off.ThrowGesture);
+            Assert.False(off.SwingGesture);
+            var env = Env(LaunchPlanBuilder.Build(Inputs()));
+            Assert.Equal("0", env["ETERNALVR_THROW"]);
+            Assert.Equal("0", env["ETERNALVR_SWING"]);
+            var on = new LauncherSettings { ThrowGesture = true, SwingGesture = true };
+            env = Env(LaunchPlanBuilder.Build(Inputs(on)));
+            Assert.Equal("1", env["ETERNALVR_THROW"]);
+            Assert.Equal("1", env["ETERNALVR_SWING"]);
+            Assert.Contains("throw_gesture = 1", on.Serialize());
+            Assert.Contains("swing_gesture = 1", on.Serialize());
+            var back = LauncherSettings.Parse(on.Serialize());
+            Assert.True(back.ThrowGesture);
+            Assert.True(back.SwingGesture);
+            Assert.False(LauncherSettings.Parse(off.Serialize()).ThrowGesture);
+            // A file without the keys (an older launcher's) or with a value that is not a clear yes keeps them off.
+            Assert.False(LauncherSettings.Parse("schema_version = 2\n").ThrowGesture);
+            Assert.False(LauncherSettings.Parse("schema_version = 2\nthrow_gesture = maybe\n").ThrowGesture);
+            Assert.True(LauncherSettings.Parse("schema_version = 2\nswing_gesture = On\n").SwingGesture);
+            Assert.Empty(LauncherSettings.Parse("schema_version = 2\nthrow_gesture = 1\nswing_gesture = 0\n").UnknownKeys);
+            // Reset to defaults turns them off; without controllers they do not apply.
+            Assert.False(on.WithDefaults().ThrowGesture);
+            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.ThrowGesture, new LauncherSettings { Controllers = false }));
+            Assert.Null(SettingRules.WhyNot(Setting.SwingGesture, on));
+        }
+
+        [Fact]
         public void AimDotIsOnByDefaultAndCanBeTurnedOff()
         {
             Assert.Equal("1", Env(LaunchPlanBuilder.Build(Inputs()))["ETERNALVR_UI_RETICLE"]);

@@ -135,12 +135,18 @@ std::vector<WristQuad> layoutWristQuads(
     return quads;
 }
 
-std::vector<PixelRect> headLockedPieces(const PixelRect& shown, std::uint32_t width, std::uint32_t height) {
+std::vector<PixelRect> headLockedPieces(const PixelRect& shown,
+                                        std::uint32_t width,
+                                        std::uint32_t height,
+                                        const std::vector<WristBlock>& moved) {
     if (width == 0 || height == 0) {
         return {};
     }
-    return subtractRects(
-        shown, {cutRect(WristBlock::Vitals, width, height), cutRect(WristBlock::Weapon, width, height)});
+    std::vector<PixelRect> cuts;
+    for (const WristBlock block : moved) {
+        cuts.push_back(cutRect(block, width, height));
+    }
+    return subtractRects(shown, cuts);
 }
 
 } // namespace evr::ui_layer

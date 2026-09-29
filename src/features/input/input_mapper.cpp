@@ -36,6 +36,9 @@ MapperSettings sanitized(MapperSettings settings) {
     // would jump from nothing to a sizeable fraction of full speed the moment the claim is made.
     settings.turn.smoothResponse = startingFrom(settings.turn.smoothResponse, settings.turnStick.turnClaim);
     settings.punch = PunchDetector(settings.punch).settings();
+    const ArmGestures arms(settings.throwGesture, settings.swing);
+    settings.throwGesture = arms.throwSettings();
+    settings.swing = arms.swingSettings();
     return settings;
 }
 
@@ -67,7 +70,8 @@ bool gestureActive(StickGesture gesture, const TurnStickOutput& output) {
 
 InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
     : profile_(std::move(profile)), settings_(sanitized(settings)), turnStick_(settings_.turnStick),
-      turn_(settings_.turn), handsJump_(settings_.handsJump), punch_(settings_.punch),
+      turn_(settings_.turn), handsJump_(settings_.handsJump),
+      armGestures_(settings_.throwGesture, settings_.swing), punch_(settings_.punch),
       captureChord_(settings_.trigger, settings_.captureButtons), stickChord_(settings_.buttonHoldSeconds) {
     for (HandButtons& hand : hands_) {
         hand.trigger = AnalogButton(settings_.trigger);
@@ -134,7 +138,17 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     if (handsJump_.update(frame, context.posture, dt)) {
         game::add(input.down, game::GameAction::Jump);
     }
-    if (punch_.update(frame)) {
+    // A throw or an overhead swing holds back its hand's punch: the gesture's own motion would punch too.
+    const ArmGestureOutput arms = armGestures_.update(frame, profile_.weaponHand, dt);
+    if (arms.thrown) {
+        game::add(input.down, game::GameAction::Equipment);
+    }
+    if (arms.swung) {
+        game::add(input.down, game::GameAction::Crucible);
+    }
+    input.thrown = arms.thrown;
+    input.swung = arms.swung;
+    if (punch_.update(frame, arms.heldBack)) {
         game::add(input.down, game::GameAction::Melee);
         input.punch = punch_.punched();
     }

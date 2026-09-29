@@ -86,6 +86,7 @@ namespace EternalVR.Launcher
             Shown += (s, e) =>
             {
                 ctx.Log.Info($"EternalVR launcher started; data folder {ctx.Paths.Root}");
+                GiveProfilesTheirControls();
                 TryRecover();
                 RunPreflight();
             };
@@ -96,14 +97,14 @@ namespace EternalVR.Launcher
         /// display scale Windows had at sign-in: after a scale change without signing out, every text was that much too big
         /// or too small. Points follow the display the window opens on; WinForms rescales them when it moves.
         /// </summary>
-        private static Font UiFont(FontStyle style = FontStyle.Regular) => new Font("Segoe UI", 9f, style);
+        internal static Font UiFont(FontStyle style = FontStyle.Regular) => new Font("Segoe UI", 9f, style);
 
         /// <summary>
         /// A list keeps the height it got with the font it was made with (the default font, too tall here), and a layout
         /// takes that height: each list is set to its height in the window's font. The rows hold lists in flow panels, which
         /// follow the new height (a table row keeps the first one).
         /// </summary>
-        private static void FitListHeights(Control parent)
+        internal static void FitListHeights(Control parent)
         {
             foreach (Control c in parent.Controls)
             {
@@ -210,6 +211,7 @@ namespace EternalVR.Launcher
             header.SetText(
                 g.Game == null ? "DOOM Eternal not found" : "DOOM Eternal",
                 build == null ? "Choose the game folder (Advanced)"
+                : build.Status == BuildStatus.Known && build.Build.Platform == GamePlatform.GamePass ? $"Game Pass {build.Build.BuildId}: supported"
                 : build.Status == BuildStatus.Known ? $"Build {build.Build.BuildId}: supported"
                 : build.Status == BuildStatus.Unknown ? "Unknown game build: not supported"
                 : "The game's exe is missing",
@@ -282,6 +284,11 @@ namespace EternalVR.Launcher
             }
             var chosen = ChooseBackup(backups);
             if (chosen == null) return;
+            if (SaveBackups.HoldsGamePassSaves(chosen))
+            {
+                MessageBox.Show(this, SaveRestore.GamePassBackupAdvice(chosen), "Restore saves", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             var when = BackupLabel(chosen);
             var answer = MessageBox.Show(this,
                 $"Restore the save slots backed up on {when}?\n\nThe current saves are backed up first. Your saves are Steam Cloud files, so Steam must "
@@ -320,15 +327,16 @@ namespace EternalVR.Launcher
 
         private void ChooseGameFolder()
         {
-            using (var dlg = new FolderBrowserDialog { Description = "Choose the DOOM Eternal folder (the one containing " + GameLayout.RetailExe + ")" })
+            using (var dlg = new FolderBrowserDialog { Description = "Choose the DOOM Eternal folder (the one containing " + GameLayout.RetailExe + "; for Game Pass, its Content folder)" })
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                if (!File.Exists(Path.Combine(dlg.SelectedPath, GameLayout.RetailExe)))
+                var folder = GamePassInstall.ContentFolderOf(dlg.SelectedPath) ?? dlg.SelectedPath;
+                if (!File.Exists(Path.Combine(folder, GameLayout.RetailExe)))
                 {
                     MessageBox.Show(this, GameLayout.RetailExe + " is not in that folder.", "EternalVR");
                     return;
                 }
-                ctx.Settings.GameDir = dlg.SelectedPath;
+                ctx.Settings.GameDir = folder;
                 SaveSettings();
                 RunPreflight();
             }

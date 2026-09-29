@@ -13,6 +13,10 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>Stereo (Route S: one render per eye, docs/VR_STEREO.md) or head-tracked mono.</summary>
     public enum VrMode { Stereo, Mono }
 
+    /// <summary>Alternate eyes (the layer's <c>ETERNALVR_ALTERNATE_EYES</c>, docs/rig-findings/alternate-eye.md): never,
+    /// only while the processor cannot keep up with the headset (auto), or always (one eye per game tick).</summary>
+    public enum AlternateEyesMode { Off, Auto, On }
+
     /// <summary>Posture override (REQ-06, docs/VR_ROOMSCALE.md): detected, or forced seated or standing.</summary>
     public enum PostureMode { Auto, Seated, Standing }
 
@@ -34,6 +38,9 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>Which press of the X button opens the Dossier (the layer's <c>ETERNALVR_DOSSIER</c>); the other one switches equipment.</summary>
     public enum DossierPress { Hold, Tap }
 
+    /// <summary>What points at the weapon wheel (the layer's <c>ETERNALVR_WHEEL_SELECT</c>): the stick that holds it open, or the weapon hand.</summary>
+    public enum WheelSelect { Stick, Hand }
+
     /// <summary>The stereo anti-aliasing: the game's TAA per eye, DLSS per eye (experimental; the forced <c>r_antialiasing</c>
     /// becomes 2), or none (the forced <c>r_antialiasing</c> becomes 0 and the layer turns every temporal effect off).</summary>
     public enum AntiAliasingMode { Taa, Dlss, Off }
@@ -51,8 +58,8 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>Where shots start under hand aim (the layer's <c>ETERNALVR_SHOT_ORIGIN</c>).</summary>
     public enum ShotOrigin { Hand, Eye }
 
-    /// <summary>Where the HUD is (the layer's <c>ETERNALVR_HUD</c>, docs/VR_HANDS_HUD.md): all on the panel in front, or health, armor and ammo on the off hand's wrist.</summary>
-    public enum HudMode { Panel, Wrist }
+    /// <summary>Where the HUD is (the layer's <c>ETERNALVR_HUD</c>, docs/VR_HANDS_HUD.md): all on the panel in front, health, armor and ammo on the off hand's wrist, or the ammo above the gun in the weapon hand.</summary>
+    public enum HudMode { Panel, Wrist, Weapon }
 
     /// <summary>
     /// The launcher's own per-machine settings (<c>%LOCALAPPDATA%\EternalVR\launcher.ini</c>), a flat
@@ -64,13 +71,13 @@ namespace EternalVR.Launcher.Core.Settings
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier,
-    /// mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette and profile.
+    /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes and profile.
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
     /// scale, cutscene and argument choices and takes the new defaults for the rest (stereo, controllers on,
     /// hand aim); its <c>aim = view</c> is kept, its <c>aim = head</c> (schema 1's default) becomes hand aim.
     /// </summary>
-    public sealed class LauncherSettings
+    public sealed partial class LauncherSettings
     {
         public const int SchemaVersion = 2;
         public const double MinWorldScale = 0.85;
@@ -117,6 +124,10 @@ namespace EternalVR.Launcher.Core.Settings
         public string Runtime { get; set; } = SystemRuntime;
         public double WorldScale { get; set; } = 1.0;
         public VrMode Mode { get; set; } = VrMode.Stereo;
+        /// <summary>Stereo renders one eye per game tick, each eye every other tick, for slower processors (the layer's
+        /// <c>ETERNALVR_ALTERNATE_EYES</c>, docs/rig-findings/alternate-eye.md): always, only while the processor cannot keep
+        /// up with the headset (auto), or never. Off by default.</summary>
+        public AlternateEyesMode AlternateEyes { get; set; } = AlternateEyesMode.Off;
         /// <summary>Motion controllers drive the game (docs/VR_CONTROLLERS.md); off leaves keyboard, mouse and pad only.</summary>
         public bool Controllers { get; set; } = true;
         public AimMode Aim { get; set; } = AimMode.Hand;
@@ -147,10 +158,22 @@ namespace EternalVR.Launcher.Core.Settings
         public Handedness Hand { get; set; } = Handedness.Right;
         public LocomotionMode Locomotion { get; set; } = LocomotionMode.Head;
         public DossierPress Dossier { get; set; } = DossierPress.Hold;
+        /// <summary>What points at the weapon wheel: the stick (default) or the weapon hand.</summary>
+        public WheelSelect Wheel { get; set; } = WheelSelect.Stick;
+        /// <summary>The off hand's throw presses the equipment launcher (the layer's <c>ETERNALVR_THROW</c>); off by default.</summary>
+        public bool ThrowGesture { get; set; } = false;
+        /// <summary>The weapon hand's overhead swing presses the Crucible (the layer's <c>ETERNALVR_SWING</c>); off by default.</summary>
+        public bool SwingGesture { get; set; } = false;
         /// <summary>The dot at the end of the weapon hand's aim ray (the layer's <c>ETERNALVR_UI_RETICLE</c>).</summary>
         public bool AimDot { get; set; } = true;
         public AntiAliasingMode AntiAliasing { get; set; } = AntiAliasingMode.Taa;
         public DlssQuality Dlss { get; set; } = DlssQuality.Quality;
+        /// <summary>The game's own nvngx_dlss.dll, or the player's newer one at <see cref="DlssDllPath"/> (<see cref="DlssDll"/>).</summary>
+        public DlssDllChoice DlssDll { get; set; } = DlssDllChoice.Game;
+        /// <summary>The player's nvngx_dlss.dll, kept where they chose it (this machine's, like the folders).</summary>
+        public string DlssDllPath { get; set; } = string.Empty;
+        /// <summary>The DLSS render preset with the player's DLL (<see cref="Settings.DlssDll.PresetValues"/>).</summary>
+        public string DlssPreset { get; set; } = "default";
         /// <summary>Room-scale walking: the body follows the head (the layer's <c>ETERNALVR_BODY_FOLLOW</c>).</summary>
         public bool BodyFollow { get; set; } = true;
         /// <summary>The layer's <c>ETERNALVR_AIM_SMOOTHING</c>, 0 to 1.</summary>
@@ -175,7 +198,7 @@ namespace EternalVR.Launcher.Core.Settings
         public double AimDotSize { get; set; } = DefaultAimDotSize;
         /// <summary>The laser from the hand to the menu panel (the layer's <c>ETERNALVR_MENU_BEAM</c>); off keeps only the dot.</summary>
         public bool MenuBeam { get; set; } = true;
-        /// <summary>The whole HUD on the panel (default), or health, armor and ammo on the off hand's wrist.</summary>
+        /// <summary>The whole HUD on the panel (default), health, armor and ammo on the off hand's wrist, or the ammo on the weapon.</summary>
         public HudMode Hud { get; set; } = HudMode.Panel;
         /// <summary>Extra command-line text, checked by the argument policy.</summary>
         public string ExtraArguments { get; set; } = string.Empty;
@@ -189,16 +212,16 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The defaults, keeping the folders, the runtime and the keys this launcher does not know ("Reset to defaults").</summary>
         public LauncherSettings WithDefaults() => new LauncherSettings
         {
-            GameDir = GameDir, LayerDir = LayerDir, Runtime = Runtime, UnknownKeys = UnknownKeys, Profile = Profile,
+            GameDir = GameDir, LayerDir = LayerDir, Runtime = Runtime, UnknownKeys = UnknownKeys, Profile = Profile, DlssDllPath = DlssDllPath,
         };
 
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
-            "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "body_follow", "aim_smoothing", "hud_distance",
-            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "mirror_display",
-            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "vignette", "extra_args", "profile",
+            "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_dll_path", "dlss_preset", "cpu_saver", "body_follow", "aim_smoothing", "hud_distance",
+            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "mirror_display",
+            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "vignette", "alternate_eyes", "extra_args", "profile",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -273,6 +296,7 @@ namespace EternalVR.Launcher.Core.Settings
                     s.EyeHeight = eh;
                 }
             }
+            if (map.TryGetValue("alternate_eyes", out var ae)) s.AlternateEyes = ParseAlternateEyes(ae);
             if (map.TryGetValue("render_size", out var rs) && NormaliseRenderSize(rs) is string renderSize) s.RenderSize = renderSize;
             if (map.TryGetValue("render_scale", out var sc))
             {
@@ -294,10 +318,19 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
             if (map.TryGetValue("locomotion", out var lm)) s.Locomotion = Pick(lm, LocomotionMode.Head, ("hand", LocomotionMode.Hand));
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
+            if (map.TryGetValue("wheel_select", out var ws)) s.Wheel = Pick(ws, WheelSelect.Stick, ("hand", WheelSelect.Hand));
+            if (map.TryGetValue("throw_gesture", out var tg)) s.ThrowGesture = On(tg);
+            if (map.TryGetValue("swing_gesture", out var sg)) s.SwingGesture = On(sg);
             if (map.TryGetValue("anti_aliasing", out var aa)) s.AntiAliasing = Pick(aa, AntiAliasingMode.Taa, ("dlss", AntiAliasingMode.Dlss), ("off", AntiAliasingMode.Off));
             if (map.TryGetValue("dlss_quality", out var dq))
                 s.Dlss = Pick(dq, DlssQuality.Quality, ("balanced", DlssQuality.Balanced), ("performance", DlssQuality.Performance),
                     ("ultra_performance", DlssQuality.UltraPerformance));
+            if (map.TryGetValue("dlss_dll", out var dd)) s.DlssDll = Pick(dd, DlssDllChoice.Game, ("file", DlssDllChoice.File));
+            if (map.TryGetValue("dlss_dll_path", out var dp2)) s.DlssDllPath = dp2;
+            if (map.TryGetValue("dlss_preset", out var dps)) s.DlssPreset = Settings.DlssDll.NormalisePreset(dps);
+            if (map.TryGetValue("cpu_saver", out var cs)) s.CpuSaverAllOn = On(cs);
+            s.CpuSaverChoices = order.Where(IsCpuSaverKey).Select(k => (Key: k.Substring(CpuSaverKeyPrefix.Length).ToLowerInvariant(), On: Switch(map[k])))
+                .Where(x => x.On.HasValue).Select(x => new KeyValuePair<string, bool>(x.Key, x.On.Value)).ToList();
             if (map.TryGetValue("skip_cinematics", out var c)) s.SkipCinematics = c == "1" || string.Equals(c, "true", StringComparison.OrdinalIgnoreCase);
             if (map.TryGetValue("body_follow", out var bf)) s.BodyFollow = Flag(bf);
             if (map.TryGetValue("aim_smoothing", out var sm)) s.AimSmoothing = Number(sm, 0.0, 1.0, DefaultAimSmoothing);
@@ -314,15 +347,22 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("mirror_size", out var ms) && MirrorSettings.NormaliseSize(ms) is string size) s.MirrorSize = size;
             if (map.TryGetValue("mirror_crop", out var mc)) s.MirrorCrop = mc.Trim() == "16:9";
             if (map.TryGetValue("cinema_aspect", out var ca)) s.Cinema = MirrorSettings.ParseCinema(ca);
-            if (map.TryGetValue("hud", out var hu)) s.Hud = Pick(hu, HudMode.Panel, ("wrist", HudMode.Wrist));
+            if (map.TryGetValue("hud", out var hu)) s.Hud = Pick(hu, HudMode.Panel, ("wrist", HudMode.Wrist), ("weapon", HudMode.Weapon));
             if (map.TryGetValue("extra_args", out var e)) s.ExtraArguments = e;
             if (map.TryGetValue("profile", out var pr)) s.Profile = ProfileStore.NormaliseName(pr) ?? string.Empty;
-            s.UnknownKeys = order.Where(k => !KnownKeys.Contains(k)).Select(k => new KeyValuePair<string, string>(k, map[k])).ToList();
+            s.UnknownKeys = order.Where(k => !KnownKeys.Contains(k) && !IsCpuSaverKey(k)).Select(k => new KeyValuePair<string, string>(k, map[k])).ToList();
             return s;
         }
 
         /// <summary>A switch: off for 0 or false, on for anything else.</summary>
         private static bool Flag(string text) => !(text == "0" || string.Equals(text, "false", StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>A switch that is off by default: on only for 1, true or on.</summary>
+        private static bool On(string text)
+        {
+            var t = text.Trim();
+            return t == "1" || string.Equals(t, "true", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "on", StringComparison.OrdinalIgnoreCase);
+        }
 
         private static double Number(string text, double min, double max, double fallback) =>
             double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? Clamp(v, min, max, fallback) : fallback;
@@ -339,6 +379,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("runtime = " + OneLine(Runtime));
             sb.AppendLine("world_scale = " + ClampWorldScale(WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
             sb.AppendLine("mode = " + (Mode == VrMode.Mono ? "mono" : "stereo"));
+            sb.AppendLine("alternate_eyes = " + AlternateEyesValue(AlternateEyes));
             sb.AppendLine("controllers = " + (Controllers ? "1" : "0"));
             sb.AppendLine("aim = " + AimName(Aim));
             sb.AppendLine("render_size = " + (NormaliseRenderSize(RenderSize) ?? RenderSizeAuto));
@@ -356,9 +397,17 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("handedness = " + HandednessName(Hand));
             sb.AppendLine("locomotion = " + LocomotionName(Locomotion));
             sb.AppendLine("dossier = " + DossierName(Dossier));
+            sb.AppendLine("wheel_select = " + WheelSelectName(Wheel));
+            sb.AppendLine("throw_gesture = " + (ThrowGesture ? "1" : "0"));
+            sb.AppendLine("swing_gesture = " + (SwingGesture ? "1" : "0"));
             sb.AppendLine("aim_dot = " + (AimDot ? "1" : "0"));
             sb.AppendLine("anti_aliasing = " + (AntiAliasing == AntiAliasingMode.Dlss ? "dlss" : AntiAliasing == AntiAliasingMode.Off ? "off" : "taa"));
             sb.AppendLine("dlss_quality = " + DlssQualityName(Dlss));
+            sb.AppendLine("dlss_dll = " + (DlssDll == DlssDllChoice.File ? "file" : "game"));
+            sb.AppendLine("dlss_dll_path = " + OneLine(DlssDllPath));
+            sb.AppendLine("dlss_preset = " + Settings.DlssDll.NormalisePreset(DlssPreset));
+            if (CpuSaverAllOn) sb.AppendLine("cpu_saver = on");
+            foreach (var kv in CpuSaverChoices) sb.AppendLine(CpuSaverKeyPrefix + kv.Key + " = " + (kv.Value ? "on" : "off"));
             sb.AppendLine("body_follow = " + (BodyFollow ? "1" : "0"));
             sb.AppendLine("aim_smoothing = " + Metres(Clamp(AimSmoothing, 0.0, 1.0, DefaultAimSmoothing)));
             sb.AppendLine("vibration = " + Metres(Clamp(Vibration, 0.0, 1.0, DefaultVibration)));
@@ -426,6 +475,9 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The layer's <c>ETERNALVR_DOSSIER</c> value.</summary>
         public static string DossierName(DossierPress d) => d == DossierPress.Tap ? "tap" : "hold";
 
+        /// <summary>The layer's <c>ETERNALVR_WHEEL_SELECT</c> value.</summary>
+        public static string WheelSelectName(WheelSelect w) => w == WheelSelect.Hand ? "hand" : "stick";
+
         /// <summary>The layer's <c>ETERNALVR_MIRROR</c> value.</summary>
         public static string MirrorName(MirrorMode m) => m == MirrorMode.Right ? "right" : m == MirrorMode.Off ? "off" : "left";
 
@@ -456,7 +508,7 @@ namespace EternalVR.Launcher.Core.Settings
         public static string ShotOriginName(ShotOrigin o) => o == ShotOrigin.Eye ? "eye" : "hand";
 
         /// <summary>The layer's <c>ETERNALVR_HUD</c> value.</summary>
-        public static string HudName(HudMode h) => h == HudMode.Wrist ? "wrist" : "panel";
+        public static string HudName(HudMode h) => h == HudMode.Wrist ? "wrist" : h == HudMode.Weapon ? "weapon" : "panel";
 
         private static T Pick<T>(string text, T fallback, params (string Name, T Value)[] choices)
         {
@@ -470,6 +522,18 @@ namespace EternalVR.Launcher.Core.Settings
 
         /// <summary>The layer's <c>ETERNALVR_HEIGHT</c> value.</summary>
         public static string HeightName(HeightMode height) => height == HeightMode.Real ? "real" : "slayer";
+
+        /// <summary>The ini's and the layer's <c>ETERNALVR_ALTERNATE_EYES</c> value: 0, auto or 1.</summary>
+        public static string AlternateEyesValue(AlternateEyesMode mode) =>
+            mode == AlternateEyesMode.On ? "1" : mode == AlternateEyesMode.Auto ? "auto" : "0";
+
+        /// <summary>1 or true: on; auto: auto; anything else (an older launcher's 0, an unknown value): off.</summary>
+        private static AlternateEyesMode ParseAlternateEyes(string text)
+        {
+            var t = (text ?? string.Empty).Trim();
+            if (t == "1" || string.Equals(t, "true", StringComparison.OrdinalIgnoreCase)) return AlternateEyesMode.On;
+            return string.Equals(t, "auto", StringComparison.OrdinalIgnoreCase) ? AlternateEyesMode.Auto : AlternateEyesMode.Off;
+        }
 
         private static PostureMode ParsePosture(string text) =>
             string.Equals(text, "seated", StringComparison.OrdinalIgnoreCase) ? PostureMode.Seated

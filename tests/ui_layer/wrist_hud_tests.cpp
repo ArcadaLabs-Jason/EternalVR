@@ -258,13 +258,14 @@ TEST_CASE("wrist hud: laid out around an identity hand, the quads are relative t
 }
 
 TEST_CASE("wrist hud: the head-locked pieces keep the band but the corners") {
+    const std::vector<WristBlock> kCorners{WristBlock::Vitals, WristBlock::Weapon};
     const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {1920, 1080}};
     for (const auto& size : sizes) {
         const std::uint32_t width = size[0];
         const std::uint32_t height = size[1];
         CAPTURE(width);
         const PixelRect band = wideContentRect(width, height);
-        const auto pieces = headLockedPieces(band, width, height);
+        const auto pieces = headLockedPieces(band, width, height, kCorners);
         REQUIRE(pieces.size() == 2);
         const auto v = evr::ui_layer::cutRect(WristBlock::Vitals, width, height);
         const auto w = evr::ui_layer::cutRect(WristBlock::Weapon, width, height);
@@ -283,11 +284,11 @@ TEST_CASE("wrist hud: the head-locked pieces keep the band but the corners") {
         CHECK(pieces[0].width == band.width);
     }
     // With ETERNALVR_UI_CROP=0 the quad shows the whole target: the rows outside the band stay on it.
-    const auto whole = headLockedPieces(PixelRect{0, 0, 1280, 1400}, 1280, 1400);
+    const auto whole = headLockedPieces(PixelRect{0, 0, 1280, 1400}, 1280, 1400, kCorners);
     REQUIRE(whole.size() == 3);
     CHECK(whole[0].y == 0);
     CHECK(whole[2].y + static_cast<std::int64_t>(whole[2].height) == 1400);
-    CHECK(headLockedPieces(PixelRect{}, 0, 0).empty());
+    CHECK(headLockedPieces(PixelRect{}, 0, 0, kCorners).empty());
 }
 
 TEST_CASE("wrist hud settings: defaults and every variable") {
@@ -301,6 +302,7 @@ TEST_CASE("wrist hud settings: defaults and every variable") {
 
     CHECK(readUiSettings(envOf({{L"ETERNALVR_HUD", L"PANEL"}}), warnings).hud == HudMode::Panel);
     CHECK(readUiSettings(envOf({{L"ETERNALVR_HUD", L"wrist"}}), warnings).hud == HudMode::Wrist);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_HUD", L"Weapon"}}), warnings).hud == HudMode::Weapon);
     const auto s = readUiSettings(envOf({{L"ETERNALVR_HUD", L" Wrist "},
                                          {L"ETERNALVR_WRIST_ALWAYS", L"1"},
                                          {L"ETERNALVR_WRIST_ANGLE", L"30"},

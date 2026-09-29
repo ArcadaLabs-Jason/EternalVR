@@ -13,7 +13,8 @@ namespace EternalVR.Launcher.Core.Safety
     /// <c>SHA256SUMS</c> file; only the newest <see cref="Keep"/> backups are kept. "Restore saves" copies
     /// a verified backup back, after first backing up the current saves under <c>pre-restore-*</c>. The
     /// save slots are Steam-Cloud files: callers go through <see cref="SaveRestore"/>, which keeps Steam's
-    /// record consistent (T-115).
+    /// record consistent (T-115). A Game Pass location (its <c>wgs</c> save containers) is copied whole into the
+    /// backup and marked in <c>locations.txt</c>; such a backup is a copy only and is never restored.
     /// </summary>
     public static class SaveBackups
     {
@@ -21,6 +22,8 @@ namespace EternalVR.Launcher.Core.Safety
         private const string SumsFile = "SHA256SUMS";
         private const string LocationsFile = "locations.txt";
         private const string PreRestorePrefix = "pre-restore-";
+        /// <summary>The third field of a Game Pass line in <c>locations.txt</c>.</summary>
+        private const string GamePassMark = "gamepass";
 
         /// <summary>
         /// Copies the save slots into a new backup folder. Returns null, leaving nothing behind, when
@@ -35,10 +38,12 @@ namespace EternalVR.Launcher.Core.Safety
             int files = 0;
             var sums = new StringBuilder();
             var locs = new StringBuilder();
-            foreach (var loc in locations.Where(l => l.Kind == SettingsLocationKind.SteamRemote))
+            foreach (var loc in locations.Where(l => l.Kind == SettingsLocationKind.SteamRemote || l.Kind == SettingsLocationKind.GamePassSaves))
             {
-                locs.Append(loc.Name).Append('|').Append(loc.Path).Append('\n');
-                foreach (var slot in GameLayout.SaveSlotFolders(loc.Path))
+                locs.Append(loc.Name).Append('|').Append(loc.Path);
+                if (loc.Kind == SettingsLocationKind.GamePassSaves) locs.Append('|').Append(GamePassMark);
+                locs.Append('\n');
+                foreach (var slot in SaveFolders(loc))
                 {
                     foreach (var file in Directory.GetFiles(slot, "*", SearchOption.AllDirectories))
                     {
@@ -60,6 +65,17 @@ namespace EternalVR.Launcher.Core.Safety
             File.WriteAllText(Path.Combine(dir, SumsFile), sums.ToString());
             return dir;
         }
+
+        /// <summary>The folders backed up from a location: a Steam location's save slots, or the whole Game Pass container folder.</summary>
+        private static IReadOnlyList<string> SaveFolders(SettingsLocation loc)
+        {
+            if (loc.Kind != SettingsLocationKind.GamePassSaves) return GameLayout.SaveSlotFolders(loc.Path);
+            return Directory.Exists(loc.Path) ? new[] { loc.Path } : new string[0];
+        }
+
+        /// <summary>Whether a backup holds Game Pass saves (it is kept as a copy only, <see cref="Restore"/> refuses it).</summary>
+        public static bool HoldsGamePassSaves(string backupDir) =>
+            LocationsOf(backupDir).Any(l => l.Kind == SettingsLocationKind.GamePassSaves);
 
         /// <summary>Rotating backups (not pre-restore ones), newest first.</summary>
         public static IReadOnlyList<string> List(string backupsRoot)
@@ -112,6 +128,8 @@ namespace EternalVR.Launcher.Core.Safety
             if (problems.Count > 0) throw new IOException("backup does not verify: " + string.Join("; ", problems));
 
             var locations = LocationsOf(backupDir);
+            if (locations.Any(l => l.Kind == SettingsLocationKind.GamePassSaves))
+                throw new IOException("the backup holds Game Pass saves, which the launcher keeps as a copy only: " + backupDir);
 
             // Every entry is checked before anything is changed: its location must be listed and its
             // target must stay inside that location.
@@ -152,14 +170,16 @@ namespace EternalVR.Launcher.Core.Safety
             return pre;
         }
 
-        /// <summary>The Steam locations a backup was taken from (its <c>locations.txt</c>).</summary>
+        /// <summary>The locations a backup was taken from (its <c>locations.txt</c>): Steam ones, and a marked Game Pass one.</summary>
         public static IReadOnlyList<SettingsLocation> LocationsOf(string backupDir)
         {
             var locations = new List<SettingsLocation>();
             foreach (var line in File.ReadAllLines(Path.Combine(backupDir, LocationsFile)))
             {
                 var parts = line.Split('|');
-                if (parts.Length >= 2) locations.Add(new SettingsLocation(parts[0], SettingsLocationKind.SteamRemote, parts[1]));
+                if (parts.Length < 2) continue;
+                var kind = parts.Length >= 3 && parts[2] == GamePassMark ? SettingsLocationKind.GamePassSaves : SettingsLocationKind.SteamRemote;
+                locations.Add(new SettingsLocation(parts[0], kind, parts[1]));
             }
             return locations;
         }

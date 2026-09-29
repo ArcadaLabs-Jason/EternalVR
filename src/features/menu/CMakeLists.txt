@@ -4,6 +4,7 @@ evr_add_module(evr_menu
     SOURCES
         enter_tick.cpp
         map_drag.cpp
+        menu_kind.cpp
         panel_follow.cpp
         menu_router.cpp
         panel_pointer.cpp

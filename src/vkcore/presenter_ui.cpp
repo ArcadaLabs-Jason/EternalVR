@@ -47,11 +47,21 @@ void XrPresenter::Impl::startUi() {
     EVR_LOG("ui: HUD %s%s; wrist: %s (facing %.0f/%.0f deg, gaze %.0f/%.0f deg), %.2f m row at (%.3f, %.3f, "
             "%.3f), fade %.2f s %s, abilities %s",
             ui_layer::hudModeName(settings.ui.hud),
-            settings.ui.hud == ui_layer::HudMode::Wrist ? " (corner blocks on the off hand's wrist)" : "",
+            settings.ui.hud == ui_layer::HudMode::Wrist    ? " (corner blocks on the off hand's wrist)"
+            : settings.ui.hud == ui_layer::HudMode::Weapon ? " (ammo above the gun in the weapon hand)"
+                                                           : "",
             w.always ? "always shown" : "shown while facing the head", w.showDegrees, w.hideDegrees,
             w.gazeShowDegrees, w.gazeHideDegrees, w.widthMetres, w.offset.x, w.offset.y, w.offset.z,
             w.fadeInSeconds, wrist.colorScaleBias ? "(colour scale)" : "(no colour scale: switched)",
             w.abilities ? "on" : "off");
+    if (settings.ui.hud == ui_layer::HudMode::Weapon) {
+        const ui_layer::WeaponHudSettings& g = settings.ui.weapon;
+        EVR_LOG("ui: weapon HUD: %s, %.2f m wide at (%.3f, %.3f, %.3f) in the gun's frame, tilted %.0f deg, "
+                "shown while facing the head (%.0f/%.0f deg)",
+                g.vitals ? "ammo, health and armor" : "ammo (health and armor stay on the panel)",
+                g.widthMetres, g.offset.x, g.offset.y, g.offset.z, g.tiltDegrees, g.showDegrees,
+                g.hideDegrees);
+    }
     std::wstring motion;
     if (ui_vulkan::motionCaptureRequested() && readEnv(L"ETERNALVR_CAPTURE_MOTION", motion)) {
         const auto setting = stereo_seq::parseCaptureSetting(motion);

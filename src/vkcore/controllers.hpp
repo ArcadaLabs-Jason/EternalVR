@@ -85,6 +85,10 @@ XrSpace weaponAimSpace();
 // runtime places them at display time, whatever the recenter transform); XR_NULL_HANDLE otherwise.
 XrSpace offHandGripSpace();
 
+// XR worker: the weapon hand's aim space while the controllers are attached, whatever the aim source, for
+// the weapon HUD's quads (placed like the wrist's); XR_NULL_HANDLE otherwise.
+XrSpace weaponHandAimSpace();
+
 // XR worker, while the multiplayer guard is armed (head-tracked mode): installs the game hooks.
 void installGameHooks();
 
@@ -102,10 +106,10 @@ struct WeaponAim {
 
 // Camera hook, once per game frame after the head pose is known: the controllers at the same time, and
 // whether the game forces the view this frame (`player` is the view's object, `cutscene` the game view's
-// cutscene flag). Under hand aim, returns the weapon hand's aim ray for the view's record (the reticle);
-// nullopt otherwise or while the hand is not tracked.
-std::optional<WeaponAim>
-beginGameView(XrTime poseTime, const Pose& headTracking, const std::byte* player, bool cutscene);
+// cutscene flag, `cameraAnimation` a hands animation moving the camera). Under hand aim, returns the weapon
+// hand's aim ray for the view's record (the reticle); nullopt otherwise or while the hand is not tracked.
+std::optional<WeaponAim> beginGameView(
+    XrTime poseTime, const Pose& headTracking, const std::byte* player, bool cutscene, bool cameraAnimation);
 // (headTracking is the head in room space.)
 
 // Camera hook, every game frame: whether a cutscene plays that the player may skip by hand (the layer's
@@ -148,6 +152,10 @@ ArtificialMotion artificialMotion();
 // Camera hook, inside head aim: the angles the view follows. The head's own, or under hand aim the weapon
 // hand's ray; nullopt when hand aim yields this frame (forced view) and nothing may be written.
 std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head);
+
+// The same angles whatever the game's view is doing: the head's, or under hand aim the weapon hand's ray.
+// For a piloted demon (demon_aim.cpp), whose update runs through a forced view every tick.
+xr_math::IdAngles aimAnglesUnforced(const xr_math::IdAngles& head);
 
 // Camera hook, after the view is written: the weapon hand's pose in the world for the viewmodel and the
 // shots, and the weapon FOV. `eye` is the game's view origin before the head's offset was added.

@@ -16,6 +16,8 @@ namespace EternalVR.Launcher
     {
         private readonly ToolTip tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400, ReshowDelay = 100 };
         private readonly List<SettingRow> rows = new List<SettingRow>();
+        /// <summary>Controls with a tooltip of their own inside a row (a processor saver item's checkbox), kept over the row's.</summary>
+        private readonly Dictionary<Control, string> ownTips = new Dictionary<Control, string>();
         /// <summary>True while the controls are filled from the settings: their change events save nothing.</summary>
         private bool loading;
 
@@ -26,19 +28,23 @@ namespace EternalVR.Launcher
             public Control Control;
             public Action<LauncherSettings> Load;
             public Action<LauncherSettings> Read;
+            /// <summary>The row's label and tooltip when they are not the setting's own (a processor saver item's, from its data file).</summary>
+            public SettingTexts.Text Text;
             /// <summary>The checks run again after a change (the runtime, the mode, the arguments).</summary>
             public bool Preflight;
         }
 
-        private SettingRow Row(Setting id, Control control, Action<LauncherSettings> load, Action<LauncherSettings> read, bool preflight = false)
+        private SettingRow Row(Setting id, Control control, Action<LauncherSettings> load, Action<LauncherSettings> read, bool preflight = false,
+            SettingTexts.Text text = null)
         {
-            control.AccessibleName = SettingTexts.For(id).Label;
+            var label = (text ?? SettingTexts.For(id)).Label;
+            control.AccessibleName = label;
             // In a flow panel: a table row keeps a list's first height (FitListHeights).
             if (control is ComboBox) control = WithUnit(control, null);
             var row = new SettingRow
             {
-                Id = id, Control = control, Load = load, Read = read, Preflight = preflight,
-                Label = new Label { Text = SettingTexts.For(id).Label, AutoSize = true, Anchor = AnchorStyles.Left },
+                Id = id, Control = control, Load = load, Read = read, Preflight = preflight, Text = text,
+                Label = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left },
             };
             // Label and control both centred in the row's height.
             control.Anchor = AnchorStyles.Left;
@@ -90,6 +96,7 @@ namespace EternalVR.Launcher
         {
             if (loading) return;
             SaveSettings();
+            MarkProfileChanged();
             UpdateRules();
             if (preflight && row.Preflight) RunPreflight();
         }
@@ -166,13 +173,6 @@ namespace EternalVR.Launcher
             {
                 ctx.Log.Error("saving settings failed: " + e.Message);
             }
-            // The active player's own copy (MainForm.Profiles.cs).
-            if (ctx.Settings.Profile.Length == 0) return;
-            try { Profiles.Save(ctx.Settings.Profile, ctx.Settings); }
-            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException)
-            {
-                ctx.Log.Error("saving player profile '" + ctx.Settings.Profile + "' failed: " + e.Message);
-            }
         }
 
         /// <summary>Greys out the rows that do not apply and puts the reason first in their tooltip.</summary>
@@ -181,7 +181,7 @@ namespace EternalVR.Launcher
             foreach (var r in rows)
             {
                 var why = SettingRules.WhyNot(r.Id, ctx.Settings);
-                var tip = Wrap(SettingTexts.For(r.Id).Tooltip);
+                var tip = Wrap((r.Text ?? SettingTexts.For(r.Id)).Tooltip);
                 r.Control.Enabled = why == null;
                 r.Label.ForeColor = why == null ? SystemColors.ControlText : SystemColors.GrayText;
                 tips.SetToolTip(r.Label, why == null ? tip : Wrap(why) + Environment.NewLine + Environment.NewLine + tip);
@@ -192,7 +192,7 @@ namespace EternalVR.Launcher
 
         private void SetTip(Control c, string tip)
         {
-            tips.SetToolTip(c, tip);
+            tips.SetToolTip(c, ownTips.TryGetValue(c, out var own) ? own : tip);
             if (c is FlowLayoutPanel) foreach (Control child in c.Controls) SetTip(child, tip);
         }
 
@@ -228,6 +228,7 @@ namespace EternalVR.Launcher
             ctx.Settings = ctx.Settings.WithDefaults();
             LoadSettingsIntoControls();
             SaveSettings();
+            MarkProfileChanged();
             ctx.Log.Info("settings reset to the defaults (folders and runtime kept)");
             RunPreflight();
         }

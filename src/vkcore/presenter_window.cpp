@@ -24,6 +24,10 @@ namespace {
 // At most this many images handed back late: a later present then reaches the window as usual, so the game
 // never runs out of images to acquire.
 constexpr std::size_t kMaxHeldImages = 2;
+// The display's refresh rate is read this often by the XR worker. EnumDisplaySettingsW can take long (it
+// asks the display driver), so it stays off the game's present path and out from under the presenter's
+// lock; a rate change on the desktop is rare, and seen within this time.
+constexpr ULONGLONG kRefreshQueryMs = 3000;
 
 } // namespace
 
@@ -44,8 +48,8 @@ bool XrPresenter::Impl::decideWindow(const VkPresentInfoKHR* info, stereo_seq::P
         !mp_guard::allowsGameTouch()) {
         return true;
     }
-    const bool toWindow =
-        windowPresents.present(qpcSeconds(qpcNow()), displayRefresh(), kind, settings.mirror);
+    const bool toWindow = windowPresents.present(
+        qpcSeconds(qpcNow()), windowRefreshHz.load(std::memory_order_relaxed), kind, settings.mirror);
     windowHold = !toWindow;
     return toWindow;
 }
@@ -90,10 +94,10 @@ void XrPresenter::Impl::dropHeldImages(VkSwapchainKHR swapchain) {
                      heldImages.end());
 }
 
-double XrPresenter::Impl::displayRefresh() {
+void XrPresenter::Impl::refreshDisplayRate() {
     const ULONGLONG now = GetTickCount64();
-    if (now - lastRefreshTicks < 1000) {
-        return windowRefreshHz;
+    if (lastRefreshTicks != 0 && now - lastRefreshTicks < kRefreshQueryMs) {
+        return;
     }
     lastRefreshTicks = now;
     const HWND window = gameWindow();
@@ -104,11 +108,10 @@ double XrPresenter::Impl::displayRefresh() {
     mode.dmSize = sizeof(mode);
     if (monitor && GetMonitorInfoW(monitor, &info) &&
         EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) && mode.dmDisplayFrequency > 1) {
-        windowRefreshHz = static_cast<double>(mode.dmDisplayFrequency);
+        windowRefreshHz.store(static_cast<double>(mode.dmDisplayFrequency), std::memory_order_relaxed);
     } else {
-        windowRefreshHz = 0.0; // unknown: the gate assumes 60 Hz
+        windowRefreshHz.store(0.0, std::memory_order_relaxed); // unknown: the gate assumes 60 Hz
     }
-    return windowRefreshHz;
 }
 
 void XrPresenter::Impl::logWindowStats() {
@@ -131,9 +134,9 @@ void XrPresenter::Impl::logWindowStats() {
         "back; display %.0f Hz; %llu handed back, %llu failed, %zu held, in total",
         static_cast<unsigned long long>(c.presented - lastWindowCounters.presented),
         static_cast<unsigned long long>(c.otherEye - lastWindowCounters.otherEye),
-        static_cast<unsigned long long>(c.tooSoon - lastWindowCounters.tooSoon), windowRefreshHz,
-        static_cast<unsigned long long>(imagesHandedBack), static_cast<unsigned long long>(handBackFailures),
-        heldImages.size());
+        static_cast<unsigned long long>(c.tooSoon - lastWindowCounters.tooSoon),
+        windowRefreshHz.load(std::memory_order_relaxed), static_cast<unsigned long long>(imagesHandedBack),
+        static_cast<unsigned long long>(handBackFailures), heldImages.size());
     lastWindowCounters = c;
 }
 

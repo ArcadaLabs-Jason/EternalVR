@@ -1,5 +1,6 @@
 #include "vkcore/player_aim.hpp"
 
+#include "vkcore/game_build.hpp"
 #include "vkcore/log.hpp"
 
 #include <windows.h>
@@ -10,8 +11,6 @@ namespace evr::vkcore {
 
 namespace {
 
-constexpr DWORD kKnownTimestamp = 0x6A7B9B8C; // Steam build 25216728
-constexpr std::uintptr_t kPlayerVtableRva = 0x2DB5698;
 constexpr std::size_t kPhysics = 0x8A50;
 constexpr std::size_t kCommandAngles = kPhysics + 0x3DE0 + 0x1C;
 constexpr std::size_t kViewAngles = kPhysics + 0x3F10;
@@ -28,17 +27,15 @@ xr_math::IdAngles readAngles(const std::byte* at) {
 
 bool PlayerAim::init() {
     const auto* module = reinterpret_cast<const std::byte*>(GetModuleHandleW(nullptr));
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(module + dos->e_lfanew);
-    if (nt->FileHeader.TimeDateStamp != kKnownTimestamp) {
-        EVR_LOG("aim: game build timestamp 0x%08lx is not the one the player layout was read from (0x%08lx); "
-                "head "
-                "aim off",
-                static_cast<unsigned long>(nt->FileHeader.TimeDateStamp),
-                static_cast<unsigned long>(kKnownTimestamp));
+    const GameBuild* build = currentGameBuild();
+    if (!build) {
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(module + dos->e_lfanew);
+        EVR_LOG("aim: game build timestamp 0x%08lx is not one the player layout was read from; head aim off",
+                static_cast<unsigned long>(nt->FileHeader.TimeDateStamp));
         return false;
     }
-    playerVtable_ = module + kPlayerVtableRva;
+    playerVtable_ = module + build->playerVtable;
     available_ = true;
     return true;
 }

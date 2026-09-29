@@ -256,6 +256,21 @@ evaluation.
 - **No render view overlap.** A wait for the previous frame's render-view job before the next chain
   rewrites the view never waited in any run, and each frame's eye tag always matched the side of its
   latched projection (`tag eye vs latched projection side`: 0 mismatches), so the wait was removed.
+- **Which counter finds a render's tag.** The render counter the render-view job reads (0x1CBB2D0,
+  `[[renderSystem + 0xF58] + 0xB0]` with the render system at 0x66E2C30) is the backend frame counter
+  itself: 0x66E2C30 + 0xF58 is the backend pointer 0x66E3B88 whose + 0xB0 the render thread's swap
+  increments. So the tag in flight, read in a job of the backend frame, is the tag of the counter the engine
+  read, unless the swap came in between. Code that has the engine's own read at hand looks the tag up by it
+  (`seqTagForBackendFrame(counter + 1)`): the object ring (the counter in rax), the exposure hook (the
+  post-process context + 0x148, stored at 0x1C570D2) and the scattering setup (its context + 0x10, stored
+  at 0x1C568FC). The last two count every 10 s the renders whose tag in flight names another eye
+  (`seq-taa: ... exposure renders whose tag in flight names another eye N`, `seq-scatter: ... N render(s)
+  whose tag in flight names another eye`). The selectors (the engine's selector reads the same memory), the
+  world GUI check (backend draw jobs, no counter at hand) and the DLSS evaluation (the AA pass) keep the tag
+  in flight. Before the change, the ring traces (two rig runs and one headset run, 1,800 events) had the
+  two lookups name the same eye at every ring site, the selector check had no cross-eye pick in 2,112
+  windows of 10 s, and the world GUI counts had no eye L draw one behind and no eye R draw current in 767.
+  [static-verified; live-verified]
 - **The player's profile overrides the command line at run time** (the owner's `r_antialiasing 1`, `r_dof`,
   `r_SSR`). Per-eye TAA checks its cvars on every stereo tick and writes only what differs; it reports itself
   to `runtime_cvars::setStereoTemporal(PerEye)`, so the layer's run-time v1 hold stands down. TAA safe mode

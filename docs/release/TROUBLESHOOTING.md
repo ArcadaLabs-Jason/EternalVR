@@ -66,12 +66,13 @@ warning does not.
 | Message | What to do |
 |---|---|
 | Running as administrator | Start the launcher normally, not "as administrator". |
-| Steam is not running / no user is logged in | Start Steam and log in, then **Check**. |
+| Steam is not running / no user is logged in | Start Steam and log in, then **Check**. (Steam version only; the Game Pass version does not need Steam.) |
 | Already running: DOOMEternalx64vk ... | Quit the game (and id's launcher if it is open) first. |
 | The previous VR session's settings restore has not completed | The game from the last session is still running. Quit it; the restore then runs. |
 | The data folder cannot be written | Something blocks `%LOCALAPPDATA%\EternalVR` (permissions, antivirus). |
 | The launcher is inside Program Files | Warning only. Moving the folder elsewhere is recommended. |
-| DOOM Eternal was not found in the Steam libraries | Click **Choose folder...** and pick the folder that holds `DOOMEternalx64vk.exe`. |
+| DOOM Eternal was not found in the Steam libraries or the Game Pass folders | Click **Choose folder...** and pick the folder that holds `DOOMEternalx64vk.exe` (for Game Pass, its `Content` folder). |
+| ... is not the Content folder of the Game Pass DOOM Eternal | Choose the `Content` folder of the game, usually `XboxGames\Doom Eternal - PC\Content` on the drive it is installed on. |
 | Unknown game build | Your game is a different build from the one this alpha was made for. It may still work: the mod switches off what it cannot find. Please tell me your build. |
 | Anti-cheat components found in the game folder | VR is refused. The retail Steam game has none; something was added to the game folder. |
 | The EternalVR layer is incomplete | The `layer` folder next to the launcher is missing a file. Unzip again, keeping the folders. |
@@ -107,6 +108,32 @@ the headset's render size during the session and the graphics card ran out of me
 cards). Connect the headset before launching so the game starts at that size, and lower "Resolution" (Play tab)
 if it still happens.
 
+**Short freezes (about a second) now and then.** Send an Export report and say roughly when they
+happened. The mod's log has a `stall:` line for each of the first 30 freezes during play: how long the game
+went without a new frame, and what took the time meanwhile (the mod's own work, the game creating shaders
+or allocating video memory). Every 10 s a `vram:` line shows how much video memory the game uses against
+what Windows allows it; past 100% Windows moves memory out and back, which stutters (lower "Resolution" on
+the Play tab, or close other programs that use the graphics card).
+
+**What frame rate am I really getting?** EternalVR hands your headset a frame at the headset's own rate (90 or
+120 a second, say). When the game has not finished a new pair of eye images yet, the newest pair is shown again,
+turned to follow your head, so looking around stays smooth, but moving things only update as often as the game
+draws. Headset overlays count this differently: some count every frame handed over (then they always show the
+headset's rate), others only frames with a new image, which is close to the real rate. The real number is in the
+mod's log: every 10 s a `rates:` line says how many `stereo pair(s)/s` the game drew and how many `frame(s)/s` went
+to the headset. After a session the launcher's status line sums it up ("In play the game drew about ... new frames
+a second"). If that is well below your headset's rate, see the next entry, or lower "Resolution" on the Play tab if
+your graphics card is the limit.
+
+**The frame rate is low and lowering "Resolution" does not help.** Your processor, not your graphics card,
+is probably what holds the game back. Check that "Texture streaming: Only what you see" on the Play tab is on
+(it is by default), then try the "Processor saver" checkboxes on the Play tab: each turns down one detail
+setting that costs processor time, and its tooltip says how much it gained on the test rig and what it costs
+in the picture. If that is not enough, try "Alternate eyes" on the Advanced tab: it draws one eye per frame
+instead of both, which roughly halves the processor's work per frame. Each eye then updates at half the
+rate, so fast motion can look doubled; see `KNOWN-ISSUES.md`. "Auto" does it only while the processor
+cannot keep up. Turn it off again if you do not like it.
+
 **Everything is blurry.** See "Render resolution" in `KNOWN-ISSUES.md`.
 
 **The view is turned or at the wrong height.** Face forward and hold both sticks pressed for 2 seconds
@@ -130,7 +157,9 @@ off):
 **Saves.** A copy of your save slots is taken before every VR launch (the last five). To put one back,
 quit the game, keep Steam running, and click **Restore saves...** in the launcher. It backs up your
 current saves first, restores the chosen backup and checks it with Steam's cloud record. If it then says
-the cloud record is still stale, start the game once through Steam and quit at the main menu.
+the cloud record is still stale, start the game once through Steam and quit at the main menu. For the Game
+Pass version the backup is a copy of the game's save containers only: the launcher does not write it back
+(Windows syncs those saves with the Xbox cloud), and **Restore saves...** says where the copy is.
 
 ## The game started flat, or VR switched off
 

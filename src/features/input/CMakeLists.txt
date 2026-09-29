@@ -2,6 +2,7 @@ evr_add_module(evr_input
     SOURCES
         aim_smoothing.cpp
         analog_button.cpp
+        arm_gestures.cpp
         binding_compiler.cpp
         binding_keys.cpp
         binding_overrides.cpp
@@ -30,6 +31,7 @@ evr_add_module(evr_input
         usercmd_injection.cpp
         usercmd_motion.cpp
         virtual_gamepad.cpp
+        wheel_hand.cpp
         wheel_mouse.cpp
         xr_action_set.cpp
     DEPENDS

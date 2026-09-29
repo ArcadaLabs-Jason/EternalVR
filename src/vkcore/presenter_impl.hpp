@@ -16,7 +16,6 @@
 #include "features/menu/panel_follow.hpp"
 #include "features/menu/panel_pointer.hpp"
 #include "stereo_seq/centered_matrix.hpp"
-#include "stereo_seq/eye_pairing.hpp"
 #include "ui_layer/gui_target.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/backdrop_probe.hpp"
@@ -26,6 +25,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/motion_capture.hpp"
 #include "vkcore/player_aim.hpp"
+#include "vkcore/presenter_alt.hpp"
 #include "vkcore/presenter_fade.hpp"
 #include "vkcore/presenter_mirror.hpp"
 #include "vkcore/presenter_stereo.hpp"
@@ -321,6 +321,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::atomic<bool> seqActive{false}; // the Route S hooks are installed: two-eye ring, pairing
     // Present hook, under `mutex`:
     stereo_seq::EyePairing pairing;
+    AltPresentState alt; // ETERNALVR_ALTERNATE_EYES instead of `pairing` (presenter_alt.cpp)
     std::uint32_t pendingSlot = kRingSize; // slot holding the left half of the pending pair
     std::uint64_t pairsWithoutRecord = 0;
     EyeCapture capture;
@@ -482,8 +483,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::vector<HeldImage> heldImages;
     std::uint64_t imagesHandedBack = 0;
     std::uint64_t handBackFailures = 0;
-    double windowRefreshHz = 0.0;
-    ULONGLONG lastRefreshTicks = 0;
+    std::atomic<double> windowRefreshHz{0.0}; // written by the worker (refreshDisplayRate), read by the gate
+    ULONGLONG lastRefreshTicks = 0;           // worker only
     ULONGLONG lastWindowStatsTicks = 0;
     stereo_seq::WindowPresentGate::Counters lastWindowCounters;
     // Whether this present reaches the window (sets windowHold); true whenever gating is off.
@@ -494,7 +495,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     void holdImage(VkSwapchainKHR swapchain, std::uint32_t image, std::uint64_t value);
     void handBackImages(std::uint64_t completed);
     void dropHeldImages(VkSwapchainKHR swapchain);
-    double displayRefresh();
+    void refreshDisplayRate(); // worker loop, every few seconds: windowRefreshHz, never on the present hook
     void logWindowStats();
     // Worker, every 10 s while the render size is on (virtual_client.hpp): its size and counters.
     std::uint64_t lastSizeAnswers = 0;

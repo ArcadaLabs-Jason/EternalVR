@@ -286,6 +286,9 @@ void XrPresenter::Impl::recreateRing() {
         if (pairing.pending()) {
             pairing.leftNotStored();
         }
+        if (alt.pairing.holding()) {
+            alt.pairing.carryNotStored(); // alternate eyes: the held image went with the old ring
+        }
         pendingSlot = kRingSize;
         capture.cancel();
         gameExtent = extent;

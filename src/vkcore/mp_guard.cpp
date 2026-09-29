@@ -4,6 +4,7 @@
 
 #include "vkcore/mp_guard.hpp"
 
+#include "vkcore/game_build.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -29,7 +30,6 @@ using mp_policy::Signal;
 constexpr const char* kTag = "mp guard";
 
 // The main-menu screen ids (mainMenuElementID_t) were read from this build's type info.
-constexpr std::uint32_t kKnownTimestamp = 0x6A7B9B8C; // Steam build 25216728
 
 // idMainMenu::menu and the idMenu screen fields (type info of the same build).
 constexpr std::size_t kMainMenuSize = 0xD80;
@@ -137,6 +137,14 @@ void onSteamLobbyJoin(const HookRegisters&) {
 
 void onSteamRichPresenceJoin(const HookRegisters&) {
     tripWith(Signal::SteamRichPresenceJoin, "GameRichPresenceJoinRequested_t");
+}
+
+void onXboxInviteEvent(const HookRegisters&) {
+    tripWith(Signal::XboxInviteEvent, "the GDK invite callback");
+}
+
+void onXboxInviteDecoded(const HookRegisters&) {
+    tripWith(Signal::XboxInviteDecoded, "DecodeInvitationEvent");
 }
 
 void onInviteConsumed(const HookRegisters&) {
@@ -265,6 +273,56 @@ bool installSteamJoin(const GameImage& image) {
     return lobbyHooked && richHooked;
 }
 
+// Game Pass (analysis/gamepass/xbox-join.md): there is no Steam code; an Xbox invite accept or friend join
+// reaches the game through the GDK invite callback that idFirstPartyPlatformLocalXboxlive::Initialize
+// registers (GP RVA 0x1E56370, found through its registration site and the failure string next to it),
+// then idXboxliveOnlineSessionInviteProvider::DecodeInvitationEvent (GP RVA 0x1BFB020, found through its
+// "Activation missing 'handle'" string). Both are hooked, like the two Steam join handlers.
+bool installXboxJoin(const GameImage& image) {
+    constexpr const char* kName = "Xbox joins";
+    const std::byte* site =
+        findUnique(image, kTag, "Xbox invite registration",
+                   "4C 8D 4F 28 33 D2 4C 8D 05 ?? ?? ?? ?? 33 C9 E8 ?? ?? ?? ?? 85 C0 79 0E 8B "
+                   "D0 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ??");
+    if (!site) {
+        return false;
+    }
+    if (stringAt(image, ripTarget(image, site + 29, site + 33)) !=
+        "idFirstPartyPlatformLocalXboxlive::Initialize - Failed to register for invites: 0x%lX") {
+        return fail(kName, "the registration is not idFirstPartyPlatformLocalXboxlive's invite registration");
+    }
+    const std::byte* callback = ripTarget(image, site + 9, site + 13);
+    if (!matchesAt(
+            image, callback,
+            "40 53 48 83 EC 30 48 8B DA C7 44 24 20 FF FF FF FF 48 8B CB 48 8D 15 ?? ?? ?? ?? 45 33 C9 41 B0 "
+            "01 E8 ?? ?? ?? ??") ||
+        stringAt(image, ripTarget(image, callback + 23, callback + 27)) != "://") {
+        return fail(kName, "the invite callback does not parse the invite URI");
+    }
+    const std::byte* decode =
+        findUnique(image, kTag, "Xbox DecodeInvitationEvent",
+                   "85 D2 0F 85 ?? ?? ?? ?? 4C 8B DC 55 49 8D AB 48 FF FF FF 48 81 EC B0 01 00 00");
+    if (!decode) {
+        return false;
+    }
+    // The decode function logs this when the activation has no handle.
+    bool handleString = false;
+    for (const std::byte* p = decode; p && image.inText(p, 7) && p < decode + 0x400 && !handleString; ++p) {
+        handleString = p[0] == std::byte{0x48} && p[1] == std::byte{0x8D} &&
+                       (std::to_integer<int>(p[2]) & 0xC7) == 0x05 &&
+                       stringAt(image, ripTarget(image, p + 3, p + 7)).find("Activation missing 'handle'") !=
+                           std::string_view::npos;
+    }
+    if (!handleString) {
+        return fail(kName, "DecodeInvitationEvent does not check the activation's handle");
+    }
+    // Both hooks are attempted so the log names every failure. The decode hook goes after its first
+    // instruction (a jne rel32 on the event type), where every invitation event passes.
+    const bool eventHooked = hookAt(image, "Xbox invite callback", callback, &onXboxInviteEvent);
+    const bool decodeHooked = hookAt(image, "Xbox invite decode", decode + 8, &onXboxInviteDecoded);
+    return eventHooked && decodeHooked;
+}
+
 // idOnlineSessionInviteManager::ConsumeInvite (RVA 0x1A2C7A0), found through its log string; its
 // prologue is shared with another function, so the string is the anchor.
 bool installInviteConsumed(const GameImage& image) {
@@ -337,8 +395,9 @@ bool installBattleArenaSession(const GameImage& image) {
 // idMenu::Update (RVA 0x11CBD2C; hooked at RVA 0x11CBD3E, before activeScreen takes nextScreen).
 bool installMainMenu(const GameImage& image) {
     constexpr const char* kName = "main menu";
-    if (image.timestamp != kKnownTimestamp) {
-        return fail(kName, "the screen ids are from build 25216728 and this exe is another build");
+    if (!findGameBuild(image.timestamp)) {
+        return fail(
+            kName, "the screen ids are from the known builds (game_build.hpp) and this exe is another build");
     }
     const std::byte* getter =
         findUnique(image, kTag, "main menu getter",
@@ -414,25 +473,28 @@ GuardState install() {
         }
         // Every point is attempted (no short-circuit) so the log names every failure.
         const bool mapLoad = installMapLoad(image);
-        const bool steam = installSteamJoin(image);
+        // The platform's join detection: Steam's join callbacks, or on Game Pass the Xbox invite path.
+        const GameBuild* build = findGameBuild(image.timestamp);
+        const bool xbox = build && build->kind == GameBuildKind::GamePass;
+        const bool steam = xbox ? installXboxJoin(image) : installSteamJoin(image);
         const bool invite = installInviteConsumed(image);
         const bool lobby = installLobbySession(image);
         const bool session = installBattleArenaSession(image);
         const bool menu = installMainMenu(image);
         const bool all = mapLoad && steam && invite && lobby && session && menu;
-        EVR_LOG(
-            "%s: map load %s, Steam joins %s, invites %s, lobby session %s, game session %s, main menu %s",
-            kTag, mapLoad ? "ok" : "MISSING", steam ? "ok" : "MISSING", invite ? "ok" : "MISSING",
-            lobby ? "ok" : "MISSING", session ? "ok" : "MISSING", menu ? "ok" : "MISSING");
+        EVR_LOG("%s: map load %s, %s joins %s, invites %s, lobby session %s, game session %s, main menu %s",
+                kTag, mapLoad ? "ok" : "MISSING", xbox ? "Xbox" : "Steam", steam ? "ok" : "MISSING",
+                invite ? "ok" : "MISSING", lobby ? "ok" : "MISSING", session ? "ok" : "MISSING",
+                menu ? "ok" : "MISSING");
         if (!all) {
             g_latch.refuse();
             EVR_LOG("%s: REFUSED: a detection point is missing, so online play could not be detected; camera "
                     "writes, head aim and key injection stay off",
                     kTag);
             status::flat(
-                image.timestamp != kKnownTimestamp
-                    ? "this DOOM Eternal version is not the one this EternalVR supports (Steam build "
-                      "25216728); VR stays off until an EternalVR update"
+                !findGameBuild(image.timestamp)
+                    ? "this DOOM Eternal version is not one this EternalVR supports (Steam build 25216728 or "
+                      "Game Pass 1.0.56.0); VR stays off until an EternalVR update"
                     : "the mod could not find everything it needs in the game; VR stays off");
             return;
         }

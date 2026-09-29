@@ -14,6 +14,15 @@
 //   ETERNALVR_HANDEDNESS     right / left / left_mirror
 //   ETERNALVR_DOSSIER        hold / tap         X hold opens the Dossier and a tap switches equipment
 //                                               (hold), or the other way round (tap); dossier_press.hpp
+//   ETERNALVR_WHEEL_SELECT   stick / hand       what points at the weapon wheel: the stick that holds it
+//                                               (stick), or the weapon hand (hand); wheel_hand.hpp
+//   ETERNALVR_WHEEL_HAND_DEGREES  5 to 45       the hand's turn that reaches the wheel's rim (20)
+//   ETERNALVR_THROW          1 / 0              wind up the off hand beside the head and throw: the equipment
+//                                               launcher (off by default; arm_gestures.hpp)
+//   ETERNALVR_THROW_SPEED    1 to 5             the throw's forward speed, metres per second (2)
+//   ETERNALVR_SWING          1 / 0              raise the weapon hand above the head and swing it down: the
+//                                               Crucible (off by default; arm_gestures.hpp)
+//   ETERNALVR_SWING_SPEED    1 to 5             the swing's downward speed, metres per second (2.5)
 //   ETERNALVR_XINPUT         auto / 1 / 0       the virtual gamepad: only when the user-command hooks
 //                                               cannot be installed (auto), instead of them (1), never (0)
 //   ETERNALVR_SHOT_ORIGIN    hand / eye         where shots start under hand aim
@@ -43,11 +52,13 @@
 //   ETERNALVR_OFFHAND_TRACE  1 / 0              log the left-arm signals when they change
 
 #include "features/input/aim_smoothing.hpp"
+#include "features/input/arm_gestures.hpp"
 #include "features/input/dossier_press.hpp"
 #include "features/input/haptics_policy.hpp"
 #include "features/input/locomotion_direction.hpp"
 #include "features/input/offhand_policy.hpp"
 #include "features/input/turn_policy.hpp"
+#include "features/input/wheel_hand.hpp"
 #include "game/eternal/quest_touch_bindings.hpp"
 #include "game/eternal/weapon_offsets.hpp"
 
@@ -107,6 +118,10 @@ struct ControllerSettings {
     TurnSettings turn;
     game::Handedness handedness = game::Handedness::Right;
     DossierPress dossier = DossierPress::Hold;
+    WheelSelect wheelSelect = WheelSelect::Stick;
+    float wheelHandDegrees = kDefaultWheelHandDegrees;
+    ThrowSettings throwGesture; // arm_gestures.hpp
+    SwingSettings swing;
     InputPath path = InputPath::Auto;
     ShotOrigin shotOrigin = ShotOrigin::Hand;
     float aimSmoothing = kDefaultAimSmoothing; // aim_smoothing.hpp

@@ -10,10 +10,17 @@
 // - Route S, whatever the temporal mode: the window and present set (stereo_seq::stereoWindowCvars:
 //   r_fullscreen 0, r_swapInterval 0, the command line's r_windowWidth / r_windowHeight), so a load path
 //   that applies the player's video mode cannot take the eyes to the display's size.
-// - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value.
+// - ETERNALVR_CPU_SAVER="name=value;name=value": the launcher's processor saver (launcher/data/cpu-saver.txt,
+//   docs/rig-findings/perf-cpu-cvars.md), cvars that cut the CPU work of each render. A cvar the sets above
+//   hold keeps their value. Unset, empty or "0": nothing.
+// - A value "<=N" (in either list) is a cap: written only while the cvar's float value is above N, so a
+//   player on a lower quality level keeps the game's value.
+// - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
+//   replaces the processor saver's value for the same cvar.
 //
-// A value the game puts back is written again; every write and the value read back are logged (the first
-// ones; later ones are counted). Only while the multiplayer guard allows touching the game.
+// A value the game puts back is written again; each cvar's first write and the value read back are logged,
+// then the first 12 later writes; the rest are counted. Only while the multiplayer guard allows touching the
+// game.
 
 #include "stereo_seq/seq_settings.hpp"
 

@@ -1,13 +1,14 @@
-# The wrist HUD and the free off hand (M6, T-077)
+# The wrist HUD, the weapon HUD and the free off hand (M6, T-077)
 
 Builds on the UI layer (`docs/rig-findings/ui-layer.md`), the render size (`docs/rig-findings/render-size.md`)
 and the motion controllers (`docs/VR_CONTROLLERS.md`). The owner's request (D-035): a HUD read by looking
 at the bottom of the left wrist, with the head-locked HUD kept as an option; and both hands
 moving freely.
 
-**Status.** Built and unit-tested; **not yet run in the game or a headset**. Both are opt-in until the live
-checks below pass: the head-locked panel stays the default HUD and the wrist is one setting away
-(`ETERNALVR_HUD=wrist`, or the launcher's Advanced tab); the free off hand needs `ETERNALVR_OFFHAND=free`.
+**Status.** Built and unit-tested; **not yet run in the game or a headset**. All are opt-in until the live
+checks below pass: the head-locked panel stays the default HUD and the wrist or the weapon is one setting
+away (`ETERNALVR_HUD=wrist` or `weapon`, or the launcher's Advanced tab); the free off hand needs
+`ETERNALVR_OFFHAND=free`.
 
 ## The wrist HUD
 
@@ -59,6 +60,58 @@ XR worker, every XR frame (presenter_wrist.cpp)
   head-locked quad as in panel mode (logged once). Loading screens and menus are unchanged.
 - **Head-locked HUD.** `ETERNALVR_HUD=panel` (the default; launcher: "Health and ammo" = On the HUD panel) is
   the earlier behaviour, unchanged.
+
+## The weapon HUD
+
+The public README's planned "health, armour and ammo on your wrist or weapon": the weapon half, ammo on
+the gun the way a VR shooter shows it, read with a glance at the hand that holds it.
+
+```
+XR worker, every XR frame (presenter_wrist.cpp, the same path as the wrist)
+  UI quad filled as before; weapon mode, no menu panel up (nor held), controllers attached?
+    head-locked pieces: the band minus the bottom-right corner (ammo block); with
+      ETERNALVR_WEAPON_HUD_VITALS=1 minus both corners, as on the wrist
+    the gun's frame: the weapon hand's grip position with its aim orientation (the viewmodel's)
+    facing test: the panel's normal and the head (controller snapshot, room space)
+      facing angle <= 60 deg -> shown; > 75 deg -> hidden (no gaze test)
+    shown (or fading): one quad (two with the vitals) in the weapon hand's aim space
+```
+
+- **What moves to the gun.** The HUD's bottom-right block: the ammo count, the equipment (grenade, its
+  cooldown) and the flame belch, cropped from the GUI target exactly as the wrist does (`hud_regions.hpp`).
+  Health and armor stay on the head-locked quad unless `ETERNALVR_WEAPON_HUD_VITALS=1`, which puts the
+  bottom-left block beside the ammo at the same scale (on the image's left, as on screen). The ability rings
+  stay head-locked. Everything else on the GUI target is as in wrist mode.
+- **Where the panel is** (`ui_layer/weapon_hud.hpp`). The viewmodel hook (`vkcore/viewmodel_hook.cpp`) puts
+  the gun at the weapon hand's grip position, turned to its aim ray, plus the held weapon's offset. The
+  panel uses the same frame without the per-weapon offset: 7 cm above the grip and 5 cm behind it (over the
+  back of the hand, where the rear of the gun is), 10 cm wide (the ammo block is then about 5.7 cm tall),
+  its face turned 45 degrees from straight back along the barrel toward straight up, so with the gun held
+  at the chest it looks at the eyes from below and in front (about 26 degrees off). The line from the eye
+  to the aim dot passes about 30 cm above a hand held at the chest, so the panel stays below it; raising the
+  gun to the eye brings the panel into view, like a sight. `ETERNALVR_WEAPON_HUD_OFFSET` (x, y, z in the
+  right hand's gun frame: +X right, +Y up, +Z back toward the player; x mirrored for the left hand),
+  `_WIDTH` and `_TILT` tune it; one offset for every weapon for now.
+- **How it follows the hand.** The quads are submitted in the weapon hand's OpenXR aim space
+  (`controllers::weaponHandAimSpace`, whatever the aim source), so the runtime places them at display time
+  and a recenter does not move them. The grip's position in that space is the controller's own fixed
+  offset, taken from each controller snapshot (both poses located at the same time) and kept while the grip
+  is lost. The gun in the eye images is drawn from the pose the game view was built with and, under hand
+  aim, the smoothed ray (`ETERNALVR_AIM_SMOOTHING`), so in fast swings the panel can lead the gun slightly;
+  it settles as the hand stops.
+- **When it shows.** One angle with 15 degrees of hysteresis: the facing angle between the panel's normal
+  and the direction to the head. Shown at 60 degrees or less, hidden above 75 (`ETERNALVR_WEAPON_HUD_ANGLE`),
+  which hides it when the gun points back across the body or at the player, seen edge-on or from behind.
+  There is no gaze test: like a sight on the gun, it is there whenever it faces the eyes. It fades with the
+  wrist's times (`ETERNALVR_WRIST_FADE`) and is hidden in the same cases: while the game forces the view
+  (glory kills, cutscenes, the meathook pull; the game's own hands animation has the gun then), while a menu
+  is up or its panel is held, and while the weapon hand is not tracked.
+- **Handedness.** It follows the weapon hand: the left controller with `ETERNALVR_HANDEDNESS=left` or
+  `left_mirror`, the x offset mirrored.
+- **Fallbacks.** No controllers, a stale snapshot or no aim space: the whole HUD stays on the head-locked
+  quad (logged once: `ui: weapon HUD: no controllers (or no weapon-hand aim space); the HUD stays on the
+  panel`). With the viewmodel off the gun is the game's, in front of the head, and the panel still follows
+  the controller.
 
 ## The free off hand (ETERNALVR_OFFHAND)
 
@@ -211,7 +264,7 @@ the weapon's grip point), so putting it at the controller did not put the hand t
 
 | Variable | Values (default) | Meaning |
 | --- | --- | --- |
-| `ETERNALVR_HUD` | `panel` / `wrist` (`panel`) | The whole HUD head-locked, or the corner blocks on the wrist |
+| `ETERNALVR_HUD` | `panel` / `wrist` / `weapon` (`panel`) | The whole HUD head-locked, the corner blocks on the wrist, or the ammo block on the gun |
 | `ETERNALVR_WRIST_ALWAYS` | 0 / 1 (0) | Show whenever the hand is tracked, whichever way it turns |
 | `ETERNALVR_WRIST_ANGLE` | 5..90 degrees (40) | Facing angle to show; hidden above it + 15 |
 | `ETERNALVR_WRIST_GAZE` | 5..90 degrees (40) | Gaze angle to show; hidden above it + 15 |
@@ -219,6 +272,11 @@ the weapon's grip point), so putting it at the controller did not put the hand t
 | `ETERNALVR_WRIST_WIDTH` | 0.05..1 m (0.16) | Width of the vitals + weapon row |
 | `ETERNALVR_WRIST_OFFSET` | x,y,z m (0.04,0,0.13) | Row centre in the left grip frame (+X out of the palm, +Y thumb side, +Z to the elbow); x mirrored on the right hand |
 | `ETERNALVR_WRIST_ABILITIES` | 0 / 1 (1) | The ability rings above the row |
+| `ETERNALVR_WEAPON_HUD_OFFSET` | x,y,z m (0,0.07,0.05) | Panel centre in the right hand's gun frame (grip position, aim orientation: +X right, +Y up, +Z back toward the player); x mirrored on the left hand |
+| `ETERNALVR_WEAPON_HUD_WIDTH` | 0.03..0.5 m (0.10) | Width of the ammo block (health and armor at the same scale) |
+| `ETERNALVR_WEAPON_HUD_TILT` | -90..90 degrees (45) | The panel's face: 0 straight back along the barrel, 90 straight up |
+| `ETERNALVR_WEAPON_HUD_ANGLE` | 5..90 degrees (60) | Facing angle to show; hidden above it + 15 |
+| `ETERNALVR_WEAPON_HUD_VITALS` | 0 / 1 (0) | Health and armor on the gun too, beside the ammo |
 | `ETERNALVR_OFFHAND` | `game` / `free` / `probe` (`game`) | Who drives the game's left arm |
 | `ETERNALVR_OFFHAND_OFFSET` | f,l,u[,pitch,yaw,roll] m, deg (-0.08,0.035,0) | The wrist (`LeftHand`) from the off-hand grip, in the grip's forward/left/up, then turned about its axes |
 | `ETERNALVR_OFFHAND_SHOULDER` | `head` / `model` / f,l,u m (`head`: -0.08,0.18,-0.24) | Where the arm's IK starts: fixed to the head (f,l,u from the eyes in the head's yaw frame) or the game's animated shoulder |
@@ -238,9 +296,9 @@ shoulder across the body and filled the lower view; lh1 (after): it comes from t
 scripted poses mirrored (`tmp-vr\rs\lh-drive.sh`), 0 rejected.
 
 The launcher has a row for it on the Advanced tab, in the HUD panel group ("Health and ammo": On the HUD
-panel / On your wrist, default the panel, `hud` in `launcher.ini`); in stereo it always sends `ETERNALVR_HUD`,
-`panel` when the controllers are off, and the row is greyed out without controllers or in mono. The
-off-hand variables are environment only.
+panel / On your wrist / On your weapon, default the panel, `hud` in `launcher.ini`: `panel`, `wrist`,
+`weapon`); in stereo it always sends `ETERNALVR_HUD`, `panel` when the controllers are off, and the row is
+greyed out without controllers or in mono. The tuning and off-hand variables are environment only.
 
 ## Live-test plan
 
@@ -275,19 +333,32 @@ the headset's own recenter), the in-headset capture is the left Menu held + a tr
    cursor goes; a loading screen is unchanged. The low-health red wash stays off the wrist as it does off
    the panel. `ETERNALVR_HUD=panel` (or the launcher row back on the panel) gives back the whole head-locked
    HUD.
-6. **Off hand, probe.** `ETERNALVR_OFFHAND=probe ETERNALVR_OFFHAND_TRACE=1`: expect three `offhand: ... at RVA
+6. **Weapon HUD.** `ETERNALVR_HUD=weapon` (launcher: "Health and ammo" = On your weapon). Start-up:
+   `ui: HUD weapon (ammo above the gun in the weapon hand); ...` and `ui: weapon HUD: ammo (health and armor
+   stay on the panel), 0.10 m wide at (0.000, 0.070, 0.050) in the gun's frame, tilted 45 deg, shown while
+   facing the head (60/75 deg)`. In a level: the bottom-right block is gone from the head-locked HUD and
+   health and armor are still there; with the gun held at the chest `ui: weapon HUD shown for the first time
+   (right hand, facing N deg, gaze 0 deg)` and the ammo sits just above the back of the gun, upright,
+   readable, below the aim dot. Fire until the count changes, throw a grenade, switch weapons: the numbers
+   follow. Point the gun across the body to the left or back at yourself: it fades out; bring it back: it
+   fades in, without flicker at the edge. A glory kill, a cutscene, the pause menu and the Dossier hide it.
+   Judge the place in the headset: `ETERNALVR_WEAPON_HUD_OFFSET` (higher, further back), `_TILT`, `_WIDTH`;
+   note the values that work for the most weapons. Repeat once with `ETERNALVR_HANDEDNESS=left` (the left
+   controller carries it) and once with `ETERNALVR_WEAPON_HUD_VITALS=1` (both corners on the gun, both gone
+   from the head-locked HUD).
+7. **Off hand, probe.** `ETERNALVR_OFFHAND=probe ETERNALVR_OFFHAND_TRACE=1`: expect three `offhand: ... at RVA
    0x...` lines and `offhand: left hand modifier hook at RVA 0x138D903` (or `... differs at +0x..` / `a
    signature did not match exactly once`, each followed by `off hand stays the game's`, which ends the test).
    The left hand should sit 10 cm forward of where the game puts it; `offhand: arm controller (controller)
    ...` lines as the policy changes. If the hand does not move, the attach joint does not drive the arm and
    free mode cannot work this way.
-7. **Off hand, free.** `ETERNALVR_OFFHAND=free ETERNALVR_OFFHAND_TRACE=1`: the left hand follows the left
+8. **Off hand, free.** `ETERNALVR_OFFHAND=free ETERNALVR_OFFHAND_TRACE=1`: the left hand follows the left
    controller, and goes back to the game for a punch, a grenade (left trigger), Flame Belch (left grip), a
    weapon switch and a glory kill (`offhand: arm game (left-arm action)`, `(left-arm animation)`,
    `(forced view)`, `(sync)`). Check the `flags 0x...` values against the actions to confirm the [inferred]
    bits. `N rejected` in the pose lines should stay at 0. Recenter (both sticks 2 s) and check the hand
    still meets the controller.
-8. **Off hand, the arm.** Same settings. At start-up: `offhand: InitJointMods at RVA 0x138B080`, `offhand:
+9. **Off hand, the arm.** Same settings. At start-up: `offhand: InitJointMods at RVA 0x138B080`, `offhand:
    the joint modifier node's SetNum at RVA 0x19A61F0`, `offhand: arm: InitJointMods at RVA 0x138B080
    (AddJointMod 0x138B360, SetNum 0x19A61F0), hooked at RVA 0x138B28D to make room for the layer's joint
    modifiers`, `offhand: arm: animator getter at RVA 0x135EC20, name table at RVA 0x47DDA28; ...`

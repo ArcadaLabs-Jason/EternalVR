@@ -58,7 +58,7 @@ namespace EternalVR.Launcher.Core.Settings
 
         public bool Exists(string name) => NormaliseName(name) is string n && File.Exists(PathOf(n));
 
-        /// <summary>Writes <paramref name="settings"/> as the profile <paramref name="name"/>, without this machine's folders and runtime.</summary>
+        /// <summary>Writes <paramref name="settings"/> as the profile <paramref name="name"/>, without this machine's folders, runtime and DLSS file.</summary>
         public void Save(string name, LauncherSettings settings)
         {
             var n = NormaliseName(name) ?? throw new ArgumentException("not a profile name: " + name, nameof(name));
@@ -66,6 +66,7 @@ namespace EternalVR.Launcher.Core.Settings
             copy.GameDir = string.Empty;
             copy.LayerDir = string.Empty;
             copy.Runtime = LauncherSettings.SystemRuntime;
+            copy.DlssDllPath = string.Empty;
             copy.Profile = string.Empty;
             Directory.CreateDirectory(Dir);
             FileUtil.WriteAllTextAtomic(PathOf(n), copy.Serialize());
@@ -82,6 +83,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.GameDir = current.GameDir;
             s.LayerDir = current.LayerDir;
             s.Runtime = current.Runtime;
+            s.DlssDllPath = current.DlssDllPath;
             s.Profile = n;
             return s;
         }

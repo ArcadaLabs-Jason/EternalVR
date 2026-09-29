@@ -169,6 +169,44 @@ TEST_CASE("the Dossier press is hold or tap; anything else keeps hold") {
     CHECK(bad.settings.dossier == evr::input::DossierPress::Hold);
 }
 
+TEST_CASE("the weapon wheel is pointed at with the stick unless hand is chosen") {
+    using evr::input::WheelSelect;
+    CHECK(parse({}).settings.wheelSelect == WheelSelect::Stick);
+    CHECK(parse({}).settings.wheelHandDegrees == evr::input::kDefaultWheelHandDegrees);
+    const auto hand = parse({{"ETERNALVR_WHEEL_SELECT", " Hand "}, {"ETERNALVR_WHEEL_HAND_DEGREES", "15"}});
+    CHECK(hand.issues.empty());
+    CHECK(hand.settings.wheelSelect == WheelSelect::Hand);
+    CHECK(hand.settings.wheelHandDegrees == 15.0f);
+    CHECK(parse({{"ETERNALVR_WHEEL_SELECT", "stick"}}).settings.wheelSelect == WheelSelect::Stick);
+    const auto bad = parse({{"ETERNALVR_WHEEL_SELECT", "head"}, {"ETERNALVR_WHEEL_HAND_DEGREES", "90"}});
+    CHECK(bad.issues.size() == 2);
+    CHECK(bad.settings.wheelSelect == WheelSelect::Stick);
+    CHECK(bad.settings.wheelHandDegrees == evr::input::kDefaultWheelHandDegrees);
+}
+
+TEST_CASE("the throw and the overhead swing are off unless turned on") {
+    const auto defaults = parse({});
+    CHECK_FALSE(defaults.settings.throwGesture.enabled);
+    CHECK_FALSE(defaults.settings.swing.enabled);
+    CHECK(defaults.settings.throwGesture.speed == evr::input::ThrowSettings{}.speed);
+    CHECK(defaults.settings.swing.speed == evr::input::SwingSettings{}.speed);
+    const auto on = parse({{"ETERNALVR_THROW", "1"},
+                           {"ETERNALVR_THROW_SPEED", "2.4"},
+                           {"ETERNALVR_SWING", "on"},
+                           {"ETERNALVR_SWING_SPEED", "3"}});
+    CHECK(on.issues.empty());
+    CHECK(on.settings.throwGesture.enabled);
+    CHECK(on.settings.throwGesture.speed == doctest::Approx(2.4f));
+    CHECK(on.settings.swing.enabled);
+    CHECK(on.settings.swing.speed == 3.0f);
+    const auto bad = parse(
+        {{"ETERNALVR_THROW", "maybe"}, {"ETERNALVR_THROW_SPEED", "0.2"}, {"ETERNALVR_SWING_SPEED", "nine"}});
+    CHECK(bad.issues.size() == 3);
+    CHECK_FALSE(bad.settings.throwGesture.enabled);
+    CHECK(bad.settings.throwGesture.speed == evr::input::ThrowSettings{}.speed);
+    CHECK(bad.settings.swing.speed == evr::input::SwingSettings{}.speed);
+}
+
 TEST_CASE("the off-hand arm's offsets are mirrored with the weapon in the left hand") {
     using evr::game::Handedness;
     using evr::input::kDefaultOffhandShoulder;

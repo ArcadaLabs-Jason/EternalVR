@@ -4,18 +4,52 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/body_follow.hpp"
+#include "vkcore/camera_anim_hook.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/debug_commands.hpp"
+#include "vkcore/demon_view.hpp"
 #include "vkcore/head_sweep.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/menu_input.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/stall_watch.hpp"
+#include "xr_math/camera_anim.hpp"
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <optional>
 
 namespace evr::vkcore {
+
+namespace {
+
+// The body yaw turning more than 90 degrees in one game frame (a stick turn never does): logged with what
+// drove the view, to find the rare instant half turn seen once in a seated glory kill (the owner's Quest 3,
+// 2026-09-28). Camera hook thread only.
+struct BodyJumpWatch {
+    std::optional<float> lastYaw;
+    std::uint64_t jumps = 0;
+};
+BodyJumpWatch g_bodyJump;
+
+void watchBodyYaw(float yaw, bool headAimed, bool forcedView, bool cutscene, bool menuUp) {
+    if (g_bodyJump.lastYaw) {
+        const float turn = xr_math::normalize180(yaw - *g_bodyJump.lastYaw);
+        if (std::fabs(turn) > 90.0f && ++g_bodyJump.jumps <= 20) {
+            EVR_LOG("aim: the body turned %.1f deg in one game frame (%.1f -> %.1f); %s, forced view %s, "
+                    "cutscene %s, menu %s (jump %llu)",
+                    turn, *g_bodyJump.lastYaw, yaw, headAimed ? "head aim" : "the game's yaw",
+                    forcedView ? "yes" : "no", cutscene ? "yes" : "no", menuUp ? "yes" : "no",
+                    static_cast<unsigned long long>(g_bodyJump.jumps));
+        }
+    }
+    g_bodyJump.lastYaw = yaw;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------------------------------
 // Head tracking: the game's camera hook, the render latch and the view carried by each present
@@ -58,6 +92,9 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         }
         return;
     }
+    // The hands animation's camera (camera_anim_hook.hpp): off the game's view for the body and head aim, and
+    // (ETERNALVR_CAMERA_ANIMATIONS=1) back on top of the head below.
+    const camera_anim::Frame anim = camera_anim::frame(player, gameAxis, cutscene, controllers::forcedView());
     ViewRecord record;
     bool positionValid = false;
     std::optional<float> headAboveFloor;
@@ -125,10 +162,11 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         roomIn.menu = menu_input::suppressGameplay();
     }
     const RoomScale::Head roomHead = room.head(roomIn);
-    const Quat headGame = roomHead.game.orientation;
-    const Quat headId = xr_math::openXrToIdTech(headGame);
+    Quat headGame = roomHead.game.orientation;
+    Quat headId = xr_math::openXrToIdTech(headGame);
     controllers::setRoomFromLocal(roomHead.roomFromLocal);
-    if (const auto weapon = controllers::beginGameView(record.poseTime, roomHead.room, player, cutscene)) {
+    if (const auto weapon =
+            controllers::beginGameView(record.poseTime, roomHead.room, player, cutscene, anim.active)) {
         const Pose& a = weapon->used;
         record.weaponAimValid = true;
         record.weaponAim = {{a.orientation.x, a.orientation.y, a.orientation.z, a.orientation.w},
@@ -138,14 +176,22 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     }
     std::optional<xr_math::IdViewAxis> body;
     if (settings.headAim) {
-        body = aimWithHead(player, gameAxis, headId);
+        body = aimWithHead(player, anim.gameAxis, headId);
     }
+    const bool headAimed = body.has_value();
     if (!body) {
-        body = xr_math::yawOnly(gameAxis);
+        body = xr_math::yawOnly(anim.gameAxis);
     }
     if (!body) {
         ++gameViewsSkipped;
         return;
+    }
+    watchBodyYaw(xr_math::anglesFromAxis(*body).yaw, headAimed, roomIn.forcedView, cutscene,
+                 menuUp.load(std::memory_order_relaxed));
+    if (anim.active) {
+        // Aim and the body above follow the head; the view and the eyes turn by the animation on top of it.
+        headId = xr_math::headWithCameraAnim(*body, headId, anim.applied);
+        headGame = xr_math::idTechToOpenXr(headId);
     }
     const xr_math::IdViewAxis view = xr_math::composeHeadAxis(*body, headId);
     room.noteBody(body->forward, body->left);
@@ -206,6 +252,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     }
     ++gameViews;
     gameTicks.fetch_add(1, std::memory_order_relaxed);
+    stall_watch::onGameTick(); // stalls in play are told from loading screens and menus by the ticks
 
     if (!loggedFirstGameView) {
         loggedFirstGameView = true;
@@ -299,6 +346,19 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
         }
         return std::nullopt;
     }
+    if (controllers::pilotingDemon()) {
+        // Piloting a demon (demon_view.hpp): the idPlayer's own angles stay where the Slayer stood, so
+        // nothing is written to them. The demon aims where the head looks, or under hand aim where the weapon
+        // hand points (demon_aim.cpp): the view is built on the body yaw it aimed from; without it, on the
+        // demon's camera yaw.
+        ++aimCameraFrames;
+        const xr_math::IdAngles aim = controllers::aimAnglesUnforced(xr_math::headAngles(headInIdTech));
+        controllers::notePilotAim(aim.pitch, aim.yaw);
+        if (const std::optional<controllers::PilotAim> piloted = controllers::pilotAim()) {
+            return xr_math::axisFromAngles({0.0f, piloted->bodyYaw, 0.0f});
+        }
+        return std::nullopt;
+    }
     const PlayerAim::Sample sample = playerAim.read(player);
     if (!xr_math::plausible(sample.view) || !xr_math::plausible(sample.delta) ||
         !xr_math::plausible(sample.stateDelta) || !xr_math::plausible(sample.command)) {
@@ -306,6 +366,8 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
         ++aimCameraFrames;
         return std::nullopt;
     }
+    // What moved the camera in a forced view (a pickup, a glory kill): logged when it ends.
+    camera_anim::noteForcedView(controllers::forcedView(), gameAxis, sample.view);
 
     // Verification: the game's view angles must be its command angles plus one of the two deltas.
     if (aimPhase == AimPhase::Verifying) {
@@ -340,6 +402,7 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
             return std::nullopt;
         }
         aimPhase = AimPhase::Active;
+        markPlayerInMap(); // ETERNALVR_DEBUG_COMMANDS counts from here
         EVR_LOG("aim: head aim on through the %s deltaViewAngles (%d/%d frames matched)",
                 aimField == PlayerAim::DeltaField::Physics ? "physics" : "state",
                 aimField == PlayerAim::DeltaField::Physics ? aimPhysicsMatches : aimStateMatches, aimChecks);

@@ -21,6 +21,7 @@
 #include "features/input/input_mapper.hpp"
 #include "features/input/test_input.hpp"
 #include "features/input/usercmd_injection.hpp"
+#include "features/input/wheel_hand.hpp"
 #include "features/input/wheel_mouse.hpp"
 #include "features/input/xr_action_set.hpp"
 #include "game/eternal/controller_data.hpp"
@@ -187,6 +188,8 @@ struct State {
     input::ViewDeltaQueue viewQueue;
     // The weapon wheel's pointer: the stick as the game's cursor motion while the wheel is held.
     input::WheelMouse wheelMouse;
+    // Under ETERNALVR_WHEEL_SELECT=hand the weapon hand's turn is that pointer (created on first use).
+    std::optional<input::WheelHand> wheelHand;
     LONGLONG lastMapQpc = 0;
     bool pauseKeyDown = false;
     // Keys sent while the game suppresses buttons (tutorial and lore popups read keys, not commands).
@@ -229,6 +232,7 @@ struct State {
     bool offhandHook = false;
     bool xinputHook = false;
     bool rumbleHook = false;
+    bool demonAimHook = false;
     std::atomic<bool> xinputActive{false}; // the virtual gamepad feeds the game
     PlayerAim player;                      // the idPlayer vtable check
 
@@ -339,7 +343,7 @@ void refreshTestInput();
 std::optional<input::TestInput> testInput();
 
 // Camera hook: feeds this frame's forced-view signals to the gate and sets `yielding`.
-void updateForcedView(const std::byte* player, bool cutscene);
+void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimation);
 
 // Vibration (haptics_xr.cpp). The mapper, after a menu held its actions back: the actions sent and the
 // command's punch and capture.

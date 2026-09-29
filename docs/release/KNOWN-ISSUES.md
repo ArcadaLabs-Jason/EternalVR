@@ -7,8 +7,9 @@ them is worse for you than described here.
 
 - **The HUD is on a floating panel.** Health, armour, ammo and the rest of the HUD are shown on a flat
   panel in front of you that follows your head. "Health and ammo" on the launcher's Advanced tab can put
-  health, armour and ammo on the inside of your off hand's wrist instead; that is experimental and has
-  not been tried in a headset yet. A HUD on the weapon is not done yet.
+  health, armour and ammo on the inside of your off hand's wrist instead, or the ammo just above the back
+  of the gun in your weapon hand. Both are experimental and have not been tried in a headset yet. The ammo
+  sits in one place for every weapon, so on some guns it may float a little off the gun.
 - **Glory kills keep the game's camera.** The game moves the camera during a glory kill; in VR the view
   follows it, facing the demon, and turns with your head from there. The kills are short, but if camera
   motion bothers you, this is where you will feel it. Cutscenes play on a flat 16:9 screen in front of you
@@ -36,6 +37,14 @@ them is worse for you than described here.
 - **SteamVR has had one test**, with a Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the
   left Menu button opens SteamVR's dashboard, so hold Y to pause instead, and take a screenshot with Y
   held and a trigger pulled (instead of left Menu + trigger).
+- **The Game Pass and Microsoft Store version has had one test**, on one PC with a Quest 3 through Virtual
+  Desktop: a level and the Revenant in Cultist Base played as on Steam. On its first start that version
+  asks you to log in to Bethesda.net, and clicking a text box opens Windows' own typing window on the
+  desktop, which the headset does not show: what you type goes there and is entered when you press Enter.
+  It is easier to log in once without VR, starting the game from the Xbox app, before the first VR session.
+- **Some doors and a ladder in Doom Hunter Base open only when you look at them**, and the game may check
+  where your gun points rather than where your head looks. If one does not open, point your weapon hand
+  at it for a moment. A fix is in progress; please tell me anywhere else you get stuck.
 - **Only tested with a Quest 3 through Virtual Desktop (VDXR).** SteamVR, Meta Horizon Link, other
   runtimes and other headsets are untested. The launcher lets you pick a runtime; please tell me what
   happens.
@@ -68,9 +77,18 @@ them is worse for you than described here.
 - **DLSS is experimental.** It is offered on NVIDIA RTX cards and helps only when the graphics card, not
   the processor, is what holds the frame rate back; when the processor is, DLSS can be slower than TAA.
   Each eye gets its own DLSS history. Pick the quality (Quality, Balanced, Performance or Ultra
-  Performance) in the launcher's "Anti-aliasing" setting: the game's own DLSS setting in its video menu is
-  not used in VR and may show DLSS as off. If DLSS cannot run per eye, the mod switches that session to
-  TAA (the log says `DLSS has no per-eye feature`).
+  Performance) in the launcher's "Anti-aliasing" setting. In VR the game's own video menu shows the DLSS
+  setting that is running (Ultra Performance shows as Performance, which the menu does not have). With the
+  launcher's DLSS or Off, changing DLSS in the game's menu has no effect in VR, and your saved game settings
+  keep their own DLSS choice for flat play. With the launcher's TAA the game's own DLSS setting is used: if
+  it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
+  the mod switches that session to TAA (the log says `DLSS has no per-eye feature`) and the menu shows
+  DLSS as off.
+- **A newer DLSS is experimental too.** The game ships DLSS 2.3. On the Advanced tab, "DLSS version: From
+  a file" lets DLSS run with a newer `nvngx_dlss.dll` you download yourself (NVIDIA's DLSS page on GitHub,
+  `lib/Windows_x86_64/rel/nvngx_dlss.dll`); the mod does not include it. The file stays where you keep it
+  and nothing is copied into the game folder. If the game cannot use the file, it keeps its own DLSS and
+  the log says why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn.
 - **Shadows can pop in** on some walls as you turn your head.
@@ -79,6 +97,22 @@ them is worse for you than described here.
 - **HDR output is off** during VR sessions.
 - **Frame rate.** Stereo renders every frame twice, and there is no foveated rendering or DLSS tuning for
   VR yet. Slower cards than the tested RTX 4080 may struggle.
+- **Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
+  (on by default) has the game load only the texture detail the current view needs, which gave about 8% more
+  frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
+  texture may look soft for a moment. Turn it off if that bothers you.
+- **The Processor saver is experimental.** Its checkboxes on the Play tab (all off by default) each turn down
+  one of the game's detail settings that cost processor time: your own shadow, sun shadows near you, how far
+  away models switch to simpler versions, and how far away marks, shadows and lights fade. Each one's tooltip
+  says what it gained on the test rig and what it costs in the picture. The game's own settings are put back
+  after you play.
+- **Alternate eyes is new and not yet tried in a headset.** "Alternate eyes" on the launcher's Advanced tab
+  (off by default) draws one eye per frame, taking turns, so a slower processor has about half the work per
+  frame. Each eye then updates at half the rate: fast motion can look doubled or smeared, moving demons can
+  seem slightly nearer or farther than they are, and some people find it uncomfortable. With "Anti-aliasing"
+  on TAA, fast-moving demons can smear a little more than without it; Off avoids that. "Auto" does this only
+  while your processor cannot keep up with the headset and draws both eyes again once it can (the switch
+  takes a second or a few). Turn it off if it does not help.
 
 ## Controllers and aiming
 
@@ -93,7 +127,16 @@ them is worse for you than described here.
   strength and feel may change.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
   right of centre.
+- **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
+  new and has not been tried in a headset yet. How far you need to turn your hand may change.
+- **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and
+  have not been tried in a headset yet. How hard you need to throw or swing may change. The grenade flies
+  where your gun points (or where you look with head aim), not where your hand threw it. A throw or a swing
+  you did not mean still spends a grenade or a Crucible charge, so turn them off if they fire by mistake.
 - **The meathook and glory kills with hand aim** have had little testing.
+- **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
+  your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
+  pilot it, and at some angles you can see inside its shoulders.
 - **Index controllers** have bindings but have never been tried.
 
 ## Menus
@@ -111,10 +154,10 @@ them is worse for you than described here.
   once normally through Steam, let it reach the main menu, quit, then use the launcher again.
 - **A small game window sits on your desktop** during a VR session. That is normal. While the game is
   not the focused window, your mouse stays yours.
-- **No controls editor in the launcher yet.** To change the buttons, edit the files in your controls
-  folder (**Edit controls...** on the Play tab, see CONTROLS.md). The controls folder is shared by every
-  player: a player picked in the launcher's Player list keeps their own Play and Advanced settings, not
-  their own buttons.
+- **No rename for VR settings profiles.** The launcher can make and delete a profile but not rename it. To
+  rename one by hand, close the launcher and rename both its file in `profiles` and its controls folder in
+  `controls\profiles` (in `%LOCALAPPDATA%\EternalVR`); a profile whose controls folder is missing uses the
+  controls of (none) until it gets its own copy (CONTROLS.md, "Controls for each profile").
 - **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
   in a headset; its strength may change.
 - **Not code-signed.** Windows SmartScreen may warn the first time (`INSTALL.md`).

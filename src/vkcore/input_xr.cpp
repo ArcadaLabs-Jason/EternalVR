@@ -360,17 +360,20 @@ bool attach(const XrContext& context) {
         s.mapper.reset();
     }
     s.attached.store(true, std::memory_order_release);
-    EVR_LOG("%s: on: aim %s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, input %s, "
-            "viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s",
-            kTag, input::aimSourceName(cfg.aim),
-            cfg.locomotion == input::LocomotionFrame::Head ? "head" : "hand",
-            cfg.turn.mode == input::TurnMode::Smooth ? "smooth"
-            : cfg.turn.mode == input::TurnMode::Snap ? "snap"
-                                                     : "off",
-            cfg.turn.smoothDegreesPerSecond, cfg.turn.snapDegrees, static_cast<int>(cfg.handedness),
-            input::inputPathName(cfg.path), cfg.viewmodel ? "at the hand" : "the game's",
-            cfg.weaponFov ? "on" : "off", cfg.shotOrigin == input::ShotOrigin::Hand ? "hand" : "eye",
-            cfg.aimSmoothing, s.aimFilter ? "" : " (off)", input::dossierPressName(cfg.dossier));
+    EVR_LOG(
+        "%s: on: aim %s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, input %s, "
+        "viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, weapon wheel "
+        "by the %s, throw gesture %s, overhead swing %s",
+        kTag, input::aimSourceName(cfg.aim), cfg.locomotion == input::LocomotionFrame::Head ? "head" : "hand",
+        cfg.turn.mode == input::TurnMode::Smooth ? "smooth"
+        : cfg.turn.mode == input::TurnMode::Snap ? "snap"
+                                                 : "off",
+        cfg.turn.smoothDegreesPerSecond, cfg.turn.snapDegrees, static_cast<int>(cfg.handedness),
+        input::inputPathName(cfg.path), cfg.viewmodel ? "at the hand" : "the game's",
+        cfg.weaponFov ? "on" : "off", cfg.shotOrigin == input::ShotOrigin::Hand ? "hand" : "eye",
+        cfg.aimSmoothing, s.aimFilter ? "" : " (off)", input::dossierPressName(cfg.dossier),
+        input::wheelSelectName(cfg.wheelSelect), cfg.throwGesture.enabled ? "on" : "off",
+        cfg.swing.enabled ? "on" : "off");
     return true;
 }
 

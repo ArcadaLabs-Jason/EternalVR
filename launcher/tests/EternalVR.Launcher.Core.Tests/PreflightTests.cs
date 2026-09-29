@@ -53,7 +53,6 @@ namespace EternalVR.Launcher.Core.Tests
             yield return new object[] { "openxr", (System.Action<PreflightFacts>)(f => f.RuntimeManifestExists = false) };
             yield return new object[] { "single-player", (System.Action<PreflightFacts>)(f => f.ArgumentRefusal = "Refused: BATTLEMODE") };
             yield return new object[] { "game-build", (System.Action<PreflightFacts>)(f => f.Build = new BuildCheck(BuildStatus.Unknown, new string('b', 64), null)) };
-            yield return new object[] { "game", (System.Action<PreflightFacts>)(f => f.StoreInstall = true) };
             yield return new object[] { "settings", (System.Action<PreflightFacts>)(f => f.SettingsLocationCount = 0) };
         }
 

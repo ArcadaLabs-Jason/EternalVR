@@ -50,6 +50,14 @@ namespace EternalVR.Launcher.Core.Settings
                 "The game's: your eyes at the Slayer's height, however tall you are. Your real height: your own eye height "
                 + "above the floor (needs a headset that knows where the floor is).",
                 "The game's (Slayer)", "Your real height"),
+            [Setting.ThrowGesture] = new Text("Throw grenades",
+                "Throw a grenade with your off hand, as you would throw a ball: bring the hand up beside your ear, then "
+                + "swing it forward. It fires the equipment launcher, like its button; the grenade flies where you aim. "
+                + "Off by default. Experimental: not yet tried in a headset."),
+            [Setting.SwingGesture] = new Text("Overhead swing",
+                "Swing the Crucible (the Sentinel Hammer in The Ancient Gods Part Two) with your weapon hand: raise it above "
+                + "your head, then bring it down hard. It does what the Crucible button does. Both hands up does nothing. "
+                + "Off by default. Experimental: not yet tried in a headset."),
             [Setting.AimWith] = new Text("Aim with",
                 "What aims your weapon: your weapon hand (motion controllers), your head, or the mouse as in the flat game.",
                 "Weapon hand", "Head", "Mouse"),
@@ -63,6 +71,11 @@ namespace EternalVR.Launcher.Core.Settings
                 "Which press of the X button opens the Dossier; the other one switches equipment. Hold means a quarter of "
                 + "a second or more.",
                 "Hold for Dossier (default)", "Tap for Dossier"),
+            [Setting.WeaponWheel] = new Text("Weapon wheel",
+                "How you pick a weapon on the weapon wheel. Stick: hold the wheel open and push the stick toward a weapon. "
+                + "Point with your hand: hold the wheel open with its stick or button, then turn your weapon hand toward "
+                + "a weapon (a small turn of the wrist is enough) and let go to pick it.",
+                "Stick (default)", "Point with your hand"),
             [Setting.AimSteadiness] = new Text("Aim steadiness",
                 "Steadies the gun and the aim dot against the small shake of a held hand. Higher is steadier but the gun "
                 + "follows your hand a little later; lower it if the gun feels like it trails behind.",
@@ -74,9 +87,10 @@ namespace EternalVR.Launcher.Core.Settings
                 + "game rumbles. Off turns vibration off.",
                 Vibration.Names),
             [Setting.ButtonLayout] = new Text("Button layout",
-                "Change which button does what. Edit controls opens your controls folder, with a copy of the built-in controls "
-                + "in its defaults folder: copy the file for your controllers into the controls folder, edit it and start the "
-                + "game. Delete your copy to go back to the built-in controls."),
+                "Change which button does what. Edit controls lets you pick an action for each button of your controllers, "
+                + "for each weapon hand, and saves them for the VR settings profile in use: each profile keeps its own controls. "
+                + "Open folder opens that profile's controls folder, to edit the files by hand or delete yours to go back to the "
+                + "built-in controls."),
             [Setting.Resolution] = new Text("Resolution",
                 "The detail each eye is rendered with. 1.00 is your headset's recommended size, kept within what a fast card "
                 + "can render at the headset's refresh rate. Raise it for a sharper picture if your card has headroom; lower it "
@@ -88,12 +102,32 @@ namespace EternalVR.Launcher.Core.Settings
                 + "experimental and "
                 + "needs an NVIDIA RTX card: it renders a smaller image and scales it up (Quality the least, Ultra "
                 + "Performance the most), which helps only when the graphics card is what limits the frame rate; when the "
-                + "processor is, it can be slower than TAA. Choose it here: the game's own DLSS setting in its video menu "
-                + "is not used in VR, and it may show DLSS as off.",
+                + "processor is, it can be slower than TAA. Choose it here: with DLSS or Off, the game's own DLSS setting "
+                + "in its video menu shows what runs in VR, and a change there is not used in VR and leaves your flat "
+                + "game's setting as it was. With TAA, the game's own DLSS setting is used: if it is on, DLSS runs in VR.",
                 "TAA (recommended)", "DLSS Quality", "DLSS Balanced", "DLSS Performance", "DLSS Ultra Performance", "Off"),
+            [Setting.TextureStreaming] = new Text("Texture streaming",
+                "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
+                + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "
+                + "more frames per second on the test rig). Mostly lossless: textures may sharpen a moment later when you turn "
+                + "fast or enter a new area. On by default. The game's own setting is put back after you play."),
+            [Setting.ProcessorSaver] = new Text("Processor saver (experimental)",
+                "Turns down a few of the game's detail settings that cost processor time for each eye's picture, one checkbox "
+                + "each; point at one to see what it changes, what it gained on the test rig and what it costs in the picture. "
+                + "Try them if the frame rate drops and your processor, not your graphics card, is what holds it back: in VR "
+                + "the game draws every scene twice, once per eye. All of them together with Texture streaming gave about 24% "
+                + "more frames per second on the test rig. The picture changes only a little. All off by default. The game's "
+                + "own settings are put back after you play. Experimental: the list is still being measured."),
             [Setting.VrMode] = new Text("VR mode",
                 "Stereo renders one image per eye, for real depth. Mono renders one image for both eyes: flat, but faster.",
                 "Stereo (one image per eye)", "Mono (one for both eyes)"),
+            [Setting.AlternateEyes] = new Text("Alternate eyes",
+                "Draws one eye per game frame instead of both, taking turns. The processor does about half the work per "
+                + "frame, so the game runs faster on a slower processor, but each eye updates at half the rate. Fast "
+                + "motion can look doubled or smeared, and some people find it uncomfortable. Auto does this only when "
+                + "your processor cannot keep up with your headset, and draws both eyes again once it can. Leave it off "
+                + "unless the game cannot keep up with your headset.",
+                "Off", "Auto (only when your processor cannot keep up)", "On (for slower processors)"),
             [Setting.WorldSize] = new Text("World size",
                 "How big the world feels around you. 1.00 is the game's own scale; change it a little if rooms and demons "
                 + "feel too big or too small."),
@@ -130,9 +164,20 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.HudHeight] = new Text("HUD height",
                 "Moves the HUD panel up or down from eye level, in metres (negative is lower)."),
             [Setting.HudPlace] = new Text("Health and ammo",
-                "Where health, armour and ammo are shown: on the HUD panel with the rest, or on the inside of your off hand's "
-                + "wrist, shown when you turn it toward you (experimental).",
-                "On the HUD panel", "On your wrist"),
+                "Where health, armour and ammo are shown: on the HUD panel with the rest; on the inside of your off hand's "
+                + "wrist, shown when you turn it toward you; or on your weapon, where the ammo sits just above the back of the "
+                + "gun and health and armour stay on the panel. The wrist and the weapon are experimental.",
+                "On the HUD panel", "On your wrist", "On your weapon"),
+            [Setting.DlssVersion] = new Text("DLSS version",
+                "The DLSS the game uses. The game's own is version 2.3. A newer one looks sharper and smears less in motion: "
+                + "choose From a file and pick an nvngx_dlss.dll you downloaded (NVIDIA's DLSS page on GitHub has the latest). "
+                + "The file stays where it is: nothing is copied into the game folder. If the game cannot use it, it keeps its own.",
+                "The game's (2.3)", "From a file"),
+            [Setting.DlssPreset] = new Text("DLSS preset",
+                "How the newer DLSS renders. The DLL's default is NVIDIA's choice for each quality (the transformer model in "
+                + "recent versions). K is the transformer model at every quality; J, M and L are its variants; F is the older model. "
+                + "Presets need DLSS 3.1 or later.",
+                DlssDll.PresetNames),
             [Setting.MotionControllers] = new Text("Motion controllers",
                 "Play with your headset's controllers. Off: keyboard, mouse or a gamepad, as in the flat game."),
             [Setting.ShotsFrom] = new Text("Shots come from",
@@ -144,8 +189,8 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.MenuLaser] = new Text("Menu laser",
                 "A laser from your hand to the menu panel. Off keeps only the dot on the panel."),
             [Setting.GameFolder] = new Text("Game folder",
-                "Where DOOM Eternal is installed. The launcher finds it through Steam; choose the folder yourself only if "
-                + "that fails (the one with DOOMEternalx64vk.exe)."),
+                "Where DOOM Eternal is installed. The launcher finds it through Steam or Game Pass; choose the folder yourself only if "
+                + "that fails (the one with DOOMEternalx64vk.exe; for Game Pass, its Content folder)."),
             [Setting.Runtime] = new Text("OpenXR runtime",
                 "The program that connects the game to your headset. The system default is the one your headset's software "
                 + "set; choose another only if you use more than one."),

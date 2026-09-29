@@ -118,8 +118,8 @@ void report() {
 // The picks for the render with this counter; nullopt until all five hooks are in (the engine's own picks).
 // Every render goes through the ring, mono ones as well. The render's tag is the one that presents with
 // backend frame counter + 1 (ring_trace.hpp showed the two in step on every render). Not the tag "in flight":
-// this job runs ahead of the backend, and under a headset's load the backend is often a frame behind, which
-// handed renders another render's eye.
+// it reads the counter again at the hook, and the render thread's swap often moves it on while this job runs
+// (under a headset's load), which handed renders the next render's eye.
 std::optional<stereo_seq::ObjectRing::Picks> picksFor(std::uint32_t counter, bool count) {
     if (!g_live.load(std::memory_order_acquire)) {
         return std::nullopt;

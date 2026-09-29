@@ -13,8 +13,9 @@
 //   crosshair and ability rings     x 0.405..0.592  y 0.449..0.571  (centre)
 //   boss / encounter bars, markers  top and sides: stay head-locked
 //
-// The wrist HUD shows the corner blocks (and optionally the centre abilities) on quads at the off hand;
-// the head-locked quad then shows the rest of the band, cut into rectangles around the corner blocks.
+// The wrist HUD shows the corner blocks (and optionally the centre abilities) on quads at the off hand, the
+// weapon HUD the weapon block (and optionally the vitals) above the gun; the head-locked quad then shows the
+// rest of the band, cut into rectangles around the blocks that moved.
 
 #include "ui_layer/ui_settings.hpp"
 

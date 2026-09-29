@@ -8,6 +8,7 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/vram_watch.hpp"
 #include "vkcore/xr_runtime.hpp"
 #include "xr_math/cinema_quad.hpp"
 #include "xr_math/upright_space.hpp"
@@ -401,6 +402,7 @@ bool XrPresenter::Impl::createD3D12AndSession() {
         return false;
     }
     EVR_LOG("d3d12: device on '%ls'", desc.Description);
+    vram::watch(adapter.Get()); // the stall line and the 10 s vram line read its memory budget
     D3D12_COMMAND_QUEUE_DESC queueDesc{};
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     if (FAILED(d3dDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&d3dQueue))) ||

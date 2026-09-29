@@ -82,10 +82,14 @@ std::uintptr_t NgxTwins::released(std::uintptr_t primary) {
     return twin;
 }
 
-bool NgxTwins::resetTwin(std::uintptr_t primary, std::uint64_t gameFrame) {
+bool NgxTwins::resetTwin(std::uintptr_t primary,
+                         std::uint64_t gameFrame,
+                         std::uint64_t minStep,
+                         std::uint64_t maxStep) {
     for (Entry& e : entries_) {
         if (e.primary == primary) {
-            const bool reset = e.lastFrame == 0 || gameFrame != e.lastFrame + 1;
+            const bool reset =
+                e.lastFrame == 0 || gameFrame < e.lastFrame + minStep || gameFrame > e.lastFrame + maxStep;
             e.lastFrame = gameFrame;
             return reset;
         }

@@ -3,9 +3,14 @@
 # tested on every platform.
 evr_add_module(evr_stereo_seq
     SOURCES
+        adaptive_eyes.cpp
+        alternate_eyes.cpp
+        alternate_prev.cpp
         bin_tiles.cpp
         centered_matrix.cpp
         desktop_window.cpp
+        dlss_menu.cpp
+        drain_backoff.cpp
         eye_pairing.cpp
         eye_tags.cpp
         eye_view_plan.cpp

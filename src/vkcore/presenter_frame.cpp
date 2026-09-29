@@ -6,14 +6,17 @@
 #include "features/comfort/vignette.hpp"
 #include "game/eternal/game_action.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/debug_commands.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/head_sweep.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/test_keys.hpp"
 #include "vkcore/ui_engine.hpp"
+#include "vkcore/vram_watch.hpp"
 #include "xr_math/cinema_quad.hpp"
 #include "xr_math/enclosing_fov.hpp"
 
@@ -520,6 +523,7 @@ void XrPresenter::Impl::runWorker() {
                 installKeyInjection();
             }
             controllers::installGameHooks();
+            installDebugCommands(); // ETERNALVR_DEBUG_COMMANDS: console commands on a schedule (test rig)
             startMenu();
             if (roomScaleSettings().collision) {
                 installHeadSweep();
@@ -541,6 +545,7 @@ void XrPresenter::Impl::runWorker() {
         }
         openFrameLog();
     }
+    stall_watch::trackGameTicks(hooks.gameView); // the camera hook's ticks tell play from loading and menus
     // Every stage is followed by a stop check: once shutdown has begun the game's device may be gone.
     const auto running = [this] {
         return !stop.load();
@@ -563,6 +568,8 @@ void XrPresenter::Impl::runWorker() {
                     recreateRing();
                 }
                 pollEvents();
+                refreshDisplayRate(); // between frames: xrWaitFrame has the slack
+                vram::poll();
                 if (sessionRunning) {
                     frame();
                 } else {

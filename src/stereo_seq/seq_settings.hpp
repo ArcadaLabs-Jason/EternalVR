@@ -64,6 +64,16 @@ struct CvarHold {
 // (docs/VR_STEREO.md, Cvars).
 std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::string_view windowSetting = {});
 
+// A "name=value;name=value" list of cvars to hold (ETERNALVR_DEBUG_CVARS, ETERNALVR_CPU_SAVER). Spaces around
+// names and values are dropped; an item without a name before '=' is skipped; a later item for the same name
+// (compared case-insensitively) replaces the earlier one.
+std::vector<CvarHold> parseCvarList(std::string_view text);
+
+// A held value "<=N" is a cap: the layer writes N only while the cvar's value is above it, and never raises
+// it (the processor saver's cap on a value the game's menu sets per quality level, where a fixed value would
+// raise the cost for a player on a lower level). The cap N; nullopt for any other value or a bad number.
+std::optional<float> parseCvarCap(std::string_view value);
+
 struct SwapchainSize {
     std::uint32_t width = 0;
     std::uint32_t height = 0;

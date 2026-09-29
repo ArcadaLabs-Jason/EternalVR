@@ -1,6 +1,7 @@
 #include "vkcore/world_gui_hooks.hpp"
 
 #include "stereo_seq/world_gui.hpp"
+#include "vkcore/game_build.hpp"
 #include "vkcore/game_code.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -36,8 +37,8 @@ constexpr std::size_t kStamp = 0xC;
 constexpr std::size_t kFrameNumber = 0xBFD8;
 // At both hook points the function has pushed two registers and reserved 0xA8 bytes: its return address.
 constexpr std::size_t kReturnAddress = 0xB8;
-// The world-surface callback's call of the check (RVA 0x1C74E03): the draws of GUIs on world surfaces.
-constexpr std::uint32_t kWorldCallReturnRva = 0x1C74E08;
+// The world-surface callback's call of the check (Steam RVA 0x1C74E03, returning to 0x1C74E08; per build in
+// game_build.hpp): the draws of GUIs on world surfaces.
 
 // The world's commit of a model (0x18D9FA0; signature at RVA 0x18DA7D2): `mov ebx, [rax + 0xBFD8]`, the
 // model's last commit frame (+0x4A0) compared and set, `mov [rcx + 0xC], ebx` (the committed data's stamp),
@@ -46,8 +47,6 @@ constexpr const char* kCommitSignature =
     "48 8B 8F A8 00 00 00 48 8B 41 20 48 85 C0 74 18 8B 98 D8 BF 00 00 39 9F A0 04 00 00 0F 84 ?? ?? ?? ?? "
     "89 9F A0 04 00 00 89 59 0C 48 8B 8F A8 00 00 00 48 8B 41 28";
 constexpr std::size_t kCommitHook = 0x2B;
-// idRenderModelGui's vtable (type info, Steam build 25216728).
-constexpr std::uint32_t kGuiModelVtableRva = 0x2E73048;
 
 std::once_flag g_once;
 bool g_installed = false;
@@ -76,6 +75,9 @@ int counterRow(stereo_seq::Eye eye) {
     }
 }
 
+// The check runs in the backend frame's draw jobs (0x1C74D00 is called from the pass jobs), before that
+// frame's present, where the tag in flight is the render's own; no copy of the engine's counter read is at
+// hand here. A wrong eye would show in the counts as eye L draws one behind or eye R draws current.
 stereo_seq::Eye backendEye() {
     const std::optional<stereo_seq::RenderTag> tag = seqTagInFlight();
     return tag ? tag->eye : stereo_seq::Eye::Mono;
@@ -189,11 +191,16 @@ bool installWorldGuiHook() {
             return;
         }
         // The world-surface callback must call this check right before its return address.
-        const std::byte* worldReturn = image.base + kWorldCallReturnRva;
+        const GameBuild* build = currentGameBuild();
+        if (!build) {
+            EVR_LOG("%s: an unknown game build (no world-surface call site for it); not installed", kTag);
+            return;
+        }
+        const std::byte* worldReturn = image.base + build->worldGuiCallReturn;
         if (!image.inText(worldReturn - 5, 5) || static_cast<std::uint8_t>(*(worldReturn - 5)) != 0xE8 ||
             relativeTarget(worldReturn - 5) != site - kCheckFunction) {
-            EVR_LOG("%s: the world-surface call of the check is not at RVA 0x%X; not installed", kTag,
-                    kWorldCallReturnRva);
+            EVR_LOG("%s: the world-surface call of the check is not at RVA 0x%X (%s); not installed", kTag,
+                    build->worldGuiCallReturn, build->name);
             return;
         }
         g_worldCallReturn = reinterpret_cast<std::uintptr_t>(worldReturn);
@@ -211,7 +218,7 @@ bool installWorldGuiHook() {
                     ? "counting only (ETERNALVR_STEREO_WORLD_GUI=count); world GUIs show in eye L only"
                     : "eye R draws the world GUIs eye L committed in the same tick");
         // The commit count is a diagnostic: its absence changes nothing.
-        const std::byte* vtable = image.base + kGuiModelVtableRva;
+        const std::byte* vtable = image.base + build->guiModelVtable;
         const std::byte* commit = findUnique(image, kTag, "model commit stamp", kCommitSignature);
         if (commit && image.contains(vtable, sizeof(void*))) {
             g_guiModelVtable = reinterpret_cast<std::uintptr_t>(vtable);

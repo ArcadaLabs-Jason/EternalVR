@@ -37,6 +37,11 @@ constexpr Quat openXrToIdTech(Quat q) {
     return {-q.z, -q.x, q.y, q.w};
 }
 
+// Converts an orientation from id Tech axes back to OpenXR axes (the inverse of openXrToIdTech).
+constexpr Quat idTechToOpenXr(Quat q) {
+    return {-q.y, q.z, -q.x, q.w};
+}
+
 // The view axis of an orientation in id Tech axes: the rotated forward, left and up unit vectors.
 IdViewAxis viewAxisFromQuat(Quat orientation);
 

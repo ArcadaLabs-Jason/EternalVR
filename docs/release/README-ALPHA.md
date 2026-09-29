@@ -27,8 +27,10 @@ The exact version and commit are in `BUILD-INFO.txt`. Please quote them in every
   `DOOMEternalx64vk.exe` having SHA-256
   `69dc13e88d1c19133ead7950dc64ebcbd4a5a3f6bd6f9c336ebffe56df6a1c11`. The launcher checks this and shows
   "Build 25216728: supported". After a DOOM Eternal update, VR stays off (the game runs flat) until an
-  EternalVR update supports the new build. Other stores (Microsoft Store, Game Pass) are not supported.
-- **Steam running and logged in** before you start the launcher.
+  EternalVR update supports the new build.
+- **Or DOOM Eternal from Game Pass** (Microsoft Store / Xbox app), package version 1.0.56.0. The launcher
+  finds it in the XboxGames folder of any drive and shows "Game Pass 1.0.56.0: supported".
+- **Steam running and logged in** before you start the launcher (Steam version only).
 - **.NET Framework 4.8** for the launcher; Windows 10 1903 and later include it. The mod itself needs
   nothing else installed.
 - **Any monitor.** Each eye renders at the headset's recommended size (capped at about 4.6 million pixels

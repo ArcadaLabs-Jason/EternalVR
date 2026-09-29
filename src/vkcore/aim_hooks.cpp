@@ -263,11 +263,12 @@ bool installFireHook(const GameImage& image) {
 
 } // namespace
 
-void updateForcedView(const std::byte* player, bool cutscene) {
+void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimation) {
     State& s = state();
     input::ForcedAngleSignals signals;
     signals.foreignSetViewAngles = s.foreignSetViewAngles.exchange(0, std::memory_order_relaxed) > 0;
     signals.cutscene = cutscene;
+    signals.cameraAnimation = cameraAnimation;
     if (isPlayerSafe(player)) {
         g_viewPlayer.store(player, std::memory_order_relaxed);
         safeRead(player + kPlayerInhibitFlags, signals.inhibitFlags);
@@ -297,6 +298,15 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
     }
     if (s.yielding.load()) {
         return std::nullopt;
+    }
+    return aimAnglesUnforced(head);
+}
+
+xr_math::IdAngles aimAnglesUnforced(const xr_math::IdAngles& head) {
+    State& s = state();
+    const input::ControllerSettings& cfg = settings();
+    if (cfg.aim != input::AimSource::Hand || !s.attached.load(std::memory_order_acquire)) {
+        return head;
     }
     bool valid = false;
     Pose aim;

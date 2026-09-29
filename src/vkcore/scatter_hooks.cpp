@@ -38,7 +38,8 @@ constexpr std::size_t kAllocHook = 0x4E;
 constexpr std::size_t kDescriptionInFrame = 0x10; // rbp + 0x10
 
 // The scattering setup's entry (RVA 0x1C71F90): the arguments' context (rcx + 0x80) and `mov r11, [rip +
-// deviceContext]` (+0x25). The context holds the render counter (+0x10) and the filter's state (+0x8).
+// deviceContext]` (+0x25). The context holds the render counter (+0x10: the backend frame counter, stored by
+// the render-view job through RVA 0x1CBB2D0) and the filter's state (+0x8).
 constexpr const char* kSetupSignature =
     "48 8B C4 48 89 58 10 48 89 70 18 57 41 54 41 55 41 56 41 57 48 81 EC A0 00 00 00 4C 8B 91 80 00 00 "
     "00 4C 8B EA 4C 8B 1D ?? ?? ?? ?? 48 8B F1";
@@ -95,6 +96,7 @@ struct Counters {
     std::atomic<std::uint64_t> renders[2]{};
     std::atomic<std::uint64_t> swaps{0};
     std::atomic<std::uint64_t> skipped{0};
+    std::atomic<std::uint64_t> inFlightDiffers{0}; // renders whose tag in flight names another eye
     std::atomic<int> logged{0};
     std::atomic<std::uint64_t> lastReport{0};
 } g_counters;
@@ -223,11 +225,12 @@ void report() {
         return;
     }
     EVR_LOG("%s: scattering history per eye: %llu eye L / mono and %llu eye R render(s), %llu state swap(s), "
-            "%llu skipped",
+            "%llu skipped; %llu render(s) whose tag in flight names another eye",
             kTag, static_cast<unsigned long long>(g_counters.renders[0].exchange(0)),
             static_cast<unsigned long long>(g_counters.renders[1].exchange(0)),
             static_cast<unsigned long long>(g_counters.swaps.exchange(0)),
-            static_cast<unsigned long long>(g_counters.skipped.exchange(0)));
+            static_cast<unsigned long long>(g_counters.skipped.exchange(0)),
+            static_cast<unsigned long long>(g_counters.inFlightDiffers.exchange(0)));
 }
 
 void onSetup(const HookRegisters& r) {
@@ -252,8 +255,16 @@ void onSetup(const HookRegisters& r) {
         ++g_counters.skipped;
         return;
     }
-    const std::optional<stereo_seq::RenderTag> tag = seqTagInFlight();
+    // The render's own tag, found by the counter the render-view job read for it (the backend frame counter
+    // stored at RVA 0x1C568FC), the one the engine picks the pair's parity with. The tag in flight reads the
+    // counter again now and would name the next render if the render thread's swap came in between; the
+    // count of such renders is the self-check.
+    const std::optional<stereo_seq::RenderTag> tag = seqTagForBackendFrame(counter + 1u);
     const stereo_seq::Eye eye = tag ? tag->eye : stereo_seq::Eye::Mono;
+    const std::optional<stereo_seq::RenderTag> inFlight = seqTagInFlight();
+    if ((inFlight ? inFlight->eye : stereo_seq::Eye::Mono) != eye) {
+        ++g_counters.inFlightDiffers;
+    }
     stereo_seq::ScatterState current{};
     std::memcpy(current.data(), state + stereo_seq::kScatterStateOffset, current.size());
     const stereo_seq::ScatterPlan plan = g_history.beforeRender(eye, counter, current);

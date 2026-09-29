@@ -6,8 +6,10 @@
 // The game forces the view during sync and glory kills, the meathook pull, melee lunges, wall-climb
 // release, scripted and photo cameras and more. Every one of those goes through idPlayer::SetViewAngles
 // from a caller other than the per-tick view update, or sets the player's view inhibit flags, or runs
-// as a cutscene. While any of these holds, and for a short time after, the layer sends no aim delta;
-// fighting a forced view would jerk the camera and could push the player out of the animation.
+// as a cutscene. A hands animation that moves the camera counts too while the layer plays its rotation
+// (xr_math/camera_anim.hpp): the hands play in front of the game's camera, not at the controller. While any
+// of these holds, and for a short time after, the layer sends no aim delta; fighting a forced view would jerk
+// the camera and could push the player out of the animation.
 
 #include <cstdint>
 
@@ -20,6 +22,7 @@ struct ForcedAngleSignals {
     bool foreignSetViewAngles = false; // a SetViewAngles call not from the per-tick update since last frame
     std::uint32_t inhibitFlags = 0;    // idPlayer::inhibitFlags
     bool cutscene = false;             // renderView_t::inCutscene
+    bool cameraAnimation = false;      // a hands animation moves the camera
 };
 
 enum class ForcedReason : std::uint8_t {
@@ -27,6 +30,7 @@ enum class ForcedReason : std::uint8_t {
     SetViewAngles,
     Inhibit,
     Cutscene,
+    CameraAnimation,
     Settling, // none holds now, but one did within the resume delay
 };
 

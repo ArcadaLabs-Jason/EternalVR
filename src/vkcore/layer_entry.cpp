@@ -9,11 +9,13 @@
 #include "vkcore/cpu_timing.hpp"
 #include "vkcore/device_augment.hpp"
 #include "vkcore/dispatch.hpp"
+#include "vkcore/dlss_dll.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/shader_dump.hpp"
+#include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/stereo_hooks.hpp"
 #include "vkcore/stereo_present.hpp"
@@ -374,6 +376,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
 
     if (inst->isGame && !t_passThrough) {
         startStereoHooksEarly(); // stereo mode only; before the first map loads
+        installDlssDll();        // ETERNALVR_DLSS_DLL; the game initialises NGX right after this returns
         virtual_client::onGameDevice(*inst, physicalDevice, interop && plan.releaseImages);
     }
 
@@ -382,7 +385,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     shader_dump::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);
     ui_vulkan::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);      // ETERNALVR_UI_LAYER
     gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
-    cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough); // ETERNALVR_CPU_TIMING, after GPU
+    cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
+    stall_watch::onDeviceCreated(*data, inst->isGame && !t_passThrough); // always on, after the dump
 
     std::unique_lock lock(g_mapMutex);
     g_devices[keyOf(*pDevice)] = std::move(data);
@@ -403,6 +407,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     ui_vulkan::onDeviceDestroyed(device);
     gpu_timing::onDeviceDestroyed(device);
     cpu_timing::onDeviceDestroyed(device);
+    stall_watch::onDeviceDestroyed(device);
     const PFN_vkDestroyDevice destroy = data->vk.DestroyDevice;
     destroy(device, pAllocator);
     std::unique_lock lock(g_mapMutex);
@@ -449,6 +454,9 @@ PFN_vkVoidFunction findDeviceHook(const char* name) {
 #undef EVR_HOOK
     if (const PFN_vkVoidFunction swapchain = findSwapchainHook(name)) {
         return swapchain;
+    }
+    if (const PFN_vkVoidFunction stall = stall_watch::findHook(name)) { // chains to the shader dump's
+        return stall;
     }
     const PFN_vkVoidFunction cpu = cpu_timing::findHook(name); // chains to the GPU timing's, UI's or dump's
     const PFN_vkVoidFunction timing = gpu_timing::findHook(name); // chains to the UI layer's where both hook

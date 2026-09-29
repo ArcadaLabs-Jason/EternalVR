@@ -42,7 +42,7 @@ namespace EternalVR.Launcher.Core.Launch
                         Exit 0 restored, 2 refused, 4 restored but the record is still stale
   --export-report <zip> write the report zip (logs, versions, checks; redacted) to <zip> and exit
   --data-root <dir>     user data folder (default %LOCALAPPDATA%\EternalVR)
-  --game-dir <dir>      DOOM Eternal folder (default: found through Steam)
+  --game-dir <dir>      DOOM Eternal folder (default: found through Steam, else Game Pass)
   --layer-dir <dir>     folder holding VK_LAYER_ETERNALVR.json and EternalVR.dll (default: layer\ next to the launcher)
   --saved-games <dir>   the game's Saved Games folder (default: Saved Games\id Software\DOOMEternal)
   --steam-root <dir>    Steam folder for userdata and libraries (default: from the registry)

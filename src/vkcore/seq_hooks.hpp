@@ -28,6 +28,9 @@ namespace evr::vkcore {
 
 struct SeqHookSettings {
     bool prevMatrices = true; // ETERNALVR_STEREO_PREV_MATRICES
+    bool alternateEyes =
+        false; // ETERNALVR_ALTERNATE_EYES: one eye per game tick (stereo_seq/alternate_eyes.hpp)
+    bool adaptiveEyes = false; // =auto: both eyes per tick while the processor keeps up (adaptive_eyes.hpp)
 };
 
 // Locates, checks and installs the Route S hooks once per process; later calls return the first result.
@@ -48,8 +51,23 @@ SeqReadiness seqStereoReadiness();
 void seqMarkWanted();
 
 // The eye whose chain is running: Right inside the eye R render the wrapper started, Left otherwise (the
-// engine's own chain, which is eye L on a stereo tick and the only view on a mono one).
+// engine's own chain, which is eye L on a stereo tick and the only view on a mono one). With alternate eyes
+// on there is no such render: always Left, so the hooks that patch eye R's re-render of eye L's tick (moved
+// flags) leave every render as the engine made it; with auto there is one in a tick that renders both eyes.
 stereo_seq::Eye seqChainEye();
+
+// The eye the running render draws: seqChainEye() under Route S; with alternate eyes the eye the engine's own
+// chain draws in this render frame (Left, then Right in the next one; stereo_seq::EyeAlternator).
+stereo_seq::Eye seqRenderEye();
+
+// ETERNALVR_ALTERNATE_EYES is on or auto and the hooks are installed.
+bool seqAlternateEyes();
+// ETERNALVR_ALTERNATE_EYES is auto and the hooks are installed: a tick renders both eyes (eye R nested, as
+// under Route S) or one (alternating), chosen at each pair's eye L (stereo_seq/adaptive_eyes.hpp).
+bool seqAdaptiveEyes();
+// The running render belongs to a tick that renders both eyes: always under Route S, never with alternate
+// eyes on; with auto, the choice its pair's eye L made.
+bool seqPairInTick();
 
 // The per-eye hook wrote (or, with the same-view test, would have written) `eye`'s view for game frame
 // `tick` in the current chain. Without this for eye L the tick renders mono.
@@ -69,9 +87,10 @@ stereo_seq::PresentMatch seqTakePresent();
 // counter it will present with (the counter read now, plus one). nullopt when it has none.
 std::optional<stereo_seq::RenderTag> seqTagInFlight();
 
-// The tag of the frame that will present with `backendFrame`, wherever the backend is now: for code that
-// knows its own frame's counter (the render-view job runs ahead of the backend, so the counter read there
-// can be an older frame's under load). nullopt when it has none.
+// The tag of the frame that will present with `backendFrame`, wherever the backend is now: for code that has
+// the counter the engine read for its render (RVA 0x1CBB2D0 reads this same backend counter; the render-view
+// job keeps its reads in its contexts). A later read, as seqTagInFlight makes, names the next frame once the
+// render thread's swap has moved the counter on. nullopt when it has none.
 std::optional<stereo_seq::RenderTag> seqTagForBackendFrame(std::uint32_t backendFrame);
 
 struct SeqCounters {
@@ -85,16 +104,21 @@ struct SeqCounters {
     std::uint64_t drains = 0;          // waits for an idle render thread (tag base)
     std::uint64_t drainFailures = 0;
     std::uint64_t unverifiedBases = 0; // bases taken from a quiet period, not from the frame counts
+    std::uint64_t drainMicros = 0;     // wall time the frontend was held by drains
     std::uint64_t prevRewrites = 0;
     std::uint64_t prevKept = 0;
-    std::uint32_t renderFrames = 0;  // renderSystem + 0x10
-    std::uint32_t backendFrames = 0; // renderBackend + 0xB0
-    std::int32_t swapInterval = -1;  // r_swapInterval as the render thread reads it (-1: unknown)
-    std::size_t deepestNested = 0;   // bytes: deepest eye R chain point seen below the wrapper's call
-    std::size_t leastHeadroom = 0;   // bytes: least stack left at an eye R call (0: none or unknown)
+    std::uint64_t altRenders[2] = {}; // alternate eyes: stereo renders per eye
+    std::uint32_t renderFrames = 0;   // renderSystem + 0x10
+    std::uint32_t backendFrames = 0;  // renderBackend + 0xB0
+    std::int32_t swapInterval = -1;   // r_swapInterval as the render thread reads it (-1: unknown)
+    std::size_t deepestNested = 0;    // bytes: deepest eye R chain point seen below the wrapper's call
+    std::size_t leastHeadroom = 0;    // bytes: least stack left at an eye R call (0: none or unknown)
     stereo_seq::EyeTagQueue::Stats tags;
     bool tagsSynced = false;
 };
 SeqCounters seqCounters();
+
+// The longest drain since the last call (microseconds; 0: none), for the 10 s summary.
+std::uint64_t seqTakeDrainMaxMicros();
 
 } // namespace evr::vkcore

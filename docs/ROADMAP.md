@@ -13,7 +13,7 @@
 | **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for seven controller families, `docs/VR_CONTROLLERS.md`) |
 | M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`); the wrist HUD is on a branch |
 | M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen or skipped, comfort effects off; glory kills not adapted yet |
-| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, player controller maps from its controls folder; no profiles or editor yet |
+| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles, each with its own controls, and the controls editor |
 | M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye (experimental), stereo CPU profile; no foveation yet |
 | M10 Beta and release | A public release | Code signing choice; going public | In progress: public alpha v0.1.0, v0.1.1 and v0.1.2 (prereleases) |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
@@ -443,7 +443,8 @@ Required for v1
       pause and quit; still open: a curved panel, the rest of the R12 inventory, the headset
 - [ ] HUD split onto the wrist panel and the message panel (T-077); the body-locked HUD with look-down
       reveal is available as an option. Built and unit-tested, not yet run live (`docs/VR_HANDS_HUD.md`):
-      the corner blocks on the off hand's wrist (opt-in, `ETERNALVR_HUD=wrist`, until the live test), the rest on
+      the corner blocks on the off hand's wrist (opt-in, `ETERNALVR_HUD=wrist`, until the live test), or the
+      ammo block above the gun in the weapon hand (opt-in, `ETERNALVR_HUD=weapon`), the rest on
       the head-locked quad; the whole head-locked HUD stays the default; the free off hand behind
       `ETERNALVR_OFFHAND=free`
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere

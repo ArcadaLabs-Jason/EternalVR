@@ -37,10 +37,13 @@ namespace EternalVR.Launcher
 
         public bool TestMode => Options.TestExe != null;
 
-        /// <summary>The player's controls folder in the data folder.</summary>
-        public ControlsFolder Controls => new ControlsFolder(Paths.Controls);
+        /// <summary>The player's controls in the data folder: the no-profile set and each VR settings profile's own.</summary>
+        public ControlSets ControlSets => new ControlSets(Paths.Controls);
 
-        /// <summary>The built-in controller maps shipped with the launcher, copied into the controls folder's defaults.</summary>
+        /// <summary>The controls of the VR settings profile in use (<c>ControlSets.InUse</c>: its own, else the no-profile set).</summary>
+        public ControlsFolder Controls => ControlSets.InUse(Settings.Profile);
+
+        /// <summary>The built-in controller maps shipped with the launcher, copied into each controls folder's defaults.</summary>
         public string DefaultControlsDir => Path.Combine(ProgramDir, "data", "controllers");
 
         public static LauncherContext Create(LauncherOptions options, Log log)
@@ -79,20 +82,48 @@ namespace EternalVR.Launcher
         public string LayerDir =>
             Options.LayerDir ?? (string.IsNullOrWhiteSpace(Settings.LayerDir) ? Path.Combine(ProgramDir, "layer") : Settings.LayerDir);
 
+        /// <summary>
+        /// The game: the chosen folder, else the Steam install, else the Game Pass one. A chosen store folder is used as
+        /// the Game Pass install: its Content folder (unless it is in WindowsApps), else the one found on the drives, else
+        /// the folder itself (preflight then says it is not a Content folder).
+        /// </summary>
         public GameInstallLocation ResolveGame()
         {
             if (TestMode)
                 return new GameInstallLocation(Options.GameDir ?? Path.GetDirectoryName(Options.TestExe), null, null, "test");
             var manual = Options.GameDir ?? (string.IsNullOrWhiteSpace(Settings.GameDir) ? null : Settings.GameDir);
-            if (manual != null) return new GameInstallLocation(manual, null, null, "chosen folder");
-            return SteamLibraries.FindApp(SteamRoot, GameLayout.SteamAppId, GameLayout.RetailExe);
+            if (manual != null)
+            {
+                var content = GamePassInstall.ContentFolderOf(manual);
+                if (content == null && !GameLayout.IsStoreInstall(manual)) return new GameInstallLocation(manual, null, null, "chosen folder");
+                if (content != null && !GamePassInstall.IsPackageStorePath(content)) return GamePassInstall.Locate(content, "chosen folder");
+                return FindGamePass() ?? GamePassInstall.Locate(content ?? manual, "chosen folder");
+            }
+            return SteamLibraries.FindApp(SteamRoot, GameLayout.SteamAppId, GameLayout.RetailExe) ?? FindGamePass();
         }
+
+        private static GameInstallLocation FindGamePass() => GamePassInstall.FindInDrives(WindowsSystem.FixedDriveRoots());
 
         public string GameExePath(GameInstallLocation game) =>
             TestMode ? Options.TestExe : Path.Combine(game.GameRoot, GameLayout.RetailExe);
 
-        public IReadOnlyList<SettingsLocation> SettingsLocations() =>
-            GameLayout.FindSettingsLocations(SavedGamesDir, SteamRoot, ActiveAccount);
+        /// <summary>The settings locations of the game found now (<see cref="ResolveGame"/>).</summary>
+        public IReadOnlyList<SettingsLocation> SettingsLocations() => SettingsLocations(ResolveGame());
+
+        public IReadOnlyList<SettingsLocation> SettingsLocations(GameInstallLocation game) =>
+            GameLayout.FindSettingsLocations(game?.Platform ?? GamePlatform.Steam, SavedGamesDir, SteamRoot, ActiveAccount);
+
+        /// <summary>
+        /// The locations the save backup covers: the Steam ones among the settings locations, and for Game Pass the
+        /// package's save containers when they exist.
+        /// </summary>
+        public IReadOnlyList<SettingsLocation> SaveLocations(Gathered g)
+        {
+            if (g.Game?.Platform != GamePlatform.GamePass) return g.Locations;
+            var saves = GamePassInstall.SaveLocation(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+            if (saves == null) Log.Info("save backup: no Game Pass save folder found");
+            return saves == null ? g.Locations : g.Locations.Concat(new[] { saves }).ToList();
+        }
 
         /// <summary>The runtime manifest the game will use: the chosen one, else the system's active one.</summary>
         public string EffectiveRuntime() =>
@@ -133,9 +164,6 @@ namespace EternalVR.Launcher
             var g = new Gathered();
             var f = new PreflightFacts();
             f.IsElevated = WindowsSystem.IsElevated();
-            f.SteamRunning = WindowsSystem.IsProcessRunning("steam");
-            var active = WindowsSystem.SteamActiveUser();
-            f.SteamLoggedIn = active == null ? (bool?)null : active != "0";
             f.GameProcessesRunning = RunningGameProcesses();
             f.SessionPending = File.Exists(Paths.SessionMarker);
             f.DataFolderWritable = FileUtil.IsWritableDirectory(Paths.Root, out var dataError);
@@ -143,14 +171,21 @@ namespace EternalVR.Launcher
             f.ProgramFolderUnderProgramFiles = WindowsSystem.IsUnderProgramFiles(ProgramDir);
 
             f.TestMode = TestMode;
-            f.KnownBuildIds = Data.Builds.All.Select(b => b.BuildId).Distinct().ToList();
             g.Game = ResolveGame();
+            f.Platform = g.Game?.Platform ?? GamePlatform.Steam;
+            bool steam = f.Platform == GamePlatform.Steam;
+            f.KnownBuildIds = Data.Builds.IdsFor(f.Platform);
+            if (steam)
+            {
+                f.SteamRunning = WindowsSystem.IsProcessRunning("steam");
+                var active = WindowsSystem.SteamActiveUser();
+                f.SteamLoggedIn = active == null ? (bool?)null : active != "0";
+            }
             if (g.Game != null)
             {
                 f.GameRoot = g.Game.GameRoot;
-                f.SteamBuildId = g.Game.BuildId;
-                f.StoreInstall = !TestMode && GameLayout.IsStoreInstall(g.Game.GameRoot);
-                f.Build = Data.Builds.Check(GameExePath(g.Game));
+                f.SteamBuildId = steam ? g.Game.BuildId : null;
+                f.Build = steam ? Data.Builds.Check(GameExePath(g.Game)) : GamePassInstall.Check(Data.Builds, g.Game.GameRoot);
                 f.AntiCheatFiles = TestMode ? new string[0] : Data.AntiCheat.Scan(g.Game.GameRoot);
             }
             f.Compatibility = new CompatibilityFacts
@@ -176,11 +211,22 @@ namespace EternalVR.Launcher
             f.Layers = g.LayerDecisions;
             f.HagsMode = WindowsSystem.HagsMode();
 
-            g.Locations = SettingsLocations();
+            g.Locations = SettingsLocations(g.Game);
             f.SettingsLocationCount = g.Locations.Count;
+            // Game Pass has no Steam Cloud: its saves go through XGameSave.
+            if (steam) CheckCloudRecord(f, g.Locations);
+            f.ArgumentRefusal = Data.ArgumentPolicy.Check(Settings.ExtraArguments);
+
+            g.Facts = f;
+            g.Result = PreflightEvaluator.Evaluate(f);
+            return g;
+        }
+
+        private void CheckCloudRecord(PreflightFacts f, IReadOnlyList<SettingsLocation> locations)
+        {
             try
             {
-                var cloud = SteamCloudCache.Check(g.Locations);
+                var cloud = SteamCloudCache.Check(locations);
                 f.CloudRecordStale = cloud.Stale.Select(x => x.Key).ToList();
                 f.CloudRecordUnreadable = cloud.Unreadable;
                 foreach (var x in cloud.Stale) Log.Warn("Steam's cloud record is stale: " + x);
@@ -189,11 +235,6 @@ namespace EternalVR.Launcher
             {
                 f.CloudRecordUnreadable = new[] { e.Message };
             }
-            f.ArgumentRefusal = Data.ArgumentPolicy.Check(Settings.ExtraArguments);
-
-            g.Facts = f;
-            g.Result = PreflightEvaluator.Evaluate(f);
-            return g;
         }
 
         /// <summary>The resync step's machine access: the game's process names, and Steam.</summary>
@@ -222,6 +263,7 @@ namespace EternalVR.Launcher
                 LogDir = Paths.SessionLogDir(sessionId),
                 Settings = Settings,
                 ForcedCvars = Data.ForcedCvars,
+                CpuSaver = Data.CpuSaver,
                 ForceCvars = g.Locations.Count > 0,
                 LayerDecisions = g.LayerDecisions,
                 Route = Options.RegisterHkcu ? LayerRoute.HkcuRegistration : LayerRoute.Environment,

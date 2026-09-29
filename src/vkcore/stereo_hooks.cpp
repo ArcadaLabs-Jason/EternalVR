@@ -40,7 +40,7 @@ constexpr std::size_t kLatchCallPatch = 0x22;
 
 // Screen-view build (RVA 0x17E8740): the current world from the game system's vtable slot 0x60, stored
 // at [rbp - 0x70] (RVA 0x17E879D) ...
-constexpr const char* kBuildWorldSignature = "49 8B 45 00 FF 50 60 45 33 FF 48 89 45 90 0F B6 87 60 2A 00 00";
+constexpr const char* kBuildWorldSignature = "49 8B 45 00 FF 50 60 45 33 FF 48 89 45 ?? 0F B6 87 60 2A 00 00";
 constexpr std::size_t kBuildWorldDisp8 = 13;
 // ... and the read of the layout pointer, frameBuilder (rdi) + 0x2A70 (RVA 0x17E88A1). The layout hook
 // goes on that read. Also gives the render system object (lea rcx at RVA 0x17E8837) for E7.

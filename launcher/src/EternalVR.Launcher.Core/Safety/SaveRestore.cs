@@ -45,6 +45,7 @@ namespace EternalVR.Launcher.Core.Safety
                                             CloudResyncOptions resync, Action<string> log)
         {
             var result = new SaveRestoreResult();
+            if (SaveBackups.HoldsGamePassSaves(backupDir)) return Refuse(result, GamePassBackupAdvice(backupDir), log);
             var games = host.GameProcessIds();
             if (games.Count > 0) return Refuse(result, "Quit the game first (a game process is running).", log);
             if (!host.SteamRunning())
@@ -94,6 +95,11 @@ namespace EternalVR.Launcher.Core.Safety
             log(result.Summary);
             return result;
         }
+
+        /// <summary>Why a Game Pass save backup is not restored, and where its copy is.</summary>
+        public static string GamePassBackupAdvice(string backupDir) =>
+            "This backup holds Game Pass saves. The launcher keeps them as a copy only and does not write them back: "
+            + "Windows syncs Game Pass saves with the Xbox cloud. The copy is in " + backupDir + ".";
 
         private static SaveRestoreResult Refuse(SaveRestoreResult result, string why, Action<string> log)
         {

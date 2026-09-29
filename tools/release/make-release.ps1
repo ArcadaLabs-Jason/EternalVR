@@ -127,7 +127,7 @@ function Test-RelSources($state) {
     foreach ($doc in (Get-RelDocs $repo)) {
         if (-not (Test-Path -LiteralPath $doc.Source)) { Stop-Refused "Missing: $($doc.Source)" }
     }
-    $builds = @(Get-Content -LiteralPath (Join-Path $repo 'launcher\data\known-builds.txt') | Where-Object { $_ -match '^[0-9a-f]{64}\s*\|' })
+    $builds = @(Get-Content -LiteralPath (Join-Path $repo 'launcher\data\known-builds.txt') | Where-Object { $_ -match '^([0-9a-f]{64}|gamepass)\s*\|' })
     if ($builds.Count -eq 0) { Stop-Refused 'launcher\data\known-builds.txt lists no supported game build' }
     $maps = @(Get-ChildItem -LiteralPath (Join-Path $repo 'data\input\controllers') -File -Filter '*.toml')
     if ($maps.Count -eq 0) { Stop-Refused 'data\input\controllers holds no controller map for the launcher to ship' }

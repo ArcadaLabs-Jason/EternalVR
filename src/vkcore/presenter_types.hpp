@@ -134,6 +134,9 @@ struct CopyTarget {
     // Which present of a tick this is: while a menu is up the window shows the panel's image, which only a
     // mono or eye L present carries (stereo_seq::panelMirror).
     stereo_seq::PresentKind kind = stereo_seq::PresentKind::Mono;
+    // Alternate eyes: the image also goes into its half of this slot (held for the next present); kRingSize:
+    // none.
+    std::uint32_t carrySlot = kRingSize;
 };
 
 // A ring slot's copy of the game's GUI target (UI layer): shared like the slot's image.

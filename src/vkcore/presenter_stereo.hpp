@@ -40,8 +40,10 @@ struct StereoSettings {
     float testWeaponFov = 0.0f;  // ETERNALVR_TEST_WEAPON_FOV: weaponFOVX/Y override in degrees (E3), 0 off
     // Route S (docs/VR_STEREO.md): ETERNALVR_STEREO_SAME_VIEW, _FULL_RES, _EXPOSURE_ONCE, _DISCONTINUOUS.
     stereo_seq::SeqViewSettings seqView;
-    bool prevMatrices = true; // ETERNALVR_STEREO_PREV_MATRICES
-    bool fixCentered = true;  // ETERNALVR_STEREO_FIX_CENTERED: centred matrix depth row after each eye latch
+    bool prevMatrices = true;   // ETERNALVR_STEREO_PREV_MATRICES
+    bool alternateEyes = false; // ETERNALVR_ALTERNATE_EYES (1 or auto): one eye per game tick (seq_hooks.hpp)
+    bool adaptiveEyes = false;  // ETERNALVR_ALTERNATE_EYES=auto: only while the processor cannot keep up
+    bool fixCentered = true; // ETERNALVR_STEREO_FIX_CENTERED: centred matrix depth row after each eye latch
     std::optional<stereo_seq::CaptureSetting> capture; // ETERNALVR_CAPTURE_EYES
 };
 

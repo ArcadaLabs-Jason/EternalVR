@@ -18,6 +18,12 @@ target_compile_features(evr_device_features PUBLIC cxx_std_20)
 target_compile_definitions(evr_device_features PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(evr_device_features PRIVATE evr_warnings PUBLIC Vulkan::Headers)
 
+# The debug command schedule (debug_commands.cpp), tested without the game.
+add_library(evr_debug_script STATIC debug_script.cpp)
+target_include_directories(evr_debug_script PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_debug_script PUBLIC cxx_std_20)
+target_link_libraries(evr_debug_script PRIVATE evr_warnings evr_mp_policy)
+
 # Pure helpers of the shader dump, tested without a device.
 add_library(evr_dump_format STATIC dump_format.cpp)
 target_include_directories(evr_dump_format PUBLIC "${PROJECT_SOURCE_DIR}/src")
@@ -30,11 +36,18 @@ add_library(evr_layer SHARED
     bin_tile_hooks.cpp
     body_follow.cpp
     bug_capture.cpp
+    camera_anim_hook.cpp
     cinema_view.cpp
     client_rect.cpp
     cpu_timing.cpp
+    debug_commands.cpp
+    demon_aim.cpp
+    demon_view.cpp
     device_augment.cpp
+    dlss_dll.cpp
+    dlss_menu_hooks.cpp
     eye_capture.cpp
+    game_build.cpp
     game_code.cpp
     game_text.cpp
     gpu_timing.cpp
@@ -53,6 +66,7 @@ add_library(evr_layer SHARED
     object_prev_hooks.cpp
     world_gui_hooks.cpp
     player_aim.cpp
+    presenter_alt.cpp
     presenter_copy.cpp
     presenter_fade.cpp
     presenter_mirror.cpp
@@ -77,10 +91,13 @@ add_library(evr_layer SHARED
     room_follow.cpp
     room_scale.cpp
     scatter_hooks.cpp
+    seq_alternate.cpp
     seq_hooks.cpp
     seq_locate.cpp
+    seq_stack.cpp
     shader_dump.cpp
     shader_dump_record.cpp
+    stall_watch.cpp
     status_file.cpp
     stereo_hooks.cpp
     stereo_present.cpp
@@ -91,6 +108,7 @@ add_library(evr_layer SHARED
     taa_locate.cpp
     taa_ngx.cpp
     taa_resize.cpp
+    test_cpu_load.cpp
     test_keys.cpp
     ui_capture.cpp
     ui_engine.cpp
@@ -98,6 +116,7 @@ add_library(evr_layer SHARED
     ui_wash.cpp
     view_hook.cpp
     virtual_client.cpp
+    vram_watch.cpp
     xr_presenter.cpp)
 # Motion controllers (M5, controllers.hpp).
 target_sources(evr_layer PRIVATE
@@ -133,7 +152,9 @@ target_compile_definitions(evr_layer PRIVATE
     NOMINMAX)
 target_link_libraries(evr_layer PRIVATE
     evr_warnings
+    evr_debug_script
     evr_device_features
+    evr_dlss_dll
     evr_dump_format
     evr_gpu_timing
     evr_layer_gate

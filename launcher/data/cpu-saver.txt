@@ -1,0 +1,64 @@
+# The processor saver (Play tab, Picture): game cvars that cut the processor's work for each render, in items the
+# player turns on one by one. Measured on the rig 2026-09-29 (docs/rig-findings/perf-cpu-cvars.md section 6): every
+# item together gave +23.9% ticks per second on e1m2's start view. Stereo renders the scene twice per tick, one eye
+# after the other, so every saving per render counts twice.
+#
+# A stereo launch hands the cvars of the items that are on to the layer (ETERNALVR_CPU_SAVER), which holds them at
+# run time through the game's own setter (the game's menu writes some of them again on every profile load and menu
+# change). The settings restore puts the cvars of every item back in the game's configs after each session, whether
+# the item was on or not.
+#
+# item | id | default | row | checkbox text [| note]
+#   id       a stable name (a-z, 0-9, _): launcher.ini keeps the player's choice as cpu_saver_<id> = on or off.
+#            Never rename one; a new id starts from its default for everyone.
+#   default  on or off, for a player whose launcher.ini has no choice for it. An older launcher.ini's
+#            cpu_saver = on turns every item on.
+#   row      streaming (a checkbox in the Picture group's "Texture streaming" row) or saver (a row of the "Processor
+#            saver" group, the checkbox text as its label).
+#   note     optional: a short line under a streaming checkbox.
+# tip | text      the checkbox's tooltip: what it changes, the gain measured on the rig, what it costs in the
+#                 picture (more tip lines are joined with a space; the launcher adds the cvars).
+# name | value    the item's cvars ("<=N": a cap, lowered to N only while above it, so a player on a lower level
+#                 keeps it). A cvar belongs to one item only.
+
+# The texture streamer keeps only the mip levels a view needs instead of also caching extra ones ahead: +8% ticks per
+# second on the rig (the streamer's whole cost in stereo; a still view looked the same after five minutes).
+item | texture_streaming | on | streaming | Only what you see | Mostly lossless; on by default
+tip | The game's texture streamer loads the texture detail the current view needs, instead of also caching extra detail
+tip | ahead of time. About 8% more frames per second on the test rig. Mostly lossless: a still view looks the same, but
+tip | textures may sharpen a moment later when you turn fast or enter a new area. On by default.
+is_cacheGreedily | 0
+
+# No shadows cast by the player's own hands and weapon onto the player (the game's Low and Medium shadows): +2.4%.
+item | own_shadow | off | saver | No shadow from your hands and gun
+tip | Your hands and gun cast no shadow onto you, as with the game's Low and Medium shadows. About 2.4% more frames
+tip | per second on the test rig. You lose only your own shadow; the world's shadows stay.
+r_skipPlayerShadow | 1
+
+# The sun's shadow cascades without the accurate near slices (the game's Low and Medium shadows): +6.3% (2 rounds).
+item | near_sun_shadows | off | saver | Simpler sun shadows near you
+tip | Sun shadows close to you are cast from simpler, cached geometry, as with the game's Low and Medium shadows.
+tip | About 6.3% more frames per second on the test rig. Nearby sun shadows can look a little less exact.
+r_shadowNumAccurateSunSlices | 0
+
+# Models switch to their simpler versions at the distance of the game's Medium setting (Ultra Nightmare 3.5): +4.4%.
+item | model_detail | off | saver | Simpler models a little closer
+tip | Models switch to their simpler versions at the distance of the game's Medium detail setting. About 4.4% more
+tip | frames per second on the test rig. Distant detail pops in a little closer to you. A lower setting of your own is
+tip | kept.
+r_lodScale | <=1.625
+
+# Decals (blood, scorch marks, bullet holes) fade out at the game's Medium distance (Ultra Nightmare 8): +3.7%.
+item | decal_distance | off | saver | Blood and scorch marks fade nearer
+tip | Decals (blood, scorch marks, bullet holes) fade out at the game's Medium distance. About 3.7% more frames per
+tip | second on the test rig. Marks on distant walls and floors disappear sooner. A lower setting of your own is kept.
+r_decalDistanceFadeMultiplier | <=0.5
+
+# Shadows and lights fade out at the distance of the game's High setting (Ultra 2.0 and 1.5, Nightmare 2.5 and 2.0,
+# UN 2.5). No gain on the start view (few lights); kept for lit arenas, where more shadows and lights are in range.
+item | distant_shadows_lights | off | saver | Shadows and lights fade nearer
+tip | Shadows and lights far from you fade out at the distance of the game's High setting. No measurable gain on the
+tip | test view, which has few lights; meant for big lit arenas. Far-off shadows and lights fade a little sooner.
+tip | A lower setting of your own is kept.
+r_shadowsDistanceFadeMultiplier | <=1
+r_lightDistanceFadeMultiplier | <=1

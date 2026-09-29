@@ -114,8 +114,16 @@ TestInput parseTestInput(std::string_view text) {
                 continue;
             }
             h.position = Vec3{v[0], v[1], v[2]};
+        } else if (key == "velocity") {
+            if (v.size() != 3 || std::fabs(v[0]) > 10.0f || std::fabs(v[1]) > 10.0f ||
+                std::fabs(v[2]) > 10.0f) {
+                issue("expected x, y, z in metres per second (within 10)");
+                continue;
+            }
+            h.velocity = Vec3{v[0], v[1], v[2]};
         } else {
-            issue("unknown input (trigger, grip, stick, primary, secondary, click, menu, aim, position)");
+            issue("unknown input (trigger, grip, stick, primary, secondary, click, menu, aim, position, "
+                  "velocity)");
         }
     }
     return input;
@@ -150,7 +158,7 @@ void applyTestInput(const TestInput& input, InputFrame& frame) {
             h.gripValid = true;
             h.gripPose = *pose;
             h.velocityValid = true;
-            h.linearVelocity = {};
+            h.linearVelocity = t.velocity.value_or(Vec3{});
         }
     }
 }

@@ -233,11 +233,15 @@ namespace EternalVR.Launcher
             Log.Info("the game has exited");
             DropHeldProblem();
             bool restored = CleanUpAfterSession(marker);
+            // How fast the game really drew, beside the headset's rate (SessionRates).
+            var rates = SessionRates.FromSessionDir(logDir);
+            if (rates != null) Log.Info(rates.LogText());
+            var ratesText = rates != null ? " " + rates.Describe() : string.Empty;
             // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended.
             if (lastStatus == null || lastStatus.Kind != StatusKind.Problem)
-                Report(restored ? StatusKind.Good : StatusKind.Warning, restored
+                Report(restored ? StatusKind.Good : StatusKind.Warning, (restored
                     ? "The game has exited and your settings were restored."
-                    : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).");
+                    : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).") + ratesText);
             return restored;
         }
 
@@ -262,7 +266,7 @@ namespace EternalVR.Launcher
 
         private void BackUpSaves(string id, LauncherContext.Gathered g)
         {
-            var backup = SaveBackups.Create(ctx.Paths.SaveBackups, id, g.Locations);
+            var backup = SaveBackups.Create(ctx.Paths.SaveBackups, id, ctx.SaveLocations(g));
             Log.Info(backup == null ? "save backup: no save slot found, nothing to back up" : "save backup: " + backup);
             try { SaveBackups.Rotate(ctx.Paths.SaveBackups); }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { Log.Warn("removing old save backups failed: " + e.Message); }

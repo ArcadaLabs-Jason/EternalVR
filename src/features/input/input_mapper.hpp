@@ -7,6 +7,7 @@
 // whole input sequences can be replayed in tests.
 
 #include "features/input/analog_button.hpp"
+#include "features/input/arm_gestures.hpp"
 #include "features/input/binding_profile.hpp"
 #include "features/input/capture_chord.hpp"
 #include "features/input/controller_state.hpp"
@@ -51,6 +52,9 @@ struct MapperSettings {
     TurnStickSettings turnStick;
     HandsJumpSettings handsJump;
     PunchSettings punch;
+    // The throw and the overhead swing (arm_gestures.hpp), both off by default.
+    ThrowSettings throwGesture;
+    SwingSettings swing;
 };
 
 // Per-frame facts the mapper needs from outside the input system.
@@ -110,6 +114,7 @@ private:
     TurnPolicy turn_;
     LocomotionDirection locomotion_;
     HandsJumpDetector handsJump_;
+    ArmGestures armGestures_;
     PunchDetector punch_;
     CaptureChord captureChord_;
     StickChord stickChord_;

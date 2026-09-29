@@ -1,10 +1,12 @@
 #include "vkcore/keep_prev_hooks.hpp"
 
+#include "stereo_seq/alternate_prev.hpp"
 #include "stereo_seq/keep_prev.hpp"
 #include "vkcore/game_code.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/seq_alternate.hpp"
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/taa_hooks.hpp"
 
@@ -42,6 +44,18 @@ stereo_seq::KeepPrevMode g_mode = stereo_seq::KeepPrevMode::On;
 stereo_seq::PairClock g_clock;
 std::unique_ptr<std::atomic<std::uint32_t>[]> g_leftStamps;
 
+// Alternate eyes (on or auto): every commit leaves the entity's current matrix of two renders back as its
+// previous one (stereo_seq/alternate_prev.hpp), instead of eye R keeping eye L's. Per entity: the render of
+// its latest commit and the current matrix that commit replaced. Entities with a larger index keep the
+// engine's behaviour.
+constexpr std::size_t kMaxHeld = std::size_t{1} << 16;
+struct Held {
+    stereo_seq::PrevHold hold;
+    std::byte matrix[kMatrixBytes];
+};
+bool g_alternateRule = false;
+std::unique_ptr<Held[]> g_held;
+
 // The previous matrix saved between the two hooks, on the thread running the commit.
 struct Saved {
     std::byte* at = nullptr;
@@ -54,6 +68,10 @@ struct Counters {
     std::atomic<std::uint64_t> copies[2]{}; // the commit's previous = current copies
     std::atomic<std::uint64_t> sameTick{0}; // eye R copies of entities eye L committed in the same tick
     std::atomic<std::uint64_t> kept{0};     // previous matrices put back
+    // Alternate eyes: commits by PrevAction (the engine's copy, the matrix of two renders back, a second
+    // commit in one render keeping the first one's), and commits past kMaxHeld.
+    std::atomic<std::uint64_t> actions[3]{};
+    std::atomic<std::uint64_t> unheld{0};
     std::atomic<std::uint64_t> lastReport{0};
 } g_counters;
 
@@ -74,6 +92,18 @@ void report() {
     if (now - last < 10000 || !g_counters.lastReport.compare_exchange_strong(last, now)) {
         return;
     }
+    if (g_alternateRule) {
+        EVR_LOG(
+            "%s: alternate eyes: %llu commit(s) given the matrix of two renders back (committed in the "
+            "render before), %llu left as the engine's (not committed since), %llu second commit(s) in one "
+            "render keeping the first one's, %llu past the table; previous matrices put back %llu",
+            kTag, static_cast<unsigned long long>(g_counters.actions[1].exchange(0)),
+            static_cast<unsigned long long>(g_counters.actions[0].exchange(0)),
+            static_cast<unsigned long long>(g_counters.actions[2].exchange(0)),
+            static_cast<unsigned long long>(g_counters.unheld.exchange(0)),
+            static_cast<unsigned long long>(g_counters.kept.exchange(0)));
+        return;
+    }
     EVR_LOG(
         "%s: previous-matrix copies L %llu R %llu; eye R copies of entities eye L committed this tick %llu, "
         "previous kept %llu",
@@ -83,13 +113,40 @@ void report() {
         static_cast<unsigned long long>(g_counters.kept.exchange(0)));
 }
 
-// Before the first copy: stamp (eye L) or save (eye R).
+// Alternate eyes, before the first copy: rsi is the current matrix, r14 + rdi the previous one.
+void onCopyAlternate(const HookRegisters& r, std::size_t index) {
+    if (index >= kMaxHeld) {
+        ++g_counters.unheld;
+        return;
+    }
+    Held& held = g_held[index];
+    const std::uint64_t render = seq_alternate::renderIndex();
+    const stereo_seq::PrevPlan plan = stereo_seq::planPrevious(held.hold, render);
+    ++g_counters.actions[static_cast<int>(plan.action)];
+    auto* previous = reinterpret_cast<std::byte*>(r.r14 + r.rdi);
+    if (g_mode == stereo_seq::KeepPrevMode::On && plan.action != stereo_seq::PrevAction::Engine) {
+        std::memcpy(t_saved.matrix, plan.action == stereo_seq::PrevAction::Keep ? previous : held.matrix,
+                    kMatrixBytes);
+        t_saved.at = previous;
+    }
+    if (plan.hold) {
+        held.hold = stereo_seq::PrevHold{true, render};
+        std::memcpy(held.matrix, reinterpret_cast<const std::byte*>(r.rsi), kMatrixBytes);
+    }
+}
+
+// Before the first copy: stamp (eye L) or save (eye R); with alternate eyes, onCopyAlternate.
 void onCopy(const HookRegisters& r) {
     t_saved.at = nullptr;
     if (!mp_guard::allowsGameTouch()) {
         return;
     }
     const std::size_t index = static_cast<std::uint32_t>(r.rbx);
+    if (g_alternateRule) {
+        report();
+        onCopyAlternate(r, index);
+        return;
+    }
     const stereo_seq::Eye eye = seqChainEye();
     const bool right = eye == stereo_seq::Eye::Right;
     ++g_counters.copies[right ? 1 : 0];
@@ -154,6 +211,10 @@ bool installKeepPrevHooks() {
             return;
         }
         g_leftStamps = std::make_unique<std::atomic<std::uint32_t>[]>(kMaxEntities);
+        if (seqAlternateEyes()) {
+            g_held = std::make_unique<Held[]>(kMaxHeld);
+            g_alternateRule = true; // before the hooks go in
+        }
         std::string error;
         if (!installMidHook(const_cast<std::byte*>(copy), &onCopy, error)) {
             EVR_LOG("%s: copy hook failed: %s", kTag, error.c_str());
@@ -168,9 +229,12 @@ bool installKeepPrevHooks() {
         g_installed = true;
         EVR_LOG("%s: the commit's model-matrix step hooked (RVA 0x%X, 0x%X): %s", kTag, image.rva(copy),
                 image.rva(call + kAfterCallHook),
-                g_mode == stereo_seq::KeepPrevMode::Count
-                    ? "counting only (ETERNALVR_STEREO_KEEP_PREV=count)"
-                    : "eye R keeps eye L's previous model matrix for entities eye L committed this tick");
+                g_mode == stereo_seq::KeepPrevMode::Count ? "counting only (ETERNALVR_STEREO_KEEP_PREV=count)"
+                : g_alternateRule
+                    ? "alternate eyes: each commit leaves the current matrix of two renders back "
+                      "as the previous one (each eye's own last render)"
+                    : "eye R keeps eye L's previous model matrix for entities eye L committed "
+                      "this tick");
     });
     return g_installed;
 }

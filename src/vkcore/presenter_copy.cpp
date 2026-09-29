@@ -6,6 +6,7 @@
 #include "stereo_seq/seq_settings.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/stall_watch.hpp"
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/window_timing.hpp"
@@ -179,7 +180,10 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     }
 
     const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    std::array<VkImageMemoryBarrier, 2> before{};
+    // Alternate eyes: the slot held for the next present takes the same image in the same half.
+    const VkImage carry = target.carrySlot < kRingSize ? ring[target.carrySlot].image : VK_NULL_HANDLE;
+    const std::uint32_t barriers = carry ? 3u : 2u;
+    std::array<VkImageMemoryBarrier, 3> before{};
     // The swapchain image, written by the game (the present's wait semaphores are waited on by this
     // submit), moves to TRANSFER_SRC.
     before[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -202,8 +206,12 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     before[1].dstQueueFamilyIndex = family;
     before[1].image = slot.image;
     before[1].subresourceRange = range;
+    // The carry slot's old contents are discarded like a fresh slot's.
+    before[2] = before[1];
+    before[2].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    before[2].image = carry;
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
-                              nullptr, 0, nullptr, static_cast<std::uint32_t>(before.size()), before.data());
+                              nullptr, 0, nullptr, barriers, before.data());
 
     // One region per eye half the image goes to.
     const std::uint32_t count = std::min<std::uint32_t>(target.eyeCount, 2);
@@ -219,6 +227,10 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
         }
         dev.vk.CmdCopyImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, slot.image,
                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data());
+        if (carry) {
+            dev.vk.CmdCopyImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, carry,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data());
+        }
     } else {
         std::array<VkImageBlit, 2> regions{};
         for (std::uint32_t i = 0; i < count; ++i) {
@@ -232,6 +244,11 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
         }
         dev.vk.CmdBlitImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, slot.image,
                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data(), VK_FILTER_LINEAR);
+        if (carry) {
+            dev.vk.CmdBlitImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, carry,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data(),
+                                VK_FILTER_LINEAR);
+        }
     }
     if (captureBuffer) {
         EyeCapture::record(dev, cb, source, sc.extent, captureBuffer);
@@ -252,7 +269,7 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     const VkImageLayout sourceLayout =
         mirror.record(dev, cb, source, sc.format, sc.extent, panel.step, target.toWindow);
 
-    std::array<VkImageMemoryBarrier, 2> after{};
+    std::array<VkImageMemoryBarrier, 3> after{};
     // The swapchain image goes back to PRESENT_SRC for the present.
     after[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     after[0].srcAccessMask = sourceLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
@@ -275,8 +292,10 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     after[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
     after[1].image = slot.image;
     after[1].subresourceRange = range;
+    after[2] = after[1];
+    after[2].image = carry;
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
-                              nullptr, 0, nullptr, static_cast<std::uint32_t>(after.size()), after.data());
+                              nullptr, 0, nullptr, barriers, after.data());
     return dev.vk.EndCommandBuffer(cb) == VK_SUCCESS;
 }
 
@@ -345,6 +364,9 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
     motionCapture.submitted(value); // only after a record
     fc.lastValue[buffer] = value;
     slot.value.store(value);
+    if (target.carrySlot < kRingSize) {
+        ring[target.carrySlot].value.store(value); // held (kSlotWriting) until the next present completes it
+    }
     return value;
 }
 
@@ -528,7 +550,9 @@ VkResult XrPresenter::Impl::present(VkQueue queue, std::uint32_t family, const V
     bool hold = false;
     gamePresents.fetch_add(1, std::memory_order_relaxed);
     {
-        std::lock_guard lock(mutex);
+        const std::uint64_t waitStart = window_timing::nowMicros();
+        std::lock_guard lock(mutex); // also the XR worker's (ring rebuilds) and swapchain creation's
+        stall_watch::addLockWait(window_timing::nowMicros() - waitStart);
         if (!loggedFirstPresent) {
             loggedFirstPresent = true;
             EVR_LOG("presenter: first game present");
@@ -543,7 +567,9 @@ VkResult XrPresenter::Impl::present(VkQueue queue, std::uint32_t family, const V
     const auto timed = [this, queue](const VkPresentInfoKHR* present) {
         const std::uint64_t start = window_timing::nowMicros();
         const VkResult r = dev.vk.QueuePresentKHR(queue, present);
-        window_timing::addPresent(window_timing::nowMicros() - start);
+        const std::uint64_t took = window_timing::nowMicros() - start;
+        window_timing::addPresent(took);
+        stall_watch::addDriverPresent(took);
         return r;
     };
     if (wait == VK_NULL_HANDLE) {

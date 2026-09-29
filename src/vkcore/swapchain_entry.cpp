@@ -7,6 +7,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/shader_dump.hpp"
+#include "vkcore/stall_watch.hpp"
 #include "vkcore/stereo_present.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/window_timing.hpp"
@@ -128,9 +129,11 @@ VkResult presentOnce(DeviceData& data, VkQueue queue, const VkPresentInfoKHR* pP
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
+    DeviceData* data = findDeviceData(queue);
+    // Always on for the game's device: the gap since its last present, and our own time in this hook.
+    const std::uint64_t entered = data->presenter ? stall_watch::presentEntered() : 0;
     mp_guard::poll();
     virtual_client::poll();
-    DeviceData* data = findDeviceData(queue);
     shader_dump::onPresent(data->device);
     gpu_timing::onPresent(queue); // closes the frame (ETERNALVR_GPU_TIMING)
     VkResult result = [&] {
@@ -139,6 +142,9 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInf
     }();
     logResult("vkQueuePresentKHR", result);
     virtual_client::scaledResults(*pPresentInfo, result);
+    if (entered != 0) {
+        stall_watch::presentLeft(entered);
+    }
     return result;
 }
 

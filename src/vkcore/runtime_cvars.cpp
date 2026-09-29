@@ -12,8 +12,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace evr::vkcore::runtime_cvars {
@@ -21,7 +23,7 @@ namespace evr::vkcore::runtime_cvars {
 namespace {
 
 constexpr const char* kTag = "cvars";
-constexpr int kLoggedWrites = 12; // later writes are only counted
+constexpr int kLoggedWrites = 12; // writes after each cvar's first: the first 12 logged, later ones counted
 
 // idCVar::SetString (RVA 0x376020 in build 25216728): (cvar object, value, force).
 constexpr const char* kSetStringSignature =
@@ -39,6 +41,10 @@ struct Held {
     std::string value;     // "?": only logged
     bool stereo = false;   // part of the Route S set (not ETERNALVR_DEBUG_CVARS)
     bool temporal = false; // a TAA cvar: left to the per-eye module once it is active
+    bool saver = false;    // from ETERNALVR_CPU_SAVER
+    bool cap = false;      // value "<=N": lowered to N while above it, never raised (capValue)
+    float capValue = 0.0f;
+    bool written = false; // the first write is always logged
     std::byte* object = nullptr;
     bool logged = false;
 };
@@ -62,27 +68,90 @@ int readValue(const std::byte* object) {
     return number;
 }
 
-void addDebugList() {
+// The cvar's float value (the values block, +0x0C; the renderer reads it there, e.g. 0x1CFC7C3).
+float readFloat(const std::byte* object) {
+    const std::byte* values = nullptr;
+    std::memcpy(&values, object, sizeof(values));
+    float number = 0.0f;
+    if (values) {
+        std::memcpy(&number, values + 0x0C, sizeof(number));
+    }
+    return number;
+}
+
+// A held entry; a "<=N" value becomes a cap. False for a cap whose number does not parse.
+bool makeHeld(const stereo_seq::CvarHold& c, Held& out) {
+    out = Held{c.name, c.value};
+    if (c.value.rfind("<=", 0) == 0) {
+        const std::optional<float> cap = stereo_seq::parseCvarCap(c.value);
+        if (!cap) {
+            return false;
+        }
+        out.cap = true;
+        out.capValue = *cap;
+        out.value = c.value.substr(2);
+    }
+    return true;
+}
+
+std::string narrowEnv(const wchar_t* name) {
     std::wstring text;
-    if (!readEnv(L"ETERNALVR_DEBUG_CVARS", text) || text.empty()) {
-        return;
+    if (!readEnv(name, text)) {
+        return {};
     }
     std::string narrow;
     for (const wchar_t c : text) {
         narrow.push_back(c < 0x80 ? static_cast<char>(c) : '?'); // cvar names and values are ASCII
     }
-    std::size_t at = 0;
-    while (at < narrow.size()) {
-        std::size_t end = narrow.find(';', at);
-        if (end == std::string::npos) {
-            end = narrow.size();
+    return narrow;
+}
+
+Held* heldNamed(std::string_view name) {
+    for (Held& h : g_held) {
+        if (h.name.size() == name.size() && _strnicmp(h.name.c_str(), name.data(), name.size()) == 0) {
+            return &h;
         }
-        const std::string item = narrow.substr(at, end - at);
-        const std::size_t eq = item.find('=');
-        if (eq != std::string::npos && eq > 0) {
-            g_held.push_back(Held{item.substr(0, eq), item.substr(eq + 1)});
+    }
+    return nullptr;
+}
+
+// ETERNALVR_CPU_SAVER="name=value;..." (the launcher's processor saver, data/cpu-saver.txt): cvars that cut
+// the CPU work of a render, held like the others. A cvar the stereo sets already hold keeps their value.
+void addCpuSaver() {
+    const std::string text = narrowEnv(L"ETERNALVR_CPU_SAVER");
+    if (text.empty() || text == "0") {
+        return;
+    }
+    std::string list;
+    for (const stereo_seq::CvarHold& c : stereo_seq::parseCvarList(text)) {
+        Held h;
+        if (c.value.empty() || heldNamed(c.name) || !makeHeld(c, h)) {
+            EVR_LOG("%s: processor saver: %s left out (%s)", kTag, c.name.c_str(),
+                    heldNamed(c.name) ? "the stereo set holds it" : "no usable value");
+            continue;
         }
-        at = end + 1;
+        h.saver = true;
+        g_held.push_back(std::move(h));
+        list += (list.empty() ? "" : ", ") + c.name + " " + c.value;
+    }
+    EVR_LOG("%s: processor saver (ETERNALVR_CPU_SAVER) asks for: %s", kTag,
+            list.empty() ? "nothing (no name=value item)" : list.c_str());
+}
+
+// ETERNALVR_DEBUG_CVARS: rig experiments; an entry replaces the processor saver's value for the same cvar.
+void addDebugList() {
+    for (const stereo_seq::CvarHold& c : stereo_seq::parseCvarList(narrowEnv(L"ETERNALVR_DEBUG_CVARS"))) {
+        Held h;
+        if (!makeHeld(c, h)) {
+            EVR_LOG("%s: %s=%s is not a usable value; left alone", kTag, c.name.c_str(), c.value.c_str());
+            continue;
+        }
+        Held* same = heldNamed(c.name);
+        if (same && same->saver) {
+            *same = std::move(h);
+        } else {
+            g_held.push_back(std::move(h));
+        }
     }
 }
 
@@ -120,6 +189,7 @@ void start(bool stereo) {
     } else if (stereo) {
         EVR_LOG("%s: the stereo set is left as the game has it (ETERNALVR_STEREO_RUNTIME_CVARS=0)", kTag);
     }
+    addCpuSaver();
     addDebugList();
     GameImage image;
     if (g_held.empty() || !locateGameImage(image, kTag)) {
@@ -156,12 +226,23 @@ void start(bool stereo) {
         }
     }
     std::string list;
+    std::string saver;
+    bool anySaver = false;
     for (const Held& h : g_held) {
         if (h.object) {
-            list += (list.empty() ? "" : ", ") + h.name + " " + h.value;
+            list += (list.empty() ? "" : ", ") + h.name + (h.cap ? " at most " : " ") + h.value;
+        }
+        if (h.saver) {
+            anySaver = true;
+            if (h.object) {
+                saver += (saver.empty() ? "" : ", ") + h.name + (h.cap ? " at most " : " ") + h.value;
+            }
         }
     }
     EVR_LOG("%s: held at run time: %s", kTag, list.empty() ? "none" : list.c_str());
+    if (anySaver) {
+        EVR_LOG("%s: processor saver holds: %s", kTag, saver.empty() ? "none" : saver.c_str());
+    }
 }
 
 } // namespace
@@ -187,15 +268,36 @@ void apply(bool stereo) {
             }
             continue;
         }
+        if (h.cap) {
+            // Only lowered: a player on a lower quality level keeps it (a small margin for the float's
+            // rounding).
+            const float value = readFloat(h.object);
+            if (!(value > h.capValue + 1e-4f)) {
+                continue;
+            }
+            g_setString(h.object, h.value.c_str(), true);
+            g_writes.fetch_add(1, std::memory_order_relaxed);
+            if (!h.written || g_loggedWrites < kLoggedWrites) {
+                g_loggedWrites += h.written ? 1 : 0;
+                h.written = true;
+                EVR_LOG("%s: %s %.3f -> at most %s (reads %.3f)%s", kTag, h.name.c_str(), value,
+                        h.value.c_str(), readFloat(h.object), h.saver ? "; processor saver" : "");
+            }
+            continue;
+        }
         if (before == std::atoi(h.value.c_str())) {
             continue;
         }
         g_setString(h.object, h.value.c_str(), true);
         g_writes.fetch_add(1, std::memory_order_relaxed);
-        if (g_loggedWrites < kLoggedWrites) {
-            ++g_loggedWrites;
+        if (!h.written || g_loggedWrites < kLoggedWrites) {
+            g_loggedWrites += h.written ? 1 : 0;
+            h.written = true;
             EVR_LOG("%s: %s %d -> %s (reads %d)%s", kTag, h.name.c_str(), before, h.value.c_str(),
-                    readValue(h.object), h.stereo ? "; the game's setting is not changed" : "");
+                    readValue(h.object),
+                    h.stereo  ? "; the game's setting is not changed"
+                    : h.saver ? "; processor saver"
+                              : "");
         }
     }
 }

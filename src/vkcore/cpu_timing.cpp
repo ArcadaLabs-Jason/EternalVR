@@ -4,6 +4,7 @@
 #include "vkcore/cpu_timing.hpp"
 
 #include "gpu_timing/stats.hpp"
+#include "gpu_timing/submit_census.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/shader_dump.hpp"
@@ -109,6 +110,11 @@ struct Reporter {
     double lastMs = 0.0; // the last summary's own cost (on the reporting thread)
 };
 Reporter& g_reporter = *new Reporter;
+
+// The shape of the game's submits (gpu_timing/submit_census.hpp), from any thread; the reporter logs and
+// clears it every window.
+std::mutex& g_censusMutex = *new std::mutex;
+gt::SubmitCensus& g_census = *new gt::SubmitCensus;
 
 double g_ticksPerMs = 0.0;
 std::int64_t g_calibrationTicks = 0;
@@ -262,6 +268,13 @@ void logWindow(Reporter& rep, const Window& w, std::uint64_t dropped) {
             stageLine(r, CpuStage::Submit).c_str(), stageLine(r, CpuStage::FenceWait).c_str(),
             stageLine(r, CpuStage::SemaphoreWait).c_str(), stageLine(r, CpuStage::Present).c_str(),
             r.processCpu.mean, r.processCpu.p50, r.processCpu.p95);
+    gt::SubmitCensus::Report census;
+    {
+        std::lock_guard lock(g_censusMutex);
+        census = g_census.report();
+        g_census.clear();
+    }
+    EVR_LOG("cpu: submits: %s", gt::formatSubmitCensus(census, w.ticks).c_str());
     std::string list;
     for (const gt::ThreadShare& t : top) {
         list += (list.empty() ? "" : ", ") + gt::formatShare(t);
@@ -325,6 +338,22 @@ Next nextOf(DispatchKey key) {
     return it == g_devices.end() ? Next{} : it->second;
 }
 
+void recordSubmit(VkQueue queue, std::uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
+    gt::SubmitRecord r;
+    r.queue = reinterpret_cast<std::uint64_t>(queue);
+    r.thread = GetCurrentThreadId();
+    r.atMs = ticksToMs(nowTicks());
+    r.batches = submitCount;
+    for (std::uint32_t i = 0; i < submitCount; ++i) {
+        r.commandBuffers += pSubmits[i].commandBufferCount;
+        r.waits += pSubmits[i].waitSemaphoreCount;
+        r.signals += pSubmits[i].signalSemaphoreCount;
+    }
+    r.fence = fence != VK_NULL_HANDLE;
+    std::lock_guard lock(g_censusMutex);
+    g_census.add(r);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            std::uint32_t submitCount,
                                            const VkSubmitInfo* pSubmits,
@@ -333,6 +362,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
     if (!next.game) {
         return next.queueSubmit(queue, submitCount, pSubmits, fence);
     }
+    recordSubmit(queue, submitCount, pSubmits, fence);
     Scope scope(CpuStage::Submit);
     return next.queueSubmit(queue, submitCount, pSubmits, fence);
 }

@@ -87,8 +87,15 @@ public:
     // The game released `primary`: returns its twin to release (0: none) and forgets both.
     std::uintptr_t released(std::uintptr_t primary);
     // Eye R evaluates the twin of `primary` for game frame `gameFrame`: true when the twin's history must be
-    // reset (its first evaluation, or eye R did not evaluate it for the previous game frame).
-    bool resetTwin(std::uintptr_t primary, std::uint64_t gameFrame);
+    // reset (its first evaluation, or eye R's last evaluation was not `step` game frames earlier: 1 under
+    // Route S, 2 with alternate eyes, alternate_eyes.hpp).
+    bool resetTwin(std::uintptr_t primary, std::uint64_t gameFrame, std::uint64_t step = 1) {
+        return resetTwin(primary, gameFrame, step, step);
+    }
+    // The same, with eye R's last evaluation anywhere from `minStep` to `maxStep` game frames earlier
+    // (ETERNALVR_ALTERNATE_EYES=auto: 1 or 2).
+    bool
+    resetTwin(std::uintptr_t primary, std::uint64_t gameFrame, std::uint64_t minStep, std::uint64_t maxStep);
     std::size_t size() const { return entries_.size(); }
 
 private:

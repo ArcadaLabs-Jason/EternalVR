@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using EternalVR.Launcher.Core.Game;
 using EternalVR.Launcher.Core.Text;
 
 namespace EternalVR.Launcher.Core.Steam
@@ -9,19 +10,22 @@ namespace EternalVR.Launcher.Core.Steam
     /// <summary>Where the game was found and how.</summary>
     public sealed class GameInstallLocation
     {
-        public GameInstallLocation(string gameRoot, string libraryRoot, string buildId, string source)
+        public GameInstallLocation(string gameRoot, string libraryRoot, string buildId, string source, GamePlatform platform = GamePlatform.Steam)
         {
             GameRoot = gameRoot;
             LibraryRoot = libraryRoot;
             BuildId = buildId;
             Source = source;
+            Platform = platform;
         }
 
         public string GameRoot { get; }
         public string LibraryRoot { get; }
-        /// <summary>Steam's build ID from the app manifest; null when unknown.</summary>
+        /// <summary>Steam's build ID from the app manifest, or the Game Pass package version; null when unknown.</summary>
         public string BuildId { get; }
         public string Source { get; }
+        /// <summary>The store the install belongs to (a folder chosen by hand counts as Steam unless it is a Game Pass one).</summary>
+        public GamePlatform Platform { get; }
     }
 
     /// <summary>Steam library discovery through <c>steamapps\libraryfolders.vdf</c> and app manifests.</summary>

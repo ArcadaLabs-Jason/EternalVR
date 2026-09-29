@@ -3,6 +3,7 @@
 #include "vkcore/controllers.hpp"
 
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/demon_view.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -53,6 +54,7 @@ void install() {
         if (cfg.viewmodel) {
             s.viewmodelHook = installViewmodelHook();
         }
+        s.demonAimHook = installDemonAimHook();
         // The off hand on the game's left arm needs the arms at the weapon hand (docs/VR_HANDS_HUD.md).
         if (s.viewmodelHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)) {
             s.offhandHook = installOffhandHook();
@@ -60,10 +62,10 @@ void install() {
     }
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
-        "%s, off hand %s (%s), rumble %s",
+        "%s, off hand %s (%s), rumble %s, demon aim %s",
         kTag, onOff(s.userCmdHook), onOff(s.angleHook), onOff(s.xinputActive.load()),
         onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook), onOff(s.offhandHook),
-        input::offhandModeName(cfg.offhand), onOff(s.rumbleHook));
+        input::offhandModeName(cfg.offhand), onOff(s.rumbleHook), onOff(s.demonAimHook));
     if (!s.userCmdHook && !s.xinputActive.load()) {
         EVR_LOG("%s: no input path to the game: controller buttons and movement do nothing", kTag);
     }
@@ -87,6 +89,15 @@ XrSpace offHandGripSpace() {
     }
     std::shared_lock lock(s.xrMutex);
     return s.xr.gripSpaces[weaponHand() == input::Hand::Left ? 1 : 0];
+}
+
+XrSpace weaponHandAimSpace() {
+    State& s = state();
+    if (!settings().enabled || !s.attached.load()) {
+        return XR_NULL_HANDLE;
+    }
+    std::shared_lock lock(s.xrMutex);
+    return s.xr.aimSpaces[weaponHand() == input::Hand::Left ? 0 : 1];
 }
 
 void installGameHooks() {

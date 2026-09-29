@@ -59,6 +59,14 @@ yet).
   so the view faces where the game points it and turns with the head from there, instead of the camera
   plus the head's yaw in the room. If any check fails, head aim stays off and the log says why. Roll is
   render-only. `ETERNALVR_AIM=view` keeps the game's aim (the first build's behaviour).
+- Hands camera animations (docs/rig-findings/camera-animations.md): a hands animation's `camera` joint turns
+  the first-person view (`p_applyAnimatedCamera`, in `idPlayer::CalculateViewWithoutUpdates`); the rotation
+  the head replaces is lost. A read-only hook at RVA 0x14526C5 reads the added angles; animations of 5
+  degrees or more are logged (`camera: camera animation N starts / ends`), and with
+  `ETERNALVR_CAMERA_ANIMATIONS=1` their rotation goes on top of the head-tracked view (and the stereo eyes)
+  the way the game adds it, fading in from 5 to 10 degrees, while aim and the body see the game's view
+  without it and the controllers treat it as a forced view. Every forced view also logs how far the rendered
+  view left the player's view angles (`camera: forced view N: ...`).
 - Cutscenes: `renderView_t.inCutscene` (+0x15) changes are logged (`game: cutscene starts / ends`). With
   `ETERNALVR_SKIP_CINEMATICS=1` the layer holds the skip key (R) while a cutscene plays, 2.5 s at a time,
   without depending on desktop focus: the exe's `GetRawInputData` import is replaced, and a key event is
@@ -106,6 +114,8 @@ yet).
 | `ETERNALVR_KEEP_ACTIVE` | 1 | 0 lets focus changes reach the game (it pauses) |
 | `ETERNALVR_AIM` | head | `view` keeps the game's own aim (render-only head tracking) |
 | `ETERNALVR_SKIP_CINEMATICS` | 0 | 1 holds the skip key while a cutscene plays |
+| `ETERNALVR_CAMERA_ANIMATIONS` | 0 | 1 plays a hands animation's camera rotation (5 degrees or more) on top of the head-tracked view |
+| `ETERNALVR_CAMERA_ANIM_MIN` | 5 | degrees (0.5 to 45): where the camera animation ramp starts (full at twice), for rig tests |
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
 | `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
 | `ETERNALVR_TEST_XR_LOSS` | unset | seconds: once the session has run this long, it is taken as lost (as if the headset had gone away) and the worker reconnects (ARCHITECTURE section 6, session state) |

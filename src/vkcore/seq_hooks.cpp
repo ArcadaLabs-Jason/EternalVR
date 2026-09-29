@@ -1,5 +1,6 @@
 #include "vkcore/seq_hooks.hpp"
 
+#include "stereo_seq/drain_backoff.hpp"
 #include "stereo_seq/prev_matrices.hpp"
 #include "stereo_seq/render_idle.hpp"
 #include "stereo_seq/stack_budget.hpp"
@@ -11,8 +12,13 @@
 #include "vkcore/moved_flag_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/object_prev_hooks.hpp"
+#include "vkcore/seq_alternate.hpp"
 #include "vkcore/seq_locate.hpp"
+#include "vkcore/seq_stack.hpp"
+#include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
+#include "vkcore/test_cpu_load.hpp"
+#include "vkcore/window_timing.hpp"
 #include "vkcore/world_gui_hooks.hpp"
 
 #include <windows.h>
@@ -44,9 +50,9 @@ constexpr std::size_t kFrameInfoScreenshot = 0x2A44;
 constexpr std::size_t kCvarIntValue = 0x08;
 
 // Holding the frontend for a new tag base gives up after this long (stereo_seq/render_idle.hpp decides
-// when the render thread is idle).
+// when the render thread is idle); how long stereo then waits before the next try is
+// stereo_seq/drain_backoff.hpp's.
 constexpr ULONGLONG kDrainTimeoutMs = 250;
-constexpr ULONGLONG kDrainRetryMs = 2000;
 constexpr ULONGLONG kDrainSpacingMs = 1000;
 // Stereo resuming after this many mono frames takes a fresh tag base.
 constexpr std::uint32_t kRebaseAfterMono = 30;
@@ -77,18 +83,15 @@ std::atomic<std::uint32_t> g_marks{0};
 std::atomic<std::uint64_t> g_markTick{0};
 std::atomic<std::uint32_t> g_monoStreak{kRebaseAfterMono};
 std::atomic<ULONGLONG> g_nextDrainTicks{0}; // no drain before this (after a failure or a recent drain)
-
-// Eye R's chain on the wrapper's stack (docs/VR_STEREO.md, "Stack").
-std::atomic<std::uintptr_t> g_outerSp{0};
-std::atomic<DWORD> g_outerThread{0};
-std::atomic<std::size_t> g_deepestNested{0};
-std::atomic<std::size_t> g_leastHeadroom{0};
+stereo_seq::DrainBackoff g_backoff;         // drainAndRebase only (the frontend, one frame-end job at a time)
 
 std::mutex g_tagMutex; // g_tags and g_idle
 stereo_seq::EyeTagQueue g_tags;
 stereo_seq::RenderIdle g_idle;
 std::mutex g_prevMutex;
 stereo_seq::PrevMatrixBook g_prev(stereo_seq::previousMatrixRanges());
+bool g_alternate = false; // ETERNALVR_ALTERNATE_EYES on or auto, set once at install before g_active
+bool g_adaptive = false;  // auto: a tick may render both eyes (seq_alternate::pairInTick)
 
 struct Counters {
     std::atomic<std::uint64_t> frameEnds{0};
@@ -101,6 +104,8 @@ struct Counters {
     std::atomic<std::uint64_t> drains{0};
     std::atomic<std::uint64_t> drainFailures{0};
     std::atomic<std::uint64_t> unverifiedBases{0};
+    std::atomic<std::uint64_t> drainMicros{0};    // the frontend held by drains, in total
+    std::atomic<std::uint64_t> drainMaxMicros{0}; // the longest drain since seqTakeDrainMaxMicros
     std::atomic<int> loggedDesyncs{0};
     std::atomic<int> loggedTicks{0};
     std::atomic<int> loggedStack{0};
@@ -154,10 +159,12 @@ bool drainAndRebase() {
                 std::lock_guard lock(g_tagMutex);
                 g_idle.forget(); // the next base comes from a quiet period
             }
-            g_nextDrainTicks.store(now + kDrainRetryMs);
-            EVR_LOG("seq: the render thread did not present every frame within %llu ms; mono for %llu ms",
-                    static_cast<unsigned long long>(kDrainTimeoutMs),
-                    static_cast<unsigned long long>(kDrainRetryMs));
+            const std::uint64_t wait = g_backoff.failed();
+            g_nextDrainTicks.store(now + wait);
+            EVR_LOG("seq: the render thread did not present every frame within %llu ms; mono for %llu ms (%u "
+                    "failed drain(s) in a row)",
+                    static_cast<unsigned long long>(kDrainTimeoutMs), static_cast<unsigned long long>(wait),
+                    g_backoff.failures());
             return false;
         }
         Sleep(1);
@@ -170,6 +177,7 @@ bool drainAndRebase() {
     if (!counted) {
         ++g_counters.unverifiedBases;
     }
+    g_backoff.succeeded();
     // At most one drain per kDrainSpacingMs, so tags that keep falling out of sync cost a hitch a second at
     // worst (stereo is off until the next drain).
     g_nextDrainTicks.store(GetTickCount64() + kDrainSpacingMs);
@@ -181,6 +189,16 @@ bool drainAndRebase() {
     return true;
 }
 
+// A drain's wall time, for the 10 s summary and the stall line (stall_watch.hpp).
+void noteDrainTime(std::uint64_t micros) {
+    g_counters.drainMicros.fetch_add(micros, std::memory_order_relaxed);
+    std::uint64_t longest = g_counters.drainMaxMicros.load(std::memory_order_relaxed);
+    while (micros > longest &&
+           !g_counters.drainMaxMicros.compare_exchange_weak(longest, micros, std::memory_order_relaxed)) {
+    }
+    stall_watch::addDrain(micros);
+}
+
 bool tagsSynced() {
     std::lock_guard lock(g_tagMutex);
     return g_tags.synced();
@@ -188,21 +206,16 @@ bool tagsSynced() {
 
 // Tags a frame about to be handed to the render thread (and counts it for the drains). False when the
 // tags are out of step (nothing queued).
-bool handOver(Eye eye, std::uint64_t tick, bool applied, std::uint32_t renderFrame) {
+bool handOver(Eye eye, std::uint64_t tick, bool applied, std::uint32_t renderFrame, bool pairInTick = false) {
     stereo_seq::RenderTag tag;
     tag.eye = eye;
     tag.tick = tick;
     tag.viewApplied = applied;
+    tag.pairInTick = pairInTick;
     tag.renderFrame = renderFrame;
     std::lock_guard lock(g_tagMutex);
     g_idle.kicked();
     return g_tags.push(tag);
-}
-
-void noteHeadroom(std::size_t headroom) {
-    std::size_t least = g_leastHeadroom.load();
-    while ((least == 0 || headroom < least) && !g_leastHeadroom.compare_exchange_weak(least, headroom)) {
-    }
 }
 
 // Eye R after eye L's frame-end job handed eye L over: the same frame again, as the loading screens
@@ -219,9 +232,9 @@ bool renderRightEye(std::byte* rs, void* arg, void* frameInfo, std::uint8_t flag
         return false;
     }
     const stereo_seq::StackPosition stack = currentStack();
-    const std::size_t deepest = g_deepestNested.load();
+    const std::size_t deepest = seq_stack::deepestNested();
     if (stereo_seq::stackKnown(stack)) {
-        noteHeadroom(stereo_seq::stackHeadroom(stack));
+        seq_stack::noteHeadroom(stereo_seq::stackHeadroom(stack));
     }
     if (g_counters.loggedStack.fetch_add(1) == 0) {
         EVR_LOG(
@@ -237,8 +250,7 @@ bool renderRightEye(std::byte* rs, void* arg, void* frameInfo, std::uint8_t flag
         }
         return false;
     }
-    g_outerSp.store(stack.sp);
-    g_outerThread.store(GetCurrentThreadId());
+    seq_stack::enter(stack.sp);
     auto* screenshot = static_cast<std::byte*>(frameInfo) + kFrameInfoScreenshot;
     std::int32_t savedScreenshot = 0;
     std::memcpy(&savedScreenshot, screenshot, sizeof(savedScreenshot));
@@ -248,7 +260,7 @@ bool renderRightEye(std::byte* rs, void* arg, void* frameInfo, std::uint8_t flag
     g_inRight.store(true, std::memory_order_release);
     g_renderOne(rs, arg, frameInfo, flag);
     g_inRight.store(false, std::memory_order_release);
-    g_outerThread.store(0);
+    seq_stack::leave();
     std::memcpy(screenshot, &savedScreenshot, sizeof(savedScreenshot));
     ++g_counters.stereoTicks;
     return true;
@@ -256,6 +268,8 @@ bool renderRightEye(std::byte* rs, void* arg, void* frameInfo, std::uint8_t flag
 
 // The frame-end job's replacement. Every render frame of the engine ends here.
 void frameEndWrapper(void* packet, void* a2, void* a3, void* a4) {
+    seq_alternate::countRender();
+    test_cpu_load::atFrameEnd(); // ETERNALVR_TEST_CPU_LOAD_MS, a test knob
     auto* p = static_cast<std::byte*>(packet);
     std::byte* rs = nullptr;
     std::memcpy(&rs, p + kPacketRenderSystem, sizeof(rs));
@@ -282,7 +296,8 @@ void frameEndWrapper(void* packet, void* a2, void* a3, void* a4) {
         seqNoteNestedStack();
         const std::uint64_t tick = g_rightTick.load();
         if (presents) {
-            handOver(Eye::Right, tick, (marks & kMarkRight) != 0 && markTick == tick, renderFrame);
+            handOver(Eye::Right, tick, (marks & kMarkRight) != 0 && markTick == tick, renderFrame,
+                     g_alternate);
         }
         g_frameEnd(packet, a2, a3, a4);
         return;
@@ -290,9 +305,11 @@ void frameEndWrapper(void* packet, void* a2, void* a3, void* a4) {
 
     ++g_counters.frameEnds;
     cpu_timing::onFrontendTick(); // ETERNALVR_CPU_TIMING
+    // The engine's own chain draws eye L, or with alternate eyes the eye of this render frame.
+    const Eye eye = g_alternate ? seq_alternate::eyeFor(renderFrame) : Eye::Left;
     stereo_seq::FrameEndInput in;
     in.presents = presents;
-    in.leftApplied = (marks & kMarkLeft) != 0;
+    in.leftApplied = (marks & (eye == Eye::Right ? kMarkRight : kMarkLeft)) != 0;
     in.wanted = (marks & kMarkWanted) != 0;
     in.synced = tagsSynced();
     in.rebaseDue = g_monoStreak.load() >= kRebaseAfterMono;
@@ -304,18 +321,33 @@ void frameEndWrapper(void* packet, void* a2, void* a3, void* a4) {
             std::lock_guard lock(g_tagMutex);
             g_tags.desync(stereo_seq::DesyncReason::Requested);
         }
+        const std::uint64_t drainStart = window_timing::nowMicros();
         const bool based = [] {
             cpu_timing::Scope timed(cpu_timing::Stage::Drain);
             return drainAndRebase();
         }();
+        noteDrainTime(window_timing::nowMicros() - drainStart);
         if (based) {
             g_monoStreak.store(0);
         }
         stereo = stereo && based;
     }
+    // Auto: eye L of a tick that renders both eyes (Route S; decided at the render's first ask).
+    const bool pairTick = g_adaptive && eye == Eye::Left && seq_alternate::pairInTick(renderFrame);
     if (presents) {
-        const bool pushed = handOver(stereo ? Eye::Left : Eye::Mono, markTick, in.leftApplied, renderFrame);
+        const bool pushed =
+            handOver(stereo ? eye : Eye::Mono, markTick, in.leftApplied, renderFrame, stereo && pairTick);
         stereo = stereo && pushed;
+    }
+    // Noted before the original clears the render-frame guard, so the next render frame is decided after it.
+    if (g_alternate && stereo && pairTick) {
+        seq_alternate::rendered(renderFrame, eye, true, true); // eye R nested below: the next pair starts
+    } else if (g_alternate) {                                  // one eye per tick: no eye R render
+        seq_alternate::rendered(renderFrame, eye, stereo);
+        g_monoStreak.store(stereo ? 0 : g_monoStreak.load() + 1);
+        cpu_timing::Scope timed(cpu_timing::Stage::FrameEndLeft);
+        g_frameEnd(packet, a2, a3, a4);
+        return;
     }
     // The packet belongs to the calling job list and stays valid, but read it before the original runs.
     void* frameInfo = nullptr;
@@ -334,10 +366,15 @@ void frameEndWrapper(void* packet, void* a2, void* a3, void* a4) {
         return;
     }
     g_monoStreak.store(0);
+    const std::uint64_t rightStart = g_adaptive ? window_timing::nowMicros() : 0;
     cpu_timing::Scope timed(cpu_timing::Stage::RightEye);
-    if (renderRightEye(rs, arg, frameInfo, flag, markTick) && g_counters.loggedTicks.fetch_add(1) < 3) {
+    const bool right = renderRightEye(rs, arg, frameInfo, flag, markTick);
+    if (right && g_counters.loggedTicks.fetch_add(1) < 3) {
         EVR_LOG("seq: stereo tick for game frame %llu (render frame %u): eye L then eye R rendered",
                 static_cast<unsigned long long>(markTick), renderFrame);
+    }
+    if (g_adaptive) {
+        seq_alternate::rightRendered(right, window_timing::nowMicros() - rightStart);
     }
 }
 
@@ -349,7 +386,7 @@ void onPrevStoredHook(const HookRegisters& regs) {
     if (!view) {
         return;
     }
-    const Eye eye = seqChainEye();
+    const Eye eye = seqRenderEye();
     if (eye == Eye::Right) {
         seqNoteNestedStack();
     }
@@ -405,6 +442,10 @@ bool installSeqHooks(const SeqHookSettings& settings) {
             EVR_LOG("seq: the frame-end slot changed to %p while installing; stereo off", swapped);
             return;
         }
+        g_alternate = settings.alternateEyes; // before g_active: the wrapper and the hooks read it
+        g_adaptive = g_alternate && settings.adaptiveEyes;
+        seq_alternate::configure(g_adaptive ? stereo_seq::AlternateMode::Auto
+                                            : stereo_seq::AlternateMode::On);
         g_installed = true;
         g_active.store(true, std::memory_order_release);
         installBinTileHook(); // lights and decals binned in each eye's own frustum; a missing piece only logs
@@ -412,8 +453,11 @@ bool installSeqHooks(const SeqHookSettings& settings) {
         installWorldGuiHook();    // world GUIs (holograms, screens) in eye R too
         installMovedFlagHooks();  // moving objects keep their motion vectors in eye R
         installKeepPrevHooks();   // and their previous model matrix from eye L
-        EVR_LOG("seq: frame-end job wrapped; per-eye previous matrices %s",
-                settings.prevMatrices ? "on" : "off");
+        EVR_LOG("seq: frame-end job wrapped; per-eye previous matrices %s%s",
+                settings.prevMatrices ? "on" : "off",
+                g_adaptive    ? "; adaptive eyes (eye R nested while the processor keeps up)"
+                : g_alternate ? "; alternate eyes (no eye R render)"
+                              : "");
     });
     return g_installed;
 }
@@ -446,6 +490,28 @@ Eye seqChainEye() {
     return g_inRight.load(std::memory_order_acquire) ? Eye::Right : Eye::Left;
 }
 
+Eye seqRenderEye() {
+    if (!g_alternate || !g_renderSystem || g_inRight.load(std::memory_order_acquire)) {
+        return seqChainEye();
+    }
+    return seq_alternate::eyeFor(readU32(g_renderSystem + kRenderSystemFrame));
+}
+
+bool seqAlternateEyes() {
+    return g_alternate && g_installed;
+}
+
+bool seqAdaptiveEyes() {
+    return g_adaptive && g_installed;
+}
+
+bool seqPairInTick() {
+    if (!g_alternate || !g_renderSystem || g_inRight.load(std::memory_order_acquire)) {
+        return true; // Route S, or eye R nested in its eye L's tick
+    }
+    return seq_alternate::pairInTick(readU32(g_renderSystem + kRenderSystemFrame));
+}
+
 void seqMarkEyeView(Eye eye, std::uint64_t tick) {
     g_markTick.store(tick);
     g_marks.fetch_or(eye == Eye::Right ? kMarkRight : kMarkLeft);
@@ -453,17 +519,6 @@ void seqMarkEyeView(Eye eye, std::uint64_t tick) {
 
 std::uint64_t seqRightTick() {
     return g_rightTick.load();
-}
-
-void seqNoteNestedStack() {
-    if (g_outerThread.load() != GetCurrentThreadId()) {
-        return; // eye R's chain moved to another thread here: nothing nested on the wrapper's stack
-    }
-    const std::size_t depth = stereo_seq::nestedDepth(
-        g_outerSp.load(), reinterpret_cast<std::uintptr_t>(_AddressOfReturnAddress()));
-    std::size_t deepest = g_deepestNested.load();
-    while (depth > deepest && !g_deepestNested.compare_exchange_weak(deepest, depth)) {
-    }
 }
 
 stereo_seq::PresentMatch seqTakePresent() {
@@ -512,13 +567,17 @@ SeqCounters seqCounters() {
     c.drains = g_counters.drains.load();
     c.drainFailures = g_counters.drainFailures.load();
     c.unverifiedBases = g_counters.unverifiedBases.load();
-    c.deepestNested = g_deepestNested.load();
-    c.leastHeadroom = g_leastHeadroom.load();
+    c.drainMicros = g_counters.drainMicros.load();
+    c.deepestNested = seq_stack::deepestNested();
+    c.leastHeadroom = seq_stack::leastHeadroom();
     {
         std::lock_guard lock(g_prevMutex);
         c.prevRewrites = g_prev.stats().rewrites;
         c.prevKept = g_prev.stats().kept;
     }
+    const stereo_seq::EyeAlternator::Stats alt = seq_alternate::stats();
+    c.altRenders[0] = alt.renders[0];
+    c.altRenders[1] = alt.renders[1];
     {
         std::lock_guard lock(g_tagMutex);
         c.tags = g_tags.stats();
@@ -532,6 +591,10 @@ SeqCounters seqCounters() {
         c.swapInterval = static_cast<std::int32_t>(readU32(*g_swapIntervalCvar + kCvarIntValue));
     }
     return c;
+}
+
+std::uint64_t seqTakeDrainMaxMicros() {
+    return g_counters.drainMaxMicros.exchange(0, std::memory_order_relaxed);
 }
 
 } // namespace evr::vkcore

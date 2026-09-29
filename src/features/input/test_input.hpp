@@ -15,6 +15,8 @@
 //   left.aim = 0, 0, 90          an optional roll about the pointing axis, counter-clockwise as the user
 //                                sees it (the controller's top to the left): 90 turns the left palm up
 //   right.position = 0.2, -0.35, -0.3   metres from the head, LOCAL axes (default: the side's rest position)
+//   right.velocity = 0, 0, -3    metres per second, LOCAL axes (default: still), for punches and gestures;
+//                                the pose does not move with it
 //
 // A hand given an aim is tracked, at its position from the head (or its side's rest position below and
 // ahead of the head), with the grip at the same pose. There is no file IO here.
@@ -44,6 +46,7 @@ struct TestHand {
     std::optional<float> aimPitchDegrees; // positive up
     float aimRollDegrees = 0.0f;          // about the pointing axis, counter-clockwise as the user sees it
     std::optional<Vec3> position;         // from the head, LOCAL axes, metres
+    std::optional<Vec3> velocity;         // LOCAL axes, metres per second
 };
 
 struct TestInput {

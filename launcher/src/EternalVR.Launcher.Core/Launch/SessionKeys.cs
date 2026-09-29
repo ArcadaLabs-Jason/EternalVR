@@ -33,9 +33,10 @@ namespace EternalVR.Launcher.Core.Launch
             return new SessionKeys(list);
         }
 
-        /// <summary>Every key the settings restore puts back: the forced cvars, then these, without repeats.</summary>
-        public static IReadOnlyList<string> RestoredKeys(ForcedCvars forced, SessionKeys session) =>
+        /// <summary>Every key the settings restore puts back: the forced cvars, then these, then <paramref name="more"/>, without repeats.</summary>
+        public static IReadOnlyList<string> RestoredKeys(ForcedCvars forced, SessionKeys session, IEnumerable<string> more = null) =>
             forced.Names.Concat(session == null ? Enumerable.Empty<string>() : session.Names)
+                .Concat(more ?? Enumerable.Empty<string>())
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }

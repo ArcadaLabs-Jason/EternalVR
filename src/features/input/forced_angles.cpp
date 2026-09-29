@@ -14,6 +14,8 @@ const char* forcedReasonName(ForcedReason reason) {
         return "view inhibited";
     case ForcedReason::Cutscene:
         return "cutscene";
+    case ForcedReason::CameraAnimation:
+        return "camera animation";
     case ForcedReason::Settling:
         return "settling after a forced view";
     }
@@ -31,6 +33,8 @@ bool ForcedAngleGate::update(const ForcedAngleSignals& signals) {
         now = ForcedReason::SetViewAngles;
     } else if ((signals.inhibitFlags & kInhibitViewMask) != 0) {
         now = ForcedReason::Inhibit;
+    } else if (signals.cameraAnimation) {
+        now = ForcedReason::CameraAnimation;
     }
     const bool wasYielding = reason_ != ForcedReason::None;
     if (now != ForcedReason::None) {

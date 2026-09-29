@@ -6,6 +6,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "features/menu/menu_kind.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/key_inject.hpp"
@@ -156,10 +157,26 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     if (active && !menuOn && wasHeld) {
         EVR_LOG("menu: the cursor is back; the panel stays where it was");
     } else if (active && !menuOn) {
-        // Tutorial and lore popups show the cursor over the game unasked; they wait for Space or E.
-        menuPopup = panelContent && shownHasView && !controllers::menuRequestedWithin(kMenuRequestSeconds);
-        // The Dossier the controllers asked for opens on its map page (the router follows its tabs).
-        menuDossier = !menuPopup && controllers::dossierRequestedWithin(kMenuRequestSeconds);
+        // Tutorial and lore popups show the cursor over the game unasked; they wait for Space or E. The
+        // Dossier the controllers asked for opens on its map page (the router follows its tabs). A cursor
+        // back within moments of the last one going is the same menu changing screens and keeps its kind
+        // (menu_kind.hpp).
+        menu::MenuKindInput kindIn;
+        kindIn.overGame = panelContent && shownHasView;
+        kindIn.menuRequested = controllers::menuRequestedWithin(kMenuRequestSeconds);
+        kindIn.dossierRequested = controllers::dossierRequestedWithin(kMenuRequestSeconds);
+        kindIn.hadMenu = menuCursorGone > 0.0;
+        kindIn.previous = menuPopup     ? menu::MenuKind::Popup
+                          : menuDossier ? menu::MenuKind::Dossier
+                                        : menu::MenuKind::Screen;
+        kindIn.sinceCursorGone = now - menuCursorGone;
+        const menu::MenuKind kind = menu::menuKindOnCursor(kindIn);
+        if (kindIn.hadMenu && kindIn.sinceCursorGone < menu::kMenuContinueSeconds) {
+            EVR_LOG("menu: the cursor is back after %.2f s: the same menu (%s) on another screen",
+                    kindIn.sinceCursorGone, menu::menuKindName(kind));
+        }
+        menuPopup = kind == menu::MenuKind::Popup;
+        menuDossier = kind == menu::MenuKind::Dossier;
         // A menu came up: its panel goes in front of the head (yaw only) at the UI quad's height.
         placeMenuPanel(time);
         menuReplace.store(false, std::memory_order_relaxed);

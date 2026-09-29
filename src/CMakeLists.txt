@@ -16,6 +16,7 @@ add_subdirectory(features/arm)
 add_subdirectory(features/input)
 add_subdirectory(features/menu)
 add_subdirectory(features/render_size)
+add_subdirectory(features/dlss_dll)
 add_subdirectory(engine/eternal/resolver)
 
 if(EVR_BUILD_LAYER)

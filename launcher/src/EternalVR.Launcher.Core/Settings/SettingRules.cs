@@ -10,13 +10,15 @@ namespace EternalVR.Launcher.Core.Settings
         Turning, TurnSpeed, SnapAngle, Vignette, WalkInRoom, RecenterHold, SkipCutscenes,
         // Play: body
         PlayPosition, EyeHeight,
+        // Play: gestures
+        ThrowGesture, SwingGesture,
         // Play: controls
-        AimWith, WeaponHand, MoveToward, XButton, AimSteadiness, AimDot, Vibration, ButtonLayout,
+        AimWith, WeaponHand, MoveToward, XButton, WeaponWheel, AimSteadiness, AimDot, Vibration, ButtonLayout,
         // Play: picture
-        Resolution, AntiAliasing,
+        Resolution, AntiAliasing, TextureStreaming, ProcessorSaver,
         // Advanced
-        VrMode, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape,
-        HudDistance, HudSize, HudHeight, HudPlace,
+        VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape,
+        HudDistance, HudSize, HudHeight, HudPlace, DlssVersion, DlssPreset,
         MotionControllers, ShotsFrom, AimDotSize, MenuLaser, GameFolder, Runtime, ExtraArguments,
     }
 
@@ -35,6 +37,8 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NeedsRenderSize =
             "Only when the game renders at the headset's size (render_size in launcher.ini): otherwise the window is the eye image.";
         public const string NeedsCinema = "Only with cutscenes on a flat screen (Cutscene view).";
+        public const string NeedsDlss = "Only with DLSS (Anti-aliasing on the Play tab).";
+        public const string NeedsDlssFile = "Only with a DLSS file of your own (DLSS version).";
 
         /// <summary>Null when <paramref name="setting"/> applies, else why not (one sentence).</summary>
         public static string WhyNot(Setting setting, LauncherSettings s)
@@ -49,6 +53,9 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.WeaponHand:
                 case Setting.MoveToward:
                 case Setting.XButton:
+                case Setting.WeaponWheel:
+                case Setting.ThrowGesture:
+                case Setting.SwingGesture:
                 case Setting.Vibration:
                 case Setting.ButtonLayout:
                     return s.Controllers ? null : NeedsControllers;
@@ -72,6 +79,9 @@ namespace EternalVR.Launcher.Core.Settings
                     return !s.Controllers ? NeedsControllers : stereo ? null : NeedsStereo;
                 case Setting.Resolution:
                 case Setting.AntiAliasing:
+                case Setting.AlternateEyes:
+                case Setting.TextureStreaming:
+                case Setting.ProcessorSaver:
                 case Setting.DesktopWindow:
                 case Setting.HudDistance:
                 case Setting.HudSize:
@@ -82,6 +92,11 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.DesktopCrop:
                     if (!stereo) return NeedsStereo;
                     return LauncherSettings.NormaliseRenderSize(s.RenderSize) == LauncherSettings.RenderSizeOff ? NeedsRenderSize : null;
+                case Setting.DlssVersion:
+                case Setting.DlssPreset:
+                    if (!stereo) return NeedsStereo;
+                    if (s.AntiAliasing != AntiAliasingMode.Dlss) return NeedsDlss;
+                    return setting == Setting.DlssPreset && s.DlssDll != DlssDllChoice.File ? NeedsDlssFile : null;
                 case Setting.CutsceneShape:
                     if (!stereo) return NeedsStereo;
                     return s.Cutscenes == CutsceneView.Cinema ? null : NeedsCinema;

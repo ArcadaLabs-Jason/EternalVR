@@ -43,8 +43,8 @@ It has no paywall and gates no features; a Ko-fi link on the project page is the
   testers, recruited in the release track once there is a stereo build (M4.5) and starting with an
   offline shader-patcher check (T-035, T-068). Intel is best effort: XeSS through OptiScaler, verified
   by a tester or documented as untested (T-076).
-- **Game versions:** the current Steam build of DOOM Eternal (`DOOMEternalx64vk.exe`). The idStudio
-  sandbox executable is v1.x (T-109, T-112). Game Pass/Microsoft Store is out of scope.
+- **Game versions:** the current Steam build of DOOM Eternal (`DOOMEternalx64vk.exe`) and the Game Pass
+  (Microsoft Store) build 1.0.56.0. The idStudio sandbox executable is v1.x (T-109, T-112).
 
 ## Requirements
 
@@ -62,7 +62,7 @@ It has no paywall and gates no features; a Ko-fi link on the project page is the
 | REQ-08 | **Survives game patches:** engine found by name and type info, not fixed addresses; features fail individually with a clear report | D-002 (goal); T-002 (technique) |
 | REQ-09 | **Desktop launcher is the main configuration surface** (not in-game menus). Settings hot-reload while playing, which the owner accepted in principle; each setting is marked live, next level load or restart (an `ApplyClass` in the settings schema, T-106) | D-015, D-028, T-032, T-061, T-106 |
 | REQ-10 | **Savable per-player profiles:** preset plus personal edits, e.g. an "intense" and a "comfort" player on one PC | D-016, D-025 |
-| REQ-11 | **Remappable controls:** bindings are data, stored per profile, never hardcoded. The launcher has a bindings editor that rejects conflicting bindings with a clear message naming both actions (and both inputs; the compiler side is done, the editor is still to do, T-106) | D-019, T-106 |
+| REQ-11 | **Remappable controls:** bindings are data, stored per profile, never hardcoded. The launcher has a bindings editor that rejects conflicting bindings with a clear message naming both actions (and both inputs, T-106). Done: the compiler, and the launcher's controls editor, which refuses to save a map the layer would reject; each VR settings profile keeps its own controls (`controls\profiles\<name>`, the controls folder itself for no profile), a new profile starting from a copy of the controls in use | D-019, T-106 |
 | REQ-12 | **DLSS 4.x** support in stereo, plus help updating the DLSS DLL the user already has (the game ships DLSS 2.3.0; DLSS 4.x comes from a newer DLL the user supplies, loaded from our folder, T-094, T-103) | D-011, T-103 |
 | REQ-13 | **AMD/Intel upscaling** through the same per-eye interface: OptiScaler (FSR 3.1 on AMD, XeSS on Intel) as the provider under our NGX interposition, with the game's DLSS option unlocked by our gate patch. If the rig proxy test or the AMD tester check fails, v1 ships the game's native TAA on AMD and our own NGX shim moves to v1.1. Intel is verified by a tester or documented as untested. FSR 4 is a Should item. No FSR1 | D-012, D-031, T-072, T-076 |
 | REQ-14 | **Fixed foveated rendering** on every headset, "just centered and perhaps wider than you'd make it with eye tracking" (owner's words). Degree-based presets and per-eye lens centring are the technical design | D-013 (goal); T-012 (presets, centring) |
@@ -113,7 +113,6 @@ Moved out of v1 to keep it lean; each can return if a measurement calls for it.
 
 ### Out of scope
 
-- Game Pass/Microsoft Store builds.
 - Frame generation.
 - FSR1 (D-031).
 - Full-body avatar.

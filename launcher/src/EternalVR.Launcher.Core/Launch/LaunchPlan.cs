@@ -25,6 +25,8 @@ namespace EternalVR.Launcher.Core.Launch
         public string LogDir { get; set; }
         public LauncherSettings Settings { get; set; } = new LauncherSettings();
         public ForcedCvars ForcedCvars { get; set; } = new ForcedCvars(new ForcedCvar[0]);
+        /// <summary>The processor saver's items; the cvars of those that are on are handed to the layer in stereo.</summary>
+        public CpuSaver CpuSaver { get; set; } = CpuSaver.Empty;
         /// <summary>False when no settings location was found: nothing is forced (T-094).</summary>
         public bool ForceCvars { get; set; } = true;
         public IReadOnlyList<LayerDecision> LayerDecisions { get; set; } = new LayerDecision[0];
@@ -151,9 +153,12 @@ namespace EternalVR.Launcher.Core.Launch
             if (!string.IsNullOrEmpty(inputs.LogDir)) Set("ETERNALVR_LOG_DIR", inputs.LogDir);
             Set("ETERNALVR_WORLD_SCALE", LauncherSettings.ClampWorldScale(s.WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
             if (stereo) Set("ETERNALVR_MODE", "stereo");
+            // One eye per game tick for slower processors, always or only while the processor cannot keep up
+            // (docs/rig-findings/alternate-eye.md); explicit either way.
+            Set("ETERNALVR_ALTERNATE_EYES", stereo ? LauncherSettings.AlternateEyesValue(s.AlternateEyes) : "0");
             // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md).
             if (stereo) Set("ETERNALVR_UI_LAYER", "1");
-            // The HUD on the off hand's wrist needs the UI layer and the controllers (docs/VR_HANDS_HUD.md).
+            // The HUD on the off hand's wrist or the weapon needs the UI layer and the controllers (docs/VR_HANDS_HUD.md).
             if (stereo) Set("ETERNALVR_HUD", LauncherSettings.HudName(s.Controllers ? s.Hud : HudMode.Panel));
             Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
             // Hand aim needs the controllers; without them the head aims.
@@ -186,6 +191,10 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
+            Set("ETERNALVR_WHEEL_SELECT", LauncherSettings.WheelSelectName(s.Wheel));
+            // Arm gestures (docs/VR_INTERACTIONS.md), off by default: the throw and the overhead swing.
+            Set("ETERNALVR_THROW", s.ThrowGesture ? "1" : "0");
+            Set("ETERNALVR_SWING", s.SwingGesture ? "1" : "0");
             // The player's own maps, each in place of the built-in one for its controllers (docs/release/CONTROLS.md).
             if (s.Controllers && inputs.Controls != null && inputs.Controls.HasPlayerMaps) Set("ETERNALVR_CONTROLLER_DATA", inputs.Controls.Dir);
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");
@@ -206,9 +215,20 @@ namespace EternalVR.Launcher.Core.Launch
             {
                 Set("ETERNALVR_STEREO_DLSS", "1");
                 Set("ETERNALVR_STEREO_DLSS_QUALITY", LauncherSettings.DlssQualityName(s.Dlss));
+                // The player's newer DLSS DLL, used by the layer from where it is (docs/rig-findings/dlss-dll.md).
+                if (DlssDll.Applies(s))
+                {
+                    Set("ETERNALVR_DLSS_DLL", s.DlssDllPath.Trim());
+                    Set("ETERNALVR_DLSS_PRESET", DlssDll.NormalisePreset(s.DlssPreset));
+                }
             }
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
+            // The processor saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
+            // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could
+            // not undo them there. Absent when no item is on.
+            var saver = stereo && inputs.ForceCvars && inputs.CpuSaver != null ? inputs.CpuSaver.EnvironmentValue(s) : string.Empty;
+            if (saver.Length > 0) Set(CpuSaver.EnvironmentName, saver);
             var ipd = LauncherSettings.ClampIpd(s.IpdMm);
             if (ipd > 0.0) Set("ETERNALVR_IPD", ipd.ToString("0.0", CultureInfo.InvariantCulture));
             foreach (var kv in OpenXrEnvironment(s, inputs.LayerDecisions)) Set(kv.Key, kv.Value);

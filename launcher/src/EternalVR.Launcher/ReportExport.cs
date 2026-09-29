@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
+using EternalVR.Launcher.Core.Game;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Preflight;
 using EternalVR.Launcher.Core.Report;
@@ -37,7 +38,9 @@ namespace EternalVR.Launcher
             Add("openxr active runtime", active == null ? "none set" : active + RuntimeName(active));
             Add("openxr runtime for launches", LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? "system active" : effective + RuntimeName(effective));
             Add("hardware-accelerated GPU scheduling", hags == 2 ? "on (HwSchMode 2)" : hags.HasValue ? $"off (HwSchMode {hags.Value})" : "not set (off)");
-            Add("game build", g.Facts.Build == null ? "game not found" : g.Facts.Build.Status + " " + g.Facts.Build.Sha256);
+            Add("game build", g.Facts.Build == null ? "game not found"
+                : g.Facts.Platform == GamePlatform.GamePass ? g.Facts.Build.Status + " Game Pass " + g.Facts.Build.Version
+                : g.Facts.Build.Status + " " + g.Facts.Build.Sha256);
             Add("program folder", ctx.ProgramDir);
             Add("layer folder", ctx.LayerDir);
             Add("data folder", ctx.Paths.Root);

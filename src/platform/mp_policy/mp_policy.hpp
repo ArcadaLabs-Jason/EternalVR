@@ -98,6 +98,8 @@ enum class Signal : std::uint8_t {
     MapLoad,               // idMapInstanceLocal::LoadMap with an online or unknown map
     SteamLobbyJoin,        // Steam GameLobbyJoinRequested_t (an invite or "join game" accepted)
     SteamRichPresenceJoin, // Steam GameRichPresenceJoinRequested_t (also +connect_lobby at launch)
+    XboxInviteEvent,       // Game Pass: the GDK invite callback (an Xbox invite or join URI arrived)
+    XboxInviteDecoded,     // Game Pass: idXboxliveOnlineSessionInviteProvider::DecodeInvitationEvent
     InviteConsumed,        // idOnlineSessionInviteManager::ConsumeInvite (any platform's invite accepted)
     LobbySession,          // idLobbyUISessionCasualBattleArena created (BATTLEMODE lobby or its tutorial)
     BattleArenaSession,    // idBattleArenaGameSession created (BATTLEMODE play state)

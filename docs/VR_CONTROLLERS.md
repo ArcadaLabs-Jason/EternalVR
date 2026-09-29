@@ -66,6 +66,35 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   `_changeWeapon` (the sweep ends at the centre) picks it. With the virtual gamepad the pointer goes on its
   right stick instead. Log: `the weapon wheel is up`, `weapon wheel: pointing <direction> (motion dx, dy)`
   at each change of the eight directions, `weapon wheel released after N motion(s)`.
+- **Weapon wheel by the hand** (`ETERNALVR_WHEEL_SELECT=hand`, `features/input/wheel_hand.hpp`; the
+  launcher's Play tab, Controls, "Weapon wheel"). The stick (or a button bound to `weapon_wheel`) only holds
+  the wheel; the weapon hand's aim ray points. At the first command of a hold with the hand tracked the
+  mapper keeps the aim orientation from the controller snapshot (the same snapshot the buttons come from, so
+  no other lock or thread); after that the pointer is the angle between the start and current pointing
+  directions over `ETERNALVR_WHEEL_HAND_DEGREES` (20 by default, capped at 1), in the direction of the turn,
+  with right level with the room and up tilted with the start's pitch (straight up or down at the start,
+  the controller's own right stands in). Only the pointing direction counts, so a roll at the start or
+  during the hold never moves the pointer, and the frame follows the start so it works in any facing. The
+  pointer replaces the stick's in `GameInput::wheelPointer` and goes the same way (cursor motion, or the
+  virtual gamepad's right stick), so the wheel's half-deflection threshold is a 10-degree turn: below it
+  nothing is sent and the highlight stays. A hand that loses tracking gives no pointer and keeps its
+  reference. Rotation rather than translation: a turn of the wrist is small, quick and the same seated or
+  standing, as the menu laser points; moving the hand sideways needs a large arm sweep, has no natural
+  centre and drifts with the body. The weapon hand is the handedness's (left in both left modes). Log: the
+  `controllers: on:` line ends `weapon wheel by the hand` (or `stick`), and `the weapon wheel is up: the
+  weapon hand moves the game's wheel cursor (200 px to the rim at a 20 deg turn)`.
+- **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
+  Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
+  off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along
+  the head's heading) primes it for 0.8 s, and a forward speed of 2 m/s (`ETERNALVR_THROW_SPEED`) within
+  that time presses `equipment` once. The overhead swing: the weapon hand at least 0.10 m above the eyes,
+  the other hand not, primes it; a downward speed of 2.5 m/s (`ETERNALVR_SWING_SPEED`) presses `crucible`
+  once. Both hands raised together block the swing until the weapon hand has come down. One gesture per
+  pose, 0.5 s apart. A primed hand's punch is held back and it has to slow down before it can punch, so the
+  gesture's own motion never also punches. The press is one mapper frame, held by `ActionHold` like a tap.
+  Log: the `controllers: on:` line ends `throw gesture on|off, overhead swing on|off`, and each gesture
+  logs `controllers: gesture: throw` (or `overhead swing`) followed by `controllers: action equipment`
+  (or `action crucible`).
 - **Locomotion.** The move stick is relative to the head or the off hand (`ETERNALVR_LOCOMOTION`) and is
   rotated into the game's view yaw, which the camera hook measures each frame as the player's view yaw
   less the body yaw, so hand aim never bends the direction of travel.
@@ -89,7 +118,9 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   address is not the per-tick view update (0x14562A8, found as the only call to SetViewAngles inside
   `UpdateViewAngles`) and whose player (rcx) is the one the camera hook sees; each distinct caller is
   logged once. With the player's view inhibit bits
-  (`inhibitFlags & 0x108`, +0x87FC) and `renderView_t.inCutscene` they feed `ForcedAngleGate`, which
+  (`inhibitFlags & 0x108`, +0x87FC), `renderView_t.inCutscene` and, when its rotation is played
+  (`ETERNALVR_CAMERA_ANIMATIONS=1`), a hands animation that moves the camera
+  (docs/rig-findings/camera-animations.md) they feed `ForcedAngleGate`, which
   yields that frame and two more. While it yields, hand aim writes nothing (the camera keeps the body yaw
   without the injected hand yaw, so it does not jump), shots keep the game's start and axis, and the
   viewmodel keeps the game's own placement (glory kills and sync animations use it).
@@ -173,6 +204,12 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_VIGNETTE` | `off`, `light`, `strong`: the comfort vignette (above) | `off` |
 | `ETERNALVR_HANDEDNESS` | `right`, `left` (triggers, grips and clicks swap), `left_mirror` (sticks and face buttons swap too) | `right` |
 | `ETERNALVR_DOSSIER` | `hold`: X tap switches equipment, X hold (0.25 s) opens the Dossier; `tap`: the other way round (below) | `hold` |
+| `ETERNALVR_WHEEL_SELECT` | `stick`: the stick that holds the weapon wheel points at it; `hand`: the weapon hand points, the stick or button only holds it (above) | `stick` |
+| `ETERNALVR_WHEEL_HAND_DEGREES` | the hand's turn that reaches the wheel's rim, 5 to 45 degrees (half of it highlights a weapon) | 20 |
+| `ETERNALVR_THROW` | `1`: the off hand's overhand throw presses the equipment launcher (above) | `0` |
+| `ETERNALVR_THROW_SPEED` | the throw's forward speed, 1 to 5 metres per second | 2 |
+| `ETERNALVR_SWING` | `1`: the weapon hand's overhead swing presses the Crucible (above) | `0` |
+| `ETERNALVR_SWING_SPEED` | the swing's downward speed, 1 to 5 metres per second | 2.5 |
 | `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
 | `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
 | `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |
@@ -181,7 +218,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
 | `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning) | the table |
-| `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes its controls folder (`<data>\controls`) when it holds a map of the player's | built in |
+| `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
 | `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Y pause and the Y capture) | none |
 | `ETERNALVR_CONTROLLERS_TRACE` | `1`: log the eye, view angles, body and hand 4 times a second, the game's own command bits, and the turns | `0` |
@@ -213,6 +250,8 @@ A value that cannot be used is logged with its name and the default is kept
 | Left Menu held + a trigger | Save a capture of each eye for a bug report (below) | the layer's own |
 | Y held + a trigger (SteamVR) | The same capture, since SteamVR keeps the left Menu button (below) | the layer's own |
 | A physical punch | Melee | as the stick click |
+| Off hand wound up by the ear, then thrown forward (`ETERNALVR_THROW=1`) | Equipment launcher | as the left trigger |
+| Weapon hand raised above the head, then swung down (`ETERNALVR_SWING=1`) | Crucible | as the left stick click |
 
 While a menu is up the controllers drive the menu instead (laser pointer, trigger clicks, B / Y back, the
 grips switch tabs, sticks scroll and switch tabs or move the Dossier map, a stick click centres it) and
@@ -355,9 +394,11 @@ right.primary = 1          # primary, secondary, click (stick click), menu
 right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOCAL)
 left.aim = 0, 0, 90        # an optional roll, counter-clockwise as the user sees it: the left palm up
 right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)
+right.velocity = 0, 0, -3  # metres per second, LOCAL (default: still); the pose does not move with it
 ```
 
-A hand given an aim is tracked there, with the grip at the same pose. Without the file the runtime's
+A hand given an aim is tracked there, with the grip at the same pose, still unless the file gives it a
+velocity (for a punch or an arm gesture). Without the file the runtime's
 controllers are used alone. OpenXR-Simulator binds our actions but its own controller emulation is driven
 through files under the home directory, which the rig does not write; the scripted input covers the same
 ground. The simulator also turns some keyboard keys into controller buttons while it runs, so keys sent
@@ -407,7 +448,9 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 9 | Virtual gamepad (`ETERNALVR_XINPUT=1`, `+in_joystick 1`) | Pass: A jumps, the left stick walks, the trigger fires (16 to 14), turning goes through the turn hook |
 | 10 | Guard trip (`ETERNALVR_GUARD_TEST_TRIP_MS=40000`) | Pass: after the trip the trace and the action log stop, the view stays where it was, and a held trigger fires nothing (15 stays 15) |
 | 11 | Weapon wheel through the cursor: in e1m2 with two or more weapons, the file `right.stick = 0, -1` for 1 s, then `right.stick = 1, 0` for 1 s, then `right.stick = 0, 0` | Pending. Expect `action weapon_wheel`, about 0.25 s later `the weapon wheel is up`, `weapon wheel: pointing down (motion 0, 200)`, then `pointing right (motion 200, -200)`, then `weapon wheel released after N motion(s)` and a `held item` line for the weapon on the wheel's right; no `menu: the game shows its cursor` (if the game does show it: `menu: the weapon wheel is up: ...` and no panel); the `aim:` line's body yaw unchanged across the wheel |
-| 12 | Vibration: in e1m2, the file `right.trigger = 1` for 2 s, then `right.trigger = 0`; then `left.menu = 1` with `right.trigger = 1` (the capture), both back to 0; then the Menu button (pause), `right.aim = 0, 0` and a `right.trigger = 1` tap on the pause menu | Pending. Expect `haptics: on, strength 0.60 ...`, `haptics: rumble hook at RVA 0xAAE730` and `rumble on` in the `game hooks:` line, `haptics: the game's first rumble: low L, high H` on the first shot, then within 10 s `haptics: N pulses (fire a, punch 0, menu c, game d, capture e), r refused` with a up to 14 for 2 s held (one at the press, then every 0.15 s; fewer where the game's rumble on that hand is stronger), d above 0 while shooting, e 2 (both hands), c 1 or more after the click. A runtime without haptics shows the pulses as refused (the first one logged with its result). A punch needs hand velocity, which the file cannot give |
+| 12 | Vibration: in e1m2, the file `right.trigger = 1` for 2 s, then `right.trigger = 0`; then `left.menu = 1` with `right.trigger = 1` (the capture), both back to 0; then the Menu button (pause), `right.aim = 0, 0` and a `right.trigger = 1` tap on the pause menu | Pending. Expect `haptics: on, strength 0.60 ...`, `haptics: rumble hook at RVA 0xAAE730` and `rumble on` in the `game hooks:` line, `haptics: the game's first rumble: low L, high H` on the first shot, then within 10 s `haptics: N pulses (fire a, punch 0, menu c, game d, capture e), r refused` with a up to 14 for 2 s held (one at the press, then every 0.15 s; fewer where the game's rumble on that hand is stronger), d above 0 while shooting, e 2 (both hands), c 1 or more after the click. A runtime without haptics shows the pulses as refused (the first one logged with its result). A punch needs hand velocity: `right.velocity = 0, 0, -3.5` with an aim for 0.3 s |
+| 13 | Weapon wheel by the hand (`ETERNALVR_WHEEL_SELECT=hand`): in e1m2 with two or more weapons, the file `right.aim = 0, 0`, then with it `right.stick = 0, -1` for 1.5 s, then (the stick still down) `right.aim = -25, 0` for 1 s, `right.aim = 0, 25` for 1 s, then `right.stick = 0, 0` | Pending. Expect `weapon wheel by the hand` at the end of the `controllers: on:` line, `action weapon_wheel`, `the weapon wheel is up: the weapon hand moves the game's wheel cursor (200 px to the rim at a 20 deg turn)`, no `pointing` line while the hand is still, then `weapon wheel: pointing right (motion 200, 0)`, `pointing up (motion -200, -200)`, `weapon wheel released after N motion(s)` and a `held item` line for the weapon at the wheel's top |
+| 14 | Arm gestures (`ETERNALVR_THROW=1`, `ETERNALVR_SWING=1`), in e1m2: the file `left.aim = 0, 0` with `left.position = -0.15, 0.05, 0.15` (wound up) for 1 s, then `left.position = -0.15, -0.05, -0.3` with `left.velocity = 0, -0.5, -3.5` for 0.3 s, then the left hand at rest; later `right.aim = 0, 0` with `right.position = 0.15, 0.3, -0.1` (raised) for 1 s, then `right.position = 0.15, -0.1, -0.35` with `right.velocity = 0, -3.5, -1.5` for 0.3 s; and a control: `left.position = -0.2, -0.3, -0.45` with `left.velocity = 0, 0, -3.5` (a punch from the chest) | Pending. Expect `throw gesture on, overhead swing on` at the end of the `controllers: on:` line; `controllers: gesture: throw` then `controllers: action equipment` and no `action melee` for the throw; `gesture: overhead swing` then `action crucible` and no `action melee` for the swing (the Crucible itself needs the weapon; the press is what is checked); `action melee` and no gesture line for the control |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent
@@ -436,6 +479,13 @@ for seconds (below).
   unit tests; selection in the headset is still to be confirmed. The first version moved the accumulated
   angles, which the wheel does not read (the owner's Quest 3 session: the wheel opened, nothing could be
   selected).
+- **Weapon wheel by the hand** (`ETERNALVR_WHEEL_SELECT=hand`) is covered by unit tests only. To confirm in
+  a headset: that 20 degrees (10 to highlight) feels right, that the wheel's segments match the directions
+  the hand turns as the player sees the wheel, and that hand aim turning the view while the hand points
+  does not disturb the wheel (the game reads the cursor, not the view).
+- **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`) are covered by unit tests only. To confirm in a
+  headset: the thresholds, false triggers in a real fight, and whether the grenade should fly along the
+  throw rather than the view (`docs/VR_INTERACTIONS.md` section 5).
 - **The virtual gamepad** depends on the game's default pad binds and, for the sticks, on `in_joystick`.
 - **One hand model.** The game's hands model holds both arms; placed at the weapon hand, the left arm
   follows it (T-054: no off-hand model in v1). `ETERNALVR_OFFHAND=free` poses the left arm at the off-hand
@@ -443,8 +493,9 @@ for seconds (below).
   left hand.
 - **Seated** offsets are chosen by `ETERNALVR_SEATED`; posture detection is not wired to them yet.
 - **Bindings from the player's profile** (REQ-11) come through `ETERNALVR_CONTROLLER_DATA`: the launcher's
-  Edit controls opens a folder for the player's edited copies of the built-in files
-  (docs/release/CONTROLS.md); the launcher has no binding editor yet. No haptics yet (v1 if time allows). Aim assist is not forced off (the
+  controls editor (Edit controls) saves the player's edited copies of the built-in files in the controls
+  folder, checked with the layer's rules first (launcher/src/EternalVR.Launcher.Core/Controls,
+  docs/release/CONTROLS.md); each VR settings profile keeps its own folder (`controls\profiles\<name>`). No haptics yet (v1 if time allows). Aim assist is not forced off (the
   injected turn does not use the stick path that gates it).
 - **Stereo.** Checked live with Route S (docs/VR_STEREO.md, re-test table): with hand aim and snap turn
   every action works as in mono, and the weapon is drawn at the hand in both eyes (Route S retargets the

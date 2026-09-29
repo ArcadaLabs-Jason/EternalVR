@@ -7,7 +7,7 @@ where it differs from the design is T-113 in `docs/DECISIONS.md`.
 | Project | Target | What it is |
 |---|---|---|
 | `src/EternalVR.Launcher` | .NET Framework 4.8, WinForms | The window, the command-line modes and the Windows side (registry reads, processes, the flag-gated HKCU registration) |
-| `src/EternalVR.Launcher.Core` | netstandard2.0 | Everything that can be tested without Windows: VDF parsing, Steam discovery, config snapshot and key restore, save backups, preflight decisions, hash check, launch plan |
+| `src/EternalVR.Launcher.Core` | netstandard2.0 | Everything that can be tested without Windows: VDF parsing, Steam and Game Pass discovery, config snapshot and key restore, save backups, preflight decisions, hash check, launch plan |
 | `tests/EternalVR.Launcher.Core.Tests` | net8.0, xUnit | Unit tests of the core; any OS |
 | `tests/FakeGame` | .NET Framework 4.8 | A stand-in for the game used by `tests/e2e.ps1` |
 | `data/*.txt` | | Known builds, forced cvars, session (window and display) keys, refused multiplayer arguments, known layers, anti-cheat names. Copied next to the exe |
@@ -35,7 +35,8 @@ On the development rig the SDK is user-local and every cache stays on the develo
 
 Put the layer next to the launcher as `layer\VK_LAYER_ETERNALVR.json` and `layer\EternalVR.dll` (the
 CMake build's `src\vkcore` output), or point `--layer-dir` or `layer_dir` in `launcher.ini` at a build
-folder. Start Steam, then `EternalVR.Launcher.exe`. Launch VR is enabled when preflight has no failure.
+folder. Start Steam (not needed for the Game Pass version), then `EternalVR.Launcher.exe`. Launch VR is
+enabled when preflight has no failure.
 
 ```
 EternalVR.Launcher.exe --dry-run [--data-root <dir>]   preflight, snapshot, save backup and the launch plan; no game
@@ -60,6 +61,17 @@ history per eye, docs/VR_STEREO.md; the temporal effects whose history the eyes 
 `r_swapInterval 0`: no dynamic resolution, no vsync on the doubled render rate) and a windowed game
 (`r_fullscreen 0`, `r_windowWidth`/`r_windowHeight`), and hands the layer the window's place and size
 (`ETERNALVR_WINDOW=x,y,width,height`, client area).
+
+"Texture streaming" (Play tab, Picture) and the "Processor saver" group (Play tab) are the items of
+`data\cpu-saver.txt`, one checkbox each (stereo only): game cvars that cut the processor's work per render
+(`docs/rig-findings/perf-cpu-cvars.md`). Each item has an id, a default, the row it goes in, its checkbox text,
+its tooltip and its cvars; the window builds the checkboxes from the file. Texture streaming (`is_cacheGreedily 0`:
+the streamer loads only the mips a view needs, +8% on the rig, mostly lossless) is on by default; the processor
+saver's items (your own shadow, near sun shadows, model detail distance, decal distance, distant shadows and
+lights) are off by default. A stereo launch with a settings location hands the cvars of the items that are on to
+the layer (`ETERNALVR_CPU_SAVER=name=value;...`, absent when none is on), which holds them at run time; `<=N`
+values only lower a cvar the game's menu sets per quality level. The cvars of every item are restored in the
+game's configs after every session like the forced cvars, whether the item was on or not.
 
 Each eye renders at the headset's size, not the window's (`docs/rig-findings/render-size.md`): the launcher
 sets `ETERNALVR_RENDER_SIZE` (`render_size` in `launcher.ini`: `auto`, the default, is the runtime's
@@ -109,7 +121,7 @@ A launch, in order (`SessionRunner`):
    or `view`; hand aim without controllers is sent as `head`), `ETERNALVR_CONTROLLERS`, in stereo
    `ETERNALVR_MODE=stereo` and `ETERNALVR_WINDOW`, `ETERNALVR_SKIP_CINEMATICS`, the room-scale settings
    `ETERNALVR_POSTURE`, `ETERNALVR_HEIGHT`, `ETERNALVR_RECENTER_HOLD` and (when set) `ETERNALVR_IPD`
-   (`docs/VR_ROOMSCALE.md`), `ETERNALVR_CONTROLLER_DATA=<data>\controls` when that folder holds a map
+   (`docs/VR_ROOMSCALE.md`), `ETERNALVR_CONTROLLER_DATA=<data>\controls` (or the active profile's `controls\profiles\<name>`) when that folder holds a map
    of the player's, `XR_RUNTIME_JSON` when a runtime other than the system's is chosen, and
    the disable variables of known-bad layers (read from their own manifests).
 5. For 10 s the start is watched. When the started exe exits in that window, the launcher looks for a
@@ -153,14 +165,31 @@ and uploads a fresh profile (T-115, `docs/rig-findings/launcher-live.md`). The l
   of `--restore-saves`: 0 restored (record matching, or no record to compare with, which is said), 2
   refused, 4 restored but the record still stale, 1 error.
 
-Preflight: not elevated; Steam running and logged in (`HKCU\Software\Valve\Steam\ActiveProcess`); no
+Preflight: not elevated; for Steam, Steam running and logged in (`HKCU\Software\Valve\Steam\ActiveProcess`); no
 `DOOMEternalx64vk`, `DOOMSandBox64vk` or `idTechLauncher` running; no pending restore; data folder
-writable (a program folder under Program Files only warns); game found and its exe hash known (unknown
-warns); no anti-cheat files in the game folder; layer folder complete; OpenXR runtime manifest present
+writable (a program folder under Program Files only warns); game found and its build known (the exe hash
+for Steam, the package version for Game Pass); no anti-cheat files in the game folder; layer folder
+complete; OpenXR runtime manifest present
 (the system's active one from `HKLM\SOFTWARE\Khronos\OpenXR\1`, read only, unless one is chosen);
 implicit Vulkan and OpenXR layers checked against `data\known-layers.txt`; HAGS on warns; no settings
-location found warns and forces nothing; a stale Steam cloud record warns; extra arguments asking for
+location found warns and forces nothing; a stale Steam cloud record warns (Steam only); extra arguments asking for
 multiplayer (`data\refused-args.txt`) are refused.
+
+## Game Pass
+
+The Game Pass (Microsoft Store) version is found when Steam has none, or when the chosen game folder is a store
+one (`Game/GamePassInstall.cs`): every fixed drive's Gaming Services folders (those its hidden `.GamingRoot`
+names, and `XboxGames`) are searched for a `Content` folder whose `MicrosoftGame.Config` identity is
+`BethesdaSoftworks.DOOMEternal-PC`. The package's own install location (`Program Files\WindowsApps`) is not
+used: it can still point there after the game was moved. The exe cannot be opened for reading, so the build
+is known by the package version (`gamepass` records in `data\known-builds.txt`); an unknown version is
+refused like an unknown Steam build. The launch is the same as for Steam: `Content\DOOMEternalx64vk.exe` is
+started directly with the same command line and environment (not through `gamelaunchhelper.exe` or the
+Store app). Steam is not checked. The settings are the Saved Games folder only (shared with the Steam
+version). The saves go through XGameSave into `%LOCALAPPDATA%\Packages\BethesdaSoftworks.DOOMEternal-PC_*\SystemAppData\wgs`:
+that folder is copied into each save backup (skipped when absent), and such a backup is never written back
+(Windows syncs those saves with the Xbox cloud); "Restore saves" says where the copy is. There is no Steam
+Cloud, so no cloud record check and no resync.
 
 The launcher reads the registry and never writes it, except with `--register-hkcu` (the HKCU
 implicit-layer route of ARCHITECTURE section 4, off by default and untested, T-113).
@@ -171,12 +200,12 @@ implicit-layer route of ARCHITECTURE section 4, off by default and untested, T-1
 
 | Path | Contents |
 |---|---|
-| `profiles\<name>.ini` | A player profile (the Player picker above the tabs): the same keys as `launcher.ini` without the game folder, layer folder and runtime, which stay this machine's. The active profile gets every change saved |
-| `launcher.ini` | Mode (`stereo`, `mono`), controllers, aim (`hand`, `head`, `view`), per-eye size, world scale, cutscene skip, posture (`auto`, `seated`, `standing`), eye height (`slayer`, `real`), `ipd_mm` (0 = the headset's), `recenter_hold`, turning (`turn` smooth, snap or off, `snap_degrees` 15-90, `turn_rate` 150-400), `vignette` (`off`, `light`, `strong`: the comfort vignette), `handedness` (`right`, `left`, `left_mirror`), `locomotion` (`head`, `hand`), `dossier` (`hold`: X hold opens the Dossier; `tap`: X tap does), `aim_dot` (1, or 0 to hide the hand-aim dot), `anti_aliasing` (`taa`, or `dlss`: experimental, NVIDIA RTX only), `body_follow` (1 or 0), `aim_smoothing` (0 to 1), `vibration` (0 to 1: 0 off, 0.35 light, 0.6 medium, 1 strong), `hud_distance`, `hud_width`, `hud_height` (metres), `mirror` (`left`, `right`, `off`), `mirror_display` (`auto`, `primary`, or a display's top-left `x,y`), `mirror_size` (`WxH`, default 1280x720), `mirror_crop` (`full`, `16:9`), `cinema_aspect` (`16:9`, `16:10`, `full`), `cutscene_view` (`cinema`, `immersive`), `shot_origin` (`hand`, `eye`), `aim_dot_size` (degrees), `menu_beam` (1 or 0), `profile` (the active player profile), runtime, game and layer folder overrides, extra arguments; `schema_version`. Every key after the paths is optional (a missing one takes its default), and keys the launcher does not know are kept as they are |
+| `profiles\<name>.ini` | A VR settings profile (the picker above the tabs): the same keys as `launcher.ini` without the game folder, layer folder, runtime and DLSS file (`dlss_dll_path`), which stay this machine's. Its controls are in `controls\profiles\<name>\`. The active profile gets every change saved |
+| `launcher.ini` | Mode (`stereo`, `mono`), `alternate_eyes` (0 or 1: in stereo each game tick renders one eye, for slower processors; passed as `ETERNALVR_ALTERNATE_EYES`, docs/rig-findings/alternate-eye.md), controllers, aim (`hand`, `head`, `view`), per-eye size, world scale, cutscene skip, posture (`auto`, `seated`, `standing`), eye height (`slayer`, `real`), `ipd_mm` (0 = the headset's), `recenter_hold`, turning (`turn` smooth, snap or off, `snap_degrees` 15-90, `turn_rate` 150-400), `vignette` (`off`, `light`, `strong`: the comfort vignette), `handedness` (`right`, `left`, `left_mirror`), `locomotion` (`head`, `hand`), `dossier` (`hold`: X hold opens the Dossier; `tap`: X tap does), `wheel_select` (`stick`, or `hand`: the weapon hand points at the weapon wheel), `aim_dot` (1, or 0 to hide the hand-aim dot), `anti_aliasing` (`taa`, `off`, or `dlss`: experimental, NVIDIA RTX only), `dlss_quality`, `dlss_dll` (`game`, or `file`: the newer `nvngx_dlss.dll` at `dlss_dll_path`, passed to the layer as `ETERNALVR_DLSS_DLL` with DLSS in stereo; docs/rig-findings/dlss-dll.md), `dlss_dll_path` (this machine's, kept by Reset), `dlss_preset` (`default`, `K`, `J`, `M`, `L`, `F`), `cpu_saver_<id>` (`on`, `off`: one key per item of `data\cpu-saver.txt`, stereo only: `cpu_saver_texture_streaming`, on by default, and the processor saver's `cpu_saver_own_shadow`, `cpu_saver_near_sun_shadows`, `cpu_saver_model_detail`, `cpu_saver_decal_distance`, `cpu_saver_distant_shadows_lights`, off by default; an item without a key takes its default, and an older launcher's `cpu_saver = on` turns every item without a key on), `throw_gesture` (0 or 1: the off hand's overhand throw fires the equipment launcher, passed as `ETERNALVR_THROW`; off by default), `swing_gesture` (0 or 1: the weapon hand's overhead swing fires the Crucible, passed as `ETERNALVR_SWING`; off by default; both in docs/VR_INTERACTIONS.md), `body_follow` (1 or 0), `aim_smoothing` (0 to 1), `vibration` (0 to 1: 0 off, 0.35 light, 0.6 medium, 1 strong), `hud` (`panel`, `wrist`, `weapon`: where health, armour and ammo are, docs/VR_HANDS_HUD.md), `hud_distance`, `hud_width`, `hud_height` (metres), `mirror` (`left`, `right`, `off`), `mirror_display` (`auto`, `primary`, or a display's top-left `x,y`), `mirror_size` (`WxH`, default 1280x720), `mirror_crop` (`full`, `16:9`), `cinema_aspect` (`16:9`, `16:10`, `full`), `cutscene_view` (`cinema`, `immersive`), `shot_origin` (`hand`, `eye`), `aim_dot_size` (degrees), `menu_beam` (1 or 0), `profile` (the active player profile), runtime, game and layer folder overrides, extra arguments; `schema_version`. Every key after the paths is optional (a missing one takes its default), and keys the launcher does not know are kept as they are |
 | `logs\launcher.log`, `logs\<session>\` | The launcher's log; the layer's log folder for each session |
 | `snapshots\<session>\` | Settings copies, `SHA256SUMS`, `locations.txt`, `restore.txt`, files replaced by the restore (ten kept) |
-| `controls\` | The player's own controller maps (`*.toml`, edited copies of the built-in ones), `README.txt`, and `defaults\` with a copy of every built-in map (`data\controllers` next to the exe), refreshed by **Edit controls...** on the Play tab. When it holds a map, the launch sets `ETERNALVR_CONTROLLER_DATA` to the folder (with controllers on); see `docs/release/CONTROLS.md` |
-| `save-backups\<session>\` | Save slots with `SHA256SUMS` (five kept); `pre-restore-*` holds the saves found before a "Restore saves" |
+| `controls\` | The controls of no profile ("(none)"): the player's own controller maps (`*.toml`, edited copies of the built-in ones), `README.txt`, and `defaults\` with a copy of every built-in map (`data\controllers` next to the exe), refreshed by **Edit controls...** (the controls editor, which saves the player's maps here) and **Open folder** on the Play tab. `controls\profiles\<name>\` holds each profile's own controls in the same shape (`ControlSets`): a new profile gets a copy of the controls in use, Delete removes its folder, and on start a profile without a folder (an older launcher's, when all profiles shared `controls\`) gets a copy of the maps of no profile; until then it uses them. The launch sets `ETERNALVR_CONTROLLER_DATA` to the active profile's set when it holds a map (with controllers on); the layer reads only the files directly in that folder. See `docs/release/CONTROLS.md` |
+| `save-backups\<session>\` | Save slots with `SHA256SUMS` (five kept), or for Game Pass a copy of the package's `wgs` save containers under `gamepass\`; `pre-restore-*` holds the saves found before a "Restore saves" |
 | `SESSION_PENDING`, `REGISTRATION_PENDING` | Crash-safety markers |
 
 ## Version check and Export report
@@ -199,7 +228,7 @@ rules for testers.
   `data\` or (window only) `layer\` missing, it says to extract the whole zip. A global handler
   (`CrashHandler.cs`) logs anything nothing else caught and shows a plain dialog.
 - **Preflight refuses** an unknown game build (the layer's hooks are pinned to the builds in `known-builds.txt`),
-  a Microsoft Store / Game Pass install and a game never started on this PC (no settings folder), and **warns**
+  a Game Pass folder that is not the game's Content folder and a game never started on this PC (no settings folder), and **warns**
   about 8 GB of video memory or less, more than one GPU, injector DLLs in the game folder (ReShade, SpecialK,
   OptiScaler), a system Vulkan loader older than 1.3.234 and paths outside ASCII
   (`Preflight/CompatibilityChecks.cs`).

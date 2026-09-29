@@ -1,5 +1,6 @@
 #include "vkcore/taa_ngx.hpp"
 
+#include "stereo_seq/alternate_eyes.hpp"
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
@@ -96,7 +97,11 @@ int evaluateHook(void* commandBuffer, const void* handle, const void* parameters
         }
         twin = g_twins.twinOf(key(handle));
         if (twin) {
-            reset = g_twins.resetTwin(key(handle), tag->tick);
+            // With alternate eyes eye R evaluates every other game frame; with auto, every game frame or
+            // every other one.
+            reset = g_twins.resetTwin(key(handle), tag->tick,
+                                      stereo_seq::eyeFrameMinStep(seqAlternateEyes(), seqAdaptiveEyes()),
+                                      stereo_seq::eyeFrameStep(seqAlternateEyes()));
         }
     }
     if (!twin) {

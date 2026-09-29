@@ -19,6 +19,7 @@
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/body_follow.hpp"
 #include "vkcore/bug_capture.hpp"
+#include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
@@ -130,10 +131,17 @@ void sendCutsceneSkip(State& s, bool dash) {
 void sendWheelPointer(State& s, bool held, input::Axis2 pointer, float dt) {
     const input::WheelMouseOutput w = s.wheelMouse.update(held, pointer, dt);
     if (w.opened) {
-        EVR_LOG(
-            "%s: the weapon wheel is up: the stick moves the game's wheel cursor (%.0f px to the rim); let "
-            "go of the stick to pick",
-            kTag, s.wheelMouse.settings().reachPixels);
+        if (settings().wheelSelect == input::WheelSelect::Hand) {
+            EVR_LOG(
+                "%s: the weapon wheel is up: the weapon hand moves the game's wheel cursor (%.0f px to the "
+                "rim at a %.0f deg turn); let go of the wheel's stick or button to pick",
+                kTag, s.wheelMouse.settings().reachPixels, settings().wheelHandDegrees);
+        } else {
+            EVR_LOG(
+                "%s: the weapon wheel is up: the stick moves the game's wheel cursor (%.0f px to the rim); "
+                "let go of the stick to pick",
+                kTag, s.wheelMouse.settings().reachPixels);
+        }
     }
     if (w.move) {
         const bool sent = injectMouse(w.dx, w.dy, 0, 0, gameWindow());
@@ -162,7 +170,8 @@ void addBodyFollow(std::byte* cmd, bool suppressed) {
     const bool moving = forward != 0 || right != 0;
     const bool jumpOrDash =
         up != 0 || (buttons & (game::usercmd_button::kMoveUp | game::usercmd_button::kDash)) != 0;
-    const bool gameplay = !suppressed && !menu_input::suppressGameplay();
+    // Not while piloting a demon: body follow steers the Slayer's body toward the head.
+    const bool gameplay = !suppressed && !menu_input::suppressGameplay() && !pilotingDemon();
     const input::MoveAxes move = body_follow::commandMove(
         moving, jumpOrDash, gameplay, state().viewYawTracking.load(std::memory_order_relaxed));
     if (move == input::MoveAxes{} || !mp_guard::allowsGameTouch()) {
@@ -226,7 +235,7 @@ void onPutUserCmd(const HookRegisters& regs) {
             }
         }
     }
-    const std::uint64_t injected = game::usercmdButtons(mapped.actions);
+    const std::uint64_t injected = pilotedDemonButtons(mapped.actions, game::usercmdButtons(mapped.actions));
     const input::MoveAxes move = input::quantizeMove(mapped.input.move, input::kMaxMoveAxis);
     std::uint64_t buttons = 0;
     std::int8_t forward = 0;
@@ -424,6 +433,7 @@ MappedInput runMapper() {
         s.hold.reset();
         s.viewQueue.drain();
         sendWheelPointer(s, false, {}, 0.0f);
+        s.wheelHand.reset();
         return out;
     }
     if (!s.mapper || s.mapperController != snapshot.controller) {
@@ -446,6 +456,8 @@ MappedInput runMapper() {
         mapperSettings.stickChordRecenter = recenterHold > 0.0f;
         // SteamVR keeps the left Menu button: Y held + a trigger is the capture too (capture_chord.hpp).
         mapperSettings.captureButtons = input::captureButtonsFor(xrRuntimeName());
+        mapperSettings.throwGesture = cfg.throwGesture;
+        mapperSettings.swing = cfg.swing;
         s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
         EVR_LOG("%s: control map for %s controllers, %s-handed", kTag,
                 std::string(game::controllerName(snapshot.controller)).c_str(),
@@ -466,6 +478,16 @@ MappedInput runMapper() {
     }
     out.actions = s.hold.update(out.input.down, dt);
     out.live = true;
+    if (cfg.wheelSelect == input::WheelSelect::Hand) {
+        // The weapon hand points at the wheel; the stick or button only holds it (wheel_hand.hpp).
+        if (!s.wheelHand) {
+            s.wheelHand.emplace(cfg.wheelHandDegrees);
+        }
+        const input::HandState& hand = snapshot.frame.hand(weaponHand());
+        out.input.wheelPointer =
+            s.wheelHand->update(game::contains(out.actions, game::GameAction::WeaponWheel), hand.poseValid,
+                                hand.aimPose.orientation);
+    }
     // Published before a menu holds them back: in a tutorial popup the menu router presses their keys.
     s.heldActionBits.store(out.actions.to_ullong(), std::memory_order_relaxed);
     s.heldActionsQpc.store(now, std::memory_order_relaxed);
@@ -483,6 +505,10 @@ MappedInput runMapper() {
         out.input.punch = {};
         out.input.down = out.actions;
         out.turnStick = {};
+    } else if (out.input.thrown || out.input.swung) {
+        // Its action is logged below with every other action sent (arm_gestures.hpp).
+        EVR_LOG("%s: gesture:%s%s", kTag, out.input.thrown ? " throw" : "",
+                out.input.swung ? " overhead swing" : "");
     }
     s.viewQueue.add({0.0f, out.input.turnDegrees});
     // The comfort vignette follows the motion sent (artificialMotion); the mapper counted at most this step.

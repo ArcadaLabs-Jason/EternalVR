@@ -109,6 +109,18 @@ namespace EternalVR.Launcher.Platform
             return null;
         }
 
+        /// <summary>The roots of the ready fixed drives (where Gaming Services can install games).</summary>
+        public static IReadOnlyList<string> FixedDriveRoots()
+        {
+            var list = new List<string>();
+            foreach (var d in DriveInfo.GetDrives())
+            {
+                try { if (d.DriveType == DriveType.Fixed && d.IsReady) list.Add(d.RootDirectory.FullName); }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
+            }
+            return list;
+        }
+
         public static string ActiveOpenXrRuntime() =>
             ReadString(RegistryHive.LocalMachine, @"SOFTWARE\Khronos\OpenXR\1", "ActiveRuntime");
 

@@ -37,18 +37,9 @@ namespace EternalVR.Launcher.Core.Game
         }
 
         /// <summary>
-        /// Every settings location that exists (T-094, T-099): the Saved Games folder, and the
-        /// <c>782330\remote</c> folder of the active Steam user, or of every user when the active one is
-        /// unknown (0 or null means unknown).
-        /// </summary>
-        /// <remarks>
-        /// When a Steam location is found the Saved Games location is included even if its folder does not
-        /// exist yet: a launch then forces cvars, the game may create its text configs there, and the
-        /// snapshot records them as absent so the restore can take the forced keys out again.
-        /// </remarks>
-        /// <summary>
         /// A Microsoft Store / Game Pass install: a <c>MicrosoftGame.config</c> or <c>appxmanifest.xml</c> in the game folder, or a
-        /// path under <c>WindowsApps</c> or <c>XboxGames</c>. EternalVR supports only the Steam build.
+        /// path under <c>WindowsApps</c> or <c>XboxGames</c>. A game folder that is one is taken as the Game Pass install
+        /// (<see cref="GamePassInstall"/>): its Content folder, else the one found on the drives.
         /// </summary>
         public static bool IsStoreInstall(string gameRoot)
         {
@@ -64,6 +55,22 @@ namespace EternalVR.Launcher.Core.Game
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException) { return false; }
         }
 
+        /// <summary>The settings locations of an install: Game Pass keeps its settings in the Saved Games folder only.</summary>
+        public static IReadOnlyList<SettingsLocation> FindSettingsLocations(GamePlatform platform, string savedGamesDir, string steamRoot, string activeAccountId) =>
+            platform == GamePlatform.GamePass
+                ? FindSettingsLocations(savedGamesDir, null, null)
+                : FindSettingsLocations(savedGamesDir, steamRoot, activeAccountId);
+
+        /// <summary>
+        /// Every settings location that exists (T-094, T-099): the Saved Games folder, and the
+        /// <c>782330\remote</c> folder of the active Steam user, or of every user when the active one is
+        /// unknown (0 or null means unknown).
+        /// </summary>
+        /// <remarks>
+        /// When a Steam location is found the Saved Games location is included even if its folder does not
+        /// exist yet: a launch then forces cvars, the game may create its text configs there, and the
+        /// snapshot records them as absent so the restore can take the forced keys out again.
+        /// </remarks>
         public static IReadOnlyList<SettingsLocation> FindSettingsLocations(string savedGamesDir, string steamRoot, string activeAccountId)
         {
             var list = new List<SettingsLocation>();
@@ -133,7 +140,13 @@ namespace EternalVR.Launcher.Core.Game
         }
     }
 
-    public enum SettingsLocationKind { SavedGames, SteamRemote }
+    public enum SettingsLocationKind
+    {
+        SavedGames,
+        SteamRemote,
+        /// <summary>The Game Pass save containers (<c>wgs</c>): copied into the save backups only, never snapshotted or restored.</summary>
+        GamePassSaves,
+    }
 
     public sealed class SettingsLocation
     {
@@ -144,7 +157,7 @@ namespace EternalVR.Launcher.Core.Game
             Path = path;
         }
 
-        /// <summary>Stable folder name inside a snapshot: "saved-games" or "steam-&lt;account&gt;".</summary>
+        /// <summary>Stable folder name inside a snapshot or backup: "saved-games", "steam-&lt;account&gt;" or "gamepass".</summary>
         public string Name { get; }
         public SettingsLocationKind Kind { get; }
         public string Path { get; }

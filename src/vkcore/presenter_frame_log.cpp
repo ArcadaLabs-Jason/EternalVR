@@ -4,6 +4,8 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/gpu_timing.hpp"
+#include "vkcore/stall_watch.hpp"
+#include "vkcore/vram_watch.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -93,6 +95,8 @@ void XrPresenter::Impl::logRates() {
     lastRatePairs = pairs;
     lastRateXrFrames = xrFrames;
     lastRateXrCopies = xrCopies;
+    vram::logSummary();
+    stall_watch::logSummary();
 }
 
 } // namespace evr::vkcore

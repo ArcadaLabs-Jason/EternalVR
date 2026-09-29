@@ -167,7 +167,7 @@ items and do not block v1.
 ## 4a. Multiplayer and online safety
 
 Players must never be put at risk of a ban, and online play must never be affected (D-021). The
-decisions are T-109 and T-114; this section explains them.
+decisions are T-109, T-114 and T-117; this section explains them.
 
 - **Opt-in per launch only.** The layer is dormant unless our launcher starts the game with
   `ETERNALVR_ENABLE_LAYER=1`; the launcher removes its registry entry afterwards and, at every start,
@@ -187,7 +187,9 @@ decisions are T-109 and T-114; this section explains them.
   one key-up is posted for any key the layer was holding; the presenter falls back to the flat cinema
   quad; the log says to relaunch without VR for multiplayer. The game is not quit and keeps running
   flat. The hooks stay installed and only watch; we never unhook live. Each signal is tested by
-  injection; the real-invite test is not run (D-043).
+  injection; the real-invite test is not run (D-043). On the Game Pass build there are no Steam
+  callbacks: the guard watches the Xbox invite path instead (the invite callback the game registers
+  and the invitation decoder), and the launcher starts that build without Steam (T-117).
 - **Fails closed.** Every game-touching feature asks the guard before acting and acts only while it is
   armed. If a signal or the anti-cheat check cannot be resolved, the guard refuses: those features stay
   off for the process and the log names the missing point. This is the stated exception to principle 1.

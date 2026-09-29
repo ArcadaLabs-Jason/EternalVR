@@ -37,10 +37,10 @@ namespace EternalVR.Launcher.Core.Preflight
         public BuildCheck Build { get; set; }
         /// <summary>Steam's build ID of the installed game (its app manifest); null when unknown.</summary>
         public string SteamBuildId { get; set; }
-        /// <summary>The Steam build IDs of <c>known-builds.txt</c>, for the refusal message.</summary>
+        /// <summary>The build IDs (Steam) or package versions (Game Pass) of <c>known-builds.txt</c> for the platform, for the refusal message.</summary>
         public IReadOnlyList<string> KnownBuildIds { get; set; } = new string[0];
-        /// <summary>The game folder is a Microsoft Store / Game Pass install (WindowsApps, XboxGames, MicrosoftGame.config).</summary>
-        public bool StoreInstall { get; set; }
+        /// <summary>The store of the install found; the Steam facts (Steam running, logged in, cloud record) count only for Steam.</summary>
+        public GamePlatform Platform { get; set; }
         /// <summary>A stand-in program replaces the game (<c>--test-exe</c>): its build is never a known one.</summary>
         public bool TestMode { get; set; }
         /// <summary>Compatibility facts that only warn (<see cref="CompatibilityChecks"/>).</summary>
@@ -93,7 +93,9 @@ namespace EternalVR.Launcher.Core.Preflight
                 f.IsElevated ? "The launcher is running as administrator. Close it and start it normally: Windows ignores the layer settings in elevated processes."
                              : "Not elevated");
 
-            if (!f.SteamRunning) Add("steam", Severity.Fail, "Steam is not running. Start Steam and log in, then launch again.");
+            bool steam = f.Platform == GamePlatform.Steam;
+            if (!steam) Add("platform", Severity.Pass, "Game Pass version of DOOM Eternal: Steam is not needed");
+            else if (!f.SteamRunning) Add("steam", Severity.Fail, "Steam is not running. Start Steam and log in, then launch again.");
             else if (f.SteamLoggedIn == false) Add("steam", Severity.Fail, "Steam is running but no user is logged in. Log in to Steam first.");
             else if (f.SteamLoggedIn == null) Add("steam", Severity.Warn, "Steam is running; whether a user is logged in could not be determined.");
             else Add("steam", Severity.Pass, "Steam is running and logged in");
@@ -111,9 +113,10 @@ namespace EternalVR.Launcher.Core.Preflight
                 Add("program-folder", Severity.Warn, "The launcher is inside Program Files. It works, but extracting it to a folder of your own is recommended.");
 
             if (string.IsNullOrEmpty(f.GameRoot))
-                Add("game", Severity.Fail, "DOOM Eternal was not found in the Steam libraries. Choose the game folder manually.");
-            else if (f.StoreInstall)
-                Add("game", Severity.Fail, "This is the Microsoft Store / Game Pass version of DOOM Eternal. EternalVR supports only the Steam version.");
+                Add("game", Severity.Fail, "DOOM Eternal was not found in the Steam libraries or the Game Pass folders. Choose the game folder manually.");
+            else if ((f.Build == null || f.Build.Status == BuildStatus.Missing) && !steam)
+                Add("game", Severity.Fail, $"{f.GameRoot} is not the Content folder of the Game Pass DOOM Eternal (it holds {GamePassInstall.ConfigFile} "
+                    + $"and {GameLayout.RetailExe}). Choose that folder, usually XboxGames\\<game name>\\Content on the drive the game is on.");
             else if (f.Build == null || f.Build.Status == BuildStatus.Missing)
                 Add("game", Severity.Fail, $"{GameLayout.RetailExe} was not found in {f.GameRoot}.");
             else if (f.Build.Status == BuildStatus.Unknown && f.TestMode)
@@ -148,17 +151,18 @@ namespace EternalVR.Launcher.Core.Preflight
                 Add("hags", Severity.Warn, "Hardware-accelerated GPU scheduling is on; it caused frame hitching in VR on the development PC. To turn it off: " + HagsHelp + " (restart needed).");
 
             if (f.SettingsLocationCount == 0 && !f.TestMode)
-                Add("settings", Severity.Fail, "DOOM Eternal has not been started on this PC yet (no settings folder). Start it once through Steam, "
+                Add("settings", Severity.Fail, "DOOM Eternal has not been started on this PC yet (no settings folder). Start it once through "
+                    + (steam ? "Steam" : "the Xbox app") + ", "
                     + "go past the first screens to the main menu, quit, and launch VR again.");
             else if (f.SettingsLocationCount == 0)
                 Add("settings", Severity.Warn, "No DOOM Eternal settings folder was found, so no settings are forced for VR (they could not be restored afterwards).");
             else Add("settings", Severity.Pass, f.SettingsLocationCount + " settings location(s) will be snapshotted and restored");
 
-            if (f.CloudRecordStale.Count > 0)
+            if (steam && f.CloudRecordStale.Count > 0)
                 Add("cloud-record", Severity.Warn, "Steam's cloud record is stale for " + string.Join(", ", f.CloudRecordStale)
                     + ": the file was changed behind Steam's back, and the game may reset your profile (\"Profile corrupt\") at its next start. "
                     + "Start DOOM Eternal once through Steam and quit at the main menu to let Steam take the files on disk.");
-            foreach (var u in f.CloudRecordUnreadable)
+            foreach (var u in steam ? f.CloudRecordUnreadable : new string[0])
                 Add("cloud-record", Severity.Warn, "Steam's cloud record could not be read (" + u + "); the cloud files are not checked.");
 
             if (f.ArgumentRefusal != null) Add("single-player", Severity.Fail, f.ArgumentRefusal);
@@ -171,6 +175,9 @@ namespace EternalVR.Launcher.Core.Preflight
         public static string UnknownBuildMessage(PreflightFacts f)
         {
             var supported = string.Join(", ", f.KnownBuildIds);
+            if (f.Platform == GamePlatform.GamePass)
+                return $"DOOM Eternal (Game Pass) was updated (version {f.Build.Version ?? "unknown"}). This EternalVR supports Game Pass version {supported}; "
+                    + "VR would stay off (the game would run flat). Wait for an EternalVR update for this game version.";
             var build = string.IsNullOrEmpty(f.SteamBuildId) ? "an unknown build" : "build " + f.SteamBuildId;
             return $"DOOM Eternal was updated ({build}, SHA-256 {f.Build.Sha256}). This EternalVR supports build {supported}; "
                 + "VR would stay off (the game would run flat). Wait for an EternalVR update for this game version.";

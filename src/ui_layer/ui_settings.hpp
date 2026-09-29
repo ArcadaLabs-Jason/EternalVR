@@ -17,7 +17,9 @@ namespace evr::ui_layer {
 // ETERNALVR_HUD: where the HUD is (docs/VR_HANDS_HUD.md). `Panel`: the whole GUI target on the head-locked
 // quad. `Wrist`: the corner blocks (health, armor, ammo, equipment) under the off hand's wrist while it
 // faces the head, the rest (subtitles, prompts, boss bars, markers, damage) on the head-locked quad.
-enum class HudMode : std::uint8_t { Panel, Wrist };
+// `Weapon`: the ammo block (ammo, equipment, flame belch; with ETERNALVR_WEAPON_HUD_VITALS=1 health and
+// armor too) above the gun in the weapon hand, the rest on the head-locked quad.
+enum class HudMode : std::uint8_t { Panel, Wrist, Weapon };
 
 const char* hudModeName(HudMode mode);
 
@@ -45,6 +47,27 @@ struct WristSettings {
     bool abilities = true;
 };
 inline constexpr float kWristHysteresisDegrees = 15.0f;
+
+// The weapon HUD (ui_layer/weapon_hud.hpp). The gun's frame is the viewmodel's: the weapon hand's grip
+// position with its aim orientation (-Z along the barrel, +Y up, +X to the right).
+struct WeaponHudSettings {
+    // ETERNALVR_WEAPON_HUD_ANGLE: shown while the angle between the panel's normal and the direction to the
+    // head is at most this; hidden above it plus kWristHysteresisDegrees (the panel seen edge-on or from
+    // behind). There is no gaze test: like a sight on the gun, it is there whenever it faces the eyes.
+    float showDegrees = 60.0f;
+    float hideDegrees = 75.0f;
+    // ETERNALVR_WEAPON_HUD_WIDTH: the width of the ammo block in metres (health and armor, when shown, at
+    // the same scale beside it).
+    float widthMetres = 0.10f;
+    // ETERNALVR_WEAPON_HUD_OFFSET=x,y,z: the panel's centre in the right hand's gun frame, metres (+X right,
+    // +Y up, +Z back toward the player); x is mirrored for the left hand.
+    Vec3 offset{0.0f, 0.07f, 0.05f};
+    // ETERNALVR_WEAPON_HUD_TILT: how far the panel's face turns from straight back along the barrel (0)
+    // toward straight up (90), degrees; tilted toward the eyes above and behind a gun held at the chest.
+    float tiltDegrees = 45.0f;
+    // ETERNALVR_WEAPON_HUD_VITALS=1: health and armor on the gun too, left of the ammo as on screen.
+    bool vitals = false;
+};
 
 // The comfort vignette (features/comfort/vignette.hpp): off, or how far it closes in.
 enum class VignetteMode : std::uint8_t {
@@ -88,10 +111,11 @@ struct UiSettings {
     // ETERNALVR_UI_WASH: the full-screen additive wash (the red low-health vignette) is taken out of the
     // GUI image before it goes on the HUD quad (additive_wash.hpp); 0 shows the image as the game drew it.
     bool removeWash = true;
-    // ETERNALVR_HUD=panel|wrist (panel by default). The wrist needs the controllers: without a tracked off
-    // hand the whole HUD stays on the head-locked quad.
+    // ETERNALVR_HUD=panel|wrist|weapon (panel by default). The wrist and the weapon need the controllers:
+    // without them the whole HUD stays on the head-locked quad.
     HudMode hud = HudMode::Panel;
     WristSettings wrist;
+    WeaponHudSettings weapon;
     // ETERNALVR_VIGNETTE (off, light, strong): the edges of the view darken while the stick moves or turns
     // the player or the game moves the camera (a dash, a glory kill); off by default.
     VignetteMode vignette = VignetteMode::Off;

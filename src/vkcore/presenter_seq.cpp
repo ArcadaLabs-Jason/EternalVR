@@ -4,7 +4,9 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "stereo_seq/alternate_eyes.hpp"
 #include "stereo_seq/stereo_taa.hpp"
+#include "vkcore/dlss_menu_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/status_file.hpp"
@@ -65,6 +67,8 @@ void logCommandLineCvars() {
 // threads; the two chains of a tick never overlap, the mutex only orders them.
 std::mutex g_taaMutex;
 stereo_seq::TaaResetPlanner g_taaReset;
+stereo_seq::AlternateTaaReset g_altTaaReset;            // alternate eyes
+stereo_seq::AlternateTaaReset g_adaptiveTaaReset{true}; // auto: Route S ticks continue the run too
 std::byte g_leftUpsampler{};
 std::atomic<std::uint64_t> g_taaResets{0};
 TaaCounters g_lastTaa;
@@ -77,16 +81,22 @@ void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame) {
         return;
     }
     std::lock_guard lock(g_taaMutex);
-    // One jitter phase per tick for both eyes. The upsampler's index (the ray-traced reflections'
-    // temporal upscale, off with per-eye TAA) follows eye L's.
+    // One jitter phase per tick for both eyes (with alternate eyes, one per render of each eye; with auto, as
+    // the render's tick goes). The upsampler's index (the ray-traced reflections' temporal upscale, off with
+    // per-eye TAA) follows eye L's.
+    const bool alternate = seqAlternateEyes() && !seqPairInTick();
     renderView[stereo_view_fields::kSubSampleIndex] =
-        std::byte{stereo_seq::taaSubSample(gameFrame, taaNumSubSamples())};
+        std::byte{alternate ? stereo_seq::alternateSubSample(gameFrame, taaNumSubSamples())
+                            : stereo_seq::taaSubSample(gameFrame, taaNumSubSamples())};
     if (eye == Eye::Left) {
         g_leftUpsampler = renderView[stereo_view_fields::kUpsamplerSubSampleIndex];
     } else {
         renderView[stereo_view_fields::kUpsamplerSubSampleIndex] = g_leftUpsampler;
     }
-    const bool reset = eye == Eye::Left ? g_taaReset.onLeft(gameFrame) : g_taaReset.onRight(gameFrame);
+    const bool reset = seqAdaptiveEyes()    ? g_adaptiveTaaReset.onEye(eye, gameFrame)
+                       : seqAlternateEyes() ? g_altTaaReset.onEye(eye, gameFrame)
+                       : eye == Eye::Left   ? g_taaReset.onLeft(gameFrame)
+                                            : g_taaReset.onRight(gameFrame);
     if (reset) {
         renderView[stereo_view_fields::kDisableTssaaNextFewFrames] = std::byte{1};
         ++g_taaResets;
@@ -117,6 +127,8 @@ void XrPresenter::Impl::startSequential() {
     }
     SeqHookSettings hookSettings;
     hookSettings.prevMatrices = settings.stereo.prevMatrices;
+    hookSettings.alternateEyes = settings.stereo.alternateEyes;
+    hookSettings.adaptiveEyes = settings.stereo.adaptiveEyes;
     if (!installSeqHooks(hookSettings)) {
         EVR_LOG("seq: Route S hooks not installed (reason above); stereo off, mono");
         status::stereo(false, "the stereo hooks could not be installed");
@@ -125,6 +137,7 @@ void XrPresenter::Impl::startSequential() {
     if (taaRequested()) {
         installTaaHooks(); // a missing piece fails closed on the first stereo tick
     }
+    installDlssMenuHooks(); // the game's video menu shows the DLSS state the layer holds
     {
         std::lock_guard lock(mutex);
         ringEyes = 2;
@@ -137,8 +150,21 @@ void XrPresenter::Impl::startSequential() {
         EVR_LOG("seq: ETERNALVR_CAPTURE_EYES is not <dir>[,<every N pairs>]; capture off");
     }
     seqActive.store(true, std::memory_order_release);
-    EVR_LOG(
-        "seq: Route S on: each stereo tick renders eye L, then eye R; the ring holds both eyes side by side");
+    if (seqAdaptiveEyes()) {
+        EVR_LOG(
+            "stereo: adaptive eyes on (ETERNALVR_ALTERNATE_EYES=auto): both eyes in each game tick while "
+            "the processor keeps up with the headset, one eye per tick (alternate eyes) while it does not; "
+            "the way changes only at a pair's eye L, and each switch is logged");
+    } else if (seqAlternateEyes()) {
+        EVR_LOG(
+            "stereo: alternate eyes on: each game tick renders one eye (ETERNALVR_ALTERNATE_EYES=1), eye L "
+            "then eye R the next tick; each eye updates at half the tick rate and is shown next to the other "
+            "eye's newest image, each with the pose it was rendered with");
+    }
+    EVR_LOG("seq: Route S on: %s; the ring holds both eyes side by side",
+            seqAdaptiveEyes()    ? "both eyes per tick or one, as the processor keeps up (adaptive eyes)"
+            : seqAlternateEyes() ? "one eye per tick (alternate eyes)"
+                                 : "each stereo tick renders eye L, then eye R");
     status::stereo(true, nullptr);
 }
 
@@ -154,19 +180,22 @@ bool sameAxis(const std::byte* renderView, const ViewRecord& record) {
 } // namespace
 
 void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
-    const Eye eye = seqChainEye();
+    // With alternate eyes both eyes render in the engine's own chain, each for its own game frame; with auto
+    // eye R renders nested in its eye L's tick while the processor keeps up.
+    const Eye eye = seqRenderEye();
+    const bool nested = seqChainEye() == Eye::Right;
     const int index = stereo_seq::eyeIndex(eye);
-    const SeqReadiness readiness = eye == Eye::Left ? seqStereoReadiness() : SeqReadiness::Ready;
+    const SeqReadiness readiness = nested ? SeqReadiness::Ready : seqStereoReadiness();
     if (readiness == SeqReadiness::Off) {
         return; // the tick stays mono: the game's own view
     }
-    if (eye == Eye::Right) {
+    if (nested) {
         seqNoteNestedStack();
     }
     ViewRecord record;
     // Eye R draws the game frame eye L was drawn for (and the game's view must still be that frame's).
-    const bool found = eye == Eye::Right ? viewBySeq(seqRightTick(), record) && sameAxis(renderView, record)
-                                         : recordForView(renderView, record);
+    const bool found = nested ? viewBySeq(seqRightTick(), record) && sameAxis(renderView, record)
+                              : recordForView(renderView, record);
     if (!found || !record.stereo) {
         // Not a head-tracked game view with located eyes (menus, loading screens): the tick stays mono.
         ++stereoStats.unmatched;
@@ -266,6 +295,10 @@ bool XrPresenter::Impl::viewBySeq(std::uint64_t seq, ViewRecord& out) {
 }
 
 void XrPresenter::Impl::seqPresentNotCopied(const stereo_seq::PresentMatch& match) {
+    if (seqAlternateEyes()) {
+        altPresentNotCopied(*this, match);
+        return;
+    }
     const stereo_seq::PairStep step = pairing.onPresent(match);
     if (step.abandoned) {
         releasePendingSlot();
@@ -297,7 +330,16 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
     capture.poll(dev, completed);
     // TAA stays off although the game's settings turn it back on (runtime_cvars.hpp); cheap once located.
     runtime_cvars::apply(true);
-    const stereo_seq::PairStep step = pairing.onPresent(match);
+    const bool alternate = seqAlternateEyes();
+    if (alternate) {
+        // One eye per tick (presenter_alt.cpp); a mono frame comes back here.
+        if (const std::optional<VkSemaphore> done =
+                altCopyForPresent(*this, queue, family, sc, imageIndex, info, fc, completed, match)) {
+            return *done;
+        }
+    }
+    const stereo_seq::PairStep step =
+        alternate ? stereo_seq::PairStep{PairAction::ShowMono, false} : pairing.onPresent(match);
     if (step.abandoned) {
         releasePendingSlot();
     }
@@ -406,6 +448,7 @@ void XrPresenter::Impl::logSeqStats() {
     if (lastSeqStatsTicks == 0) {
         lastSeqStatsTicks = now;
         lastSeqCounters = seqCounters();
+        seqTakeDrainMaxMicros(); // the first window starts here
         lastSeqGameTicks = gameTicks.load();
         lastPairStats = pairing.stats();
         return;
@@ -436,16 +479,19 @@ void XrPresenter::Impl::logSeqStats() {
         d(p.leftDropped, lp.leftDropped), d(p.rightDropped, lp.rightDropped),
         d(p.withoutView, lp.withoutView), d(p.notStored, lp.notStored),
         static_cast<unsigned long long>(pairsWithoutRecord));
+    logAltStats(*this, c, l);
+    // A drain holds the game's frontend: its total and longest wall time are the hitch the player felt.
     EVR_LOG(
         "seq: eye tags %s: %llu matched, %llu untagged; out of sync %llu (missing present) / %llu (untagged "
-        "frame) / %llu (overflow) / %llu (rebase); %llu drain(s), %llu failed, %llu on a quiet period only; "
-        "frames without a backend frame %llu; previous matrices %llu rewritten / %llu kept; r_swapInterval "
-        "%d",
+        "frame) / %llu (overflow) / %llu (rebase); %llu drain(s), %llu failed, %llu on a quiet period only, "
+        "%.1f ms in total, longest %.1f ms; frames without a backend frame %llu; previous matrices %llu "
+        "rewritten / %llu kept; r_swapInterval %d",
         c.tagsSynced ? "in sync" : "OUT OF SYNC", d(c.tags.matched, l.tags.matched),
         d(c.tags.untagged, l.tags.untagged), d(c.tags.missingPresent, l.tags.missingPresent),
         d(c.tags.untaggedFrame, l.tags.untaggedFrame), d(c.tags.overflow, l.tags.overflow),
         d(c.tags.requested, l.tags.requested), d(c.drains, l.drains), d(c.drainFailures, l.drainFailures),
-        d(c.unverifiedBases, l.unverifiedBases), d(c.noBackendFrames, l.noBackendFrames),
+        d(c.unverifiedBases, l.unverifiedBases), static_cast<double>(c.drainMicros - l.drainMicros) / 1000.0,
+        static_cast<double>(seqTakeDrainMaxMicros()) / 1000.0, d(c.noBackendFrames, l.noBackendFrames),
         d(c.prevRewrites, l.prevRewrites), d(c.prevKept, l.prevKept), c.swapInterval);
     EVR_LOG("seq: eye R skipped %llu (render-frame guard busy) / %llu (multiplayer guard) / %llu (stack); "
             "eye R chain at most %zu KiB deep, least stack left at eye R %zu KiB",
@@ -487,8 +533,9 @@ void XrPresenter::Impl::logSeqStats() {
                 d(t.distortionBinds, lt.distortionBinds));
         EVR_LOG(
             "seq-taa: tag eye vs latched projection side (left / centred / right): eye L %llu / %llu / %llu, "
-            "eye R %llu / %llu / %llu",
-            v(0, 0), v(0, 1), v(0, 2), v(1, 0), v(1, 1), v(1, 2));
+            "eye R %llu / %llu / %llu; exposure renders whose tag in flight names another eye %llu",
+            v(0, 0), v(0, 1), v(0, 2), v(1, 0), v(1, 1), v(1, 2),
+            d(t.exposureInFlightDiffers, lt.exposureInFlightDiffers));
     }
     g_lastTaa = t;
     lastSeqStatsTicks = now;

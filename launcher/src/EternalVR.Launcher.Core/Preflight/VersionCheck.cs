@@ -18,9 +18,10 @@ namespace EternalVR.Launcher.Core.Preflight
     /// Both sides carry <c>MAJOR.MINOR.PATCH[-prerelease][+metadata]</c>: the launcher its informational
     /// version (<c>launcher/Directory.Build.props</c>, plus the commit), the layer the product version of
     /// <c>EternalVR.dll</c>'s version resource (<c>CMakeLists.txt</c>'s project version). Build metadata after
-    /// <c>+</c> is ignored. A Debug build carries the <c>-dev</c> prerelease on either side, and a DLL without a
-    /// version resource (built before the handshake) reads as unknown; both only warn, so development builds
-    /// are never blocked.
+    /// <c>+</c> is ignored. A Debug build carries the <c>-dev</c> prerelease on either side and only warns, so
+    /// development builds are never blocked. A DLL without a version resource (built before the handshake)
+    /// reads as unknown: a development launcher only warns, a release launcher refuses it, since such a layer is
+    /// older than any release that checks (a layer folder left in the settings loaded one, 2026-09-28).
     /// </summary>
     public static class VersionCheck
     {
@@ -71,6 +72,12 @@ namespace EternalVR.Launcher.Core.Preflight
                         $"Version mismatch: the launcher is {shownLauncher} but the layer in {layerDir} is {shownLayer}. "
                         + "They must come from the same release: unzip the whole release again into an empty folder (keeping its folders) and start the launcher from there.");
                 default:
+                    if (Normalize(layerVersion) == null && Normalize(launcherVersion) != null && !IsDev(launcherVersion))
+                        return new Check("version", Severity.Fail,
+                            $"The layer in {layerDir} has no version, so it is older than this launcher ({shownLauncher}). "
+                            + "If the launcher's settings name a layer folder (layer_dir in launcher.ini, in the data folder), "
+                            + "remove that line to use the layer that came with this launcher; otherwise unzip the whole release "
+                            + "again into an empty folder and start the launcher from there.");
                     var why = Normalize(launcherVersion) == null || Normalize(layerVersion) == null ? "a version could not be read" : "a development build";
                     return new Check("version", Severity.Warn,
                         $"Launcher {shownLauncher}, layer {shownLayer}: not compared ({why}). A release zip always carries a matching pair.");

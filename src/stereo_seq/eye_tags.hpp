@@ -35,6 +35,7 @@ struct RenderTag {
     Eye eye = Eye::Mono;
     std::uint64_t tick = 0;         // game frame whose view both eyes were made from (0: unknown)
     bool viewApplied = false;       // the per-eye hook wrote this eye's view into the render view
+    bool pairInTick = false;        // ETERNALVR_ALTERNATE_EYES=auto: both eyes of this tick render (Route S)
     std::uint32_t renderFrame = 0;  // renderSystem + 0x10 when the frame's chain ended (diagnostics)
     std::uint32_t backendFrame = 0; // assigned by push: the backend counter expected at its present
     std::uint32_t eyeSeq = 0;       // assigned by push: the count of frames pushed before for this eye

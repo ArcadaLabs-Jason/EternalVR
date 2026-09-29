@@ -78,10 +78,22 @@ namespace EternalVR.Launcher.Core.Tests
             var dev = VersionCheck.Evaluate("0.1.0-dev", "0.3.0", "x");
             Assert.Equal(Severity.Warn, dev.Severity);
             Assert.Contains("development build", dev.Message);
-            var unknown = VersionCheck.Evaluate("0.1.0", null, "x");
+            var unknown = VersionCheck.Evaluate("0.1.0-dev", null, "x");
             Assert.Equal(Severity.Warn, unknown.Severity);
             Assert.Contains("layer unknown", unknown.Message);
             Assert.Contains("could not be read", unknown.Message);
+            var noLauncher = VersionCheck.Evaluate(null, "0.1.0", "x");
+            Assert.Equal(Severity.Warn, noLauncher.Severity);
+        }
+
+        [Fact]
+        public void AReleaseLauncherRefusesALayerWithoutAVersion()
+        {
+            // A layer folder left in the settings loaded a layer built before the handshake (2026-09-28).
+            var c = VersionCheck.Evaluate("0.1.2+" + Sha, null, @"E:\old\layer");
+            Assert.Equal(Severity.Fail, c.Severity);
+            Assert.Contains(@"E:\old\layer", c.Message);
+            Assert.Contains("layer_dir", c.Message);
         }
 
         [Fact]

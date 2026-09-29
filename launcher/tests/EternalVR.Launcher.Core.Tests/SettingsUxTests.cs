@@ -157,11 +157,13 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void EverythingAppliesWithTheDefaultsExceptTheSnapAngle()
+        public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleAndDlss()
         {
             var inapplicable = SettingRules.Inapplicable(new LauncherSettings());
-            Assert.Equal(new[] { Setting.SnapAngle }, inapplicable.Keys);
+            Assert.Equal(new[] { Setting.SnapAngle, Setting.DlssVersion, Setting.DlssPreset }, inapplicable.Keys);
             Assert.Equal(SettingRules.NeedsSnapTurn, inapplicable[Setting.SnapAngle]);
+            // TAA is the default anti-aliasing: the DLSS rows wait for DLSS.
+            Assert.Equal(SettingRules.NeedsDlss, inapplicable[Setting.DlssVersion]);
         }
 
         [Fact]
@@ -180,7 +182,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
-                Setting.XButton, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
+                Setting.XButton, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
@@ -214,8 +216,8 @@ namespace EternalVR.Launcher.Core.Tests
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             foreach (var setting in new[]
             {
-                Setting.Resolution, Setting.AntiAliasing, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize, Setting.HudHeight,
-                Setting.MenuLaser, Setting.HudPlace,
+                Setting.Resolution, Setting.AntiAliasing, Setting.TextureStreaming, Setting.ProcessorSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
+                Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime })
@@ -242,6 +244,7 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<Handedness>(Setting.WeaponHand);
             Choices<LocomotionMode>(Setting.MoveToward);
             Choices<DossierPress>(Setting.XButton);
+            Choices<WheelSelect>(Setting.WeaponWheel);
             // The anti-aliasing row: TAA, one choice per DLSS quality, then off (LauncherSettings.AntiAliasingChoice).
             Assert.Equal(2 + Enum.GetValues(typeof(DlssQuality)).Length, SettingTexts.For(Setting.AntiAliasing).Choices.Count);
             Choices<VrMode>(Setting.VrMode);

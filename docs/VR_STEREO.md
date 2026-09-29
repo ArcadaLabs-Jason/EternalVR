@@ -64,7 +64,9 @@ tried on the Quest 3.
    slow frame is waited for, however long the counter stands still: a base taken under it would pair two
    different frames). The first base, and one after the counts stopped agreeing, is taken after 100 ms
    without a backend frame. A drain gives up after 250 ms (mono for 2 s, then the next base comes from a
-   quiet period); at most one drain per second. A disagreement (a tagged
+   quiet period; each failure in a row doubles the wait, up to 16 s, and a drain that succeeds starts over,
+   `src/stereo_seq/drain_backoff.*`: a render thread that will not go idle costs a 250 ms hitch less and
+   less often); at most one drain per second. A disagreement (a tagged
    frame that never presented, a present no tag was queued for, more than 8 queued) drops the tags out of
    step: presents are then shown mono until the next base. The pairing (`src/stereo_seq/eye_pairing.*`)
    copies eye L into the left half of a free ring slot, holds the slot, copies eye R of the same tick into
@@ -199,6 +201,66 @@ reads the previous frame's from the render before. For eye R that is eye L's ren
 moving objects had no motion there and TAA smeared them. Eye R now reads its own render of the tick before
 (`docs/rig-findings/stereo-object-motion.md`).
 
+### The game's video menu (DLSS entry)
+
+The game's video menu has one anti-aliasing entry, DLSS, with Off (the game's TAA), Performance, Balanced and
+Quality (index 0 to 3). The game keeps the index in the player's profile (`advDlssQualityIndex` in
+`profile.bin`, synced by Steam Cloud, which the launcher's settings restore never writes back) and fills the
+entry from that index, never from the cvars. Its setter (RVA 0x1420FD0) stores the index and writes
+`r_antialiasing` (0: 1, else 2) and `r_dlssQuality` (1, 2, 3); the video page calls it for the entry every
+time it is applied (RVA 0x15E1D8F in the page apply 0x15E1600), and the profile is saved with it. In
+stereo the layer holds `r_antialiasing` and `r_dlssQuality` itself when the launcher's Anti-aliasing is DLSS
+or Off, so the entry showed the profile's choice ("Off" with the launcher's DLSS on).
+
+`src/vkcore/dlss_menu_hooks.cpp` (stereo only, from the Route S start; decisions in
+`src/stereo_seq/dlss_menu.cpp`):
+
+- **Shown:** a mid hook after the page refresh's call to the index getter (RVA 0x15E8F35, the getter
+  0x1415E90 reads settings + 0x122A0) fills the entry with what runs: the launcher's DLSS quality
+  (Ultra Performance, which the menu lacks, as Performance), Off with the launcher's Off, after a failed-closed
+  start, or when DLSS fell back to TAA, and the profile's own index with the launcher's TAA (which keeps the
+  profile's DLSS, per eye).
+- **Applied:** a detour of the setter compares the entry with what was shown. Unchanged: the setter is
+  skipped, so the profile keeps its own index and no cvar is rewritten. Changed with the launcher's TAA: the
+  setter runs as in the flat game (the layer follows the game's choice). Changed with the launcher's DLSS or
+  Off: skipped and logged; the launcher's setting decides in VR and the profile keeps the flat game's choice.
+- Writing the settings object's index instead was rejected: every profile save (this page's apply and other
+  pages') would store the VR value in `profile.bin`, which nothing puts back after the session.
+- Log lines: `dlss-menu: DLSS setter at RVA ...` (located), `dlss-menu: video menu refresh N: the profile's
+  DLSS index P, shown S (...)` (the first 20 refreshes and any change), `dlss-menu: video menu applied DLSS
+  index I (shown S, the profile's P, ...): unchanged | applied as in the flat game | not used in VR`.
+- Not hooked (a signature or self-check failed, or the multiplayer guard not armed): the entry shows the
+  profile's index as before, and an apply writes it through the game's own setter.
+
+## Alternate eyes (`ETERNALVR_ALTERNATE_EYES=1` or `auto`, off by default)
+
+An option for slower processors (the launcher's "Alternate eyes" on the Advanced tab): each game tick renders
+one eye in the engine's own chain, eye L and then eye R in the next tick, instead of eye L and a nested eye R
+render. The design, the expected saving and the rig recipe are in `docs/rig-findings/alternate-eye.md`
+(`src/stereo_seq/alternate_eyes.*`, `src/vkcore/seq_alternate.*`, `src/vkcore/presenter_alt.cpp`). In short:
+
+- The eye of a render is eye R when the render right before was eye L in stereo, else eye L
+  (`stereo_seq::EyeAlternator`, keyed by the render frame counter); `seqRenderEye()` gives it to the per-eye
+  hook, the post-latch hook and the previous-matrix hook. `seqChainEye()` stays "inside the nested eye R
+  render", which never happens with `=1`, so the moved-flag repair leaves every render alone.
+- The render order is still L, R, L, R, so each eye's previous matrices, TAA and DLSS history, exposure and
+  scattering history stay its own; the jitter phase and the TAA and DLSS resets count each eye's renders two game
+  frames apart. Ordinary moving entities get the previous model matrix of two renders back, their eye's own last
+  render (`stereo_seq/alternate_prev.*`); skinned meshes take theirs from the object ring's render before (the
+  other eye's, one game frame back), which needs a fourth ring slot to fix: under TAA fast demons smear a
+  little (the design doc, section 9).
+- Every present shows its fresh eye beside the other eye's newest image, each with the pose and FOV it was
+  rendered with (the compositor corrects the older one for the head's rotation): the image goes into its half
+  of the held ring slot, which is shown, and in the same copy into its half of a new held slot
+  (`stereo_seq::AlternatePairing`, `composeHalves`, `CopyTarget::carrySlot`).
+- About half the CPU per tick, about twice the tick rate on a CPU-bound machine; each eye updates at half the
+  tick rate. Log: `stereo: alternate eyes on: ...` at start-up and `seq: alternate eyes: ...` every 10 s.
+- `auto` (the launcher's "Auto (only when your processor cannot keep up)"): each pair renders both eyes in its
+  tick (Route S, eye R nested) while the ticks keep up with the headset's display rate, and alternates after
+  about 1 s below it; back to both eyes after about 3 s with the estimated Route S rate 15% above it
+  (`stereo_seq::AdaptiveEyes`). The way changes only at a pair's eye L and nothing resets. Log: `seq: adaptive
+  eyes: ...` at every switch and every 10 s (the design doc, section 10).
+
 ## Render size (T-031)
 
 With `ETERNALVR_RENDER_SIZE=auto` (the launcher's default in stereo) each eye renders at the runtime's
@@ -235,7 +297,8 @@ axis).
 | `ETERNALVR_UI_CROP` | 1 | 0: the UI quad and the menu panel show the whole GUI target instead of its 16:9 band |
 | `ETERNALVR_UI_WASH` | 1 | 0: the HUD quad shows the GUI target's full-screen additive wash (the red low-health vignette) as the game drew it (docs/rig-findings/ui-layer.md, section 12) |
 | `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time |
-| `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments) |
+| `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and processor saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
+| `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments); `<=N` is a cap as above; an entry replaces the processor saver's value for the same cvar |
 | `ETERNALVR_PRESENT_IMMEDIATE` | 0 | 1: immediate present mode in any mode (mono frame-rate references) |
 | `ETERNALVR_STEREO_FULL_RES` | 1 | `forceFullResolution` on both eyes |
 | `ETERNALVR_STEREO_EXPOSURE_ONCE` | 1 | `skipAutoExposureUpdate` on eye R |
@@ -244,7 +307,10 @@ axis).
 | `ETERNALVR_STEREO_INHIBIT_MODEL_FOV` | 1 | `inhibitModelFovScale` on each eye's view, and the hands-and-guns matrices in the eye's frustum |
 | `ETERNALVR_STEREO_TAA` | 1 | per-eye temporal history (TAA, DLSS, exposure; section "Per-eye temporal history"); 0: v1, no temporal accumulation |
 | `ETERNALVR_STEREO_DLSS` | 0 | 1: DLSS per eye instead of TAA (`r_antialiasing 2`) |
+| `ETERNALVR_DLSS_DLL`, `_PRESET`, `_ROUTE` | unset | a newer `nvngx_dlss.dll` of the player's own (DLSS 310: the transformer model) and its render preset, for both eyes' features; loaded from its own folder, never copied into the game's (`docs/rig-findings/dlss-dll.md`) |
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
+| `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
+| `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end, as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S |
 | `ETERNALVR_STEREO_EYE_POSES`, `_JITTER_COPY`, `ETERNALVR_TEST_WEAPON_FOV` | | experiments only (below) |
@@ -260,10 +326,16 @@ cvars, each hook point with its RVA, `frame-end job wrapped`, then `Route S on`.
   tick(s), E eye R frame end(s)`: in steady stereo X is 2.00, B equals R, and T equals E and G.
 - `pairs P complete of S started, M mono; dropped halves ...; pair(s) without a view record (not shown)`.
 - `eye tags in sync: ... matched, ... untagged; out of sync ... (missing present) / ... (untagged frame)
-  / ... (overflow) / ... (rebase); ... drain(s), ... failed, ... on a quiet period only; frames without
-  a backend frame ...; previous matrices ... rewritten / ... kept; r_swapInterval V`.
+  / ... (overflow) / ... (rebase); ... drain(s), ... failed, ... on a quiet period only, D ms in total,
+  longest L ms; frames without a backend frame ...; previous matrices ... rewritten / ... kept;
+  r_swapInterval V`. D and L are the time the drains held the game's frontend (a hitch in the headset).
+  A failed drain logs `the render thread did not present every frame within 250 ms; mono for W ms (N
+  failed drain(s) in a row)`.
 - `eye R skipped ... (render-frame guard busy) / ... (multiplayer guard) / ... (stack); eye R chain at
   most N KiB deep, least stack left at eye R M KiB`.
+- With alternate eyes: `alternate eyes: A eye L / B eye R render(s); P shown ..., H held without a partner, ...;
+  the held eye X game frame(s) older on average` (the first line then shows 1.00 renders per game frame and no
+  stereo ticks).
 
 Beside them (the 10 s blocks): `rates: game P present(s)/s, T tick(s)/s, S stereo pair(s)/s shown; XR F
 frame(s)/s, N new image(s)/s`, the game's own rates next to the runtime's (a headset's frame counter shows
@@ -303,7 +375,9 @@ irrelevant to the game's pace in three steps (`src/vkcore/stereo_present.cpp`, `
    handed back with `vkReleaseSwapchainImagesKHR` once that copy's timeline value has completed (the
    game's rendering and the copy are then done). Of a stereo pair only the mirrored eye is presented, and
    only when the last present to the window is at least two refreshes of its display old
-   (`stereo_seq::WindowPresentGate`; the display from `MonitorFromWindow`, 60 Hz when unknown). At most
+   (`stereo_seq::WindowPresentGate`; the display from `MonitorFromWindow`, its rate from
+   `EnumDisplaySettingsW`, which the XR worker reads every 3 s so that the query never runs on the game's
+   present path or under the presenter's lock; 60 Hz when unknown). At most
    two images are held; beyond that, and whenever the multiplayer guard is not armed, every present goes
    out as before. `ETERNALVR_WINDOW_PRESENTS=all` turns this off.
 3. **The window shows one eye.** `ETERNALVR_MIRROR=left` (default), `right` or `off`. With step 2 the window
@@ -468,6 +542,47 @@ Logs (all lines start with `cpu:`):
 
 Cost when on: about 0.01 ms per tick of timers (measured at start-up and logged), one map lookup per timed
 Vulkan call, and a Toolhelp snapshot every 10 s off the game's threads.
+
+## Stalls
+
+Always on, any mode (`src/vkcore/stall_watch.*`, `vram_watch.*`; which gaps count in
+`src/gpu_timing/present_stall.*`). The present hook stamps every present of the game's device. A present
+more than 50 ms after the previous one is a stall. It counts as in play when the camera hook ran a game
+frame at most 250 ms before the gap began and another during it; menus and loading screens run no game
+frame, so their stalls (a map streaming in, the first frame after a load) are only counted. Without the
+camera hook (cinema mode) every stall counts. Each of the first 30 stalls in play gets one line:
+
+`stall: 1043.2 ms between game presents (in play, line 3 of 30); in the gap: our present hook 2.1 ms
+(lock wait 0.0 ms, driver present 1.4 ms), Route S drain 0.0 ms; the game created 12 pipeline(s) in 4
+call(s), 1021.7 ms (longest call 998.3 ms), and made 2 allocation(s) of 64.0 MB in 0.9 ms; VRAM 7012 of
+7420 MB`
+
+- **our present hook**: the layer's whole `vkQueuePresentKHR` path during the gap (the ring copy, the
+  pairing, the logging); **lock wait** is the part spent waiting for the presenter's lock (the XR worker
+  holds it while it rebuilds the ring), **driver present** the part in the driver's own present (the
+  desktop display can make it wait, Desktop window above).
+- **Route S drain**: the frontend held for a new tag base (Eye tags and pairing, above).
+- **pipeline(s)** and **allocation(s)**: the game's `vkCreateGraphicsPipelines`/`vkCreateComputePipelines`
+  and `vkAllocateMemory` calls on its device, with their wall time; a shader compile stutter shows as a
+  long pipeline call.
+- **VRAM**: the last reading of the process's local video memory against its budget (below).
+
+When none of these accounts for the gap, the time went elsewhere: the game's own frame, a GPU that fell
+behind, paging (VRAM near or over the budget), the driver or another process. After the 30th line: `stall: 30 stall lines logged; later stalls
+are only counted in the 10 s stall summary`. Every 10 s with any stall: `stall: last 10 s: N stall(s) in
+play (longest X ms), M on loading screens or in menus; T in play in total, K logged`. At start-up: `stall:
+game presents more than 50 ms apart get a line (the first 30)` and whether loading screens and menus are
+told apart. Stalls before that line (the game starting up and loading its first map, before the XR worker
+runs) have no game tick, so they count as loading screens.
+
+Every 10 s the XR worker also logs `vram: the process uses U MB of local video memory, budget B MB (P%);
+last 10 s: peak K MB, O of R reading(s) over the budget` (`IDXGIAdapter3::QueryVideoMemoryInfo` on the
+runtime's adapter, which is the game's, read once a second by the worker; Windows counts the whole
+process). Past the budget Windows pages memory out and back in, which stutters.
+
+Cost: four performance-counter reads and a dozen atomic exchanges per present; a map lookup and two counter
+reads per pipeline creation or allocation. The display rate query (Desktop window) and the VRAM reading run
+on the XR worker between its frames.
 
 ## Live experiments (S1 to S5, stereo-routes.md section 2.10)
 

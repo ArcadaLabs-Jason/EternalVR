@@ -12,6 +12,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "vkcore/controllers.hpp"
+#include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -208,9 +209,26 @@ void endGameView(std::byte* renderView,
         std::memcpy(renderView + kCustomFov2X, fov, sizeof(fov));
     }
 
+    // Piloting a demon (demon_view.hpp): the game built this view from the demon's own camera, which is the
+    // frame its movement follows. The view is built through the idPlayer, whose own view yaw stays where the
+    // Slayer stood, so it must not set the view's yaw below.
+    const bool demon = isPilotedDemon(player, s.player);
+    notePilotedDemon(demon);
+    const bool piloting = demon && pilotingDemon();
+    if (piloting) {
+        // With demon aim the view is the body plus the head's yaw, the same as the Slayer's under head aim;
+        // without it, the demon's camera.
+        float yaw = 0.0f;
+        if (const std::optional<PilotAim> aim = pilotAim()) {
+            yaw = xr_math::normalize180(aim->aimYaw - aim->bodyYaw);
+        }
+        s.viewYawTracking.store(yaw * kRadiansPerDegree, std::memory_order_relaxed);
+    }
+
     // The view's yaw in tracking space: the game's view yaw less the body's.
     float viewYaw = 0.0f;
-    if (s.player.isPlayer(player) && safeRead(player + kPlayerViewYaw, viewYaw) && std::isfinite(viewYaw)) {
+    if (!piloting && s.player.isPlayer(player) && safeRead(player + kPlayerViewYaw, viewYaw) &&
+        std::isfinite(viewYaw)) {
         const float bodyYaw = std::atan2(body.forward.y, body.forward.x) / kRadiansPerDegree;
         s.viewYawTracking.store(xr_math::normalize180(viewYaw - bodyYaw) * kRadiansPerDegree,
                                 std::memory_order_relaxed);
