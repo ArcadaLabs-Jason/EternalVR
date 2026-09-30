@@ -126,6 +126,8 @@ struct ViewRecord {
     bool weaponAimValid = false;
     XrPosef weaponAim{{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
     XrQuaternionf weaponAimTracked{0.0f, 0.0f, 0.0f, 1.0f};
+    // How far along that ray the world is hit, in metres (reticle_depth.hpp); 0 when not known.
+    float weaponAimHitMetres = 0.0f;
 };
 
 // Where a present's image goes in a ring slot (Route S rings hold two eye images side by side).

@@ -20,6 +20,7 @@ through OpenXR.
 - Controller vibration for shots, punches, the game's own rumble and menu clicks.
 - A desktop window mirroring the game for people watching.
 - The full campaign and both DLC (single-player only).
+- Full ray tracing support: the testing so far has been at maximum settings with ray tracing on.
 - A launcher that checks your game version, sets everything up for the session and restores your
   settings afterwards.
 

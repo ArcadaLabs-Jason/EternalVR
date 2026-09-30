@@ -95,6 +95,7 @@ struct Noted {
 std::mutex g_mutex;
 Noted g_noted;
 std::atomic<std::uint32_t> g_shots{0};
+std::atomic<std::uint32_t> g_belches{0};
 std::atomic<std::uint8_t> g_weapon{static_cast<std::uint8_t>(bhaptics::WeaponClass::Medium)};
 std::atomic<bool> g_running{false};
 std::once_flag g_startOnce;
@@ -198,12 +199,14 @@ void logSummary(const bhaptics::BodyHaptics& body,
     }
     loggedTotal = total;
     const auto& c = body.counts();
-    EVR_LOG("%s: %llu frames (shot %llu, damage %llu, heartbeat %llu, glory kill %llu, death %llu), %llu "
-            "messages sent, %llu failed",
-            kTag, static_cast<unsigned long long>(total), static_cast<unsigned long long>(c[0]),
-            static_cast<unsigned long long>(c[1]), static_cast<unsigned long long>(c[2]),
-            static_cast<unsigned long long>(c[3]), static_cast<unsigned long long>(c[4]),
-            static_cast<unsigned long long>(sent), static_cast<unsigned long long>(failed));
+    EVR_LOG(
+        "%s: %llu frames (shot %llu, damage %llu, heartbeat %llu, glory kill %llu, death %llu, belch %llu, "
+        "equipment %llu), %llu messages sent, %llu failed",
+        kTag, static_cast<unsigned long long>(total), static_cast<unsigned long long>(c[0]),
+        static_cast<unsigned long long>(c[1]), static_cast<unsigned long long>(c[2]),
+        static_cast<unsigned long long>(c[3]), static_cast<unsigned long long>(c[4]),
+        static_cast<unsigned long long>(c[5]), static_cast<unsigned long long>(c[6]),
+        static_cast<unsigned long long>(sent), static_cast<unsigned long long>(failed));
 }
 
 void linkMain(float intensity) {
@@ -215,6 +218,7 @@ void linkMain(float intensity) {
     std::uint64_t sent = 0;
     std::uint64_t failed = 0;
     bool loggedReply = false;
+    bool equipmentWasHeld = false;
     ULONGLONG lastSummary = GetTickCount64();
     std::uint64_t loggedTotal = 0;
     for (;;) {
@@ -260,6 +264,11 @@ void linkMain(float intensity) {
         signals.hitSerial = noted.hitSerial;
         signals.hitYawDegrees = noted.hitYaw;
         signals.shots = g_shots.exchange(0);
+        signals.belches = g_belches.exchange(0);
+        // The equipment launcher: its button going down (the fire hook does not see it).
+        const bool equipmentHeld = game::contains(heldActions(), game::GameAction::Equipment);
+        signals.equipment = equipmentHeld && !equipmentWasHeld ? 1 : 0;
+        equipmentWasHeld = equipmentHeld;
         signals.weapon = static_cast<bhaptics::WeaponClass>(g_weapon.load());
         signals.weaponHand = weaponHand();
         const std::vector<bhaptics::Frame> frames = body.update(signals);
@@ -299,7 +308,8 @@ void startBhaptics() {
             return;
         }
         EVR_LOG(
-            "%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death); looking for the bHaptics "
+            "%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment); looking "
+            "for the bHaptics "
             "Player on port %d",
             kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
         g_running.store(true);
@@ -309,6 +319,11 @@ void startBhaptics() {
 
 void noteBhapticsShot(const std::byte* hands) {
     if (!g_running.load(std::memory_order_relaxed)) {
+        return;
+    }
+    if (game::contains(heldActions(), game::GameAction::FlameBelch)) {
+        // The Flame Belch fires through the same hook, with the held weapon's decl.
+        g_belches.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     g_shots.fetch_add(1, std::memory_order_relaxed);

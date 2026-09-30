@@ -91,6 +91,7 @@ add_library(evr_layer SHARED
     presenter_xr.cpp
     presenter_xr_events.cpp
     room_follow.cpp
+    reticle_depth.cpp
     room_scale.cpp
     scatter_hooks.cpp
     seq_alternate.cpp

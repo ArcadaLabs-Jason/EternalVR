@@ -130,8 +130,9 @@ them is worse for you than described here.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
   strength and feel may change.
 - **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. A tester's suit showed the front
-  of the vest mirrored in 0.1.5, fixed in 0.1.6; whether hits from behind land on the right side of your
-  back has not been confirmed yet.
+  of the vest mirrored in 0.1.5, fixed in 0.1.6, and confirmed hits from behind land on the right side.
+  The Flame Belch and equipment launcher pulses on the left shoulder (0.1.7) have not been felt on a suit
+  yet. An equipment press with no charge left still pulses.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
   right of centre.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is

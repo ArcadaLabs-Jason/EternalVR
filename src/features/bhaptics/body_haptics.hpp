@@ -13,6 +13,9 @@
 //   health falls;
 // - glory kill: the game's sync kill starting (a sync master appears) pulses the whole front and both
 //   sleeves;
+// - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
+//   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
+//   lighter and shorter (a tester's suggestion, public issue #1);
 // - death: the player dying fills both sides of the vest once.
 //
 // Only while `gameplay` holds (no menu, no loading, the reads fresh); outside it the edges are forgotten, so
@@ -68,6 +71,8 @@ enum class Effect : std::uint8_t {
     Heartbeat,
     GloryKill,
     Death,
+    Belch,
+    Equipment,
     Count,
 };
 
@@ -109,8 +114,10 @@ struct BodySignals {
     float health = 0.0f;
     float armor = 0.0f;
     bool dead = false;
-    bool sync = false;       // a sync or glory kill runs
-    std::uint32_t shots = 0; // shots since the last update
+    bool sync = false;           // a sync or glory kill runs
+    std::uint32_t shots = 0;     // shots since the last update (the Flame Belch's not among them)
+    std::uint32_t belches = 0;   // shots while the Flame Belch's button was held, since the last update
+    std::uint32_t equipment = 0; // presses of the equipment launcher's button since the last update
     WeaponClass weapon = WeaponClass::Medium;
     input::Hand weaponHand = input::Hand::Right;
     // The newest hit the game recorded: a number that changes with each one, and the yaw of its source in
@@ -137,6 +144,8 @@ public:
 private:
     void add(std::vector<Frame>& out, Effect effect, Device device, int millis, std::vector<Dot> dots);
     void shot(std::vector<Frame>& out, const BodySignals& signals);
+    // The top two rows of the wearer's left two columns, front and back: the left shoulder.
+    void leftShoulder(std::vector<Frame>& out, Effect effect, float intensity, int millis);
     void damage(std::vector<Frame>& out, float amount, std::optional<float> yawDegrees);
     void heartbeat(std::vector<Frame>& out, const BodySignals& signals);
     [[nodiscard]] std::uint8_t scaled(float intensity) const;
@@ -151,6 +160,7 @@ private:
     std::optional<float> recentHitYaw_; // the direction of a hit seen within kHitWindowSeconds
     double recentHitSeconds_ = 0.0;
     double nextShot_ = 0.0;
+    double nextBelch_ = 0.0;
     double nextBeat_ = 0.0;
     bool dub_ = false; // the next beat is the second of the pair
     std::array<std::uint64_t, kEffectCount> counts_{};

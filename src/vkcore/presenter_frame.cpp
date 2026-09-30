@@ -525,7 +525,7 @@ void XrPresenter::Impl::runWorker() {
             controllers::installGameHooks();
             installDebugCommands(); // ETERNALVR_DEBUG_COMMANDS: console commands on a schedule (test rig)
             startMenu();
-            if (roomScaleSettings().collision) {
+            if (roomScaleSettings().collision || settings.ui.reticle) { // the aim dot's depth uses it too
                 installHeadSweep();
             }
         } else {

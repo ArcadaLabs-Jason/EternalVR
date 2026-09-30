@@ -130,7 +130,12 @@ tab), the "DLSS preset" makes a big difference on RTX 20 and 30 series cards. On
 Ryzen 7 3800X (Quest 3 at 72 Hz, ray tracing on, DLSS Performance, "Resolution" 0.80) drew about 60 new frames
 a second with preset M and about 80 with preset J. The game's own DLSS 2.3 was faster still (about 87) but
 blurrier at medium and long distances. On those cards start with J or K: M looks best but costs the most. That
-player settled on "Resolution" 0.90, DLSS Performance and preset J.
+player settled on "Resolution" 0.90, DLSS Performance and preset J. On a faster card, try DLSS 310 with preset K
+and DLSS Quality first: another player found it by far the sharpest and cleanest picture in the headset.
+
+**Game Pass: a black screen, then the game closes.** One player's Game Pass install did this on a 10-bit
+monitor until they turned on "Reduced color mode" in the Compatibility tab of the game's `.exe` Properties
+(right-click the file in the game folder). After that the game and the mod ran normally.
 
 **The frame rate is low and lowering "Resolution" does not help.** Your processor, not your graphics card,
 is probably what holds the game back. Check that "Texture streaming: Only what you see" on the Play tab is on

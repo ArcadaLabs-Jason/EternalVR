@@ -200,6 +200,18 @@ const std::byte* heldItemDecl(const std::byte* hands) {
     return hands && safeRead(hands + kHandsRightItemDecl, decl) ? decl : nullptr;
 }
 
+std::optional<WorldRay> weaponRayInWorld(Vec3 eye) {
+    State& s = state();
+    if (!s.attached.load(std::memory_order_acquire)) {
+        return std::nullopt;
+    }
+    std::lock_guard lock(s.viewMutex);
+    if (!s.world.valid) {
+        return std::nullopt;
+    }
+    return WorldRay{eye + s.world.aim.offset, s.world.aim.axis.forward};
+}
+
 void endGameView(std::byte* renderView,
                  const std::byte* player,
                  const xr_math::IdViewAxis& body,

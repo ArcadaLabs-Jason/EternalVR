@@ -13,6 +13,7 @@
 #include "vkcore/key_inject.hpp"
 #include "vkcore/menu_input.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/reticle_depth.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "xr_math/camera_anim.hpp"
 
@@ -26,8 +27,7 @@ namespace evr::vkcore {
 
 namespace {
 
-// While a glory kill is shown as a fade, the camera hook holds the view black this far ahead, again each
-// frame.
+// While a glory kill is shown as a fade, the camera hook holds the view black this far ahead, each frame.
 constexpr double kGloryBlackRefreshSeconds = 0.1;
 
 // The body yaw turning more than 90 degrees in one game frame (a stick turn never does): logged with what
@@ -100,8 +100,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         if (!loggedBadAxis) {
             loggedBadAxis = true;
             EVR_LOG("head: the game's view axis is not orthonormal (%.3f %.3f %.3f / %.3f %.3f %.3f / %.3f "
-                    "%.3f %.3f); "
-                    "frame left as the game made it",
+                    "%.3f %.3f); frame left as the game made it",
                     axis[0], axis[1], axis[2], axis[3], axis[4], axis[5], axis[6], axis[7], axis[8]);
         }
         return;
@@ -254,6 +253,9 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     fov[0] = used.fovX;
     fov[1] = used.fovY;
     controllers::endGameView(renderView, player, *body, eye, clear.validOffset, settings.unitsPerMetre);
+    if (settings.ui.reticle && record.weaponAimValid) {
+        record.weaponAimHitMetres = reticleHitMetres(player, eye, settings.unitsPerMetre);
+    }
     record.axis = written;
     if (settings.stereo.enabled) {
         prepareEyes(record, *body, headGame);

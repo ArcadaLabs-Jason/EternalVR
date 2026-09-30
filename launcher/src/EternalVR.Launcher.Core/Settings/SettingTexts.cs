@@ -199,7 +199,8 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.DlssPreset] = new Text("DLSS preset",
                 "How the newer DLSS renders. The DLL's default is NVIDIA's choice for each quality (the transformer model in "
                 + "recent versions). K is the transformer model at every quality; J, M and L are its variants; F is the older model. "
-                + "Presets need DLSS 3.1 or later.",
+                + "Presets need DLSS 3.1 or later. A good start: K with DLSS Quality on a fast card (the sharpest picture), "
+                + "J or K with Performance on RTX 20 and 30 series cards.",
                 DlssDll.PresetNames),
             [Setting.MotionControllers] = new Text("Motion controllers",
                 "Play with your headset's controllers. Off: keyboard, mouse or a gamepad, as in the flat game."),

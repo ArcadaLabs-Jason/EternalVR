@@ -178,4 +178,12 @@ void endGameView(std::byte* renderView,
                  Vec3 headOffset,
                  float unitsPerMetre);
 
+// Camera hook, after endGameView: the weapon hand's aim ray in the game's world, the start (the game's eye
+// `eye` plus the hand's offset, as hand-origin shots start) and its unit direction; nullopt without one.
+struct WorldRay {
+    Vec3 origin;
+    Vec3 direction;
+};
+std::optional<WorldRay> weaponRayInWorld(Vec3 eye);
+
 } // namespace evr::vkcore::controllers

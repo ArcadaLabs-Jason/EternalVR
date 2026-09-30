@@ -5,6 +5,7 @@
 #include "common/quat.hpp"
 #include "common/vector.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/reticle_depth.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +22,9 @@ constexpr std::uint32_t kReticlePixels = 64;
 // As the UI swapchain: RGBA8 bytes, sRGB-encoded already, copied unchanged into an sRGB image.
 constexpr DXGI_FORMAT kStaticDxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 constexpr DXGI_FORMAT kStaticSwapchainFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+// How often the dot's distance is logged (XR thread only).
+constexpr double kDotLogSeconds = 10.0;
+double g_nextDotLog = 0.0;
 } // namespace
 
 bool XrPresenter::Impl::createStaticImage(XrSwapchain& swapchain,
@@ -143,8 +147,17 @@ bool XrPresenter::Impl::fillReticleQuad(XrCompositionLayerQuad& quad) {
         reticleFailed = true;
         return false;
     }
-    const float side =
-        ui_layer::reticleSideMetres(settings.ui.reticleDistanceMetres, settings.ui.reticleDegrees);
+    // Where the ray meets the world (reticle_depth.hpp), else at the set distance; the same angular size.
+    const bool traced = shownHasView && shownView.weaponAimValid && shownView.weaponAimHitMetres > 0.0f;
+    const float d = traced ? shownView.weaponAimHitMetres : settings.ui.reticleDistanceMetres;
+    const float side = ui_layer::reticleSideMetres(d, settings.ui.reticleDegrees);
+    if (const double now = qpcSeconds(qpcNow()); now >= g_nextDotLog) {
+        g_nextDotLog = now + kDotLogSeconds;
+        EVR_LOG("ui: the aim dot at %.1f m (%s)", d,
+                !traced                    ? "the set distance"
+                : d >= kReticleReachMetres ? "the ray is clear"
+                                           : "where the ray meets the world");
+    }
     quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
     quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
     quad.subImage.swapchain = reticleSwapchain;
@@ -153,7 +166,6 @@ bool XrPresenter::Impl::fillReticleQuad(XrCompositionLayerQuad& quad) {
     quad.subImage.imageArrayIndex = 0;
     quad.size = {side, side};
     // On the ray (-Z of the aim pose), facing back along it toward the hand and the eyes.
-    const float d = settings.ui.reticleDistanceMetres;
     if (shownHasView && shownView.weaponAimValid) {
         // The ray the shown frame's gun and shots were made with (smoothed, at the view's pose time), placed
         // in LOCAL like the frame itself, so the dot stays on the barrel's line and where the shots go.

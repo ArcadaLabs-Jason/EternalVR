@@ -269,6 +269,45 @@ TEST_CASE("a glory kill's start pulses the front and both sleeves once") {
     CHECK(of(body.update(s), Effect::GloryKill).empty());
 }
 
+TEST_CASE("the Flame Belch pulses the left shoulder front and back, not the gun arm, at most one per gap") {
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto s = playing(1.1);
+    s.belches = 3;
+    const auto belch = body.update(s);
+    CHECK(of(belch, Effect::Shot).empty());
+    for (const Device side : {Device::VestFront, Device::VestBack}) {
+        const Frame* f = on(belch, Effect::Belch, side);
+        REQUIRE(f != nullptr);
+        CHECK(wearerColumns(*f) == std::vector<int>{0, 1});
+        for (const auto& dot : f->dots) {
+            CHECK(dot.index / kVestColumns <= 1); // the top two rows
+        }
+    }
+    s.seconds = 1.2; // within the gap
+    CHECK(of(body.update(s), Effect::Belch).empty());
+    s.seconds = 1.5;
+    CHECK_FALSE(of(body.update(s), Effect::Belch).empty());
+}
+
+TEST_CASE("the equipment launcher pulses the left shoulder too, lighter than the Flame Belch") {
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto s = playing(1.1);
+    s.equipment = 1;
+    const auto launch = body.update(s);
+    const Frame* front = on(launch, Effect::Equipment, Device::VestFront);
+    REQUIRE(front != nullptr);
+    REQUIRE(on(launch, Effect::Equipment, Device::VestBack) != nullptr);
+    CHECK(wearerColumns(*front) == std::vector<int>{0, 1});
+    s = playing(1.2);
+    s.belches = 1;
+    const auto belch = body.update(s);
+    REQUIRE(on(belch, Effect::Belch, Device::VestFront) != nullptr);
+    CHECK(strongest(*front) < strongest(*on(belch, Effect::Belch, Device::VestFront)));
+    CHECK(front->durationMillis < on(belch, Effect::Belch, Device::VestFront)->durationMillis);
+}
+
 TEST_CASE("dying fills both sides once; no heartbeat while dead") {
     BodyHaptics body;
     body.update(playing(1.0));

@@ -45,6 +45,13 @@ constexpr float kGloryKill = 80.0f;
 constexpr int kGloryKillMillis = 250;
 constexpr float kDeath = 100.0f;
 constexpr int kDeathMillis = 700;
+// The Flame Belch (a burst while its button is held: at most one pulse every kBelchGapSeconds) and the
+// equipment launcher.
+constexpr float kBelch = 70.0f;
+constexpr int kBelchMillis = 300;
+constexpr double kBelchGapSeconds = 0.25;
+constexpr float kEquipment = 45.0f;
+constexpr int kEquipmentMillis = 150;
 
 // Column angles round the torso in degrees (0 ahead, positive to the wearer's left), wearer's left first.
 constexpr std::array<float, kVestColumns> kFrontAngles{67.5f, 22.5f, -22.5f, -67.5f};
@@ -105,6 +112,10 @@ const char* effectName(Effect effect) {
         return "glorykill";
     case Effect::Death:
         return "death";
+    case Effect::Belch:
+        return "belch";
+    case Effect::Equipment:
+        return "equipment";
     case Effect::Count:
         break;
     }
@@ -216,6 +227,18 @@ void BodyHaptics::shot(std::vector<Frame>& out, const BodySignals& signals) {
     add(out, Effect::Shot, Device::VestFront, kick.millis, std::move(front));
 }
 
+void BodyHaptics::leftShoulder(std::vector<Frame>& out, Effect effect, float intensity, int millis) {
+    for (const Device side : {Device::VestFront, Device::VestBack}) {
+        std::vector<Dot> dots;
+        for (int wearerColumn = 0; wearerColumn <= 1; ++wearerColumn) {
+            for (int row = 0; row <= 1; ++row) {
+                dots.push_back({dotIndex(side, wearerColumn, row), scaled(intensity)});
+            }
+        }
+        add(out, effect, side, millis, std::move(dots));
+    }
+}
+
 void BodyHaptics::damage(std::vector<Frame>& out, float amount, std::optional<float> yawDegrees) {
     const float base = std::min(100.0f, kDamageFloor + amount * kDamagePerPoint);
     std::array<std::vector<Dot>, 2> sides; // front, back
@@ -272,6 +295,13 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         return out;
     }
     shot(out, signals);
+    if (signals.belches > 0 && signals.seconds >= nextBelch_) {
+        nextBelch_ = signals.seconds + kBelchGapSeconds;
+        leftShoulder(out, Effect::Belch, kBelch, kBelchMillis);
+    }
+    if (signals.equipment > 0) {
+        leftShoulder(out, Effect::Equipment, kEquipment, kEquipmentMillis);
+    }
     if (primed_) {
         const float lost = std::max(0.0f, health_ - signals.health) + std::max(0.0f, armor_ - signals.armor);
         if (signals.hitSerial != hitSerial_) {

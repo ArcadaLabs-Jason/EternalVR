@@ -41,6 +41,8 @@ status messages are read and dropped on a second thread (the first one is logged
 | Heartbeat | health above 0 and below 30 | lub (80) and dub (50) on the chest's inner left column, a beat every 1.1 s at 30 health down to 0.6 s near 0 |
 | Glory kill | a sync kill starting (`idPlayer::syncMaster` set, as `offhand_hook.cpp` reads it) | the whole front and both sleeves at 80 for 250 ms |
 | Death | `isDead` of the health component | both sides of the vest at 100 for 700 ms |
+| Flame Belch | a shot from the fire hook while the controllers hold the Flame Belch's button (it fires through the same hook with the held weapon's decl; that shot is not a weapon shot) | the Slayer's left shoulder, where the Belch sits: the top two rows of the wearer's left two columns, front and back, at 70 for 300 ms; at most one every 250 ms |
+| Equipment | the controllers' equipment launcher button going down (the launcher does not go through the fire hook) | the same left shoulder at 45 for 150 ms. A press with no charge left plays it too |
 
 Nothing plays while a menu holds gameplay back or while the camera hook is not running (loads); coming
 back does not replay what changed meanwhile. `ETERNALVR_BHAPTICS_INTENSITY` (0 to 1, default 1;
