@@ -13,6 +13,9 @@
 // - ETERNALVR_CPU_SAVER="name=value;name=value": the launcher's CPU Saver (launcher/data/cpu-saver.txt,
 //   docs/rig-findings/perf-cpu-cvars.md), cvars that cut the CPU work of each render. A cvar the sets above
 //   hold keeps their value. Unset, empty or "0": nothing.
+// - ETERNALVR_SHARPENING=<number> (the launcher's Sharpening, 0 to 3): r_sharpening, the game's post-process
+//   sharpening, held at that strength and compared as a float (the game's menu sets fractions such as 1.99).
+//   Unset: the player's own setting.
 // - A value "<=N" (in either list) is a cap: written only while the cvar's float value is above N, so a
 //   player on a lower quality level keeps the game's value.
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry

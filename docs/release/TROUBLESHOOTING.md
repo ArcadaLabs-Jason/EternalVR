@@ -131,13 +131,14 @@ to the headset. After a session the launcher's status line sums it up ("In play 
 a second"). If that is well below your headset's rate, see the next entry, or lower "Resolution" on the Play tab if
 your graphics card is the limit.
 
-**Which DLSS preset should I use?** With a newer `nvngx_dlss.dll` ("DLSS version: From a file" on the Advanced
-tab), the "DLSS preset" makes a big difference on RTX 20 and 30 series cards. One player's RTX 3070 with a
+**Which DLSS preset should I use?** With a newer DLSS than the game's (the DLSS group on the Play tab: NVIDIA's
+newest, downloaded once, or a file of your own), the "Preset" makes a big difference on RTX 20 and 30 series cards. One player's RTX 3070 with a
 Ryzen 7 3800X (Quest 3 at 72 Hz, ray tracing on, DLSS Performance, "Resolution" 0.80) drew about 60 new frames
 a second with preset M and about 80 with preset J. The game's own DLSS 2.3 was faster still (about 87) but
 blurrier at medium and long distances. On those cards start with J or K: M looks best but costs the most. That
-player settled on "Resolution" 0.90, DLSS Performance and preset J. On a faster card, try DLSS 310 with preset K
-and DLSS Quality first: another player found it by far the sharpest and cleanest picture in the headset.
+player settled on "Resolution" 0.90, DLSS Performance and preset J. On a faster card, DLSS 310 with preset K
+and Quality (the launcher's defaults) is the one to try first: another player found it by far the sharpest and
+cleanest picture in the headset. "In the headset" under the DLSS group says what will run.
 
 **Game Pass: a black screen, then the game closes.** One player's Game Pass install did this on a 10-bit
 monitor until they turned on "Reduced color mode" in the Compatibility tab of the game's `.exe` Properties

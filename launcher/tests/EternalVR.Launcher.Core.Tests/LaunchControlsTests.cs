@@ -184,31 +184,27 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void DlssQualityIsOneChoiceOfTheAntiAliasingRowAndReachesTheLayer()
+        public void DlssAndItsQualityRoundTripAndReachTheLayer()
         {
-            // The row's choices: TAA, DLSS Quality/Balanced/Performance/Ultra Performance, Off.
-            Assert.Equal(6, SettingTexts.For(Setting.AntiAliasing).Choices.Count);
-            for (int choice = 0; choice < 6; ++choice)
-            {
-                var s = new LauncherSettings();
-                LauncherSettings.SetAntiAliasingChoice(s, choice);
-                Assert.Equal(choice, LauncherSettings.AntiAliasingChoice(s));
-                Assert.Equal(choice, LauncherSettings.AntiAliasingChoice(LauncherSettings.Parse(s.Serialize())));
-            }
-            var perf = new LauncherSettings();
-            LauncherSettings.SetAntiAliasingChoice(perf, 3);
-            Assert.Equal(AntiAliasingMode.Dlss, perf.AntiAliasing);
-            Assert.Equal(DlssQuality.Performance, perf.Dlss);
+            // The anti-aliasing row: TAA, DLSS, Off; the quality is the DLSS group's own row.
+            Assert.Equal(3, SettingTexts.For(Setting.AntiAliasing).Choices.Count);
+            foreach (AntiAliasingMode mode in System.Enum.GetValues(typeof(AntiAliasingMode)))
+                foreach (DlssQuality quality in System.Enum.GetValues(typeof(DlssQuality)))
+                {
+                    var back = LauncherSettings.Parse(new LauncherSettings { AntiAliasing = mode, Dlss = quality }.Serialize());
+                    Assert.Equal(mode, back.AntiAliasing);
+                    Assert.Equal(quality, back.Dlss);
+                }
+            var perf = new LauncherSettings { AntiAliasing = AntiAliasingMode.Dlss, Dlss = DlssQuality.Performance };
             var env = Env(LaunchPlanBuilder.Build(Inputs(perf)));
             Assert.Equal("1", env["ETERNALVR_STEREO_DLSS"]);
             Assert.Equal("performance", env["ETERNALVR_STEREO_DLSS_QUALITY"]);
             // TAA and off keep the chosen quality for later but send none.
-            LauncherSettings.SetAntiAliasingChoice(perf, 0);
-            Assert.Equal(DlssQuality.Performance, perf.Dlss);
+            perf.AntiAliasing = AntiAliasingMode.Taa;
             Assert.False(Env(LaunchPlanBuilder.Build(Inputs(perf))).ContainsKey("ETERNALVR_STEREO_DLSS_QUALITY"));
             // A file from before the quality existed: DLSS runs at Quality.
             var old = LauncherSettings.Parse("schema_version = 2\nanti_aliasing = dlss\n");
-            Assert.Equal(1, LauncherSettings.AntiAliasingChoice(old));
+            Assert.Equal(AntiAliasingMode.Dlss, old.AntiAliasing);
             Assert.Equal("quality", Env(LaunchPlanBuilder.Build(Inputs(old)))["ETERNALVR_STEREO_DLSS_QUALITY"]);
             Assert.Equal(DlssQuality.Quality, LauncherSettings.Parse("schema_version = 2\ndlss_quality = dlaa\n").Dlss);
         }

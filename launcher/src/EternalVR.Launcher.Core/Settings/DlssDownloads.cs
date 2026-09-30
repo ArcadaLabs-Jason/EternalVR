@@ -77,6 +77,9 @@ namespace EternalVR.Launcher.Core.Settings
         public static string PathFor(string dlssRoot, DlssRelease release) =>
             Path.Combine(dlssRoot, release.Version.ToString(), DlssDll.FileName);
 
+        /// <summary>True when a file of the release's size is at <paramref name="path"/> (the quick check, for the window).</summary>
+        public static bool HasSize(string path, DlssRelease release) => File.Exists(path) && new FileInfo(path).Length == release.Size;
+
         /// <summary>True when the file at <paramref name="path"/> is the release's (its size and SHA-256).</summary>
         public static bool Matches(string path, DlssRelease release) =>
             File.Exists(path) && new FileInfo(path).Length == release.Size

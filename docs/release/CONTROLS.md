@@ -228,8 +228,18 @@ are the same whichever profile is picked.
 | bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, and the Flame Belch and equipment launcher on your left shoulder ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
 | Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
-| Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card), DLSS (experimental, NVIDIA RTX only) | TAA |
+| Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), DLSS (NVIDIA RTX only, set up in the DLSS group below), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card) | TAA |
+| Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
+
+The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
+
+| Setting | Choices | Default |
+|---|---|---|
+| Quality | Quality, Balanced, Performance, Ultra Performance: how small an image each eye renders before DLSS scales it up (two thirds of the size, 58%, half, a third) | Quality |
+| Version | NVIDIA's newest (recommended; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or A file of mine (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
+| Preset | Automatic (NVIDIA's pick), K (recommended: the transformer model at every quality, the sharpest), J, M, L (its variants) or F (the older model). Needs a newer DLSS than the game's | K |
+| In the headset | What will run in VR with these settings, for example "DLSS 310.9.1, preset K, Quality, both eyes". Until the newest is downloaded, the game's DLSS 2.3 runs | |
 
 ### Advanced tab
 
@@ -246,8 +256,6 @@ are the same whichever profile is picked.
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
 | HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m) | 1.5 m, 2 m, 0 |
 | Health and ammo | On the HUD panel; On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you); or On your weapon (experimental: the ammo just above the back of the gun in your weapon hand, health and armour stay on the panel). The wrist and the weapon need Motion controllers | On the HUD panel |
-| DLSS version | The game's (2.3), or From a file: a newer `nvngx_dlss.dll`: "Download from NVIDIA..." fetches it from NVIDIA's own GitHub once you accept NVIDIA's license, or "Choose..." takes one you downloaded yourself. The file stays in EternalVR's data folder or where you keep it; nothing is copied into the game folder. Only with a DLSS choice under Anti-aliasing | The game's |
-| DLSS preset | With a file of your own: The DLL's default, K (the transformer model at every quality), J, M, L (its variants) or F (the older model). Needs DLSS 3.1 or later | The DLL's default |
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |

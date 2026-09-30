@@ -9,7 +9,7 @@ using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
 {
-    /// <summary>The Play tab: comfort, body, controls and picture, the settings most players change.</summary>
+    /// <summary>The Play tab: comfort, body, controls, picture and DLSS, the settings most players change.</summary>
     public sealed partial class MainForm
     {
         private readonly ComboBox turn = Choices(Setting.Turning);
@@ -40,6 +40,7 @@ namespace EternalVR.Launcher
         private readonly Label controlsState = Caption(string.Empty);
         private readonly NumericUpDown renderScale = Number(LauncherSettings.MinRenderScale, LauncherSettings.MaxRenderScale, 0.05, 2);
         private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing);
+        private readonly ComboBox sharpening = Choices(Setting.Sharpening);
         private readonly ComboBox foveation = Choices(Setting.Foveation);
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
@@ -111,8 +112,11 @@ namespace EternalVR.Launcher
                     s => renderScale.Value = (decimal)LauncherSettings.ClampRenderScale(s.RenderScale),
                     s => s.RenderScale = LauncherSettings.ClampRenderScale((double)renderScale.Value)),
                 Row(Setting.AntiAliasing, antiAliasing,
-                    s => antiAliasing.SelectedIndex = LauncherSettings.AntiAliasingChoice(s),
-                    s => LauncherSettings.SetAntiAliasingChoice(s, antiAliasing.SelectedIndex)),
+                    s => antiAliasing.SelectedIndex = (int)s.AntiAliasing,
+                    s => s.AntiAliasing = (AntiAliasingMode)Math.Max(0, antiAliasing.SelectedIndex)),
+                Row(Setting.Sharpening, sharpening,
+                    s => sharpening.SelectedIndex = (int)s.Sharpening,
+                    s => s.Sharpening = (SharpeningMode)Math.Max(0, sharpening.SelectedIndex)),
                 Row(Setting.Foveation, foveation,
                     s => foveation.SelectedIndex = (int)s.Foveation,
                     s => s.Foveation = (FoveationMode)foveation.SelectedIndex),
@@ -122,7 +126,7 @@ namespace EternalVR.Launcher
             var picture = Group("Picture", pictureRows.ToArray());
             var left = new List<Control> { comfort, body, gestures };
             if (SaverGroup() is GroupBox saver) left.Add(saver);
-            var page = Page("Play", left.ToArray(), new Control[] { controls, picture });
+            var page = Page("Play", left.ToArray(), new Control[] { controls, picture, DlssGroup() });
             // The player edits the folder in Explorer: looked at again on coming back to the window or the tab.
             tabs.Selected += (s, e) => { if (e.TabPage == page) ShowControlsState(); };
             Activated += (s, e) => ShowControlsState();

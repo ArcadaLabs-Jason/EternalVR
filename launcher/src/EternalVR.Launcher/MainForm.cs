@@ -28,7 +28,7 @@ namespace EternalVR.Launcher
         /// <summary>The settings tabs: locked while a session runs, whose plan reads the same settings.</summary>
         private TabPage playPage, advancedPage;
         /// <summary>The branding strip across the top, with the game's state and the version.</summary>
-        private readonly HeaderStrip header = new HeaderStrip(Branding.HeaderStrip()) { Dock = DockStyle.Top, Height = 120 };
+        private readonly HeaderStrip header = new HeaderStrip(Branding.HeaderStrip(), Branding.KofiCup()) { Dock = DockStyle.Top, Height = 120 };
         private readonly TabControl tabs = new TabControl { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed };
 
         private readonly ListBox checks = new ListBox { Height = 120, Dock = DockStyle.Fill, HorizontalScrollbar = true };
@@ -85,6 +85,7 @@ namespace EternalVR.Launcher
             restoreSaves.Click += (s, e) => RestoreSaves();
             openData.Click += (s, e) => Process.Start("explorer.exe", "\"" + ctx.Paths.Root + "\"");
             exportReport.Click += (s, e) => ReportExport.Run(this, ctx);
+            header.SupportClicked += (s, e) => OpenSupportPage();
             discardRestore.Click += (s, e) => DiscardPendingRestore();
             recoveryTimer.Tick += (s, e) => TryRecover();
             FormClosing += OnClosing;
@@ -413,6 +414,16 @@ namespace EternalVR.Launcher
                 FillRuntimes();
                 SaveSettings();
                 RunPreflight();
+            }
+        }
+
+        /// <summary>The Ko-fi page in the default browser; without one, the address is logged to copy by hand.</summary>
+        private void OpenSupportPage()
+        {
+            try { Process.Start(Branding.SupportPage.AbsoluteUri); }
+            catch (Exception e) when (e is System.ComponentModel.Win32Exception || e is FileNotFoundException)
+            {
+                ctx.Log.Error($"no browser opened {Branding.SupportPage.AbsoluteUri}: {e.Message}");
             }
         }
 

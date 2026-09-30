@@ -30,5 +30,7 @@
     <EmbeddedResource Include="..\..\..\branding\eternalvr.ico" LogicalName="EternalVR.Launcher.eternalvr.ico" Link="Resources\eternalvr.ico" />
     <!-- The window's header strip (branding/launcher-header-1440x240.png, drawn at half size). -->
     <EmbeddedResource Include="..\..\..\branding\launcher-header-1440x240.png" LogicalName="EternalVR.Launcher.launcher-header.png" Link="Resources\launcher-header.png" />
+    <!-- Ko-fi's cup, beside the header's support link. -->
+    <EmbeddedResource Include="..\..\..\branding\kofi-symbol-64.png" LogicalName="EternalVR.Launcher.kofi-symbol.png" Link="Resources\kofi-symbol.png" />
   </ItemGroup>
 </Project>

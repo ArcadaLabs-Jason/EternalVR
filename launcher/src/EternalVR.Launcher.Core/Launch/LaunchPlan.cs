@@ -37,6 +37,8 @@ namespace EternalVR.Launcher.Core.Launch
         public OpenXrProbeResult RuntimeProbe { get; set; }
         /// <summary>The player's controls folder; its maps are used when it holds any (null: the built-in controls).</summary>
         public ControlsFolder Controls { get; set; }
+        /// <summary>NVIDIA's newest DLSS when the launcher has downloaded it (checked); null when it has not.</summary>
+        public string NewestDlss { get; set; }
     }
 
     /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
@@ -225,13 +227,16 @@ namespace EternalVR.Launcher.Core.Launch
             {
                 Set("ETERNALVR_STEREO_DLSS", "1");
                 Set("ETERNALVR_STEREO_DLSS_QUALITY", LauncherSettings.DlssQualityName(s.Dlss));
-                // The player's newer DLSS DLL, used by the layer from where it is (docs/rig-findings/dlss-dll.md).
-                if (DlssDll.Applies(s))
+                // A newer DLSS DLL (NVIDIA's newest, downloaded, or the player's), used by the layer from where it is
+                // (docs/rig-findings/dlss-dll.md). Without one the game's own runs.
+                if (DlssDll.PathFor(s, inputs.NewestDlss) is string dll)
                 {
-                    Set("ETERNALVR_DLSS_DLL", s.DlssDllPath.Trim());
+                    Set("ETERNALVR_DLSS_DLL", dll);
                     Set("ETERNALVR_DLSS_PRESET", DlssDll.NormalisePreset(s.DlssPreset));
                 }
             }
+            // The game's post-process sharpening held at the chosen strength; absent, the player's own setting stays.
+            if (stereo && LauncherSettings.SharpeningValue(s.Sharpening) is string sharpening) Set("ETERNALVR_SHARPENING", sharpening);
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading

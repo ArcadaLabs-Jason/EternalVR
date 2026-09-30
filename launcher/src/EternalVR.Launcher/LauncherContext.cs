@@ -271,10 +271,31 @@ namespace EternalVR.Launcher
                 Displays = WindowsSystem.Displays(),
                 RuntimeProbe = ProbeRuntime(g.LayerDecisions),
                 Controls = Controls,
+                NewestDlss = NewestDlss(verify: true),
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             if (plan.RenderSize?.Note != null) Log.Warn(plan.RenderSize.Note + " (" + plan.RenderSize.Reason + ")");
             return plan;
+        }
+
+        /// <summary>
+        /// NVIDIA's newest listed DLSS (data\dlss-downloads.txt) when it is in the data folder's dlss folder, else null. With
+        /// <paramref name="verify"/> (at launch) its SHA-256 is checked too; without (the window's line) only its size.
+        /// </summary>
+        public string NewestDlss(bool verify)
+        {
+            var release = Data.DlssDownloads?.Newest;
+            if (release == null) return null;
+            var path = DlssDownloads.PathFor(Paths.DlssFiles, release);
+            try
+            {
+                return (verify ? DlssDownloads.Matches(path, release) : DlssDownloads.HasSize(path, release)) ? path : null;
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                Log.Warn("the downloaded DLSS cannot be read: " + e.Message);
+                return null;
+            }
         }
 
         /// <summary>

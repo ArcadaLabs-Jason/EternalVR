@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -44,6 +45,8 @@ struct Held {
     bool saver = false;    // from ETERNALVR_CPU_SAVER
     bool cap = false;      // value "<=N": lowered to N while above it, never raised (capValue)
     float capValue = 0.0f;
+    bool exact = false; // a float cvar held at exactValue, compared as a float (ETERNALVR_SHARPENING)
+    float exactValue = 0.0f;
     bool written = false; // the first write is always logged
     std::byte* object = nullptr;
     bool logged = false;
@@ -138,6 +141,27 @@ void addCpuSaver() {
             list.empty() ? "nothing (no name=value item)" : list.c_str());
 }
 
+// ETERNALVR_SHARPENING=<number> (the launcher's Sharpening): r_sharpening held at that strength. Its value in
+// the game's menu (a fraction such as 1.99) is compared as a float, so a hold of 1 is not taken for 1.99.
+void addSharpening() {
+    const std::string text = narrowEnv(L"ETERNALVR_SHARPENING");
+    if (text.empty()) {
+        return;
+    }
+    char* end = nullptr;
+    const float value = std::strtof(text.c_str(), &end);
+    if (end == text.c_str() || *end != '\0' || !(value >= 0.0f && value <= 10.0f)) {
+        EVR_LOG("%s: ETERNALVR_SHARPENING=%s is not a number from 0 to 10; the game's sharpening stays", kTag,
+                text.c_str());
+        return;
+    }
+    Held h{"r_sharpening", text};
+    h.exact = true;
+    h.exactValue = value;
+    g_held.push_back(std::move(h));
+    EVR_LOG("%s: Sharpening (ETERNALVR_SHARPENING) asks for r_sharpening %s", kTag, text.c_str());
+}
+
 // ETERNALVR_DEBUG_CVARS: rig experiments; an entry replaces the CPU Saver's value for the same cvar.
 void addDebugList() {
     for (const stereo_seq::CvarHold& c : stereo_seq::parseCvarList(narrowEnv(L"ETERNALVR_DEBUG_CVARS"))) {
@@ -190,6 +214,7 @@ void start(bool stereo) {
         EVR_LOG("%s: the stereo set is left as the game has it (ETERNALVR_STEREO_RUNTIME_CVARS=0)", kTag);
     }
     addCpuSaver();
+    addSharpening();
     addDebugList();
     GameImage image;
     if (g_held.empty() || !locateGameImage(image, kTag)) {
@@ -282,6 +307,21 @@ void apply(bool stereo) {
                 h.written = true;
                 EVR_LOG("%s: %s %.3f -> at most %s (reads %.3f)%s", kTag, h.name.c_str(), value,
                         h.value.c_str(), readFloat(h.object), h.saver ? "; CPU Saver" : "");
+            }
+            continue;
+        }
+        if (h.exact) {
+            const float value = readFloat(h.object);
+            if (std::fabs(value - h.exactValue) < 1e-4f) {
+                continue;
+            }
+            g_setString(h.object, h.value.c_str(), true);
+            g_writes.fetch_add(1, std::memory_order_relaxed);
+            if (!h.written || g_loggedWrites < kLoggedWrites) {
+                g_loggedWrites += h.written ? 1 : 0;
+                h.written = true;
+                EVR_LOG("%s: %s %.3f -> %s (reads %.3f)", kTag, h.name.c_str(), value, h.value.c_str(),
+                        readFloat(h.object));
             }
             continue;
         }

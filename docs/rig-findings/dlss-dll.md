@@ -12,7 +12,7 @@ what those imply; section 7 checks it live.
 
 The game ships `nvngx_dlss.dll` 2.3.0.0 in its folder: the convolutional model, no render presets. A newer DLL
 (DLSS 310.x: the transformer model, presets J to M) can run instead without touching the game folder. The player
-picks the file in the launcher (Advanced tab, DLSS group); the launcher passes `ETERNALVR_DLSS_DLL` and
+picks it in the launcher (Play tab, DLSS group: NVIDIA's newest, downloaded, by default; or a file of their own); the launcher passes `ETERNALVR_DLSS_DLL` and
 `ETERNALVR_DLSS_PRESET`, and the layer:
 
 1. checks the file (named `nvngx_dlss.dll`, an x86-64 DLL, a version resource naming NVIDIA) and logs its version,
@@ -120,10 +120,10 @@ bypassing its authentication (4(d)) and making it subject to an open source lice
 charge" (4(e)). The application that integrates the SDK is the game, not the mod; shipping the DLL in the mod's
 open source release is at best unclear and plausibly conflicts with 2(c), 4(b) and 4(e). **Nothing NVIDIA's is in
 the repo or the release: the player downloads the DLL and chooses it.** An opt-in download from NVIDIA's repository on
-the player's machine is what the launcher offers (Jason's go, 2026-09-29): "Download from NVIDIA..." on the
-Advanced tab names the source and NVIDIA's license, links it, and downloads only once the player accepts it; the
-file (the newest line of `launcher/data/dlss-downloads.txt`, pinned by size and SHA-256) is kept in the data
-folder's `dlss\<version>\` and chosen as "From a file". EternalVR itself never ships or hosts it. Nothing third-party was added, so
+the player's machine is what the launcher offers (the owner's go, 2026-09-29): Download in the
+Play tab's DLSS group names the source and NVIDIA's license, links it, and downloads only once the player accepts
+it; the file (the newest line of `launcher/data/dlss-downloads.txt`, pinned by size and SHA-256) is kept in the data
+folder's `dlss\<version>\` and used as "Version: NVIDIA's newest", the default since 2026-09-30. EternalVR itself never ships or hosts it. Nothing third-party was added, so
 `THIRD_PARTY_NOTICES.md` is unchanged.
 
 ## 6. Settings and logs
@@ -135,9 +135,10 @@ folder's `dlss\<version>\` and chosen as "From a file". EternalVR itself never s
 | `ETERNALVR_DLSS_ROUTE` | `path` | `path`: the folder first in NGX's search path; `redirect`: every `nvngx_dlss.dll` load sent to the chosen file |
 | `ETERNALVR_DLSS_NGX_LOG` | on | `verbose`: NGX's verbose log level (at most 400 NGX lines are logged) |
 
-The launcher sets the first two only in stereo with a DLSS anti-aliasing choice and "DLSS version: From a file"
-(`launcher.ini`: `dlss_dll = game|file`, `dlss_dll_path`, `dlss_preset`; the path is this machine's, kept by Reset
-and left out of profiles).
+The launcher sets the first two only in stereo with DLSS as the anti-aliasing and a newer DLL: NVIDIA's newest
+once downloaded (its SHA-256 checked at launch), or the player's file (`launcher.ini`: `dlss_version =
+newest|game|file`, `dlss_dll_path`, `dlss_preset`, K by default; the path is this machine's, kept by Reset and left
+out of profiles).
 
 Log lines (prefix `dlss:`; NGX's own lines are `ngx[level/feature]: ...`):
 

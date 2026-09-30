@@ -160,7 +160,8 @@ namespace EternalVR.Launcher.Core.Tests
         public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleAndDlss()
         {
             var inapplicable = SettingRules.Inapplicable(new LauncherSettings());
-            Assert.Equal(new[] { Setting.SnapAngle, Setting.DlssVersion, Setting.DlssPreset }, inapplicable.Keys);
+            Assert.Equal(new[] { Setting.SnapAngle, Setting.DlssQuality, Setting.DlssVersion, Setting.DlssPreset, Setting.DlssInHeadset },
+                inapplicable.Keys);
             Assert.Equal(SettingRules.NeedsSnapTurn, inapplicable[Setting.SnapAngle]);
             // TAA is the default anti-aliasing: the DLSS rows wait for DLSS.
             Assert.Equal(SettingRules.NeedsDlss, inapplicable[Setting.DlssVersion]);
@@ -247,8 +248,9 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<LocomotionMode>(Setting.MoveToward);
             Choices<DossierPress>(Setting.XButton);
             Choices<WheelSelect>(Setting.WeaponWheel);
-            // The anti-aliasing row: TAA, one choice per DLSS quality, then off (LauncherSettings.AntiAliasingChoice).
-            Assert.Equal(2 + Enum.GetValues(typeof(DlssQuality)).Length, SettingTexts.For(Setting.AntiAliasing).Choices.Count);
+            Choices<AntiAliasingMode>(Setting.AntiAliasing);
+            Choices<SharpeningMode>(Setting.Sharpening);
+            Choices<DlssQuality>(Setting.DlssQuality);
             Choices<FoveationMode>(Setting.Foveation);
             Choices<VrMode>(Setting.VrMode);
             Choices<MirrorMode>(Setting.DesktopWindow);

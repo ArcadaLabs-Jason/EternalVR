@@ -21,6 +21,7 @@ through OpenXR.
 - A desktop window mirroring the game for people watching.
 - The full campaign and both DLC (single-player only).
 - Full ray tracing support: the testing so far has been at maximum settings with ray tracing on.
+- DLSS in both eyes, with NVIDIA's newest DLSS one click away in the launcher, and a sharpening setting.
 - A launcher that checks your game version, sets everything up for the session and restores your
   settings afterwards.
 
@@ -33,7 +34,6 @@ No dates yet:
 - Full rigging for each arm: both arms follow your hands, with a free off hand and left-handed play.
 - More VR interactions with the world, beyond punching.
 - Optimizations, especially on the processor side, for more frames on more PCs.
-- Improved DLSS.
 - More ways to use the weapon wheel (pointing or motion).
 
 ## Headsets, and I need testers

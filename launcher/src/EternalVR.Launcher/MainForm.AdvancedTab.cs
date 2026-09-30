@@ -8,7 +8,7 @@ using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
 {
-    /// <summary>The Advanced tab: the view, the HUD panel, the controllers, DLSS, the runtime and the arguments, and Reset to defaults.</summary>
+    /// <summary>The Advanced tab: the view, the HUD panel, the controllers, the runtime and the arguments, and Reset to defaults.</summary>
     public sealed partial class MainForm
     {
         private readonly ComboBox mode = Choices(Setting.VrMode);
@@ -34,13 +34,6 @@ namespace EternalVR.Launcher
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
         private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
-        private readonly ComboBox dlssDll = Choices(Setting.DlssVersion, 130);
-        private readonly Button dlssChoose = new Button { Text = "Choose...", Width = 90, Height = 26 };
-        /// <summary>Downloads NVIDIA's newest pinned DLL (data\dlss-downloads.txt) on request; hidden when none is listed.</summary>
-        private readonly Button dlssDownload = new Button { Text = "Download from NVIDIA...", Width = 170, Height = 26 };
-        /// <summary>The chosen file's version, or why it cannot be used; the whole path is in its tooltip.</summary>
-        private readonly Label dlssFile = new Label { AutoSize = false, AutoEllipsis = true, Width = 226, Height = 18, Margin = new Padding(3, 0, 3, 4) };
-        private readonly ComboBox dlssPreset = Choices(Setting.DlssPreset, 226);
         private readonly ComboBox runtime = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
         private readonly TextBox extraArgs = new TextBox { Width = 510 };
         /// <summary>One line, cut with an ellipsis; the whole path and where it came from are in its tooltip.</summary>
@@ -108,34 +101,6 @@ namespace EternalVR.Launcher
                     s => s.AimDotSize = (double)dotSize.Value),
                 Row(Setting.MenuLaser, menuBeam, s => menuBeam.Checked = s.MenuBeam, s => s.MenuBeam = menuBeam.Checked));
 
-            // DLSS from a newer DLL of the player's own (docs/rig-findings/dlss-dll.md): the list, Choose... and the file's version below.
-            var dllLine = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
-            dllLine.Controls.AddRange(new Control[] { dlssDll, dlssChoose });
-            var dllRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
-            dllRow.Controls.AddRange(new Control[] { dllLine, dlssFile, dlssDownload });
-            dlssChoose.Click += (s, e) => ChooseDlssDll();
-            dlssDownload.Click += (s, e) => DownloadDlssDll();
-            if (ctx.Data.DlssDownloads?.Newest is DlssRelease newest)
-                ownTips[dlssDownload] = Wrap($"Downloads DLSS {newest.Version.ToString(3)} ({newest.SizeText}) straight from NVIDIA's GitHub, once you "
-                    + "accept NVIDIA's license, and uses it. EternalVR does not ship NVIDIA's file.");
-            else
-                dlssDownload.Visible = false;
-            dlssDll.SelectedIndexChanged += (s, e) =>
-            {
-                // From a file with none chosen yet: pick one now, or stay with the game's.
-                if (!loading && dlssDll.SelectedIndex == (int)DlssDllChoice.File && string.IsNullOrWhiteSpace(ctx.Settings.DlssDllPath)
-                    && !ChooseDlssDll())
-                    dlssDll.SelectedIndex = (int)DlssDllChoice.Game;
-                ShowDlssFile();
-            };
-            var dlss = Group("DLSS",
-                Row(Setting.DlssVersion, dllRow,
-                    s => { dlssDll.SelectedIndex = (int)s.DlssDll; ShowDlssFile(); },
-                    s => s.DlssDll = (DlssDllChoice)Math.Max(0, dlssDll.SelectedIndex)),
-                Row(Setting.DlssPreset, dlssPreset,
-                    s => dlssPreset.SelectedIndex = DlssDll.PresetIndex(s.DlssPreset),
-                    s => s.DlssPreset = DlssDll.PresetValues[Math.Max(0, dlssPreset.SelectedIndex)]));
-
             var runtimeRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
             var browse = new Button { Text = "Browse...", Width = 90, Height = 26 };
             browse.Click += (s, e) => BrowseRuntime();
@@ -159,65 +124,7 @@ namespace EternalVR.Launcher
             reset.MinimumSize = reset.Size;
             reset.Click += (s, e) => ResetToDefaults();
             tips.SetToolTip(reset, "Puts every setting on the Play and Advanced tabs back to its default.\nThe game folder, the layer folder and the runtime are kept.");
-            return Page("Advanced", new Control[] { view, reset }, new Control[] { hands, hud, dlss }, system);
-        }
-
-        /// <summary>Picks the player's nvngx_dlss.dll; false when none was chosen or the file cannot be used (said in a message).</summary>
-        private bool ChooseDlssDll()
-        {
-            using (var dlg = new OpenFileDialog { Filter = "DLSS DLL (" + DlssDll.FileName + ")|" + DlssDll.FileName, Title = "Choose a newer " + DlssDll.FileName })
-            {
-                if (!string.IsNullOrWhiteSpace(ctx.Settings.DlssDllPath)) dlg.InitialDirectory = Path.GetDirectoryName(ctx.Settings.DlssDllPath);
-                if (dlg.ShowDialog(this) != DialogResult.OK) return false;
-                return UseDlssDll(dlg.FileName);
-            }
-        }
-
-        /// <summary>Downloads NVIDIA's DLL after the player accepts NVIDIA's license, then uses it (as if chosen).</summary>
-        private void DownloadDlssDll()
-        {
-            var release = ctx.Data.DlssDownloads?.Newest;
-            if (release == null) return;
-            using (var dlg = new DlssDownloadDialog(release, ctx.Paths.DlssFiles, ctx.Log.Info))
-            {
-                if (dlg.ShowDialog(this) != DialogResult.OK || dlg.FilePath == null) return;
-                UseDlssDll(dlg.FilePath);
-            }
-        }
-
-        /// <summary>Uses <paramref name="path"/> for "DLSS version: From a file"; false when it cannot be used (said in a message).</summary>
-        private bool UseDlssDll(string path)
-        {
-            var check = DlssDll.Inspect(path);
-            if (!check.Ok)
-            {
-                MessageBox.Show(this, check.Problem, "DLSS version", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-            ctx.Settings.DlssDllPath = path;
-            ctx.Log.Info("DLSS file chosen: " + path + " (version " + check.Version + ")");
-            loading = true;
-            try { dlssDll.SelectedIndex = (int)DlssDllChoice.File; }
-            finally { loading = false; }
-            SaveSettings();
-            MarkProfileChanged();
-            UpdateRules();
-            ShowDlssFile();
-            return true;
-        }
-
-        /// <summary>The line under the DLSS version: the file's version (or why it cannot be used), for the file chosen.</summary>
-        private void ShowDlssFile()
-        {
-            var path = ctx.Settings.DlssDllPath;
-            if (dlssDll.SelectedIndex != (int)DlssDllChoice.File || string.IsNullOrWhiteSpace(path))
-            {
-                dlssFile.Text = "Version 2.3, in the game folder";
-                tips.SetToolTip(dlssFile, "The DLSS the game ships.");
-                return;
-            }
-            dlssFile.Text = DlssDll.Describe(DlssDll.Inspect(path));
-            tips.SetToolTip(dlssFile, path);
+            return Page("Advanced", new Control[] { view, reset }, new Control[] { hands, hud }, system);
         }
 
         private void LoadIpd(LauncherSettings s)
@@ -278,7 +185,7 @@ namespace EternalVR.Launcher
         private void UpdateRowParts()
         {
             ipd.Enabled = ipdOverride.Checked;
-            ShowDlssFile();
+            ShowDlss();
         }
 
         private static decimal Clamped(double v, NumericUpDown box, double fallback) =>

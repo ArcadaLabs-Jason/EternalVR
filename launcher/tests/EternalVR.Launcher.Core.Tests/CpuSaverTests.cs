@@ -82,7 +82,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.All(saver.Items.Skip(1), i => Assert.Equal(string.Empty, i.Note));
             Assert.All(saver.Items.Skip(1), i => Assert.False(i.DefaultOn, i.Id));
             Assert.All(saver.Items.Skip(1), i => Assert.Equal(Setting.CpuSaver, i.Row));
-            // Jason's name for the group (2026-09-29): "CPU Saver", not "Processor saver".
+            // The owner's name for the group (2026-09-29): "CPU Saver", not "Processor saver".
             Assert.Equal("CPU Saver (experimental)", SettingTexts.For(Setting.CpuSaver).Label);
             Assert.Equal(new[] { "texture_streaming" }, saver.InRow(Setting.TextureStreaming).Select(i => i.Id));
             // The distant shadows and lights go together, as one item.

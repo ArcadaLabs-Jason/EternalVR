@@ -172,12 +172,12 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 var sets = OlderPlayer(t);
                 sets.Adopt("Karen");
-                sets.Adopt("Jason");
+                sets.Adopt("Evening");
                 sets.Of("Karen").Prepare(ShippedMaps);
                 File.SetAttributes(t.Combine("controls", "profiles", "Karen", "oculus_touch.toml"), FileAttributes.ReadOnly);
                 sets.Delete("Karen");
                 Assert.False(sets.HasOwn("Karen"));
-                Assert.True(sets.HasOwn("Jason"));
+                Assert.True(sets.HasOwn("Evening"));
                 Assert.Equal("my touch", t.Read("controls/oculus_touch.toml"));
                 Assert.True(File.Exists(sets.Shared.ReadmeFile));
                 // No profile: the set of no profile is never deleted this way.

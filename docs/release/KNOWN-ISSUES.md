@@ -79,20 +79,21 @@ them is worse for you than described here.
   carries on normally afterwards.
 - **DLSS is experimental.** It is offered on NVIDIA RTX cards and helps only when the graphics card, not
   the processor, is what holds the frame rate back; when the processor is, DLSS can be slower than TAA.
-  Each eye gets its own DLSS history. Pick the quality (Quality, Balanced, Performance or Ultra
-  Performance) in the launcher's "Anti-aliasing" setting. In VR the game's own video menu shows the DLSS
+  Each eye gets its own DLSS history. Choose DLSS under "Anti-aliasing" on the launcher's Play tab, then its
+  quality (Quality, Balanced, Performance or Ultra Performance) in the DLSS group. In VR the game's own video menu shows the DLSS
   setting that is running (Ultra Performance shows as Performance, which the menu does not have). With the
   launcher's DLSS or Off, changing DLSS in the game's menu has no effect in VR, and your saved game settings
   keep their own DLSS choice for flat play. With the launcher's TAA the game's own DLSS setting is used: if
   it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
   the mod switches that session to TAA (the log says `DLSS has no per-eye feature`) and the menu shows
   DLSS as off.
-- **A newer DLSS is experimental too.** The game ships DLSS 2.3. On the Advanced tab, "DLSS version: From
-  a file" lets DLSS run with a newer `nvngx_dlss.dll`. "Download from NVIDIA..." fetches it straight from
-  NVIDIA's GitHub once you accept NVIDIA's license, or you can download it yourself (NVIDIA's DLSS page on
-  GitHub, `lib/Windows_x86_64/rel/nvngx_dlss.dll`) and choose it; the mod does not include it. The file stays
-  in EternalVR's data folder or where you keep it, and nothing is copied into the game folder. If the game cannot use the file, it keeps its own DLSS and
-  the log says why (lines starting with `dlss:`).
+- **A newer DLSS is experimental too.** The game ships DLSS 2.3. The DLSS group's "Version" offers NVIDIA's
+  newest by default: **Download** fetches it once, straight from NVIDIA's GitHub after you accept NVIDIA's
+  license (the mod does not include it), and until then the game's 2.3 runs. "A file of mine" uses a
+  `nvngx_dlss.dll` you downloaded yourself (NVIDIA's DLSS page on GitHub, `lib/Windows_x86_64/rel/nvngx_dlss.dll`).
+  The file stays in EternalVR's data folder or where you keep it, and nothing is copied into the game folder.
+  "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
+  why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn.
 - **Shadows can pop in** on some walls as you turn your head.

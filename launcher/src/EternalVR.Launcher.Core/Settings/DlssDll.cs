@@ -4,12 +4,13 @@ using System.IO;
 
 namespace EternalVR.Launcher.Core.Settings
 {
-    /// <summary>Which nvngx_dlss.dll DLSS runs with: the game's own (2.3, in its folder) or a newer one the player chose.</summary>
-    public enum DlssDllChoice { Game, File }
+    /// <summary>Which nvngx_dlss.dll DLSS runs with: the game's own (2.3, in its folder), a newer one the player chose, or
+    /// NVIDIA's newest the launcher downloads (data\dlss-downloads.txt).</summary>
+    public enum DlssDllChoice { Game, File, Newest }
 
     /// <summary>
-    /// A newer DLSS DLL of the player's own (docs/rig-findings/dlss-dll.md): the layer's <c>ETERNALVR_DLSS_DLL</c> and
-    /// <c>ETERNALVR_DLSS_PRESET</c>. The file stays where the player keeps it; nothing is copied into the game folder. The
+    /// A newer DLSS DLL (docs/rig-findings/dlss-dll.md): the layer's <c>ETERNALVR_DLSS_DLL</c> and <c>ETERNALVR_DLSS_PRESET</c>.
+    /// The file stays where it is (the player's, or the launcher's download); nothing is copied into the game folder. The
     /// layer checks the file again and falls back to the game's DLL when it cannot use it.
     /// </summary>
     public static class DlssDll
@@ -22,14 +23,23 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The first DLSS with render presets.</summary>
         public static readonly Version FirstPresetVersion = new Version(3, 1, 0, 0);
 
-        /// <summary>The preset choices (the layer's values), in the window's order: the DLL's own, then the transformer model's letters.</summary>
+        /// <summary>The preset choices (the layer's values), in the window's order: NVIDIA's pick, then the transformer model's letters.</summary>
         public static readonly string[] PresetValues = { "default", "K", "J", "M", "L", "F" };
+
+        /// <summary>NVIDIA's own pick for each quality (the DLL's default).</summary>
+        public const string AutomaticPreset = "default";
+
+        /// <summary>The default: the transformer model at every quality, the sharpest (docs/release/TROUBLESHOOTING.md).</summary>
+        public const string RecommendedPreset = "K";
 
         public static readonly string[] PresetNames =
         {
-            "The DLL's default", "K (transformer)", "J (transformer)", "M (transformer, Performance)", "L (transformer, Ultra Perf.)",
+            "Automatic (NVIDIA's pick)", "K (recommended)", "J (transformer)", "M (transformer, Performance)", "L (transformer, Ultra Perf.)",
             "F (older model)",
         };
+
+        /// <summary>The Version list's order in the window: the newest first (recommended), then the game's, then a file.</summary>
+        public static readonly DlssDllChoice[] VersionOrder = { DlssDllChoice.Newest, DlssDllChoice.Game, DlssDllChoice.File };
 
         /// <summary>One of <see cref="PresetValues"/>; the default for anything else.</summary>
         public static string NormalisePreset(string text)
@@ -42,10 +52,47 @@ namespace EternalVR.Launcher.Core.Settings
 
         public static int PresetIndex(string text) => Array.IndexOf(PresetValues, NormalisePreset(text));
 
-        /// <summary>True when the launch passes the chosen file to the layer: stereo, DLSS, and a file chosen.</summary>
-        public static bool Applies(LauncherSettings s) =>
-            s.Mode == VrMode.Stereo && s.AntiAliasing == AntiAliasingMode.Dlss && s.DlssDll == DlssDllChoice.File
-            && !string.IsNullOrWhiteSpace(s.DlssDllPath);
+        /// <summary>
+        /// The DLL the launch passes to the layer in stereo with DLSS: NVIDIA's newest when it is downloaded
+        /// (<paramref name="newestPath"/>, null when it is not), or the player's file; null for the game's own.
+        /// </summary>
+        public static string PathFor(LauncherSettings s, string newestPath)
+        {
+            if (s.Mode != VrMode.Stereo || s.AntiAliasing != AntiAliasingMode.Dlss) return null;
+            if (s.DlssDll == DlssDllChoice.Newest) return string.IsNullOrWhiteSpace(newestPath) ? null : newestPath;
+            return s.DlssDll == DlssDllChoice.File && !string.IsNullOrWhiteSpace(s.DlssDllPath) ? s.DlssDllPath.Trim() : null;
+        }
+
+        /// <summary>The DLSS qualities' names, in <see cref="DlssQuality"/> order.</summary>
+        public static readonly string[] QualityNames = { "Quality", "Balanced", "Performance", "Ultra Performance" };
+
+        /// <summary>
+        /// The Play tab's "In the headset" line: the DLSS that runs, its preset and its quality. <paramref name="newest"/> is
+        /// NVIDIA's newest listed DLSS (null when none is listed), <paramref name="newestReady"/> whether it is downloaded, and
+        /// <paramref name="file"/> what the launcher found about the player's file (null when none is chosen).
+        /// </summary>
+        public static string WhatRuns(LauncherSettings s, DlssRelease newest, bool newestReady, Check file)
+        {
+            var quality = QualityNames[Math.Max(0, Math.Min(QualityNames.Length - 1, (int)s.Dlss))];
+            var game = "The game's DLSS 2.3, " + quality + ", both eyes";
+            if (s.DlssDll == DlssDllChoice.Newest)
+            {
+                if (newest == null) return game;
+                var version = newest.Version.ToString(3);
+                return newestReady ? $"DLSS {version}, {PresetText(s.DlssPreset)}, {quality}, both eyes"
+                    : $"{game}, until you download DLSS {version}";
+            }
+            if (s.DlssDll != DlssDllChoice.File) return game;
+            if (file == null || !file.Ok) return game + ": your file cannot be used";
+            var own = "DLSS " + file.Version.ToString(3) + " from your file";
+            return file.HasPresets ? $"{own}, {PresetText(s.DlssPreset)}, {quality}, both eyes" : $"{own}, {quality}, both eyes";
+        }
+
+        private static string PresetText(string preset)
+        {
+            var p = NormalisePreset(preset);
+            return p == AutomaticPreset ? "NVIDIA's preset" : "preset " + p;
+        }
 
         /// <summary>What the launcher found about a chosen file.</summary>
         public sealed class Check

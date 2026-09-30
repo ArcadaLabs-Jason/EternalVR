@@ -121,15 +121,19 @@ namespace EternalVR.Launcher.Core.Settings
                 + "if the frame rate drops."),
             [Setting.AntiAliasing] = new Text("Anti-aliasing",
                 "How edges are smoothed in each eye. TAA (recommended) is the game's own: smooth edges, with each eye "
-                + "keeping its own history. Off turns anti-aliasing and the game's other temporal effects off: sharp, "
-                + "with some shimmer on edges and shiny surfaces, and a little lighter on the graphics card. DLSS is "
-                + "experimental and "
-                + "needs an NVIDIA RTX card: it renders a smaller image and scales it up (Quality the least, Ultra "
-                + "Performance the most), which helps only when the graphics card is what limits the frame rate; when the "
-                + "processor is, it can be slower than TAA. Choose it here: with DLSS or Off, the game's own DLSS setting "
-                + "in its video menu shows what runs in VR, and a change there is not used in VR and leaves your flat "
-                + "game's setting as it was. With TAA, the game's own DLSS setting is used: if it is on, DLSS runs in VR.",
-                "TAA (recommended)", "DLSS Quality", "DLSS Balanced", "DLSS Performance", "DLSS Ultra Performance", "Off"),
+                + "keeping its own history. DLSS needs an NVIDIA RTX card: it renders a smaller image and scales it up, which "
+                + "helps only when the graphics card is what limits the frame rate; when the processor is, it can be slower "
+                + "than TAA. Its quality, version and preset are in the DLSS group. Off turns anti-aliasing and the game's "
+                + "other temporal effects off: sharp, with some shimmer on edges and shiny surfaces, and a little lighter on "
+                + "the graphics card. The game's own DLSS setting in its video menu is not used in VR with DLSS or Off (it "
+                + "shows what runs, and your flat game keeps its setting); with TAA it is used: if it is on, DLSS runs in VR.",
+                "TAA (recommended)", "DLSS (RTX cards)", "Off"),
+            [Setting.Sharpening] = new Text("Sharpening",
+                "The game's sharpening filter, applied to each eye's finished picture, with any anti-aliasing. The game's "
+                + "setting is the one from its own video menu (Advanced, Sharpening); the others hold it at a fixed strength "
+                + "in VR and leave your flat game's setting as it was. Low to High make distant detail crisper, at the cost "
+                + "of some shimmer on fine edges.",
+                "The game's setting", "Off", "Low", "Medium", "High"),
             [Setting.Foveation] = new Text("Foveated rendering (experimental)",
                 "Shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames on the graphics "
                 + "card (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). It helps only when "
@@ -198,17 +202,24 @@ namespace EternalVR.Launcher.Core.Settings
                 + "wrist, shown when you turn it toward you; or on your weapon, where the ammo sits just above the back of the "
                 + "gun and health and armour stay on the panel. The wrist and the weapon are experimental.",
                 "On the HUD panel", "On your wrist", "On your weapon"),
-            [Setting.DlssVersion] = new Text("DLSS version",
-                "The DLSS the game uses. The game's own is version 2.3. A newer one looks sharper and smears less in motion: "
-                + "choose From a file and pick an nvngx_dlss.dll you downloaded (NVIDIA's DLSS page on GitHub has the latest). "
-                + "The file stays where it is: nothing is copied into the game folder. If the game cannot use it, it keeps its own.",
-                "The game's (2.3)", "From a file"),
-            [Setting.DlssPreset] = new Text("DLSS preset",
-                "How the newer DLSS renders. The DLL's default is NVIDIA's choice for each quality (the transformer model in "
-                + "recent versions). K is the transformer model at every quality; J, M and L are its variants; F is the older model. "
-                + "Presets need DLSS 3.1 or later. A good start: K with DLSS Quality on a fast card (the sharpest picture), "
-                + "J or K with Performance on RTX 20 and 30 series cards.",
+            [Setting.DlssQuality] = new Text("Quality",
+                "How large the image DLSS scales up from: Quality renders each eye at two thirds of its size, Balanced at 58%, "
+                + "Performance at half and Ultra Performance at a third. The smaller, the faster and the softer.",
+                DlssDll.QualityNames),
+            [Setting.DlssVersion] = new Text("Version",
+                "The DLSS that runs. NVIDIA's newest (recommended) looks sharper and smears less in motion than the game's "
+                + "own 2.3: Download fetches it once from NVIDIA's GitHub, after you accept NVIDIA's license, and keeps it in "
+                + "the launcher's data folder. A file of mine uses an nvngx_dlss.dll you downloaded yourself, from where it "
+                + "is. Nothing is copied into the game folder. If the game cannot use the newer file, it keeps its own.",
+                "Newest from NVIDIA (recommended)", "The game's (2.3)", "A file of mine"),
+            [Setting.DlssPreset] = new Text("Preset",
+                "How the newer DLSS renders. K (recommended) is the transformer model at every quality, the sharpest "
+                + "picture; J, M and L are its variants; F is the older model. Automatic lets NVIDIA pick for each quality. "
+                + "A good start: K with Quality on a fast card, J or K with Performance on RTX 20 and 30 series cards.",
                 DlssDll.PresetNames),
+            [Setting.DlssInHeadset] = new Text("In the headset",
+                "The DLSS that will run in VR with these settings, both eyes the same. The mod's log and Export report "
+                + "name the version and preset the game really used."),
             [Setting.MotionControllers] = new Text("Motion controllers",
                 "Play with your headset's controllers. Off: keyboard, mouse or a gamepad, as in the flat game."),
             [Setting.ShotsFrom] = new Text("Shots come from",

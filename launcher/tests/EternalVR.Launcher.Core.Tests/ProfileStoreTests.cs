@@ -33,20 +33,20 @@ namespace EternalVR.Launcher.Core.Tests
                 var intense = Machine();
                 intense.Turn = TurnMode.Smooth;
                 intense.TurnRate = 400;
-                intense.Profile = "Jason";
-                store.Save("Jason", intense);
-                var text = File.ReadAllText(t.Combine("profiles", "Jason.ini"));
+                intense.Profile = "Evening";
+                store.Save("Evening", intense);
+                var text = File.ReadAllText(t.Combine("profiles", "Evening.ini"));
                 Assert.DoesNotContain(@"E:\Games", text);
                 Assert.DoesNotContain("runtime.json", text);
                 Assert.DoesNotContain("profile =", text);
 
                 var elsewhere = new LauncherSettings { GameDir = @"D:\Other", Runtime = LauncherSettings.SystemRuntime, Turn = TurnMode.Snap };
-                var loaded = store.Load("Jason", elsewhere);
+                var loaded = store.Load("Evening", elsewhere);
                 Assert.Equal(TurnMode.Smooth, loaded.Turn);
                 Assert.Equal(400, loaded.TurnRate);
                 Assert.Equal(@"D:\Other", loaded.GameDir);
                 Assert.Equal(LauncherSettings.SystemRuntime, loaded.Runtime);
-                Assert.Equal("Jason", loaded.Profile);
+                Assert.Equal("Evening", loaded.Profile);
             }
         }
 
@@ -58,12 +58,12 @@ namespace EternalVR.Launcher.Core.Tests
                 var store = new ProfileStore(t.Combine("profiles"));
                 Assert.Empty(store.Names());
                 store.Save("karen", Machine());
-                store.Save("Jason", Machine());
+                store.Save("Evening", Machine());
                 t.Write("profiles/notes.txt", "not a profile");
-                Assert.Equal(new[] { "Jason", "karen" }, store.Names());
-                Assert.True(store.Exists("jason"));
+                Assert.Equal(new[] { "Evening", "karen" }, store.Names());
+                Assert.True(store.Exists("evening"));
                 store.Delete("karen");
-                Assert.Equal(new[] { "Jason" }, store.Names());
+                Assert.Equal(new[] { "Evening" }, store.Names());
                 Assert.Null(store.Load("karen", Machine()));
                 store.Delete("nobody");
             }

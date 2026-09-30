@@ -16,3 +16,7 @@ for a fork, a different project or anything that could be taken for an official 
 `eternalvr.ico` holds the pixel head at 16 to 64 px (16-32 scaled down from the detailed head, 48-64 hand-tuned) (the title bar, taskbar and Alt-Tab) and the
 full logo at 128 and 256 px (Explorer's large views). `launcher-header-1440x240.png` is the launcher's
 header strip, shown at 720x120.
+
+`kofi-symbol-64.png` is Ko-fi's cup symbol (Ko-fi's brand asset `kofi_symbol.png`, only resized to 80x64), shown
+beside the launcher's "Support EternalVR on Ko-fi" link. It belongs to Ko-fi Labs Limited, is not covered by
+the MIT licence and is used only to link to the Ko-fi page.
