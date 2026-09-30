@@ -224,7 +224,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::atomic<float> targetFovY{0.0f};
     ViewHookStatus hooks;
 
-    // Cutscenes (camera hook thread only).
+    // Cutscenes and glory kills (camera hook thread only; the worker reads glory.flat()).
+    GloryKills glory{settings.gloryKills, settings.testGloryStart, settings.testGloryDuration};
     bool cutscene = false;
     ULONGLONG cutsceneSince = 0;
     std::uint64_t cutsceneChanges = 0;
@@ -276,8 +277,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t presentsWithoutView = 0;
     std::uint64_t presentSeqGapSum = 0;
 
-    // ViewHookSink
-    void onGameView(std::byte* renderView, std::byte* player) override;
+    void onGameView(std::byte* renderView, std::byte* player) override; // ViewHookSink
     // Logs cutscene changes and, with ETERNALVR_SKIP_CINEMATICS, holds the skip key during them.
     void trackCutscene(bool inCutscene);
     // Head aim: moves the player's view angles toward body + head; returns the body yaw axis when it

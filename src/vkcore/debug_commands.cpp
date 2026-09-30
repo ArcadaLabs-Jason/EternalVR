@@ -184,6 +184,11 @@ bool installDebugCommands() {
     return g_installed.load(std::memory_order_acquire);
 }
 
+double secondsInMap() {
+    const double since = g_playerInMap.load(std::memory_order_acquire);
+    return since > 0.0 ? nowSeconds() - since : -1.0;
+}
+
 void markPlayerInMap() {
     double expected = 0.0;
     if (g_playerInMap.compare_exchange_strong(expected, nowSeconds(), std::memory_order_acq_rel) &&

@@ -89,8 +89,8 @@ TEST_CASE("weapons are classed by their decl name, unknown ones as medium") {
 }
 
 TEST_CASE("vest columns: the front is seen from in front, the back from behind") {
-    CHECK(vestColumn(Device::VestFront, 0) == 3);
-    CHECK(vestColumn(Device::VestFront, 3) == 0);
+    CHECK(vestColumn(Device::VestFront, 0) == 0);
+    CHECK(vestColumn(Device::VestFront, 3) == 3);
     CHECK(vestColumn(Device::VestBack, 0) == 0);
     CHECK(vestColumn(Device::VestBack, 3) == 3);
 }

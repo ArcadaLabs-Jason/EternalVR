@@ -86,6 +86,9 @@ public:
     void onSpaceChange(std::optional<Pose> newInPrevious);
     // XR worker, once per XR frame: the fade to show now (0 clear, 1 black).
     float fade(double seconds);
+    // Camera hook: the view fades to black and stays black until `untilSeconds` (qpcSeconds clock), with the
+    // blink's timing; refreshed each game frame while a glory kill is shown as a fade (glory_view.hpp).
+    void holdBlack(double untilSeconds) { holdBlackUntil_.store(untilSeconds, std::memory_order_release); }
 
 private:
     // `lift`: the test head offset's height (ETERNALVR_TEST_HEAD_OFFSET), added to the head's height so a
@@ -168,6 +171,7 @@ private:
     std::atomic<double> leanSeconds_{0.0};
     // The blink over a re-anchor: the view is faded out until then (nowSeconds()).
     std::atomic<double> blinkUntil_{-1.0};
+    std::atomic<double> holdBlackUntil_{-1.0}; // holdBlack()
 
     // Worker only.
     roomscale::HeadFade fade_;

@@ -192,6 +192,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_SNAP_DEGREES", LauncherSettings.ClampSnapDegrees(s.SnapDegrees).ToString("0", CultureInfo.InvariantCulture));
             Set("ETERNALVR_TURN_RATE", LauncherSettings.ClampTurnRate(s.TurnRate).ToString("0", CultureInfo.InvariantCulture));
             Set("ETERNALVR_VIGNETTE", LauncherSettings.VignetteName(s.Vignette));
+            Set("ETERNALVR_GLORY_KILLS", LauncherSettings.GloryKillName(s.GloryKills));
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
@@ -231,6 +232,9 @@ namespace EternalVR.Launcher.Core.Launch
             }
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
+            // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
+            // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, absent when off.
+            if (stereo && s.Foveation != FoveationMode.Off) Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
             // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
             // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could
             // not undo them there. Absent when no item is on.

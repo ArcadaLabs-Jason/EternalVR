@@ -142,6 +142,9 @@ game::GameActionSet heldActions();
 // glory kill, the Meathook pull, a melee lunge, a scripted camera; forced_angles.hpp). False while the
 // controllers are off.
 bool forcedView();
+// Camera hook: whether `player` (the view's object) is the idPlayer and a sync or glory kill runs
+// (idPlayer::syncMaster set). False for any other object, and while the controllers are off.
+bool syncKillActive(const std::byte* player);
 
 // Any thread: the artificial motion of the last mapper run, for the comfort vignette: the turn rate (degrees
 // per second, smooth or snap, either direction) and the move stick's magnitude after its response (0 to 1).

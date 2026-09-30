@@ -317,6 +317,9 @@ bool safeRead(const std::byte* at, T& value) {
 // True when `object` is the idPlayer, with its vtable read safely (the pointer came from game memory).
 bool isPlayerSafe(const std::byte* object);
 
+// idPlayer::syncMaster's object: set while a sync or glory kill runs [inferred].
+inline constexpr std::size_t kPlayerSyncMaster = 0x7DA8 + 8;
+
 // The hand holding the weapon for the configured handedness.
 input::Hand weaponHand();
 

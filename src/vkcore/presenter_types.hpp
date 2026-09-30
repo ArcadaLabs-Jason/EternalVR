@@ -11,6 +11,7 @@
 #include "features/menu/enter_tick.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "ui_layer/ui_settings.hpp"
+#include "vkcore/glory_view.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/presenter_stereo.hpp"
 #include "vkcore/xr_presenter.hpp"
@@ -73,6 +74,13 @@ struct Settings {
     // as a flat display of that shape shows it, or `full` (the eye image as the game draws it;
     // cinema_view.hpp).
     double cinemaAspect = 16.0 / 9.0;
+    // ETERNALVR_GLORY_KILLS: how glory kills are shown, follow (default), steady, fade or screen
+    // (features/comfort/glory_kill.hpp).
+    comfort::GloryView gloryKills = comfort::GloryView::Follow;
+    // ETERNALVR_TEST_GLORY=start,duration: a glory kill forced for rig tests (GloryKills);
+    // a negative start is none.
+    double testGloryStart = -1.0;
+    double testGloryDuration = 0.0;
     // ETERNALVR_TEST_HEAD_SWAY=yaw,pitch,period: a sinusoidal head turn (degrees, seconds) added to the
     // tracked pose, for checking head tracking and head aim without a moving headset. An optional fourth
     // value (yaw,pitch,period,base) turns the head by `base` degrees of yaw first, so runs can be compared

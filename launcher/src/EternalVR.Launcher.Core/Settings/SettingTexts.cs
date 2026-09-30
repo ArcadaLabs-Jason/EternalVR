@@ -34,6 +34,13 @@ namespace EternalVR.Launcher.Core.Settings
                 + "leaving the middle clear. Less motion at the edges of your eyes helps if moving with the stick makes you "
                 + "feel sick. Strong narrows the view more than light. Moving your head never shows it.",
                 "Off", "Light", "Strong"),
+            [Setting.GloryKills] = new Text("Glory kills",
+                "How a glory kill is shown. Follow the camera: your view goes with the game's camera through the kill "
+                + "and turns with your head from there. Steady view: you still see the kill up close, but the view never "
+                + "turns on its own, only when you turn your head, and you face the same way after it. Fade out: the view "
+                + "goes dark for the kill and comes back when it ends. Flat screen: the kill plays on a flat screen in "
+                + "front of you, like a cutscene.",
+                "Follow the camera", "Steady view", "Fade out", "Flat screen"),
             [Setting.WalkInRoom] = new Text("Room-scale",
                 "Walking around your room moves the Slayer with you. Off: you can still lean and peek about 60 cm from where "
                 + "you recentered; past that the view fades until you step back or recenter."),
@@ -116,6 +123,12 @@ namespace EternalVR.Launcher.Core.Settings
                 + "in its video menu shows what runs in VR, and a change there is not used in VR and leaves your flat "
                 + "game's setting as it was. With TAA, the game's own DLSS setting is used: if it is on, DLSS runs in VR.",
                 "TAA (recommended)", "DLSS Quality", "DLSS Balanced", "DLSS Performance", "DLSS Ultra Performance", "Off"),
+            [Setting.Foveation] = new Text("Foveated rendering (experimental)",
+                "Shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames on the graphics "
+                + "card (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). It helps only when "
+                + "the graphics card is what limits the frame rate. Subtle keeps the most of each eye at full detail, Aggressive "
+                + "the least. NVIDIA RTX only; other cards ignore it. Off by default. Experimental.",
+                "Off", "Subtle", "Balanced", "Aggressive"),
             [Setting.TextureStreaming] = new Text("Texture streaming",
                 "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "

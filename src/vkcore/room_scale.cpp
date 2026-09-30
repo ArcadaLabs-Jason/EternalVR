@@ -396,8 +396,9 @@ float RoomScale::fade(double seconds) {
     const float pastCap = seconds - leanAt > kPenetrationStaleSeconds
                               ? 0.0f
                               : leanExcess_.load(std::memory_order_relaxed) - kLeanFadeStartMetres;
-    // The blink over a re-anchor fades out fully, whatever the head does.
-    const bool blink = seconds < blinkUntil_.load(std::memory_order_acquire);
+    // The blink over a re-anchor, and a glory kill shown as a fade, fade out fully whatever the head does.
+    const bool glory = seconds < holdBlackUntil_.load(std::memory_order_acquire);
+    const bool blink = seconds < blinkUntil_.load(std::memory_order_acquire) || glory;
     const float depth = blink ? 1.0f : std::max(inGeometry, pastCap);
     const float before = fade_.value();
     const float value = fade_.update(depth, dt);
@@ -405,7 +406,8 @@ float RoomScale::fade(double seconds) {
         contactSeconds_ = seconds - dt;
         deepSeconds_ = -1.0;
         loggedFull_ = false;
-        fadeCause_ = blink                   ? ""
+        fadeCause_ = glory                   ? "a glory kill started (shown as a fade)"
+                     : blink                 ? ""
                      : inGeometry >= pastCap ? "the head entered geometry"
                                              : "the head went past the lean cap";
     }
@@ -415,8 +417,10 @@ float RoomScale::fade(double seconds) {
     if (value >= 1.0f && !loggedFull_ && contactSeconds_ >= 0.0) {
         loggedFull_ = true;
         // The first time depends on how fast the head moved in; the second is the fade's own delay. A blink
-        // is not logged (the re-anchor it hides is).
-        if (*fadeCause_ != '\0') {
+        // is not logged (the re-anchor it hides is); a glory kill's fade gives the first time only.
+        if (glory) {
+            EVR_LOG("room: fade full %.0f ms after %s", (seconds - contactSeconds_) * 1000.0, fadeCause_);
+        } else if (*fadeCause_ != '\0') {
             EVR_LOG("room: fade full %.0f ms after %s, %.0f ms after it was 0.10 m deep",
                     (seconds - contactSeconds_) * 1000.0, fadeCause_,
                     deepSeconds_ >= 0.0 ? (seconds - deepSeconds_) * 1000.0 : 0.0);

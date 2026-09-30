@@ -24,6 +24,7 @@
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/vrs_nv.hpp"
 #include "vkcore/xr_presenter.hpp"
 
 #include <windows.h>
@@ -387,6 +388,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
     cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
     stall_watch::onDeviceCreated(*data, inst->isGame && !t_passThrough); // always on, after the dump
+    vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate); // ETERNALVR_VRS_TEST, innermost of the chain
 
     std::unique_lock lock(g_mapMutex);
     g_devices[keyOf(*pDevice)] = std::move(data);
@@ -461,7 +463,9 @@ PFN_vkVoidFunction findDeviceHook(const char* name) {
     const PFN_vkVoidFunction cpu = cpu_timing::findHook(name); // chains to the GPU timing's, UI's or dump's
     const PFN_vkVoidFunction timing = gpu_timing::findHook(name); // chains to the UI layer's where both hook
     const PFN_vkVoidFunction ui = ui_vulkan::findHook(name); // chains to the shader dump's where both hook
-    return cpu ? cpu : timing ? timing : ui ? ui : shader_dump::findHook(name);
+    const PFN_vkVoidFunction dump =
+        shader_dump::findHook(name); // chains to the VRS experiment's where both hook
+    return cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : vrs_nv::findHook(name);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, const char* pName);

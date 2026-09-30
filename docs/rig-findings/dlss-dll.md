@@ -149,7 +149,7 @@ Log lines (prefix `dlss:`; NGX's own lines are `ngx[level/feature]: ...`):
   `dlss: NGX loaded <game folder>\nvngx_dlss.dll (version 2.3.0.0), not <path>: the newer DLL is NOT in use [...]`
 - `dlss: DLSS feature create #N: result 0x00000001, feature <id>, preset K`
 
-## 7. Rig check (not run yet)
+## 7. Rig check
 
 Build: this branch; the DLL above in `<workspace>\tmp-vr\dlss\310.9.1\`. Stereo, any map, Anti-aliasing
 DLSS Quality (`ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_STEREO_DLSS_QUALITY=quality`, `+r_antialiasing 2`).
@@ -170,3 +170,20 @@ DLSS Quality (`ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_STEREO_DLSS_QUALITY=quality`
 Record the `ngx[...]` lines around the DLL load (with `ETERNALVR_DLSS_NGX_LOG=verbose` if the default level says
 nothing about the path or preset), the per-eye GPU times against 2.3 (`ETERNALVR_GPU_TIMING=1`), and what the
 search order turned out to be, in this section.
+
+### Results (2026-09-30, the Windows rig: RTX 4080, driver 616.92, Steam build 25216728, OpenXR simulator)
+
+Dev main 19f4e9d, Route S, e1m2_battle, `ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_STEREO_DLSS_QUALITY=quality`,
+`+r_antialiasing 2`, the DLL of section 2 (310.9.1.0) in `tmp-vr\dlss\310.9.1\`. Every run clean.
+
+| Step | Result |
+| --- | --- |
+| 1. Off | No `dlss:` line; eye R gets its own feature for each of the game's two (`created (2, result 0x1)`, `(4, result 0x1)`). Pass. |
+| 2. Route `path`, preset K | `NVSDK_NGX_VULKAN_Init with 1 folder(s) in the search path, first ...\310.9.1 ...: 0x00000001`, `using ...\310.9.1\nvngx_dlss.dll (version 310.9.1.0)` after Init, after the first feature and after the second; four `DLSS feature create` lines, all `result 0x00000001` and `preset K`; eye R's twins made for features 1 and 3; no `NOT in use`, no fallback to TAA. Pass: the driver takes the DLL's folder first, so step 3 (`redirect`) was not needed. |
+| 4. Fail safe | A missing file: `not using ...: the file does not exist; the game's own nvngx_dlss.dll is used`. A renamed copy (`nvngx_dlss_310.dll`): `not using ...: the file is not named nvngx_dlss.dll; ...`. DLSS per eye as in step 1 both times. Pass. |
+| 5. Preset default | `preset the DLL's own` on the creates. Pass. |
+| 6. Map change | A scheduled `map game/sp/e1m3_cult/e1m3_cult` loads the new map with DLSS evaluated for both eyes (1072 eye L / 1071 eye R in 10 s, none without a twin), but the game keeps its DLSS features across the map change at the same size, so nothing is recreated and no create line follows. A quality change (which recreates them) was not scripted. |
+
+NGX's own log on this machine shows an override in its config (`[dlss_override] app_E658700=310.9.0`, left by an
+override tool); with the route the loaded DLL was still ours. NGX cannot write `base/generated/nvsdk_ngx.log`
+(a warning only). Sharpness in the headset and per-eye GPU times were not measured on the simulator.

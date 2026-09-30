@@ -53,6 +53,10 @@ namespace EternalVR.Launcher.Core.Settings
     /// <c>r_dlssQuality</c> 3 to 0): how large the image DLSS scales up from is.</summary>
     public enum DlssQuality { Quality, Balanced, Performance, UltraPerformance }
 
+    /// <summary>Fixed foveated rendering in stereo (the layer's <c>ETERNALVR_FOVEATION</c>, experimental, NVIDIA RTX only): the edges
+    /// of each eye shaded at a lower rate, from the gentlest preset to the strongest.</summary>
+    public enum FoveationMode { Off, Subtle, Balanced, Aggressive }
+
     /// <summary>What the game's desktop window shows during stereo (the layer's <c>ETERNALVR_MIRROR</c>): one eye, or black.</summary>
     public enum MirrorMode { Left, Right, Off }
 
@@ -76,7 +80,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier,
     /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, bhaptics and bhaptics_intensity.
+    /// revenant_aim, bhaptics, bhaptics_intensity, foveation and glory_kills.
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
     /// scale, cutscene and argument choices and takes the new defaults for the rest (stereo, controllers on,
@@ -183,6 +187,8 @@ namespace EternalVR.Launcher.Core.Settings
         public string DlssDllPath { get; set; } = string.Empty;
         /// <summary>The DLSS render preset with the player's DLL (<see cref="Settings.DlssDll.PresetValues"/>).</summary>
         public string DlssPreset { get; set; } = "default";
+        /// <summary>Fixed foveated rendering in stereo (<see cref="FoveationMode"/>); off by default.</summary>
+        public FoveationMode Foveation { get; set; } = FoveationMode.Off;
         /// <summary>Room-scale walking: the body follows the head (the layer's <c>ETERNALVR_BODY_FOLLOW</c>).</summary>
         public bool BodyFollow { get; set; } = true;
         /// <summary>The layer's <c>ETERNALVR_AIM_SMOOTHING</c>, 0 to 1.</summary>
@@ -234,7 +240,7 @@ namespace EternalVR.Launcher.Core.Settings
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_dll_path", "dlss_preset", "cpu_saver", "body_follow", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "mirror_display",
-            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "alternate_eyes", "extra_args", "profile",
+            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "foveation", "extra_args", "profile",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -329,6 +335,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("turn_rate", out var tr) && double.TryParse(tr, NumberStyles.Float, CultureInfo.InvariantCulture, out var rate))
                 s.TurnRate = ClampTurnRate(rate);
             if (map.TryGetValue("vignette", out var vg)) s.Vignette = Pick(vg, VignetteMode.Off, ("light", VignetteMode.Light), ("strong", VignetteMode.Strong));
+            if (map.TryGetValue("glory_kills", out var gk)) s.GloryKills = ParseGloryKills(gk);
             if (map.TryGetValue("handedness", out var hd)) s.Hand = Pick(hd, Handedness.Right, ("left", Handedness.Left), ("left_mirror", Handedness.LeftMirrored));
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
             if (map.TryGetValue("locomotion", out var lm)) s.Locomotion = Pick(lm, LocomotionMode.Head, ("hand", LocomotionMode.Hand));
@@ -343,6 +350,8 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("dlss_dll", out var dd)) s.DlssDll = Pick(dd, DlssDllChoice.Game, ("file", DlssDllChoice.File));
             if (map.TryGetValue("dlss_dll_path", out var dp2)) s.DlssDllPath = dp2;
             if (map.TryGetValue("dlss_preset", out var dps)) s.DlssPreset = Settings.DlssDll.NormalisePreset(dps);
+            if (map.TryGetValue("foveation", out var fv))
+                s.Foveation = Pick(fv, FoveationMode.Off, ("subtle", FoveationMode.Subtle), ("balanced", FoveationMode.Balanced), ("aggressive", FoveationMode.Aggressive));
             if (map.TryGetValue("cpu_saver", out var cs)) s.CpuSaverAllOn = On(cs);
             s.CpuSaverChoices = order.Where(IsCpuSaverKey).Select(k => (Key: k.Substring(CpuSaverKeyPrefix.Length).ToLowerInvariant(), On: Switch(map[k])))
                 .Where(x => x.On.HasValue).Select(x => new KeyValuePair<string, bool>(x.Key, x.On.Value)).ToList();
@@ -412,6 +421,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("snap_degrees = " + ClampSnapDegrees(SnapDegrees).ToString("0", CultureInfo.InvariantCulture));
             sb.AppendLine("turn_rate = " + ClampTurnRate(TurnRate).ToString("0", CultureInfo.InvariantCulture));
             sb.AppendLine("vignette = " + VignetteName(Vignette));
+            sb.AppendLine("glory_kills = " + GloryKillName(GloryKills));
             sb.AppendLine("handedness = " + HandednessName(Hand));
             sb.AppendLine("locomotion = " + LocomotionName(Locomotion));
             sb.AppendLine("dossier = " + DossierName(Dossier));
@@ -424,6 +434,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("dlss_dll = " + (DlssDll == DlssDllChoice.File ? "file" : "game"));
             sb.AppendLine("dlss_dll_path = " + OneLine(DlssDllPath));
             sb.AppendLine("dlss_preset = " + Settings.DlssDll.NormalisePreset(DlssPreset));
+            sb.AppendLine("foveation = " + FoveationName(Foveation));
             if (CpuSaverAllOn) sb.AppendLine("cpu_saver = on");
             foreach (var kv in CpuSaverChoices) sb.AppendLine(CpuSaverKeyPrefix + kv.Key + " = " + (kv.Value ? "on" : "off"));
             sb.AppendLine("body_follow = " + (BodyFollow ? "1" : "0"));
@@ -509,6 +520,10 @@ namespace EternalVR.Launcher.Core.Settings
         public static string DlssQualityName(DlssQuality q) =>
             q == DlssQuality.Balanced ? "balanced" : q == DlssQuality.Performance ? "performance"
             : q == DlssQuality.UltraPerformance ? "ultra_performance" : "quality";
+
+        /// <summary>The settings file's and the layer's <c>ETERNALVR_FOVEATION</c> value: off, subtle, balanced or aggressive.</summary>
+        public static string FoveationName(FoveationMode f) =>
+            f == FoveationMode.Subtle ? "subtle" : f == FoveationMode.Balanced ? "balanced" : f == FoveationMode.Aggressive ? "aggressive" : "off";
 
         /// <summary>The Anti-aliasing row's choice (SettingTexts' order): TAA, the four DLSS qualities, then off.</summary>
         public static int AntiAliasingChoice(LauncherSettings s) =>

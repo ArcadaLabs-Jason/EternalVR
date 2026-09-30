@@ -25,4 +25,7 @@ bool installDebugCommands();
 // The player is in a map: the schedule's clock starts at the first call. Cheap; any thread.
 void markPlayerInMap();
 
+// Seconds on the schedule's clock (since markPlayerInMap), or a negative value before it. Any thread.
+double secondsInMap();
+
 } // namespace evr::vkcore

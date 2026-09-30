@@ -24,8 +24,18 @@ struct DeviceAugment {
     VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR release{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
 
+    // VK_NV_shading_rate_image's feature (vrs_nv.hpp, ETERNALVR_VRS_TEST), in front of the chain when set.
+    VkPhysicalDeviceShadingRateImageFeaturesNV* shadingRate = nullptr;
+
     // The pNext chain to create the device with.
-    [[nodiscard]] const void* head() const { return releaseImages ? &release : features.head(); }
+    [[nodiscard]] const void* head() const {
+        const void* rest = releaseImages ? static_cast<const void*>(&release) : features.head();
+        if (!shadingRate) {
+            return rest;
+        }
+        shadingRate->pNext = const_cast<void*>(rest);
+        return shadingRate;
+    }
     // Takes the swapchain maintenance additions out again (a create that failed with them).
     void dropRelease();
 };

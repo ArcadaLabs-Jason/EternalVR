@@ -317,6 +317,12 @@ bool forcedView() {
     return s.attached.load(std::memory_order_acquire) && s.yielding.load();
 }
 
+bool syncKillActive(const std::byte* player) {
+    const std::byte* sync = nullptr;
+    return state().attached.load(std::memory_order_acquire) && isPlayerSafe(player) &&
+           safeRead(player + kPlayerSyncMaster, sync) && sync != nullptr;
+}
+
 std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
     State& s = state();
     const input::ControllerSettings& cfg = settings();

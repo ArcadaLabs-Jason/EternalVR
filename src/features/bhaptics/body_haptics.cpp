@@ -89,7 +89,8 @@ int motorCount(Device device) {
 
 int vestColumn(Device side, int wearerColumn) {
     const int c = std::clamp(wearerColumn, 0, kVestColumns - 1);
-    return side == Device::VestFront ? kVestColumns - 1 - c : c;
+    (void)side; // both sides count from the wearer's left
+    return c;
 }
 
 const char* effectName(Effect effect) {

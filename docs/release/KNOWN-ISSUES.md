@@ -10,9 +10,10 @@ them is worse for you than described here.
   health, armour and ammo on the inside of your off hand's wrist instead, or the ammo just above the back
   of the gun in your weapon hand. Both are experimental and have not been tried in a headset yet. The ammo
   sits in one place for every weapon, so on some guns it may float a little off the gun.
-- **Glory kills keep the game's camera.** The game moves the camera during a glory kill; in VR the view
-  follows it, facing the demon, and turns with your head from there. The kills are short, but if camera
-  motion bothers you, this is where you will feel it. Cutscenes play on a flat 16:9 screen in front of you
+- **Glory kills keep the game's camera by default.** The game moves the camera during a glory kill; in VR
+  the view follows it, facing the demon, and turns with your head from there. If camera motion bothers you,
+  the Play tab's "Glory kills" setting keeps the view steady, fades it out, or shows the kill on a flat
+  screen instead; these are new and have not been tried in a headset yet. Cutscenes play on a flat 16:9 screen in front of you
   with the game's own camera (`ETERNALVR_CUTSCENES=immersive` puts you in the cutscene's camera instead).
 - **Room-scale walking is new and lightly tested.** When you step around the room while standing, the
   Slayer walks after you in short pulses, so you may hear footsteps start and stop. It has been tested
@@ -96,9 +97,10 @@ them is worse for you than described here.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.
-- **Frame rate.** Stereo renders every frame twice, and there is no foveated rendering yet. Slower cards
-  than the tested RTX 4080 may struggle; a player's RTX 3070 plays well with DLSS Performance and preset J
-  (see "Which DLSS preset should I use?" in `TROUBLESHOOTING.md`).
+- **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
+  player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
+  `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
+  experimental and off by default.
 - **Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
   (on by default) has the game load only the texture detail the current view needs, which gave about 8% more
   frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
@@ -127,9 +129,9 @@ them is worse for you than described here.
   and there is no wall check yet.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
   strength and feel may change.
-- **bHaptics** (bHaptics (experimental) on the Play tab) is experimental and untested on hardware: the
-  messages have been checked against a stand-in for the bHaptics Player, not a real suit. Which side of
-  the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms them.
+- **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. A tester's suit showed the front
+  of the vest mirrored in 0.1.5, fixed in 0.1.6; whether hits from behind land on the right side of your
+  back has not been confirmed yet.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
   right of centre.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is

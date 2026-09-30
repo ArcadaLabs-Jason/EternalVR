@@ -5,6 +5,7 @@
 
 #include "vkcore/log.hpp"
 #include "vkcore/shader_dump_impl.hpp"
+#include "vkcore/vrs_nv.hpp"
 
 #include <windows.h>
 
@@ -420,8 +421,12 @@ void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcA
     }
     auto* d = new DumpDevice; // freed with the device; the loader keeps no pointer to it
     d->device = device;
-#define EVR_DUMP_LOAD_FN(name)                                                                               \
-    d->name = reinterpret_cast<PFN_vk##name>(nextGetDeviceProcAddr(device, "vk" #name));
+    // The VRS experiment's hooks sit between this one and the next layer where both hook a function.
+    const auto next = [&](const char* name) {
+        const PFN_vkVoidFunction vrs = vrs_nv::findHook(name);
+        return vrs ? vrs : nextGetDeviceProcAddr(device, name);
+    };
+#define EVR_DUMP_LOAD_FN(name) d->name = reinterpret_cast<PFN_vk##name>(next("vk" #name));
     EVR_DUMP_FUNCTIONS(EVR_DUMP_LOAD_FN)
 #undef EVR_DUMP_LOAD_FN
     if (!d->CmdDrawIndirectCount) {

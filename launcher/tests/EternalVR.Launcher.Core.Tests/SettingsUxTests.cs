@@ -181,7 +181,7 @@ namespace EternalVR.Launcher.Core.Tests
             var s = new LauncherSettings { Controllers = false };
             foreach (var setting in new[]
             {
-                Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
+                Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.GloryKills, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
                 Setting.XButton, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.Bhaptics, Setting.RevenantAimWith,
             })
@@ -217,7 +217,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Resolution, Setting.AntiAliasing, Setting.TextureStreaming, Setting.CpuSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
-                Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace,
+                Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace, Setting.Foveation,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime })
@@ -238,6 +238,7 @@ namespace EternalVR.Launcher.Core.Tests
             void Choices<T>(Setting setting) => Assert.Equal(Enum.GetValues(typeof(T)).Length, SettingTexts.For(setting).Choices.Count);
             Choices<TurnMode>(Setting.Turning);
             Choices<VignetteMode>(Setting.Vignette);
+            Choices<GloryKillView>(Setting.GloryKills);
             Choices<PostureMode>(Setting.PlayPosition);
             Choices<HeightMode>(Setting.EyeHeight);
             Choices<AimMode>(Setting.AimWith);
@@ -248,6 +249,7 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<WheelSelect>(Setting.WeaponWheel);
             // The anti-aliasing row: TAA, one choice per DLSS quality, then off (LauncherSettings.AntiAliasingChoice).
             Assert.Equal(2 + Enum.GetValues(typeof(DlssQuality)).Length, SettingTexts.For(Setting.AntiAliasing).Choices.Count);
+            Choices<FoveationMode>(Setting.Foveation);
             Choices<VrMode>(Setting.VrMode);
             Choices<MirrorMode>(Setting.DesktopWindow);
             Choices<CutsceneView>(Setting.CutsceneView);

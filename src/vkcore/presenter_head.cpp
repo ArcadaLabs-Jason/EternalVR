@@ -26,6 +26,10 @@ namespace evr::vkcore {
 
 namespace {
 
+// While a glory kill is shown as a fade, the camera hook holds the view black this far ahead, again each
+// frame.
+constexpr double kGloryBlackRefreshSeconds = 0.1;
+
 // The body yaw turning more than 90 degrees in one game frame (a stick turn never does): logged with what
 // drove the view, to find the rare instant half turn seen once in a seated glory kill (the owner's Quest 3,
 // 2026-09-28). Camera hook thread only.
@@ -66,14 +70,24 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         return;
     }
     trackCutscene(renderView[render_view::kInCutscene] != std::byte{0});
-    cinemaView.onGameView(reinterpret_cast<float*>(renderView + render_view::kFovX),
-                          cutscene && settings.cutsceneCinema, settings.cinemaAspect);
+    // Glory kills (glory_view.hpp): on the flat screen, faded out, or with a steady heading (below).
+    const double now = qpcSeconds(qpcNow());
+    if (glory.frame(player, controllers::forcedView(), now).started && glory.onScreen()) {
+        replaceScreen.store(true, std::memory_order_release);
+    }
+    if (glory.black()) {
+        room.holdBlack(now + kGloryBlackRefreshSeconds);
+    }
+    const bool flatScreen = (cutscene && settings.cutsceneCinema) || glory.onScreen();
+    cinemaView.onGameView(reinterpret_cast<float*>(renderView + render_view::kFovX), flatScreen,
+                          settings.cinemaAspect);
     if (!trackingReady.load(std::memory_order_acquire)) {
         return;
     }
-    if (cutscene && settings.cutsceneCinema) {
-        // The cutscene keeps the game's camera and view; without a head-tracked view its frames go to the
-        // flat screen (kViewStaleSeconds), placed in front of the head when the cutscene started.
+    if (flatScreen) {
+        // The cutscene (or glory kill) keeps the game's camera and view; without a head-tracked view its
+        // frames go to the flat screen (kViewStaleSeconds, or at once for a glory kill: GloryKills::flat),
+        // placed in front of the head when it started.
         return;
     }
     auto* fov = reinterpret_cast<float*>(renderView + render_view::kFovX);
@@ -186,6 +200,11 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         ++gameViewsSkipped;
         return;
     }
+    if (const std::optional<float> steady = glory.steadyYaw()) {
+        // A glory kill shown steady: the view stays on the kill's eye with the heading it had before it.
+        body = xr_math::axisFromAngles({0.0f, *steady, 0.0f});
+    }
+    glory.noteBody(xr_math::anglesFromAxis(*body).yaw);
     watchBodyYaw(xr_math::anglesFromAxis(*body).yaw, headAimed, roomIn.forcedView, cutscene,
                  menuUp.load(std::memory_order_relaxed));
     if (anim.active) {
@@ -465,7 +484,17 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
     if (!xr_math::plausible(head)) {
         return std::nullopt;
     }
-    const xr_math::HeadAimStep step = xr_math::headAimStep(aimState, game, current.yaw, head, rewrote);
+    xr_math::HeadAimStep step = xr_math::headAimStep(aimState, game, current.yaw, head, rewrote);
+    if (const std::optional<float> steady = glory.restoreYaw(qpcSeconds(qpcNow()))) {
+        // After a glory kill shown steady the view still has the heading it kept, while the game's aim
+        // ended where the kill left it: the aim turns back to the view instead of the view to the aim.
+        const float turn = xr_math::normalize180(*steady - step.bodyYaw);
+        if (std::fabs(turn) > 0.05f) {
+            step.deltaYaw = xr_math::normalize180(step.deltaYaw + turn);
+            step.bodyYaw = *steady;
+            glory.noteRestored(turn);
+        }
+    }
     if (step.restoredWrite) {
         ++aimRestores;
     }
@@ -548,8 +577,8 @@ void XrPresenter::Impl::onRenderLatch(const std::byte* renderView, const float* 
 bool XrPresenter::Impl::latestView(ViewRecord& out, std::uint64_t& gap) {
     std::lock_guard lock(historyMutex);
     gap = 0;
-    if (latestSeq == 0) {
-        return false;
+    if (latestSeq == 0 || glory.flat()) {
+        return false; // no view yet, or a glory kill on the flat screen
     }
     // The view the render thread latched most recently is the frame being presented, if the latch
     // hook matched one; otherwise the newest game view.

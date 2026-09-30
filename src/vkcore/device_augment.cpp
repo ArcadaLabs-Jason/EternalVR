@@ -2,6 +2,7 @@
 
 #include "vkcore/log.hpp"
 #include "vkcore/status_file.hpp"
+#include "vkcore/vrs_nv.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -85,6 +86,7 @@ void planDeviceAugment(DeviceAugment& plan,
         return;
     }
     plan.ok = true;
+    plan.shadingRate = vrs_nv::planDevice(inst, physicalDevice, plan.extensions);
 
     // Optional: the window's presents (Route S). Leaves the interop plan as it is when unavailable.
     // The swapchain extension of the same family as the instance's surface one (KHR, or the older EXT).

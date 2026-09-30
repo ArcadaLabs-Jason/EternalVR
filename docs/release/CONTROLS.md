@@ -204,6 +204,7 @@ are the same whichever profile is picked.
 | Turn speed | Smooth turning's speed, 150 to 400 degrees per second | 230 |
 | Snap angle | Snap turning's step, 15 to 90 degrees | 45 |
 | Vignette | Off, Light, Strong: darkens the edges of your view while the stick moves or turns you (and during a dash or a glory kill), which helps if stick motion makes you feel sick; moving your head never shows it | Off |
+| Glory kills | Follow the camera (your view goes with the game's camera through the kill), Steady view (you see the kill up close but the view only turns when you turn your head, and you face the same way afterwards), Fade out (the view goes dark for the kill), Flat screen (the kill plays on a flat screen in front of you, like a cutscene) | Follow the camera |
 | Room-scale | Walking around your room moves you in the game; off, you can lean about 60 cm before the view fades | On |
 | Recenter hold | Hold both sticks pressed for 2 seconds to recenter | On |
 | Skip cutscenes | Skip cutscenes automatically (the start of the very first one cannot be skipped; off: hold B to skip one) | On |
@@ -223,6 +224,7 @@ are the same whichever profile is picked.
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
 | Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card), DLSS (experimental, NVIDIA RTX only) | TAA |
+| Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
 
 ### Advanced tab
 

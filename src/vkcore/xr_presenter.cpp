@@ -52,6 +52,27 @@ Settings readSettings() {
     if (readEnv(L"ETERNALVR_CUTSCENES", value) && _wcsicmp(value.c_str(), L"immersive") == 0) {
         s.cutsceneCinema = false;
     }
+    if (readEnv(L"ETERNALVR_GLORY_KILLS", value) && !value.empty()) {
+        std::string narrow;
+        for (const wchar_t c : value) {
+            narrow.push_back(c < 0x80 ? static_cast<char>(c) : '?');
+        }
+        if (const auto view = comfort::parseGloryView(narrow)) {
+            s.gloryKills = *view;
+            EVR_LOG("glory: ETERNALVR_GLORY_KILLS=%s", comfort::gloryViewName(*view));
+        } else {
+            EVR_LOG("glory: ETERNALVR_GLORY_KILLS '%ls' is not follow, steady, fade or screen; follow",
+                    value.c_str());
+        }
+    }
+    if (readEnv(L"ETERNALVR_TEST_GLORY", value) && !value.empty()) {
+        double start = -1.0, duration = 0.0;
+        if (swscanf_s(value.c_str(), L"%lf,%lf", &start, &duration) == 2 && std::isfinite(start) &&
+            std::isfinite(duration) && start >= 0.0 && duration > 0.0) {
+            s.testGloryStart = start;
+            s.testGloryDuration = duration;
+        }
+    }
     if (readEnv(L"ETERNALVR_CINEMA_ASPECT", value) && !value.empty()) {
         if (const auto aspect = render_size::parseAspect(value)) {
             s.cinemaAspect = *aspect;

@@ -5,8 +5,11 @@ and the motion controllers (`docs/VR_CONTROLLERS.md`). The owner's request (D-03
 at the bottom of the left wrist, with the head-locked HUD kept as an option; and both hands
 moving freely.
 
-**Status.** Built and unit-tested; **not yet run in the game or a headset**. All are opt-in until the live
-checks below pass: the head-locked panel stays the default HUD and the wrist or the weapon is one setting
+**Status.** Built, unit-tested and checked in the game on the rig with OpenXR-Simulator (2026-09-28: the
+wrist HUD shows at a watch glance, hides with the hand down, forward or turned away, does not flicker at
+the threshold, and hides under the pause menu); **not yet tried in a headset**, and glory kills, cutscenes
+and real head motion are not scriptable on the rig. All are opt-in until the headset checks pass, and the
+wrist HUD becomes a default only together with the free off hand: the head-locked panel stays the default HUD and the wrist or the weapon is one setting
 away (`ETERNALVR_HUD=wrist` or `weapon`, or the launcher's Advanced tab); the free off hand needs
 `ETERNALVR_OFFHAND=free`.
 

@@ -91,7 +91,6 @@ constexpr std::size_t kHandsHiddenReasons = 0x29A0;    // idHands::hiddenReasons
 constexpr std::size_t kHandsPendingAction = 0x8CD0;    // idHands::pendingAction.action
 constexpr std::size_t kHandsFlags = 0x8DA0;            // idHands::handsFlags
 constexpr std::size_t kPlayerFpHandsDisabled = 0x5C28; // idPlayer::disableFPHandsReasons
-constexpr std::size_t kPlayerSyncMaster = 0x7DA8 + 8;  // idPlayer::syncMaster's object [inferred]
 
 // A probe modifier never reaches further than this from the animated pose, nor the wrist in free mode.
 constexpr float kMaxReachMetres = 1.5f;

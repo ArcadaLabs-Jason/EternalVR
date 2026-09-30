@@ -8,6 +8,7 @@
 
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/vrs_nv.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -139,6 +140,7 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
                               Vec3{v.pose.position.x, v.pose.position.y, v.pose.position.z}};
         eyes[i].pose = xr_math::eyeInHeadFromSpace(rawHead, eyeInSpace);
         eyes[i].fov = fromXr(v.fov);
+        vrs_nv::noteEye(static_cast<int>(i), eyes[i].fov, eyes[i].pose.orientation); // ETERNALVR_VRS_TEST
         if (!xr_math::plausibleEyeInHead(eyes[i].pose)) {
             ++eyesMissing;
             if (eyesMissing <= 3) {

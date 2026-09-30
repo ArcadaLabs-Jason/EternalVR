@@ -88,6 +88,25 @@ yet).
   subtitles included, sits in that band already, section 6 of docs/rig-findings/render-size.md). A game FOV
   that is already taller than wide on a tall image (the game kept the width) keeps its horizontal FOV. The
   log's `cinema: cutscene fov ...` line gives the game's FOV, the one drawn and the rows shown.
+- Glory kills (`ETERNALVR_GLORY_KILLS`, `features/comfort/glory_kill.hpp`, `vkcore/glory_view.hpp`; M7, REQ-15).
+  A glory kill is the game's sync kill: `idPlayer::syncMaster` is set while it runs (the camera hook reads
+  it for the view's object once it is the idPlayer, with the controllers on). The chainsaw's kills are sync
+  kills too [inferred], so they are shown the same way. An episode starts with the
+  flag and ends when the flag has cleared and the game no longer forces the view, at most 0.5 s later
+  (`glory: kill N starts (...)` / `ends`, for the first 30). What the headset shows:
+  - `follow` (default): as above, the view faces where the kill's camera points and turns with the head
+    from there; the camera's own pitch and roll never reach the view.
+  - `steady`: the view stays on the kill's animated eye (the head's room offset eases out as for any driven
+    view, docs/VR_ROOMSCALE.md) but keeps the body yaw it had the frame before the kill, so only the head
+    turns it. When the kill ends, head aim turns the game's aim back to that heading (logged once per kill,
+    `glory: the aim turned back ... deg`) for 0.5 s in case the game rewrites the aim as it lets go, so the
+    view never turns on its own at either end. With `ETERNALVR_AIM=view` there is no head aim to turn the
+    game's aim back, and the view takes the game's heading when the kill ends.
+  - `fade`: the view fades to black while the kill runs and back in when it ends, with the room-scale
+    blink's timing (black within 0.10 s, clear 0.25 s after; `RoomScale::holdBlack`).
+  - `screen`: the kill plays on the flat screen in front of the head, as a cutscene does (the same screen
+    shape and placement). The camera hook leaves the game's view alone for those frames, and the worker
+    stops showing head-tracked views at once (`GloryKills::flat`), not after the 0.25 s a cutscene takes.
 - Window size: `ETERNALVR_WINDOW=x,y,width,height` moves the game window and sizes its client area in
   `vkCreateWin32SurfaceKHR`, before the first swapchain. The game clamps `r_windowWidth/Height` to the
   primary display's work area, so this is how a larger render (on the rig's virtual display) is set.
@@ -116,6 +135,8 @@ yet).
 | `ETERNALVR_SKIP_CINEMATICS` | 0 | 1 holds the skip key while a cutscene plays |
 | `ETERNALVR_CAMERA_ANIMATIONS` | 0 | 1 plays a hands animation's camera rotation (5 degrees or more) on top of the head-tracked view |
 | `ETERNALVR_CAMERA_ANIM_MIN` | 5 | degrees (0.5 to 45): where the camera animation ramp starts (full at twice), for rig tests |
+| `ETERNALVR_GLORY_KILLS` | follow | how glory kills are shown: `follow`, `steady`, `fade` or `screen` (Glory kills, above) |
+| `ETERNALVR_TEST_GLORY` | unset | `start,duration` (seconds on the `ETERNALVR_DEBUG_COMMANDS` clock): a glory kill is taken to run then, whatever the game does, to check each option on the rig without a staggered demon |
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
 | `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
 | `ETERNALVR_TEST_XR_LOSS` | unset | seconds: once the session has run this long, it is taken as lost (as if the headset had gone away) and the worker reconnects (ARCHITECTURE section 6, session state) |

@@ -7,7 +7,7 @@ namespace EternalVR.Launcher.Core.Settings
     public enum Setting
     {
         // Play: comfort
-        Turning, TurnSpeed, SnapAngle, Vignette, WalkInRoom, RecenterHold, SkipCutscenes,
+        Turning, TurnSpeed, SnapAngle, Vignette, GloryKills, WalkInRoom, RecenterHold, SkipCutscenes,
         // Play: body
         PlayPosition, EyeHeight,
         // Play: gestures
@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: controls
         AimWith, RevenantAimWith, WeaponHand, MoveToward, XButton, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, AntiAliasing, TextureStreaming, CpuSaver,
+        Resolution, AntiAliasing, Foveation, TextureStreaming, CpuSaver,
         // Advanced
         VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape,
         HudDistance, HudSize, HudHeight, HudPlace, DlssVersion, DlssPreset,
@@ -50,6 +50,7 @@ namespace EternalVR.Launcher.Core.Settings
             {
                 case Setting.Turning:
                 case Setting.Vignette:
+                case Setting.GloryKills:
                 case Setting.RecenterHold:
                 case Setting.WeaponHand:
                 case Setting.MoveToward:
@@ -84,6 +85,7 @@ namespace EternalVR.Launcher.Core.Settings
                     return !s.Controllers ? NeedsControllers : stereo ? null : NeedsStereo;
                 case Setting.Resolution:
                 case Setting.AntiAliasing:
+                case Setting.Foveation:
                 case Setting.AlternateEyes:
                 case Setting.TextureStreaming:
                 case Setting.CpuSaver:

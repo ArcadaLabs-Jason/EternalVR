@@ -52,9 +52,9 @@ inline constexpr int kSleeveMotors = 6;
 
 int motorCount(Device device);
 
-// On VestFront, column 0 is the wearer's right side (the Player's front view shows the vest as seen from
-// in front); on VestBack, column 0 is the wearer's left (seen from behind). vestColumn gives the column of
-// a side for a wearer-relative column (0 = the wearer's far left, 3 = far right).
+// On both sides of the vest, column 0 is the wearer's left: a tester's suit felt right-handed recoil on the
+// left of the chest while the front was taken to count from the wearer's right (public issue #1). vestColumn
+// gives the column of a side for a wearer-relative column (0 = the wearer's far left, 3 = far right).
 int vestColumn(Device side, int wearerColumn);
 
 struct Dot {

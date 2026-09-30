@@ -7,6 +7,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/vram_watch.hpp"
+#include "vkcore/vrs_nv.hpp"
 #include "vkcore/window_timing.hpp"
 
 #include <atomic>
@@ -234,6 +235,9 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateMemory(VkDevice device,
 PFN_vkVoidFunction chained(DeviceData& data, const char* name) {
     if (const PFN_vkVoidFunction dump = shader_dump::findHook(name)) {
         return dump;
+    }
+    if (const PFN_vkVoidFunction vrs = vrs_nv::findHook(name)) {
+        return vrs;
     }
     return data.nextGetDeviceProcAddr(data.device, name);
 }

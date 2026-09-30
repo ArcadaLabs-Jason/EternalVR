@@ -91,6 +91,7 @@ evr_add_test(evr_roomscale_tests
 
 evr_add_test(evr_comfort_tests
     SOURCES
+        features/comfort/glory_kill_tests.cpp
         features/comfort/vignette_tests.cpp
     DEPENDS evr_comfort)
 
@@ -98,6 +99,7 @@ evr_add_test(evr_foveation_tests
     SOURCES
         features/foveation/foveation_preset_tests.cpp
         features/foveation/foveation_region_tests.cpp
+        features/foveation/rate_pattern_tests.cpp
     DEPENDS evr_foveation)
 
 evr_add_test(evr_input_tests

@@ -51,6 +51,7 @@ add_library(evr_layer SHARED
     game_build.cpp
     game_code.cpp
     game_text.cpp
+    glory_view.cpp
     gpu_timing.cpp
     gpu_timing_report.cpp
     head_sweep.cpp
@@ -136,6 +137,7 @@ target_sources(evr_layer PRIVATE
     rumble_hook.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
+    vrs_nv.cpp
     xinput_hook.cpp
     xr_runtime.cpp)
 # Menus on a panel with a laser pointer (M6, docs/VR_MENUS.md).
@@ -143,7 +145,7 @@ target_sources(evr_layer PRIVATE
     menu_cursor.cpp
     menu_input.cpp
     presenter_menu.cpp)
-target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_input evr_menu evr_roomscale)
+target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_foveation evr_input evr_menu evr_roomscale)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
 target_compile_features(evr_layer PRIVATE cxx_std_20)
 target_compile_definitions(evr_layer PRIVATE

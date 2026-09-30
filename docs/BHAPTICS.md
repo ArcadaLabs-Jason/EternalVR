@@ -77,11 +77,12 @@ Every item below is checked from the layer's log (`bhaptics:` lines), most witho
    D deg (0 ahead, 90 left)`. Face an enemy and let it hit you: D should be near 0; from behind near 180.
    If it reads 180 for a hit from ahead, `impactDir` points the other way (flip the sign in
    `bhaptics_game.cpp`).
-4. **Vest sides**: the column order on each side of the vest (`vestColumn` in `body_haptics.hpp`) is
-   assumed, not documented by bHaptics: on `VestFront` column 0 is taken to be the wearer's right (the
-   vest seen from in front), on `VestBack` the wearer's left (seen from behind). With a suit: a hit from
-   the left must be felt on the left; the heartbeat on the left of the chest; right-handed shots on the
-   right shoulder. If they come out mirrored, swap the front's rule.
+4. **Vest sides**: the column order on each side of the vest (`vestColumn` in `body_haptics.hpp`) is not
+   documented by bHaptics. The first build took `VestFront`'s column 0 to be the wearer's right, and a
+   tester's suit felt right-handed recoil on the left of the chest (public issue #1, v0.1.5), so both
+   sides now count from the wearer's left. The back's order is still unconfirmed. With a suit: a hit from
+   the left must be felt on the left (front and back); the heartbeat on the left of the chest; right-handed
+   shots on the right shoulder. If the back comes out mirrored, give it the opposite rule.
 5. **Glory kill**: one jolt as each glory kill starts; the log's summary counts `glory kill`.
 6. **Weapons**: `firing '<decl>': <class> kick` for each weapon; names that land on medium but should not
    go in `weaponClassOf`.

@@ -16,6 +16,7 @@ namespace EternalVR.Launcher
         private readonly NumericUpDown turnRate = Number(LauncherSettings.MinTurnRate, LauncherSettings.MaxTurnRate, 10, 0);
         private readonly NumericUpDown snapDegrees = Number(LauncherSettings.MinSnapDegrees, LauncherSettings.MaxSnapDegrees, 15, 0);
         private readonly ComboBox vignette = Choices(Setting.Vignette);
+        private readonly ComboBox gloryKills = Choices(Setting.GloryKills);
         private readonly CheckBox bodyFollow = new CheckBox { AutoSize = true };
         private readonly CheckBox recenter = new CheckBox { AutoSize = true };
         private readonly CheckBox skipCinematics = new CheckBox { AutoSize = true };
@@ -37,6 +38,7 @@ namespace EternalVR.Launcher
         private readonly Label controlsState = Caption(string.Empty);
         private readonly NumericUpDown renderScale = Number(LauncherSettings.MinRenderScale, LauncherSettings.MaxRenderScale, 0.05, 2);
         private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing);
+        private readonly ComboBox foveation = Choices(Setting.Foveation);
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
         private double customSmoothing = -1;
@@ -58,6 +60,9 @@ namespace EternalVR.Launcher
                 Row(Setting.Vignette, vignette,
                     s => vignette.SelectedIndex = (int)s.Vignette,
                     s => s.Vignette = (VignetteMode)vignette.SelectedIndex),
+                Row(Setting.GloryKills, gloryKills,
+                    s => gloryKills.SelectedIndex = (int)s.GloryKills,
+                    s => s.GloryKills = (GloryKillView)gloryKills.SelectedIndex),
                 Row(Setting.WalkInRoom, bodyFollow, s => bodyFollow.Checked = s.BodyFollow, s => s.BodyFollow = bodyFollow.Checked),
                 Row(Setting.RecenterHold, recenter, s => recenter.Checked = s.RecenterLongPress, s => s.RecenterLongPress = recenter.Checked),
                 Row(Setting.SkipCutscenes, skipCinematics, s => skipCinematics.Checked = s.SkipCinematics, s => s.SkipCinematics = skipCinematics.Checked));
@@ -104,6 +109,9 @@ namespace EternalVR.Launcher
                 Row(Setting.AntiAliasing, antiAliasing,
                     s => antiAliasing.SelectedIndex = LauncherSettings.AntiAliasingChoice(s),
                     s => LauncherSettings.SetAntiAliasingChoice(s, antiAliasing.SelectedIndex)),
+                Row(Setting.Foveation, foveation,
+                    s => foveation.SelectedIndex = (int)s.Foveation,
+                    s => s.Foveation = (FoveationMode)foveation.SelectedIndex),
             };
             // Texture streaming and the CPU Saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
             if (StreamingRow() is SettingRow streaming) pictureRows.Add(streaming);
