@@ -328,3 +328,16 @@ TEST_CASE("a teleport never reaches the anchor, and the step after it is not fol
     CHECK(approxEqual(step.absorbed, {}));
     CHECK(sim.tick().block == FollowBlock::Settling);
 }
+
+TEST_CASE("the room rides with the body only while something else moves it") {
+    for (const FollowBlock b :
+         {FollowBlock::Teleport, FollowBlock::Menu, FollowBlock::Cutscene, FollowBlock::Stick,
+          FollowBlock::JumpOrDash, FollowBlock::Airborne, FollowBlock::Fast, FollowBlock::Settling}) {
+        CHECK(followBlockRidesWithBody(b));
+    }
+    // Following (a wall stops the body: the lean-cap fade tells the player), or follow cannot run at all.
+    for (const FollowBlock b : {FollowBlock::None, FollowBlock::Off, FollowBlock::NotAnchored,
+                                FollowBlock::Seated, FollowBlock::NoOrigin}) {
+        CHECK_FALSE(followBlockRidesWithBody(b));
+    }
+}

@@ -189,8 +189,6 @@ namespace EternalVR.Launcher.Core.Settings
         public string DlssPreset { get; set; } = "default";
         /// <summary>Fixed foveated rendering in stereo (<see cref="FoveationMode"/>); off by default.</summary>
         public FoveationMode Foveation { get; set; } = FoveationMode.Off;
-        /// <summary>Room-scale walking: the body follows the head (the layer's <c>ETERNALVR_BODY_FOLLOW</c>).</summary>
-        public bool BodyFollow { get; set; } = true;
         /// <summary>The layer's <c>ETERNALVR_AIM_SMOOTHING</c>, 0 to 1.</summary>
         public double AimSmoothing { get; set; } = DefaultAimSmoothing;
         /// <summary>The layer's <c>ETERNALVR_HAPTICS</c>, 0 (off) to 1.</summary>
@@ -238,7 +236,7 @@ namespace EternalVR.Launcher.Core.Settings
         {
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
-            "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_dll_path", "dlss_preset", "cpu_saver", "body_follow", "aim_smoothing", "hud_distance",
+            "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_dll_path", "dlss_preset", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "foveation", "extra_args", "profile",
         };
@@ -356,7 +354,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.CpuSaverChoices = order.Where(IsCpuSaverKey).Select(k => (Key: k.Substring(CpuSaverKeyPrefix.Length).ToLowerInvariant(), On: Switch(map[k])))
                 .Where(x => x.On.HasValue).Select(x => new KeyValuePair<string, bool>(x.Key, x.On.Value)).ToList();
             if (map.TryGetValue("skip_cinematics", out var c)) s.SkipCinematics = c == "1" || string.Equals(c, "true", StringComparison.OrdinalIgnoreCase);
-            if (map.TryGetValue("body_follow", out var bf)) s.BodyFollow = Flag(bf);
+            s.ReadRoom(map);
             if (map.TryGetValue("aim_smoothing", out var sm)) s.AimSmoothing = Number(sm, 0.0, 1.0, DefaultAimSmoothing);
             if (map.TryGetValue("vibration", out var vb)) s.Vibration = Number(vb, 0.0, 1.0, DefaultVibration);
             if (map.TryGetValue("bhaptics", out var bh)) s.Bhaptics = On(bh);
@@ -437,7 +435,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("foveation = " + FoveationName(Foveation));
             if (CpuSaverAllOn) sb.AppendLine("cpu_saver = on");
             foreach (var kv in CpuSaverChoices) sb.AppendLine(CpuSaverKeyPrefix + kv.Key + " = " + (kv.Value ? "on" : "off"));
-            sb.AppendLine("body_follow = " + (BodyFollow ? "1" : "0"));
+            WriteRoom(sb);
             sb.AppendLine("aim_smoothing = " + Metres(Clamp(AimSmoothing, 0.0, 1.0, DefaultAimSmoothing)));
             sb.AppendLine("vibration = " + Metres(Clamp(Vibration, 0.0, 1.0, DefaultVibration)));
             sb.AppendLine("bhaptics = " + (Bhaptics ? "1" : "0"));

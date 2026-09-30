@@ -53,4 +53,9 @@ HeadOffsetLimits sanitized(HeadOffsetLimits limits);
 
 HeadOffset headOffset(const HeadOffsetInput& input, const HeadOffsetLimits& limits);
 
+// How far the room is carried along so that `roomHead` (room space, metres) is no further than the lean
+// cap from the anchor horizontally: the part of the lean past the cap, toward the head; zero within it or
+// for a sample that is not finite. For RoomAnchor's shiftedBy.
+Vec3 leanPastCap(Vec3 roomHead, const HeadOffsetLimits& limits);
+
 } // namespace evr::roomscale

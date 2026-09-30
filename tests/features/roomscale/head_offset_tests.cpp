@@ -106,3 +106,23 @@ TEST_CASE("the lean is horizontal only: standing up is not a lean") {
     CHECK(up.requestedLean == doctest::Approx(0.0f));
     CHECK_FALSE(up.leanClamped);
 }
+
+TEST_CASE("the lean past the cap is what the room rides along") {
+    // 1.0 m forward with the 0.6 m cap: 0.4 m of it, toward the head; the height is ignored.
+    const Vec3 past = leanPastCap({0.0f, 0.3f, -1.0f}, {});
+    CHECK(past.x == doctest::Approx(0.0f));
+    CHECK(past.y == 0.0f);
+    CHECK(past.z == doctest::Approx(-0.4f));
+    // Diagonal: the remaining lean is the cap, along the same direction.
+    const Vec3 head{0.8f, 0.0f, 0.6f}; // 1.0 m
+    const Vec3 d = leanPastCap(head, {});
+    CHECK(std::hypot(head.x - d.x, head.z - d.z) == doctest::Approx(0.6f));
+    CHECK(d.x / d.z == doctest::Approx(head.x / head.z));
+    // Inside the cap, or a sample that is not finite: nothing.
+    const Vec3 inside = leanPastCap({0.3f, 0.0f, -0.3f}, {});
+    CHECK(inside.x == 0.0f);
+    CHECK(inside.z == 0.0f);
+    const Vec3 bad = leanPastCap({NAN, 0.0f, 2.0f}, {});
+    CHECK(bad.x == 0.0f);
+    CHECK(bad.z == 0.0f);
+}

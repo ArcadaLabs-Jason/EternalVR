@@ -97,7 +97,17 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
   re-detection dwell running) and for 1 s after a posture re-anchor, while body follow walks the body to the
   head: standing up out of a chair steps the head forward, and that is not a lean. The cap still holds the
   camera then; geometry still fades. (Session 4 went black this way: seated follow was blocked, so standing
-  up and moving around was all lean.)
+  up and moving around was all lean.) While something other than the player's walking moves the body (the
+  stick, a jump or dash, a fall, the Meathook, a teleport, a cutscene or glory kill, a menu, and body
+  follow's resume delay after them), follow cannot close the gap, so the lean past the cap is taken into the
+  room instead: the view rides with the body and nothing fades (`followBlockRidesWithBody`, `leanPastCap`;
+  logged once as `room: body follow: the head went past the lean cap while <cause> moved the body`, and as
+  `m ridden past the lean cap` in the follow stats). A player walking a large space through a glory kill, or
+  walking while using the stick, went black here before (a tester's report, 2026-09-30).
+- **Never stuck in the dark.** The head's fade (geometry or the lean cap, not a blink or a glory kill shown
+  as a fade) held fully black for 1.5 s moves the room onto the body, heading kept, behind the blink: `room:
+  the view was black 1.5 s; the room moved N m onto the body`. The same tester stood in a train door with a
+  black view and could not tell which way was out.
 - **Head in geometry** (T-062, R10 section 3.2 step 4; `src/vkcore/head_sweep.cpp`,
   `src/features/roomscale/head_fade.hpp`). Each game frame with an offset over 1 cm, the engine's own
   collision query (`idHavokCollision::Translation`, synchronous, as the game calls it for its cameras)
@@ -289,7 +299,7 @@ different speed on another build, `_WALK` and `_CREEP` move the values (a `TEST_
 | `ETERNALVR_RECENTER_HOLD` | 2.0 | seconds both sticks are held to recenter (0.3–5); 0 turns the chord off |
 | `ETERNALVR_LEAN_CAP` | 0.60 | metres (0.05–2) |
 | `ETERNALVR_HEAD_COLLISION` | 1 | 0: no head sweep (cap only, no fade) |
-| `ETERNALVR_HEAD_FADE` | 1 | 0: no fade layer |
+| `ETERNALVR_HEAD_FADE` | 1 | 0: no fade layer (the launcher's "Fade in walls", Play tab) |
 | `ETERNALVR_IPD` | unset | millimetres (50–80) the game renders with; unset or 0: the runtime's |
 | `ETERNALVR_BODY_FOLLOW` | 1 | 0: no body follow (Body follow above) |
 | `ETERNALVR_BODY_FOLLOW_DEADZONE` | 0.04 | metres (0.01–0.5) of gap before the body follows; it stops within 40 % of it |

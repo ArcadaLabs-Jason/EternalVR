@@ -32,6 +32,9 @@ constexpr double kBlinkLeadSeconds = 0.12;
 constexpr double kBlinkHoldSeconds = 0.05;
 // After a posture change the lean-cap fade stays off this long: body follow walks the body to the head.
 constexpr double kPostureGraceSeconds = 1.0;
+// The head's fade held fully black this long moves the room onto the body, so a player is never left in
+// the dark (the head stuck in a door, a walk the body could not follow).
+constexpr double kStuckBlackSeconds = 1.5;
 // The input mapper stopped calling for this long (menus, a stall): the recenter binding counts as released.
 constexpr double kBindingGapSeconds = 0.25;
 
@@ -293,6 +296,18 @@ RoomScale::Head RoomScale::head(const Input& in) {
         testOffset = testOffset + roomscale::testOffsetAt(*cfg.testOffset, in.seconds - firstSeconds_);
     }
     follow(in, testOffset);
+    if (unstick_.exchange(false, std::memory_order_acq_rel) && in.positionValid) {
+        // Black too long: the head goes back over the body (the game's eye is always clear), heading kept.
+        const Vec3 head = roomscale::toRoom(anchor_, in.localHead).position + testOffset;
+        anchor_ = roomscale::shiftedBy(anchor_, {head.x, 0.0f, head.z});
+        clearance_.reset();
+        blinkUntil_.store(now + kBlinkHoldSeconds, std::memory_order_release);
+        if (++unsticks_ <= 20) {
+            EVR_LOG("room: the view was black %.1f s; the room moved %.2f m onto the body (%llu)",
+                    kStuckBlackSeconds, std::sqrt(head.x * head.x + head.z * head.z),
+                    static_cast<unsigned long long>(unsticks_));
+        }
+    }
 
     Head out;
     out.roomFromLocal = roomscale::roomFromTracking(anchor_);
@@ -413,6 +428,17 @@ float RoomScale::fade(double seconds) {
     }
     if (deepSeconds_ < 0.0 && contactSeconds_ >= 0.0 && roomscale::fadeTarget(depth, {}) >= 1.0f) {
         deepSeconds_ = seconds - dt; // the head reached full depth
+    }
+    // Fully black from the head (not a blink or a glory kill) for too long: ask for the room to move.
+    if (value >= 1.0f && !blink) {
+        if (blackSince_ < 0.0) {
+            blackSince_ = seconds;
+        } else if (seconds - blackSince_ >= kStuckBlackSeconds) {
+            blackSince_ = -1.0;
+            unstick_.store(true, std::memory_order_release);
+        }
+    } else {
+        blackSince_ = -1.0;
     }
     if (value >= 1.0f && !loggedFull_ && contactSeconds_ >= 0.0) {
         loggedFull_ = true;

@@ -18,6 +18,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox vignette = Choices(Setting.Vignette);
         private readonly ComboBox gloryKills = Choices(Setting.GloryKills);
         private readonly CheckBox bodyFollow = new CheckBox { AutoSize = true };
+        private readonly CheckBox headFade = new CheckBox { AutoSize = true };
         private readonly CheckBox recenter = new CheckBox { AutoSize = true };
         private readonly CheckBox skipCinematics = new CheckBox { AutoSize = true };
         private readonly ComboBox posture = Choices(Setting.PlayPosition);
@@ -64,6 +65,7 @@ namespace EternalVR.Launcher
                     s => gloryKills.SelectedIndex = (int)s.GloryKills,
                     s => s.GloryKills = (GloryKillView)gloryKills.SelectedIndex),
                 Row(Setting.WalkInRoom, bodyFollow, s => bodyFollow.Checked = s.BodyFollow, s => s.BodyFollow = bodyFollow.Checked),
+                Row(Setting.HeadFade, headFade, s => headFade.Checked = s.HeadFade, s => s.HeadFade = headFade.Checked),
                 Row(Setting.RecenterHold, recenter, s => recenter.Checked = s.RecenterLongPress, s => s.RecenterLongPress = recenter.Checked),
                 Row(Setting.SkipCutscenes, skipCinematics, s => skipCinematics.Checked = s.SkipCinematics, s => s.SkipCinematics = skipCinematics.Checked));
             var body = Group("Body",

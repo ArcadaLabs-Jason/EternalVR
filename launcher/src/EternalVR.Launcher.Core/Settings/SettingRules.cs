@@ -7,7 +7,7 @@ namespace EternalVR.Launcher.Core.Settings
     public enum Setting
     {
         // Play: comfort
-        Turning, TurnSpeed, SnapAngle, Vignette, GloryKills, WalkInRoom, RecenterHold, SkipCutscenes,
+        Turning, TurnSpeed, SnapAngle, Vignette, GloryKills, WalkInRoom, HeadFade, RecenterHold, SkipCutscenes,
         // Play: body
         PlayPosition, EyeHeight,
         // Play: gestures

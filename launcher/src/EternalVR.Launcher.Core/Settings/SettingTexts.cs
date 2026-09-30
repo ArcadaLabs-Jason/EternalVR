@@ -44,6 +44,10 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.WalkInRoom] = new Text("Room-scale",
                 "Walking around your room moves the Slayer with you. Off: you can still lean and peek about 60 cm from where "
                 + "you recentered; past that the view fades until you step back or recenter."),
+            [Setting.HeadFade] = new Text("Fade in walls",
+                "The view fades to black when your head goes into a wall or too far from your body, so you cannot see "
+                + "through the level. If you are stuck in the dark for a moment, the game moves you back onto your body. "
+                + "Turn it off if you walk a lot in a big space and the fades get in the way."),
             [Setting.RecenterHold] = new Text("Recenter hold",
                 "Hold both sticks pressed for 2 seconds to turn the game to where you face and reset your height. "
                 + "A single stick click still melees at once. The headset's own recenter works too."),

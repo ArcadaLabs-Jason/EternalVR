@@ -132,6 +132,22 @@ void RoomScale::follow(const Input& in, Vec3 testOffset) {
     tick.jumpOrDash = command.jumpOrDash;
     const roomscale::FollowStep step = follow_.update(tick);
     anchor_ = roomscale::shiftedBy(anchor_, step.absorbed);
+    // While something else moves the body, the head's walk past the lean cap is taken into the room: the view
+    // rides with the body instead of fading (a player walking through a glory kill or while using the stick).
+    if (in.positionValid && roomscale::followBlockRidesWithBody(step.block)) {
+        const Vec3 past = roomscale::leanPastCap(tick.gapRoom - step.absorbed, cfg.limits);
+        if (flatLength(past) > 0.0f) {
+            anchor_ = roomscale::shiftedBy(anchor_, past);
+            ridden_ += flatLength(past);
+            if (!loggedRide_) {
+                loggedRide_ = true;
+                EVR_LOG(
+                    "room: body follow: the head went past the lean cap while %s moved the body; the room "
+                    "rides along (%.3f m) instead of fading",
+                    roomscale::followBlockName(step.block), flatLength(past));
+            }
+        }
+    }
     body_follow::publish(step.request.move);
     if (probe_.active()) {
         probe_.add(displacement.value_or(Vec3{}), step.absorbed, in.seconds,
@@ -195,13 +211,14 @@ void RoomScale::logFollowStats() {
     }
     EVR_LOG(
         "room: body follow: %llu frame(s) following (walk %llu, creep %llu, coast %llu), %llu command(s) "
-        "sent, %.3f m taken into the room, largest gap %.3f m; blocked frames: %s",
+        "sent, %.3f m taken into the room, largest gap %.3f m, %.3f m ridden past the lean cap; blocked "
+        "frames: %s",
         static_cast<unsigned long long>(followFrames_),
         static_cast<unsigned long long>(followTiers_[static_cast<std::size_t>(roomscale::FollowTier::Walk)]),
         static_cast<unsigned long long>(followTiers_[static_cast<std::size_t>(roomscale::FollowTier::Creep)]),
         static_cast<unsigned long long>(followTiers_[static_cast<std::size_t>(roomscale::FollowTier::Coast)]),
         static_cast<unsigned long long>(body_follow::followCommands()), followAbsorbed_, followMaxGap_,
-        blocked.empty() ? "none" : blocked.c_str());
+        ridden_, blocked.empty() ? "none" : blocked.c_str());
     followMaxGap_ = 0.0f;
 }
 

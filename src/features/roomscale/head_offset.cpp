@@ -53,4 +53,17 @@ HeadOffset headOffset(const HeadOffsetInput& input, const HeadOffsetLimits& rawL
     return out;
 }
 
+Vec3 leanPastCap(Vec3 roomHead, const HeadOffsetLimits& rawLimits) {
+    const HeadOffsetLimits limits = sanitized(rawLimits);
+    if (!std::isfinite(roomHead.x) || !std::isfinite(roomHead.z)) {
+        return {};
+    }
+    const float lean = std::sqrt(roomHead.x * roomHead.x + roomHead.z * roomHead.z);
+    if (lean <= limits.leanCapMetres) {
+        return {};
+    }
+    const float past = (lean - limits.leanCapMetres) / lean;
+    return {roomHead.x * past, 0.0f, roomHead.z * past};
+}
+
 } // namespace evr::roomscale

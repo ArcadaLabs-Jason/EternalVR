@@ -92,6 +92,12 @@ enum class FollowBlock : std::uint8_t {
 
 const char* followBlockName(FollowBlock block);
 
+// Something other than the player's walking moves the body (the stick, a jump or dash, a fall, the
+// Meathook, a teleport, a cutscene or glory kill, a menu, and the resume delay after them): follow cannot
+// close the gap meanwhile, so the head's walk past the lean cap is taken into the room (the view rides with
+// the body, as without body follow) instead of fading the view.
+bool followBlockRidesWithBody(FollowBlock block);
+
 // A jump this large in one frame is a teleport (a checkpoint, a level change), never a step.
 inline constexpr float kTeleportMetres = 1.0f;
 // Vertical origin speed above which the player counts as in the air (the grounded flag is not read).

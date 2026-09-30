@@ -210,7 +210,11 @@ its own quad in the weapon hand's **aim space**, 10 m along the ray (`ETERNALVR_
 degree across at any distance (`ETERNALVR_UI_RETICLE_SIZE`; `ETERNALVR_UI_RETICLE=0` turns it off). The
 runtime placed it every frame from the controller pose, without game-side latency; since the aim-jitter
 work (`aim-jitter.md`) it is placed in LOCAL from the shown frame's own weapon ray (smoothed, at the frame's
-pose time), so it stays on the line of the gun drawn in that frame and of its shots.
+pose time), so it stays on the line of the gun drawn in that frame and of its shots. Since v0.1.7 it sits where
+that ray meets the world (the head sweep's collision query, `src/vkcore/reticle_depth.hpp`; 100 m when the
+ray is clear) instead of 10 m out: the eyes are about 0.3 m from the hand, so a fixed distance put far
+targets over a degree off the dot (a player's Precision Bolt report). `ETERNALVR_UI_RETICLE_DISTANCE` is
+now only the fallback without the query.
 Hiding the reticle with cvars does **not** work from the command line: `+g_reticleMode 2` and
 `+hud_reticle_scaleOverride 0.01` left the game's crosshair unchanged in U6 (the menu setting in the profile
 wins), and `+g_showHud 0` left the HUD on (U3). Under head aim the game's crosshair stays on the quad

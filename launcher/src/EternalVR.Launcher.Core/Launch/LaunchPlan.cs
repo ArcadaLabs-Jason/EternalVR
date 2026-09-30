@@ -205,6 +205,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");
             // The settings of the Play and Advanced tabs, always explicit (the layer's own defaults may change).
             Set("ETERNALVR_BODY_FOLLOW", s.BodyFollow ? "1" : "0");
+            Set("ETERNALVR_HEAD_FADE", s.HeadFade ? "1" : "0");
             Set("ETERNALVR_AIM_SMOOTHING", Number(s.AimSmoothing, 0.0, 1.0, LauncherSettings.DefaultAimSmoothing));
             Set("ETERNALVR_HAPTICS", Number(s.Vibration, 0.0, 1.0, LauncherSettings.DefaultVibration));
             // bHaptics (docs/BHAPTICS.md), off by default: the layer talks to the bHaptics Player on this PC.

@@ -152,6 +152,9 @@ private:
     bool loggedNoHook_ = false;
     std::uint32_t loggedBlocks_ = 0; // a bit per FollowBlock logged once
     std::uint64_t teleports_ = 0;
+    double ridden_ = 0.0; // metres the room rode along past the lean cap (followBlockRidesWithBody)
+    bool loggedRide_ = false;
+    std::uint64_t unsticks_ = 0;
     double firstAnchorSeconds_ = -1.0;
     int stepLeg_ = -1;
     int testCommand_ = 0;
@@ -173,6 +176,10 @@ private:
     std::atomic<double> blinkUntil_{-1.0};
     std::atomic<double> holdBlackUntil_{-1.0}; // holdBlack()
 
+    // Worker -> camera hook: the view has been fully black too long (the head stuck in geometry or past the
+    // cap); the next game frame moves the room onto the body, behind the blink.
+    std::atomic<bool> unstick_{false};
+
     // Worker only.
     roomscale::HeadFade fade_;
     double lastFadeSeconds_ = -1.0;
@@ -180,6 +187,7 @@ private:
     double deepSeconds_ = -1.0;    // when the penetration first reached full depth
     bool loggedFull_ = false;
     const char* fadeCause_ = ""; // what started the current fade
+    double blackSince_ = -1.0;   // when the head's fade became full (not a blink or a glory kill)
 };
 
 } // namespace evr::vkcore

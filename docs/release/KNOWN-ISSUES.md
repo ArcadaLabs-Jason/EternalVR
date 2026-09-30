@@ -18,9 +18,11 @@ them is worse for you than described here.
 - **Room-scale walking is new and lightly tested.** When you step around the room while standing, the
   Slayer walks after you in short pulses, so you may hear footsteps start and stop. It has been tested
   in a headset, but not much against walls, on stairs or in heavy combat. It
-  pauses in menus, cutscenes, the air and while you use the move stick, and it is off when seated. If it
-  bothers you, set `ETERNALVR_BODY_FOLLOW=0`. Leaning more than about 60 cm while seated still fades the
-  view to black: sit back, or hold both sticks pressed for 2 seconds to recenter. Standing up or sitting
+  pauses in menus, cutscenes, the air and while you use the move stick (since 0.1.8 the view then rides
+  along with the Slayer instead of fading), and it is off when seated. If it bothers you, untick
+  "Room-scale" on the Play tab. Leaning more than about 60 cm while seated still fades the view to black:
+  sit back, or hold both sticks pressed for 2 seconds to recenter. After a second and a half of black you
+  are moved back onto your body, and "Fade in walls" on the Play tab turns the fade off. Standing up or sitting
   down is noticed after a second or so (the view blinks while your height is reset); if it is not (a very
   tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds.
 - **Only tested on NVIDIA:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have not

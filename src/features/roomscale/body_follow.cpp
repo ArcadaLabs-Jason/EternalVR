@@ -138,6 +138,22 @@ const char* followBlockName(FollowBlock block) {
     return "?";
 }
 
+bool followBlockRidesWithBody(FollowBlock block) {
+    switch (block) {
+    case FollowBlock::Teleport:
+    case FollowBlock::Menu:
+    case FollowBlock::Cutscene:
+    case FollowBlock::Stick:
+    case FollowBlock::JumpOrDash:
+    case FollowBlock::Airborne:
+    case FollowBlock::Fast:
+    case FollowBlock::Settling:
+        return true;
+    default:
+        return false; // following, or follow off, seated, not anchored or without an origin
+    }
+}
+
 BodyFollow::BodyFollow(const BodyFollowSettings& settings) : settings_(sanitized(settings)) {
     settings_.enabled = settings.enabled;
 }
