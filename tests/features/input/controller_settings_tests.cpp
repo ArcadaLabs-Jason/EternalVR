@@ -134,6 +134,18 @@ TEST_CASE("vibration strength is 0 to 1, 0.6 by default") {
     CHECK(parse({{"ETERNALVR_HAPTICS", "on"}}).issues.size() == 1);
 }
 
+TEST_CASE("bHaptics is off by default, at full intensity, and the intensity is kept within 0 to 1") {
+    CHECK_FALSE(parse({}).settings.bhaptics);
+    CHECK(parse({}).settings.bhapticsIntensity == 1.0f);
+    CHECK(parse({{"ETERNALVR_BHAPTICS", "1"}}).settings.bhaptics);
+    CHECK(parse({{"ETERNALVR_BHAPTICS_INTENSITY", "0.4"}}).settings.bhapticsIntensity ==
+          doctest::Approx(0.4f));
+    const auto over = parse({{"ETERNALVR_BHAPTICS_INTENSITY", "3"}});
+    CHECK(over.issues.size() == 1);
+    CHECK(over.settings.bhapticsIntensity == 1.0f);
+    CHECK(parse({{"ETERNALVR_BHAPTICS", "vest"}}).issues.size() == 1);
+}
+
 TEST_CASE("an unusable value is reported by name and value, and the default kept") {
     const auto result = parse({{"ETERNALVR_AIM", "feet"}, {"ETERNALVR_CONTROLLERS", "maybe"}});
     REQUIRE(result.issues.size() == 2);
@@ -148,6 +160,40 @@ TEST_CASE("an unusable value is reported by name and value, and the default kept
         }
     }
     CHECK(sawAim);
+}
+
+TEST_CASE("the demon's aim follows the main aim unless ETERNALVR_DEMON_AIM sets it") {
+    using evr::input::demonAimSource;
+    // Unset or empty: as ETERNALVR_AIM, whatever it is.
+    for (const char* aim : {"head", "hand", "view"}) {
+        const auto result = parse({{"ETERNALVR_AIM", aim}});
+        CHECK_FALSE(result.settings.demonAim.has_value());
+        CHECK(demonAimSource(result.settings) == result.settings.aim);
+        CHECK(demonAimSource(parse({{"ETERNALVR_AIM", aim}, {"ETERNALVR_DEMON_AIM", " "}}).settings) ==
+              result.settings.aim);
+    }
+    // Set: head or hand, independent of the main aim.
+    const auto head = parse({{"ETERNALVR_AIM", "hand"}, {"ETERNALVR_DEMON_AIM", "head"}});
+    CHECK(head.issues.empty());
+    CHECK(head.settings.aim == AimSource::Hand);
+    CHECK(demonAimSource(head.settings) == AimSource::Head);
+    const auto hand = parse({{"ETERNALVR_AIM", "head"}, {"ETERNALVR_DEMON_AIM", "Hand"}});
+    CHECK(hand.issues.empty());
+    CHECK(hand.settings.aim == AimSource::Head);
+    CHECK(demonAimSource(hand.settings) == AimSource::Hand);
+    CHECK(demonAimSource(parse({{"ETERNALVR_DEMON_AIM", "hand"}}).settings) == AimSource::Hand);
+    // Under view aim nothing is aimed: the demon keeps the game's aim.
+    CHECK(demonAimSource(parse({{"ETERNALVR_AIM", "view"}, {"ETERNALVR_DEMON_AIM", "hand"}}).settings) ==
+          AimSource::View);
+    // View is not a demon aim; an unknown value is reported and the demon follows the main aim.
+    for (const char* bad : {"view", "feet"}) {
+        const auto result = parse({{"ETERNALVR_AIM", "hand"}, {"ETERNALVR_DEMON_AIM", bad}});
+        REQUIRE(result.issues.size() == 1);
+        CHECK(result.issues[0].name == "ETERNALVR_DEMON_AIM");
+        CHECK(result.issues[0].message.find("head, hand") != std::string::npos);
+        CHECK_FALSE(result.settings.demonAim.has_value());
+        CHECK(demonAimSource(result.settings) == AimSource::Hand);
+    }
 }
 
 TEST_CASE("a bad viewmodel offset is reported and the table used") {

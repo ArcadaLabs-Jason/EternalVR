@@ -10,6 +10,10 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>What drives the aim: the weapon hand (motion controllers), the head, or the game's own (mouse).</summary>
     public enum AimMode { Hand, Head, View }
 
+    /// <summary>What aims the Revenant while the player pilots it in Cultist Base (the layer's <c>ETERNALVR_DEMON_AIM</c>): the
+    /// same as <see cref="AimMode"/>, the weapon hand, or the head.</summary>
+    public enum RevenantAimMode { Same, Hand, Head }
+
     /// <summary>Stereo (Route S: one render per eye, docs/VR_STEREO.md) or head-tracked mono.</summary>
     public enum VrMode { Stereo, Mono }
 
@@ -71,7 +75,8 @@ namespace EternalVR.Launcher.Core.Settings
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier,
-    /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes and profile.
+    /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
+    /// revenant_aim, bhaptics and bhaptics_intensity.
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
     /// scale, cutscene and argument choices and takes the new defaults for the rest (stereo, controllers on,
@@ -109,6 +114,8 @@ namespace EternalVR.Launcher.Core.Settings
         public const double DefaultAimSmoothing = 0.3;
         /// <summary>Controller vibration strength, 0 (off) to 1 (the strongest); the layer's default.</summary>
         public const double DefaultVibration = 0.6;
+        /// <summary>The bHaptics effects' strength, 0 to 1 (the layer's <c>ETERNALVR_BHAPTICS_INTENSITY</c>); set in the file only.</summary>
+        public const double DefaultBhapticsIntensity = 1.0;
         /// <summary>The HUD panel (src/ui_layer/ui_settings.hpp): distance ahead, width, height offset, in metres.</summary>
         public const double MinHudDistance = 0.3, MaxHudDistance = 10.0, DefaultHudDistance = 1.5;
         public const double MinHudWidth = 0.1, MaxHudWidth = 10.0, DefaultHudWidth = 2.0;
@@ -131,6 +138,8 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Motion controllers drive the game (docs/VR_CONTROLLERS.md); off leaves keyboard, mouse and pad only.</summary>
         public bool Controllers { get; set; } = true;
         public AimMode Aim { get; set; } = AimMode.Hand;
+        /// <summary>What aims the Revenant while piloting it: the same as <see cref="Aim"/> (default), the weapon hand, or the head.</summary>
+        public RevenantAimMode RevenantAim { get; set; } = RevenantAimMode.Same;
         /// <summary>
         /// Stereo: <see cref="RenderSizeAuto"/> (each eye at the headset's recommended size times the render scale,
         /// whatever the displays), <c>WxH</c> (that size), or <see cref="RenderSizeOff"/> (the window's size).
@@ -180,6 +189,10 @@ namespace EternalVR.Launcher.Core.Settings
         public double AimSmoothing { get; set; } = DefaultAimSmoothing;
         /// <summary>The layer's <c>ETERNALVR_HAPTICS</c>, 0 (off) to 1.</summary>
         public double Vibration { get; set; } = DefaultVibration;
+        /// <summary>bHaptics suits and sleeves through the bHaptics Player (the layer's <c>ETERNALVR_BHAPTICS</c>); off by default.</summary>
+        public bool Bhaptics { get; set; } = false;
+        /// <summary>The layer's <c>ETERNALVR_BHAPTICS_INTENSITY</c>, 0 to 1.</summary>
+        public double BhapticsIntensity { get; set; } = DefaultBhapticsIntensity;
         public double HudDistance { get; set; } = DefaultHudDistance;
         public double HudWidth { get; set; } = DefaultHudWidth;
         /// <summary>Metres up (negative: down) from eye level.</summary>
@@ -217,11 +230,11 @@ namespace EternalVR.Launcher.Core.Settings
 
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "render_size",
+            "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_dll_path", "dlss_preset", "cpu_saver", "body_follow", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "mirror_display",
-            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "vignette", "alternate_eyes", "extra_args", "profile",
+            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "alternate_eyes", "extra_args", "profile",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -286,6 +299,8 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("world_scale", out var w) && double.TryParse(w, NumberStyles.Float, CultureInfo.InvariantCulture, out var scale))
                 s.WorldScale = ClampWorldScale(scale);
             if (map.TryGetValue("aim", out var a)) s.Aim = ParseAim(a, version);
+            if (map.TryGetValue("revenant_aim", out var ra))
+                s.RevenantAim = Pick(ra, RevenantAimMode.Same, ("hand", RevenantAimMode.Hand), ("head", RevenantAimMode.Head));
             if (version >= 2)
             {
                 if (map.TryGetValue("mode", out var m)) s.Mode = string.Equals(m, "mono", StringComparison.OrdinalIgnoreCase) ? VrMode.Mono : VrMode.Stereo;
@@ -335,6 +350,8 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("body_follow", out var bf)) s.BodyFollow = Flag(bf);
             if (map.TryGetValue("aim_smoothing", out var sm)) s.AimSmoothing = Number(sm, 0.0, 1.0, DefaultAimSmoothing);
             if (map.TryGetValue("vibration", out var vb)) s.Vibration = Number(vb, 0.0, 1.0, DefaultVibration);
+            if (map.TryGetValue("bhaptics", out var bh)) s.Bhaptics = On(bh);
+            if (map.TryGetValue("bhaptics_intensity", out var bi)) s.BhapticsIntensity = Number(bi, 0.0, 1.0, DefaultBhapticsIntensity);
             if (map.TryGetValue("hud_distance", out var hd2)) s.HudDistance = Number(hd2, MinHudDistance, MaxHudDistance, DefaultHudDistance);
             if (map.TryGetValue("hud_width", out var hw)) s.HudWidth = Number(hw, MinHudWidth, MaxHudWidth, DefaultHudWidth);
             if (map.TryGetValue("hud_height", out var hh)) s.HudHeight = Number(hh, MinHudHeight, MaxHudHeight, 0.0);
@@ -382,6 +399,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("alternate_eyes = " + AlternateEyesValue(AlternateEyes));
             sb.AppendLine("controllers = " + (Controllers ? "1" : "0"));
             sb.AppendLine("aim = " + AimName(Aim));
+            sb.AppendLine("revenant_aim = " + RevenantAimName(RevenantAim));
             sb.AppendLine("render_size = " + (NormaliseRenderSize(RenderSize) ?? RenderSizeAuto));
             sb.AppendLine("render_scale = " + ClampRenderScale(RenderScale).ToString("0.00", CultureInfo.InvariantCulture));
             sb.AppendLine("eye_size = " + EyeWidth.ToString(CultureInfo.InvariantCulture) + "x" + EyeHeight.ToString(CultureInfo.InvariantCulture));
@@ -411,6 +429,8 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("body_follow = " + (BodyFollow ? "1" : "0"));
             sb.AppendLine("aim_smoothing = " + Metres(Clamp(AimSmoothing, 0.0, 1.0, DefaultAimSmoothing)));
             sb.AppendLine("vibration = " + Metres(Clamp(Vibration, 0.0, 1.0, DefaultVibration)));
+            sb.AppendLine("bhaptics = " + (Bhaptics ? "1" : "0"));
+            sb.AppendLine("bhaptics_intensity = " + Metres(Clamp(BhapticsIntensity, 0.0, 1.0, DefaultBhapticsIntensity)));
             sb.AppendLine("hud_distance = " + Metres(Clamp(HudDistance, MinHudDistance, MaxHudDistance, DefaultHudDistance)));
             sb.AppendLine("hud_width = " + Metres(Clamp(HudWidth, MinHudWidth, MaxHudWidth, DefaultHudWidth)));
             sb.AppendLine("hud_height = " + Metres(Clamp(HudHeight, MinHudHeight, MaxHudHeight, 0.0)));
@@ -451,6 +471,10 @@ namespace EternalVR.Launcher.Core.Settings
 
         /// <summary>The layer's <c>ETERNALVR_AIM</c> value.</summary>
         public static string AimName(AimMode aim) => aim == AimMode.View ? "view" : aim == AimMode.Head ? "head" : "hand";
+
+        /// <summary>The settings file's <c>revenant_aim</c> value: <c>same</c>, <c>hand</c> or <c>head</c>.</summary>
+        public static string RevenantAimName(RevenantAimMode aim) =>
+            aim == RevenantAimMode.Hand ? "hand" : aim == RevenantAimMode.Head ? "head" : "same";
 
         private static AimMode ParseAim(string text, int version)
         {

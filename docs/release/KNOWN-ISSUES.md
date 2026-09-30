@@ -85,9 +85,10 @@ them is worse for you than described here.
   the mod switches that session to TAA (the log says `DLSS has no per-eye feature`) and the menu shows
   DLSS as off.
 - **A newer DLSS is experimental too.** The game ships DLSS 2.3. On the Advanced tab, "DLSS version: From
-  a file" lets DLSS run with a newer `nvngx_dlss.dll` you download yourself (NVIDIA's DLSS page on GitHub,
-  `lib/Windows_x86_64/rel/nvngx_dlss.dll`); the mod does not include it. The file stays where you keep it
-  and nothing is copied into the game folder. If the game cannot use the file, it keeps its own DLSS and
+  a file" lets DLSS run with a newer `nvngx_dlss.dll`. "Download from NVIDIA..." fetches it straight from
+  NVIDIA's GitHub once you accept NVIDIA's license, or you can download it yourself (NVIDIA's DLSS page on
+  GitHub, `lib/Windows_x86_64/rel/nvngx_dlss.dll`) and choose it; the mod does not include it. The file stays
+  in EternalVR's data folder or where you keep it, and nothing is copied into the game folder. If the game cannot use the file, it keeps its own DLSS and
   the log says why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn.
@@ -95,13 +96,14 @@ them is worse for you than described here.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.
-- **Frame rate.** Stereo renders every frame twice, and there is no foveated rendering or DLSS tuning for
-  VR yet. Slower cards than the tested RTX 4080 may struggle.
+- **Frame rate.** Stereo renders every frame twice, and there is no foveated rendering yet. Slower cards
+  than the tested RTX 4080 may struggle; a player's RTX 3070 plays well with DLSS Performance and preset J
+  (see "Which DLSS preset should I use?" in `TROUBLESHOOTING.md`).
 - **Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
   (on by default) has the game load only the texture detail the current view needs, which gave about 8% more
   frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
   texture may look soft for a moment. Turn it off if that bothers you.
-- **The Processor saver is experimental.** Its checkboxes on the Play tab (all off by default) each turn down
+- **The CPU Saver is experimental.** Its checkboxes on the Play tab (all off by default) each turn down
   one of the game's detail settings that cost processor time: your own shadow, sun shadows near you, how far
   away models switch to simpler versions, and how far away marks, shadows and lights fade. Each one's tooltip
   says what it gained on the test rig and what it costs in the picture. The game's own settings are put back
@@ -125,10 +127,15 @@ them is worse for you than described here.
   and there is no wall check yet.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
   strength and feel may change.
+- **bHaptics** (bHaptics (experimental) on the Play tab) is experimental and untested on hardware: the
+  messages have been checked against a stand-in for the bHaptics Player, not a real suit. Which side of
+  the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms them.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
   right of centre.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
   new and has not been tried in a headset yet. How far you need to turn your hand may change.
+- **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new
+  and has not been tried in a headset yet.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and
   have not been tried in a headset yet. How hard you need to throw or swing may change. The grenade flies
   where your gun points (or where you look with head aim), not where your hand threw it. A throw or a swing

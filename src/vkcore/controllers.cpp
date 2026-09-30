@@ -47,6 +47,8 @@ void install() {
     if (cfg.haptics > 0.0f) {
         s.rumbleHook = installRumbleHook();
     }
+    // bHaptics reads the player from the camera hook and the shots from the fire hook (below).
+    startBhaptics();
     if (knownBuild) {
         bool fire = false;
         s.setViewAnglesHook = installAimHooks(fire);
@@ -74,9 +76,13 @@ void install() {
 
 } // namespace
 
+input::AimSource activeAim() {
+    return pilotingDemon() ? input::demonAimSource(settings()) : settings().aim;
+}
+
 XrSpace weaponAimSpace() {
     State& s = state();
-    if (!settings().enabled || settings().aim != input::AimSource::Hand || !s.attached.load()) {
+    if (!settings().enabled || activeAim() != input::AimSource::Hand || !s.attached.load()) {
         return XR_NULL_HANDLE;
     }
     std::shared_lock lock(s.xrMutex);

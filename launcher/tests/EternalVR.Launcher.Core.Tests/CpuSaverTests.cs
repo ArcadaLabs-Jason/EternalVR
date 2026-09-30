@@ -8,7 +8,7 @@ using Xunit;
 
 namespace EternalVR.Launcher.Core.Tests
 {
-    /// <summary>The processor saver: its data file, the launch plan's variable, the settings and the restore.</summary>
+    /// <summary>The CPU Saver: its data file, the launch plan's variable, the settings and the restore.</summary>
     public class CpuSaverTests
     {
         private static CpuSaver Shipped => CpuSaver.Parse(TestData.Read("cpu-saver.txt"));
@@ -73,7 +73,7 @@ namespace EternalVR.Launcher.Core.Tests
             var saver = Shipped;
             Assert.Equal(new[] { "texture_streaming", "own_shadow", "near_sun_shadows", "model_detail", "decal_distance", "distant_shadows_lights" },
                 saver.Items.Select(i => i.Id));
-            // Texture streaming: its own row, on by default; the processor saver's items: off by default.
+            // Texture streaming: its own row, on by default; the CPU Saver's items: off by default.
             var streaming = saver.Items[0];
             Assert.True(streaming.DefaultOn);
             Assert.Equal(Setting.TextureStreaming, streaming.Row);
@@ -81,7 +81,9 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Contains("lossless", streaming.Note);
             Assert.All(saver.Items.Skip(1), i => Assert.Equal(string.Empty, i.Note));
             Assert.All(saver.Items.Skip(1), i => Assert.False(i.DefaultOn, i.Id));
-            Assert.All(saver.Items.Skip(1), i => Assert.Equal(Setting.ProcessorSaver, i.Row));
+            Assert.All(saver.Items.Skip(1), i => Assert.Equal(Setting.CpuSaver, i.Row));
+            // Jason's name for the group (2026-09-29): "CPU Saver", not "Processor saver".
+            Assert.Equal("CPU Saver (experimental)", SettingTexts.For(Setting.CpuSaver).Label);
             Assert.Equal(new[] { "texture_streaming" }, saver.InRow(Setting.TextureStreaming).Select(i => i.Id));
             // The distant shadows and lights go together, as one item.
             Assert.Equal(new[] { "r_shadowsDistanceFadeMultiplier", "r_lightDistanceFadeMultiplier" }, saver.Items.Last().Cvars.Select(c => c.Name));

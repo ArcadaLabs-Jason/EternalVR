@@ -353,6 +353,18 @@ void noteMapperHaptics(const game::GameActionSet& sent, const input::GameInput& 
 // while the session is not focused).
 void updateHaptics(const XrInput& xr, bool focused);
 
+// The held item (viewmodel_hook.cpp): the decl in `hands`' right hand (idHands::rightItem), or null, and a
+// decl's name ("weapon/player/shotgun"), or empty.
+const std::byte* heldItemDecl(const std::byte* hands);
+std::string itemDeclName(const std::byte* decl);
+
+// bHaptics (bhaptics_game.cpp, docs/BHAPTICS.md). With the game hooks: starts its thread once when
+// ETERNALVR_BHAPTICS=1. The fire hook: a shot of the local player's `hands`. The camera hook, once a game
+// frame: the player's health, armor, hits and sync kill. Both only note; nothing waits on the network.
+void startBhaptics();
+void noteBhapticsShot(const std::byte* hands);
+void noteBhapticsFrame(const std::byte* player);
+
 // Installers (each logs what it did); `image` checks were made by the caller.
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
 bool installAimHooks(bool& fireInstalled);

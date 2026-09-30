@@ -22,6 +22,7 @@
 
 #include "common/pose.hpp"
 #include "common/vector.hpp"
+#include "features/input/controller_settings.hpp"
 #include "features/input/controller_state.hpp"
 #include "features/input/haptics_policy.hpp"
 #include "game/eternal/game_action.hpp"
@@ -77,8 +78,11 @@ std::optional<input::InputFrame> latestFrame();
 // The weapon hand (the dominant hand: right unless ETERNALVR_HANDEDNESS says left).
 input::Hand dominantHand();
 
-// XR worker: the weapon hand's aim space (-Z along its pointing ray) while hand aim is on, for a reticle
-// on that ray; XR_NULL_HANDLE otherwise.
+// What aims now: the main aim (ETERNALVR_AIM), or while piloting a demon the demon's (input::demonAimSource).
+input::AimSource activeAim();
+
+// XR worker: the weapon hand's aim space (-Z along its pointing ray) while hand aim is on (activeAim), for a
+// reticle on that ray; XR_NULL_HANDLE otherwise.
 XrSpace weaponAimSpace();
 
 // XR worker: the off hand's grip space while the controllers are attached, for the wrist HUD's quads (the
@@ -153,9 +157,10 @@ ArtificialMotion artificialMotion();
 // hand's ray; nullopt when hand aim yields this frame (forced view) and nothing may be written.
 std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head);
 
-// The same angles whatever the game's view is doing: the head's, or under hand aim the weapon hand's ray.
-// For a piloted demon (demon_aim.cpp), whose update runs through a forced view every tick.
-xr_math::IdAngles aimAnglesUnforced(const xr_math::IdAngles& head);
+// Camera hook, while piloting a demon (demon_aim.cpp): the angles the demon aims at, the head's or the weapon
+// hand's ray (input::demonAimSource), whatever the game's view is doing: the demon's update runs through a
+// forced view every tick.
+xr_math::IdAngles demonAimAngles(const xr_math::IdAngles& head);
 
 // Camera hook: the forward direction of the view it wrote (engine world axes), for the look-at triggers
 // (facing_hook.cpp), which test where the head looks rather than where the gun points.

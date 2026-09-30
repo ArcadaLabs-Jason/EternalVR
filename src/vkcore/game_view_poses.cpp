@@ -44,6 +44,7 @@ std::optional<WeaponAim> beginGameView(
         return std::nullopt;
     }
     updateForcedView(player, cutscene, cameraAnimation);
+    noteBhapticsFrame(player);
     refreshTestInput();
     GameViewPoses poses;
     {
@@ -65,11 +66,11 @@ std::optional<WeaponAim> beginGameView(
             }
         }
     }
-    // Under hand aim the weapon hand's ray is smoothed before anything reads it: the viewmodel and fire
-    // hooks and aimAngles take it from `poses`, the reticle from the view's record.
+    // Under hand aim (the demon's while piloting one) the weapon hand's ray is smoothed before anything reads
+    // it: the viewmodel and fire hooks and the aim take it from `poses`, the reticle from the view's record.
     std::optional<WeaponAim> weapon;
     const auto hand = static_cast<std::size_t>(weaponHand());
-    if (settings().aim == input::AimSource::Hand && poses.aimValid[hand]) {
+    if (activeAim() == input::AimSource::Hand && poses.aimValid[hand]) {
         weapon = smoothWeaponAim(s, poseTime, poses.aim[hand]);
     } else if (s.aimFilter) {
         s.aimFilter->reset();

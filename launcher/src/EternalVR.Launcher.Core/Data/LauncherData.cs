@@ -14,12 +14,14 @@ namespace EternalVR.Launcher.Core.Data
         public ArgumentPolicy ArgumentPolicy { get; private set; }
         public KnownLayers KnownLayers { get; private set; }
         public AntiCheat AntiCheat { get; private set; }
-        /// <summary>The processor saver's items (<see cref="Launch.CpuSaver"/>).</summary>
+        /// <summary>The CPU Saver's items (<see cref="Launch.CpuSaver"/>).</summary>
         public CpuSaver CpuSaver { get; private set; }
+        /// <summary>NVIDIA's DLSS DLL releases the launcher can download on request (<see cref="Settings.DlssDownloads"/>).</summary>
+        public Settings.DlssDownloads DlssDownloads { get; private set; }
 
         /// <summary>
-        /// The keys the settings restore puts back after a session: the forced cvars, the session keys and the processor
-        /// saver's cvars, of every item (whether it was on or not: a key the session did not change is left alone).
+        /// The keys the settings restore puts back after a session: the forced cvars, the session keys and the CPU
+        /// Saver's cvars, of every item (whether it was on or not: a key the session did not change is left alone).
         /// </summary>
         public System.Collections.Generic.IReadOnlyList<string> RestoredKeys => SessionKeys.RestoredKeys(ForcedCvars, SessionKeys, CpuSaver?.Names);
 
@@ -35,6 +37,7 @@ namespace EternalVR.Launcher.Core.Data
                 KnownLayers = KnownLayers.Parse(Read("known-layers.txt")),
                 AntiCheat = AntiCheat.Parse(Read("anti-cheat.txt")),
                 CpuSaver = CpuSaver.Parse(Read("cpu-saver.txt")),
+                DlssDownloads = Settings.DlssDownloads.Parse(Read("dlss-downloads.txt")),
             };
         }
     }

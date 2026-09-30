@@ -109,7 +109,8 @@ namespace EternalVR.Launcher.Core.Safety
             if (!File.Exists(sums)) { problems.Add("no " + SumsFile); return problems; }
             foreach (var entry in ReadSums(backupDir))
             {
-                var path = Path.Combine(backupDir, entry.Value.Replace('/', Path.DirectorySeparatorChar));
+                // A Game Pass container's names can take a copy past Windows' classic path limit (FileUtil.Long).
+                var path = FileUtil.Long(Path.Combine(backupDir, entry.Value.Replace('/', Path.DirectorySeparatorChar)));
                 if (!File.Exists(path)) problems.Add("missing " + entry.Value);
                 else if (!string.Equals(KnownBuilds.Sha256OfFile(path), entry.Key, StringComparison.OrdinalIgnoreCase)) problems.Add("checksum mismatch " + entry.Value);
             }

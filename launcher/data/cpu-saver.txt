@@ -1,4 +1,4 @@
-# The processor saver (Play tab, Picture): game cvars that cut the processor's work for each render, in items the
+# The CPU Saver (Play tab, Picture): game cvars that cut the processor's work for each render, in items the
 # player turns on one by one. Measured on the rig 2026-09-29 (docs/rig-findings/perf-cpu-cvars.md section 6): every
 # item together gave +23.9% ticks per second on e1m2's start view. Stereo renders the scene twice per tick, one eye
 # after the other, so every saving per render counts twice.
@@ -13,8 +13,8 @@
 #            Never rename one; a new id starts from its default for everyone.
 #   default  on or off, for a player whose launcher.ini has no choice for it. An older launcher.ini's
 #            cpu_saver = on turns every item on.
-#   row      streaming (a checkbox in the Picture group's "Texture streaming" row) or saver (a row of the "Processor
-#            saver" group, the checkbox text as its label).
+#   row      streaming (a checkbox in the Picture group's "Texture streaming" row) or saver (a row of the "CPU
+#            Saver" group, the checkbox text as its label).
 #   note     optional: a short line under a streaming checkbox.
 # tip | text      the checkbox's tooltip: what it changes, the gain measured on the rig, what it costs in the
 #                 picture (more tip lines are joined with a space; the launcher adds the cvars).

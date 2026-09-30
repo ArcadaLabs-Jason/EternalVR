@@ -183,7 +183,7 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
                 Setting.XButton, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
-                Setting.MenuLaser, Setting.HudPlace, Setting.Vibration,
+                Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.Bhaptics, Setting.RevenantAimWith,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
             Assert.Null(SettingRules.WhyNot(Setting.AimWith, s));
@@ -216,7 +216,7 @@ namespace EternalVR.Launcher.Core.Tests
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             foreach (var setting in new[]
             {
-                Setting.Resolution, Setting.AntiAliasing, Setting.TextureStreaming, Setting.ProcessorSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
+                Setting.Resolution, Setting.AntiAliasing, Setting.TextureStreaming, Setting.CpuSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
                 Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
@@ -241,6 +241,7 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<PostureMode>(Setting.PlayPosition);
             Choices<HeightMode>(Setting.EyeHeight);
             Choices<AimMode>(Setting.AimWith);
+            Choices<RevenantAimMode>(Setting.RevenantAimWith);
             Choices<Handedness>(Setting.WeaponHand);
             Choices<LocomotionMode>(Setting.MoveToward);
             Choices<DossierPress>(Setting.XButton);

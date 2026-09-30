@@ -74,8 +74,8 @@ namespace EternalVR.Launcher.Core.Tests
             var text = SettingTexts.For(Setting.AlternateEyes);
             Assert.Equal("Alternate eyes", text.Label);
             // In the order of AlternateEyesMode: the combo box's index is the mode.
-            Assert.Equal(new[] { "Off", "Auto (only when your processor cannot keep up)", "On (for slower processors)" }, text.Choices);
-            Assert.Equal("Auto (only when your processor cannot keep up)", text.Choices[(int)AlternateEyesMode.Auto]);
+            Assert.Equal(new[] { "Off", "Auto (when needed)", "On (for slower processors)" }, text.Choices);
+            Assert.Equal("Auto (when needed)", text.Choices[(int)AlternateEyesMode.Auto]);
             Assert.Equal("On (for slower processors)", text.Choices[(int)AlternateEyesMode.On]);
             Assert.Contains("half the rate", text.Tooltip);
             Assert.Contains("doubled", text.Tooltip);

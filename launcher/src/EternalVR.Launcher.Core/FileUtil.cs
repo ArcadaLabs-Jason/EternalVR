@@ -10,6 +10,22 @@ namespace EternalVR.Launcher.Core
     public static class FileUtil
     {
         private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+        private const string ExtendedPrefix = @"\\?\";
+
+        /// <summary>
+        /// The path in Windows' extended-length form (<c>\\?\C:\...</c>, <c>\\?\UNC\server\share\...</c>), which the
+        /// file functions take beyond the classic 260-character limit whether or not long paths are turned on in
+        /// Windows. A data folder deep in the disk plus a Game Pass save container's names passes that limit. Other
+        /// systems, and a path already in that form, are returned as they are.
+        /// </summary>
+        public static string Long(string path)
+        {
+            if (string.IsNullOrEmpty(path) || Path.DirectorySeparatorChar != '\\' || path.StartsWith(ExtendedPrefix, StringComparison.Ordinal))
+                return path;
+            var full = Path.GetFullPath(path);
+            if (full.StartsWith(@"\\", StringComparison.Ordinal)) return ExtendedPrefix + @"UNC\" + full.Substring(2);
+            return ExtendedPrefix + full;
+        }
 
         /// <summary>Writes a temporary file next to the target, then moves it into place.</summary>
         public static void WriteAllTextAtomic(string path, string text) => WriteAllBytesAtomic(path, Utf8NoBom.GetBytes(text));
@@ -20,6 +36,7 @@ namespace EternalVR.Launcher.Core
         /// </summary>
         public static void WriteAllBytesAtomic(string path, byte[] bytes)
         {
+            path = Long(path);
             var tmp = path + ".evr-tmp";
             RemoveStaleTemp(tmp);
             using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
@@ -36,6 +53,8 @@ namespace EternalVR.Launcher.Core
         /// </summary>
         public static void CopyVerified(string source, string target)
         {
+            source = Long(source);
+            target = Long(target);
             Directory.CreateDirectory(Path.GetDirectoryName(target));
             var expected = KnownBuilds.Sha256OfFile(source);
             var tmp = target + ".evr-tmp";
@@ -54,6 +73,7 @@ namespace EternalVR.Launcher.Core
         /// </summary>
         public static void DeleteDirectory(string dir)
         {
+            dir = Long(dir);
             if (!Directory.Exists(dir)) return;
             foreach (var f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
             {

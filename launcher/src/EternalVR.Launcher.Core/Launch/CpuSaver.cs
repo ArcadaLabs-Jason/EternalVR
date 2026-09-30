@@ -8,7 +8,7 @@ using EternalVR.Launcher.Core.Settings;
 namespace EternalVR.Launcher.Core.Launch
 {
     /// <summary>
-    /// One item of the processor saver: a checkbox on the Play tab (Picture) with its game cvars. Its choice is kept in
+    /// One item of the CPU Saver: a checkbox on the Play tab (Picture) with its game cvars. Its choice is kept in
     /// launcher.ini as <c>cpu_saver_&lt;id&gt; = on|off</c> (<see cref="LauncherSettings.CpuSaverChoice"/>).
     /// </summary>
     public sealed class CpuSaverItem
@@ -47,7 +47,7 @@ namespace EternalVR.Launcher.Core.Launch
     }
 
     /// <summary>
-    /// The processor saver (Play tab, Picture): game cvars that cut the processor's work per render, in items the player
+    /// The CPU Saver (Play tab, Picture): game cvars that cut the processor's work per render, in items the player
     /// turns on one by one, kept as data in <c>data\cpu-saver.txt</c> (docs/rig-findings/perf-cpu-cvars.md). A stereo
     /// launch hands the cvars of the items that are on to the layer (<c>ETERNALVR_CPU_SAVER</c>), which holds them at
     /// run time. The game may save them into its config, so the settings restore puts the keys of every item back after
@@ -65,7 +65,7 @@ namespace EternalVR.Launcher.Core.Launch
         public static readonly IReadOnlyList<KeyValuePair<string, Setting>> Rows = new[]
         {
             new KeyValuePair<string, Setting>("streaming", Setting.TextureStreaming),
-            new KeyValuePair<string, Setting>("saver", Setting.ProcessorSaver),
+            new KeyValuePair<string, Setting>("saver", Setting.CpuSaver),
         };
 
         public static readonly CpuSaver Empty = new CpuSaver(new CpuSaverItem[0]);
@@ -128,7 +128,7 @@ namespace EternalVR.Launcher.Core.Launch
             var items = new List<CpuSaverItem>();
             string id = null, label = null, note = null, tip = null;
             bool defaultOn = false;
-            Setting row = Setting.ProcessorSaver;
+            Setting row = Setting.CpuSaver;
             var cvars = new List<ForcedCvar>();
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

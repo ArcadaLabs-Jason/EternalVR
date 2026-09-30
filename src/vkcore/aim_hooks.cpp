@@ -9,6 +9,7 @@
 // - Shots: a mid-hook in idHands::FireWeapon just after GetWeaponFireInfo returns (RVA 0x135D733): the
 //   fire position [rsp+0x68] and fire axis [rbp+0x2B0] are replaced with the hand ray, so hitscan and
 //   projectiles leave the gun, not the eye. The game adds spread and derives the muzzle offset afterwards.
+//   The same hook counts the local player's shots for bHaptics (bhaptics_game.cpp), whatever the aim.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -139,13 +140,18 @@ void onFire(const HookRegisters& regs) {
     }
     State& s = state();
     const input::ControllerSettings& cfg = settings();
-    if (cfg.aim != input::AimSource::Hand || !s.attached.load(std::memory_order_acquire)) {
+    const bool handAim = cfg.aim == input::AimSource::Hand && s.attached.load(std::memory_order_acquire);
+    if (!handAim && !cfg.bhaptics) {
         return;
     }
     const auto* hands = reinterpret_cast<const std::byte*>(regs.r15);
     const std::byte* owner = nullptr;
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return; // not the local player's hands
+    }
+    noteBhapticsShot(hands);
+    if (!handAim) {
+        return;
     }
     s.shots.fetch_add(1, std::memory_order_relaxed);
     WorldHand world;
@@ -245,6 +251,27 @@ const std::byte* findUpdateReturn(const GameImage& image, const std::byte* setVi
     return found;
 }
 
+// The weapon hand's aim ray, or where it last pointed for a moment after it lost tracking, else the head.
+xr_math::IdAngles handAngles(State& s, const xr_math::IdAngles& head) {
+    bool valid = false;
+    Pose aim;
+    {
+        std::lock_guard lock(s.viewMutex);
+        const auto hand = static_cast<std::size_t>(weaponHand());
+        valid = s.poses.valid && s.poses.aimValid[hand];
+        aim = s.poses.aim[hand];
+    }
+    if (valid) {
+        s.lastHandAngles = xr_math::handAimAngles(aim.orientation);
+        s.lastHandQpc = nowQpc();
+        return s.lastHandAngles;
+    }
+    if (s.lastHandQpc != 0 && secondsSince(s.lastHandQpc) < kHandHoldSeconds) {
+        return s.lastHandAngles;
+    }
+    return head;
+}
+
 bool installFireHook(const GameImage& image) {
     const std::byte* site = findUnique(image, kTag, "fire info call", kFireSignature);
     if (!site) {
@@ -299,32 +326,16 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
     if (s.yielding.load()) {
         return std::nullopt;
     }
-    return aimAnglesUnforced(head);
+    return handAngles(s, head);
 }
 
-xr_math::IdAngles aimAnglesUnforced(const xr_math::IdAngles& head) {
+xr_math::IdAngles demonAimAngles(const xr_math::IdAngles& head) {
     State& s = state();
-    const input::ControllerSettings& cfg = settings();
-    if (cfg.aim != input::AimSource::Hand || !s.attached.load(std::memory_order_acquire)) {
+    if (input::demonAimSource(settings()) != input::AimSource::Hand ||
+        !s.attached.load(std::memory_order_acquire)) {
         return head;
     }
-    bool valid = false;
-    Pose aim;
-    {
-        std::lock_guard lock(s.viewMutex);
-        const auto hand = static_cast<std::size_t>(weaponHand());
-        valid = s.poses.valid && s.poses.aimValid[hand];
-        aim = s.poses.aim[hand];
-    }
-    if (valid) {
-        s.lastHandAngles = xr_math::handAimAngles(aim.orientation);
-        s.lastHandQpc = nowQpc();
-        return s.lastHandAngles;
-    }
-    if (s.lastHandQpc != 0 && secondsSince(s.lastHandQpc) < kHandHoldSeconds) {
-        return s.lastHandAngles;
-    }
-    return head;
+    return handAngles(s, head);
 }
 
 bool installAimHooks(bool& fireInstalled) {

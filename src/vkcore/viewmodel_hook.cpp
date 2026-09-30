@@ -191,6 +191,15 @@ bool viewmodelSiteChecks(const std::byte* site) {
 
 } // namespace
 
+std::string itemDeclName(const std::byte* decl) {
+    return declName(decl);
+}
+
+const std::byte* heldItemDecl(const std::byte* hands) {
+    const std::byte* decl = nullptr;
+    return hands && safeRead(hands + kHandsRightItemDecl, decl) ? decl : nullptr;
+}
+
 void endGameView(std::byte* renderView,
                  const std::byte* player,
                  const xr_math::IdViewAxis& body,

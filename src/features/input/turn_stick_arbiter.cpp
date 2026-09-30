@@ -34,12 +34,16 @@ bool inVerticalCone(Axis2 stick, float sign, float coneDegrees) {
 
 TurnStickArbiter::TurnStickArbiter(TurnStickSettings settings) : settings_(sanitized(settings)) {}
 
-TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds) {
+TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds, bool wheelHeld) {
     if (isFinite(stick)) {
         lastStick_ = stick;
     } else {
         stick = lastStick_;
         dtSeconds = 0.0f;
+    }
+
+    if (wheelHeld) {
+        return pointAtWheel(stick);
     }
 
     if (magnitude(stick) <= settings_.centreRadius) {
@@ -90,6 +94,15 @@ SweepIntent TurnStickArbiter::claim(Axis2 stick) const {
         return SweepIntent::Turn;
     }
     return SweepIntent::None;
+}
+
+TurnStickOutput TurnStickArbiter::pointAtWheel(Axis2 stick) {
+    intent_ = magnitude(stick) <= settings_.centreRadius ? SweepIntent::None : SweepIntent::Cancelled;
+    downSeconds_ = 0.0f;
+    holdReached_ = false;
+    TurnStickOutput output;
+    output.wheelPointer = stick;
+    return output;
 }
 
 TurnStickOutput TurnStickArbiter::continueDown(Axis2 stick) {

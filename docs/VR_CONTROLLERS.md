@@ -65,7 +65,11 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   deflection nothing is sent, so the stick springing back leaves the highlight, and the release of
   `_changeWeapon` (the sweep ends at the centre) picks it. With the virtual gamepad the pointer goes on its
   right stick instead. Log: `the weapon wheel is up`, `weapon wheel: pointing <direction> (motion dx, dy)`
-  at each change of the eight directions, `weapon wheel released after N motion(s)`.
+  at each change of the eight directions, `weapon wheel released after N motion(s)`. A player's map may put
+  `weapon_wheel` on a button instead of (or as well as) the down hold: while a button holds it, the turn
+  stick is the pointer (`TurnStickArbiter::update` with `wheelHeld`), the sweep in progress is cancelled,
+  and a stick still out of the centre when the button is let go stays cancelled until it comes back, so
+  pointing never turns, presses the chainsaw or ends in a quick switch.
 - **Weapon wheel by the hand** (`ETERNALVR_WHEEL_SELECT=hand`, `features/input/wheel_hand.hpp`; the
   launcher's Play tab, Controls, "Weapon wheel"). The stick (or a button bound to `weapon_wheel`) only holds
   the wheel; the weapon hand's aim ray points. At the first command of a hold with the hand tracked the
@@ -170,6 +174,10 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   another source short. The strength (0 off, default 0.6) scales every pulse. Log: `haptics: on, strength
   S`, `haptics: rumble hook at RVA 0x...`, `haptics: the game's first rumble: low L, high H`, and every
   10 s with something new `haptics: N pulses (fire a, punch b, menu c, game d, capture e), r refused`.
+- **bHaptics** (`ETERNALVR_BHAPTICS`, `ETERNALVR_BHAPTICS_INTENSITY`; [BHAPTICS.md](BHAPTICS.md)). Off by
+  default. Vests and arm sleeves through the bHaptics Player's local WebSocket: shots, damage with its
+  direction, a low-health heartbeat, glory kills and death, from the fire hook and the player's health
+  component. Experimental, untested on hardware.
 - **Comfort vignette** (`ETERNALVR_VIGNETTE`, `src/features/comfort/vignette.hpp`,
   `src/vkcore/presenter_vignette.cpp`). While the stick turns or moves the player, or the game moves the
   camera itself (the dash action held, or a forced view: a glory kill, the Meathook pull, a scripted
@@ -203,7 +211,11 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   The idPlayer's controlled entity (+0x88B0) is the demon; while piloting, the move stick follows the
   demon's view, body follow and head aim leave the Slayer alone, the actions press the demon's own
   bindings, and a detour on the demon's update aims it where the weapon hand points (the head under head
-  aim) through the game's view and basis setters.
+  aim) through the game's view and basis setters. `ETERNALVR_DEMON_AIM` chooses the demon's aim apart
+  from `ETERNALVR_AIM`: under hand aim for the demon the reticle and the aim smoothing follow the weapon
+  hand while piloting, under head aim for the demon the game's crosshair stays. The `controllers: on:` line
+  names it (`demon aim head (ETERNALVR_DEMON_AIM)`, or `(as aim)` when unset), and the first aimed update
+  of each piloting stretch logs `demon aim: the demon follows the head` (or `hand`).
 
 ## Settings
 
@@ -213,6 +225,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 |---|---|---|
 | `ETERNALVR_CONTROLLERS` | `1` / `0` | `1` |
 | `ETERNALVR_AIM` | `head` (view follows the head), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
+| `ETERNALVR_DEMON_AIM` | what aims a piloted demon (the Cultist Base Revenant, above): `head` or `hand`; unset or empty follows `ETERNALVR_AIM`. No effect under `view` aim, where the demon keeps the game's own aim | unset |
 | `ETERNALVR_LOCOMOTION` | `head` / `hand` (the off hand) | `head` |
 | `ETERNALVR_TURN` | `smooth` / `snap` / `off` | `smooth` |
 | `ETERNALVR_TURN_RATE` | smooth turn, 150 to 400 degrees per second | 230 |
@@ -230,6 +243,8 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
 | `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |
 | `ETERNALVR_HAPTICS` | controller vibration strength, `0` (off) to `1`; the launcher's Vibration: Off 0, Light 0.35, Medium 0.6, Strong 1 | `0.6` |
+| `ETERNALVR_BHAPTICS` | `1`: bHaptics suits and sleeves through the bHaptics Player ([BHAPTICS.md](BHAPTICS.md)) | `0` |
+| `ETERNALVR_BHAPTICS_INTENSITY` | the bHaptics effects' strength, `0` to `1` | `1` |
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
@@ -513,7 +528,10 @@ for seconds (below).
 - **Bindings from the player's profile** (REQ-11) come through `ETERNALVR_CONTROLLER_DATA`: the launcher's
   controls editor (Edit controls) saves the player's edited copies of the built-in files in the controls
   folder, checked with the layer's rules first (launcher/src/EternalVR.Launcher.Core/Controls,
-  docs/release/CONTROLS.md); each VR settings profile keeps its own folder (`controls\profiles\<name>`). No haptics yet (v1 if time allows). Aim assist is not forced off (the
+  docs/release/CONTROLS.md); each VR settings profile keeps its own folder (`controls\profiles\<name>`).
+  The layer uses only the file whose profile the runtime reports, so the editor opens on the controllers of
+  the newest session log with a `the runtime reports <profile> for the right hand` line
+  (`SessionLogs.LastControllerProfile`). No haptics yet (v1 if time allows). Aim assist is not forced off (the
   injected turn does not use the stick path that gates it).
 - **Stereo.** Checked live with Route S (docs/VR_STEREO.md, re-test table): with hand aim and snap turn
   every action works as in mono, and the weapon is drawn at the hand in both eyes (Route S retargets the

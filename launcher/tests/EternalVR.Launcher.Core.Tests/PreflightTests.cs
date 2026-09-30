@@ -81,10 +81,11 @@ namespace EternalVR.Launcher.Core.Tests
                 GameFolderDlls = new[] { "DOOMEternalx64vk.dll", "dxgi.dll", "OptiScaler.dll", "nvngx.dll" },
                 VulkanLoaderVersion = "1.2.198.1",
                 Paths = new[] { "D:\\Spiele\\DOOM\u00C9ternal", @"C:\EternalVR" },
+                DataRoot = @"D:\" + new string('d', CompatibilityChecks.LongDataRootChars),
             };
             var r = PreflightEvaluator.Evaluate(f);
             Assert.True(r.CanLaunch);
-            foreach (var id in new[] { "steam", "program-folder", "hags", "layer-disabled", "vram", "gpus", "injectors", "vulkan-loader", "path" })
+            foreach (var id in new[] { "steam", "program-folder", "hags", "layer-disabled", "vram", "gpus", "injectors", "vulkan-loader", "path", "data-path" })
                 Assert.Equal(Severity.Warn, Only(r, id).Severity);
             Assert.Contains("Hardware-accelerated GPU scheduling", Only(r, "hags").Message);
             Assert.Contains("Small GPU has 8 GB", Only(r, "vram").Message);
@@ -105,6 +106,7 @@ namespace EternalVR.Launcher.Core.Tests
                 GameFolderDlls = new[] { "amd_ags_x64.dll", "bink2w64.dll" },
                 VulkanLoaderVersion = "1.4.341.0",
                 Paths = new[] { @"C:\Program Files (x86)\Steam\steamapps\common\DOOMEternal" },
+                DataRoot = @"C:\Users\Someone\AppData\Local\EternalVR",
             };
             Assert.DoesNotContain(PreflightEvaluator.Evaluate(f).Checks, c => c.Severity != Severity.Pass);
         }

@@ -25,7 +25,7 @@ namespace EternalVR.Launcher.Core.Launch
         public string LogDir { get; set; }
         public LauncherSettings Settings { get; set; } = new LauncherSettings();
         public ForcedCvars ForcedCvars { get; set; } = new ForcedCvars(new ForcedCvar[0]);
-        /// <summary>The processor saver's items; the cvars of those that are on are handed to the layer in stereo.</summary>
+        /// <summary>The CPU Saver's items; the cvars of those that are on are handed to the layer in stereo.</summary>
         public CpuSaver CpuSaver { get; set; } = CpuSaver.Empty;
         /// <summary>False when no settings location was found: nothing is forced (T-094).</summary>
         public bool ForceCvars { get; set; } = true;
@@ -163,6 +163,10 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
             // Hand aim needs the controllers; without them the head aims.
             Set("ETERNALVR_AIM", LauncherSettings.AimName(s.Aim == AimMode.Hand && !s.Controllers ? AimMode.Head : s.Aim));
+            // The Revenant's aim while piloting it, only when it is not the same as Aim with (the layer then follows ETERNALVR_AIM);
+            // hand aim needs the controllers the same way. Under view aim the layer ignores it.
+            if (s.RevenantAim != RevenantAimMode.Same)
+                Set("ETERNALVR_DEMON_AIM", s.RevenantAim == RevenantAimMode.Hand && s.Controllers ? "hand" : "head");
             if (window != null) Set("ETERNALVR_WINDOW", window.EnvironmentValue);
             if (mirror)
             {
@@ -202,6 +206,9 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_BODY_FOLLOW", s.BodyFollow ? "1" : "0");
             Set("ETERNALVR_AIM_SMOOTHING", Number(s.AimSmoothing, 0.0, 1.0, LauncherSettings.DefaultAimSmoothing));
             Set("ETERNALVR_HAPTICS", Number(s.Vibration, 0.0, 1.0, LauncherSettings.DefaultVibration));
+            // bHaptics (docs/BHAPTICS.md), off by default: the layer talks to the bHaptics Player on this PC.
+            Set("ETERNALVR_BHAPTICS", s.Bhaptics ? "1" : "0");
+            Set("ETERNALVR_BHAPTICS_INTENSITY", Number(s.BhapticsIntensity, 0.0, 1.0, LauncherSettings.DefaultBhapticsIntensity));
             Set("ETERNALVR_UI_DISTANCE", Number(s.HudDistance, LauncherSettings.MinHudDistance, LauncherSettings.MaxHudDistance, LauncherSettings.DefaultHudDistance));
             Set("ETERNALVR_UI_WIDTH", Number(s.HudWidth, LauncherSettings.MinHudWidth, LauncherSettings.MaxHudWidth, LauncherSettings.DefaultHudWidth));
             Set("ETERNALVR_UI_OFFSET_Y", Number(s.HudHeight, LauncherSettings.MinHudHeight, LauncherSettings.MaxHudHeight, 0.0));
@@ -224,7 +231,7 @@ namespace EternalVR.Launcher.Core.Launch
             }
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
-            // The processor saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
+            // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
             // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could
             // not undo them there. Absent when no item is on.
             var saver = stereo && inputs.ForceCvars && inputs.CpuSaver != null ? inputs.CpuSaver.EnvironmentValue(s) : string.Empty;

@@ -125,7 +125,7 @@ namespace EternalVR.Launcher.Core.Game
         public static string Sha256OfFile(string path)
         {
             using (var sha = SHA256.Create())
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 20))
+            using (var stream = new FileStream(FileUtil.Long(path), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 20))
                 return ToHex(sha.ComputeHash(stream));
         }
 

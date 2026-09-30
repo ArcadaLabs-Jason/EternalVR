@@ -5,8 +5,9 @@ Starts one DOOM Eternal run (or the test application) into a new run folder and 
 .DESCRIPTION
 Refuses when elevated, when Steam is not running, when a game process is already running, when a pending
 run cannot be cleaned up (a live or owner run is never cleaned implicitly: stop it with stop.ps1 -Run),
-or when the settings differ from the last verified restore (or, before the first one, from the
-pre-development backups) without an explanation. Otherwise: writes CLEANUP_PENDING, snapshots every
+or, with EVR_RIG_OWNER_SETTINGS_GUARD=1, when the settings differ from the last verified restore (or,
+before the first one, from the pre-development backups) without an explanation; with the guard off (the
+default outside the tests) a difference is logged and adopted. Otherwise: writes CLEANUP_PENDING, snapshots every
 settings location into config-before\, makes sure the virtual display is part of the desktop (once per
 work block, 2560x1440 by default), starts the exe windowed (+r_fullscreen 0, window size = the virtual
 display's) with SteamAppId=782330, mutes the game's own audio session (its prior mute state is recorded
@@ -183,12 +184,13 @@ if ($bLocations) {
         @($diff.Added | ForEach-Object { "added: $_" }) + @($diff.Unreadable | ForEach-Object { "unreadable: $_" }) + $newLocations
     $baseline = [ordered]@{ source = $bName; differences = $differences; acknowledged = $false }
     if ($differences.Count -gt 0) {
-        if (-not $AcknowledgeSettingsChange) {
+        if (-not $AcknowledgeSettingsChange -and $cfg.OwnerSettingsGuard) {
             foreach ($d in $differences) { Write-RigLog "settings differ from $($bName): $d" 'ERROR' }
             Exit-Rig 2 'REFUSED: the settings changed since the baseline and no pending run explains it. Report this to the owner; rerun with -AcknowledgeSettingsChange only once he has confirmed the change is his.'
         }
         $baseline.acknowledged = $true
-        Write-RigLog ("settings differences acknowledged: {0}" -f ($differences -join '; ')) 'WARN'
+        $how = $(if ($AcknowledgeSettingsChange) { 'acknowledged' } else { 'adopted (EVR_RIG_OWNER_SETTINGS_GUARD is off)' })
+        Write-RigLog ("settings differences {0}: {1}" -f $how, ($differences -join '; ')) 'WARN'
     }
 }
 

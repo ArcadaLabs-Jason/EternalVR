@@ -105,6 +105,10 @@ function Get-RigConfig {
         WindowWaitSec   = [int](& $seam 'EVR_RIG_WINDOW_WAIT_SEC' 30)
         MuteWaitSec     = [int](& $seam 'EVR_RIG_MUTE_WAIT_SEC' 60)
         LockWaitSec     = [int](& $seam 'EVR_RIG_LOCK_WAIT_SEC' 120)
+        # Settings and saves that changed outside a run stop the next run until the owner confirms them.
+        # Off on the rig: the owner's saves are backed up and he does not play on it until release, so a
+        # difference is logged and adopted, and a file changed after a run is kept in config-replaced        # before the restore. On in test mode, so the tests keep covering the guarded path.
+        OwnerSettingsGuard = ((Get-RigEnv 'EVR_RIG_OWNER_SETTINGS_GUARD' $(if ($test) { '1' } else { '0' })) -eq '1')
         DisplayStub     = (& $seam 'EVR_RIG_DISPLAY_STUB' $null)
         ElevationProbe  = (& $seam 'EVR_RIG_ELEVATION' 'auto')
         AbortAt         = (& $seam 'EVR_RIG_TEST_ABORT_AT' $null)
@@ -1721,6 +1725,7 @@ function Stop-RigRunProcesses($cfg, [string]$RunDir) {
 # run; an owner run is only cleaned when named explicitly (-Explicit). Steam-Cloud files are kept as the
 # game left them and reported; -RestoreCloud restores them and runs the resync launch (T-115).
 function Invoke-RigRunCleanup($cfg, [string]$RunDir, [switch]$Explicit, [switch]$AllowStop, [switch]$Acknowledge, [switch]$RestoreCloud) {
+    if (-not $cfg.OwnerSettingsGuard) { $Acknowledge = [switch]$true }
     $marker = Join-Path $RunDir 'CLEANUP_PENDING'
     $name = Split-Path -Leaf $RunDir
     if (-not (Test-Path -LiteralPath $marker)) { return [pscustomobject]@{ Ok = $true; Skipped = $false; Reason = 'not pending' } }

@@ -32,6 +32,8 @@ namespace EternalVR.Launcher.Core.Preflight
         public string VulkanLoaderVersion { get; set; }
         /// <summary>The folders whose paths are checked for characters outside ASCII (game, program, data).</summary>
         public IReadOnlyList<string> Paths { get; set; } = new string[0];
+        /// <summary>The launcher's data folder (its sessions, snapshots and save backups); null when not known.</summary>
+        public string DataRoot { get; set; }
     }
 
     public static class CompatibilityChecks
@@ -40,6 +42,12 @@ namespace EternalVR.Launcher.Core.Preflight
         public const long LowVramBytes = 8L * 1024 * 1024 * 1024;
         /// <summary>The loader the layer route needs (T-079).</summary>
         public static readonly Version MinimumLoader = new Version(1, 3, 234);
+        /// <summary>
+        /// Beyond this many characters the files the launcher keeps under its data folder (session snapshots, logs) may pass
+        /// Windows' classic 260-character path limit, which applies unless long paths are turned on in Windows. Save
+        /// backups use extended-length paths and are not limited by it (<see cref="FileUtil.Long"/>).
+        /// </summary>
+        public const int LongDataRootChars = 150;
 
         /// <summary>DLL names that injectors and upscaler mods drop into a game folder (ReShade, SpecialK, OptiScaler, ...).</summary>
         public static readonly IReadOnlyList<string> InjectorDlls = new[]
@@ -79,6 +87,12 @@ namespace EternalVR.Launcher.Core.Preflight
                 yield return new Check("path", Severity.Warn,
                     "These paths contain characters outside plain ASCII: " + string.Join(", ", nonAscii)
                     + ". It should work, but if the layer does not load, move the game or EternalVR to a plain path.");
+
+            if (f.DataRoot != null && f.DataRoot.Length > LongDataRootChars)
+                yield return new Check("data-path", Severity.Warn,
+                    $"The data folder's path is {f.DataRoot.Length} characters long: {f.DataRoot}. Some of the launcher's files in it "
+                    + "may pass Windows' 260-character path limit, and then backing up or restoring your settings fails. Use a "
+                    + "shorter data folder, or turn on long paths in Windows.");
         }
 
         public static bool TryParseVersion(string text, out Version version)

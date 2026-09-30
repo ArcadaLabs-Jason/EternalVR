@@ -61,6 +61,11 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.AimWith] = new Text("Aim with",
                 "What aims your weapon: your weapon hand (motion controllers), your head, or the mouse as in the flat game.",
                 "Weapon hand", "Head", "Mouse"),
+            [Setting.RevenantAimWith] = new Text("Revenant aim with",
+                "What aims the Revenant's cannons. Only applies while you pilot the Revenant in Cultist Base. Same as Aim with "
+                + "follows that setting. Weapon hand: the cannons and the demon's hands follow your controller. Head: they follow "
+                + "where you look, which keeps them out of the way when you walk around or turn in your room.",
+                "Same as Aim with", "Weapon hand", "Head"),
             [Setting.WeaponHand] = new Text("Weapon hand",
                 "The hand that holds the gun. Left swaps the buttons between the hands; the second left option also swaps the sticks.",
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),
@@ -86,6 +91,11 @@ namespace EternalVR.Launcher.Core.Settings
                 "How strongly the controllers vibrate. They pulse when you fire, punch, point at and click menus, and when the "
                 + "game rumbles. Off turns vibration off.",
                 Vibration.Names),
+            [Setting.Bhaptics] = new Text("bHaptics (experimental)",
+                "For bHaptics vests and arm sleeves. Start the bHaptics Player on this PC with your suit connected, then the "
+                + "game: you feel your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at "
+                + "low health, glory kills and death. Nothing happens without the Player running. New and not yet tried on a "
+                + "real suit."),
             [Setting.ButtonLayout] = new Text("Button layout",
                 "Change which button does what. Edit controls lets you pick an action for each button of your controllers, "
                 + "for each weapon hand, and saves them for the VR settings profile in use: each profile keeps its own controls. "
@@ -111,7 +121,7 @@ namespace EternalVR.Launcher.Core.Settings
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "
                 + "more frames per second on the test rig). Mostly lossless: textures may sharpen a moment later when you turn "
                 + "fast or enter a new area. On by default. The game's own setting is put back after you play."),
-            [Setting.ProcessorSaver] = new Text("Processor saver (experimental)",
+            [Setting.CpuSaver] = new Text("CPU Saver (experimental)",
                 "Turns down a few of the game's detail settings that cost processor time for each eye's picture, one checkbox "
                 + "each; point at one to see what it changes, what it gained on the test rig and what it costs in the picture. "
                 + "Try them if the frame rate drops and your processor, not your graphics card, is what holds it back: in VR "
@@ -127,7 +137,7 @@ namespace EternalVR.Launcher.Core.Settings
                 + "motion can look doubled or smeared, and some people find it uncomfortable. Auto does this only when "
                 + "your processor cannot keep up with your headset, and draws both eyes again once it can. Leave it off "
                 + "unless the game cannot keep up with your headset.",
-                "Off", "Auto (only when your processor cannot keep up)", "On (for slower processors)"),
+                "Off", "Auto (when needed)", "On (for slower processors)"),
             [Setting.WorldSize] = new Text("World size",
                 "How big the world feels around you. 1.00 is the game's own scale; change it a little if rooms and demons "
                 + "feel too big or too small."),

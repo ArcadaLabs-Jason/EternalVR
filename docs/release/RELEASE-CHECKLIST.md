@@ -14,6 +14,10 @@ known to be incomplete, **unverified** may be fine but nothing records it.
        builds the layer (preset `windows-msvc-release`) and the launcher, runs both test suites, and
        writes `EternalVR-alpha-<version>-<sha>.zip`, a `-symbols.zip` and a `.sha256` for each into
        `<workspace>\tmp-release\`. It refuses a dirty checkout.
+       The launcher's updater (`launcher/src/EternalVR.Launcher.Core/Update/`) relies on this shape: a tag
+       `vX.Y.Z` on the public repo, the zip uploaded as `EternalVR-*.zip` (the symbols zip is never uploaded)
+       with its `.sha256` next to it, one top folder holding `SHA256SUMS.txt` for every other file, and the
+       launcher's file version equal to the tag.
 3. [ ] **Play the zip's own build once.** Rig runs so far used the Debug layer (`windows-msvc`); this is
        an optimised build. Unzip it outside the checkout, start the launcher from there, and play 15
        minutes: a save loaded, a fight, pause and resume, a menu with the pointer, quit. Check the

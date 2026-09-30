@@ -7,6 +7,8 @@
 //   ETERNALVR_CONTROLLERS    1 / 0              controllers drive the game (on by default)
 //   ETERNALVR_AIM            head / hand / view the view angles follow the head, the weapon hand, or
 //                                               stay the game's own (view)
+//   ETERNALVR_DEMON_AIM      head / hand        what aims a piloted demon (the Cultist Base Revenant): the
+//                                               head or the weapon hand; unset, as ETERNALVR_AIM
 //   ETERNALVR_LOCOMOTION     head / hand        "forward" on the move stick: the head or the off hand
 //   ETERNALVR_TURN           smooth / snap / off
 //   ETERNALVR_TURN_RATE      degrees per second for smooth turning (150 to 400)
@@ -29,6 +31,9 @@
 //   ETERNALVR_AIM_SMOOTHING  0 to 1             hand-aim smoothing: 0 off, 1 the strongest (0.3)
 //   ETERNALVR_HAPTICS        0 to 1             controller vibration strength: 0 off (0.6;
 //                                               haptics_policy.hpp)
+//   ETERNALVR_BHAPTICS       1 / 0              bHaptics suits and sleeves through the bHaptics Player
+//                                               (off by default; docs/BHAPTICS.md)
+//   ETERNALVR_BHAPTICS_INTENSITY  0 to 1        the bHaptics effects' strength (1)
 //   ETERNALVR_VIEWMODEL      1 / 0              the game's weapon and arms at the controller
 //   ETERNALVR_WEAPON_FOV     1 / 0              the weapon drawn with the headset's FOV
 //   ETERNALVR_VIEWMODEL_OFFSET  f,l,u[,pitch,yaw,roll]  one offset for every weapon (tuning)
@@ -114,6 +119,7 @@ inline constexpr game::WeaponOffset kDefaultOffhandElbow{-0.2f, 0.6f, -1.0f, 0.0
 struct ControllerSettings {
     bool enabled = true;
     AimSource aim = AimSource::Head;
+    std::optional<AimSource> demonAim; // head or hand; nullopt follows `aim` (demonAimSource)
     LocomotionFrame locomotion = LocomotionFrame::Head;
     TurnSettings turn;
     game::Handedness handedness = game::Handedness::Right;
@@ -126,6 +132,8 @@ struct ControllerSettings {
     ShotOrigin shotOrigin = ShotOrigin::Hand;
     float aimSmoothing = kDefaultAimSmoothing; // aim_smoothing.hpp
     float haptics = kDefaultHapticStrength;    // haptics_policy.hpp
+    bool bhaptics = false;                     // docs/BHAPTICS.md
+    float bhapticsIntensity = 1.0f;
     bool viewmodel = true;
     bool weaponFov = true;
     bool seated = false;
@@ -162,6 +170,11 @@ using SettingLookup = std::function<std::optional<std::string>(std::string_view 
 ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup);
 
 const char* aimSourceName(AimSource aim);
+
+// What aims a piloted demon: ETERNALVR_DEMON_AIM, or the main aim when it is unset. Under view aim nothing
+// is written for the Slayer or the demon, so the demon keeps the game's own aim whatever ETERNALVR_DEMON_AIM
+// says.
+AimSource demonAimSource(const ControllerSettings& settings);
 const char* inputPathName(InputPath path);
 
 } // namespace evr::input

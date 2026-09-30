@@ -49,6 +49,11 @@ down instead is the quick switch to your last weapon. The stick does not turn yo
 Keep the game's "Weapon Wheel Open Delay" (controls settings) at its default or shorter, so the wheel is
 open before the stick starts moving its pointer.
 
+If you give the weapon wheel to a button in the controls editor (the right stick click, for example), hold
+that button to open the wheel and point with the turn stick (the right stick unless you swapped the
+sticks), then let go of the button to pick. While the button holds the wheel the turn stick only points:
+it does not turn you, and its up and down do nothing, also if it is still pushed when you let go.
+
 **Picking on the wheel with your hand.** If you would rather point than roll the stick, set **Weapon wheel**
 on the launcher's Play tab to **Point with your hand**. The stick (or whichever button you gave the wheel in
 the controls editor) then only holds the wheel open: open it as usual and keep holding, then turn your gun
@@ -207,12 +212,14 @@ are the same whichever profile is picked.
 | Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
 | Overhead swing | Swing your gun hand down from above your head for the Crucible or the Hammer ([In the game](#in-the-game)) | Off |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
+| Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
 | Move toward | Where you look, Where your off hand points | Where you look |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims | On |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
+| bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death ([bHaptics](#bhaptics)). Not yet tried on a real suit | Off |
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
 | Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card), DLSS (experimental, NVIDIA RTX only) | TAA |
@@ -232,11 +239,27 @@ are the same whichever profile is picked.
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
 | HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m) | 1.5 m, 2 m, 0 |
 | Health and ammo | On the HUD panel; On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you); or On your weapon (experimental: the ammo just above the back of the gun in your weapon hand, health and armour stay on the panel). The wrist and the weapon need Motion controllers | On the HUD panel |
-| DLSS version | The game's (2.3), or From a file: a newer `nvngx_dlss.dll` you downloaded (NVIDIA's DLSS page on GitHub has the latest). The file stays where it is; nothing is copied into the game folder. Only with a DLSS choice under Anti-aliasing | The game's |
+| DLSS version | The game's (2.3), or From a file: a newer `nvngx_dlss.dll`: "Download from NVIDIA..." fetches it from NVIDIA's own GitHub once you accept NVIDIA's license, or "Choose..." takes one you downloaded yourself. The file stays in EternalVR's data folder or where you keep it; nothing is copied into the game folder. Only with a DLSS choice under Anti-aliasing | The game's |
 | DLSS preset | With a file of your own: The DLL's default, K (the transformer model at every quality), J, M, L (its variants) or F (the older model). Needs DLSS 3.1 or later | The DLL's default |
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |
+
+### bHaptics
+
+Experimental, and not yet tried on a real suit. With **bHaptics (experimental)** on (Play tab):
+
+1. Install and start the bHaptics Player on the PC that runs the game, and connect your vest and sleeves
+   to it (they show as connected in the Player).
+2. Start the game from the launcher as usual. EternalVR finds the Player by itself on this PC; you can
+   start the Player before or after the game.
+
+You feel your shots on the weapon arm's sleeve and a little on the chest (harder for the Super Shotgun,
+the Rocket Launcher, the Ballista and the BFG), hits on the vest from the side they came from, a heartbeat
+when your health is low, a jolt when a glory kill starts, and your death. Without the Player running
+nothing happens and the game plays as usual. `bhaptics_intensity` in `launcher.ini` (0 to 1, default 1)
+turns every effect down; the Player's own intensity settings apply too. The game's log lines starting
+with `bhaptics:` say whether it connected and what it played.
 
 ## Changing the controls
 
@@ -248,8 +271,11 @@ of the launcher.
 ### The controls editor
 
 1. Press **Edit controls...** on the launcher's Play tab (Controls, Button layout).
-2. Pick your controllers in **Controllers**, and the map to change in **Weapon hand**. It starts on the
-   Weapon hand you play with; the game uses the map of the Weapon hand chosen on the Play tab.
+2. Pick your controllers in **Controllers**, and the map to change in **Weapon hand**. The game uses only
+   the controls of the controllers you play with, so check **Controllers** names yours: it starts on the
+   controllers of your last game (else on the ones you have a file for, else on Meta Quest). **Weapon
+   hand** starts on the Weapon hand you play with; the game uses the map of the Weapon hand chosen on the
+   Play tab.
 3. **Buttons** lists every button of your controllers, named as they are on the controller (A, X,
    trigger, trackpad click and so on), with a column for each way of pressing it:
    - **Press:** the action is held for as long as the button is down.

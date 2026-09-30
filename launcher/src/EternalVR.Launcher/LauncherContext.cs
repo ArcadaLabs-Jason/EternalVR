@@ -194,6 +194,7 @@ namespace EternalVR.Launcher
                 GameFolderDlls = g.Game == null ? new string[0] : FileUtil.FileNames(g.Game.GameRoot, "*.dll"),
                 VulkanLoaderVersion = WindowsSystem.SystemVulkanLoaderVersion(),
                 Paths = new[] { g.Game?.GameRoot, ProgramDir, Paths.Root },
+                DataRoot = Paths.Root,
             };
 
             f.LayerDir = LayerDir;

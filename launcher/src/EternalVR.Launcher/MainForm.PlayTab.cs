@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using EternalVR.Launcher.Core;
 using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
@@ -23,6 +24,7 @@ namespace EternalVR.Launcher
         private readonly CheckBox throwGesture = new CheckBox { AutoSize = true };
         private readonly CheckBox swingGesture = new CheckBox { AutoSize = true };
         private readonly ComboBox aim = Choices(Setting.AimWith);
+        private readonly ComboBox revenantAim = Choices(Setting.RevenantAimWith);
         private readonly ComboBox hand = Choices(Setting.WeaponHand);
         private readonly ComboBox locomotion = Choices(Setting.MoveToward);
         private readonly ComboBox xButton = Choices(Setting.XButton);
@@ -30,10 +32,11 @@ namespace EternalVR.Launcher
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly ComboBox vibration = Choices(Setting.Vibration);
+        private readonly CheckBox bhaptics = new CheckBox { AutoSize = true };
         /// <summary>Whether the controls folder holds maps of the player's own (<see cref="ShowControlsState"/>).</summary>
         private readonly Label controlsState = Caption(string.Empty);
         private readonly NumericUpDown renderScale = Number(LauncherSettings.MinRenderScale, LauncherSettings.MaxRenderScale, 0.05, 2);
-        private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing, 200);
+        private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing);
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
         private double customSmoothing = -1;
@@ -72,6 +75,9 @@ namespace EternalVR.Launcher
                 Row(Setting.AimWith, aim,
                     s => aim.SelectedIndex = (int)s.Aim,
                     s => s.Aim = (AimMode)aim.SelectedIndex),
+                Row(Setting.RevenantAimWith, revenantAim,
+                    s => revenantAim.SelectedIndex = (int)s.RevenantAim,
+                    s => s.RevenantAim = (RevenantAimMode)revenantAim.SelectedIndex),
                 Row(Setting.WeaponHand, hand,
                     s => hand.SelectedIndex = (int)s.Hand,
                     s => s.Hand = (Handedness)hand.SelectedIndex),
@@ -87,6 +93,7 @@ namespace EternalVR.Launcher
                 Row(Setting.AimSteadiness, steadiness, LoadSteadiness, ReadSteadiness),
                 Row(Setting.AimDot, aimDot, s => aimDot.Checked = s.AimDot, s => s.AimDot = aimDot.Checked),
                 Row(Setting.Vibration, vibration, LoadVibration, ReadVibration),
+                Row(Setting.Bhaptics, bhaptics, s => bhaptics.Checked = s.Bhaptics, s => s.Bhaptics = bhaptics.Checked),
                 // Nothing to save: the buttons open the controls editor and the folder, the caption says what it holds.
                 Row(Setting.ButtonLayout, ControlsRow(), s => ShowControlsState(), s => { }));
             var pictureRows = new List<SettingRow>
@@ -98,7 +105,7 @@ namespace EternalVR.Launcher
                     s => antiAliasing.SelectedIndex = LauncherSettings.AntiAliasingChoice(s),
                     s => LauncherSettings.SetAntiAliasingChoice(s, antiAliasing.SelectedIndex)),
             };
-            // Texture streaming and the processor saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
+            // Texture streaming and the CPU Saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
             if (StreamingRow() is SettingRow streaming) pictureRows.Add(streaming);
             var picture = Group("Picture", pictureRows.ToArray());
             var left = new List<Control> { comfort, body, gestures };
@@ -112,8 +119,8 @@ namespace EternalVR.Launcher
 
         private FlowLayoutPanel ControlsRow()
         {
-            var edit = new Button { Text = "Edit controls...", Width = 110, Height = 26 };
-            var open = new Button { Text = "Open folder", Width = 90, Height = 26 };
+            var edit = new Button { Text = "Edit controls...", Width = 100, Height = 26 };
+            var open = new Button { Text = "Open folder", Width = 80, Height = 26 };
             edit.Click += (s, e) => EditControls();
             open.Click += (s, e) => OpenControlsFolder();
             var buttons = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
@@ -157,7 +164,9 @@ namespace EternalVR.Launcher
             if (!AdoptControls(ctx.Settings.Profile)) return;
             var controls = ctx.Controls;
             if (!PrepareControls(controls)) return;
-            using (var dialog = new ControlsDialog(controls, ctx.Settings.Hand, ctx.Log))
+            var lastProfile = SessionLogs.LastControllerProfile(ctx.Paths.Logs);
+            if (lastProfile != null) ctx.Log.Info("controls editor: the last game used " + lastProfile);
+            using (var dialog = new ControlsDialog(controls, ctx.Settings.Hand, lastProfile, ctx.Log))
                 dialog.ShowDialog(this);
             ShowControlsState();
         }

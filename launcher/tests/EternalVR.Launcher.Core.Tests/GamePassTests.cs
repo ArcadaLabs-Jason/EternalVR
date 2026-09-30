@@ -205,6 +205,41 @@ namespace EternalVR.Launcher.Core.Tests
             }
         }
 
+        [Fact]
+        public void SaveContainersAreBackedUpUnderADataFolderPastThePathLimit()
+        {
+            using (var t = new TempDir())
+            {
+                // A container's real names (48 + 32 + 32 characters) under a deep data folder: the copies pass 260 characters.
+                const string container = "000900000ABCDEF0_0000000000000000000000007A1B2C3D/0123456789ABCDEF0123456789ABCDEF";
+                t.Write("wgs/" + container + "/FEDCBA9876543210FEDCBA9876543210", "save data");
+                var backups = t.Combine(new string('d', 120), "save-backups");
+                var locs = new[] { new SettingsLocation(GamePassInstall.SaveLocationName, SettingsLocationKind.GamePassSaves, t.Combine("wgs")) };
+                var dir = SaveBackups.Create(backups, "20260929-120000", locs);
+                var copy = Path.Combine(dir, "gamepass", container.Replace('/', Path.DirectorySeparatorChar), "FEDCBA9876543210FEDCBA9876543210");
+                Assert.True(copy.Length > 260);
+                Assert.Empty(SaveBackups.Verify(dir));
+                Assert.Equal("save data", File.ReadAllText(FileUtil.Long(copy)));
+                Assert.Single(SaveBackups.List(backups));
+                FileUtil.DeleteDirectory(dir);
+                Assert.False(Directory.Exists(FileUtil.Long(dir)));
+            }
+        }
+
+        [Fact]
+        public void LongPathsTakeTheExtendedFormOnWindowsOnly()
+        {
+            if (Path.DirectorySeparatorChar != '\\')
+            {
+                Assert.Equal("/home/x", FileUtil.Long("/home/x"));
+                return;
+            }
+            Assert.Equal(@"\\?\C:\Games\EternalVR\x", FileUtil.Long(@"C:\Games\EternalVR\sub\..\x"));
+            Assert.Equal(@"\\?\UNC\server\share\x", FileUtil.Long(@"\\server\share\x"));
+            Assert.Equal(@"\\?\C:\already", FileUtil.Long(@"\\?\C:\already"));
+            Assert.Null(FileUtil.Long(null));
+        }
+
         private static PreflightFacts GamePassFacts() => new PreflightFacts
         {
             Platform = GamePlatform.GamePass,

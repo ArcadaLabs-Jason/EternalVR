@@ -62,11 +62,16 @@ namespace EternalVR.Launcher
             // font are measured again (at 100 % no scaling pass does it).
             Font = UiFont();
             FitListHeights(this);
+            WidenOpenLists(this);
             LoadSettingsIntoControls();
             ResumeLayout(false);
             PerformLayout();
             Load += (s, e) => { FitTabs(); FitToScreen(); };
             DpiChanged += (s, e) => BeginInvoke(new Action(FitTabs));
+            tabs.Selecting += (s, e) => HoldLayoutWhileSwitching(tabs.SelectedTab, e.TabPage);
+            var wheelGuard = new WheelGuard();
+            Application.AddMessageFilter(wheelGuard);
+            FormClosed += (s, e) => Application.RemoveMessageFilter(wheelGuard);
 
             ctx.Log.Line += AppendLog;
             runner.Status += ShowStatus;
@@ -83,12 +88,14 @@ namespace EternalVR.Launcher
             discardRestore.Click += (s, e) => DiscardPendingRestore();
             recoveryTimer.Tick += (s, e) => TryRecover();
             FormClosing += OnClosing;
+            WireUpdates();
             Shown += (s, e) =>
             {
                 ctx.Log.Info($"EternalVR launcher started; data folder {ctx.Paths.Root}");
                 GiveProfilesTheirControls();
                 TryRecover();
                 RunPreflight();
+                CheckForUpdate(asked: false);
             };
         }
 
@@ -114,6 +121,26 @@ namespace EternalVR.Launcher
         }
 
         /// <summary>
+        /// Each list opens as wide as its longest entry, so a box sized to fit its column can hold choices with longer names.
+        /// Measured when it opens: some lists are filled later (the monitors, the runtimes).
+        /// </summary>
+        internal static void WidenOpenLists(Control parent)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is ComboBox list)
+                    list.DropDown += (s, e) =>
+                    {
+                        int widest = list.Width;
+                        foreach (var item in list.Items)
+                            widest = Math.Max(widest, TextRenderer.MeasureText(list.GetItemText(item), list.Font).Width + SystemInformation.VerticalScrollBarWidth);
+                        list.DropDownWidth = widest;
+                    };
+                WidenOpenLists(c);
+            }
+        }
+
+        /// <summary>
         /// The tab headers at the width of their titles in the scaled font (measured by the tab control itself, the headers
         /// keep the size of the unscaled font and the titles overlap).
         /// </summary>
@@ -124,6 +151,41 @@ namespace EternalVR.Launcher
                 width = Math.Max(width, TextRenderer.MeasureText(page.Text, tabs.Font).Width);
             int pad = tabs.Font.Height;
             tabs.ItemSize = new Size(width + pad * 2, tabs.Font.Height + pad / 2 + 4);
+        }
+
+        /// <summary>
+        /// Showing a tab page laid out its nested tables once per control made visible (about 80 passes, 0.4 to 0.7 s on
+        /// Advanced): both pages' layouts are held until the switch is over (a message posted now runs after it), then the
+        /// shown page is laid out once. A page resized while hidden (the window fitted to the screen) kept its old layout
+        /// when shown, its bottom row cut off: it is laid out again at its new size once it is up.
+        /// </summary>
+        private void HoldLayoutWhileSwitching(TabPage from, TabPage to)
+        {
+            SuspendTree(from);
+            SuspendTree(to);
+            BeginInvoke(new Action(() =>
+            {
+                ResumeTree(to, true);
+                ResumeTree(from, false);
+                BeginInvoke(new Action(() => to?.PerformLayout()));
+            }));
+        }
+
+        private static void SuspendTree(Control c)
+        {
+            if (c == null) return;
+            c.SuspendLayout();
+            foreach (Control child in c.Controls)
+                if (child.Controls.Count > 0) SuspendTree(child);
+        }
+
+        /// <summary>Resumes the inner containers first, each laid out once when <paramref name="layOut"/>, then the outer one.</summary>
+        private static void ResumeTree(Control c, bool layOut)
+        {
+            if (c == null) return;
+            foreach (Control child in c.Controls)
+                if (child.Controls.Count > 0) ResumeTree(child, layOut);
+            c.ResumeLayout(layOut);
         }
 
         /// <summary>A scaled window taller or wider than the screen's working area is shrunk to it (the log box takes the loss).</summary>
@@ -147,7 +209,7 @@ namespace EternalVR.Launcher
             tabs.TabPages.AddRange(new[] { playPage, advancedPage, ChecksTab() });
 
             var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
-            buttons.Controls.AddRange(new Control[] { launch, check, restoreSaves, exportReport, discardRestore, statusLabel });
+            buttons.Controls.AddRange(new Control[] { launch, check, restoreSaves, exportReport, updateButton, discardRestore, statusLabel });
             buttons.SetFlowBreak(discardRestore, true);
             tips.SetToolTip(launch, "Starts DOOM Eternal in VR with these settings. Your game settings are put back when it exits.");
             tips.SetToolTip(check, "Checks the game, the mod and the headset runtime again.");
@@ -169,14 +231,14 @@ namespace EternalVR.Launcher
         private TabPage ChecksTab()
         {
             var page = new TabPage("Checks and log") { Padding = new Padding(6) };
-            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1 };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            grid.Controls.Add(checks);
-            grid.Controls.Add(logBox);
-            grid.Controls.Add(openData);
+            grid.Controls.Add(checks, 0, 0);
+            grid.Controls.Add(logBox, 0, 1);
+            grid.Controls.Add(UpdateRow(), 0, 2);
             page.Controls.Add(grid);
             return page;
         }

@@ -435,6 +435,20 @@ Test-Case 'unexplained-settings-change-is-reported-not-adopted' {
     Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'second stop failed'
 }
 
+Test-Case 'unexplained-settings-change-is-adopted-with-the-guard-off' {
+    $t = New-TestEnv 'unexplained-change-unguarded' @{ EVR_RIG_OWNER_SETTINGS_GUARD = '0' }
+    $s = Start-TestRun $t
+    Check ($s.Code -eq 0) "first run exit code $($s.Code)"
+    Check ((Invoke-Rig 'stop.ps1').Code -eq 0) 'first stop failed'
+    Write-TestFile (Join-Path $t.Saved 'base\DOOMEternalConfig.local') "seta r_mode `"5`"`r`n"
+    $r = Invoke-Rig 'run.ps1' @('-Exe', $t.Exe)
+    Check ($r.Code -eq 0) "exit code $($r.Code), expected 0"
+    Check ($r.Output -match 'adopted') 'adoption not logged'
+    $run = Read-Json (Join-Path (@(Get-Runs $t)[-1]) 'run.json')
+    Check ($run.baseline.acknowledged -eq $true) 'adoption not recorded'
+    Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'second stop failed'
+}
+
 Test-Case 'game-log-files-never-block-a-run' {
     $t = New-TestEnv 'game-logs'
     Write-TestFile (Join-Path $t.Saved 'base\qconsole.log') 'first'

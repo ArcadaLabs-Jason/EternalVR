@@ -361,10 +361,14 @@ bool attach(const XrContext& context) {
     }
     s.attached.store(true, std::memory_order_release);
     EVR_LOG(
-        "%s: on: aim %s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, input %s, "
-        "viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, weapon wheel "
-        "by the %s, throw gesture %s, overhead swing %s",
-        kTag, input::aimSourceName(cfg.aim), cfg.locomotion == input::LocomotionFrame::Head ? "head" : "hand",
+        "%s: on: aim %s, demon aim %s%s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
+        "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
+        "weapon wheel by the %s, throw gesture %s, overhead swing %s",
+        kTag, input::aimSourceName(cfg.aim), input::aimSourceName(input::demonAimSource(cfg)),
+        !cfg.demonAim                       ? " (as aim)"
+        : cfg.aim == input::AimSource::View ? " (ETERNALVR_DEMON_AIM has no effect under view aim)"
+                                            : " (ETERNALVR_DEMON_AIM)",
+        cfg.locomotion == input::LocomotionFrame::Head ? "head" : "hand",
         cfg.turn.mode == input::TurnMode::Smooth ? "smooth"
         : cfg.turn.mode == input::TurnMode::Snap ? "snap"
                                                  : "off",

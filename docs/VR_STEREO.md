@@ -297,8 +297,8 @@ axis).
 | `ETERNALVR_UI_CROP` | 1 | 0: the UI quad and the menu panel show the whole GUI target instead of its 16:9 band |
 | `ETERNALVR_UI_WASH` | 1 | 0: the HUD quad shows the GUI target's full-screen additive wash (the red low-health vignette) as the game drew it (docs/rig-findings/ui-layer.md, section 12) |
 | `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time |
-| `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and processor saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
-| `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments); `<=N` is a cap as above; an entry replaces the processor saver's value for the same cvar |
+| `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and CPU Saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
+| `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments); `<=N` is a cap as above; an entry replaces the CPU Saver's value for the same cvar |
 | `ETERNALVR_PRESENT_IMMEDIATE` | 0 | 1: immediate present mode in any mode (mono frame-rate references) |
 | `ETERNALVR_STEREO_FULL_RES` | 1 | `forceFullResolution` on both eyes |
 | `ETERNALVR_STEREO_EXPOSURE_ONCE` | 1 | `skipAutoExposureUpdate` on eye R |

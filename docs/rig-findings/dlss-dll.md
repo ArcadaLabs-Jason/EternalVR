@@ -119,8 +119,11 @@ under terms "at least as protective" (2(c)); it forbids distributing the SDK "as
 bypassing its authentication (4(d)) and making it subject to an open source licence or "redistributable at no
 charge" (4(e)). The application that integrates the SDK is the game, not the mod; shipping the DLL in the mod's
 open source release is at best unclear and plausibly conflicts with 2(c), 4(b) and 4(e). **Nothing NVIDIA's is in
-the repo or the release: the player downloads the DLL and chooses it.** An opt-in download from NVIDIA's release on
-the player's machine would also be possible; that is the owner's call. Nothing third-party was added, so
+the repo or the release: the player downloads the DLL and chooses it.** An opt-in download from NVIDIA's repository on
+the player's machine is what the launcher offers (Jason's go, 2026-09-29): "Download from NVIDIA..." on the
+Advanced tab names the source and NVIDIA's license, links it, and downloads only once the player accepts it; the
+file (the newest line of `launcher/data/dlss-downloads.txt`, pinned by size and SHA-256) is kept in the data
+folder's `dlss\<version>\` and chosen as "From a file". EternalVR itself never ships or hosts it. Nothing third-party was added, so
 `THIRD_PARTY_NOTICES.md` is unchanged.
 
 ## 6. Settings and logs

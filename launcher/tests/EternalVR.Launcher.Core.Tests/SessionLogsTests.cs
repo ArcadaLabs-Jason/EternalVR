@@ -39,5 +39,40 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Empty(SessionLogs.Prune(dir.Combine("missing"), 1, null));
             }
         }
+
+        private const string Index = "/interaction_profiles/valve/index_controller";
+        private const string Touch = "/interaction_profiles/oculus/touch_controller";
+
+        private static string Reports(string profile, string hand) =>
+            "[   12.345] [ 4242] controllers: the runtime reports " + profile + " for the " + hand + " hand\n";
+
+        [Fact]
+        public void TheControlsEditorOpensOnTheControllersOfTheLastGame()
+        {
+            using (var dir = new TempDir())
+            {
+                dir.Write("20260926-100000/eternalvr-20260926-100001-100.log", Reports(Touch, "right"));
+                // The newest session: the controllers changed during it, and the right hand's last report counts.
+                dir.Write("20260927-090000/eternalvr-20260927-090001-200.log",
+                    Reports("no controller", "right") + Reports(Touch, "right") + Reports(Index, "left") + Reports(Index, "right"));
+                // A later session whose game never reported controllers is passed over.
+                dir.Write("20260927-100000/eternalvr-20260927-100001-300.log", "[    0.000] log start\n");
+                Directory.CreateDirectory(dir.Combine("20260927-110000"));
+
+                Assert.Equal(Index, SessionLogs.LastControllerProfile(dir.Path));
+            }
+        }
+
+        [Fact]
+        public void NoGameWithControllersLeavesTheControlsEditorOnItsDefault()
+        {
+            using (var dir = new TempDir())
+            {
+                Assert.Null(SessionLogs.LastControllerProfile(dir.Combine("missing")));
+                dir.Write("20260927-090000/eternalvr-20260927-090001-200.log",
+                    Reports("no controller", "right") + Reports(Index, "left"));
+                Assert.Null(SessionLogs.LastControllerProfile(dir.Path));
+            }
+        }
     }
 }

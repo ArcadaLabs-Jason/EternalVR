@@ -118,6 +118,14 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     static constexpr std::pair<const char*, AimSource> kAim[] = {
         {"head", AimSource::Head}, {"hand", AimSource::Hand}, {"view", AimSource::View}};
     r.choice("ETERNALVR_AIM", kAim, s.aim);
+    // View is not one of the choices: it stays when the variable is unset or unusable.
+    static constexpr std::pair<const char*, AimSource> kDemonAim[] = {{"head", AimSource::Head},
+                                                                      {"hand", AimSource::Hand}};
+    AimSource demonAim = AimSource::View;
+    r.choice("ETERNALVR_DEMON_AIM", kDemonAim, demonAim);
+    if (demonAim != AimSource::View) {
+        s.demonAim = demonAim;
+    }
 
     static constexpr std::pair<const char*, LocomotionFrame> kLocomotion[] = {
         {"head", LocomotionFrame::Head}, {"hand", LocomotionFrame::OffHand}};
@@ -162,6 +170,8 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     r.choice("ETERNALVR_SHOT_ORIGIN", kShot, s.shotOrigin);
     r.range("ETERNALVR_AIM_SMOOTHING", 0.0f, 1.0f, s.aimSmoothing);
     r.range("ETERNALVR_HAPTICS", 0.0f, 1.0f, s.haptics);
+    r.flag("ETERNALVR_BHAPTICS", s.bhaptics);
+    r.range("ETERNALVR_BHAPTICS_INTENSITY", 0.0f, 1.0f, s.bhapticsIntensity);
 
     r.flag("ETERNALVR_VIEWMODEL", s.viewmodel);
     r.flag("ETERNALVR_WEAPON_FOV", s.weaponFov);
@@ -238,6 +248,13 @@ const char* aimSourceName(AimSource aim) {
         return "view";
     }
     return "head";
+}
+
+AimSource demonAimSource(const ControllerSettings& settings) {
+    if (settings.aim == AimSource::View || !settings.demonAim) {
+        return settings.aim;
+    }
+    return *settings.demonAim;
 }
 
 const char* shoulderAnchorName(ShoulderAnchor anchor) {

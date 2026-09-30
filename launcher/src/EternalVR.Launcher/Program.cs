@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -74,8 +75,30 @@ namespace EternalVR.Launcher
                     return 1;
                 }
                 Application.Run(new MainForm(ctx));
-                return 0;
             }
+            // After an update: the new launcher, started once this one's lock is released, with the same options.
+            if (MainForm.RestartExe != null)
+                Process.Start(new ProcessStartInfo(MainForm.RestartExe, string.Join(" ", args.Select(Quote))) { UseShellExecute = false });
+            return 0;
+        }
+
+        /// <summary>One argument as Windows splits a command line back into it (backslashes doubled before a quote).</summary>
+        internal static string Quote(string arg)
+        {
+            if (arg.Length > 0 && arg.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return arg;
+            var sb = new System.Text.StringBuilder("\"");
+            int slashes = 0;
+            foreach (var c in arg)
+            {
+                if (c == '\\')
+                {
+                    slashes++;
+                    continue;
+                }
+                sb.Append('\\', c == '"' ? slashes * 2 + 1 : slashes).Append(c);
+                slashes = 0;
+            }
+            return sb.Append('\\', slashes * 2).Append('"').ToString();
         }
 
         private static bool IsStartupError(Exception e) =>

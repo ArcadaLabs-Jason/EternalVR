@@ -121,6 +121,7 @@ evr_add_test(evr_input_tests
         features/input/input_mapper_stick_tests.cpp
         features/input/input_mapper_chord_tests.cpp
         features/input/input_mapper_tests.cpp
+        features/input/input_mapper_wheel_tests.cpp
         features/input/locomotion_direction_tests.cpp
         features/input/offhand_policy_tests.cpp
         features/input/player_controller_data_tests.cpp
@@ -138,6 +139,12 @@ evr_add_test(evr_input_tests
         features/input/wheel_mouse_tests.cpp
         features/input/xr_action_set_tests.cpp
     DEPENDS evr_input)
+
+evr_add_test(evr_bhaptics_tests
+    SOURCES
+        features/bhaptics/bhaptics_message_tests.cpp
+        features/bhaptics/body_haptics_tests.cpp
+    DEPENDS evr_bhaptics)
 
 evr_add_test(evr_arm_tests
     SOURCES

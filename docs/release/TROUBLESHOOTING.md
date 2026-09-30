@@ -125,9 +125,16 @@ to the headset. After a session the launcher's status line sums it up ("In play 
 a second"). If that is well below your headset's rate, see the next entry, or lower "Resolution" on the Play tab if
 your graphics card is the limit.
 
+**Which DLSS preset should I use?** With a newer `nvngx_dlss.dll` ("DLSS version: From a file" on the Advanced
+tab), the "DLSS preset" makes a big difference on RTX 20 and 30 series cards. One player's RTX 3070 with a
+Ryzen 7 3800X (Quest 3 at 72 Hz, ray tracing on, DLSS Performance, "Resolution" 0.80) drew about 60 new frames
+a second with preset M and about 80 with preset J. The game's own DLSS 2.3 was faster still (about 87) but
+blurrier at medium and long distances. On those cards start with J or K: M looks best but costs the most. That
+player settled on "Resolution" 0.90, DLSS Performance and preset J.
+
 **The frame rate is low and lowering "Resolution" does not help.** Your processor, not your graphics card,
 is probably what holds the game back. Check that "Texture streaming: Only what you see" on the Play tab is on
-(it is by default), then try the "Processor saver" checkboxes on the Play tab: each turns down one detail
+(it is by default), then try the "CPU Saver" checkboxes on the Play tab: each turns down one detail
 setting that costs processor time, and its tooltip says how much it gained on the test rig and what it costs
 in the picture. If that is not enough, try "Alternate eyes" on the Advanced tab: it draws one eye per frame
 instead of both, which roughly halves the processor's work per frame. Each eye then updates at half the

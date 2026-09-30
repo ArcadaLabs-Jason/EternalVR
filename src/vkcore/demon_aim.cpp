@@ -1,5 +1,5 @@
-// Piloting a demon: the demon aims where the head looks, or under hand aim where the weapon hand points
-// (demon_view.hpp).
+// Piloting a demon: the demon aims where the head looks, or under the demon's hand aim where the weapon hand
+// points (demon_view.hpp; ETERNALVR_DEMON_AIM, or ETERNALVR_AIM when it is unset).
 //
 // The demon's camera, movement and attacks follow its own view angles: the command's angles plus its physics
 // deltaViewAngles. The detour on the demon's per-tick update (idDemonPlayer_Revenant, vtable slot +0x1968)
@@ -132,7 +132,8 @@ void onUpdate(void* demon, const void* previous, const void* current) {
         // No jump: the body starts where the demon faces less the aim's yaw.
         g_offsetDemon = reinterpret_cast<std::uintptr_t>(demon);
         g_bodyOffset = xr_math::normalize180(delta[1] - aimYaw);
-        EVR_LOG("%s: demon aim: the demon follows the aim (view yaw %.1f, aim yaw %.1f pitch %.1f)", kTag,
+        EVR_LOG("%s: demon aim: the demon follows the %s (view yaw %.1f, aim yaw %.1f pitch %.1f)", kTag,
+                input::aimSourceName(input::demonAimSource(settings())),
                 xr_math::normalize180(commandYaw + delta[1]), aimYaw, aimPitch);
     }
     const float bodyYaw = xr_math::normalize180(commandYaw + g_bodyOffset);

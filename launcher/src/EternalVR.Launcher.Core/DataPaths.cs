@@ -26,6 +26,11 @@ namespace EternalVR.Launcher.Core
         public string Controls => Path.Combine(Root, "controls");
         /// <summary>The player profiles (<see cref="Settings.ProfileStore"/>).</summary>
         public string Profiles => Path.Combine(Root, "profiles");
+        /// <summary>DLSS DLLs downloaded from NVIDIA on the player's request, one folder per version (<see cref="Settings.DlssDownloads"/>).</summary>
+        public string DlssFiles => Path.Combine(Root, "dlss");
+        /// <summary>Downloaded EternalVR releases and the update check's state (<see cref="Update.UpdateState"/>).</summary>
+        public string Updates => Path.Combine(Root, "updates");
+        public string UpdateStateFile => Path.Combine(Updates, "state.txt");
         /// <summary>Present while a VR session's restore has not completed (T-036, T-093).</summary>
         public string SessionMarker => Path.Combine(Root, "SESSION_PENDING");
         /// <summary>Present while an HKCU layer registration may exist (flag-gated route only).</summary>

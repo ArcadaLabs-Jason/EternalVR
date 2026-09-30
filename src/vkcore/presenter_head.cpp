@@ -349,11 +349,11 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
     }
     if (controllers::pilotingDemon()) {
         // Piloting a demon (demon_view.hpp): the idPlayer's own angles stay where the Slayer stood, so
-        // nothing is written to them. The demon aims where the head looks, or under hand aim where the weapon
-        // hand points (demon_aim.cpp): the view is built on the body yaw it aimed from; without it, on the
-        // demon's camera yaw.
+        // nothing is written to them. The demon aims where the head looks, or under the demon's hand aim
+        // where the weapon hand points (demon_aim.cpp): the view is built on the body yaw it aimed from;
+        // without it, on the demon's camera yaw.
         ++aimCameraFrames;
-        const xr_math::IdAngles aim = controllers::aimAnglesUnforced(xr_math::headAngles(headInIdTech));
+        const xr_math::IdAngles aim = controllers::demonAimAngles(xr_math::headAngles(headInIdTech));
         controllers::notePilotAim(aim.pitch, aim.yaw);
         if (const std::optional<controllers::PilotAim> piloted = controllers::pilotAim()) {
             return xr_math::axisFromAngles({0.0f, piloted->bodyYaw, 0.0f});

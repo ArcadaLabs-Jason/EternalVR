@@ -115,7 +115,7 @@ Held* heldNamed(std::string_view name) {
     return nullptr;
 }
 
-// ETERNALVR_CPU_SAVER="name=value;..." (the launcher's processor saver, data/cpu-saver.txt): cvars that cut
+// ETERNALVR_CPU_SAVER="name=value;..." (the launcher's CPU Saver, data/cpu-saver.txt): cvars that cut
 // the CPU work of a render, held like the others. A cvar the stereo sets already hold keeps their value.
 void addCpuSaver() {
     const std::string text = narrowEnv(L"ETERNALVR_CPU_SAVER");
@@ -126,7 +126,7 @@ void addCpuSaver() {
     for (const stereo_seq::CvarHold& c : stereo_seq::parseCvarList(text)) {
         Held h;
         if (c.value.empty() || heldNamed(c.name) || !makeHeld(c, h)) {
-            EVR_LOG("%s: processor saver: %s left out (%s)", kTag, c.name.c_str(),
+            EVR_LOG("%s: CPU Saver: %s left out (%s)", kTag, c.name.c_str(),
                     heldNamed(c.name) ? "the stereo set holds it" : "no usable value");
             continue;
         }
@@ -134,11 +134,11 @@ void addCpuSaver() {
         g_held.push_back(std::move(h));
         list += (list.empty() ? "" : ", ") + c.name + " " + c.value;
     }
-    EVR_LOG("%s: processor saver (ETERNALVR_CPU_SAVER) asks for: %s", kTag,
+    EVR_LOG("%s: CPU Saver (ETERNALVR_CPU_SAVER) asks for: %s", kTag,
             list.empty() ? "nothing (no name=value item)" : list.c_str());
 }
 
-// ETERNALVR_DEBUG_CVARS: rig experiments; an entry replaces the processor saver's value for the same cvar.
+// ETERNALVR_DEBUG_CVARS: rig experiments; an entry replaces the CPU Saver's value for the same cvar.
 void addDebugList() {
     for (const stereo_seq::CvarHold& c : stereo_seq::parseCvarList(narrowEnv(L"ETERNALVR_DEBUG_CVARS"))) {
         Held h;
@@ -241,7 +241,7 @@ void start(bool stereo) {
     }
     EVR_LOG("%s: held at run time: %s", kTag, list.empty() ? "none" : list.c_str());
     if (anySaver) {
-        EVR_LOG("%s: processor saver holds: %s", kTag, saver.empty() ? "none" : saver.c_str());
+        EVR_LOG("%s: CPU Saver holds: %s", kTag, saver.empty() ? "none" : saver.c_str());
     }
 }
 
@@ -281,7 +281,7 @@ void apply(bool stereo) {
                 g_loggedWrites += h.written ? 1 : 0;
                 h.written = true;
                 EVR_LOG("%s: %s %.3f -> at most %s (reads %.3f)%s", kTag, h.name.c_str(), value,
-                        h.value.c_str(), readFloat(h.object), h.saver ? "; processor saver" : "");
+                        h.value.c_str(), readFloat(h.object), h.saver ? "; CPU Saver" : "");
             }
             continue;
         }
@@ -296,7 +296,7 @@ void apply(bool stereo) {
             EVR_LOG("%s: %s %d -> %s (reads %d)%s", kTag, h.name.c_str(), before, h.value.c_str(),
                     readValue(h.object),
                     h.stereo  ? "; the game's setting is not changed"
-                    : h.saver ? "; processor saver"
+                    : h.saver ? "; CPU Saver"
                               : "");
         }
     }

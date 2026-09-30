@@ -37,10 +37,11 @@ void notePilotedDemon(bool piloting);
 // The piloted demon last seen (0 before any).
 [[nodiscard]] std::uintptr_t pilotedDemon();
 
-// Demon aim (demon_aim.cpp): the demon aims where the head looks, or under hand aim where the weapon hand
-// points. The camera hook publishes those angles (id Tech degrees, the yaw relative to the body) for every
-// view while piloting; the demon's update publishes the body yaw it aimed from, which the view is built on,
-// and the yaw it aimed at. Nullopt when not piloting or the hook has not aimed within a quarter second.
+// Demon aim (demon_aim.cpp): the demon aims where the head looks, or under the demon's hand aim
+// (input::demonAimSource) where the weapon hand points. The camera hook publishes those angles (id Tech
+// degrees, the yaw relative to the body) for every view while piloting; the demon's update publishes the body
+// yaw it aimed from, which the view is built on, and the yaw it aimed at. Nullopt when not piloting or the
+// hook has not aimed within a quarter second.
 struct PilotAim {
     float bodyYaw = 0.0f;
     float aimYaw = 0.0f;

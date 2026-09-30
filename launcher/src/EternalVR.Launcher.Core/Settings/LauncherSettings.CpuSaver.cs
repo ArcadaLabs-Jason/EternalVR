@@ -4,20 +4,20 @@ using System.Linq;
 
 namespace EternalVR.Launcher.Core.Settings
 {
-    /// <summary>The processor saver's choices in launcher.ini: <c>cpu_saver_&lt;id&gt; = on|off</c> per item of
+    /// <summary>The CPU Saver's choices in launcher.ini: <c>cpu_saver_&lt;id&gt; = on|off</c> per item of
     /// <c>data\cpu-saver.txt</c> (<see cref="Launch.CpuSaver"/>), and an older launcher's single <c>cpu_saver</c> switch.</summary>
     public sealed partial class LauncherSettings
     {
-        /// <summary>The key prefix of a processor saver item's choice: <c>cpu_saver_&lt;id&gt; = on|off</c> (<see cref="Launch.CpuSaver"/>).</summary>
+        /// <summary>The key prefix of a CPU Saver item's choice: <c>cpu_saver_&lt;id&gt; = on|off</c> (<see cref="Launch.CpuSaver"/>).</summary>
         public const string CpuSaverKeyPrefix = "cpu_saver_";
-        /// <summary>The processor saver items the player chose, by id, in file order (an item without a choice takes its
+        /// <summary>The CPU Saver items the player chose, by id, in file order (an item without a choice takes its
         /// default, <see cref="Launch.CpuSaver.IsOn"/>). Replaced as a whole, never changed in place, so a clone may share it.</summary>
         public IReadOnlyList<KeyValuePair<string, bool>> CpuSaverChoices { get; private set; } = new KeyValuePair<string, bool>[0];
         /// <summary>An older launcher's single switch, <c>cpu_saver = on</c>: every item without a choice of its own is on.
         /// Written back only until the window has saved a choice for each item.</summary>
         public bool CpuSaverAllOn { get; set; } = false;
 
-        /// <summary>The player's choice for processor saver item <paramref name="id"/>; null when there is none.</summary>
+        /// <summary>The player's choice for CPU Saver item <paramref name="id"/>; null when there is none.</summary>
         public bool? CpuSaverChoice(string id)
         {
             foreach (var kv in CpuSaverChoices)
@@ -25,7 +25,7 @@ namespace EternalVR.Launcher.Core.Settings
             return null;
         }
 
-        /// <summary>Sets the choices of the processor saver items (the window sets every item it shows): an item not
+        /// <summary>Sets the choices of the CPU Saver items (the window sets every item it shows): an item not
         /// named keeps its choice. Once chosen, the older <c>cpu_saver</c> switch no longer counts.</summary>
         public void SetCpuSaverChoices(IEnumerable<KeyValuePair<string, bool>> choices)
         {
@@ -41,7 +41,7 @@ namespace EternalVR.Launcher.Core.Settings
             CpuSaverAllOn = false;
         }
 
-        /// <summary>A processor saver item's key: <c>cpu_saver_</c> and an id (<see cref="Launch.CpuSaver.IsId"/>).</summary>
+        /// <summary>A CPU Saver item's key: <c>cpu_saver_</c> and an id (<see cref="Launch.CpuSaver.IsId"/>).</summary>
         private static bool IsCpuSaverKey(string key) =>
             key.StartsWith(CpuSaverKeyPrefix, StringComparison.OrdinalIgnoreCase)
             && Launch.CpuSaver.IsId(key.Substring(CpuSaverKeyPrefix.Length).ToLowerInvariant());

@@ -13,9 +13,9 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: gestures
         ThrowGesture, SwingGesture,
         // Play: controls
-        AimWith, WeaponHand, MoveToward, XButton, WeaponWheel, AimSteadiness, AimDot, Vibration, ButtonLayout,
+        AimWith, RevenantAimWith, WeaponHand, MoveToward, XButton, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, AntiAliasing, TextureStreaming, ProcessorSaver,
+        Resolution, AntiAliasing, TextureStreaming, CpuSaver,
         // Advanced
         VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape,
         HudDistance, HudSize, HudHeight, HudPlace, DlssVersion, DlssPreset,
@@ -31,6 +31,7 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NeedsControllers = "Needs motion controllers (Advanced tab).";
         public const string NeedsStereo = "Only in stereo (VR mode on the Advanced tab).";
         public const string NeedsHandAim = "Only when the weapon hand aims (Aim with).";
+        public const string NeedsHeadOrHandAim = "Only when the weapon hand or the head aims (Aim with).";
         public const string NeedsSmoothTurn = "Only with smooth turning.";
         public const string NeedsSnapTurn = "Only with snap turning.";
         public const string NotSitting = "Not while sitting: your body stays put (Play position).";
@@ -57,6 +58,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.ThrowGesture:
                 case Setting.SwingGesture:
                 case Setting.Vibration:
+                case Setting.Bhaptics:
                 case Setting.ButtonLayout:
                     return s.Controllers ? null : NeedsControllers;
                 case Setting.TurnSpeed:
@@ -65,6 +67,9 @@ namespace EternalVR.Launcher.Core.Settings
                     return !s.Controllers ? NeedsControllers : s.Turn == TurnMode.Snap ? null : NeedsSnapTurn;
                 case Setting.WalkInRoom:
                     return !s.Controllers ? NeedsControllers : s.Posture == PostureMode.Seated ? NotSitting : null;
+                case Setting.RevenantAimWith:
+                    // Without the controllers, or with the mouse, there is nothing to choose between.
+                    return !s.Controllers ? NeedsControllers : s.Aim == AimMode.View ? NeedsHeadOrHandAim : null;
                 case Setting.AimSteadiness:
                 case Setting.ShotsFrom:
                     return !s.Controllers ? NeedsControllers : handAim ? null : NeedsHandAim;
@@ -81,7 +86,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.AntiAliasing:
                 case Setting.AlternateEyes:
                 case Setting.TextureStreaming:
-                case Setting.ProcessorSaver:
+                case Setting.CpuSaver:
                 case Setting.DesktopWindow:
                 case Setting.HudDistance:
                 case Setting.HudSize:

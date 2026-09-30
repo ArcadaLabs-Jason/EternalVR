@@ -12,7 +12,7 @@ namespace EternalVR.Launcher
     public sealed partial class MainForm
     {
         private readonly ComboBox mode = Choices(Setting.VrMode);
-        private readonly ComboBox alternateEyes = Choices(Setting.AlternateEyes, 300);
+        private readonly ComboBox alternateEyes = Choices(Setting.AlternateEyes);
         private readonly NumericUpDown worldScale = Number(LauncherSettings.MinWorldScale, LauncherSettings.MaxWorldScale, 0.05, 2);
         private readonly CheckBox ipdOverride = new CheckBox { Text = "Set my own:", AutoSize = true };
         private readonly NumericUpDown ipd = Number(LauncherSettings.MinIpdMm, LauncherSettings.MaxIpdMm, 0.5, 1);
@@ -36,6 +36,8 @@ namespace EternalVR.Launcher
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
         private readonly ComboBox dlssDll = Choices(Setting.DlssVersion, 130);
         private readonly Button dlssChoose = new Button { Text = "Choose...", Width = 90, Height = 26 };
+        /// <summary>Downloads NVIDIA's newest pinned DLL (data\dlss-downloads.txt) on request; hidden when none is listed.</summary>
+        private readonly Button dlssDownload = new Button { Text = "Download from NVIDIA...", Width = 170, Height = 26 };
         /// <summary>The chosen file's version, or why it cannot be used; the whole path is in its tooltip.</summary>
         private readonly Label dlssFile = new Label { AutoSize = false, AutoEllipsis = true, Width = 226, Height = 18, Margin = new Padding(3, 0, 3, 4) };
         private readonly ComboBox dlssPreset = Choices(Setting.DlssPreset, 226);
@@ -110,8 +112,14 @@ namespace EternalVR.Launcher
             var dllLine = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
             dllLine.Controls.AddRange(new Control[] { dlssDll, dlssChoose });
             var dllRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
-            dllRow.Controls.AddRange(new Control[] { dllLine, dlssFile });
+            dllRow.Controls.AddRange(new Control[] { dllLine, dlssFile, dlssDownload });
             dlssChoose.Click += (s, e) => ChooseDlssDll();
+            dlssDownload.Click += (s, e) => DownloadDlssDll();
+            if (ctx.Data.DlssDownloads?.Newest is DlssRelease newest)
+                ownTips[dlssDownload] = Wrap($"Downloads DLSS {newest.Version.ToString(3)} ({newest.SizeText}) straight from NVIDIA's GitHub, once you "
+                    + "accept NVIDIA's license, and uses it. EternalVR does not ship NVIDIA's file.");
+            else
+                dlssDownload.Visible = false;
             dlssDll.SelectedIndexChanged += (s, e) =>
             {
                 // From a file with none chosen yet: pick one now, or stay with the game's.
@@ -161,15 +169,33 @@ namespace EternalVR.Launcher
             {
                 if (!string.IsNullOrWhiteSpace(ctx.Settings.DlssDllPath)) dlg.InitialDirectory = Path.GetDirectoryName(ctx.Settings.DlssDllPath);
                 if (dlg.ShowDialog(this) != DialogResult.OK) return false;
-                var check = DlssDll.Inspect(dlg.FileName);
-                if (!check.Ok)
-                {
-                    MessageBox.Show(this, check.Problem, "DLSS version", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return false;
-                }
-                ctx.Settings.DlssDllPath = dlg.FileName;
-                ctx.Log.Info("DLSS file chosen: " + dlg.FileName + " (version " + check.Version + ")");
+                return UseDlssDll(dlg.FileName);
             }
+        }
+
+        /// <summary>Downloads NVIDIA's DLL after the player accepts NVIDIA's license, then uses it (as if chosen).</summary>
+        private void DownloadDlssDll()
+        {
+            var release = ctx.Data.DlssDownloads?.Newest;
+            if (release == null) return;
+            using (var dlg = new DlssDownloadDialog(release, ctx.Paths.DlssFiles, ctx.Log.Info))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK || dlg.FilePath == null) return;
+                UseDlssDll(dlg.FilePath);
+            }
+        }
+
+        /// <summary>Uses <paramref name="path"/> for "DLSS version: From a file"; false when it cannot be used (said in a message).</summary>
+        private bool UseDlssDll(string path)
+        {
+            var check = DlssDll.Inspect(path);
+            if (!check.Ok)
+            {
+                MessageBox.Show(this, check.Problem, "DLSS version", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            ctx.Settings.DlssDllPath = path;
+            ctx.Log.Info("DLSS file chosen: " + path + " (version " + check.Version + ")");
             loading = true;
             try { dlssDll.SelectedIndex = (int)DlssDllChoice.File; }
             finally { loading = false; }
@@ -205,8 +231,6 @@ namespace EternalVR.Launcher
         private void LoadMirrorMonitor(LauncherSettings s)
         {
             mirrorMonitor.Items.Clear();
-            // The list opens wider than the box: a display's entry names its size and position.
-            mirrorMonitor.DropDownWidth = 260;
             monitorValues.Clear();
             var names = SettingTexts.For(Setting.DesktopMonitor).Choices;
             mirrorMonitor.Items.Add(names[0]);

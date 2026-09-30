@@ -94,6 +94,45 @@ TEST_CASE("holding down opens the wheel and the stick then points freely") {
     CHECK_FALSE(output.downTap);
 }
 
+TEST_CASE("a button holding the wheel makes the stick its pointer, whatever the sweep") {
+    TurnStickArbiter arbiter;
+    // A turn in progress when the button goes down stops turning; the stick points instead.
+    CHECK(arbiter.update({1.0f, 0.0f}, kFrame).turnAllowed);
+    for (const Axis2 stick : {Axis2{1.0f, 0.0f}, Axis2{0.0f, 1.0f}, Axis2{0.0f, -1.0f}, Axis2{}}) {
+        for (int i = 0; i < 40; ++i) {
+            const TurnStickOutput output = arbiter.update(stick, kFrame, true);
+            CHECK_FALSE(output.turnAllowed);
+            CHECK_FALSE(output.up);
+            CHECK_FALSE(output.downTap);
+            CHECK_FALSE(output.downHold);
+            CHECK(output.wheelPointer == stick);
+        }
+    }
+}
+
+TEST_CASE("a stick still pointing when the wheel's button is let go does nothing until it recentres") {
+    for (const Axis2 stick : {Axis2{0.0f, 1.0f}, Axis2{1.0f, 0.0f}, Axis2{0.0f, -1.0f}}) {
+        TurnStickArbiter arbiter;
+        arbiter.update(stick, kFrame, true);
+        std::vector<Axis2> after(40, stick);
+        const SweepResult result = runSweep(arbiter, after);
+        CHECK(result.turnFrames == 0);
+        CHECK(result.upFrames == 0);
+        CHECK(result.taps == 0);
+        CHECK(result.holdFrames == 0);
+        // The next sweep is claimed as usual.
+        CHECK(arbiter.update({0.0f, 1.0f}, kFrame).up);
+    }
+}
+
+TEST_CASE("a down sweep cut short by the wheel's button is no quick switch") {
+    TurnStickArbiter arbiter;
+    arbiter.update({0.0f, -1.0f}, kFrame);
+    arbiter.update({0.0f, -1.0f}, kFrame, true);
+    arbiter.update({}, kFrame, true);
+    CHECK_FALSE(arbiter.update({}, kFrame).downTap);
+}
+
 TEST_CASE("a turning sweep that drifts down never selects a weapon") {
     TurnStickArbiter arbiter;
     // Right turn, then the thumb rolls down through the down cone and back up, held long enough to

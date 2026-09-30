@@ -48,7 +48,8 @@ namespace EternalVR.Launcher
         private int familyIndex = -1;
         private bool filling;
 
-        public ControlsDialog(ControlsFolder folder, Handedness weaponHand, Log log)
+        /// <param name="lastProfile">The interaction profile of the controllers the last game reported, or null.</param>
+        public ControlsDialog(ControlsFolder folder, Handedness weaponHand, string lastProfile, Log log)
         {
             this.folder = folder;
             this.log = log;
@@ -74,8 +75,10 @@ namespace EternalVR.Launcher
             hand.SelectedIndex = Math.Max(0, Math.Min((int)weaponHand, hand.Items.Count - 1));
             families = folder.Families();
             foreach (var f in families) family.Items.Add(f);
-            // The kind of controller the player has a file for, else the first.
-            var mine = families.FirstOrDefault(f => folder.PlayerFileFor(f.ProfilePath) != null);
+            // The controllers of the last game (the game uses their file), else the kind the player has a file for, else
+            // the first.
+            var mine = families.FirstOrDefault(f => lastProfile != null && f.ProfilePath == lastProfile)
+                ?? families.FirstOrDefault(f => folder.PlayerFileFor(f.ProfilePath) != null);
             if (families.Count > 0) SelectFamily(mine != null ? families.ToList().IndexOf(mine) : 0);
 
             family.SelectionChangeCommitted += (s, e) => SelectFamily(family.SelectedIndex);
@@ -107,7 +110,8 @@ namespace EternalVR.Launcher
             var pickers = new TableLayoutPanel { AutoSize = true, ColumnCount = 4, Dock = DockStyle.Fill, Margin = Padding.Empty };
             for (int i = 0; i < 4; i++) pickers.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             pickers.Controls.AddRange(new Control[] { Caption("Controllers"), family, Caption("Weapon hand"), hand });
-            tips.SetToolTip(family, "The kind of controller to change the controls of. Each kind has its own controls file.");
+            tips.SetToolTip(family, "The kind of controller to change the controls of. Each kind has its own controls file, and "
+                + "the game uses only the file of the controllers you play with. The list starts on the controllers of your last game.");
             tips.SetToolTip(hand, "Which of the three maps to show: each Weapon hand setting has its own. The game uses the one "
                 + "for the Weapon hand chosen on the Play tab.");
 

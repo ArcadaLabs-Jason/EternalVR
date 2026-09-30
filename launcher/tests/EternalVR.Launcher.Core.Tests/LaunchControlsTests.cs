@@ -91,6 +91,32 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void BhapticsIsOffUnlessTurnedOn()
+        {
+            var off = new LauncherSettings();
+            Assert.False(off.Bhaptics);
+            var env = Env(LaunchPlanBuilder.Build(Inputs()));
+            Assert.Equal("0", env["ETERNALVR_BHAPTICS"]);
+            Assert.Equal("1.00", env["ETERNALVR_BHAPTICS_INTENSITY"]);
+            var on = new LauncherSettings { Bhaptics = true, BhapticsIntensity = 0.5 };
+            env = Env(LaunchPlanBuilder.Build(Inputs(on)));
+            Assert.Equal("1", env["ETERNALVR_BHAPTICS"]);
+            Assert.Equal("0.50", env["ETERNALVR_BHAPTICS_INTENSITY"]);
+            Assert.Contains("bhaptics = 1", on.Serialize());
+            var back = LauncherSettings.Parse(on.Serialize());
+            Assert.True(back.Bhaptics);
+            Assert.Equal(0.5, back.BhapticsIntensity, 3);
+            // An older launcher's file, or a value that is not a clear yes, keeps it off; the intensity stays within 0 to 1.
+            Assert.False(LauncherSettings.Parse("schema_version = 2\n").Bhaptics);
+            Assert.False(LauncherSettings.Parse("schema_version = 2\nbhaptics = maybe\n").Bhaptics);
+            Assert.Equal(1.0, LauncherSettings.Parse("schema_version = 2\nbhaptics_intensity = 7\n").BhapticsIntensity, 3);
+            Assert.Empty(LauncherSettings.Parse("schema_version = 2\nbhaptics = 1\nbhaptics_intensity = 0.4\n").UnknownKeys);
+            Assert.False(on.WithDefaults().Bhaptics);
+            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.Bhaptics, new LauncherSettings { Controllers = false }));
+            Assert.Null(SettingRules.WhyNot(Setting.Bhaptics, on));
+        }
+
+        [Fact]
         public void AimDotIsOnByDefaultAndCanBeTurnedOff()
         {
             Assert.Equal("1", Env(LaunchPlanBuilder.Build(Inputs()))["ETERNALVR_UI_RETICLE"]);

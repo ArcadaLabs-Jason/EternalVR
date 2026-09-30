@@ -1,8 +1,8 @@
-# Game cvars that cut the CPU work of a render (the processor saver)
+# Game cvars that cut the CPU work of a render (the CPU Saver)
 
 Retail `DOOMEternalx64vk.exe`, Steam build 25216728; all addresses are RVAs in this build. Static research only
 (no rig run yet): which game cvars are most likely to cut the CPU work per render, what the game's own Video menu
-sets, the provisional preset behind the launcher's "Processor saver" and the plan to measure it. Stereo renders the
+sets, the provisional preset behind the launcher's "CPU Saver" and the plan to measure it. Stereo renders the
 scene twice per tick, one eye after the other (`perf-baselines.md`, `perf-stereo-cpu.md`), so a saving per render
 counts twice, and the critical path is each eye's command recording and submission.
 
@@ -118,16 +118,16 @@ section 6 on e1m2's start view:
 Every item together: +23.9% (207.7 against 167.6 ticks/s). Texture streaming is on by default because it is
 mostly lossless and the largest single gain; the others change the picture a little and stay the player's
 choice. An older `launcher.ini` with `cpu_saver = on` turns every item on until the window saves a choice for
-each; `cpu_saver = off` or none leaves the processor saver's items off and texture streaming on.
+each; `cpu_saver = off` or none leaves the CPU Saver's items off and texture streaming on.
 
 Why these: each is CPU work that runs once per render, is visually mild (the menu's own Low, Medium or High
 values), never raises a player's setting (the float ones are caps, the boolean is the cheaper state) and is not
 already held by the stereo sets. Tune the data file from further runs (no layer rebuild is needed); keep an id
 once shipped, since it is the player's key.
 
-The layer logs `cvars: processor saver (ETERNALVR_CPU_SAVER) asks for: ...`, then `cvars: processor saver holds:
+The layer logs `cvars: CPU Saver (ETERNALVR_CPU_SAVER) asks for: ...`, then `cvars: CPU Saver holds:
 ...` with the cvars it found, and each cvar's first write (`cvars: r_shadowsDistanceFadeMultiplier 2.000 -> at
-most 1 (reads 1.000); processor saver`). The launcher's settings restore puts the preset's keys back in the game's
+most 1 (reads 1.000); CPU Saver`). The launcher's settings restore puts the preset's keys back in the game's
 configs after every session (the game may save a held value, as `r_SSR` once did), for every item whether it was
 on or not; a key the session did not change is left alone.
 
@@ -176,7 +176,7 @@ cvar set after the map has loaded (`ETERNALVR_DEBUG_COMMANDS`); `r_skipGPUPartic
 a measurement window. The combined preset is still to be measured as one set.
 
 **Third list and the whole preset (2026-09-29, same rig and scene, 3 interleaved rounds; ticks/s medians against
-base 166.8):** the Processor saver preset as one set (the six cvars of `launcher/data/cpu-saver.txt`) 189.7
+base 166.8):** the CPU Saver preset as one set (the six cvars of `launcher/data/cpu-saver.txt`) 189.7
 (+13.7%, the three rounds within 0.3 of each other), more than its cvars gave one by one; eye L p50 fell from
 3.12 to 2.79 ms and eye R from 2.69 to 2.27 ms. `r_shadowParallelSkipDynamicModelsFromSlice 2` (moving models cast
 no sun shadow from the third sun slice out) +2.7 (+1.6%, steady; a visual cost at distance, left out of the

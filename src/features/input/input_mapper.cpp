@@ -123,8 +123,11 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         }
     }
 
+    // A button holding the weapon wheel: the turn stick points at it instead of turning or firing its
+    // gestures, as under the stick's own down hold.
+    const bool wheelFromButton = game::contains(input.down, game::GameAction::WeaponWheel);
     const Axis2 turnStick = profile_.turnStick ? frame.hand(*profile_.turnStick).stick : Axis2{};
-    const TurnStickOutput gestures = turnStick_.update(turnStick, dt);
+    const TurnStickOutput gestures = turnStick_.update(turnStick, dt, wheelFromButton);
     addStickGestureActions(gestures, input.down);
     input.turnDegrees = turn_.update(turnStick, dt, gestures.turnAllowed);
     input.wheelPointer = gestures.wheelPointer;

@@ -19,6 +19,11 @@
 //
 // So a turn that drifts downward, a roll from turning into pulling back, or a stick that wanders
 // while held can never produce a weapon change.
+//
+// The wheel can also be held by a button (a player's map may bind weapon_wheel to one). While it is,
+// the stick points at the wheel as it does after a down hold: the sweep in progress is cancelled, and
+// one still out of the centre when the button is let go stays cancelled until it comes back, so
+// pointing at the wheel never turns, fires a gesture or ends in a quick switch.
 
 #include "features/input/axis2.hpp"
 
@@ -50,7 +55,7 @@ struct TurnStickOutput {
     bool up = false;       // For the whole up sweep.
     bool downTap = false;  // One frame, when a short down sweep ends.
     bool downHold = false; // From the hold time until the sweep ends.
-    Axis2 wheelPointer;    // The stick, while downHold is active.
+    Axis2 wheelPointer;    // The stick, while downHold is active or a button holds the wheel.
 };
 
 class TurnStickArbiter {
@@ -62,8 +67,9 @@ public:
 
     // `dtSeconds` must be finite and non-negative. A non-finite stick (a lost action state) is
     // treated as the last finite position with no time passing, so a glitch neither ends a sweep,
-    // which would fire a quick switch, nor moves the hold timer.
-    TurnStickOutput update(Axis2 stick, float dtSeconds);
+    // which would fire a quick switch, nor moves the hold timer. `wheelHeld`: a button holds the
+    // weapon wheel this frame, and the stick only points at it.
+    TurnStickOutput update(Axis2 stick, float dtSeconds, bool wheelHeld = false);
 
     [[nodiscard]] SweepIntent intent() const { return intent_; }
     [[nodiscard]] const TurnStickSettings& settings() const { return settings_; }
@@ -71,6 +77,7 @@ public:
 private:
     SweepIntent claim(Axis2 stick) const;
     TurnStickOutput continueDown(Axis2 stick);
+    TurnStickOutput pointAtWheel(Axis2 stick);
 
     TurnStickSettings settings_;
     SweepIntent intent_ = SweepIntent::None;

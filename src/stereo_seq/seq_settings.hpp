@@ -70,7 +70,7 @@ std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::strin
 std::vector<CvarHold> parseCvarList(std::string_view text);
 
 // A held value "<=N" is a cap: the layer writes N only while the cvar's value is above it, and never raises
-// it (the processor saver's cap on a value the game's menu sets per quality level, where a fixed value would
+// it (the CPU Saver's cap on a value the game's menu sets per quality level, where a fixed value would
 // raise the cost for a player on a lower level). The cap N; nullopt for any other value or a bad number.
 std::optional<float> parseCvarCap(std::string_view value);
 

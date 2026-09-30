@@ -1,0 +1,7 @@
+# NVIDIA's DLSS DLL releases the launcher downloads when the player asks (Advanced tab, DLSS, "Download from
+# NVIDIA..."), for "DLSS version: From a file" (docs/rig-findings/dlss-dll.md). The file comes from NVIDIA's own
+# repository on the player's click, after the player accepts NVIDIA's license; EternalVR does not ship or host it.
+# A download is used only when its size and SHA-256 match its line. The newest version is offered.
+#
+# dll | version | url of the file | size in bytes | sha256 | url of NVIDIA's license text for that release
+dll | 310.9.1.0 | https://raw.githubusercontent.com/NVIDIA/DLSS/v310.9.1/lib/Windows_x86_64/rel/nvngx_dlss.dll | 58956912 | 3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983 | https://github.com/NVIDIA/DLSS/blob/v310.9.1/LICENSE.txt

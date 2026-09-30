@@ -7,7 +7,7 @@ using EternalVR.Launcher.Core.Settings;
 namespace EternalVR.Launcher
 {
     /// <summary>
-    /// Texture streaming and the processor saver on the Play tab: one checkbox per item of <c>data\cpu-saver.txt</c>
+    /// Texture streaming and the CPU Saver on the Play tab: one checkbox per item of <c>data\cpu-saver.txt</c>
     /// (<see cref="CpuSaver"/>), each with its own tooltip. The window sets a choice for every item it shows.
     /// </summary>
     public sealed partial class MainForm
@@ -41,20 +41,20 @@ namespace EternalVR.Launcher
             return row;
         }
 
-        /// <summary>The "Processor saver" group: a row per item with its label on the left, as in the other groups; null
+        /// <summary>The "CPU Saver" group: a row per item with its label on the left, as in the other groups; null
         /// when the data file has none.</summary>
         private GroupBox SaverGroup()
         {
-            var items = ctx.Data.CpuSaver.InRow(Setting.ProcessorSaver).ToList();
+            var items = ctx.Data.CpuSaver.InRow(Setting.CpuSaver).ToList();
             if (items.Count == 0) return null;
             var groupRows = items.Select(item =>
             {
                 var one = new[] { item };
                 var boxes = new[] { new CheckBox { AutoSize = true } };
-                return Row(Setting.ProcessorSaver, boxes[0], s => LoadSaver(one, boxes, s), s => ReadSaver(one, boxes, s),
+                return Row(Setting.CpuSaver, boxes[0], s => LoadSaver(one, boxes, s), s => ReadSaver(one, boxes, s),
                     text: new SettingTexts.Text(item.Label, SaverTip(item)));
             }).ToArray();
-            var text = SettingTexts.For(Setting.ProcessorSaver);
+            var text = SettingTexts.For(Setting.CpuSaver);
             var group = Group(text.Label, groupRows);
             tips.SetToolTip(group, Wrap(text.Tooltip));
             return group;

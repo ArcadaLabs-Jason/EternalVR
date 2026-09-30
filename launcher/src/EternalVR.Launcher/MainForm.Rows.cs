@@ -16,7 +16,7 @@ namespace EternalVR.Launcher
     {
         private readonly ToolTip tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400, ReshowDelay = 100 };
         private readonly List<SettingRow> rows = new List<SettingRow>();
-        /// <summary>Controls with a tooltip of their own inside a row (a processor saver item's checkbox), kept over the row's.</summary>
+        /// <summary>Controls with a tooltip of their own inside a row (a CPU Saver item's checkbox), kept over the row's.</summary>
         private readonly Dictionary<Control, string> ownTips = new Dictionary<Control, string>();
         /// <summary>True while the controls are filled from the settings: their change events save nothing.</summary>
         private bool loading;
@@ -28,7 +28,7 @@ namespace EternalVR.Launcher
             public Control Control;
             public Action<LauncherSettings> Load;
             public Action<LauncherSettings> Read;
-            /// <summary>The row's label and tooltip when they are not the setting's own (a processor saver item's, from its data file).</summary>
+            /// <summary>The row's label and tooltip when they are not the setting's own (a CPU Saver item's, from its data file).</summary>
             public SettingTexts.Text Text;
             /// <summary>The checks run again after a change (the runtime, the mode, the arguments).</summary>
             public bool Preflight;
