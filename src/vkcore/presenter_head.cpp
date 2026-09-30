@@ -228,6 +228,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         return; // the guard went off during this frame: the view stays the game's
     }
     std::memcpy(axis, written.data(), sizeof(written));
+    controllers::noteViewForward(view.forward.x, view.forward.y);
     origin[0] += offset.x;
     origin[1] += offset.y;
     origin[2] += offset.z;

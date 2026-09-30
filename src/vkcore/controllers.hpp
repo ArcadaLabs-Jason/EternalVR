@@ -157,6 +157,10 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head);
 // For a piloted demon (demon_aim.cpp), whose update runs through a forced view every tick.
 xr_math::IdAngles aimAnglesUnforced(const xr_math::IdAngles& head);
 
+// Camera hook: the forward direction of the view it wrote (engine world axes), for the look-at triggers
+// (facing_hook.cpp), which test where the head looks rather than where the gun points.
+void noteViewForward(float x, float y);
+
 // Camera hook, after the view is written: the weapon hand's pose in the world for the viewmodel and the
 // shots, and the weapon FOV. `eye` is the game's view origin before the head's offset was added.
 void endGameView(std::byte* renderView,

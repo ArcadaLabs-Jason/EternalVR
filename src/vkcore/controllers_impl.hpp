@@ -233,6 +233,7 @@ struct State {
     bool xinputHook = false;
     bool rumbleHook = false;
     bool demonAimHook = false;
+    bool facingHook = false;
     std::atomic<bool> xinputActive{false}; // the virtual gamepad feeds the game
     PlayerAim player;                      // the idPlayer vtable check
 
@@ -359,5 +360,6 @@ bool installViewmodelHook();
 bool installOffhandHook();
 bool installXInputHook();
 bool installRumbleHook();
+bool installFacingHook();
 
 } // namespace evr::vkcore::controllers

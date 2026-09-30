@@ -43,6 +43,7 @@ add_library(evr_layer SHARED
     debug_commands.cpp
     demon_aim.cpp
     demon_view.cpp
+    facing_hook.cpp
     device_augment.cpp
     dlss_dll.cpp
     dlss_menu_hooks.cpp

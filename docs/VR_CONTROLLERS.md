@@ -189,6 +189,22 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   `mp_guard::allowsGameTouch()` first and again just before it writes (`docs/rig-findings/mp-guard.md`).
   Anything that cannot be located or validated stays off and the log says which.
 
+- **Look-at triggers** (`src/vkcore/facing_hook.cpp`). A few places open only when the player looks at
+  something (idTrigger_Facing: the ladder panel, the tram exit and a door in Doom Hunter Base, and others).
+  The game tests the player's first-person view axis, which under hand aim is the gun's direction, so the
+  trigger waited for the gun. A mid hook in the test (RVA 0xD9D17F in build 25216728; the signature is
+  unique in the Game Pass build too) puts the head's horizontal forward, from the view the camera hook
+  wrote, in the test's copy of the look direction. The test is horizontal only. Rig check (e1m4, the ladder
+  trigger, the weapon hand 70 degrees off the head): with the head on the target and the gun off it the
+  trigger fired on its first test; without the hook it never did, and with the gun on it and the head off
+  it the hook kept it from firing. Each test is logged for the first three and then every sixtieth
+  (`look-at trigger test N: head yaw, view yaw`).
+- **Piloting a demon** (`src/vkcore/demon_view.cpp`, `demon_aim.cpp`): the Revenant in Cultist Base.
+  The idPlayer's controlled entity (+0x88B0) is the demon; while piloting, the move stick follows the
+  demon's view, body follow and head aim leave the Slayer alone, the actions press the demon's own
+  bindings, and a detour on the demon's update aims it where the weapon hand points (the head under head
+  aim) through the game's view and basis setters.
+
 ## Settings
 
 Environment variables for the game process (the rig passes them with `launch-ht.ps1 -ExtraEnv`):
@@ -221,6 +237,8 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
 | `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Y pause and the Y capture) | none |
+| `ETERNALVR_LOOK_TRIGGERS` | `0`: look-at triggers test the game's view (the gun under hand aim) instead of the head, and the tests are only logged (above) | `1` |
+| `ETERNALVR_DEMON_VIEW` | `0`: no handling for a piloted demon (above) | `1` |
 | `ETERNALVR_CONTROLLERS_TRACE` | `1`: log the eye, view angles, body and hand 4 times a second, the game's own command bits, and the turns | `0` |
 
 A value that cannot be used is logged with its name and the default is kept

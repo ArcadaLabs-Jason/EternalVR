@@ -42,9 +42,9 @@ them is worse for you than described here.
   asks you to log in to Bethesda.net, and clicking a text box opens Windows' own typing window on the
   desktop, which the headset does not show: what you type goes there and is entered when you press Enter.
   It is easier to log in once without VR, starting the game from the Xbox app, before the first VR session.
-- **Some doors and a ladder in Doom Hunter Base open only when you look at them**, and the game may check
-  where your gun points rather than where your head looks. If one does not open, point your weapon hand
-  at it for a moment. A fix is in progress; please tell me anywhere else you get stuck.
+- **Places that open when you look at them** (a ladder, the tram exit and a door in Doom Hunter Base, and a
+  few others) check where your head looks. That was fixed in v0.1.4; before it they waited for the gun.
+  Please tell me anywhere you get stuck.
 - **Only tested with a Quest 3 through Virtual Desktop (VDXR).** SteamVR, Meta Horizon Link, other
   runtimes and other headsets are untested. The launcher lets you pick a runtime; please tell me what
   happens.
