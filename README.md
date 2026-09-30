@@ -36,7 +36,7 @@ No dates yet:
 - Improved DLSS.
 - More ways to use the weapon wheel (pointing or motion).
 
-## Headsets, and we need testers
+## Headsets, and I need testers
 
 It should work with any PC VR headset that has an OpenXR runtime: Virtual Desktop, SteamVR, Meta
 Horizon Link and others. So far it has been tested on a Quest 3, through Virtual Desktop and through
@@ -51,7 +51,7 @@ are untested, so reports from anyone with them are especially welcome. Their lay
 [`docs/release/CONTROLS.md`](docs/release/CONTROLS.md).
 
 If you try it on anything else (another headset or runtime, an AMD or Intel graphics card), please
-tell us how it went, good or bad, in an [issue](../../issues/new/choose) or in
+tell me how it went, good or bad, in an [issue](../../issues/new/choose) or in
 [Discussions](../../discussions). Bug reports, ideas and pull requests are all welcome.
 
 See [`docs/release/KNOWN-ISSUES.md`](docs/release/KNOWN-ISSUES.md) for what does not work yet, and
@@ -101,7 +101,7 @@ EternalVR is free and stays free. If you want to support it:
 [ko-fi.com/FanciestPeanut](https://ko-fi.com/FanciestPeanut).
 
 ## Layout
-- `docs/SCOPE.md`: what we are building, requirements, in and out of scope
+- `docs/SCOPE.md`: what I am building, requirements, in and out of scope
 - `docs/DECISIONS.md`: decision log
 - `docs/ARCHITECTURE.md`: design baseline
 - `docs/ROADMAP.md`: milestones with done-when criteria

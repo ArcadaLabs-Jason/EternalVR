@@ -35,6 +35,9 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 | `launcher.ini` | The launcher settings |
 | `BUILD-INFO.txt` | The release's version, commit and supported game builds |
 | `layer/VK_LAYER_ETERNALVR.json` | The layer manifest |
+| `windows-events.txt` | Windows event log entries of the last 7 days, newest first, at most 20 per log: crashes, crash reports and hangs of the game, the launcher or the mod (`DOOMEternalx64vk.exe`, `EternalVR.Launcher.exe`, `EternalVR.dll`) from the Application log, and graphics driver resets and errors (NVIDIA, AMD, Intel) from the System log. A log Windows does not let the launcher read is named in the file |
+| `game-crashes/crash-*.html` | The game's own crash reports (`Crash.<computer>.<number>.html` in `Saved Games\id Software\DOOMEternal\base`, about 4 KB each: call stack, registers, exception code, game build, command line), the newest 3 written since the oldest of the newest 3 sessions started or in the last 7 days, whichever reaches back further. The zip names keep only the number. The memory dumps next to them (`crash-dumps`) are never included |
+| `game/qconsole.log` | The game's console log from the same folder, of its latest start; a longer log keeps its first 1 MB and last 3 MB |
 | `sessions/<session>/LAYER_LOADED` | For each of the newest 3 sessions: the layer's note that it loaded |
 | `sessions/<session>/eternalvr-*.log` | For each of the newest 3 sessions: the mod's log; a longer log keeps its first 1 MB and last 3 MB |
 | `sessions/<session>/eternalvr-frames-*.csv` | The frame timing table of the newest session only: its header and last 3 MB |
@@ -42,7 +45,7 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 
 The text in the zip is at most 20 MB (the zip itself is usually one or two MB); a file that would go past
 that is left out and named in `report-contents.txt`. Captures come on top of that and make the zip larger
-(the images shrink a lot in the zip; captures past 48 MB are left out, the oldest first). **Never included:** memory dumps, save games and save
+(the images shrink a lot in the zip; captures past 48 MB are left out, the oldest first). **Never included:** memory dumps (the mod's and the game's), save games and save
 backups, settings snapshots, the game's own config files, older session folders and anything not in the
 table. The launcher log names the settings files and keys it restored, as it always does.
 
@@ -50,7 +53,10 @@ table. The launcher log names the settings files and keys it restored, as it alw
 
 - your user folder (`C:\Users\<name>`, with `\` or `/`) becomes `%USERPROFILE%`; so does any other
   `X:\Users\<name>` folder except Public and Default;
+- your computer name as a word of its own becomes `<computer>` (names shorter than 3 letters are left);
 - your Windows user name as a word of its own becomes `<user>` (names shorter than 3 letters are left);
+- the name you play under, in the game's console log (`User '<name>' signed in`), becomes `<player>`,
+  and the number at the end of that line `<playerid>`;
 - a Steam account ID becomes `<steamid>`: in the game's `steam-<number>` save folders, in Steam's
   `userdata\<number>` folders, and wherever the same number appears alone; a 17-digit SteamID64
   (`7656119...`) becomes `<steamid64>`.
@@ -151,7 +157,8 @@ cannot keep up. Turn it off again if you do not like it.
 **The view is turned or at the wrong height.** Face forward and hold both sticks pressed for 2 seconds
 to recenter, or use the headset's own recenter (hold the Meta / Oculus button).
 
-**The game crashed.** Send an Export report (above). Your settings are restored when the
+**The game crashed.** Send an Export report (above): it holds the game's own crash report and console log
+as well as the mod's log. Your settings are restored when the
 game has exited (or the next time you open the launcher).
 
 ## Getting your settings back

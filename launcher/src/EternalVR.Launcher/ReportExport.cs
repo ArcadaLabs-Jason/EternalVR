@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Game;
 using EternalVR.Launcher.Core.Launch;
@@ -54,7 +55,12 @@ namespace EternalVR.Launcher
                 Preflight = g.Result.Checks,
                 UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 UserName = Environment.UserName,
+                ComputerName = Environment.MachineName,
                 SteamAccountIds = ctx.ActiveAccount == null ? new string[0] : new[] { ctx.ActiveAccount },
+                // The game's Saved Games folder as the settings snapshot knows it (Steam and Game Pass alike).
+                GameSavedGamesDirs = (g.Locations ?? new SettingsLocation[0])
+                    .Where(l => l.Kind == SettingsLocationKind.SavedGames).Select(l => l.Path).ToList(),
+                WindowsEvents = WindowsEventLogs.Read(),
                 Now = DateTime.Now,
             };
         }
@@ -72,7 +78,7 @@ namespace EternalVR.Launcher
             }
 
             var answer = MessageBox.Show(owner,
-                "The report holds these files. Your user folder, user name and Steam account ID are replaced by placeholders; "
+                "The report holds these files. Your user folder, user name, computer name and Steam account ID are replaced by placeholders; "
                 + "no saves, memory dumps or game settings files are included.\n\n" + report.Describe() + "\nSave it?",
                 "Export report", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
             if (answer != DialogResult.OK) return;

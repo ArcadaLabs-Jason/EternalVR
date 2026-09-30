@@ -23,6 +23,15 @@ namespace EternalVR.Launcher.Core.Report
         public string UserProfile { get; set; }
         public string UserName { get; set; }
         public IReadOnlyList<string> SteamAccountIds { get; set; } = new string[0];
+        /// <summary>For redaction: the computer name (<c>Environment.MachineName</c>).</summary>
+        public string ComputerName { get; set; }
+        /// <summary>
+        /// The game's Saved Games folders (<c>Saved Games\id Software\DOOMEternal</c>, the settings locations of kind
+        /// SavedGames); their <c>base</c> folder holds the game's console log and crash reports.
+        /// </summary>
+        public IReadOnlyList<string> GameSavedGamesDirs { get; set; } = new string[0];
+        /// <summary>The event log entries read for <see cref="ReportManifest.WindowsEventsFile"/>; null when the logs were not read.</summary>
+        public IReadOnlyList<WindowsEventLogRead> WindowsEvents { get; set; }
         public DateTime Now { get; set; } = DateTime.Now;
     }
 
@@ -79,7 +88,7 @@ namespace EternalVR.Launcher.Core.Report
     }
 
     /// <summary>Collects, redacts and zips a report (ROADMAP M4.5 "Export report", T-095) from <see cref="ReportManifest"/>.</summary>
-    public static class ReportBuilder
+    public static partial class ReportBuilder
     {
         private static readonly Regex SessionFolderName = new Regex(@"^\d{8}-\d{6}(-\d+)?$", RegexOptions.CultureInvariant);
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
@@ -94,14 +103,25 @@ namespace EternalVR.Launcher.Core.Report
             var missing = new List<string>();
             var logs = inputs.DataRoot == null ? null : Path.Combine(inputs.DataRoot, "logs");
             var sessions = NewestSessions(logs, int.MaxValue);
+            var gameDirs = GameBaseFolders(inputs.GameSavedGamesDirs);
 
             foreach (var item in ReportManifest.Items)
             {
                 switch (item.Source)
                 {
                     case ReportSource.Generated:
-                        var text = item.ZipPath == ReportManifest.SystemFile ? SystemText(inputs) : PreflightText(inputs);
+                        var text = item.ZipPath == ReportManifest.SystemFile ? SystemText(inputs)
+                            : item.ZipPath == ReportManifest.WindowsEventsFile ? WindowsEvents.Format(inputs.WindowsEvents, inputs.Now)
+                            : PreflightText(inputs);
                         files.Add(new ReportFile(item.ZipPath, text, Utf8.GetByteCount(text), false));
+                        break;
+                    case ReportSource.GameFolder:
+                        var newest = NewestFile(gameDirs.Select(d => Path.Combine(d, item.Pattern)));
+                        if (newest == null) { missing.Add(item.ZipPath); break; }
+                        AddFile(files, dropped, newest, item, item.ZipPath);
+                        break;
+                    case ReportSource.GameCrashes:
+                        AddGameCrashes(files, dropped, missing, gameDirs, CrashWindowStart(sessions, inputs.Now), item);
                         break;
                     case ReportSource.SessionCaptures:
                         AddCaptures(files, dropped, logs, sessions.Take(item.Sessions), item);
@@ -129,10 +149,12 @@ namespace EternalVR.Launcher.Core.Report
                 dropped.Add($"{sessions.Count - ReportManifest.SessionsKept} older session folder(s) (only the newest {ReportManifest.SessionsKept} are taken)");
             int dumps = sessions.Sum(s => SafeFiles(Path.Combine(logs, s), "*.dmp").Count);
             if (dumps > 0) dropped.Add($"{dumps} memory dump(s) (*.dmp): never included");
+            int gameDumps = gameDirs.Sum(d => CountFilesBelow(Path.Combine(d, GameCrashDumpsFolder), "*.dmp"));
+            if (gameDumps > 0) dropped.Add($"{gameDumps} memory dump(s) of the game ({GameCrashDumpsFolder}\\*.dmp): never included");
 
             // Redaction first (an account ID found in one file is removed from all), then the size cap.
             var ids = (inputs.SteamAccountIds ?? new string[0]).Concat(Redactor.FindSteamAccountIds(files.Select(f => f.Text)));
-            var redactor = new Redactor(inputs.UserProfile, inputs.UserName, ids);
+            var redactor = new Redactor(inputs.UserProfile, inputs.UserName, ids, inputs.ComputerName);
             foreach (var f in files) f.Text = redactor.Apply(f.Text);
 
             var kept = new List<ReportFile>();
@@ -290,6 +312,7 @@ namespace EternalVR.Launcher.Core.Report
             var sb = new StringBuilder();
             sb.Append("EternalVR report, created ").Append(inputs.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append('\n');
             sb.Append("Every file is redacted: your user folder reads ").Append(Redactor.ProfileToken).Append(", your user name ").Append(Redactor.UserToken)
+              .Append(", your computer name ").Append(Redactor.ComputerToken).Append(", the name you play under ").Append(Redactor.PlayerToken)
               .Append(", Steam account IDs ").Append(Redactor.SteamIdToken).Append(" or ").Append(Redactor.SteamId64Token).Append(".\n\n");
             sb.Append("Files:\n");
             foreach (var f in kept)

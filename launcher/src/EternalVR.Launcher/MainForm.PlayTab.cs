@@ -25,6 +25,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox height = Choices(Setting.EyeHeight);
         private readonly CheckBox throwGesture = new CheckBox { AutoSize = true };
         private readonly CheckBox swingGesture = new CheckBox { AutoSize = true };
+        private readonly CheckBox handsJump = new CheckBox { AutoSize = true };
         private readonly ComboBox aim = Choices(Setting.AimWith);
         private readonly ComboBox revenantAim = Choices(Setting.RevenantAimWith);
         private readonly ComboBox hand = Choices(Setting.WeaponHand);
@@ -77,7 +78,8 @@ namespace EternalVR.Launcher
                     s => s.Height = (HeightMode)height.SelectedIndex));
             var gestures = Group("Gestures",
                 Row(Setting.ThrowGesture, throwGesture, s => throwGesture.Checked = s.ThrowGesture, s => s.ThrowGesture = throwGesture.Checked),
-                Row(Setting.SwingGesture, swingGesture, s => swingGesture.Checked = s.SwingGesture, s => s.SwingGesture = swingGesture.Checked));
+                Row(Setting.SwingGesture, swingGesture, s => swingGesture.Checked = s.SwingGesture, s => s.SwingGesture = swingGesture.Checked),
+                Row(Setting.HandsJump, handsJump, s => handsJump.Checked = s.HandsJump, s => s.HandsJump = handsJump.Checked));
             var controls = Group("Controls",
                 Row(Setting.AimWith, aim,
                     s => aim.SelectedIndex = (int)s.Aim,

@@ -191,7 +191,7 @@ them is worse for you than described here.
   of that session (restart from the launcher). The real invite path has not been tested with a second
   account.
 - EternalVR does not modify any game file; it only changes the running game while it is started from the
-  EternalVR launcher. We know of no bans for single-player mods in DOOM Eternal, and id's own mod support
+  EternalVR launcher. I know of no bans for single-player mods in DOOM Eternal, and id's own mod support
   only turns multiplayer and achievements off, but id has never said anything about Events, weekly
   challenges or Slayer Points. To be safe, don't use EternalVR to earn Event or challenge progress, and
   never try to play online with it.

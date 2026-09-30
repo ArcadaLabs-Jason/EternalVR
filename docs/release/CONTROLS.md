@@ -40,6 +40,7 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | A real punch with your hand | Melee, Glory Kill, Blood Punch, use (punch a switch to press it) |
 | Throw with your left hand (Throw grenades on) | Equipment launcher (below) |
 | Swing your right hand down from above your head (Overhead swing on) | Crucible, or the Sentinel Hammer (below) |
+| Throw both hands up above your head (Jump with both hands on) | Jump (below) |
 
 **The weapon wheel.** Push the right stick down and keep it there: after about half a second the wheel
 opens (the game slows time) with the bottom weapon highlighted. Without letting go, roll the stick round to
@@ -73,6 +74,8 @@ box of the launcher's Play tab, and both are new and not yet tried in a headset.
 - **Overhead swing:** raise your gun hand above your head, then bring it down hard, like a hammer. It swings
   the Crucible, or in The Ancient Gods Part Two slams the Sentinel Hammer. Raising both hands does nothing,
   so a stretch does not swing it.
+- **Jump with both hands:** throw both hands up above your head, fast, like in DOOM VFR. The jump button still
+  works. It is off while you play sitting, and both hands have to come down before the next jump.
 
 A throw or a swing does not punch as well. With the weapon in your left hand, the hands swap: the right hand
 throws and the left hand swings.
@@ -213,6 +216,7 @@ are the same whichever profile is picked.
 | Eye height | The game's (the Slayer's, whatever your own), Your real height (needs a runtime with a floor level) | The game's |
 | Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
 | Overhead swing | Swing your gun hand down from above your head for the Crucible or the Hammer ([In the game](#in-the-game)) | Off |
+| Jump with both hands | Throw both hands up above your head to jump, not while sitting ([In the game](#in-the-game)) | Off |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |

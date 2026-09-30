@@ -25,6 +25,8 @@
 //   ETERNALVR_SWING          1 / 0              raise the weapon hand above the head and swing it down: the
 //                                               Crucible (off by default; arm_gestures.hpp)
 //   ETERNALVR_SWING_SPEED    1 to 5             the swing's downward speed, metres per second (2.5)
+//   ETERNALVR_HANDS_JUMP     1 / 0              throw both hands up above the head to jump (off by default,
+//                                               never when seated; hands_jump.hpp)
 //   ETERNALVR_XINPUT         auto / 1 / 0       the virtual gamepad: only when the user-command hooks
 //                                               cannot be installed (auto), instead of them (1), never (0)
 //   ETERNALVR_SHOT_ORIGIN    hand / eye         where shots start under hand aim
@@ -59,6 +61,7 @@
 #include "features/input/aim_smoothing.hpp"
 #include "features/input/arm_gestures.hpp"
 #include "features/input/dossier_press.hpp"
+#include "features/input/hands_jump.hpp"
 #include "features/input/haptics_policy.hpp"
 #include "features/input/locomotion_direction.hpp"
 #include "features/input/offhand_policy.hpp"
@@ -128,6 +131,7 @@ struct ControllerSettings {
     float wheelHandDegrees = kDefaultWheelHandDegrees;
     ThrowSettings throwGesture; // arm_gestures.hpp
     SwingSettings swing;
+    HandsJumpSettings handsJump; // hands_jump.hpp
     InputPath path = InputPath::Auto;
     ShotOrigin shotOrigin = ShotOrigin::Hand;
     float aimSmoothing = kDefaultAimSmoothing; // aim_smoothing.hpp

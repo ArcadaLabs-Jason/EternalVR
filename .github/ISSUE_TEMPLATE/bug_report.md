@@ -30,6 +30,7 @@ The mission or menu, what you did, whether it happens every time, and about when
 so it can be found in the log.
 
 **Report**
-In the launcher, click **Export report...** and attach the zip here. It holds the launcher and mod
-logs with your user name and Steam account ID removed; the dialog lists every file before you save it.
+In the launcher, click **Export report...** and attach the zip here. It holds the launcher, mod and game
+logs and the game's crash reports, with your user name, computer name and Steam account ID removed; the
+dialog lists every file before you save it.
 Screenshots or a short video from the headset help a lot.

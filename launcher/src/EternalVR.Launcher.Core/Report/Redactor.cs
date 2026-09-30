@@ -6,13 +6,17 @@ using System.Text.RegularExpressions;
 namespace EternalVR.Launcher.Core.Report
 {
     /// <summary>
-    /// Removes personal identifiers from report text (T-095): the user profile path, the Windows user name and
-    /// Steam account IDs. Rules, applied in this order:
+    /// Removes personal identifiers from report text (T-095): the user profile path, the computer name, the Windows
+    /// user name, the name played under and Steam account IDs. Rules, applied in this order:
     /// <list type="number">
     /// <item>The user's own profile folder, with <c>\</c>, <c>/</c> or JSON's <c>\\</c> separators, in any case, becomes <c>%USERPROFILE%</c>.</item>
     /// <item>Any other <c>X:\Users\&lt;name&gt;</c> folder (not Public or Default) becomes <c>%USERPROFILE%</c> too.</item>
+    /// <item>The computer name as a whole word, case-insensitive, becomes <c>&lt;computer&gt;</c>; names shorter than 3
+    ///       characters are left alone. It goes before the user name, which may be part of it (<c>JASON-PC</c>).</item>
     /// <item>The user name as a whole word (not inside a longer word), case-insensitive, becomes <c>&lt;user&gt;</c>;
     ///       names shorter than 3 characters are left alone, they would hit ordinary words.</item>
+    /// <item>The name in the game's sign-in lines (<c>User 'name' signed in - 1234567890</c>, the name played under)
+    ///       becomes <c>&lt;player&gt;</c>, and the number at the end of such a line <c>&lt;playerid&gt;</c>.</item>
     /// <item>A 17-digit SteamID64 (<c>7656119</c> and 10 digits) becomes <c>&lt;steamid64&gt;</c>.</item>
     /// <item><c>steam-&lt;digits&gt;</c> (the game's save folders) and <c>userdata\&lt;digits&gt;</c> (Steam's) keep their prefix, with <c>&lt;steamid&gt;</c> for the number.</item>
     /// <item>Every account ID known (passed in, or found by the previous rule in any file of the report) with 5 or more
@@ -24,9 +28,13 @@ namespace EternalVR.Launcher.Core.Report
     {
         public const string ProfileToken = "%USERPROFILE%";
         public const string UserToken = "<user>";
+        public const string ComputerToken = "<computer>";
+        public const string PlayerToken = "<player>";
+        public const string PlayerIdToken = "<playerid>";
         public const string SteamIdToken = "<steamid>";
         public const string SteamId64Token = "<steamid64>";
         public const int MinUserNameLength = 3;
+        public const int MinComputerNameLength = 3;
         public const int MinAccountIdDigits = 5;
 
         private const string Sep = @"(?:\\\\|\\|/)";
@@ -36,18 +44,25 @@ namespace EternalVR.Launcher.Core.Report
             @"(?<![A-Za-z])[A-Za-z]:" + Sep + "Users" + Sep + @"(?!(?:Public|Default|All Users|Default User)(?:\\|/|\b))"
             + @"(?:[^\\/\r\n""'<>|:*?]+(?=\\|/)|[^\\/\s""'<>|:*?,;()\[\]]+)", Options);
         private static readonly Regex SteamId64 = new Regex(@"(?<![0-9A-Za-z])7656119\d{10}(?![0-9A-Za-z])", Options);
-        private static readonly Regex SteamFolder = new Regex(@"(?<![0-9A-Za-z])(steam-)(\d+)(?!\d)", Options);
+        // Not a date: the game's console log names its build branch "release-steam-2026-08".
+        private static readonly Regex SteamFolder = new Regex(@"(?<![0-9A-Za-z])(steam-)(\d+)(?!\d|-\d)", Options);
         private static readonly Regex UserdataFolder = new Regex(@"(userdata" + Sep + @")(\d+)(?!\d)", Options);
+        // The game's qconsole.log: "idSignInManager::TriggerLocalUserSignInEvent - User 'name' signed in - 1234567890".
+        private static readonly Regex PlayerName = new Regex(@"(?<![\p{L}\p{N}_])(User ')[^'\r\n]+(')", Options);
+        private static readonly Regex PlayerId = new Regex(@"(User '" + PlayerToken + @"'[^\r\n]*? - )\d+(?![0-9A-Za-z])", Options);
 
         private readonly Regex ownProfile;
+        private readonly Regex computerName;
         private readonly Regex userName;
         private readonly Regex accountIds;
 
         /// <param name="userProfile">The profile folder, e.g. <c>C:\Users\name</c>; may be null.</param>
         /// <param name="userName">The Windows user name; may be null.</param>
         /// <param name="steamAccountIds">Known Steam account IDs (the 32-bit numbers); may be null.</param>
-        public Redactor(string userProfile, string userName, IEnumerable<string> steamAccountIds)
+        /// <param name="computerName">The computer name (<c>Environment.MachineName</c>); may be null.</param>
+        public Redactor(string userProfile, string userName, IEnumerable<string> steamAccountIds, string computerName = null)
         {
+            this.computerName = WholeWord(computerName, MinComputerNameLength);
             var profile = (userProfile ?? string.Empty).Trim().TrimEnd('\\', '/');
             if (profile.Length >= 4)
             {
@@ -56,9 +71,7 @@ namespace EternalVR.Launcher.Core.Report
                 const string nameChar = @"[^\\/\s""'<>|:*?,;()\[\].]";
                 ownProfile = new Regex(string.Join(Sep, parts) + "(?!" + nameChar + @"|\." + nameChar + ")", Options);
             }
-            var name = (userName ?? string.Empty).Trim();
-            if (name.Length >= MinUserNameLength)
-                this.userName = new Regex(@"(?<![\p{L}\p{N}_])" + Regex.Escape(name) + @"(?![\p{L}\p{N}_])", Options);
+            this.userName = WholeWord(userName, MinUserNameLength);
             var ids = (steamAccountIds ?? Enumerable.Empty<string>())
                 .Select(i => (i ?? string.Empty).Trim())
                 .Where(i => i.Length >= MinAccountIdDigits && i.All(char.IsDigit))
@@ -88,12 +101,22 @@ namespace EternalVR.Launcher.Core.Report
             var t = text;
             if (ownProfile != null) t = ownProfile.Replace(t, ProfileToken);
             t = AnyProfile.Replace(t, ProfileToken);
+            if (computerName != null) t = computerName.Replace(t, ComputerToken);
             if (userName != null) t = userName.Replace(t, UserToken);
+            t = PlayerName.Replace(t, "$1" + PlayerToken + "$2");
+            t = PlayerId.Replace(t, "$1" + PlayerIdToken);
             t = SteamId64.Replace(t, SteamId64Token);
             t = SteamFolder.Replace(t, m => m.Groups[1].Value + SteamIdToken);
             t = UserdataFolder.Replace(t, m => m.Groups[1].Value + SteamIdToken);
             if (accountIds != null) t = accountIds.Replace(t, SteamIdToken);
             return t;
+        }
+
+        /// <summary>A name as a whole word (not inside a longer word), in any case; null when it is shorter than <paramref name="minLength"/>.</summary>
+        private static Regex WholeWord(string name, int minLength)
+        {
+            var n = (name ?? string.Empty).Trim();
+            return n.Length < minLength ? null : new Regex(@"(?<![\p{L}\p{N}_])" + Regex.Escape(n) + @"(?![\p{L}\p{N}_])", Options);
         }
     }
 }

@@ -178,6 +178,7 @@ not expect is the worst comfort case (high risk in R06). Keep dash on the button
 | `ETERNALVR_THROW_SPEED` | none | forward speed, 1 to 5 m/s | 2 |
 | `ETERNALVR_SWING` | Overhead swing | `1` / `0` | `0` |
 | `ETERNALVR_SWING_SPEED` | none | downward speed, 1 to 5 m/s | 2.5 |
+| `ETERNALVR_HANDS_JUMP` | Jump with both hands | `1` / `0` (never when seated; `src/features/input/hands_jump.hpp`) | `0` |
 
 Both follow the weapon hand setting (the off hand throws, the weapon hand swings). Both need motion
 controllers. The `controllers: on:` line ends with `throw gesture on|off, overhead swing on|off`; a gesture

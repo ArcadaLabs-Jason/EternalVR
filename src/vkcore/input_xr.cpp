@@ -363,7 +363,7 @@ bool attach(const XrContext& context) {
     EVR_LOG(
         "%s: on: aim %s, demon aim %s%s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
         "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
-        "weapon wheel by the %s, throw gesture %s, overhead swing %s",
+        "weapon wheel by the %s, throw gesture %s, overhead swing %s, hands-up jump %s",
         kTag, input::aimSourceName(cfg.aim), input::aimSourceName(input::demonAimSource(cfg)),
         !cfg.demonAim                       ? " (as aim)"
         : cfg.aim == input::AimSource::View ? " (ETERNALVR_DEMON_AIM has no effect under view aim)"
@@ -377,7 +377,7 @@ bool attach(const XrContext& context) {
         cfg.weaponFov ? "on" : "off", cfg.shotOrigin == input::ShotOrigin::Hand ? "hand" : "eye",
         cfg.aimSmoothing, s.aimFilter ? "" : " (off)", input::dossierPressName(cfg.dossier),
         input::wheelSelectName(cfg.wheelSelect), cfg.throwGesture.enabled ? "on" : "off",
-        cfg.swing.enabled ? "on" : "off");
+        cfg.swing.enabled ? "on" : "off", cfg.handsJump.enabled ? "on" : "off");
     return true;
 }
 

@@ -253,6 +253,17 @@ TEST_CASE("the throw and the overhead swing are off unless turned on") {
     CHECK(bad.settings.swing.speed == evr::input::SwingSettings{}.speed);
 }
 
+TEST_CASE("the hands-up jump is off unless turned on") {
+    CHECK_FALSE(parse({}).settings.handsJump.enabled);
+    const auto on = parse({{"ETERNALVR_HANDS_JUMP", "1"}});
+    CHECK(on.issues.empty());
+    CHECK(on.settings.handsJump.enabled);
+    CHECK_FALSE(on.settings.handsJump.allowWhenSeated);
+    const auto bad = parse({{"ETERNALVR_HANDS_JUMP", "sometimes"}});
+    CHECK(bad.issues.size() == 1);
+    CHECK_FALSE(bad.settings.handsJump.enabled);
+}
+
 TEST_CASE("the off-hand arm's offsets are mirrored with the weapon in the left hand") {
     using evr::game::Handedness;
     using evr::input::kDefaultOffhandShoulder;

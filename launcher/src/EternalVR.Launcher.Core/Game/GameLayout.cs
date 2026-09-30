@@ -16,11 +16,17 @@ namespace EternalVR.Launcher.Core.Game
         public static readonly IReadOnlyList<string> GameProcessNames =
             new[] { "DOOMEternalx64vk", "DOOMSandBox64vk", "idTechLauncher" };
 
+        /// <summary>
+        /// The folder under <c>Saved Games\id Software\DOOMEternal</c> that holds the text configs, the game's console log
+        /// (<c>qconsole.log</c>), its crash reports (<c>Crash.&lt;computer&gt;.&lt;number&gt;.html</c>) and <c>crash-dumps</c>.
+        /// </summary>
+        public const string SavedGamesBaseFolder = "base";
+
         /// <summary>Text config files under <c>Saved Games\id Software\DOOMEternal</c> (T-099).</summary>
         public static readonly IReadOnlyList<string> SavedGamesConfigFiles = new[]
         {
-            Path.Combine("base", "DOOMEternalConfig.cfg"),
-            Path.Combine("base", "DOOMEternalConfig.local"),
+            Path.Combine(SavedGamesBaseFolder, "DOOMEternalConfig.cfg"),
+            Path.Combine(SavedGamesBaseFolder, "DOOMEternalConfig.local"),
             Path.Combine("user", "config.json"),
         };
 

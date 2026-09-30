@@ -75,6 +75,6 @@ come when it is ready.
 ## Reporting
 
 When something goes wrong, click **Export report...** in the launcher and send me the zip it saves,
-with what you were doing. It holds the logs, the versions and your PC's relevant settings, with your
-user folder, user name and Steam account ID replaced by placeholders; `docs\TROUBLESHOOTING.md` lists
+with what you were doing. It holds the logs (the game's crash reports too), the versions and your PC's relevant
+settings, with your user folder, user name, computer name and Steam account ID replaced by placeholders; `docs\TROUBLESHOOTING.md` lists
 exactly what is in it.

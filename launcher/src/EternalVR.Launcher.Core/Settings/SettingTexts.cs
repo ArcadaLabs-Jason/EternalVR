@@ -65,6 +65,9 @@ namespace EternalVR.Launcher.Core.Settings
                 "Throw a grenade with your off hand, as you would throw a ball: bring the hand up beside your ear, then "
                 + "swing it forward. It fires the equipment launcher, like its button; the grenade flies where you aim. "
                 + "Off by default. Experimental: not yet tried in a headset."),
+            [Setting.HandsJump] = new Text("Jump with both hands",
+                "Throw both hands up above your head, fast, to jump, like in DOOM VFR. The jump button still works. "
+                + "Off when you play sitting. Off by default: two-handed moves can set it off by accident."),
             [Setting.SwingGesture] = new Text("Overhead swing",
                 "Swing the Crucible (the Sentinel Hammer in The Ancient Gods Part Two) with your weapon hand: raise it above "
                 + "your head, then bring it down hard. It does what the Crucible button does. Both hands up does nothing. "

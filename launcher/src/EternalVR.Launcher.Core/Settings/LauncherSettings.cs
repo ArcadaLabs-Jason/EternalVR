@@ -173,10 +173,6 @@ namespace EternalVR.Launcher.Core.Settings
         public DossierPress Dossier { get; set; } = DossierPress.Hold;
         /// <summary>What points at the weapon wheel: the stick (default) or the weapon hand.</summary>
         public WheelSelect Wheel { get; set; } = WheelSelect.Stick;
-        /// <summary>The off hand's throw presses the equipment launcher (the layer's <c>ETERNALVR_THROW</c>); off by default.</summary>
-        public bool ThrowGesture { get; set; } = false;
-        /// <summary>The weapon hand's overhead swing presses the Crucible (the layer's <c>ETERNALVR_SWING</c>); off by default.</summary>
-        public bool SwingGesture { get; set; } = false;
         /// <summary>The dot at the end of the weapon hand's aim ray (the layer's <c>ETERNALVR_UI_RETICLE</c>).</summary>
         public bool AimDot { get; set; } = true;
         public AntiAliasingMode AntiAliasing { get; set; } = AntiAliasingMode.Taa;
@@ -237,7 +233,7 @@ namespace EternalVR.Launcher.Core.Settings
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_dll_path", "dlss_preset", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
-            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "mirror_display",
+            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "foveation", "extra_args", "profile",
         };
 
@@ -339,8 +335,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("locomotion", out var lm)) s.Locomotion = Pick(lm, LocomotionMode.Head, ("hand", LocomotionMode.Hand));
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
             if (map.TryGetValue("wheel_select", out var ws)) s.Wheel = Pick(ws, WheelSelect.Stick, ("hand", WheelSelect.Hand));
-            if (map.TryGetValue("throw_gesture", out var tg)) s.ThrowGesture = On(tg);
-            if (map.TryGetValue("swing_gesture", out var sg)) s.SwingGesture = On(sg);
+            s.ReadGestures(map);
             if (map.TryGetValue("anti_aliasing", out var aa)) s.AntiAliasing = Pick(aa, AntiAliasingMode.Taa, ("dlss", AntiAliasingMode.Dlss), ("off", AntiAliasingMode.Off));
             if (map.TryGetValue("dlss_quality", out var dq))
                 s.Dlss = Pick(dq, DlssQuality.Quality, ("balanced", DlssQuality.Balanced), ("performance", DlssQuality.Performance),
@@ -424,8 +419,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("locomotion = " + LocomotionName(Locomotion));
             sb.AppendLine("dossier = " + DossierName(Dossier));
             sb.AppendLine("wheel_select = " + WheelSelectName(Wheel));
-            sb.AppendLine("throw_gesture = " + (ThrowGesture ? "1" : "0"));
-            sb.AppendLine("swing_gesture = " + (SwingGesture ? "1" : "0"));
+            WriteGestures(sb);
             sb.AppendLine("aim_dot = " + (AimDot ? "1" : "0"));
             sb.AppendLine("anti_aliasing = " + (AntiAliasing == AntiAliasingMode.Dlss ? "dlss" : AntiAliasing == AntiAliasingMode.Off ? "off" : "taa"));
             sb.AppendLine("dlss_quality = " + DlssQualityName(Dlss));

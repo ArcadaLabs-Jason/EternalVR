@@ -11,7 +11,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: body
         PlayPosition, EyeHeight,
         // Play: gestures
-        ThrowGesture, SwingGesture,
+        ThrowGesture, SwingGesture, HandsJump,
         // Play: controls
         AimWith, RevenantAimWith, WeaponHand, MoveToward, XButton, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
@@ -67,6 +67,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.SnapAngle:
                     return !s.Controllers ? NeedsControllers : s.Turn == TurnMode.Snap ? null : NeedsSnapTurn;
                 case Setting.WalkInRoom:
+                case Setting.HandsJump:
                     return !s.Controllers ? NeedsControllers : s.Posture == PostureMode.Seated ? NotSitting : null;
                 case Setting.RevenantAimWith:
                     // Without the controllers, or with the mouse, there is nothing to choose between.

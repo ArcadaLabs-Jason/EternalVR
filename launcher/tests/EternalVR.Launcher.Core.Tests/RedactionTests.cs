@@ -56,6 +56,42 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(@"%USERPROFILE%\x", r.Apply(@"C:\Users\al\x"));
         }
 
+        private static readonly Redactor WithComputer = new Redactor(@"C:\Users\Jason", "Jason", null, "DESKTOP-7Q2XK9M");
+
+        [Theory]
+        [InlineData("\tHost Name: DESKTOP-7Q2XK9M", "\tHost Name: <computer>")]
+        [InlineData("Crash.desktop-7q2xk9m.00014.html", "Crash.<computer>.00014.html")]
+        [InlineData(@"\\DESKTOP-7Q2XK9M\share", @"\\<computer>\share")]
+        [InlineData("(DESKTOP-7Q2XK9M)", "(<computer>)")]
+        public void ComputerNameAloneBecomesThePlaceholder(string input, string expected) => Assert.Equal(expected, WithComputer.Apply(input));
+
+        [Theory]
+        [InlineData("XDESKTOP-7Q2XK9M and DESKTOP-7Q2XK9M2 and DESKTOP-7Q2XK9M_x and myDESKTOP-7Q2XK9M")]
+        [InlineData("DESKTOP-7Q2 and XK9M")]
+        public void ComputerNameInsideLongerWordsIsKept(string input) => Assert.Equal(input, WithComputer.Apply(input));
+
+        [Fact]
+        public void ShortComputerNamesAreNotReplaced()
+        {
+            var r = new Redactor(null, null, null, "PC");
+            Assert.Equal("PC and pc stay", r.Apply("PC and pc stay"));
+            Assert.Equal("<computer> here", new Redactor(null, null, null, " ABC ").Apply("abc here"));
+        }
+
+        [Fact]
+        public void AComputerNameHoldingTheUserNameIsReplacedWhole()
+        {
+            var r = new Redactor(@"C:\Users\Jason", "Jason", null, "JASON-PC");
+            Assert.Equal("on <computer> as <user>", r.Apply("on jason-pc as Jason"));
+        }
+
+        [Theory]
+        [InlineData("idSignInManager::TriggerLocalUserSignInEvent - User 'SlayerFan42' signed in - 1234567890",
+                    "idSignInManager::TriggerLocalUserSignInEvent - User '<player>' signed in - <playerid>")]
+        [InlineData("idSignInManager::TriggerLocalUserSignInEvent - User 'Some Name' promoted - 42", "idSignInManager::TriggerLocalUserSignInEvent - User '<player>' promoted - <playerid>")]
+        [InlineData("User 'x' left\nnext line - 123", "User '<player>' left\nnext line - 123")]
+        public void TheNamePlayedUnderBecomesThePlaceholder(string input, string expected) => Assert.Equal(expected, R.Apply(input));
+
         [Theory]
         [InlineData("restore: unchanged steam-12345678/PROFILE/profile.bin", "restore: unchanged steam-<steamid>/PROFILE/profile.bin")]
         [InlineData(@"E:\Steam\userdata\12345678\782330\remote", @"E:\Steam\userdata\<steamid>\782330\remote")]
@@ -92,6 +128,7 @@ namespace EternalVR.Launcher.Core.Tests
         [InlineData("sha256 a76561197972611406b0000000000000000000000000000000000000000000000")]
         [InlineData("x123456781 and 1123456780 and 1234567")]
         [InlineData("SteamLibrary\\steamapps\\common and steam running")]
+        [InlineData("\t\tBranch: release-steam-2026-08")]
         public void OrdinaryNumbersAndTextAreKept(string input) => Assert.Equal(input, R.Apply(input));
 
         [Fact]

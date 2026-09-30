@@ -200,6 +200,7 @@ namespace EternalVR.Launcher.Core.Launch
             // Arm gestures (docs/VR_INTERACTIONS.md), off by default: the throw and the overhead swing.
             Set("ETERNALVR_THROW", s.ThrowGesture ? "1" : "0");
             Set("ETERNALVR_SWING", s.SwingGesture ? "1" : "0");
+            Set("ETERNALVR_HANDS_JUMP", s.HandsJump ? "1" : "0");
             // The player's own maps, each in place of the built-in one for its controllers (docs/release/CONTROLS.md).
             if (s.Controllers && inputs.Controls != null && inputs.Controls.HasPlayerMaps) Set("ETERNALVR_CONTROLLER_DATA", inputs.Controls.Dir);
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");

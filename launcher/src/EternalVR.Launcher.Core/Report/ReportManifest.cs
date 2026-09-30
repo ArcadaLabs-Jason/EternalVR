@@ -21,6 +21,18 @@ namespace EternalVR.Launcher.Core.Report
         /// newest capture first, whole captures up to <see cref="ReportManifest.CapturesCapBytes"/>.
         /// </summary>
         SessionCaptures,
+        /// <summary>
+        /// A file in the game's own <c>base</c> folder under Saved Games (<c>Saved Games\id Software\DOOMEternal\base</c>,
+        /// the folder the settings snapshot knows, <see cref="ReportInputs.GameSavedGamesDirs"/>); the newest when there are several.
+        /// </summary>
+        GameFolder,
+        /// <summary>
+        /// The game's crash reports (<c>Crash.&lt;computer&gt;.&lt;number&gt;.html</c>) in that <c>base</c> folder, written since
+        /// the oldest session in the report started or in the last <see cref="ReportManifest.GameCrashDays"/> days,
+        /// whichever reaches back further: newest first, at most <see cref="ReportManifest.GameCrashesKept"/>.
+        /// Never the memory dumps next to them (<c>crash-dumps\*.dmp</c>).
+        /// </summary>
+        GameCrashes,
     }
 
     /// <summary>One line of the report manifest.</summary>
@@ -63,9 +75,16 @@ namespace EternalVR.Launcher.Core.Report
         public const string SystemFile = "system.txt";
         public const string PreflightFile = "preflight.txt";
         public const string ContentsFile = "report-contents.txt";
+        public const string WindowsEventsFile = "windows-events.txt";
 
         /// <summary>The newest session folders whose layer logs are included.</summary>
         public const int SessionsKept = 3;
+
+        /// <summary>The most game crash reports (<see cref="ReportSource.GameCrashes"/>) a report holds.</summary>
+        public const int GameCrashesKept = 3;
+
+        /// <summary>Game crash reports of the last this many days are taken even when older than the sessions in the report.</summary>
+        public const int GameCrashDays = 7;
 
         /// <summary>
         /// The most uncompressed text a report holds. Logs compress about tenfold, so the zip stays far below
@@ -90,6 +109,14 @@ namespace EternalVR.Launcher.Core.Report
             new ReportItem(ReportSource.DataFolder, "launcher.ini", "launcher.ini", "The launcher settings"),
             new ReportItem(ReportSource.ProgramFolder, "BUILD-INFO.txt", "BUILD-INFO.txt", "The release's version, commit and supported game builds"),
             new ReportItem(ReportSource.LayerFolder, "VK_LAYER_ETERNALVR.json", "layer/VK_LAYER_ETERNALVR.json", "The layer manifest"),
+            // The game's files come before the session logs: when every log is at its longest, the oldest session's log is left out, not these.
+            new ReportItem(ReportSource.Generated, WindowsEventsFile, WindowsEventsFile,
+                "Windows event log entries of the last 7 days: crashes and hangs of the game, the launcher or the layer, and display driver resets and errors (see WindowsEvents)"),
+            new ReportItem(ReportSource.GameCrashes, "Crash.*.html", "game-crashes/crash-{number}.html",
+                "The game's own crash reports (call stack, registers, exception code, build) written since the oldest session in the report or in the last 7 days, newest first, at most 3"),
+            new ReportItem(ReportSource.GameFolder, "qconsole.log", "game/qconsole.log",
+                "The game's console log of its latest start; a longer log keeps its first 1 MB and last 3 MB",
+                headBytes: 1 * MiB, tailBytes: 3 * MiB),
             new ReportItem(ReportSource.SessionFolder, "LAYER_LOADED", "sessions/{session}/{name}",
                 "Whether the layer loaded in that session", sessions: SessionsKept),
             new ReportItem(ReportSource.SessionFolder, "eternalvr-*.log", "sessions/{session}/{name}",

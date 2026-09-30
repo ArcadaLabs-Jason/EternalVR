@@ -458,6 +458,7 @@ MappedInput runMapper() {
         mapperSettings.captureButtons = input::captureButtonsFor(xrRuntimeName());
         mapperSettings.throwGesture = cfg.throwGesture;
         mapperSettings.swing = cfg.swing;
+        mapperSettings.handsJump = cfg.handsJump;
         s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
         EVR_LOG("%s: control map for %s controllers, %s-handed", kTag,
                 std::string(game::controllerName(snapshot.controller)).c_str(),
