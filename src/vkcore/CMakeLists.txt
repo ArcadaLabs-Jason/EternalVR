@@ -48,6 +48,7 @@ add_library(evr_layer SHARED
     dlss_dll.cpp
     dlss_menu_hooks.cpp
     eye_capture.cpp
+    frame_pacing.cpp
     game_build.cpp
     game_code.cpp
     game_text.cpp
@@ -126,6 +127,7 @@ target_sources(evr_layer PRIVATE
     aim_hooks.cpp
     bhaptics_game.cpp
     bhaptics_link.cpp
+    bhaptics_portal.cpp
     controller_test.cpp
     controllers.cpp
     game_view_poses.cpp
@@ -138,6 +140,7 @@ target_sources(evr_layer PRIVATE
     rumble_hook.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
+    vrs_gui.cpp
     vrs_nv.cpp
     xinput_hook.cpp
     xr_runtime.cpp)
@@ -146,7 +149,7 @@ target_sources(evr_layer PRIVATE
     menu_cursor.cpp
     menu_input.cpp
     presenter_menu.cpp)
-target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_foveation evr_input evr_menu evr_roomscale)
+target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_foveation evr_input evr_menu evr_pacing evr_roomscale)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
 target_compile_features(evr_layer PRIVATE cxx_std_20)
 target_compile_definitions(evr_layer PRIVATE

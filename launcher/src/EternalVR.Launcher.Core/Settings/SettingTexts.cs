@@ -90,6 +90,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "Which press of the X button opens the Dossier; the other one switches equipment. Hold means a quarter of "
                 + "a second or more.",
                 "Hold for Dossier (default)", "Tap for Dossier"),
+            [Setting.DossierMapSticks] = new Text("Dossier map sticks",
+                "Which stick moves the Dossier's map. On the map one stick pans it and the other zooms (up and down) and "
+                + "turns it (left and right). By default your weapon hand's stick pans; choose the other hand to swap them.",
+                "Weapon hand pans (default)", "Other hand pans"),
             [Setting.WeaponWheel] = new Text("Weapon wheel",
                 "How you pick a weapon on the weapon wheel. Stick: hold the wheel open and push the stick toward a weapon. "
                 + "Point with your hand: hold the wheel open with its stick or button, then turn your weapon hand toward "
@@ -119,6 +123,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "The detail each eye is rendered with. 1.00 is your headset's recommended size, kept within what a fast card "
                 + "can render at the headset's refresh rate. Raise it for a sharper picture if your card has headroom; lower it "
                 + "if the frame rate drops."),
+            [Setting.EachEye] = new Text("Each eye",
+                "The size each eye renders at with the Resolution above, and how it compares with the size your headset "
+                + "asks for, per side (as Virtual Desktop shows its resolution). The headset's size is read when you press "
+                + "Play and remembered for the next time."),
             [Setting.AntiAliasing] = new Text("Anti-aliasing",
                 "How edges are smoothed in each eye. TAA (recommended) is the game's own: smooth edges, with each eye "
                 + "keeping its own history. DLSS needs an NVIDIA RTX card: it renders a smaller image and scales it up, which "
@@ -140,6 +148,15 @@ namespace EternalVR.Launcher.Core.Settings
                 + "the graphics card is what limits the frame rate. Subtle keeps the most of each eye at full detail, Aggressive "
                 + "the least. NVIDIA RTX only; other cards ignore it. Off by default. Experimental.",
                 "Off", "Subtle", "Balanced", "Aggressive"),
+            [Setting.FramePacing] = new Text("Frame pacing",
+                "How the game's frames are timed against your headset's. As fast as the game runs: the game draws as many "
+                + "frames as it can and the headset shows the newest one at each of its frames; looking around is smooth, "
+                + "but when the game draws more frames than the headset shows, moving things (the world, your gun, the "
+                + "Slayer's movement) advance by uneven steps. Matched to the headset: the game draws exactly one frame for "
+                + "each headset frame, started at the same moment of each, as native VR games do, so motion advances evenly. "
+                + "It helps when the game runs faster than your headset's refresh rate; below it nothing changes. "
+                + "Experimental: off by default.",
+                "As fast as the game runs", "Matched to the headset (experimental)"),
             [Setting.TextureStreaming] = new Text("Texture streaming",
                 "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "

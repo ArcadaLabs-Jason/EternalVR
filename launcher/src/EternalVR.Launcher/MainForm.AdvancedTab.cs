@@ -186,6 +186,7 @@ namespace EternalVR.Launcher
         {
             ipd.Enabled = ipdOverride.Checked;
             ShowDlss();
+            ShowEachEye();
         }
 
         private static decimal Clamped(double v, NumericUpDown box, double fallback) =>

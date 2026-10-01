@@ -213,7 +213,8 @@ showed, its pose age and the prediction horizon (T-111), the pose lead, the view
 under hand aim, the weapon hand's aim orientation as used (smoothed) and as tracked (zeros without one).
 `tools/frames/aim_jitter.py` summarises it (`docs/rig-findings/aim-jitter.md`). `ETERNALVR_POSE_LEAD=1`
 predicts the head and hands for when frames are measured to be shown instead of one display period ahead
-(`xr_math/display_lead.hpp`, off by default).
+(`xr_math/display_lead.hpp`, off by default; on by default under `ETERNALVR_PACE=headset`, docs/VR_STEREO.md
+"Frame pacing").
 
 ## Verified on the rig without a headset (2026-09-26, OpenXR-Simulator)
 

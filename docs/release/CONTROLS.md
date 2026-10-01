@@ -176,7 +176,9 @@ TAB (the Dossier); B backs out as usual.
 **The Dossier.** Hold X to open it; it opens on the map. Tabs change with the grips (left: previous,
 right: next) or can be clicked. On the map the sticks move it, so your hand can stay still: the right
 stick pans (the left stick with the weapon in your left hand), the other stick zooms (up / down) and
-rotates (left / right), and a stick click centres it on you. Pointing and clicking still works for the
+rotates (left / right), and a stick click centres it on you. To pan with the other hand instead, set
+**Dossier map sticks** on the launcher's Play tab to Other hand pans: then the other hand's stick pans and
+the weapon hand's stick zooms and rotates. Pointing and clicking still works for the
 map's buttons, and holding the trigger while you move the pointer still pans. In the
 Arsenal, click a weapon to select it and click a mod to open its upgrades. The Arsenal's key-only
 shortcuts (T customize weapon wheel, X equip or unequip a mod) have no controller button yet. B closes
@@ -221,23 +223,26 @@ are the same whichever profile is picked.
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
 | Move toward | Where you look, Where your off hand points | Where you look |
+| Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
-| bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, and the Flame Belch and equipment launcher on your left shoulder ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
+| bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, the Flame Belch and equipment launcher on your left shoulder, and landing from a fall ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
 | Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
+| Each eye | The size each eye renders at with that Resolution and how it compares with what your headset asks for, per side, for example "2056x2216, 82% of the 2496x2688 your headset asked for". The headset's size is read when you press Play and remembered for the next time | |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), DLSS (NVIDIA RTX only, set up in the DLSS group below), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card) | TAA |
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
-| Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
+| Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. The game's menus and HUD stay at full rate, so their text stays sharp. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
+| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (experimental: the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate). Stereo only, not with Alternate eyes on Auto | As fast as the game runs |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 
 | Setting | Choices | Default |
 |---|---|---|
 | Quality | Quality, Balanced, Performance, Ultra Performance: how small an image each eye renders before DLSS scales it up (two thirds of the size, 58%, half, a third) | Quality |
-| Version | NVIDIA's newest (recommended; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or A file of mine (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
+| Version | NVIDIA's newest (shown as latest, used by default; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or A file of mine (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
 | Preset | Automatic (NVIDIA's pick), K (recommended: the transformer model at every quality, the sharpest), J, M, L (its variants) or F (the older model). Needs a newer DLSS than the game's | K |
 | In the headset | What will run in VR with these settings, for example "DLSS 310.9.1, preset K, Quality, both eyes". Until the newest is downloaded, the game's DLSS 2.3 runs | |
 
@@ -262,7 +267,7 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 
 ### bHaptics
 
-Experimental, and not yet tried on a real suit. With **bHaptics (experimental)** on (Play tab):
+Experimental; tried on one tester's suit so far. With **bHaptics (experimental)** on (Play tab):
 
 1. Install and start the bHaptics Player on the PC that runs the game, and connect your vest and sleeves
    to it (they show as connected in the Player).
@@ -271,7 +276,8 @@ Experimental, and not yet tried on a real suit. With **bHaptics (experimental)**
 
 You feel your shots on the weapon arm's sleeve and a little on the chest (harder for the Super Shotgun,
 the Rocket Launcher, the Ballista and the BFG), hits on the vest from the side they came from, a heartbeat
-when your health is low, a jolt when a glory kill starts, and your death. Without the Player running
+when your health is low, a jolt when a glory kill starts, a thump low on the vest when you land from a
+fall higher than a double jump, and your death. Without the Player running
 nothing happens and the game plays as usual. `bhaptics_intensity` in `launcher.ini` (0 to 1, default 1)
 turns every effect down; the Player's own intensity settings apply too. The game's log lines starting
 with `bhaptics:` say whether it connected and what it played.

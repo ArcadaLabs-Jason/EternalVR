@@ -4,6 +4,7 @@ evr_add_module(evr_bhaptics
     SOURCES
         bhaptics_message.cpp
         body_haptics.cpp
+        landing.cpp
     DEPENDS
         evr_common
         evr_input)

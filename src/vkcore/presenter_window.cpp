@@ -1,9 +1,10 @@
-// The game's own window under Route S (docs/VR_STEREO.md, Desktop window). The window is only a mirror: the
-// OpenXR runtime paces the game. Every present that reaches the window can be made to wait by the desktop
-// display (a compositor that takes one image per refresh, a desktop capture), which then caps the tick rate
-// at half the refresh. With VK_KHR_swapchain_maintenance1 only the presents the window shows reach it (the
-// mirrored eye, at most one per two refreshes of its display); the others are handed back to the swapchain
-// unpresented once their ring copy has finished.
+// The game's own window under Route S (docs/VR_STEREO.md, Desktop window). The window is only a mirror and
+// must not pace the game: the game renders as fast as it can, or one image per headset frame under
+// ETERNALVR_PACE=headset (frame_pacing.hpp). Every present that reaches the window can be made to wait by
+// the desktop display (a compositor that takes one image per refresh, a desktop capture), which then caps the
+// tick rate at half the refresh. With VK_KHR_swapchain_maintenance1 only the presents the window shows reach
+// it (the mirrored eye, at most one per two refreshes of its display); the others are handed back to the
+// swapchain unpresented once their ring copy has finished.
 
 #include "vkcore/presenter_impl.hpp"
 

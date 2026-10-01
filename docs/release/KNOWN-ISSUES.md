@@ -103,7 +103,12 @@ them is worse for you than described here.
 - **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
   player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
   `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
-  experimental and off by default.
+  experimental and off by default. Since 0.1.11 it keeps the menus and HUD sharp; that has been checked on
+  the test rig, not yet in a headset.
+- **Frame pacing is experimental** (Frame pacing on the Play tab, off by default). "Matched to the headset"
+  gives the headset one new image per frame instead of letting the game run ahead. On the test rig it did
+  exactly that, but it has not been tried in a headset yet, so whether it feels smoother is still open. It
+  is not available with Alternate eyes on Auto.
 - **Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
   (on by default) has the game load only the texture detail the current view needs, which gave about 8% more
   frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
@@ -134,8 +139,10 @@ them is worse for you than described here.
   strength and feel may change.
 - **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. A tester's suit showed the front
   of the vest mirrored in 0.1.5, fixed in 0.1.6, and confirmed hits from behind land on the right side.
-  The Flame Belch and equipment launcher pulses on the left shoulder (0.1.7) have not been felt on a suit
-  yet. An equipment press with no charge left still pulses.
+  The tester confirmed the Flame Belch and equipment launcher pulses on the left shoulder (0.1.7). An
+  equipment press with no charge left still pulses. The 0.1.11 effects (glory kills, landing, portals and
+  the Sentinel Crystal) have not been felt on a suit yet; the crystal's shock and a level's exit portal have
+  not been tried at all.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
   right of centre.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is

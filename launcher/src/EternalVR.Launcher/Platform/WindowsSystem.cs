@@ -138,6 +138,41 @@ namespace EternalVR.Launcher.Platform
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { return null; }
         }
 
+        /// <summary>The CPU's name (the first processor's ProcessorNameString) and the logical processors Windows
+        /// sees, e.g. "AMD Ryzen 7 7800X3D 8-Core Processor, 16 logical processors".</summary>
+        public static string CpuDescription()
+        {
+            var name = ReadString(RegistryHive.LocalMachine, @"HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString");
+            name = string.IsNullOrWhiteSpace(name) ? "unknown CPU" : string.Join(" ", name.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+            return $"{name}, {Environment.ProcessorCount} logical processors";
+        }
+
+        /// <summary>The installed memory in GB (GlobalMemoryStatusEx's total physical memory); null when it fails.</summary>
+        public static string MemoryDescription()
+        {
+            var status = new MemoryStatusEx { Length = (uint)Marshal.SizeOf(typeof(MemoryStatusEx)) };
+            if (!GlobalMemoryStatusEx(ref status)) return null;
+            return $"{status.TotalPhys / (1024.0 * 1024 * 1024):0.0} GB";
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MemoryStatusEx
+        {
+            public uint Length;
+            public uint MemoryLoad;
+            public ulong TotalPhys;
+            public ulong AvailPhys;
+            public ulong TotalPageFile;
+            public ulong AvailPageFile;
+            public ulong TotalVirtual;
+            public ulong AvailVirtual;
+            public ulong AvailExtendedVirtual;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
+
         /// <summary>The Windows edition, release and build, e.g. "Windows 10 Pro 24H2 (build 26100.4061)".</summary>
         public static string OsDescription()
         {

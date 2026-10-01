@@ -12,16 +12,26 @@
 // - heartbeat: while health is above 0 and below kLowHealth, a lub-dub on the left of the chest, quicker as
 //   health falls;
 // - glory kill: the game's sync kill starting (a sync master appears) pulses the whole front and both
-//   sleeves;
+//   sleeves; a sync that is a pickup's animation (a rune, a Praetor token: syncKindOf) does not;
+// - Sentinel Crystal: its pickup animation (the Slayer grabs the crystal and takes its energy) plays a
+//   shock, random motors all over the vest and both sleeves for kCrystalSeconds, from kCrystalDelaySeconds
+//   into the animation (a tester's idea, public issue #1);
 // - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
 //   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
 //   lighter and shorter (a tester's suggestion, public issue #1);
-// - death: the player dying fills both sides of the vest once.
+// - death: the player dying fills both sides of the vest once;
+// - landing: coming down from a fall of kLandingDrop or more (the layer's LandingDetector, run on every game
+//   frame) pulses the bottom row of the vest, front and back, harder for a longer fall (a tester's idea,
+//   public issue #1);
+// - portal: going through a teleporter, a portal or a level exit (the layer's hooks, teleportKindOf) sweeps a
+//   crackle down the vest from the top row to the bottom, front and back, with the sleeves buzzing, over
+//   kPortalSeconds (a tester's idea, public issue #1).
 //
 // Only while `gameplay` holds (no menu, no loading, the reads fresh); outside it the edges are forgotten, so
 // nothing fires on the way back in. Every intensity is scaled by the strength (ETERNALVR_BHAPTICS_INTENSITY).
 // Pure: the layer feeds it from its own thread and sends what it returns. No Windows or network here.
 
+#include "features/bhaptics/landing.hpp"
 #include "features/input/controller_state.hpp"
 
 #include <array>
@@ -73,6 +83,9 @@ enum class Effect : std::uint8_t {
     Death,
     Belch,
     Equipment,
+    Landing,
+    Crystal,
+    Portal,
     Count,
 };
 
@@ -106,6 +119,38 @@ inline constexpr float kLowHealth = 30.0f;
 inline constexpr float kMinDamage = 0.5f;
 // A new hit's direction applies to damage seen this long after it (the two may arrive a frame apart).
 inline constexpr double kHitWindowSeconds = 0.15;
+// A landing is felt from a drop this high (game units, about a metre each): on the rig a jump drops 1.4,
+// a double jump 3.2 to 3.3 (both left out), a fall from a ledge more.
+inline constexpr float kLandingDrop = 3.5f;
+
+// What a sync (the player's sync master set) is, from its sync entity's entityDef name: a Sentinel Crystal's
+// pickup (interact/argent_cell/use_sync), another pickup (interact/...: runes, Praetor tokens, mod bots,
+// batteries), or anything else, taken for a glory kill (as before, also when the name could not be read).
+enum class SyncKind : std::uint8_t { GloryKill, Pickup, Crystal };
+
+SyncKind syncKindOf(std::string_view entityDefName);
+const char* syncKindName(SyncKind kind);
+
+// The crystal's shock: its start into the pickup animation, its length, and a burst of random motors every
+// kCrystalBurstSeconds. The animation runs about 3.3 s from the upgrade menu closing, and the Slayer's hand takes
+// the crystal about 2 s in (timed in a headset session, 2026-09-30); the shock starts a little before for the
+// suit's latency.
+inline constexpr double kCrystalDelaySeconds = 1.9;
+inline constexpr double kCrystalSeconds = 0.8;
+inline constexpr double kCrystalBurstSeconds = 0.08;
+
+// What a trigger teleport of the player is (idTrigger_Teleporter, and its _Fade kind that fades out first):
+// a portal or pad, or one of the same classes the maps use to put the player back after a fall (a hazard
+// with a damage decl, or out of bounds with the falling stinger for its fade sound). The hub's secret
+// teleporter plays the falling stinger too; an entity named '...secret...' counts as a portal.
+enum class TeleportKind : std::uint8_t { Portal, Hazard, OutOfBounds };
+
+TeleportKind teleportKindOf(bool fade, bool damage, std::string_view fadeSound, std::string_view entityName);
+const char* teleportKindName(TeleportKind kind);
+
+// The portal's sweep: its length, and a step every kPortalStepSeconds.
+inline constexpr double kPortalSeconds = 0.6;
+inline constexpr double kPortalStepSeconds = 0.06;
 
 // What the layer read this update. Levels, except `shots` (counted since the last update) and the hit.
 struct BodySignals {
@@ -114,8 +159,9 @@ struct BodySignals {
     float health = 0.0f;
     float armor = 0.0f;
     bool dead = false;
-    bool sync = false;           // a sync or glory kill runs
-    std::uint32_t shots = 0;     // shots since the last update (the Flame Belch's not among them)
+    bool sync = false;                       // a sync or glory kill runs
+    SyncKind syncKind = SyncKind::GloryKill; // what the running sync is (with `sync`)
+    std::uint32_t shots = 0;                 // shots since the last update (the Flame Belch's not among them)
     std::uint32_t belches = 0;   // shots while the Flame Belch's button was held, since the last update
     std::uint32_t equipment = 0; // presses of the equipment launcher's button since the last update
     WeaponClass weapon = WeaponClass::Medium;
@@ -125,6 +171,9 @@ struct BodySignals {
     // game gave a direction.
     std::uint32_t hitSerial = 0;
     std::optional<float> hitYawDegrees;
+    // The largest landing seen since the last update (LandingDetector on the game's frames), if any.
+    std::optional<Landing> landing;
+    std::uint32_t portals = 0; // portals, pads and level exits gone through since the last update
 };
 
 class BodyHaptics {
@@ -140,6 +189,9 @@ public:
     [[nodiscard]] float strength() const { return strength_; }
     // Frames made per effect since the start, for the layer's summary.
     [[nodiscard]] const std::array<std::uint64_t, kEffectCount>& counts() const { return counts_; }
+    // Landings seen (felt or not) and the newest one, for the layer's log.
+    [[nodiscard]] std::uint64_t landings() const { return landings_; }
+    [[nodiscard]] std::optional<Landing> lastLanding() const { return lastLanding_; }
 
 private:
     void add(std::vector<Frame>& out, Effect effect, Device device, int millis, std::vector<Dot> dots);
@@ -148,6 +200,13 @@ private:
     void leftShoulder(std::vector<Frame>& out, Effect effect, float intensity, int millis);
     void damage(std::vector<Frame>& out, float amount, std::optional<float> yawDegrees);
     void heartbeat(std::vector<Frame>& out, const BodySignals& signals);
+    void landing(std::vector<Frame>& out, const BodySignals& signals);
+    void crystal(std::vector<Frame>& out, double seconds);
+    void portal(std::vector<Frame>& out, double seconds);
+    // xorshift32: the patterns only have to look random.
+    std::uint32_t random();
+    // A level from `low` to `high`, at random.
+    float randomLevel(float low, float high);
     [[nodiscard]] std::uint8_t scaled(float intensity) const;
 
     float strength_;
@@ -163,6 +222,14 @@ private:
     double nextBelch_ = 0.0;
     double nextBeat_ = 0.0;
     bool dub_ = false; // the next beat is the second of the pair
+    std::uint64_t landings_ = 0;
+    double nextCrystal_ = 0.0;   // the shock's next burst
+    double crystalUntil_ = -1.0; // no burst from here on
+    double portalStart_ = 0.0;
+    double nextPortal_ = 0.0;   // the sweep's next step
+    double portalUntil_ = -1.0; // no step from here on
+    std::uint32_t random_ = 0x2545F491u;
+    std::optional<Landing> lastLanding_;
     std::array<std::uint64_t, kEffectCount> counts_{};
 };
 

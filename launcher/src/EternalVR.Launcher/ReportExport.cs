@@ -33,15 +33,19 @@ namespace EternalVR.Launcher
             Add("layer version", layerVersion ?? "none (EternalVR.dll missing or without a version resource)");
             Add("version check", VersionCheck.Evaluate(LauncherContext.LauncherVersion, layerVersion, ctx.LayerDir).ToString());
             Add("windows", WindowsSystem.OsDescription());
+            Add("cpu", WindowsSystem.CpuDescription());
+            Add("memory", WindowsSystem.MemoryDescription());
             var adapters = WindowsSystem.DisplayAdapters();
             if (adapters.Count == 0) Add("gpu", null);
             foreach (var a in adapters) Add("gpu", a);
             Add("openxr active runtime", active == null ? "none set" : active + RuntimeName(active));
             Add("openxr runtime for launches", LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? "system active" : effective + RuntimeName(effective));
+            system.AddRange(SteamVrSummary.Read(ctx.SteamRoot)); // chosen keys only, never the headset's serial number
             Add("hardware-accelerated GPU scheduling", hags == 2 ? "on (HwSchMode 2)" : hags.HasValue ? $"off (HwSchMode {hags.Value})" : "not set (off)");
             Add("game build", g.Facts.Build == null ? "game not found"
                 : g.Facts.Platform == GamePlatform.GamePass ? g.Facts.Build.Status + " Game Pass " + g.Facts.Build.Version
                 : g.Facts.Build.Status + " " + g.Facts.Build.Sha256);
+            system.AddRange(GameMods.Describe(g.Game?.GameRoot));
             Add("program folder", ctx.ProgramDir);
             Add("layer folder", ctx.LayerDir);
             Add("data folder", ctx.Paths.Root);
@@ -78,8 +82,8 @@ namespace EternalVR.Launcher
             }
 
             var answer = MessageBox.Show(owner,
-                "The report holds these files. Your user folder, user name, computer name and Steam account ID are replaced by placeholders; "
-                + "no saves, memory dumps or game settings files are included.\n\n" + report.Describe() + "\nSave it?",
+                "The report holds these files. Your user folder, user name, computer name, the name you play under and Steam account ID are replaced by placeholders; "
+                + "no saves or memory dumps are included.\n\n" + report.Describe() + "\nSave it?",
                 "Export report", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
             if (answer != DialogResult.OK) return;
 

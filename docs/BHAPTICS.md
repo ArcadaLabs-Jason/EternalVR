@@ -39,10 +39,13 @@ status messages are read and dropped on a second thread (the first one is logged
 | Shot | the fire hook (`idHands::FireWeapon`, `aim_hooks.cpp`), every shot of the local player, whatever the aim | the weapon arm's sleeve (all 6 motors) and the top two rows of the chest on the weapon's side; Light (Plasma Rifle, Chaingun, Heavy Cannon, Unmaykr) 35 for 60 ms, Medium (Combat Shotgun, anything unknown) 65 for 90 ms, Heavy (Super Shotgun, Rocket Launcher, Ballista) 100 for 130 ms, Huge (BFG) 100 for 350 ms, the chest at 40 to 90 % of that; at most one every 70 ms |
 | Damage | health plus armor dropping (`idPlayer::playerHealth`) | with the direction of a new hit (the damage feedback buffer) the two vest columns nearest it, middle rows, front or back; without one the middle of both sides at 80 %. 35 plus 1.3 per point lost, up to 100, for 150 ms |
 | Heartbeat | health above 0 and below 30 | lub (80) and dub (50) on the chest's inner left column, a beat every 1.1 s at 30 health down to 0.6 s near 0 |
-| Glory kill | a sync kill starting (`idPlayer::syncMaster` set, as `offhand_hook.cpp` reads it) | the whole front and both sleeves at 80 for 250 ms |
+| Glory kill | a sync kill starting (`idPlayer::savedSyncEntity` set, a `syncmelee/<demon>` sync entity), unless its sync entity's entityDef name starts with `interact/` (a pickup's animation: runes, Praetor tokens, mod bots, batteries) | the whole front and both sleeves at 80 for 250 ms |
+| Sentinel Crystal | a sync whose entity is `interact/argent_cell/use_sync` (an upgrade picked at a crystal) | a shock: from 1.9 s into the animation (about when the Slayer's hand takes the crystal; the animation runs about 3.3 s), for 0.8 s, a 100 ms burst every 80 ms on about 40 % of every motor of the vest and both sleeves, at random, 40 to 90 (a tester's idea, public issue #1) |
 | Death | `isDead` of the health component | both sides of the vest at 100 for 700 ms |
 | Flame Belch | a shot from the fire hook while the controllers hold the Flame Belch's button (it fires through the same hook with the held weapon's decl; that shot is not a weapon shot) | the Slayer's left shoulder, where the Belch sits: the top two rows of the wearer's left two columns, front and back, at 70 for 300 ms; at most one every 250 ms |
 | Equipment | the controllers' equipment launcher button going down (the launcher does not go through the fire hook) | the same left shoulder at 45 for 150 ms. A press with no charge left plays it too |
+| Landing | the feet coming to rest after falling (features/bhaptics/landing.hpp, on every game frame from the player's physics origin), from 3.5 units or more above: on the rig a jump drops about 1.4 units and a double jump 3.2 to 3.3, so both are left out; teleports (faster than 60 units a second) and rises onto a ledge or a lift are not landings, and a dash in the air is not taken for one | the bottom row, front and back, from 35 at 3.5 units up to 70 for a long fall, for 120 ms (a tester's idea, public issue #1) |
+| Portal | a trigger teleport of the player (`idTrigger_Teleporter::TriggerStuff_Impl`: pads, in-map portals, Slayer Gates, the Fortress's portals) or a level exit (`idTarget_LevelTransition`'s activate, first call), both hooked in `bhaptics_portal.cpp`; not the same classes' volumes that put the player back after a fall (a damage decl, or the falling stinger as the fade sound, except the Fortress's secret teleporter) | a crackle sweeping down the vest over 0.6 s, a step every 60 ms: the row under way at 55 to 85, about half the row above at 20 to 40, a fifth of the rest at 15 to 30, and half of each sleeve at 25 to 55, all at random, for 80 ms each (a tester's idea, public issue #1) |
 
 Nothing plays while a menu holds gameplay back or while the camera hook is not running (loads); coming
 back does not replay what changed meanwhile. `ETERNALVR_BHAPTICS_INTENSITY` (0 to 1, default 1;
@@ -64,7 +67,16 @@ the log says `bhaptics: off: unknown game build`):
   The newest item is the one with the latest time (or the one before the position when none has a time).
   The hit is taken to come from `-impactDir`; its yaw from the view's yaw
   (`idHavokPhysics_Player::viewAngles`) gives the side.
-- `idPlayer::syncMaster`'s object at +0x7DB0 (inferred, as in `offhand_hook.cpp`).
+- `idPlayer::savedSyncEntity`'s object at +0x8428: the sync entity of the animation the player is in, for
+  its whole length (traced in headset sessions: `syncmelee/<demon>` for a glory kill, about 1.6 s;
+  `interact/argent_cell/use_sync` for a Sentinel Crystal, about 3.3 s; `interact/...` for other pickups).
+  `idPlayer::syncMaster` (+0x7DB0) never changed in those sessions and is only a fallback. The sync entity's
+  `idEntity::entityDef` at +0xA8 and its name at +0x8 tell the kind.
+- Portals: `idTrigger_Teleporter::TriggerStuff_Impl` (RVA 0xDB2320, found by signature; rcx the trigger,
+  rdx the activator, which must be the player), the class from its vtable's RTTI name, and for
+  `idTrigger_Teleporter_Fade` its `damageDecl` (+0xE20) and `fadeOut.fadeSound` (+0xDD0 + 0x18, name at
+  +0x8); the entity name (idStr at +0x40, text at +0x8). `idTarget_LevelTransition`'s activate (RVA
+  0xD720D0), counted only while its `activated` (+0xC28) is still clear.
 - The held weapon's decl name (`idHands::rightItem`, as the viewmodel hook reads it) for the kick.
 
 ## Unverified, and how to check
@@ -85,19 +97,22 @@ Every item below is checked from the layer's log (`bhaptics:` lines), most witho
    sides now count from the wearer's left. The back's order is still unconfirmed. With a suit: a hit from
    the left must be felt on the left (front and back); the heartbeat on the left of the chest; right-handed
    shots on the right shoulder. If the back comes out mirrored, give it the opposite rule.
-5. **Glory kill**: one jolt as each glory kill starts; the log's summary counts `glory kill`.
-6. **Weapons**: `firing '<decl>': <class> kick` for each weapon; names that land on medium but should not
+5. **Glory kill**: one jolt as each glory kill starts; the log's summary counts `glory kill`. Each sync
+   logs `sync starts: '<entityDef>' (glory kill|pickup|Sentinel Crystal)` and `sync ends after N s`.
+6. **Portals**: each trigger teleport of the player logs `teleport '<entity>' (fade|plain, fade sound
+   '...', damage 0|1): portal|hazard|out of bounds`, and each level exit `level exit '<entity>': portal`.
+   A pad or portal must read `portal`; falling into a pit `hazard` or `out of bounds`.
+7. **Weapons**: `firing '<decl>': <class> kick` for each weapon; names that land on medium but should not
    go in `weaponClassOf`.
-7. **Summary**: every 30 s with something new, `N frames (shot a, damage b, heartbeat c, glory kill d,
-   death e), m messages sent, f failed`.
+8. **Summary**: every 30 s with something new, `N frames (shot a, damage b, heartbeat c, glory kill d,
+   death e, ...), m messages sent, f failed`.
 
 To see the messages without a suit, run any WebSocket server on 127.0.0.1:15881 that prints what it
 receives (quit the bHaptics Player first, it holds the port).
 
 ## Follow-ups
 
-- Dash and double jump (the mapper's actions, `usercmd_hook.cpp`), landing (`idPlayer::wasOnGround`
-  +0x8970, `highestFallPosition` +0x8958 for its strength).
+- Dash and double jump (the mapper's actions, `usercmd_hook.cpp`).
 - The chainsaw (the hands' `destHandsState` 10 and 11, read by the off-hand hook), the Blood Punch and
   melee (the punch detector, `haptics_policy.hpp`).
 - Pickups (health, armor and ammo going up, or the damage feedback's `pickUpBuffer`), armor breaking

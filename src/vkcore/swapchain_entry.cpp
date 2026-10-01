@@ -3,6 +3,7 @@
 #include "vkcore/swapchain_entry.hpp"
 
 #include "vkcore/cpu_timing.hpp"
+#include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -145,6 +146,9 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInf
     if (entered != 0) {
         stall_watch::presentLeft(entered);
     }
+    // ETERNALVR_PACE=headset: a present that handed an image to the headset waits here for the headset's next
+    // frame, after the hook's own timing and with no lock held (frame_pacing.hpp).
+    frame_pacing::afterPresent();
     return result;
 }
 

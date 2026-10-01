@@ -70,7 +70,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// recenter_hold) are optional in schema 2: a file without them takes the defaults, and an older launcher
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
-    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier,
+    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
     /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
     /// revenant_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version and sharpening (dlss_version replaced
     /// dlss_dll, which is still read once).
@@ -218,8 +218,8 @@ namespace EternalVR.Launcher.Core.Settings
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
-            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
-            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "foveation", "extra_args", "profile",
+            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
+            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "foveation", "pace", "extra_args", "profile",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -319,9 +319,11 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
             if (map.TryGetValue("locomotion", out var lm)) s.Locomotion = Pick(lm, LocomotionMode.Head, ("hand", LocomotionMode.Hand));
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
+            s.ReadMapSticks(map);
             if (map.TryGetValue("wheel_select", out var ws)) s.Wheel = Pick(ws, WheelSelect.Stick, ("hand", WheelSelect.Hand));
             s.ReadGestures(map);
             s.ReadPicture(map);
+            s.ReadPacing(map);
             if (map.TryGetValue("foveation", out var fv))
                 s.Foveation = Pick(fv, FoveationMode.Off, ("subtle", FoveationMode.Subtle), ("balanced", FoveationMode.Balanced), ("aggressive", FoveationMode.Aggressive));
             if (map.TryGetValue("cpu_saver", out var cs)) s.CpuSaverAllOn = On(cs);
@@ -397,11 +399,13 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("handedness = " + HandednessName(Hand));
             sb.AppendLine("locomotion = " + LocomotionName(Locomotion));
             sb.AppendLine("dossier = " + DossierName(Dossier));
+            WriteMapSticks(sb);
             sb.AppendLine("wheel_select = " + WheelSelectName(Wheel));
             WriteGestures(sb);
             sb.AppendLine("aim_dot = " + (AimDot ? "1" : "0"));
             WritePicture(sb);
             sb.AppendLine("foveation = " + FoveationName(Foveation));
+            WritePacing(sb);
             if (CpuSaverAllOn) sb.AppendLine("cpu_saver = on");
             foreach (var kv in CpuSaverChoices) sb.AppendLine(CpuSaverKeyPrefix + kv.Key + " = " + (kv.Value ? "on" : "off"));
             WriteRoom(sb);

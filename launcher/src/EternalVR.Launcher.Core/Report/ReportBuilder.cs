@@ -45,7 +45,9 @@ namespace EternalVR.Launcher.Core.Report
             Truncated = truncated;
         }
 
-        public string ZipPath { get; }
+        public string ZipPath { get; internal set; }
+        /// <summary>True when <see cref="ZipPath"/> holds a name the player chose (a controls profile folder): it is redacted as the text is.</summary>
+        internal bool RedactZipPath { get; set; }
         /// <summary>The redacted text that goes into the zip.</summary>
         public string Text { get; internal set; }
         /// <summary>The size of the source file (for generated files, of the text).</summary>
@@ -101,7 +103,8 @@ namespace EternalVR.Launcher.Core.Report
             var files = new List<ReportFile>();
             var dropped = new List<string>();
             var missing = new List<string>();
-            var logs = inputs.DataRoot == null ? null : Path.Combine(inputs.DataRoot, "logs");
+            var notes = new List<string>();
+            var logs =inputs.DataRoot == null ? null : Path.Combine(inputs.DataRoot, "logs");
             var sessions = NewestSessions(logs, int.MaxValue);
             var gameDirs = GameBaseFolders(inputs.GameSavedGamesDirs);
 
@@ -122,6 +125,9 @@ namespace EternalVR.Launcher.Core.Report
                         break;
                     case ReportSource.GameCrashes:
                         AddGameCrashes(files, dropped, missing, gameDirs, CrashWindowStart(sessions, inputs.Now), item);
+                        break;
+                    case ReportSource.ControlsFolder:
+                        AddControls(files, dropped, notes, inputs.DataRoot, item);
                         break;
                     case ReportSource.SessionCaptures:
                         AddCaptures(files, dropped, logs, sessions.Take(item.Sessions), item);
@@ -152,10 +158,12 @@ namespace EternalVR.Launcher.Core.Report
             int gameDumps = gameDirs.Sum(d => CountFilesBelow(Path.Combine(d, GameCrashDumpsFolder), "*.dmp"));
             if (gameDumps > 0) dropped.Add($"{gameDumps} memory dump(s) of the game ({GameCrashDumpsFolder}\\*.dmp): never included");
 
-            // Redaction first (an account ID found in one file is removed from all), then the size cap.
+            // Redaction first (an account ID or a name played under found in one file is removed from all), then the size cap.
             var ids = (inputs.SteamAccountIds ?? new string[0]).Concat(Redactor.FindSteamAccountIds(files.Select(f => f.Text)));
-            var redactor = new Redactor(inputs.UserProfile, inputs.UserName, ids, inputs.ComputerName);
+            var players = Redactor.FindPlayerNames(files.Select(f => f.Text));
+            var redactor = new Redactor(inputs.UserProfile, inputs.UserName, ids, inputs.ComputerName, players);
             foreach (var f in files) f.Text = redactor.Apply(f.Text);
+            foreach (var f in files.Where(f => f.RedactZipPath)) f.ZipPath = ZipSafe(redactor.Apply(f.ZipPath));
 
             var kept = new List<ReportFile>();
             long total = 0;
@@ -170,7 +178,7 @@ namespace EternalVR.Launcher.Core.Report
                 kept.Add(f);
             }
 
-            var contents = new ReportFile(ReportManifest.ContentsFile, redactor.Apply(ContentsText(inputs, kept, dropped, missing)), 0, false);
+            var contents = new ReportFile(ReportManifest.ContentsFile, redactor.Apply(ContentsText(inputs, kept, dropped, missing, notes)), 0, false);
             kept.Insert(0, contents);
             return new ReportResult(kept, dropped, Zip(kept, inputs.Now));
         }
@@ -307,7 +315,8 @@ namespace EternalVR.Launcher.Core.Report
             return sb.Length == 0 ? "no checks were run\n" : sb.ToString();
         }
 
-        private static string ContentsText(ReportInputs inputs, IReadOnlyList<ReportFile> kept, IReadOnlyList<string> dropped, IReadOnlyList<string> missing)
+        private static string ContentsText(ReportInputs inputs, IReadOnlyList<ReportFile> kept, IReadOnlyList<string> dropped, IReadOnlyList<string> missing,
+            IReadOnlyList<string> notes)
         {
             var sb = new StringBuilder();
             sb.Append("EternalVR report, created ").Append(inputs.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append('\n');
@@ -322,6 +331,7 @@ namespace EternalVR.Launcher.Core.Report
                 sb.Append('\n');
             }
             if (missing.Count > 0) sb.Append("Not found: ").Append(string.Join(", ", missing)).Append('\n');
+            foreach (var n in notes) sb.Append(n).Append('\n');
             foreach (var d in dropped) sb.Append("Left out: ").Append(d).Append('\n');
             sb.Append(ReportManifest.NeverIncluded).Append('\n');
             return sb.ToString();

@@ -5,7 +5,7 @@
 
 namespace evr::vkcore {
 
-void* patchImport(const char* name, void* replacement, const void** slotAddress) {
+void* patchImport(const char* name, void* replacement, const void** slotAddress, const char* dll) {
     auto* module = reinterpret_cast<std::byte*>(GetModuleHandleW(nullptr));
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(module + dos->e_lfanew);
@@ -15,7 +15,7 @@ void* patchImport(const char* name, void* replacement, const void** slotAddress)
     }
     for (auto* desc = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(module + dir.VirtualAddress);
          desc->Name; ++desc) {
-        if (_stricmp(reinterpret_cast<const char*>(module + desc->Name), "USER32.dll") != 0 ||
+        if (_stricmp(reinterpret_cast<const char*>(module + desc->Name), dll) != 0 ||
             !desc->OriginalFirstThunk) {
             continue;
         }

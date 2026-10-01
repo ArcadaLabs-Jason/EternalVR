@@ -168,7 +168,7 @@ wheel zooms, C centres, Escape goes back; the game also has pad and keyboard pan
 | Screen | Works | How |
 |---|---|---|
 | Tabs (Map, Arsenal, Codex, Challenges) | Yes | click the tab, or the grips (left Q, right E); a stick left / right off the map |
-| Map: pan | Yes | the weapon hand's stick (left drags, below), or the trigger held while the pointer moves |
+| Map: pan | Yes | the weapon hand's stick (left drags, below; the other hand's with `ETERNALVR_MAP_STICKS=other`), or the trigger held while the pointer moves |
 | Map: zoom | Yes | the other stick up / down (the wheel, a notch every 0.1 s) |
 | Map: rotate | Yes | the other stick left / right (right drags, below) |
 | Map: centre | Yes | a stick click (C) |
@@ -184,6 +184,13 @@ the next stroke starts from the middle. The cursor never reaches the edge of its
 would clamp it. While a stroke lasts the drag owns the cursor and the ray does not move it; with the sticks
 at rest the ray has it again, so the map's buttons can still be pointed at and clicked. A drag does not
 start while the trigger holds the left button.
+
+**Which stick pans.** `ETERNALVR_MAP_STICKS=other` swaps the two sticks' roles on the map: the other
+hand's stick pans and the weapon hand's stick zooms and rotates (`features/input/map_sticks.hpp`; the
+router swaps them in `MenuRouter::mapSticks`, for either weapon hand). The sticks are not in the control
+maps, so the controls files cannot do this. The launcher's Play tab sets it (Controls, "Dossier map
+sticks"; `map_sticks` in `launcher.ini`). The choice is in the `controllers: on:` start-up line (`Dossier
+map panned by the weapon hand's stick`, or `by the other stick`).
 
 **Which page is up.** The game does not say. The router takes a menu that comes up within 1.5 s of the
 controllers' Dossier (or automap) action to be the Dossier on its map page (`controllers::
@@ -228,6 +235,7 @@ weapon wheel's cursor is gone`.
 | `ETERNALVR_MENU_WIDTH` | metres, 0.1 to 10 | `ETERNALVR_UI_WIDTH` (2.0) |
 | `ETERNALVR_MENU_BEAM` | `1` / `0` | `1` |
 | `ETERNALVR_MENU_FOLLOW` | `1` / `0` | `1` |
+| `ETERNALVR_MAP_STICKS` | `weapon` (the weapon hand's stick pans the Dossier's map) / `other` (the other hand's stick pans) | `weapon` |
 
 ## Log lines
 

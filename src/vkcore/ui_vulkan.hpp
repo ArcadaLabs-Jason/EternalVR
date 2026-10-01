@@ -41,6 +41,10 @@ std::optional<ui_layer::ImageRecord> recordOf(VkImage image);
 // dropped. Its layout is known once the game's next barrier on it has been submitted.
 void watch(VkImage image);
 
+// The image watch() follows now (the game's GUI target), or VK_NULL_HANDLE before the first and once it is
+// destroyed. Lock-free: foveated rendering asks before each render pass (vrs_gui.hpp).
+VkImage guiTarget();
+
 // Follows a prepared image's layout from now on (the motion-vector capture, for the images it finds bound as
 // velocity); true when it is followed. A no-op for an image followed already.
 bool follow(VkImage image);

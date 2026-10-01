@@ -18,6 +18,8 @@ through OpenXR.
 - The weapon wheel on the right stick, and every tutorial and popup action on a button.
 - The HUD and menus on panels in VR, with a laser pointer; cutscenes on a big screen.
 - Controller vibration for shots, punches, the game's own rumble and menu clicks.
+- bHaptics vest and sleeves (experimental): hits from the direction they came, glory kills, landings,
+  portals and more.
 - A desktop window mirroring the game for people watching.
 - The full campaign and both DLC (single-player only).
 - Full ray tracing support: the testing so far has been at maximum settings with ray tracing on.

@@ -65,8 +65,8 @@ std::optional<std::uint8_t> popupActionKey(game::GameAction action) {
     return key;
 }
 
-MenuRouter::MenuRouter(input::Hand dominant, RouterTuning tuning)
-    : dominant_(dominant), tuning_(tuning), pointer_(dominant), drag_(tuning.map) {}
+MenuRouter::MenuRouter(input::Hand dominant, input::MapSticks mapSticks, RouterTuning tuning)
+    : dominant_(dominant), mapSticks_(mapSticks), tuning_(tuning), pointer_(dominant), drag_(tuning.map) {}
 
 bool MenuRouter::repeat(Repeater& r, int dir, double now, double delay, double interval) {
     if (dir == 0) {
@@ -239,17 +239,20 @@ void MenuRouter::moveCursor(const RouterInput& in,
 }
 
 void MenuRouter::mapSticks(const RouterInput& in, double now, RouterOutput& out) {
-    // The weapon hand's stick pans; the other stick zooms (up / down, the wheel) and rotates (left / right).
-    const std::size_t d = index(dominant_);
-    const std::size_t o = index(input::otherHand(dominant_));
-    const input::Axis2 turn = in.hands[o].stick;
+    // One stick pans; the other zooms (up / down, the wheel) and rotates (left / right). The weapon hand's
+    // stick pans unless the player chose the other one (ETERNALVR_MAP_STICKS=other).
+    const input::Hand pan =
+        mapSticks_ == input::MapSticks::OtherPans ? input::otherHand(dominant_) : dominant_;
+    const std::size_t panStick = index(pan);
+    const std::size_t turnStick = index(input::otherHand(pan));
+    const input::Axis2 turn = in.hands[turnStick].stick;
     // A drag starts only while the left button is not held by a click; one going on is finished.
     const bool free = !buttonDown_ && !clickWanted_;
     if (free || drag_.active()) {
         MapDragInput drag;
         drag.seconds = now;
         if (free) {
-            drag.pan = in.hands[d].stick;
+            drag.pan = in.hands[panStick].stick;
             drag.turn = turn;
         }
         drag.cursor = in.gameCursor;
@@ -266,12 +269,12 @@ void MenuRouter::mapSticks(const RouterInput& in, double now, RouterOutput& out)
     if (std::isfinite(turn.x) && std::isfinite(turn.y) && std::fabs(turn.y) >= std::fabs(turn.x)) {
         zoom = direction(turn.y, tuning_.stickThreshold);
     }
-    if (repeat(scroll_[o], zoom, now, tuning_.zoomInterval, tuning_.zoomInterval)) {
+    if (repeat(scroll_[turnStick], zoom, now, tuning_.zoomInterval, tuning_.zoomInterval)) {
         RouterEvent wheel = event(RouterEvent::Kind::Wheel);
         wheel.wheel = static_cast<std::int16_t>(zoom * kWheelNotch);
         out.events.push_back(wheel);
     }
-    scroll_[d] = {};
+    scroll_[panStick] = {};
     tabs_ = {};
 }
 

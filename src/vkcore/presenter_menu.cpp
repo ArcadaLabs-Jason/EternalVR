@@ -119,7 +119,7 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     }
     const bool showing = panelContent || ((menuOn || menuHeld) && now - menuPanelSeen < kPanelGraceSeconds);
     if (!menuRouter) {
-        menuRouter.emplace(controllers::dominantHand());
+        menuRouter.emplace(controllers::dominantHand(), controllers::mapSticks());
     }
     // A cursor the game shows for the weapon wheel is not a menu: the stick selects and gameplay input stays
     // on (wheel_cursor.hpp).

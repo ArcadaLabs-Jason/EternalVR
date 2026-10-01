@@ -14,8 +14,8 @@ namespace EternalVR.Launcher.Core.Tests
 
         /// <summary>
         /// <see cref="ReportTests.Setup"/> plus the game's base folder: two crash reports in the window (the oldest session in
-        /// the report started 2026-09-25 10:00, a week before now is 2026-09-20 12:00), one before it, the console log, a
-        /// memory dump and a crash report inside crash-dumps, and a config file.
+        /// the report started 2026-09-22 10:00, a week before now is 2026-09-20 12:00), one before it, the console log, a
+        /// memory dump and a crash report inside crash-dumps, the two config files, the game's structured log and another file.
         /// </summary>
         private static ReportInputs SetupWithGame(TempDir t)
         {
@@ -31,7 +31,10 @@ namespace EternalVR.Launcher.Core.Tests
             t.Write(@"saved\base\crash-dumps\Ghost_20260811-165453-brown-sapphire\x64_build_0.txt", "inside crash-dumps");
             t.Write(@"saved\base\crash-dumps\x64_build_1.dmp", "MDMP");
             t.Write($@"saved\base\crash-dumps\Crash.{Computer}.00099.html", "inside crash-dumps");
-            t.Write(@"saved\base\DOOMEternalConfig.cfg", "secret config");
+            t.Write(@"saved\base\DOOMEternalConfig.cfg", "seta r_fullscreen \"0\"\nbind \"SPACE\" \"_jump\"\nseta com_lastSave \"C:\\Users\\Tester\\Saved Games\"\n");
+            t.Write(@"saved\base\DOOMEternalConfig.local", "seta r_mode \"-1\"\nseta r_windowWidth \"2496\"\n");
+            t.Write(@"saved\base\structured.log", "{\"PlayFabId\": \"A1B2C3D4E5F60718\"}\n");
+            t.Write(@"saved\base\notes.txt", "another file of the base folder");
             return inputs;
         }
 
@@ -53,8 +56,11 @@ namespace EternalVR.Launcher.Core.Tests
                 var entries = ReportTests.Unzip(report.Zip);
                 var names = entries.Keys.ToList();
                 int events = names.IndexOf("windows-events.txt");
-                Assert.Equal(new[] { "game-crashes/crash-00012.html", "game-crashes/crash-00011.html", "game/qconsole.log" }, names.Skip(events + 1).Take(3));
-                Assert.DoesNotContain(names, n => n.Contains("00003") || n.Contains("00099") || n.Contains(Computer) || n.EndsWith(".dmp") || n.EndsWith(".cfg"));
+                Assert.Equal(new[]
+                {
+                    "game-crashes/crash-00012.html", "game-crashes/crash-00011.html", "game/qconsole.log", "game/DOOMEternalConfig.cfg", "game/DOOMEternalConfig.local",
+                }, names.Skip(events + 1).Take(5));
+                Assert.DoesNotContain(names, n => n.Contains("00003") || n.Contains("00099") || n.Contains(Computer) || n.EndsWith(".dmp") || n.Contains("structured") || n.Contains("notes"));
                 foreach (var kv in entries)
                 {
                     Assert.DoesNotContain(Computer, kv.Value, StringComparison.OrdinalIgnoreCase);
@@ -62,7 +68,8 @@ namespace EternalVR.Launcher.Core.Tests
                     Assert.DoesNotContain("1234567890", kv.Value);
                     Assert.DoesNotContain("MDMP", kv.Value);
                     Assert.DoesNotContain("inside crash-dumps", kv.Value);
-                    Assert.DoesNotContain("secret config", kv.Value);
+                    Assert.DoesNotContain("A1B2C3D4E5F60718", kv.Value);
+                    Assert.DoesNotContain("another file", kv.Value);
                 }
                 var crash = entries["game-crashes/crash-00012.html"];
                 Assert.Contains("ExpCode:          0xC0000374", crash);
@@ -71,6 +78,8 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Contains("Host <computer> crash 00012", crash);
                 Assert.Contains("Host Name: <computer>", entries["game/qconsole.log"]);
                 Assert.Contains("User '<player>' signed in - <playerid>", entries["game/qconsole.log"]);
+                Assert.Contains("bind \"SPACE\" \"_jump\"\nseta com_lastSave \"%USERPROFILE%\\Saved Games\"\n", entries["game/DOOMEternalConfig.cfg"]);
+                Assert.Equal("seta r_mode \"-1\"\nseta r_windowWidth \"2496\"\n", entries["game/DOOMEternalConfig.local"]);
 
                 var contents = entries["report-contents.txt"];
                 Assert.Contains("  game-crashes/crash-00012.html  ", contents);
@@ -122,9 +131,9 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(week, ReportBuilder.CrashWindowStart(new[] { "20260926-100000-2", "20260926-100000", "20260925-100000" }, now));
             // An older session in the report reaches back further.
             Assert.Equal(new DateTime(2026, 9, 10, 8, 0, 0), ReportBuilder.CrashWindowStart(new[] { "20260926-100000", "20260910-080000-2" }, now));
-            // Only the sessions in the report count (the newest 3).
+            // Only the sessions in the report count (the newest 5).
             Assert.Equal(new DateTime(2026, 9, 15, 9, 30, 0),
-                ReportBuilder.CrashWindowStart(new[] { "20260927-100000", "20260926-100000", "20260915-093000", "20260801-100000" }, now));
+                ReportBuilder.CrashWindowStart(new[] { "20260927-100000", "20260926-100000", "20260925-100000", "20260924-100000", "20260915-093000", "20260801-100000" }, now));
         }
 
         [Theory]
@@ -147,7 +156,7 @@ namespace EternalVR.Launcher.Core.Tests
                 {
                     inputs.GameSavedGamesDirs = dirs;
                     var report = ReportBuilder.Build(inputs);
-                    Assert.Contains("Not found: game-crashes/crash-*.html, game/qconsole.log\n", report.Files[0].Text);
+                    Assert.Contains("Not found: game-crashes/crash-*.html, game/qconsole.log, game/DOOMEternalConfig.cfg, game/DOOMEternalConfig.local\n", report.Files[0].Text);
                     Assert.DoesNotContain(report.Files, f => f.ZipPath.StartsWith("game"));
                 }
 
@@ -155,7 +164,7 @@ namespace EternalVR.Launcher.Core.Tests
                 inputs.GameSavedGamesDirs = new[] { t.Combine("saved"), t.Combine("saved") };
                 Assert.Equal(new[] { t.Combine("saved", "base") }, ReportBuilder.GameBaseFolders(inputs.GameSavedGamesDirs));
                 var withLog = ReportBuilder.Build(inputs);
-                Assert.Contains("Not found: game-crashes/crash-*.html\n", withLog.Files[0].Text);
+                Assert.Contains("Not found: game-crashes/crash-*.html, game/DOOMEternalConfig.cfg, game/DOOMEternalConfig.local\n", withLog.Files[0].Text);
                 Assert.Single(withLog.Files, f => f.ZipPath == "game/qconsole.log");
             }
         }

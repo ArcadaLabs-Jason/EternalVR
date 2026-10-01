@@ -18,6 +18,7 @@ add_subdirectory(features/bhaptics)
 add_subdirectory(features/menu)
 add_subdirectory(features/render_size)
 add_subdirectory(features/dlss_dll)
+add_subdirectory(features/pacing)
 add_subdirectory(engine/eternal/resolver)
 
 if(EVR_BUILD_LAYER)

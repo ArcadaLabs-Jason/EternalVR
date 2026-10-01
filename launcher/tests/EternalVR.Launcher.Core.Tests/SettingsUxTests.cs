@@ -183,7 +183,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.GloryKills, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
-                Setting.XButton, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
+                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.Bhaptics, Setting.RevenantAimWith,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
@@ -217,8 +217,8 @@ namespace EternalVR.Launcher.Core.Tests
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             foreach (var setting in new[]
             {
-                Setting.Resolution, Setting.AntiAliasing, Setting.TextureStreaming, Setting.CpuSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
-                Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace, Setting.Foveation,
+                Setting.Resolution, Setting.EachEye, Setting.AntiAliasing, Setting.TextureStreaming, Setting.CpuSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
+                Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace, Setting.Foveation, Setting.FramePacing,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime })
@@ -247,11 +247,13 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<Handedness>(Setting.WeaponHand);
             Choices<LocomotionMode>(Setting.MoveToward);
             Choices<DossierPress>(Setting.XButton);
+            Choices<MapPanStick>(Setting.DossierMapSticks);
             Choices<WheelSelect>(Setting.WeaponWheel);
             Choices<AntiAliasingMode>(Setting.AntiAliasing);
             Choices<SharpeningMode>(Setting.Sharpening);
             Choices<DlssQuality>(Setting.DlssQuality);
             Choices<FoveationMode>(Setting.Foveation);
+            Choices<FramePacing>(Setting.FramePacing);
             Choices<VrMode>(Setting.VrMode);
             Choices<MirrorMode>(Setting.DesktopWindow);
             Choices<CutsceneView>(Setting.CutsceneView);

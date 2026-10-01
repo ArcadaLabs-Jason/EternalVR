@@ -95,8 +95,14 @@ evr_add_test(evr_comfort_tests
         features/comfort/vignette_tests.cpp
     DEPENDS evr_comfort)
 
+evr_add_test(evr_pacing_tests
+    SOURCES
+        features/pacing/pace_policy_tests.cpp
+    DEPENDS evr_pacing)
+
 evr_add_test(evr_foveation_tests
     SOURCES
+        features/foveation/attachment_images_tests.cpp
         features/foveation/foveation_preset_tests.cpp
         features/foveation/foveation_region_tests.cpp
         features/foveation/rate_pattern_tests.cpp
@@ -146,6 +152,7 @@ evr_add_test(evr_bhaptics_tests
     SOURCES
         features/bhaptics/bhaptics_message_tests.cpp
         features/bhaptics/body_haptics_tests.cpp
+        features/bhaptics/landing_tests.cpp
     DEPENDS evr_bhaptics)
 
 evr_add_test(evr_arm_tests

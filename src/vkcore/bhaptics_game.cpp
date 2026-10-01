@@ -14,8 +14,13 @@
 // - idPlayer::damageFeedbackComponent (idDamageFeedbackComponent) at +0x26CD8: damageFeedback, 10 items
 //   of 0x80 bytes from +0x88, each with damage (float, +0x0), selfDamage (+0x28), impactDir (idVec3,
 //   +0x38) and addedTimeStamp (+0x70); damageFeedbackBufferPos (int) at +0x588.
-// - idPlayer::syncMaster's object at +0x7DB0 (as offhand_hook.cpp reads it): set during sync and glory
-//   kills.
+// - idPlayer::savedSyncEntity's object (+0x8428): the sync entity of the animation the player is in, from its
+//   start to its end. Traced in headset sessions (2026-09-30): a glory kill sets it to syncmelee/<demon>
+//   (syncmelee/imp, syncmelee/zombie_tier1, ...) for about 1.6 s, a Sentinel Crystal's upgrade to
+//   interact/argent_cell/use_sync for about 3.3 s, other pickups to interact/... (a mod bot about 2.8 s).
+//   idPlayer::syncMaster's object (+0x7DB0) never changed in those sessions and is only a fallback. The sync
+//   entity's idEntity::entityDef at +0xA8 names which kind it is.
+// Portals come from two hooks of their own (bhaptics_portal.cpp), installed with the thread.
 // - idHavokPhysics_Player::viewAngles (+0x8A50 + 0x3F10), the yaw in degrees at +4 (as viewmodel_hook.cpp).
 // Which hit is the newest, and that impactDir points from the attacker to the player, are read from the
 // names; the log's first hits show the raw values so a rig session can confirm them.
@@ -25,6 +30,7 @@
 #include "features/bhaptics/bhaptics_message.hpp"
 #include "features/bhaptics/body_haptics.hpp"
 #include "vkcore/bhaptics_link.hpp"
+#include "vkcore/body_follow.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/menu_input.hpp"
 
@@ -38,6 +44,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace evr::vkcore::controllers {
@@ -61,6 +68,8 @@ constexpr std::size_t kItemSelfDamage = 0x28;
 constexpr std::size_t kItemImpactDir = 0x38;
 constexpr std::size_t kItemAddedTime = 0x70;
 constexpr std::size_t kPlayerViewYaw = 0x8A50 + 0x3F10 + 4;
+constexpr std::size_t kEntityDef = 0xA8;
+constexpr std::size_t kPlayerSavedSync = 0x8420 + 8;
 
 // Readings outside this are not health.
 constexpr float kMaxPlausible = 10000.0f;
@@ -70,6 +79,8 @@ constexpr int kTickMs = 20;
 constexpr double kRetrySeconds = 3.0;
 constexpr ULONGLONG kSummaryTicks = 30000;
 constexpr int kLoggedHits = 20;
+constexpr int kLoggedLandings = 30;
+constexpr int kLoggedSyncs = 40;
 constexpr float kMinImpactDir = 1e-3f;
 
 // What the game threads noted, under g_mutex.
@@ -81,6 +92,7 @@ struct Noted {
     float armor = 0.0f;
     bool dead = false;
     bool sync = false;
+    bhaptics::SyncKind syncKind = bhaptics::SyncKind::GloryKill;
     std::uint32_t hitSerial = 0;
     std::optional<float> hitYaw;
     // The newest hit's raw values, for the log.
@@ -96,6 +108,7 @@ std::mutex g_mutex;
 Noted g_noted;
 std::atomic<std::uint32_t> g_shots{0};
 std::atomic<std::uint32_t> g_belches{0};
+std::atomic<std::uint32_t> g_portals{0};
 std::atomic<std::uint8_t> g_weapon{static_cast<std::uint8_t>(bhaptics::WeaponClass::Medium)};
 std::atomic<bool> g_running{false};
 std::once_flag g_startOnce;
@@ -106,14 +119,27 @@ std::atomic<int> g_loggedWeapons{0};
 int g_loggedHits = 0;
 std::uint32_t g_lastHitSerial = 0;
 bool g_loggedFirstRead = false;
+// The sync entity last seen and what it is (read once when it appears).
+const std::byte* g_syncObject = nullptr;
+bhaptics::SyncKind g_syncKind = bhaptics::SyncKind::GloryKill;
+LONGLONG g_syncStart = 0;
+int g_loggedSyncs = 0;
+// Landings, found on every game frame (the link thread's own ticks can miss a whole fall while it waits
+// for the Player): the detector is the camera hook's, the largest landing not yet taken is under g_mutex.
+bhaptics::LandingDetector g_feet;
+std::optional<bhaptics::Landing> g_landing;
 
-double seconds() {
+double qpcSeconds(LONGLONG qpc) {
     static const double frequency = [] {
         LARGE_INTEGER f;
         QueryPerformanceFrequency(&f);
         return static_cast<double>(f.QuadPart);
     }();
-    return static_cast<double>(nowQpc()) / frequency;
+    return static_cast<double>(qpc) / frequency;
+}
+
+double seconds() {
+    return qpcSeconds(nowQpc());
 }
 
 float wrapDegrees(float d) {
@@ -160,6 +186,12 @@ void readNewestHit(const std::byte* player, Noted& n) {
     n.hitYaw = wrapDegrees(from - n.viewYaw);
 }
 
+// The entityDef name of a game entity, or empty.
+std::string entityDefName(const std::byte* entity) {
+    const std::byte* def = nullptr;
+    return safeRead(entity + kEntityDef, def) && def ? itemDeclName(def) : std::string{};
+}
+
 bool readPlayer(const std::byte* player, Noted& n) {
     const std::byte* health = player + kPlayerHealth;
     const std::byte* components = health + kHealthComponents;
@@ -174,8 +206,30 @@ bool readPlayer(const std::byte* player, Noted& n) {
         std::fabs(n.armor) > kMaxPlausible) {
         return false;
     }
-    const std::byte* sync = nullptr;
-    n.sync = safeRead(player + kPlayerSyncMaster, sync) && sync != nullptr;
+    const std::byte* master = nullptr;
+    const std::byte* saved = nullptr;
+    if (!safeRead(player + kPlayerSyncMaster, master)) {
+        master = nullptr;
+    }
+    if (!safeRead(player + kPlayerSavedSync, saved)) {
+        saved = nullptr;
+    }
+    const std::byte* sync = saved ? saved : master;
+    n.sync = sync != nullptr;
+    if (n.sync && sync != g_syncObject) {
+        const std::string name = entityDefName(sync);
+        g_syncKind = bhaptics::syncKindOf(name);
+        g_syncStart = n.qpc;
+        if (g_loggedSyncs++ < kLoggedSyncs) {
+            EVR_LOG("%s: sync starts: '%s' (%s)", kTag, name.c_str(), bhaptics::syncKindName(g_syncKind));
+        }
+    }
+    if (!n.sync && g_syncObject && g_loggedSyncs <= kLoggedSyncs) {
+        EVR_LOG("%s: sync ends after %.2f s (%s)", kTag, qpcSeconds(n.qpc) - qpcSeconds(g_syncStart),
+                bhaptics::syncKindName(g_syncKind));
+    }
+    g_syncObject = n.sync ? sync : nullptr;
+    n.syncKind = g_syncKind;
     readNewestHit(player, n);
     return true;
 }
@@ -201,12 +255,14 @@ void logSummary(const bhaptics::BodyHaptics& body,
     const auto& c = body.counts();
     EVR_LOG(
         "%s: %llu frames (shot %llu, damage %llu, heartbeat %llu, glory kill %llu, death %llu, belch %llu, "
-        "equipment %llu), %llu messages sent, %llu failed",
+        "equipment %llu, landing %llu, crystal %llu, portal %llu), %llu messages sent, %llu failed",
         kTag, static_cast<unsigned long long>(total), static_cast<unsigned long long>(c[0]),
         static_cast<unsigned long long>(c[1]), static_cast<unsigned long long>(c[2]),
         static_cast<unsigned long long>(c[3]), static_cast<unsigned long long>(c[4]),
         static_cast<unsigned long long>(c[5]), static_cast<unsigned long long>(c[6]),
-        static_cast<unsigned long long>(sent), static_cast<unsigned long long>(failed));
+        static_cast<unsigned long long>(c[7]), static_cast<unsigned long long>(c[8]),
+        static_cast<unsigned long long>(c[9]), static_cast<unsigned long long>(sent),
+        static_cast<unsigned long long>(failed));
 }
 
 void linkMain(float intensity) {
@@ -221,6 +277,8 @@ void linkMain(float intensity) {
     bool equipmentWasHeld = false;
     ULONGLONG lastSummary = GetTickCount64();
     std::uint64_t loggedTotal = 0;
+    std::uint64_t landingsSeen = 0;
+    int loggedLandings = 0;
     for (;;) {
         Sleep(kTickMs);
         const double now = seconds();
@@ -250,9 +308,11 @@ void linkMain(float intensity) {
         }
         bhaptics::BodySignals signals;
         Noted noted;
+        std::optional<bhaptics::Landing> landing;
         {
             std::lock_guard lock(g_mutex);
             noted = g_noted;
+            landing = std::exchange(g_landing, std::nullopt);
         }
         signals.seconds = now;
         signals.gameplay =
@@ -261,17 +321,29 @@ void linkMain(float intensity) {
         signals.armor = noted.armor;
         signals.dead = noted.dead;
         signals.sync = noted.sync;
+        signals.syncKind = noted.syncKind;
         signals.hitSerial = noted.hitSerial;
         signals.hitYawDegrees = noted.hitYaw;
         signals.shots = g_shots.exchange(0);
         signals.belches = g_belches.exchange(0);
+        signals.portals = g_portals.exchange(0);
         // The equipment launcher: its button going down (the fire hook does not see it).
         const bool equipmentHeld = game::contains(heldActions(), game::GameAction::Equipment);
         signals.equipment = equipmentHeld && !equipmentWasHeld ? 1 : 0;
         equipmentWasHeld = equipmentHeld;
         signals.weapon = static_cast<bhaptics::WeaponClass>(g_weapon.load());
         signals.weaponHand = weaponHand();
+        signals.landing = landing;
         const std::vector<bhaptics::Frame> frames = body.update(signals);
+        if (body.landings() != landingsSeen) {
+            landingsSeen = body.landings();
+            const std::optional<bhaptics::Landing> l = body.lastLanding();
+            if (l && loggedLandings++ < kLoggedLandings) {
+                EVR_LOG("%s: landing: dropped %.2f units, fastest fall %.1f units/s (%s from %.1f)", kTag,
+                        l->drop, l->fallSpeed, l->drop >= bhaptics::kLandingDrop ? "felt" : "not felt, felt",
+                        bhaptics::kLandingDrop);
+            }
+        }
         if (frames.empty() || !link.isOpen()) {
             logSummary(body, sent, failed, lastSummary, loggedTotal);
             continue;
@@ -307,13 +379,14 @@ void startBhaptics() {
             EVR_LOG("%s: off: unknown game build, nothing to read", kTag);
             return;
         }
-        EVR_LOG(
-            "%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment); looking "
-            "for the bHaptics "
-            "Player on port %d",
-            kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
+        EVR_LOG("%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment, "
+                "landing, crystal, portal); looking for the bHaptics Player on port %d",
+                kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
         g_running.store(true);
         std::thread(linkMain, cfg.bhapticsIntensity).detach();
+        if (!installBhapticsPortalHooks()) {
+            EVR_LOG("%s: no portal hooks: going through a portal plays nothing", kTag);
+        }
     });
 }
 
@@ -339,6 +412,12 @@ void noteBhapticsShot(const std::byte* hands) {
     }
 }
 
+void noteBhapticsPortal() {
+    if (g_running.load(std::memory_order_relaxed)) {
+        g_portals.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 void noteBhapticsFrame(const std::byte* player) {
     if (!g_running.load(std::memory_order_relaxed)) {
         return;
@@ -348,6 +427,13 @@ void noteBhapticsFrame(const std::byte* player) {
     n.valid = isPlayerSafe(player) && readPlayer(player, n);
     // Cutscenes count: a scripted sync kill is felt like any other.
     n.gameplay = !menu_input::suppressGameplay();
+    std::optional<bhaptics::Landing> landed;
+    const std::optional<float> feet = n.valid && n.gameplay ? body_follow::feetHeight(player) : std::nullopt;
+    if (feet) {
+        landed = g_feet.update(*feet, qpcSeconds(n.qpc));
+    } else {
+        g_feet.reset();
+    }
     if (n.valid && !g_loggedFirstRead) {
         g_loggedFirstRead = true;
         g_lastHitSerial = n.hitSerial;
@@ -367,6 +453,9 @@ void noteBhapticsFrame(const std::byte* player) {
     }
     std::lock_guard lock(g_mutex);
     g_noted = n;
+    if (landed && (!g_landing || landed->drop > g_landing->drop)) {
+        g_landing = landed;
+    }
 }
 
 } // namespace evr::vkcore::controllers

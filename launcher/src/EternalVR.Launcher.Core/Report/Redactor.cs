@@ -17,6 +17,9 @@ namespace EternalVR.Launcher.Core.Report
     ///       names shorter than 3 characters are left alone, they would hit ordinary words.</item>
     /// <item>The name in the game's sign-in lines (<c>User 'name' signed in - 1234567890</c>, the name played under)
     ///       becomes <c>&lt;player&gt;</c>, and the number at the end of such a line <c>&lt;playerid&gt;</c>.</item>
+    /// <item>Every name played under known (passed in, or found by the previous rule in any file of the report) with 3 or
+    ///       more characters becomes <c>&lt;player&gt;</c> wherever it stands as a word of its own, in any case: a VR settings
+    ///       profile named after it, for example. A name that is a placeholder's word (<c>user</c>, <c>player</c>) is left alone.</item>
     /// <item>A 17-digit SteamID64 (<c>7656119</c> and 10 digits) becomes <c>&lt;steamid64&gt;</c>.</item>
     /// <item><c>steam-&lt;digits&gt;</c> (the game's save folders) and <c>userdata\&lt;digits&gt;</c> (Steam's) keep their prefix, with <c>&lt;steamid&gt;</c> for the number.</item>
     /// <item>Every account ID known (passed in, or found by the previous rule in any file of the report) with 5 or more
@@ -35,6 +38,7 @@ namespace EternalVR.Launcher.Core.Report
         public const string SteamId64Token = "<steamid64>";
         public const int MinUserNameLength = 3;
         public const int MinComputerNameLength = 3;
+        public const int MinPlayerNameLength = 3;
         public const int MinAccountIdDigits = 5;
 
         private const string Sep = @"(?:\\\\|\\|/)";
@@ -48,19 +52,25 @@ namespace EternalVR.Launcher.Core.Report
         private static readonly Regex SteamFolder = new Regex(@"(?<![0-9A-Za-z])(steam-)(\d+)(?!\d|-\d)", Options);
         private static readonly Regex UserdataFolder = new Regex(@"(userdata" + Sep + @")(\d+)(?!\d)", Options);
         // The game's qconsole.log: "idSignInManager::TriggerLocalUserSignInEvent - User 'name' signed in - 1234567890".
-        private static readonly Regex PlayerName = new Regex(@"(?<![\p{L}\p{N}_])(User ')[^'\r\n]+(')", Options);
+        private static readonly Regex PlayerName = new Regex(@"(?<![\p{L}\p{N}_])(User ')([^'\r\n]+)(')", Options);
         private static readonly Regex PlayerId = new Regex(@"(User '" + PlayerToken + @"'[^\r\n]*? - )\d+(?![0-9A-Za-z])", Options);
+        // The words inside the placeholders: a known name that is one of them would break the placeholders already written.
+        private static readonly HashSet<string> PlaceholderWords = new HashSet<string>(
+            new[] { ProfileToken, UserToken, ComputerToken, PlayerToken, PlayerIdToken, SteamIdToken, SteamId64Token }.Select(w => w.Trim('<', '>', '%')),
+            StringComparer.OrdinalIgnoreCase);
 
         private readonly Regex ownProfile;
         private readonly Regex computerName;
         private readonly Regex userName;
         private readonly Regex accountIds;
+        private readonly Regex playerNames;
 
         /// <param name="userProfile">The profile folder, e.g. <c>C:\Users\name</c>; may be null.</param>
         /// <param name="userName">The Windows user name; may be null.</param>
         /// <param name="steamAccountIds">Known Steam account IDs (the 32-bit numbers); may be null.</param>
         /// <param name="computerName">The computer name (<c>Environment.MachineName</c>); may be null.</param>
-        public Redactor(string userProfile, string userName, IEnumerable<string> steamAccountIds, string computerName = null)
+        /// <param name="playerNames">Known names played under (<see cref="FindPlayerNames"/>); may be null.</param>
+        public Redactor(string userProfile, string userName, IEnumerable<string> steamAccountIds, string computerName = null, IEnumerable<string> playerNames = null)
         {
             this.computerName = WholeWord(computerName, MinComputerNameLength);
             var profile = (userProfile ?? string.Empty).Trim().TrimEnd('\\', '/');
@@ -80,6 +90,15 @@ namespace EternalVR.Launcher.Core.Report
                 .ToList();
             if (ids.Count > 0)
                 accountIds = new Regex(@"(?<![0-9A-Za-z])(?:" + string.Join("|", ids) + @")(?![0-9A-Za-z])", Options);
+            var names = (playerNames ?? Enumerable.Empty<string>())
+                .Select(n => (n ?? string.Empty).Trim())
+                .Where(n => n.Length >= MinPlayerNameLength && !PlaceholderWords.Contains(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(n => n.Length)
+                .Select(Regex.Escape)
+                .ToList();
+            if (names.Count > 0)
+                this.playerNames = new Regex(@"(?<![\p{L}\p{N}_])(?:" + string.Join("|", names) + @")(?![\p{L}\p{N}_])", Options);
         }
 
         /// <summary>The Steam account IDs named by <c>steam-&lt;digits&gt;</c> or <c>userdata\&lt;digits&gt;</c> in the texts.</summary>
@@ -95,6 +114,18 @@ namespace EternalVR.Launcher.Core.Report
             return found.OrderBy(x => x, StringComparer.Ordinal).ToList();
         }
 
+        /// <summary>The names played under in the game's sign-in lines (<c>User 'name' signed in</c>) in the texts.</summary>
+        public static IReadOnlyList<string> FindPlayerNames(IEnumerable<string> texts)
+        {
+            var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var t in texts ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrEmpty(t)) continue;
+                foreach (Match m in PlayerName.Matches(t)) found.Add(m.Groups[2].Value.Trim());
+            }
+            return found.OrderBy(x => x, StringComparer.Ordinal).ToList();
+        }
+
         public string Apply(string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
@@ -103,8 +134,9 @@ namespace EternalVR.Launcher.Core.Report
             t = AnyProfile.Replace(t, ProfileToken);
             if (computerName != null) t = computerName.Replace(t, ComputerToken);
             if (userName != null) t = userName.Replace(t, UserToken);
-            t = PlayerName.Replace(t, "$1" + PlayerToken + "$2");
+            t = PlayerName.Replace(t, "$1" + PlayerToken + "$3");
             t = PlayerId.Replace(t, "$1" + PlayerIdToken);
+            if (playerNames != null) t = playerNames.Replace(t, PlayerToken);
             t = SteamId64.Replace(t, SteamId64Token);
             t = SteamFolder.Replace(t, m => m.Groups[1].Value + SteamIdToken);
             t = UserdataFolder.Replace(t, m => m.Groups[1].Value + SteamIdToken);

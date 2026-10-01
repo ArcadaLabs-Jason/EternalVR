@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Tests
         private const string Profile = @"C:\Users\Tester";
         private const string Account = "12345678";
 
-        /// <summary>A data folder with four sessions, a dump, and personal data in every file.</summary>
+        /// <summary>A data folder with six sessions, a dump, and personal data in every file.</summary>
         internal static ReportInputs Setup(TempDir t)
         {
             t.Write(@"data\logs\launcher.log",
@@ -24,7 +24,7 @@ namespace EternalVR.Launcher.Core.Tests
             t.Write(@"data\launcher.ini", "schema_version = 2\ngame_dir = C:\\Users\\Tester\\Games\\DOOMEternal\n");
             t.Write(@"data\snapshots\20260926-021400\DOOMEternalConfig.cfg", "secret config");
             t.Write(@"data\save-backups\20260926-021400\profile.bin", "save");
-            foreach (var s in new[] { "20260924-100000", "20260925-100000", "20260926-100000", "20260926-100000-2" })
+            foreach (var s in new[] { "20260921-100000", "20260922-100000", "20260924-100000", "20260925-100000", "20260926-100000", "20260926-100000-2" })
             {
                 t.Write($@"data\logs\{s}\LAYER_LOADED", $"log {Profile}\\AppData\\Local\\EternalVR\\logs\\{s}\\eternalvr.log\n");
                 t.Write($@"data\logs\{s}\eternalvr-{s}-100.log", "[0.000] vulkan-1.dll version 1.4.357.0, user Tester\n");
@@ -71,8 +71,10 @@ namespace EternalVR.Launcher.Core.Tests
                 {
                     "report-contents.txt", "system.txt", "preflight.txt", "launcher.log", "launcher.ini", "BUILD-INFO.txt", "layer/VK_LAYER_ETERNALVR.json",
                     "windows-events.txt", "sessions/20260926-100000-2/LAYER_LOADED", "sessions/20260926-100000/LAYER_LOADED", "sessions/20260925-100000/LAYER_LOADED",
+                    "sessions/20260924-100000/LAYER_LOADED", "sessions/20260922-100000/LAYER_LOADED",
                     "sessions/20260926-100000-2/eternalvr-20260926-100000-2-100.log", "sessions/20260926-100000/eternalvr-20260926-100000-100.log",
-                    "sessions/20260925-100000/eternalvr-20260925-100000-100.log",
+                    "sessions/20260925-100000/eternalvr-20260925-100000-100.log", "sessions/20260924-100000/eternalvr-20260924-100000-100.log",
+                    "sessions/20260922-100000/eternalvr-20260922-100000-100.log",
                     "sessions/20260926-100000-2/eternalvr-frames-100.csv",
                 };
                 Assert.Equal(expected, entries.Keys.ToArray());
@@ -80,7 +82,8 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Contains("hardware-accelerated GPU scheduling: on (HwSchMode 2)", entries["system.txt"]);
                 Assert.Contains("gpu: unknown", entries["system.txt"]);
                 Assert.Contains("[PASS] steam: Steam is running and logged in", entries["preflight.txt"]);
-                Assert.Contains(report.Dropped, d => d.Contains("1 older session folder"));
+                Assert.Contains(report.Dropped, d => d.Contains("1 older session folder(s) (only the newest 5 are taken)"));
+                Assert.DoesNotContain(entries.Keys, k => k.Contains("20260921"));
                 Assert.Contains(report.Dropped, d => d.Contains("1 memory dump"));
                 Assert.Contains("Left out: 1 memory dump(s)", entries["report-contents.txt"]);
                 Assert.Contains("Never included", entries["report-contents.txt"]);
@@ -129,7 +132,7 @@ namespace EternalVR.Launcher.Core.Tests
                 var inputs = new ReportInputs { DataRoot = t.Combine("nothing"), ProgramDir = t.Combine("p"), LayerDir = null, Now = new DateTime(2026, 1, 2) };
                 var report = ReportBuilder.Build(inputs);
                 Assert.Equal(new[] { "report-contents.txt", "system.txt", "preflight.txt", "windows-events.txt" }, report.Files.Select(f => f.ZipPath).ToArray());
-                Assert.Contains("Not found: launcher.log, launcher.ini, BUILD-INFO.txt, layer/VK_LAYER_ETERNALVR.json, game-crashes/crash-*.html, game/qconsole.log\n", report.Files[0].Text);
+                Assert.Contains("Not found: launcher.log, launcher.ini, BUILD-INFO.txt, layer/VK_LAYER_ETERNALVR.json, game-crashes/crash-*.html, game/qconsole.log, game/DOOMEternalConfig.cfg, game/DOOMEternalConfig.local\n", report.Files[0].Text);
                 Assert.Contains("no checks were run", report.Files[2].Text);
                 Assert.Contains("The event logs were not read.", report.Files[3].Text);
             }
@@ -208,17 +211,18 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("EternalVR-report-2026-09-27.zip", ReportBuilder.DefaultFileName(new DateTime(2026, 9, 27, 23, 59, 0)));
             foreach (var item in ReportManifest.Items)
             {
-                Assert.DoesNotMatch(@"\.(dmp|bin|cfg|local|exe|dll)$", item.Pattern);
+                Assert.DoesNotMatch(@"\.(dmp|bin|exe|dll)$", item.Pattern);
+                Assert.DoesNotContain("structured", item.Pattern, StringComparison.OrdinalIgnoreCase); // the game's structured.log holds account IDs
                 if (item.Source == ReportSource.SessionFolder) Assert.InRange(item.Sessions, 1, ReportManifest.SessionsKept);
             }
             long Worst(IEnumerable<ReportItem> items) => items.Sum(i => (i.HeadBytes + i.TailBytes) * Math.Max(1, i.Sessions));
-            Assert.True(Worst(ReportManifest.Items.Where(i => i.Source != ReportSource.GameFolder)) < ReportManifest.TotalCapBytes,
-                "the launcher's and the mod's capped logs alone fit in the report");
-            // With the game's console log at its longest too, the oldest session's log is what is left out (the game's files come first).
+            // With every file at its longest, the cap leaves out the older sessions' logs (the newest sessions' come first), never
+            // the launcher's log, the game's files, the frame table or the newest two sessions' logs.
             var order = ReportManifest.Items.ToList();
             Assert.True(order.FindIndex(i => i.Source == ReportSource.GameFolder) < order.FindIndex(i => i.Pattern == "eternalvr-*.log"));
             var sessionLog = order.Single(i => i.Pattern == "eternalvr-*.log");
-            Assert.True(Worst(ReportManifest.Items) - (sessionLog.HeadBytes + sessionLog.TailBytes) < ReportManifest.TotalCapBytes);
+            Assert.Equal(ReportManifest.SessionsKept, sessionLog.Sessions);
+            Assert.True(Worst(ReportManifest.Items) - (ReportManifest.SessionsKept - 2) * (sessionLog.HeadBytes + sessionLog.TailBytes) < ReportManifest.TotalCapBytes);
             Assert.True(ReportManifest.TotalCapBytes < 25L * 1024 * 1024, "GitHub's attachment limit");
         }
 

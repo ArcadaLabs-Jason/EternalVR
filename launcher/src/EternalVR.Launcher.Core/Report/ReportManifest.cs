@@ -33,6 +33,14 @@ namespace EternalVR.Launcher.Core.Report
         /// Never the memory dumps next to them (<c>crash-dumps\*.dmp</c>).
         /// </summary>
         GameCrashes,
+        /// <summary>
+        /// The player's own controller maps in the controls folder (<c>controls</c> in the data folder), as the launcher and
+        /// the layer know them (<see cref="Settings.ControlsFolder.PlayerMaps"/>): the <c>*.toml</c> files directly in it (the
+        /// controls used with no VR settings profile) and directly in each profile's folder (<c>controls\profiles\&lt;name&gt;</c>).
+        /// Never the built-in copies in <c>defaults</c> or a README. The zip keeps each file's path below the controls folder,
+        /// redacted as the text is (<see cref="ReportBuilder.ControlsPlayerMaps"/>).
+        /// </summary>
+        ControlsFolder,
     }
 
     /// <summary>One line of the report manifest.</summary>
@@ -52,7 +60,7 @@ namespace EternalVR.Launcher.Core.Report
         public ReportSource Source { get; }
         /// <summary>The path relative to the source folder; for session items a file name pattern (<c>*</c> wildcard).</summary>
         public string Pattern { get; }
-        /// <summary>Where it goes in the zip; <c>{session}</c> and <c>{name}</c> are filled in for session items.</summary>
+        /// <summary>Where it goes in the zip; <c>{session}</c> and <c>{name}</c> are filled in for session items, <c>{path}</c> for the controls.</summary>
         public string ZipPath { get; }
         public string Description { get; }
         /// <summary>A longer file keeps its first <see cref="HeadBytes"/> and last <see cref="TailBytes"/> bytes (whole lines); 0 and 0 keep all.</summary>
@@ -78,7 +86,7 @@ namespace EternalVR.Launcher.Core.Report
         public const string WindowsEventsFile = "windows-events.txt";
 
         /// <summary>The newest session folders whose layer logs are included.</summary>
-        public const int SessionsKept = 3;
+        public const int SessionsKept = 5;
 
         /// <summary>The most game crash reports (<see cref="ReportSource.GameCrashes"/>) a report holds.</summary>
         public const int GameCrashesKept = 3;
@@ -102,13 +110,18 @@ namespace EternalVR.Launcher.Core.Report
         public static readonly IReadOnlyList<ReportItem> Items = new[]
         {
             new ReportItem(ReportSource.Generated, SystemFile, SystemFile,
-                "Launcher and layer versions and their check, Windows version, GPUs and drivers, the OpenXR runtime, the HAGS state, the folders in use"),
+                "Launcher and layer versions and their check, Windows version, GPUs and drivers, the OpenXR runtime, chosen SteamVR settings (SteamVrSummary), "
+                + "the HAGS state, the game build, the names in the game's Mods folder and any mod loader (GameMods), the folders in use"),
             new ReportItem(ReportSource.Generated, PreflightFile, PreflightFile, "The launcher's checks, run at export time"),
             new ReportItem(ReportSource.DataFolder, @"logs\launcher.log", "launcher.log",
                 "The launcher log (checks, launch plans, settings restores); its last 4 MB", tailBytes: 4 * MiB),
             new ReportItem(ReportSource.DataFolder, "launcher.ini", "launcher.ini", "The launcher settings"),
             new ReportItem(ReportSource.ProgramFolder, "BUILD-INFO.txt", "BUILD-INFO.txt", "The release's version, commit and supported game builds"),
             new ReportItem(ReportSource.LayerFolder, "VK_LAYER_ETERNALVR.json", "layer/VK_LAYER_ETERNALVR.json", "The layer manifest"),
+            new ReportItem(ReportSource.ControlsFolder, "*.toml", "controls/{path}",
+                "The player's own controller maps, with no profile and of each VR settings profile (not the built-in copies in defaults); "
+                + "a longer map keeps its first and last 64 KB",
+                headBytes: 64 * 1024, tailBytes: 64 * 1024),
             // The game's files come before the session logs: when every log is at its longest, the oldest session's log is left out, not these.
             new ReportItem(ReportSource.Generated, WindowsEventsFile, WindowsEventsFile,
                 "Windows event log entries of the last 7 days: crashes and hangs of the game, the launcher or the layer, and display driver resets and errors (see WindowsEvents)"),
@@ -117,22 +130,28 @@ namespace EternalVR.Launcher.Core.Report
             new ReportItem(ReportSource.GameFolder, "qconsole.log", "game/qconsole.log",
                 "The game's console log of its latest start; a longer log keeps its first 1 MB and last 3 MB",
                 headBytes: 1 * MiB, tailBytes: 3 * MiB),
+            new ReportItem(ReportSource.GameFolder, "DOOMEternalConfig.cfg", "game/DOOMEternalConfig.cfg",
+                "The game's settings file (graphics settings, binds) as it is at export time; a longer file keeps its first and last 128 KB",
+                headBytes: 128 * 1024, tailBytes: 128 * 1024),
+            new ReportItem(ReportSource.GameFolder, "DOOMEternalConfig.local", "game/DOOMEternalConfig.local",
+                "The game's local settings file (resolution and the like) as it is at export time; a longer file keeps its first and last 16 KB",
+                headBytes: 16 * 1024, tailBytes: 16 * 1024),
             new ReportItem(ReportSource.SessionFolder, "LAYER_LOADED", "sessions/{session}/{name}",
                 "Whether the layer loaded in that session", sessions: SessionsKept),
             new ReportItem(ReportSource.SessionFolder, "eternalvr-*.log", "sessions/{session}/{name}",
-                "The layer's log of each of the newest 3 sessions; a longer log keeps its first 1 MB and last 3 MB",
+                "The layer's log of each of the newest 5 sessions; a longer log keeps its first 1 MB and last 3 MB",
                 headBytes: 1 * MiB, tailBytes: 3 * MiB, sessions: SessionsKept),
             new ReportItem(ReportSource.SessionFolder, "eternalvr-frames-*.csv", "sessions/{session}/{name}",
                 "The frame timing table of the newest session only: its header and last 3 MB",
                 headBytes: 16 * 1024, tailBytes: 3 * MiB, sessions: 1),
             new ReportItem(ReportSource.SessionCaptures, "capture-*", "sessions/{session}/captures/{name}",
-                "The in-headset captures (left Menu held + a trigger: eye L, eye R and UI images with a text file each) of the newest 3 sessions, newest first, up to 48 MB",
+                "The in-headset captures (left Menu held + a trigger: eye L, eye R and UI images with a text file each) of the newest 5 sessions, newest first, up to 48 MB",
                 sessions: SessionsKept),
         };
 
         /// <summary>Shown in the contents file: what is never taken.</summary>
         public const string NeverIncluded =
-            "Never included: memory dumps (*.dmp), save games and save backups, settings snapshots, the game's config files, "
-            + "older session folders, and any file not listed above. The capture images are the only files not text.";
+            "Never included: memory dumps (*.dmp), save games and save backups, settings snapshots, the game's structured.log "
+            + "(it holds account IDs), older session folders, and any file not listed above. The capture images are the only files not text.";
     }
 }

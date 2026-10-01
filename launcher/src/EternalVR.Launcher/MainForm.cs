@@ -313,6 +313,8 @@ namespace EternalVR.Launcher
                 // A restore deferred because a game process was still running is retried from here.
                 TryRecover();
                 RunPreflight();
+                // The launch's runtime probe may have read the headset's size.
+                ShowEachEye();
             }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 

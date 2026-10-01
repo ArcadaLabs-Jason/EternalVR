@@ -380,3 +380,166 @@ TEST_CASE("every frame stays within its device's motors and 0..100, and the coun
     }
     CHECK(counted == frames);
 }
+
+TEST_CASE("a sync is a crystal, a pickup or a glory kill by its entity's name") {
+    using evr::bhaptics::SyncKind;
+    using evr::bhaptics::syncKindOf;
+    CHECK(syncKindOf("interact/argent_cell/use_sync") == SyncKind::Crystal);
+    CHECK(syncKindOf("interact/argent_cell/use_sync_e3") == SyncKind::Crystal);
+    CHECK(syncKindOf("interact/rune/use_sync") == SyncKind::Pickup);
+    CHECK(syncKindOf("interact/preator_suit_token/preator_suit_token_sync") == SyncKind::Pickup);
+    CHECK(syncKindOf("sync/imp/front") == SyncKind::GloryKill);
+    CHECK(syncKindOf("") == SyncKind::GloryKill);
+}
+
+TEST_CASE("a pickup's animation is not a glory kill") {
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto s = playing(1.1);
+    s.sync = true;
+    s.syncKind = evr::bhaptics::SyncKind::Pickup;
+    CHECK(body.update(s).empty());
+}
+
+TEST_CASE("the Sentinel Crystal's pickup plays a shock all over, after its delay and for its length") {
+    using evr::bhaptics::kCrystalDelaySeconds;
+    using evr::bhaptics::kCrystalSeconds;
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto s = playing(1.1);
+    s.sync = true;
+    s.syncKind = evr::bhaptics::SyncKind::Crystal;
+    CHECK(body.update(s).empty()); // not a glory kill, and the shock waits for its delay
+    int bursts = 0;
+    bool vest[2] = {false, false};
+    bool changed = false;
+    std::vector<std::uint8_t> first;
+    for (double t = 1.12; t < 1.1 + kCrystalDelaySeconds + kCrystalSeconds + 0.5; t += 0.02) {
+        s.seconds = t;
+        const auto frames = body.update(s);
+        CHECK(of(frames, Effect::GloryKill).empty());
+        const auto shock = of(frames, Effect::Crystal);
+        if (shock.empty()) {
+            continue;
+        }
+        CHECK(t >= 1.1 + kCrystalDelaySeconds - 1e-9);
+        CHECK(t < 1.1 + kCrystalDelaySeconds + kCrystalSeconds + 0.02);
+        ++bursts;
+        for (const Frame* f : shock) {
+            vest[0] = vest[0] || f->device == Device::VestFront;
+            vest[1] = vest[1] || f->device == Device::VestBack;
+            std::vector<std::uint8_t> indices;
+            for (const auto& d : f->dots) {
+                indices.push_back(d.index);
+            }
+            if (f->device == Device::VestFront) {
+                if (first.empty()) {
+                    first = indices;
+                } else if (indices != first) {
+                    changed = true;
+                }
+            }
+        }
+    }
+    CHECK(bursts >= 8);
+    CHECK(vest[0]);
+    CHECK(vest[1]);
+    CHECK(changed); // random motors, not one pattern
+    // Leaving play cancels a shock that has not played out.
+    BodyHaptics again;
+    again.update(playing(5.0));
+    auto c = playing(5.1);
+    c.sync = true;
+    c.syncKind = evr::bhaptics::SyncKind::Crystal;
+    again.update(c);
+    auto menu = c;
+    menu.seconds = 5.2;
+    menu.gameplay = false;
+    again.update(menu);
+    c.seconds = 5.1 + kCrystalDelaySeconds + 0.1;
+    CHECK(of(again.update(c), Effect::Crystal).empty());
+}
+
+TEST_CASE("a trigger teleport is a portal unless it is one of the fall's hazard or out-of-bounds volumes") {
+    using evr::bhaptics::TeleportKind;
+    using evr::bhaptics::teleportKindOf;
+    constexpr const char* kStinger = "play_stinger_falling_damage";
+    CHECK(teleportKindOf(false, false, "", "trenches_trigger_teleporter_1") == TeleportKind::Portal);
+    CHECK(teleportKindOf(true, false, "play_util_classic_teleport", "trigger_teleport_fade_slayergate_1") ==
+          TeleportKind::Portal);
+    CHECK(teleportKindOf(true, false, "play_hub_portal_enter", "portal_trigger_teleport_fade_to_citadel") ==
+          TeleportKind::Portal);
+    CHECK(teleportKindOf(true, true, "", "trigger_teleport_fade_pit_3") == TeleportKind::Hazard);
+    CHECK(teleportKindOf(true, true, kStinger, "trigger_teleport_fade_pit_3") == TeleportKind::Hazard);
+    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_void_12") ==
+          TeleportKind::OutOfBounds);
+    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_secret") == TeleportKind::Portal);
+    // A plain pad's fields are not read: a portal.
+    CHECK(teleportKindOf(false, true, kStinger, "") == TeleportKind::Portal);
+}
+
+TEST_CASE("a portal sweeps down the vest front and back with the sleeves buzzing, once for its length") {
+    using evr::bhaptics::kPortalSeconds;
+    using evr::bhaptics::kVestRows;
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto s = playing(1.1);
+    s.portals = 1;
+    std::vector<int> bands; // the front's strongest row at each step
+    bool back = false;
+    bool sleeves[2] = {false, false};
+    int steps = 0;
+    for (double t = 1.1; t < 1.1 + kPortalSeconds + 0.5; t += 0.02) {
+        s.seconds = t;
+        const auto frames = body.update(s);
+        s.portals = t < 1.3 ? 1u : 0u; // another portal during the sweep does not restart it
+        const auto sweep = of(frames, Effect::Portal);
+        if (sweep.empty()) {
+            continue;
+        }
+        CHECK(t < 1.1 + kPortalSeconds + 1e-9);
+        ++steps;
+        for (const Frame* f : sweep) {
+            back = back || f->device == Device::VestBack;
+            sleeves[0] = sleeves[0] || f->device == Device::ForearmL;
+            sleeves[1] = sleeves[1] || f->device == Device::ForearmR;
+            if (f->device != Device::VestFront) {
+                continue;
+            }
+            std::vector<int> rows(static_cast<std::size_t>(kVestRows), 0);
+            for (const auto& d : f->dots) {
+                auto& r = rows[static_cast<std::size_t>(d.index / kVestColumns)];
+                r = std::max(r, static_cast<int>(d.intensity));
+            }
+            bands.push_back(static_cast<int>(std::max_element(rows.begin(), rows.end()) - rows.begin()));
+        }
+    }
+    CHECK(steps >= 8);
+    CHECK(steps <= 11);
+    CHECK(back);
+    CHECK(sleeves[0]);
+    CHECK(sleeves[1]);
+    REQUIRE(!bands.empty());
+    CHECK(bands.front() == 0);
+    CHECK(bands.back() == kVestRows - 1);
+    CHECK(std::is_sorted(bands.begin(), bands.end()));
+}
+
+TEST_CASE("no portal sweep while dead, and leaving play cancels one under way") {
+    BodyHaptics dead;
+    dead.update(playing(1.0));
+    auto d = playing(1.1, 0.0f);
+    d.dead = true;
+    d.portals = 1;
+    CHECK(of(dead.update(d), Effect::Portal).empty());
+
+    BodyHaptics body;
+    body.update(playing(2.0));
+    auto s = playing(2.1);
+    s.portals = 1;
+    CHECK(!of(body.update(s), Effect::Portal).empty());
+    auto loading = playing(2.15);
+    loading.gameplay = false;
+    body.update(loading);
+    CHECK(of(body.update(playing(2.2)), Effect::Portal).empty());
+}

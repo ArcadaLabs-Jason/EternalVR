@@ -233,6 +233,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_VIGNETTE` | `off`, `light`, `strong`: the comfort vignette (above) | `off` |
 | `ETERNALVR_HANDEDNESS` | `right`, `left` (triggers, grips and clicks swap), `left_mirror` (sticks and face buttons swap too) | `right` |
 | `ETERNALVR_DOSSIER` | `hold`: X tap switches equipment, X hold (0.25 s) opens the Dossier; `tap`: the other way round (below) | `hold` |
+| `ETERNALVR_MAP_STICKS` | `weapon`: on the Dossier's map the weapon hand's stick pans and the other stick zooms and rotates; `other`: the other way round (docs/VR_MENUS.md) | `weapon` |
 | `ETERNALVR_WHEEL_SELECT` | `stick`: the stick that holds the weapon wheel points at it; `hand`: the weapon hand points, the stick or button only holds it (above) | `stick` |
 | `ETERNALVR_WHEEL_HAND_DEGREES` | the hand's turn that reaches the wheel's rim, 5 to 45 degrees (half of it highlights a weapon) | 20 |
 | `ETERNALVR_THROW` | `1`: the off hand's overhand throw presses the equipment launcher (above) | `0` |

@@ -34,6 +34,8 @@ namespace EternalVR.Launcher
         public DataPaths Paths { get; }
         public LauncherData Data { get; private set; }
         public LauncherSettings Settings { get; set; }
+        /// <summary>The headset's sizes from the last runtime probe that answered (<see cref="LastHeadset"/>); null before the first.</summary>
+        public ViewLimits Headset { get; private set; }
 
         public bool TestMode => Options.TestExe != null;
 
@@ -53,6 +55,7 @@ namespace EternalVR.Launcher
             log.SetFile(ctx.Paths.LauncherLog);
             ctx.Data = LauncherData.Load(Path.Combine(ctx.ProgramDir, "data"));
             ctx.Settings = LauncherSettings.Load(ctx.Paths.SettingsFile);
+            ctx.Headset = LastHeadset.Load(ctx.Paths.HeadsetFile);
             return ctx;
         }
 
@@ -309,7 +312,19 @@ namespace EternalVR.Launcher
             Log.Info($"waiting for the headset runtime (up to {OpenXrProbe.DefaultTimeoutMs / 1000} s)");
             var probe = OpenXrProbe.Run(Path.Combine(LayerDir, "openxr_loader.dll"), env);
             Log.Info("openxr probe (" + (LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? "system runtime" : Settings.Runtime) + "): " + probe);
+            if (probe.Ok && !probe.Limits.Recommended.IsEmpty) RememberHeadset(probe.Limits);
             return probe;
+        }
+
+        /// <summary>Keeps the runtime's answer for the Play tab's "Each eye" line, in memory and in the data folder.</summary>
+        private void RememberHeadset(ViewLimits limits)
+        {
+            Headset = limits;
+            try { LastHeadset.Save(Paths.HeadsetFile, limits); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                Log.Warn("saving the headset's size failed: " + e.Message);
+            }
         }
     }
 }

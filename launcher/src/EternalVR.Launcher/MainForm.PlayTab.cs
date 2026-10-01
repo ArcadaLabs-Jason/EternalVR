@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core;
+using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
@@ -31,6 +32,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox hand = Choices(Setting.WeaponHand);
         private readonly ComboBox locomotion = Choices(Setting.MoveToward);
         private readonly ComboBox xButton = Choices(Setting.XButton);
+        private readonly ComboBox mapSticks = Choices(Setting.DossierMapSticks);
         private readonly ComboBox wheel = Choices(Setting.WeaponWheel);
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
@@ -39,9 +41,12 @@ namespace EternalVR.Launcher
         /// <summary>Whether the controls folder holds maps of the player's own (<see cref="ShowControlsState"/>).</summary>
         private readonly Label controlsState = Caption(string.Empty);
         private readonly NumericUpDown renderScale = Number(LauncherSettings.MinRenderScale, LauncherSettings.MaxRenderScale, 0.05, 2);
+        /// <summary>The size each eye renders at, from the headset's last answer (<see cref="ShowEachEye"/>).</summary>
+        private readonly Label eachEye = new Label { AutoSize = true, MaximumSize = new Size(200, 0), Margin = new Padding(3, 4, 3, 4) };
         private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing);
         private readonly ComboBox sharpening = Choices(Setting.Sharpening);
         private readonly ComboBox foveation = Choices(Setting.Foveation);
+        private readonly ComboBox pacing = Choices(Setting.FramePacing);
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
         private double customSmoothing = -1;
@@ -97,6 +102,9 @@ namespace EternalVR.Launcher
                 Row(Setting.XButton, xButton,
                     s => xButton.SelectedIndex = (int)s.Dossier,
                     s => s.Dossier = (DossierPress)xButton.SelectedIndex),
+                Row(Setting.DossierMapSticks, mapSticks,
+                    s => mapSticks.SelectedIndex = (int)s.MapSticks,
+                    s => s.MapSticks = (MapPanStick)mapSticks.SelectedIndex),
                 Row(Setting.WeaponWheel, wheel,
                     s => wheel.SelectedIndex = (int)s.Wheel,
                     s => s.Wheel = (WheelSelect)wheel.SelectedIndex),
@@ -111,6 +119,8 @@ namespace EternalVR.Launcher
                 Row(Setting.Resolution, WithUnit(renderScale, "× the headset's size"),
                     s => renderScale.Value = (decimal)LauncherSettings.ClampRenderScale(s.RenderScale),
                     s => s.RenderScale = LauncherSettings.ClampRenderScale((double)renderScale.Value)),
+                // Nothing to save: the line follows the Resolution above and the headset's last answer (ShowEachEye).
+                Row(Setting.EachEye, eachEye, s => { }, s => { }),
                 Row(Setting.AntiAliasing, antiAliasing,
                     s => antiAliasing.SelectedIndex = (int)s.AntiAliasing,
                     s => s.AntiAliasing = (AntiAliasingMode)Math.Max(0, antiAliasing.SelectedIndex)),
@@ -120,6 +130,9 @@ namespace EternalVR.Launcher
                 Row(Setting.Foveation, foveation,
                     s => foveation.SelectedIndex = (int)s.Foveation,
                     s => s.Foveation = (FoveationMode)foveation.SelectedIndex),
+                Row(Setting.FramePacing, pacing,
+                    s => pacing.SelectedIndex = (int)s.Pacing,
+                    s => s.Pacing = (FramePacing)Math.Max(0, pacing.SelectedIndex)),
             };
             // Texture streaming and the CPU Saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
             if (StreamingRow() is SettingRow streaming) pictureRows.Add(streaming);
@@ -151,6 +164,9 @@ namespace EternalVR.Launcher
         {
             controlsState.Text = ctx.Controls.HasPlayerMaps ? "Using your own controls" : "Built-in controls";
         }
+
+        /// <summary>The "Each eye" line (<see cref="LastHeadset.EachEye"/>).</summary>
+        private void ShowEachEye() => eachEye.Text = LastHeadset.EachEye(ctx.Settings, ctx.Headset);
 
         /// <summary>Refreshes the controls folder (its README and the copy of the built-in maps); false, with a message, if it fails.</summary>
         private bool PrepareControls(ControlsFolder controls)

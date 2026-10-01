@@ -198,6 +198,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
+            Set("ETERNALVR_MAP_STICKS", LauncherSettings.MapSticksName(s.MapSticks));
             Set("ETERNALVR_WHEEL_SELECT", LauncherSettings.WheelSelectName(s.Wheel));
             // Arm gestures (docs/VR_INTERACTIONS.md), off by default: the throw and the overhead swing.
             Set("ETERNALVR_THROW", s.ThrowGesture ? "1" : "0");
@@ -242,6 +243,10 @@ namespace EternalVR.Launcher.Core.Launch
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
             // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, absent when off.
             if (stereo && s.Foveation != FoveationMode.Off) Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
+            // Frame pacing (experimental, docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset.
+            // Stereo only and not with adaptive alternate eyes; explicit either way (the layer's default may change).
+            var paced = stereo && s.AlternateEyes != AlternateEyesMode.Auto ? s.Pacing : FramePacing.Off;
+            Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
             // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
             // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could
             // not undo them there. Absent when no item is on.

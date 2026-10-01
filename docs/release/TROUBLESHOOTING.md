@@ -17,7 +17,7 @@ After a problem, click **Export report...** in the launcher (or run
 `EternalVR.Launcher.exe --export-report <file.zip>`). It shows the files it will save and their total size,
 then asks where to save the zip (the Desktop, `EternalVR-report-<date>.zip`). Send me that zip, or attach
 it to your GitHub issue if you have access, and say what you were doing. If the game went wrong in an older session than the newest
-three, zip that `logs\<session>` folder by hand as well.
+five, zip that `logs\<session>` folder by hand as well.
 
 **Something looks wrong in one eye, or only in the headset?** Hold the left Menu button and pull a trigger
 while you see it (under SteamVR: press Y and pull a trigger straight away). The mod saves a screenshot of each eye and of the HUD (the log says `capture: saved`),
@@ -29,25 +29,28 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 | File in the zip | What it is |
 |---|---|
 | `report-contents.txt` | This list for your report: every file and its size, what was shortened, left out or not found |
-| `system.txt` | Launcher and layer versions and whether they match, Windows version, GPUs with driver version and date, the OpenXR runtime (active manifest and its name, and the one used for launches), hardware-accelerated GPU scheduling (HAGS) on or off, the game build, the folders in use |
+| `system.txt` | Launcher and layer versions and whether they match, Windows version, GPUs with driver version and date, the OpenXR runtime (active manifest and its name, and the one used for launches), hardware-accelerated GPU scheduling (HAGS) on or off, a few SteamVR settings from Steam's `config\steamvr.vrsettings` (the headset SteamVR last saw, supersampling, motion smoothing and supersample filtering, any refresh rate set, and SteamVR's own settings for DOOM Eternal; nothing else from that file, never the headset's serial number), the game build, the names of the files in the game's `Mods` folder (at most 30, never their contents) and any mod loader at the top of the game folder (EternalModInjector, DEternal_loadMods and the like), the folders in use |
 | `preflight.txt` | The launcher's checks, run when you export |
 | `launcher.log` | `logs\launcher.log`, its last 4 MB |
 | `launcher.ini` | The launcher settings |
 | `BUILD-INFO.txt` | The release's version, commit and supported game builds |
 | `layer/VK_LAYER_ETERNALVR.json` | The layer manifest |
+| `controls/*.toml`, `controls/profiles/<profile>/*.toml` | Your own controller maps, the files you changed in the `controls` folder: those used with no VR settings profile and each profile's own; a longer map keeps its first and last 64 KB. Never the built-in copies in `defaults` or the README. The folder names are replaced as the text is (below), with `[player]` for `<player>` and so on, since a Windows file name cannot hold `<` or `>`. With no maps of your own, `report-contents.txt` says so |
 | `windows-events.txt` | Windows event log entries of the last 7 days, newest first, at most 20 per log: crashes, crash reports and hangs of the game, the launcher or the mod (`DOOMEternalx64vk.exe`, `EternalVR.Launcher.exe`, `EternalVR.dll`) from the Application log, and graphics driver resets and errors (NVIDIA, AMD, Intel) from the System log. A log Windows does not let the launcher read is named in the file |
-| `game-crashes/crash-*.html` | The game's own crash reports (`Crash.<computer>.<number>.html` in `Saved Games\id Software\DOOMEternal\base`, about 4 KB each: call stack, registers, exception code, game build, command line), the newest 3 written since the oldest of the newest 3 sessions started or in the last 7 days, whichever reaches back further. The zip names keep only the number. The memory dumps next to them (`crash-dumps`) are never included |
+| `game-crashes/crash-*.html` | The game's own crash reports (`Crash.<computer>.<number>.html` in `Saved Games\id Software\DOOMEternal\base`, about 4 KB each: call stack, registers, exception code, game build, command line), the newest 3 written since the oldest of the newest 5 sessions started or in the last 7 days, whichever reaches back further. The zip names keep only the number. The memory dumps next to them (`crash-dumps`) are never included |
 | `game/qconsole.log` | The game's console log from the same folder, of its latest start; a longer log keeps its first 1 MB and last 3 MB |
-| `sessions/<session>/LAYER_LOADED` | For each of the newest 3 sessions: the layer's note that it loaded |
-| `sessions/<session>/eternalvr-*.log` | For each of the newest 3 sessions: the mod's log; a longer log keeps its first 1 MB and last 3 MB |
+| `game/DOOMEternalConfig.cfg` | The game's settings file from the same folder (graphics settings, key binds), as it is when you export; a longer file keeps its first and last 128 KB |
+| `game/DOOMEternalConfig.local` | The game's local settings file from the same folder (resolution and the like), as it is when you export |
+| `sessions/<session>/LAYER_LOADED` | For each of the newest 5 sessions: the layer's note that it loaded |
+| `sessions/<session>/eternalvr-*.log` | For each of the newest 5 sessions: the mod's log; a longer log keeps its first 1 MB and last 3 MB |
 | `sessions/<session>/eternalvr-frames-*.csv` | The frame timing table of the newest session only: its header and last 3 MB |
-| `sessions/<session>/captures/capture-*` | Your in-headset captures (left Menu held + a trigger) of the newest 3 sessions, newest first, whole captures up to 48 MB: each eye's image, the HUD image and a small text file |
+| `sessions/<session>/captures/capture-*` | Your in-headset captures (left Menu held + a trigger) of the newest 5 sessions, newest first, whole captures up to 48 MB: each eye's image, the HUD image and a small text file |
 
 The text in the zip is at most 20 MB (the zip itself is usually one or two MB); a file that would go past
 that is left out and named in `report-contents.txt`. Captures come on top of that and make the zip larger
 (the images shrink a lot in the zip; captures past 48 MB are left out, the oldest first). **Never included:** memory dumps (the mod's and the game's), save games and save
-backups, settings snapshots, the game's own config files, older session folders and anything not in the
-table. The launcher log names the settings files and keys it restored, as it always does.
+backups, settings snapshots, the game's `structured.log` (it holds account IDs) and its other files, older session
+folders and anything not in the table. The launcher log names the settings files and keys it restored, as it always does.
 
 **What is replaced before zipping**, in every file:
 
@@ -56,7 +59,8 @@ table. The launcher log names the settings files and keys it restored, as it alw
 - your computer name as a word of its own becomes `<computer>` (names shorter than 3 letters are left);
 - your Windows user name as a word of its own becomes `<user>` (names shorter than 3 letters are left);
 - the name you play under, in the game's console log (`User '<name>' signed in`), becomes `<player>`,
-  and the number at the end of that line `<playerid>`;
+  and the number at the end of that line `<playerid>`; that name as a word of its own elsewhere (a VR
+  settings profile named after you, say) becomes `<player>` too (names shorter than 3 letters are left);
 - a Steam account ID becomes `<steamid>`: in the game's `steam-<number>` save folders, in Steam's
   `userdata\<number>` folders, and wherever the same number appears alone; a 17-digit SteamID64
   (`7656119...`) becomes `<steamid64>`.
@@ -130,6 +134,14 @@ mod's log: every 10 s a `rates:` line says how many `stereo pair(s)/s` the game 
 to the headset. After a session the launcher's status line sums it up ("In play the game drew about ... new frames
 a second"). If that is well below your headset's rate, see the next entry, or lower "Resolution" on the Play tab if
 your graphics card is the limit.
+
+**Moving things look less smooth than in other VR games.** When the game draws more frames than your headset
+shows (say 140 a second on a 90 Hz headset), each headset frame shows the newest one, so the world, your gun
+and your movement advance in uneven steps, while looking around stays smooth. Try "Frame pacing: Matched to the
+headset (experimental)" on the Play tab (Picture): the game then draws exactly one frame for each headset frame,
+started at the same moment of each. It changes nothing while the game runs below your headset's rate. The mod's
+log has a `pace:` line every 10 s: "with one" close to the number of headset frames means every headset frame
+got exactly one new frame; tell me which of the two settings looks better to you.
 
 **Which DLSS preset should I use?** With a newer DLSS than the game's (the DLSS group on the Play tab: NVIDIA's
 newest, downloaded once, or a file of your own), the "Preset" makes a big difference on RTX 20 and 30 series cards. One player's RTX 3070 with a

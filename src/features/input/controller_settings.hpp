@@ -16,6 +16,9 @@
 //   ETERNALVR_HANDEDNESS     right / left / left_mirror
 //   ETERNALVR_DOSSIER        hold / tap         X hold opens the Dossier and a tap switches equipment
 //                                               (hold), or the other way round (tap); dossier_press.hpp
+//   ETERNALVR_MAP_STICKS     weapon / other     the stick that pans the Dossier's map: the weapon hand's
+//                                               (weapon) or the other one (other); the second stick zooms
+//                                               and rotates (map_sticks.hpp)
 //   ETERNALVR_WHEEL_SELECT   stick / hand       what points at the weapon wheel: the stick that holds it
 //                                               (stick), or the weapon hand (hand); wheel_hand.hpp
 //   ETERNALVR_WHEEL_HAND_DEGREES  5 to 45       the hand's turn that reaches the wheel's rim (20)
@@ -64,6 +67,7 @@
 #include "features/input/hands_jump.hpp"
 #include "features/input/haptics_policy.hpp"
 #include "features/input/locomotion_direction.hpp"
+#include "features/input/map_sticks.hpp"
 #include "features/input/offhand_policy.hpp"
 #include "features/input/turn_policy.hpp"
 #include "features/input/wheel_hand.hpp"
@@ -127,6 +131,7 @@ struct ControllerSettings {
     TurnSettings turn;
     game::Handedness handedness = game::Handedness::Right;
     DossierPress dossier = DossierPress::Hold;
+    MapSticks mapSticks = MapSticks::WeaponPans; // map_sticks.hpp
     WheelSelect wheelSelect = WheelSelect::Stick;
     float wheelHandDegrees = kDefaultWheelHandDegrees;
     ThrowSettings throwGesture; // arm_gestures.hpp

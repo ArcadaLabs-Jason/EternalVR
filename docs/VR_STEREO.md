@@ -76,8 +76,9 @@ tried on the Quest 3.
    each eye's half, pose and FOV; a mono frame (menus, loading, a mono tick) with the head pose and the
    game's FOV in both halves; the cinema quad shows the left half.
 
-Both presents also reach the game's window, and the window is only a mirror: the runtime paces the game.
-How the layer keeps the desktop display from pacing it is in Desktop window, below. The ring keeps one
+Both presents also reach the game's window, and the window is only a mirror that must not pace the game: the
+game renders as fast as it can, or one pair per headset frame under Frame pacing (below). How the layer keeps
+the desktop display from pacing it is in Desktop window, below. The ring keeps one
 command buffer per slot half: eye R's copy into a slot is recorded while eye L's may still be pending. A pair
 whose game frame record is gone is not shown (the headset repeats the last pair).
 
@@ -88,8 +89,9 @@ runs the jobs of a job list it waits on inline; the S2 log shows eye L's per-eye
 eye R's per-eye hook on one thread), and each job of the chain keeps a job list of about 14 KiB on the
 stack (`sub rsp, 0x38C0` in the frame-end job, 0x3870 in render one and the render-frame job). The
 engine never nests two chains, and many of its threads are created with 256 KiB stacks. A stack overflow
-ends the process through the game's own crash handler (`SetUnhandledExceptionFilter`,
-`TerminateProcess`) without a dump or an event log entry, which is what the one silent exit of S2 looked
+ends the process without a crash report, a dump or an event log entry: the game's crash handler needs about
+33 KiB of stack for its first log line and faults again on an overflowed thread, and the game runs with
+`SetErrorMode(3)`, which keeps Windows error reporting quiet. That is what the one silent exit of S2 looked
 like. So eye R is rendered only when the stack below eye L's frame end holds the deepest eye R chain
 measured so far (at the wrapper, the per-eye hook and the previous-matrix hook of eye R's chain; 64 KiB
 before the first measurement) plus 64 KiB (`src/stereo_seq/stack_budget.*`); otherwise the tick stays
@@ -261,6 +263,65 @@ render. The design, the expected saving and the rig recipe are in `docs/rig-find
   (`stereo_seq::AdaptiveEyes`). The way changes only at a pair's eye L and nothing resets. Log: `seq: adaptive
   eyes: ...` at every switch and every 10 s (the design doc, section 10).
 
+## Frame pacing (`ETERNALVR_PACE=headset`, off by default)
+
+Without it the game renders stereo pairs as fast as it can and each XR frame shows the newest finished pair
+(`updateImage` takes the ring's newest slot). A game faster than the headset (a player's RTX 5080 drew a median
+of 142 pairs a second on a 90 Hz Quest 2) gets an uneven pulldown: some headset frames show a pair one game
+frame newer than the last, others two. Head rotation stays smooth (the compositor turns every frame to the
+head), but the world's animation, locomotion and the gun advance at an irregular cadence that a native VR game,
+which renders one frame per `xrWaitFrame`, does not have. Off stays the default until a comparison in a headset
+decides.
+
+`ETERNALVR_PACE=headset` (the launcher's "Frame pacing: Matched to the headset (experimental)", Play tab,
+Picture, stereo only) holds the game to one image per headset frame (`src/features/pacing/pace_policy.*`, the
+decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
+
+- **Where the game waits.** In the layer's `vkQueuePresentKHR`, after the downstream present returned and the
+  hook's own timing closed, with no lock of the layer held, and only after a present that handed an image to the
+  XR worker (`publishSlot`): under Route S eye R's present, which completes the pair (eye L's only copies its
+  half). The render thread waits there for the headset's next frame; its next frame (eye L of the next tick)
+  starts when it comes. The engine's frontend never runs far ahead of its render thread, so the game ticks
+  follow at one per headset frame, each started at the same point of the headset's frame loop.
+- **The signal.** The XR worker raises it in every frame it renders, in `updateImage` the moment it chooses the
+  newest image (after `xrWaitFrame` and `xrBeginFrame`), not when `xrWaitFrame` returns: an image the game
+  finishes quickly can then never be taken by the frame that released it, so while the game keeps up every
+  image is shown exactly once. It comes before `updateImage` waits for the image's copy (which waits for the
+  game's GPU work), so the game's next frame never waits for the previous one's GPU work.
+- **Timeout.** A wait ends after two display periods without a new headset frame (one frame the runtime skipped
+  still ends it in time), at most 50 ms, and counts as a timeout. Once the headset has begun no frame for three
+  periods (not shown, the dashboard, a lost session, shutdown) nothing waits until it does again: the game
+  never hangs on the headset.
+- **Slower PCs.** A game that cannot keep up with the headset never waits (a headset frame always began while it
+  drew), so below the headset's rate nothing changes; the uneven cadence of a game just below the rate (an
+  occasional repeated frame) remains.
+- **Pose.** The camera hook predicts the head and hands for `predictedDisplayTime` plus one period, plus the
+  measured lead under `ETERNALVR_POSE_LEAD` (`xr_math/display_lead.hpp`). Paced, every game frame is shown the
+  same time after its pose was taken, so the lead converges on that time and each pose is predicted for the
+  display time it is shown at. Under `ETERNALVR_PACE=headset` the pose lead is on by default
+  (`ETERNALVR_POSE_LEAD=0` turns it off, to compare the two separately).
+- **Menus, loading screens, cutscenes, mono.** Every image handed over counts, mono frames included, so menus
+  and cutscenes are held to the headset's rate the same way; a loading screen slower than the headset never
+  waits. The layer paces whatever mode it runs in when asked; the launcher offers it in stereo only.
+- **Alternate eyes.** Not with `ETERNALVR_ALTERNATE_EYES=auto` (the layer logs it and stays off, the launcher
+  greys it out): the adaptive switch decides by the game's tick rate, which pacing holds at the headset's, so
+  once alternating it would never measure the headroom to render both eyes per tick again. With `1` each
+  present hands over a pair (its fresh eye beside the other's newest), so pacing holds the alternating ticks,
+  and each eye, to the headset's rate and half of it.
+
+Log: at start-up `pace: ETERNALVR_PACE=headset: ...` or `pace: off: ...`. Every 10 s after the `rates:` line,
+in both modes, `pace: <off|headset>; last 10 s: F headset frame(s): A with no new image, B with one, C with two
+or more (N image(s) never shown); X image(s) per headset frame; game frames shown L ms after the time their pose
+was predicted for, on average`: paced and keeping up, B is close to F, X is 1.00 and L settles near 0 once the
+lead has converged. Paced, a second line: `pace: last 10 s: H image(s) handed over; W wait(s) for the headset's
+next frame, average M ms, longest M ms; T timeout(s); G without a wait (a headset frame had begun), I with the
+headset not running`. A `stall:` line's hook time does not include the wait.
+
+The game's own cap would be cheaper: `com_adaptiveTickMaxHz` ("max game hz", 1000 by default; the dormant VR
+path raises it to at least 120, `docs/rig-findings/stereo-reentry.md`) on the command line, for example
+`+com_adaptiveTickMaxHz 90`. It caps the tick rate on the game's own clock, though, not in phase with the
+headset's frames and drifting against them, so the uneven pulldown would come back as a slow beat. Not tried.
+
 ## Render size (T-031)
 
 With `ETERNALVR_RENDER_SIZE=auto` (the launcher's default in stereo) each eye renders at the runtime's
@@ -297,6 +358,7 @@ axis).
 | `ETERNALVR_UI_CROP` | 1 | 0: the UI quad and the menu panel show the whole GUI target instead of its 16:9 band |
 | `ETERNALVR_UI_WASH` | 1 | 0: the HUD quad shows the GUI target's full-screen additive wash (the red low-health vignette) as the game drew it (docs/rig-findings/ui-layer.md, section 12) |
 | `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time |
+| `ETERNALVR_PACE` | off | `headset`: one image per headset frame, the game's render thread waiting after each pair for the headset's next frame (at most two display periods); the pose lead then defaults on (Frame pacing) |
 | `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and CPU Saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
 | `ETERNALVR_SHARPENING` | unset | a number from 0 to 10 (the launcher's Sharpening: 0, 1, 2 or 3): `r_sharpening`, the game's post-process sharpening, held at run time and compared as a float (the game's menu sets fractions such as 1.99); unset leaves the player's own setting. With DLSS 2.5.1 and later it is the only sharpening: NGX logs that DLSS's own is deprecated and disabled |
 | `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments); `<=N` is a cap as above; an entry replaces the CPU Saver's value for the same cvar |
@@ -311,7 +373,7 @@ axis).
 | `ETERNALVR_DLSS_DLL`, `_PRESET`, `_ROUTE` | unset | a newer `nvngx_dlss.dll` of the player's own (DLSS 310: the transformer model) and its render preset, for both eyes' features; loaded from its own folder, never copied into the game's (`docs/rig-findings/dlss-dll.md`) |
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
-| `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced` or `aggressive` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within 30, 24 or 18 degrees of head-forward in each eye, half rate for 16 degrees more, quarter rate outside (`src/vkcore/vrs_nv.cpp`). NVIDIA RTX only: other cards log it as unsupported and render normally. Mono frames stay full rate |
+| `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced` or `aggressive` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within 30, 24 or 18 degrees of head-forward in each eye, half rate for 16 degrees more, quarter rate outside (`src/vkcore/vrs_nv.cpp`). NVIDIA RTX only: other cards log it as unsupported and render normally. Mono frames stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`) |
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end, as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S |
@@ -344,7 +406,8 @@ frame(s)/s, N new image(s)/s`, the game's own rates next to the runtime's (a hea
 the XR rate, not the game's); `window: last 10 s: A acquire(s), average/max ms; C present call(s),
 average/max ms` (the time the driver's acquire and present take); `window: ... present(s) to the window,
 ... of the other eye and ... too soon handed back; display H Hz; ... handed back, ... failed, ... held`;
-`mirror: the window shows left ...`; and `cvars:` for every run-time cvar write. The eye capture logs each
+`mirror: the window shows left ...`; `pace:` (the headset's cadence and, with `ETERNALVR_PACE=headset`, the
+waits; Frame pacing); and `cvars:` for every run-time cvar write. The eye capture logs each
 eye L image's alpha (`eye L alpha min, mean, % below 255`): the projection layer is layer 0, which some
 runtimes blend by its alpha.
 

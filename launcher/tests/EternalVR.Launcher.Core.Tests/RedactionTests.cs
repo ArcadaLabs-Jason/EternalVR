@@ -92,6 +92,30 @@ namespace EternalVR.Launcher.Core.Tests
         [InlineData("User 'x' left\nnext line - 123", "User '<player>' left\nnext line - 123")]
         public void TheNamePlayedUnderBecomesThePlaceholder(string input, string expected) => Assert.Equal(expected, R.Apply(input));
 
+        [Fact]
+        public void KnownNamesPlayedUnderAreReplacedAsWords()
+        {
+            var r = new Redactor(null, "alex", null, "TESTBOX", new[] { "TestPilot", "Night Shift", "ab", "player", " ", null });
+            Assert.Equal(@"controls\profiles\<player>\valve_index.toml", r.Apply(@"controls\profiles\TestPilot\valve_index.toml"));
+            Assert.Equal("profile = <player> and <player>", r.Apply("profile = testpilot and Night Shift"));
+            Assert.Equal("TestPilots and xTestPilot and TestPilot_2", r.Apply("TestPilots and xTestPilot and TestPilot_2"));
+            Assert.Equal("ab stays, so does the player", r.Apply("ab stays, so does the player"));
+            Assert.Equal("User '<player>' signed in - <playerid> on <computer> as <user>", r.Apply("User 'TestPilot' signed in - 1234567890 on TESTBOX as alex"));
+            // A name that is a placeholder's word never breaks the placeholders.
+            Assert.Equal("<user> on <computer>", new Redactor(null, "alex", null, "TESTBOX", new[] { "user", "computer" }).Apply("alex on TESTBOX"));
+        }
+
+        [Fact]
+        public void NamesPlayedUnderAreFound()
+        {
+            var names = Redactor.FindPlayerNames(new[]
+            {
+                "idSignInManager::TriggerLocalUserSignInEvent - User 'TestPilot' signed in - 1234567890", null,
+                "User 'Night Shift' promoted - 42\nuser 'testpilot' signed in", "no sign-in here",
+            });
+            Assert.Equal(new[] { "Night Shift", "TestPilot" }, names);
+        }
+
         [Theory]
         [InlineData("restore: unchanged steam-12345678/PROFILE/profile.bin", "restore: unchanged steam-<steamid>/PROFILE/profile.bin")]
         [InlineData(@"E:\Steam\userdata\12345678\782330\remote", @"E:\Steam\userdata\<steamid>\782330\remote")]

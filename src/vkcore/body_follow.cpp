@@ -93,6 +93,15 @@ std::optional<Vec3> physicsOrigin(const std::byte* player) {
 
 } // namespace
 
+std::optional<float> feetHeight(const std::byte* player) {
+    std::call_once(g_playerOnce, [] { g_playerKnown = g_player.init(); });
+    if (!g_playerKnown || !g_player.isPlayer(player)) {
+        return std::nullopt;
+    }
+    const auto origin = physicsOrigin(player);
+    return origin ? std::optional<float>(origin->z) : std::nullopt;
+}
+
 std::optional<Vec3> playerOrigin(const std::byte* player, Vec3 eye, float unitsPerMetre) {
     std::call_once(g_playerOnce, [] { g_playerKnown = g_player.init(); });
     if (!g_playerKnown || !g_player.isPlayer(player) || !finite(eye)) {

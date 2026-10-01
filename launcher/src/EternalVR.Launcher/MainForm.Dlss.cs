@@ -25,7 +25,7 @@ namespace EternalVR.Launcher
         {
             if (ctx.Data.DlssDownloads?.Newest is DlssRelease newest)
             {
-                dlssDll.Items[Array.IndexOf(DlssDll.VersionOrder, DlssDllChoice.Newest)] = $"NVIDIA {newest.Version.ToString(3)} (recommended)";
+                dlssDll.Items[Array.IndexOf(DlssDll.VersionOrder, DlssDllChoice.Newest)] = $"NVIDIA {newest.Version.ToString(3)} (latest)";
                 dlssDownload.Text = $"Download ({newest.SizeText})...";
                 ownTips[dlssDownload] = Wrap($"Downloads DLSS {newest.Version.ToString(3)} ({newest.SizeText}) straight from NVIDIA's GitHub, once you "
                     + "accept NVIDIA's license. EternalVR does not ship NVIDIA's file.");

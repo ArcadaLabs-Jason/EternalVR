@@ -147,6 +147,9 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     static constexpr std::pair<const char*, DossierPress> kDossier[] = {{"hold", DossierPress::Hold},
                                                                         {"tap", DossierPress::Tap}};
     r.choice("ETERNALVR_DOSSIER", kDossier, s.dossier);
+    static constexpr std::pair<const char*, MapSticks> kMapSticks[] = {{"weapon", MapSticks::WeaponPans},
+                                                                       {"other", MapSticks::OtherPans}};
+    r.choice("ETERNALVR_MAP_STICKS", kMapSticks, s.mapSticks);
 
     static constexpr std::pair<const char*, WheelSelect> kWheel[] = {{"stick", WheelSelect::Stick},
                                                                      {"hand", WheelSelect::Hand}};

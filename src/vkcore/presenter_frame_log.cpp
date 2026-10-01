@@ -3,6 +3,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/vram_watch.hpp"
@@ -34,6 +35,8 @@ void XrPresenter::Impl::openFrameLog() {
 }
 
 void XrPresenter::Impl::noteShownView(const XrFrameState& state) {
+    frame_pacing::noteShown(shownHasView ? shownView.seq : 0,
+                            state.predictedDisplayTime - shownView.poseTime);
     if (shownHasView && settings.poseLead) {
         displayLead.noteShown(shownView.seq, state.predictedDisplayTime - shownView.poseTime,
                               state.predictedDisplayPeriod);
@@ -95,6 +98,7 @@ void XrPresenter::Impl::logRates() {
     lastRatePairs = pairs;
     lastRateXrFrames = xrFrames;
     lastRateXrCopies = xrCopies;
+    frame_pacing::logSummary(); // the headset's cadence, and ETERNALVR_PACE's waits
     vram::logSummary();
     stall_watch::logSummary();
 }

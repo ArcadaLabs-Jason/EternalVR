@@ -43,6 +43,7 @@ TEST_CASE("defaults: on, head aim and head locomotion, smooth turning, right-han
     CHECK(s.turn.snapDegrees == 45.0f);
     CHECK(s.handedness == Handedness::Right);
     CHECK(s.dossier == evr::input::DossierPress::Hold);
+    CHECK(s.mapSticks == evr::input::MapSticks::WeaponPans);
     CHECK(s.path == InputPath::Auto);
     CHECK(s.shotOrigin == ShotOrigin::Hand);
     CHECK(s.viewmodel);
@@ -62,6 +63,7 @@ TEST_CASE("every setting reads its documented values") {
                                {"ETERNALVR_SNAP_DEGREES", "30"},
                                {"ETERNALVR_HANDEDNESS", "left_mirror"},
                                {"ETERNALVR_DOSSIER", "tap"},
+                               {"ETERNALVR_MAP_STICKS", "other"},
                                {"ETERNALVR_XINPUT", "1"},
                                {"ETERNALVR_SHOT_ORIGIN", "eye"},
                                {"ETERNALVR_AIM_SMOOTHING", "0.6"},
@@ -81,6 +83,7 @@ TEST_CASE("every setting reads its documented values") {
     CHECK(s.turn.snapDegrees == 30.0f);
     CHECK(s.handedness == Handedness::LeftButtonAndStickSwap);
     CHECK(s.dossier == evr::input::DossierPress::Tap);
+    CHECK(s.mapSticks == evr::input::MapSticks::OtherPans);
     CHECK(s.path == InputPath::XInput);
     CHECK(s.shotOrigin == ShotOrigin::Eye);
     CHECK(s.aimSmoothing == 0.6f);
@@ -213,6 +216,15 @@ TEST_CASE("the Dossier press is hold or tap; anything else keeps hold") {
     const auto bad = parse({{"ETERNALVR_DOSSIER", "double"}});
     CHECK(bad.issues.size() == 1);
     CHECK(bad.settings.dossier == evr::input::DossierPress::Hold);
+}
+
+TEST_CASE("the Dossier map's sticks are weapon or other; anything else keeps weapon") {
+    using evr::input::MapSticks;
+    CHECK(parse({{"ETERNALVR_MAP_STICKS", " Weapon "}}).settings.mapSticks == MapSticks::WeaponPans);
+    CHECK(parse({{"ETERNALVR_MAP_STICKS", "OTHER"}}).settings.mapSticks == MapSticks::OtherPans);
+    const auto bad = parse({{"ETERNALVR_MAP_STICKS", "left"}});
+    CHECK(bad.issues.size() == 1);
+    CHECK(bad.settings.mapSticks == MapSticks::WeaponPans);
 }
 
 TEST_CASE("the weapon wheel is pointed at with the stick unless hand is chosen") {

@@ -8,6 +8,7 @@
 // The Dossier's map page from the sticks (map_drag.hpp through the router).
 
 using evr::input::Hand;
+using evr::input::MapSticks;
 using evr::menu::CursorPixel;
 using evr::menu::kKeyNextTab;
 using evr::menu::MenuRouter;
@@ -135,6 +136,54 @@ TEST_CASE("router: on the map the other stick zooms up and down and rotates with
     in.seconds = 1.1;
     const RouterOutput closed = router.update(in);
     CHECK_FALSE(closed.mapPage);
+}
+
+namespace {
+
+// On the map page, the stick at `panStick` pans (left drags, never the wheel, whichever way it is pushed)
+// and the one at `turnStick` zooms (up / down, the wheel) and rotates (left / right, right drags).
+void checkMapSticks(MenuRouter& router, std::size_t panStick, std::size_t turnStick) {
+    CursorPixel cursor{500, 250};
+    RouterInput in = mapFrame(0.0, cursor);
+    in.hands[kLeft].hit = hitAt(0.5f, 0.5f);
+    REQUIRE(router.update(in).mapPage);
+    in.hands[panStick].stick = {0.0f, 1.0f};
+    std::vector<RouterEvent> events = runMap(router, in, 0.01, 0.5, cursor);
+    CHECK(count(events, Kind::ButtonDown) >= 1);
+    CHECK(count(events, Kind::RightButtonDown) == 0);
+    CHECK(count(events, Kind::Wheel) == 0);
+    in.hands[panStick].stick = {};
+    in.hands[turnStick].stick = {0.0f, -1.0f};
+    events = runMap(router, in, 0.5, 1.0, cursor);
+    CHECK(count(events, Kind::Wheel) >= 4);
+    CHECK(count(events, Kind::ButtonDown) == 0);
+    CHECK(count(events, Kind::RightButtonDown) == 0);
+    in.hands[turnStick].stick = {1.0f, 0.1f};
+    events = runMap(router, in, 1.0, 1.5, cursor);
+    CHECK(count(events, Kind::RightButtonDown) >= 1);
+    CHECK(count(events, Kind::ButtonDown) == 0);
+    CHECK(count(events, Kind::Wheel) == 0);
+}
+
+} // namespace
+
+TEST_CASE("router: the map's sticks swap with MapSticks::OtherPans, for either weapon hand") {
+    SUBCASE("right-handed, the default: the right stick pans, the left zooms and rotates") {
+        MenuRouter router(Hand::Right);
+        checkMapSticks(router, kRight, kLeft);
+    }
+    SUBCASE("right-handed, the other hand pans: the left stick pans, the right zooms and rotates") {
+        MenuRouter router(Hand::Right, MapSticks::OtherPans);
+        checkMapSticks(router, kLeft, kRight);
+    }
+    SUBCASE("left-handed, the default: the left stick pans, the right zooms and rotates") {
+        MenuRouter router(Hand::Left, MapSticks::WeaponPans);
+        checkMapSticks(router, kLeft, kRight);
+    }
+    SUBCASE("left-handed, the other hand pans: the right stick pans, the left zooms and rotates") {
+        MenuRouter router(Hand::Left, MapSticks::OtherPans);
+        checkMapSticks(router, kRight, kLeft);
+    }
 }
 
 TEST_CASE("router: the map page ends with a tab key or a click on the tab strip, and after the last tab") {

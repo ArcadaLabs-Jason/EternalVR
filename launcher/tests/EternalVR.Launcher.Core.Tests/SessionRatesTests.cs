@@ -26,6 +26,28 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheHeadsetsRepeatedFramesAreCountedFromTheLastTotals()
+        {
+            string Xr(long frames, long fresh, long repeats) =>
+                $"[  100.000] [1] xr: {frames} frame(s), {fresh} new image(s), {repeats} repeat(s); 1 head-tracked, 0 on the screen";
+            // A player's 27 min session (2026-10-01): 599 of 148046 headset frames repeated.
+            var lines = new[] { Rates(140, 90), Xr(1000, 990, 10), Rates(142, 90), Rates(143, 90), Xr(148046, 147447, 599) };
+            var r = SessionRates.FromLines(lines);
+            Assert.NotNull(r);
+            Assert.Equal(599.0 / 148046, r.RepeatShare.Value, 6);
+            Assert.Contains("99.5% of its frames were new images", r.Describe());
+            Assert.DoesNotContain("until the next one was ready", r.Describe());
+            Assert.Contains("repeated frames 0.4%", r.LogText());
+            // A second log file starts its totals again: both files count.
+            var two = SessionRates.FromLines(new[] { Rates(140, 90), Rates(140, 90), Xr(100, 90, 10), Rates(140, 90), Xr(50, 40, 10) });
+            Assert.Equal(20.0 / 150, two.RepeatShare.Value, 6);
+            // Without totals the sentence stays general.
+            var none = SessionRates.FromLines(new[] { Rates(72, 90), Rates(73, 90), Rates(74, 90) });
+            Assert.Null(none.RepeatShare);
+            Assert.Contains("when no new frame was ready", none.Describe());
+        }
+
+        [Fact]
         public void TooLittlePlayOrNoStereoGivesNoSummary()
         {
             Assert.Null(SessionRates.FromLines(new[] { Rates(80, 90), Rates(81, 90) }));

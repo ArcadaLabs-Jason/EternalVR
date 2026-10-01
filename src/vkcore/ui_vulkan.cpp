@@ -315,6 +315,10 @@ void watch(VkImage image) {
     }
 }
 
+VkImage guiTarget() {
+    return reinterpret_cast<VkImage>(g_watched.load(std::memory_order_relaxed));
+}
+
 bool follow(VkImage image) {
     const auto value = handleValue(image);
     if (g_tracker.isCandidate(value)) {

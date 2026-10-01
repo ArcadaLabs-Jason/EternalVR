@@ -7,6 +7,7 @@
 #include "game/eternal/game_action.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/debug_commands.hpp"
+#include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/head_sweep.hpp"
 #include "vkcore/keep_active.hpp"
@@ -40,6 +41,7 @@ void XrPresenter::Impl::updateImage() {
         return;
     }
     const std::uint64_t packed = latest.load();
+    frame_pacing::onHeadsetFrame(displayPeriod.load()); // the image is chosen: a paced game goes on
     const std::uint64_t newest = packed >> 2;
     if (newest <= lastConsumed) {
         ++xrRepeats;
@@ -291,8 +293,7 @@ void XrPresenter::Impl::frame() {
         if (guardOff && !loggedGuardCinema) {
             loggedGuardCinema = true;
             EVR_LOG("xr: multiplayer guard %s: the game is shown on the flat cinema screen from now on; no "
-                    "camera "
-                    "writes, head aim or key injection for the rest of this process",
+                    "camera writes, head aim or key injection for the rest of this process",
                     mp_policy::toString(mp_guard::state()));
             status::flat(
                 "an online mode or a multiplayer invite switched VR off for this session (restart from "
@@ -429,8 +430,7 @@ void XrPresenter::Impl::frame() {
     if (GetTickCount64() - lastXrStatsTicks >= 10000) {
         lastXrStatsTicks = GetTickCount64();
         EVR_LOG("xr: %llu frame(s), %llu new image(s), %llu repeat(s); %llu head-tracked, %llu on the "
-                "screen; pose age "
-                "average %.1f ms, max %.1f ms; display period %.2f ms, pose lead %.1f ms",
+                "screen; pose age average %.1f ms, max %.1f ms; display period %.2f ms, pose lead %.1f ms",
                 static_cast<unsigned long long>(xrFrames), static_cast<unsigned long long>(xrCopies),
                 static_cast<unsigned long long>(xrRepeats),
                 static_cast<unsigned long long>(xrProjectionFrames),

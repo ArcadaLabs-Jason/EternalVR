@@ -65,7 +65,8 @@ struct Settings {
     bool headAim = true;         // ETERNALVR_AIM: "head" (default) or "view"
     bool skipCinematics = false; // ETERNALVR_SKIP_CINEMATICS
     // ETERNALVR_POSE_LEAD: predict the head and hands for when each game frame is measured to be shown,
-    // not one display period ahead (xr_math/display_lead.hpp). Off by default.
+    // not one display period ahead (xr_math/display_lead.hpp). Off by default, on by default under
+    // ETERNALVR_PACE=headset.
     bool poseLead = false;
     // ETERNALVR_CUTSCENES: "cinema" (default) shows cutscenes on the flat screen in front of the player, with
     // the game's own camera; "immersive" keeps the head in the cutscene's moving camera.

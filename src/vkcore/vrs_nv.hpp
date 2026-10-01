@@ -4,7 +4,8 @@
 // later; docs/research/08-foveated-rendering.md). The retail game has no working VRS on Vulkan (its r_VRS*
 // cvars fill a tile buffer nothing reads), so the layer enables the extension at device creation, gives every
 // graphics pipeline a shading rate palette (1x1, 2x2, 4x4) and binds a rate image before each render pass of
-// at least 256x256: one per render target size and eye, the eye taken from the backend frame's tag.
+// at least 256x256: one per render target size and eye, the eye taken from the backend frame's tag. Passes
+// into the game's GUI target (its menus and HUD) keep full rate (vrs_gui.hpp).
 // ETERNALVR_FOVEATION (the player's setting: off, subtle, balanced, aggressive): full rate within the
 // preset's angle of head-forward (foveation_preset.hpp), half rate for 16 degrees more, quarter rate outside.
 // ETERNALVR_VRS_TEST (experiments, wins over the setting): 2x2 or 4x4 everywhere (the upper bound), eyetest
@@ -40,7 +41,7 @@ void onDeviceDestroyed(VkDevice device);
 // shapes that eye's foveation.
 void noteEye(int eye, const xr_math::Fov& fov, const Quat& orientationInHead);
 
-// vkCreateGraphicsPipelines and vkCmdBeginRenderPass while wanted; nullptr otherwise.
+// vkCreateGraphicsPipelines and vkCmdBeginRenderPass while wanted, and vrs_gui's hooks; nullptr otherwise.
 PFN_vkVoidFunction findHook(const char* name);
 
 } // namespace evr::vkcore::vrs_nv

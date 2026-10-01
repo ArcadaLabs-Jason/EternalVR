@@ -77,6 +77,9 @@ void sync(XrTime predictedDisplayTime, bool focused);
 std::optional<input::InputFrame> latestFrame();
 // The weapon hand (the dominant hand: right unless ETERNALVR_HANDEDNESS says left).
 input::Hand dominantHand();
+// Which stick pans the Dossier's map (ETERNALVR_MAP_STICKS): the weapon hand's unless the player chose the
+// other one.
+input::MapSticks mapSticks();
 
 // What aims now: the main aim (ETERNALVR_AIM), or while piloting a demon the demon's (input::demonAimSource).
 input::AimSource activeAim();

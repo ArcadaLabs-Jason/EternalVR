@@ -52,6 +52,33 @@ constexpr int kBelchMillis = 300;
 constexpr double kBelchGapSeconds = 0.25;
 constexpr float kEquipment = 45.0f;
 constexpr int kEquipmentMillis = 150;
+// Landing from a fall of kLandingDrop or more: the bottom row, front and back, harder for a longer fall.
+constexpr float kLandingLight = 35.0f;
+constexpr float kLandingPerUnit = 6.0f;
+constexpr float kLandingHard = 70.0f;
+constexpr int kLandingMillis = 120;
+// The crystal's shock: each burst sets about kCrystalShare of every device's motors, kCrystalLow to
+// kCrystalHigh.
+constexpr std::uint32_t kCrystalShare = 40; // percent
+constexpr float kCrystalLow = 40.0f;
+constexpr float kCrystalHigh = 90.0f;
+constexpr int kCrystalMillis = 100;
+// The portal's sweep: the band row at kPortalBandLow..High, about kPortalTrailShare of the row above it at
+// kPortalTrailLow..High, a crackle of kPortalCrackleShare of the other rows at kPortalCrackleLow..High, and
+// kPortalSleeveShare of the sleeves' motors at kPortalSleeveLow..High. Each step's frame lasts a little
+// longer than a step, so the sweep does not stutter.
+constexpr float kPortalBandLow = 55.0f;
+constexpr float kPortalBandHigh = 85.0f;
+constexpr std::uint32_t kPortalTrailShare = 50; // percent
+constexpr float kPortalTrailLow = 20.0f;
+constexpr float kPortalTrailHigh = 40.0f;
+constexpr std::uint32_t kPortalCrackleShare = 20; // percent
+constexpr float kPortalCrackleLow = 15.0f;
+constexpr float kPortalCrackleHigh = 30.0f;
+constexpr std::uint32_t kPortalSleeveShare = 50; // percent
+constexpr float kPortalSleeveLow = 25.0f;
+constexpr float kPortalSleeveHigh = 55.0f;
+constexpr int kPortalMillis = 80;
 
 // Column angles round the torso in degrees (0 ahead, positive to the wearer's left), wearer's left first.
 constexpr std::array<float, kVestColumns> kFrontAngles{67.5f, 22.5f, -22.5f, -67.5f};
@@ -116,10 +143,61 @@ const char* effectName(Effect effect) {
         return "belch";
     case Effect::Equipment:
         return "equipment";
+    case Effect::Landing:
+        return "landing";
+    case Effect::Crystal:
+        return "crystal";
+    case Effect::Portal:
+        return "portal";
     case Effect::Count:
         break;
     }
     return "shot";
+}
+
+SyncKind syncKindOf(std::string_view entityDefName) {
+    if (entityDefName.find("argent_cell/use_sync") != std::string_view::npos) {
+        return SyncKind::Crystal;
+    }
+    return entityDefName.starts_with("interact/") ? SyncKind::Pickup : SyncKind::GloryKill;
+}
+
+const char* syncKindName(SyncKind kind) {
+    switch (kind) {
+    case SyncKind::Pickup:
+        return "pickup";
+    case SyncKind::Crystal:
+        return "Sentinel Crystal";
+    case SyncKind::GloryKill:
+        break;
+    }
+    return "glory kill";
+}
+
+TeleportKind teleportKindOf(bool fade, bool damage, std::string_view fadeSound, std::string_view entityName) {
+    if (!fade) {
+        return TeleportKind::Portal;
+    }
+    if (damage) {
+        return TeleportKind::Hazard;
+    }
+    if (fadeSound.find("stinger_falling_damage") != std::string_view::npos &&
+        entityName.find("secret") == std::string_view::npos) {
+        return TeleportKind::OutOfBounds;
+    }
+    return TeleportKind::Portal;
+}
+
+const char* teleportKindName(TeleportKind kind) {
+    switch (kind) {
+    case TeleportKind::Hazard:
+        return "hazard";
+    case TeleportKind::OutOfBounds:
+        return "out of bounds";
+    case TeleportKind::Portal:
+        break;
+    }
+    return "portal";
 }
 
 WeaponClass weaponClassOf(std::string_view declName) {
@@ -184,6 +262,8 @@ BodyHaptics::BodyHaptics(float strength)
 
 void BodyHaptics::reset() {
     primed_ = false;
+    crystalUntil_ = -1.0;
+    portalUntil_ = -1.0;
     recentHitYaw_.reset();
     dub_ = false;
     nextBeat_ = 0.0;
@@ -267,6 +347,95 @@ void BodyHaptics::damage(std::vector<Frame>& out, float amount, std::optional<fl
     add(out, Effect::Damage, Device::VestBack, kDamageMillis, std::move(sides[1]));
 }
 
+void BodyHaptics::landing(std::vector<Frame>& out, const BodySignals& signals) {
+    const std::optional<Landing>& landed = signals.landing;
+    if (!landed) {
+        return;
+    }
+    lastLanding_ = landed;
+    ++landings_;
+    if (signals.dead || landed->drop < kLandingDrop) {
+        return;
+    }
+    const float intensity =
+        std::min(kLandingHard, kLandingLight + (landed->drop - kLandingDrop) * kLandingPerUnit);
+    for (const Device side : {Device::VestFront, Device::VestBack}) {
+        std::vector<Dot> dots;
+        for (int wearerColumn = 0; wearerColumn < kVestColumns; ++wearerColumn) {
+            dots.push_back({dotIndex(side, wearerColumn, kVestRows - 1), scaled(intensity)});
+        }
+        add(out, Effect::Landing, side, kLandingMillis, std::move(dots));
+    }
+}
+
+std::uint32_t BodyHaptics::random() {
+    random_ ^= random_ << 13;
+    random_ ^= random_ >> 17;
+    random_ ^= random_ << 5;
+    return random_;
+}
+
+float BodyHaptics::randomLevel(float low, float high) {
+    return low + static_cast<float>(random() % 1000) / 1000.0f * (high - low);
+}
+
+void BodyHaptics::crystal(std::vector<Frame>& out, double seconds) {
+    if (seconds < nextCrystal_ || seconds >= crystalUntil_) {
+        return;
+    }
+    nextCrystal_ = std::max(nextCrystal_ + kCrystalBurstSeconds, seconds);
+    for (const Device device : {Device::VestFront, Device::VestBack, Device::ForearmL, Device::ForearmR}) {
+        std::vector<Dot> dots;
+        for (int i = 0; i < motorCount(device); ++i) {
+            if (random() % 100 < kCrystalShare) {
+                dots.push_back(
+                    {static_cast<std::uint8_t>(i), scaled(randomLevel(kCrystalLow, kCrystalHigh))});
+            }
+        }
+        add(out, Effect::Crystal, device, kCrystalMillis, std::move(dots));
+    }
+}
+
+void BodyHaptics::portal(std::vector<Frame>& out, double seconds) {
+    if (seconds < nextPortal_ || seconds >= portalUntil_) {
+        return;
+    }
+    nextPortal_ = std::max(nextPortal_ + kPortalStepSeconds, seconds);
+    const double progress = std::clamp((seconds - portalStart_) / kPortalSeconds, 0.0, 1.0);
+    const int band = std::min(kVestRows - 1, static_cast<int>(progress * kVestRows));
+    for (const Device side : {Device::VestFront, Device::VestBack}) {
+        std::vector<Dot> dots;
+        for (int row = 0; row < kVestRows; ++row) {
+            for (int wearerColumn = 0; wearerColumn < kVestColumns; ++wearerColumn) {
+                float level = 0.0f;
+                if (row == band) {
+                    level = randomLevel(kPortalBandLow, kPortalBandHigh);
+                } else if (row == band - 1) {
+                    level = random() % 100 < kPortalTrailShare
+                                ? randomLevel(kPortalTrailLow, kPortalTrailHigh)
+                                : 0.0f;
+                } else if (random() % 100 < kPortalCrackleShare) {
+                    level = randomLevel(kPortalCrackleLow, kPortalCrackleHigh);
+                }
+                if (level > 0.0f) {
+                    dots.push_back({dotIndex(side, wearerColumn, row), scaled(level)});
+                }
+            }
+        }
+        add(out, Effect::Portal, side, kPortalMillis, std::move(dots));
+    }
+    for (const Device sleeve : {Device::ForearmL, Device::ForearmR}) {
+        std::vector<Dot> dots;
+        for (int i = 0; i < kSleeveMotors; ++i) {
+            if (random() % 100 < kPortalSleeveShare) {
+                dots.push_back(
+                    {static_cast<std::uint8_t>(i), scaled(randomLevel(kPortalSleeveLow, kPortalSleeveHigh))});
+            }
+        }
+        add(out, Effect::Portal, sleeve, kPortalMillis, std::move(dots));
+    }
+}
+
 void BodyHaptics::heartbeat(std::vector<Frame>& out, const BodySignals& signals) {
     if (signals.dead || !(signals.health > 0.0f && signals.health < kLowHealth)) {
         dub_ = false;
@@ -302,6 +471,12 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
     if (signals.equipment > 0) {
         leftShoulder(out, Effect::Equipment, kEquipment, kEquipmentMillis);
     }
+    landing(out, signals);
+    if (signals.portals > 0 && !signals.dead && signals.seconds >= portalUntil_) {
+        portalStart_ = signals.seconds;
+        nextPortal_ = signals.seconds;
+        portalUntil_ = signals.seconds + kPortalSeconds;
+    }
     if (primed_) {
         const float lost = std::max(0.0f, health_ - signals.health) + std::max(0.0f, armor_ - signals.armor);
         if (signals.hitSerial != hitSerial_) {
@@ -313,7 +488,11 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
             damage(out, lost, recent ? recentHitYaw_ : std::nullopt);
             recentHitYaw_.reset();
         }
-        if (signals.sync && !sync_ && !signals.dead) {
+        if (signals.sync && !sync_ && !signals.dead && signals.syncKind == SyncKind::Crystal) {
+            nextCrystal_ = signals.seconds + kCrystalDelaySeconds;
+            crystalUntil_ = nextCrystal_ + kCrystalSeconds;
+        }
+        if (signals.sync && !sync_ && !signals.dead && signals.syncKind == SyncKind::GloryKill) {
             std::vector<Dot> front;
             for (int i = 0; i < kVestMotors; ++i) {
                 front.push_back({static_cast<std::uint8_t>(i), scaled(kGloryKill)});
@@ -338,6 +517,8 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         }
     }
     heartbeat(out, signals);
+    crystal(out, signals.seconds);
+    portal(out, signals.seconds);
     primed_ = true;
     health_ = signals.health;
     armor_ = signals.armor;

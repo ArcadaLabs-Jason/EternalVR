@@ -7,6 +7,8 @@
 #include "features/foveation/rate_pattern.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/seq_hooks.hpp"
+#include "vkcore/ui_vulkan.hpp"
+#include "vkcore/vrs_gui.hpp"
 
 #include <algorithm>
 #include <array>
@@ -144,6 +146,7 @@ struct VrsDevice {
     std::array<std::atomic<std::uint64_t>, 3> binds{}; // eye L, eye R, untagged
     std::atomic<std::uint64_t> passes{0};
     std::atomic<std::uint64_t> fullRate{0};
+    std::atomic<std::uint64_t> guiPasses{0}; // passes into the GUI target, kept at full rate
 };
 
 // Allocated once and never destroyed (see layer_entry.cpp: no teardown at process exit).
@@ -390,7 +393,14 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
         VkImageView view = VK_NULL_HANDLE;
         if (eye != 2 && extent.width >= kMinTarget && extent.height >= kMinTarget &&
             pRenderPassBegin->renderArea.offset.x == 0 && pRenderPassBegin->renderArea.offset.y == 0) {
-            view = viewFor(*d, commandBuffer, extent, eye);
+            // Passes into the GUI target (the game's menus and HUD) keep full rate: their text turns coarse.
+            if (!vrs_gui::drawsGuiTarget(commandBuffer, *pRenderPassBegin)) {
+                view = viewFor(*d, commandBuffer, extent, eye);
+            } else if (d->guiPasses.fetch_add(1) == 0) {
+                EVR_LOG("vrs: first render pass into the GUI target (image %p, %ux%u) kept at full rate; the "
+                        "game's menus and HUD are not foveated",
+                        reinterpret_cast<void*>(ui_vulkan::guiTarget()), extent.width, extent.height);
+            }
         }
         d->cmdBindShadingRateImage(commandBuffer, view, VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV);
         d->binds[static_cast<std::size_t>(eye)].fetch_add(1);
@@ -398,10 +408,11 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
         if (d->passes.fetch_add(1) % 200000 == 199999) {
             EVR_LOG(
                 "vrs: render passes: %llu recorded for eye L, %llu for eye R, %llu untagged; %llu of them at "
-                "full rate; %llu pipeline(s) with the palette",
+                "full rate (%llu into the GUI target); %llu pipeline(s) with the palette",
                 static_cast<unsigned long long>(d->binds[0].load()),
                 static_cast<unsigned long long>(d->binds[1].load()),
                 static_cast<unsigned long long>(d->binds[2].load()), static_cast<unsigned long long>(full),
+                static_cast<unsigned long long>(d->guiPasses.load()),
                 static_cast<unsigned long long>(d->pipelines.load()));
         }
     }
@@ -481,6 +492,7 @@ void onDeviceCreated(DeviceData& data, bool enabled) {
                 : s.mode == Mode::EyeTest ? "eye test: eye L's left half and eye R's right half at 4x4"
                                           : "fixed foveation around head-forward");
     }
+    vrs_gui::onDeviceCreated(data, d->on);
     std::unique_lock lock(g_devicesMutex);
     g_devices[keyOf(data.device)] = d;
 }
@@ -511,7 +523,7 @@ PFN_vkVoidFunction findHook(const char* name) {
     if (std::strcmp(name, "vkCmdBeginRenderPass") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(&CmdBeginRenderPass);
     }
-    return nullptr;
+    return vrs_gui::findHook(name); // the image views and framebuffers, to find the GUI passes
 }
 
 } // namespace evr::vkcore::vrs_nv

@@ -27,6 +27,10 @@ namespace evr::vkcore::body_follow {
 // and the step-up spring, its horizontal position with the body. nullopt when `player` is not the idPlayer.
 std::optional<Vec3> playerOrigin(const std::byte* player, Vec3 eye, float unitsPerMetre);
 
+// Camera hook: the height of the player's feet (game units) from its physics object alone, for bHaptics'
+// landings; nullopt when `player` is not the idPlayer or the read fails.
+std::optional<float> feetHeight(const std::byte* player);
+
 // Camera hook: the move body follow asks for this frame (room frame; zero for none).
 void publish(roomscale::FollowMove move);
 

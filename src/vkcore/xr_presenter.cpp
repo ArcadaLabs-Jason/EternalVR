@@ -4,6 +4,7 @@
 
 #include "features/render_size/mirror_window.hpp"
 
+#include "vkcore/frame_pacing.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/ui_engine.hpp"
@@ -48,7 +49,9 @@ Settings readSettings() {
         s.headAim = false;
     }
     s.skipCinematics = envFlag(L"ETERNALVR_SKIP_CINEMATICS", false);
-    s.poseLead = envFlag(L"ETERNALVR_POSE_LEAD", false);
+    // Paced to the headset, every game frame is shown the same time after its pose was taken, so the measured
+    // lead lands each frame's pose on its display time: on by default then (frame_pacing.hpp).
+    s.poseLead = envFlag(L"ETERNALVR_POSE_LEAD", frame_pacing::configure());
     if (readEnv(L"ETERNALVR_CUTSCENES", value) && _wcsicmp(value.c_str(), L"immersive") == 0) {
         s.cutsceneCinema = false;
     }

@@ -5,7 +5,8 @@
 // (previous, next), a stick pushed up or down scrolls and pushed left or right changes tabs, a stick click
 // taps C (the map's centre key), and the controllers' gameplay actions are held back until the menu is gone
 // and every control is let go. On the Dossier's map page the sticks move the map instead (map_drag.hpp):
-// the weapon hand's stick pans, the other stick zooms (up / down) and rotates (left / right). In a popup the
+// the weapon hand's stick pans, the other stick zooms (up / down) and rotates (left / right), or the other
+// way round with input::MapSticks::OtherPans (ETERNALVR_MAP_STICKS=other). In a popup the
 // game raised by itself (a tutorial or lore popup, which waits for Space, E or Left Alt) A / X taps Space, a
 // stick click taps E and Y holds Left Alt instead. A tutorial popup waits for the key of the mechanic it
 // introduces ("[R]" for the Flame Belch), so there every gameplay action the controllers press also presses
@@ -22,6 +23,7 @@
 
 #include "features/input/axis2.hpp"
 #include "features/input/controller_state.hpp"
+#include "features/input/map_sticks.hpp"
 #include "features/menu/map_drag.hpp"
 #include "features/menu/panel_pointer.hpp"
 #include "features/menu/wheel_cursor.hpp"
@@ -148,7 +150,10 @@ struct RouterOutput {
 
 class MenuRouter {
 public:
-    explicit MenuRouter(input::Hand dominant = input::Hand::Right, RouterTuning tuning = {});
+    // `mapSticks`: which stick pans the Dossier's map (map_sticks.hpp).
+    explicit MenuRouter(input::Hand dominant = input::Hand::Right,
+                        input::MapSticks mapSticks = input::MapSticks::WeaponPans,
+                        RouterTuning tuning = {});
 
     RouterOutput update(const RouterInput& in);
 
@@ -183,6 +188,7 @@ private:
     [[nodiscard]] bool allReleased(const RouterInput& in) const;
 
     input::Hand dominant_;
+    input::MapSticks mapSticks_;
     RouterTuning tuning_;
     input::Hand pointer_;
     WheelCursor wheel_;

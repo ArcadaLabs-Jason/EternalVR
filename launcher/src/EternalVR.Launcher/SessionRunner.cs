@@ -220,17 +220,20 @@ namespace EternalVR.Launcher
             Report(StatusKind.Info, "The game is starting...");
             var logDir = ctx.Paths.SessionLogDir(id);
             var startedUtc = DateTime.UtcNow;
+            int? exitCode = null;
             using (game)
             {
                 WatchStart(game, cancel, logDir, startedUtc);
                 WaitForAllGameProcesses(game, cancel, logDir, startedUtc);
+                if (game.HasExited) exitCode = game.ExitCode;
             }
             if (cancel.IsCancellationRequested)
             {
                 Log.Warn("stopped waiting for the game; the restore runs at the next launcher start");
                 return false;
             }
-            Log.Info("the game has exited");
+            Log.Info("the game has exited" + (exitCode.HasValue ? ", " + GameExit.Describe(exitCode.Value) : string.Empty));
+            bool crashed = exitCode.HasValue && GameExit.IsCrash(exitCode.Value);
             DropHeldProblem();
             bool restored = CleanUpAfterSession(marker);
             // How fast the game really drew, beside the headset's rate (SessionRates).
@@ -239,7 +242,9 @@ namespace EternalVR.Launcher
             var ratesText = rates != null ? " " + rates.Describe() : string.Empty;
             // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended.
             if (lastStatus == null || lastStatus.Kind != StatusKind.Problem)
-                Report(restored ? StatusKind.Good : StatusKind.Warning, (restored
+                Report(restored && !crashed ? StatusKind.Good : StatusKind.Warning, (crashed
+                    ? "The game crashed (" + GameExit.Describe(exitCode.Value) + "). Use Export report... and attach the zip to a GitHub issue. "
+                    : string.Empty) + (restored
                     ? "The game has exited and your settings were restored."
                     : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).") + ratesText);
             return restored;

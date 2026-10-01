@@ -2,6 +2,8 @@
 // device (T-040, T-080), and rebuilt when the game's swapchain changes shape.
 
 #include "vkcore/presenter_impl.hpp"
+
+#include "vkcore/frame_pacing.hpp"
 #include "vkcore/status_file.hpp"
 
 #include <algorithm>
@@ -356,6 +358,7 @@ void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value
     slot.state.store(kSlotFree);
     latest.store((value << 2) | slotIndex);
     ++framesCopied;
+    frame_pacing::onHandOver(); // the present hook waits for the headset's next frame under ETERNALVR_PACE
 }
 
 void XrPresenter::Impl::setRingExtent(VkExtent2D game) {

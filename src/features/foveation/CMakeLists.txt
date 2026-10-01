@@ -1,5 +1,6 @@
 evr_add_module(evr_foveation
     SOURCES
+        attachment_images.cpp
         foveation_preset.cpp
         foveation_region.cpp
         rate_pattern.cpp
