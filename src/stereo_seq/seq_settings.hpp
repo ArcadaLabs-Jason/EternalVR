@@ -64,6 +64,12 @@ struct CvarHold {
 // (docs/VR_STEREO.md, Cvars).
 std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::string_view windowSetting = {});
 
+// Whether a held cvar is the window's size (r_windowWidth / r_windowHeight, compared case-insensitively). The
+// layer stops holding these once the render size is off (vkcore/virtual_client.hpp): the game then renders
+// at its window's size, and a size that differs from the window's makes the game resize its window, which
+// on an AMD driver puts the swapchain out of date (VK_ERROR_OUT_OF_DATE_KHR).
+bool isWindowSizeCvar(std::string_view name);
+
 // A "name=value;name=value" list of cvars to hold (ETERNALVR_DEBUG_CVARS, ETERNALVR_CPU_SAVER). Spaces around
 // names and values are dropped; an item without a name before '=' is skipped; a later item for the same name
 // (compared case-insensitively) replaces the earlier one.

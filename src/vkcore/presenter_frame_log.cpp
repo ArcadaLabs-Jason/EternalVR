@@ -1,10 +1,12 @@
 // The XR worker's frame table (eternalvr-frames-<pid>.csv, docs/VR_HEAD_TRACKED.md), the display lead it
-// measures (xr_math/display_lead.hpp), and the rates in the 10 s line.
+// measures (xr_math/display_lead.hpp), the display period's watch (presenter_refresh.hpp), and the 10 s
+// lines.
 
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
+#include "vkcore/presenter_result.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/vram_watch.hpp"
 
@@ -73,6 +75,31 @@ void XrPresenter::Impl::logFrame(const XrFrameState& state) {
     }
 }
 
+void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
+    refresh.onFrame(state.predictedDisplayPeriod);
+    if (GetTickCount64() - lastXrStatsTicks < 10000) {
+        return;
+    }
+    lastXrStatsTicks = GetTickCount64();
+    EVR_LOG("xr: %llu frame(s), %llu new image(s), %llu repeat(s); %llu head-tracked, %llu on the "
+            "screen; pose age average %.1f ms, max %.1f ms; display period %.2f ms, pose lead %.1f ms",
+            static_cast<unsigned long long>(xrFrames), static_cast<unsigned long long>(xrCopies),
+            static_cast<unsigned long long>(xrRepeats), static_cast<unsigned long long>(xrProjectionFrames),
+            static_cast<unsigned long long>(xrQuadFrames),
+            poseAgeCount ? poseAgeSum / static_cast<double>(poseAgeCount) : 0.0, poseAgeMax,
+            static_cast<double>(state.predictedDisplayPeriod) / 1e6,
+            static_cast<double>(displayLead.leadNs()) / 1e6);
+    poseAgeSum = 0.0;
+    poseAgeMax = 0.0;
+    poseAgeCount = 0;
+    logRates();
+    logSizeStats();
+    vignette.logStats(settings.ui.vignette);
+    if (frameLog) {
+        std::fflush(frameLog);
+    }
+}
+
 void XrPresenter::Impl::logRates() {
     logD3dHealth();
     // The game's own rates beside the runtime's: a headset's frame counter shows the XR rate, which a game
@@ -81,23 +108,19 @@ void XrPresenter::Impl::logRates() {
     const std::uint64_t presents = gamePresents.load(std::memory_order_relaxed);
     const std::uint64_t ticks = gameTicks.load(std::memory_order_relaxed);
     const std::uint64_t pairs = pairsPublished.load(std::memory_order_relaxed);
-    if (lastRateQpc != 0) {
-        const double seconds = qpcSeconds(now - lastRateQpc);
+    if (lastRates.qpc != 0) {
+        const double seconds = qpcSeconds(now - lastRates.qpc);
         const auto rate = [seconds](std::uint64_t now, std::uint64_t then) {
             return seconds > 0.0 ? static_cast<double>(now - then) / seconds : 0.0;
         };
         EVR_LOG(
             "rates: game %.1f present(s)/s, %.1f tick(s)/s, %.1f stereo pair(s)/s shown; XR %.1f frame(s)/s, "
             "%.1f new image(s)/s",
-            rate(presents, lastRatePresents), rate(ticks, lastRateTicks), rate(pairs, lastRatePairs),
-            rate(xrFrames, lastRateXrFrames), rate(xrCopies, lastRateXrCopies));
+            rate(presents, lastRates.presents), rate(ticks, lastRates.ticks), rate(pairs, lastRates.pairs),
+            rate(xrFrames, lastRates.xrFrames), rate(xrCopies, lastRates.xrCopies));
     }
-    lastRateQpc = now;
-    lastRatePresents = presents;
-    lastRateTicks = ticks;
-    lastRatePairs = pairs;
-    lastRateXrFrames = xrFrames;
-    lastRateXrCopies = xrCopies;
+    lastRates = {presents, ticks, pairs, xrFrames, xrCopies, now};
+    checkGamePresents(*this);   // a line once the game stops presenting (presenter_result.hpp)
     frame_pacing::logSummary(); // the headset's cadence, and ETERNALVR_PACE's waits
     vram::logSummary();
     stall_watch::logSummary();

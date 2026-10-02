@@ -44,6 +44,7 @@ namespace EternalVR.Launcher.Core.Settings
             + "  htc_vive_cosmos.toml: HTC Vive Cosmos\r\n"
             + "  htc_vive_wand.toml: HTC Vive wands\r\n"
             + "  pico4.toml: Pico 4\r\n"
+            + "  steam_frame.toml: Steam Frame\r\n"
             + "The launcher replaces everything in defaults each time you press Edit controls or Open folder, so do not\r\n"
             + "edit there.\r\n"
             + "\r\n"

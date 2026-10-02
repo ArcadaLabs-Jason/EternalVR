@@ -12,8 +12,8 @@ namespace EternalVR.Launcher.Core.Tests
     {
         private static readonly string[] BuiltInMaps =
         {
-            "hp_reverb_g2.toml", "htc_vive_cosmos.toml", "htc_vive_wand.toml", "oculus_touch.toml", "pico4.toml", "valve_index.toml",
-            "windows_mixed_reality.toml",
+            "hp_reverb_g2.toml", "htc_vive_cosmos.toml", "htc_vive_wand.toml", "oculus_touch.toml", "pico4.toml", "steam_frame.toml",
+            "valve_index.toml", "windows_mixed_reality.toml",
         };
 
         private static string ShippedMaps => Path.Combine(TestData.Dir, "controllers");

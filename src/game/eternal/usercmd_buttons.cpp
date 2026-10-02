@@ -107,6 +107,23 @@ std::uint64_t usercmdButtons(GameAction action) {
     return 0;
 }
 
+std::optional<GameAction> actionForUsercmdButton(int index) {
+    if (index < 0 || index >= 64) {
+        return std::nullopt;
+    }
+    const std::uint64_t bit = std::uint64_t{1} << index;
+    if (bit == usercmd_button::kAny) {
+        return std::nullopt;
+    }
+    for (std::size_t i = 0; i < kGameActionCount; ++i) {
+        const auto action = static_cast<GameAction>(i);
+        if ((usercmdButtons(action) & bit) != 0) {
+            return action;
+        }
+    }
+    return std::nullopt;
+}
+
 std::uint64_t usercmdButtons(const GameActionSet& actions) {
     std::uint64_t bits = 0;
     for (std::size_t i = 0; i < kGameActionCount; ++i) {

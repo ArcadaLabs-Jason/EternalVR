@@ -7,6 +7,7 @@
 #include "vkcore/mirror_place.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/window_cap.hpp"
 #include "vkcore/xr_presenter.hpp"
 
 #include <array>
@@ -166,11 +167,14 @@ void setGameWindow(void* hwnd) {
 // ETERNALVR_WINDOW=x,y,width,height: places the game's window (client area of that size) before its
 // first swapchain, so the game renders at a size its own window-size clamp (the primary display's work
 // area) would not allow, for example on a tall virtual display. With the render size the window is only the
-// mirror and goes where the mirror's options put it (virtual_client::mirrorWindow).
+// mirror and goes where the mirror's options put it (virtual_client::mirrorWindow); on a device without
+// present scaling the game renders at the window's size, so the window is then as large as its display's work
+// area allows (window_cap::cappedWindow).
 void placeGameWindow(HWND hwnd) {
     static std::once_flag once;
     std::call_once(once, [hwnd] {
-        const auto mirror = virtual_client::mirrorWindow();
+        const auto capped = window_cap::cappedWindow(hwnd);
+        const auto mirror = capped ? capped : virtual_client::mirrorWindow();
         std::wstring value;
         if (!mirror && (!readEnv(L"ETERNALVR_WINDOW", value) || value.empty())) {
             return;
@@ -210,6 +214,10 @@ void placeGameWindow(HWND hwnd) {
         GetClientRect(hwnd, &after);
         EVR_LOG("window: placed at %d,%d with client %ldx%ld (was %ldx%ld)%s", x, y, after.right,
                 after.bottom, before.right, before.bottom, ok ? "" : " - SetWindowPos failed");
+        if (capped && ok) {
+            window_cap::onPlaced(
+                {static_cast<std::uint32_t>(after.right), static_cast<std::uint32_t>(after.bottom)});
+        }
     });
 }
 

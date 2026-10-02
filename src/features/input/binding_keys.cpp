@@ -19,6 +19,9 @@ constexpr std::array<std::pair<ButtonInput, std::string_view>, kButtonInputCount
     {ButtonInput::StickClick, "stick_click"},
     {ButtonInput::Primary, "primary"},
     {ButtonInput::Secondary, "secondary"},
+    {ButtonInput::Face3, "face3"},
+    {ButtonInput::Face4, "face4"},
+    {ButtonInput::Shoulder, "shoulder"},
     {ButtonInput::Menu, "menu"},
 }};
 

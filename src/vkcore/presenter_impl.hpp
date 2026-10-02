@@ -28,6 +28,7 @@
 #include "vkcore/presenter_alt.hpp"
 #include "vkcore/presenter_fade.hpp"
 #include "vkcore/presenter_mirror.hpp"
+#include "vkcore/presenter_refresh.hpp"
 #include "vkcore/presenter_stereo.hpp"
 #include "vkcore/presenter_types.hpp"
 #include "vkcore/presenter_vignette.hpp"
@@ -39,6 +40,7 @@
 #include "vkcore/ui_wash.hpp"
 #include "vkcore/view_hook.hpp"
 #include "vkcore/xr_presenter.hpp"
+#include "xr_math/aim_check.hpp"
 #include "xr_math/display_lead.hpp"
 #include "xr_math/head_aim.hpp"
 #include "xr_math/head_view.hpp"
@@ -200,12 +202,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     // handed to the worker (present hook); the worker keeps the last values.
     std::atomic<std::uint64_t> gamePresents{0};
     std::atomic<std::uint64_t> pairsPublished{0};
-    std::uint64_t lastRatePresents = 0;
-    std::uint64_t lastRateTicks = 0;
-    std::uint64_t lastRatePairs = 0;
-    std::uint64_t lastRateXrFrames = 0;
-    std::uint64_t lastRateXrCopies = 0;
-    LONGLONG lastRateQpc = 0;
+    RateMarks lastRates;
+    RefreshLog refresh; // worker: the display period's changes and summary (presenter_refresh.hpp)
 
     // ---- Head tracking: shared between the XR worker and the game's camera hook ------------------------
 
@@ -245,9 +243,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::optional<float> aimMenuBody; // the body yaw held while a menu is up (aimWithHead); nullopt: none
     std::uint64_t aimMenuFrames = 0;
     bool loggedNotPlayer = false;
-    int aimChecks = 0;
-    int aimPhysicsMatches = 0;
-    int aimStateMatches = 0;
+    xr_math::AimCheck aimCheck; // Verifying: the start-up check and its later tries
     std::uint64_t aimFrames = 0;
     std::uint64_t aimCameraFrames = 0;
     std::uint64_t aimRewrites = 0;
@@ -587,6 +583,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     void openFrameLog();
     void noteShownView(const XrFrameState& state);
     void logFrame(const XrFrameState& state);
+    // Worker, after each frame: the display period's watch and, every 10 s, the xr line and the statistics.
+    void afterFrame(const XrFrameState& state);
     // Worker, every 10 s: the game's present, tick and stereo pair rates beside the XR frame rate.
     void logRates();
     // Worker, with the rates: the D3D12 debug layer's messages (ETERNALVR_D3D12_DEBUG) and a removed device.

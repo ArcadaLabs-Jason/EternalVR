@@ -7,6 +7,8 @@ evr_add_module(evr_input
         binding_keys.cpp
         binding_overrides.cpp
         binding_text.cpp
+        binding_watch.cpp
+        button_labels.cpp
         capture_chord.cpp
         controller_bindings.cpp
         controller_settings.cpp

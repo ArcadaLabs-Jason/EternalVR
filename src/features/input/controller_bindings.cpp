@@ -1,6 +1,7 @@
 #include "features/input/controller_bindings.hpp"
 
 #include "features/input/binding_keys.hpp"
+#include "features/input/button_labels.hpp"
 #include "features/input/interaction_profiles.hpp"
 
 #include <algorithm>
@@ -18,6 +19,7 @@ namespace {
 constexpr std::string_view kUtf8Bom = "\xEF\xBB\xBF";
 constexpr std::string_view kProfileSection = "profile";
 constexpr std::string_view kMapSectionPrefix = "map.";
+constexpr std::string_view kLabelsSection = "labels";
 constexpr std::string_view kPathKey = "path";
 
 constexpr std::array<std::pair<game::Handedness, std::string_view>, 3> kHandednessNames{{
@@ -85,7 +87,7 @@ Sections splitSections(std::string_view text) {
             if (current < 0) {
                 sections.issues.push_back(
                     issueOf(BindingIssueKind::Syntax, {}, lineNumber,
-                            "entries must be under a [profile] or [map.<handedness>] header"));
+                            "entries must be under a [profile], [map.<handedness>] or [labels] header"));
             }
             owner[i] = current;
             continue;
@@ -262,6 +264,27 @@ private:
     ControllerData& data_;
 };
 
+void readLabels(ControllerData& data, const std::string& sectionText) {
+    BindingTextResult text = parseBindingText(sectionText);
+    std::ranges::move(text.issues, std::back_inserter(data.issues));
+    for (auto& [key, value] : text.entries) {
+        const auto lineIt = text.lineOf.find(key);
+        const int line = lineIt == text.lineOf.end() ? 0 : lineIt->second;
+        if (!parseLabelKey(key)) {
+            data.issues.push_back(issueOf(BindingIssueKind::UnknownKey, key, line,
+                                          quoted(key) + " is not a label key; use <hand>.<input>, e.g. "
+                                                        "\"left.primary\""));
+            continue;
+        }
+        if (trim(value).empty()) {
+            data.issues.push_back(
+                issueOf(BindingIssueKind::UnknownValue, key, line, quoted(key) + " has an empty name"));
+            continue;
+        }
+        data.labels.emplace(key, std::string(trim(value)));
+    }
+}
+
 } // namespace
 
 const SuggestedBinding* ControllerData::find(XrActionId action, Hand hand) const {
@@ -282,15 +305,20 @@ ControllerData parseControllerData(std::string_view text) {
             ProfileReader(data).read(sectionText);
             continue;
         }
+        if (name == kLabelsSection) {
+            readLabels(data, sectionText);
+            continue;
+        }
         const std::optional<game::Handedness> handedness =
             name.starts_with(kMapSectionPrefix)
                 ? parseHandednessName(std::string_view(name).substr(kMapSectionPrefix.size()))
                 : std::nullopt;
         if (!handedness) {
-            data.issues.push_back(issueOf(BindingIssueKind::UnknownKey, name, 0,
-                                          "[" + name +
-                                              "] is not a section of controller data; use [profile] or "
-                                              "[map.right], [map.left_button_swap], [map.left_full_mirror]"));
+            data.issues.push_back(
+                issueOf(BindingIssueKind::UnknownKey, name, 0,
+                        "[" + name +
+                            "] is not a section of controller data; use [profile], [labels] or "
+                            "[map.right], [map.left_button_swap], [map.left_full_mirror]"));
             continue;
         }
         BindingTextResult map = parseBindingText(sectionText);

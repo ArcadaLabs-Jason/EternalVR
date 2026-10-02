@@ -243,7 +243,7 @@ namespace EternalVR.Launcher.Core.Launch
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
             // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, absent when off.
             if (stereo && s.Foveation != FoveationMode.Off) Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
-            // Frame pacing (experimental, docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset.
+            // Frame pacing (docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset.
             // Stereo only and not with adaptive alternate eyes; explicit either way (the layer's default may change).
             var paced = stereo && s.AlternateEyes != AlternateEyesMode.Auto ? s.Pacing : FramePacing.Off;
             Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
@@ -316,6 +316,11 @@ namespace EternalVR.Launcher.Core.Launch
         public static bool IsVdxr(string runtimeManifest) =>
             !string.IsNullOrEmpty(runtimeManifest)
             && Path.GetFileName(runtimeManifest.Replace('\\', '/').Split('/').Last()).StartsWith("virtualdesktop-openxr", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>SteamVR's runtime (<c>steamxr_win64.json</c>), judged by its manifest's file name.</summary>
+        public static bool IsSteamVr(string runtimeManifest) =>
+            !string.IsNullOrEmpty(runtimeManifest)
+            && runtimeManifest.Replace('\\', '/').Split('/').Last().StartsWith("steamxr", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Splits command-line text at whitespace, keeping double-quoted parts together.</summary>
         public static IReadOnlyList<string> SplitArguments(string text)

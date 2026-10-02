@@ -27,9 +27,10 @@ them is worse for you than described here.
   tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds.
 - **Only tested on NVIDIA:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have not
   been tried.
-- **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands and Pico 4
-  controllers are new and untested on real hardware.** Please report how they work. The Vive wands have a
-  reduced layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. Pimax and other
+- **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands, Pico 4 and Steam
+  Frame controllers are new and untested on real hardware.** Please report how they work. The Vive wands
+  have a reduced layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. The
+  Steam Frame has a layout of its own (see CONTROLS.md). Pimax and other
   controllers get whatever layout their runtime maps them to.
 - **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), the game carries on
   flat on your desktop and VR comes back by itself once the headset and its runtime are back, usually
@@ -59,6 +60,14 @@ them is worse for you than described here.
   Raise it for sharpness if your GPU has headroom, lower it if the frame rate drops below the headset's
   refresh rate. The mod's log says the size it used (`size: render size ...`). If the size cannot be
   set, the game renders at its small window's size and looks soft; the log says why.
+- **AMD Radeon RX 5000 and 6000 (and some newer AMD drivers): the picture renders at the window's
+  size.** These drivers cannot scale the game's image into a smaller desktop window, so each eye renders
+  at the size of the game's window on your desktop instead of the planned size, and looks soft. The mod
+  then makes that window as large as your display allows (in the eye's shape), so a larger or
+  higher-resolution display gives a sharper picture. After such a session the launcher says how large each
+  eye really was ("Your graphics driver cannot render above the window size, so each eye rendered at ...").
+  A virtual display works around it today (see "The picture is soft on an AMD graphics card" in
+  [TROUBLESHOOTING.md](TROUBLESHOOTING.md)); a full fix is being worked on.
 - **Put the headset on before launching.** The launcher asks the headset's runtime for the render size
   and starts the game at it. If the headset is not detected ("Headset not detected; the render size is
   decided in-game" in the launcher's log), the game switches size a few seconds in; on graphics cards
@@ -85,8 +94,9 @@ them is worse for you than described here.
   launcher's DLSS or Off, changing DLSS in the game's menu has no effect in VR, and your saved game settings
   keep their own DLSS choice for flat play. With the launcher's TAA the game's own DLSS setting is used: if
   it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
-  the mod switches that session to TAA (the log says `DLSS has no per-eye feature`) and the menu shows
-  DLSS as off.
+  the mod switches to TAA (the log says `DLSS has no per-eye feature`) and the menu shows DLSS as off. The
+  mod tries DLSS again by itself a few times (after 5, 10 and 20 seconds); choosing a DLSS quality in the
+  game's menu tries it again at once.
 - **A newer DLSS is experimental too.** The game ships DLSS 2.3. The DLSS group's "Version" offers NVIDIA's
   newest by default: **Download** fetches it once, straight from NVIDIA's GitHub after you accept NVIDIA's
   license (the mod does not include it), and until then the game's 2.3 runs. "A file of mine" uses a
@@ -103,12 +113,12 @@ them is worse for you than described here.
 - **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
   player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
   `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
-  experimental and off by default. Since 0.1.11 it keeps the menus and HUD sharp; that has been checked on
-  the test rig, not yet in a headset.
-- **Frame pacing is experimental** (Frame pacing on the Play tab, off by default). "Matched to the headset"
-  gives the headset one new image per frame instead of letting the game run ahead. On the test rig it did
-  exactly that, but it has not been tried in a headset yet, so whether it feels smoother is still open. It
-  is not available with Alternate eyes on Auto.
+  experimental and off by default.
+- **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
+  picture can stop for about half a second. That is the game's own checkpoint autosave, not the mod: the
+  game holds everything while it writes the save. It happens in the flat game too, but in the headset a
+  frozen picture stands out much more. The mod's log names it: the `stall:` line for that freeze ends with
+  `the game saved a checkpoint in the gap`.
 - **Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
   (on by default) has the game load only the texture detail the current view needs, which gave about 8% more
   frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
@@ -137,12 +147,11 @@ them is worse for you than described here.
   and there is no wall check yet.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
   strength and feel may change.
-- **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. A tester's suit showed the front
-  of the vest mirrored in 0.1.5, fixed in 0.1.6, and confirmed hits from behind land on the right side.
-  The tester confirmed the Flame Belch and equipment launcher pulses on the left shoulder (0.1.7). An
-  equipment press with no charge left still pulses. The 0.1.11 effects (glory kills, landing, portals and
-  the Sentinel Crystal) have not been felt on a suit yet; the crystal's shock and a level's exit portal have
-  not been tried at all.
+- **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. On a real suit a player has felt
+  the shots, the landing from a fall and glory kills; the other effects (portals, the Sentinel Crystal, the
+  pickup waves, jump pads and the rest) have only been checked against a stand-in for the bHaptics Player.
+  Which side of the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms
+  them.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
   right of centre.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
@@ -154,6 +163,10 @@ them is worse for you than described here.
   where your gun points (or where you look with head aim), not where your hand threw it. A throw or a swing
   you did not mean still spends a grenade or a Crucible charge, so turn them off if they fire by mistake.
 - **The meathook and glory kills with hand aim** have had little testing.
+- **Jumping off climbable walls where you look** is new; it works on a Quest 3, other headsets are untried.
+  While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
+  or down, and your gun follows your head there, not your hand. If it misbehaves, `ETERNALVR_CLIMB_LOOK=0` brings back the
+  game's own wall climbing (turn with the stick before you jump).
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
   your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
   pilot it, and at some angles you can see inside its shoulders.

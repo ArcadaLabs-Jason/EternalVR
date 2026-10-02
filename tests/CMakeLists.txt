@@ -26,6 +26,7 @@ evr_add_test(evr_common_tests
 
 evr_add_test(evr_xr_math_tests
     SOURCES
+        xr_math/aim_check_tests.cpp
         xr_math/camera_anim_tests.cpp
         xr_math/cinema_quad_tests.cpp
         xr_math/display_lead_tests.cpp
@@ -97,6 +98,7 @@ evr_add_test(evr_comfort_tests
 
 evr_add_test(evr_pacing_tests
     SOURCES
+        features/pacing/display_period_watch_tests.cpp
         features/pacing/pace_policy_tests.cpp
     DEPENDS evr_pacing)
 
@@ -117,6 +119,8 @@ evr_add_test(evr_input_tests
         features/input/binding_keys_tests.cpp
         features/input/binding_overrides_tests.cpp
         features/input/binding_text_tests.cpp
+        features/input/binding_watch_tests.cpp
+        features/input/button_labels_tests.cpp
         features/input/capture_chord_tests.cpp
         features/input/controller_bindings_tests.cpp
         features/input/controller_settings_tests.cpp
@@ -152,7 +156,11 @@ evr_add_test(evr_bhaptics_tests
     SOURCES
         features/bhaptics/bhaptics_message_tests.cpp
         features/bhaptics/body_haptics_tests.cpp
+        features/bhaptics/crystal_tests.cpp
         features/bhaptics/landing_tests.cpp
+        features/bhaptics/launch_tests.cpp
+        features/bhaptics/pickups_tests.cpp
+        features/bhaptics/pickup_wave_tests.cpp
     DEPENDS evr_bhaptics)
 
 evr_add_test(evr_arm_tests
@@ -222,9 +230,11 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/eye_view_plan_tests.cpp
         stereo_seq/keep_prev_tests.cpp
         stereo_seq/moved_flag_tests.cpp
+        stereo_seq/ngx_twin_retry_tests.cpp
         stereo_seq/object_prev_tests.cpp
         stereo_seq/world_gui_tests.cpp
         stereo_seq/png_writer_tests.cpp
+        stereo_seq/present_watch_tests.cpp
         stereo_seq/prev_matrices_tests.cpp
         stereo_seq/render_idle_tests.cpp
         stereo_seq/scatter_history_tests.cpp
@@ -250,6 +260,7 @@ evr_add_test(evr_menu_tests
 evr_add_test(evr_render_size_tests
     SOURCES
         features/render_size/mirror_window_tests.cpp
+        features/render_size/render_cap_tests.cpp
         features/render_size/render_size_tests.cpp
     DEPENDS evr_render_size)
 

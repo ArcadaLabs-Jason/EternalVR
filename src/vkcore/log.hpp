@@ -12,6 +12,9 @@ void logOpen();
 
 void logf(const char* format, ...);
 
+// Seconds since the log started: the time in front of every log line.
+double logSeconds();
+
 // The value of ETERNALVR_LOG_DIR, empty when unset.
 std::wstring logDirectory();
 

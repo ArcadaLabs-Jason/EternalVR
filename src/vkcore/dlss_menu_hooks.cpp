@@ -8,6 +8,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/taa_locate.hpp"
+#include "vkcore/taa_ngx.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -66,6 +67,7 @@ stereo_seq::DlssMenuHold currentHold() {
     hold.perEyeTaa = taaRequested() && !taaFailedClosed();
     hold.dlssOption = taaDlssRequested();
     hold.dlssPerEye = taaDlssPerEyeReady();
+    hold.dlssRetry = ngxTwinFailed();
     const int quality = taaDlssQuality();
     hold.dlssQuality = quality >= 0 ? quality : (g_dlssQuality ? cvarInt(g_dlssQuality) : -1);
     return hold;
@@ -111,8 +113,11 @@ void onSetter(void* settings, int index) {
     const stereo_seq::DlssMenuApply apply = stereo_seq::dlssMenuApply(hold, index, shown);
     EVR_LOG("%s: video menu applied DLSS index %d (shown %d, the profile's %d, %s): %s", kTag, index, shown,
             profile, holdName(hold), stereo_seq::dlssMenuApplyName(apply));
-    if (apply == stereo_seq::DlssMenuApply::Apply) {
+    if (apply == stereo_seq::DlssMenuApply::Apply || apply == stereo_seq::DlssMenuApply::ApplyRetry) {
         g_setterOriginal(settings, index);
+    }
+    if (apply == stereo_seq::DlssMenuApply::Retry || apply == stereo_seq::DlssMenuApply::ApplyRetry) {
+        retryNgxTwins();
     }
 }
 

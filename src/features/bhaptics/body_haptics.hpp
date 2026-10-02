@@ -12,10 +12,17 @@
 // - heartbeat: while health is above 0 and below kLowHealth, a lub-dub on the left of the chest, quicker as
 //   health falls;
 // - glory kill: the game's sync kill starting (a sync master appears) pulses the whole front and both
-//   sleeves; a sync that is a pickup's animation (a rune, a Praetor token: syncKindOf) does not;
+//   sleeves; a sync that is a pickup's animation (a rune, a mod bot, a Praetor token: syncKindOf) does not;
 // - Sentinel Crystal: its pickup animation (the Slayer grabs the crystal and takes its energy) plays a
-//   shock, random motors all over the vest and both sleeves for kCrystalSeconds, from kCrystalDelaySeconds
-//   into the animation (a tester's idea, public issue #1);
+//   wave (crystal.hpp) from the centre of the vest, front and back, out to its edges and then both
+//   sleeves, over kCrystalWaveSeconds from kCrystalDelaySeconds into the animation (a tester's idea,
+//   public issue #1). The animation starts as the upgrade menu closes, when `gameplay` is not back yet
+//   (the menu's held-back controls, stale reads), so its start is seen in every update and the wave is
+//   timed from it once play is back (kCrystalDelaySeconds after the start, nothing once
+//   kCrystalWaveSeconds of it would be over);
+// - Praetor Suit token: its pickup animation (no menu: the Slayer's hands take the coin and hold it up) plays
+//   the crystal's wave from kTokenDelaySeconds into it, as the hands close on the coin (a tester's idea,
+//   public issue #1; crystalWaveDelay);
 // - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
 //   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
 //   lighter and shorter (a tester's suggestion, public issue #1);
@@ -25,13 +32,25 @@
 //   public issue #1);
 // - portal: going through a teleporter, a portal or a level exit (the layer's hooks, teleportKindOf) sweeps a
 //   crackle down the vest from the top row to the bottom, front and back, with the sleeves buzzing, over
-//   kPortalSeconds (a tester's idea, public issue #1).
+//   kPortalSeconds (a tester's idea, public issue #1);
+// - pickups: health going up (the layer's PickupDetector, run on every game frame) sends a wave up the vest
+//   from the bottom row to the top, front and back; armor the same wave down from the top. Harder for a
+//   bigger gain; a Mega Health at full strength and slower (PickupWave). A row is left out while a hit,
+//   a glory kill, death, a landing, the crystal or a portal plays on the vest (a tester's idea, public
+//   issue #1);
+// - launch: a jump pad or a booster launching the player (the layer's hooks, LaunchFilter) shoves the bottom
+//   row of the vest, front and back, strong and then fading while the row above joins in, over
+//   kLaunchSeconds (a player's idea, public issue #1).
 //
 // Only while `gameplay` holds (no menu, no loading, the reads fresh); outside it the edges are forgotten, so
-// nothing fires on the way back in. Every intensity is scaled by the strength (ETERNALVR_BHAPTICS_INTENSITY).
-// Pure: the layer feeds it from its own thread and sends what it returns. No Windows or network here.
+// nothing fires on the way back in (the crystal's start excepted, above). Every intensity is scaled by the
+// strength (ETERNALVR_BHAPTICS_INTENSITY). Pure: the layer feeds it from its own thread and sends what it
+// returns. No Windows or network here.
 
+#include "features/bhaptics/crystal.hpp"
 #include "features/bhaptics/landing.hpp"
+#include "features/bhaptics/launch.hpp"
+#include "features/bhaptics/pickups.hpp"
 #include "features/input/controller_state.hpp"
 
 #include <array>
@@ -86,6 +105,10 @@ enum class Effect : std::uint8_t {
     Landing,
     Crystal,
     Portal,
+    Health,
+    MegaHealth,
+    Armor,
+    Launch,
     Count,
 };
 
@@ -124,20 +147,17 @@ inline constexpr double kHitWindowSeconds = 0.15;
 inline constexpr float kLandingDrop = 3.5f;
 
 // What a sync (the player's sync master set) is, from its sync entity's entityDef name: a Sentinel Crystal's
-// pickup (interact/argent_cell/use_sync), another pickup (interact/...: runes, Praetor tokens, mod bots,
+// pickup (interact/argent_cell/use_sync), a Praetor Suit token's (the game spells it
+// interact/preator_suit_token/preator_suit_token_sync), another pickup (interact/...: runes, mod bots,
 // batteries), or anything else, taken for a glory kill (as before, also when the name could not be read).
-enum class SyncKind : std::uint8_t { GloryKill, Pickup, Crystal };
+enum class SyncKind : std::uint8_t { GloryKill, Pickup, Crystal, Token };
 
 SyncKind syncKindOf(std::string_view entityDefName);
 const char* syncKindName(SyncKind kind);
 
-// The crystal's shock: its start into the pickup animation, its length, and a burst of random motors every
-// kCrystalBurstSeconds. The animation runs about 3.3 s from the upgrade menu closing, and the Slayer's hand takes
-// the crystal about 2 s in (timed in a headset session, 2026-09-30); the shock starts a little before for the
-// suit's latency.
-inline constexpr double kCrystalDelaySeconds = 1.9;
-inline constexpr double kCrystalSeconds = 0.8;
-inline constexpr double kCrystalBurstSeconds = 0.08;
+// How far into a sync of `kind` the crystal's wave starts: kCrystalDelaySeconds for a Sentinel Crystal,
+// kTokenDelaySeconds for a Praetor token, none for the other kinds (crystal.cpp).
+std::optional<double> crystalWaveDelay(SyncKind kind);
 
 // What a trigger teleport of the player is (idTrigger_Teleporter, and its _Fade kind that fades out first):
 // a portal or pad, or one of the same classes the maps use to put the player back after a fall (a hazard
@@ -173,7 +193,11 @@ struct BodySignals {
     std::optional<float> hitYawDegrees;
     // The largest landing seen since the last update (LandingDetector on the game's frames), if any.
     std::optional<Landing> landing;
-    std::uint32_t portals = 0; // portals, pads and level exits gone through since the last update
+    std::uint32_t portals = 0;  // portals, pads and level exits gone through since the last update
+    std::uint32_t launches = 0; // jump pad and booster launches since the last update (LaunchFilter's)
+    // The health and armor gains to feel that the layer's PickupDetector found since the last update.
+    std::optional<Pickup> healthGain;
+    std::optional<Pickup> armorGain;
 };
 
 class BodyHaptics {
@@ -201,8 +225,13 @@ private:
     void damage(std::vector<Frame>& out, float amount, std::optional<float> yawDegrees);
     void heartbeat(std::vector<Frame>& out, const BodySignals& signals);
     void landing(std::vector<Frame>& out, const BodySignals& signals);
+    // The crystal's wave (crystal.cpp).
     void crystal(std::vector<Frame>& out, double seconds);
     void portal(std::vector<Frame>& out, double seconds);
+    // The launch's curve (launch.cpp).
+    void launch(std::vector<Frame>& out, double seconds);
+    // The pickups' waves; a row is left out while an effect in `out` or one still playing holds the vest.
+    void pickups(std::vector<Frame>& out, const BodySignals& signals);
     // xorshift32: the patterns only have to look random.
     std::uint32_t random();
     // A level from `low` to `high`, at random.
@@ -223,11 +252,22 @@ private:
     double nextBeat_ = 0.0;
     bool dub_ = false; // the next beat is the second of the pair
     std::uint64_t landings_ = 0;
-    double nextCrystal_ = 0.0;   // the shock's next burst
-    double crystalUntil_ = -1.0; // no burst from here on
+    double nextCrystal_ = 0.0;      // the wave's next step
+    double crystalUntil_ = -1.0;    // no step from here on
+    bool crystalSync_ = false;      // a crystal's or a token's sync ran at the last update, gameplay or not
+    bool crystalPending_ = false;   // that sync started and its wave is not timed yet
+    double crystalStart_ = 0.0;     // when that sync started
+    double crystalDelay_ = 0.0;     // its wave's delay (crystalWaveDelay)
+    double crystalWaveStart_ = 0.0; // and when its wave starts
     double portalStart_ = 0.0;
     double nextPortal_ = 0.0;   // the sweep's next step
     double portalUntil_ = -1.0; // no step from here on
+    double launchStart_ = 0.0;
+    std::size_t launchNextStep_ = 0; // the curve's next step to play
+    double launchUntil_ = -1.0;      // no step from here on
+    PickupWave healthWave_{kVestRows};
+    PickupWave armorWave_{kVestRows};
+    double vestHeldUntil_ = -1.0; // a stronger effect plays on the vest until then
     std::uint32_t random_ = 0x2545F491u;
     std::optional<Landing> lastLanding_;
     std::array<std::uint64_t, kEffectCount> counts_{};

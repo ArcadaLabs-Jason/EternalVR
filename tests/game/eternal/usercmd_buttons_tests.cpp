@@ -181,3 +181,32 @@ TEST_CASE("every action in the default control maps reaches the game or the laye
         }
     }
 }
+
+TEST_CASE("a usercmd button index names the action that presses it") {
+    using evr::game::actionForUsercmdButton;
+    // Indexes from the game's action table (build 25216728): _attack1 0, _attack2 1, _altfire 2, _use 3,
+    // _zoom 4, _changeWeapon 6, _reload 7, _bfg 0x14, _dash 0x16, _quickuse 0x17, _quick0 0x18, _quick3 0x1B,
+    // _inventory 0x1E, _jump 0x20, _crucible 0x22, _objectives 0x27.
+    CHECK(actionForUsercmdButton(0) == GameAction::Fire);
+    CHECK(actionForUsercmdButton(1) == GameAction::Melee);
+    CHECK(actionForUsercmdButton(2) == GameAction::WeaponMod);
+    CHECK(actionForUsercmdButton(3) == GameAction::Melee);
+    CHECK(actionForUsercmdButton(4) == GameAction::WeaponMod);
+    CHECK(actionForUsercmdButton(6) == GameAction::QuickSwitch);
+    CHECK(actionForUsercmdButton(7) == GameAction::SwitchWeaponMod);
+    CHECK(actionForUsercmdButton(0x14) == GameAction::FlameBelch);
+    CHECK(actionForUsercmdButton(0x16) == GameAction::Dash);
+    CHECK(actionForUsercmdButton(0x17) == GameAction::Equipment);
+    CHECK(actionForUsercmdButton(0x18) == GameAction::SwitchEquipment);
+    CHECK(actionForUsercmdButton(0x1B) == GameAction::Chainsaw);
+    CHECK(actionForUsercmdButton(0x1E) == GameAction::Dossier);
+    CHECK(actionForUsercmdButton(0x20) == GameAction::Jump);
+    CHECK(actionForUsercmdButton(0x22) == GameAction::Crucible);
+    CHECK(actionForUsercmdButton(0x27) == GameAction::MissionInfo);
+    CHECK(actionForUsercmdButton(0x0B) == GameAction::WeaponSlot1);
+    CHECK_FALSE(actionForUsercmdButton(0x1A)); // _quick2: no Slayer action; the Revenant's, through its binds
+    CHECK_FALSE(actionForUsercmdButton(0x30)); // _crouch
+    CHECK_FALSE(actionForUsercmdButton(57));   // BUTTON_ANY
+    CHECK_FALSE(actionForUsercmdButton(-1));
+    CHECK_FALSE(actionForUsercmdButton(64));
+}

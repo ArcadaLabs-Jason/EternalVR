@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <utility>
 
 namespace evr::input {
 
@@ -41,6 +42,20 @@ std::vector<float> numbers(std::string_view text) {
 // The side's rest position from the head: below, ahead and to the side.
 Vec3 restPosition(Hand hand) {
     return {hand == Hand::Left ? -0.2f : 0.2f, -0.35f, -0.3f};
+}
+
+// The button a key names, or null.
+std::optional<bool>* buttonOf(TestHand& h, std::string_view key) {
+    const std::pair<std::string_view, std::optional<bool>*> buttons[] = {
+        {"primary", &h.primary},   {"secondary", &h.secondary}, {"face3", &h.face3}, {"face4", &h.face4},
+        {"shoulder", &h.shoulder}, {"click", &h.stickClick},    {"menu", &h.menu},
+    };
+    for (const auto& [name, button] : buttons) {
+        if (name == key) {
+            return button;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -86,14 +101,8 @@ TestInput parseTestInput(std::string_view text) {
         };
         if (key == "trigger" || key == "grip") {
             one([&](float x) { (key == "trigger" ? h.trigger : h.grip) = std::clamp(x, 0.0f, 1.0f); });
-        } else if (key == "primary" || key == "secondary" || key == "click" || key == "menu") {
-            one([&](float x) {
-                std::optional<bool>& b = key == "primary"     ? h.primary
-                                         : key == "secondary" ? h.secondary
-                                         : key == "click"     ? h.stickClick
-                                                              : h.menu;
-                b = x != 0.0f;
-            });
+        } else if (std::optional<bool>* button = buttonOf(h, key)) {
+            one([&](float x) { *button = x != 0.0f; });
         } else if (key == "stick") {
             if (v.size() != 2) {
                 issue("expected x, y");
@@ -122,8 +131,8 @@ TestInput parseTestInput(std::string_view text) {
             }
             h.velocity = Vec3{v[0], v[1], v[2]};
         } else {
-            issue("unknown input (trigger, grip, stick, primary, secondary, click, menu, aim, position, "
-                  "velocity)");
+            issue("unknown input (trigger, grip, stick, primary, secondary, face3, face4, shoulder, click, "
+                  "menu, aim, position, velocity)");
         }
     }
     return input;
@@ -150,6 +159,9 @@ void applyTestInput(const TestInput& input, InputFrame& frame) {
         h.stickClick = t.stickClick.value_or(h.stickClick);
         h.primaryButton = t.primary.value_or(h.primaryButton);
         h.secondaryButton = t.secondary.value_or(h.secondaryButton);
+        h.face3Button = t.face3.value_or(h.face3Button);
+        h.face4Button = t.face4.value_or(h.face4Button);
+        h.shoulderButton = t.shoulder.value_or(h.shoulderButton);
         h.menuButton = t.menu.value_or(h.menuButton);
         const Vec3 head = frame.head.poseValid ? frame.head.pose.position : Vec3{};
         if (const auto pose = testHandPose(input, which, head)) {

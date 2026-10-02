@@ -54,6 +54,8 @@ namespace EternalVR.Launcher.Core.Tests
                 new KeyValuePair<string, string>("steamvr refresh rate", "driver_lighthouse 120"),
                 new KeyValuePair<string, string>("steamvr settings for DOOM Eternal (steam.app.782330)",
                     "motionSmoothingOverride 1, supersampleScale 0.8, worldScale 1.25"),
+                new KeyValuePair<string, string>("steamvr controller bindings for DOOM Eternal",
+                    "none chosen (SteamVR generates them from the mod's suggestions)"),
             }, lines);
             var all = string.Join("\n", lines.Select(kv => kv.Key + ": " + kv.Value));
             foreach (var secret in new[] { "LHR-TEST0001", "TESTSTATION", "TEST-SERIAL", "1111222233334444555", "TEST-PAIRED", "620980" })
@@ -106,6 +108,71 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal("manual override on, scale 1.5", Lines(SteamVrSummary.Read(t.Combine("steam")))["steamvr supersampling"]);
                 t.Write(@"steam\config\steamvr.vrsettings", "{ broken");
                 Assert.StartsWith("could not be read (FormatException", Assert.Single(SteamVrSummary.Read(t.Combine("steam"))).Value);
+            }
+        }
+
+        // Made-up workshop items and paths; SteamVR's keys for the game's app key, as a PS VR2 player's file had them.
+        private const string WorkshopBinding = @"{
+   ""steam.app.782330"" : {
+      ""disableAsync"" : false,
+      ""playstation_vr2_sense_250820_AutosaveURL_openxr"" : ""vr-input-workshop://1000000001"",
+      ""playstation_vr2_sense_250820_CurrentURL_openxr"" : ""vr-input-workshop://1000000002"",
+      ""playstation_vr2_sense_250820_NeedToUpdateAutosave_openxr"" : false,
+      ""playstation_vr2_sense_250820_PreviousURL_openxr"" : ""vr-input-workshop://1000000001""
+   },
+   ""steam.app.620980"" : {
+      ""knuckles_CurrentURL_openxr"" : ""vr-input-workshop://1000000003""
+   }
+}";
+
+        [Fact]
+        public void AWorkshopBindingForTheGameIsFound()
+        {
+            var binding = Assert.Single(SteamVrSummary.CustomBindings(WorkshopBinding));
+            Assert.Equal("playstation_vr2_sense", binding.ControllerType);
+            Assert.Equal(SteamVrBindingKind.Workshop, binding.Kind);
+            Assert.Equal("workshop binding for playstation_vr2_sense", binding.ToString());
+            Assert.Equal("chosen in SteamVR: workshop binding for playstation_vr2_sense",
+                Lines(SteamVrSummary.Summarize(WorkshopBinding))["steamvr controller bindings for DOOM Eternal"]);
+        }
+
+        [Fact]
+        public void TheCurrentBindingDecidesAndTheAutosaveCountsOnlyWithoutOne()
+        {
+            var bindings = SteamVrSummary.CustomBindings(@"{ ""steam.app.782330"" : {
+                ""knuckles_CurrentURL_openxr"" : ""file:///D:/Bindings/steam.app.782330_knuckles.json"",
+                ""knuckles_AutosaveURL_openxr"" : ""vr-input-workshop://1000000004"",
+                ""oculus_touch_AutosaveURL_openxr"" : ""vr-input-workshop://1000000005"",
+                ""vive_controller_CurrentURL_openxr"" : ""something://else"",
+                ""vive_controller_AutosaveURL_openxr"" : ""vr-input-workshop://1000000006"",
+                ""holographic_controller_CurrentURL_openxr"" : """",
+                ""hpmotioncontroller_CurrentURL_openxr"" : 3,
+                ""knuckles_CurrentURL"" : ""vr-input-workshop://1000000007""
+            } }");
+            Assert.Equal(new[] { "binding file for knuckles", "workshop binding for oculus_touch" }, bindings.Select(b => b.ToString()));
+        }
+
+        [Theory]
+        [InlineData(@"{ ""steam.app.782330"" : { ""motionSmoothingOverride"" : 1 } }")]
+        [InlineData(@"{ ""steam.app.782330"" : ""not a section"" }")]
+        [InlineData(@"{ ""steamvr"" : { } }")]
+        [InlineData("{ broken")]
+        [InlineData("")]
+        [InlineData(null)]
+        public void NoChosenBindingFindsNone(string text)
+        {
+            Assert.Empty(SteamVrSummary.CustomBindings(text));
+        }
+
+        [Fact]
+        public void ReadCustomBindingsReadsSteamsFolderOrFindsNone()
+        {
+            using (var t = new TempDir())
+            {
+                Assert.Empty(SteamVrSummary.ReadCustomBindings(null));
+                Assert.Empty(SteamVrSummary.ReadCustomBindings(t.Combine("steam")));
+                t.Write(@"steam\config\steamvr.vrsettings", WorkshopBinding);
+                Assert.Equal(SteamVrBindingKind.Workshop, Assert.Single(SteamVrSummary.ReadCustomBindings(t.Combine("steam"))).Kind);
             }
         }
 

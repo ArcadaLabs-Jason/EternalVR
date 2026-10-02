@@ -37,6 +37,18 @@ left.menu = 0
     CHECK(frame.right.secondaryButton);
 }
 
+TEST_CASE("the extra face buttons and the bumper can be pressed") {
+    const auto input = parseTestInput("right.face3 = 1\nleft.face4 = 1\nright.shoulder = 1\n");
+    CHECK(input.issues.empty());
+    InputFrame frame;
+    applyTestInput(input, frame);
+    CHECK(frame.right.face3Button);
+    CHECK(frame.left.face4Button);
+    CHECK(frame.right.shoulderButton);
+    CHECK_FALSE(frame.left.face3Button);
+    CHECK_FALSE(frame.left.shoulderButton);
+}
+
 TEST_CASE("an aim makes the hand tracked, pointing where it says") {
     const auto input =
         parseTestInput("right.aim = 90, 0\nleft.aim = 0, 30\nleft.position = -0.1, -0.2, -0.4\n");

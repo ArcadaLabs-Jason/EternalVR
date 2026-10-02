@@ -168,6 +168,24 @@ TEST_CASE("stereo TAA: NGX twins follow the game's feature and reset on first us
     CHECK(t.size() == 1);
 }
 
+TEST_CASE("stereo TAA: NGX twins that failed are forgotten for a new try, the others kept") {
+    NgxTwins t;
+    t.created(0x10, 0x20);
+    CHECK_FALSE(t.anyFailed());
+    t.created(0x30, 0);
+    t.created(0x50, 0);
+    CHECK(t.anyFailed());
+    CHECK(t.forgetFailed() == 2);
+    CHECK_FALSE(t.anyFailed());
+    CHECK(t.size() == 1);
+    CHECK(t.twinOf(0x10) == 0x20);
+    CHECK_FALSE(t.known(0x30)); // eye R's next evaluation of it tries again
+    t.created(0x30, 0x40);
+    CHECK(t.twinOf(0x30) == 0x40);
+    CHECK(t.forgetFailed() == 0);
+    CHECK(t.size() == 2);
+}
+
 TEST_CASE("stereo TAA: the forced and fail-closed cvar sets") {
     bool antiGhosting = false;
     for (const auto& c : evr::stereo_seq::stereoTaaForcedCvars()) {

@@ -80,10 +80,15 @@ void XrPresenter::Impl::handBackImages(std::uint64_t completed) {
         release.swapchain = it->swapchain;
         release.imageIndexCount = 1;
         release.pImageIndices = &it->image;
-        if (dev.releaseSwapchainImages(dev.device, &release) == VK_SUCCESS) {
+        const VkResult r = dev.releaseSwapchainImages(dev.device, &release);
+        if (r == VK_SUCCESS) {
             ++imagesHandedBack;
-        } else {
-            ++handBackFailures;
+        } else if (++handBackFailures <= 8) {
+            // The game took the image as presented and does not know it is still acquired; the swapchain gets
+            // it back only when it is destroyed.
+            EVR_LOG("window: handing image %u of swapchain %p back failed (%d, %llu failure(s) so far)",
+                    it->image, reinterpret_cast<void*>(it->swapchain), r,
+                    static_cast<unsigned long long>(handBackFailures));
         }
         it = heldImages.erase(it);
     }

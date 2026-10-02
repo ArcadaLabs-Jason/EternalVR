@@ -201,7 +201,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Contains("VR settings profile Karen", ControlsFolder.ReadmeFor("Karen"));
                 Assert.Equal(Names(ShippedMaps), Names(karen.DefaultsDir));
                 Assert.False(karen.HasPlayerMaps);
-                Assert.Equal(7, karen.Families().Count);
+                Assert.Equal(8, karen.Families().Count);
                 Assert.Equal(ControlsFolder.Readme, ControlsFolder.ReadmeFor(null));
                 Assert.Contains("profiles", ControlsFolder.Readme);
             }

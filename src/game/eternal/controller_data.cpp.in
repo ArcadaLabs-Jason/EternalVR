@@ -22,6 +22,7 @@ constexpr std::array<BuiltinData, kControllerCount> kData{{
     {"htc_vive_cosmos", R"evrdata(@EVR_CONTROLLER_DATA_htc_vive_cosmos@)evrdata"},
     {"htc_vive_wand", R"evrdata(@EVR_CONTROLLER_DATA_htc_vive_wand@)evrdata"},
     {"pico4", R"evrdata(@EVR_CONTROLLER_DATA_pico4@)evrdata"},
+    {"steam_frame", R"evrdata(@EVR_CONTROLLER_DATA_steam_frame@)evrdata"},
 }};
 
 const BuiltinData& dataOf(Controller controller) {

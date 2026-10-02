@@ -179,7 +179,7 @@ namespace EternalVR.Launcher.Core.Controls
                 if (!inSection)
                 {
                     // Before the first header, or under a malformed one: the layer uses the line for nothing.
-                    issues.Add(FileIssue(ControlIssueKind.Syntax, null, i, "entries must be under a [profile] or [map.<handedness>] header"));
+                    issues.Add(FileIssue(ControlIssueKind.Syntax, null, i, "entries must be under a [profile], [map.<handedness>] or [labels] header"));
                     continue;
                 }
                 var entry = ParseEntry(lines[i], out var error);
@@ -205,18 +205,23 @@ namespace EternalVR.Launcher.Core.Controls
                     CheckProfile();
                     continue;
                 }
+                if (name == ControlNames.LabelsSection)
+                {
+                    CheckLabels();
+                    continue;
+                }
                 if (!ControlNames.MapSections.Contains(name))
                     issues.Add(new ControlIssue
                     {
                         Kind = ControlIssueKind.UnknownKey, Key = name, Line = headers.First(h => h.Name == name).Line + 1,
-                        Message = "[" + name + "] is not a section of a controller file; use [profile] or [map.right], [map.left_button_swap], [map.left_full_mirror]",
+                        Message = "[" + name + "] is not a section of a controller file; use [profile], [labels] or [map.right], [map.left_button_swap], [map.left_full_mirror]",
                     });
             }
             if (!sawProfile)
                 issues.Add(new ControlIssue { Kind = ControlIssueKind.Syntax, Message = "the file has no [profile] section" });
         }
 
-        private static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "menu", "aim_pose", "grip_pose", "haptic" };
+        private static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "aim_pose", "grip_pose", "haptic" };
         private static readonly string[] MenuActions = { "select", "back", "scroll", "pointer_pose", "close" };
 
         /// <summary>
@@ -245,6 +250,29 @@ namespace EternalVR.Launcher.Core.Controls
                     {
                         Kind = ControlIssueKind.UnknownValue, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1,
                         Message = "line " + (e.Line + 1) + ": '" + e.Value + "' is not an input path; paths start with /input/ or are /output/haptic",
+                    });
+            }
+        }
+
+        /// <summary>The <c>[labels]</c> entries: <c>"&lt;hand&gt;.&lt;input&gt;" = "&lt;name&gt;"</c>, as the layer reads them.</summary>
+        private void CheckLabels()
+        {
+            const string section = ControlNames.LabelsSection;
+            foreach (var e in entries.Where(e => e.Used && e.Section == section))
+            {
+                var parts = e.Key.Split('.');
+                bool known = parts.Length == 2 && ControlNames.TryParseHand(parts[0], out _) && ControlNames.LabelInputNames.Contains(parts[1]);
+                if (!known)
+                    issues.Add(new ControlIssue
+                    {
+                        Kind = ControlIssueKind.UnknownKey, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1,
+                        Message = "line " + (e.Line + 1) + ": '" + e.Key + "' is not a label key; use <hand>.<input>, e.g. 'left.primary'",
+                    });
+                else if (e.Value.Trim().Length == 0)
+                    issues.Add(new ControlIssue
+                    {
+                        Kind = ControlIssueKind.UnknownValue, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1,
+                        Message = "line " + (e.Line + 1) + ": '" + e.Key + "' has an empty name",
                     });
             }
         }

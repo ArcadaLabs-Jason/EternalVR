@@ -162,7 +162,11 @@ campaign re-created the swapchain at 1280x800, 2560x1440, then 3840x2160 (displa
 eye rendered 4.1x the pixels, and the stereo ticks fell from 95-190 to 40-66 per second with the XR
 compositor below 90. A fresh config's `r_swapInterval` is 2. The presenter logs `presenter: WARNING the
 game's swapchain is WxH, not the expected WxH` for any later swapchain of another size than the render size
-(while the layer answers the client area) or the first swapchain's.
+(while the layer answers the client area) or the first swapchain's. Once the render size is off (the surface
+cannot scale to it, as on the AMD driver of a Radeon 890M, whose scaled image range is only the window's
+size), `r_windowWidth` / `r_windowHeight` are left to the game and logged (`cvars: r_windowWidth is left at
+the game's ...`): the eyes then render at the window's size, and holding the render size made the game
+resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_DATE_KHR`; the game then froze.
 
 `ETERNALVR_DEBUG_CVARS="name=value;name=value"` writes more cvars the same way for rig experiments;
 `name=?` only logs the value the game runs with. Writes from it may be saved by the game (a written
@@ -226,11 +230,16 @@ or Off, so the entry showed the profile's choice ("Off" with the launcher's DLSS
   skipped, so the profile keeps its own index and no cvar is rewritten. Changed with the launcher's TAA: the
   setter runs as in the flat game (the layer follows the game's choice). Changed with the launcher's DLSS or
   Off: skipped and logged; the launcher's setting decides in VR and the profile keeps the flat game's choice.
+  When DLSS fell back to TAA because eye R's feature could not be created (the entry shows Off), choosing a
+  DLSS entry tries that feature again at once with a fresh count of tries (`src/stereo_seq/ngx_twin_retry.hpp`):
+  at the launcher's quality with the launcher's DLSS (the setter skipped), as in the flat game with the
+  launcher's TAA (the setter runs).
 - Writing the settings object's index instead was rejected: every profile save (this page's apply and other
   pages') would store the VR value in `profile.bin`, which nothing puts back after the session.
 - Log lines: `dlss-menu: DLSS setter at RVA ...` (located), `dlss-menu: video menu refresh N: the profile's
   DLSS index P, shown S (...)` (the first 20 refreshes and any change), `dlss-menu: video menu applied DLSS
-  index I (shown S, the profile's P, ...): unchanged | applied as in the flat game | not used in VR`.
+  index I (shown S, the profile's P, ...): unchanged | applied as in the flat game | not used in VR | DLSS
+  asked for again`, then `seq-taa: DLSS chosen in the game's video menu: trying eye R's DLSS feature again`.
 - Not hooked (a signature or self-check failed, or the multiplayer guard not armed): the entry shows the
   profile's index as before, and an apply writes it through the game's own setter.
 
@@ -263,17 +272,17 @@ render. The design, the expected saving and the rig recipe are in `docs/rig-find
   (`stereo_seq::AdaptiveEyes`). The way changes only at a pair's eye L and nothing resets. Log: `seq: adaptive
   eyes: ...` at every switch and every 10 s (the design doc, section 10).
 
-## Frame pacing (`ETERNALVR_PACE=headset`, off by default)
+## Frame pacing (`ETERNALVR_PACE=headset`, the launcher's default)
 
 Without it the game renders stereo pairs as fast as it can and each XR frame shows the newest finished pair
 (`updateImage` takes the ring's newest slot). A game faster than the headset (a player's RTX 5080 drew a median
 of 142 pairs a second on a 90 Hz Quest 2) gets an uneven pulldown: some headset frames show a pair one game
 frame newer than the last, others two. Head rotation stays smooth (the compositor turns every frame to the
 head), but the world's animation, locomotion and the gun advance at an irregular cadence that a native VR game,
-which renders one frame per `xrWaitFrame`, does not have. Off stays the default until a comparison in a headset
-decides.
+which renders one frame per `xrWaitFrame`, does not have. The launcher turns pacing on by default since 0.1.12
+(players preferred it in 0.1.11, where it was an option); the layer's own default without the variable stays off.
 
-`ETERNALVR_PACE=headset` (the launcher's "Frame pacing: Matched to the headset (experimental)", Play tab,
+`ETERNALVR_PACE=headset` (the launcher's "Frame pacing: Matched to the headset", Play tab,
 Picture, stereo only) holds the game to one image per headset frame (`src/features/pacing/pace_policy.*`, the
 decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
 
@@ -321,6 +330,54 @@ The game's own cap would be cheaper: `com_adaptiveTickMaxHz` ("max game hz", 100
 path raises it to at least 120, `docs/rig-findings/stereo-reentry.md`) on the command line, for example
 `+com_adaptiveTickMaxHz 90`. It caps the tick rate on the game's own clock, though, not in phase with the
 headset's frames and drifting against them, so the uneven pulldown would come back as a slow beat. Not tried.
+
+## Headset refresh rate
+
+The runtime's `predictedDisplayPeriod` is 1/refresh, but several runtimes report a multiple of it while they
+hold the game at a fraction of the refresh rate: Virtual Desktop doubles it while SSW is active, SteamVR reports
+a measured period that reads 2x or 3x while it throttles or Motion Smoothing runs, Pimax doubles it under Smart
+Smoothing. Some headsets also change their refresh rate during play. The 10 s `xr:` line's `display period` is
+the latest frame's only, so the layer watches every frame's period (`src/features/pacing/display_period_watch.*`,
+the logic; `src/vkcore/presenter_refresh.*`, the glue):
+
+- **Hysteresis.** A new period counts once it holds for 6 frames in a row; one odd frame is no change. Periods
+  within 3% of each other are the same period (SteamVR's measured period wanders a little).
+- **Base.** The shortest period that held for 3 s: the headset's refresh rate as far as the period shows it.
+  A settled period about 2x to 6x the base is the runtime throttling or reprojecting; one that is no multiple of
+  it is a refresh change. A real refresh change to exactly half the rate (144 to 72 Hz) cannot be told from
+  throttling by the period alone; the runtime's own rate below can.
+- **Time.** The time between frames goes to the settled period; gaps over 0.5 s (the session not running) are
+  not counted.
+- **`XR_FB_display_refresh_rate`.** Enabled only when the runtime lists it (VDXR, SteamVR, WiVRn; Varjo does
+  not); never used to request a rate. Once the session runs the layer reads the runtime's refresh rate, reads it
+  again at each logged period change (SteamVR sends no change event), and logs the extension's change event.
+  Changes are then named against the headset's own refresh period, and a session that ran throttled from its
+  start still gets the right base. Without the extension, or when its getter fails (logged once), the period
+  alone decides.
+
+Log lines (the time is the log's, so it matches the line's own time stamp):
+
+- `xr: refresh rate 90.0 Hz (XR_FB_display_refresh_rate)` when the session starts; `xr: refresh rate 144.0 ->
+  90.0 Hz (XR_FB_display_refresh_rate, read at the display period change)`; `xr: refresh rate 90.0 -> 72.0 Hz
+  (XR_FB_display_refresh_rate event)`. Without the extension, once: `xr: XR_FB_display_refresh_rate not offered;
+  the refresh rate is read from the display period only`.
+- `xr: display period 11.11 ms at 4.2 s (90 Hz)` when the first period settles (`(90 Hz, the headset's refresh
+  rate)` with the extension).
+- `xr: display period 6.94 -> 13.89 ms at 312.4 s (2x the base 6.94 ms: the runtime is throttling or
+  reprojecting)` (with the extension: `2x the headset's 6.94 ms at 144 Hz: ...`), `(back to the base: 144 Hz)`
+  (`back to the headset's refresh rate: 144 Hz`), `(a refresh change to 90 Hz)`, `(shorter than any steady period
+  before: 144 Hz)` (a session that started throttled, before its base held). The first 200 changes are logged,
+  then `xr: display period: 200 lines logged; later changes are only counted`.
+- Every 60 s while frames run, and when the XR worker finishes: `xr: refresh summary: base 6.94 ms (144 Hz); 1x
+  81.5%, 2x 17.2%, 3x 0.9%, other 0.4% (90 Hz 0.4%); 12 change(s) in 312 s` (`xr: refresh summary at session
+  end: ...` for the last). Shares are of the time counted; multiples up to 6x are named, longer periods and
+  non-multiples are `other` with up to three rates listed.
+
+The status file (`eternalvr-status.txt`, `src/vkcore/status_file.hpp`) carries the same facts for the
+launcher, after its first five keys, each rewritten when it changes: `runtime=` and `system=` (the names the
+runtime reports), `recommended=WxH` (the runtime's size per eye), `render=WxH` (each eye's image the headset
+gets), `refresh_hz=` (the base, for example `144.0`) and `throttled_share=` (the share at 2x the base or more,
+for example `0.181`, with each summary).
 
 ## Render size (T-031)
 
@@ -374,7 +431,9 @@ axis).
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
 | `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced` or `aggressive` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within 30, 24 or 18 degrees of head-forward in each eye, half rate for 16 degrees more, quarter rate outside (`src/vkcore/vrs_nv.cpp`). NVIDIA RTX only: other cards log it as unsupported and render normally. Mono frames stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`) |
+| `ETERNALVR_TEST_DLSS_TWIN_FAIL` | unset | test knob: a count from 1 to 100; eye R's first tries at its own DLSS feature fail without a create (result 0xBAD00000), to exercise the fallback to TAA, the tries after it and the menu's try (`docs/rig-findings/stereo-temporal.md`, Fail closed) |
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end, as a slower processor (`alternate-eye.md` 10.4) |
+| `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S |
 | `ETERNALVR_STEREO_EYE_POSES`, `_JITTER_COPY`, `ETERNALVR_TEST_WEAPON_FOV` | | experiments only (below) |
@@ -407,7 +466,11 @@ the XR rate, not the game's); `window: last 10 s: A acquire(s), average/max ms; 
 average/max ms` (the time the driver's acquire and present take); `window: ... present(s) to the window,
 ... of the other eye and ... too soon handed back; display H Hz; ... handed back, ... failed, ... held`;
 `mirror: the window shows left ...`; `pace:` (the headset's cadence and, with `ETERNALVR_PACE=headset`, the
-waits; Frame pacing); and `cvars:` for every run-time cvar write. The eye capture logs each
+waits; Frame pacing); `xr: refresh summary:` every 60 s and `xr: display period A -> B ms at T s` at each
+change (Headset refresh rate); and `cvars:` for every run-time cvar write. Once no game present has come for 5 s or
+more while the headset runs (checked with the rates line), `present: the game has stopped presenting: no game
+present for N s ...` gives the newest failed present result and the images the window gate holds (or that
+the presenter's lock is busy), and `present: the game presents again after N s ...` follows if they return. The eye capture logs each
 eye L image's alpha (`eye L alpha min, mean, % below 255`): the projection layer is layer 0, which some
 runtimes blend by its alpha.
 
@@ -444,7 +507,14 @@ irrelevant to the game's pace in three steps (`src/vkcore/stereo_present.cpp`, `
    `EnumDisplaySettingsW`, which the XR worker reads every 3 s so that the query never runs on the game's
    present path or under the presenter's lock; 60 Hz when unknown). At most
    two images are held; beyond that, and whenever the multiplayer guard is not armed, every present goes
-   out as before. `ETERNALVR_WINDOW_PRESENTS=all` turns this off.
+   out as before. `ETERNALVR_WINDOW_PRESENTS=all` turns this off. A present that returns
+   `VK_ERROR_OUT_OF_DATE_KHR` or `VK_ERROR_SURFACE_LOST_KHR` hands every held image back at once (after its
+   copy, waiting up to 250 ms) instead of at the next present, since a game that recreates its swapchain or
+   waits in `vkAcquireNextImageKHR` may not present again first, and the image gets a new present semaphore
+   (`presenter_result.cpp`; logged as `present: the game's window present returned out of date ...`). An
+   AMD Radeon 890M's driver returned out of date when the window changed size, where NVIDIA's returns
+   `VK_SUBOPTIMAL_KHR`; the game then stopped presenting. `ETERNALVR_TEST_PRESENT_OUT_OF_DATE=<seconds>`
+   makes one present return out of date on any GPU, to run that path.
 3. **The window shows one eye.** `ETERNALVR_MIRROR=left` (default), `right` or `off`. With step 2 the window
    simply receives only that eye (black for `off`, cleared in the ring copy); without the extension the
    kept eye is copied over the other eye's image in the ring copy (two image copies per tick, about 0.05
@@ -631,11 +701,19 @@ call(s), 1021.7 ms (longest call 998.3 ms), and made 2 allocation(s) of 64.0 MB 
   and `vkAllocateMemory` calls on its device, with their wall time; a shader compile stutter shows as a
   long pipeline call.
 - **VRAM**: the last reading of the process's local video memory against its budget (below).
+- **the game saved a checkpoint in the gap** (only then, at the end of the line): the game began one of its
+  own checkpoint saves during the gap. A save holds the game's thread for a few hundred milliseconds (it
+  serialises the map), flat as well, after a fight or before a cutscene; the stall is the game's, not the
+  layer's. The layer sees it through a mid hook in the game's `SaveCheckPointAndGetFiles` (on the lea of its
+  `SaveCheckPointAndGetFiles` log string, found by that string; `src/vkcore/save_hook.cpp`), which only
+  counts. At start-up: `stall: checkpoint save hook at RVA 0x...`; when the string or its one reference is
+  missing, a line says so and stall lines just do not name saves.
 
 When none of these accounts for the gap, the time went elsewhere: the game's own frame, a GPU that fell
 behind, paging (VRAM near or over the budget), the driver or another process. After the 30th line: `stall: 30 stall lines logged; later stalls
-are only counted in the 10 s stall summary`. Every 10 s with any stall: `stall: last 10 s: N stall(s) in
-play (longest X ms), M on loading screens or in menus; T in play in total, K logged`. At start-up: `stall:
+are only counted in the 10 s stall summary`. Every 10 s with any stall or checkpoint save: `stall: last 10 s: N stall(s) in
+play (longest X ms), M on loading screens or in menus; T in play in total, K logged`, ending with `; the
+game saved a checkpoint` (or `S checkpoints`) when it saved any. At start-up: `stall:
 game presents more than 50 ms apart get a line (the first 30)` and whether loading screens and menus are
 told apart. Stalls before that line (the game starting up and loading its first map, before the XR worker
 runs) have no game tick, so they count as loading screens.

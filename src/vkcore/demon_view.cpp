@@ -7,6 +7,7 @@
 
 #include <windows.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -126,6 +127,36 @@ bool readBindings(std::uintptr_t demon, std::uint64_t (&bindings)[kDemonBindingC
 
 std::atomic<std::uintptr_t> g_loggedBindings{0};
 
+struct DemonPair {
+    game::GameAction action;
+    std::uint64_t demonBits;
+};
+
+// Our actions and the demon bindings they press: fire, mode (the weapon mod), dash, and both fly bindings
+// (jump).
+std::array<DemonPair, 4> demonPairs(const std::uint64_t (&bindings)[kDemonBindingCount]) {
+    using game::GameAction;
+    return {{{GameAction::Fire, bindings[0]},
+             {GameAction::WeaponMod, bindings[1]},
+             {GameAction::Dash, bindings[2]},
+             {GameAction::Jump, bindings[3] | bindings[4]}}};
+}
+
+// The piloted demon's bindings, logged once per demon; false when not piloting or unreadable.
+bool readPilotedBindings(std::uint64_t (&bindings)[kDemonBindingCount]) {
+    const std::uintptr_t demon = g_demon.load(std::memory_order_relaxed);
+    if (!pilotingDemon() || demon == 0 || !readBindings(demon, bindings)) {
+        return false;
+    }
+    if (g_loggedBindings.exchange(demon) != demon) {
+        EVR_LOG("controllers: the demon's bindings: fire 0x%llx, mode 0x%llx, dash 0x%llx, fly 0x%llx 0x%llx",
+                static_cast<unsigned long long>(bindings[0]), static_cast<unsigned long long>(bindings[1]),
+                static_cast<unsigned long long>(bindings[2]), static_cast<unsigned long long>(bindings[3]),
+                static_cast<unsigned long long>(bindings[4]));
+    }
+    return true;
+}
+
 } // namespace
 
 bool isPilotedDemon(const std::byte* entity, const PlayerAim& player) {
@@ -182,32 +213,29 @@ std::uintptr_t pilotedDemon() {
 }
 
 std::uint64_t pilotedDemonButtons(const game::GameActionSet& actions, std::uint64_t buttons) {
-    const std::uintptr_t demon = g_demon.load(std::memory_order_relaxed);
     std::uint64_t bindings[kDemonBindingCount] = {};
-    if (!pilotingDemon() || demon == 0 || !readBindings(demon, bindings)) {
+    if (!readPilotedBindings(bindings)) {
         return buttons;
     }
-    if (g_loggedBindings.exchange(demon) != demon) {
-        EVR_LOG("controllers: the demon's bindings: fire 0x%llx, mode 0x%llx, dash 0x%llx, fly 0x%llx 0x%llx",
-                static_cast<unsigned long long>(bindings[0]), static_cast<unsigned long long>(bindings[1]),
-                static_cast<unsigned long long>(bindings[2]), static_cast<unsigned long long>(bindings[3]),
-                static_cast<unsigned long long>(bindings[4]));
-    }
-    using game::GameAction;
-    struct Pair {
-        GameAction action;
-        std::uint64_t demonBits;
-    };
-    const Pair pairs[] = {{GameAction::Fire, bindings[0]},
-                          {GameAction::WeaponMod, bindings[1]},
-                          {GameAction::Dash, bindings[2]},
-                          {GameAction::Jump, bindings[3] | bindings[4]}};
-    for (const Pair& p : pairs) {
+    for (const DemonPair& p : demonPairs(bindings)) {
         if (p.demonBits != 0 && game::contains(actions, p.action)) {
             buttons = (buttons & ~game::usercmdButtons(p.action)) | p.demonBits;
         }
     }
     return buttons;
+}
+
+std::optional<game::GameAction> pilotedDemonAction(std::uint64_t bits) {
+    std::uint64_t bindings[kDemonBindingCount] = {};
+    if (bits == 0 || !readPilotedBindings(bindings)) {
+        return std::nullopt;
+    }
+    for (const DemonPair& p : demonPairs(bindings)) {
+        if ((p.demonBits & bits) != 0) {
+            return p.action;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace evr::vkcore::controllers

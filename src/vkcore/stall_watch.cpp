@@ -69,6 +69,7 @@ struct Spent {
     std::uint64_t allocations = 0;
     std::uint64_t allocationBytes = 0;
     std::uint64_t allocationMicros = 0;
+    std::uint64_t checkpointSaves = 0; // the game's own checkpoint saves begun (onCheckpointSave)
 };
 
 struct AtomicSpent {
@@ -83,6 +84,7 @@ struct AtomicSpent {
     std::atomic<std::uint64_t> allocations{0};
     std::atomic<std::uint64_t> allocationBytes{0};
     std::atomic<std::uint64_t> allocationMicros{0};
+    std::atomic<std::uint64_t> checkpointSaves{0};
 
     Spent take() {
         const auto t = [](std::atomic<std::uint64_t>& a) {
@@ -100,10 +102,12 @@ struct AtomicSpent {
         s.allocations = t(allocations);
         s.allocationBytes = t(allocationBytes);
         s.allocationMicros = t(allocationMicros);
+        s.checkpointSaves = t(checkpointSaves);
         return s;
     }
 };
 AtomicSpent g_spent;
+std::atomic<std::uint64_t> g_summarySaves{0}; // checkpoint saves since the last 10 s summary
 
 std::atomic<std::uint64_t> g_lastPresent{0};   // entry time of the game's last present (0: none yet)
 std::atomic<std::uint64_t> g_lastTick{0};      // time of the last game tick (0: none yet)
@@ -137,12 +141,13 @@ void logStall(double gapMs, bool ticksKnown, std::uint32_t line, const Spent& s)
     EVR_LOG("stall: %.1f ms between game presents (%s, line %u of %u); in the gap: our present hook %.1f ms "
             "(lock wait %.1f ms, driver present %.1f ms), Route S drain %.1f ms; the game created %llu "
             "pipeline(s) in %llu call(s), %.1f ms (longest call %.1f ms), and made %llu allocation(s) of "
-            "%.1f MB in %.1f ms; VRAM %s",
+            "%.1f MB in %.1f ms; VRAM %s%s",
             gapMs, ticksKnown ? "in play" : "phase unknown", line, gt::kStallLinesLogged, ms(s.hookMicros),
             ms(s.lockMicros), ms(s.driverMicros), ms(s.drainMicros),
             static_cast<unsigned long long>(s.pipelines), static_cast<unsigned long long>(s.pipelineCalls),
             ms(s.pipelineMicros), ms(s.pipelineMaxMicros), static_cast<unsigned long long>(s.allocations),
-            static_cast<double>(s.allocationBytes) / kMiB, ms(s.allocationMicros), memory);
+            static_cast<double>(s.allocationBytes) / kMiB, ms(s.allocationMicros), memory,
+            gt::stallSaveNote(s.checkpointSaves).c_str());
 }
 
 // A gap over the threshold: the gate decides whether it gets a line.
@@ -301,6 +306,11 @@ void addDrain(std::uint64_t micros) {
     g_spent.drainMicros.fetch_add(micros, std::memory_order_relaxed);
 }
 
+void onCheckpointSave() {
+    g_spent.checkpointSaves.fetch_add(1, std::memory_order_relaxed);
+    g_summarySaves.fetch_add(1, std::memory_order_relaxed);
+}
+
 void onGameTick() {
     g_lastTick.store(window_timing::nowMicros(), std::memory_order_relaxed);
 }
@@ -319,12 +329,13 @@ void logSummary() {
     const gt::StallGate::Counters& c = g_stalls.gate.counters();
     const std::uint64_t inPlay = c.inPlay - g_stalls.summaryInPlay;
     const std::uint64_t outside = c.outsidePlay - g_stalls.summaryOutsidePlay;
-    if (inPlay != 0 || outside != 0) {
+    const std::uint64_t saves = g_summarySaves.exchange(0, std::memory_order_relaxed);
+    if (inPlay != 0 || outside != 0 || saves != 0) {
         EVR_LOG("stall: last 10 s: %llu stall(s) in play (longest %.1f ms), %llu on loading screens or in "
-                "menus; %llu in play in total, %u logged",
+                "menus; %llu in play in total, %u logged%s",
                 static_cast<unsigned long long>(inPlay), g_stalls.windowLongestMs,
-                static_cast<unsigned long long>(outside), static_cast<unsigned long long>(c.inPlay),
-                c.logged);
+                static_cast<unsigned long long>(outside), static_cast<unsigned long long>(c.inPlay), c.logged,
+                gt::summarySaveNote(saves).c_str());
     }
     g_stalls.summaryInPlay = c.inPlay;
     g_stalls.summaryOutsidePlay = c.outsidePlay;

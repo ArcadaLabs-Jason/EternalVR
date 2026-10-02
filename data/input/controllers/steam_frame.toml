@@ -1,0 +1,143 @@
+# Steam Frame controllers: the OpenXR suggested bindings and the default control maps.
+#
+# The file format is the one in oculus_touch.toml. The profile comes with SteamVR's
+# XR_VALVE_frame_controller_interaction extension. The Frame's controllers are a gamepad split in two:
+# A/B/X/Y and Menu on the right, a D-pad and View on the left, and a bumper above each trigger. The
+# first two face buttons of each hand are primary and secondary, the other two face3 and face4:
+#   - right: A primary, B secondary, X face3, Y face4 (Y top, B outside, A bottom, X inside);
+#   - left: D-pad down primary, left secondary, right face3, up face4 (the same places as A, B, X, Y).
+#
+# Triggers, grips and sticks do what they do on Touch controllers, and so does the turn stick's up and
+# down. The buttons take the gamepad's actions: jump on A, dash on B, the chainsaw on X, Flame Belch on
+# Y, the quick switch on a right bumper tap and the weapon wheel on its hold, the equipment launcher on
+# the left bumper. The D-pad carries what Touch puts on X and Y: switch weapon mod up, switch equipment
+# left, the Crucible right, mission information down. Some actions are on two inputs, so either habit
+# works. The pause is a View tap, on the left like every family's (the capture chord holds that button),
+# and a Menu tap opens the Dossier. Switch equipment is a tap, so under SteamVR, where the D-pad left
+# also works as the capture chord's button, a press that captured switches nothing.
+#
+# SteamVR 2.17.10 renamed the bumper from /input/bumper/ to /input/shoulder/. When a runtime refuses
+# the newer name, the bindings are suggested again with the older one.
+
+[profile]
+"path" = "/interaction_profiles/valve/frame_controller_valve"
+"gameplay.left.trigger" = "/input/trigger/value"
+"gameplay.left.grip" = "/input/squeeze/value"
+"gameplay.left.thumbstick" = "/input/thumbstick"
+"gameplay.left.thumbstick_click" = "/input/thumbstick/click"
+"gameplay.left.primary" = "/input/dpad_down/click"
+"gameplay.left.secondary" = "/input/dpad_left/click"
+"gameplay.left.face3" = "/input/dpad_right/click"
+"gameplay.left.face4" = "/input/dpad_up/click"
+"gameplay.left.shoulder" = "/input/shoulder/click"
+"gameplay.left.menu" = "/input/view/click"
+"gameplay.left.aim_pose" = "/input/aim/pose"
+"gameplay.left.grip_pose" = "/input/grip/pose"
+"gameplay.left.haptic" = "/output/haptic"
+"gameplay.right.trigger" = "/input/trigger/value"
+"gameplay.right.grip" = "/input/squeeze/value"
+"gameplay.right.thumbstick" = "/input/thumbstick"
+"gameplay.right.thumbstick_click" = "/input/thumbstick/click"
+"gameplay.right.primary" = "/input/a/click"
+"gameplay.right.secondary" = "/input/b/click"
+"gameplay.right.face3" = "/input/x/click"
+"gameplay.right.face4" = "/input/y/click"
+"gameplay.right.shoulder" = "/input/shoulder/click"
+"gameplay.right.menu" = "/input/menu/click"
+"gameplay.right.aim_pose" = "/input/aim/pose"
+"gameplay.right.grip_pose" = "/input/grip/pose"
+"gameplay.right.haptic" = "/output/haptic"
+"menu.left.select" = "/input/trigger/value"
+"menu.left.back" = "/input/dpad_left/click"
+"menu.left.scroll" = "/input/thumbstick"
+"menu.left.pointer_pose" = "/input/aim/pose"
+"menu.left.close" = "/input/view/click"
+"menu.right.select" = "/input/trigger/value"
+"menu.right.back" = "/input/b/click"
+"menu.right.scroll" = "/input/thumbstick"
+"menu.right.pointer_pose" = "/input/aim/pose"
+
+[map.right]
+"weapon_hand" = "right"
+"left.stick.role" = "move"
+"left.trigger.press" = "equipment"
+"left.grip.press" = "flame_belch"
+"left.stick_click.press" = "crucible"
+"left.primary.press" = "mission_info"
+"left.secondary.tap" = "switch_equipment"
+"left.face3.press" = "crucible"
+"left.face4.press" = "switch_weapon_mod"
+"left.shoulder.press" = "equipment"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "fire"
+"right.grip.press" = "weapon_mod"
+"right.stick_click.press" = "melee"
+"right.primary.press" = "jump"
+"right.secondary.press" = "dash"
+"right.face3.press" = "chainsaw"
+"right.face4.press" = "flame_belch"
+"right.shoulder.tap" = "quick_switch"
+"right.shoulder.hold" = "weapon_wheel"
+"right.menu.tap" = "dossier"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# Weapon in the left hand: triggers, grips and stick clicks swap sides; sticks, face buttons, the
+# D-pad, the bumpers and the View and Menu buttons stay.
+[map.left_button_swap]
+"weapon_hand" = "left"
+"left.stick.role" = "move"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.primary.press" = "mission_info"
+"left.secondary.tap" = "switch_equipment"
+"left.face3.press" = "crucible"
+"left.face4.press" = "switch_weapon_mod"
+"left.shoulder.press" = "equipment"
+"left.menu.tap" = "pause"
+"right.stick.role" = "turn"
+"right.trigger.press" = "equipment"
+"right.grip.press" = "flame_belch"
+"right.stick_click.press" = "crucible"
+"right.primary.press" = "jump"
+"right.secondary.press" = "dash"
+"right.face3.press" = "chainsaw"
+"right.face4.press" = "flame_belch"
+"right.shoulder.tap" = "quick_switch"
+"right.shoulder.hold" = "weapon_wheel"
+"right.menu.tap" = "dossier"
+"right.stick.up" = "chainsaw"
+"right.stick.down_tap" = "quick_switch"
+"right.stick.down_hold" = "weapon_wheel"
+
+# A full mirror: sticks, face buttons, the D-pad and the bumpers swap too, each face button with the one
+# in its place on the other hand; the pause stays on View and the Dossier on Menu.
+[map.left_full_mirror]
+"weapon_hand" = "left"
+"left.stick.role" = "turn"
+"left.trigger.press" = "fire"
+"left.grip.press" = "weapon_mod"
+"left.stick_click.press" = "melee"
+"left.primary.press" = "jump"
+"left.secondary.press" = "dash"
+"left.face3.press" = "chainsaw"
+"left.face4.press" = "flame_belch"
+"left.shoulder.tap" = "quick_switch"
+"left.shoulder.hold" = "weapon_wheel"
+"left.menu.tap" = "pause"
+"left.stick.up" = "chainsaw"
+"left.stick.down_tap" = "quick_switch"
+"left.stick.down_hold" = "weapon_wheel"
+"right.stick.role" = "move"
+"right.trigger.press" = "equipment"
+"right.grip.press" = "flame_belch"
+"right.stick_click.press" = "crucible"
+"right.primary.press" = "mission_info"
+"right.secondary.tap" = "switch_equipment"
+"right.face3.press" = "crucible"
+"right.face4.press" = "switch_weapon_mod"
+"right.shoulder.press" = "equipment"
+"right.menu.tap" = "dossier"

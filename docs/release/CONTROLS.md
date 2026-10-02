@@ -6,7 +6,8 @@ the mod keeps them away from the game, so your PC stays usable while you play.
 
 The tables below are for Meta Quest (Touch) controllers. Valve Index, HP Reverb G2, HTC Vive Cosmos and
 Pico 4 controllers have the same layout. Windows Mixed Reality controllers and HTC Vive wands have fewer
-buttons and their own layouts ([Other controllers](#other-controllers)). Only Touch controllers have been
+buttons, and Steam Frame controllers more, each with a layout of its own
+([Other controllers](#other-controllers)). Only Touch controllers have been
 tried; the others are untested. On Index the Menu button is a firm trackpad press, A and B on the left
 controller do the X and Y jobs, and the grip actions need a firm squeeze.
 
@@ -40,7 +41,7 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | A real punch with your hand | Melee, Glory Kill, Blood Punch, use (punch a switch to press it) |
 | Throw with your left hand (Throw grenades on) | Equipment launcher (below) |
 | Swing your right hand down from above your head (Overhead swing on) | Crucible, or the Sentinel Hammer (below) |
-| Throw both hands up above your head (Jump with both hands on) | Jump (below) |
+| Throw both hands up above your head (Jump with both hands (standing) on) | Jump (below) |
 
 **The weapon wheel.** Push the right stick down and keep it there: after about half a second the wheel
 opens (the game slows time) with the bottom weapon highlighted. Without letting go, roll the stick round to
@@ -74,7 +75,7 @@ box of the launcher's Play tab, and both are new and not yet tried in a headset.
 - **Overhead swing:** raise your gun hand above your head, then bring it down hard, like a hammer. It swings
   the Crucible, or in The Ancient Gods Part Two slams the Sentinel Hammer. Raising both hands does nothing,
   so a stretch does not swing it.
-- **Jump with both hands:** throw both hands up above your head, fast, like in DOOM VFR. The jump button still
+- **Jump with both hands (standing):** throw both hands up above your head, fast, like in DOOM VFR. The jump button still
   works. It is off while you play sitting, and both hands have to come down before the next jump.
 
 A throw or a swing does not punch as well. With the weapon in your left hand, the hands swap: the right hand
@@ -83,6 +84,10 @@ throws and the left hand swings.
 Movement goes where your head faces. With **hand aim** (the default) the gun shoots where your right hand
 points, and the weapon is drawn at your hand. With **head aim** it shoots where you look. **View aim**
 leaves aiming to the mouse, as in the flat game.
+
+**Climbable walls.** While you hang on a climbable wall, just look where you want to go and press jump: the
+jump goes where you look, with hand aim or head aim, and you no longer have to turn with the stick first.
+The stick still turns you as usual. Looking at the wall and pressing jump lets go, as in the flat game.
 
 Recentering: hold both sticks pressed for 2 seconds, or use the headset's own recenter (hold the
 Meta / Oculus button), e.g. after standing up or sitting down; the mod also notices when you stand up or sit
@@ -140,6 +145,38 @@ seconds.
 With the weapon in your left hand, the triggers, grips and stick (or trackpad) clicks swap sides, as on
 Touch. On Windows Mixed Reality and the Vive wands the left Menu button stays the pause and the right one
 stays the dash in every handedness.
+
+**Steam Frame** (A, B, X and Y on the right controller, a D-pad on the left, a bumper above each trigger:
+the buttons do a gamepad's jobs, and the triggers, grips and sticks do what they do on Touch):
+
+| Controller | Action |
+|---|---|
+| Right trigger | Fire |
+| Right grip | Weapon mod |
+| Right stick | Turn; up: chainsaw; down: quick switch (tap) or weapon wheel (hold) |
+| Right stick click | Melee, Glory Kill, Blood Punch, use |
+| A | Jump |
+| B | Dash (hold during a cutscene to skip it) |
+| X | Chainsaw |
+| Y | Flame Belch |
+| Right bumper, tap | Quick switch (last weapon) |
+| Right bumper, hold | Weapon wheel: keep holding, point the right stick at a weapon, let go of the bumper to pick. The stick does not turn you until it is back in the middle |
+| Menu button, tap | Dossier |
+| Left stick | Move |
+| Left trigger or left bumper | Equipment launcher |
+| Left grip | Flame Belch |
+| Left stick click or D-pad right | Crucible |
+| D-pad up | Switch weapon mod |
+| D-pad left, tap | Switch equipment |
+| D-pad down | Mission info |
+| View button, tap | Pause menu |
+| Hold View + pull a trigger | Save a screenshot of each eye for bug reports (under SteamVR, D-pad left held works too) |
+
+In menus, B or D-pad left goes back and View closes the menu. With **Left (buttons swapped)** the
+triggers, grips and stick clicks swap sides. With **Left (buttons and sticks)** the sticks, the bumpers
+and each face button swap with the one in the same place on the other controller (A with D-pad down,
+B with D-pad left, X with D-pad right, Y with D-pad up); View stays the pause and Menu the Dossier. The
+Steam Frame's own layout needs SteamVR. The launcher's Dossier option does not change it.
 
 ## In menus
 
@@ -218,7 +255,7 @@ are the same whichever profile is picked.
 | Eye height | The game's (the Slayer's, whatever your own), Your real height (needs a runtime with a floor level) | The game's |
 | Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
 | Overhead swing | Swing your gun hand down from above your head for the Crucible or the Hammer ([In the game](#in-the-game)) | Off |
-| Jump with both hands | Throw both hands up above your head to jump, not while sitting ([In the game](#in-the-game)) | Off |
+| Jump with both hands (standing) | Throw both hands up above your head to jump, not while sitting ([In the game](#in-the-game)) | Off |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
@@ -228,14 +265,14 @@ are the same whichever profile is picked.
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
-| bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, the Flame Belch and equipment launcher on your left shoulder, and landing from a fall ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
+| bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, the Flame Belch and equipment launcher on your left shoulder, landing from a fall, a shove from below when a jump pad or booster launches you, and health and armor pickups ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
 | Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
 | Each eye | The size each eye renders at with that Resolution and how it compares with what your headset asks for, per side, for example "2056x2216, 82% of the 2496x2688 your headset asked for". The headset's size is read when you press Play and remembered for the next time | |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), DLSS (NVIDIA RTX only, set up in the DLSS group below), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card) | TAA |
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. The game's menus and HUD stay at full rate, so their text stays sharp. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
-| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (experimental: the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate). Stereo only, not with Alternate eyes on Auto | As fast as the game runs |
+| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate). Stereo only, not with Alternate eyes on Auto | Matched to the headset |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 
@@ -277,9 +314,11 @@ Experimental; tried on one tester's suit so far. With **bHaptics (experimental)*
 You feel your shots on the weapon arm's sleeve and a little on the chest (harder for the Super Shotgun,
 the Rocket Launcher, the Ballista and the BFG), hits on the vest from the side they came from, a heartbeat
 when your health is low, a jolt when a glory kill starts, a thump low on the vest when you land from a
-fall higher than a double jump, and your death. Without the Player running
-nothing happens and the game plays as usual. `bhaptics_intensity` in `launcher.ini` (0 to 1, default 1)
-turns every effect down; the Player's own intensity settings apply too. The game's log lines starting
+fall higher than a double jump, a shove low on the vest when a jump pad or a booster launches you, a
+quick wave up the vest when you pick up health (stronger for more, a Mega Health strongest and a little
+slower) and down it for armor, and your death. Without the Player
+running nothing happens and the game plays as usual. `bhaptics_intensity` in `launcher.ini` (0 to 1,
+default 1) turns every effect down; the Player's own intensity settings apply too. The game's log lines starting
 with `bhaptics:` say whether it connected and what it played.
 
 ## Changing the controls
@@ -336,6 +375,7 @@ The editor saves ordinary text files, one per kind of controller, which you can 
 | HTC Vive Cosmos | `htc_vive_cosmos.toml` |
 | HTC Vive wands | `htc_vive_wand.toml` |
 | Pico 4 | `pico4.toml` |
+| Steam Frame | `steam_frame.toml` |
 
 1. Press **Open folder** on the launcher's Play tab (Controls, Button layout). It opens the controls
    folder of the VR settings profile in use: `%LOCALAPPDATA%\EternalVR\controls` with (none), or
@@ -360,7 +400,10 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
 ```
 
 - **Hand:** `left` or `right`.
-- **Button:** `trigger`, `grip`, `stick_click`, `primary` (A or X), `secondary` (B or Y), `menu`.
+- **Button:** `trigger`, `grip`, `stick_click`, `primary` (A or X), `secondary` (B or Y), `menu`. Steam
+  Frame controllers have three more: `face3` (X, or D-pad right), `face4` (Y, or D-pad up) and `shoulder`
+  (the bumper); there `primary` is A or D-pad down, `secondary` B or D-pad left, and the left `menu` is
+  View.
 - **Press:** `press` (the action is held while the button is down), `tap` (a short press) or `hold` (held
   for a quarter of a second). A button can have a tap and a hold, but not a press together with either.
 - **Stick lines:** `"<hand>.stick.role"` is `move`, `turn` or `none`. The turn stick also takes

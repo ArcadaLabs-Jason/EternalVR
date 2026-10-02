@@ -165,8 +165,9 @@ void XrPresenter::Impl::shutdown() {
     }
     setViewHookSink(nullptr); // no camera hook callback runs past this point
     setStereoHookSink(nullptr);
-    ui_engine::setSkipComposite(false); // the game composites its own GUI again
-    requestTwoViews(false);             // the game goes back to its own single view
+    controllers::restoreClimbCvars("the layer shuts down"); // the game's own wall climbing again
+    ui_engine::setSkipComposite(false);                     // the game composites its own GUI again
+    requestTwoViews(false);                                 // the game goes back to its own single view
     if (skipHolding) {
         injectKey(kSkipKey, false, gameWindow());
         skipHolding = false;

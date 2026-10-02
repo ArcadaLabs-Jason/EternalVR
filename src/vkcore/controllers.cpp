@@ -49,6 +49,10 @@ void install() {
     }
     // bHaptics reads the player from the camera hook and the shots from the fire hook (below).
     startBhaptics();
+    // The game's prompts name the VR buttons; the signatures are their own check.
+    if (cfg.buttonPrompts) {
+        s.promptHooks = installPromptHooks();
+    }
     if (knownBuild) {
         bool fire = false;
         s.setViewAnglesHook = installAimHooks(fire);
@@ -58,6 +62,7 @@ void install() {
         }
         s.demonAimHook = installDemonAimHook();
         s.facingHook = installFacingHook();
+        s.climbHook = installClimbHook();
         // The off hand on the game's left arm needs the arms at the weapon hand (docs/VR_HANDS_HUD.md).
         if (s.viewmodelHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)) {
             s.offhandHook = installOffhandHook();
@@ -65,10 +70,12 @@ void install() {
     }
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
-        "%s, off hand %s (%s), rumble %s, demon aim %s, look-at triggers %s",
+        "%s, off hand %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable walls %s, button "
+        "prompts %s",
         kTag, onOff(s.userCmdHook), onOff(s.angleHook), onOff(s.xinputActive.load()),
         onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook), onOff(s.offhandHook),
-        input::offhandModeName(cfg.offhand), onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook));
+        input::offhandModeName(cfg.offhand), onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook),
+        onOff(s.climbHook), onOff(s.promptHooks));
     if (!s.userCmdHook && !s.xinputActive.load()) {
         EVR_LOG("%s: no input path to the game: controller buttons and movement do nothing", kTag);
     }

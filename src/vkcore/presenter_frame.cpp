@@ -427,27 +427,7 @@ void XrPresenter::Impl::frame() {
         noteShownView(state);
         logFrame(state);
     }
-    if (GetTickCount64() - lastXrStatsTicks >= 10000) {
-        lastXrStatsTicks = GetTickCount64();
-        EVR_LOG("xr: %llu frame(s), %llu new image(s), %llu repeat(s); %llu head-tracked, %llu on the "
-                "screen; pose age average %.1f ms, max %.1f ms; display period %.2f ms, pose lead %.1f ms",
-                static_cast<unsigned long long>(xrFrames), static_cast<unsigned long long>(xrCopies),
-                static_cast<unsigned long long>(xrRepeats),
-                static_cast<unsigned long long>(xrProjectionFrames),
-                static_cast<unsigned long long>(xrQuadFrames),
-                poseAgeCount ? poseAgeSum / static_cast<double>(poseAgeCount) : 0.0, poseAgeMax,
-                static_cast<double>(state.predictedDisplayPeriod) / 1e6,
-                static_cast<double>(displayLead.leadNs()) / 1e6);
-        poseAgeSum = 0.0;
-        poseAgeMax = 0.0;
-        poseAgeCount = 0;
-        logRates();
-        logSizeStats();
-        vignette.logStats(settings.ui.vignette);
-        if (frameLog) {
-            std::fflush(frameLog);
-        }
-    }
+    afterFrame(state);
 }
 
 void XrPresenter::Impl::destroyXrObjects() {
@@ -524,6 +504,7 @@ void XrPresenter::Impl::runWorker() {
             }
             controllers::installGameHooks();
             installDebugCommands(); // ETERNALVR_DEBUG_COMMANDS: console commands on a schedule (test rig)
+            stall_watch::installCheckpointSaveHook(); // stall lines name the game's own checkpoint saves
             startMenu();
             if (roomScaleSettings().collision || settings.ui.reticle) { // the aim dot's depth uses it too
                 installHeadSweep();
@@ -585,6 +566,7 @@ void XrPresenter::Impl::runWorker() {
         status::flat("VR could not start (see the reason before this in the log)");
     }
     consumerAlive.store(false);
+    refresh.logSummary(" at session end");
     if (instance) {
         destroyXrObjects();
     }

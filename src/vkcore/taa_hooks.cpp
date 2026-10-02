@@ -81,7 +81,7 @@ thread_local void* t_lastHistory = nullptr;
 bool g_distortionHooked = false;
 
 std::atomic<bool> g_decided{false};
-std::atomic<bool> g_dlssFallbackDone{false};
+std::atomic<int> g_dlssFallbacks{0};
 bool g_ngxHooked = false;
 std::atomic<bool> g_failedClosed{false};
 std::atomic<std::uint64_t> g_cvarWrites{0};
@@ -514,12 +514,13 @@ void taaOnStereoTick() {
     applySet(stereo_seq::stereoTaaForcedCvars());
     // Per-eye history is in place: temporal AA on, deliberately.
     setCvar("r_TAASafeMode", "0");
-    // DLSS without a per-eye feature for eye R would mix the eyes: temporal AA instead (per eye).
+    // DLSS without a per-eye feature for eye R would mix the eyes: TAA (per eye) until it is tried again.
+    ngxTwinsTick();
     const bool dlssPerEye = g_ngxHooked && !ngxTwinFailed();
     const int current = cvarInt(g_antialiasing);
     const int held = stereo_seq::heldAntialiasing(current, taaDlssRequested(), dlssPerEye);
     if (held != current) {
-        if (held == 1 && current == 2 && !g_dlssFallbackDone.exchange(true)) {
+        if (held == 1 && current == 2 && g_dlssFallbacks.fetch_add(1) < 16) {
             EVR_LOG("%s: DLSS has no per-eye feature for eye R; temporal AA instead", kTag);
         }
         setCvar("r_antialiasing", held == 2 ? "2" : "1");

@@ -233,21 +233,38 @@ namespace EternalVR.Launcher
                 return false;
             }
             Log.Info("the game has exited" + (exitCode.HasValue ? ", " + GameExit.Describe(exitCode.Value) : string.Empty));
-            bool crashed = exitCode.HasValue && GameExit.IsCrash(exitCode.Value);
+            // A crash, or exit code -1 (the game was ended, often after a freeze): a warning that asks for a report.
+            string exitText = GameExit.StatusPrefix(exitCode);
             DropHeldProblem();
             bool restored = CleanUpAfterSession(marker);
             // How fast the game really drew, beside the headset's rate (SessionRates).
             var rates = SessionRates.FromSessionDir(logDir);
             if (rates != null) Log.Info(rates.LogText());
             var ratesText = rates != null ? " " + rates.Describe() : string.Empty;
+            // Each eye below the planned size: the graphics driver held it at the window's size (RenderCap).
+            var cap = ReadRenderCap(logDir);
+            ctx.RememberRenderCap(cap);
+            bool capped = cap != null && cap.Capped;
+            if (capped)
+            {
+                Log.Warn("each eye rendered at " + cap.Real + ", " + cap.Percent + "% of the planned " + cap.Planned + " (the window's size)");
+                ratesText += " " + cap.Warning();
+            }
             // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended.
             if (lastStatus == null || lastStatus.Kind != StatusKind.Problem)
-                Report(restored && !crashed ? StatusKind.Good : StatusKind.Warning, (crashed
-                    ? "The game crashed (" + GameExit.Describe(exitCode.Value) + "). Use Export report... and attach the zip to a GitHub issue. "
-                    : string.Empty) + (restored
+                Report(restored && exitText.Length == 0 && !capped ? StatusKind.Good : StatusKind.Warning, exitText + (restored
                     ? "The game has exited and your settings were restored."
                     : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).") + ratesText);
             return restored;
+        }
+
+        /// <summary>The session's eye size against the plan from the layer's status file; null when it is not there.</summary>
+        private static RenderCap ReadRenderCap(string logDir)
+        {
+            var file = Path.Combine(logDir, LayerStatusFile.FileName);
+            try { return File.Exists(file) ? RenderCap.FromStatus(File.ReadAllText(file)) : null; }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
         }
 
         /// <summary>Reads the layer's loaded marker and status file and reports what changed.</summary>

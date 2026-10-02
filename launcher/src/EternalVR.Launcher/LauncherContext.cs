@@ -36,6 +36,8 @@ namespace EternalVR.Launcher
         public LauncherSettings Settings { get; set; }
         /// <summary>The headset's sizes from the last runtime probe that answered (<see cref="LastHeadset"/>); null before the first.</summary>
         public ViewLimits Headset { get; private set; }
+        /// <summary>The last session's eye size when it was below the plan (<see cref="RenderCap"/>); null otherwise.</summary>
+        public RenderCap LastRenderCap { get; private set; }
 
         public bool TestMode => Options.TestExe != null;
 
@@ -56,6 +58,7 @@ namespace EternalVR.Launcher
             ctx.Data = LauncherData.Load(Path.Combine(ctx.ProgramDir, "data"));
             ctx.Settings = LauncherSettings.Load(ctx.Paths.SettingsFile);
             ctx.Headset = LastHeadset.Load(ctx.Paths.HeadsetFile);
+            ctx.LastRenderCap = RenderCap.Load(ctx.Paths.RenderCapFile);
             return ctx;
         }
 
@@ -206,10 +209,12 @@ namespace EternalVR.Launcher
             f.LauncherVersion = LauncherVersion;
             f.LayerVersion = f.LayerLibraryExists ? LayerVersion() : null;
             f.DisableLayerInherited = Environment.GetEnvironmentVariable("ETERNALVR_DISABLE_LAYER") == "1";
+            f.LastRenderCap = LastRenderCap;
 
             f.RuntimeChosen = !LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime);
             f.RuntimeManifest = EffectiveRuntime();
             f.RuntimeManifestExists = !string.IsNullOrEmpty(f.RuntimeManifest) && File.Exists(f.RuntimeManifest);
+            if (LaunchPlanBuilder.IsSteamVr(f.RuntimeManifest)) f.SteamVrBindings = Core.Report.SteamVrSummary.ReadCustomBindings(SteamRoot);
 
             g.LayerDecisions = Data.KnownLayers.Evaluate(WindowsSystem.ImplicitLayers(), LaunchPlanBuilder.IsVdxr(f.RuntimeManifest));
             f.Layers = g.LayerDecisions;
@@ -314,6 +319,21 @@ namespace EternalVR.Launcher
             Log.Info("openxr probe (" + (LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? "system runtime" : Settings.Runtime) + "): " + probe);
             if (probe.Ok && !probe.Limits.Recommended.IsEmpty) RememberHeadset(probe.Limits);
             return probe;
+        }
+
+        /// <summary>
+        /// Keeps the session's eye size against the plan (from the layer's status file; null: not known) while it was capped,
+        /// for the "Each eye" line and the preflight, in memory and in the data folder.
+        /// </summary>
+        public void RememberRenderCap(RenderCap cap)
+        {
+            if (cap == null) return;
+            LastRenderCap = cap.Capped ? cap : null;
+            try { RenderCap.Remember(Paths.RenderCapFile, cap); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                Log.Warn("saving the session's eye size failed: " + e.Message);
+            }
         }
 
         /// <summary>Keeps the runtime's answer for the Play tab's "Each eye" line, in memory and in the data folder.</summary>

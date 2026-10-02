@@ -2,6 +2,9 @@
 
 #include <doctest/doctest.h>
 
+#include <initializer_list>
+#include <string_view>
+
 using evr::stereo_seq::DlssMenuApply;
 using evr::stereo_seq::dlssMenuApply;
 using evr::stereo_seq::dlssMenuFollowsGame;
@@ -88,4 +91,35 @@ TEST_CASE("DLSS menu: a change is applied only when the layer follows the game")
 TEST_CASE("DLSS menu: nothing shown by the layer keeps the game's behaviour") {
     CHECK(dlssMenuApply(launcherDlss(3), 0, -1) == DlssMenuApply::Apply);
     CHECK(dlssMenuApply(DlssMenuHold{}, 2, -1) == DlssMenuApply::Apply);
+}
+
+TEST_CASE("DLSS menu: after a failed DLSS feature for eye R, choosing DLSS tries it again") {
+    DlssMenuHold fellBack = launcherDlss(3);
+    fellBack.dlssPerEye = false;
+    fellBack.dlssRetry = true;
+    REQUIRE(dlssMenuShown(fellBack, 3) == 0); // TAA runs: shown Off
+    CHECK(dlssMenuApply(fellBack, 3, 0) == DlssMenuApply::Retry);
+    CHECK(dlssMenuApply(fellBack, 1, 0) == DlssMenuApply::Retry); // the launcher's quality decides
+    CHECK(dlssMenuApply(fellBack, 0, 0) == DlssMenuApply::Keep);
+    // The launcher's TAA with the profile's DLSS: the choice is applied as in the flat game, and tried.
+    DlssMenuHold gameFellBack = launcherTaa(false);
+    gameFellBack.dlssRetry = true;
+    CHECK(dlssMenuShown(gameFellBack, 2) == 0);
+    CHECK(dlssMenuApply(gameFellBack, 2, 0) == DlssMenuApply::ApplyRetry);
+    CHECK(dlssMenuApply(gameFellBack, 0, 0) == DlssMenuApply::Keep);
+    // No temporal AA held (the launcher's Off, failed closed): nothing to try.
+    DlssMenuHold off;
+    off.dlssOption = true;
+    off.dlssRetry = true;
+    CHECK(dlssMenuApply(off, 3, 0) == DlssMenuApply::Ignore);
+    // Without the NGX hooks there is nothing to try again either.
+    CHECK(dlssMenuApply(launcherTaa(false), 3, 0) == DlssMenuApply::Ignore);
+}
+
+TEST_CASE("DLSS menu: every apply decision has a log name") {
+    using evr::stereo_seq::dlssMenuApplyName;
+    for (const DlssMenuApply a : {DlssMenuApply::Keep, DlssMenuApply::Apply, DlssMenuApply::Ignore,
+                                  DlssMenuApply::Retry, DlssMenuApply::ApplyRetry}) {
+        CHECK((std::string_view(dlssMenuApplyName(a)) != "?"));
+    }
 }

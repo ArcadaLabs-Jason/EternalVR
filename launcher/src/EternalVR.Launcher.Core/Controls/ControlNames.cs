@@ -8,7 +8,7 @@ namespace EternalVR.Launcher.Core.Controls
     public enum ControlHand { Left, Right }
 
     /// <summary>The buttons of a control map (the layer's <c>ButtonInput</c>, features/input/binding_profile.hpp).</summary>
-    public enum ButtonInput { Trigger, Grip, StickClick, Primary, Secondary, Menu }
+    public enum ButtonInput { Trigger, Grip, StickClick, Primary, Secondary, Face3, Face4, Shoulder, Menu }
 
     /// <summary>How a button is pressed: held down, a short tap, or held for a quarter of a second.</summary>
     public enum PressKind { Press, Tap, Hold }
@@ -134,14 +134,18 @@ namespace EternalVR.Launcher.Core.Controls
         public const string Unbound = "none";
         public const string ProfileSection = "profile";
         public const string MapSectionPrefix = "map.";
+        /// <summary>Optional names for the buttons, for the game's prompts (the layer's button_labels.hpp).</summary>
+        public const string LabelsSection = "labels";
 
-        internal static readonly string[] InputNames = { "trigger", "grip", "stick_click", "primary", "secondary", "menu" };
+        internal static readonly string[] InputNames = { "trigger", "grip", "stick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu" };
         internal static readonly string[] PressNames = { "press", "tap", "hold" };
+        /// <summary>The inputs a <c>[labels]</c> key names: every button input, and a whole stick.</summary>
+        internal static readonly string[] LabelInputNames = InputNames.Append("stick").ToArray();
         internal static readonly string[] GestureNames = { "up", "down_tap", "down_hold" };
         internal static readonly string[] RoleNames = { "none", "move", "turn" };
 
         /// <summary>The OpenXR action of each button in a <c>[profile]</c> section (<c>gameplay.&lt;hand&gt;.&lt;action&gt;</c>).</summary>
-        internal static readonly string[] InputActions = { "trigger", "grip", "thumbstick_click", "primary", "secondary", "menu" };
+        internal static readonly string[] InputActions = { "trigger", "grip", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu" };
         internal const string StickAction = "thumbstick";
 
         /// <summary>Every action, in the order of the layer's <c>GameAction</c> (features/input, game/eternal/game_action.cpp).</summary>
@@ -236,11 +240,16 @@ namespace EternalVR.Launcher.Core.Controls
                 case "trigger": return "trigger";
                 case "squeeze": return "grip";
                 case "menu": return "Menu button";
+                case "view": return "View button";
+                case "dpad_up": return "D-pad up";
+                case "dpad_down": return "D-pad down";
+                case "dpad_left": return "D-pad left";
+                case "dpad_right": return "D-pad right";
                 case "system": return "System button";
                 case "thumbstick": return how == null ? "stick" : how == "click" ? "stick click" : null;
                 case "trackpad": return how == null ? "trackpad" : how == "click" ? "trackpad click" : how == "force" ? "trackpad press" : null;
                 case "thumbrest": return "thumb rest";
-                case "shoulder": return "shoulder button";
+                case "shoulder": case "bumper": return "bumper";
                 default: return null;
             }
         }
@@ -255,6 +264,9 @@ namespace EternalVR.Launcher.Core.Controls
                 case ButtonInput.StickClick: return "stick click";
                 case ButtonInput.Primary: return "primary button";
                 case ButtonInput.Secondary: return "secondary button";
+                case ButtonInput.Face3: return "third face button";
+                case ButtonInput.Face4: return "fourth face button";
+                case ButtonInput.Shoulder: return "bumper";
                 default: return "Menu button";
             }
         }
@@ -271,6 +283,7 @@ namespace EternalVR.Launcher.Core.Controls
             ("htc_vive_cosmos.toml", "HTC Vive Cosmos"),
             ("htc_vive_wand.toml", "HTC Vive wands"),
             ("pico4.toml", "Pico 4"),
+            ("steam_frame.toml", "Steam Frame"),
         };
 
         /// <summary>The name shown for a built-in controller file: the README's, else the file name without its extension.</summary>

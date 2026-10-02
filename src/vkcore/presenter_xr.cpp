@@ -9,6 +9,7 @@
 #include "vkcore/status_file.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/vram_watch.hpp"
+#include "vkcore/window_cap.hpp"
 #include "vkcore/xr_runtime.hpp"
 #include "xr_math/cinema_quad.hpp"
 #include "xr_math/upright_space.hpp"
@@ -177,6 +178,13 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
     if (wrist.colorScaleBias) {
         extensions.push_back(XR_KHR_COMPOSITION_LAYER_COLOR_SCALE_BIAS_EXTENSION_NAME);
     }
+    // Optional: the runtime's refresh rate, read only, beside the display period (presenter_refresh.hpp).
+    refresh.extension = std::any_of(props.begin(), props.end(), [](const XrExtensionProperties& p) {
+        return std::strcmp(p.extensionName, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME) == 0;
+    });
+    if (refresh.extension) {
+        extensions.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+    }
     for (const std::string& name : controllerProfiles.extensions) {
         extensions.push_back(name.c_str());
     }
@@ -202,6 +210,7 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
         controllerProfiles.extensions.clear();
         perfCounterTime = false;
         wrist.colorScaleBias = false;
+        refresh.extension = false;
         info.enabledExtensionCount = 1;
         r = xr.xrCreateInstance(&info, &instance);
     }
@@ -221,6 +230,7 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
     }
     EVR_XR_FUNCTIONS(EVR_XR_LOAD)
 #undef EVR_XR_LOAD
+    refresh.onInstance(xr.xrGetInstanceProcAddr, instance);
     XrInstanceProperties ip{XR_TYPE_INSTANCE_PROPERTIES};
     xr.xrGetInstanceProperties(instance, &ip);
     EVR_LOG("xr: runtime '%s' %u.%u.%u, api %s", ip.runtimeName, XR_VERSION_MAJOR(ip.runtimeVersion),
@@ -448,6 +458,7 @@ bool XrPresenter::Impl::createSession() {
                 configViews[i].recommendedImageRectHeight, configViews[i].maxImageRectWidth,
                 configViews[i].maxImageRectHeight);
     }
+    writeHeadsetStatus(xr, instance, systemId, configViews);
 
     // sRGB swapchain whose D3D12 images are typeless: the game's bytes are already sRGB-encoded and
     // are copied unchanged (T-080). The ring uses the matching UNORM format so the copy is a plain
@@ -567,6 +578,8 @@ bool XrPresenter::Impl::createXrSwapchain() {
         quadSize = {size->width, size->height};
     }
     cinemaView.setImage(eyeExtent.width, eyeExtent.height);
+    status::field("render", std::to_string(eyeExtent.width) + "x" + std::to_string(eyeExtent.height));
+    window_cap::reportEyeSize({eyeExtent.width, eyeExtent.height});
     EVR_LOG("xr: swapchain %ux%u (%u eye image(s) of %ux%u) format %d, %u image(s); screen %.2f x %.2f m at "
             "%.1f m",
             ringExtent.width, ringExtent.height, ringEyes, eyeExtent.width, eyeExtent.height,

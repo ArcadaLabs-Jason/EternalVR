@@ -276,3 +276,49 @@ as before, so a display's taskbar (always on top) can stay over it.
 
 Not yet checked live: the menu pointer on the 16:9 band (7 and the menu part of 6), resizing the mirror by hand,
 and the headset (Virtual Desktop's recommendation is below the budget and is used as it is).
+
+## 10. Drivers without usable present scaling (AMD)
+
+Two cases from players' reports (October 2026), both fail closed to the window-sized render, which capped each
+eye at the mirror window (often 33 to 47 % of the planned width):
+
+| Case | What the log showed | Where it turns off |
+|---|---|---|
+| AMD Radeon RX 5000 and 6000 (RDNA1, RDNA2; an RX 6750 XT) | no `VK_KHR_swapchain_maintenance1` nor the EXT one: `device extension VK_KHR_swapchain_maintenance1 is not supported ...` | at the game's first surface: `the game's device has no VK_KHR_swapchain_maintenance1 (present scaling)` |
+| AMD RDNA3.5 (ROG Ally, Radeon 890M) | the extension exists, but the scaled image range is the window's own size: `present scaling 0x5, gravity 0x0, scaled image 672x701 to 672x701` | `the render size is outside the surface's scaled image range` |
+
+What the layer does now (`window_cap.hpp`, `features/render_size/render_cap.hpp`):
+
+- The off line says how large each eye is against the plan and why:
+  `size: render size off: <why>; the game renders at its window's size; each eye renders at the window's 652x713, 50% of the planned 1280x1400 (a driver limit: the graphics driver cannot scale presented images)`.
+  For the range case the limit reads `the driver scales presented images only within 672x701 to 672x701; the window is not re-placed for this`.
+- `queryScaling` logs each present mode's range and the surface's raw extents:
+  `size: present mode 2: scaling 0x7, gravity x 0x7 y 0x7, scaled image 1x1 to 4294967294x4294967294; surface current 658x720, min 658x720, max 658x720`.
+- Device create logs the GPU and driver once (`GPU vendor 0x10de device 0x2704, driver version 0x9a170000, driver 'NVIDIA' '616.92'`),
+  which swapchain maintenance names the device lists, and when the instance has no surface maintenance extension.
+- **The no-extension case is known at device create**, before the game's window is placed, so the window is placed
+  at the largest client area of the planned eye's shape that the mirror display's work area allows (frame included,
+  centred, never larger than the planned eye):
+  `size: no present scaling on the game's device, so each eye renders at the window's size: the window takes the largest eye-shaped client area the work area 0,0 1280x752 allows, 652x713 at 314,31 (planned eye 1280x1400)`.
+  `r_windowWidth` and `r_windowHeight` are then held at that window's real client area
+  (`cvars: r_windowWidth is held at the placed window's 652, not 1280 (no present scaling)`), which the game already
+  reads, so nothing is written and the game does not resize its window (holding the launch size resized it, which
+  an AMD driver answered with `VK_ERROR_OUT_OF_DATE_KHR`; `runtime_cvars.cpp`). Not with `ETERNALVR_MIRROR_SIZE=fill`, nor for `auto` before the
+  runtime's size is known (the window then goes where the mirror goes).
+- The range case is known only once the game's surface exists; the window is not re-placed for it (a mid-session
+  resize is what froze AMD drivers), only logged.
+- The status file gets `render_planned` and `render_capped`; the launcher compares `render` with `render_planned`
+  after the session and warns, and its "Each eye" line shows the real size while the last session was capped.
+- `ETERNALVR_TEST_NO_PRESENT_SCALING=1` (a test knob) leaves the swapchain maintenance extension out so the fallback
+  runs on any driver.
+
+Not done: the instance's surface maintenance extension is still chosen by `vkCreateInstance` succeeding (the loader
+can drop an extension the driver lacks without failing); the device's own list and the raw scaling values in the log
+show when that happened. A virtual swapchain (section 1, option (a)) remains the full fix for both cases.
+
+Rig runs (simulator, RTX 4080, the virtual display alone at 0,0 1280x800, work area 1280x752):
+
+| Run | Result |
+|---|---|
+| aw2, `ETERNALVR_TEST_NO_PRESENT_SCALING=1`, render size 1280x1400 | window placed at 314,31 with client 652x713 (the mirror's eye shape would have been 658x720, whose frame does not fit the work area); one `vkCreateSwapchainKHR` at 652x713; XR swapchain 1304x713 (two eyes of 652x713); `render_capped=1`; the cvars read 652x713 already (no write); no present errors |
+| aw3, without the knob | unchanged: render size on at 1280x1400 scaled into the 658x720 mirror; `render_capped=0` |

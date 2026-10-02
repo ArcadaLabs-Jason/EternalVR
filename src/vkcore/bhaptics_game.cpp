@@ -17,10 +17,13 @@
 // - idPlayer::savedSyncEntity's object (+0x8428): the sync entity of the animation the player is in, from its
 //   start to its end. Traced in headset sessions (2026-09-30): a glory kill sets it to syncmelee/<demon>
 //   (syncmelee/imp, syncmelee/zombie_tier1, ...) for about 1.6 s, a Sentinel Crystal's upgrade to
-//   interact/argent_cell/use_sync for about 3.3 s, other pickups to interact/... (a mod bot about 2.8 s).
+//   interact/argent_cell/use_sync for about 3.3 s, other pickups to interact/... (a mod bot about 2.8 s; a
+//   Praetor Suit token interact/preator_suit_token/preator_suit_token_sync for about 3.1 s, on the rig).
 //   idPlayer::syncMaster's object (+0x7DB0) never changed in those sessions and is only a fallback. The sync
 //   entity's idEntity::entityDef at +0xA8 names which kind it is.
-// Portals come from two hooks of their own (bhaptics_portal.cpp), installed with the thread.
+// Health and armor pickups are found here too (features/bhaptics/pickups.hpp), on every game frame.
+// Portals come from two hooks of their own (bhaptics_portal.cpp), jump pads and boosters from two more
+// (bhaptics_launch.cpp), installed with the thread.
 // - idHavokPhysics_Player::viewAngles (+0x8A50 + 0x3F10), the yaw in degrees at +4 (as viewmodel_hook.cpp).
 // Which hit is the newest, and that impactDir points from the attacker to the player, are read from the
 // names; the log's first hits show the raw values so a rig session can confirm them.
@@ -81,6 +84,8 @@ constexpr ULONGLONG kSummaryTicks = 30000;
 constexpr int kLoggedHits = 20;
 constexpr int kLoggedLandings = 30;
 constexpr int kLoggedSyncs = 40;
+constexpr int kLoggedPickups = 60;
+constexpr int kLoggedSkippedPickups = 20;
 constexpr float kMinImpactDir = 1e-3f;
 
 // What the game threads noted, under g_mutex.
@@ -109,6 +114,7 @@ Noted g_noted;
 std::atomic<std::uint32_t> g_shots{0};
 std::atomic<std::uint32_t> g_belches{0};
 std::atomic<std::uint32_t> g_portals{0};
+std::atomic<std::uint32_t> g_launches{0};
 std::atomic<std::uint8_t> g_weapon{static_cast<std::uint8_t>(bhaptics::WeaponClass::Medium)};
 std::atomic<bool> g_running{false};
 std::once_flag g_startOnce;
@@ -128,6 +134,13 @@ int g_loggedSyncs = 0;
 // for the Player): the detector is the camera hook's, the largest landing not yet taken is under g_mutex.
 bhaptics::LandingDetector g_feet;
 std::optional<bhaptics::Landing> g_landing;
+// Pickups, found on every game frame for the same reason: the detector is the camera hook's, the gains not
+// yet taken are under g_mutex.
+bhaptics::PickupDetector g_pickups;
+std::optional<bhaptics::Pickup> g_healthGain;
+std::optional<bhaptics::Pickup> g_armorGain;
+int g_loggedPickups = 0;
+int g_loggedSkippedPickups = 0;
 
 double qpcSeconds(LONGLONG qpc) {
     static const double frequency = [] {
@@ -234,6 +247,23 @@ bool readPlayer(const std::byte* player, Noted& n) {
     return true;
 }
 
+void logPickup(const bhaptics::Pickup& p) {
+    const bool felt = p.skip == bhaptics::PickupSkip::None;
+    if (felt ? g_loggedPickups++ >= kLoggedPickups : g_loggedSkippedPickups++ >= kLoggedSkippedPickups) {
+        return;
+    }
+    const char* mega = p.kind != bhaptics::PickupKind::Health ? "" : p.mega ? " (mega yes)" : " (mega no)";
+    if (felt) {
+        EVR_LOG("%s: pickup: %s +%.3g%s, %.1f to %.1f in %d step%s over %.2f s", kTag,
+                bhaptics::pickupKindName(p.kind), p.amount, mega, p.from, p.to, p.steps,
+                p.steps == 1 ? "" : "s", p.spanSeconds);
+    } else {
+        EVR_LOG("%s: rise not felt (%s): %s +%.3g, %.1f to %.1f in %d step%s over %.2f s", kTag,
+                bhaptics::pickupSkipName(p.skip), bhaptics::pickupKindName(p.kind), p.amount, p.from, p.to,
+                p.steps, p.steps == 1 ? "" : "s", p.spanSeconds);
+    }
+}
+
 void logSummary(const bhaptics::BodyHaptics& body,
                 std::uint64_t sent,
                 std::uint64_t failed,
@@ -255,13 +285,16 @@ void logSummary(const bhaptics::BodyHaptics& body,
     const auto& c = body.counts();
     EVR_LOG(
         "%s: %llu frames (shot %llu, damage %llu, heartbeat %llu, glory kill %llu, death %llu, belch %llu, "
-        "equipment %llu, landing %llu, crystal %llu, portal %llu), %llu messages sent, %llu failed",
+        "equipment %llu, landing %llu, crystal %llu, portal %llu, health %llu, mega health %llu, "
+        "armor %llu, launch %llu), %llu messages sent, %llu failed",
         kTag, static_cast<unsigned long long>(total), static_cast<unsigned long long>(c[0]),
         static_cast<unsigned long long>(c[1]), static_cast<unsigned long long>(c[2]),
         static_cast<unsigned long long>(c[3]), static_cast<unsigned long long>(c[4]),
         static_cast<unsigned long long>(c[5]), static_cast<unsigned long long>(c[6]),
         static_cast<unsigned long long>(c[7]), static_cast<unsigned long long>(c[8]),
-        static_cast<unsigned long long>(c[9]), static_cast<unsigned long long>(sent),
+        static_cast<unsigned long long>(c[9]), static_cast<unsigned long long>(c[10]),
+        static_cast<unsigned long long>(c[11]), static_cast<unsigned long long>(c[12]),
+        static_cast<unsigned long long>(c[13]), static_cast<unsigned long long>(sent),
         static_cast<unsigned long long>(failed));
 }
 
@@ -313,6 +346,8 @@ void linkMain(float intensity) {
             std::lock_guard lock(g_mutex);
             noted = g_noted;
             landing = std::exchange(g_landing, std::nullopt);
+            signals.healthGain = std::exchange(g_healthGain, std::nullopt);
+            signals.armorGain = std::exchange(g_armorGain, std::nullopt);
         }
         signals.seconds = now;
         signals.gameplay =
@@ -327,6 +362,7 @@ void linkMain(float intensity) {
         signals.shots = g_shots.exchange(0);
         signals.belches = g_belches.exchange(0);
         signals.portals = g_portals.exchange(0);
+        signals.launches = g_launches.exchange(0);
         // The equipment launcher: its button going down (the fire hook does not see it).
         const bool equipmentHeld = game::contains(heldActions(), game::GameAction::Equipment);
         signals.equipment = equipmentHeld && !equipmentWasHeld ? 1 : 0;
@@ -379,13 +415,18 @@ void startBhaptics() {
             EVR_LOG("%s: off: unknown game build, nothing to read", kTag);
             return;
         }
-        EVR_LOG("%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment, "
-                "landing, crystal, portal); looking for the bHaptics Player on port %d",
-                kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
+        EVR_LOG(
+            "%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment, "
+            "landing, crystal, portal, health and armor pickups, launch); looking for the bHaptics Player on "
+            "port %d",
+            kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
         g_running.store(true);
         std::thread(linkMain, cfg.bhapticsIntensity).detach();
         if (!installBhapticsPortalHooks()) {
             EVR_LOG("%s: no portal hooks: going through a portal plays nothing", kTag);
+        }
+        if (!installBhapticsLaunchHooks()) {
+            EVR_LOG("%s: no launch hooks: jump pads and boosters play nothing", kTag);
         }
     });
 }
@@ -418,6 +459,12 @@ void noteBhapticsPortal() {
     }
 }
 
+void noteBhapticsLaunch() {
+    if (g_running.load(std::memory_order_relaxed)) {
+        g_launches.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 void noteBhapticsFrame(const std::byte* player) {
     if (!g_running.load(std::memory_order_relaxed)) {
         return;
@@ -433,6 +480,11 @@ void noteBhapticsFrame(const std::byte* player) {
         landed = g_feet.update(*feet, qpcSeconds(n.qpc));
     } else {
         g_feet.reset();
+    }
+    const std::vector<bhaptics::Pickup> pickups =
+        g_pickups.update({qpcSeconds(n.qpc), n.valid && n.gameplay, n.health, n.armor, n.dead});
+    for (const bhaptics::Pickup& p : pickups) {
+        logPickup(p);
     }
     if (n.valid && !g_loggedFirstRead) {
         g_loggedFirstRead = true;
@@ -455,6 +507,11 @@ void noteBhapticsFrame(const std::byte* player) {
     g_noted = n;
     if (landed && (!g_landing || landed->drop > g_landing->drop)) {
         g_landing = landed;
+    }
+    for (const bhaptics::Pickup& p : pickups) {
+        if (p.skip == bhaptics::PickupSkip::None) {
+            bhaptics::addPickup(p.kind == bhaptics::PickupKind::Armor ? g_armorGain : g_healthGain, p);
+        }
     }
 }
 

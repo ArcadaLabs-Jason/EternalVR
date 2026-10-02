@@ -19,6 +19,7 @@ using evr::input::findInteractionProfile;
 using evr::input::Hand;
 using evr::input::handednessName;
 using evr::input::InteractionProfileInfo;
+using evr::input::olderInputName;
 using evr::input::parseControllerData;
 using evr::input::parseHandednessName;
 using evr::input::pathSuitsAction;
@@ -167,6 +168,30 @@ TEST_CASE("path rules of the known profiles") {
     CHECK_FALSE(pathSuitsAction(touch(), Hand::Right, "/input/a", XrActionKind::Float));
     CHECK(pathSuitsAction(touch(), Hand::Right, "/output/haptic", XrActionKind::Haptic));
     CHECK_FALSE(pathSuitsAction(touch(), Hand::Right, "/output/haptic", XrActionKind::Boolean));
+}
+
+TEST_CASE("the Steam Frame's controllers differ, and its bumper has both names") {
+    const InteractionProfileInfo& frame =
+        *findInteractionProfile("/interaction_profiles/valve/frame_controller_valve");
+    CHECK(profileHasPath(frame, Hand::Right, "/input/x/click"));
+    CHECK_FALSE(profileHasPath(frame, Hand::Left, "/input/x/click"));
+    CHECK(profileHasPath(frame, Hand::Left, "/input/dpad_up/click"));
+    CHECK_FALSE(profileHasPath(frame, Hand::Right, "/input/dpad_up/click"));
+    CHECK(profileHasPath(frame, Hand::Left, "/input/view/click"));
+    CHECK_FALSE(profileHasPath(frame, Hand::Left, "/input/menu/click"));
+    CHECK(profileHasPath(frame, Hand::Right, "/input/menu/click"));
+    CHECK_FALSE(profileHasPath(frame, Hand::Right, "/input/system/click"));
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        CHECK(profileHasPath(frame, hand, "/input/shoulder/click"));
+        CHECK(profileHasPath(frame, hand, "/input/bumper/click"));
+    }
+    CHECK(olderInputName("/interaction_profiles/valve/frame_controller_valve",
+                         "/user/hand/left/input/shoulder/click") == "/user/hand/left/input/bumper/click");
+    CHECK_FALSE(olderInputName("/interaction_profiles/valve/frame_controller_valve",
+                               "/user/hand/left/input/a/click"));
+    // The Cosmos shoulder buttons were never renamed.
+    CHECK_FALSE(olderInputName("/interaction_profiles/htc/vive_cosmos_controller",
+                               "/user/hand/left/input/shoulder/click"));
 }
 
 TEST_CASE("bindings overlap when they read the same component") {

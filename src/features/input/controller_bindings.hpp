@@ -12,6 +12,9 @@
 //   [map.left_button_swap]       right, left_button_swap and left_full_mirror
 //   [map.left_full_mirror]
 //
+//   [labels]                     optional names for the buttons, for game prompts (button_labels.hpp)
+//   "<hand>.<input>" = "<name>"  e.g. "left.primary" = "X"
+//
 // Each section is read with the binding-text reader, so the same lenient rules and line numbers
 // apply. Suggested bindings are checked against the profile's input list (interaction_profiles.hpp)
 // and against each other: two actions of one set on one physical input is a conflict, reported with
@@ -48,6 +51,7 @@ struct ControllerData {
     // Ordered by action set, hand and action, one entry per bound action and hand.
     std::vector<SuggestedBinding> suggested;
     std::map<game::Handedness, BindingMap> maps;
+    BindingMap labels; // [labels] entries with a known key and a name; the others are reported.
     std::vector<BindingIssue> issues;
 
     [[nodiscard]] bool ok() const { return issues.empty(); }

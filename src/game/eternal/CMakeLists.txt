@@ -5,7 +5,7 @@
 # and control maps. They are built in here, so the tests check the files themselves.
 set(EVR_CONTROLLER_DATA_DIR "${PROJECT_SOURCE_DIR}/data/input/controllers")
 foreach(controller oculus_touch valve_index hp_reverb_g2 windows_mixed_reality htc_vive_cosmos htc_vive_wand
-                   pico4)
+                   pico4 steam_frame)
     set(data_file "${EVR_CONTROLLER_DATA_DIR}/${controller}.toml")
     file(READ "${data_file}" EVR_CONTROLLER_DATA_${controller})
     # MSVC limits one string literal to about 16 KB.

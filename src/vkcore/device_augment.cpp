@@ -3,6 +3,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/vrs_nv.hpp"
+#include "vkcore/window_cap.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -14,6 +15,21 @@ namespace {
 
 bool hasExtension(const std::vector<const char*>& list, const char* name) {
     return std::any_of(list.begin(), list.end(), [name](const char* e) { return std::strcmp(e, name) == 0; });
+}
+
+// The GPU's vendor and driver, once (an AMD driver without present scaling caps the render size,
+// window_cap.hpp).
+void logDriver(InstanceData& inst, VkPhysicalDevice physicalDevice, bool driverProperties) {
+    VkPhysicalDeviceDriverProperties driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 props{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                                      driverProperties ? &driver : nullptr};
+    if (!inst.vk.GetPhysicalDeviceProperties2) {
+        return;
+    }
+    inst.vk.GetPhysicalDeviceProperties2(physicalDevice, &props);
+    EVR_LOG("  GPU vendor 0x%04x device 0x%04x, driver version 0x%08x, driver '%s' '%s'",
+            props.properties.vendorID, props.properties.deviceID, props.properties.driverVersion,
+            driverProperties ? driver.driverName : "?", driverProperties ? driver.driverInfo : "?");
 }
 
 } // namespace
@@ -87,19 +103,38 @@ void planDeviceAugment(DeviceAugment& plan,
     }
     plan.ok = true;
     plan.shadingRate = vrs_nv::planDevice(inst, physicalDevice, plan.extensions);
+    logDriver(inst, physicalDevice, supported(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME));
 
     // Optional: the window's presents (Route S). Leaves the interop plan as it is when unavailable.
     // The swapchain extension of the same family as the instance's surface one (KHR, or the older EXT).
     const char* extension = inst.maintenance1Ext ? VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME
                                                  : VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
-    if (!inst.surfaceMaintenance1 ||
-        hasExtension(plan.extensions, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME) ||
+    if (!inst.surfaceMaintenance1) {
+        EVR_LOG(
+            "  the instance has no surface maintenance extension: no %s, so the game's window takes every "
+            "present and the game renders at its window's size",
+            extension);
+        return;
+    }
+    if (hasExtension(plan.extensions, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME) ||
         hasExtension(plan.extensions, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)) {
         return;
     }
+    const bool khr = supported(VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    const bool ext = supported(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    EVR_LOG("  the device lists %s %s and %s %s; the instance has the %s surface maintenance extension",
+            VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, khr ? "yes" : "no",
+            VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, ext ? "yes" : "no",
+            inst.maintenance1Ext ? "EXT" : "KHR");
     if (!supported(extension)) {
         EVR_LOG("  device extension %s is not supported: the game's window takes every present and the game "
                 "renders at its window's size",
+                extension);
+        return;
+    }
+    if (window_cap::testNoPresentScaling()) {
+        EVR_LOG("  device extension %s left out (ETERNALVR_TEST_NO_PRESENT_SCALING, a test knob): the game's "
+                "window takes every present and the game renders at its window's size",
                 extension);
         return;
     }

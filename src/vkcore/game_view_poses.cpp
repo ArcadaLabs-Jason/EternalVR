@@ -40,10 +40,12 @@ WeaponAim smoothWeaponAim(State& s, XrTime poseTime, Pose& roomAim) {
 std::optional<WeaponAim> beginGameView(
     XrTime poseTime, const Pose& headTracking, const std::byte* player, bool cutscene, bool cameraAnimation) {
     State& s = state();
+    // Head aim keeps the view on a climbable wall with the controllers attached or not (climb_hook.cpp).
+    const bool wallClimb = climbFrame();
     if (!s.attached.load(std::memory_order_acquire)) {
         return std::nullopt;
     }
-    updateForcedView(player, cutscene, cameraAnimation);
+    updateForcedView(player, cutscene, cameraAnimation, wallClimb);
     noteBhapticsFrame(player);
     refreshTestInput();
     GameViewPoses poses;

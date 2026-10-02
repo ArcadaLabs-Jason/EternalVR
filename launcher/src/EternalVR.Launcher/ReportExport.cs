@@ -41,6 +41,7 @@ namespace EternalVR.Launcher
             Add("openxr active runtime", active == null ? "none set" : active + RuntimeName(active));
             Add("openxr runtime for launches", LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? "system active" : effective + RuntimeName(effective));
             system.AddRange(SteamVrSummary.Read(ctx.SteamRoot)); // chosen keys only, never the headset's serial number
+            Add("last session eye size", ctx.LastRenderCap == null ? "not below the planned size (or no session yet)" : ctx.LastRenderCap.Describe());
             Add("hardware-accelerated GPU scheduling", hags == 2 ? "on (HwSchMode 2)" : hags.HasValue ? $"off (HwSchMode {hags.Value})" : "not set (off)");
             Add("game build", g.Facts.Build == null ? "game not found"
                 : g.Facts.Platform == GamePlatform.GamePass ? g.Facts.Build.Status + " Game Pass " + g.Facts.Build.Version
@@ -66,6 +67,7 @@ namespace EternalVR.Launcher
                     .Where(l => l.Kind == SettingsLocationKind.SavedGames).Select(l => l.Path).ToList(),
                 WindowsEvents = WindowsEventLogs.Read(),
                 Now = DateTime.Now,
+                Id = ReportBuilder.NewId(),
             };
         }
 
@@ -91,7 +93,7 @@ namespace EternalVR.Launcher
             {
                 Title = "Save the EternalVR report",
                 Filter = "Zip file (*.zip)|*.zip",
-                FileName = ReportBuilder.DefaultFileName(DateTime.Now),
+                FileName = ReportBuilder.DefaultFileName(DateTime.Now, report.Id, LauncherContext.LauncherVersion),
                 InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
                 OverwritePrompt = true,
             })
@@ -100,8 +102,9 @@ namespace EternalVR.Launcher
                 try
                 {
                     File.WriteAllBytes(dlg.FileName, report.Zip);
-                    ctx.Log.Info($"report saved: {dlg.FileName} ({report.Files.Count} files, {report.Zip.Length} bytes)");
-                    MessageBox.Show(owner, "Saved " + dlg.FileName + ".\n\nAttach it to your GitHub issue.", "Export report", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ctx.Log.Info($"report {report.Id} saved: {dlg.FileName} ({report.Files.Count} files, {report.Zip.Length} bytes)");
+                    MessageBox.Show(owner, "Saved " + dlg.FileName + ".\n\nIts report ID is " + report.Id
+                        + ". Attach the zip to your GitHub issue or Discord message.", "Export report", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
                 {
@@ -117,8 +120,9 @@ namespace EternalVR.Launcher
             var report = ReportBuilder.Build(Gather(ctx));
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllBytes(path, report.Zip);
+            Console.WriteLine("report ID: " + report.Id);
             Console.WriteLine(report.Describe());
-            ctx.Log.Info($"report saved: {path} ({report.Files.Count} files, {report.Zip.Length} bytes)");
+            ctx.Log.Info($"report {report.Id} saved: {path} ({report.Files.Count} files, {report.Zip.Length} bytes)");
             return 0;
         }
 

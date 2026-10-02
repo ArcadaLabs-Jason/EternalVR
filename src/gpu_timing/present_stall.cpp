@@ -1,5 +1,7 @@
 #include "gpu_timing/present_stall.hpp"
 
+#include <string>
+
 namespace evr::gpu_timing {
 
 StallVerdict StallGate::onGap(const PresentGap& gap) {
@@ -22,6 +24,22 @@ StallVerdict StallGate::onGap(const PresentGap& gap) {
     }
     ++counters_.logged;
     return counters_.logged == kStallLinesLogged ? StallVerdict::LastLog : StallVerdict::Log;
+}
+
+namespace {
+
+std::string checkpoints(std::uint64_t saves) {
+    return saves == 1 ? std::string("a checkpoint") : std::to_string(saves) + " checkpoints";
+}
+
+} // namespace
+
+std::string stallSaveNote(std::uint64_t saves) {
+    return saves == 0 ? std::string() : "; the game saved " + checkpoints(saves) + " in the gap";
+}
+
+std::string summarySaveNote(std::uint64_t saves) {
+    return saves == 0 ? std::string() : "; the game saved " + checkpoints(saves);
 }
 
 } // namespace evr::gpu_timing

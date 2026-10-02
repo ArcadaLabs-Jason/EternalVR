@@ -9,7 +9,9 @@
 // (RVA 0x66E8B28). The feature keeps DLSS's own history, so with two renders per tick both eyes would
 // accumulate into one. Evaluate and release are detoured: eye R's evaluations (the frame's eye tag) go to
 // a twin of the game's feature, created on eye R's first evaluation from the same parameter block, with the
-// "Reset" parameter raised on its first use and after eye R missed a tick; a release releases both.
+// "Reset" parameter raised on its first use and after eye R missed a tick; a release releases both. A twin
+// that cannot be created makes DLSS fall back to TAA until it is tried again (stereo_seq/ngx_twin_retry.hpp):
+// after a wait, at once when the game releases that feature, or when the player chooses DLSS in the menu.
 
 #include <cstdint>
 
@@ -23,9 +25,17 @@ bool installNgxTwins();
 // Twins are used only while this is true (per-eye TAA on and the multiplayer guard armed).
 void setNgxTwinsActive(bool active);
 
-// True once a twin could not be created: eye R would share the game's feature, so the caller falls back
-// from DLSS to TAA.
+// True while a twin could not be created and is not being tried again: eye R would share the game's
+// feature, so the caller falls back from DLSS to TAA.
 bool ngxTwinFailed();
+
+// Each stereo tick, before ngxTwinFailed is read: when a try is due, the failed twins are forgotten and the
+// fallback ends, so DLSS is held again and eye R's next evaluation creates its feature.
+void ngxTwinsTick();
+
+// The player chose DLSS in the game's video menu during a fallback: a try at once, the count started over.
+// False (nothing changes) without a fallback.
+bool retryNgxTwins();
 
 struct NgxCounters {
     std::uint64_t twinCreates = 0;

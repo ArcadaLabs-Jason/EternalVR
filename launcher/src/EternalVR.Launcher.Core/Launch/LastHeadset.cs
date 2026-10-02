@@ -55,13 +55,16 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>
         /// The Play tab's "Each eye" line: the size each eye renders at with these settings and <paramref name="last"/>
         /// (null: none remembered), worked out as the launch does (<see cref="RenderSizeChoice.Decide"/>). With auto it says
-        /// how that compares with the headset's recommended size, per side as Virtual Desktop gives its resolution.
+        /// how that compares with the headset's recommended size, per side as Virtual Desktop gives its resolution. When the
+        /// last session rendered below its plan (<paramref name="cap"/>: the graphics driver held each eye at the window's
+        /// size), it says what that session really got instead.
         /// </summary>
-        public static string EachEye(LauncherSettings s, ViewLimits last)
+        public static string EachEye(LauncherSettings s, ViewLimits last, RenderCap cap = null)
         {
             if (s.Mode != VrMode.Stereo) return "The game's own resolution (mono)";
             var setting = LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto;
             if (setting == LauncherSettings.RenderSizeOff) return "The game window's size (render_size off)";
+            if (cap != null && cap.Capped) return cap.EachEyeText();
             var choice = RenderSizeChoice.Decide(setting, s.RenderScale, last == null ? null : new OpenXrProbeResult { Limits = last });
             if (choice.Size == null) return "Set from your headset when you press Play";
             var size = choice.Size.Value;

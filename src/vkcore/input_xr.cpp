@@ -94,6 +94,15 @@ bool loadFunctions(XrInput& xr, PFN_xrGetInstanceProcAddr gipa) {
     EVR_LOAD(xrApplyHapticFeedback)
     EVR_LOAD(xrStopHapticFeedback)
 #undef EVR_LOAD
+    // For the diagnostics only: without them the controllers still work.
+    if (XR_FAILED(gipa(xr.instance, "xrEnumerateBoundSourcesForAction",
+                       reinterpret_cast<PFN_xrVoidFunction*>(&xr.xrEnumerateBoundSourcesForAction)))) {
+        xr.xrEnumerateBoundSourcesForAction = nullptr;
+    }
+    if (XR_FAILED(gipa(xr.instance, "xrGetInputSourceLocalizedName",
+                       reinterpret_cast<PFN_xrVoidFunction*>(&xr.xrGetInputSourceLocalizedName)))) {
+        xr.xrGetInputSourceLocalizedName = nullptr;
+    }
     return true;
 }
 
@@ -273,6 +282,9 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     h.stickClick = readBool(xr, input::XrActionId::ThumbstickClick, path);
     h.primaryButton = readBool(xr, input::XrActionId::Primary, path);
     h.secondaryButton = readBool(xr, input::XrActionId::Secondary, path);
+    h.face3Button = readBool(xr, input::XrActionId::Face3, path);
+    h.face4Button = readBool(xr, input::XrActionId::Face4, path);
+    h.shoulderButton = readBool(xr, input::XrActionId::Shoulder, path);
     h.menuButton = readBool(xr, input::XrActionId::Menu, path);
     h.poseValid = locate(xr, xr.aimSpaces[handIndex(hand)], time, h.aimPose, &h.linearVelocity,
                          &h.velocityValid, &room);
@@ -359,6 +371,7 @@ bool attach(const XrContext& context) {
         s.controllerData = std::move(data);
         s.mapper.reset();
     }
+    s.bindingWatch = {};
     s.attached.store(true, std::memory_order_release);
     EVR_LOG(
         "%s: on: aim %s, demon aim %s%s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
@@ -411,6 +424,7 @@ void sync(XrTime predictedDisplayTime, bool focused) {
     std::shared_lock lock(s.xrMutex);
     const XrInput& xr = s.xr;
     Snapshot next;
+    input::BindingWatchSample watched; // what the runtime gave, before any scripted input
     if (focused && xr.session) {
         XrActiveActionSet active{xr.sets[static_cast<std::size_t>(input::XrActionSetId::Gameplay)],
                                  XR_NULL_PATH};
@@ -429,6 +443,10 @@ void sync(XrTime predictedDisplayTime, bool focused) {
             next.frame.right = readHand(xr, input::Hand::Right, predictedDisplayTime, room);
             next.frame.head.poseValid =
                 locate(xr, xr.viewSpace, predictedDisplayTime, next.frame.head.pose, nullptr, nullptr, &room);
+            watched.synced = true;
+            watched.headTracked = next.frame.head.poseValid;
+            watched.poseValid = {next.frame.left.poseValid || next.frame.left.gripValid,
+                                 next.frame.right.poseValid || next.frame.right.gripValid};
         }
     }
     if (const auto test = testInput()) {
@@ -455,6 +473,7 @@ void sync(XrTime predictedDisplayTime, bool focused) {
         }
         s.snapshot = next;
     }
+    watchBindings(xr, s, watched);
     updateHaptics(xr, focused);
 }
 

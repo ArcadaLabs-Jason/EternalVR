@@ -45,6 +45,9 @@ struct TaaEngine {
 };
 bool locateTaaEngine(const GameImage& image, TaaEngine& out);
 
+// idCVar::SetString (RVA 0x376020): (cvar object, value, force). nullptr (logged) unless it matches once.
+const std::byte* findCvarSetter(const GameImage& image);
+
 // The cvar objects registered under `names` (in the same order; nullptr for a name not found once). A
 // registration is `lea r8, [default]; lea rdx, [name]; lea rcx, [object]; call`. The object's first
 // member points at its value block: the value string at +0x0, the integer at +0x8.

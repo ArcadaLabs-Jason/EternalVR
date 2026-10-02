@@ -62,6 +62,14 @@ void poll();
 // The render size the game's window reports now, if any.
 std::optional<render_size::Extent> activeExtent();
 
+// The eye size the render size plans: a fixed size (fitted to the runtime's limits once known), or auto's
+// once the runtime's limits are known; nullopt before that or when the render size is not wanted.
+std::optional<render_size::Extent> plannedSize();
+
+// The render size was wanted and is off for the rest of the process (reason logged): the game renders at its
+// window's size, so the layer leaves the window's size cvars alone (runtime_cvars.hpp).
+bool sizeOff();
+
 // With the render size wanted: the mirror window's client area (ETERNALVR_MIRROR_WINDOW, moved and sized by
 // ETERNALVR_MIRROR_DISPLAY, _SIZE and _CROP; mirror_place.hpp), with crop `full` cut to the eye image's shape
 // once its size is known (the size answered, or a fixed render size). nullopt: the window stays where it is.

@@ -111,6 +111,18 @@ TEST_CASE("window cvars: no size is held without a usable one on the command lin
     CHECK(later[2].value == "2064"); // the later setting wins
 }
 
+TEST_CASE("window cvars: the window's size is told apart from the rest of the set") {
+    const auto held = evr::stereo_seq::stereoWindowCvars("game.exe +r_windowWidth 672 +r_windowHeight 720");
+    REQUIRE(held.size() == 4);
+    CHECK_FALSE(evr::stereo_seq::isWindowSizeCvar(held[0].name)); // r_fullscreen
+    CHECK_FALSE(evr::stereo_seq::isWindowSizeCvar(held[1].name)); // r_swapInterval
+    CHECK(evr::stereo_seq::isWindowSizeCvar(held[2].name));
+    CHECK(evr::stereo_seq::isWindowSizeCvar(held[3].name));
+    CHECK(evr::stereo_seq::isWindowSizeCvar("R_WINDOWWIDTH"));
+    CHECK_FALSE(evr::stereo_seq::isWindowSizeCvar("r_windowWidthX"));
+    CHECK_FALSE(evr::stereo_seq::isWindowSizeCvar(""));
+}
+
 TEST_CASE("launch size watch: the first swapchain is the launch size, a change reports the pixel ratio") {
     evr::stereo_seq::LaunchSizeWatch watch;
     CHECK_FALSE(watch.onSwapchain({0, 0}).has_value());

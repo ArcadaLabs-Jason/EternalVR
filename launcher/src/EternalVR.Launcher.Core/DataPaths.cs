@@ -33,6 +33,8 @@ namespace EternalVR.Launcher.Core
         public string UpdateStateFile => Path.Combine(Updates, "state.txt");
         /// <summary>The headset's sizes from the last runtime probe that answered (<see cref="Launch.LastHeadset"/>).</summary>
         public string HeadsetFile => Path.Combine(Root, "headset.txt");
+        /// <summary>Present while the last session rendered each eye below the planned size (<see cref="Launch.RenderCap"/>).</summary>
+        public string RenderCapFile => Path.Combine(Root, "render-cap.txt");
         /// <summary>Present while a VR session's restore has not completed (T-036, T-093).</summary>
         public string SessionMarker => Path.Combine(Root, "SESSION_PENDING");
         /// <summary>Present while an HKCU layer registration may exist (flag-gated route only).</summary>

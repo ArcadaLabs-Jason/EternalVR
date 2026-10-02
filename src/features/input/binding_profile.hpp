@@ -23,6 +23,9 @@ enum class ButtonInput : std::uint8_t {
     StickClick,
     Primary,   // A on the right Touch controller, X on the left.
     Secondary, // B on the right, Y on the left.
+    Face3,     // X on the right Steam Frame controller, D-pad right on the left.
+    Face4,     // Y on the right, D-pad up on the left.
+    Shoulder,  // The bumper above the trigger.
     Menu,
     Count,
 };

@@ -11,6 +11,7 @@
 // viewmodel hooks) and the pad sampler (XInput). Each piece of state names its lock.
 
 #include "features/input/aim_smoothing.hpp"
+#include "features/input/binding_watch.hpp"
 #include "features/input/controller_bindings.hpp"
 #include "features/input/controller_settings.hpp"
 #include "features/input/controller_state.hpp"
@@ -76,6 +77,9 @@ struct XrInput {
     PFN_xrResultToString xrResultToString = nullptr;
     PFN_xrApplyHapticFeedback xrApplyHapticFeedback = nullptr;
     PFN_xrStopHapticFeedback xrStopHapticFeedback = nullptr;
+    // Diagnostics only (input_watch.cpp): null when the runtime does not give them.
+    PFN_xrEnumerateBoundSourcesForAction xrEnumerateBoundSourcesForAction = nullptr;
+    PFN_xrGetInputSourceLocalizedName xrGetInputSourceLocalizedName = nullptr;
 
     XrInstance instance = XR_NULL_HANDLE;
     XrSession session = XR_NULL_HANDLE;
@@ -153,6 +157,11 @@ struct State {
 
     std::mutex snapshotMutex;
     Snapshot snapshot;
+
+    // XR worker only: the interaction profile each hand last reported (empty for none, by input::Hand), and
+    // whether the runtime binds our actions (input_watch.cpp; reset by attach).
+    std::array<std::string, 2> handProfiles;
+    input::BindingWatch bindingWatch;
 
     // The recenter transform from LOCAL into room space (setRoomFromLocal), applied by every locate.
     std::mutex roomMutex;
@@ -234,6 +243,8 @@ struct State {
     bool rumbleHook = false;
     bool demonAimHook = false;
     bool facingHook = false;
+    bool climbHook = false;
+    bool promptHooks = false;
     std::atomic<bool> xinputActive{false}; // the virtual gamepad feeds the game
     PlayerAim player;                      // the idPlayer vtable check
 
@@ -285,8 +296,14 @@ FamilyData loadControllerData(const input::ControllerSettings& settings);
 // which skipped. True when at least one profile was accepted.
 bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const FamilyData& data);
 // The family whose profile the runtime reports for the right hand, if it is one we have data for (the
-// profile of each hand is logged when it changes; a profile without data once). XR worker only.
-std::optional<game::Controller> currentFamily(const XrInput& xr, const State& s);
+// profile of each hand is kept in handProfiles and logged when it changes; a profile without data once). XR
+// worker only.
+std::optional<game::Controller> currentFamily(const XrInput& xr, State& s);
+
+// Whether the runtime binds our actions (input_watch.cpp). XR worker, inside sync under the shared xrMutex:
+// feeds the watch what this sync saw (before any scripted input; the time and the profiles are filled in)
+// and lists the bound sources, or warns, when it asks.
+void watchBindings(const XrInput& xr, State& s, input::BindingWatchSample sample);
 
 // The settings and the offset table, read once from the environment on first use.
 const input::ControllerSettings& settings();
@@ -346,8 +363,27 @@ void refreshTestInput();
 // The scripted input in force, if any (any thread).
 std::optional<input::TestInput> testInput();
 
-// Camera hook: feeds this frame's forced-view signals to the gate and sets `yielding`.
-void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimation);
+// Camera hook: feeds this frame's forced-view signals to the gate and sets `yielding`. `wallClimb`: on a
+// climbable wall whose view is the player's own (climbFrame).
+void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimation, bool wallClimb);
+
+// The local player's foreign SetViewAngles calls since the last take (aim_hooks.cpp): how many, how many
+// turned the view (pitch or yaw left the player's angles), the largest turn in degrees and its caller's RVA.
+struct ForeignViewWrites {
+    std::uint32_t writes = 0;
+    std::uint32_t turns = 0;
+    float largestTurnDegrees = 0.0f;
+    std::uintptr_t largestTurnCaller = 0;
+};
+// Camera hook, once a game frame (climbFrame): takes and clears the counts.
+ForeignViewWrites takeForeignViewWrites();
+
+// Climbable walls (climb_hook.cpp). Camera hook, every game frame whether or not the controllers are
+// attached: holds the wall-climb cvars and returns whether the player is on a climbable wall with the view
+// the player's own (false with ETERNALVR_CLIMB_LOOK=0, under aim view, or without the hook).
+bool climbFrame();
+// Camera hook: the gate had hand aim aim with the head this frame (the counters).
+void noteClimbAim(bool headAims);
 
 // Vibration (haptics_xr.cpp). The mapper, after a menu held its actions back: the actions sent and the
 // command's punch and capture.
@@ -364,13 +400,16 @@ std::string itemDeclName(const std::byte* decl);
 // bHaptics (bhaptics_game.cpp, docs/BHAPTICS.md). With the game hooks: starts its thread once when
 // ETERNALVR_BHAPTICS=1. The fire hook: a shot of the local player's `hands`. The camera hook, once a game
 // frame: the player's health, armor, hits and sync kill. The portal hooks (bhaptics_portal.cpp, installed by
-// startBhaptics): the player went through a portal, a pad or a level exit. All only note; nothing waits on
-// the network.
+// startBhaptics): the player went through a portal, a pad or a level exit. The launch hooks
+// (bhaptics_launch.cpp, the same): a jump pad or a booster launched the player (once per launch, already
+// filtered). All only note; nothing waits on the network.
 void startBhaptics();
 void noteBhapticsShot(const std::byte* hands);
 void noteBhapticsFrame(const std::byte* player);
 void noteBhapticsPortal();
+void noteBhapticsLaunch();
 bool installBhapticsPortalHooks();
+bool installBhapticsLaunchHooks();
 
 // Installers (each logs what it did); `image` checks were made by the caller.
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
@@ -380,5 +419,11 @@ bool installOffhandHook();
 bool installXInputHook();
 bool installRumbleHook();
 bool installFacingHook();
+bool installClimbHook();
+bool installPromptHooks();
+
+// The game's prompts name the buttons of `controller` under `profile` from now on (prompt_hooks.cpp). Called
+// under mapperMutex whenever the mapper is built; nothing changes when the texts are the same.
+void publishPromptLabels(const input::BindingProfile& profile, game::Controller controller);
 
 } // namespace evr::vkcore::controllers

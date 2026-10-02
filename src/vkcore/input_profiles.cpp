@@ -10,7 +10,6 @@
 #include "vkcore/log.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -64,21 +63,55 @@ bool profileAvailable(const ProfileSupport& support, const input::ControllerData
     return input::profileAvailable(*info, enabled, support.api11);
 }
 
-bool suggestBindings(XrInput& xr, const input::ControllerData& data) {
+// Suggests the bindings of `data` with these paths (one per suggested binding): the runtime's result.
+XrResult suggestPaths(XrInput& xr, const input::ControllerData& data, const std::vector<std::string>& paths) {
     XrPath profile = XR_NULL_PATH;
-    EVR_XR_TRY(xr.xrStringToPath(xr.instance, data.profilePath.c_str(), &profile));
+    XrResult r = xr.xrStringToPath(xr.instance, data.profilePath.c_str(), &profile);
     std::vector<XrActionSuggestedBinding> bindings;
-    for (const input::SuggestedBinding& b : data.suggested) {
+    for (std::size_t i = 0; i < paths.size() && XR_SUCCEEDED(r); ++i) {
         XrPath path = XR_NULL_PATH;
-        EVR_XR_TRY(xr.xrStringToPath(xr.instance, b.path.c_str(), &path));
-        bindings.push_back({xr.actions[static_cast<std::size_t>(b.action)], path});
+        r = xr.xrStringToPath(xr.instance, paths[i].c_str(), &path);
+        bindings.push_back({xr.actions[static_cast<std::size_t>(data.suggested[i].action)], path});
+    }
+    if (XR_FAILED(r)) {
+        return r;
     }
     XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     suggested.interactionProfile = profile;
     suggested.countSuggestedBindings = static_cast<std::uint32_t>(bindings.size());
     suggested.suggestedBindings = bindings.data();
-    EVR_XR_TRY(xr.xrSuggestInteractionProfileBindings(xr.instance, &suggested));
-    EVR_LOG("%s: %zu binding(s) suggested for %s", kTag, bindings.size(), data.profilePath.c_str());
+    return xr.xrSuggestInteractionProfileBindings(xr.instance, &suggested);
+}
+
+bool suggestBindings(XrInput& xr, const input::ControllerData& data) {
+    std::vector<std::string> paths;
+    std::vector<std::string> olderPaths;
+    bool renamed = false;
+    for (const input::SuggestedBinding& b : data.suggested) {
+        paths.push_back(b.path);
+        const auto older = input::olderInputName(data.profilePath, b.path);
+        renamed = renamed || older.has_value();
+        olderPaths.push_back(older.value_or(b.path));
+    }
+    const char* names = "";
+    XrResult r = suggestPaths(xr, data, paths);
+    if (renamed) {
+        names = " (the bumper as /input/shoulder/)";
+        // A runtime older than the rename refuses the whole profile for the newer name (olderInputName).
+        if (r == XR_ERROR_PATH_UNSUPPORTED) {
+            EVR_LOG("%s: %s: the runtime refuses a path; trying the bumper's older name, /input/bumper/",
+                    kTag, data.profilePath.c_str());
+            names = " (the bumper as /input/bumper/)";
+            r = suggestPaths(xr, data, olderPaths);
+        }
+    }
+    if (XR_FAILED(r)) {
+        char text[XR_MAX_RESULT_STRING_SIZE];
+        EVR_LOG("%s: xrSuggestInteractionProfileBindings failed for %s: %s", kTag, data.profilePath.c_str(),
+                xrText(r, text));
+        return false;
+    }
+    EVR_LOG("%s: %zu binding(s) suggested for %s%s", kTag, paths.size(), data.profilePath.c_str(), names);
     return true;
 }
 
@@ -87,11 +120,11 @@ void append(std::string& list, std::string_view item) {
     list += item;
 }
 
-// The interaction profile the runtime reports for a hand, or empty (none yet, or the call failed). A
-// change is logged per hand.
-std::string currentProfile(const XrInput& xr, input::Hand hand) {
-    static std::array<std::string, 2> logged; // the input thread only
+// The interaction profile the runtime reports for a hand, or empty (none yet, or the call failed), kept in
+// handProfiles. A change is logged per hand.
+std::string currentProfile(const XrInput& xr, State& s, input::Hand hand) {
     const auto index = static_cast<std::size_t>(hand);
+    std::string& logged = s.handProfiles[index];
     XrInteractionProfileState profile{XR_TYPE_INTERACTION_PROFILE_STATE};
     char text[XR_MAX_PATH_LENGTH] = {};
     if (XR_SUCCEEDED(xr.xrGetCurrentInteractionProfile(xr.session, xr.handPaths[index], &profile)) &&
@@ -102,8 +135,8 @@ std::string currentProfile(const XrInput& xr, input::Hand hand) {
             text[0] = '\0';
         }
     }
-    if (logged[index] != text) {
-        logged[index] = text;
+    if (logged != text) {
+        logged = text;
         EVR_LOG("%s: the runtime reports %s for the %s hand", kTag, text[0] ? text : "no controller",
                 hand == input::Hand::Left ? "left" : "right");
     }
@@ -194,9 +227,9 @@ bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const Family
     return any;
 }
 
-std::optional<game::Controller> currentFamily(const XrInput& xr, const State& s) {
-    currentProfile(xr, input::Hand::Left); // logged only
-    const std::string text = currentProfile(xr, input::Hand::Right);
+std::optional<game::Controller> currentFamily(const XrInput& xr, State& s) {
+    currentProfile(xr, s, input::Hand::Left); // logged only
+    const std::string text = currentProfile(xr, s, input::Hand::Right);
     if (text.empty()) {
         return std::nullopt;
     }

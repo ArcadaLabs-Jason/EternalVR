@@ -381,13 +381,16 @@ TEST_CASE("every frame stays within its device's motors and 0..100, and the coun
     CHECK(counted == frames);
 }
 
-TEST_CASE("a sync is a crystal, a pickup or a glory kill by its entity's name") {
+TEST_CASE("a sync is a crystal, a Praetor token, a pickup or a glory kill by its entity's name") {
     using evr::bhaptics::SyncKind;
     using evr::bhaptics::syncKindOf;
     CHECK(syncKindOf("interact/argent_cell/use_sync") == SyncKind::Crystal);
     CHECK(syncKindOf("interact/argent_cell/use_sync_e3") == SyncKind::Crystal);
     CHECK(syncKindOf("interact/rune/use_sync") == SyncKind::Pickup);
-    CHECK(syncKindOf("interact/preator_suit_token/preator_suit_token_sync") == SyncKind::Pickup);
+    // The token's name as the game spells it (traced on the rig, 2026-10-01), and spelt right.
+    CHECK(syncKindOf("interact/preator_suit_token/preator_suit_token_sync") == SyncKind::Token);
+    CHECK(syncKindOf("interact/praetor_suit_token/praetor_suit_token_sync") == SyncKind::Token);
+    CHECK(syncKindOf("interact/mod_bot/use_sync") == SyncKind::Pickup);
     CHECK(syncKindOf("sync/imp/front") == SyncKind::GloryKill);
     CHECK(syncKindOf("") == SyncKind::GloryKill);
 }
@@ -399,65 +402,6 @@ TEST_CASE("a pickup's animation is not a glory kill") {
     s.sync = true;
     s.syncKind = evr::bhaptics::SyncKind::Pickup;
     CHECK(body.update(s).empty());
-}
-
-TEST_CASE("the Sentinel Crystal's pickup plays a shock all over, after its delay and for its length") {
-    using evr::bhaptics::kCrystalDelaySeconds;
-    using evr::bhaptics::kCrystalSeconds;
-    BodyHaptics body;
-    body.update(playing(1.0));
-    auto s = playing(1.1);
-    s.sync = true;
-    s.syncKind = evr::bhaptics::SyncKind::Crystal;
-    CHECK(body.update(s).empty()); // not a glory kill, and the shock waits for its delay
-    int bursts = 0;
-    bool vest[2] = {false, false};
-    bool changed = false;
-    std::vector<std::uint8_t> first;
-    for (double t = 1.12; t < 1.1 + kCrystalDelaySeconds + kCrystalSeconds + 0.5; t += 0.02) {
-        s.seconds = t;
-        const auto frames = body.update(s);
-        CHECK(of(frames, Effect::GloryKill).empty());
-        const auto shock = of(frames, Effect::Crystal);
-        if (shock.empty()) {
-            continue;
-        }
-        CHECK(t >= 1.1 + kCrystalDelaySeconds - 1e-9);
-        CHECK(t < 1.1 + kCrystalDelaySeconds + kCrystalSeconds + 0.02);
-        ++bursts;
-        for (const Frame* f : shock) {
-            vest[0] = vest[0] || f->device == Device::VestFront;
-            vest[1] = vest[1] || f->device == Device::VestBack;
-            std::vector<std::uint8_t> indices;
-            for (const auto& d : f->dots) {
-                indices.push_back(d.index);
-            }
-            if (f->device == Device::VestFront) {
-                if (first.empty()) {
-                    first = indices;
-                } else if (indices != first) {
-                    changed = true;
-                }
-            }
-        }
-    }
-    CHECK(bursts >= 8);
-    CHECK(vest[0]);
-    CHECK(vest[1]);
-    CHECK(changed); // random motors, not one pattern
-    // Leaving play cancels a shock that has not played out.
-    BodyHaptics again;
-    again.update(playing(5.0));
-    auto c = playing(5.1);
-    c.sync = true;
-    c.syncKind = evr::bhaptics::SyncKind::Crystal;
-    again.update(c);
-    auto menu = c;
-    menu.seconds = 5.2;
-    menu.gameplay = false;
-    again.update(menu);
-    c.seconds = 5.1 + kCrystalDelaySeconds + 0.1;
-    CHECK(of(again.update(c), Effect::Crystal).empty());
 }
 
 TEST_CASE("a trigger teleport is a portal unless it is one of the fall's hazard or out-of-bounds volumes") {

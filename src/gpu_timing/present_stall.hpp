@@ -10,6 +10,7 @@
 // play get a line each; later ones are only counted, so a bad session cannot flood the log.
 
 #include <cstdint>
+#include <string>
 
 namespace evr::gpu_timing {
 
@@ -48,5 +49,11 @@ public:
 private:
     Counters counters_;
 };
+
+// The game's own checkpoint saves (stall_watch.hpp): the stall line's closing note for the saves begun in
+// its gap ("; the game saved a checkpoint in the gap"), and the 10 s summary's ("; the game saved 2
+// checkpoints"). Empty for none.
+std::string stallSaveNote(std::uint64_t saves);
+std::string summarySaveNote(std::uint64_t saves);
 
 } // namespace evr::gpu_timing

@@ -48,7 +48,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.HandsJump, new LauncherSettings { Controllers = false }));
             Assert.Equal(SettingRules.NotSitting, SettingRules.WhyNot(Setting.HandsJump, new LauncherSettings { Posture = PostureMode.Seated }));
             var text = SettingTexts.For(Setting.HandsJump);
-            Assert.Equal("Jump with both hands", text.Label);
+            Assert.Equal("Jump with both hands (standing)", text.Label);
             Assert.DoesNotContain("\u2014", text.Tooltip);
         }
     }

@@ -4,7 +4,8 @@
 // present of the game's device; a gap longer than gpu_timing::kStallGapMs in play gets one `stall:` line
 // with what the layer's own code and the game's heavier Vulkan calls took during it: the layer's present
 // hook (its wait for the presenter's lock, the driver's present it calls), Route S drains, the game's
-// pipeline creation and vkAllocateMemory calls, and the last VRAM reading (vram_watch.hpp). Which gaps
+// pipeline creation and vkAllocateMemory calls, the last VRAM reading (vram_watch.hpp), and whether the game
+// began one of its own checkpoint saves in the gap (save_hook.cpp). Which gaps
 // count, and the line limit, are gpu_timing/present_stall.hpp's. The hot paths only add to atomics: no
 // allocation, lock or log except for a stall.
 
@@ -40,7 +41,15 @@ void addDrain(std::uint64_t micros);
 void onGameTick();
 void trackGameTicks(bool on);
 
-// XR worker, every 10 s: the stalls of the last 10 s (nothing when there were none).
+// The game began saving a checkpoint (save_hook.cpp, on the game's thread): named in the stall line of the
+// gap it falls in and counted in the 10 s summary. Only adds to atomics.
+void onCheckpointSave();
+
+// Hooks the game's checkpoint save (save_hook.cpp). False, with a line, when it cannot: stall lines then
+// just do not name saves.
+bool installCheckpointSaveHook();
+
+// XR worker, every 10 s: the stalls and checkpoint saves of the last 10 s (nothing when there were none).
 void logSummary();
 
 } // namespace evr::vkcore::stall_watch

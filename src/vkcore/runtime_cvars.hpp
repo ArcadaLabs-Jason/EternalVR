@@ -9,7 +9,10 @@
 //   Route S; ETERNALVR_STEREO_RUNTIME_CVARS=0 leaves the cvars as the game has them.
 // - Route S, whatever the temporal mode: the window and present set (stereo_seq::stereoWindowCvars:
 //   r_fullscreen 0, r_swapInterval 0, the command line's r_windowWidth / r_windowHeight), so a load path
-//   that applies the player's video mode cannot take the eyes to the display's size.
+//   that applies the player's video mode cannot take the eyes to the display's size. Once the render size is
+//   off (virtual_client::sizeOff: the surface cannot scale to it, as on an AMD driver), r_windowWidth /
+//   r_windowHeight are left to the game (logged): the eyes render at the window's size, and a held size that
+//   differs from it would make the game resize its window and put the swapchain out of date.
 // - ETERNALVR_CPU_SAVER="name=value;name=value": the launcher's CPU Saver (launcher/data/cpu-saver.txt,
 //   docs/rig-findings/perf-cpu-cvars.md), cvars that cut the CPU work of each render. A cvar the sets above
 //   hold keeps their value. Unset, empty or "0": nothing.
@@ -18,6 +21,8 @@
 //   Unset: the player's own setting.
 // - A value "<=N" (in either list) is a cap: written only while the cvar's float value is above N, so a
 //   player on a lower quality level keeps the game's value.
+// - swf_platformOverride 2: the game's prompts stay in their keyboard form, which the layer renames to the VR
+//   buttons (prompt_hooks.cpp). ETERNALVR_BUTTON_PROMPTS=0 leaves it alone.
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
 //   replaces the CPU Saver's value for the same cvar.
 //

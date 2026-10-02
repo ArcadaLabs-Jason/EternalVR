@@ -6,6 +6,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/window_cap.hpp"
 
 #include <algorithm>
 #include <array>
@@ -23,6 +24,7 @@ namespace {
 using render_size::Extent;
 
 std::atomic<std::uint64_t> g_suboptimal{0};
+std::atomic<bool> g_off{false}; // State::off, read without the mutex (sizeOff)
 // The band the window shows (ETERNALVR_MIRROR_CROP) while the game's swapchain is stretched into it; 0: none.
 std::atomic<double> g_cropAspect{0.0};
 
@@ -199,6 +201,7 @@ queryScaling(const InstanceData& inst, VkPhysicalDevice physicalDevice, VkSurfac
         if (inst.nextSurfaceCapabilities2(physicalDevice, &info, &caps) != VK_SUCCESS) {
             return std::nullopt;
         }
+        window_cap::logPresentMode(mode, scaling, caps.surfaceCapabilities);
         any = true;
         all.behavior &= scaling.supportedPresentScaling;
         all.gravity &= scaling.supportedPresentGravityX & scaling.supportedPresentGravityY;
@@ -237,17 +240,22 @@ VkPresentGravityFlagsKHR chooseGravity(const Scaling& s) {
     return s.gravity & VK_PRESENT_GRAVITY_MIN_BIT_KHR ? VK_PRESENT_GRAVITY_MIN_BIT_KHR : 0;
 }
 
-void turnOff(State& s, const char* why) {
+// `driverLimit`: what the driver lacks, when that is why (logged with the eye's real size).
+void turnOff(State& s, const char* why, const char* driverLimit = nullptr) {
     if (s.off) {
         return;
     }
     s.off = true;
+    g_off.store(true, std::memory_order_release);
     g_cropAspect.store(0.0);
     const bool wasActive = client_rect::answer().has_value();
     client_rect::setAnswer(std::nullopt);
-    EVR_LOG("size: render size off: %s%s", why,
+    EVR_LOG("size: render size off: %s%s%s", why,
             wasActive ? "; the game renders at its window's size again"
-                      : "; the game renders at its window's size");
+                      : "; the game renders at its window's size",
+            window_cap::capText(wasActive ? nullptr : s.window,
+                                render_size::selectSize(settings().request, s.limits), driverLimit)
+                .c_str());
     if (wasActive) {
         s.placement = State::Placement{settings().fallback, "render size off"};
     }
@@ -290,7 +298,8 @@ void update(State& s) {
         return;
     }
     if (!s.deviceMaintenance) {
-        turnOff(s, "the game's device has no VK_KHR_swapchain_maintenance1 (present scaling)");
+        turnOff(s, "the game's device has no VK_KHR_swapchain_maintenance1 (present scaling)",
+                "the graphics driver cannot scale presented images");
         return;
     }
     if (!s.scaling) {
@@ -312,7 +321,8 @@ void update(State& s) {
     }
     if (size->width < s.scaling->minScaled.width || size->height < s.scaling->minScaled.height ||
         size->width > s.scaling->maxScaled.width || size->height > s.scaling->maxScaled.height) {
-        turnOff(s, "the render size is outside the surface's scaled image range");
+        const std::string limit = window_cap::rangeLimit(s.scaling->minScaled, s.scaling->maxScaled);
+        turnOff(s, "the render size is outside the surface's scaled image range", limit.c_str());
         return;
     }
     const std::optional<Extent> previous = client_rect::answer();
@@ -374,6 +384,7 @@ void onGameDevice(const InstanceData& inst, VkPhysicalDevice physicalDevice, boo
         s.physicalDevice = physicalDevice;
         s.deviceKnown = true;
         s.deviceMaintenance = swapchainMaintenance;
+        window_cap::setDeviceScaling(swapchainMaintenance);
         s.scaling.reset();
         update(s);
     }
@@ -547,6 +558,16 @@ void poll() {
 
 std::optional<Extent> activeExtent() {
     return client_rect::answer();
+}
+
+std::optional<Extent> plannedSize() {
+    State& s = state();
+    std::lock_guard lock(s.mutex);
+    return render_size::selectSize(settings().request, s.limits);
+}
+
+bool sizeOff() {
+    return g_off.load(std::memory_order_acquire);
 }
 
 std::optional<render_size::WindowRect> mirrorWindow() {

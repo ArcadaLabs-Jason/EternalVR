@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <optional>
+#include <string>
 #include <utility>
 
 namespace evr::input {
@@ -89,11 +91,36 @@ constexpr std::array<std::string_view, 16> kPicoRight{
     "/input/thumbstick/touch", "/input/grip/pose",     "/input/aim/pose",      "/output/haptic",
 };
 
+// Steam Frame (XR_VALVE_frame_controller_interaction, which SteamVR offers but the registry does not list):
+// a D-pad and View on the left, A/B/X/Y and Menu on the right, a bumper on both. SteamVR 2.17.10 renamed
+// the bumper's input from bumper to shoulder and still accepts the old name, so both are listed. System
+// on both hands is reserved.
+constexpr std::array<std::string_view, 27> kFrameLeft{
+    "/input/dpad_up/click",   "/input/dpad_up/touch",   "/input/dpad_down/click",  "/input/dpad_down/touch",
+    "/input/dpad_left/click", "/input/dpad_left/touch", "/input/dpad_right/click", "/input/dpad_right/touch",
+    "/input/view/click",      "/input/view/touch",      "/input/shoulder/click",   "/input/shoulder/touch",
+    "/input/bumper/click",    "/input/bumper/touch",    "/input/squeeze/value",    "/input/squeeze/click",
+    "/input/squeeze/touch",   "/input/trigger/value",   "/input/trigger/click",    "/input/trigger/touch",
+    "/input/thumbstick/x",    "/input/thumbstick/y",    "/input/thumbstick/click", "/input/thumbstick/touch",
+    "/input/grip/pose",       "/input/aim/pose",        "/output/haptic",
+};
+constexpr std::array<std::string_view, 27> kFrameRight{
+    "/input/a/click",       "/input/a/touch",       "/input/b/click",          "/input/b/touch",
+    "/input/x/click",       "/input/x/touch",       "/input/y/click",          "/input/y/touch",
+    "/input/menu/click",    "/input/menu/touch",    "/input/shoulder/click",   "/input/shoulder/touch",
+    "/input/bumper/click",  "/input/bumper/touch",  "/input/squeeze/value",    "/input/squeeze/click",
+    "/input/squeeze/touch", "/input/trigger/value", "/input/trigger/click",    "/input/trigger/touch",
+    "/input/thumbstick/x",  "/input/thumbstick/y",  "/input/thumbstick/click", "/input/thumbstick/touch",
+    "/input/grip/pose",     "/input/aim/pose",      "/output/haptic",
+};
+
+constexpr std::string_view kFrameProfile = "/interaction_profiles/valve/frame_controller_valve";
+
 // The Touch Pro and Touch Plus profiles (XR_FB_touch_controller_pro, XR_META_touch_controller_plus) are
 // left out on purpose: every runtime that has them reports those controllers as Touch controllers when
 // an application suggests no bindings for them, and a family of their own would only split the Touch
 // data (a player's Touch file would stop applying to them).
-constexpr std::array<InteractionProfileInfo, 7> kProfiles{{
+constexpr std::array<InteractionProfileInfo, 8> kProfiles{{
     {"/interaction_profiles/oculus/touch_controller", kTouchLeft, kTouchRight, {}, false},
     {"/interaction_profiles/valve/index_controller", kIndex, kIndex, {}, false},
     {"/interaction_profiles/hp/mixed_reality_controller", kHpLeft, kHpRight,
@@ -104,7 +131,11 @@ constexpr std::array<InteractionProfileInfo, 7> kProfiles{{
     {"/interaction_profiles/htc/vive_controller", kViveWand, kViveWand, {}, false},
     {"/interaction_profiles/bytedance/pico4_controller", kPicoLeft, kPicoRight,
      "XR_BD_controller_interaction", true},
+    {kFrameProfile, kFrameLeft, kFrameRight, "XR_VALVE_frame_controller_interaction", false},
 }};
+
+constexpr std::string_view kShoulder = "/input/shoulder/";
+constexpr std::string_view kBumper = "/input/bumper/";
 
 // The identifier part of a path: "/input/trigger/value" -> "/input/trigger". Paths with no
 // component ("/output/haptic", "/input/thumbstick") are their own identifier.
@@ -154,6 +185,15 @@ bool profileAvailable(const InteractionProfileInfo& profile,
         return true;
     }
     return std::ranges::find(enabledExtensions, profile.extension) != enabledExtensions.end();
+}
+
+std::optional<std::string> olderInputName(std::string_view profilePath, std::string_view bindingPath) {
+    const std::size_t at = bindingPath.find(kShoulder);
+    if (profilePath != kFrameProfile || at == std::string_view::npos) {
+        return std::nullopt;
+    }
+    return std::string(bindingPath.substr(0, at)) + std::string(kBumper) +
+           std::string(bindingPath.substr(at + kShoulder.size()));
 }
 
 bool profileHasPath(const InteractionProfileInfo& profile, Hand hand, std::string_view path) {

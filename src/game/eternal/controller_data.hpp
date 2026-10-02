@@ -23,6 +23,7 @@ enum class Controller : std::uint8_t {
     ViveCosmos,
     ViveWand,
     Pico4,
+    SteamFrame,
     Count,
 };
 
@@ -31,7 +32,7 @@ inline constexpr std::size_t kControllerCount = static_cast<std::size_t>(Control
 // Every family, in enum order.
 inline constexpr std::array<Controller, kControllerCount> kControllers{
     Controller::OculusTouch, Controller::ValveIndex, Controller::HpReverbG2, Controller::WindowsMixedReality,
-    Controller::ViveCosmos,  Controller::ViveWand,   Controller::Pico4,
+    Controller::ViveCosmos,  Controller::ViveWand,   Controller::Pico4,      Controller::SteamFrame,
 };
 
 // The data file's base name, e.g. "oculus_touch" for oculus_touch.toml.

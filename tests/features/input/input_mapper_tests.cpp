@@ -64,6 +64,15 @@ void press(InputFrame& frame, Hand hand, ButtonInput input) {
     case ButtonInput::Secondary:
         state.secondaryButton = true;
         break;
+    case ButtonInput::Face3:
+        state.face3Button = true;
+        break;
+    case ButtonInput::Face4:
+        state.face4Button = true;
+        break;
+    case ButtonInput::Shoulder:
+        state.shoulderButton = true;
+        break;
     case ButtonInput::Menu:
         state.menuButton = true;
         break;

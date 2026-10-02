@@ -1,5 +1,5 @@
-// Head tracking: the game's camera hook, head aim, cutscene handling, the render latch and the view
-// each present carries (docs/VR_HEAD_TRACKED.md).
+// Head tracking: the game's camera hook, head aim and cutscene handling (docs/VR_HEAD_TRACKED.md). The render
+// latch and the view each present carries are in presenter_latch.cpp.
 
 #include "vkcore/presenter_impl.hpp"
 
@@ -31,8 +31,7 @@ namespace {
 constexpr double kGloryBlackRefreshSeconds = 0.1;
 
 // The body yaw turning more than 90 degrees in one game frame (a stick turn never does): logged with what
-// drove the view, to find the rare instant half turn seen once in a seated glory kill (the owner's Quest 3,
-// 2026-09-28). Camera hook thread only.
+// drove the view, to find the rare half turn seen once in a seated glory kill (2026-09-28; camera hook only).
 struct BodyJumpWatch {
     std::optional<float> lastYaw;
     std::uint64_t jumps = 0;
@@ -56,16 +55,17 @@ void watchBodyYaw(float yaw, bool headAimed, bool forcedView, bool cutscene, boo
 } // namespace
 
 // ---------------------------------------------------------------------------------------------------
-// Head tracking: the game's camera hook, the render latch and the view carried by each present
+// Head tracking: the game's camera hook
 
 void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
-    // Multiplayer guard (mp_guard.hpp): off, the game's view, aim and input are left exactly as it made
-    // them, for the rest of the process.
+    // Multiplayer guard (mp_guard.hpp): off, the game's view, aim and input stay as it made them for the
+    // rest of the process, and the wall-climb cvars go back to the game's own values (climb_hook.cpp).
     if (!mp_guard::allowsGameTouch()) {
         if (!loggedGuardOff) {
             loggedGuardOff = true;
             EVR_LOG("head: the multiplayer guard is %s; the game's view and aim are no longer changed",
                     mp_policy::toString(mp_guard::state()));
+            controllers::restoreClimbCvars("the multiplayer guard stopped game touches");
         }
         return;
     }
@@ -347,10 +347,23 @@ void XrPresenter::Impl::trackCutscene(bool inCutscene) {
 std::optional<xr_math::IdViewAxis>
 XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gameAxis, Quat headInIdTech) {
     if (aimPhase == AimPhase::Off) {
+        const ULONGLONG ticks = GetTickCount64();
+        if (ticks - lastAimStatsTicks >= 10000) {
+            lastAimStatsTicks = ticks;
+            if (aimCheck.gaveUp()) {
+                EVR_LOG("aim: head aim off for this session after %d tries of the view angles check; the "
+                        "game keeps its own aim",
+                        aimCheck.tryNumber());
+            } else {
+                EVR_LOG("aim: head aim off for this session (the player layout was not found); the game "
+                        "keeps its own aim");
+            }
+        }
         return std::nullopt;
     }
     if (aimPhase == AimPhase::Unchecked) {
         aimPhase = playerAim.init() ? AimPhase::Verifying : AimPhase::Off;
+        lastAimStatsTicks = GetTickCount64(); // the first statistics line comes 10 s on
         if (aimPhase == AimPhase::Off) {
             return std::nullopt;
         }
@@ -391,43 +404,63 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
     // What moved the camera in a forced view (a pickup, a glory kill): logged when it ends.
     camera_anim::noteForcedView(controllers::forcedView(), gameAxis, sample.view);
 
-    // Verification: the game's view angles must be its command angles plus one of the two deltas.
+    // Verification (xr_math/aim_check.hpp): the game's view angles must be its command angles plus one of
+    // the two deltas. Frames the game drives are not counted, and a failed try runs again later.
     if (aimPhase == AimPhase::Verifying) {
-        const auto matches = [&](const xr_math::IdAngles& delta) {
-            return std::fabs(xr_math::normalize180(sample.view.yaw - (sample.command.yaw + delta.yaw))) <
-                       0.05f &&
-                   std::fabs(xr_math::normalize180(sample.view.pitch -
-                                                   (sample.command.pitch + delta.pitch))) < 0.05f;
-        };
-        ++aimChecks;
-        aimPhysicsMatches += matches(sample.delta) ? 1 : 0;
-        aimStateMatches += matches(sample.stateDelta) ? 1 : 0;
-        if (aimChecks <= 3) {
-            EVR_LOG("aim: check %d: view (%.2f %.2f) command (%.2f %.2f) delta (%.2f %.2f) state delta (%.2f "
-                    "%.2f)",
-                    aimChecks, sample.view.pitch, sample.view.yaw, sample.command.pitch, sample.command.yaw,
-                    sample.delta.pitch, sample.delta.yaw, sample.stateDelta.pitch, sample.stateDelta.yaw);
+        using Event = xr_math::AimCheck::Event;
+        constexpr int kTries = xr_math::AimCheck::kRetries + 1;
+        const bool forced = controllers::forcedView();
+        const bool menu = menuUp.load(std::memory_order_relaxed);
+        const xr_math::AimCheck::Step check = aimCheck.update(sample.view, sample.command, sample.delta,
+                                                              sample.stateDelta, cutscene || forced || menu);
+        const int tryNumber = aimCheck.tryNumber();
+        const bool mismatch = check.counted && !check.physicsMatch && !check.stateMatch;
+        if (check.counted && (aimCheck.checks() <= 3 || (mismatch && aimCheck.mismatches() <= 10))) {
+            EVR_LOG("aim: try %d check %d: view (%.2f %.2f) command (%.2f %.2f) delta (%.2f %.2f) state "
+                    "delta (%.2f %.2f)%s",
+                    tryNumber, aimCheck.checks(), sample.view.pitch, sample.view.yaw, sample.command.pitch,
+                    sample.command.yaw, sample.delta.pitch, sample.delta.yaw, sample.stateDelta.pitch,
+                    sample.stateDelta.yaw, mismatch ? "; matches neither delta" : "");
+        } else if (check.event == Event::Skipped && aimCheck.skipped() == 1) {
+            EVR_LOG("aim: try %d paused after %d check(s) while the game drives the view (cutscene %s, "
+                    "forced view %s, menu %s); those frames are not counted",
+                    tryNumber, aimCheck.checks(), cutscene ? "yes" : "no", forced ? "yes" : "no",
+                    menu ? "yes" : "no");
+        } else if (check.event == Event::Retry) {
+            EVR_LOG("aim: checking the view angles again (try %d of %d) after %d frames of the player's own "
+                    "view",
+                    tryNumber, kTries, xr_math::AimCheck::kSettleFrames * (tryNumber - 1));
         }
-        if (aimChecks < 60) {
+        const ULONGLONG ticks = GetTickCount64();
+        const bool ended = check.event == Event::Passed || check.event == Event::GaveUp;
+        if (!ended && ticks - lastAimStatsTicks >= 10000) {
+            lastAimStatsTicks = ticks;
+            EVR_LOG("aim: head aim not on yet: try %d of %d, %d frame(s) checked, %d not counted%s",
+                    tryNumber, kTries, aimCheck.checks(), aimCheck.skipped(),
+                    check.event == Event::Waiting ? "; the try failed, waiting for the player's view" : "");
+        }
+        if (check.event == Event::Failed || check.event == Event::GaveUp) {
+            EVR_LOG("aim: view angles = command + delta held in %d/%d (physics) and %d/%d (state) frames, %d "
+                    "frame(s) in a cutscene, forced view or menu not counted (try %d of %d); %s",
+                    aimCheck.physicsMatches(), aimCheck.checks(), aimCheck.stateMatches(), aimCheck.checks(),
+                    aimCheck.skipped(), tryNumber, kTries,
+                    check.event == Event::GaveUp ? "head aim off for this session, the game keeps its own aim"
+                                                 : "checking again once the player has their own view");
+            if (check.event == Event::GaveUp) {
+                aimPhase = AimPhase::Off;
+            }
+        }
+        if (check.event != Event::Passed) {
             return std::nullopt;
         }
-        if (aimPhysicsMatches >= 54) {
-            aimField = PlayerAim::DeltaField::Physics;
-        } else if (aimStateMatches >= 54) {
-            aimField = PlayerAim::DeltaField::State;
-        } else {
-            aimPhase = AimPhase::Off;
-            EVR_LOG("aim: view angles = command + delta held in %d/%d (physics) and %d/%d (state) frames; "
-                    "head aim "
-                    "off, the game keeps its own aim",
-                    aimPhysicsMatches, aimChecks, aimStateMatches, aimChecks);
-            return std::nullopt;
-        }
+        aimField = aimCheck.physics() ? PlayerAim::DeltaField::Physics : PlayerAim::DeltaField::State;
         aimPhase = AimPhase::Active;
         markPlayerInMap(); // ETERNALVR_DEBUG_COMMANDS counts from here
-        EVR_LOG("aim: head aim on through the %s deltaViewAngles (%d/%d frames matched)",
-                aimField == PlayerAim::DeltaField::Physics ? "physics" : "state",
-                aimField == PlayerAim::DeltaField::Physics ? aimPhysicsMatches : aimStateMatches, aimChecks);
+        EVR_LOG("aim: head aim on through the %s deltaViewAngles (%d/%d frames matched, %d not counted; try "
+                "%d of %d)",
+                aimCheck.physics() ? "physics" : "state",
+                aimCheck.physics() ? aimCheck.physicsMatches() : aimCheck.stateMatches(), aimCheck.checks(),
+                aimCheck.skipped(), tryNumber, kTries);
     }
 
     // A menu or popup over the game (the pause menu, the Dossier, a tutorial popup): the game holds its view
@@ -529,72 +562,6 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
                 step.bodyYaw, head.yaw, head.pitch, sample.view.pitch, sample.view.yaw);
     }
     return xr_math::axisFromAngles({0.0f, step.bodyYaw, 0.0f});
-}
-
-void XrPresenter::Impl::onRenderLatch(const std::byte* renderView, const float* previousProjection) {
-    const auto* axis = reinterpret_cast<const float*>(renderView + render_view::kViewAxis);
-    std::uint64_t seq = 0;
-    XrFovf fov{};
-    std::uint64_t newest = 0;
-    {
-        std::lock_guard lock(historyMutex);
-        newest = latestSeq;
-        for (std::size_t i = 0; i < kHistorySize && i < newest; ++i) {
-            const ViewRecord& record = history[(newest - i) % kHistorySize];
-            if (std::memcmp(record.axis.data(), axis, sizeof(record.axis)) == 0) {
-                seq = record.seq;
-                fov = record.fov;
-                break;
-            }
-        }
-    }
-    if (seq == 0) {
-        latchUnmatched.fetch_add(1, std::memory_order_relaxed);
-        return;
-    }
-    latchMatched.fetch_add(1, std::memory_order_relaxed);
-    latchedSeq.store(seq, std::memory_order_release);
-    if (loggedLatches.fetch_add(1, std::memory_order_relaxed) < 12) {
-        EVR_LOG("latch: render view %p latched view %llu (newest %llu)", static_cast<const void*>(renderView),
-                static_cast<unsigned long long>(seq), static_cast<unsigned long long>(newest));
-    }
-    const ULONGLONG ticks = GetTickCount64();
-    ULONGLONG last = lastLatchStatsTicks.load(std::memory_order_relaxed);
-    if (ticks - last >= 10000 && lastLatchStatsTicks.compare_exchange_strong(last, ticks)) {
-        // The projection left from this view's previous render against the FOV we asked for, to check
-        // that the renderer uses fov_x / fov_y as given (a mismatch means the headset shows the image
-        // at the wrong size).
-        const float wantX = 1.0f / std::tan(fov.angleRight);
-        const float wantY = 1.0f / std::tan(fov.angleUp);
-        EVR_LOG("latch: %llu matched, %llu other view(s); previous projection [0][0] %.4f [1][1] %.4f [0][2] "
-                "%.4f "
-                "[1][2] %.4f [2][0] %.4f [2][1] %.4f; expected %.4f / %.4f",
-                static_cast<unsigned long long>(latchMatched.load()),
-                static_cast<unsigned long long>(latchUnmatched.load()), previousProjection[0],
-                previousProjection[5], previousProjection[2], previousProjection[6], previousProjection[8],
-                previousProjection[9], wantX, wantY);
-    }
-}
-
-bool XrPresenter::Impl::latestView(ViewRecord& out, std::uint64_t& gap) {
-    std::lock_guard lock(historyMutex);
-    gap = 0;
-    if (latestSeq == 0 || glory.flat()) {
-        return false; // no view yet, or a glory kill on the flat screen
-    }
-    // The view the render thread latched most recently is the frame being presented, if the latch
-    // hook matched one; otherwise the newest game view.
-    std::uint64_t seq = latchedSeq.load(std::memory_order_acquire);
-    if (seq == 0 || seq > latestSeq || latestSeq - seq >= kHistorySize) {
-        seq = latestSeq;
-    }
-    const ViewRecord& record = history[seq % kHistorySize];
-    if (record.seq != seq || qpcSeconds(qpcNow() - record.locatedQpc) > kViewStaleSeconds) {
-        return false;
-    }
-    out = record;
-    gap = latestSeq - seq;
-    return true;
 }
 
 } // namespace evr::vkcore

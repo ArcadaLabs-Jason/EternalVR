@@ -9,7 +9,9 @@ using evr::gpu_timing::kStallGapMs;
 using evr::gpu_timing::kStallLinesLogged;
 using evr::gpu_timing::PresentGap;
 using evr::gpu_timing::StallGate;
+using evr::gpu_timing::stallSaveNote;
 using evr::gpu_timing::StallVerdict;
+using evr::gpu_timing::summarySaveNote;
 
 namespace {
 
@@ -69,4 +71,16 @@ TEST_CASE("present stall: lines stop at the limit, the count goes on") {
     CHECK(gate.counters().logged == kStallLinesLogged);
     CHECK(gate.counters().inPlay == kStallLinesLogged + 2);
     CHECK(gate.counters().longestMs == doctest::Approx(1043.0));
+}
+
+TEST_CASE("present stall: a checkpoint save in the gap is named in the line") {
+    CHECK(stallSaveNote(0).empty());
+    CHECK(stallSaveNote(1) == "; the game saved a checkpoint in the gap");
+    CHECK(stallSaveNote(2) == "; the game saved 2 checkpoints in the gap");
+}
+
+TEST_CASE("present stall: the 10 s summary counts the checkpoint saves") {
+    CHECK(summarySaveNote(0).empty());
+    CHECK(summarySaveNote(1) == "; the game saved a checkpoint");
+    CHECK(summarySaveNote(3) == "; the game saved 3 checkpoints");
 }

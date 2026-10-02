@@ -6,6 +6,7 @@
 #include "stereo_seq/seq_settings.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/presenter_result.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/virtual_client.hpp"
@@ -573,7 +574,7 @@ VkResult XrPresenter::Impl::present(VkQueue queue, std::uint32_t family, const V
         return r;
     };
     if (wait == VK_NULL_HANDLE) {
-        return timed(info);
+        return windowPresented(*this, timed(info), info, VK_NULL_HANDLE, 0, VK_NULL_HANDLE);
     }
     if (hold) {
         // Not presented: the image goes back to the swapchain once its copy is done (presenter_window.cpp).
@@ -585,14 +586,8 @@ VkResult XrPresenter::Impl::present(VkQueue queue, std::uint32_t family, const V
     VkPresentInfoKHR replaced = *info;
     replaced.waitSemaphoreCount = 1;
     replaced.pWaitSemaphores = &wait;
-    const VkResult result = timed(&replaced);
-    if (result < 0 && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_ERROR_SURFACE_LOST_KHR &&
-        result != VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT) {
-        // The present's wait may not have run, leaving the semaphore signalled; the image gets a new one.
-        std::lock_guard lock(mutex);
-        replacePresentSemaphore(copiedSwapchain, copiedImage, wait);
-    }
-    return result;
+    // A failed present gets a new semaphore, out of date hands the held images back (presenter_result.hpp).
+    return windowPresented(*this, timed(&replaced), info, copiedSwapchain, copiedImage, wait);
 }
 
 } // namespace evr::vkcore

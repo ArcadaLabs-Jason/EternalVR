@@ -39,6 +39,7 @@ add_library(evr_layer SHARED
     camera_anim_hook.cpp
     cinema_view.cpp
     client_rect.cpp
+    climb_hook.cpp
     cpu_timing.cpp
     debug_commands.cpp
     demon_aim.cpp
@@ -74,6 +75,7 @@ add_library(evr_layer SHARED
     presenter_fade.cpp
     presenter_mirror.cpp
     presenter_reticle.cpp
+    presenter_result.cpp
     presenter_vignette.cpp
     presenter_window.cpp
     ring_trace.cpp
@@ -82,6 +84,7 @@ add_library(evr_layer SHARED
     presenter_frame.cpp
     presenter_frame_log.cpp
     presenter_head.cpp
+    presenter_latch.cpp
     presenter_ring.cpp
     presenter_seq.cpp
     presenter_snapshot.cpp
@@ -89,11 +92,13 @@ add_library(evr_layer SHARED
     presenter_ui.cpp
     presenter_wrist.cpp
     presenter_reconnect.cpp
+    presenter_refresh.cpp
     presenter_xr.cpp
     presenter_xr_events.cpp
     room_follow.cpp
     reticle_depth.cpp
     room_scale.cpp
+    save_hook.cpp
     scatter_hooks.cpp
     seq_alternate.cpp
     seq_hooks.cpp
@@ -121,11 +126,13 @@ add_library(evr_layer SHARED
     view_hook.cpp
     virtual_client.cpp
     vram_watch.cpp
+    window_cap.cpp
     xr_presenter.cpp)
 # Motion controllers (M5, controllers.hpp).
 target_sources(evr_layer PRIVATE
     aim_hooks.cpp
     bhaptics_game.cpp
+    bhaptics_launch.cpp
     bhaptics_link.cpp
     bhaptics_portal.cpp
     controller_test.cpp
@@ -133,10 +140,12 @@ target_sources(evr_layer PRIVATE
     game_view_poses.cpp
     haptics_xr.cpp
     input_profiles.cpp
+    input_watch.cpp
     input_xr.cpp
     offhand_arm.cpp
     offhand_hook.cpp
     offhand_mods.cpp
+    prompt_hooks.cpp
     rumble_hook.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp

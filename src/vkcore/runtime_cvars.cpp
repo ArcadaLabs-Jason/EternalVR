@@ -4,6 +4,8 @@
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/virtual_client.hpp"
+#include "vkcore/window_cap.hpp"
 
 #include <windows.h>
 
@@ -50,6 +52,10 @@ struct Held {
     bool written = false; // the first write is always logged
     std::byte* object = nullptr;
     bool logged = false;
+    bool windowSize = false; // r_windowWidth / r_windowHeight of the window set: left alone with the render
+                             // size off (windowSizeLeft)
+    bool left = false;       // ... and that was logged
+    bool placed = false;     // ... held at the window placed for a device without present scaling instead
 };
 
 std::mutex g_mutex;
@@ -59,6 +65,29 @@ std::vector<Held> g_held;
 int g_loggedWrites = 0;
 std::atomic<std::uint64_t> g_writes{0};
 stereo_seq::StereoTemporal g_temporal = stereo_seq::StereoTemporal::Off;
+
+// The window set's size is left to the game once the render size is off: the game then renders at its
+// window's size, and holding the launch size (the render size) makes the game resize its window, which an
+// AMD driver answers with VK_ERROR_OUT_OF_DATE_KHR on the next present. With the render size on (or not
+// wanted) the size stays held. On a device without present scaling the window was placed at the largest
+// eye-shaped size its display allows (window_cap.hpp): the size is held at that window's, which the game
+// already reads, so the window keeps its size.
+bool windowSizeLeft(const Held& h) {
+    return h.windowSize && virtual_client::sizeOff() && !window_cap::placedSize();
+}
+
+void holdPlacedWindow(Held& h) {
+    const auto placed = window_cap::placedSize();
+    if (!h.windowSize || h.placed || !placed) {
+        return;
+    }
+    h.placed = true;
+    const bool width = h.name.size() >= 5 && _stricmp(h.name.c_str() + h.name.size() - 5, "width") == 0;
+    const std::string value = std::to_string(width ? placed->width : placed->height);
+    EVR_LOG("%s: %s is held at the placed window's %s, not %s (no present scaling)", kTag, h.name.c_str(),
+            value.c_str(), h.value.c_str());
+    h.value = value;
+}
 
 // The cvar's integer value as the engine keeps it (the values block, +0x08).
 int readValue(const std::byte* object) {
@@ -179,6 +208,19 @@ void addDebugList() {
     }
 }
 
+// The game's prompts stay in their keyboard form, which prompt_hooks.cpp renames to the VR buttons: a gamepad
+// or Steam Input would switch them to pad glyphs naming the pad's binds. ETERNALVR_BUTTON_PROMPTS=0 leaves
+// the cvar as the game has it, and an ETERNALVR_DEBUG_CVARS entry for it wins.
+void addPromptPlatform() {
+    if (narrowEnv(L"ETERNALVR_BUTTON_PROMPTS") == "0" || heldNamed("swf_platformOverride")) {
+        return;
+    }
+    Held h;
+    h.name = "swf_platformOverride";
+    h.value = "2";
+    g_held.push_back(std::move(h));
+}
+
 // The game's command line as UTF-8.
 std::string commandLine() {
     const wchar_t* wide = GetCommandLineW();
@@ -206,6 +248,7 @@ void start(bool stereo) {
         }
         for (const auto& c : stereo_seq::stereoWindowCvars(commandLine(), narrowWindow)) {
             g_held.push_back(Held{c.name, c.value, true, false});
+            g_held.back().windowSize = stereo_seq::isWindowSizeCvar(c.name);
         }
         for (const auto& c : stereo_seq::stereoComfortCvars()) {
             g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
@@ -216,6 +259,7 @@ void start(bool stereo) {
     addCpuSaver();
     addSharpening();
     addDebugList();
+    addPromptPlatform();
     GameImage image;
     if (g_held.empty() || !locateGameImage(image, kTag)) {
         return;
@@ -253,8 +297,9 @@ void start(bool stereo) {
     std::string list;
     std::string saver;
     bool anySaver = false;
-    for (const Held& h : g_held) {
-        if (h.object) {
+    for (Held& h : g_held) {
+        holdPlacedWindow(h);
+        if (h.object && !windowSizeLeft(h)) {
             list += (list.empty() ? "" : ", ") + h.name + (h.cap ? " at most " : " ") + h.value;
         }
         if (h.saver) {
@@ -283,6 +328,17 @@ void apply(bool stereo) {
     }
     for (Held& h : g_held) {
         if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off)) {
+            continue;
+        }
+        holdPlacedWindow(h);
+        if (windowSizeLeft(h)) {
+            if (!h.left) {
+                h.left = true;
+                EVR_LOG(
+                    "%s: %s is left at the game's %d, not held at %s: the render size is off, so the game "
+                    "renders at its window's size (a held size would resize the window)",
+                    kTag, h.name.c_str(), readValue(h.object), h.value.c_str());
+            }
             continue;
         }
         const int before = readValue(h.object);

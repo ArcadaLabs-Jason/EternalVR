@@ -149,6 +149,12 @@ bool forcedView();
 // (idPlayer::syncMaster set). False for any other object, and while the controllers are off.
 bool syncKillActive(const std::byte* player);
 
+// Writes back the game's own values of the wall-climb cvars the layer held (climb_hook.cpp), once; nothing
+// if it wrote none or gave them back already. The camera hook when the multiplayer guard has stopped game
+// touches (the hold itself no longer runs then), and the presenter's shutdown after the camera hook's last
+// callback. `why` goes into the log line.
+void restoreClimbCvars(const char* why);
+
 // Any thread: the artificial motion of the last mapper run, for the comfort vignette: the turn rate (degrees
 // per second, smooth or snap, either direction) and the move stick's magnitude after its response (0 to 1).
 // Zero while a menu holds the controllers back, while they are off or when the mapper has not run for a

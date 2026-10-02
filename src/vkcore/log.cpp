@@ -85,6 +85,10 @@ void logOpen() {
     }
 }
 
+double logSeconds() {
+    return static_cast<double>(GetTickCount64() - g_startTicks) / 1000.0;
+}
+
 void logf(const char* format, ...) {
     char message[2048];
     va_list args;
@@ -93,8 +97,7 @@ void logf(const char* format, ...) {
     va_end(args);
 
     char line[2200];
-    const double seconds = static_cast<double>(GetTickCount64() - g_startTicks) / 1000.0;
-    std::snprintf(line, sizeof(line), "[%9.3f] [%5lu] %s\n", seconds, GetCurrentThreadId(), message);
+    std::snprintf(line, sizeof(line), "[%9.3f] [%5lu] %s\n", logSeconds(), GetCurrentThreadId(), message);
 
     std::lock_guard lock(g_mutex);
     if (g_file) {

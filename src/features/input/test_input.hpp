@@ -10,7 +10,8 @@
 //   # one "key = value" per line; a line not given leaves the runtime's value
 //   right.trigger = 1            analog 0..1 (also grip)
 //   left.stick = 0, 1            x, y in -1..1 (also right.stick)
-//   right.primary = 1            buttons: primary, secondary, click (stick click), menu; 1 or 0
+//   right.primary = 1            buttons: primary, secondary, face3, face4, shoulder, click (stick click),
+//                                menu; 1 or 0
 //   right.aim = 20, -10          the hand points 20 degrees left and 10 degrees down of LOCAL's -Z
 //   left.aim = 0, 0, 90          an optional roll about the pointing axis, counter-clockwise as the user
 //                                sees it (the controller's top to the left): 90 turns the left palm up
@@ -41,6 +42,9 @@ struct TestHand {
     std::optional<bool> stickClick;
     std::optional<bool> primary;
     std::optional<bool> secondary;
+    std::optional<bool> face3;
+    std::optional<bool> face4;
+    std::optional<bool> shoulder;
     std::optional<bool> menu;
     std::optional<float> aimYawDegrees;   // counter-clockwise seen from above
     std::optional<float> aimPitchDegrees; // positive up

@@ -184,6 +184,10 @@ std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::strin
     return held;
 }
 
+bool isWindowSizeCvar(std::string_view name) {
+    return sameName(name, "r_windowWidth") || sameName(name, "r_windowHeight");
+}
+
 std::vector<CvarHold> parseCvarList(std::string_view text) {
     const auto strip = [](std::string_view s) {
         while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {

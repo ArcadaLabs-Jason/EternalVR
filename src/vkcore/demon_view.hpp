@@ -34,6 +34,12 @@ void notePilotedDemon(bool piloting);
 // when the demon's table cannot be read, the buttons are returned unchanged.
 [[nodiscard]] std::uint64_t pilotedDemonButtons(const game::GameActionSet& actions, std::uint64_t buttons);
 
+// While piloting, the action whose demon binding presses any of `bits`: the game's prompts for the demon's
+// abilities name the demon's buttons ("_quick2", the Revenant's rocket barrage, which the weapon mod
+// presses). Nullopt when not piloting, when no demon binding has those bits, or when the table cannot be
+// read.
+[[nodiscard]] std::optional<game::GameAction> pilotedDemonAction(std::uint64_t bits);
+
 // The piloted demon last seen (0 before any).
 [[nodiscard]] std::uintptr_t pilotedDemon();
 

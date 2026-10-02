@@ -166,7 +166,7 @@ namespace EternalVR.Launcher
         }
 
         /// <summary>The "Each eye" line (<see cref="LastHeadset.EachEye"/>).</summary>
-        private void ShowEachEye() => eachEye.Text = LastHeadset.EachEye(ctx.Settings, ctx.Headset);
+        private void ShowEachEye() => eachEye.Text = LastHeadset.EachEye(ctx.Settings, ctx.Headset, ctx.LastRenderCap);
 
         /// <summary>Refreshes the controls folder (its README and the copy of the built-in maps); false, with a message, if it fails.</summary>
         private bool PrepareControls(ControlsFolder controls)

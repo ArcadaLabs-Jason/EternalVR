@@ -247,6 +247,17 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(expected, LaunchPlanBuilder.IsVdxr(manifest));
         }
 
+        [Theory]
+        [InlineData(@"C:\Program Files (x86)\Steam\steamapps\common\SteamVR\steamxr_win64.json", true)]
+        [InlineData(@"D:/SteamLibrary/steamapps/common/SteamVR/STEAMXR_WIN64.JSON", true)]
+        [InlineData(@"C:\Program Files\Virtual Desktop Streamer\OpenXR\virtualdesktop-openxr.json", false)]
+        [InlineData(@"C:\SteamVR\oculus_openxr_64.json", false)]
+        [InlineData(null, false)]
+        public void SteamVrIsRecognised(string manifest, bool expected)
+        {
+            Assert.Equal(expected, LaunchPlanBuilder.IsSteamVr(manifest));
+        }
+
         [Fact]
         public void MissingPathsThrow()
         {

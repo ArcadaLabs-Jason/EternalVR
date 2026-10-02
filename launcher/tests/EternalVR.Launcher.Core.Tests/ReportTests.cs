@@ -194,6 +194,26 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void ReportIdIsRandomAndHeadsTheGeneratedFiles()
+        {
+            var ids = Enumerable.Range(0, 200).Select(_ => ReportBuilder.NewId()).ToList();
+            foreach (var id in ids) Assert.Matches("^[2-9A-HJKMNP-Z]{" + ReportBuilder.IdLength + "}$", id);
+            Assert.True(ids.Distinct().Count() > 190);
+            using (var t = new TempDir())
+            {
+                var inputs = Setup(t);
+                inputs.Id = "K7F3QX";
+                var report = ReportBuilder.Build(inputs);
+                Assert.Equal("K7F3QX", report.Id);
+                var entries = Unzip(report.Zip);
+                Assert.StartsWith("EternalVR report K7F3QX, created 2026-09-27 12:00:00\n", entries[ReportManifest.SystemFile]);
+                Assert.StartsWith("EternalVR report K7F3QX, created 2026-09-27 12:00:00\n", entries[ReportManifest.ContentsFile]);
+                inputs.Id = null;
+                Assert.StartsWith("EternalVR report, created ", Unzip(ReportBuilder.Build(inputs).Zip)[ReportManifest.SystemFile]);
+            }
+        }
+
+        [Fact]
         public void SessionsAreNewestFirst()
         {
             using (var t = new TempDir())
@@ -209,6 +229,10 @@ namespace EternalVR.Launcher.Core.Tests
         public void ManifestIsTextOnlyAndSmall()
         {
             Assert.Equal("EternalVR-report-2026-09-27.zip", ReportBuilder.DefaultFileName(new DateTime(2026, 9, 27, 23, 59, 0)));
+            Assert.Equal("EternalVR-report-2026-09-27-K7F3QX.zip", ReportBuilder.DefaultFileName(new DateTime(2026, 9, 27, 23, 59, 0), "K7F3QX"));
+            Assert.Equal("EternalVR-report-v0.1.12-2026-09-27-K7F3QX.zip",
+                ReportBuilder.DefaultFileName(new DateTime(2026, 9, 27, 23, 59, 0), "K7F3QX", "0.1.12+ac2cc99c7a8ed53eb630134a67fce7303a64506c"));
+            Assert.Equal("EternalVR-report-v0.1.12-dev-2026-09-27.zip", ReportBuilder.DefaultFileName(new DateTime(2026, 9, 27), null, "0.1.12-dev"));
             foreach (var item in ReportManifest.Items)
             {
                 Assert.DoesNotMatch(@"\.(dmp|bin|exe|dll)$", item.Pattern);

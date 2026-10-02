@@ -3,4 +3,5 @@
 evr_add_module(evr_render_size
     SOURCES
         mirror_window.cpp
+        render_cap.cpp
         render_size.cpp)

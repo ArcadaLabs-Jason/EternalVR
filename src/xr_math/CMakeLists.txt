@@ -1,5 +1,6 @@
 evr_add_module(evr_xr_math
     SOURCES
+        aim_check.cpp
         enclosing_fov.cpp
         eye_clip_transform.cpp
         camera_anim.cpp

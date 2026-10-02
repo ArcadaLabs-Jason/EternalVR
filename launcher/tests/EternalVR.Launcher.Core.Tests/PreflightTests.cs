@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using EternalVR.Launcher.Core.Game;
 using EternalVR.Launcher.Core.Preflight;
+using EternalVR.Launcher.Core.Report;
 using Xunit;
 
 namespace EternalVR.Launcher.Core.Tests
@@ -65,6 +66,26 @@ namespace EternalVR.Launcher.Core.Tests
             var r = PreflightEvaluator.Evaluate(f);
             Assert.False(r.CanLaunch);
             Assert.Equal(Severity.Fail, r.Checks.First(c => c.Id == id && c.Severity == Severity.Fail).Severity);
+        }
+
+        [Fact]
+        public void ASteamVrBindingChosenForTheGameWarnsUnderSteamVrOnly()
+        {
+            var f = Good();
+            f.SteamVrBindings = new[] { new SteamVrBinding("playstation_vr2_sense", SteamVrBindingKind.Workshop) };
+            Assert.DoesNotContain(PreflightEvaluator.Evaluate(f).Checks, c => c.Id == "steamvr-binding");
+
+            f.RuntimeManifest = @"D:\SteamLibrary\steamapps\common\SteamVR\steamxr_win64.json";
+            var r = PreflightEvaluator.Evaluate(f);
+            Assert.True(r.CanLaunch);
+            var check = Only(r, "steamvr-binding");
+            Assert.Equal(Severity.Warn, check.Severity);
+            Assert.Equal("SteamVR uses a custom controller binding for DOOM Eternal (workshop binding for playstation_vr2_sense). If your "
+                + "controllers do nothing in game, open SteamVR > Settings > Controllers > Manage Controller Bindings, pick DOOM Eternal "
+                + "and choose the default binding.", check.Message);
+
+            f.SteamVrBindings = new SteamVrBinding[0];
+            Assert.DoesNotContain(PreflightEvaluator.Evaluate(f).Checks, c => c.Id == "steamvr-binding");
         }
 
         [Fact]

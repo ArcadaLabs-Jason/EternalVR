@@ -78,7 +78,7 @@ private:
 class NgxTwins {
 public:
     // A twin was made (or tried) for the game's feature `primary`: `twin` is eye R's (0 when its creation
-    // failed; not tried again until the game releases `primary`).
+    // failed; not tried again until the game releases `primary` or the failure is forgotten).
     void created(std::uintptr_t primary, std::uintptr_t twin);
     // A twin was made or tried for `primary`.
     bool known(std::uintptr_t primary) const;
@@ -86,6 +86,11 @@ public:
     std::uintptr_t twinOf(std::uintptr_t primary) const;
     // The game released `primary`: returns its twin to release (0: none) and forgets both.
     std::uintptr_t released(std::uintptr_t primary);
+    // A game feature whose twin could not be created is known.
+    bool anyFailed() const;
+    // Forgets the game features whose twin could not be created, so eye R's next evaluation of each tries
+    // again (NgxTwinRetry, ngx_twin_retry.hpp); the number forgotten.
+    std::size_t forgetFailed();
     // Eye R evaluates the twin of `primary` for game frame `gameFrame`: true when the twin's history must be
     // reset (its first evaluation, or eye R's last evaluation was not `step` game frames earlier: 1 under
     // Route S, 2 with alternate eyes, alternate_eyes.hpp).

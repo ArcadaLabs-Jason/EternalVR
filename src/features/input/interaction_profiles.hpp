@@ -12,7 +12,9 @@
 #include "features/input/controller_state.hpp"
 #include "features/input/xr_action_set.hpp"
 
+#include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace evr::input {
@@ -40,6 +42,12 @@ const InteractionProfileInfo* findInteractionProfile(std::string_view path);
 bool profileAvailable(const InteractionProfileInfo& profile,
                       std::span<const std::string_view> enabledExtensions,
                       bool api11);
+
+// The Steam Frame's bumper is /input/shoulder/ from SteamVR 2.17.10 on and was /input/bumper/ before it
+// (later versions accept both). A runtime refuses all of a profile's suggested bindings for one path it
+// does not know, so the Frame's are suggested again under the older name when the newer one is refused.
+// Returns `bindingPath` with the older name, or nullopt when the profile or the path has none.
+std::optional<std::string> olderInputName(std::string_view profilePath, std::string_view bindingPath);
 
 // True when `path` is one of the hand's leaf paths, or an input identifier that has leaves (such as
 // "/input/thumbstick" for "/input/thumbstick/x").

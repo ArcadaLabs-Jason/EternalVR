@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using EternalVR.Launcher.Core.Preflight;
@@ -33,6 +34,11 @@ namespace EternalVR.Launcher.Core.Report
         /// <summary>The event log entries read for <see cref="ReportManifest.WindowsEventsFile"/>; null when the logs were not read.</summary>
         public IReadOnlyList<WindowsEventLogRead> WindowsEvents { get; set; }
         public DateTime Now { get; set; } = DateTime.Now;
+        /// <summary>
+        /// The report's ID (<see cref="ReportBuilder.NewId"/>): in the file name and at the top of the text files, so a zip can be
+        /// matched with the message it came with. Random each export; nothing about the machine or the player is in it.
+        /// </summary>
+        public string Id { get; set; }
     }
 
     public sealed class ReportFile
@@ -64,13 +70,16 @@ namespace EternalVR.Launcher.Core.Report
     /// <summary>A report ready to be saved: its files, what was left out, and the zip itself.</summary>
     public sealed class ReportResult
     {
-        internal ReportResult(IReadOnlyList<ReportFile> files, IReadOnlyList<string> dropped, byte[] zip)
+        internal ReportResult(string id, IReadOnlyList<ReportFile> files, IReadOnlyList<string> dropped, byte[] zip)
         {
+            Id = id;
             Files = files;
             Dropped = dropped;
             Zip = zip;
         }
 
+        /// <summary>The report's ID (<see cref="ReportInputs.Id"/>), or null.</summary>
+        public string Id { get; }
         public IReadOnlyList<ReportFile> Files { get; }
         /// <summary>One line per file or group left out, with the reason.</summary>
         public IReadOnlyList<string> Dropped { get; }
@@ -95,7 +104,30 @@ namespace EternalVR.Launcher.Core.Report
         private static readonly Regex SessionFolderName = new Regex(@"^\d{8}-\d{6}(-\d+)?$", RegexOptions.CultureInvariant);
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
 
-        public static string DefaultFileName(DateTime now) => "EternalVR-report-" + now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".zip";
+        /// <summary>Report ID characters: capitals and digits without the look-alikes 0/O, 1/I/L.</summary>
+        private const string IdAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+        public const int IdLength = 6;
+
+        /// <summary>A fresh random report ID (<see cref="ReportInputs.Id"/>), e.g. <c>K7F3QX</c>.</summary>
+        public static string NewId()
+        {
+            var bytes = new byte[IdLength];
+            using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(bytes);
+            var chars = new char[IdLength];
+            for (int i = 0; i < IdLength; i++) chars[i] = IdAlphabet[bytes[i] % IdAlphabet.Length];
+            return new string(chars);
+        }
+
+        /// <summary>
+        /// <c>EternalVR-report-v0.1.12-2026-10-01-K7F3QX.zip</c>: the version (the launcher's, without its <c>+commit</c>) shows in
+        /// a Discord or GitHub attachment whether the player runs the latest release, and the ID matches the zip to its message.
+        /// </summary>
+        public static string DefaultFileName(DateTime now, string id = null, string version = null)
+        {
+            var v = Regex.Replace((version ?? string.Empty).Split('+')[0], "[^0-9A-Za-z.-]", string.Empty);
+            return "EternalVR-report-" + (v.Length == 0 ? string.Empty : "v" + v + "-") + now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                + (string.IsNullOrEmpty(id) ? string.Empty : "-" + id) + ".zip";
+        }
 
         public static ReportResult Build(ReportInputs inputs)
         {
@@ -180,7 +212,7 @@ namespace EternalVR.Launcher.Core.Report
 
             var contents = new ReportFile(ReportManifest.ContentsFile, redactor.Apply(ContentsText(inputs, kept, dropped, missing, notes)), 0, false);
             kept.Insert(0, contents);
-            return new ReportResult(kept, dropped, Zip(kept, inputs.Now));
+            return new ReportResult(inputs.Id, kept, dropped, Zip(kept, inputs.Now));
         }
 
         /// <summary>The session log folders (<c>yyyyMMdd-HHmmss[-n]</c>), newest first.</summary>
@@ -299,10 +331,15 @@ namespace EternalVR.Launcher.Core.Report
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { return new List<string>(); }
         }
 
+        /// <summary>The first line of the generated text files: the ID (when there is one) and the time.</summary>
+        private static string Heading(ReportInputs inputs) =>
+            "EternalVR report" + (string.IsNullOrEmpty(inputs.Id) ? string.Empty : " " + inputs.Id) + ", created "
+            + inputs.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
         private static string SystemText(ReportInputs inputs)
         {
             var sb = new StringBuilder();
-            sb.Append("EternalVR report, created ").Append(inputs.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append('\n');
+            sb.Append(Heading(inputs)).Append('\n');
             foreach (var kv in inputs.System ?? new KeyValuePair<string, string>[0])
                 sb.Append(kv.Key).Append(": ").Append(string.IsNullOrWhiteSpace(kv.Value) ? "unknown" : kv.Value.Trim()).Append('\n');
             return sb.ToString();
@@ -319,7 +356,7 @@ namespace EternalVR.Launcher.Core.Report
             IReadOnlyList<string> notes)
         {
             var sb = new StringBuilder();
-            sb.Append("EternalVR report, created ").Append(inputs.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append('\n');
+            sb.Append(Heading(inputs)).Append('\n');
             sb.Append("Every file is redacted: your user folder reads ").Append(Redactor.ProfileToken).Append(", your user name ").Append(Redactor.UserToken)
               .Append(", your computer name ").Append(Redactor.ComputerToken).Append(", the name you play under ").Append(Redactor.PlayerToken)
               .Append(", Steam account IDs ").Append(Redactor.SteamIdToken).Append(" or ").Append(Redactor.SteamId64Token).Append(".\n\n");

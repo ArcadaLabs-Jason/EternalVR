@@ -57,12 +57,6 @@ constexpr float kLandingLight = 35.0f;
 constexpr float kLandingPerUnit = 6.0f;
 constexpr float kLandingHard = 70.0f;
 constexpr int kLandingMillis = 120;
-// The crystal's shock: each burst sets about kCrystalShare of every device's motors, kCrystalLow to
-// kCrystalHigh.
-constexpr std::uint32_t kCrystalShare = 40; // percent
-constexpr float kCrystalLow = 40.0f;
-constexpr float kCrystalHigh = 90.0f;
-constexpr int kCrystalMillis = 100;
 // The portal's sweep: the band row at kPortalBandLow..High, about kPortalTrailShare of the row above it at
 // kPortalTrailLow..High, a crackle of kPortalCrackleShare of the other rows at kPortalCrackleLow..High, and
 // kPortalSleeveShare of the sleeves' motors at kPortalSleeveLow..High. Each step's frame lasts a little
@@ -149,6 +143,14 @@ const char* effectName(Effect effect) {
         return "crystal";
     case Effect::Portal:
         return "portal";
+    case Effect::Health:
+        return "health";
+    case Effect::MegaHealth:
+        return "megahealth";
+    case Effect::Armor:
+        return "armor";
+    case Effect::Launch:
+        return "launch";
     case Effect::Count:
         break;
     }
@@ -159,6 +161,10 @@ SyncKind syncKindOf(std::string_view entityDefName) {
     if (entityDefName.find("argent_cell/use_sync") != std::string_view::npos) {
         return SyncKind::Crystal;
     }
+    if (entityDefName.find("preator_suit_token") != std::string_view::npos ||
+        entityDefName.find("praetor_suit_token") != std::string_view::npos) {
+        return SyncKind::Token;
+    }
     return entityDefName.starts_with("interact/") ? SyncKind::Pickup : SyncKind::GloryKill;
 }
 
@@ -168,6 +174,8 @@ const char* syncKindName(SyncKind kind) {
         return "pickup";
     case SyncKind::Crystal:
         return "Sentinel Crystal";
+    case SyncKind::Token:
+        return "Praetor token";
     case SyncKind::GloryKill:
         break;
     }
@@ -264,9 +272,13 @@ void BodyHaptics::reset() {
     primed_ = false;
     crystalUntil_ = -1.0;
     portalUntil_ = -1.0;
+    launchUntil_ = -1.0;
     recentHitYaw_.reset();
     dub_ = false;
     nextBeat_ = 0.0;
+    healthWave_.stop();
+    armorWave_.stop();
+    vestHeldUntil_ = -1.0;
 }
 
 std::uint8_t BodyHaptics::scaled(float intensity) const {
@@ -379,23 +391,6 @@ float BodyHaptics::randomLevel(float low, float high) {
     return low + static_cast<float>(random() % 1000) / 1000.0f * (high - low);
 }
 
-void BodyHaptics::crystal(std::vector<Frame>& out, double seconds) {
-    if (seconds < nextCrystal_ || seconds >= crystalUntil_) {
-        return;
-    }
-    nextCrystal_ = std::max(nextCrystal_ + kCrystalBurstSeconds, seconds);
-    for (const Device device : {Device::VestFront, Device::VestBack, Device::ForearmL, Device::ForearmR}) {
-        std::vector<Dot> dots;
-        for (int i = 0; i < motorCount(device); ++i) {
-            if (random() % 100 < kCrystalShare) {
-                dots.push_back(
-                    {static_cast<std::uint8_t>(i), scaled(randomLevel(kCrystalLow, kCrystalHigh))});
-            }
-        }
-        add(out, Effect::Crystal, device, kCrystalMillis, std::move(dots));
-    }
-}
-
 void BodyHaptics::portal(std::vector<Frame>& out, double seconds) {
     if (seconds < nextPortal_ || seconds >= portalUntil_) {
         return;
@@ -457,6 +452,17 @@ void BodyHaptics::heartbeat(std::vector<Frame>& out, const BodySignals& signals)
 
 std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
     std::vector<Frame> out;
+    // The crystal's sync starts as its upgrade menu closes, before gameplay is back: its start is taken in
+    // every update, and its wave timed from it below. A Praetor token's (no menu) the same way.
+    const std::optional<double> waveDelay = signals.sync ? crystalWaveDelay(signals.syncKind) : std::nullopt;
+    const bool crystalSync = waveDelay.has_value() && std::isfinite(signals.seconds);
+    if (crystalSync && !crystalSync_) {
+        crystalStart_ = signals.seconds;
+        crystalDelay_ = *waveDelay;
+        crystalPending_ = true;
+    }
+    crystalSync_ = crystalSync;
+    crystalPending_ = crystalPending_ && crystalSync;
     const bool usable =
         signals.gameplay && finite(signals.health) && finite(signals.armor) && std::isfinite(signals.seconds);
     if (!usable || strength_ <= 0.0f) {
@@ -477,6 +483,12 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         nextPortal_ = signals.seconds;
         portalUntil_ = signals.seconds + kPortalSeconds;
     }
+    // One launch plays its curve to the end: another one meanwhile does not restart it.
+    if (signals.launches > 0 && !signals.dead && signals.seconds >= launchUntil_) {
+        launchStart_ = signals.seconds;
+        launchNextStep_ = 0;
+        launchUntil_ = signals.seconds + kLaunchSeconds;
+    }
     if (primed_) {
         const float lost = std::max(0.0f, health_ - signals.health) + std::max(0.0f, armor_ - signals.armor);
         if (signals.hitSerial != hitSerial_) {
@@ -487,10 +499,6 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
             const bool recent = recentHitYaw_ && signals.seconds - recentHitSeconds_ <= kHitWindowSeconds;
             damage(out, lost, recent ? recentHitYaw_ : std::nullopt);
             recentHitYaw_.reset();
-        }
-        if (signals.sync && !sync_ && !signals.dead && signals.syncKind == SyncKind::Crystal) {
-            nextCrystal_ = signals.seconds + kCrystalDelaySeconds;
-            crystalUntil_ = nextCrystal_ + kCrystalSeconds;
         }
         if (signals.sync && !sync_ && !signals.dead && signals.syncKind == SyncKind::GloryKill) {
             std::vector<Dot> front;
@@ -516,9 +524,17 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
             }
         }
     }
+    if (crystalPending_ && !signals.dead) {
+        crystalPending_ = false;
+        crystalWaveStart_ = crystalStart_ + crystalDelay_;
+        nextCrystal_ = std::max(crystalWaveStart_, signals.seconds);
+        crystalUntil_ = crystalWaveStart_ + kCrystalWaveSeconds;
+    }
     heartbeat(out, signals);
     crystal(out, signals.seconds);
     portal(out, signals.seconds);
+    launch(out, signals.seconds);
+    pickups(out, signals);
     primed_ = true;
     health_ = signals.health;
     armor_ = signals.armor;

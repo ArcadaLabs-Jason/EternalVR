@@ -38,9 +38,13 @@ yet).
   angles instead. The build point's r15 is the player; when its vtable is `idPlayer`'s (RVA 0x2DB5698)
   and the exe is build 25216728 (timestamp 0x6A7B9B8C), the hook reads `idHavokPhysics_Player`
   (`idPlayer + 0x8A50`): the user command angles (+0x3DE0 + 0x1C, shorts), `viewAngles` (+0x3F10),
-  `deltaViewAngles` (+0x3F1C) and `current.deltaViewAngles` (+0x3F28 + 0x80). For the first 60 player
-  frames it only checks that `viewAngles = command + delta` holds for one of the two deltas (54 of 60),
-  then adds to that delta each frame: yaw by the change in head yaw since the last frame (the mouse
+  `deltaViewAngles` (+0x3F1C) and `current.deltaViewAngles` (+0x3F28 + 0x80). For its first 60 counted
+  frames it only checks that `viewAngles = command + delta` holds for one of the two deltas (54 of 60;
+  `xr_math/aim_check.hpp`). Frames in a cutscene, a forced view or a menu are not counted, and a failed
+  try runs again after 120, 240, ... 600 frames of the player's own view, six tries in all: a check
+  that overlapped a level's opening cutscene once left head aim off for the whole session (issue 7,
+  2026-10-01: a save loaded straight into a level, 51/60 through the state delta). Once it passes, it
+  adds to that delta each frame: yaw by the change in head yaw since the last frame (the mouse
   keeps turning the body), pitch to reach the head's pitch (the head owns pitch). The rendered axis is
   then `body yaw * head` with `body = command yaw + delta yaw - the head yaw the delta holds`. The
   game's own angles are read as command + delta, not from the frame's view angles: around cutscenes
@@ -57,8 +61,9 @@ yet).
   degrees from the view angles: glory-kill and cutscene cameras) and forced-view frames are not aimed;
   their body is the camera's heading, or the game's yaw, without the head yaw it holds (`drivenBodyYaw`),
   so the view faces where the game points it and turns with the head from there, instead of the camera
-  plus the head's yaw in the room. If any check fails, head aim stays off and the log says why. Roll is
-  render-only. `ETERNALVR_AIM=view` keeps the game's aim (the first build's behaviour).
+  plus the head's yaw in the room. If the layout is not this build's, or the last try of the check fails,
+  head aim stays off for the session and the log says so every 10 s. Roll is render-only.
+  `ETERNALVR_AIM=view` keeps the game's aim (the first build's behaviour).
 - Hands camera animations (docs/rig-findings/camera-animations.md): a hands animation's `camera` joint turns
   the first-person view (`p_applyAnimatedCamera`, in `idPlayer::CalculateViewWithoutUpdates`); the rotation
   the head replaces is lost. A read-only hook at RVA 0x14526C5 reads the added angles; animations of 5

@@ -9,7 +9,8 @@
 // syncs and the launcher never writes back) and shows that index, never the cvars. The layer, though,
 // holds r_antialiasing and r_dlssQuality itself when the launcher's Anti-aliasing is DLSS or Off, so the
 // menu would show the profile's choice, not what runs. The layer shows what runs instead, and keeps the
-// profile's own index when the menu applies an entry the player did not change.
+// profile's own index when the menu applies an entry the player did not change. When DLSS fell back to TAA
+// because eye R's feature could not be created, choosing a DLSS entry tries that feature again.
 
 namespace evr::stereo_seq {
 
@@ -18,6 +19,7 @@ struct DlssMenuHold {
     bool perEyeTaa = false;  // per-eye TAA requested and not failed closed (else r_antialiasing 0 is held)
     bool dlssOption = false; // the launcher's DLSS (ETERNALVR_STEREO_DLSS): r_antialiasing 2 is held
     bool dlssPerEye = false; // eye R can have its own DLSS feature (else DLSS falls back to TAA)
+    bool dlssRetry = false;  // DLSS fell back because eye R's feature failed: it can be tried again
     int dlssQuality = -1;    // the r_dlssQuality DLSS runs with (-1: unknown)
 };
 
@@ -38,6 +40,11 @@ enum class DlssMenuApply {
     Keep,   // the entry is as shown: the game's setter is skipped, the profile and the cvars stay as they are
     Apply,  // the game's setter runs with the chosen index (the flat game's behaviour)
     Ignore, // the player chose another entry but the launcher's setting decides in VR: skipped, logged
+    // DLSS fell back to TAA (the menu shows Off) and the player chose a DLSS entry: eye R's feature is tried
+    // again at once. Retry with the launcher's DLSS skips the setter (the launcher's quality decides);
+    // ApplyRetry with the launcher's TAA runs it as in the flat game.
+    Retry,
+    ApplyRetry,
 };
 
 // What to do when the menu applies `chosen` after it showed `shown` (-1: the layer showed nothing, which

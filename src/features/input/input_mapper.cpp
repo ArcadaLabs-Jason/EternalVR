@@ -170,6 +170,9 @@ InputMapper::sampleButtons(HandButtons& buttons, const HandState& hand, float dt
     levels.down[buttonIndex(ButtonInput::StickClick)] = hand.stickClick;
     levels.down[buttonIndex(ButtonInput::Primary)] = hand.primaryButton;
     levels.down[buttonIndex(ButtonInput::Secondary)] = hand.secondaryButton;
+    levels.down[buttonIndex(ButtonInput::Face3)] = hand.face3Button;
+    levels.down[buttonIndex(ButtonInput::Face4)] = hand.face4Button;
+    levels.down[buttonIndex(ButtonInput::Shoulder)] = hand.shoulderButton;
     levels.down[buttonIndex(ButtonInput::Menu)] = hand.menuButton;
     for (std::size_t i = 0; i < kButtonInputCount; ++i) {
         const TapHoldOutput tapHold = buttons.tapHold[i].update(levels.down[i], dtSeconds);

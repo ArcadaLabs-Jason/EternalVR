@@ -6,8 +6,8 @@ using Xunit;
 
 namespace EternalVR.Launcher.Core.Tests
 {
-    /// <summary>"Frame pacing" (Picture): one pair per headset frame, stereo only and not with adaptive alternate eyes, off by
-    /// default.</summary>
+    /// <summary>"Frame pacing" (Picture): one pair per headset frame, stereo only and not with adaptive alternate eyes, on
+    /// by default.</summary>
     public class FramePacingTests
     {
         private static LaunchInputs Inputs(LauncherSettings s = null) => new LaunchInputs
@@ -22,13 +22,13 @@ namespace EternalVR.Launcher.Core.Tests
         private static Dictionary<string, string> Env(LaunchPlan p) => p.Environment.ToDictionary(e => e.Key, e => e.Value);
 
         [Fact]
-        public void OffByDefaultAndPassedExplicitly()
+        public void MatchedByDefaultAndPassedExplicitly()
         {
-            Assert.Equal(FramePacing.Off, new LauncherSettings().Pacing);
-            Assert.Equal("off", Env(LaunchPlanBuilder.Build(Inputs()))["ETERNALVR_PACE"]);
-            var env = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Pacing = FramePacing.Headset })));
+            Assert.Equal(FramePacing.Headset, new LauncherSettings().Pacing);
+            var env = Env(LaunchPlanBuilder.Build(Inputs()));
             Assert.Equal("stereo", env["ETERNALVR_MODE"]);
             Assert.Equal("headset", env["ETERNALVR_PACE"]);
+            Assert.Equal("off", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Pacing = FramePacing.Off })))["ETERNALVR_PACE"]);
         }
 
         [Fact]
@@ -44,20 +44,25 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void TheSettingRoundTripsAndAnOlderFileTakesOff()
+        public void TheSettingRoundTripsAndOldFilesTakeTheNewDefault()
         {
             foreach (var p in new[] { FramePacing.Off, FramePacing.Headset })
                 Assert.Equal(p, LauncherSettings.Parse(new LauncherSettings { Pacing = p }.Serialize()).Pacing);
-            Assert.Contains("pace = headset", new LauncherSettings { Pacing = FramePacing.Headset }.Serialize());
-            Assert.Contains("pace = off", new LauncherSettings().Serialize());
-            // A file from before the key, or a value this version does not know: off.
-            Assert.Equal(FramePacing.Off, LauncherSettings.Parse("schema_version = 2\nfoveation = subtle\n").Pacing);
-            Assert.Equal(FramePacing.Off, LauncherSettings.Parse("schema_version = 2\npace = 90\n").Pacing);
+            Assert.Contains("frame_pacing = headset", new LauncherSettings().Serialize());
+            Assert.Contains("frame_pacing = off", new LauncherSettings { Pacing = FramePacing.Off }.Serialize());
+            Assert.DoesNotContain("\npace =", "\n" + new LauncherSettings().Serialize());
+            // A file from before either key, or a value this version does not know: the default.
+            Assert.Equal(FramePacing.Headset, LauncherSettings.Parse("schema_version = 2\nfoveation = subtle\n").Pacing);
+            Assert.Equal(FramePacing.Headset, LauncherSettings.Parse("schema_version = 2\nframe_pacing = 90\n").Pacing);
+            // Launcher 0.1.11 always wrote pace, off by default, so its 'off' is not a choice; its 'headset' is.
+            Assert.Equal(FramePacing.Headset, LauncherSettings.Parse("schema_version = 2\npace = off\n").Pacing);
             Assert.Equal(FramePacing.Headset, LauncherSettings.Parse("schema_version = 2\npace = Headset\n").Pacing);
-            // A known key: not kept among the unknown ones, so it is not written twice.
-            Assert.Empty(LauncherSettings.Parse("schema_version = 2\npace = headset\n").UnknownKeys);
-            // Reset to defaults turns it off.
-            Assert.Equal(FramePacing.Off, new LauncherSettings { Pacing = FramePacing.Headset }.WithDefaults().Pacing);
+            // The new key wins over the old one.
+            Assert.Equal(FramePacing.Off, LauncherSettings.Parse("schema_version = 2\npace = headset\nframe_pacing = off\n").Pacing);
+            // Known keys: not kept among the unknown ones, so neither is written back as is.
+            Assert.Empty(LauncherSettings.Parse("schema_version = 2\npace = off\nframe_pacing = off\n").UnknownKeys);
+            // Reset to defaults matches the headset again.
+            Assert.Equal(FramePacing.Headset, new LauncherSettings { Pacing = FramePacing.Off }.WithDefaults().Pacing);
         }
 
         [Fact]
@@ -70,7 +75,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Null(SettingRules.WhyNot(Setting.FramePacing, new LauncherSettings { AlternateEyes = AlternateEyesMode.On }));
             var text = SettingTexts.For(Setting.FramePacing);
             Assert.Equal("Frame pacing", text.Label);
-            Assert.Equal(new[] { "As fast as the game runs", "Matched to the headset (experimental)" }, text.Choices);
+            Assert.Equal(new[] { "As fast as the game runs", "Matched to the headset (default)" }, text.Choices);
             Assert.DoesNotContain("\u2014", text.Tooltip);
             Assert.DoesNotContain("\u2013", text.Tooltip);
         }

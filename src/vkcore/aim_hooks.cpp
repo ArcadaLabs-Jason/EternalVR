@@ -5,7 +5,10 @@
 //   instead of the head. The render camera stays on the head.
 // - Forced views: an entry hook on idPlayer::SetViewAngles (RVA 0x1454480) counts calls from anywhere but
 //   the per-tick view update (idPlayer::UpdateViewAngles, whose call is found by its target); with the
-//   player's view inhibit bits and cutscenes they feed the gate that makes hand aim yield.
+//   player's view inhibit bits and cutscenes they feed the gate that makes hand aim yield. On a climbable
+//   wall (climb_hook.cpp) the gate yields the shots and viewmodel but hand aim aims with the head, and the
+//   game's own calls there (the climb animation's deltas every tick, the let-go once) do not end that. The
+//   hook also notes how far each foreign call turns the view, for the climb stats (takeForeignViewWrites).
 // - Shots: a mid-hook in idHands::FireWeapon just after GetWeaponFireInfo returns (RVA 0x135D733): the
 //   fire position [rsp+0x68] and fire axis [rbp+0x2B0] are replaced with the hand ray, so hitscan and
 //   projectiles leave the gun, not the eye. The game adds spread and derives the muzzle offset afterwards.
@@ -63,6 +66,10 @@ constexpr const char* kGetWeaponFireInfoSignature =
 constexpr std::size_t kHandsOwner = 0x358;                // idHands::owner
 constexpr std::size_t kPlayerInhibitFlags = 0x87FC;       // idPlayer::inhibitFlags
 constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
+// idHavokPhysics_Player::viewAngles (player_aim.cpp): the view before SetViewAngles sets it.
+constexpr std::size_t kPlayerViewAngles = 0x8A50 + 0x3F10;
+// A foreign SetViewAngles turns the view when its pitch or yaw leaves the player's by more than this.
+constexpr float kTurnDegrees = 0.01f;
 
 // A hand that loses tracking keeps aiming where it last pointed for this long, then the head takes over.
 constexpr double kHandHoldSeconds = 0.5;
@@ -74,12 +81,21 @@ constexpr float kMuzzleEpsilonMetres = 0.02f;
 std::atomic<const std::byte*> g_updateViewAnglesReturn{nullptr};
 // The idPlayer the camera hook last saw (the forced-view hook counts only its calls).
 std::atomic<const std::byte*> g_viewPlayer{nullptr};
+// The gate yields everything but the aim, which takes the head (a climbable wall; camera hook only).
+std::atomic<bool> g_headAims{false};
 const std::byte* g_imageBase = nullptr;
 
 // Distinct foreign SetViewAngles callers seen, for the log (the live check of section 2's table).
 std::mutex g_callersMutex;
 std::array<std::uintptr_t, 16> g_callers{};
 std::size_t g_callerCount = 0;
+
+// Foreign SetViewAngles calls for the view player since the camera hook last took them
+// (takeForeignViewWrites): the climb stats show whether the game turns the view on a climbable wall.
+std::atomic<std::uint32_t> g_foreignWrites{0};
+std::atomic<std::uint32_t> g_foreignTurns{0};
+std::atomic<float> g_foreignLargestTurn{0.0f};
+std::atomic<std::uintptr_t> g_foreignTurnCaller{0};
 
 std::atomic<std::uint64_t> g_loggedShots{0};
 std::atomic<ULONGLONG> g_lastShotStats{0};
@@ -95,8 +111,34 @@ void noteCaller(const std::byte* returnAddress) {
     }
     if (g_callerCount < g_callers.size()) {
         g_callers[g_callerCount++] = rva;
-        EVR_LOG("%s: SetViewAngles called from RVA 0x%llX (a forced view; hand aim yields)", kTag,
-                static_cast<unsigned long long>(rva));
+        EVR_LOG("%s: SetViewAngles called from RVA 0x%llX (a forced view except on a climbable wall; hand "
+                "aim yields)",
+                kTag, static_cast<unsigned long long>(rva));
+    }
+}
+
+// How far a foreign call turns the view: the angles passed (rdx) against the player's (rcx), read only.
+void noteViewTurn(const HookRegisters& regs, const std::byte* returnAddress) {
+    g_foreignWrites.fetch_add(1, std::memory_order_relaxed);
+    float to[3];
+    float from[3];
+    if (!safeCopy(to, reinterpret_cast<const std::byte*>(regs.rdx), sizeof(to)) ||
+        !safeCopy(from, reinterpret_cast<const std::byte*>(regs.rcx) + kPlayerViewAngles, sizeof(from))) {
+        return;
+    }
+    const float turn = std::max(std::fabs(std::remainder(to[0] - from[0], 360.0f)),
+                                std::fabs(std::remainder(to[1] - from[1], 360.0f)));
+    if (!std::isfinite(turn) || turn <= kTurnDegrees) {
+        return;
+    }
+    g_foreignTurns.fetch_add(1, std::memory_order_relaxed);
+    float largest = g_foreignLargestTurn.load(std::memory_order_relaxed);
+    while (turn > largest) {
+        if (g_foreignLargestTurn.compare_exchange_weak(largest, turn)) {
+            g_foreignTurnCaller.store(static_cast<std::uintptr_t>(returnAddress - g_imageBase),
+                                      std::memory_order_relaxed);
+            break;
+        }
     }
 }
 
@@ -110,6 +152,7 @@ void onSetViewAngles(const HookRegisters& regs) {
         reinterpret_cast<const std::byte*>(regs.rcx) == g_viewPlayer.load(std::memory_order_relaxed)) {
         state().foreignSetViewAngles.fetch_add(1, std::memory_order_relaxed);
         noteCaller(returnAddress);
+        noteViewTurn(regs, returnAddress);
     }
 }
 
@@ -290,23 +333,30 @@ bool installFireHook(const GameImage& image) {
 
 } // namespace
 
-void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimation) {
+void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimation, bool wallClimb) {
     State& s = state();
     input::ForcedAngleSignals signals;
     signals.foreignSetViewAngles = s.foreignSetViewAngles.exchange(0, std::memory_order_relaxed) > 0;
     signals.cutscene = cutscene;
     signals.cameraAnimation = cameraAnimation;
+    signals.wallClimb = wallClimb;
     if (isPlayerSafe(player)) {
         g_viewPlayer.store(player, std::memory_order_relaxed);
         safeRead(player + kPlayerInhibitFlags, signals.inhibitFlags);
     }
     const bool yield = s.gate.update(signals);
+    const bool headAims = yield && input::aimsWithHead(s.gate.reason());
+    g_headAims.store(headAims);
     s.yielding.store(yield);
+    noteClimbAim(headAims && settings().aim == input::AimSource::Hand);
     if (s.gate.reason() != s.lastReason) {
         if (s.gate.episodes() <= 50) {
-            EVR_LOG("%s: forced view %s (%s; inhibit 0x%X): hand aim, shots and viewmodel %s", kTag,
-                    yield ? "starts" : "ends", input::forcedReasonName(s.gate.reason()), signals.inhibitFlags,
-                    yield ? "leave the game alone" : "resume");
+            EVR_LOG("%s: forced view %s (%s; inhibit 0x%X): %s %s", kTag, yield ? "starts" : "ends",
+                    input::forcedReasonName(s.gate.reason()), signals.inhibitFlags,
+                    headAims ? "shots and viewmodel" : "hand aim, shots and viewmodel",
+                    !yield     ? "resume"
+                    : headAims ? "leave the game alone; hand aim aims with the head"
+                               : "leave the game alone");
         }
         s.lastReason = s.gate.reason();
     }
@@ -315,6 +365,15 @@ void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimati
 bool forcedView() {
     State& s = state();
     return s.attached.load(std::memory_order_acquire) && s.yielding.load();
+}
+
+ForeignViewWrites takeForeignViewWrites() {
+    ForeignViewWrites w;
+    w.writes = g_foreignWrites.exchange(0, std::memory_order_relaxed);
+    w.turns = g_foreignTurns.exchange(0, std::memory_order_relaxed);
+    w.largestTurnDegrees = g_foreignLargestTurn.exchange(0.0f, std::memory_order_relaxed);
+    w.largestTurnCaller = g_foreignTurnCaller.exchange(0, std::memory_order_relaxed);
+    return w;
 }
 
 bool syncKillActive(const std::byte* player) {
@@ -330,6 +389,10 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
         return head;
     }
     if (s.yielding.load()) {
+        // On a climbable wall the view is the player's own and follows the head (climb_hook.cpp).
+        if (g_headAims.load()) {
+            return head;
+        }
         return std::nullopt;
     }
     return handAngles(s, head);

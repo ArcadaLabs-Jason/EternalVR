@@ -82,6 +82,18 @@ std::uintptr_t NgxTwins::released(std::uintptr_t primary) {
     return twin;
 }
 
+bool NgxTwins::anyFailed() const {
+    return std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.twin == 0; });
+}
+
+std::size_t NgxTwins::forgetFailed() {
+    const auto failed =
+        std::remove_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.twin == 0; });
+    const auto n = static_cast<std::size_t>(entries_.end() - failed);
+    entries_.erase(failed, entries_.end());
+    return n;
+}
+
 bool NgxTwins::resetTwin(std::uintptr_t primary,
                          std::uint64_t gameFrame,
                          std::uint64_t minStep,

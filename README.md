@@ -52,6 +52,11 @@ HTC Vive Cosmos, HTC Vive wands and Pico 4. Only the Quest controllers have been
 are untested, so reports from anyone with them are especially welcome. Their layouts are in
 [`docs/release/CONTROLS.md`](docs/release/CONTROLS.md).
 
+On AMD Radeon RX 5000 and 6000 cards (and with some newer AMD drivers) each eye renders at the size of the
+game's desktop window and looks soft. A virtual display shaped like a headset eye works around it today;
+see "The picture is soft on an AMD graphics card" in
+[`docs/release/TROUBLESHOOTING.md`](docs/release/TROUBLESHOOTING.md).
+
 If you try it on anything else (another headset or runtime, an AMD or Intel graphics card), please
 tell me how it went, good or bad, in an [issue](../../issues/new/choose) or in
 [Discussions](../../discussions). Bug reports, ideas and pull requests are all welcome.

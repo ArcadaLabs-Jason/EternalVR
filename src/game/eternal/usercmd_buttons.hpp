@@ -49,6 +49,11 @@ inline constexpr std::uint64_t kAny = 0x0200000000000000;
 // The bits one action presses; 0 for an action with no bit (Pause).
 std::uint64_t usercmdButtons(GameAction action);
 
+// The action that presses the usercmd button with this index (bit 1 << index), the first in enum order when
+// two share it (_changeWeapon: the quick switch, not the wheel). The game's prompts name their action by its
+// button (the action table maps "_altfire" to index 2). Nothing for BUTTON_ANY or a button no action presses.
+std::optional<GameAction> actionForUsercmdButton(int index);
+
 // The bits a set of actions presses together, with BUTTON_ANY when any is pressed.
 std::uint64_t usercmdButtons(const GameActionSet& actions);
 

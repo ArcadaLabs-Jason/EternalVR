@@ -52,8 +52,9 @@ namespace EternalVR.Launcher
             SuspendLayout();
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            // Fits a 1080p display at 150 %.
-            Width = 720;
+            // Wide enough that the Play tab's right column shows whole; fits a 1080p display at 175 % (FitToScreen
+            // shrinks it on a smaller screen).
+            Width = 1000;
             Height = 660;
             StartPosition = FormStartPosition.CenterScreen;
             Icon = Branding.WindowIcon() ?? Icon;

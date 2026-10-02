@@ -86,6 +86,8 @@ std::string_view expectedProfile(Controller controller) {
         return "/interaction_profiles/htc/vive_controller";
     case Controller::Pico4:
         return "/interaction_profiles/bytedance/pico4_controller";
+    case Controller::SteamFrame:
+        return "/interaction_profiles/valve/frame_controller_valve";
     case Controller::Count:
         break;
     }
@@ -94,8 +96,16 @@ std::string_view expectedProfile(Controller controller) {
 
 // The gameplay actions a family leaves unbound on a hand, because the controller has no input for them.
 bool expectedUnbound(Controller controller, XrActionId action, Hand hand) {
+    // The Frame has every button on both hands: four face buttons, a bumper and a Menu or View button.
+    if (controller == Controller::SteamFrame) {
+        return false;
+    }
     // Only the left Menu button is the pause on every family (the capture chord reads it too).
     if (action == XrActionId::Menu && hand == Hand::Right) {
+        return true;
+    }
+    // Two face buttons more than Touch's, and a bumper.
+    if (action == XrActionId::Face3 || action == XrActionId::Face4 || action == XrActionId::Shoulder) {
         return true;
     }
     switch (controller) {
@@ -109,6 +119,32 @@ bool expectedUnbound(Controller controller, XrActionId action, Hand hand) {
     default:
         return false;
     }
+}
+
+// The gameplay action a control map's button input reads.
+XrActionId gameplayAction(ButtonInput input) {
+    switch (input) {
+    case ButtonInput::Trigger:
+        return XrActionId::Trigger;
+    case ButtonInput::Grip:
+        return XrActionId::Grip;
+    case ButtonInput::StickClick:
+        return XrActionId::ThumbstickClick;
+    case ButtonInput::Primary:
+        return XrActionId::Primary;
+    case ButtonInput::Secondary:
+        return XrActionId::Secondary;
+    case ButtonInput::Face3:
+        return XrActionId::Face3;
+    case ButtonInput::Face4:
+        return XrActionId::Face4;
+    case ButtonInput::Shoulder:
+        return XrActionId::Shoulder;
+    case ButtonInput::Menu:
+    case ButtonInput::Count:
+        break;
+    }
+    return XrActionId::Menu;
 }
 
 bool reaches(const BindingProfile& profile, GameAction action) {
@@ -203,13 +239,7 @@ TEST_CASE("every map binds only inputs the family's profile binds") {
             const BindingProfile profile = mapOf(controller, handedness);
             for (const ButtonBinding& b : profile.buttons) {
                 CAPTURE(gameActionName(b.action));
-                const XrActionId action = b.input == ButtonInput::Trigger      ? XrActionId::Trigger
-                                          : b.input == ButtonInput::Grip       ? XrActionId::Grip
-                                          : b.input == ButtonInput::StickClick ? XrActionId::ThumbstickClick
-                                          : b.input == ButtonInput::Primary    ? XrActionId::Primary
-                                          : b.input == ButtonInput::Secondary  ? XrActionId::Secondary
-                                                                               : XrActionId::Menu;
-                CHECK(data.find(action, b.hand) != nullptr);
+                CHECK(data.find(gameplayAction(b.input), b.hand) != nullptr);
             }
         }
     }
@@ -337,6 +367,45 @@ TEST_CASE("Vive wands: the trackpad is the stick, and the off hand's trigger and
     }
 }
 
+TEST_CASE("Steam Frame: four face buttons and a bumper per hand, a gamepad's actions on them") {
+    const ControllerData data = dataOf(Controller::SteamFrame);
+    CHECK(data.find(XrActionId::Primary, Hand::Right)->path == "/user/hand/right/input/a/click");
+    CHECK(data.find(XrActionId::Face3, Hand::Right)->path == "/user/hand/right/input/x/click");
+    CHECK(data.find(XrActionId::Face4, Hand::Right)->path == "/user/hand/right/input/y/click");
+    CHECK(data.find(XrActionId::Primary, Hand::Left)->path == "/user/hand/left/input/dpad_down/click");
+    CHECK(data.find(XrActionId::Secondary, Hand::Left)->path == "/user/hand/left/input/dpad_left/click");
+    CHECK(data.find(XrActionId::Face3, Hand::Left)->path == "/user/hand/left/input/dpad_right/click");
+    CHECK(data.find(XrActionId::Face4, Hand::Left)->path == "/user/hand/left/input/dpad_up/click");
+    CHECK(data.find(XrActionId::Menu, Hand::Left)->path == "/user/hand/left/input/view/click");
+    CHECK(data.find(XrActionId::Menu, Hand::Right)->path == "/user/hand/right/input/menu/click");
+    CHECK(data.find(XrActionId::Shoulder, Hand::Right)->path == "/user/hand/right/input/shoulder/click");
+    CHECK(data.find(XrActionId::MenuClose, Hand::Left)->path == "/user/hand/left/input/view/click");
+    const BindingProfile right = mapOf(Controller::SteamFrame, Handedness::Right);
+    CHECK(bindingOf(right, GameAction::Jump)->input == ButtonInput::Primary);
+    CHECK(bindingOf(right, GameAction::Dash)->input == ButtonInput::Secondary);
+    const ButtonBinding* dossier = bindingOf(right, GameAction::Dossier);
+    CHECK(dossier->hand == Hand::Right);
+    CHECK(dossier->input == ButtonInput::Menu);
+    CHECK(dossier->kind == PressKind::Tap);
+    const ButtonBinding* wheel = bindingOf(right, GameAction::WeaponWheel);
+    CHECK(wheel->input == ButtonInput::Shoulder);
+    CHECK(wheel->kind == PressKind::Hold);
+    // Triggers, grips and sticks are Touch's.
+    const BindingProfile touch = mapOf(Controller::OculusTouch, Handedness::Right);
+    for (const GameAction action : {GameAction::Fire, GameAction::WeaponMod, GameAction::Melee}) {
+        CAPTURE(gameActionName(action));
+        CHECK(*bindingOf(right, action) == *bindingOf(touch, action));
+    }
+    CHECK(right.stickGestures == touch.stickGestures);
+    // The full mirror swaps every face button with the one in its place on the other hand.
+    const BindingProfile mirror = mapOf(Controller::SteamFrame, Handedness::LeftButtonAndStickSwap);
+    CHECK(bindingOf(mirror, GameAction::Jump)->hand == Hand::Left);
+    CHECK(bindingOf(mirror, GameAction::Jump)->input == ButtonInput::Primary);
+    CHECK(bindingOf(mirror, GameAction::WeaponWheel)->hand == Hand::Left);
+    CHECK(bindingOf(mirror, GameAction::MissionInfo)->hand == Hand::Right);
+    CHECK(bindingOf(mirror, GameAction::Dossier)->hand == Hand::Right);
+}
+
 TEST_CASE("extension profiles are available only with their extension, or as OpenXR 1.1 core") {
     const InteractionProfileInfo& touch =
         *findInteractionProfile("/interaction_profiles/oculus/touch_controller");
@@ -363,6 +432,13 @@ TEST_CASE("extension profiles are available only with their extension, or as Ope
     CHECK(profileAvailable(g2, kNone, true));
     CHECK_FALSE(profileAvailable(cosmos, kHp, false));
     CHECK(profileAvailable(cosmos, kNone, true));
+    // The Frame's profile is SteamVR's own, with no OpenXR 1.1 core path.
+    const InteractionProfileInfo& frame =
+        *findInteractionProfile("/interaction_profiles/valve/frame_controller_valve");
+    CHECK(frame.extension == "XR_VALVE_frame_controller_interaction");
+    constexpr std::array<std::string_view, 1> kFrame{"XR_VALVE_frame_controller_interaction"};
+    CHECK_FALSE(profileAvailable(frame, kNone, true));
+    CHECK(profileAvailable(frame, kFrame, false));
 }
 
 TEST_CASE("controller names match the data files") {
@@ -373,6 +449,7 @@ TEST_CASE("controller names match the data files") {
     CHECK(controllerName(Controller::ViveCosmos) == "htc_vive_cosmos");
     CHECK(controllerName(Controller::ViveWand) == "htc_vive_wand");
     CHECK(controllerName(Controller::Pico4) == "pico4");
+    CHECK(controllerName(Controller::SteamFrame) == "steam_frame");
     for (std::size_t i = 0; i < kControllers.size(); ++i) {
         CHECK(static_cast<std::size_t>(kControllers[i]) == i);
     }

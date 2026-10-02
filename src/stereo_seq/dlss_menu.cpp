@@ -42,7 +42,13 @@ DlssMenuApply dlssMenuApply(const DlssMenuHold& hold, int chosen, int shown) {
     if (chosen == shown) {
         return DlssMenuApply::Keep;
     }
-    return dlssMenuFollowsGame(hold) ? DlssMenuApply::Apply : DlssMenuApply::Ignore;
+    if (dlssMenuFollowsGame(hold)) {
+        return DlssMenuApply::Apply;
+    }
+    if (hold.perEyeTaa && hold.dlssRetry && chosen != kMenuOff) {
+        return hold.dlssOption ? DlssMenuApply::Retry : DlssMenuApply::ApplyRetry;
+    }
+    return DlssMenuApply::Ignore;
 }
 
 const char* dlssMenuApplyName(DlssMenuApply apply) {
@@ -53,6 +59,11 @@ const char* dlssMenuApplyName(DlssMenuApply apply) {
         return "applied as in the flat game";
     case DlssMenuApply::Ignore:
         return "not used in VR (the launcher's Anti-aliasing decides): the profile's own index kept";
+    case DlssMenuApply::Retry:
+        return "DLSS asked for again: eye R's DLSS feature is tried again at the launcher's quality (the "
+               "profile's own index kept)";
+    case DlssMenuApply::ApplyRetry:
+        return "applied as in the flat game, and eye R's DLSS feature is tried again";
     }
     return "?";
 }

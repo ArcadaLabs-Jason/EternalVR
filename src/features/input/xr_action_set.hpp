@@ -44,6 +44,10 @@ enum class XrActionId : std::uint8_t {
     ThumbstickClick,
     Primary,   // A on the right Touch controller, X on the left.
     Secondary, // B on the right, Y on the left.
+    // Two more face buttons and the bumper, for controllers that have them (the Steam Frame's).
+    Face3, // X on the right Steam Frame controller, D-pad right on the left.
+    Face4, // Y on the right, D-pad up on the left.
+    Shoulder,
     Menu,
     AimPose,
     GripPose, // The weapon and arms are placed at this pose (T-054).

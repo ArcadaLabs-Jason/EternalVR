@@ -202,6 +202,16 @@ struct SwapchainState {
     VkExtent2D extent{};
 };
 
+// The game's and the headset's counters at the last `rates:` line (presenter_frame_log.cpp).
+struct RateMarks {
+    std::uint64_t presents = 0;
+    std::uint64_t ticks = 0;
+    std::uint64_t pairs = 0;
+    std::uint64_t xrFrames = 0;
+    std::uint64_t xrCopies = 0;
+    LONGLONG qpc = 0;
+};
+
 // A game swapchain image whose present was handed back instead of reaching the window (presenter_window.cpp).
 struct HeldImage {
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;

@@ -1,5 +1,6 @@
 // OpenXR session events on the XR worker: session state changes, a lost runtime or instance, a LOCAL
-// space change (a recenter), and placing the flat screen in front of the head.
+// space change (a recenter), a refresh rate change (presenter_refresh.hpp), and placing the flat screen in
+// front of the head.
 
 #include "vkcore/presenter_impl.hpp"
 
@@ -71,6 +72,7 @@ void XrPresenter::Impl::pollEvents() {
                 if (sessionRunning) {
                     loss.runningSinceQpc = qpcNow();
                     status::vr("the headset shows the game");
+                    refresh.onSessionRunning(session);
                 }
                 if (sessionRunning && settings.keepActive) {
                     enableKeepActive();
@@ -88,6 +90,9 @@ void XrPresenter::Impl::pollEvents() {
             }
             break;
         }
+        case XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB:
+            refresh.onRateChanged(reinterpret_cast<const XrEventDataDisplayRefreshRateChangedFB&>(event));
+            break;
         case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
             markLost(*this, xr_recovery::Loss::Instance, "instance loss pending");
             break;

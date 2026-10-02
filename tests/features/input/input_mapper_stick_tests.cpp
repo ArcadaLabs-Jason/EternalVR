@@ -5,14 +5,20 @@
 
 #include <doctest/doctest.h>
 
-// The recenter chord (both sticks held) through the mapper, with the built-in Quest Touch map.
+// The sticks through the mapper, with the built-in Quest Touch map: the recenter chord (both sticks held),
+// and the turn stick pointing at a weapon wheel a button holds.
 
 using evr::game::contains;
 using evr::game::GameAction;
+using evr::input::Axis2;
+using evr::input::BindingProfile;
+using evr::input::ButtonInput;
 using evr::input::GameInput;
+using evr::input::Hand;
 using evr::input::InputFrame;
 using evr::input::InputMapper;
 using evr::input::MapperSettings;
+using evr::input::PressKind;
 using evr::test::questTouchProfile;
 using evr::test::restingFrame;
 
@@ -99,4 +105,57 @@ TEST_CASE("a stick held past the window with the other is the chord") {
     CHECK(run.melee == 0);
     CHECK(run.recenter);
     CHECK(run.recenterAt == doctest::Approx(0.75f).epsilon(0.1));
+}
+
+namespace {
+
+// The Touch map with the weapon wheel on a right bumper hold too.
+BindingProfile bumperWheelProfile() {
+    BindingProfile profile = questTouchProfile();
+    profile.buttons.push_back({Hand::Right, ButtonInput::Shoulder, PressKind::Hold, GameAction::WeaponWheel});
+    return profile;
+}
+
+InputFrame bumperAndStick(bool bumper, Axis2 stick) {
+    InputFrame frame = restingFrame();
+    frame.right.shoulderButton = bumper;
+    frame.right.stick = stick;
+    return frame;
+}
+
+} // namespace
+
+TEST_CASE("a wheel held by a button is pointed at with the turn stick, which does not turn meanwhile") {
+    InputMapper mapper(bumperWheelProfile());
+    for (int i = 0; i < 40; ++i) {
+        mapper.update(bumperAndStick(true, {}), {}, kFrame);
+    }
+    const GameInput right = mapper.update(bumperAndStick(true, {1.0f, 0.0f}), {}, kFrame);
+    CHECK(contains(right.down, GameAction::WeaponWheel));
+    CHECK(right.wheelPointer == Axis2{1.0f, 0.0f});
+    CHECK(right.turnDegrees == 0.0f);
+    // Straight up points at the top of the wheel; it is not the chainsaw.
+    const GameInput up = mapper.update(bumperAndStick(true, {0.0f, 1.0f}), {}, kFrame);
+    CHECK(up.wheelPointer == Axis2{0.0f, 1.0f});
+    CHECK_FALSE(contains(up.down, GameAction::Chainsaw));
+}
+
+TEST_CASE("after a button's wheel, the turn stick waits for the centre before it turns or gestures again") {
+    InputMapper mapper(bumperWheelProfile());
+    for (int i = 0; i < 40; ++i) {
+        mapper.update(bumperAndStick(true, {0.0f, 1.0f}), {}, kFrame);
+    }
+    // The bumper lets go first, with the stick still up and then sideways.
+    for (const Axis2 stick : {Axis2{0.0f, 1.0f}, Axis2{1.0f, 0.0f}}) {
+        const GameInput held = mapper.update(bumperAndStick(false, stick), {}, kFrame);
+        CHECK_FALSE(contains(held.down, GameAction::WeaponWheel));
+        CHECK_FALSE(contains(held.down, GameAction::Chainsaw));
+        CHECK(held.turnDegrees == 0.0f);
+        CHECK(held.wheelPointer == Axis2{});
+    }
+    mapper.update(bumperAndStick(false, {}), {}, kFrame);
+    CHECK(mapper.update(bumperAndStick(false, {1.0f, 0.0f}), {}, kFrame).turnDegrees < 0.0f);
+    mapper.update(bumperAndStick(false, {}), {}, kFrame);
+    CHECK(
+        contains(mapper.update(bumperAndStick(false, {0.0f, 1.0f}), {}, kFrame).down, GameAction::Chainsaw));
 }

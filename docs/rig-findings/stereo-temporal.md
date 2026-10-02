@@ -201,7 +201,12 @@ that frame run before its present, while the counter is one below. So the jobs l
 exposure hook, `r_TAANumSubSamples`, the setter and every cvar object). If one is missing it writes
 `r_antialiasing 0` and `r_TAASafeMode 1` (the v1 state: no TAA pass at all) and, if even that does not read
 back, turns stereo off (mono). DLSS asked for without a working twin (no NGX hook, a twin that failed to
-create) switches to `r_antialiasing 1` (per-eye TAA). Every write, redirect and creation asks
+create) switches to `r_antialiasing 1` (per-eye TAA). A failed twin is tried again rather than never
+(`src/stereo_seq/ngx_twin_retry.hpp`): 5 s, 10 s and 20 s after each failure in a row, at once when the game
+releases that feature, and after the third try only when the player chooses DLSS in the game's video menu,
+which starts the count over. Each failure logs the NGX result and the create keys the block held (sizes,
+`PerfQualityValue`, preset); a twin made after one logs `DLSS per eye again after a failure`. Every write,
+redirect and creation asks
 `mp_guard::allowsGameTouch()`; after a trip every hook forwards to the engine (the DLSS twin is still
 released with its game feature: it is the layer's own object).
 

@@ -30,6 +30,9 @@ struct HandState {
     bool stickClick = false;
     bool primaryButton = false;   // A on the right Touch controller, X on the left.
     bool secondaryButton = false; // B on the right, Y on the left.
+    bool face3Button = false;     // X on the right Steam Frame controller, D-pad right on the left.
+    bool face4Button = false;     // Y on the right, D-pad up on the left.
+    bool shoulderButton = false;  // The bumper above the trigger.
     bool menuButton = false;
 
     // The aim pose: -Z runs along the controller's pointing ray.

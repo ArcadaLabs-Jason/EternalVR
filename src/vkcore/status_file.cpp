@@ -6,9 +6,12 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #ifndef EVR_LAYER_VERSION
 #define EVR_LAYER_VERSION "unknown"
@@ -21,7 +24,8 @@ namespace {
 std::mutex g_mutex;
 std::string g_state;
 std::string g_reason;
-std::string g_stereo; // "on", "off: <reason>", or empty until decided
+std::string g_stereo;                                      // "on", "off: <reason>", or empty until decided
+std::vector<std::pair<std::string, std::string>> g_fields; // the headset keys, in the order first set
 
 std::string oneLine(std::string text) {
     for (char& c : text) {
@@ -46,6 +50,9 @@ void save() {
     }
     std::fprintf(f, "state=%s\nreason=%s\nstereo=%s\nversion=%s\npid=%lu\n", g_state.c_str(),
                  g_reason.c_str(), g_stereo.c_str(), EVR_LAYER_VERSION, GetCurrentProcessId());
+    for (const auto& [key, value] : g_fields) {
+        std::fprintf(f, "%s=%s\n", key.c_str(), value.c_str());
+    }
     std::fclose(f);
     MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
 }
@@ -93,6 +100,20 @@ void stereo(bool on, const char* reason) {
     g_stereo = value;
     save();
     EVR_LOG("status: stereo %s", value.c_str());
+}
+
+void field(const char* key, const std::string& value) {
+    const std::string text = oneLine(value);
+    std::lock_guard lock(g_mutex);
+    auto it = std::find_if(g_fields.begin(), g_fields.end(), [key](const auto& f) { return f.first == key; });
+    if (it == g_fields.end()) {
+        g_fields.emplace_back(key, text);
+    } else if (it->second == text) {
+        return;
+    } else {
+        it->second = text;
+    }
+    save();
 }
 
 } // namespace evr::vkcore::status

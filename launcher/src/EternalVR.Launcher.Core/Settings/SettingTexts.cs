@@ -65,7 +65,7 @@ namespace EternalVR.Launcher.Core.Settings
                 "Throw a grenade with your off hand, as you would throw a ball: bring the hand up beside your ear, then "
                 + "swing it forward. It fires the equipment launcher, like its button; the grenade flies where you aim. "
                 + "Off by default. Experimental: not yet tried in a headset."),
-            [Setting.HandsJump] = new Text("Jump with both hands",
+            [Setting.HandsJump] = new Text("Jump with both hands (standing)",
                 "Throw both hands up above your head, fast, to jump, like in DOOM VFR. The jump button still works. "
                 + "Off when you play sitting. Off by default: two-handed moves can set it off by accident."),
             [Setting.SwingGesture] = new Text("Overhead swing",
@@ -112,8 +112,9 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.Bhaptics] = new Text("bHaptics (experimental)",
                 "For bHaptics vests and arm sleeves. Start the bHaptics Player on this PC with your suit connected, then the "
                 + "game: you feel your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at "
-                + "low health, glory kills and death. Nothing happens without the Player running. New and not yet tried on a "
-                + "real suit."),
+                + "low health, glory kills, landing from a fall, jump pads, pickups, portals and death. Nothing happens without "
+                + "the Player running. Experimental: a player has felt the shots, the landing and glory kills on a real suit; "
+                + "the other effects have not been felt yet."),
             [Setting.ButtonLayout] = new Text("Button layout",
                 "Change which button does what. Edit controls lets you pick an action for each button of your controllers, "
                 + "for each weapon hand, and saves them for the VR settings profile in use: each profile keeps its own controls. "
@@ -155,8 +156,8 @@ namespace EternalVR.Launcher.Core.Settings
                 + "Slayer's movement) advance by uneven steps. Matched to the headset: the game draws exactly one frame for "
                 + "each headset frame, started at the same moment of each, as native VR games do, so motion advances evenly. "
                 + "It helps when the game runs faster than your headset's refresh rate; below it nothing changes. "
-                + "Experimental: off by default.",
-                "As fast as the game runs", "Matched to the headset (experimental)"),
+                + "Matched to the headset by default.",
+                "As fast as the game runs", "Matched to the headset (default)"),
             [Setting.TextureStreaming] = new Text("Texture streaming",
                 "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "

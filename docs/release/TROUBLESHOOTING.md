@@ -15,7 +15,8 @@ The session folder names start with the date and time, so the newest is the last
 
 After a problem, click **Export report...** in the launcher (or run
 `EternalVR.Launcher.exe --export-report <file.zip>`). It shows the files it will save and their total size,
-then asks where to save the zip (the Desktop, `EternalVR-report-<date>.zip`). Send me that zip, or attach
+then asks where to save the zip (the Desktop, `EternalVR-report-v<version>-<date>-<ID>.zip`). The ID is six random letters and
+digits, also at the top of `system.txt`; it only tells reports apart and says nothing about you or your PC. Send me that zip, or attach
 it to your GitHub issue if you have access, and say what you were doing. If the game went wrong in an older session than the newest
 five, zip that `logs\<session>` folder by hand as well.
 
@@ -91,10 +92,12 @@ warning does not.
 | ETERNALVR_DISABLE_LAYER=1 is set | Remove that environment variable. |
 | No active OpenXR runtime is set / manifest does not exist | Start your headset software and make it the active OpenXR runtime (for Virtual Desktop: VDXR), or pick a runtime in the launcher. |
 | A layer warning (RTSS, OBS, Bandicam ...) | That overlay or capture tool is untested with the mod. If VR misbehaves, close it and try again. ReShade, OpenXR Toolkit, Overwolf and other VR mods for DOOM Eternal are switched off for the session automatically. |
+| SteamVR uses a custom controller binding for DOOM Eternal | Warning only. SteamVR applies a binding chosen for the game (often one made for another VR mod of DOOM Eternal) instead of the mod's own. If your controllers do nothing in game, see "Controllers do nothing in game (SteamVR)" below. |
 | Hardware-accelerated GPU scheduling is on | Warning only. It caused hitching on my PC; the message says how to turn it off (needs a restart). |
 | No DOOM Eternal settings folder was found | Start the game once normally through Steam, then try again. Without it, VR settings are not forced. |
 | Steam's cloud record is stale | Start DOOM Eternal once through Steam, wait for the main menu, quit, then use the launcher again. |
 | Extra arguments refused (single-player) | Remove the multiplayer argument from **Extra arguments**. |
+| Last session: Your graphics driver cannot render above the window size | Warning only. See "The picture is soft on an AMD graphics card" below. |
 | Headset not detected; the render size is decided in-game | Warning only. The launcher could not ask the headset's runtime for its render size (the log says why), so the game starts small and switches size a few seconds in. Connect the headset and start its software before launching. |
 
 ## Problems in the game
@@ -113,6 +116,32 @@ warning does not.
 **The launcher says the game handed off to Steam.** Steam restarted the game itself, without the mod.
 Make sure Steam was running and logged in before you clicked Launch VR, and try again.
 
+**The picture is soft on an AMD graphics card** (the launcher says "Your graphics driver cannot render above
+the window size, so each eye rendered at ..."). On AMD Radeon RX 5000 and 6000 cards, and with some newer
+AMD drivers, the driver cannot scale the game's image into its desktop window, so each eye renders at that
+window's size. The mod makes the window as large as your display allows, in the eye's shape. What helps:
+
+- Put the game on your largest, highest-resolution display (the launcher's desktop window settings), and
+  keep the taskbar small or on another display: the window cannot be larger than the display's free area.
+- Update the graphics driver; a newer one may add what is missing.
+- The Play tab's "Each eye" line shows the size the last session really got.
+- **Workaround that works today: a virtual display.** Each eye renders at the window's size, and with
+  "Fill the monitor" the window covers its whole display, so an extra display shaped like a headset eye
+  gives each eye close to its planned size. A player with an RX 6750 XT and a Quest 2 plays this way.
+  1. Install a virtual display driver, for example
+     [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver), and give it a
+     custom resolution about the size of one eye (for example 2000x2100; the launcher's message after a
+     session says the planned size).
+  2. In the launcher's Advanced tab, set "Window monitor" to the virtual display, "Window size" to
+     "Fill the monitor", and turn "Crop to 16:9" off.
+  3. Launch VR as usual. The game's window now sits on the virtual display, which you do not need to look at.
+
+  A bigger eye costs frame rate: if it drops too far, use a smaller custom resolution or lower Resolution
+  on the Play tab.
+
+The mod's log says why (`size: render size off: ...; each eye renders at the window's ...`). A full fix is
+being worked on; an Export report from your PC helps.
+
 **"Failed to allocate video memory", or the game seems to hang a few seconds in.** The game switched to
 the headset's render size during the session and the graphics card ran out of memory (seen on 12 GB
 cards). Connect the headset before launching so the game starts at that size, and lower "Resolution" (Play tab)
@@ -121,7 +150,9 @@ if it still happens.
 **Short freezes (about a second) now and then.** Send an Export report and say roughly when they
 happened. The mod's log has a `stall:` line for each of the first 30 freezes during play: how long the game
 went without a new frame, and what took the time meanwhile (the mod's own work, the game creating shaders
-or allocating video memory). Every 10 s a `vram:` line shows how much video memory the game uses against
+or allocating video memory, or the game saving a checkpoint). A freeze of about half a second right after a
+fight or before a cutscene whose line ends with `the game saved a checkpoint in the gap` is the game's own
+autosave (`KNOWN-ISSUES.md`). Every 10 s a `vram:` line shows how much video memory the game uses against
 what Windows allows it; past 100% Windows moves memory out and back, which stutters (lower "Resolution" on
 the Play tab, or close other programs that use the graphics card).
 
@@ -136,12 +167,13 @@ a second"). If that is well below your headset's rate, see the next entry, or lo
 your graphics card is the limit.
 
 **Moving things look less smooth than in other VR games.** When the game draws more frames than your headset
-shows (say 140 a second on a 90 Hz headset), each headset frame shows the newest one, so the world, your gun
-and your movement advance in uneven steps, while looking around stays smooth. Try "Frame pacing: Matched to the
-headset (experimental)" on the Play tab (Picture): the game then draws exactly one frame for each headset frame,
-started at the same moment of each. It changes nothing while the game runs below your headset's rate. The mod's
-log has a `pace:` line every 10 s: "with one" close to the number of headset frames means every headset frame
-got exactly one new frame; tell me which of the two settings looks better to you.
+shows (say 140 a second on a 90 Hz headset) and each headset frame shows the newest one, the world, your gun
+and your movement advance in uneven steps, while looking around stays smooth. "Frame pacing: Matched to the
+headset" on the Play tab (Picture), the default since 0.1.12, prevents that: the game draws exactly one frame
+for each headset frame, started at the same moment of each. It changes nothing while the game runs below your
+headset's rate. Check it is not set to "As fast as the game runs" (or that Alternate eyes is not on Auto, which
+turns pacing off). The mod's log has a `pace:` line every 10 s: "with one" close to the number of headset frames
+means every headset frame got exactly one new frame.
 
 **Which DLSS preset should I use?** With a newer DLSS than the game's (the DLSS group on the Play tab: NVIDIA's
 newest, downloaded once, or a file of your own), the "Preset" makes a big difference on RTX 20 and 30 series cards. One player's RTX 3070 with a
@@ -167,12 +199,31 @@ cannot keep up. Turn it off again if you do not like it.
 
 **Everything is blurry.** See "Render resolution" in `KNOWN-ISSUES.md`.
 
+**Controllers do nothing in game (SteamVR).** The headset works, but the trigger, buttons and sticks do
+nothing, there is no menu pointer and no hand aim. SteamVR keeps controller bindings per game, and every VR mod
+of DOOM Eternal runs under the same game, so a binding chosen there for another mod (a community or workshop
+binding, or one you saved yourself) replaces the mod's own and binds none of its controls. To go back to the
+default:
+
+1. In SteamVR open **Settings > Controllers > Manage Controller Bindings** (or "Show old binding UI").
+2. Pick **DOOM Eternal** and your controller.
+3. Choose the **default** binding, not a community or custom one.
+4. Launch again.
+
+The launcher warns about such a binding before the launch ("SteamVR uses a custom controller binding for DOOM
+Eternal"), and the mod's log has a `controllers: WARNING` line when no hand
+pose ever arrives while you play. Also check that both controllers are on and tracked in SteamVR's window before you launch.
+
 **The view is turned or at the wrong height.** Face forward and hold both sticks pressed for 2 seconds
 to recenter, or use the headset's own recenter (hold the Meta / Oculus button).
 
 **The game crashed.** Send an Export report (above): it holds the game's own crash report and console log
 as well as the mod's log. Your settings are restored when the
 game has exited (or the next time you open the launcher).
+
+**"The game was ended (exit code -1)".** The game did not crash: it was closed, by itself or by another
+program (often you, after it froze: the headset kept showing the last image). If it froze, send an Export
+report (above) and say how you closed it.
 
 ## Getting your settings back
 
@@ -198,7 +249,10 @@ Pass version the backup is a copy of the game's save containers only: the launch
 The mod writes why in `logs\<session>\eternalvr-status.txt` (and in the session's `eternalvr-*.log`):
 `state=` is `vr` while the headset shows the game, `waiting` while no headset is found yet, and `flat` once
 VR is off for that session, with `reason=` saying why in one sentence. `stereo=off` means the headset gets
-one image for both eyes. The usual reasons:
+one image for both eyes. Once VR is up the file also names the headset runtime (`runtime=`), the headset as the
+runtime reports it (`system=`), the size per eye the runtime asks for (`recommended=`) and the size the game
+renders (`render=`), the headset's refresh rate (`refresh_hz=`) and the share of play the runtime held the
+game at half its refresh rate or less (`throttled_share=`, 0 to 1). The usual reasons:
 
 | Reason | What to do |
 |---|---|

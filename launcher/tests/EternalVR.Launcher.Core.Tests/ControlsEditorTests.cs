@@ -45,7 +45,7 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var families = Prepared(t).Families();
-                Assert.Equal(new[] { "oculus_touch.toml", "valve_index.toml", "hp_reverb_g2.toml", "windows_mixed_reality.toml", "htc_vive_cosmos.toml", "htc_vive_wand.toml", "pico4.toml" },
+                Assert.Equal(new[] { "oculus_touch.toml", "valve_index.toml", "hp_reverb_g2.toml", "windows_mixed_reality.toml", "htc_vive_cosmos.toml", "htc_vive_wand.toml", "pico4.toml", "steam_frame.toml" },
                     families.Select(f => f.FileName));
                 Assert.Equal("Meta Quest and Rift (Touch)", families[0].Name);
                 Assert.Equal("/interaction_profiles/oculus/touch_controller", families[0].ProfilePath);
@@ -305,6 +305,19 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void ALabelsSectionIsReadAndItsBadKeysAndEmptyNamesAreReported()
+        {
+            var header = "[profile]\n\"path\" = \"/interaction_profiles/oculus/touch_controller\"\n[labels]\n";
+            var good = ControllerMapFile.Parse(header + "\"left.primary\" = \"X\"\n\"right.stick\" = \"Right Thumbstick\"\n");
+            Assert.Empty(good.FileIssues);
+            Assert.Equal("Right Thumbstick", good.Get(ControlNames.LabelsSection, "right.stick"));
+            var bad = ControllerMapFile.Parse(header + "\"left.thumb\" = \"Thumb\"\n\"right.primary\" = \" \"\n");
+            Assert.Equal(2, bad.FileIssues.Count);
+            Assert.Contains(bad.FileIssues, i => i.Kind == ControlIssueKind.UnknownKey && i.Key == "left.thumb" && i.Line == 4);
+            Assert.Contains(bad.FileIssues, i => i.Kind == ControlIssueKind.UnknownValue && i.Key == "right.primary");
+        }
+
+        [Fact]
         public void ANewBindingGoesInTheLayersOrderAndARemovedOneLeavesTheButtonFree()
         {
             var file = ControllerMapFile.Parse(File.ReadAllText(Path.Combine(ShippedMaps, "oculus_touch.toml")));
@@ -425,6 +438,13 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal("Right Menu button", wands.InputName(ControlHand.Right, ButtonInput.Secondary));
                 Assert.Equal("Left trackpad click", wands.InputName(ControlHand.Left, ButtonInput.StickClick));
                 Assert.Equal("Left trackpad", wands.StickName(ControlHand.Left));
+
+                var frame = Open(controls, "steam_frame.toml");
+                Assert.Equal(18, frame.Inputs(Handedness.Right).Count); // four face buttons, a bumper and Menu or View on each
+                Assert.Equal("Right X", frame.InputName(ControlHand.Right, ButtonInput.Face3));
+                Assert.Equal("Left D-pad up", frame.InputName(ControlHand.Left, ButtonInput.Face4));
+                Assert.Equal("Left View button", frame.InputName(ControlHand.Left, ButtonInput.Menu));
+                Assert.Equal("Right bumper", frame.InputName(ControlHand.Right, ButtonInput.Shoulder));
 
                 var wmr = Open(controls, "windows_mixed_reality.toml");
                 Assert.Equal("Left trackpad click", wmr.InputName(ControlHand.Left, ButtonInput.Primary));

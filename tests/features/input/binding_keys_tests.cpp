@@ -29,6 +29,12 @@ TEST_CASE("keys parse into what they name") {
           BindingKey{ButtonKey{Hand::Left, ButtonInput::Primary, PressKind::Hold}});
     CHECK(parseBindingKey("right.stick_click.tap") ==
           BindingKey{ButtonKey{Hand::Right, ButtonInput::StickClick, PressKind::Tap}});
+    CHECK(parseBindingKey("right.face3.press") ==
+          BindingKey{ButtonKey{Hand::Right, ButtonInput::Face3, PressKind::WhileDown}});
+    CHECK(parseBindingKey("left.face4.tap") ==
+          BindingKey{ButtonKey{Hand::Left, ButtonInput::Face4, PressKind::Tap}});
+    CHECK(parseBindingKey("right.shoulder.hold") ==
+          BindingKey{ButtonKey{Hand::Right, ButtonInput::Shoulder, PressKind::Hold}});
     CHECK(parseBindingKey("right.stick.down_hold") ==
           BindingKey{GestureKey{Hand::Right, StickGesture::DownHold}});
 }

@@ -57,6 +57,9 @@ TEST_CASE("gameplay actions carry every field of the hand state with the right t
     CHECK(xrAction(XrActionId::ThumbstickClick).kind == XrActionKind::Boolean);
     CHECK(xrAction(XrActionId::Primary).kind == XrActionKind::Boolean);
     CHECK(xrAction(XrActionId::Secondary).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::Face3).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::Face4).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::Shoulder).kind == XrActionKind::Boolean);
     CHECK(xrAction(XrActionId::Menu).kind == XrActionKind::Boolean);
     CHECK(xrAction(XrActionId::AimPose).kind == XrActionKind::Pose);
     CHECK(xrAction(XrActionId::GripPose).kind == XrActionKind::Pose);
@@ -72,6 +75,9 @@ TEST_CASE("actions are found by set and name") {
     CHECK_FALSE(findXrActionSet("Gameplay").has_value());
     CHECK(findXrAction(XrActionSetId::Gameplay, "trigger") == XrActionId::Trigger);
     CHECK(findXrAction(XrActionSetId::Menu, "select") == XrActionId::MenuSelect);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "face3") == XrActionId::Face3);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "face4") == XrActionId::Face4);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "shoulder") == XrActionId::Shoulder);
     // Names are looked up within their set only.
     CHECK_FALSE(findXrAction(XrActionSetId::Menu, "trigger").has_value());
     CHECK_FALSE(findXrAction(XrActionSetId::Gameplay, "select").has_value());

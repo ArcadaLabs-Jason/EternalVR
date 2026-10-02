@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using EternalVR.Launcher.Core.Game;
+using EternalVR.Launcher.Core.Launch;
+using EternalVR.Launcher.Core.Report;
 
 namespace EternalVR.Launcher.Core.Preflight
 {
@@ -57,6 +59,8 @@ namespace EternalVR.Launcher.Core.Preflight
         public bool RuntimeChosen { get; set; }
         public bool RuntimeManifestExists { get; set; }
         public IReadOnlyList<LayerDecision> Layers { get; set; } = new LayerDecision[0];
+        /// <summary>Controller bindings chosen in SteamVR for the game's app key (<see cref="SteamVrSummary.ReadCustomBindings"/>).</summary>
+        public IReadOnlyList<SteamVrBinding> SteamVrBindings { get; set; } = new SteamVrBinding[0];
         /// <summary>HwSchMode from the registry; 2 means hardware-accelerated GPU scheduling is on.</summary>
         public int? HagsMode { get; set; }
         public int SettingsLocationCount { get; set; }
@@ -68,6 +72,8 @@ namespace EternalVR.Launcher.Core.Preflight
         public IReadOnlyList<string> CloudRecordStale { get; set; } = new string[0];
         /// <summary>Steam records that exist but could not be read.</summary>
         public IReadOnlyList<string> CloudRecordUnreadable { get; set; } = new string[0];
+        /// <summary>The last session's eye size when it was below the plan (<see cref="RenderCap"/>); null otherwise.</summary>
+        public RenderCap LastRenderCap { get; set; }
     }
 
     public sealed class PreflightResult
@@ -83,6 +89,7 @@ namespace EternalVR.Launcher.Core.Preflight
     public static class PreflightEvaluator
     {
         public const string HagsHelp = "Settings > System > Display > Graphics > Change default graphics settings > Hardware-accelerated GPU scheduling";
+        public const string SteamVrBindingsHelp = "SteamVR > Settings > Controllers > Manage Controller Bindings";
 
         public static PreflightResult Evaluate(PreflightFacts f)
         {
@@ -146,6 +153,15 @@ namespace EternalVR.Launcher.Core.Preflight
 
             foreach (var d in f.Layers.Where(l => l.Action != LayerAction.Ignore))
                 Add("layers", d.Action == LayerAction.Warn ? Severity.Warn : Severity.Pass, d.Message);
+
+            // Only SteamVR reads its own settings file; the bindings there mean nothing to another runtime.
+            if (LaunchPlanBuilder.IsSteamVr(f.RuntimeManifest) && f.SteamVrBindings.Count > 0)
+                Add("steamvr-binding", Severity.Warn, "SteamVR uses a custom controller binding for DOOM Eternal ("
+                    + string.Join(", ", f.SteamVrBindings) + "). If your controllers do nothing in game, open " + SteamVrBindingsHelp
+                    + ", pick DOOM Eternal and choose the default binding.");
+
+            if (f.LastRenderCap != null && f.LastRenderCap.Capped)
+                Add("render-size", Severity.Warn, "Last session: " + f.LastRenderCap.Warning());
 
             if (f.HagsMode == 2)
                 Add("hags", Severity.Warn, "Hardware-accelerated GPU scheduling is on; it caused frame hitching in VR on the development PC. To turn it off: " + HagsHelp + " (restart needed).");
