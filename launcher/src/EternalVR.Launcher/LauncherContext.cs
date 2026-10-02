@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using EternalVR.Launcher.Core;
@@ -339,7 +340,8 @@ namespace EternalVR.Launcher
         /// <summary>
         /// Stereo with the render size on (or Detect again, or the read at start): asks the runtime the game will use (with the game's OpenXR
         /// environment) for its recommended eye size, through the layer's own OpenXR loader, for at most
-        /// <see cref="OpenXrProbe.DefaultTimeoutMs"/>. Its answer, or its failure, is kept for the Play tab's Headset box.
+        /// <see cref="OpenXrProbe.DefaultTimeoutMs"/>. The probe runs in a short-lived copy of the launcher (<see cref="ProbeChild"/>),
+        /// so the runtime's DLLs never stay loaded here. Its answer, or its failure, is kept for the Play tab's Headset box.
         /// </summary>
         private OpenXrProbeResult ProbeRuntime(IReadOnlyList<LayerDecision> decisions, HeadsetReadBy by = HeadsetReadBy.Launch)
         {
@@ -347,7 +349,9 @@ namespace EternalVR.Launcher
             var env = LaunchPlanBuilder.OpenXrEnvironment(Settings, decisions);
             var who = by == HeadsetReadBy.Detect ? "detect again: " : by == HeadsetReadBy.Start ? "headset read at start: " : string.Empty;
             Log.Info($"{who}waiting for the headset runtime (up to {OpenXrProbe.DefaultTimeoutMs / 1000} s)");
-            var probe = OpenXrProbe.Run(OpenXrLoader, env);
+            string self;
+            using (var me = Process.GetCurrentProcess()) self = me.MainModule?.FileName;
+            var probe = ProbeChild.Run(self, ProbeChild.Switch + " " + Program.Quote(OpenXrLoader), env);
             Log.Info("openxr probe (" + (LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? "system runtime" : Settings.Runtime) + "): " + probe);
             ReadSteamVrSeen();
             RememberHeadset(LastHeadset.After(Headset, probe, EffectiveRuntime(), DateTime.Now, by));

@@ -29,6 +29,9 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary><c>--finish-session</c>: the windowless helper the window starts with each session (it restores the settings
         /// after the game exits if the window was closed or killed meanwhile).</summary>
         public bool FinishSession { get; private set; }
+        /// <summary><c>--probe-headset &lt;loader&gt;</c>: the windowless copy that asks the headset runtime through that OpenXR
+        /// loader and prints the answer (<see cref="ProbeChild"/>).</summary>
+        public string ProbeHeadset { get; private set; }
 
         public bool Headless => DryRun || Help || RestoreSaves || Launch || ExportReport != null;
 
@@ -50,7 +53,10 @@ namespace EternalVR.Launcher.Core.Launch
   --test-exe <exe>      start <exe> instead of the game (tests; needs --data-root, --saved-games, --steam-root)
   --launch              with --test-exe: run a whole session from the command line
   --finish-session      (started by the window) wait for the game to exit and restore the settings if
-                        the window is no longer open";
+                        the window is no longer open
+  --probe-headset <loader>
+                        (started by the window) ask the headset runtime through <loader> and print
+                        the answer";
 
         public static LauncherOptions Parse(IReadOnlyList<string> args)
         {
@@ -78,6 +84,7 @@ namespace EternalVR.Launcher.Core.Launch
                     case "--test-exe": o.TestExe = Full(Value()); break;
                     case "--export-report": o.ExportReport = Full(Value()); break;
                     case "--finish-session": o.FinishSession = true; break;
+                    case ProbeChild.Switch: o.ProbeHeadset = Full(Value()); break;
                     default: throw new ArgumentException("unknown option: " + args[i]);
                 }
             }
@@ -88,6 +95,8 @@ namespace EternalVR.Launcher.Core.Launch
                 throw new ArgumentException("--launch is for tests and needs --test-exe; use the window to play");
             if (o.FinishSession && (o.Headless))
                 throw new ArgumentException("--finish-session cannot be combined with another command");
+            if (o.ProbeHeadset != null && (o.Headless || o.FinishSession))
+                throw new ArgumentException(ProbeChild.Switch + " cannot be combined with another command");
             if (o.TestExe != null && o.RegisterHkcu)
                 throw new ArgumentException("--register-hkcu cannot be combined with --test-exe");
             return o;

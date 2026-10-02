@@ -32,7 +32,16 @@ namespace EternalVR.Launcher
                 }
                 return 1;
             }
-            CrashHandler.Install();
+            // The headset probe's copy has no window: an error there is its answer, not a dialog nobody sees.
+            if (args.Length > 0 && string.Equals(args[0], ProbeChild.Switch, StringComparison.OrdinalIgnoreCase))
+                AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+                {
+                    var x = e.ExceptionObject as Exception;
+                    var why = x == null ? "unknown error" : x.GetType().Name + ": " + x.Message;
+                    Answer(OpenXrProbeResult.Failed("the probe stopped: " + why), 1);
+                };
+            else
+                CrashHandler.Install();
             return Run(args);
         }
 
@@ -50,6 +59,7 @@ namespace EternalVR.Launcher
             }
 
             if (options.FinishSession) return FinishSession.Run(options);
+            if (options.ProbeHeadset != null) return ProbeHeadset(options.ProbeHeadset);
             if (options.Headless)
             {
                 AttachParentConsole();
@@ -80,6 +90,40 @@ namespace EternalVR.Launcher
             if (MainForm.RestartExe != null)
                 Process.Start(new ProcessStartInfo(MainForm.RestartExe, string.Join(" ", args.Select(Quote))) { UseShellExecute = false });
             return 0;
+        }
+
+        /// <summary>
+        /// <c>--probe-headset</c>: the runtime probe in this short-lived copy (<see cref="ProbeChild"/>); the answer goes to
+        /// standard output, which the launcher reads. Exit 0 when the runtime answered, 2 when it did not, 1 on an error.
+        /// </summary>
+        private static int ProbeHeadset(string loader)
+        {
+            // A runtime that starts its server (SteamVR) from here must not hand it this copy's output pipe: the launcher
+            // would then wait on a pipe that stays open as long as SteamVR runs.
+            foreach (var std in new[] { StdInputHandle, StdOutputHandle, StdErrorHandle })
+                SetHandleInformation(GetStdHandle(std), HandleFlagInherit, 0);
+            var result = OpenXrProbe.Run(loader, null);
+            Answer(result, result.Ok ? 0u : 2u);
+            return 1;
+        }
+
+        /// <summary>
+        /// The probe copy's answer on standard output, then the copy ends at once: a runtime that keeps a thread or the
+        /// loader lock cannot hold it open (the normal exit unloads the runtime's DLLs, which may wait on them).
+        /// </summary>
+        private static void Answer(OpenXrProbeResult result, uint exitCode)
+        {
+            var bytes = new System.Text.UTF8Encoding(false).GetBytes(ProbeChild.Serialize(result));
+            try
+            {
+                using (var stdout = Console.OpenStandardOutput())
+                {
+                    stdout.Write(bytes, 0, bytes.Length);
+                    stdout.Flush();
+                }
+            }
+            catch (System.IO.IOException) { exitCode = 1; }
+            TerminateProcess(GetCurrentProcess(), exitCode);
         }
 
         /// <summary>One argument as Windows splits a command line back into it (backslashes doubled before a quote).</summary>
@@ -191,5 +235,22 @@ namespace EternalVR.Launcher
 
         [DllImport("kernel32.dll")]
         private static extern bool AttachConsole(int processId);
+
+        private const int StdInputHandle = -10;
+        private const int StdOutputHandle = -11;
+        private const int StdErrorHandle = -12;
+        private const uint HandleFlagInherit = 0x00000001;
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetStdHandle(int which);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll")]
+        private static extern bool TerminateProcess(IntPtr process, uint exitCode);
     }
 }
