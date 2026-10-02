@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Game;
+using EternalVR.Launcher.Core.Headsets;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Preflight;
 using EternalVR.Launcher.Core.Report;
@@ -40,6 +41,8 @@ namespace EternalVR.Launcher
             foreach (var a in adapters) Add("gpu", a);
             Add("openxr active runtime", active == null ? "none set" : active + RuntimeName(active));
             Add("openxr runtime for launches", LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? "system active" : effective + RuntimeName(effective));
+            // The Play tab's Headset box as read (the last probe that answered) and the last session's refresh rate and summary.
+            system.AddRange(HeadsetView.ReportLines(ctx.Headset, ctx.Identify(ctx.Headset.RuntimeName, ctx.Headset.SystemName)));
             system.AddRange(SteamVrSummary.Read(ctx.SteamRoot)); // chosen keys only, never the headset's serial number
             Add("last session eye size", ctx.LastRenderCap == null ? "not below the planned size (or no session yet)" : ctx.LastRenderCap.Describe());
             Add("hardware-accelerated GPU scheduling", hags == 2 ? "on (HwSchMode 2)" : hags.HasValue ? $"off (HwSchMode {hags.Value})" : "not set (off)");

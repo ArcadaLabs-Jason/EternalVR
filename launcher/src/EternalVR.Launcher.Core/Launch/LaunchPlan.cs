@@ -35,6 +35,8 @@ namespace EternalVR.Launcher.Core.Launch
         public IReadOnlyList<DisplayArea> Displays { get; set; } = new DisplayArea[0];
         /// <summary>The runtime's answer for the render size (<see cref="OpenXrProbe"/>); null when it was not asked.</summary>
         public OpenXrProbeResult RuntimeProbe { get; set; }
+        /// <summary>The headset's native panel per eye (<c>data\headsets.txt</c>), for Resolution's native panel; null when not known.</summary>
+        public Extent? Panel { get; set; }
         /// <summary>The player's controls folder; its maps are used when it holds any (null: the built-in controls).</summary>
         public ControlsFolder Controls { get; set; }
         /// <summary>NVIDIA's newest DLSS when the launcher has downloaded it (checked); null when it has not.</summary>
@@ -125,7 +127,7 @@ namespace EternalVR.Launcher.Core.Launch
             // The game starts at its final render size when it is known before the launch: the layer applies a fixed
             // size before the first swapchain and the game's video init takes its output size from r_windowWidth and
             // r_windowHeight, so nothing is resized mid-session (a resize can fail on cards with 12 GB or less).
-            var renderChoice = mirror ? RenderSizeChoice.Decide(renderSize, s.RenderScale, inputs.RuntimeProbe) : null;
+            var renderChoice = mirror ? RenderSizeChoice.Decide(renderSize, s.RenderScale, inputs.RuntimeProbe, s.ResolutionBase, inputs.Panel) : null;
             int outputWidth = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Width : window?.Width ?? 0;
             int outputHeight = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Height : window?.Height ?? 0;
 

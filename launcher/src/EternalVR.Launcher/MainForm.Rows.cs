@@ -32,31 +32,52 @@ namespace EternalVR.Launcher
             public SettingTexts.Text Text;
             /// <summary>The checks run again after a change (the runtime, the mode, the arguments).</summary>
             public bool Preflight;
+            /// <summary>The control goes on its own line under the label, across both columns (too wide for the second one).</summary>
+            public bool Wide;
+            /// <summary>A yes/no row: its checkbox, then its label, across both columns (<see cref="CheckLine"/>).</summary>
+            public bool Check;
+            /// <summary>Fits the control to the width it has, in pixels (<see cref="FitGroup"/>); null when its size is its own.</summary>
+            public Action<int> Fit;
         }
 
         private SettingRow Row(Setting id, Control control, Action<LauncherSettings> load, Action<LauncherSettings> read, bool preflight = false,
-            SettingTexts.Text text = null)
+            SettingTexts.Text text = null, bool wide = false, Action<int> fit = null)
         {
             var label = (text ?? SettingTexts.For(id)).Label;
             control.AccessibleName = label;
+            fit = fit ?? FitOf(control);
+            bool check = control is CheckBox;
             // In a flow panel: a table row keeps a list's first height (FitListHeights).
             if (control is ComboBox) control = WithUnit(control, null);
             var row = new SettingRow
             {
-                Id = id, Control = control, Load = load, Read = read, Preflight = preflight, Text = text,
+                Id = id, Control = control, Load = load, Read = read, Preflight = preflight, Text = text, Wide = wide, Check = check, Fit = fit,
                 Label = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left },
             };
-            // Label and control both centred in the row's height.
-            control.Anchor = AnchorStyles.Left;
+            // A yes/no row's checkbox and label are placed by CheckLine; the others sit at the top of their row (FitGroup).
+            control.Anchor = check ? AnchorStyles.Left : AnchorStyles.Top | AnchorStyles.Left;
+            if (!check) row.Label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             rows.Add(row);
             Watch(control, row);
             return row;
         }
 
-        /// <summary>A list control filled with the setting's choices (<see cref="SettingTexts"/>).</summary>
-        private static ComboBox Choices(Setting id, int width = 180)
+        /// <summary>How a control takes the width it has: a list fills it up to a cap, a text box fills it, a value wraps in it.</summary>
+        private Action<int> FitOf(Control control)
         {
-            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = width };
+            switch (control)
+            {
+                case ComboBox list: return w => FitList(list, w);
+                case TextBox box: return w => SetWidth(box, w - box.Margin.Horizontal);
+                case Label value: return w => WrapIn(value, w);
+                default: return null;
+            }
+        }
+
+        /// <summary>A list control filled with the setting's choices (<see cref="SettingTexts"/>).</summary>
+        private static ComboBox Choices(Setting id)
+        {
+            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
             foreach (var c in SettingTexts.For(id).Choices) box.Items.Add(c);
             return box;
         }
@@ -99,50 +120,6 @@ namespace EternalVR.Launcher
             MarkProfileChanged();
             UpdateRules();
             if (preflight && row.Preflight) RunPreflight();
-        }
-
-        /// <summary>A titled box of rows: labels on the left, controls on the right.</summary>
-        private static GroupBox Group(string title, params SettingRow[] groupRows)
-        {
-            var box = new GroupBox { Text = title, Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(6, 4, 6, 4) };
-            // Docked at the top: a box stretched to its neighbour's height keeps its rows together.
-            var grid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, AutoSize = true };
-            // Both columns sized to their contents: a percent column in an auto-sized table gets no width at all.
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            foreach (var r in groupRows)
-            {
-                grid.Controls.Add(r.Label);
-                grid.Controls.Add(r.Control);
-            }
-            box.Controls.Add(grid);
-            return box;
-        }
-
-        /// <summary>Two columns of group boxes, the page scrolling when the window is smaller than they are.</summary>
-        private static TabPage Page(string title, Control[] left, Control[] right, params Control[] below)
-        {
-            var page = new TabPage(title) { AutoScroll = true, Padding = new Padding(6) };
-            var grid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, AutoSize = true };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            grid.Controls.Add(Column(left), 0, 0);
-            grid.Controls.Add(Column(right), 1, 0);
-            for (int i = 0; i < below.Length; i++)
-            {
-                grid.Controls.Add(below[i], 0, i + 1);
-                grid.SetColumnSpan(below[i], 2);
-            }
-            page.Controls.Add(grid);
-            return page;
-        }
-
-        private static Control Column(Control[] groups)
-        {
-            var column = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, AutoSize = true, Margin = Padding.Empty };
-            column.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            foreach (var g in groups) column.Controls.Add(g);
-            return column;
         }
 
         private void LoadSettingsIntoControls()

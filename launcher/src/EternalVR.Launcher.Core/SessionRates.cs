@@ -85,11 +85,15 @@ namespace EternalVR.Launcher.Core
         }
 
         /// <summary>The summary of the layer logs (<c>eternalvr-*.log</c>) in a session's log folder; null when there is none.</summary>
-        public static SessionRates FromSessionDir(string logDir)
+        public static SessionRates FromSessionDir(string logDir) => FromLines(ReadLayerLogs(logDir));
+
+        /// <summary>The lines of the layer logs (<c>eternalvr-*.log</c>) in a session's log folder, file after file by name (the
+        /// names start with the time); none when the folder is not there. A file that cannot be read is skipped.</summary>
+        public static IReadOnlyList<string> ReadLayerLogs(string logDir)
         {
-            if (string.IsNullOrEmpty(logDir) || !Directory.Exists(logDir)) return null;
             var lines = new List<string>();
-            foreach (var file in Directory.GetFiles(logDir, "eternalvr-*.log"))
+            if (string.IsNullOrEmpty(logDir) || !Directory.Exists(logDir)) return lines;
+            foreach (var file in Directory.GetFiles(logDir, "eternalvr-*.log").OrderBy(f => f, StringComparer.Ordinal))
             {
                 try
                 {
@@ -103,7 +107,7 @@ namespace EternalVR.Launcher.Core
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
             }
-            return FromLines(lines);
+            return lines;
         }
 
         /// <summary>One sentence for the launcher's status line. It gives the share of the headset's frames that were new

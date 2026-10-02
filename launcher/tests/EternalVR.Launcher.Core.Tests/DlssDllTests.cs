@@ -183,6 +183,10 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(Enum.GetValues(typeof(DlssDllChoice)).Length, SettingTexts.For(Setting.DlssVersion).Choices.Count);
             Assert.Equal(Enum.GetValues(typeof(DlssDllChoice)).Length, DlssDll.VersionOrder.Distinct().Count());
             Assert.Equal(DlssDllChoice.Newest, DlssDll.VersionOrder[0]);
+            // The player's own file opens a file picker; launcher.ini keeps "file", so a saved choice still loads.
+            Assert.Equal("Load file...", SettingTexts.For(Setting.DlssVersion).Choices[Array.IndexOf(DlssDll.VersionOrder, DlssDllChoice.File)]);
+            Assert.Equal(DlssDllChoice.File, LauncherSettings.Parse("schema_version = 2\ndlss_version = file\n").DlssDll);
+            Assert.Contains("dlss_version = file", new LauncherSettings { DlssDll = DlssDllChoice.File }.Serialize());
             Assert.Equal(Enum.GetValues(typeof(DlssQuality)).Length, SettingTexts.For(Setting.DlssQuality).Choices.Count);
             Assert.Equal(DlssDll.PresetValues.Length, SettingTexts.For(Setting.DlssPreset).Choices.Count);
             Assert.Equal(1, DlssDll.PresetIndex("k"));

@@ -6,6 +6,8 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>Every setting the launcher window shows (Play and Advanced tabs), in window order.</summary>
     public enum Setting
     {
+        // Play: headset (what the launcher found; nothing to set)
+        Headset, NativePanel, HeadsetAsks, Refresh,
         // Play: comfort
         Turning, TurnSpeed, SnapAngle, Vignette, GloryKills, WalkInRoom, HeadFade, RecenterHold, SkipCutscenes,
         // Play: body

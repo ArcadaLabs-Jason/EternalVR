@@ -18,6 +18,8 @@ namespace EternalVR.Launcher.Core.Data
         public CpuSaver CpuSaver { get; private set; }
         /// <summary>NVIDIA's DLSS DLL releases the launcher can download on request (<see cref="Settings.DlssDownloads"/>).</summary>
         public Settings.DlssDownloads DlssDownloads { get; private set; }
+        /// <summary>The headsets known by name, with their native panels (<see cref="Headsets.HeadsetTable"/>).</summary>
+        public Headsets.HeadsetTable Headsets { get; private set; }
 
         /// <summary>
         /// The keys the settings restore puts back after a session: the forced cvars, the session keys and the CPU
@@ -38,6 +40,7 @@ namespace EternalVR.Launcher.Core.Data
                 AntiCheat = AntiCheat.Parse(Read("anti-cheat.txt")),
                 CpuSaver = CpuSaver.Parse(Read("cpu-saver.txt")),
                 DlssDownloads = Settings.DlssDownloads.Parse(Read("dlss-downloads.txt")),
+                Headsets = Core.Headsets.HeadsetTable.Parse(Read("headsets.txt")),
             };
         }
     }

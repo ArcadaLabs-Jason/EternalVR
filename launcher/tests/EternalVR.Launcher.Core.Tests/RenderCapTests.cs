@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using EternalVR.Launcher.Core.Headsets;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Preflight;
 using EternalVR.Launcher.Core.Settings;
@@ -33,7 +34,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("Your graphics driver cannot render above the window size, so each eye rendered at 958 x 1009, 47% of the planned "
                 + "2016 x 2112. A larger display helps; a full fix is being worked on.", cap.Warning());
             Assert.DoesNotContain("\u2014", cap.Warning());
-            Assert.Equal("958x1009 last session, 47% of the planned 2016x2112 (your graphics driver renders at the window's size)", cap.EachEyeText());
+            Assert.Equal("958 x 1009 last session, 47% of the planned 2016 x 2112\n"
+                + "Your graphics driver renders at the window's size", cap.EachEyeText());
         }
 
         [Fact]
@@ -79,12 +81,12 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var cap = RenderCap.FromStatus(CappedStatus);
             var s = new LauncherSettings { RenderSize = "auto" };
-            Assert.Equal(cap.EachEyeText(), LastHeadset.EachEye(s, null, cap));
+            Assert.StartsWith(cap.EachEyeText() + "\n", HeadsetView.EachEye(s, null, null, cap));
             // Not capped: the plan as before.
-            Assert.Equal("Set from your headset when you press Play",
-                LastHeadset.EachEye(s, null, new RenderCap(new Extent(2016, 2112), new Extent(2016, 2112))));
+            Assert.Equal("Set from your headset at Launch VR",
+                HeadsetView.EachEye(s, null, null, new RenderCap(new Extent(2016, 2112), new Extent(2016, 2112))));
             // The render size off: the window's size whatever the last session got.
-            Assert.Equal("The game window's size (render_size off)", LastHeadset.EachEye(new LauncherSettings { RenderSize = "off" }, null, cap));
+            Assert.Equal("The game window's size (render_size off)", HeadsetView.EachEye(new LauncherSettings { RenderSize = "off" }, null, null, cap));
         }
 
         [Fact]

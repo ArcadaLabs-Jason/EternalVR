@@ -5,8 +5,10 @@ using System.Linq;
 using EternalVR.Launcher.Core;
 using EternalVR.Launcher.Core.Data;
 using EternalVR.Launcher.Core.Game;
+using EternalVR.Launcher.Core.Headsets;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Preflight;
+using EternalVR.Launcher.Core.Report;
 using EternalVR.Launcher.Core.Safety;
 using EternalVR.Launcher.Core.Settings;
 using EternalVR.Launcher.Core.Steam;
@@ -34,8 +36,10 @@ namespace EternalVR.Launcher
         public DataPaths Paths { get; }
         public LauncherData Data { get; private set; }
         public LauncherSettings Settings { get; set; }
-        /// <summary>The headset's sizes from the last runtime probe that answered (<see cref="LastHeadset"/>); null before the first.</summary>
-        public ViewLimits Headset { get; private set; }
+        /// <summary>The headset as the last runtime probe that answered read it (<see cref="LastHeadset"/>); its limits are null before the first.</summary>
+        public HeadsetFacts Headset { get; private set; } = new HeadsetFacts();
+        /// <summary>The headset SteamVR last saw (steamvr.vrsettings), read at start, at each probe and after each session; null when none.</summary>
+        public SteamVrHeadset SteamVrSeen { get; private set; }
         /// <summary>The last session's eye size when it was below the plan (<see cref="RenderCap"/>); null otherwise.</summary>
         public RenderCap LastRenderCap { get; private set; }
 
@@ -57,7 +61,8 @@ namespace EternalVR.Launcher
             log.SetFile(ctx.Paths.LauncherLog);
             ctx.Data = LauncherData.Load(Path.Combine(ctx.ProgramDir, "data"));
             ctx.Settings = LauncherSettings.Load(ctx.Paths.SettingsFile);
-            ctx.Headset = LastHeadset.Load(ctx.Paths.HeadsetFile);
+            ctx.Headset = LastHeadset.Read(ctx.Paths.HeadsetFile);
+            ctx.ReadSteamVrSeen();
             ctx.LastRenderCap = RenderCap.Load(ctx.Paths.RenderCapFile);
             return ctx;
         }
@@ -265,6 +270,7 @@ namespace EternalVR.Launcher
 
         public LaunchPlan BuildPlan(Gathered g, string sessionId)
         {
+            var probe = ProbeRuntime(g.LayerDecisions);
             var plan = LaunchPlanBuilder.Build(new LaunchInputs
             {
                 GameRoot = g.Game.GameRoot,
@@ -277,14 +283,38 @@ namespace EternalVR.Launcher
                 LayerDecisions = g.LayerDecisions,
                 Route = Options.RegisterHkcu ? LayerRoute.HkcuRegistration : LayerRoute.Environment,
                 Displays = WindowsSystem.Displays(),
-                RuntimeProbe = ProbeRuntime(g.LayerDecisions),
+                RuntimeProbe = probe,
+                Panel = probe != null && probe.Ok ? Identify(probe.RuntimeName, probe.SystemName).Known?.Panel : null,
                 Controls = Controls,
                 NewestDlss = NewestDlss(verify: true),
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             if (plan.RenderSize?.Note != null) Log.Warn(plan.RenderSize.Note + " (" + plan.RenderSize.Reason + ")");
+            if (plan.RenderSize?.BaseNote != null) Log.Warn("Resolution: " + plan.RenderSize.BaseNote);
             return plan;
         }
+
+        /// <summary>The headset and route for a probe's names, with SteamVR's last seen headset and the table of headsets.</summary>
+        public HeadsetIdentity Identify(string runtimeName, string systemName) =>
+            HeadsetIdentity.Identify(runtimeName, systemName, SteamVrSeen, Data.Headsets);
+
+        /// <summary>Reads SteamVR's last seen headset again (a SteamVR session may have changed it).</summary>
+        public void ReadSteamVrSeen() => SteamVrSeen = SteamVrSummary.ReadLastKnown(SteamRoot);
+
+        /// <summary>
+        /// "Detect again", or the read when the launcher opens (<paramref name="by"/>): the launch's runtime probe on its own,
+        /// whatever the mode and render size, with the game's OpenXR environment. It can take up to
+        /// <see cref="OpenXrProbe.DefaultTimeoutMs"/> and starts SteamVR when SteamVR is the runtime (the read at start runs only
+        /// with the runtime up, <see cref="HeadsetAutoRead"/>). Not while a session runs (the window disables it).
+        /// </summary>
+        public OpenXrProbeResult DetectHeadset(HeadsetReadBy by)
+        {
+            var decisions = Data.KnownLayers.Evaluate(WindowsSystem.ImplicitLayers(), LaunchPlanBuilder.IsVdxr(EffectiveRuntime()));
+            return ProbeRuntime(decisions, by);
+        }
+
+        /// <summary>The layer's own OpenXR loader, which the runtime probe asks the runtime with.</summary>
+        public string OpenXrLoader => Path.Combine(LayerDir, "openxr_loader.dll");
 
         /// <summary>
         /// NVIDIA's newest listed DLSS (data\dlss-downloads.txt) when it is in the data folder's dlss folder, else null. With
@@ -307,17 +337,20 @@ namespace EternalVR.Launcher
         }
 
         /// <summary>
-        /// Stereo with the render size on: asks the runtime the game will use (with the game's OpenXR environment) for
-        /// its recommended eye size, through the layer's own OpenXR loader, for at most <see cref="OpenXrProbe.DefaultTimeoutMs"/>.
+        /// Stereo with the render size on (or Detect again, or the read at start): asks the runtime the game will use (with the game's OpenXR
+        /// environment) for its recommended eye size, through the layer's own OpenXR loader, for at most
+        /// <see cref="OpenXrProbe.DefaultTimeoutMs"/>. Its answer, or its failure, is kept for the Play tab's Headset box.
         /// </summary>
-        private OpenXrProbeResult ProbeRuntime(IReadOnlyList<LayerDecision> decisions)
+        private OpenXrProbeResult ProbeRuntime(IReadOnlyList<LayerDecision> decisions, HeadsetReadBy by = HeadsetReadBy.Launch)
         {
-            if (!LaunchPlanBuilder.WantsRenderSize(Settings)) return null;
+            if (by == HeadsetReadBy.Launch && !LaunchPlanBuilder.WantsRenderSize(Settings)) return null;
             var env = LaunchPlanBuilder.OpenXrEnvironment(Settings, decisions);
-            Log.Info($"waiting for the headset runtime (up to {OpenXrProbe.DefaultTimeoutMs / 1000} s)");
-            var probe = OpenXrProbe.Run(Path.Combine(LayerDir, "openxr_loader.dll"), env);
+            var who = by == HeadsetReadBy.Detect ? "detect again: " : by == HeadsetReadBy.Start ? "headset read at start: " : string.Empty;
+            Log.Info($"{who}waiting for the headset runtime (up to {OpenXrProbe.DefaultTimeoutMs / 1000} s)");
+            var probe = OpenXrProbe.Run(OpenXrLoader, env);
             Log.Info("openxr probe (" + (LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? "system runtime" : Settings.Runtime) + "): " + probe);
-            if (probe.Ok && !probe.Limits.Recommended.IsEmpty) RememberHeadset(probe.Limits);
+            ReadSteamVrSeen();
+            RememberHeadset(LastHeadset.After(Headset, probe, EffectiveRuntime(), DateTime.Now, by));
             return probe;
         }
 
@@ -336,14 +369,21 @@ namespace EternalVR.Launcher
             }
         }
 
-        /// <summary>Keeps the runtime's answer for the Play tab's "Each eye" line, in memory and in the data folder.</summary>
-        private void RememberHeadset(ViewLimits limits)
+        /// <summary>Keeps a finished session's refresh rate and summary as the last session's (the Play tab's Refresh line).</summary>
+        public void RememberSession(SessionSummary summary, string sessionId, DateTime endedAt) =>
+            RememberHeadset(LastHeadset.AfterSession(Headset, summary, sessionId, endedAt));
+
+        /// <summary>
+        /// Keeps the headset's facts for the Play tab's Headset box, in memory and in the data folder: a probe that answered
+        /// replaces them, one that failed marks them old.
+        /// </summary>
+        private void RememberHeadset(HeadsetFacts facts)
         {
-            Headset = limits;
-            try { LastHeadset.Save(Paths.HeadsetFile, limits); }
+            Headset = facts;
+            try { LastHeadset.Save(Paths.HeadsetFile, facts); }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
-                Log.Warn("saving the headset's size failed: " + e.Message);
+                Log.Warn("saving the headset's facts failed: " + e.Message);
             }
         }
     }

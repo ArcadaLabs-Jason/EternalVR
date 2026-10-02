@@ -11,13 +11,20 @@ namespace EternalVR.Launcher.Core.Settings
     /// <c>r_dlssQuality</c> 3 to 0): how large the image DLSS scales up from is.</summary>
     public enum DlssQuality { Quality, Balanced, Performance, UltraPerformance }
 
+    /// <summary>What Resolution's number multiplies (<c>resolution_base</c>): the size the runtime asks for fitted into the
+    /// default pixel budget (Auto, the layer's own rule and the default), the size the runtime asks for, or the headset's native
+    /// panel from <c>data\headsets.txt</c>.</summary>
+    public enum ResolutionBase { Auto, Ask, Panel }
+
     /// <summary>The game's post-process sharpening in VR (<c>r_sharpening</c>, the layer's <c>ETERNALVR_SHARPENING</c>): the
     /// player's own setting from the game's menu, or held at 0, 1, 2 or 3.</summary>
     public enum SharpeningMode { Game, Off, Low, Medium, High }
 
     /// <summary>
-    /// The Play tab's picture settings in launcher.ini: <c>anti_aliasing</c>, <c>dlss_quality</c>, <c>dlss_version =
-    /// newest|game|file</c>, <c>dlss_dll_path</c>, <c>dlss_preset</c> and <c>sharpening = game|off|low|medium|high</c>.
+    /// The Play tab's picture settings in launcher.ini: <c>resolution_base = auto|ask|panel</c>, <c>anti_aliasing</c>,
+    /// <c>dlss_quality</c>, <c>dlss_version = newest|game|file</c>, <c>dlss_dll_path</c>, <c>dlss_preset</c> and <c>sharpening =
+    /// game|off|low|medium|high</c>. A file without <c>resolution_base</c> (launcher 0.1.11 and older) is Auto with its
+    /// <c>render_scale</c> as it was: Auto is exactly the size those launchers rendered, so updating changes no one's size.
     /// </summary>
     public sealed partial class LauncherSettings
     {
@@ -31,9 +38,13 @@ namespace EternalVR.Launcher.Core.Settings
         public string DlssPreset { get; set; } = Settings.DlssDll.RecommendedPreset;
         /// <summary>The game's sharpening in VR; the player's own setting by default.</summary>
         public SharpeningMode Sharpening { get; set; } = SharpeningMode.Game;
+        /// <summary>What Resolution's number multiplies; Auto by default (<see cref="ResolutionBase"/>).</summary>
+        public ResolutionBase ResolutionBase { get; set; } = ResolutionBase.Auto;
 
         private void ReadPicture(IDictionary<string, string> map)
         {
+            if (map.TryGetValue("resolution_base", out var rb))
+                ResolutionBase = Pick(rb, ResolutionBase.Auto, ("ask", ResolutionBase.Ask), ("panel", ResolutionBase.Panel));
             if (map.TryGetValue("anti_aliasing", out var aa)) AntiAliasing = Pick(aa, AntiAliasingMode.Taa, ("dlss", AntiAliasingMode.Dlss), ("off", AntiAliasingMode.Off));
             if (map.TryGetValue("dlss_quality", out var dq))
                 Dlss = Pick(dq, DlssQuality.Quality, ("balanced", DlssQuality.Balanced), ("performance", DlssQuality.Performance),
@@ -57,6 +68,7 @@ namespace EternalVR.Launcher.Core.Settings
 
         private void WritePicture(StringBuilder sb)
         {
+            sb.AppendLine("resolution_base = " + ResolutionBaseName(ResolutionBase));
             sb.AppendLine("anti_aliasing = " + (AntiAliasing == AntiAliasingMode.Dlss ? "dlss" : AntiAliasing == AntiAliasingMode.Off ? "off" : "taa"));
             sb.AppendLine("dlss_quality = " + DlssQualityName(Dlss));
             sb.AppendLine("dlss_version = " + DlssVersionName(DlssDll));
@@ -69,6 +81,9 @@ namespace EternalVR.Launcher.Core.Settings
         public static string DlssQualityName(DlssQuality q) =>
             q == DlssQuality.Balanced ? "balanced" : q == DlssQuality.Performance ? "performance"
             : q == DlssQuality.UltraPerformance ? "ultra_performance" : "quality";
+
+        /// <summary>The settings file's <c>resolution_base</c> value: auto, ask or panel.</summary>
+        public static string ResolutionBaseName(ResolutionBase b) => b == ResolutionBase.Ask ? "ask" : b == ResolutionBase.Panel ? "panel" : "auto";
 
         /// <summary>The settings file's <c>dlss_version</c> value: newest, game or file.</summary>
         public static string DlssVersionName(DlssDllChoice c) =>

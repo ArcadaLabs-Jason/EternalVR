@@ -30,7 +30,7 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 | File in the zip | What it is |
 |---|---|
 | `report-contents.txt` | This list for your report: every file and its size, what was shortened, left out or not found |
-| `system.txt` | Launcher and layer versions and whether they match, Windows version, GPUs with driver version and date, the OpenXR runtime (active manifest and its name, and the one used for launches), hardware-accelerated GPU scheduling (HAGS) on or off, a few SteamVR settings from Steam's `config\steamvr.vrsettings` (the headset SteamVR last saw, supersampling, motion smoothing and supersample filtering, any refresh rate set, and SteamVR's own settings for DOOM Eternal; nothing else from that file, never the headset's serial number), the game build, the names of the files in the game's `Mods` folder (at most 30, never their contents) and any mod loader at the top of the game folder (EternalModInjector, DEternal_loadMods and the like), the folders in use |
+| `system.txt` | Launcher and layer versions and whether they match, Windows version, GPUs with driver version and date, the OpenXR runtime (active manifest and its name, and the one used for launches), the headset as the launcher last read it (the Play tab's Headset box: the headset and its route, the runtime's and the system's names, the native panel, the size the runtime asks for, when and with which runtime it was read, and a try that found no headset since) and your last session's refresh rate and summary, hardware-accelerated GPU scheduling (HAGS) on or off, a few SteamVR settings from Steam's `config\steamvr.vrsettings` (the headset SteamVR last saw, supersampling, motion smoothing and supersample filtering, any refresh rate set, and SteamVR's own settings for DOOM Eternal; nothing else from that file, never the headset's serial number), the game build, the names of the files in the game's `Mods` folder (at most 30, never their contents) and any mod loader at the top of the game folder (EternalModInjector, DEternal_loadMods and the like), the folders in use |
 | `preflight.txt` | The launcher's checks, run when you export |
 | `launcher.log` | `logs\launcher.log`, its last 4 MB |
 | `launcher.ini` | The launcher settings |
@@ -98,7 +98,8 @@ warning does not.
 | Steam's cloud record is stale | Start DOOM Eternal once through Steam, wait for the main menu, quit, then use the launcher again. |
 | Extra arguments refused (single-player) | Remove the multiplayer argument from **Extra arguments**. |
 | Last session: Your graphics driver cannot render above the window size | Warning only. See "The picture is soft on an AMD graphics card" below. |
-| Headset not detected; the render size is decided in-game | Warning only. The launcher could not ask the headset's runtime for its render size (the log says why), so the game starts small and switches size a few seconds in. Connect the headset and start its software before launching. |
+| Headset not detected; the render size is decided in-game | Warning only. The launcher could not ask the headset's runtime for its render size (the log says why), so the game starts small and switches size a few seconds in, at Resolution's Auto whatever base you chose. Connect the headset and start its software before launching. |
+| Resolution: the headset's native panel is not known | Warning only. Resolution is on your headset's native size, but your headset is not in the launcher's list (the Headset box on the Play tab says "not in our list"), so Auto is used. Please tell me your headset's model. |
 
 ## Problems in the game
 
@@ -162,9 +163,20 @@ turned to follow your head, so looking around stays smooth, but moving things on
 draws. Headset overlays count this differently: some count every frame handed over (then they always show the
 headset's rate), others only frames with a new image, which is close to the real rate. The real number is in the
 mod's log: every 10 s a `rates:` line says how many `stereo pair(s)/s` the game drew and how many `frame(s)/s` went
-to the headset. After a session the launcher's status line sums it up ("In play the game drew about ... new frames
-a second"). If that is well below your headset's rate, see the next entry, or lower "Resolution" on the Play tab if
-your graphics card is the limit.
+to the headset. After a session the launcher's status line sums it up ("The game kept up with your headset: about
+90 new frames a second at 90 Hz", or "The game drew about 72 new frames a second at 90 Hz"), and the Play tab's
+Headset box shows the refresh rate your headset ran at. If the game was well below your headset's rate, see the next
+entries, or lower "Resolution" on the Play tab if your graphics card is the limit.
+
+**The launcher says the game was held to half the refresh rate.** When the game falls behind, Virtual Desktop's
+SSW, Meta's ASW, Pimax's Smart Smoothing and SteamVR's Motion Smoothing or throttling ask the game for only half
+the frames (or a third) and make up the rest; with Frame pacing the game is matched to that. The launcher counts
+the 10-second stretches of play where that happened, from the mod's log, and says so after the session ("SteamVR
+throttled the game to 72 of 144 Hz for 18% of play"). A large share means the game cannot keep the refresh rate
+with these settings: lower the refresh rate in your runtime (or its resolution, or "Resolution" on the Play tab)
+until it can. If you set SteamVR's per-game throttling or forced Motion Smoothing for DOOM Eternal, the game stays
+at half the rate all the time. Virtual Desktop's SSW set to Always does the same. A refresh rate that changed
+during play is said too ("The headset ran at 144 Hz, and at 90 Hz for about 2 minutes").
 
 **Moving things look less smooth than in other VR games.** When the game draws more frames than your headset
 shows (say 140 a second on a 90 Hz headset) and each headset frame shows the newest one, the world, your gun

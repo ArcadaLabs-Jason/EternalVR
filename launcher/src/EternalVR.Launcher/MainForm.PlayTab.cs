@@ -10,7 +10,7 @@ using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
 {
-    /// <summary>The Play tab: comfort, body, controls, picture and DLSS, the settings most players change.</summary>
+    /// <summary>The Play tab: the headset found, then comfort, body, controls, picture and DLSS, the settings most players change.</summary>
     public sealed partial class MainForm
     {
         private readonly ComboBox turn = Choices(Setting.Turning);
@@ -41,11 +41,12 @@ namespace EternalVR.Launcher
         /// <summary>Whether the controls folder holds maps of the player's own (<see cref="ShowControlsState"/>).</summary>
         private readonly Label controlsState = Caption(string.Empty);
         private readonly NumericUpDown renderScale = Number(LauncherSettings.MinRenderScale, LauncherSettings.MaxRenderScale, 0.05, 2);
-        /// <summary>The size each eye renders at, from the headset's last answer (<see cref="ShowEachEye"/>).</summary>
-        private readonly Label eachEye = new Label { AutoSize = true, MaximumSize = new Size(200, 0), Margin = new Padding(3, 4, 3, 4) };
+        /// <summary>The size each eye renders at, from the headset's last answer (<see cref="ShowHeadset"/>).</summary>
+        private readonly Label eachEye = new Label { AutoSize = true, MaximumSize = new Size(260, 0), Margin = new Padding(3, 4, 3, 4) };
         private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing);
         private readonly ComboBox sharpening = Choices(Setting.Sharpening);
         private readonly ComboBox foveation = Choices(Setting.Foveation);
+        /// <summary>Its matched choice names the last session's refresh rate (<see cref="ShowPacingChoice"/>).</summary>
         private readonly ComboBox pacing = Choices(Setting.FramePacing);
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
@@ -113,14 +114,13 @@ namespace EternalVR.Launcher
                 Row(Setting.Vibration, vibration, LoadVibration, ReadVibration),
                 Row(Setting.Bhaptics, bhaptics, s => bhaptics.Checked = s.Bhaptics, s => s.Bhaptics = bhaptics.Checked),
                 // Nothing to save: the buttons open the controls editor and the folder, the caption says what it holds.
-                Row(Setting.ButtonLayout, ControlsRow(), s => ShowControlsState(), s => { }));
+                Row(Setting.ButtonLayout, ControlsRow(), s => ShowControlsState(), s => { }, fit: w => WrapIn(controlsState, w)));
             var pictureRows = new List<SettingRow>
             {
-                Row(Setting.Resolution, WithUnit(renderScale, "× the headset's size"),
-                    s => renderScale.Value = (decimal)LauncherSettings.ClampRenderScale(s.RenderScale),
-                    s => s.RenderScale = LauncherSettings.ClampRenderScale((double)renderScale.Value)),
-                // Nothing to save: the line follows the Resolution above and the headset's last answer (ShowEachEye).
-                Row(Setting.EachEye, eachEye, s => { }, s => { }),
+                // Resolution's base and number (MainForm.Headset.cs).
+                ResolutionRow(),
+                // Nothing to save: the line follows the Resolution above and the headset's last answer (ShowHeadset).
+                Row(Setting.EachEye, eachEye, s => { }, s => { }, wide: true),
                 Row(Setting.AntiAliasing, antiAliasing,
                     s => antiAliasing.SelectedIndex = (int)s.AntiAliasing,
                     s => s.AntiAliasing = (AntiAliasingMode)Math.Max(0, antiAliasing.SelectedIndex)),
@@ -139,7 +139,8 @@ namespace EternalVR.Launcher
             var picture = Group("Picture", pictureRows.ToArray());
             var left = new List<Control> { comfort, body, gestures };
             if (SaverGroup() is GroupBox saver) left.Add(saver);
-            var page = Page("Play", left.ToArray(), new Control[] { controls, picture, DlssGroup() });
+            // The Headset box across the top (MainForm.Headset.cs).
+            var page = Page("Play", HeadsetGroup(), left.ToArray(), new Control[] { controls, picture, DlssGroup() });
             // The player edits the folder in Explorer: looked at again on coming back to the window or the tab.
             tabs.Selected += (s, e) => { if (e.TabPage == page) ShowControlsState(); };
             Activated += (s, e) => ShowControlsState();
@@ -148,13 +149,15 @@ namespace EternalVR.Launcher
 
         private FlowLayoutPanel ControlsRow()
         {
-            var edit = new Button { Text = "Edit controls...", Width = 100, Height = 26 };
-            var open = new Button { Text = "Open folder", Width = 80, Height = 26 };
+            var edit = new Button { Text = "Edit controls...", Width = 100, Height = ButtonHeight };
+            var open = new Button { Text = "Open folder", Width = 80, Height = ButtonHeight };
             edit.Click += (s, e) => EditControls();
             open.Click += (s, e) => OpenControlsFolder();
+            // The buttons on one line, what the folder holds under them.
             var buttons = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
             buttons.Controls.AddRange(new Control[] { edit, open });
-            // Below the buttons, so the row is no wider than they are.
+            controlsState.Padding = Padding.Empty;
+            controlsState.Margin = new Padding(3, 0, 3, 3);
             var row = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
             row.Controls.AddRange(new Control[] { buttons, controlsState });
             return row;
@@ -164,9 +167,6 @@ namespace EternalVR.Launcher
         {
             controlsState.Text = ctx.Controls.HasPlayerMaps ? "Using your own controls" : "Built-in controls";
         }
-
-        /// <summary>The "Each eye" line (<see cref="LastHeadset.EachEye"/>).</summary>
-        private void ShowEachEye() => eachEye.Text = LastHeadset.EachEye(ctx.Settings, ctx.Headset, ctx.LastRenderCap);
 
         /// <summary>Refreshes the controls folder (its README and the copy of the built-in maps); false, with a message, if it fails.</summary>
         private bool PrepareControls(ControlsFolder controls)

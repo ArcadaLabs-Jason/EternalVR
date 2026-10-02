@@ -21,6 +21,16 @@ namespace EternalVR.Launcher.Core.Settings
 
         private static readonly Dictionary<Setting, Text> Texts = new Dictionary<Setting, Text>
         {
+            [Setting.Headset] = new Text("Headset",
+                "Your headset and how the game reaches it (the OpenXR runtime). Read when the launcher opens, if its runtime "
+                + "is already running, and at every Launch VR; on SteamVR the model is the one SteamVR last saw."),
+            [Setting.NativePanel] = new Text("Native panel",
+                "Your headset's own screen per eye, from the launcher's list of headsets: no runtime tells it."),
+            [Setting.HeadsetAsks] = new Text("Asks for",
+                "The size the runtime asks the game to render each eye at. It follows the runtime's quality setting, not the panel."),
+            [Setting.Refresh] = new Text("Refresh",
+                "Your headset's refresh rate in your last session, from the mod's log: steady, held to a half or a third of it "
+                + "for part of play (the runtime's smoothing or throttling), or changing."),
             [Setting.Turning] = new Text("Turning",
                 "How the right stick turns you. Smooth turns continuously; snap jumps by a fixed angle, which many people find "
                 + "more comfortable; off leaves turning to your body.",
@@ -121,13 +131,13 @@ namespace EternalVR.Launcher.Core.Settings
                 + "Open folder opens that profile's controls folder, to edit the files by hand or delete yours to go back to the "
                 + "built-in controls."),
             [Setting.Resolution] = new Text("Resolution",
-                "The detail each eye is rendered with. 1.00 is your headset's recommended size, kept within what a fast card "
-                + "can render at the headset's refresh rate. Raise it for a sharper picture if your card has headroom; lower it "
-                + "if the frame rate drops."),
+                "How many pixels each eye renders: a size times the number beside it (0.50 to 2.00). Auto is what the runtime "
+                + "asks for, fitted within about 4.6 million pixels per eye; Virtual Desktop native (SteamVR native...) is exactly "
+                + "what the runtime asks for; Quest 3 native (Index native...) is your headset's own panel.",
+                "Auto (fits about 4.6 MP per eye)", "Runtime native", "Headset native"),
             [Setting.EachEye] = new Text("Each eye",
-                "The size each eye renders at with the Resolution above, and how it compares with the size your headset "
-                + "asks for, per side (as Virtual Desktop shows its resolution). The headset's size is read when you press "
-                + "Play and remembered for the next time."),
+                "The size each eye renders at, per side against what the runtime asks for and the native panel; with DLSS, about "
+                + "the size DLSS draws. After a session held to the window's size (AMD Radeon RX 5000 and 6000), that size first."),
             [Setting.AntiAliasing] = new Text("Anti-aliasing",
                 "How edges are smoothed in each eye. TAA (recommended) is the game's own: smooth edges, with each eye "
                 + "keeping its own history. DLSS needs an NVIDIA RTX card: it renders a smaller image and scales it up, which "
@@ -156,6 +166,8 @@ namespace EternalVR.Launcher.Core.Settings
                 + "Slayer's movement) advance by uneven steps. Matched to the headset: the game draws exactly one frame for "
                 + "each headset frame, started at the same moment of each, as native VR games do, so motion advances evenly. "
                 + "It helps when the game runs faster than your headset's refresh rate; below it nothing changes. "
+                + "If your headset's own smoothing takes over (Virtual Desktop's SSW, Meta's ASW, SteamVR's Motion Smoothing or "
+                + "throttling), your headset asks for half the frames and the game is matched to that half. "
                 + "Matched to the headset by default.",
                 "As fast as the game runs", "Matched to the headset (default)"),
             [Setting.TextureStreaming] = new Text("Texture streaming",
@@ -227,9 +239,9 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.DlssVersion] = new Text("Version",
                 "The DLSS that runs. NVIDIA's newest (recommended) looks sharper and smears less in motion than the game's "
                 + "own 2.3: Download fetches it once from NVIDIA's GitHub, after you accept NVIDIA's license, and keeps it in "
-                + "the launcher's data folder. A file of mine uses an nvngx_dlss.dll you downloaded yourself, from where it "
-                + "is. Nothing is copied into the game folder. If the game cannot use the newer file, it keeps its own.",
-                "Newest from NVIDIA (recommended)", "The game's (2.3)", "A file of mine"),
+                + "the launcher's data folder. Load file... uses an nvngx_dlss.dll of yours, where it is. Nothing is copied "
+                + "into the game folder. If the game cannot use the newer file, it keeps its own.",
+                "Newest from NVIDIA (recommended)", "The game's (2.3)", "Load file..."),
             [Setting.DlssPreset] = new Text("Preset",
                 "How the newer DLSS renders. K (recommended) is the transformer model at every quality, the sharpest "
                 + "picture; J, M and L are its variants; F is the older model. Automatic lets NVIDIA pick for each quality. "

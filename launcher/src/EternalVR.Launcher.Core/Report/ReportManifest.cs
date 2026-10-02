@@ -110,7 +110,8 @@ namespace EternalVR.Launcher.Core.Report
         public static readonly IReadOnlyList<ReportItem> Items = new[]
         {
             new ReportItem(ReportSource.Generated, SystemFile, SystemFile,
-                "Launcher and layer versions and their check, Windows version, GPUs and drivers, the OpenXR runtime, chosen SteamVR settings (SteamVrSummary), "
+                "Launcher and layer versions and their check, Windows version, GPUs and drivers, the OpenXR runtime, the headset as the last runtime "
+                + "probe read it and the last session's refresh rate and summary (HeadsetView.ReportLines), chosen SteamVR settings (SteamVrSummary), "
                 + "the HAGS state, the game build, the names in the game's Mods folder and any mod loader (GameMods), the folders in use"),
             new ReportItem(ReportSource.Generated, PreflightFile, PreflightFile, "The launcher's checks, run at export time"),
             new ReportItem(ReportSource.DataFolder, @"logs\launcher.log", "launcher.log",

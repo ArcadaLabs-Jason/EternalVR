@@ -16,8 +16,8 @@ namespace EternalVR.Launcher
     {
         private const string NoProfile = "(none)";
         private readonly ComboBox profile = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
-        private readonly Button saveProfile = new Button { Text = "Save", Width = 80, Height = 26 };
-        private readonly Button deleteProfile = new Button { Text = "Delete", Width = 80, Height = 26 };
+        private readonly Button saveProfile = new Button { Text = "Save", Width = 80, Height = ButtonHeight };
+        private readonly Button deleteProfile = new Button { Text = "Delete", Width = 80, Height = ButtonHeight };
         private FlowLayoutPanel profileStrip;
         /// <summary>The list is being refilled: a selection change then is not the user's.</summary>
         private bool fillingProfiles;

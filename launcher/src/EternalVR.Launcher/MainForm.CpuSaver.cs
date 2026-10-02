@@ -20,6 +20,7 @@ namespace EternalVR.Launcher
             if (items.Count == 0) return null;
             var panel = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
             var boxes = new List<CheckBox>();
+            var notes = new List<Label>();
             foreach (var item in items)
             {
                 var box = new CheckBox { Text = item.Label, AutoSize = true, AccessibleName = item.Label, Margin = new Padding(3, 3, 3, 0) };
@@ -31,14 +32,13 @@ namespace EternalVR.Launcher
                     // Under the checkbox's text.
                     var note = new Label { Text = item.Note, AutoSize = true, Margin = new Padding(20, 0, 3, 3) };
                     ownTips[note] = ownTips[box];
+                    notes.Add(note);
                     panel.Controls.Add(note);
                 }
             }
-            var row = Row(Setting.TextureStreaming, panel, s => LoadSaver(items, boxes, s), s => ReadSaver(items, boxes, s));
-            // The label beside the first checkbox.
-            row.Label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-            row.Label.Padding = new Padding(0, 4, 0, 0);
-            return row;
+            // The label beside the first checkbox (FitGroup); the notes wrap in the column.
+            return Row(Setting.TextureStreaming, panel, s => LoadSaver(items, boxes, s), s => ReadSaver(items, boxes, s),
+                fit: w => { foreach (var note in notes) WrapIn(note, w); });
         }
 
         /// <summary>The "CPU Saver" group: a row per item with its label on the left, as in the other groups; null

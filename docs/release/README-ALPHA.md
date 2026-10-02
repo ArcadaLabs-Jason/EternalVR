@@ -34,9 +34,10 @@ The exact version and commit are in `BUILD-INFO.txt`. Please quote them in every
 - **Steam running and logged in** before you start the launcher (Steam version only).
 - **.NET Framework 4.8** for the launcher; Windows 10 1903 and later include it. The mod itself needs
   nothing else installed.
-- **Any monitor.** Each eye renders at the headset's recommended size (capped at about 4.6 million pixels
-  per eye by default, about 2056x2216; "Resolution" on the launcher's Play tab raises or lowers it). The game's own window is a
-  small 1280x720 mirror on your desktop.
+- **Any monitor.** Each eye renders at the size your headset's runtime asks for, fitted within about 4.6
+  million pixels per eye by default ("Resolution: Auto" on the launcher's Play tab, about 2056x2216 for a
+  Quest 3). Resolution can also render all of what the runtime asks for, or the headset's native panel, and
+  its number raises or lowers it. The game's own window is a small 1280x720 mirror on your desktop.
 
 ## Single-player only
 

@@ -13,11 +13,11 @@ namespace EternalVR.Launcher
     public sealed partial class MainForm
     {
         private readonly ComboBox dlssQuality = Choices(Setting.DlssQuality);
-        private readonly ComboBox dlssDll = Choices(Setting.DlssVersion, 200);
+        private readonly ComboBox dlssDll = Choices(Setting.DlssVersion);
         /// <summary>Downloads NVIDIA's newest pinned DLL (data\dlss-downloads.txt); shown while it is chosen and not downloaded.</summary>
-        private readonly Button dlssDownload = new Button { Text = "Download...", Width = 150, Height = 26 };
-        private readonly Button dlssChoose = new Button { Text = "Choose file...", Width = 110, Height = 26 };
-        private readonly ComboBox dlssPreset = Choices(Setting.DlssPreset, 200);
+        private readonly Button dlssDownload = new Button { Text = "Download...", Width = 150, Height = ButtonHeight };
+        private readonly Button dlssChoose = new Button { Text = "Choose file...", Width = 110, Height = ButtonHeight };
+        private readonly ComboBox dlssPreset = Choices(Setting.DlssPreset);
         /// <summary>What will run in the headset (<see cref="DlssDll.WhatRuns"/>); a chosen file's path and version in its tooltip.</summary>
         private readonly Label dlssRuns = new Label { AutoSize = true, MaximumSize = new Size(200, 0), Margin = new Padding(3, 4, 3, 4) };
 
@@ -34,7 +34,7 @@ namespace EternalVR.Launcher
             dlssChoose.Click += (s, e) => ChooseDlssDll();
             dlssDll.SelectedIndexChanged += (s, e) =>
             {
-                // A file of mine with none chosen yet: pick one now, or go back to the newest.
+                // Load file... with none chosen yet: pick one now, or go back to the newest.
                 if (!loading && SelectedDlssVersion() == DlssDllChoice.File && string.IsNullOrWhiteSpace(ctx.Settings.DlssDllPath)
                     && !ChooseDlssDll())
                     SelectDlssVersion(DlssDllChoice.Newest);
@@ -47,7 +47,7 @@ namespace EternalVR.Launcher
                 Row(Setting.DlssQuality, dlssQuality,
                     s => dlssQuality.SelectedIndex = (int)s.Dlss,
                     s => s.Dlss = (DlssQuality)Math.Max(0, dlssQuality.SelectedIndex)),
-                Row(Setting.DlssVersion, version, s => SelectDlssVersion(s.DlssDll), s => s.DlssDll = SelectedDlssVersion()),
+                Row(Setting.DlssVersion, version, s => SelectDlssVersion(s.DlssDll), s => s.DlssDll = SelectedDlssVersion(), fit: w => FitList(dlssDll, w)),
                 Row(Setting.DlssPreset, dlssPreset,
                     s => dlssPreset.SelectedIndex = DlssDll.PresetIndex(s.DlssPreset),
                     s => s.DlssPreset = DlssDll.PresetValues[Math.Max(0, dlssPreset.SelectedIndex)]),
@@ -115,7 +115,7 @@ namespace EternalVR.Launcher
             // Green when the newer DLSS asked for will run, amber when the game's runs in its place, plain for the game's by choice.
             bool? newer = s.DlssDll == DlssDllChoice.Newest ? newest != null && ready
                 : s.DlssDll == DlssDllChoice.File ? file != null && file.Ok : (bool?)null;
-            dlssRuns.ForeColor = newer == null ? SystemColors.ControlText : newer.Value ? Color.FromArgb(0, 110, 40) : Color.FromArgb(150, 80, 0);
+            dlssRuns.ForeColor = newer == null ? SystemColors.ControlText : newer.Value ? GoodText : WarningText;
             var tip = SettingTexts.For(Setting.DlssInHeadset).Tooltip;
             if (file != null) tip = s.DlssDllPath + ": " + DlssDll.Describe(file) + ". " + tip;
             ownTips[dlssRuns] = Wrap(tip);

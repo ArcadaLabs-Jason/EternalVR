@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Game;
+using EternalVR.Launcher.Core.Headsets;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Preflight;
 using EternalVR.Launcher.Core.Safety;
@@ -35,13 +36,15 @@ namespace EternalVR.Launcher
         private readonly TextBox logBox = new TextBox
         {
             Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false, Dock = DockStyle.Fill,
-            Font = new Font(FontFamily.GenericMonospace, 8.5f),
+            Font = new Font("Consolas", 9f),
         };
-        private readonly Button launch = new Button { Text = "Launch VR", Width = 140, Height = 36, Font = UiFont(FontStyle.Bold) };
-        private readonly Button check = new Button { Text = "Check", Width = 90, Height = 36 };
-        private readonly Button restoreSaves = new Button { Text = "Restore saves...", Width = 120, Height = 36 };
-        private readonly Button openData = new Button { Text = "Open data folder", Width = 120, Height = 36 };
-        private readonly Button exportReport = new Button { Text = "Export report...", Width = 120, Height = 36 };
+        private readonly Button launch = new Button { Text = "Launch VR", Width = 140, Height = BarButtonHeight, Font = UiFont(FontStyle.Bold) };
+        private readonly Button check = new Button { Text = "Check", Width = 90, Height = BarButtonHeight };
+        private readonly Button restoreSaves = new Button { Text = "Restore saves...", Width = 120, Height = BarButtonHeight };
+        private readonly Button openData = new Button { Text = "Open data folder", Width = 120, Height = ButtonHeight };
+        private readonly Button exportReport = new Button { Text = "Export report...", Width = 120, Height = BarButtonHeight };
+        /// <summary>The status line's "Launch VR is off" reason now shown (<see cref="ShowLaunchBlock"/>); null when none is.</summary>
+        private string shownBlock;
 
         public MainForm(LauncherContext ctx)
         {
@@ -59,16 +62,26 @@ namespace EternalVR.Launcher
             StartPosition = FormStartPosition.CenterScreen;
             Icon = Branding.WindowIcon() ?? Icon;
             BuildLayout();
+            // Every container's layout held while the font, the list heights and the settings change (each change laid the
+            // tabs out again, about a second in all), then each laid out once.
+            foreach (Control c in Controls) SuspendTree(c);
             // After the layout: the change reaches every control in the window, and the sizes they measured with the default
             // font are measured again (at 100 % no scaling pass does it).
             Font = UiFont();
             FitListHeights(this);
             WidenOpenLists(this);
             LoadSettingsIntoControls();
+            foreach (Control c in Controls) ResumeTree(c, true);
             ResumeLayout(false);
             PerformLayout();
-            Load += (s, e) => { FitTabs(); FitToScreen(); };
-            DpiChanged += (s, e) => BeginInvoke(new Action(FitTabs));
+            Load += (s, e) => { MatchDisplayScale(); FitTabs(); FitGroups(); FitToScreen(); };
+            DpiChanged += (s, e) =>
+            {
+                // No minimum while the window takes its new scale (FitWindow).
+                MinimumSize = Size.Empty;
+                BeginInvoke(new Action(() => { FitTabs(); FitWindow(); }));
+            };
+            Resize += (s, e) => FitStatus();
             tabs.Selecting += (s, e) => HoldLayoutWhileSwitching(tabs.SelectedTab, e.TabPage);
             var wheelGuard = new WheelGuard();
             Application.AddMessageFilter(wheelGuard);
@@ -93,10 +106,15 @@ namespace EternalVR.Launcher
             WireUpdates();
             Shown += (s, e) =>
             {
+                MatchDisplayScale();
+                FitWindow();
                 ctx.Log.Info($"EternalVR launcher started; data folder {ctx.Paths.Root}");
+                // The last session's summary, until something newer is said.
+                if (HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) is string last) ShowStatus(StatusKind.Info, last);
                 GiveProfilesTheirControls();
                 TryRecover();
                 RunPreflight();
+                ReadHeadsetAtStart();
                 CheckForUpdate(asked: false);
             };
         }
@@ -135,7 +153,8 @@ namespace EternalVR.Launcher
                     {
                         int widest = list.Width;
                         foreach (var item in list.Items)
-                            widest = Math.Max(widest, TextRenderer.MeasureText(list.GetItemText(item), list.Font).Width + SystemInformation.VerticalScrollBarWidth);
+                            widest = Math.Max(widest, TextRenderer.MeasureText(list.GetItemText(item), list.Font).Width
+                                + SystemInformation.GetVerticalScrollBarWidthForDpi(list.DeviceDpi));
                         list.DropDownWidth = widest;
                     };
                 WidenOpenLists(c);
@@ -190,12 +209,17 @@ namespace EternalVR.Launcher
             c.ResumeLayout(layOut);
         }
 
-        /// <summary>A scaled window taller or wider than the screen's working area is shrunk to it (the log box takes the loss).</summary>
+        /// <summary>
+        /// The window as tall as the Play tab's content, at most 90 % of the screen's working area (less scrolling), and at most
+        /// as wide as the working area; centred on it. At the window's own scale, once its groups are fitted.
+        /// </summary>
         private void FitToScreen()
         {
             var area = Screen.FromControl(this).WorkingArea;
+            var content = playPage.Controls.Count > 0 ? playPage.Controls[0] : null;
+            int needed = content == null ? Height : Height - playPage.ClientSize.Height + content.Height + playPage.Padding.Vertical;
             Width = Math.Min(Width, area.Width);
-            Height = Math.Min(Height, area.Height);
+            Height = Math.Min(Math.Min(needed, area.Height * 9 / 10), area.Height);
             Left = Math.Max(area.Left, area.Left + (area.Width - Width) / 2);
             Top = Math.Max(area.Top, area.Top + (area.Height - Height) / 2);
         }
@@ -283,7 +307,23 @@ namespace EternalVR.Launcher
                 "EternalVR " + typeof(MainForm).Assembly.GetName().Version.ToString(3));
             checks.Items.Clear();
             foreach (var c in g.Result.Checks) checks.Items.Add(c.ToString());
-            launch.Enabled = session == null && saveRestore == null && g.Result.CanLaunch;
+            launch.Enabled = session == null && saveRestore == null && detecting == null && g.Result.CanLaunch;
+            ShowLaunchBlock(g.Result);
+        }
+
+        /// <summary>
+        /// When the checks keep Launch VR off, the status line says why (the first failed check); said again only when the
+        /// reason changes, so it does not cover a newer status. Once the checks pass, a reason still shown gives way to the
+        /// last session's line.
+        /// </summary>
+        private void ShowLaunchBlock(PreflightResult result)
+        {
+            var text = LaunchBlock.Status(result);
+            if (text == shownBlock) return;
+            bool showing = shownBlock != null && statusLabel.Text == shownBlock;
+            shownBlock = text;
+            if (text != null) ShowStatus(StatusKind.Warning, text);
+            else if (showing) ShowStatus(StatusKind.Info, HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) ?? string.Empty);
         }
 
         private void StartSession()
@@ -314,8 +354,9 @@ namespace EternalVR.Launcher
                 // A restore deferred because a game process was still running is retried from here.
                 TryRecover();
                 RunPreflight();
-                // The launch's runtime probe may have read the headset's size.
-                ShowEachEye();
+                // The launch's runtime probe may have read the headset, the session its refresh rate, SteamVR its model.
+                ctx.ReadSteamVrSeen();
+                ShowHeadset();
             }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 

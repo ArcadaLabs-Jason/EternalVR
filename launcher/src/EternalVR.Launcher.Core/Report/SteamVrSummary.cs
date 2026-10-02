@@ -9,6 +9,17 @@ using EternalVR.Launcher.Core.Text;
 
 namespace EternalVR.Launcher.Core.Report
 {
+    /// <summary>The headset SteamVR last saw (<c>LastKnown</c> in steamvr.vrsettings): its maker, model and driver.</summary>
+    public sealed class SteamVrHeadset
+    {
+        /// <summary><c>HMDManufacturer</c>, such as "Valve Corporation"; null when not set.</summary>
+        public string Manufacturer { get; set; }
+        /// <summary><c>HMDModel</c>, such as "Index"; null when not set.</summary>
+        public string Model { get; set; }
+        /// <summary><c>ActualHMDDriver</c>, such as "lighthouse" or "oculus_virtualdesktop"; null when not set.</summary>
+        public string Driver { get; set; }
+    }
+
     /// <summary>Where a controller binding SteamVR applies to the game comes from.</summary>
     public enum SteamVrBindingKind
     {
@@ -165,6 +176,44 @@ namespace EternalVR.Launcher.Core.Report
                 why = "could not be read (" + e.GetType().Name + ")";
                 return null;
             }
+        }
+
+        /// <summary>
+        /// The headset SteamVR last saw, from Steam's folder <paramref name="steamRoot"/>; null when the file is not there, cannot
+        /// be read or names no model. It is SteamVR's last session, not necessarily the headset in use now.
+        /// </summary>
+        public static SteamVrHeadset ReadLastKnown(string steamRoot)
+        {
+            if (string.IsNullOrWhiteSpace(steamRoot)) return null;
+            var path = Path.Combine(steamRoot, RelativePath);
+            try
+            {
+                if (!File.Exists(path)) return null;
+                using (var s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var r = new StreamReader(s))
+                    return LastKnown(r.ReadToEnd());
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>The <c>LastKnown</c> headset in the settings file's text; null when it names no model or the text is not JSON.
+        /// Never the serial number.</summary>
+        public static SteamVrHeadset LastKnown(string json)
+        {
+            object root;
+            try { root = MiniJson.Parse(json); }
+            catch (Exception e) when (e is FormatException || e is OverflowException || e is ArgumentException) { return null; }
+            var model = Text(MiniJson.Get(root, "LastKnown", "HMDModel"));
+            if (model == null) return null;
+            return new SteamVrHeadset
+            {
+                Manufacturer = Text(MiniJson.Get(root, "LastKnown", "HMDManufacturer")),
+                Model = model,
+                Driver = Text(MiniJson.Get(root, "LastKnown", "ActualHMDDriver")),
+            };
         }
 
         /// <summary>The summary of the settings file's text; one line saying so when it is not a JSON object. Never throws.</summary>

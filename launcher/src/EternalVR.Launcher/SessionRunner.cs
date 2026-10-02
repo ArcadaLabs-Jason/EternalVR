@@ -237,10 +237,19 @@ namespace EternalVR.Launcher
             string exitText = GameExit.StatusPrefix(exitCode);
             DropHeldProblem();
             bool restored = CleanUpAfterSession(marker);
-            // How fast the game really drew, beside the headset's rate (SessionRates).
-            var rates = SessionRates.FromSessionDir(logDir);
+            // How fast the game really drew, beside the headset's rate (SessionRates), and what the headset did: its refresh
+            // rate, the time the runtime held the game to a part of it, refresh changes (SessionSummary, kept for the Play tab).
+            var layerLines = SessionRates.ReadLayerLogs(logDir);
+            var rates = SessionRates.FromLines(layerLines);
             if (rates != null) Log.Info(rates.LogText());
-            var ratesText = rates != null ? " " + rates.Describe() : string.Empty;
+            var summary = SessionSummary.FromLines(layerLines);
+            if (summary != null)
+            {
+                Log.Info(summary.LogText());
+                ctx.RememberSession(summary, id, DateTime.Now);
+            }
+            var summaryText = summary?.Describe();
+            var ratesText = !string.IsNullOrEmpty(summaryText) ? " " + summaryText : rates != null ? " " + rates.Describe() : string.Empty;
             // Each eye below the planned size: the graphics driver held it at the window's size (RenderCap).
             var cap = ReadRenderCap(logDir);
             ctx.RememberRenderCap(cap);

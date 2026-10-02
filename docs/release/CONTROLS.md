@@ -240,6 +240,15 @@ are the same whichever profile is picked.
 
 ### Play tab
 
+The **Headset** box across the top shows what the launcher found, with nothing to set: your headset and the way the
+game reaches it (Virtual Desktop (VDXR), Meta Link, SteamVR...), its native panel per eye (from the launcher's list
+of headsets), the size the runtime asks for and when it was read, and the refresh rate of your last session (steady,
+held to half of it for part of play, or changing). SteamVR names only how it tracks the headset, so on SteamVR the
+model is the one SteamVR last saw. The launcher reads the headset when it opens if its runtime is already running
+(the Virtual Desktop Streamer, Meta's Link software, or SteamVR: it never starts SteamVR for that), and again when you
+press Launch VR; **Detect again** reads it now (with SteamVR as the runtime it starts SteamVR). The box says when the
+values are old.
+
 | Setting | Choices | Default |
 |---|---|---|
 | Turning | Smooth, Snap, Off | Smooth |
@@ -267,19 +276,19 @@ are the same whichever profile is picked.
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
 | bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, the Flame Belch and equipment launcher on your left shoulder, landing from a fall, a shove from below when a jump pad or booster launches you, and health and armor pickups ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
-| Resolution | Each eye's detail, 0.50 to 2.00 times the headset's recommended size | 1.00 |
-| Each eye | The size each eye renders at with that Resolution and how it compares with what your headset asks for, per side, for example "2056x2216, 82% of the 2496x2688 your headset asked for". The headset's size is read when you press Play and remembered for the next time | |
+| Resolution | A size times a number from 0.50 to 2.00. Auto: what your headset's runtime asks for, fitted within about 4.6 million pixels per eye (the size every earlier version rendered). Virtual Desktop native (SteamVR native, Quest Link native...): 1.00 is exactly the size the runtime asks for at its current quality setting, as in other OpenXR games, so Virtual Desktop's Graphics Quality or SteamVR's resolution slider counts in full; it is not the headset's panel. Quest 3 native (Index native, Steam Frame native...): 1.00 is your headset's own panel, offered when the launcher knows the headset's model | Auto, 1.00 |
+| Each eye | The size each eye renders at with Resolution and its percent, per side, of what the runtime asks for and of the native panel, for example "2056 x 2216   82% of what VD asks for, 100% of the native panel". With DLSS, about the size DLSS draws; with more than a quarter more pixels than Auto at 1.00, how many more ("47% more pixels than Auto"). After a session whose graphics driver rendered each eye at the window's size (AMD Radeon RX 5000 and 6000), it first says the size that session really got, for example "958 x 1009 last session, 45% of the planned 2056 x 2216", then the plan after "Planned:" | |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), DLSS (NVIDIA RTX only, set up in the DLSS group below), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card) | TAA |
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. The game's menus and HUD stay at full rate, so their text stays sharp. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
-| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate). Stereo only, not with Alternate eyes on Auto | Matched to the headset |
+| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"). Stereo only, not with Alternate eyes on Auto | Matched to the headset |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 
 | Setting | Choices | Default |
 |---|---|---|
 | Quality | Quality, Balanced, Performance, Ultra Performance: how small an image each eye renders before DLSS scales it up (two thirds of the size, 58%, half, a third) | Quality |
-| Version | NVIDIA's newest (shown as latest, used by default; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or A file of mine (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
+| Version | NVIDIA's newest (shown as latest, used by default; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or Load file... (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
 | Preset | Automatic (NVIDIA's pick), K (recommended: the transformer model at every quality, the sharpest), J, M, L (its variants) or F (the older model). Needs a newer DLSS than the game's | K |
 | In the headset | What will run in VR with these settings, for example "DLSS 310.9.1, preset K, Quality, both eyes". Until the newest is downloaded, the game's DLSS 2.3 runs | |
 

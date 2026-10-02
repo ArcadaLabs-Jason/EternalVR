@@ -55,11 +55,19 @@ them is worse for you than described here.
 
 ## Image and performance
 
-- **Render resolution.** Each eye renders at the headset runtime's recommended size, scaled down to a
-  budget of about 4.6 million pixels per eye (about 2056x2216), times "Resolution" on the launcher's Play tab (0.50 to 2.00).
-  Raise it for sharpness if your GPU has headroom, lower it if the frame rate drops below the headset's
-  refresh rate. The mod's log says the size it used (`size: render size ...`). If the size cannot be
-  set, the game renders at its small window's size and looks soft; the log says why.
+- **Render resolution.** "Resolution" on the launcher's Play tab is a size times a number (0.50 to 2.00).
+  Auto, the default, is the size your headset's runtime asks for, fitted within about 4.6 million pixels
+  per eye: a Quest 3 at Virtual Desktop's High asks for 2496x2688 and renders 2056x2216 at 1.00, so 1.00 is
+  not the headset's own size, and Virtual Desktop's High, Ultra and Godlike all render about the same.
+  Choose "Virtual Desktop native" (or "SteamVR native", "Quest Link native"...) to make 1.00 exactly the size
+  the runtime asks for, as in other OpenXR games; then Virtual Desktop's quality or SteamVR's resolution counts
+  in full. "Quest 3 native" (named after your headset) makes 1.00 the headset's own panel, when the launcher
+  knows the headset's model. Updating keeps your number
+  on Auto, so nothing changes until you choose. The "Each eye" line shows the size and its percent of what
+  the runtime asks for and of the panel. Raise the number for sharpness if your GPU has headroom, lower it if
+  the frame rate drops below the headset's refresh rate. The mod's log says the size it used
+  (`size: render size ...`). If the size cannot be set, the game renders at its small window's size and
+  looks soft; the log says why.
 - **AMD Radeon RX 5000 and 6000 (and some newer AMD drivers): the picture renders at the window's
   size.** These drivers cannot scale the game's image into a smaller desktop window, so each eye renders
   at the size of the game's window on your desktop instead of the planned size, and looks soft. The mod
@@ -70,7 +78,8 @@ them is worse for you than described here.
   [TROUBLESHOOTING.md](TROUBLESHOOTING.md)); a full fix is being worked on.
 - **Put the headset on before launching.** The launcher asks the headset's runtime for the render size
   and starts the game at it. If the headset is not detected ("Headset not detected; the render size is
-  decided in-game" in the launcher's log), the game switches size a few seconds in; on graphics cards
+  decided in-game" in the launcher's log), the mod uses Resolution's Auto whatever you chose, and the game
+  switches size a few seconds in; on graphics cards
   with 12 GB or less that switch can fail with "Failed to allocate video memory". Launch again with the
   headset connected.
 - **Some effects are off in stereo.** Motion blur, depth of field, chromatic aberration and vignette are
@@ -99,7 +108,7 @@ them is worse for you than described here.
   game's menu tries it again at once.
 - **A newer DLSS is experimental too.** The game ships DLSS 2.3. The DLSS group's "Version" offers NVIDIA's
   newest by default: **Download** fetches it once, straight from NVIDIA's GitHub after you accept NVIDIA's
-  license (the mod does not include it), and until then the game's 2.3 runs. "A file of mine" uses a
+  license (the mod does not include it), and until then the game's 2.3 runs. "Load file..." uses a
   `nvngx_dlss.dll` you downloaded yourself (NVIDIA's DLSS page on GitHub, `lib/Windows_x86_64/rel/nvngx_dlss.dll`).
   The file stays in EternalVR's data folder or where you keep it, and nothing is copied into the game folder.
   "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says

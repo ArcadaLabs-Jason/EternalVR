@@ -66,6 +66,10 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The DLSS qualities' names, in <see cref="DlssQuality"/> order.</summary>
         public static readonly string[] QualityNames = { "Quality", "Balanced", "Performance", "Ultra Performance" };
 
+        /// <summary>How large an image each quality renders per side before DLSS scales it up, in <see cref="DlssQuality"/> order
+        /// (NVIDIA's factors; the game rounds the sizes its own way, so the window says "about").</summary>
+        public static readonly double[] QualityFactors = { 2.0 / 3.0, 0.58, 0.5, 1.0 / 3.0 };
+
         /// <summary>
         /// The Play tab's "In the headset" line: the DLSS that runs, its preset and its quality. <paramref name="newest"/> is
         /// NVIDIA's newest listed DLSS (null when none is listed), <paramref name="newestReady"/> whether it is downloaded, and

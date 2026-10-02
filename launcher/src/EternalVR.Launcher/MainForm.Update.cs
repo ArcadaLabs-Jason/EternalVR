@@ -15,9 +15,9 @@ namespace EternalVR.Launcher
     /// </summary>
     public sealed partial class MainForm
     {
-        private readonly Button updateButton = new Button { Width = 130, Height = 36, Visible = false };
-        private readonly CheckBox updateCheck = new CheckBox { Text = "Check for new EternalVR versions", AutoSize = true, Margin = new Padding(12, 10, 3, 3) };
-        private readonly Button checkUpdateNow = new Button { Text = "Check now", Width = 90, Height = 30 };
+        private readonly Button updateButton = new Button { Width = 130, Height = BarButtonHeight, Visible = false };
+        private readonly CheckBox updateCheck = new CheckBox { Text = "Check for new EternalVR versions", AutoSize = true, Margin = new Padding(12, 3, 3, 3), Anchor = AnchorStyles.Left };
+        private readonly Button checkUpdateNow = new Button { Text = "Check now", Width = 90, Height = ButtonHeight };
         private AvailableRelease available;
         private bool checkingUpdate;
 

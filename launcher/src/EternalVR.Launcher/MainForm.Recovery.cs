@@ -19,7 +19,7 @@ namespace EternalVR.Launcher
         /// <summary>Failed restores before the window offers to discard the pending one.</summary>
         private const int FailuresBeforeDiscard = 3;
         private int recoveryFailures;
-        private readonly Button discardRestore = new Button { Text = "Discard pending restore...", Width = 180, Height = 36, Visible = false };
+        private readonly Button discardRestore = new Button { Text = "Discard pending restore...", Width = 180, Height = BarButtonHeight, Visible = false };
 
         /// <summary>After a recovery attempt: the next retry interval, the status line and the discard button.</summary>
         private void AfterRecovery(bool clear)

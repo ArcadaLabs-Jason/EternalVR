@@ -38,10 +38,10 @@ namespace EternalVR.Launcher.Core.Launch
             + Percent.ToString(CultureInfo.InvariantCulture) + "% of the planned " + Spaced(Planned)
             + ". A larger display helps; a full fix is being worked on.";
 
-        /// <summary>The Play tab's "Each eye" line while the last session was capped.</summary>
+        /// <summary>The first lines of the Play tab's "Each eye" line while the last session was capped (separated by '\n').</summary>
         public string EachEyeText() =>
-            Real + " last session, " + Percent.ToString(CultureInfo.InvariantCulture) + "% of the planned " + Planned
-            + " (your graphics driver renders at the window's size)";
+            Spaced(Real) + " last session, " + Percent.ToString(CultureInfo.InvariantCulture) + "% of the planned " + Spaced(Planned)
+            + "\nYour graphics driver renders at the window's size";
 
         /// <summary>For the report's system.txt.</summary>
         public string Describe() =>

@@ -1,0 +1,33 @@
+# EternalVR launcher: headsets and their native panels, per eye (the Play tab's Headset box, Resolution's native panel).
+# One headset per line: display name | identifiers | panel per eye WxH | refresh rates (Hz)
+# Identifiers, separated by ';', tried in file order (the first headset with a match wins):
+#   xr=  the OpenXR system name, exactly (a vendor's runtime names the model: Virtual Desktop, Meta Link, Pimax, Varjo)
+#   vr=  SteamVR's headset model (steamvr.vrsettings, LastKnown HMDModel), exactly
+#   vr~  a part of SteamVR's headset model, in any case
+#   tk=  SteamVR's tracking system in its system name ("SteamVR/OpenXR : playstation_vr2"), in any case, and only for a
+#        tracking system one headset alone uses: lighthouse (Index, Vive, Beyond...), oculus (Quest, Rift, Virtual
+#        Desktop), aapvr (every Pimax), pico, vrlink and the like name no model and are never listed. SteamVR's last seen
+#        model (vr=, vr~) wins over it when that model is in the list.
+# Only identifiers seen in a real log, a vendor's source or a vendor's page are listed; a headset that matches none
+# shows as not in the list rather than as a guess. ALVR reports the headset it imitates, so it is never matched.
+# Panels and rates are the makers' figures (checked 2026-10-01). Order matters for the vr~ parts: a more specific
+# name (Crystal Super, Crystal Light) comes before the one it contains.
+Meta Quest 2 | xr=Oculus Quest2; vr=Oculus Quest2 | 1832x1920 | 72,80,90,120
+Meta Quest 3 | xr=Meta Quest 3; vr=Meta Quest 3 | 2064x2208 | 72,80,90,120
+Meta Quest 3S | xr=Meta Quest 3S; vr=Meta Quest 3S; vr~ventura; vr~panther | 1832x1920 | 72,80,90,120
+Meta Quest Pro | xr=Meta Quest Pro; vr=Meta Quest Pro | 1800x1920 | 72,90
+Oculus Quest | xr=Oculus Quest; vr=Oculus Quest | 1440x1600 | 72
+Oculus Rift S | xr=Oculus Rift S; vr=Oculus Rift S | 1280x1440 | 80
+Oculus Rift CV1 | xr=Oculus Rift CV1; vr=Oculus Rift CV1 | 1080x1200 | 90
+Valve Index | vr=Index; vr=Utah MP | 1440x1600 | 80,90,120,144
+Steam Frame | vr=Deckard MP; vr~Steam Frame | 2160x2160 | 72,80,90,120,144
+HTC Vive | vr=Vive MV; vr=Vive. MV; vr=Vive MV. | 1080x1200 | 90
+HTC Vive Pro | vr=Vive_Pro MV; vr=VIVE_Pro MV | 1440x1600 | 90
+HTC Vive Pro 2 | vr=VIVE_Pro 2 MV; vr=Vive_Pro 2 MV; vr=VIVE_Pro 2 PV; vr=Vive_Pro 2 PV | 2448x2448 | 90,120
+Bigscreen Beyond | vr=Bigscreen Beyond; vr=Beyond | 2560x2560 | 75,90
+Pimax Crystal Super | vr~crystal super | 3840x3840 | 72,90
+Pimax Crystal Light | vr~crystal light | 2880x2880 | 72,90,120
+Pimax Crystal | xr=Pimax Crystal; vr=Pimax Crystal | 2880x2880 | 72,90,120
+Varjo XR-4 | xr=XR-4; vr~xr-4 | 3840x3744 | 90
+PlayStation VR2 | tk=playstation_vr2 | 2000x2040 | 90,120
+Samsung Odyssey+ | vr~800ZBA | 1440x1600 | 60,90
