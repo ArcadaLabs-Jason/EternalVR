@@ -305,6 +305,7 @@ namespace EternalVR.Launcher
                 LogDir = Paths.SessionLogDir(sessionId),
                 Settings = Settings,
                 ForcedCvars = Data.ForcedCvars,
+                Platform = g.Game.Platform,
                 CpuSaver = Data.CpuSaver,
                 ForceCvars = g.Locations.Count > 0,
                 LayerDecisions = g.LayerDecisions,

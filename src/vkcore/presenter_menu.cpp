@@ -27,6 +27,10 @@ namespace evr::vkcore {
 
 namespace {
 
+// Worker only: the controllers asked for the menu that began this chain of screens (one presenter per
+// process; kept here, not in PresenterImpl, which is at the file size limit).
+bool g_menuAsked = false;
+
 // The pointer's drawing: the beam's thickness, its length when it misses the panel, the dot's angular size.
 constexpr float kBeamThicknessMetres = 0.005f;
 constexpr float kBeamMissMetres = 1.0f;
@@ -225,6 +229,8 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
         if (kindIn.hadMenu && kindIn.sinceCursorGone < menu::kMenuContinueSeconds) {
             EVR_LOG("menu: the cursor is back after %.2f s: the same menu (%s) on another screen",
                     kindIn.sinceCursorGone, menu::menuKindName(kind));
+        } else {
+            g_menuAsked = kindIn.menuRequested || kindIn.dossierRequested;
         }
         menuPopup = kind == menu::MenuKind::Popup;
         menuDossier = kind == menu::MenuKind::Dossier;
@@ -252,6 +258,15 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                          : "the panel and the pointer are down");
     }
     menuOn = active && menuPanelPlaced && menuPanel.width > 0.0f;
+    const menu::MenuKind menuKind = menuDossier ? menu::MenuKind::Dossier
+                                    : menuPopup ? menu::MenuKind::Popup
+                                                : menu::MenuKind::Screen;
+    if (menuOn && menu::screenBecomesPopup(menuKind, g_menuAsked, panelContent && shownHasView)) {
+        menuPopup = true;
+        EVR_LOG(
+            "menu: the screen shows over the game now and nobody asked for it: a popup (A / X sends Space, a "
+            "stick click E, Y Left Alt, the gameplay buttons their actions' keys)");
+    }
     menuHeld = menuHeld && menuPanelPlaced && menuPanel.width > 0.0f;
     menuUp.store(cursorActive || menuOn || menuHeld, std::memory_order_relaxed);
 

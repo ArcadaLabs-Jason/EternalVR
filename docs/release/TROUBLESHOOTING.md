@@ -123,7 +123,8 @@ Make sure Steam was running and logged in before you clicked Launch VR, and try 
 **The picture is soft on an AMD graphics card** (the launcher says "Your graphics driver cannot render above
 the window size, so each eye rendered at ..."). On AMD Radeon RX 5000 and 6000 cards, and with some newer
 AMD drivers, the driver cannot scale the game's image into its desktop window, so each eye renders at that
-window's size. The mod makes the window as large as your display allows, in the eye's shape. What helps:
+window's size. The mod makes the window as large as your display allows, in the eye's shape. On an NVIDIA
+card the same message means an old driver: update it. What helps:
 
 - Put the game on your largest, highest-resolution display (the launcher's desktop window settings), and
   keep the taskbar small or on another display: the window cannot be larger than the display's free area.

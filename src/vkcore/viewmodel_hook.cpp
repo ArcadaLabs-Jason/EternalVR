@@ -68,10 +68,19 @@ constexpr std::size_t kCustomFov2X = 0x38;
 
 constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 
+// A melee or a Blood Punch puts the fists in the hands for the punch (weapon/player/fists_doom5melee), and
+// the punch's hit follows the fists on the hands model, not the view angles. Under Melee aim with Head or Off
+// hand the view is turned onto that source before the press reaches the game (action_aim_hook.cpp), so the
+// hands are left where the game puts them from its view while the fists are held: the punch goes where the
+// view looks (issue #15: with the arms kept on the weapon hand the punch went along the controller).
+constexpr std::string_view kFistsPrefix = "weapon/player/fists";
+
 // The held item's decl and its offset (viewmodel hook thread only).
 const std::byte* g_cachedDecl = nullptr;
 bool g_cachedSeated = false;
 game::WeaponOffset g_cachedOffset;
+bool g_cachedFists = false; // the held item is the fists of a melee or a Blood Punch
+std::atomic<std::uint64_t> g_loggedFists{0};
 std::atomic<std::uint64_t> g_loggedWeapons{0};
 std::atomic<std::uint64_t> g_loggedPlacements{0};
 std::atomic<bool> g_loggedEyeMismatch{false};
@@ -114,6 +123,7 @@ game::WeaponOffset offsetFor(const std::byte* hands) {
         g_cachedDecl = decl;
         g_cachedSeated = seated;
         const std::string name = decl ? declName(decl) : std::string{};
+        g_cachedFists = name.starts_with(kFistsPrefix);
         g_cachedOffset = state().offsets.lookup(name, seated ? game::OffsetPosture::Seated
                                                              : game::OffsetPosture::Standing);
         if (g_loggedWeapons.fetch_add(1) < 40) {
@@ -151,6 +161,14 @@ void onViewmodel(const HookRegisters& regs) {
         return;
     }
     const game::WeaponOffset offset = offsetFor(hands);
+    if (g_cachedFists && cfg.aim == input::AimSource::Hand &&
+        cfg.actionAim.melee != input::ActionAimSource::Same) {
+        if (g_loggedFists.fetch_add(1) == 0) {
+            EVR_LOG("%s: viewmodel: the fists follow the game's view, on the melee aim's %s", kTag,
+                    input::actionAimSourceName(cfg.actionAim.melee));
+        }
+        return;
+    }
     const xr_math::EyeRelativePose placed =
         xr_math::applyLocalOffset(world.grip, {offset.forward, offset.left, offset.up},
                                   {offset.pitch, offset.yaw, offset.roll}, world.unitsPerMetre);

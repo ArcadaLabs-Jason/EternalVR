@@ -2,17 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using EternalVR.Launcher.Core.Data;
+using EternalVR.Launcher.Core.Game;
 
 namespace EternalVR.Launcher.Core.Launch
 {
     public sealed class ForcedCvar
     {
-        public ForcedCvar(string name, string value, bool stereoOnly = false, bool monoOnly = false)
+        public ForcedCvar(string name, string value, bool stereoOnly = false, bool monoOnly = false, bool steamOnly = false)
         {
             Name = name;
             Value = value;
             StereoOnly = stereoOnly;
             MonoOnly = monoOnly && !stereoOnly;
+            SteamOnly = steamOnly;
         }
 
         public string Name { get; }
@@ -23,11 +25,13 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>Forced only in mono mode: in stereo the layer holds it at run time instead (its comfort set), so a multiplayer
         /// guard trip gives the player's own value back.</summary>
         public bool MonoOnly { get; }
+        /// <summary>Forced only for the Steam build of the game.</summary>
+        public bool SteamOnly { get; }
     }
 
     /// <summary>
     /// The one list of cvars a VR launch forces on the command line (T-092), kept as data in
-    /// <c>data\forced-cvars.txt</c> (<c>name | value [| stereo|mono]</c>). The same names, stereo and mono ones
+    /// <c>data\forced-cvars.txt</c> (<c>name | value [| stereo|mono [| steam]]</c>). The same names, stereo and mono ones
     /// included, are the keys the settings restore puts back after the session (T-036).
     /// </summary>
     public sealed class ForcedCvars
@@ -45,6 +49,10 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>The cvars one launch forces: the stereo ones only in stereo, the mono ones only in mono, the others in both.</summary>
         public IEnumerable<ForcedCvar> For(bool stereo) => All.Where(c => stereo ? !c.MonoOnly : !c.StereoOnly);
 
+        /// <summary>The cvars one launch of the given build of the game forces.</summary>
+        public IEnumerable<ForcedCvar> For(bool stereo, GamePlatform platform) =>
+            For(stereo).Where(c => !c.SteamOnly || platform == GamePlatform.Steam);
+
         public static ForcedCvars Parse(string text)
         {
             var list = new List<ForcedCvar>();
@@ -53,6 +61,10 @@ namespace EternalVR.Launcher.Core.Launch
                 var name = DataFile.Field(r, 0);
                 var value = DataFile.Field(r, 1);
                 var when = DataFile.Field(r, 2);
+                var build = DataFile.Field(r, 3);
+                bool steamOnly = string.Equals(build, "steam", StringComparison.OrdinalIgnoreCase);
+                if (build.Length > 0 && !steamOnly)
+                    throw new FormatException("forced-cvars: the fourth field of " + name + " is 'steam' or nothing, not " + build);
                 bool stereoOnly = string.Equals(when, "stereo", StringComparison.OrdinalIgnoreCase);
                 bool monoOnly = string.Equals(when, "mono", StringComparison.OrdinalIgnoreCase);
                 if (when.Length > 0 && !stereoOnly && !monoOnly)
@@ -64,7 +76,7 @@ namespace EternalVR.Launcher.Core.Launch
                 if (value.Length == 0) throw new FormatException("forced-cvars: no value for " + name);
                 if (list.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)))
                     throw new FormatException("forced-cvars: listed twice: " + name);
-                list.Add(new ForcedCvar(name, value, stereoOnly, monoOnly));
+                list.Add(new ForcedCvar(name, value, stereoOnly, monoOnly, steamOnly));
             }
             return new ForcedCvars(list);
         }

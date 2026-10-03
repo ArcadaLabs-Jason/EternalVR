@@ -23,6 +23,10 @@ namespace EternalVR.Launcher.Core.Settings
             "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
         };
 
+        /// <summary>The characters a Windows file name cannot hold (Path.GetInvalidFileNameChars on Windows), on every OS.</summary>
+        private static readonly char[] InvalidNameChars =
+            Enumerable.Range(0, 32).Select(c => (char)c).Concat(new[] { '"', '<', '>', '|', ':', '*', '?', '\\', '/' }).ToArray();
+
         public ProfileStore(string dir)
         {
             if (string.IsNullOrWhiteSpace(dir)) throw new ArgumentException("the profiles folder is empty", nameof(dir));
@@ -40,7 +44,7 @@ namespace EternalVR.Launcher.Core.Settings
         {
             var n = (name ?? string.Empty).Trim();
             if (n.Length == 0 || n.Length > MaxNameLength) return null;
-            if (n.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || n.StartsWith(".", StringComparison.Ordinal) || n.EndsWith(".", StringComparison.Ordinal)) return null;
+            if (n.IndexOfAny(InvalidNameChars) >= 0 || n.StartsWith(".", StringComparison.Ordinal) || n.EndsWith(".", StringComparison.Ordinal)) return null;
             if (Reserved.Contains(n)) return null;
             return n;
         }
@@ -49,14 +53,15 @@ namespace EternalVR.Launcher.Core.Settings
         public IReadOnlyList<string> Names()
         {
             if (!Directory.Exists(Dir)) return new string[0];
-            return Directory.GetFiles(Dir, "*" + Extension)
+            return Directory.GetFiles(Dir, "*")
+                .Where(f => f.EndsWith(Extension, StringComparison.OrdinalIgnoreCase))
                 .Select(Path.GetFileNameWithoutExtension)
                 .Where(n => NormaliseName(n) == n)
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
-        public bool Exists(string name) => NormaliseName(name) is string n && File.Exists(PathOf(n));
+        public bool Exists(string name) => NormaliseName(name) is string n && FileOf(n) != null;
 
         /// <summary>Writes <paramref name="settings"/> as the profile <paramref name="name"/>, without this machine's folders, runtime and DLSS file.</summary>
         public void Save(string name, LauncherSettings settings)
@@ -78,8 +83,8 @@ namespace EternalVR.Launcher.Core.Settings
         /// </summary>
         public LauncherSettings Load(string name, LauncherSettings current)
         {
-            if (!(NormaliseName(name) is string n) || !File.Exists(PathOf(n))) return null;
-            var s = LauncherSettings.Parse(File.ReadAllText(PathOf(n)));
+            if (!(NormaliseName(name) is string n) || !(FileOf(n) is string file)) return null;
+            var s = LauncherSettings.Parse(File.ReadAllText(file));
             s.GameDir = current.GameDir;
             s.LayerDir = current.LayerDir;
             s.Runtime = current.Runtime;
@@ -91,9 +96,19 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Removes the profile's file; nothing when there is none.</summary>
         public void Delete(string name)
         {
-            if (NormaliseName(name) is string n && File.Exists(PathOf(n))) File.Delete(PathOf(n));
+            if (NormaliseName(name) is string n && FileOf(n) is string file) File.Delete(file);
         }
 
         private string PathOf(string name) => Path.Combine(Dir, name + Extension);
+
+        /// <summary>
+        /// The file of the profile <paramref name="name"/>, its case ignored as Windows does on every OS; null when there is none.
+        /// </summary>
+        private string FileOf(string name)
+        {
+            if (File.Exists(PathOf(name))) return PathOf(name);
+            var found = Names().FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            return found == null ? null : PathOf(found);
+        }
     }
 }

@@ -142,47 +142,43 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     if (isGame && apiVersion >= VK_API_VERSION_1_1) {
         installViewSlotsEarly();
     }
+    // Both surface maintenance names when the instance takes them: the device extension must match the
+    // instance's family, and some drivers list only VK_EXT_swapchain_maintenance1 on the device although
+    // their instance has the KHR surface one (NVIDIA 581.80). Drivers from before the KHR promotion only
+    // have the EXT names; the structures and values are the same. Attempts: KHR and EXT, KHR, EXT, none.
     const std::size_t beforeSurface = extensions.size();
+    const int firstAttempt = isGame && (windowPresentsGated() || virtual_client::wanted()) ? 0 : 3;
+    const bool gameKhr = hasExtension(extensions, VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    const bool gameExt = hasExtension(extensions, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     bool surfaceMaintenance = false;
-    if (isGame && (windowPresentsGated() || virtual_client::wanted())) {
-        for (const char* name : {VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-                                 VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME}) {
-            if (!hasExtension(extensions, name)) {
+    bool surfaceKhr = false;
+    bool surfaceExt = false;
+    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+    for (int attempt = firstAttempt; attempt < 4 && result != VK_SUCCESS; ++attempt) {
+        if (attempt > firstAttempt) {
+            EVR_LOG("vkCreateInstance with surface maintenance%s%s failed (%d); retrying with%s",
+                    surfaceKhr ? " KHR" : "", surfaceExt ? " EXT" : "", result,
+                    attempt == 1   ? " KHR"
+                    : attempt == 2 ? " EXT"
+                                   : "out it");
+            link->u.pLayerInfo = savedLink;
+            extensions.resize(beforeSurface);
+        }
+        surfaceMaintenance = attempt < 3;
+        surfaceKhr = surfaceMaintenance && (attempt < 2 || gameKhr);
+        surfaceExt = surfaceMaintenance && (attempt != 1 || gameExt);
+        for (const char* name :
+             {surfaceMaintenance ? VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME : nullptr,
+              surfaceKhr ? VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME : nullptr,
+              surfaceExt ? VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME : nullptr}) {
+            if (name && !hasExtension(extensions, name)) {
                 extensions.push_back(name);
                 EVR_LOG("  adding instance extension %s", name);
             }
         }
-        surfaceMaintenance = true;
         modified.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
         modified.ppEnabledExtensionNames = extensions.data();
-    }
-
-    VkResult result =
-        nextCreate(augmented || surfaceMaintenance ? &modified : pCreateInfo, pAllocator, pInstance);
-    bool maintenanceExt = false;
-    if (result != VK_SUCCESS && surfaceMaintenance) {
-        // Drivers from before the KHR promotion only have the EXT name (same structures and values).
-        const auto khr = std::find_if(
-            extensions.begin() + static_cast<std::ptrdiff_t>(beforeSurface), extensions.end(),
-            [](const char* e) { return std::strcmp(e, VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME) == 0; });
-        if (khr != extensions.end()) {
-            EVR_LOG("vkCreateInstance with %s failed (%d); retrying with %s",
-                    VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME, result,
-                    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
-            link->u.pLayerInfo = savedLink;
-            *khr = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
-            result = nextCreate(&modified, pAllocator, pInstance);
-            maintenanceExt = result == VK_SUCCESS;
-        }
-    }
-    if (result != VK_SUCCESS && surfaceMaintenance) {
-        EVR_LOG("vkCreateInstance with surface maintenance failed (%d); retrying without it", result);
-        link->u.pLayerInfo = savedLink;
-        extensions.resize(beforeSurface);
-        modified.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
-        modified.ppEnabledExtensionNames = extensions.data();
-        surfaceMaintenance = false;
-        result = nextCreate(augmented ? &modified : pCreateInfo, pAllocator, pInstance);
+        result = nextCreate(augmented || surfaceMaintenance ? &modified : pCreateInfo, pAllocator, pInstance);
     }
     if (result != VK_SUCCESS && augmented) {
         EVR_LOG("vkCreateInstance with added extensions failed (%d); retrying the game's own create info",
@@ -202,7 +198,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     data->apiVersion = apiVersion;
     data->isGame = isGame && (apiVersion >= VK_API_VERSION_1_1 || augmented);
     data->surfaceMaintenance1 = data->isGame && surfaceMaintenance && result == VK_SUCCESS;
-    data->maintenance1Ext = data->surfaceMaintenance1 && maintenanceExt;
+    data->surfaceMaintenance1Khr = data->surfaceMaintenance1 && surfaceKhr;
+    data->surfaceMaintenance1Ext = data->surfaceMaintenance1 && surfaceExt;
 #define EVR_LOAD_INSTANCE_FN(name)                                                                           \
     data->vk.name = reinterpret_cast<PFN_vk##name>(nextGipa(*pInstance, "vk" #name));
     EVR_INSTANCE_FUNCTIONS(EVR_LOAD_INSTANCE_FN)
@@ -336,7 +333,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
 #undef EVR_LOAD_DEVICE_FN
     if (interop && plan.releaseImages) {
         data->releaseSwapchainImages = reinterpret_cast<PFN_vkReleaseSwapchainImagesKHR>(nextGdpa(
-            *pDevice, inst->maintenance1Ext ? "vkReleaseSwapchainImagesEXT" : "vkReleaseSwapchainImagesKHR"));
+            *pDevice, std::strcmp(plan.maintenance1, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME) == 0
+                          ? "vkReleaseSwapchainImagesEXT"
+                          : "vkReleaseSwapchainImagesKHR"));
     }
 
     std::uint32_t familyCount = 0;

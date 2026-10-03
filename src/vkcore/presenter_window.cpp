@@ -37,13 +37,12 @@ bool XrPresenter::Impl::decideWindow(const VkPresentInfoKHR* info, stereo_seq::P
     if (!windowGateChecked) {
         windowGateChecked = true;
         windowGate = dev.releaseSwapchainImages != nullptr && windowPresentsGated();
-        EVR_LOG("window: %s",
-                windowGate
-                    ? "only the presents the window shows reach it (the mirrored eye, at most one per two "
-                      "refreshes of its display); the others are handed back unpresented"
-                : windowPresentsGated()
-                    ? "every present reaches the window (VK_KHR_swapchain_maintenance1 is not available)"
-                    : "every present reaches the window (ETERNALVR_WINDOW_PRESENTS=all)");
+        EVR_LOG(
+            "window: %s",
+            windowGate ? "only the presents the window shows reach it (the mirrored eye, at most one per two "
+                         "refreshes of its display); the others are handed back unpresented"
+            : windowPresentsGated() ? "every present reaches the window (no swapchain maintenance extension)"
+                                    : "every present reaches the window (ETERNALVR_WINDOW_PRESENTS=all)");
     }
     if (!windowGate || info->swapchainCount != 1 || heldImages.size() >= kMaxHeldImages ||
         !mp_guard::allowsGameTouch()) {

@@ -7,7 +7,9 @@
 // - The collision world is the map instance + a displacement that map-instance vslot 0x370 returns
 //   (`lea rax, [rcx+disp32]; ret`); the map instance is a global read by the third-person camera's trace
 //   (RVA 0x145378B) and the weapon's view trace (RVA 0x135F875).
-// - The world keeps ready-made shapes; +0x170 is `clip16sphere`, a 0.16 m sphere.
+// - The world keeps ready-made shapes; +0x170 is `clip16sphere`, a 0.16 m sphere. The weapon's view trace
+//   casts its own, read from the map instance (+0x99F50 in build 25216728, = collision world + 0xE8): the
+//   shot's trace takes that one, so the aim dot stops where a shot would, not on edges a shot clears.
 // - trace_t: fraction at +0 (1.0 when nothing was hit), 0x80 bytes.
 // - The player's spawn id (the entity the sweep ignores) is idHavokPhysics_Player +0x30.
 
@@ -54,11 +56,16 @@ constexpr const char* kWeaponSiteSignature = "48 8B 0D ?? ?? ?? ?? 48 8B 01 FF 9
                                              "?? ?? ?? ?? 48 8D 45 88 48 89 54 24 28 48 "
                                              "8D 54 24 78 48 89 44 24 20 E8 ?? ?? ?? ??";
 
+// In the weapon site: `mov rax, [rip+map instance]; mov rdx, [rax+disp32]` loads the shape it casts.
+constexpr std::size_t kWeaponShapeLoad = 81;
 constexpr std::size_t kCollisionWorldSlot = 0x370; // map-instance vtable slot returning the world
 constexpr std::size_t kSphereShape = 0x170;        // idHavokCollision: clip16sphere (0.16 m)
 constexpr std::size_t kPlayerPhysics = 0x8A50;     // idPlayer::physicsObjHavok
 constexpr std::size_t kPhysicsSpawnId = 0x30;      // idHavokPhysics_Player: the owner's spawn id
 constexpr std::int32_t kContents = 0x100009;       // MASK_PLAYERDEADSOLID: world and player clip, no monsters
+// The weapon's own trace (the site kWeaponSiteSignature matches: `mov dword ptr [rsp+38h], 140001h`, the
+// contents argument): what a shot hits, monsters included, the player clip a shot passes through left out.
+constexpr std::int32_t kShotContents = 0x140001;
 constexpr std::size_t kTraceSize = 0x80;
 constexpr std::int32_t kNoSpawnId = 0x1FFFFFE;
 
@@ -79,6 +86,7 @@ using TranslationFn = void(__fastcall*)(void* collision,
 GameImage g_image;
 TranslationFn g_translation = nullptr;
 void* const* g_mapInstanceGlobal = nullptr;
+std::int32_t g_weaponShapeDisp = 0; // the map instance's field holding the weapon trace's shape; 0: unknown
 PlayerAim g_player;
 std::atomic<bool> g_available{false};
 std::once_flag g_installOnce;
@@ -102,11 +110,16 @@ bool copyGuarded(void* destination, const void* source, std::size_t size) {
 }
 
 // The call itself, apart from anything with a destructor (__try needs that). False when it faulted.
-bool callTranslation(
-    void* collision, void* result, const float* start, const float* end, void* shape, std::int32_t spawnId) {
+bool callTranslation(void* collision,
+                     void* result,
+                     const float* start,
+                     const float* end,
+                     void* shape,
+                     std::int32_t contents,
+                     std::int32_t spawnId) {
     __try {
         std::uint64_t queryId = 0;
-        g_translation(collision, &queryId, result, start, end, shape, kIdentityAxis, kContents, spawnId, 0u,
+        g_translation(collision, &queryId, result, start, end, shape, kIdentityAxis, contents, spawnId, 0u,
                       kQueryName, nullptr, 0);
         return true;
     } __except (accessViolationOnly(GetExceptionCode())) {
@@ -165,6 +178,16 @@ void install() {
         EVR_LOG("%s: the two trace sites read different map-instance globals; no head sweep", kTag);
         return;
     }
+    const std::byte* load = weapon + kWeaponShapeLoad;
+    if (load[0] == std::byte{0x48} && load[1] == std::byte{0x8B} && load[2] == std::byte{0x05} &&
+        load[7] == std::byte{0x48} && load[8] == std::byte{0x8B} && load[9] == std::byte{0x90} &&
+        ripTarget(g_image, load + 3, load + 7) == global) {
+        std::memcpy(&g_weaponShapeDisp, load + 10, sizeof(g_weaponShapeDisp));
+    } else {
+        EVR_LOG("%s: the weapon trace's shape load is not where expected; shots are traced with the 0.16 m "
+                "sphere",
+                kTag);
+    }
     g_translation = reinterpret_cast<TranslationFn>(const_cast<std::byte*>(translation));
     g_mapInstanceGlobal = reinterpret_cast<void* const*>(global);
     g_available.store(true, std::memory_order_release);
@@ -186,7 +209,16 @@ bool headSweepAvailable() {
     return g_available.load(std::memory_order_acquire);
 }
 
-std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, float /*radius*/) {
+namespace {
+
+std::atomic<bool> g_shapeLogged{false};
+
+std::optional<float> sweep(const std::byte* player,
+                           Vec3 from,
+                           Vec3 to,
+                           std::int32_t contents,
+                           bool weaponShape,
+                           bool* startedInContact) {
     if (!g_available.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch() || !player ||
         !g_player.isPlayer(player)) {
         return std::nullopt;
@@ -204,10 +236,22 @@ std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, floa
         !copyGuarded(&spawnId, player + kPlayerPhysics + kPhysicsSpawnId, sizeof(spawnId))) {
         return std::nullopt;
     }
+    if (weaponShape && g_weaponShapeDisp != 0) {
+        void* own = nullptr;
+        if (copyGuarded(&own, mapInstance + g_weaponShapeDisp, sizeof(own)) && own) {
+            if (!g_shapeLogged.exchange(true)) {
+                EVR_LOG("%s: shots are traced with the weapon trace's shape (map instance + 0x%X = collision "
+                        "world + 0x%llX)",
+                        kTag, static_cast<unsigned>(g_weaponShapeDisp),
+                        static_cast<long long>(mapInstance + g_weaponShapeDisp - collision));
+            }
+            shape = own;
+        }
+    }
     alignas(16) std::byte result[kTraceSize] = {};
     const float start[3] = {from.x, from.y, from.z};
     const float end[3] = {to.x, to.y, to.z};
-    if (!callTranslation(collision, result, start, end, shape, spawnId)) {
+    if (!callTranslation(collision, result, start, end, shape, contents, spawnId)) {
         g_available.store(false);
         EVR_LOG("%s: the collision query faulted; head sweep off for this session", kTag);
         return std::nullopt;
@@ -222,6 +266,10 @@ std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, floa
         return std::nullopt;
     }
     if (fraction <= 0.0f) {
+        if (startedInContact) {
+            *startedInContact = true;
+            return std::nullopt;
+        }
         // The game's eye is itself in contact (a scripted camera, a tight crouch): not a head in a wall.
         if (++g_startSolid <= 5) {
             EVR_LOG("%s: head sweep starts in contact; ignored", kTag);
@@ -229,6 +277,17 @@ std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, floa
         return std::nullopt;
     }
     return fraction;
+}
+
+} // namespace
+
+std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, float /*radius*/) {
+    return sweep(player, from, to, kContents, false, nullptr);
+}
+
+std::optional<float> sweepShot(const std::byte* player, Vec3 from, Vec3 to, bool& startedInContact) {
+    startedInContact = false;
+    return sweep(player, from, to, kShotContents, true, &startedInContact);
 }
 
 } // namespace evr::vkcore

@@ -67,6 +67,7 @@ void install() {
         // The equipment launcher aims from its own joint, not the view: only for ETERNALVR_EQUIPMENT_AIM.
         if (cfg.aim == input::AimSource::Hand && cfg.actionAim.equipment != input::ActionAimSource::Same) {
             s.equipmentHook = installEquipmentLaunchHook();
+            s.belchAxisHook = installBelchAxisHook();
         }
         // The off hand on the game's left arm and the weapon arm's IK need the arms at the weapon hand
         // (docs/VR_HANDS_HUD.md); without the viewmodel hook both arms stay the game's.
@@ -80,13 +81,13 @@ void install() {
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
         "%s, off hand %s (%s), weapon arm %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable "
-        "walls %s, button prompts %s, equipment launch %s",
+        "walls %s, button prompts %s, equipment launch %s, Flame Belch plume %s",
         kTag, onOff(s.userCmdHook), onOff(s.angleHook), onOff(s.xinputActive.load()),
         onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook),
         onOff(s.offhandHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)),
         input::offhandModeName(cfg.offhand), onOff(s.weaponArmHook), input::weaponArmModeName(cfg.weaponArm),
         onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook), onOff(s.climbHook),
-        onOff(s.promptHooks), onOff(s.equipmentHook));
+        onOff(s.promptHooks), onOff(s.equipmentHook), onOff(s.belchAxisHook));
     EVR_LOG("%s: hooks in use: %d of %d mid hooks, %d of %d inline hooks", kTag, midHookCount(), kMaxMidHooks,
             inlineHookCount(), kMaxInlineHooks);
     if (!s.userCmdHook && !s.xinputActive.load()) {

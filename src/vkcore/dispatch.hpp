@@ -93,12 +93,15 @@ struct InstanceData {
     std::uint32_t apiVersion = VK_API_VERSION_1_0;
     // True when the application names match the game's (T-082); other instances pass through.
     bool isGame = false;
-    // VK_KHR_surface_maintenance1 is on (the layer asked for it under Route S): the game's device may then
-    // get VK_KHR_swapchain_maintenance1, with which the layer hands images back without presenting them.
+    // A surface maintenance extension is on (the layer asked for it under Route S): the game's device may
+    // then get the swapchain maintenance one of the same family, with which the layer hands images back
+    // without presenting them.
     bool surfaceMaintenance1 = false;
-    // The instance has the older VK_EXT_surface_maintenance1 instead (drivers without the KHR names): the
-    // device then gets VK_EXT_swapchain_maintenance1. The structures and values are the same.
-    bool maintenance1Ext = false;
+    // Which: VK_KHR_surface_maintenance1, the older VK_EXT_surface_maintenance1, or both. The device takes
+    // VK_KHR_swapchain_maintenance1 when the KHR one is on and the device lists it, else the EXT one (some
+    // drivers list only that on the device). The structures and values are the same.
+    bool surfaceMaintenance1Khr = false;
+    bool surfaceMaintenance1Ext = false;
     // The next layer's vkGetPhysicalDeviceSurfaceCapabilities2KHR (null without it): the layer's own hook
     // calls it, and the render size queries present scaling through it once VK_KHR_surface_maintenance1 is
     // on.

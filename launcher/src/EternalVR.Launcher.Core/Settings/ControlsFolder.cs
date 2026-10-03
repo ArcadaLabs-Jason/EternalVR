@@ -28,7 +28,7 @@ namespace EternalVR.Launcher.Core.Settings
                 ? "Your EternalVR controls\r\n"
                     + "\r\n"
                     + "The files here are the controls used when the launcher's VR settings profile is (none). Each VR settings\r\n"
-                    + "profile keeps its own controls in its own folder in profiles, for example profiles\\Karen.\r\n"
+                    + "profile keeps its own controls in its own folder in profiles, for example profiles\\Riley.\r\n"
                 : "Your EternalVR controls for the VR settings profile " + profile + "\r\n"
                     + "\r\n"
                     + "The files here are the controls used when the launcher's VR settings profile is " + profile + ".\r\n")
@@ -161,9 +161,12 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Lower case for A to Z only, as the layer compares names.</summary>
         private static string AsciiLower(string s) => new string(s.Select(c => c >= 'A' && c <= 'Z' ? (char)(c - 'A' + 'a') : c).ToArray());
 
-        /// <summary>The <c>*.toml</c> files directly in <paramref name="dir"/>, as the layer reads them (a name with more before the extension).</summary>
+        /// <summary>
+        /// The <c>*.toml</c> files directly in <paramref name="dir"/>, as the layer reads them (a name with more before the
+        /// extension, in any case). Every file is listed and the extension compared here: a search pattern ignores case only on Windows.
+        /// </summary>
         private static IReadOnlyList<string> MapFiles(string dir) =>
-            Directory.GetFiles(dir, "*" + MapExtension, SearchOption.TopDirectoryOnly)
+            Directory.GetFiles(dir, "*", SearchOption.TopDirectoryOnly)
                 .Where(f =>
                 {
                     var name = Path.GetFileName(f);

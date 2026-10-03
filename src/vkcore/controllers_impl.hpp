@@ -270,6 +270,7 @@ struct State {
     bool rumbleHook = false;
     bool demonAimHook = false;
     bool equipmentHook = false; // the equipment launcher's launch (equipment_launch_hook.cpp)
+    bool belchAxisHook = false; // the Flame Belch's plume axis (equipment_launch_hook.cpp)
     bool facingHook = false;
     bool climbHook = false;
     bool promptHooks = false;
@@ -477,6 +478,8 @@ bool installRumbleHook();
 bool installFacingHook();
 bool installClimbHook();
 bool installEquipmentLaunchHook();
+// The Flame Belch's plume along the head's or the off hand's ray (equipment_launch_hook.cpp).
+bool installBelchAxisHook();
 bool installPromptHooks();
 
 // The game's prompts name the buttons of `controller` under `profile` from now on (prompt_hooks.cpp). Called

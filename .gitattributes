@@ -1,0 +1,2 @@
+# The controller maps are compared line by line in the launcher tests and ship as they are: LF on every checkout.
+*.toml text eol=lf

@@ -284,7 +284,8 @@ eye at the mirror window (often 33 to 47 % of the planned width):
 
 | Case | What the log showed | Where it turns off |
 |---|---|---|
-| AMD Radeon RX 5000 and 6000 (RDNA1, RDNA2; an RX 6750 XT) | no `VK_KHR_swapchain_maintenance1` nor the EXT one: `device extension VK_KHR_swapchain_maintenance1 is not supported ...` | at the game's first surface: `the game's device has no VK_KHR_swapchain_maintenance1 (present scaling)` |
+| AMD Radeon RX 5000 and 6000 (RDNA1, RDNA2; an RX 6750 XT) | no `VK_KHR_swapchain_maintenance1` nor the EXT one: `no swapchain maintenance extension matches the instance's ...` (before 0.1.17: `device extension VK_KHR_swapchain_maintenance1 is not supported ...`) | at the game's first surface: `the game's device has no swapchain maintenance extension (present scaling)` |
+| NVIDIA driver 581.80 (RTX 3070 Ti; fixed in 0.1.17) | the device listed only `VK_EXT_swapchain_maintenance1` while the instance took `VK_KHR_surface_maintenance1`, so the layer looked for the KHR device name only | as above. The instance now takes both surface maintenance names when it can, and the device the KHR swapchain one, else the EXT one; `ETERNALVR_TEST_HIDE_KHR_MAINTENANCE=1` (a test knob) runs this path on a driver that lists both |
 | AMD RDNA3.5 (ROG Ally, Radeon 890M) | the extension exists, but the scaled image range is the window's own size: `present scaling 0x5, gravity 0x0, scaled image 672x701 to 672x701` | `the render size is outside the surface's scaled image range` |
 
 What the layer does now (`window_cap.hpp`, `features/render_size/render_cap.hpp`):

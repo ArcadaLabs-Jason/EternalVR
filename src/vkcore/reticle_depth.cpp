@@ -9,12 +9,7 @@
 
 namespace evr::vkcore {
 
-namespace {
-
-// A thin trace: the dot marks where a shot's line meets the world.
-constexpr float kTraceRadiusMetres = 0.01f;
-
-} // namespace
+namespace {} // namespace
 
 float reticleHitMetres(const std::byte* player, Vec3 eye, float unitsPerMetre) {
     if (!headSweepAvailable() || !(unitsPerMetre > 0.0f)) {
@@ -25,8 +20,14 @@ float reticleHitMetres(const std::byte* player, Vec3 eye, float unitsPerMetre) {
         return 0.0f;
     }
     const float reach = kReticleReachMetres * unitsPerMetre;
-    const std::optional<float> hit = sweepHead(player, ray->origin, ray->origin + ray->direction * reach,
-                                               kTraceRadiusMetres * unitsPerMetre);
+    // The weapon trace's own shape and contents: the dot stops where a shot does.
+    bool inContact = false;
+    const std::optional<float> hit =
+        sweepShot(player, ray->origin, ray->origin + ray->direction * reach, inContact);
+    if (inContact) {
+        // The hand is at a wall or in cover: the shot's line starts at it, not 100 m away.
+        return kReticleNearestMetres;
+    }
     if (!hit || !std::isfinite(*hit)) {
         return kReticleReachMetres;
     }

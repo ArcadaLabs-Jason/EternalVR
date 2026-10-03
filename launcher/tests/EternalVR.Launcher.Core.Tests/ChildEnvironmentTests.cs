@@ -77,7 +77,10 @@ namespace EternalVR.Launcher.Core.Tests
             ChildEnvironment.Apply(psi, new[] { Kv("EVR_TEST_APPLY", "1"), Kv("PATH", null) });
             Assert.Equal("1", psi.EnvironmentVariables["EVR_TEST_APPLY"]);
             Assert.False(psi.EnvironmentVariables.ContainsKey("PATH"));
-            Assert.Equal(System.Environment.GetEnvironmentVariable("TEMP"), psi.EnvironmentVariables["TEMP"]);
+            // An inherited variable is kept: TEMP on Windows, HOME elsewhere (a Linux shell sets no TEMP).
+            var inherited = System.OperatingSystem.IsWindows() ? "TEMP" : "HOME";
+            Assert.NotNull(System.Environment.GetEnvironmentVariable(inherited));
+            Assert.Equal(System.Environment.GetEnvironmentVariable(inherited), psi.EnvironmentVariables[inherited]);
             // The launcher's own environment is untouched.
             Assert.Null(System.Environment.GetEnvironmentVariable("EVR_TEST_APPLY"));
             Assert.Equal(path, System.Environment.GetEnvironmentVariable("PATH"));

@@ -88,7 +88,12 @@ PassFrames::find(std::uint64_t commandBuffer, std::uint32_t now, std::optional<s
         if (it != entries_.end()) {
             agree(it->second, now);
         } else if (!full()) {
-            entries_.emplace(commandBuffer, Entry{now, 1, epoch_, false, 0, false, true});
+            Entry e;
+            e.counter = now;
+            e.streak = 1;
+            e.epoch = epoch_;
+            e.learned = true;
+            entries_.emplace(commandBuffer, e);
         }
         return {now, Source::Agreed};
     }

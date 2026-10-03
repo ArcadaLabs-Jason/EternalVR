@@ -33,6 +33,13 @@ inline constexpr double kMenuContinueSeconds = 0.75;
 
 MenuKind menuKindOnCursor(const MenuKindInput& in, double continueSeconds = kMenuContinueSeconds);
 
+// A screen nobody asked for (the controllers did not ask for the menu that began the chain of screens) that
+// comes to show over the game is a popup. After a checkpoint load the popup's cursor came back within
+// kMenuContinueSeconds of the loading screen's, kept its kind (a screen) and was decided before the first
+// head-tracked frame, so A clicked and never sent the Space it waited for ("[A] TO DISMISS" that no button
+// dismissed, 2026-10-03). A screen of a menu the controllers asked for (the pause menu's Settings) stays one.
+bool screenBecomesPopup(MenuKind kind, bool chainAsked, bool overGame);
+
 // For the log.
 const char* menuKindName(MenuKind kind);
 

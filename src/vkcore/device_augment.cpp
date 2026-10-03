@@ -102,30 +102,33 @@ void planDeviceAugment(DeviceAugment& plan,
     logDriver(inst, physicalDevice, supported(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME));
 
     // Optional: the window's presents (Route S). Leaves the interop plan as it is when unavailable.
-    // The swapchain extension of the same family as the instance's surface one (KHR, or the older EXT).
-    const char* extension = inst.maintenance1Ext ? VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME
-                                                 : VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+    // The swapchain extension of the same family as an instance surface one: KHR when both have it, else the
+    // older EXT.
     if (!inst.surfaceMaintenance1) {
         EVR_LOG(
-            "  the instance has no surface maintenance extension: no %s, so the game's window takes every "
-            "present and the game renders at its window's size",
-            extension);
+            "  the instance has no surface maintenance extension: no swapchain maintenance, so the game's "
+            "window takes every present and the game renders at its window's size");
         return;
     }
     if (hasExtension(plan.extensions, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME) ||
         hasExtension(plan.extensions, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)) {
         return;
     }
-    const bool khr = supported(VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    const bool hideKhr = window_cap::testHideKhrMaintenance();
+    const bool khr = supported(VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME) && !hideKhr;
     const bool ext = supported(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
-    EVR_LOG("  the device lists %s %s and %s %s; the instance has the %s surface maintenance extension",
+    EVR_LOG("  the device lists %s %s%s and %s %s; the instance has the surface maintenance extension%s%s",
             VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, khr ? "yes" : "no",
+            hideKhr ? " (hidden by ETERNALVR_TEST_HIDE_KHR_MAINTENANCE, a test knob)" : "",
             VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, ext ? "yes" : "no",
-            inst.maintenance1Ext ? "EXT" : "KHR");
-    if (!supported(extension)) {
-        EVR_LOG("  device extension %s is not supported: the game's window takes every present and the game "
-                "renders at its window's size",
-                extension);
+            inst.surfaceMaintenance1Khr ? " KHR" : "", inst.surfaceMaintenance1Ext ? " EXT" : "");
+    const char* extension = khr && inst.surfaceMaintenance1Khr ? VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME
+                            : ext && inst.surfaceMaintenance1Ext
+                                ? VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME
+                                : nullptr;
+    if (!extension) {
+        EVR_LOG("  no swapchain maintenance extension matches the instance's: the game's window takes every "
+                "present and the game renders at its window's size");
         return;
     }
     if (window_cap::testNoPresentScaling()) {

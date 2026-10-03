@@ -390,9 +390,11 @@ namespace EternalVR.Launcher
                 }
                 if (outcome == StartOutcome.ExitedEarly)
                 {
-                    Log.Error($"the game exited {elapsed - sinceExit:0.0} s after starting (exit code {game.ExitCode}); see the logs in {ctx.Paths.Logs}");
-                    Report(StatusKind.Problem, $"The game closed {elapsed - sinceExit:0} s after it started (exit code {game.ExitCode}). "
-                        + "Use Export report... and attach the zip to a GitHub issue if it keeps happening.");
+                    bool layerLoaded = File.Exists(Path.Combine(logDir, LayerStatusFile.LoadedMarker));
+                    Log.Error($"the game exited {elapsed - sinceExit:0.0} s after starting (exit code {game.ExitCode}), "
+                        + (layerLoaded ? "after EternalVR loaded" : "before EternalVR loaded (no " + LayerStatusFile.LoadedMarker + ")")
+                        + $"; see the logs in {ctx.Paths.Logs}");
+                    Report(StatusKind.Problem, StartWatch.EarlyExitMessage(elapsed - sinceExit, game.ExitCode, layerLoaded));
                     return;
                 }
                 if (!exited) WatchLayer(logDir, startedUtc);

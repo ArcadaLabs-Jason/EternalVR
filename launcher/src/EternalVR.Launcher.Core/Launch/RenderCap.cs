@@ -36,7 +36,7 @@ namespace EternalVR.Launcher.Core.Launch
         public string Warning() =>
             "Your graphics driver cannot render above the window size, so each eye rendered at " + Spaced(Real) + ", "
             + Percent.ToString(CultureInfo.InvariantCulture) + "% of the planned " + Spaced(Planned)
-            + ". A larger display helps; a full fix is being worked on.";
+            + ". A larger display helps; on NVIDIA, update the graphics driver.";
 
         /// <summary>The first lines of the Play tab's "Each eye" line while the last session was capped (separated by '\n').</summary>
         public string EachEyeText() =>

@@ -206,7 +206,8 @@ namespace EternalVR.Launcher.Core.Tests
                         "echo probe.ok=1\necho probe.runtime=%XR_RUNTIME_JSON%\n"
                         + "if defined " + removed + " (echo probe.system=kept) else (echo probe.system=removed)\n"
                         + "echo probe.recommended=1x1\necho probe.max_image=1x1\necho probe.max_swapchain=1x1\necho probe.end=1\n",
-                        "echo probe.ok=1\necho probe.runtime=$XR_RUNTIME_JSON\n"
+                        // printf, not echo: the echo of dash (/bin/sh) reads the path's "\v" as a vertical tab.
+                        "echo probe.ok=1\nprintf '%s\\n' \"probe.runtime=$XR_RUNTIME_JSON\"\n"
                         + "if [ -n \"${" + removed + "+x}\" ]; then echo probe.system=kept; else echo probe.system=removed; fi\n"
                         + "echo probe.recommended=1x1\necho probe.max_image=1x1\necho probe.max_swapchain=1x1\necho probe.end=1\n");
                     var env = new[]

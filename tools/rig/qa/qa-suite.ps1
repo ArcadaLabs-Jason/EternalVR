@@ -38,13 +38,18 @@ it the scenario uses the repository's own bin\Release if it exists and is skippe
 A newer nvngx_dlss.dll for every game scenario, passed as the launcher passes it (ETERNALVR_DLSS_DLL with
 ETERNALVR_DLSS_PRESET=K): the route most players are on, which installs two more inline hooks. Run the
 suite once without and once with it before a release or a headset package.
+
+.PARAMETER GameEnv
+NAME=VALUE pairs for every game scenario, after -DlssDll's (a test knob such as
+ETERNALVR_TEST_HIDE_KHR_MAINTENANCE=1).
 #>
 param(
     [string]$LayerSrc = '',
     [string]$Out = '',
     [string[]]$Only = @(),
     [string]$LauncherBin = '',
-    [string]$DlssDll = ''
+    [string]$DlssDll = '',
+    [string[]]$GameEnv = @()
 )
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-common.ps1')
@@ -74,6 +79,8 @@ if ($needsGame) {
         $DlssDll = (Resolve-Path -LiteralPath $DlssDll).Path
         $script:QaExtraEnv = @("ETERNALVR_DLSS_DLL=$DlssDll", 'ETERNALVR_DLSS_PRESET=K')
     }
+    # -GameEnv from another shell with -File arrives as one comma-joined string.
+    $script:QaExtraEnv += @($GameEnv | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
 
 # One simulator run; the stop and the save restore always happen once the launch was attempted.

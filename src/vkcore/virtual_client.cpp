@@ -298,7 +298,7 @@ void update(State& s) {
         return;
     }
     if (!s.deviceMaintenance) {
-        turnOff(s, "the game's device has no VK_KHR_swapchain_maintenance1 (present scaling)",
+        turnOff(s, "the game's device has no swapchain maintenance extension (present scaling)",
                 "the graphics driver cannot scale presented images");
         return;
     }

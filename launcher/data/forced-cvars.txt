@@ -1,13 +1,17 @@
 # Cvars a VR launch forces on the command line (T-092). The launcher restores these keys in the
 # game's text configs after the session (T-036). The list follows the rig's launch recipe
 # (docs/VR_HEAD_TRACKED.md on the head-tracked branch).
-# name | value [| stereo|mono]: forced in both modes, only in stereo, or only in mono.
+# name | value [| stereo|mono [| steam]]: forced in both modes, only in stereo, or only in mono; with "steam" only
+# for the Steam build of the game.
 # The console log (qconsole.log) for the report export. 1, not 2: each line is still handed to Windows at once, so
 # a game crash loses nothing, but 2 also flushed every line to disk on the game's thread, and a checkpoint save
 # prints about 280 lines (a 50 ms to 850 ms hitch, depending on the disk).
 logFile | 1
 com_skipIntroVideo | 1
-com_skipSignInManager | 1
+# Steam only: on the Game Pass build, skipping the sign-in manager made the game crash a second after it started,
+# before the layer loaded, until the player passed +com_skipSignInManager 0 (2026-10-03, 22 crashes in a row
+# after a flat session from the Xbox app).
+com_skipSignInManager | 1 | | steam
 com_skipKeyPressOnLoadScreens | 1
 # HDR output stays on the command line in both modes: the swapchain's format is chosen at start-up, before
 # the layer's run-time hold, and the copy to the headset expects SDR.

@@ -20,10 +20,15 @@ bool installHeadSweep();
 // True once installHeadSweep found the query.
 bool headSweepAvailable();
 
-// Camera hook (game-frame thread) only. Sweeps a sphere of `radius` (game units) from `from` to `to`
-// (world, game units) against the world, ignoring `player`. Returns the fraction of the way at the first
+// Camera hook (game-frame thread) only. Sweeps the world's 0.16 m sphere (clip16sphere; `radius` is not
+// used, the engine keeps no other size) from `from` to `to` (world, game units) against the world, ignoring
+// `player`. Returns the fraction of the way at the first
 // contact, or nullopt when the way is clear, the query is unavailable, or it failed (never throws; a
 // fault inside the game's code is caught and turns the query off).
 std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, float radius);
+
+// The same sweep with the weapon trace's shape and contents (monsters in, player clip out): what a shot hits,
+// for the aim dot. `startedInContact` is set when `from` is already touching something (nullopt is returned).
+std::optional<float> sweepShot(const std::byte* player, Vec3 from, Vec3 to, bool& startedInContact);
 
 } // namespace evr::vkcore

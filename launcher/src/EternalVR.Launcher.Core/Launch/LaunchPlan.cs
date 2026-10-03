@@ -25,6 +25,8 @@ namespace EternalVR.Launcher.Core.Launch
         public string LogDir { get; set; }
         public LauncherSettings Settings { get; set; } = new LauncherSettings();
         public ForcedCvars ForcedCvars { get; set; } = new ForcedCvars(new ForcedCvar[0]);
+        /// <summary>The build of the game: some cvars are forced only for Steam's.</summary>
+        public GamePlatform Platform { get; set; } = GamePlatform.Steam;
         /// <summary>The CPU Saver's items; the cvars of those that are on are handed to the layer in stereo.</summary>
         public CpuSaver CpuSaver { get; set; } = CpuSaver.Empty;
         /// <summary>False when no settings location was found: nothing is forced (T-094).</summary>
@@ -139,7 +141,7 @@ namespace EternalVR.Launcher.Core.Launch
 
             var args = new List<string>();
             if (inputs.ForceCvars)
-                foreach (var cvar in inputs.ForcedCvars.For(stereo))
+                foreach (var cvar in inputs.ForcedCvars.For(stereo, inputs.Platform))
                 {
                     args.Add("+" + cvar.Name);
                     args.Add(cvar.Value == ForcedCvars.EyeWidth ? outputWidth.ToString(CultureInfo.InvariantCulture)
@@ -411,6 +413,20 @@ namespace EternalVR.Launcher.Core.Launch
             if (secondsSinceStart - secondsSinceExit > WatchSeconds) return StartOutcome.Exited;
             if (otherGameProcessRunning) return StartOutcome.HandOff;
             return secondsSinceExit < HandOffGraceSeconds ? StartOutcome.WaitingForHandOff : StartOutcome.ExitedEarly;
+        }
+
+        /// <summary>The status line after the game closed within the first seconds. Without the layer's
+        /// <c>LAYER_LOADED</c> marker the game exited before the Vulkan loader loaded EternalVR: only the command line and the
+        /// environment can have played a part (a Game Pass player's game crashed this way 22 times in a row after a
+        /// flat session from the Xbox app, 2026-10-03, also with the layer turned off).</summary>
+        public static string EarlyExitMessage(double seconds, int exitCode, bool layerLoaded)
+        {
+            if (!layerLoaded && GameExit.IsCrash(exitCode))
+                return $"The game crashed {seconds:0} s after it started, before EternalVR loaded: {GameExit.Describe(exitCode)}. "
+                    + "EternalVR's VR code had not run yet: start the game once without EternalVR (from Steam or the Xbox app) "
+                    + "or restart the PC, then launch again. If it keeps happening, use Export report... and attach the zip to a GitHub issue.";
+            return $"The game closed {seconds:0} s after it started (exit code {exitCode}). "
+                + "Use Export report... and attach the zip to a GitHub issue if it keeps happening.";
         }
 
         public const string HandOffMessage =

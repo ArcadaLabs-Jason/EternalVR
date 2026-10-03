@@ -146,8 +146,8 @@ TEST_CASE("stereo TAA: the exposure index is held under Route S whatever the TAA
     g.taaFailedClosed = true;
     g.exposureOnce = true;
     // Never without the hook, the eye tags or the multiplayer guard.
-    for (bool ExposureGate::* piece :
-         {&ExposureGate::hooked, &ExposureGate::routeS, &ExposureGate::gameTouch}) {
+    using Piece = bool ExposureGate::*;
+    for (Piece piece : {&ExposureGate::hooked, &ExposureGate::routeS, &ExposureGate::gameTouch}) {
         ExposureGate missing = g;
         missing.*piece = false;
         CHECK_FALSE(exposureIndexHeld(missing));

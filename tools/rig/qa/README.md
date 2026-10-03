@@ -20,7 +20,8 @@ stopped.
 
 Needs: Steam running, the virtual display driver, OpenXR-Simulator at
 `<workspace>\tools\bin\openxr-simulator\openxr_simulator_rig.json`, the 100% save at
-`<workspace>\tmp-release\save100\resigned-jason`. procdump (`tools\bin\procdump`) is optional.
+`<workspace>\tmp-release\save100\resigned-jason` (or `EVR_QA_SAVE_SOURCE`: the save is signed for one Steam
+account, so another PC's account needs its own re-signed copy). procdump (`tools\bin\procdump`) is optional.
 
 ## Safety
 

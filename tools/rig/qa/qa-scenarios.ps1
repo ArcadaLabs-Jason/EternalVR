@@ -24,6 +24,13 @@ function Get-QaThrowPose([string]$Y) {
 # `seq-taa: resize to WxH (upscaled WxH)` line). Then the render passes' frames (stereo_seq/pass_frames.hpp):
 # no parity break or contradicted recording, and few passes kept at full rate for want of a frame, so a run
 # whose passes mostly fell back to full rate cannot pass on the few that were foveated.
+# The block-edge ratio of one capture depends on the TAA jitter phase it lands on (r_TAANumSubSamples 32):
+# every 400 pairs hit only 2 of the 32 phases, fixed by where the run started, so either eye's coarse half
+# read anywhere from 1.15 to 1.33 between runs (crucible's runs on the 3080 Ti, 2026-10-03). Captures every
+# $script:QaEyeCaptureEvery pairs (odd, so any 32 captures in a row land on each of the 32 phases once) and at
+# least $script:QaEyeMinPairs of them (one whole cycle) average over the phases: 49 pairs in 40 s there.
+$script:QaEyeCaptureEvery = 81
+$script:QaEyeMinPairs = 32
 function Test-QaEyeTestBlocks($Ctx) {
     $period = 4
     $resize = Get-QaMatches $Ctx 'seq-taa: resize to \d+x\d+ \(upscaled \d+x\d+\)' -Regex | Select-Object -Last 1
@@ -41,6 +48,7 @@ function Test-QaEyeTestBlocks($Ctx) {
     } else {
         $detail = '{0} pair(s), period {1}: eye L left {2:N2} right {3:N2}; eye R left {4:N2} right {5:N2}' -f $m.Images,
             $period, $m.LeftL, $m.RightL, $m.LeftR, $m.RightR
+        Add-QaResult $Ctx "eye captures measured ($script:QaEyeMinPairs pairs or more)" ($m.Images -ge $script:QaEyeMinPairs) $detail
         Add-QaResult $Ctx "eye L's left half coarse (block-edge ratio 1.20 or more)" ($m.LeftL -ge 1.2) $detail
         Add-QaResult $Ctx "eye L's right half not (1.10 or less)" ($m.RightL -le 1.1) $detail
         Add-QaResult $Ctx "eye R's right half coarse (1.20 or more)" ($m.RightR -ge 1.2) $detail
@@ -112,7 +120,9 @@ function Test-QaActionView($Ctx, [string]$Action, [string]$Source) {
     Add-QaResult $Ctx "$Action press reached the game with the view on the $Source" ($null -ne $hit) $(if ($hit) { $hit -replace '^.*?action aim: ', '' } else { 'no matching game frame line' })
 }
 
-$script:QaTokenSchedule ='3:god|3.5:sync_printInteractionAndAnimationName 1|4:g_debugTriggers 1|' +
+# Tutorials off first: a Steam profile that has not seen the level's tutorial popups (a new rig's account) got one
+# over the equipment and Flame Belch presses, which then went to the popup (the second test PC, 2026-10-03).
+$script:QaTokenSchedule ='3:god;g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0|3.5:sync_printInteractionAndAnimationName 1|4:g_debugTriggers 1|' +
     '5:setviewpos -34.98 -250.31 33.2 45|6:where|7:selectDebugEntity'
 $script:QaInputRead = "test input '.*' read \(0 issue\(s\)\)"
 
@@ -145,7 +155,7 @@ $script:QaScenarios = @(
     @{
         Name = 'foveation-eyes'; Kind = 'game'
         Proves = "Each eye's render passes get that eye's rate image (eye test, the suite's TAA): eye L's left half and eye R's right half of the captures are coarse, the other halves not"
-        Env = @('ETERNALVR_VRS_TEST=eyetest'); EyeCaptures = 400
+        Env = @('ETERNALVR_VRS_TEST=eyetest'); EyeCaptures = $script:QaEyeCaptureEvery
         Timeline = { param($c) Wait-QaSeconds $c 40; Save-QaShot $c 'end' }
         Asserts = {
             param($c)
@@ -157,7 +167,7 @@ $script:QaScenarios = @(
         Name = 'foveation-eyes-dlss'; Kind = 'game'
         Proves = "The same with DLSS Quality per eye (its smaller render size, eye R's own DLSS feature; with -DlssDll the newer DLL)"
         Env = @('ETERNALVR_VRS_TEST=eyetest', 'ETERNALVR_STEREO_DLSS=1', 'ETERNALVR_STEREO_DLSS_QUALITY=quality')
-        EyeCaptures = 400
+        EyeCaptures = $script:QaEyeCaptureEvery
         Args = @('+r_antialiasing 2')
         Timeline = { param($c) Wait-QaSeconds $c 40; Save-QaShot $c 'end' }
         Asserts = {
@@ -230,7 +240,7 @@ $script:QaScenarios = @(
     },
     @{
         Name = 'action-aim'; Kind = 'game'
-        Proves = 'Melee aim with the off hand and equipment aim with the head (issue #11): with the weapon hand pointing 90 degrees away, each melee press is held back until the view took the off hand, reaches the game with the view on it, Use still picks up the Praetor Suit token, the view goes back to the weapon hand, and the equipment launcher launches along the head without moving the view'
+        Proves = 'Melee aim with the off hand and equipment aim with the head (issue #11): with the weapon hand pointing 90 degrees away, each melee press is held back until the view took the off hand, reaches the game with the view on it, Use still picks up the Praetor Suit token, the view goes back to the weapon hand, the equipment launcher launches along the head without moving the view, and the Flame Belch''s plume goes along the head (screenshot belch)'
         Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
         Env = @('ETERNALVR_AIM=hand', 'ETERNALVR_MELEE_AIM=offhand', 'ETERNALVR_EQUIPMENT_AIM=head',
                 "ETERNALVR_DEBUG_COMMANDS=$script:QaTokenSchedule")
@@ -254,7 +264,9 @@ $script:QaScenarios = @(
             # The equipment launcher, then the Flame Belch held for a burst: both aim with the head.
             Write-QaInput $c ($away + 'left.trigger = 1'); Wait-QaSeconds $c 0.3
             Write-QaInput $c $away; Wait-QaSeconds $c 2
-            Write-QaInput $c ($away + 'left.grip = 1'); Wait-QaSeconds $c 1.5
+            # The plume 0.3 s into the burst: ahead (the head), not 90 degrees to the left (the weapon hand).
+            Write-QaInput $c ($away + 'left.grip = 1'); Wait-QaSeconds $c 0.3
+            Save-QaShot $c 'belch'; Wait-QaSeconds $c 1.2
             Write-QaInput $c $away; Wait-QaSeconds $c 3
         }
         Asserts = {
@@ -263,13 +275,46 @@ $script:QaScenarios = @(
             Test-QaPresent $c "controllers: sync 'interact/preator_suit_token"
             Test-QaPresent $c 'action aim: the view follows the off hand for melee'
             Test-QaPresent $c 'action aim: melee press held back \d+ command\(s\), [\d.]+ ms, until the view took its target' -Regex
+            # The punch's fists are left on the game's view (on the off hand), not kept at the weapon hand (issue #15).
+            Test-QaPresent $c "viewmodel: the fists follow the game's view, on the melee aim's off hand"
             Test-QaActionView $c 'melee' 'off hand'
             Test-QaPresent $c 'equipment launch hook at RVA'
             Test-QaPresent $c 'equipment launch \(slot \d\): .* along the head' -Regex
             Test-QaAbsent $c 'action aim: the view follows the head for equipment'
             Test-QaPresent $c 'action aim: a Flame Belch shot while flame_belch held'
+            Test-QaPresent $c 'Flame Belch axis hook at RVA'
+            Test-QaPresent $c 'Flame Belch plume axis \(.*\) -> \(.*\) along the head' -Regex
             Test-QaPresent $c 'action aim: the view follows the weapon hand'
             Test-QaAbsent $c 'then sent anyway'
+        }
+    },
+    @{
+        Name = 'scope-aim'; Kind = 'game'
+        Proves = 'The Heavy Cannon under hand aim, unscoped and scoped (its weapon mod held): every shot starts on the weapon hand''s ray, the aim dot is traced with the weapon trace''s own shape, and nothing faults'
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        Env = @('ETERNALVR_AIM=hand', "ETERNALVR_DEBUG_COMMANDS=$script:QaTokenSchedule")
+        Input = @('right.aim = 0, 0', 'left.aim = 0, 0')
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 6
+            # Quick switch (turn stick down, tapped): the Combat Shotgun to the Heavy Cannon.
+            $aim = @('right.aim = 10, -5', 'left.aim = 0, 0')
+            Write-QaInput $c ($aim + 'right.stick = 0, -1'); Wait-QaSeconds $c 0.15
+            Write-QaInput $c $aim; Wait-QaSeconds $c 2
+            Write-QaInput $c ($aim + 'right.trigger = 1'); Wait-QaSeconds $c 0.2
+            Write-QaInput $c $aim; Wait-QaSeconds $c 1.5
+            # Scoped: the weapon mod held, then a shot.
+            Write-QaInput $c ($aim + 'right.grip = 1'); Wait-QaSeconds $c 1.5
+            Save-QaShot $c 'scoped'
+            Write-QaInput $c ($aim + @('right.grip = 1', 'right.trigger = 1')); Wait-QaSeconds $c 0.2
+            Write-QaInput $c ($aim + 'right.grip = 1'); Wait-QaSeconds $c 1.5
+            Write-QaInput $c $aim; Wait-QaSeconds $c 2
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'shots are traced with the weapon trace''s shape'
+            Test-QaPresent $c 'controllers: shot: game start'
+            Test-QaPresent $c 'ui: the aim dot at'
         }
     },
     @{

@@ -47,10 +47,6 @@ ControllerData builtin(Controller controller) {
     return parseControllerData(builtinControllerData(controller));
 }
 
-BindingProfile builtinProfile(Controller controller, Handedness handedness) {
-    return buildBindingProfile(builtin(controller).maps.at(handedness)).profile;
-}
-
 std::string prompt(Controller controller, GameAction action, Handedness handedness = Handedness::Right) {
     const ControllerData data = builtin(controller);
     return actionPromptText(action, buildBindingProfile(data.maps.at(handedness)).profile,
@@ -271,7 +267,7 @@ TEST_CASE("the label set gives each distinct text one slot") {
     const ControllerData data = builtin(Controller::OculusTouch);
     const PromptLabelSet set =
         promptLabelSet(buildBindingProfile(data.maps.at(Handedness::Right)).profile, buttonLabelsFor(data));
-    const auto at = [&set](GameAction action) {
+    const auto at = [](GameAction action) {
         return static_cast<std::size_t>(action);
     };
     CHECK(set.text[at(GameAction::Fire)] == "Right Trigger");
@@ -292,7 +288,7 @@ TEST_CASE("two actions on one button share a slot") {
     profile.buttons.push_back({Hand::Right, ButtonInput::Primary, PressKind::WhileDown, GameAction::Dash});
     profile.buttons.push_back({Hand::Right, ButtonInput::Trigger, PressKind::WhileDown, GameAction::Fire});
     const PromptLabelSet set = promptLabelSet(profile, buttonLabelsFor(builtin(Controller::OculusTouch)));
-    const auto at = [&set](GameAction action) {
+    const auto at = [](GameAction action) {
         return static_cast<std::size_t>(action);
     };
     CHECK(set.distinct.size() == 2);

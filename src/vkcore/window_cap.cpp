@@ -39,8 +39,26 @@ bool testNoPresentScaling() {
             return false;
         }
         EVR_LOG(
-            "test: the game's device is treated as having no VK_KHR_swapchain_maintenance1, so the render "
+            "test: the game's device is treated as having no swapchain maintenance extension, so the render "
             "size has no present scaling (ETERNALVR_TEST_NO_PRESENT_SCALING, a test knob)");
+        return true;
+    }();
+    return on;
+}
+
+bool testHideKhrMaintenance() {
+    static const bool on = [] {
+        std::wstring value;
+        if (!readEnv(L"ETERNALVR_TEST_HIDE_KHR_MAINTENANCE", value) || value.empty() || value == L"0") {
+            return false;
+        }
+        if (value != L"1") {
+            EVR_LOG("test: ETERNALVR_TEST_HIDE_KHR_MAINTENANCE '%ls' is not 1; off", value.c_str());
+            return false;
+        }
+        EVR_LOG(
+            "test: the game's device is treated as listing VK_EXT_swapchain_maintenance1 but not the KHR one "
+            "(ETERNALVR_TEST_HIDE_KHR_MAINTENANCE, a test knob)");
         return true;
     }();
     return on;

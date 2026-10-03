@@ -52,8 +52,8 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Null(sets.Shared.Profile);
                 Assert.Equal(sets.Shared.Dir, sets.Of("").Dir);
                 Assert.Equal(sets.Shared.Dir, sets.Of(null).Dir);
-                Assert.Equal(t.Combine("controls", "profiles", "Karen"), sets.Of("Karen").Dir);
-                Assert.Equal("Karen", sets.Of(" Karen ").Profile);
+                Assert.Equal(t.Combine("controls", "profiles", "Riley"), sets.Of("Riley").Dir);
+                Assert.Equal("Riley", sets.Of(" Riley ").Profile);
                 // A name that cannot be a profile never reaches another folder.
                 Assert.Equal(sets.Shared.Dir, sets.Of(@"..\..\x").Dir);
                 Assert.Equal(sets.Shared.Dir, sets.Of("..").Dir);
@@ -68,18 +68,18 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var sets = OlderPlayer(t);
-                Assert.False(sets.HasOwn("Karen"));
-                Assert.Equal(sets.Shared.Dir, sets.InUse("Karen").Dir);
+                Assert.False(sets.HasOwn("Riley"));
+                Assert.Equal(sets.Shared.Dir, sets.InUse("Riley").Dir);
                 Assert.Equal(sets.Shared.Dir, sets.InUse("").Dir);
-                Assert.Equal(sets.Shared.Dir, ControllerData(sets.InUse("Karen")));
+                Assert.Equal(sets.Shared.Dir, ControllerData(sets.InUse("Riley")));
                 // Its own folder, even an empty one, is its own set: the built-in controls, not those of no profile.
-                Directory.CreateDirectory(sets.Of("Karen").Dir);
-                Assert.True(sets.HasOwn("Karen"));
-                Assert.Equal(sets.Of("Karen").Dir, sets.InUse("Karen").Dir);
-                Assert.False(sets.InUse("Karen").HasPlayerMaps);
-                Assert.Null(ControllerData(sets.InUse("Karen")));
-                t.Write("controls/profiles/Karen/oculus_touch.toml", "karen's touch");
-                Assert.Equal(sets.Of("Karen").Dir, ControllerData(sets.InUse("Karen")));
+                Directory.CreateDirectory(sets.Of("Riley").Dir);
+                Assert.True(sets.HasOwn("Riley"));
+                Assert.Equal(sets.Of("Riley").Dir, sets.InUse("Riley").Dir);
+                Assert.False(sets.InUse("Riley").HasPlayerMaps);
+                Assert.Null(ControllerData(sets.InUse("Riley")));
+                t.Write("controls/profiles/Riley/oculus_touch.toml", "riley's touch");
+                Assert.Equal(sets.Of("Riley").Dir, ControllerData(sets.InUse("Riley")));
                 // The profiles' folders are not maps of no profile, and the layer reads only the files directly in a folder.
                 File.Delete(t.Combine("controls", "oculus_touch.toml"));
                 File.Delete(t.Combine("controls", "Index Mine.TOML"));
@@ -94,17 +94,17 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var sets = OlderPlayer(t);
-                Assert.True(sets.Adopt("Karen"));
-                var karen = sets.Of("Karen");
-                Assert.Equal(new[] { "Index Mine.TOML", "oculus_touch.toml" }, Names(karen.Dir));
-                Assert.Empty(Directory.GetDirectories(karen.Dir));
-                Assert.Equal("my touch", t.Read("controls/profiles/Karen/oculus_touch.toml"));
-                Assert.Equal(karen.Dir, ControllerData(sets.InUse("Karen")));
+                Assert.True(sets.Adopt("Riley"));
+                var riley = sets.Of("Riley");
+                Assert.Equal(new[] { "Index Mine.TOML", "oculus_touch.toml" }, Names(riley.Dir));
+                Assert.Empty(Directory.GetDirectories(riley.Dir));
+                Assert.Equal("my touch", t.Read("controls/profiles/Riley/oculus_touch.toml"));
+                Assert.Equal(riley.Dir, ControllerData(sets.InUse("Riley")));
                 // From now on the two sets are apart.
-                t.Write("controls/profiles/Karen/oculus_touch.toml", "karen's touch");
+                t.Write("controls/profiles/Riley/oculus_touch.toml", "riley's touch");
                 t.Write("controls/oculus_touch.toml", "my new touch");
-                Assert.False(sets.Adopt("Karen"));
-                Assert.Equal("karen's touch", t.Read("controls/profiles/Karen/oculus_touch.toml"));
+                Assert.False(sets.Adopt("Riley"));
+                Assert.Equal("riley's touch", t.Read("controls/profiles/Riley/oculus_touch.toml"));
                 Assert.Equal("my new touch", t.Read("controls/oculus_touch.toml"));
                 // The set of no profile is left as it was.
                 Assert.Equal("my notes", t.Read("controls/notes.txt"));
@@ -112,7 +112,7 @@ namespace EternalVR.Launcher.Core.Tests
                 // No profile, or no name, has nothing to adopt.
                 Assert.False(sets.Adopt(""));
                 Assert.False(sets.Adopt("a/b"));
-                Assert.Equal(new[] { "Karen" }, Directory.GetDirectories(sets.ProfilesDir).Select(Path.GetFileName));
+                Assert.Equal(new[] { "Riley" }, Directory.GetDirectories(sets.ProfilesDir).Select(Path.GetFileName));
             }
         }
 
@@ -122,9 +122,9 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var sets = new ControlSets(t.Combine("controls"));
-                Assert.True(sets.Adopt("Karen"));
-                Assert.Empty(Directory.GetFiles(sets.Of("Karen").Dir));
-                Assert.Null(ControllerData(sets.InUse("Karen")));
+                Assert.True(sets.Adopt("Riley"));
+                Assert.Empty(Directory.GetFiles(sets.Of("Riley").Dir));
+                Assert.Null(ControllerData(sets.InUse("Riley")));
             }
         }
 
@@ -134,11 +134,11 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var sets = OlderPlayer(t);
-                t.Write("controls/profiles/.evr-tmp-Karen/oculus_touch.toml", "half");
-                Assert.False(sets.HasOwn("Karen"));
-                Assert.True(sets.Adopt("Karen"));
-                Assert.False(Directory.Exists(t.Combine("controls", "profiles", ".evr-tmp-Karen")));
-                Assert.Equal("my touch", t.Read("controls/profiles/Karen/oculus_touch.toml"));
+                t.Write("controls/profiles/.evr-tmp-Riley/oculus_touch.toml", "half");
+                Assert.False(sets.HasOwn("Riley"));
+                Assert.True(sets.Adopt("Riley"));
+                Assert.False(Directory.Exists(t.Combine("controls", "profiles", ".evr-tmp-Riley")));
+                Assert.Equal("my touch", t.Read("controls/profiles/Riley/oculus_touch.toml"));
             }
         }
 
@@ -149,19 +149,19 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 var sets = OlderPlayer(t);
                 // A folder left by a profile of the same name that is gone: replaced.
-                t.Write("controls/profiles/Karen/valve_index.toml", "an old profile's");
-                sets.StartFrom("Karen", "");
-                Assert.Equal(new[] { "Index Mine.TOML", "oculus_touch.toml" }, Names(sets.Of("Karen").Dir));
+                t.Write("controls/profiles/Riley/valve_index.toml", "an old profile's");
+                sets.StartFrom("Riley", "");
+                Assert.Equal(new[] { "Index Mine.TOML", "oculus_touch.toml" }, Names(sets.Of("Riley").Dir));
                 // From another profile: its own set, else the set of no profile it uses.
-                t.Write("controls/profiles/Karen/oculus_touch.toml", "karen's touch");
-                sets.StartFrom("Guest", "Karen");
-                Assert.Equal("karen's touch", t.Read("controls/profiles/Guest/oculus_touch.toml"));
+                t.Write("controls/profiles/Riley/oculus_touch.toml", "riley's touch");
+                sets.StartFrom("Guest", "Riley");
+                Assert.Equal("riley's touch", t.Read("controls/profiles/Guest/oculus_touch.toml"));
                 sets.StartFrom("Guest2", "Nobody");
                 Assert.Equal("my touch", t.Read("controls/profiles/Guest2/oculus_touch.toml"));
                 // From itself: nothing changes.
-                sets.StartFrom("Karen", "Karen");
-                Assert.Equal("karen's touch", t.Read("controls/profiles/Karen/oculus_touch.toml"));
-                Assert.Throws<ArgumentException>(() => sets.StartFrom("", "Karen"));
+                sets.StartFrom("Riley", "Riley");
+                Assert.Equal("riley's touch", t.Read("controls/profiles/Riley/oculus_touch.toml"));
+                Assert.Throws<ArgumentException>(() => sets.StartFrom("", "Riley"));
             }
         }
 
@@ -171,12 +171,12 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var sets = OlderPlayer(t);
-                sets.Adopt("Karen");
+                sets.Adopt("Riley");
                 sets.Adopt("Evening");
-                sets.Of("Karen").Prepare(ShippedMaps);
-                File.SetAttributes(t.Combine("controls", "profiles", "Karen", "oculus_touch.toml"), FileAttributes.ReadOnly);
-                sets.Delete("Karen");
-                Assert.False(sets.HasOwn("Karen"));
+                sets.Of("Riley").Prepare(ShippedMaps);
+                File.SetAttributes(t.Combine("controls", "profiles", "Riley", "oculus_touch.toml"), FileAttributes.ReadOnly);
+                sets.Delete("Riley");
+                Assert.False(sets.HasOwn("Riley"));
                 Assert.True(sets.HasOwn("Evening"));
                 Assert.Equal("my touch", t.Read("controls/oculus_touch.toml"));
                 Assert.True(File.Exists(sets.Shared.ReadmeFile));
@@ -195,13 +195,13 @@ namespace EternalVR.Launcher.Core.Tests
             using (var t = new TempDir())
             {
                 var sets = new ControlSets(t.Combine("controls"));
-                var karen = sets.Of("Karen");
-                karen.Prepare(ShippedMaps);
-                Assert.Equal(ControlsFolder.ReadmeFor("Karen"), File.ReadAllText(karen.ReadmeFile));
-                Assert.Contains("VR settings profile Karen", ControlsFolder.ReadmeFor("Karen"));
-                Assert.Equal(Names(ShippedMaps), Names(karen.DefaultsDir));
-                Assert.False(karen.HasPlayerMaps);
-                Assert.Equal(8, karen.Families().Count);
+                var riley = sets.Of("Riley");
+                riley.Prepare(ShippedMaps);
+                Assert.Equal(ControlsFolder.ReadmeFor("Riley"), File.ReadAllText(riley.ReadmeFile));
+                Assert.Contains("VR settings profile Riley", ControlsFolder.ReadmeFor("Riley"));
+                Assert.Equal(Names(ShippedMaps), Names(riley.DefaultsDir));
+                Assert.False(riley.HasPlayerMaps);
+                Assert.Equal(8, riley.Families().Count);
                 Assert.Equal(ControlsFolder.Readme, ControlsFolder.ReadmeFor(null));
                 Assert.Contains("profiles", ControlsFolder.Readme);
             }

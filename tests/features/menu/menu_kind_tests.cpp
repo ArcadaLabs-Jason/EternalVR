@@ -7,6 +7,7 @@
 using evr::menu::MenuKind;
 using evr::menu::MenuKindInput;
 using evr::menu::menuKindOnCursor;
+using evr::menu::screenBecomesPopup;
 
 TEST_CASE("a menu asked for is a screen, one over the game nobody asked for is a popup") {
     MenuKindInput in;
@@ -74,4 +75,14 @@ TEST_CASE("a clock going backwards or a bad time decides again") {
     CHECK(menuKindOnCursor(in) == MenuKind::Popup);
     in.sinceCursorGone = std::numeric_limits<double>::quiet_NaN();
     CHECK(menuKindOnCursor(in) == MenuKind::Popup);
+}
+
+TEST_CASE("a screen nobody asked for becomes a popup once it shows over the game") {
+    // A checkpoint load: the popup kept the loading screen's kind (a screen) before any head-tracked frame.
+    CHECK(screenBecomesPopup(MenuKind::Screen, false, true));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, false, false)); // still a full menu screen
+    // The pause menu's Settings shows over the game too: its chain was asked for.
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, true, true));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Dossier, false, true));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Popup, false, true));
 }

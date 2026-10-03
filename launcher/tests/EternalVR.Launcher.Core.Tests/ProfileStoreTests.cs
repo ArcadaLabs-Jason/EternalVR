@@ -14,7 +14,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void NamesAreTrimmedAndCheckedAsFileNames()
         {
-            Assert.Equal("Karen", ProfileStore.NormaliseName("  Karen "));
+            Assert.Equal("Riley", ProfileStore.NormaliseName("  Riley "));
             Assert.Null(ProfileStore.NormaliseName(""));
             Assert.Null(ProfileStore.NormaliseName("a/b"));
             Assert.Null(ProfileStore.NormaliseName("what?"));
@@ -57,14 +57,14 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 var store = new ProfileStore(t.Combine("profiles"));
                 Assert.Empty(store.Names());
-                store.Save("karen", Machine());
+                store.Save("riley", Machine());
                 store.Save("Evening", Machine());
                 t.Write("profiles/notes.txt", "not a profile");
-                Assert.Equal(new[] { "Evening", "karen" }, store.Names());
+                Assert.Equal(new[] { "Evening", "riley" }, store.Names());
                 Assert.True(store.Exists("evening"));
-                store.Delete("karen");
+                store.Delete("riley");
                 Assert.Equal(new[] { "Evening" }, store.Names());
-                Assert.Null(store.Load("karen", Machine()));
+                Assert.Null(store.Load("riley", Machine()));
                 store.Delete("nobody");
             }
         }
@@ -74,10 +74,10 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var s = Machine();
             Assert.DoesNotContain("profile =", s.Serialize());
-            s.Profile = "Karen";
+            s.Profile = "Riley";
             var again = LauncherSettings.Parse(s.Serialize());
-            Assert.Equal("Karen", again.Profile);
-            Assert.Equal("Karen", again.WithDefaults().Profile);
+            Assert.Equal("Riley", again.Profile);
+            Assert.Equal("Riley", again.WithDefaults().Profile);
             Assert.Equal(string.Empty, LauncherSettings.Parse("profile = a/b").Profile);
         }
     }

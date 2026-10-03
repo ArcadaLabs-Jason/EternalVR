@@ -46,6 +46,18 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheSignInManagerIsSkippedOnlyForTheSteamBuild()
+        {
+            // The Game Pass build crashed a second after starting with the sign-in manager skipped (2026-10-03).
+            var gamePass = Inputs();
+            gamePass.Platform = GamePlatform.GamePass;
+            var p = LaunchPlanBuilder.Build(gamePass);
+            Assert.DoesNotContain("com_skipSignInManager", p.CommandLine);
+            Assert.Contains("+com_skipIntroVideo 1", p.CommandLine);
+            Assert.Contains("+com_skipSignInManager 1", LaunchPlanBuilder.Build(Inputs()).CommandLine);
+        }
+
+        [Fact]
         public void DefaultsAreStereoWithControllersAndHandAim()
         {
             var p = LaunchPlanBuilder.Build(Inputs());
@@ -305,6 +317,21 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(StartOutcome.HandOff, StartWatch.Decide(true, 14.0, 5.0, true));
             Assert.Equal(StartOutcome.ExitedEarly, StartWatch.Decide(true, 2.0 + StartWatch.HandOffGraceSeconds, StartWatch.HandOffGraceSeconds, false));
             Assert.Equal(StartOutcome.Exited, StartWatch.Decide(true, 25.0, 1.0, true));
+        }
+
+        [Fact]
+        public void ACrashBeforeTheLayerLoadedSaysEternalVrIsNotTheCause()
+        {
+            const int accessViolation = unchecked((int)0xC0000005);
+            var before = StartWatch.EarlyExitMessage(1.2, accessViolation, layerLoaded: false);
+            Assert.Contains("before EternalVR loaded", before);
+            Assert.Contains("0xC0000005", before);
+            Assert.Contains("VR code had not run yet", before);
+            var after = StartWatch.EarlyExitMessage(3.0, accessViolation, layerLoaded: true);
+            Assert.DoesNotContain("before EternalVR loaded", after);
+            Assert.StartsWith("The game closed 3 s after it started", after);
+            // A plain exit without the marker is not called a crash.
+            Assert.DoesNotContain("crashed", StartWatch.EarlyExitMessage(2.0, 1, layerLoaded: false));
         }
     }
 

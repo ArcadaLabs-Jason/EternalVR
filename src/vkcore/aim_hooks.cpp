@@ -78,7 +78,8 @@ constexpr const char* kGetWeaponFireInfoSignature =
 // Type info (build 25216728; the offsets are used only when PlayerAim confirmed the build).
 constexpr std::size_t kHandsOwner = 0x358; // idHands::owner
 // idHands::overrideStartFxAxis (idMat3): GetWeaponFireInfo resets it to identity and sets it to the Flame
-// Belch's fire axis; the shot's effects take it as their axis unless it is identity (0x136CD70, static RE).
+// Belch's fire axis. It drives the hands' effect group (0x136CD70), not the plume (belch_axis_hook.cpp):
+// read only, to tell a Belch shot.
 constexpr std::size_t kHandsStartFxAxis = 0x8E3C;
 constexpr std::size_t kPlayerInhibitFlags = 0x87FC;       // idPlayer::inhibitFlags
 constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
@@ -239,19 +240,17 @@ void onFire(const HookRegisters& regs) {
         logShotStats(s);
         return;
     }
-    // A Flame Belch shot under ETERNALVR_EQUIPMENT_AIM goes along the head's or the off hand's ray, with the
-    // turn its launcher's joint has from the weapon hand's (xr_math::carryAimOffset). A shot is the Belch's
-    // when GetWeaponFireInfo, which resets overrideStartFxAxis for every shot, set it (not identity), so a
-    // gun fired while the Belch's button is held keeps the weapon hand.
+    // A Flame Belch shot under ETERNALVR_EQUIPMENT_AIM keeps its start at the shoulder launcher and goes
+    // along the head's or the off hand's ray, as its flames do (belch_axis_hook.cpp), so the damage cone and
+    // the plume start at the same place and point the same way. Without the launcher's downward turn
+    // (launchDirOffsetDegsFlameBelch): carried onto the head's ray it sent the flames 30 to 45 deg low. A
+    // shot is the Belch's when GetWeaponFireInfo, which resets overrideStartFxAxis for every shot, set it
+    // (not identity), so a gun fired while the Belch's button is held keeps the weapon hand.
     float fxAxis[9];
     const bool belchShot = safeCopy(fxAxis, hands + kHandsStartFxAxis, sizeof(fxAxis)) && !isIdentity(fxAxis);
     const xr_math::EyeRelativePose* alternate = actionShotRay(world, hands, belchShot);
     const xr_math::EyeRelativePose& ray = alternate ? *alternate : world.aim;
-    Vec3 direction = ray.axis.forward;
-    if (alternate) {
-        direction = xr_math::carryAimOffset({axis[0], axis[1], axis[2]}, world.aim.axis.forward, direction)
-                        .value_or(direction);
-    }
+    const Vec3 direction = ray.axis.forward;
     const auto gameAngles = xr_math::anglesOfDirection({axis[0], axis[1], axis[2]});
     const auto handAngles = xr_math::anglesOfDirection(direction);
     float error = -1.0f;
@@ -265,14 +264,16 @@ void onFire(const HookRegisters& regs) {
         }
     }
     std::optional<xr_math::Shot> shot;
-    // Weapons that fire from the muzzle (the Heavy Cannon, projectiles) already start at the muzzle tag of
-    // the viewmodel, which the viewmodel hook has put at the hand (seen on the rig): only their direction
-    // changes. Hitscan starts at the eye; it moves to the hand. The Flame Belch fires from the gun's muzzle
-    // along its barrel (rig, 2026-10-02): on another ray it starts at that ray's own origin.
+    // Hitscan starts at the eye; it moves to the hand. Weapons that fire from the muzzle (the Heavy Cannon,
+    // projectiles) start at the muzzle tag of the viewmodel, which the viewmodel hook puts at the hand; the
+    // start moves onto the hand ray as far along it as the muzzle is, so the shot runs down the aim dot's
+    // line also when an animation (a scope) moves the muzzle off it. The Flame Belch starts at its launcher.
     const Vec3 fromEye = gamePos - eye;
     const bool fromMuzzle = length(fromEye) > kMuzzleEpsilonMetres * world.unitsPerMetre;
-    if (alternate || (cfg.shotOrigin == input::ShotOrigin::Hand && !fromMuzzle)) {
-        shot = xr_math::shotFromHand(eye, ray.offset, direction, kMaxReachMetres * world.unitsPerMetre, 0.0f);
+    if (!alternate && cfg.shotOrigin == input::ShotOrigin::Hand) {
+        const float along = fromMuzzle ? std::max(0.0f, dot(fromEye - ray.offset, direction)) : 0.0f;
+        shot =
+            xr_math::shotFromHand(eye, ray.offset, direction, kMaxReachMetres * world.unitsPerMetre, along);
     } else if (const auto only = xr_math::axisFromDirection(direction)) {
         shot = xr_math::Shot{gamePos, *only};
     }
@@ -285,10 +286,6 @@ void onFire(const HookRegisters& regs) {
                               shot->axis.up.x,      shot->axis.up.y,      shot->axis.up.z};
     safeCopy(firePos, pos, sizeof(pos));
     safeCopy(fireAxis, newAxis, sizeof(newAxis));
-    if (alternate) {
-        // The Flame Belch's flames follow its new axis too.
-        safeCopy(const_cast<std::byte*>(hands) + kHandsStartFxAxis, newAxis, sizeof(newAxis));
-    }
     s.shotsRewritten.fetch_add(1, std::memory_order_relaxed);
     if (g_loggedShots.fetch_add(1) < 10) {
         EVR_LOG(

@@ -101,9 +101,18 @@ namespace EternalVR.Launcher
             exportReport.Click += async (s, e) =>
             {
                 // The report is built on a worker; one at a time.
+                // Building takes a few seconds: the button says so, or the click looks lost.
                 exportReport.Enabled = false;
+                exportReport.Text = "Preparing...";
                 try { await ReportExport.Run(this, ctx); }
-                finally { if (!IsDisposed) exportReport.Enabled = true; }
+                finally
+                {
+                    if (!IsDisposed)
+                    {
+                        exportReport.Text = "Export report...";
+                        exportReport.Enabled = true;
+                    }
+                }
             };
             header.SupportClicked += (s, e) => OpenSupportPage();
             discardRestore.Click += (s, e) => DiscardPendingRestore();

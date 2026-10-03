@@ -16,7 +16,9 @@ $script:QaStageRoot = Join-Path $script:QaWorkspace 'tmp-vr\rs'
 $script:QaSimJson = Join-Path $script:QaWorkspace 'tools\bin\openxr-simulator\openxr_simulator_rig.json'
 $script:QaProcDump = Join-Path $script:QaWorkspace 'tools\bin\procdump\procdump64.exe'
 $script:QaRunsRoot = if ($env:EVR_RIG_RUNS_ROOT) { $env:EVR_RIG_RUNS_ROOT } else { Join-Path $script:QaWorkspace 'runs' }
-$script:QaSaveSource = Join-Path $script:QaWorkspace 'tmp-release\save100\resigned-jason'
+# The 100% save, signed for the rig's Steam account: EVR_QA_SAVE_SOURCE (another PC's account), else the rig's copy.
+$script:QaSaveSource = $env:EVR_QA_SAVE_SOURCE
+if (-not $script:QaSaveSource) { $script:QaSaveSource = Join-Path $script:QaWorkspace 'tmp-release\save100\resigned-jason' }
 # The game's first save slot the 100% save goes back to: EVR_QA_SAVE_TARGET, else the path in the rig's own
 # tmp-vr\qa-save-target.txt (the save is signed for one Steam account), else the account that played last.
 $script:QaSaveTarget = $env:EVR_QA_SAVE_TARGET

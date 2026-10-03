@@ -15,9 +15,18 @@
 // to the head's (or the off hand's) ray start and the axis to that ray, keeping the turn and arc the game's
 // axis has from the weapon hand's ray (xr_math::carryAimOffset). Installed only when ETERNALVR_EQUIPMENT_AIM
 // is set.
+//
+// The Flame Belch's visible plume takes its own axis, refreshed every frame (static RE, Steam build): the
+// plume effect started by PrepareFire follows idEquipmentLauncher's
+// idFXFlameBelchAxisUpdate (launcher+0x110, its axis at launcher+0x120), which the hands item's update
+// 0x138AB20 sets from the launcher's muzzle joint (GetMuzzleTransform, vslot 0xC8) at 0x138B02D, the axis
+// only (the plume's origin is the launcher model's). A mid hook on that store turns the muzzle axis at
+// [rbp-9] (idMat3, rows forward, left, up) onto the head's or the off hand's ray before it is stored; the
+// Belch's damage (the fire hook, aim_hooks.cpp) takes the same ray from the same launcher position.
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "vkcore/controllers.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -59,6 +68,18 @@ constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPers
 constexpr float kMaxReachMetres = 1.0f;
 
 LogCap g_launchLines{12};
+
+// The hands item's update storing the launcher's muzzle axis: lea r9,[rbp-9]; mov rdx,[r14+0x78]; lea
+// r8,[rbp-0x39]; mov rcx,rax; call [r10+0xC8]; test al,al; je; movups xmm0,[rbp-9]; movups [rbx+0x120],xmm0;
+// movups xmm1,[rbp+7]; movups [rbx+0x130],xmm1; mov eax,[rbp+0x17]; mov [rbx+0x140],eax.
+constexpr const char* kBelchAxisSignature = "4C 8D 4D F7 49 8B 56 78 4C 8D 45 C7 48 8B C8 41 FF 92 C8 00 00 "
+                                            "00 84 C0 74 1F 0F 10 45 F7 0F 11 83 20 01 "
+                                            "00 00 0F 10 4D 07 0F 11 8B 30 01 00 00 8B 45 17 89 83 40 01";
+constexpr std::size_t kBelchAxisStore = 0x1A; // movups xmm0,[rbp-9]
+constexpr std::ptrdiff_t kMuzzleAxisFromRbp = -9;
+constexpr std::size_t kHandsOwner = 0x358; // idHands::owner
+
+LogCap g_belchLines{6, 2000};
 
 bool readFloats(const std::byte* at, float* out, std::size_t count) {
     if (!safeCopy(out, at, count * sizeof(float))) {
@@ -142,7 +163,73 @@ void onLaunch(const HookRegisters& regs) {
     }
 }
 
+void onBelchAxis(const HookRegisters& regs) {
+    if (!mp_guard::allowsGameTouch()) {
+        return;
+    }
+    State& s = state();
+    const input::ControllerSettings& cfg = settings();
+    const auto* hands = reinterpret_cast<const std::byte*>(regs.r13);
+    const std::byte* owner = nullptr;
+    if (cfg.aim != input::AimSource::Hand || cfg.actionAim.equipment == input::ActionAimSource::Same ||
+        !safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
+        return;
+    }
+    WorldHand world;
+    {
+        std::lock_guard lock(s.viewMutex);
+        world = s.world;
+    }
+    if (!s.attached.load(std::memory_order_acquire) || !world.valid ||
+        secondsSince(world.qpc) > kWorldStaleSeconds || s.yielding.load()) {
+        return;
+    }
+    auto* axis = reinterpret_cast<std::byte*>(regs.rbp + kMuzzleAxisFromRbp);
+    float gameAxis[9];
+    if (!readFloats(axis, gameAxis, 9)) {
+        return;
+    }
+    const bool offHand = cfg.actionAim.equipment == input::ActionAimSource::OffHand && world.offAimValid;
+    const xr_math::EyeRelativePose& ray = offHand ? world.offAim : world.head;
+    const std::optional<xr_math::IdViewAxis> turned = xr_math::axisFromDirection(ray.axis.forward);
+    if (!turned || !mp_guard::allowsGameTouch()) {
+        return;
+    }
+    const float newAxis[9] = {turned->forward.x, turned->forward.y, turned->forward.z,
+                              turned->left.x,    turned->left.y,    turned->left.z,
+                              turned->up.x,      turned->up.y,      turned->up.z};
+    safeCopy(axis, newAxis, sizeof(newAxis));
+    std::uint64_t skipped = 0;
+    if (game::contains(heldActions(), game::GameAction::FlameBelch) &&
+        g_belchLines.due(GetTickCount64(), skipped)) {
+        const Vec3 hand = world.aim.axis.forward;
+        EVR_LOG("%s: Flame Belch plume axis (%.3f %.3f %.3f) -> (%.3f %.3f %.3f) along the %s; weapon hand "
+                "(%.3f %.3f %.3f)",
+                kTag, gameAxis[0], gameAxis[1], gameAxis[2], newAxis[0], newAxis[1], newAxis[2],
+                offHand ? "off hand" : "head", hand.x, hand.y, hand.z);
+    }
+}
+
 } // namespace
+
+bool installBelchAxisHook() {
+    GameImage image;
+    if (!locateGameImage(image, kTag)) {
+        return false;
+    }
+    const std::byte* site = findUnique(image, kTag, "Flame Belch axis store", kBelchAxisSignature);
+    if (!site) {
+        return false;
+    }
+    std::string error;
+    if (!installMidHook(const_cast<std::byte*>(site + kBelchAxisStore), &onBelchAxis, error)) {
+        EVR_LOG("%s: Flame Belch axis hook at RVA 0x%X failed: %s", kTag, image.rva(site + kBelchAxisStore),
+                error.c_str());
+        return false;
+    }
+    EVR_LOG("%s: Flame Belch axis hook at RVA 0x%X", kTag, image.rva(site + kBelchAxisStore));
+    return true;
+}
 
 bool installEquipmentLaunchHook() {
     GameImage image;

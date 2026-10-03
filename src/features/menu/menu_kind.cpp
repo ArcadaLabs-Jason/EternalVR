@@ -16,6 +16,10 @@ MenuKind menuKindOnCursor(const MenuKindInput& in, double continueSeconds) {
     return in.dossierRequested ? MenuKind::Dossier : MenuKind::Screen;
 }
 
+bool screenBecomesPopup(MenuKind kind, bool chainAsked, bool overGame) {
+    return kind == MenuKind::Screen && !chainAsked && overGame;
+}
+
 const char* menuKindName(MenuKind kind) {
     switch (kind) {
     case MenuKind::Screen:

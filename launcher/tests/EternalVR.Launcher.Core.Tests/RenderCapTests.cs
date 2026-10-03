@@ -32,7 +32,7 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var cap = RenderCap.FromStatus(CappedStatus);
             Assert.Equal("Your graphics driver cannot render above the window size, so each eye rendered at 958 x 1009, 47% of the planned "
-                + "2016 x 2112. A larger display helps; a full fix is being worked on.", cap.Warning());
+                + "2016 x 2112. A larger display helps; on NVIDIA, update the graphics driver.", cap.Warning());
             Assert.DoesNotContain("\u2014", cap.Warning());
             Assert.Equal("958 x 1009 last session, 47% of the planned 2016 x 2112\n"
                 + "Your graphics driver renders at the window's size", cap.EachEyeText());

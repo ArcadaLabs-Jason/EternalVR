@@ -94,15 +94,9 @@ namespace EternalVR.Launcher
             }
             if (owner.IsDisposed) return;
 
-            var answer = MessageBox.Show(owner,
-                "The report holds these files. Your user folder, user name, computer name, the name you play under and Steam account ID are replaced by placeholders; "
-                + "no saves or memory dumps are included.\n\n" + report.Describe() + "\nSave it?",
-                "Export report", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
-            if (answer != DialogResult.OK) return;
-
             using (var dlg = new SaveFileDialog
             {
-                Title = "Save the EternalVR report",
+                Title = "Save the EternalVR report (personal info removed)",
                 Filter = "Zip file (*.zip)|*.zip",
                 FileName = ReportBuilder.DefaultFileName(DateTime.Now, report.Id, LauncherContext.LauncherVersion),
                 InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
@@ -114,8 +108,14 @@ namespace EternalVR.Launcher
                 {
                     File.WriteAllBytes(dlg.FileName, report.Zip);
                     ctx.Log.Info($"report {report.Id} saved: {dlg.FileName} ({report.Files.Count} files, {report.Zip.Length} bytes)");
-                    MessageBox.Show(owner, "Saved " + dlg.FileName + ".\n\nIts report ID is " + report.Id
-                        + ". Attach the zip to your GitHub issue or Discord message.", "Export report", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // The folder opens with the zip selected: a player who clicked through the dialog could not find it.
+                    try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + dlg.FileName + "\""); }
+                    catch (Exception e) when (e is System.ComponentModel.Win32Exception || e is InvalidOperationException)
+                    {
+                        ctx.Log.Warn("could not open the report's folder: " + e.Message);
+                    }
+                    MessageBox.Show(owner, "Saved, personal info removed. Attach it to your GitHub issue or Discord message.\n\n" + dlg.FileName,
+                        "Export report", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
                 {
