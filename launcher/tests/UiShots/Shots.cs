@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Settings;
 using EternalVR.Launcher.Core.Update;
 
@@ -72,6 +73,10 @@ namespace EternalVR.Launcher.UiShots
             tabs.SelectedIndex = 0;
             Reflect.Call(main, "ShowUpdateButton", new Version(0, 1, 14));
             Shoot(main, "main-update-button", () => Pump(300));
+            // After a crash the status line asks for a report and the Export report button it names is marked (ReportHint).
+            Reflect.Call(main, "ShowStatus", new SessionStatus(StatusKind.Warning,
+                GameExit.StatusPrefix(unchecked((int)0xC0000005)) + "The game has exited and your settings were restored."));
+            Shoot(main, "main-crash-export", () => Pump(300));
 
             foreach (var s in Scenarios())
             {

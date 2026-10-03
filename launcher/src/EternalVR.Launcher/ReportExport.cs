@@ -40,6 +40,8 @@ namespace EternalVR.Launcher
             var adapters = WindowsSystem.DisplayAdapters();
             if (adapters.Count == 0) Add("gpu", null);
             foreach (var a in adapters) Add("gpu", a);
+            // Where the desktop window can go: with no present scaling each eye is held to it.
+            foreach (var d in WindowsSystem.Displays()) Add("display", d.ToString());
             Add("openxr active runtime", active == null ? "none set" : active + RuntimeName(active));
             Add("openxr runtime for launches", !LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? effective + RuntimeName(effective)
                 : LauncherContext.InheritedRuntime != null ? LaunchPlanBuilder.RuntimeVariable + " in the environment: " + effective + RuntimeName(effective)
@@ -52,6 +54,8 @@ namespace EternalVR.Launcher
             Add("game build", g.Facts.Build == null ? "game not found"
                 : g.Facts.Platform == GamePlatform.GamePass ? g.Facts.Build.Status + " Game Pass " + g.Facts.Build.Version
                 : g.Facts.Build.Status + " " + g.Facts.Build.Sha256);
+            // A Game Pass or Microsoft Store game: its package as Windows has it (version, status) and the Xbox pieces it starts through.
+            if (g.Facts.Platform == GamePlatform.GamePass) system.AddRange(StorePackageQuery.Read());
             system.AddRange(GameMods.Describe(g.Game?.GameRoot));
             Add("program folder", ctx.ProgramDir);
             Add("layer folder", ctx.LayerDir);
@@ -72,6 +76,8 @@ namespace EternalVR.Launcher
                 GameSavedGamesDirs = (g.Locations ?? new SettingsLocation[0])
                     .Where(l => l.Kind == SettingsLocationKind.SavedGames).Select(l => l.Path).ToList(),
                 WindowsEvents = WindowsEventLogs.Read(),
+                WindowsErrorReportDirs = new[] { Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolder.LocalApplicationData }
+                    .Select(f => Path.Combine(Environment.GetFolderPath(f), "Microsoft", "Windows", "WER")).ToList(),
                 Now = DateTime.Now,
                 Id = ReportBuilder.NewId(),
             };

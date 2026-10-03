@@ -83,7 +83,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void AnyOtherCauseGetsTheReportOnlyWhenNoHandPoseArrived()
         {
-            const string text = "No controller input reached EternalVR this session. Use Export report... and attach the zip to a GitHub issue.";
+            const string text = "No controller input reached EternalVR this session. Click Export report and post the zip with your bug report.";
             // SteamVR without a chosen binding, and another runtime (whose binding SteamVR's file says nothing about).
             Assert.Equal(UnboundCause.Unknown, UnboundControls.Decide(Session(Steam, Bound(0, 12), NoPose), () => false));
             Assert.Equal(UnboundCause.Unknown, UnboundControls.Decide(Session(Vd, Bound(0, 12), NoPose),

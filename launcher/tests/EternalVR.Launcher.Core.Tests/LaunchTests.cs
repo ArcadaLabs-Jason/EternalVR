@@ -324,9 +324,8 @@ namespace EternalVR.Launcher.Core.Tests
         {
             const int accessViolation = unchecked((int)0xC0000005);
             var before = StartWatch.EarlyExitMessage(1.2, accessViolation, layerLoaded: false);
-            Assert.Contains("before EternalVR loaded", before);
-            Assert.Contains("0xC0000005", before);
-            Assert.Contains("VR code had not run yet", before);
+            Assert.StartsWith("The game crashed before EternalVR loaded.", before);
+            Assert.True(Report.ReportHint.In(before));
             var after = StartWatch.EarlyExitMessage(3.0, accessViolation, layerLoaded: true);
             Assert.DoesNotContain("before EternalVR loaded", after);
             Assert.StartsWith("The game closed 3 s after it started", after);

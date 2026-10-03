@@ -124,6 +124,11 @@ namespace EternalVR.Launcher
 
         private void LoadSettingsIntoControls()
         {
+            if (settingsWritten == null)
+            {
+                try { if (File.Exists(ctx.Paths.SettingsFile)) settingsWritten = File.ReadAllText(ctx.Paths.SettingsFile); }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
+            }
             loading = true;
             if (!ParallelEyesOffered) ctx.Settings.ParallelEyes = false;
             try
@@ -145,10 +150,26 @@ namespace EternalVR.Launcher
             if (!ParallelEyesOffered) ctx.Settings.ParallelEyes = false;
         }
 
+        // The settings file as the launcher last read or wrote it: an edit made by hand while the launcher is open is merged
+        // into the next save instead of being overwritten (LauncherSettings.MergeHandEdits).
+        private string settingsWritten;
+
         private void SaveSettings()
         {
             ReadControlsIntoSettings();
-            try { ctx.Settings.Save(ctx.Paths.SettingsFile); }
+            var path = ctx.Paths.SettingsFile;
+            try
+            {
+                var disk = File.Exists(path) ? File.ReadAllText(path) : null;
+                if (settingsWritten != null && disk != null && disk != settingsWritten)
+                {
+                    ctx.Settings = LauncherSettings.Parse(LauncherSettings.MergeHandEdits(settingsWritten, ctx.Settings.Serialize(), disk));
+                    ctx.Log.Info("launcher.ini was edited outside the launcher; those edits are kept");
+                    LoadSettingsIntoControls();
+                }
+                ctx.Settings.Save(path);
+                settingsWritten = File.ReadAllText(path);
+            }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is SettingsException)
             {
                 ctx.Log.Error("saving settings failed: " + e.Message);

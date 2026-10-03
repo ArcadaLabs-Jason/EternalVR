@@ -41,6 +41,12 @@ namespace EternalVR.Launcher.Core.Report
         /// redacted as the text is (<see cref="ReportBuilder.ControlsPlayerMaps"/>).
         /// </summary>
         ControlsFolder,
+        /// <summary>
+        /// Windows' own crash and hang reports (<c>Report.wer</c>) of the game, the launcher or the layer in the WER folders
+        /// (<see cref="ReportInputs.WindowsErrorReportDirs"/>), written in the last <see cref="WindowsErrorReports.Days"/> days:
+        /// newest first, at most <see cref="WindowsErrorReports.Kept"/> (<see cref="WindowsErrorReports"/>).
+        /// </summary>
+        WindowsErrorReports,
     }
 
     /// <summary>One line of the report manifest.</summary>
@@ -112,7 +118,7 @@ namespace EternalVR.Launcher.Core.Report
             new ReportItem(ReportSource.Generated, SystemFile, SystemFile,
                 "Launcher and layer versions and their check, Windows version, GPUs and drivers, the OpenXR runtime, the headset as the last runtime "
                 + "probe read it and the last session's refresh rate, summary and controls bound (HeadsetView.ReportLines), chosen SteamVR settings (SteamVrSummary), "
-                + "the HAGS state, the game build, the names in the game's Mods folder and any mod loader (GameMods), the folders in use, "
+                + "the HAGS state, the game build, for a Game Pass or Microsoft Store game its package and the Xbox packages (StorePackages), the names in the game's Mods folder and any mod loader (GameMods), the folders in use, "
                 + "and the game's video settings as the newest session's layer log last listed them (LastGameSettings)"),
             new ReportItem(ReportSource.Generated, PreflightFile, PreflightFile, "The launcher's checks, run at export time"),
             new ReportItem(ReportSource.DataFolder, @"logs\launcher.log", "launcher.log",
@@ -127,6 +133,9 @@ namespace EternalVR.Launcher.Core.Report
             // The game's files come before the session logs: when every log is at its longest, the oldest session's log is left out, not these.
             new ReportItem(ReportSource.Generated, WindowsEventsFile, WindowsEventsFile,
                 "Windows event log entries of the last 7 days: crashes and hangs of the game, the launcher or the layer, and display driver resets and errors (see WindowsEvents)"),
+            new ReportItem(ReportSource.WindowsErrorReports, WindowsErrorReports.ReportFile, "windows-crashes/{name}.txt",
+                "Windows' own crash and hang reports (Report.wer) of the game, the launcher or the layer of the last 7 days, newest first, at most 3: "
+                + "the faulting module and offset and every module loaded at the time"),
             new ReportItem(ReportSource.GameCrashes, "Crash.*.html", "game-crashes/crash-{number}.html",
                 "The game's own crash reports (call stack, registers, exception code, build) written since the oldest session in the report or in the last 7 days, newest first, at most 3"),
             new ReportItem(ReportSource.GameFolder, "qconsole.log", "game/qconsole.log",

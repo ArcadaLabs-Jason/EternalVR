@@ -422,11 +422,11 @@ namespace EternalVR.Launcher.Core.Launch
         public static string EarlyExitMessage(double seconds, int exitCode, bool layerLoaded)
         {
             if (!layerLoaded && GameExit.IsCrash(exitCode))
-                return $"The game crashed {seconds:0} s after it started, before EternalVR loaded: {GameExit.Describe(exitCode)}. "
-                    + "EternalVR's VR code had not run yet: start the game once without EternalVR (from Steam or the Xbox app) "
-                    + "or restart the PC, then launch again. If it keeps happening, use Export report... and attach the zip to a GitHub issue.";
+                // One line, the thing that matters first; the exit code is in the log line before it.
+                return "The game crashed before EternalVR loaded. Start it once from the Xbox app or Steam, or restart the PC, then try again. "
+                    + "Still crashing? " + Report.ReportHint.Ask;
             return $"The game closed {seconds:0} s after it started (exit code {exitCode}). "
-                + "Use Export report... and attach the zip to a GitHub issue if it keeps happening.";
+                + "If it keeps happening: " + Report.ReportHint.Ask;
         }
 
         public const string HandOffMessage =

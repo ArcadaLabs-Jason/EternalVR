@@ -113,7 +113,8 @@ if ($excludes.Count -gt 0) {
 }
 
 $archive = Join-Path $Target '.git\export.tar'
-Invoke-Git $repo archive --format=tar -o $archive HEAD | Out-Null
+# core.autocrlf=false: with a global true, git archive writes CRLF and the new tree no longer matches the source.
+Invoke-Git $repo -c core.autocrlf=false archive --format=tar -o $archive HEAD | Out-Null
 & tar -xf $archive -C $Target
 if ($LASTEXITCODE -ne 0) { throw "tar failed ($LASTEXITCODE)" }
 Remove-Item -LiteralPath $archive

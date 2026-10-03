@@ -28,9 +28,9 @@ namespace EternalVR.Launcher.Core.Launch
         {
             if (!exitCode.HasValue) return string.Empty;
             if (IsCrash(exitCode.Value))
-                return "The game crashed (" + Describe(exitCode.Value) + "). Use Export report... and attach the zip to a GitHub issue. ";
+                return "The game crashed (" + Describe(exitCode.Value) + "). " + Report.ReportHint.Ask + " ";
             if (WasEnded(exitCode.Value))
-                return "The game was ended (exit code -1), often after it froze. If it froze, use Export report... and attach the zip to a GitHub issue. ";
+                return "The game was ended (exit code -1), often after it froze. If it froze: " + Report.ReportHint.Ask + " ";
             return string.Empty;
         }
 

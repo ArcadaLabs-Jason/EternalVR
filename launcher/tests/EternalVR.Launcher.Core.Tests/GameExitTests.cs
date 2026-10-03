@@ -63,12 +63,12 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(string.Empty, GameExit.StatusPrefix(null));
             Assert.Equal(string.Empty, GameExit.StatusPrefix(0));
             Assert.Equal(string.Empty, GameExit.StatusPrefix(1));
-            Assert.Equal("The game crashed (exit code 0xC0000005 (access violation: a crash)). Use Export report... and attach the zip to a GitHub issue. ",
+            Assert.Equal("The game crashed (exit code 0xC0000005 (access violation: a crash)). Click Export report and post the zip with your bug report. ",
                 GameExit.StatusPrefix(unchecked((int)0xC0000005)));
             string ended = GameExit.StatusPrefix(-1);
             Assert.StartsWith("The game was ended (exit code -1)", ended);
             Assert.DoesNotContain("crashed", ended);
-            Assert.Contains("Export report...", ended);
+            Assert.True(Report.ReportHint.In(ended));
         }
     }
 }

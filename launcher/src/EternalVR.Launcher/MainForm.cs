@@ -94,7 +94,7 @@ namespace EternalVR.Launcher
                 MessageBox.Show(this, problem + "\n\nLaunch anyway? VR starts once the headset is found, and the late size change "
                     + "can fail on graphics cards with 12 GB or less.",
                     "Headset not found", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes));
-            launch.Click += (s, e) => StartSession();
+            launch.Click += (s, e) => { MarkExport(false); StartSession(); };
             check.Click += (s, e) => RunPreflight();
             restoreSaves.Click += (s, e) => RestoreSaves();
             openData.Click += (s, e) => Process.Start("explorer.exe", "\"" + ctx.Paths.Root + "\"");
@@ -103,6 +103,7 @@ namespace EternalVR.Launcher
                 // The report is built on a worker; one at a time.
                 // Building takes a few seconds: the button says so, or the click looks lost.
                 exportReport.Enabled = false;
+                MarkExport(false);
                 exportReport.Text = "Preparing...";
                 try { await ReportExport.Run(this, ctx); }
                 finally
@@ -255,7 +256,7 @@ namespace EternalVR.Launcher
             tips.SetToolTip(launch, "Starts DOOM Eternal in VR with these settings. Your game settings are put back when it exits.");
             tips.SetToolTip(check, "Checks the game, the mod and the headset runtime again.");
             tips.SetToolTip(restoreSaves, "Puts back your save slots from a backup (one is made before every VR launch).");
-            tips.SetToolTip(exportReport, "Saves a report (logs and checks, personal paths removed) to attach to a bug report.");
+            tips.SetToolTip(exportReport, "Saves a zip of the logs and checks, personal info removed. Post it with your bug report on Discord or GitHub.");
 
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));

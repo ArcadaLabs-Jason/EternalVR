@@ -8,6 +8,7 @@ using System.Windows.Forms;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Safety;
 using EternalVR.Launcher.Core.Settings;
+using EternalVR.Launcher.Platform;
 
 namespace EternalVR.Launcher
 {
@@ -48,6 +49,9 @@ namespace EternalVR.Launcher
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int Run(string[] args)
         {
+            // The copy started inside the game's package for a Game Pass launch: it starts the game and ends (PackageStart).
+            if (args.Length == 2 && string.Equals(args[0], PackageStart.HelperSwitch, StringComparison.OrdinalIgnoreCase))
+                return PackageLaunch.RunHelper(args[1]);
             LauncherOptions options;
             try { options = LauncherOptions.Parse(args); }
             catch (ArgumentException e)

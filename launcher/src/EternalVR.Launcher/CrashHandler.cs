@@ -33,7 +33,7 @@ namespace EternalVR.Launcher
             var where = Write((fatal ? "fatal error: " : "unexpected error: ") + e);
             var text = "EternalVR hit an unexpected error" + (fatal ? " and has to close" : string.Empty) + ":\n\n"
                 + (e?.Message ?? "unknown error") + "\n\nDetails are in " + where
-                + ". If it happens again, use Export report... and attach the zip to a GitHub issue.";
+                + ". If it happens again: " + Core.Report.ReportHint.Ask;
             try { MessageBox.Show(text, "EternalVR", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             catch (InvalidOperationException) { }
         }

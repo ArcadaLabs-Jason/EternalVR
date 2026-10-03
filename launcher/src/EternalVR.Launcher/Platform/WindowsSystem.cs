@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using EternalVR.Launcher.Core.Preflight;
+using EternalVR.Launcher.Core.Report;
 using Microsoft.Win32;
 
 namespace EternalVR.Launcher.Platform
@@ -77,6 +78,22 @@ namespace EternalVR.Launcher.Platform
         }
 
         public static bool IsProcessRunning(string name) => RunningProcessIds(name).Count > 0;
+
+        /// <summary>The running processes of these names, with their start times when Windows gives them.</summary>
+        public static IReadOnlyList<SeenProcess> RunningProcesses(IEnumerable<string> names)
+        {
+            var list = new List<SeenProcess>();
+            foreach (var name in names)
+                foreach (var p in Process.GetProcessesByName(name))
+                {
+                    DateTime? started = null;
+                    try { started = p.StartTime; }
+                    catch (Exception e) when (e is System.ComponentModel.Win32Exception || e is InvalidOperationException || e is NotSupportedException) { }
+                    list.Add(new SeenProcess(p.ProcessName, p.Id, started));
+                    p.Dispose();
+                }
+            return list;
+        }
 
         public static IReadOnlyList<int> RunningProcessIds(string name)
         {

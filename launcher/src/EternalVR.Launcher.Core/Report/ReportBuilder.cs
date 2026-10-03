@@ -33,6 +33,8 @@ namespace EternalVR.Launcher.Core.Report
         public IReadOnlyList<string> GameSavedGamesDirs { get; set; } = new string[0];
         /// <summary>The event log entries read for <see cref="ReportManifest.WindowsEventsFile"/>; null when the logs were not read.</summary>
         public IReadOnlyList<WindowsEventLogRead> WindowsEvents { get; set; }
+        /// <summary>The WER folders searched for <see cref="ReportSource.WindowsErrorReports"/> (<c>Microsoft\Windows\WER</c> in ProgramData and LocalAppData).</summary>
+        public IReadOnlyList<string> WindowsErrorReportDirs { get; set; } = new string[0];
         public DateTime Now { get; set; } = DateTime.Now;
         /// <summary>
         /// The report's ID (<see cref="ReportBuilder.NewId"/>): in the file name and at the top of the text files, so a zip can be
@@ -159,6 +161,9 @@ namespace EternalVR.Launcher.Core.Report
                     case ReportSource.GameCrashes:
                         AddGameCrashes(files, dropped, missing, gameDirs, CrashWindowStart(sessions, inputs.Now), item);
                         break;
+                    case ReportSource.WindowsErrorReports:
+                        AddWindowsErrorReports(files, dropped, inputs.WindowsErrorReportDirs, inputs.Now);
+                        break;
                     case ReportSource.ControlsFolder:
                         AddControls(files, dropped, notes, inputs.DataRoot, item);
                         break;
@@ -214,6 +219,22 @@ namespace EternalVR.Launcher.Core.Report
             var contents = new ReportFile(ReportManifest.ContentsFile, redactor.Apply(ContentsText(inputs, kept, dropped, missing, notes)), 0, false);
             kept.Insert(0, contents);
             return new ReportResult(inputs.Id, kept, dropped, Zip(kept, inputs.Now));
+        }
+
+        private static void AddWindowsErrorReports(List<ReportFile> files, List<string> dropped, IEnumerable<string> werDirs, DateTime now)
+        {
+            var since = now.AddDays(-WindowsErrorReports.Days);
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var taken = WindowsErrorReports.Find(werDirs, since, WindowsErrorReports.Kept, out var notTaken);
+            foreach (var path in taken)
+            {
+                var zipPath = WindowsErrorReports.ZipPath(path, used);
+                var text = WindowsErrorReports.Read(path);
+                if (text == null) { dropped.Add(zipPath + ": could not be read"); continue; }
+                files.Add(new ReportFile(zipPath, text, Utf8.GetByteCount(text), false));
+            }
+            if (notTaken > 0)
+                dropped.Add($"{notTaken} other Windows crash report(s) (only those of the last {WindowsErrorReports.Days} days are taken, at most {WindowsErrorReports.Kept})");
         }
 
         /// <summary>The session log folders (<c>yyyyMMdd-HHmmss[-n]</c>), newest first.</summary>

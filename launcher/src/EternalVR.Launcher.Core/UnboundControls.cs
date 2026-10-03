@@ -29,7 +29,7 @@ namespace EternalVR.Launcher.Core
             + "While the game runs: " + PreflightEvaluator.SteamVrBindingsHelp + " > DOOM Eternal > Default.";
 
         /// <summary>The status sentence for any other cause.</summary>
-        public const string UnknownText = "No controller input reached EternalVR this session. Use Export report... and attach the zip to a GitHub issue.";
+        public const string UnknownText = "No controller input reached EternalVR this session. " + Report.ReportHint.Ask;
 
         /// <summary>
         /// The cause for a finished session's <paramref name="summary"/> (null: no VR session). <paramref name="steamVrBindingChosen"/>

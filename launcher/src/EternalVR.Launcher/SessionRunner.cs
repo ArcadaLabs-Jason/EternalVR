@@ -32,6 +32,8 @@ namespace EternalVR.Launcher
         private ProblemHold problemHold = new ProblemHold();
         /// <summary>The game's start with its marker and <see cref="GameStarted"/>; closed by <see cref="StopLaunching"/>.</summary>
         private readonly StartGate gate = new StartGate();
+        /// <summary>The session's game is the Game Pass or Microsoft Store build: the Xbox processes are logged at its start.</summary>
+        private bool storeGame;
         private volatile bool gameLaunched;
 
         /// <summary>Why the last restore attempt failed; null when it succeeded or only waits for the game to exit.</summary>
@@ -177,6 +179,7 @@ namespace EternalVR.Launcher
                 return false;
             }
             Report(StatusKind.Info, "Preparing the launch (settings snapshot and save backup)...");
+            storeGame = g.Facts.Platform == Core.Game.GamePlatform.GamePass;
 
             var id = ctx.Paths.UniqueSessionId(DateTime.Now);
             if (LaunchPlanBuilder.WantsRenderSize(ctx.Settings))
@@ -218,9 +221,10 @@ namespace EternalVR.Launcher
                     foreach (var old in SessionLogs.Prune(ctx.Paths.Logs, SessionLogs.Kept, ctx.Paths.SessionLogDir(id)))
                         Log.Info("removed an old session log folder: " + old);
                     Log.Info("launch plan:" + Environment.NewLine + plan.Describe());
+                    if (storeGame) Log.Info(StoreProcesses.Describe("at launch", WindowsSystem.RunningProcesses(StoreProcesses.Names)));
                 }, () =>
                 {
-                    game = Start(plan);
+                    game = storeGame && PackageStartOn() ? StartInPackage(plan, id) : Start(plan);
                     gameLaunched = true;
                     marker.State = SessionState.Running;
                     marker.GamePid = game.Id;
@@ -358,6 +362,42 @@ namespace EternalVR.Launcher
             return RestoreAndClear(marker);
         }
 
+        /// <summary>ETERNALVR_PACKAGE_START=0 in the launcher's environment starts a Game Pass game directly, as before 0.1.18.</summary>
+        private static bool PackageStartOn() => Environment.GetEnvironmentVariable("ETERNALVR_PACKAGE_START") != "0";
+
+        /// <summary>
+        /// The Game Pass or Microsoft Store game started inside its package, as the Xbox app starts it (PackageStart), with the
+        /// environment a direct start would give it; a direct start when that fails.
+        /// </summary>
+        private Process StartInPackage(LaunchPlan plan, string id)
+        {
+            var planFile = Path.Combine(ctx.Paths.SessionLogDir(id), "package-start.txt");
+            try
+            {
+                var env = ChildEnvironment.Merge(ChildEnvironment.Current(), plan.Environment, Environment.GetEnvironmentVariable);
+                var game = PackageLaunch.Start(new PackageStartPlan
+                {
+                    ExePath = plan.ExePath,
+                    WorkingDirectory = plan.WorkingDirectory,
+                    CommandLine = plan.CommandLine,
+                    Environment = env.ToList(),
+                }, planFile, Log);
+                Log.Info("started inside the package " + PackageStart.PackageName);
+                return game;
+            }
+            catch (Exception e) when (e is InvalidOperationException || e is IOException || e is UnauthorizedAccessException
+                                      || e is System.ComponentModel.Win32Exception)
+            {
+                Log.Warn("starting the game inside its package failed (" + e.Message + "); starting it directly");
+                return Start(plan);
+            }
+            finally
+            {
+                // The plan holds the whole environment: it is not left in the session folder.
+                try { File.Delete(planFile); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
         private static Process Start(LaunchPlan plan)
         {
             var psi = new ProcessStartInfo(plan.ExePath, plan.CommandLine)
@@ -394,6 +434,7 @@ namespace EternalVR.Launcher
                     Log.Error($"the game exited {elapsed - sinceExit:0.0} s after starting (exit code {game.ExitCode}), "
                         + (layerLoaded ? "after EternalVR loaded" : "before EternalVR loaded (no " + LayerStatusFile.LoadedMarker + ")")
                         + $"; see the logs in {ctx.Paths.Logs}");
+                    if (storeGame) Log.Info(StoreProcesses.Describe("after the early exit", WindowsSystem.RunningProcesses(StoreProcesses.Names)));
                     Report(StatusKind.Problem, StartWatch.EarlyExitMessage(elapsed - sinceExit, game.ExitCode, layerLoaded));
                     return;
                 }
