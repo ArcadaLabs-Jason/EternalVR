@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Settings;
@@ -255,13 +256,18 @@ namespace EternalVR.Launcher
             {
                 Text = "New VR settings profile", FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
                 MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Font = Font,
+                Font = UiFont(),
             })
             {
+                // Sizes are at 96 DPI: the scaling pass at ResumeLayout scales them to the display's (it runs only when the
+                // scale is set while the layout is suspended).
+                dialog.SuspendLayout();
+                dialog.AutoScaleDimensions = new SizeF(96F, 96F);
+                dialog.AutoScaleMode = AutoScaleMode.Dpi;
                 var prompt = new Label { Text = "Name (up to " + ProfileStore.MaxNameLength + " characters):", AutoSize = true };
                 var box = new TextBox { Width = 240, MaxLength = ProfileStore.MaxNameLength };
-                var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, Width = 80 };
-                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80 };
+                var ok = new Button { Text = "Save", DialogResult = DialogResult.OK, Width = 80, Height = ButtonHeight };
+                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80, Height = ButtonHeight };
                 var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
                 buttons.Controls.AddRange(new Control[] { cancel, ok });
                 var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Padding = new Padding(10) };
@@ -269,6 +275,9 @@ namespace EternalVR.Launcher
                 dialog.Controls.Add(layout);
                 dialog.AcceptButton = ok;
                 dialog.CancelButton = cancel;
+                DisplayScale.Follow(dialog);
+                dialog.ResumeLayout(false);
+                dialog.PerformLayout();
                 while (dialog.ShowDialog(this) == DialogResult.OK)
                 {
                     if (ProfileStore.NormaliseName(box.Text) is string name) return name;

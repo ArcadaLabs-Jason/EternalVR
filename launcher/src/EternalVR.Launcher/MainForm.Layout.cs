@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace EternalVR.Launcher
@@ -258,34 +257,8 @@ namespace EternalVR.Launcher
             FitStatus();
         }
 
-        /// <summary>
-        /// A window made at the sign-in display's scale and placed on a display with another one before it is shown (centred on
-        /// the display with the pointer) gets no scale change from Windows, and stayed at the sign-in scale: as large as on a
-        /// 200 % display on a 125 % one. It is given the change Windows gives a window dragged there.
-        /// </summary>
-        private void MatchDisplayScale()
-        {
-            if (!IsHandleCreated) return;
-            int dpi = (int)GetDpiForWindow(Handle);
-            if (dpi <= 0 || dpi == DeviceDpi) return;
-            var size = new Size(Width * dpi / DeviceDpi, Height * dpi / DeviceDpi);
-            var rect = new Rect { Left = Left, Top = Top, Right = Left + size.Width, Bottom = Top + size.Height };
-            SendMessage(Handle, WM_DPICHANGED, (IntPtr)((dpi << 16) | dpi), ref rect);
-        }
-
-        private const int WM_DPICHANGED = 0x02E0;
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Rect
-        {
-            public int Left, Top, Right, Bottom;
-        }
-
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr hwnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, ref Rect lParam);
+        /// <summary>The window placed on a display whose scale is not the sign-in one gets that display's (<see cref="DisplayScale"/>).</summary>
+        private void MatchDisplayScale() => DisplayScale.Match(this, keepCentre: false);
 
         /// <summary>The status line wraps at the window's width.</summary>
         private void FitStatus() => WrapIn(statusLabel, ClientSize.Width - LogicalToDeviceUnits(24));

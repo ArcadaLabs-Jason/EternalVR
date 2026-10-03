@@ -397,6 +397,7 @@ MappedInput runMapper() {
         // Nothing is held across a gap: the next live frame starts from released buttons.
         s.mapper.reset();
         s.hold.reset();
+        resetActionAim(s);
         s.viewQueue.drain();
         sendWheelPointer(s, false, {}, 0.0f);
         s.wheelHand.reset();
@@ -425,7 +426,8 @@ MappedInput runMapper() {
     // The recenter binding is the layer's own: a long press re-anchors the room (docs/VR_ROOMSCALE.md).
     noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter));
     out.turnStick = s.mapper->turnStick();
-    out.actions = s.hold.update(out.input.down, dt);
+    // A melee or equipment press that aims with the head or the off hand waits for the view (action_aim.hpp).
+    out.actions = s.hold.update(aimActions(s, out.input.down, menuHold, dt), dt);
     out.live = true;
     if (cfg.wheelSelect == input::WheelSelect::Hand) {
         // The weapon hand points at the wheel; the stick or button only holds it (wheel_hand.hpp).

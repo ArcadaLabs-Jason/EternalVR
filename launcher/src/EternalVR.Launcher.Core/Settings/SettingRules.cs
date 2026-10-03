@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: gestures
         ThrowGesture, SwingGesture, HandsJump,
         // Play: controls
-        AimWith, RevenantAimWith, WeaponHand, MoveToward, XButton, DossierMapSticks, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
+        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, MoveToward, XButton, DossierMapSticks, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
         Resolution, EachEye, AntiAliasing, Sharpening, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
@@ -83,6 +83,8 @@ namespace EternalVR.Launcher.Core.Settings
                     return !s.Controllers ? NeedsControllers : s.Aim == AimMode.View ? NeedsHeadOrHandAim : null;
                 case Setting.AimSteadiness:
                 case Setting.ShotsFrom:
+                case Setting.MeleeAimWith:
+                case Setting.EquipmentAimWith:
                     return !s.Controllers ? NeedsControllers : handAim ? null : NeedsHandAim;
                 case Setting.AimDot:
                 case Setting.AimDotSize:

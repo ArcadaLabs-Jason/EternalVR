@@ -162,6 +162,7 @@ add_library(evr_layer SHARED
     xr_presenter.cpp)
 # Motion controllers (M5, controllers.hpp).
 target_sources(evr_layer PRIVATE
+    action_aim_hook.cpp
     aim_hooks.cpp
     bhaptics_game.cpp
     bhaptics_launch.cpp
@@ -170,6 +171,7 @@ target_sources(evr_layer PRIVATE
     control_map.cpp
     controller_test.cpp
     controllers.cpp
+    equipment_launch_hook.cpp
     game_view_poses.cpp
     haptics_xr.cpp
     input_profiles.cpp

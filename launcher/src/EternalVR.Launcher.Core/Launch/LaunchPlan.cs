@@ -183,6 +183,10 @@ namespace EternalVR.Launcher.Core.Launch
             // hand aim needs the controllers the same way. Under view aim the layer ignores it.
             if (s.RevenantAim != RevenantAimMode.Same)
                 Set("ETERNALVR_DEMON_AIM", s.RevenantAim == RevenantAimMode.Hand && s.Controllers ? "hand" : "head");
+            // What aims melee, and the equipment launcher and the Flame Belch, only when not the same as Aim with; the layer
+            // uses them only under hand aim (features/input/action_aim.hpp).
+            if (s.MeleeAim != ActionAimMode.Same) Set("ETERNALVR_MELEE_AIM", LauncherSettings.ActionAimEnvironment(s.MeleeAim));
+            if (s.EquipmentAim != ActionAimMode.Same) Set("ETERNALVR_EQUIPMENT_AIM", LauncherSettings.ActionAimEnvironment(s.EquipmentAim));
             if (window != null) Set("ETERNALVR_WINDOW", window.EnvironmentValue);
             if (mirror)
             {

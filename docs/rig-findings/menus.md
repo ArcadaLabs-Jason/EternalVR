@@ -142,3 +142,21 @@ and memory scans while injecting mouse motion). All addresses are RVAs in this b
 - Not checked: whether the Dossier's screen does anything with the left presses after the automap (the
   layer presses only with the cursor in the middle of the screen), and the engine handlers before the game in
   the event loop (mouse drags already reach the map, so they pass motion and buttons through).
+
+## 7. How the game reads the keyboard [static-verified]
+
+- Raw input only, by the key's place. The keyboard handler (0x1DC1110) reads a `RAWKEYBOARD`'s `MakeCode`
+  and `Flags` and nothing else (not `VKey`, not `Message`): key number = `MakeCode | (RI_KEY_E0 ? 0x80 : 0)`,
+  DirectInput's numbering (W 0x11, A 0x1E, up arrow 0xC8), posted as `SE_KEY`. Fake shifts (E0 2A/AA/36/B6)
+  are dropped; 0x45 is Num Lock (0xC5), 0x54 Print Screen (0xB7), E1 1D 45 Pause; other E1 records and make
+  codes from 0x80 up are dropped. The key state array (input + 0x18048) is written only here.
+- No keyboard layout on this path: no `MapVirtualKey`, `ToUnicode` or `GetKeyboardLayout`. The layout is used
+  only to show a key's label (0x1DBE0F0: `MapVirtualKeyA` + `ToUnicode`), so on a French AZERTY keyboard the
+  key labelled Z is K_W and is shown as "Z". The key-name table (.rdata 0x38A54E0, 252 entries) and the
+  automap's W/A/S/D/C (section 6) use these numbers.
+- `WM_KEYDOWN`/`WM_KEYUP` go to `DefWindowProc`; `WM_SYSKEYDOWN` only for Alt+Enter; `WM_CHAR` (0x1DC3810)
+  is the only text path. The game's own `GetAsyncKeyState` calls ask only for Control (the low-level
+  keyboard hook 0x1DC3740 and `WM_SIZING` 0x1DC4510); `GetKeyState` and `GetKeyboardState` are called only by
+  the embedded MFC tools.
+- For the layer: an injected key is sent as its US-keyboard scan code (`src/platform/key_injection/
+  us_scan_codes.hpp`). The layout's own scan code (`MapVirtualKeyW`) sent W as Z and A as Q on AZERTY.

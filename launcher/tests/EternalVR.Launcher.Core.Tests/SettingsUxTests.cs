@@ -185,6 +185,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.GloryKills, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
                 Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.Bhaptics, Setting.RevenantAimWith,
+                Setting.MeleeAimWith, Setting.EquipmentAimWith,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
             Assert.Null(SettingRules.WhyNot(Setting.AimWith, s));
@@ -195,7 +196,7 @@ namespace EternalVR.Launcher.Core.Tests
         public void HandAimSettingsNeedHandAimInEitherMode()
         {
             var head = new LauncherSettings { Aim = AimMode.Head };
-            foreach (var setting in new[] { Setting.AimSteadiness, Setting.AimDot, Setting.ShotsFrom, Setting.AimDotSize })
+            foreach (var setting in new[] { Setting.AimSteadiness, Setting.AimDot, Setting.ShotsFrom, Setting.AimDotSize, Setting.MeleeAimWith, Setting.EquipmentAimWith })
                 Assert.Equal(SettingRules.NeedsHandAim, SettingRules.WhyNot(setting, head));
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             Assert.Null(SettingRules.WhyNot(Setting.AimDot, mono));
@@ -247,6 +248,8 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<HeightMode>(Setting.EyeHeight);
             Choices<AimMode>(Setting.AimWith);
             Choices<RevenantAimMode>(Setting.RevenantAimWith);
+            Choices<ActionAimMode>(Setting.MeleeAimWith);
+            Choices<ActionAimMode>(Setting.EquipmentAimWith);
             Choices<Handedness>(Setting.WeaponHand);
             Choices<LocomotionMode>(Setting.MoveToward);
             Choices<DossierPress>(Setting.XButton);

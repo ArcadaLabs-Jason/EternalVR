@@ -67,6 +67,12 @@ closedLoopAim(const IdAngles& gameView, const IdAngles& target, bool forcedAngle
 // measures at fire time (under 0.5 degrees p99).
 float aimErrorDegrees(const IdAngles& a, const IdAngles& b);
 
+// `game` turned the way `from` would have to turn to point along `to`: the yaw and pitch `game` differs from
+// `from` by, added to `to`'s (pitch limited to +-pitchLimit). For a launch the game aims from a joint that
+// follows one ray (`from`, with its own fixed turn and arc) when it should follow another (`to`). nullopt
+// when a direction is unusable.
+std::optional<Vec3> carryAimOffset(Vec3 game, Vec3 from, Vec3 to, float pitchLimit = 89.0f);
+
 // Convergence fallback: the view angles that point the eye at `target` (usually where the hand ray hits
 // the world). nullopt when the two points coincide or are not finite.
 std::optional<IdAngles> convergenceAngles(Vec3 eye, Vec3 target);

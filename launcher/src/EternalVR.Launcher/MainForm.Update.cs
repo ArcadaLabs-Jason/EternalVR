@@ -11,7 +11,9 @@ namespace EternalVR.Launcher
     /// <summary>
     /// Update alerts: on start (at most once an hour) the launcher asks GitHub whether a newer EternalVR release is out;
     /// if so, "Update to x.y.z..." appears next to the other buttons and offers to download and install it
-    /// (<see cref="UpdateDialog"/>). The check can be turned off, and run by hand, on the Checks and log tab.
+    /// (<see cref="UpdateDialog"/>). The check can be turned off, and run by hand, on the Checks and log tab. A launcher
+    /// that is not an unpacked release (a build or test folder: no BUILD-INFO.txt) is not checked at start; Check now
+    /// shows what is out and why it cannot install it.
     /// </summary>
     public sealed partial class MainForm
     {
@@ -60,6 +62,11 @@ namespace EternalVR.Launcher
         private async void CheckForUpdate(bool asked)
         {
             if (checkingUpdate || ctx.TestMode) return;
+            if (!asked && !InstallBlock.IsRelease(ctx.ProgramDir))
+            {
+                ctx.Log.Info("update: not checked at start: this build is not a release (no " + InstallBlock.BuildInfoFile + ")");
+                return;
+            }
             var state = LoadUpdateState();
             if (!asked && !state.Due(DateTime.UtcNow))
             {
@@ -115,7 +122,7 @@ namespace EternalVR.Launcher
                 return;
             }
             UpdateChoice choice;
-            using (var dlg = new UpdateDialog(available, Current.ToString(), ctx.ProgramDir, ctx.Paths.Updates, WhyNoInstall(), ctx.Log.Info))
+            using (var dlg = new UpdateDialog(available, Current.ToString(), ctx.ProgramDir, ctx.Paths.Updates, WhyNoInstall, ctx.Log.Info))
             {
                 dlg.ShowDialog(this);
                 choice = dlg.Choice;
@@ -138,15 +145,12 @@ namespace EternalVR.Launcher
         }
 
         /// <summary>Why the release cannot be installed in place now; null when it can.</summary>
-        private string WhyNoInstall()
+        private InstallBlock WhyNoInstall()
         {
-            if (session != null || saveRestore != null || ctx.RunningGameProcesses().Count > 0)
-                return "Quit DOOM Eternal first: the update replaces the layer the game loads.";
-            if (!File.Exists(Path.Combine(ctx.ProgramDir, "BUILD-INFO.txt")))
-                return "This launcher is not an unpacked release (it has no BUILD-INFO.txt), so it is not updated in place: download the new release from its page.";
-            if (!FileUtil.IsWritableDirectory(ctx.ProgramDir, out var error))
-                return "The launcher's folder cannot be written (" + error + "): download the new release from its page, or move EternalVR to a folder of your own.";
-            return null;
+            bool release = InstallBlock.IsRelease(ctx.ProgramDir);
+            string writeError = null;
+            if (release && !FileUtil.IsWritableDirectory(ctx.ProgramDir, out var error)) writeError = error;
+            return InstallBlock.For(release, writeError, session != null || saveRestore != null || ctx.RunningGameProcesses().Count > 0);
         }
 
         private UpdateState LoadUpdateState()

@@ -89,6 +89,14 @@ namespace EternalVR.Launcher.Core.Settings
                 + "follows that setting. Weapon hand: the cannons and the demon's hands follow your controller. Head: they follow "
                 + "where you look, which keeps them out of the way when you walk around or turn in your room.",
                 "Same as Aim with", "Weapon hand", "Head"),
+            [Setting.MeleeAimWith] = new Text("Melee aim with",
+                "What aims melee, Blood Punch, glory kills and use. Same as Aim with: your weapon hand. Head: where you look. "
+                + "Off hand: where your other hand points.",
+                "Same as Aim with", "Head", "Off hand"),
+            [Setting.EquipmentAimWith] = new Text("Equipment aim with",
+                "What aims the equipment launcher (grenades) and the Flame Belch, which sit on the Slayer's left shoulder. "
+                + "Same as Aim with: your weapon hand. Head: where you look. Off hand: where your other hand points.",
+                "Same as Aim with", "Head", "Off hand"),
             [Setting.WeaponHand] = new Text("Weapon hand",
                 "The hand that holds the gun. Left swaps the buttons between the hands; the second left option also swaps the sticks.",
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),

@@ -174,8 +174,15 @@ struct ArtificialMotion {
 ArtificialMotion artificialMotion();
 
 // Camera hook, inside head aim: the angles the view follows. The head's own, or under hand aim the weapon
-// hand's ray; nullopt when hand aim yields this frame (forced view) and nothing may be written.
+// hand's ray (the head's or the off hand's while a melee or equipment press asks for it,
+// action_aim_hook.cpp); nullopt when hand aim yields this frame (forced view) and nothing may be written.
 std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head);
+// Camera hook, inside head aim, once the angles aimAngles gave are written into the game: a melee press
+// waiting for them may go out with the next command.
+void noteAimWritten();
+// Camera hook, inside head aim, on a frame it writes nothing although hand aim does not yield (a menu or
+// popup is up, a scripted camera): a melee press waiting for the view goes out at once.
+void noteAimPaused();
 
 // Camera hook, while piloting a demon (demon_aim.cpp): the angles the demon aims at, the head's or the weapon
 // hand's ray (input::demonAimSource), whatever the game's view is doing: the demon's update runs through a

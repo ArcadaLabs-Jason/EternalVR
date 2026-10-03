@@ -18,10 +18,15 @@ namespace EternalVR.Launcher
         private readonly DlssRelease release;
         private readonly string dlssRoot;
         private readonly Action<string> log;
-        private readonly Button accept = new Button { Text = "Accept and download", AutoSize = true, MinimumSize = new Size(150, 30) };
-        private readonly Button cancel = new Button { Text = "Cancel", Width = 90, Height = 30, DialogResult = DialogResult.Cancel };
+        // Sizes at 96 DPI, scaled by the pass at ResumeLayout; the buttons grow and shrink to their text (by default they only
+        // grow, and kept twice their size after that pass).
+        private readonly Button accept = new Button { Text = "Accept and download", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(150, 30) };
+        private readonly Button cancel = new Button
+        {
+            Text = "Cancel", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(90, 30), DialogResult = DialogResult.Cancel,
+        };
         private readonly ProgressBar bar = new ProgressBar { Width = 440, Height = 18, Maximum = 1000, Visible = false };
-        private readonly Label status = new Label { AutoSize = true, MaximumSize = new Size(440, 0) };
+        private readonly Label status = new Label { AutoSize = true, MaximumSize = new Size(440, 0), Visible = false, Margin = new Padding(0, 3, 0, 3) };
         private CancellationTokenSource running;
 
         /// <summary>The downloaded file, checked; null until the download has finished.</summary>
@@ -33,6 +38,8 @@ namespace EternalVR.Launcher
             this.dlssRoot = dlssRoot;
             this.log = log;
             Text = "Download DLSS from NVIDIA";
+            // Sizes are at 96 DPI; the scaling pass at ResumeLayout scales them (without it they stayed at 96 DPI).
+            SuspendLayout();
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = MainForm.UiFont();
@@ -61,6 +68,9 @@ namespace EternalVR.Launcher
             Controls.Add(layout);
             AcceptButton = accept;
             CancelButton = cancel;
+            DisplayScale.Follow(this);
+            ResumeLayout(false);
+            PerformLayout();
 
             accept.Click += (s, e) => Download();
             FormClosing += (s, e) => running?.Cancel();
@@ -72,6 +82,7 @@ namespace EternalVR.Launcher
             bar.Visible = true;
             bar.Value = 0;
             status.ForeColor = SystemColors.ControlText;
+            status.Visible = true;
             status.Text = "Downloading...";
             running = new CancellationTokenSource();
             log($"DLSS download: {release.Url} (version {release.Version}), NVIDIA's license accepted");

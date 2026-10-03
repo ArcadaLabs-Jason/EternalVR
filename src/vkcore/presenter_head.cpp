@@ -482,6 +482,7 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
                 "aim: a menu is up: head aim holds the body yaw at %.1f and writes nothing until it closes",
                 *aimMenuBody);
         }
+        controllers::noteAimPaused();
         return xr_math::axisFromAngles({0.0f, *aimMenuBody, 0.0f});
     }
 
@@ -492,6 +493,7 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
         // while the head is where it was when the camera took over (not the camera plus the head's whole
         // yaw in the room, which faces backwards for a player turned round in the room).
         ++aimCameraFrames;
+        controllers::noteAimPaused();
         const std::optional<xr_math::IdViewAxis> camera = xr_math::yawOnly(gameAxis);
         if (!camera) {
             return std::nullopt;
@@ -555,6 +557,7 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
         return std::nullopt; // the guard went off during this frame: the player's angles stay the game's
     }
     aimLastDelta = playerAim.addDelta(player, aimField, step.deltaPitch, step.deltaYaw);
+    controllers::noteAimWritten();
     xr_math::noteWritten(aimState, aimLastDelta.yaw);
     aimWritten = true;
     aimMenuBody = step.bodyYaw; // held while a menu is up (above)

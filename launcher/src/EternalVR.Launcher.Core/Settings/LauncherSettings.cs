@@ -69,7 +69,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
     /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base and parallel_eyes
+    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base and parallel_eyes
     /// (dlss_version replaced dlss_dll, which is still read once).
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
@@ -218,7 +218,7 @@ namespace EternalVR.Launcher.Core.Settings
 
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "render_size",
+            "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "melee_aim", "equipment_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
@@ -289,6 +289,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("aim", out var a)) s.Aim = ParseAim(a, version);
             if (map.TryGetValue("revenant_aim", out var ra))
                 s.RevenantAim = Pick(ra, RevenantAimMode.Same, ("hand", RevenantAimMode.Hand), ("head", RevenantAimMode.Head));
+            s.ReadActionAim(map);
             if (version >= 2)
             {
                 if (map.TryGetValue("mode", out var m)) s.Mode = string.Equals(m, "mono", StringComparison.OrdinalIgnoreCase) ? VrMode.Mono : VrMode.Stereo;
@@ -388,6 +389,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("controllers = " + (Controllers ? "1" : "0"));
             sb.AppendLine("aim = " + AimName(Aim));
             sb.AppendLine("revenant_aim = " + RevenantAimName(RevenantAim));
+            WriteActionAim(sb);
             sb.AppendLine("render_size = " + (NormaliseRenderSize(RenderSize) ?? RenderSizeAuto));
             sb.AppendLine("render_scale = " + ClampRenderScale(RenderScale).ToString("0.00", CultureInfo.InvariantCulture));
             sb.AppendLine("eye_size = " + EyeWidth.ToString(CultureInfo.InvariantCulture) + "x" + EyeHeight.ToString(CultureInfo.InvariantCulture));

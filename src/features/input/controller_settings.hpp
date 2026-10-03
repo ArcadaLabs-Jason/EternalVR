@@ -9,6 +9,9 @@
 //                                               stay the game's own (view)
 //   ETERNALVR_DEMON_AIM      head / hand        what aims a piloted demon (the Cultist Base Revenant): the
 //                                               head or the weapon hand; unset, as ETERNALVR_AIM
+//   ETERNALVR_MELEE_AIM      head / offhand     what aims melee, Blood Punch, glory kills and use under hand
+//                                               aim; unset (or hand), the weapon hand (action_aim.hpp)
+//   ETERNALVR_EQUIPMENT_AIM  head / offhand     the same for the equipment launcher and the Flame Belch
 //   ETERNALVR_LOCOMOTION     look / left / right  "forward" on the move stick: where the head looks, or
 //                                               where the left or the right hand points, whatever the
 //                                               handedness; the older head (look) and hand (the hand with
@@ -70,6 +73,7 @@
 //   ETERNALVR_WEAPON_ARM_TEST_SHOULDER  f,l,u   rig tests: the weapon arm's shoulder at this point (metres
 //                                               from the eyes, the head's yaw frame), not mirrored
 
+#include "features/input/action_aim.hpp"
 #include "features/input/aim_smoothing.hpp"
 #include "features/input/arm_gestures.hpp"
 #include "features/input/dossier_press.hpp"
@@ -141,6 +145,7 @@ struct ControllerSettings {
     bool enabled = true;
     AimSource aim = AimSource::Head;
     std::optional<AimSource> demonAim; // head or hand; nullopt follows `aim` (demonAimSource)
+    ActionAimSettings actionAim;       // melee and the shoulder launchers under hand aim (action_aim.hpp)
     LocomotionFrame locomotion = LocomotionFrame::Head;
     TurnSettings turn;
     game::Handedness handedness = game::Handedness::Right;

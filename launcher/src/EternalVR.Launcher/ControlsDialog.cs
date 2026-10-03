@@ -16,7 +16,8 @@ namespace EternalVR.Launcher
     /// </summary>
     internal sealed class ControlsDialog : Form
     {
-        private const int ActionWidth = 160;
+        /// <summary>A list's width at 96 DPI: the longest action, "Quick switch (last weapon)", shows whole.</summary>
+        private const int ActionWidth = 190;
         /// <summary>Room on the right of each list for the problem icon (<see cref="errors"/>).</summary>
         private static readonly Padding CellMargin = new Padding(3, 3, 20, 3);
         private static readonly ButtonInput[] AllInputs = (ButtonInput[])Enum.GetValues(typeof(ButtonInput));
@@ -61,13 +62,14 @@ namespace EternalVR.Launcher
             MinimizeBox = false;
             ShowInTaskbar = false;
             // Fits a 1080p display at 150 %, as the main window does; the lists scroll when the window is smaller.
-            Width = 780;
+            Width = 860;
             Height = 660;
             MinimumSize = new Size(560, 420);
             Icon = Branding.WindowIcon() ?? Icon;
             BuildLayout();
             Font = MainForm.UiFont();
             MainForm.FitListHeights(this);
+            DisplayScale.Follow(this);
             ResumeLayout(false);
             PerformLayout();
 

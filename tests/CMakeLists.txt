@@ -114,6 +114,7 @@ evr_add_test(evr_foveation_tests
 
 evr_add_test(evr_input_tests
     SOURCES
+        features/input/action_aim_tests.cpp
         features/input/aim_smoothing_tests.cpp
         features/input/analog_button_tests.cpp
         features/input/arm_gestures_tests.cpp
@@ -199,6 +200,7 @@ target_compile_definitions(evr_mp_policy_tests
 evr_add_test(evr_key_injection_tests
     SOURCES
         platform/key_injection/injected_keys_tests.cpp
+        platform/key_injection/us_scan_codes_tests.cpp
     DEPENDS evr_key_injection)
 
 # Layer pieces that need only the Vulkan headers (built with the layer, on Windows).

@@ -378,7 +378,8 @@ bool attach(const XrContext& context) {
     s.bindingWatch = {};
     s.attached.store(true, std::memory_order_release);
     EVR_LOG(
-        "%s: on: aim %s, demon aim %s%s, locomotion %s, turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
+        "%s: on: aim %s, demon aim %s%s, melee aim %s, equipment aim %s%s, locomotion %s, "
+        "turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
         "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
         "Dossier map panned by the %s stick, weapon wheel by the %s, throw gesture %s, overhead swing %s, "
         "hands-up jump %s",
@@ -386,6 +387,8 @@ bool attach(const XrContext& context) {
         !cfg.demonAim                       ? " (as aim)"
         : cfg.aim == input::AimSource::View ? " (ETERNALVR_DEMON_AIM has no effect under view aim)"
                                             : " (ETERNALVR_DEMON_AIM)",
+        input::actionAimSourceName(cfg.actionAim.melee), input::actionAimSourceName(cfg.actionAim.equipment),
+        cfg.actionAim.any() && cfg.aim != input::AimSource::Hand ? " (no effect: only under hand aim)" : "",
         input::locomotionFrameName(cfg.locomotion),
         cfg.turn.mode == input::TurnMode::Smooth ? "smooth"
         : cfg.turn.mode == input::TurnMode::Snap ? "snap"

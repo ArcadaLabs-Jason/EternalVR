@@ -17,6 +17,7 @@ using evr::xr_math::AimCorrection;
 using evr::xr_math::aimErrorDegrees;
 using evr::xr_math::anglesOfDirection;
 using evr::xr_math::axisFromAngles;
+using evr::xr_math::carryAimOffset;
 using evr::xr_math::closedLoopAim;
 using evr::xr_math::convergenceAngles;
 using evr::xr_math::handAimAngles;
@@ -149,4 +150,35 @@ TEST_CASE("convergence aim points the eye at the point the hand ray hits") {
     CHECK(far.yaw < 0.0f);
     CHECK_FALSE(convergenceAngles(eye, eye).has_value());
     CHECK_FALSE(convergenceAngles(eye, {std::numeric_limits<float>::infinity(), 0.0f, 0.0f}).has_value());
+}
+
+TEST_CASE("carryAimOffset: the game's turn and arc from one ray, carried to another") {
+    const auto dir = [](float pitch, float yaw) {
+        return axisFromAngles({pitch, yaw, 0.0f}).forward;
+    };
+    const auto angles = [](Vec3 d) {
+        return anglesOfDirection(d).value_or(IdAngles{});
+    };
+    // The game launches 10 degrees up (pitch -10) and 5 to the left of the weapon hand at yaw 135; the head
+    // looks at yaw 45: the launch goes 10 up and 5 left of the head.
+    auto out = carryAimOffset(dir(-10.0f, 140.0f), dir(0.0f, 135.0f), dir(0.0f, 45.0f));
+    REQUIRE(out);
+    CHECK(angles(*out).pitch == doctest::Approx(-10.0f).epsilon(1e-3));
+    CHECK(angles(*out).yaw == doctest::Approx(50.0f).epsilon(1e-3));
+    // The same ray: the game's own direction.
+    out = carryAimOffset(dir(-10.0f, 140.0f), dir(5.0f, 135.0f), dir(5.0f, 135.0f));
+    REQUIRE(out);
+    CHECK(angles(*out).pitch == doctest::Approx(-10.0f).epsilon(1e-3));
+    CHECK(angles(*out).yaw == doctest::Approx(140.0f).epsilon(1e-3));
+    // Across the +-180 seam, and the pitch limited.
+    out = carryAimOffset(dir(0.0f, 170.0f), dir(0.0f, -170.0f), dir(-85.0f, 0.0f));
+    REQUIRE(out);
+    CHECK(angles(*out).yaw == doctest::Approx(-20.0f).epsilon(1e-3));
+    CHECK(angles(*out).pitch == doctest::Approx(-85.0f).epsilon(1e-3));
+    out = carryAimOffset(dir(-30.0f, 0.0f), dir(0.0f, 0.0f), dir(-80.0f, 0.0f));
+    REQUIRE(out);
+    CHECK(angles(*out).pitch == doctest::Approx(-89.0f).epsilon(1e-3));
+    // An unusable direction.
+    CHECK_FALSE(carryAimOffset(Vec3{}, dir(0.0f, 0.0f), dir(0.0f, 0.0f)));
+    CHECK_FALSE(carryAimOffset(dir(0.0f, 0.0f), Vec3{std::nanf(""), 0.0f, 0.0f}, dir(0.0f, 0.0f)));
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
@@ -76,12 +77,17 @@ namespace EternalVR.Launcher
                 Font = UiFont(),
             })
             {
+                // Sizes are at 96 DPI: the scaling pass at ResumeLayout scales them to the display's (it runs only when the
+                // scale is set while the layout is suspended).
+                dlg.SuspendLayout();
+                dlg.AutoScaleDimensions = new SizeF(96F, 96F);
+                dlg.AutoScaleMode = AutoScaleMode.Dpi;
                 var label = new Label { Text = "Choose the backup to restore (one is made before every VR launch):", Dock = DockStyle.Top, Height = 36, Padding = new Padding(8, 8, 8, 0) };
                 var list = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
                 foreach (var b in backups) list.Items.Add(new BackupItem(b));
                 list.SelectedIndex = 0;
-                var ok = new Button { Text = "Restore...", DialogResult = DialogResult.OK, Width = 100 };
-                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 100 };
+                var ok = new Button { Text = "Restore...", DialogResult = DialogResult.OK, Width = 100, Height = ButtonHeight };
+                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 100, Height = ButtonHeight };
                 var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = 40, Padding = new Padding(4) };
                 buttons.Controls.AddRange(new Control[] { cancel, ok });
                 list.DoubleClick += (s, e) => { dlg.DialogResult = DialogResult.OK; };
@@ -90,6 +96,9 @@ namespace EternalVR.Launcher
                 dlg.Controls.Add(buttons);
                 dlg.AcceptButton = ok;
                 dlg.CancelButton = cancel;
+                DisplayScale.Follow(dlg);
+                dlg.ResumeLayout(false);
+                dlg.PerformLayout();
                 return dlg.ShowDialog(this) == DialogResult.OK ? (list.SelectedItem as BackupItem)?.Path : null;
             }
         }

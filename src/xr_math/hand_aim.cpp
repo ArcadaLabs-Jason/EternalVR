@@ -70,6 +70,18 @@ float aimErrorDegrees(const IdAngles& a, const IdAngles& b) {
     return std::atan2(length(cross(fa, fb)), dot(fa, fb)) * kDegreesPerRadian;
 }
 
+std::optional<Vec3> carryAimOffset(Vec3 game, Vec3 from, Vec3 to, float pitchLimit) {
+    const std::optional<IdAngles> g = anglesOfDirection(game);
+    const std::optional<IdAngles> f = anglesOfDirection(from);
+    const std::optional<IdAngles> t = anglesOfDirection(to);
+    if (!g || !f || !t) {
+        return std::nullopt;
+    }
+    const float pitch = std::clamp(t->pitch + (g->pitch - f->pitch), -pitchLimit, pitchLimit);
+    const float yaw = normalize180(t->yaw + normalize180(g->yaw - f->yaw));
+    return axisFromAngles({pitch, yaw, 0.0f}).forward;
+}
+
 std::optional<IdAngles> convergenceAngles(Vec3 eye, Vec3 target) {
     if (!finite(eye) || !finite(target)) {
         return std::nullopt;

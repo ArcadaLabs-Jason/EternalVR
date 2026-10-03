@@ -141,7 +141,7 @@ MapDragOutput MapDrag::update(const MapDragInput& in) {
     if (phase_ == Phase::Down && want != button_ && now - downAt_ >= tuning_.minHold) {
         release(out);
     }
-    sendKeys(panBy_ == MapPanBy::Keys ? keyPan_.update(pan) : MapKeys{}, out);
+    sendKeys(panBy_ == MapPanBy::Keys ? keyPan_.update(pan, dt) : MapKeys{}, out);
     if (panBy_ != MapPanBy::Keys) {
         keyPan_.reset();
     }

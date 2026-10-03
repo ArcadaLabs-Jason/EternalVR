@@ -308,10 +308,17 @@ void endGameView(std::byte* renderView,
             inYaw(input::offhandOffsetFor(cfg.offhandShoulderOffset, cfg.handedness)) * unitsPerMetre;
         world.offElbow = inYaw(input::offhandOffsetFor(cfg.offhandElbow, cfg.handedness));
     }
+    // The off hand's aim ray and the head, for a Flame Belch shot under ETERNALVR_EQUIPMENT_AIM.
+    world.offAimValid = p.aimValid[off];
+    if (world.offAimValid) {
+        world.offAim = xr_math::controllerRelativeToEye(body, headOffset, p.head, p.aim[off], unitsPerMetre);
+    }
+    world.head = xr_math::controllerRelativeToEye(body, headOffset, p.head, p.head, unitsPerMetre);
     world.unitsPerMetre = unitsPerMetre;
     world.qpc = nowQpc();
     world.valid = true;
     s.world = world;
+    noteActionPressView(s, player, body);
     if (cfg.trace) {
         static ULONGLONG lastTrace = 0;
         const ULONGLONG ticks = GetTickCount64();

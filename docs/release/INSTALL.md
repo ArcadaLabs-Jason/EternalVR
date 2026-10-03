@@ -49,8 +49,10 @@ appears next to the other buttons: it shows what is new and offers **Download an
 version** or **Later**. Installing downloads the release's zip, checks it against the SHA-256 GitHub lists
 for it and against the zip's own `SHA256SUMS.txt`, replaces the files in the launcher's folder, and starts
 the new launcher. Your settings, controls, profiles and backups in `%LOCALAPPDATA%\EternalVR\` stay as they
-are. Quit the game first. The check can be turned off, and run by hand, on the **Checks and log** tab. You
-can always update by hand instead: unzip the new release over the old folder, or anywhere new.
+are. Quit the game first. When the launcher's folder cannot be written (for example under Program Files), the
+dialog says so and its first button opens the release page instead. The check can be turned off, and run by
+hand, on the **Checks and log** tab. You can always update by hand instead: unzip the new release over the old
+folder, or anywhere new.
 
 ## What the launcher changes, and puts back
 

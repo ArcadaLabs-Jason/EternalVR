@@ -19,6 +19,10 @@
     <Reference Include="System.Net.Http" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The visual QA harness (tests/UiShots) builds the dialogs in each of their states. -->
+    <InternalsVisibleTo Include="evr-ui-shots" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\EternalVR.Launcher.Core\EternalVR.Launcher.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

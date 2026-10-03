@@ -16,6 +16,7 @@
 // camera hook itself is seen on more than one of the game's worker threads (aim_hooks.cpp). If the game
 // ever runs two at once, those caches need a lock or a per-thread copy.
 
+#include "features/input/action_aim.hpp"
 #include "features/input/aim_smoothing.hpp"
 #include "features/input/binding_watch.hpp"
 #include "features/input/controller_bindings.hpp"
@@ -135,6 +136,11 @@ struct WorldHand {
     xr_math::EyeRelativePose grip; // the grip position with the aim axis (the barrel follows the ray)
     bool offValid = false;
     xr_math::EyeRelativePose offGrip; // the off hand's grip (position and orientation)
+    // The off hand's aim ray and the rendered head (its offset from the eye and its axis), for Flame Belch
+    // shots under ETERNALVR_EQUIPMENT_AIM.
+    bool offAimValid = false;
+    xr_math::EyeRelativePose offAim;
+    xr_math::EyeRelativePose head;
     // The off-hand arm's IK (offhand_hook.cpp): the shoulder fixed to the head (relative to the eye) and
     // the elbow's bend direction (world), both in the head's yaw frame.
     Vec3 offShoulder;
@@ -238,9 +244,19 @@ struct State {
     input::ForcedAngleGate gate;
     std::atomic<bool> yielding{false};
     input::ForcedReason lastReason = input::ForcedReason::None;
-    // The last usable hand aim angles and when (camera hook only), held briefly through tracking loss.
-    xr_math::IdAngles lastHandAngles;
-    LONGLONG lastHandQpc = 0;
+    // The last usable aim angles of each hand and when (camera hook only, by input::Hand), held briefly
+    // through tracking loss.
+    std::array<xr_math::IdAngles, 2> lastHandAngles{};
+    std::array<LONGLONG, 2> lastHandQpc{};
+
+    // Melee and equipment aim (action_aim.hpp): the policy runs on the mapper (mapperMutex, created on first
+    // use); the target it chose and its generation (action_aim_hook.cpp) for the camera hook, the last
+    // generation the camera hook wrote, and the game frames still to log after a press went out.
+    std::optional<input::ActionAim> actionAim;
+    std::atomic<std::uint64_t> actionTarget{0};
+    std::atomic<std::uint64_t> actionTargetWritten{0};
+    std::atomic<int> actionPressFrames{0};
+    std::atomic<std::uint8_t> actionPressAction{0};
 
     // Which game hooks are in place (installGameHooks, then read-only).
     bool userCmdHook = false;
@@ -253,6 +269,7 @@ struct State {
     bool xinputHook = false;
     bool rumbleHook = false;
     bool demonAimHook = false;
+    bool equipmentHook = false; // the equipment launcher's launch (equipment_launch_hook.cpp)
     bool facingHook = false;
     bool climbHook = false;
     bool promptHooks = false;
@@ -356,6 +373,20 @@ inline constexpr std::size_t kEntityDef = 0xA8;
 // The hand holding the weapon for the configured handedness.
 input::Hand weaponHand();
 
+// Melee and equipment aim (action_aim_hook.cpp, features/input/action_aim.hpp).
+// The mapper, under mapperMutex, before ActionHold: the actions with a press held back until the camera hook
+// has written its target; publishes the target. `menuHold`: a menu holds gameplay input back.
+game::GameActionSet aimActions(State& s, const game::GameActionSet& down, bool menuHold, float dt);
+// The mapper, when its input goes stale: back to the weapon hand.
+void resetActionAim(State& s);
+// Camera hook, inside hand aim: what the view follows now, and notes that this frame writes it.
+input::ActionAimSource actionAimTarget(State& s);
+// The fire hook: the ray a Flame Belch shot (`belchShot`: the shot set overrideStartFxAxis) takes instead of
+// the weapon hand's (the head's or the off hand's), when ETERNALVR_EQUIPMENT_AIM chooses one; null otherwise.
+const xr_math::EyeRelativePose* actionShotRay(const WorldHand& world, const std::byte* hands, bool belchShot);
+// endGameView: logs the game's view after a held-back press went out, against the head and the hands.
+void noteActionPressView(State& s, const std::byte* player, const xr_math::IdViewAxis& body);
+
 // Runs the mapper once for `now` and returns the actions to send (held for the game, ActionHold) and
 // the input; queues the turn for the angle hook and sends the weapon wheel's pointer as the game's cursor
 // motion. Empty when the snapshot is stale.
@@ -445,6 +476,7 @@ bool installXInputHook();
 bool installRumbleHook();
 bool installFacingHook();
 bool installClimbHook();
+bool installEquipmentLaunchHook();
 bool installPromptHooks();
 
 // The game's prompts name the buttons of `controller` under `profile` from now on (prompt_hooks.cpp). Called

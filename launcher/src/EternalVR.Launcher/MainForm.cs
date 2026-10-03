@@ -114,7 +114,7 @@ namespace EternalVR.Launcher
             {
                 MatchDisplayScale();
                 FitWindow();
-                ctx.Log.Info($"EternalVR launcher started; data folder {ctx.Paths.Root}");
+                ctx.Log.Info($"EternalVR launcher started; data folder {ctx.Paths.Root}; version {Current}, from {ctx.ProgramDir}");
                 // The last session's summary, until something newer is said.
                 if (HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) is string last) ShowStatus(StatusKind.Info, last);
                 GiveProfilesTheirControls();

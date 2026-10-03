@@ -1,6 +1,7 @@
 #include "vkcore/key_inject.hpp"
 
 #include "platform/key_injection/injected_keys.hpp"
+#include "platform/key_injection/us_scan_codes.hpp"
 #include "vkcore/import_patch.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/log.hpp"
@@ -10,6 +11,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -165,11 +167,18 @@ UINT WINAPI hookedGetRawInputData(HRAWINPUT handle, UINT command, LPVOID data, P
     input.header.hDevice = g_keyboard;
     input.header.wParam = RIM_INPUT;
     // The game reads the scan code with its E0 prefix (arrows, Home, End and the like are E0 keys), not
-    // the virtual key.
-    const UINT scan = MapVirtualKeyW(event->virtualKey, MAPVK_VK_TO_VSC_EX);
-    input.data.keyboard.MakeCode = static_cast<USHORT>(scan & 0xFFu);
-    input.data.keyboard.Flags = static_cast<USHORT>((event->down ? RI_KEY_MAKE : RI_KEY_BREAK) |
-                                                    ((scan & 0xFF00u) == 0xE000u ? RI_KEY_E0 : 0));
+    // the virtual key, and numbers keys by their place: a key's US-keyboard scan code whatever the layout
+    // (us_scan_codes.hpp). A key without one takes the layout's.
+    key_injection::ScanCode code;
+    if (const auto us = key_injection::usScanCode(event->virtualKey)) {
+        code = *us;
+    } else {
+        const UINT scan = MapVirtualKeyW(event->virtualKey, MAPVK_VK_TO_VSC_EX);
+        code = {static_cast<std::uint8_t>(scan & 0xFFu), (scan & 0xFF00u) == 0xE000u};
+    }
+    input.data.keyboard.MakeCode = code.make;
+    input.data.keyboard.Flags =
+        static_cast<USHORT>((event->down ? RI_KEY_MAKE : RI_KEY_BREAK) | (code.e0 ? RI_KEY_E0 : 0));
     input.data.keyboard.VKey = event->virtualKey;
     input.data.keyboard.Message = event->down ? WM_KEYDOWN : WM_KEYUP;
     const UINT needed =

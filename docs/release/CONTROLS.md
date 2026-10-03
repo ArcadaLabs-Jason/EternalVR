@@ -269,6 +269,8 @@ values are old.
 | Jump with both hands | Throw both hands up above your head to jump; higher when sitting ([In the game](#in-the-game)) | Off |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
+| Melee aim with | Same as Aim with, Head, Off hand: what aims melee, Blood Punch, glory kills and use (and a real punch). Only when the weapon hand aims | Same as Aim with |
+| Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch (and a grenade throw), which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |

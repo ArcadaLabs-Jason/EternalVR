@@ -95,6 +95,23 @@ function Test-QaPassFrames($Ctx) {
     }
 }
 
+# The game's view in the game frames after a held-back press of $Action went out (action_aim_hook.cpp): within
+# 3 degrees of the source's angles (both from the body) in one of them, and away from the weapon hand's.
+function Test-QaActionView($Ctx, [string]$Action, [string]$Source) {
+    $pattern = "action aim: $Action press, game frame (\d) after it went out: game view (\S+) (\S+) \(pitch, yaw from the body\); head (\S+) (\S+), weapon hand (-?[\d.]+) (-?[\d.]+), off hand (-?[\d.]+) (-?[\d.]+); the view follows the (.+)$"
+    $hit = $null
+    foreach ($line in @(Get-QaMatches $Ctx "action aim: $Action press, game frame")) {
+        if ($line -notmatch $pattern) { continue }
+        $m = $Matches
+        $want = if ($Source -eq 'head') { @([double]$m[4], [double]$m[5]) } else { @([double]$m[8], [double]$m[9]) }
+        $view = @([double]$m[2], [double]$m[3])
+        $yaw = [Math]::Abs((($view[1] - $want[1]) % 360 + 540) % 360 - 180)
+        $handYaw = [Math]::Abs((($view[1] - [double]$m[7]) % 360 + 540) % 360 - 180)
+        if ([Math]::Abs($view[0] - $want[0]) -le 3 -and $yaw -le 3 -and $handYaw -gt 10) { $hit = $line.Trim(); break }
+    }
+    Add-QaResult $Ctx "$Action press reached the game with the view on the $Source" ($null -ne $hit) $(if ($hit) { $hit -replace '^.*?action aim: ', '' } else { 'no matching game frame line' })
+}
+
 $script:QaTokenSchedule ='3:god|3.5:sync_printInteractionAndAnimationName 1|4:g_debugTriggers 1|' +
     '5:setviewpos -34.98 -250.31 33.2 45|6:where|7:selectDebugEntity'
 $script:QaInputRead = "test input '.*' read \(0 issue\(s\)\)"
@@ -209,6 +226,50 @@ $script:QaScenarios = @(
             Test-QaPresent $c "controllers: sync 'interact/preator_suit_token"
             Test-QaPresent $c '(not a kill)'
             Test-QaAbsent $c 'glory: kill'
+        }
+    },
+    @{
+        Name = 'action-aim'; Kind = 'game'
+        Proves = 'Melee aim with the off hand and equipment aim with the head (issue #11): with the weapon hand pointing 90 degrees away, each melee press is held back until the view took the off hand, reaches the game with the view on it, Use still picks up the Praetor Suit token, the view goes back to the weapon hand, and the equipment launcher launches along the head without moving the view'
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        Env = @('ETERNALVR_AIM=hand', 'ETERNALVR_MELEE_AIM=offhand', 'ETERNALVR_EQUIPMENT_AIM=head',
+                "ETERNALVR_DEBUG_COMMANDS=$script:QaTokenSchedule")
+        # Both hands ahead until the schedule has placed the player: setviewpos turns the view the weapon
+        # hand aims, so the body faces the token only with the weapon hand straight ahead.
+        Input = @('right.aim = 0, 0', 'left.aim = 0, 0')
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 6   # the schedule's last step (7 s) has run: in the use trigger, facing the token
+            $away = @('right.aim = 90, 0', 'left.aim = -90, 0')
+            $atToken = @('right.aim = 90, 0', 'left.aim = 0, -15')
+            # Both hands away from the token. The token's Use is its trigger box, not where the view points (rig,
+            # 2026-10-02): this press picks it up already.
+            Write-QaInput $c ($away + 'right.click = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $away; Wait-QaSeconds $c 3
+            # The off hand at the token, the weapon hand still 90 degrees to the left.
+            Write-QaInput $c $atToken; Wait-QaSeconds $c 1
+            Write-QaInput $c ($atToken + 'right.click = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $atToken; Wait-QaSeconds $c 6
+            Save-QaShot $c 'after-use'
+            # The equipment launcher, then the Flame Belch held for a burst: both aim with the head.
+            Write-QaInput $c ($away + 'left.trigger = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $away; Wait-QaSeconds $c 2
+            Write-QaInput $c ($away + 'left.grip = 1'); Wait-QaSeconds $c 1.5
+            Write-QaInput $c $away; Wait-QaSeconds $c 3
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'melee aim off hand, equipment aim head'
+            Test-QaPresent $c "controllers: sync 'interact/preator_suit_token"
+            Test-QaPresent $c 'action aim: the view follows the off hand for melee'
+            Test-QaPresent $c 'action aim: melee press held back \d+ command\(s\), [\d.]+ ms, until the view took its target' -Regex
+            Test-QaActionView $c 'melee' 'off hand'
+            Test-QaPresent $c 'equipment launch hook at RVA'
+            Test-QaPresent $c 'equipment launch \(slot \d\): .* along the head' -Regex
+            Test-QaAbsent $c 'action aim: the view follows the head for equipment'
+            Test-QaPresent $c 'action aim: a Flame Belch shot while flame_belch held'
+            Test-QaPresent $c 'action aim: the view follows the weapon hand'
+            Test-QaAbsent $c 'then sent anyway'
         }
     },
     @{

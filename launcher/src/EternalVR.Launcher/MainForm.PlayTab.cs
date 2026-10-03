@@ -29,6 +29,8 @@ namespace EternalVR.Launcher
         private readonly CheckBox handsJump = new CheckBox { AutoSize = true };
         private readonly ComboBox aim = Choices(Setting.AimWith);
         private readonly ComboBox revenantAim = Choices(Setting.RevenantAimWith);
+        private readonly ComboBox meleeAim = Choices(Setting.MeleeAimWith);
+        private readonly ComboBox equipmentAim = Choices(Setting.EquipmentAimWith);
         private readonly ComboBox hand = Choices(Setting.WeaponHand);
         private readonly ComboBox locomotion = Choices(Setting.MoveToward);
         private readonly ComboBox xButton = Choices(Setting.XButton);
@@ -96,6 +98,12 @@ namespace EternalVR.Launcher
                 Row(Setting.RevenantAimWith, revenantAim,
                     s => revenantAim.SelectedIndex = (int)s.RevenantAim,
                     s => s.RevenantAim = (RevenantAimMode)revenantAim.SelectedIndex),
+                Row(Setting.MeleeAimWith, meleeAim,
+                    s => meleeAim.SelectedIndex = (int)s.MeleeAim,
+                    s => s.MeleeAim = (ActionAimMode)meleeAim.SelectedIndex),
+                Row(Setting.EquipmentAimWith, equipmentAim,
+                    s => equipmentAim.SelectedIndex = (int)s.EquipmentAim,
+                    s => s.EquipmentAim = (ActionAimMode)equipmentAim.SelectedIndex),
                 Row(Setting.WeaponHand, hand,
                     s => hand.SelectedIndex = (int)s.Hand,
                     s => s.Hand = (Handedness)hand.SelectedIndex),

@@ -126,6 +126,13 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     if (demonAim != AimSource::View) {
         s.demonAim = demonAim;
     }
+    // hand is the weapon hand, the same as unset.
+    static constexpr std::pair<const char*, ActionAimSource> kActionAim[] = {
+        {"head", ActionAimSource::Head},
+        {"offhand", ActionAimSource::OffHand},
+        {"hand", ActionAimSource::Same}};
+    r.choice("ETERNALVR_MELEE_AIM", kActionAim, s.actionAim.melee);
+    r.choice("ETERNALVR_EQUIPMENT_AIM", kActionAim, s.actionAim.equipment);
 
     // head and hand are the values from before look, left and right; hand is the hand with the move stick.
     static constexpr std::pair<const char*, LocomotionFrame> kLocomotion[] = {

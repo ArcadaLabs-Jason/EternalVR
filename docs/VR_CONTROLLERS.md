@@ -119,6 +119,43 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   game frame the game's own angles (command + deltaViewAngles) are read back and moved to body + target,
   where the target is the weapon hand's aim ray (`handAimAngles`) instead of the head. The render camera
   stays `body * head`. A hand that loses tracking keeps its last angles for 0.5 s, then the head aims.
+- **Melee and equipment aim** (`ETERNALVR_MELEE_AIM`, `ETERNALVR_EQUIPMENT_AIM`,
+  `features/input/action_aim.hpp`, `src/vkcore/action_aim_hook.cpp`, `src/vkcore/equipment_launch_hook.cpp`;
+  the launcher's Play tab, Controls, "Melee aim with" and "Equipment aim with", GitHub issue 11). Under hand
+  aim, melee (one button in the game: melee, Blood Punch, glory kills and use; a punch too) and the
+  shoulder-mounted equipment launcher and Flame Belch (the throw gesture too) can aim with the head or the
+  off hand instead of the weapon hand.
+  - Melee: the game takes its target from its view angles when the press reaches it, so the mapper holds the
+    press back (before `ActionHold`) until the camera hook has written the new target into the game's angles
+    at least once (a generation number goes from the mapper to the camera hook and back), at most 0.1 s; the
+    first command built after that write carries the press. On the rig that is one command, 6 to 9 ms. The
+    target stays while the button is held, while the game forces the view (a lunge or a glory kill) and
+    0.5 s after both, then the weapon hand aims again at once: the picture is `body * head` whatever the
+    target, so neither change moves it, only the game's own angles turn. A press goes out at once where the
+    camera hook writes nothing (a menu or popup is up, a scripted camera), and equipment and Belch presses
+    are never held back (neither launch reads the view).
+  - Equipment: the launcher and the Belch do not aim with the view. Static RE (build 25216728): a frag
+    grenade or ice bomb is queued by `UseEquipmentItem` (0x1466CE0) and launched about 0.15 s later (rig) by
+    the launch animation's event through `idHandsItem::LaunchEquipmentLauncher` (0x1389470), which takes its
+    origin and axis from the shoulder launcher's muzzle joint (0x1389020 -> 0xFDBD10, turned by the decl's
+    `launchDirOffsetDegs*`) and passes them to the launch core (0x1389910); the Belch fires through
+    `FireWeapon` with the same joint's muzzle as fire position and axis. With the arms model at the weapon
+    hand both follow the weapon hand whatever the view does. So the view stays on the weapon hand, and a
+    mid hook before that call (RVA 0x13898A1: rsi the hands item, slot 5 or 6, r14 the player, the origin
+    at `[rbp-0x80]`, the axis at `[rbp+0x98]`; installed only with `ETERNALVR_EQUIPMENT_AIM` set) moves a
+    grenade's start to the head's (or the off hand's) ray start and turns its axis onto that ray, keeping the
+    turn and arc the game's axis has from the weapon hand's ray (`xr_math::carryAimOffset`). A Belch shot is
+    turned the same way in the fire hook (below), and so is its flames' axis (`idHands` +0x8E3C). A shot is
+    the Belch's when that axis is not identity: `GetWeaponFireInfo` resets it for every shot and sets it for
+    the Belch alone, so a gun fired while the Belch's button is held keeps the weapon hand.
+  - Log: `controllers: on: ... melee aim <source>, equipment aim <source>`, `game hooks: ... equipment launch
+    on`, `action aim: the view follows the off hand for melee (generation N)`, `action aim: melee press held
+    back C command(s), T ms, until the view took its target`, for the first two game frames after the press
+    `action aim: melee press, game frame 1 after it went out: game view P Y (pitch, yaw from the body); head
+    ..., weapon hand ..., off hand ...`, `equipment launch (slot 5): origin (...) dir (...) -> (...) dir (...)
+    along the head; weapon hand (...)` (the first 12), and a shot while a melee or equipment button is held
+    with its decl (`action aim: a Flame Belch shot while flame_belch held, decl '...'` for a Belch shot, the first 12). Nothing changes
+    under head or view aim, or with both left on the weapon hand (the default).
 - **Aim smoothing** (`ETERNALVR_AIM_SMOOTHING`, `features/input/aim_smoothing.hpp`,
   `src/vkcore/game_view_poses.cpp`). Where the hands are located for a game view, the weapon hand's aim
   orientation goes through a one-euro filter (Casiez et al. 2012) in LOCAL: a low-pass whose cutoff rises
@@ -272,6 +309,8 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_CONTROLLERS` | `1` / `0` | `1` |
 | `ETERNALVR_AIM` | `head` (view follows the head), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
 | `ETERNALVR_DEMON_AIM` | what aims a piloted demon (the Cultist Base Revenant, above): `head` or `hand`; unset or empty follows `ETERNALVR_AIM`. No effect under `view` aim, where the demon keeps the game's own aim | unset |
+| `ETERNALVR_MELEE_AIM` | what aims melee, Blood Punch, glory kills and use under hand aim (above): `head` or `offhand`; unset, empty or `hand`, the weapon hand | unset |
+| `ETERNALVR_EQUIPMENT_AIM` | the same for the equipment launcher, the Flame Belch and the throw gesture | unset |
 | `ETERNALVR_LOCOMOTION` | `look` / `left` / `right` (that hand, whatever the handedness); the older `head` (= `look`) and `hand` (the hand with the move stick) are still read | `look` |
 | `ETERNALVR_TURN` | `smooth` / `snap` / `off` | `smooth` |
 | `ETERNALVR_TURN_RATE` | smooth turn, 150 to 400 degrees per second | 230 |
@@ -638,6 +677,7 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 13 | Weapon wheel by the hand (`ETERNALVR_WHEEL_SELECT=hand`): in e1m2 with two or more weapons, the file `right.aim = 0, 0`, then with it `right.stick = 0, -1` for 1.5 s, then (the stick still down) `right.aim = -25, 0` for 1 s, `right.aim = 0, 25` for 1 s, then `right.stick = 0, 0` | Pending. Expect `weapon wheel by the hand` at the end of the `controllers: on:` line, `action weapon_wheel`, `the weapon wheel is up: the weapon hand moves the game's wheel cursor (200 px to the rim at a 20 deg turn)`, no `pointing` line while the hand is still, then `weapon wheel: pointing right (motion 200, 0)`, `pointing up (motion -200, -200)`, `weapon wheel released after N motion(s)` and a `held item` line for the weapon at the wheel's top |
 | 14 | Arm gestures (`ETERNALVR_THROW=1`, `ETERNALVR_SWING=1`), in e1m2: the file `left.aim = 0, 0` with `left.position = -0.15, 0.05, 0.15` (wound up) for 1 s, then `left.position = -0.15, -0.05, -0.3` with `left.velocity = 0, -0.5, -3.5` for 0.3 s, then the left hand at rest; later `right.aim = 0, 0` with `right.position = 0.15, 0.3, -0.1` (raised) for 1 s, then `right.position = 0.15, -0.1, -0.35` with `right.velocity = 0, -3.5, -1.5` for 0.3 s; and a control: `left.position = -0.2, -0.3, -0.45` with `left.velocity = 0, 0, -3.5` (a punch from the chest) | Pending. Expect `throw gesture on, overhead swing on` at the end of the `controllers: on:` line; `controllers: gesture: throw` then `controllers: action equipment` and no `action melee` for the throw; `gesture: overhead swing` then `action crucible` and no `action melee` for the swing (the Crucible itself needs the weapon; the press is what is checked); `action melee` and no gesture line for the control |
 | 15 | Inputs held through a menu's close, in e1m2: `ETERNALVR_TEST_KEYS=<ms>:ESC` opens the pause menu; once the log has `menu: the game shows its cursor`, the file `left.secondary = 1` for 0.15 s, then `left.secondary = 0`. Then the Dossier: `left.primary = 1` for 0.5 s, then 0; once the Dossier is up, `right.stick = 0, -1` for 0.5 s, then `left.secondary = 1` for 0.15 s with the stick still down, the stick held 0.5 s more, then `right.stick = 0, 0` | Pending. Expect for the pause menu `menu: key down 0x1b`, `menu: the cursor is gone`, `menu: controllers' gameplay input back on`, `controllers: gameplay input back on: presses begun in the menu are dropped` and no `controllers: action switch_weapon_mod` after it (before the fix: `action switch_weapon_mod` in the same millisecond); for the Dossier the same line ending `; a control still held stays out of the game until let go`, and no `action weapon_wheel`, `action quick_switch` or `weapon wheel` line after it |
+| 16 | Melee and equipment aim (`tools/rig/qa` scenario `action-aim`: e1m3 `cp_03_shoot_gate`, hand aim, `ETERNALVR_MELEE_AIM=offhand`, `ETERNALVR_EQUIPMENT_AIM=head`, the weapon hand 90 degrees to the left) | Pass (2026-10-02, Debug, runs QA-aim-actions-2 and -3): each melee press held back 1 command (6.0 to 8.8 ms) until the view took the off hand; the first game frame after it has the game's view on the off hand (yaw -90.0, and pitch 15.0 with the off hand at the token) while the weapon hand is at +90; back to the weapon hand 0.5 s after; a frag launched about 0.15 s after the press from the weapon hand's side along yaw 135 (`dir (-0.707 0.707 0.035)`) was moved to the eye and turned to the head's yaw 45 with the same arc (`dir (0.707 0.707 0.035)`), and in screenshots it explodes in front of the head instead of out of view to the left; Flame Belch shots turned the same way. The Praetor token's Use is a trigger box (picked up with the view 90 degrees away), so a target picked by the view (a lunge, a glory kill) is for the headset |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent

@@ -1,5 +1,6 @@
 evr_add_module(evr_input
     SOURCES
+        action_aim.cpp
         aim_smoothing.cpp
         analog_button.cpp
         arm_gestures.cpp

@@ -12,7 +12,11 @@
 // - Shots: a mid-hook in idHands::FireWeapon just after GetWeaponFireInfo returns (RVA 0x135D733): the
 //   fire position [rsp+0x68] and fire axis [rbp+0x2B0] are replaced with the hand ray, so hitscan and
 //   projectiles leave the gun, not the eye. The game adds spread and derives the muzzle offset afterwards.
-//   The same hook counts the local player's shots for bHaptics (bhaptics_game.cpp), whatever the aim.
+//   The same hook counts the local player's shots for bHaptics (bhaptics_game.cpp), whatever the aim. A Flame
+//   Belch shot (the hook sees it with the held weapon's decl while the Belch's button is held) takes the
+//   head's or the off hand's ray under ETERNALVR_EQUIPMENT_AIM (action_aim_hook.cpp).
+// - Melee aim (features/input/action_aim.hpp): while a melee press asks for it, the view follows the head
+//   or the off hand instead of the weapon hand.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -72,13 +76,26 @@ constexpr const char* kGetWeaponFireInfoSignature =
     "33 C4 48 89 85 ?? ?? ?? ?? 48 83 B9 ?? ?? ?? ?? 00 4D 8B F1 48 8B B5 ?? ?? ?? ??";
 
 // Type info (build 25216728; the offsets are used only when PlayerAim confirmed the build).
-constexpr std::size_t kHandsOwner = 0x358;                // idHands::owner
+constexpr std::size_t kHandsOwner = 0x358; // idHands::owner
+// idHands::overrideStartFxAxis (idMat3): GetWeaponFireInfo resets it to identity and sets it to the Flame
+// Belch's fire axis; the shot's effects take it as their axis unless it is identity (0x136CD70, static RE).
+constexpr std::size_t kHandsStartFxAxis = 0x8E3C;
 constexpr std::size_t kPlayerInhibitFlags = 0x87FC;       // idPlayer::inhibitFlags
 constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
 // idHavokPhysics_Player::viewAngles (player_aim.cpp): the view before SetViewAngles sets it.
 constexpr std::size_t kPlayerViewAngles = 0x8A50 + 0x3F10;
 // A foreign SetViewAngles turns the view when its pitch or yaw leaves the player's by more than this.
 constexpr float kTurnDegrees = 0.01f;
+
+// An idMat3 that is the identity (overrideStartFxAxis as GetWeaponFireInfo resets it).
+bool isIdentity(const float (&m)[9]) {
+    for (int i = 0; i < 9; ++i) {
+        if (m[i] != (i % 4 == 0 ? 1.0f : 0.0f)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // A hand that loses tracking keeps aiming where it last pointed for this long, then the head takes over.
 constexpr double kHandHoldSeconds = 0.5;
@@ -222,11 +239,23 @@ void onFire(const HookRegisters& regs) {
         logShotStats(s);
         return;
     }
-    const Vec3 direction = world.aim.axis.forward;
+    // A Flame Belch shot under ETERNALVR_EQUIPMENT_AIM goes along the head's or the off hand's ray, with the
+    // turn its launcher's joint has from the weapon hand's (xr_math::carryAimOffset). A shot is the Belch's
+    // when GetWeaponFireInfo, which resets overrideStartFxAxis for every shot, set it (not identity), so a
+    // gun fired while the Belch's button is held keeps the weapon hand.
+    float fxAxis[9];
+    const bool belchShot = safeCopy(fxAxis, hands + kHandsStartFxAxis, sizeof(fxAxis)) && !isIdentity(fxAxis);
+    const xr_math::EyeRelativePose* alternate = actionShotRay(world, hands, belchShot);
+    const xr_math::EyeRelativePose& ray = alternate ? *alternate : world.aim;
+    Vec3 direction = ray.axis.forward;
+    if (alternate) {
+        direction = xr_math::carryAimOffset({axis[0], axis[1], axis[2]}, world.aim.axis.forward, direction)
+                        .value_or(direction);
+    }
     const auto gameAngles = xr_math::anglesOfDirection({axis[0], axis[1], axis[2]});
     const auto handAngles = xr_math::anglesOfDirection(direction);
     float error = -1.0f;
-    if (gameAngles && handAngles) {
+    if (gameAngles && handAngles && !alternate) {
         error = xr_math::aimErrorDegrees(*gameAngles, *handAngles);
         if (error > 0.5f) {
             s.shotsOverHalfDegree.fetch_add(1, std::memory_order_relaxed);
@@ -238,12 +267,12 @@ void onFire(const HookRegisters& regs) {
     std::optional<xr_math::Shot> shot;
     // Weapons that fire from the muzzle (the Heavy Cannon, projectiles) already start at the muzzle tag of
     // the viewmodel, which the viewmodel hook has put at the hand (seen on the rig): only their direction
-    // changes. Hitscan starts at the eye; it moves to the hand.
+    // changes. Hitscan starts at the eye; it moves to the hand. The Flame Belch fires from the gun's muzzle
+    // along its barrel (rig, 2026-10-02): on another ray it starts at that ray's own origin.
     const Vec3 fromEye = gamePos - eye;
     const bool fromMuzzle = length(fromEye) > kMuzzleEpsilonMetres * world.unitsPerMetre;
-    if (cfg.shotOrigin == input::ShotOrigin::Hand && !fromMuzzle) {
-        shot = xr_math::shotFromHand(eye, world.aim.offset, direction, kMaxReachMetres * world.unitsPerMetre,
-                                     0.0f);
+    if (alternate || (cfg.shotOrigin == input::ShotOrigin::Hand && !fromMuzzle)) {
+        shot = xr_math::shotFromHand(eye, ray.offset, direction, kMaxReachMetres * world.unitsPerMetre, 0.0f);
     } else if (const auto only = xr_math::axisFromDirection(direction)) {
         shot = xr_math::Shot{gamePos, *only};
     }
@@ -256,6 +285,10 @@ void onFire(const HookRegisters& regs) {
                               shot->axis.up.x,      shot->axis.up.y,      shot->axis.up.z};
     safeCopy(firePos, pos, sizeof(pos));
     safeCopy(fireAxis, newAxis, sizeof(newAxis));
+    if (alternate) {
+        // The Flame Belch's flames follow its new axis too.
+        safeCopy(const_cast<std::byte*>(hands) + kHandsStartFxAxis, newAxis, sizeof(newAxis));
+    }
     s.shotsRewritten.fetch_add(1, std::memory_order_relaxed);
     if (g_loggedShots.fetch_add(1) < 10) {
         EVR_LOG(
@@ -303,25 +336,29 @@ const std::byte* findUpdateReturn(const GameImage& image, const std::byte* setVi
     return found;
 }
 
-// The weapon hand's aim ray, or where it last pointed for a moment after it lost tracking, else the head.
-xr_math::IdAngles handAngles(State& s, const xr_math::IdAngles& head) {
+// A hand's aim ray, or where it last pointed for a moment after it lost tracking, else the head.
+xr_math::IdAngles handAngles(State& s, const xr_math::IdAngles& head, input::Hand which) {
+    const auto hand = static_cast<std::size_t>(which);
     bool valid = false;
     Pose aim;
     {
         std::lock_guard lock(s.viewMutex);
-        const auto hand = static_cast<std::size_t>(weaponHand());
         valid = s.poses.valid && s.poses.aimValid[hand];
         aim = s.poses.aim[hand];
     }
     if (valid) {
-        s.lastHandAngles = xr_math::handAimAngles(aim.orientation);
-        s.lastHandQpc = nowQpc();
-        return s.lastHandAngles;
+        s.lastHandAngles[hand] = xr_math::handAimAngles(aim.orientation);
+        s.lastHandQpc[hand] = nowQpc();
+        return s.lastHandAngles[hand];
     }
-    if (s.lastHandQpc != 0 && secondsSince(s.lastHandQpc) < kHandHoldSeconds) {
-        return s.lastHandAngles;
+    if (s.lastHandQpc[hand] != 0 && secondsSince(s.lastHandQpc[hand]) < kHandHoldSeconds) {
+        return s.lastHandAngles[hand];
     }
     return head;
+}
+
+xr_math::IdAngles handAngles(State& s, const xr_math::IdAngles& head) {
+    return handAngles(s, head, weaponHand());
 }
 
 bool installFireHook(const GameImage& image) {
@@ -428,6 +465,16 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
             return head;
         }
         return std::nullopt;
+    }
+    // A melee or equipment press may ask for the head or the off hand (action_aim.hpp).
+    switch (actionAimTarget(s)) {
+    case input::ActionAimSource::Head:
+        return head;
+    case input::ActionAimSource::OffHand:
+        return handAngles(s, head,
+                          weaponHand() == input::Hand::Right ? input::Hand::Left : input::Hand::Right);
+    case input::ActionAimSource::Same:
+        break;
     }
     return handAngles(s, head);
 }
