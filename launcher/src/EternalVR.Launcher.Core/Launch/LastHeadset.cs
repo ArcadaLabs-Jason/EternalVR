@@ -45,6 +45,9 @@ namespace EternalVR.Launcher.Core.Launch
         public string SessionRefresh { get; set; }
         /// <summary>Its sentences for the status line and the report (<see cref="SessionSummary.Describe"/>).</summary>
         public string SessionText { get; set; }
+        /// <summary>Its controls (<see cref="SessionSummary.ControlsText"/>) and, when none was bound, the cause the launcher named
+        /// (<see cref="UnboundControls"/>), such as "0 of 12 bound; cause: SteamVR binding for DOOM Eternal".</summary>
+        public string SessionControls { get; set; }
 
         public HeadsetFacts Clone() => (HeadsetFacts)MemberwiseClone();
     }
@@ -109,6 +112,7 @@ namespace EternalVR.Launcher.Core.Launch
                         break;
                     case "session_refresh": facts.SessionRefresh = NullIfEmpty(value); break;
                     case "session_summary": facts.SessionText = NullIfEmpty(value); break;
+                    case "session_controls": facts.SessionControls = NullIfEmpty(value); break;
                 }
             }
             facts.Limits = limits.Recommended.IsEmpty ? null : limits;
@@ -149,11 +153,16 @@ namespace EternalVR.Launcher.Core.Launch
             Add("session_refresh_hz", facts.SessionRefreshHz?.ToString(CultureInfo.InvariantCulture));
             Add("session_refresh", facts.SessionRefresh);
             Add("session_summary", facts.SessionText);
+            Add("session_controls", facts.SessionControls);
             return sb.ToString();
         }
 
-        /// <summary>The facts with session <paramref name="session"/>'s summary as the last session's; unchanged without one.</summary>
-        public static HeadsetFacts AfterSession(HeadsetFacts old, SessionSummary summary, string session, DateTime endedAt)
+        /// <summary>
+        /// The facts with session <paramref name="session"/>'s summary as the last session's, with the cause named when none of
+        /// its controls was bound (<paramref name="unbound"/>); unchanged without one.
+        /// </summary>
+        public static HeadsetFacts AfterSession(HeadsetFacts old, SessionSummary summary, string session, DateTime endedAt,
+            UnboundCause unbound = UnboundCause.None)
         {
             var facts = (old ?? new HeadsetFacts()).Clone();
             if (summary == null || summary.RefreshHz <= 0) return facts;
@@ -164,6 +173,8 @@ namespace EternalVR.Launcher.Core.Launch
             facts.SessionRefresh = summary.Compact();
             var text = summary.Describe();
             facts.SessionText = text.Length == 0 ? null : text;
+            var cause = UnboundControls.ReportText(unbound);
+            facts.SessionControls = summary.ControlsText() + (cause == null ? string.Empty : "; cause: " + cause);
             return facts;
         }
 

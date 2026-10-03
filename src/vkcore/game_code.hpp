@@ -19,8 +19,9 @@ struct GameText {
 // The .text section of the process's main module; false when it cannot be read.
 bool findGameText(GameText& text);
 
-// The single match of `signature` in .text, or nullptr (logged under `name`) for none or several.
-const std::byte* findUniqueInText(const GameText& text, const char* name, const char* signature);
+// The single match of `signature` in .text, or nullptr for none or several; logged as "<tag>: <name> ...".
+const std::byte*
+findUniqueInText(const GameText& text, const char* tag, const char* name, const char* signature);
 
 // The target of the rel32 call or jump whose opcode byte is at `instruction` (E8 / E9), or nullptr for
 // another opcode.

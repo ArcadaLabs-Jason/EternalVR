@@ -13,10 +13,6 @@ namespace evr::vkcore {
 
 namespace {
 
-bool hasExtension(const std::vector<const char*>& list, const char* name) {
-    return std::any_of(list.begin(), list.end(), [name](const char* e) { return std::strcmp(e, name) == 0; });
-}
-
 // The GPU's vendor and driver, once (an AMD driver without present scaling caps the render size,
 // window_cap.hpp).
 void logDriver(InstanceData& inst, VkPhysicalDevice physicalDevice, bool driverProperties) {

@@ -3,7 +3,6 @@
 
 #include "vkcore/presenter_impl.hpp"
 
-#include "features/input/dashboard_pause.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/status_file.hpp"
@@ -237,8 +236,6 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
             XR_VERSION_MINOR(ip.runtimeVersion), XR_VERSION_PATCH(ip.runtimeVersion),
             info.applicationInfo.apiVersion == XR_API_VERSION_1_1 ? "1.1" : "1.0");
     setXrRuntimeName(ip.runtimeName);
-    // The menu pointer's capture chord drops the trigger click of the same buttons the mapper chords.
-    menuChord = input::CaptureChord(input::kTriggerThresholds, input::captureButtonsFor(xrRuntimeName()));
     return true;
 }
 
@@ -510,9 +507,8 @@ void XrPresenter::Impl::createRoomObjects() {
     EVR_LOG("room: floor space %s", floorSpace == XR_NULL_HANDLE ? "none (posture from overrides only)"
                                     : floor == XR_REFERENCE_SPACE_TYPE_STAGE ? "STAGE"
                                                                              : "LOCAL_FLOOR");
-    if (roomScaleSettings().fade) {
-        fadeLayer.create(xr, session, d3dDevice.Get(), xrSwapchainFormat);
-    }
+    // Made with the head fade off too: a glory kill shown as a fade uses it.
+    fadeLayer.create(xr, session, d3dDevice.Get(), xrSwapchainFormat);
 }
 
 bool XrPresenter::Impl::createXrSwapchain() {

@@ -42,6 +42,12 @@ struct RenderTag {
                                     // (eye L and mono count together; never reset)
 };
 
+// Whether the tagged frame drew one eye's own view: an eye L or R frame the per-eye hook wrote the view into.
+// A mono frame (eyeIndex 0) and an eye frame without its view drew the game's own view, not eye L's.
+constexpr bool drawsEyeView(const RenderTag& tag) {
+    return tag.eye != Eye::Mono && tag.viewApplied;
+}
+
 struct PresentMatch {
     bool tagged = false; // false: no tag belongs to this present (show it mono)
     RenderTag tag;

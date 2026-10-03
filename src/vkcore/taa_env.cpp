@@ -1,8 +1,9 @@
-// The environment switches of per-eye TAA (taa_hooks.hpp).
+// The environment switches of Route S's temporal history and per-eye TAA (taa_hooks.hpp).
 
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/taa_hooks.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <cwchar>
 #include <string>
@@ -21,15 +22,22 @@ std::string narrow(const std::wstring& text) {
 
 } // namespace
 
-bool taaRequested() {
+bool routeSRequested() {
     static const bool requested = [] {
         std::wstring mode;
         std::wstring experiment;
-        std::wstring taa;
-        readEnv(L"ETERNALVR_STEREO_TAA", taa);
         return readEnv(L"ETERNALVR_MODE", mode) && _wcsicmp(mode.c_str(), L"stereo") == 0 &&
                !(readEnv(L"ETERNALVR_STEREO_EXPERIMENT", experiment) && !experiment.empty()) &&
-               stereo_seq::switchValue(narrow(taa), true);
+               !parallelEyesChangedEngine(); // Parallel Eye Rendering, installed before this is first asked
+    }();
+    return requested;
+}
+
+bool taaRequested() {
+    static const bool requested = [] {
+        std::wstring taa;
+        readEnv(L"ETERNALVR_STEREO_TAA", taa);
+        return routeSRequested() && stereo_seq::switchValue(narrow(taa), true);
     }();
     return requested;
 }
@@ -41,6 +49,15 @@ int taaDlssQuality() {
         return stereo_seq::dlssQualityValue(narrow(value));
     }();
     return quality;
+}
+
+bool taaDlssDlaa() {
+    static const bool dlaa = [] {
+        std::wstring value;
+        readEnv(L"ETERNALVR_STEREO_DLSS_QUALITY", value);
+        return stereo_seq::dlssQualityIsDlaa(narrow(value));
+    }();
+    return dlaa;
 }
 
 bool taaDlssRequested() {

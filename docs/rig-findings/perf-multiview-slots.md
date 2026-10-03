@@ -118,6 +118,10 @@ chains) is high, around even.
 
 ## 9. Spike, live results so far (the second test PC, OpenXR-Simulator, 2026-09-28)
 
+Since merged as Parallel Eye Rendering (`ETERNALVR_PARALLEL_EYES=1`, `docs/VR_STEREO.md`). The spike's switch
+`ETERNALVR_VIEW_SLOTS` and its diagnostics are gone; `ETERNALVR_STEREO_EXPERIMENT=two-views` alone is the old
+experiment without view slots.
+
 Branch `multiview-spike`, `ETERNALVR_STEREO_EXPERIMENT=two-views` with `ETERNALVR_VIEW_SLOTS=1`; the sites are
 RVAs, used only when the PE timestamp is build 25216728's.
 

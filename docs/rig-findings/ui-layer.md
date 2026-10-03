@@ -281,8 +281,8 @@ shared timeline to the game's next graphics submit (our `vkQueueSubmit` hook alr
 
 ## 7. What this branch implements
 
-**On by default in Route S stereo** (`ETERNALVR_MODE=stereo` without an experiment; the launcher also
-sets `ETERNALVR_UI_LAYER=1` for stereo), off otherwise; `ETERNALVR_UI_LAYER=0/1` overrides. Off, no hook is
+**On by default in Route S stereo** (`ETERNALVR_MODE=stereo` without an experiment; the launcher sets
+`ETERNALVR_UI_LAYER=1` in stereo and in mono, where menus over the game need it for their panel), off otherwise; `ETERNALVR_UI_LAYER=0/1` overrides. Off, no hook is
 handed out and nothing changes.
 
 | Piece | Files | Tests |

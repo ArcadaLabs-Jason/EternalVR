@@ -26,6 +26,16 @@ TEST_CASE("glory view: names parse back, any case and spacing") {
     CHECK_FALSE(parseGloryView("fades").has_value());
 }
 
+TEST_CASE("glory view: a kill's sync entity counts, a pickup's animation does not") {
+    // Names traced in headset sessions and on the rig (docs/BHAPTICS.md).
+    CHECK(isKillSync("syncmelee/imp"));
+    CHECK(isKillSync("syncmelee/hell_knight"));
+    CHECK(isKillSync(""));
+    CHECK_FALSE(isKillSync("interact/argent_cell/use_sync"));
+    CHECK_FALSE(isKillSync("interact/preator_suit_token/preator_suit_token_sync"));
+    CHECK_FALSE(isKillSync("interact/rune/rune_sync"));
+}
+
 TEST_CASE("glory episode: starts with the sync flag and ends with it when the view is the player's") {
     GloryEpisode e;
     double t = 0.0;

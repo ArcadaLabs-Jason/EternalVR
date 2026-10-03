@@ -106,6 +106,19 @@ bool DesktopMirror::canBlit(DeviceData& dev, VkFormat format) {
     return blitOk_;
 }
 
+bool DesktopMirror::blitsOn(DeviceData& dev, std::uint32_t family) {
+    if (family < dev.queueFamilyFlags.size() && (dev.queueFamilyFlags[family] & VK_QUEUE_GRAPHICS_BIT)) {
+        return true;
+    }
+    if (!noGraphicsLogged_) {
+        noGraphicsLogged_ = true;
+        EVR_LOG("mirror: queue family %u has no graphics: no blit on its presents; the window shows the eye "
+                "image",
+                family);
+    }
+    return false;
+}
+
 bool DesktopMirror::canTakePanel(DeviceData& dev, VkFormat format) {
     if (panelChecked_ != format) {
         panelChecked_ = format;
@@ -173,12 +186,14 @@ stereo_seq::PanelMirror DesktopMirror::plan(bool menu,
 
 bool DesktopMirror::keepPanel(DeviceData& dev,
                               VkCommandBuffer cb,
+                              std::uint32_t family,
                               VkImage gui,
                               VkExtent2D guiExtent,
                               VkFormat format,
                               VkExtent2D extent) {
+    const bool copy = format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
     if (guiExtent.width != extent.width || guiExtent.height != extent.height || !canTakePanel(dev, format) ||
-        !ensureImage(dev, format, extent)) {
+        (!copy && !blitsOn(dev, family)) || !ensureImage(dev, format, extent)) {
         kept_ = false;
         return false;
     }
@@ -187,7 +202,7 @@ bool DesktopMirror::keepPanel(DeviceData& dev,
                 VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                               nullptr, 0, nullptr, 1, &toWrite);
-    if (format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB) {
+    if (copy) {
         VkImageCopy region{};
         region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -211,7 +226,7 @@ bool DesktopMirror::keepPanel(DeviceData& dev,
         panelLogged_ = true;
         const double aspect = failed_ ? 0.0 : virtual_client::mirrorCropAspect();
         const render_size::Band band = render_size::centredBand(extent.width, extent.height, aspect);
-        const bool cut = band.height != extent.height && canBlit(dev, format);
+        const bool cut = band.height != extent.height && canBlit(dev, format) && blitsOn(dev, family);
         EVR_LOG("mirror: a menu is up: the window shows the panel's image (%ux%u %s)", extent.width,
                 cut ? band.height : extent.height, cut ? "band, ETERNALVR_MIRROR_CROP" : "whole image");
     }
@@ -246,6 +261,7 @@ void DesktopMirror::blitBand(DeviceData& dev,
 
 VkImageLayout DesktopMirror::record(DeviceData& dev,
                                     VkCommandBuffer cb,
+                                    std::uint32_t family,
                                     VkImage source,
                                     VkFormat format,
                                     VkExtent2D extent,
@@ -255,7 +271,7 @@ VkImageLayout DesktopMirror::record(DeviceData& dev,
     const double aspect =
         toWindow && step != MirrorStep::Clear && !failed_ ? virtual_client::mirrorCropAspect() : 0.0;
     const render_size::Band band = render_size::centredBand(extent.width, extent.height, aspect);
-    const bool crop = band.height != extent.height && canBlit(dev, format);
+    const bool crop = band.height != extent.height && canBlit(dev, format) && blitsOn(dev, family);
     if (step == MirrorStep::None && !crop) {
         return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }

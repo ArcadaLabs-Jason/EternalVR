@@ -54,13 +54,17 @@ namespace EternalVR.Launcher.Core.Preflight
         public string LauncherVersion { get; set; }
         /// <summary>The product version in <c>EternalVR.dll</c>'s version resource; null when it has none.</summary>
         public string LayerVersion { get; set; }
-        /// <summary>The runtime manifest the game will use: the chosen one, else the system's active one.</summary>
+        /// <summary>The runtime manifest the game will use (<see cref="LaunchPlanBuilder.EffectiveRuntime"/>).</summary>
         public string RuntimeManifest { get; set; }
         public bool RuntimeChosen { get; set; }
+        /// <summary>The system default is in use and XR_RUNTIME_JSON in the launcher's environment decides it.</summary>
+        public bool RuntimeFromEnvironment { get; set; }
         public bool RuntimeManifestExists { get; set; }
         public IReadOnlyList<LayerDecision> Layers { get; set; } = new LayerDecision[0];
         /// <summary>Controller bindings chosen in SteamVR for the game's app key (<see cref="SteamVrSummary.ReadCustomBindings"/>).</summary>
         public IReadOnlyList<SteamVrBinding> SteamVrBindings { get; set; } = new SteamVrBinding[0];
+        /// <summary>SteamVR's throttling for the game's app key (<see cref="SteamVrSummary.FramesToThrottle(object)"/>); null when not set.</summary>
+        public int? SteamVrFramesToThrottle { get; set; }
         /// <summary>HwSchMode from the registry; 2 means hardware-accelerated GPU scheduling is on.</summary>
         public int? HagsMode { get; set; }
         public int SettingsLocationCount { get; set; }
@@ -88,8 +92,8 @@ namespace EternalVR.Launcher.Core.Preflight
     /// <summary>Preflight v0 decisions (ARCHITECTURE section 4, ROADMAP M4.5, T-093, T-106, T-109, T-110).</summary>
     public static class PreflightEvaluator
     {
-        public const string HagsHelp = "Settings > System > Display > Graphics > Change default graphics settings > Hardware-accelerated GPU scheduling";
         public const string SteamVrBindingsHelp = "SteamVR > Settings > Controllers > Manage Controller Bindings";
+        public const string SteamVrThrottleHelp = "SteamVR Settings > Video > Per-Application Video Settings > DOOM Eternal > Throttling Behavior";
 
         public static PreflightResult Evaluate(PreflightFacts f)
         {
@@ -97,7 +101,9 @@ namespace EternalVR.Launcher.Core.Preflight
             void Add(string id, Severity s, string m) => c.Add(new Check(id, s, m));
 
             Add("elevation", f.IsElevated ? Severity.Fail : Severity.Pass,
-                f.IsElevated ? "The launcher is running as administrator. Close it and start it normally: Windows ignores the layer settings in elevated processes."
+                f.IsElevated ? "The launcher is running as administrator. Close it and start it normally (not as administrator): in elevated processes "
+                    + "Windows ignores the layer settings, and OpenXR ignores the helpers registered for your user (HKCU API layers) and the "
+                    + "runtime chosen here (XR_RUNTIME_JSON)."
                              : "Not elevated");
 
             bool steam = f.Platform == GamePlatform.Steam;
@@ -147,9 +153,12 @@ namespace EternalVR.Launcher.Core.Preflight
 
             if (string.IsNullOrEmpty(f.RuntimeManifest))
                 Add("openxr", Severity.Fail, "No active OpenXR runtime is set. Start your headset software (SteamVR, Virtual Desktop, Meta Horizon) and make it the OpenXR runtime, or choose a runtime here.");
+            else if (!f.RuntimeManifestExists && f.RuntimeFromEnvironment)
+                Add("openxr", Severity.Fail, $"The OpenXR runtime manifest named by {LaunchPlanBuilder.RuntimeVariable} in your environment does not exist: {f.RuntimeManifest}. Remove the variable, or choose a runtime here.");
             else if (!f.RuntimeManifestExists)
                 Add("openxr", Severity.Fail, $"The {(f.RuntimeChosen ? "chosen" : "system's active")} OpenXR runtime manifest does not exist: {f.RuntimeManifest}. Choose another runtime here, or switch the active runtime in your headset software.");
-            else Add("openxr", Severity.Pass, $"OpenXR runtime: {f.RuntimeManifest}{(f.RuntimeChosen ? " (chosen for this launch)" : " (system active)")}");
+            else Add("openxr", Severity.Pass, $"OpenXR runtime: {f.RuntimeManifest}"
+                + (f.RuntimeChosen ? " (chosen for this launch)" : f.RuntimeFromEnvironment ? $" ({LaunchPlanBuilder.RuntimeVariable} in your environment)" : " (system active)"));
 
             foreach (var d in f.Layers.Where(l => l.Action != LayerAction.Ignore))
                 Add("layers", d.Action == LayerAction.Warn ? Severity.Warn : Severity.Pass, d.Message);
@@ -159,12 +168,15 @@ namespace EternalVR.Launcher.Core.Preflight
                 Add("steamvr-binding", Severity.Warn, "SteamVR uses a custom controller binding for DOOM Eternal ("
                     + string.Join(", ", f.SteamVrBindings) + "). If your controllers do nothing in game, open " + SteamVrBindingsHelp
                     + ", pick DOOM Eternal and choose the default binding.");
+            if (LaunchPlanBuilder.IsSteamVr(f.RuntimeManifest) && f.SteamVrFramesToThrottle > 0)
+                Add("steamvr-throttle", Severity.Warn, "SteamVR limits DOOM Eternal to " + SteamVrSummary.ThrottledRate(f.SteamVrFramesToThrottle.Value)
+                    + " (Throttling Behavior: Limit); frame pacing follows it. The setting: " + SteamVrThrottleHelp + ".");
 
             if (f.LastRenderCap != null && f.LastRenderCap.Capped)
                 Add("render-size", Severity.Warn, "Last session: " + f.LastRenderCap.Warning());
 
             if (f.HagsMode == 2)
-                Add("hags", Severity.Warn, "Hardware-accelerated GPU scheduling is on; it caused frame hitching in VR on the development PC. To turn it off: " + HagsHelp + " (restart needed).");
+                Add("hags", Severity.Warn, "Hardware-accelerated GPU scheduling is on; it caused frame hitching in VR on the development PC.");
 
             if (f.SettingsLocationCount == 0 && !f.TestMode)
                 Add("settings", Severity.Fail, "DOOM Eternal has not been started on this PC yet (no settings folder). Start it once through "

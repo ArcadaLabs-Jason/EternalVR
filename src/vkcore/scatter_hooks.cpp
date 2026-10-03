@@ -7,6 +7,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/seq_hooks.hpp"
+#include "vkcore/vrs_nv.hpp"
 
 #include <windows.h>
 
@@ -95,6 +96,7 @@ std::atomic<std::uint64_t> g_resizes{0};
 struct Counters {
     std::atomic<std::uint64_t> renders[2]{};
     std::atomic<std::uint64_t> swaps{0};
+    std::atomic<std::uint64_t> restarts{0}; // swaps after a gap: the eye's history started over
     std::atomic<std::uint64_t> skipped{0};
     std::atomic<std::uint64_t> inFlightDiffers{0}; // renders whose tag in flight names another eye
     std::atomic<int> logged{0};
@@ -225,10 +227,11 @@ void report() {
         return;
     }
     EVR_LOG("%s: scattering history per eye: %llu eye L / mono and %llu eye R render(s), %llu state swap(s), "
-            "%llu skipped; %llu render(s) whose tag in flight names another eye",
+            "%llu after a gap, %llu skipped; %llu render(s) whose tag in flight names another eye",
             kTag, static_cast<unsigned long long>(g_counters.renders[0].exchange(0)),
             static_cast<unsigned long long>(g_counters.renders[1].exchange(0)),
             static_cast<unsigned long long>(g_counters.swaps.exchange(0)),
+            static_cast<unsigned long long>(g_counters.restarts.exchange(0)),
             static_cast<unsigned long long>(g_counters.skipped.exchange(0)),
             static_cast<unsigned long long>(g_counters.inFlightDiffers.exchange(0)));
 }
@@ -248,6 +251,9 @@ void onSetup(const HookRegisters& r) {
     if (context) {
         std::memcpy(&state, context + kContextState, sizeof(state));
         std::memcpy(&counter, context + kContextCounter, sizeof(counter));
+        if (vrs_nv::passesFollowFrames()) {
+            seqNoteRenderViewCounter(counter); // for the frame's render passes (foveation)
+        }
     }
     std::byte* deviceContext = *g_deviceContextGlobal;
     std::lock_guard lock(g_mutex);
@@ -271,6 +277,9 @@ void onSetup(const HookRegisters& r) {
     if (plan.load) {
         std::memcpy(state + stereo_seq::kScatterStateOffset, plan.load->data(), plan.load->size());
         ++g_counters.swaps;
+    }
+    if (plan.restarted) {
+        ++g_counters.restarts;
     }
     setPair(deviceContext, 0, plan.slots[0]);
     setPair(deviceContext, 1, plan.slots[1]);
@@ -349,6 +358,10 @@ bool installScatterHooksEarly() {
                 kTag, image.rva(alloc + kAllocHook), image.rva(setup), image.rva(resizeSite + kResizeHook),
                 image.rva(manager), image.rva(create), image.rva(resize));
     });
+    return g_installed;
+}
+
+bool scatterHooksInstalled() {
     return g_installed;
 }
 

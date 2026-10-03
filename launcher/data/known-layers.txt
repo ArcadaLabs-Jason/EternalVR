@@ -17,6 +17,10 @@ vulkan | VK_LAYER_NV_optimus | ignore | NVIDIA driver
 vulkan | VK_LAYER_NV_present | ignore | NVIDIA driver
 vulkan | VK_LAYER_AMD_switchable_graphics* | ignore | AMD driver
 openxr | XR_APILAYER_VIRTUALDESKTOP_oculus_compatibility | disable-unless-vdxr | Virtual Desktop's compatibility layer is for its own runtime only
+# OpenXR Toolkit: XR_APILAYER_MBUCCHIA_toolkit in its current versions, XR_APILAYER_NOVENDOR_toolkit in older
+# ones. Its manifest's disable variable switches it off for the launch; listed before the MBUCCHIA_* prefix,
+# since the first match decides.
+openxr | XR_APILAYER_MBUCCHIA_toolkit | disable | OpenXR Toolkit is not supported with EternalVR
 openxr | XR_APILAYER_NOVENDOR_toolkit | disable | OpenXR Toolkit is not supported with EternalVR
 openxr | XR_APILAYER_reshade* | disable | ReShade's OpenXR layer is not supported with EternalVR
 openxr | XR_APILAYER_NOVENDOR_XRNeckSafer | warn | not yet tested with EternalVR

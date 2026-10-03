@@ -4,8 +4,8 @@
 // can be tested without Windows or the game; vkcore/mp_guard.hpp feeds it what the game does.
 //
 // Three decisions live here:
-// - which command lines the layer refuses to arm under (the same normalisation as the launcher's
-//   ArgumentPolicy, plus the arguments Steam passes when it starts the game from an invite);
+// - which command lines the layer refuses to arm under (the launcher's ArgumentPolicy list and normalisation,
+//   which cover the arguments Steam and Xbox pass when they start the game from an invite);
 // - which map paths are single-player, which are BATTLEMODE, and which are unknown (unknown counts as
 //   online: the guard fails closed);
 // - which main-menu screens belong to BATTLEMODE or other online play.
@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -39,6 +40,10 @@ std::optional<RefusedArgument> screenCommandLine(std::wstring_view commandLine);
 
 // Screens argument text alone (no program path), as the launcher's ArgumentPolicy.Check does.
 std::optional<RefusedArgument> screenArguments(std::wstring_view arguments);
+
+// Every refused pattern, in the order they are tried: launcher/data/refused-args.txt, built in by CMake. The
+// launcher's ArgumentPolicy reads the same file, so both refuse the same arguments.
+std::span<const RefusedArgument> refusedArguments();
 
 // ---------------------------------------------------------------------------------------------------
 // Map paths

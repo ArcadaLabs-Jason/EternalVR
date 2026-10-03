@@ -9,7 +9,7 @@ namespace EternalVR.Launcher.Core.Preflight
     /// <summary>
     /// Anti-cheat tripwire, folder part (T-109): anti-cheat files or folders inside the game folder refuse
     /// VR. Only the game root and its first-level folders are looked at; Steam's metadata and other
-    /// games' system-wide installs do not count. The in-process module check is the layer's.
+    /// games' system-wide installs do not count. There is no in-process module check (ARCHITECTURE 4a).
     /// </summary>
     public sealed class AntiCheat
     {

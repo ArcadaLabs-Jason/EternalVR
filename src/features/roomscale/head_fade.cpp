@@ -54,6 +54,13 @@ float fadeTarget(float penetrationMetres, const FadeTiming& timing) {
     return std::min(1.0f, penetrationMetres / t.fullDepthMetres);
 }
 
+float shownFadeDepth(bool headFade, bool hold, float headDepthMetres) {
+    if (hold) {
+        return 1.0f;
+    }
+    return headFade && std::isfinite(headDepthMetres) ? std::max(0.0f, headDepthMetres) : 0.0f;
+}
+
 HeadFade::HeadFade(FadeTiming timing) : timing_(sanitized(timing)) {}
 
 float HeadFade::update(float penetrationMetres, double dtSeconds) {

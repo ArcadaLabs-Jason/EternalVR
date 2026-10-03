@@ -1,7 +1,6 @@
 #include "vkcore/seq_hooks.hpp"
 
 #include "stereo_seq/drain_backoff.hpp"
-#include "stereo_seq/prev_matrices.hpp"
 #include "stereo_seq/render_idle.hpp"
 #include "stereo_seq/stack_budget.hpp"
 #include "vkcore/bin_tile_hooks.hpp"
@@ -14,6 +13,7 @@
 #include "vkcore/object_prev_hooks.hpp"
 #include "vkcore/seq_alternate.hpp"
 #include "vkcore/seq_locate.hpp"
+#include "vkcore/seq_prev.hpp"
 #include "vkcore/seq_stack.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
@@ -88,8 +88,6 @@ stereo_seq::DrainBackoff g_backoff;         // drainAndRebase only (the frontend
 std::mutex g_tagMutex; // g_tags and g_idle
 stereo_seq::EyeTagQueue g_tags;
 stereo_seq::RenderIdle g_idle;
-std::mutex g_prevMutex;
-stereo_seq::PrevMatrixBook g_prev(stereo_seq::previousMatrixRanges());
 bool g_alternate = false; // ETERNALVR_ALTERNATE_EYES on or auto, set once at install before g_active
 bool g_adaptive = false;  // auto: a tick may render both eyes (seq_alternate::pairInTick)
 
@@ -392,8 +390,7 @@ void onPrevStoredHook(const HookRegisters& regs) {
     }
     // The render-frame job raised the counter before this frame's world-views pass.
     const std::uint32_t renderFrame = readU32(g_renderSystem + kRenderSystemFrame);
-    std::lock_guard lock(g_prevMutex);
-    g_prev.afterStore(view, eye, renderFrame);
+    seq_prev::afterStore(view, eye, renderFrame);
 }
 
 // The wrapper and the hooks' code must outlive any unload of the layer: the slot keeps pointing at it.
@@ -536,11 +533,14 @@ stereo_seq::PresentMatch seqTakePresent() {
     return match;
 }
 
+std::optional<std::uint32_t> seqBackendCounter() {
+    return g_active.load(std::memory_order_acquire) ? std::optional<std::uint32_t>(backendFrame())
+                                                    : std::nullopt;
+}
+
 std::optional<stereo_seq::RenderTag> seqTagInFlight() {
-    if (!g_active.load(std::memory_order_acquire)) {
-        return std::nullopt;
-    }
-    return seqTagForBackendFrame(backendFrame() + 1);
+    const std::optional<std::uint32_t> counter = seqBackendCounter();
+    return counter ? seqTagForBackendFrame(*counter + 1) : std::nullopt;
 }
 
 std::optional<stereo_seq::RenderTag> seqTagForBackendFrame(std::uint32_t frame) {
@@ -570,11 +570,10 @@ SeqCounters seqCounters() {
     c.drainMicros = g_counters.drainMicros.load();
     c.deepestNested = seq_stack::deepestNested();
     c.leastHeadroom = seq_stack::leastHeadroom();
-    {
-        std::lock_guard lock(g_prevMutex);
-        c.prevRewrites = g_prev.stats().rewrites;
-        c.prevKept = g_prev.stats().kept;
-    }
+    const stereo_seq::PrevMatrixBook::Stats prev = seq_prev::stats();
+    c.prevRewrites = prev.rewrites;
+    c.prevKept = prev.kept;
+    c.prevUndone = prev.undone;
     const stereo_seq::EyeAlternator::Stats alt = seq_alternate::stats();
     c.altRenders[0] = alt.renders[0];
     c.altRenders[1] = alt.renders[1];

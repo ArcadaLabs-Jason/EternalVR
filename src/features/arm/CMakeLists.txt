@@ -3,6 +3,7 @@ evr_add_module(evr_arm
         arm_frames.cpp
         arm_skeleton.cpp
         arm_solve.cpp
+        arm_surfaces.cpp
         hand_offset.cpp
         mod_room.cpp
         two_bone_ik.cpp

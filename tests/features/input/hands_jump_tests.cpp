@@ -41,6 +41,25 @@ int throwHandsUp(HandsJumpDetector& detector, Posture posture) {
     return jumps;
 }
 
+// Rest, then a fast two-hand throw that stops with the hands `peak` metres above the floor.
+int throwHandsUpTo(HandsJumpDetector& detector, Posture posture, float peak) {
+    int jumps = 0;
+    jumps += detector.update(restingFrame(), posture, kFrame) ? 1 : 0;
+    jumps += detector.update(handsAt(1.5f, 2.5f), posture, kFrame) ? 1 : 0;
+    jumps += detector.update(handsAt(peak, 2.2f), posture, kFrame) ? 1 : 0;
+    jumps += detector.update(handsAt(peak, 0.4f), posture, kFrame) ? 1 : 0;
+    return jumps;
+}
+
+// Two-handed aim: the weapon hand in front of the chest, the off hand further out on the fore-grip, both
+// at `height`, moving up at `speed`.
+InputFrame twoHandedAim(float height, float speed) {
+    InputFrame frame = restingFrame();
+    frame.left = trackedHand({-0.05f, height + 0.05f, -0.6f}, {0.0f, speed, 0.0f});
+    frame.right = trackedHand({0.15f, height, -0.35f}, {0.0f, speed, 0.0f});
+    return frame;
+}
+
 } // namespace
 
 TEST_CASE("off by default") {
@@ -82,17 +101,49 @@ TEST_CASE("one hand alone does not jump") {
     CHECK_FALSE(detector.update(frame, Posture::Standing, kFrame));
 }
 
-TEST_CASE("blocked while seated unless allowed") {
+TEST_CASE("seated, the hands must go higher above the head") {
+    HandsJumpDetector detector(enabled());
+    CHECK(detector.heightAboveHead(Posture::Standing) == 0.0f);
+    CHECK(detector.heightAboveHead(Posture::Unknown) == 0.0f);
+    CHECK(detector.heightAboveHead(Posture::Seated) == doctest::Approx(0.15f));
+}
+
+TEST_CASE("seated, both hands thrown clearly above the head jump once") {
+    HandsJumpDetector detector(enabled());
+    CHECK(throwHandsUpTo(detector, Posture::Seated, kHeadHeight + 0.3f) == 1);
+}
+
+TEST_CASE("seated, a throw that jumps standing does not jump") {
+    HandsJumpDetector standing(enabled());
+    CHECK(throwHandsUpTo(standing, Posture::Standing, kHeadHeight + 0.1f) == 1);
     HandsJumpDetector seated(enabled());
-    CHECK(throwHandsUp(seated, Posture::Seated) == 0);
-
-    HandsJumpSettings allow = enabled();
-    allow.allowWhenSeated = true;
-    HandsJumpDetector seatedAllowed(allow);
-    CHECK(throwHandsUp(seatedAllowed, Posture::Seated) == 1);
-
+    CHECK(throwHandsUpTo(seated, Posture::Seated, kHeadHeight + 0.1f) == 0);
+    // Without a floor the posture is unknown: the standing height.
     HandsJumpDetector unknown(enabled());
-    CHECK(throwHandsUp(unknown, Posture::Unknown) == 1);
+    CHECK(throwHandsUpTo(unknown, Posture::Unknown, kHeadHeight + 0.1f) == 1);
+}
+
+TEST_CASE("seated, hands brought fast to the top of the head do not jump") {
+    // Reaching for the headset's strap: the crown is about 0.12 m above the eyes.
+    HandsJumpDetector detector(enabled());
+    CHECK(throwHandsUpTo(detector, Posture::Seated, kHeadHeight + 0.12f) == 0);
+}
+
+TEST_CASE("two-handed aim and resting hands never jump") {
+    for (const Posture posture : {Posture::Standing, Posture::Seated, Posture::Unknown}) {
+        CAPTURE(static_cast<int>(posture));
+        HandsJumpDetector detector(enabled());
+        int jumps = 0;
+        for (int i = 0; i < 90; ++i) {
+            // Aiming flicked up fast at something overhead, then held there, then lowered and rested.
+            jumps += detector.update(twoHandedAim(1.3f, 0.0f), posture, kFrame) ? 1 : 0;
+            jumps += detector.update(twoHandedAim(1.45f, 2.8f), posture, kFrame) ? 1 : 0;
+            jumps += detector.update(twoHandedAim(kHeadHeight - 0.1f, 2.5f), posture, kFrame) ? 1 : 0;
+            jumps += detector.update(twoHandedAim(kHeadHeight - 0.1f, 0.0f), posture, kFrame) ? 1 : 0;
+            jumps += detector.update(restingFrame(), posture, kFrame) ? 1 : 0;
+        }
+        CHECK(jumps == 0);
+    }
 }
 
 TEST_CASE("hands must settle before the next jump") {

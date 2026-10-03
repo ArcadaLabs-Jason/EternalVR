@@ -55,7 +55,7 @@ TEST_CASE("a profile section becomes full binding paths") {
     const ControllerData data =
         parseControllerData(kTouchHeader + R"("gameplay.left.primary" = "/input/x/click"
 "gameplay.right.trigger" = "/input/trigger/value"
-"menu.right.pointer_pose" = "/input/aim/pose"
+"gameplay.right.aim_pose" = "/input/aim/pose"
 )");
     CHECK(data.ok());
     CHECK(data.profilePath == "/interaction_profiles/oculus/touch_controller");
@@ -63,8 +63,20 @@ TEST_CASE("a profile section becomes full binding paths") {
     CHECK(*data.find(XrActionId::Primary, Hand::Left) ==
           SuggestedBinding{XrActionId::Primary, Hand::Left, "/user/hand/left/input/x/click"});
     CHECK(data.find(XrActionId::Trigger, Hand::Right)->path == "/user/hand/right/input/trigger/value");
-    CHECK(data.find(XrActionId::MenuPointerPose, Hand::Right) != nullptr);
+    CHECK(data.find(XrActionId::AimPose, Hand::Right) != nullptr);
     CHECK(data.find(XrActionId::Trigger, Hand::Left) == nullptr);
+}
+
+TEST_CASE("keys of the retired menu set in an older player file are skipped without an issue") {
+    const ControllerData data =
+        parseControllerData(kTouchHeader + R"("gameplay.right.trigger" = "/input/trigger/value"
+"menu.right.select" = "/input/trigger/value"
+"menu.right.back" = "/input/b/click"
+"menu.left.pointer_pose" = "/input/aim/pose"
+)");
+    CHECK(data.ok());
+    REQUIRE(data.suggested.size() == 1);
+    CHECK(data.suggested[0].action == XrActionId::Trigger);
 }
 
 TEST_CASE("map sections are read as binding text per handedness") {
@@ -257,14 +269,13 @@ TEST_CASE("conflict: an input and one of its components are one physical input")
     CHECK(data.find(XrActionId::Menu, Hand::Left) != nullptr);
 }
 
-TEST_CASE("the same input in different sets or on different hands is no conflict") {
+TEST_CASE("the same input on different hands is no conflict") {
     const ControllerData data =
         parseControllerData(kTouchHeader + R"("gameplay.right.trigger" = "/input/trigger/value"
-"menu.right.select" = "/input/trigger/value"
 "gameplay.left.trigger" = "/input/trigger/value"
 )");
     CHECK(data.ok());
-    CHECK(data.suggested.size() == 3);
+    CHECK(data.suggested.size() == 2);
 }
 
 TEST_CASE("handedness and binding key names") {
@@ -273,5 +284,5 @@ TEST_CASE("handedness and binding key names") {
     CHECK(parseHandednessName("left_full_mirror") == Handedness::LeftButtonAndStickSwap);
     CHECK_FALSE(parseHandednessName("left").has_value());
     CHECK(suggestedBindingKey(XrActionId::ThumbstickClick, Hand::Left) == "gameplay.left.thumbstick_click");
-    CHECK(suggestedBindingKey(XrActionId::MenuBack, Hand::Right) == "menu.right.back");
+    CHECK(suggestedBindingKey(XrActionId::Secondary, Hand::Right) == "gameplay.right.secondary");
 }

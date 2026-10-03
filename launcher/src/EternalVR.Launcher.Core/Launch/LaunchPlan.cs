@@ -61,6 +61,11 @@ namespace EternalVR.Launcher.Core.Launch
         /// window to ask before the launch; null when the probe found it, or none was made.
         /// </summary>
         public string HeadsetProblem { get; set; }
+        /// <summary>
+        /// Variables of the launcher's own environment the game inherits unchanged that the loaders or the layer read
+        /// (<see cref="ChildEnvironment.Inherited"/>); logged with the plan.
+        /// </summary>
+        public IReadOnlyList<KeyValuePair<string, string>> Inherited { get; set; } = new KeyValuePair<string, string>[0];
 
         public string CommandLine => string.Join(" ", Arguments.Select(QuoteIfNeeded));
 
@@ -72,6 +77,7 @@ namespace EternalVR.Launcher.Core.Launch
             sb.AppendLine("args:    " + CommandLine);
             sb.AppendLine("route:   " + (Route == LayerRoute.Environment ? "environment (VK_ADD_IMPLICIT_LAYER_PATH)" : "HKCU registration"));
             foreach (var kv in Environment) sb.AppendLine("env:     " + kv.Key + "=" + kv.Value);
+            foreach (var kv in Inherited ?? new KeyValuePair<string, string>[0]) sb.AppendLine("inherit: " + kv.Key + "=" + kv.Value);
             if (Window != null)
                 sb.AppendLine("window:  " + Window.Width + "x" + Window.Height + (Window.Mirror ? " desktop mirror (each eye at the render size)" : " per eye")
                     + (Window.Display == null ? " (no display known)" : " on " + Window.Display)
@@ -158,12 +164,18 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_WORLD_SCALE", LauncherSettings.ClampWorldScale(s.WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
             if (stereo) Set("ETERNALVR_MODE", "stereo");
             // One eye per game tick for slower processors, always or only while the processor cannot keep up
-            // (docs/rig-findings/alternate-eye.md); explicit either way.
-            Set("ETERNALVR_ALTERNATE_EYES", stereo ? LauncherSettings.AlternateEyesValue(s.AlternateEyes) : "0");
-            // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md).
-            if (stereo) Set("ETERNALVR_UI_LAYER", "1");
+            // (docs/rig-findings/alternate-eye.md); explicit either way. Not with Parallel Eye Rendering, which ignores it.
+            Set("ETERNALVR_ALTERNATE_EYES", stereo && !s.ParallelEyesOn ? LauncherSettings.AlternateEyesValue(s.AlternateEyes) : "0");
+            // Parallel Eye Rendering: both eyes as two views of one render, their work at the same time (docs/VR_STEREO.md
+            // "Parallel Eye Rendering"). The layer turns it on only for the game version it knows, and holds what it needs
+            // (async compute off among them) itself. Stereo only and not with DLSS (the layer would keep the standard
+            // renderer); absent when off.
+            if (s.ParallelEyesOn) Set("ETERNALVR_PARALLEL_EYES", "1");
+            // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md), in
+            // mono too: a menu over the game (pause, the Dossier, a tutorial popup) gets its panel and pointer from it.
+            Set("ETERNALVR_UI_LAYER", "1");
             // The HUD on the off hand's wrist or the weapon needs the UI layer and the controllers (docs/VR_HANDS_HUD.md).
-            if (stereo) Set("ETERNALVR_HUD", LauncherSettings.HudName(s.Controllers ? s.Hud : HudMode.Panel));
+            Set("ETERNALVR_HUD", LauncherSettings.HudName(s.Controllers ? s.Hud : HudMode.Panel));
             Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
             // Hand aim needs the controllers; without them the head aims.
             Set("ETERNALVR_AIM", LauncherSettings.AimName(s.Aim == AimMode.Hand && !s.Controllers ? AimMode.Head : s.Aim));
@@ -243,11 +255,14 @@ namespace EternalVR.Launcher.Core.Launch
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
-            // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, absent when off.
-            if (stereo && s.Foveation != FoveationMode.Off) Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
+            // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, not with Parallel Eye
+            // Rendering (the layer turns it off there), absent when off.
+            if (stereo && !s.ParallelEyesOn && s.Foveation != FoveationMode.Off)
+                Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
             // Frame pacing (docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset.
-            // Stereo only and not with adaptive alternate eyes; explicit either way (the layer's default may change).
-            var paced = stereo && s.AlternateEyes != AlternateEyesMode.Auto ? s.Pacing : FramePacing.Off;
+            // Stereo only and not with adaptive alternate eyes (which Parallel Eye Rendering ignores); explicit either way
+            // (the layer's default may change).
+            var paced = stereo && (s.AlternateEyes != AlternateEyesMode.Auto || s.ParallelEyesOn) ? s.Pacing : FramePacing.Off;
             Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
             // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
             // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could
@@ -299,13 +314,13 @@ namespace EternalVR.Launcher.Core.Launch
             && (LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto) != LauncherSettings.RenderSizeOff;
 
         /// <summary>
-        /// The game's OpenXR environment: the chosen runtime (none: the system's active one) and the OpenXR API layers
-        /// switched off. The runtime probe runs with it, so it asks the same runtime, through the same layers.
+        /// The game's OpenXR environment: the chosen runtime (none: the system default, <see cref="EffectiveRuntime"/>) and the
+        /// OpenXR API layers switched off. The runtime probe runs with it, so it asks the same runtime, through the same layers.
         /// </summary>
         public static IReadOnlyList<KeyValuePair<string, string>> OpenXrEnvironment(LauncherSettings s, IEnumerable<LayerDecision> decisions)
         {
             var env = new List<KeyValuePair<string, string>>();
-            if (!IsSystemRuntime(s.Runtime)) env.Add(new KeyValuePair<string, string>("XR_RUNTIME_JSON", s.Runtime));
+            if (!IsSystemRuntime(s.Runtime)) env.Add(new KeyValuePair<string, string>(RuntimeVariable, s.Runtime));
             foreach (var d in decisions ?? new LayerDecision[0])
                 if (d.Action == LayerAction.Disable && d.Environment.HasValue && d.Layer.Api == LayerApi.OpenXR) env.Add(d.Environment.Value);
             return env;
@@ -313,6 +328,21 @@ namespace EternalVR.Launcher.Core.Launch
 
         public static bool IsSystemRuntime(string runtime) =>
             string.IsNullOrWhiteSpace(runtime) || string.Equals(runtime, LauncherSettings.SystemRuntime, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The OpenXR loader's variable naming the runtime manifest; it wins over the system's active runtime.</summary>
+        public const string RuntimeVariable = "XR_RUNTIME_JSON";
+
+        /// <summary>
+        /// The runtime manifest a launch and the probe use: the chosen one, else <see cref="RuntimeVariable"/> when the
+        /// launcher's environment has it (the game inherits it, and the OpenXR loader takes it before the registry, as in
+        /// every other OpenXR program started from it), else the system's active runtime.
+        /// </summary>
+        public static string EffectiveRuntime(string chosen, string inherited, string systemActive) =>
+            !IsSystemRuntime(chosen) ? chosen : !string.IsNullOrWhiteSpace(inherited) ? inherited : systemActive;
+
+        /// <summary>True when the system default is in use and <see cref="RuntimeVariable"/> in the environment decides it.</summary>
+        public static bool RuntimeFromEnvironment(string chosen, string inherited) =>
+            IsSystemRuntime(chosen) && !string.IsNullOrWhiteSpace(inherited);
 
         /// <summary>Virtual Desktop's own runtime (VDXR), judged by its manifest's file name.</summary>
         public static bool IsVdxr(string runtimeManifest) =>

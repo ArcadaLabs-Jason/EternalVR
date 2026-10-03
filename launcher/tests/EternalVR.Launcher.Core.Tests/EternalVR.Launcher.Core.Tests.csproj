@@ -15,5 +15,7 @@
   <ItemGroup>
     <None Include="..\..\data\*.txt" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\data\input\controllers\*.toml" Link="data\controllers\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The multiplayer argument cases the layer's tests read as well (tests/platform/mp_policy). -->
+    <None Include="..\..\..\tests\platform\mp_policy\argument-cases.txt" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

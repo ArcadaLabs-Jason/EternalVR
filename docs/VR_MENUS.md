@@ -7,8 +7,9 @@ own mouse cursor. No keyboard or mouse is needed from the title screen to gamepl
 facts are in `docs/rig-findings/menus.md` (build 25216728).
 
 **Status.** Built, unit-tested and checked live on the rig with OpenXR-Simulator and scripted controller
-input (the live checks below). On by default wherever the UI layer is on (the launcher's stereo default)
-and on the cinema path; `ETERNALVR_MENU_POINTER=0` turns it off. Not yet tried on a real headset.
+input (the live checks below). On by default wherever the UI layer is on (the launcher turns it on in
+stereo and in mono) and on the cinema path; `ETERNALVR_MENU_POINTER=0` turns it off. Not yet tried on a
+real headset.
 
 ## How it works
 
@@ -42,7 +43,9 @@ XR worker, every XR frame                                     game (message pump
   (`docs/rig-findings/ui-layer.md` section 5) still sees the menu's full-screen backdrop, the UI quad stays
   on the panel for up to 1 s without the pointer, and the controllers' gameplay input is released as usual.
   A cursor back within that time finds the panel where it was instead of placing it again. Resuming the game
-  removes the backdrop, which ends the hold within a few frames.
+  removes the backdrop, which ends the hold within a few frames. The same hold keeps the whole frame on the
+  panel when no frame is head-tracked yet (the end of a loading screen, the main menu changing screens);
+  before, that frame jumped to the cinema screen for up to a second.
 - **The crosshair mask.** While the cursor is up, the panel shows or its hold lasts, the hand-aim mask of
   the game's crosshair is off, so menus never show a see-through square in their centre.
 - **The pointer.** Each hand's aim ray (the controller snapshot, with scripted input laid over it) is
@@ -87,8 +90,16 @@ XR worker, every XR frame                                     game (message pump
   he looked around in the popup.
 - **Gameplay held back.** While the menu is up, the controllers' gameplay actions, movement and turning are
   not sent (only the pause key, so the Menu button still opens and closes the pause menu). After the menu
-  closes they stay held back until every trigger, grip and face button is let go, so the pull that clicked
-  Resume does not also fire the gun.
+  closes they stay held back until every trigger, grip, A, B, X, Y and stick click is let go (the router's
+  latch). Then each input still down, or let go on that very frame, is kept out of gameplay on its own
+  until it is let go (`features/input/menu_release_latch.hpp`): the mapper reads it as released, or a stick
+  as centred, and the presses and stick sweeps begun in the menu are used up, along with any tap the
+  mapper's minimum hold was still sending. So the pull that clicked Resume does not also fire the gun, the
+  B or Y that backed out does not switch the weapon mod on its release, and a stick held to scroll or to
+  pan the Dossier's map does not become the chainsaw, the weapon wheel or a quick switch. An input pressed
+  after the menu works at once. Before, the release that ended the latch was also the release that
+  completed a tap binding: two Index players' logs (0.1.6 and 0.1.11) showed `gameplay input back on` and
+  `action switch_weapon_mod` in the same millisecond every time B closed the pause menu.
 
 ## Controls while a menu is up
 
@@ -112,6 +123,10 @@ The grips were Back (the pointing hand) and the right mouse button (the other ha
 
 The game's menus do not move their focus with the arrow keys, so none are sent; sliders are set by
 clicking or dragging on them.
+
+The menus' hint bars and tab lists name these controls instead of keys: "[B] BACK" for Escape, the
+weapon hand's trigger for Enter's select, the grips for the tabs' Q and E as LG and RG (the tab lists cut
+longer names; `docs/VR_CONTROLLERS.md`, Button prompts).
 
 **Tutorial and lore popups.** A tutorial or lore popup shows the game's cursor over the game, so it comes
 up in menu mode, but it waits for Space (continue) or E (use). On the owner's Quest 3 (2026-09-27,
@@ -168,22 +183,37 @@ wheel zooms, C centres, Escape goes back; the game also has pad and keyboard pan
 | Screen | Works | How |
 |---|---|---|
 | Tabs (Map, Arsenal, Codex, Challenges) | Yes | click the tab, or the grips (left Q, right E); a stick left / right off the map |
-| Map: pan | Yes | the weapon hand's stick (left drags, below; the other hand's with `ETERNALVR_MAP_STICKS=other`), or the trigger held while the pointer moves |
+| Map: pan | Yes | the weapon hand's stick (a left drag held, or W A S D while the other stick rotates, below; the other hand's with `ETERNALVR_MAP_STICKS=other`), or the trigger held while the pointer moves |
 | Map: zoom | Yes | the other stick up / down (the wheel, a notch every 0.1 s) |
-| Map: rotate | Yes | the other stick left / right (right drags, below) |
+| Map: rotate | Yes | the other stick left / right (a right drag held, below), at the same time as the pan |
 | Map: centre | Yes | a stick click (C) |
 
 **The map from the sticks** (`features/menu/map_drag.hpp`). The owner found moving the map with the hand
-disorienting (2026-09-27). The game pans only with a left drag and rotates with a right drag (its pad and
-keyboard pan speeds exist, `automap_panSpeedController`, `automap_panSpeedKeyboard`, but which keys pan is
-not known and a pad would switch the game's glyphs), so a held stick becomes drags: the cursor goes to the
-middle of the screen with the buttons up, the button goes down, the cursor moves at the stick's speed (pan:
-0.6 GUI heights per second at full deflection, the drag follows the stick, so the map moves the way the stick is pushed;
-rotate: 0.5), and after 0.2 of the GUI's smaller side, or when the stick is let go, the button goes up and
-the next stroke starts from the middle. The cursor never reaches the edge of its range, where the game
-would clamp it. While a stroke lasts the drag owns the cursor and the ray does not move it; with the sticks
-at rest the ray has it again, so the map's buttons can still be pointed at and clicked. A drag does not
-start while the trigger holds the left button.
+disorienting (2026-09-27). The game pans with a left drag and rotates with a right drag (its pad's sticks
+would do both; no pad is used, it would make the pad the game's input device), so a held stick becomes a drag. The
+automap adds up the raw mouse motion that comes while the button is down, not the cursor's position
+(`docs/rig-findings/menus.md` section 6), so the motion still counts with the cursor held at the edge of its
+range: the cursor goes to the middle of the screen with the buttons up, the button goes down, and it stays
+down, the stick's motion streamed every frame (pan: 1000 counts a second at full deflection, the speed of
+the game's own W A S D pan; the drag follows the stick, so the map moves the way the stick is pushed;
+rotate: 1100 counts a second, about 110 degrees), until the stick is back near its centre (0.15; a drag
+starts past 0.2, a rotation past 0.3 left or right). The first build drew short strokes from the middle
+instead (release, back to the middle, press again, about three a second at full deflection), which the
+owner felt as the map stopping and starting (2026-10-02).
+
+With both buttons held every motion pans, so one drag cannot pan and rotate at once (the owner could not,
+2026-10-02). While the other stick rotates, the pan stick pans with W, A, S and D, which the automap reads
+on its own (as it reads C), and the right button rotates: both sticks work together. The keys are on or off
+and the game evens out a pair, so a stick held part of the way or between two directions is spread over the
+frames (`features/menu/map_pan_keys.hpp`: each frame holds the key pair that keeps the sum held closest to
+the stick's). A pan that went onto the keys stays there until its stick is let go; a pan begun alone is a
+drag again. Every press is made with the cursor in the middle of the screen, as before. While a stick moves
+the map the drag owns the cursor and the ray does not move it, and the cursor is hidden; with the sticks at
+rest the ray has it again, so the map's buttons can still be pointed at and clicked. A drag does not start
+while the trigger holds the left button. The log has each change (`menu: map sticks: the pan stick pans
+with the left button held, the other stick does not rotate`, `... pans with W A S D, the other stick
+rotates with the right button held`; the first 60). The pan keys are counted in the menu's key count, not
+logged one by one.
 
 **Which stick pans.** `ETERNALVR_MAP_STICKS=other` swaps the two sticks' roles on the map: the other
 hand's stick pans and the weapon hand's stick zooms and rotates (`features/input/map_sticks.hpp`; the
@@ -226,6 +256,45 @@ the cursor is only the wheel's when it comes up during the hold, and the multipl
 every menu. Log: `menu: the weapon wheel is up: the game shows its cursor at x, y; ...` and `menu: the
 weapon wheel's cursor is gone`.
 
+## The menu's 3D model
+
+Some screens show a 3D model next to their menu: the weapon in the weapon mod screen ("Choose a weapon
+mod") and in the Dossier's Arsenal, Customize weapon. The game does not draw it in the GUI image. Every
+tick it places the model in the world a few centimetres in front of its camera (r_znear deep, pushed back
+by the model's size), along the line through the spot of the screen the menu keeps for it, and draws it in
+the 3D view under the GUI (the world is dark then, only menu models show). In VR the game's camera is the
+head, so the model stayed in front of the eyes, in the same spot of the eye images however the head moved,
+while the menu was on the world-locked panel (rig, 2026-10-02, eye captures under the test sway).
+
+Now, while the panel shows the menu over a head-tracked frame (pause and the in-game screens, not the
+title screen and the main menu, whose whole frame is on the panel already), the model is placed from a
+camera at the panel instead (`vkcore/menu_model_hook.hpp`, the maths in `features/menu/model_camera.hpp`):
+
+- **The camera.** It faces the panel from the point where the whole GUI image, as the panel shows it, fills
+  the field of view the game asked for (its own, before the headset's: 90 degrees across in the menus on
+  the rig, so a 2 m panel is seen from 1 m in front of it). Its height follows from the image's shape, so
+  the 16:9 band on the panel gets the flat screen's 58.7 degrees. The panel is in the headset's space and
+  the camera goes into the game's world through the head of the latest game view (where it is in both), so
+  it stays put in the world while the head moves.
+- **On the panel.** The model, placed by the game from that camera, is then made bigger about the camera
+  until its centre is on the panel's plane (its scale with it, about ten times for a model 10 cm in front
+  of a camera 1 m from the panel). Seen from the camera nothing changes; seen from anywhere else it is on
+  the panel where the flat menu puts it, at the size it has there next to the menu, with no parallax
+  between the two eyes and the panel.
+- **When.** Only while the multiplayer guard allows game touches, the frame is head-tracked and the panel
+  shows the UI quad (the pointer's panel or its hold), and only with a game view and a panel less than
+  0.25 s old. Otherwise the game places the model from its own view as before.
+- **How.** Two hooks in the game's `idMenuWidget_3D_Stand::UpdatePosition` (RVA 0x15A6D30 in build
+  25216728), each checked at start-up against the expected instructions. The first, right after the game
+  asked the world for its render view, hands the function a copy of that view (the whole idRenderView,
+  0x29950 bytes, kept per game thread) with the panel camera's place, direction and field of view; the game's
+  own view is not changed. The second, after the function wrote the model's position, moves the position
+  and the scale onto the panel. The model's lights follow its joints, so they move with it.
+
+`ETERNALVR_MENU_MODEL_PANEL=0` leaves the model where the game puts it (in front of the head);
+`ETERNALVR_MENU_MODEL_PANEL=near` places it from the panel camera but leaves it a few centimetres in front of
+that camera instead of on the panel (for comparing on the rig).
+
 ## Settings
 
 | Variable | Values | Default |
@@ -235,7 +304,9 @@ weapon wheel's cursor is gone`.
 | `ETERNALVR_MENU_WIDTH` | metres, 0.1 to 10 | `ETERNALVR_UI_WIDTH` (2.0) |
 | `ETERNALVR_MENU_BEAM` | `1` / `0` | `1` |
 | `ETERNALVR_MENU_FOLLOW` | `1` / `0` | `1` |
+| `ETERNALVR_MENU_MODEL_PANEL` | `1` (a menu's 3D model on the panel) / `near` (placed from the panel camera, left in front of it) / `0` (in front of the head, as the game places it) | `1` |
 | `ETERNALVR_MAP_STICKS` | `weapon` (the weapon hand's stick pans the Dossier's map) / `other` (the other hand's stick pans) | `weapon` |
+| `ETERNALVR_MAP_CURSOR_HIDE` | `1` (the game's cursor is hidden while a stick drags the Dossier's map and until it is back on the ray; `features/menu/drag_cursor_hide.hpp`, `docs/rig-findings/menus.md` section 5) / `0` (shown) | `1` |
 
 ## Log lines
 
@@ -244,20 +315,36 @@ the map page (`the Dossier's map page ...`), a panel placed again after a re-anc
 `pointer on; panel ...`, `right button down` / `up`, `the game shows its cursor (a menu screen | a menu over the game): panel ...`,
 `the cursor is gone; the panel and the pointer are down` (or `...; the pointer is down, the panel stays
 while the menu's backdrop shows`, then `the cursor is back; the panel stays where it was` or `the panel is
-down (held N s)`), every button, key and wheel event and the first moves, `controllers' gameplay input
+down (held N s)`), every button, key and wheel event (the first 300, then one a minute) and the first moves, `controllers' gameplay input
 held back (menu)` / `back on`, and every 10 s the counts (panel frames, moves, clicks, wheels, keys, not
 delivered, the cursor, and the game's desktop cursor moves and clips kept off the desktop). `keys:` `the
 game read an injected mouse event`, `desktop cursor kept from the game while it is not in the
-foreground`.
+foreground`. `menu model:` at start-up `idMenuWidget_3D_Stand::UpdatePosition view at RVA 0x15A6D84` and
+`hooks at RVA 0x15A6D97 (the render view) and 0x15A7134 (the placed model); ...` (or `off
+(ETERNALVR_MENU_MODEL_PANEL=0); ...`, or why a check failed), then once `the first model placed from the
+panel camera: camera (...) fwd (...), fov 90.00 x ..., the panel N unit(s) ahead; the model at (...),
+magnified onto the panel by F`.
 
 ## Verified
 
+- The menu's 3D model: the panel camera and the magnification are unit-tested
+  (`tests/features/menu/model_camera_tests.cpp`: a GUI element's ray from the camera meets the panel where
+  the panel shows it, for a straight, a turned and an off-centre panel and a scaled world; the camera stays
+  put in the world while the head turns and moves; the model ends on the panel's plane, unchanged as the
+  camera sees it; bad input places nothing). The hook sites, the view fields the function reads (fov_x / fov_y
+  0x28 / 0x2C, vieworg 0x94, viewaxis 0xA0) and the idRenderView's size (0x29950) are read from the exe of
+  build 25216728; on the rig and a headset it is still to be seen.
 - Unit tests: `tests/features/menu` (ray and panel: hits, corners, misses, turned panels, pixels, the dot,
   the beam quad and image; the router: closed-loop moves and the timeout, clicks after the cursor settles,
-  quick taps, a trigger held into a menu, back, scroll and tabs with repeat, the other hand's grip as the
-  right button and its release when the menu closes, the stick click's C, the pointer changing hands,
-  release and the gameplay latch when the menu closes, left-handed, NaN input) and the menu settings in
-  `tests/ui_layer`.
+  quick taps, a trigger held into a menu, back, scroll and tabs with repeat, the grips as the tab keys Q
+  and E, the stick click's C, the Dossier map's sticks (pan, zoom and rotate, and a drag let go when the
+  menu closes), the pointer changing hands, release and the gameplay latch when the menu closes,
+  left-handed, NaN input) and the menu settings in `tests/ui_layer`. The inputs held through the close:
+  `tests/features/input/menu_release_latch_tests.cpp` (B and a stick held through the close, a fresh press
+  after it, a press let go in the menu, several inputs let go one by one, analog thresholds) and
+  `input_mapper_menu_tests.cpp` (through the mapper: no weapon-mod switch from the B or Y that backed out,
+  no wheel, quick switch, chainsaw or turn from a stick held through, no shot from the trigger that clicked
+  Resume until it is pulled again, a fresh press at once).
 - Offline against the exe of build 25216728: both signatures match once; the event loop's call is the only
   call of the handler through the cursor pointer.
 
@@ -271,9 +358,10 @@ X held opened the Dossier on the map (`controllers: action dossier`, then `menu:
 to Codex (`menu: key down 0x45`, `t1-arsenal.png`, `t2-codex.png`); clicks chose a weapon, opened the mod's
 upgrade screen and switched Codex categories and the Challenges tab (`t5c.png`, `cmp3.png`, `cmp5.png`,
 `cmp6.png`); B went back from the upgrade screen and closed the Dossier (`menu: key down 0x1b`, `the cursor
-is gone`); with the change, the other hand's grip rotated the map both ways with 7 cursor moves in all and
-no rotation after the pointer stopped (`menu: right button down` / `up`, `cmp9.png`, `cmp10.png`) and a
-stick click centred it after a pan (`menu: key down 0x43`, `cmp12.png`).
+is gone`); with the build of that run, the other hand's grip rotated the map both ways with 7 cursor moves
+in all and no rotation after the pointer stopped (`menu: right button down` / `up`, `cmp9.png`,
+`cmp10.png`), and a stick click centred it after a pan (`menu: key down 0x43`, `cmp12.png`). Since then the
+grips are the tab keys Q and E and the map rotates on a stick (`menu_router_map_tests.cpp`).
 
 Runs `<workspace>\runs\20260926-071909-m6t1` (title screen to a new game and back),
 `-072718-m6t2` (e1m2: pause, resume, settings, exit), `-073459-m6t3` (with the desktop-cursor guard);
@@ -307,9 +395,14 @@ the preview.
 ## Gaps
 
 - Headset: panel size and distance, pointer comfort and precision, beam look, dot size (U4-style sweep).
-- The panel is placed when the cursor appears and stays; it does not follow a player who turns away.
+- The panel follows only a turn away of more than 60 degrees held for a second (`ETERNALVR_MENU_FOLLOW`);
+  how that feels in a headset is untested.
 - A flat, not curved, panel (cylinder layers are M6's next step).
-- Mono without the UI layer: a menu over a head-tracked frame has no panel, so no pointer.
+- Without the UI layer (`ETERNALVR_UI_LAYER=0`, a mono run outside the launcher, which leaves it off, or a
+  UI layer that failed its checks at start-up) a menu over a head-tracked frame has no panel: no pointer
+  and no Back, and gameplay input is not held back. In a popup only jump (Space) and melee (E) reach it, so
+  a tutorial that waits for another mechanic's key stays up. The Menu tap still pauses and resumes; the
+  title screen and the main menu (the cinema path) work as usual.
 - The launcher's settings restore leaves `r_windowPosX` / `r_windowPosY` in `DOOMEternalConfig.local` (the
   game saves the window position the layer set); after the live run they were put back by hand. Fixed in the
   launcher: the window and display keys (`launcher/data/session-keys.txt`) are now restored like the forced

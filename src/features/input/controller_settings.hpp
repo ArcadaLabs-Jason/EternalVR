@@ -9,7 +9,10 @@
 //                                               stay the game's own (view)
 //   ETERNALVR_DEMON_AIM      head / hand        what aims a piloted demon (the Cultist Base Revenant): the
 //                                               head or the weapon hand; unset, as ETERNALVR_AIM
-//   ETERNALVR_LOCOMOTION     head / hand        "forward" on the move stick: the head or the off hand
+//   ETERNALVR_LOCOMOTION     look / left / right  "forward" on the move stick: where the head looks, or
+//                                               where the left or the right hand points, whatever the
+//                                               handedness; the older head (look) and hand (the hand with
+//                                               the move stick, locomotionHand) are still read
 //   ETERNALVR_TURN           smooth / snap / off
 //   ETERNALVR_TURN_RATE      degrees per second for smooth turning (150 to 400)
 //   ETERNALVR_SNAP_DEGREES   30, 45 or 90 (any value from 15 to 90 is accepted)
@@ -28,8 +31,8 @@
 //   ETERNALVR_SWING          1 / 0              raise the weapon hand above the head and swing it down: the
 //                                               Crucible (off by default; arm_gestures.hpp)
 //   ETERNALVR_SWING_SPEED    1 to 5             the swing's downward speed, metres per second (2.5)
-//   ETERNALVR_HANDS_JUMP     1 / 0              throw both hands up above the head to jump (off by default,
-//                                               never when seated; hands_jump.hpp)
+//   ETERNALVR_HANDS_JUMP     1 / 0              throw both hands up above the head to jump (off by default;
+//                                               higher when seated; hands_jump.hpp)
 //   ETERNALVR_XINPUT         auto / 1 / 0       the virtual gamepad: only when the user-command hooks
 //                                               cannot be installed (auto), instead of them (1), never (0)
 //   ETERNALVR_SHOT_ORIGIN    hand / eye         where shots start under hand aim
@@ -61,6 +64,11 @@
 //   ETERNALVR_OFFHAND_PROBE  f,l,u              probe mode: added to the game's left-hand modifier (metres)
 //   ETERNALVR_OFFHAND_BLEND  seconds            hand-over blend (0 to 1; default 0.15)
 //   ETERNALVR_OFFHAND_TRACE  1 / 0              log the left-arm signals when they change
+//   ETERNALVR_WEAPON_ARM     ik / game          the weapon arm's forearm, elbow and upper arm reach the
+//                                               gun from a shoulder fixed to the head (ik, default), or
+//                                               keep the game's pose (offhand_policy.hpp)
+//   ETERNALVR_WEAPON_ARM_TEST_SHOULDER  f,l,u   rig tests: the weapon arm's shoulder at this point (metres
+//                                               from the eyes, the head's yaw frame), not mirrored
 
 #include "features/input/aim_smoothing.hpp"
 #include "features/input/arm_gestures.hpp"
@@ -119,6 +127,11 @@ game::WeaponOffset offhandOffsetFor(const game::WeaponOffset& offset, game::Hand
 // beside the weapon when the weapon is in the left hand, so the head's point is used there instead.
 ShoulderAnchor shoulderAnchorFor(ShoulderAnchor anchor, game::Handedness handedness);
 
+// The weapon arm's shoulder and elbow direction from the off hand's (given for the left hand): mirrored to
+// the right with the weapon in the right hand, as given with the weapon in the left hand, where the arms
+// model's right arm reaches for the left controller. Its shoulder is always the head's point.
+game::WeaponOffset weaponArmOffsetFor(const game::WeaponOffset& offset, game::Handedness handedness);
+
 // Defaults of the off-hand arm (metres, degrees; the grip's or the head's forward, left, up).
 inline constexpr game::WeaponOffset kDefaultOffhandOffset{-0.08f, 0.035f, 0.0f, 0.0f, 0.0f, 0.0f};
 inline constexpr game::WeaponOffset kDefaultOffhandShoulder{-0.08f, 0.18f, -0.24f, 0.0f, 0.0f, 0.0f};
@@ -162,6 +175,12 @@ struct ControllerSettings {
     float offhandBlendSeconds = 0.15f;
     float offhandHoldSeconds = 0.25f;
     bool offhandTrace = false;
+    // The weapon arm (docs/VR_HANDS_HUD.md, "The weapon arm"): the off hand's shoulder and elbow mirrored,
+    // the same blend and trace.
+    WeaponArmMode weaponArm = WeaponArmMode::Ik;
+    // Rig tests only (ETERNALVR_WEAPON_ARM_TEST_SHOULDER): the weapon arm's shoulder at this point, metres
+    // from the eyes in the head's yaw frame (forward, left, up), whatever the hand and handedness.
+    std::optional<game::WeaponOffset> weaponArmTestShoulder;
 };
 
 struct SettingsIssue {

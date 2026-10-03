@@ -145,6 +145,22 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void ALibraryListSteamHoldsOpenFallsBackToTheSteamRoot()
+        {
+            using (var t = new TempDir())
+            {
+                MakeLibrary(t, "steam", withGame: true);
+                WriteLibraryFolders(t, "steam");
+                // Steam writing the file: on Windows it cannot be read now. The checks go on with the Steam folder.
+                using (new FileStream(t.Combine("steam", "steamapps", "libraryfolders.vdf"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    var found = SteamLibraries.FindApp(t.Combine("steam"), GameLayout.SteamAppId, GameLayout.RetailExe);
+                    Assert.Equal(t.Combine("steam", "steamapps", "common", "DOOMEternal"), found.GameRoot);
+                }
+            }
+        }
+
+        [Fact]
         public void SteamVrRuntimesAreFoundPerLibrary()
         {
             using (var t = new TempDir())

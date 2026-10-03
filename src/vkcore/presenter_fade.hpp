@@ -1,8 +1,10 @@
 #pragma once
 
-// The head-collision fade (docs/VR_ROOMSCALE.md): a black quad layer locked to the head, drawn over the
-// projection layer with the fade as its alpha. A quad with source alpha is core OpenXR, so it works the
-// same on every runtime (VDXR, SteamVR, the simulator); no extension is needed.
+// The fade to black (docs/VR_ROOMSCALE.md): the head in geometry, the blink over a re-anchor and a glory
+// kill shown as a fade. A black quad layer locked to the head, drawn over the projection layer with the
+// fade as its alpha; made whatever ETERNALVR_HEAD_FADE says (that turns off only the head's own fade). A quad
+// with source alpha is core OpenXR, so it works the same on every runtime (VDXR, SteamVR, the simulator); no
+// extension is needed.
 //
 // XR worker only. The quad's swapchain is tiny (16 x 16) and cleared to (0, 0, 0, alpha) with D3D12 in
 // the frames where the fade is above zero; frames with no fade submit no quad and touch nothing.

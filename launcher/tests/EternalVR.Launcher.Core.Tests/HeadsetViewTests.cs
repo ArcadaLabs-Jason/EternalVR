@@ -79,6 +79,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Contains("DLSS Performance draws about 1028 x 1108", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Performance));
             Assert.Contains("DLSS Balanced draws about 1192 x 1285", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Balanced));
             Assert.Contains("DLSS Ultra Performance draws about 685 x 739", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.UltraPerformance));
+            Assert.Contains("DLAA draws about 2056 x 2216", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Dlaa));
             Assert.DoesNotContain("DLSS", EachEye(Quest3, aa: AntiAliasingMode.Off));
         }
 

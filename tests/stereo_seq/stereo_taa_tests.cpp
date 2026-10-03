@@ -116,6 +116,46 @@ TEST_CASE("stereo TAA: eye L's exposure alternates by its own frames, eye R read
     }
 }
 
+TEST_CASE("stereo TAA: the exposure index is held under Route S whatever the TAA mode") {
+    using evr::stereo_seq::ExposureGate;
+    using evr::stereo_seq::exposureIndexHeld;
+    ExposureGate g;
+    g.hooked = true;
+    g.routeS = true;
+    g.gameTouch = true;
+    // Per-eye TAA off (ETERNALVR_STEREO_TAA=0, the launcher's anti-aliasing Off): held on its own.
+    CHECK(exposureIndexHeld(g));
+    // Per-eye TAA requested: from its first stereo tick, as before, and on its own once it failed closed.
+    g.taaRequested = true;
+    CHECK_FALSE(exposureIndexHeld(g));
+    g.taaPerEye = true;
+    CHECK(exposureIndexHeld(g));
+    g.taaPerEye = false;
+    g.taaFailedClosed = true;
+    CHECK(exposureIndexHeld(g));
+    // With eye R's skip off the engine's own chain stays, unless per-eye TAA is on (as before).
+    g.exposureOnce = false;
+    CHECK_FALSE(exposureIndexHeld(g)); // failed closed
+    g.taaRequested = false;
+    CHECK_FALSE(exposureIndexHeld(g)); // per-eye TAA off
+    g.taaRequested = true;
+    g.taaFailedClosed = false;
+    g.taaPerEye = true;
+    CHECK(exposureIndexHeld(g));
+    g.taaPerEye = false;
+    g.taaFailedClosed = true;
+    g.exposureOnce = true;
+    // Never without the hook, the eye tags or the multiplayer guard.
+    for (bool ExposureGate::* piece :
+         {&ExposureGate::hooked, &ExposureGate::routeS, &ExposureGate::gameTouch}) {
+        ExposureGate missing = g;
+        missing.*piece = false;
+        CHECK_FALSE(exposureIndexHeld(missing));
+        missing.taaRequested = false;
+        CHECK_FALSE(exposureIndexHeld(missing));
+    }
+}
+
 TEST_CASE("stereo TAA: history resets on the first stereo tick and after eye R missed a tick") {
     TaaResetPlanner p;
     CHECK(p.onLeft(100)); // nothing rendered yet
@@ -250,6 +290,21 @@ TEST_CASE("stereo TAA: the DLSS quality names and numbers map to r_dlssQuality")
     // Unset, empty or unknown: the game's own setting stays.
     CHECK(dlssQualityValue("") == -1);
     CHECK(dlssQualityValue("4") == -1);
-    CHECK(dlssQualityValue("dlaa") == -1);
+    CHECK(dlssQualityValue("5") == -1);
     CHECK(dlssQualityValue("ultra performance") == -1);
+}
+
+TEST_CASE("stereo TAA: DLAA holds r_dlssQuality at Quality and is named only as dlaa") {
+    using evr::stereo_seq::dlssQualityIsDlaa;
+    using evr::stereo_seq::dlssQualityValue;
+    // The game maps r_dlssQuality 0 to 3 only; DLAA goes on NGX's parameter, and runs as Quality where it
+    // cannot.
+    CHECK(dlssQualityValue("dlaa") == 3);
+    CHECK(dlssQualityValue("DLAA") == 3);
+    CHECK(dlssQualityIsDlaa("dlaa"));
+    CHECK(dlssQualityIsDlaa("Dlaa"));
+    CHECK_FALSE(dlssQualityIsDlaa("quality"));
+    CHECK_FALSE(dlssQualityIsDlaa("3"));
+    CHECK_FALSE(dlssQualityIsDlaa("5"));
+    CHECK_FALSE(dlssQualityIsDlaa(""));
 }

@@ -160,7 +160,9 @@ namespace EternalVR.Launcher.Core.Tests
 
                 var report = SettingsSnapshot.Restore(snap, new[] { "r_dof" });
                 Assert.False(File.Exists(profile));
-                Assert.Contains(report.ChangedNotRestored, l => l.Contains("PROFILE/profile.bin") && l.Contains("Steam Cloud"));
+                Assert.Contains(report.ChangedInCloud, l => l.Contains("PROFILE/profile.bin") && l.Contains("removed"));
+                Assert.Empty(report.ChangedNotRestored);
+                Assert.Contains(report.Lines, l => l.Contains("Steam Cloud file kept") && l.Contains("PROFILE/profile.bin"));
                 // The local text config is still restored whole.
                 Assert.Equal("r_mode \"25\"\n", t.Read("saved/base/DOOMEternalConfig.local"));
             }

@@ -108,9 +108,16 @@ TEST_CASE("scatter history: the state follows the eye, and each eye's first two 
     CHECK((*r3.load)[0] == std::byte{5});
     // Two renders of one eye in a row (a mono frame between ticks): no swap.
     CHECK_FALSE(h.beforeRender(Eye::Right, 7, stateWith(6, std::byte{7})).load);
-    // A mono render is eye L's: eye L's state comes back; the next eye L render keeps it.
-    CHECK(h.beforeRender(Eye::Mono, 8, stateWith(7, std::byte{8})).load);
-    CHECK_FALSE(h.beforeRender(Eye::Left, 9, stateWith(8, std::byte{9})).load);
+    // A mono render is eye L's: eye L's state comes back. Its own last render is three back here, so it
+    // starts over: two renders without a last frame, then the engine's own last frame stands.
+    const auto m = h.beforeRender(Eye::Mono, 8, stateWith(7, std::byte{8}));
+    REQUIRE(m.load);
+    CHECK(lastFrame(*m.load) == 0);
+    CHECK((*m.load)[0] == std::byte{6}); // as eye R found it at counter 6
+    const auto l4 = h.beforeRender(Eye::Left, 9, stateWith(8, std::byte{9}));
+    REQUIRE(l4.load);
+    CHECK(lastFrame(*l4.load) == 0);
+    CHECK_FALSE(h.beforeRender(Eye::Left, 10, stateWith(9, std::byte{10})).load);
 }
 
 TEST_CASE("scatter history: after a resize each eye clears both pairs again and keeps its images") {
@@ -135,6 +142,73 @@ TEST_CASE("scatter history: after a resize each eye clears both pairs again and 
     }
     for (const auto& pair : r.slots) {
         CHECK((pair == ScatterPair{image(5), image(6)} || pair == ScatterPair{image(7), image(8)}));
+    }
+}
+
+namespace {
+
+// Six alternating renders from counter 1: past both eyes' clearing renders.
+ScatterHistory settled() {
+    ScatterHistory h = ready();
+    for (std::uint32_t c = 1; c <= 6; ++c) {
+        h.beforeRender(c % 2 ? Eye::Left : Eye::Right, c, stateWith(c - 1, std::byte{0}));
+    }
+    return h;
+}
+
+// Eye R's state after a gap: its last frame is zeroed for its next two renders, then passed off again.
+void checkEyeRStartsOver(ScatterHistory& h, std::uint32_t counter) {
+    const auto r1 = h.beforeRender(Eye::Right, counter, stateWith(counter - 1, std::byte{0}));
+    REQUIRE(r1.load);
+    CHECK(r1.restarted);
+    CHECK(lastFrame(*r1.load) == 0);
+    h.beforeRender(Eye::Left, counter + 1, stateWith(counter, std::byte{0}));
+    const auto r2 = h.beforeRender(Eye::Right, counter + 2, stateWith(counter + 1, std::byte{0}));
+    REQUIRE(r2.load);
+    CHECK_FALSE(r2.restarted);
+    CHECK(lastFrame(*r2.load) == 0);           // its other pair is cleared too
+    const unsigned read = (counter & 1u) ^ 1u; // the slot read: counter and counter + 2 share a parity
+    CHECK(r2.slots[read] != r1.slots[read]);
+    h.beforeRender(Eye::Left, counter + 3, stateWith(counter + 2, std::byte{0}));
+    const auto r3 = h.beforeRender(Eye::Right, counter + 4, stateWith(counter + 3, std::byte{0}));
+    REQUIRE(r3.load);
+    CHECK(lastFrame(*r3.load) == counter + 3);
+}
+
+} // namespace
+
+TEST_CASE("scatter history: after a gap an eye starts its history over") {
+    SUBCASE("a mono stretch (a menu, a cutscene, a map load)") {
+        ScatterHistory h = settled();
+        CHECK(h.beforeRender(Eye::Mono, 7, stateWith(6, std::byte{0})).load); // eye L's state back
+        for (std::uint32_t c = 8; c <= 40; ++c) {
+            CHECK_FALSE(h.beforeRender(Eye::Mono, c, stateWith(c - 1, std::byte{0})).load);
+        }
+        // Eye L carries on from the mono renders: no swap, the engine's own last frame stands.
+        CHECK_FALSE(h.beforeRender(Eye::Left, 41, stateWith(40, std::byte{0})).load);
+        checkEyeRStartsOver(h, 42);
+    }
+    SUBCASE("a skipped eye R") {
+        ScatterHistory h = settled();
+        h.beforeRender(Eye::Left, 7, stateWith(6, std::byte{0}));
+        h.beforeRender(Eye::Left, 8, stateWith(7, std::byte{0}));
+        checkEyeRStartsOver(h, 9);
+    }
+    SUBCASE("eye L after a run of eye R renders") {
+        ScatterHistory h = settled();
+        h.beforeRender(Eye::Right, 7, stateWith(6, std::byte{0}));
+        h.beforeRender(Eye::Right, 8, stateWith(7, std::byte{0}));
+        const auto l = h.beforeRender(Eye::Left, 9, stateWith(8, std::byte{0}));
+        REQUIRE(l.load);
+        CHECK(l.restarted);
+        CHECK(lastFrame(*l.load) == 0);
+    }
+    SUBCASE("no gap: the eye's own last render two back is passed off as the previous one") {
+        ScatterHistory h = settled();
+        const auto l = h.beforeRender(Eye::Left, 7, stateWith(6, std::byte{0}));
+        REQUIRE(l.load);
+        CHECK_FALSE(l.restarted);
+        CHECK(lastFrame(*l.load) == 6);
     }
 }
 

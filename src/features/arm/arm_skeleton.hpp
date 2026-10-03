@@ -1,7 +1,7 @@
 #pragma once
 
 // The arms skeleton's parents and joint-name handles, read from the game's loaded md6 skeleton
-// (docs/VR_HANDS_HUD.md, "Off hand"), and the left arm's joints found in it.
+// (docs/VR_HANDS_HUD.md, "Off hand"), and an arm's joints found in it.
 //
 // The layer reaches the skeleton the way idJointAnimator::GetJointTransforms does (the animator's model,
 // +0x80, +0x310, then the data pointer at +0x60, whose u16 at +2 is the joint count it bounds indices
@@ -19,7 +19,7 @@
 //   +0x10 u16  offset of the name-handle table: one int16 handle per joint
 //
 // The joints are found by the skeleton's shape from the game's own attach joint, and the layer then checks
-// their names through the game's name handles (vkcore/offhand_arm.cpp). Pure: the bytes come through a
+// their names through the game's name handles (vkcore/game_arm_joints.cpp). Pure: the bytes come through a
 // read callback, so the tests feed it a buffer.
 
 #include "features/arm/arm_joints.hpp"
@@ -56,17 +56,18 @@ std::optional<Skeleton> readSkeleton(const SkeletonRead& read, std::string& erro
 
 using ArmJointIndices = std::array<std::int16_t, kArmJointCount>;
 
-// The left arm's joints from `attach` (the game's own left attach joint) by the skeleton's shape:
-// LeftHand is the attach joint's only child, and the forearm is the one line of descent from LeftHand
-// exactly six joints long that ends in a leaf (three rolls, LeftForeArmRoll, LeftForeArm, LeftArm; side
-// branches along it are allowed); the fingers, the prop joint and the forearm device are shorter. nullopt
-// with `error` otherwise.
+// An arm's joints from `attach` (the game's own attach joint of that arm) by the skeleton's shape: the
+// wrist (LeftHand, RightHand) is the attach joint's only child, and the forearm is the one line of descent
+// from the wrist exactly six joints long that ends in a leaf (three rolls, the forearm roll, the forearm,
+// the upper arm; side branches along it are allowed); the fingers, the prop joint and the forearm device
+// are shorter. The same for either arm; nullopt with `error` otherwise.
 std::optional<ArmJointIndices>
 findArmJoints(const Skeleton& skeleton, std::int16_t attach, std::string& error);
 
-// True when each joint's name handle is the handle of its name (kArmJointNames order); `error` names the
-// first that is not.
+// True when each joint's name handle is the handle of its name (armJointNames(side) order); `error` names
+// the first that is not.
 bool namesMatch(const Skeleton& skeleton,
+                ArmSide side,
                 const ArmJointIndices& joints,
                 const std::array<std::int16_t, kArmJointCount>& handles,
                 std::string& error);

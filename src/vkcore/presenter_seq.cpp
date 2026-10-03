@@ -7,10 +7,12 @@
 #include "stereo_seq/alternate_eyes.hpp"
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/dlss_menu_hooks.hpp"
+#include "vkcore/exposure_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
-#include "vkcore/runtime_cvars.hpp"
+#include "vkcore/seq_prev.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/taa_hooks.hpp"
+#include "vkcore/taa_ngx.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -21,8 +23,6 @@ namespace evr::vkcore {
 using stereo_seq::Eye;
 using stereo_seq::PairAction;
 
-// idRenderView::centeredViewProjectionMatrix (built by the latch, RVA 0x1CE1400).
-constexpr std::size_t kCenteredViewProjection = 0x296B0;
 // customViewProjectionMatrix, customViewProjectionMatrix2 and their centred variants (the latch builds
 // them from weaponFOVX/Y and customFOV2X/Y).
 constexpr std::size_t kWeaponViewProjections[] = {0x295B0, 0x29630, 0x29770, 0x297F0};
@@ -72,6 +72,7 @@ stereo_seq::AlternateTaaReset g_adaptiveTaaReset{true}; // auto: Route S ticks c
 std::byte g_leftUpsampler{};
 std::atomic<std::uint64_t> g_taaResets{0};
 TaaCounters g_lastTaa;
+ExposureCounters g_lastExposure;
 
 void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame) {
     if (eye == Eye::Left) {
@@ -99,6 +100,7 @@ void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame) {
                                             : g_taaReset.onRight(gameFrame);
     if (reset) {
         renderView[stereo_view_fields::kDisableTssaaNextFewFrames] = std::byte{1};
+        noteNgxReset(eye, gameFrame); // DLSS does not read the flag: this render's evaluation resets
         ++g_taaResets;
     }
 }
@@ -134,9 +136,12 @@ void XrPresenter::Impl::startSequential() {
         status::stereo(false, "the stereo hooks could not be installed");
         return;
     }
+    // Eye R takes eye L's exposure whatever the TAA mode: the hook needs only the eye tags.
+    installExposureHook(settings.stereo.seqView.exposureOnce);
     if (taaRequested()) {
         installTaaHooks(); // a missing piece fails closed on the first stereo tick
     }
+    logStereoTemporalMode();
     installDlssMenuHooks(); // the game's video menu shows the DLSS state the layer holds
     {
         std::lock_guard lock(mutex);
@@ -185,8 +190,16 @@ void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
     const Eye eye = seqRenderEye();
     const bool nested = seqChainEye() == Eye::Right;
     const int index = stereo_seq::eyeIndex(eye);
+    // Alternate eyes: an eye R render frame left mono keeps the previous matrices the engine stored, not the
+    // eye R ones the book put in after the store (seq_prev.hpp).
+    const auto stayMono = [&] {
+        if (eye == Eye::Right && !nested) {
+            seq_prev::undoRewrite(renderView);
+        }
+    };
     const SeqReadiness readiness = nested ? SeqReadiness::Ready : seqStereoReadiness();
     if (readiness == SeqReadiness::Off) {
+        stayMono();
         return; // the tick stays mono: the game's own view
     }
     if (nested) {
@@ -199,24 +212,29 @@ void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
     if (!found || !record.stereo) {
         // Not a head-tracked game view with located eyes (menus, loading screens): the tick stays mono.
         ++stereoStats.unmatched;
+        stayMono();
         return;
     }
     if (readiness == SeqReadiness::NeedsBase) {
         // The eye tags take a new base on this frame, which stays the game's own view; the next tick pairs.
         seqMarkWanted();
+        stayMono();
         return;
     }
-    const stereo_seq::EyeViewPlan plan = stereo_seq::planEyeView(eye, settings.stereo.seqView);
+    const stereo_seq::EyeViewPlan plan =
+        stereo_seq::planEyeView(eye, settings.stereo.seqView, exposureIndexHeld());
     std::optional<xr_math::EngineMatrix> projection;
     if (plan.writePose) {
         // The centred matrix the world-views pass latched from the game's view (no explicit projection).
         stereo_seq::Matrix4 centered{};
-        std::memcpy(centered.data(), renderView + kCenteredViewProjection, sizeof(centered));
+        std::memcpy(centered.data(), renderView + render_view_object::kCenteredViewProjection,
+                    sizeof(centered));
         centeredDepth[static_cast<std::size_t>(index)] =
             settings.stereo.fixCentered ? stereo_seq::centeredDepthOf(centered) : std::nullopt;
         projection = writeEyePose(renderView, record.eyes[static_cast<std::size_t>(index)]);
         eyePoseWritten[static_cast<std::size_t>(index)] = projection.has_value();
         if (!projection) {
+            stayMono();
             return; // no usable projection: nothing written, the tick stays mono
         }
         noteWritten(index, *projection);
@@ -263,9 +281,9 @@ void XrPresenter::Impl::onSeqEyeLatched(std::byte* renderView, int eyeIndex) {
     };
     if (depth) {
         // The latch built the centred matrix from the explicit projection, depth rows included.
-        stereo_seq::Matrix4 centered = load(kCenteredViewProjection);
+        stereo_seq::Matrix4 centered = load(render_view_object::kCenteredViewProjection);
         stereo_seq::setCenteredDepth(centered, *depth);
-        store(kCenteredViewProjection, centered);
+        store(render_view_object::kCenteredViewProjection, centered);
         depth.reset();
         ++centeredRepairs;
     }
@@ -328,8 +346,6 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
                                                  std::uint64_t completed,
                                                  const stereo_seq::PresentMatch& match) {
     capture.poll(dev, completed);
-    // TAA stays off although the game's settings turn it back on (runtime_cvars.hpp); cheap once located.
-    runtime_cvars::apply(true);
     const bool alternate = seqAlternateEyes();
     if (alternate) {
         // One eye per tick (presenter_alt.cpp); a mono frame comes back here.
@@ -485,14 +501,15 @@ void XrPresenter::Impl::logSeqStats() {
         "seq: eye tags %s: %llu matched, %llu untagged; out of sync %llu (missing present) / %llu (untagged "
         "frame) / %llu (overflow) / %llu (rebase); %llu drain(s), %llu failed, %llu on a quiet period only, "
         "%.1f ms in total, longest %.1f ms; frames without a backend frame %llu; previous matrices %llu "
-        "rewritten / %llu kept; r_swapInterval %d",
+        "rewritten / %llu kept / %llu put back; r_swapInterval %d",
         c.tagsSynced ? "in sync" : "OUT OF SYNC", d(c.tags.matched, l.tags.matched),
         d(c.tags.untagged, l.tags.untagged), d(c.tags.missingPresent, l.tags.missingPresent),
         d(c.tags.untaggedFrame, l.tags.untaggedFrame), d(c.tags.overflow, l.tags.overflow),
         d(c.tags.requested, l.tags.requested), d(c.drains, l.drains), d(c.drainFailures, l.drainFailures),
         d(c.unverifiedBases, l.unverifiedBases), static_cast<double>(c.drainMicros - l.drainMicros) / 1000.0,
         static_cast<double>(seqTakeDrainMaxMicros()) / 1000.0, d(c.noBackendFrames, l.noBackendFrames),
-        d(c.prevRewrites, l.prevRewrites), d(c.prevKept, l.prevKept), c.swapInterval);
+        d(c.prevRewrites, l.prevRewrites), d(c.prevKept, l.prevKept), d(c.prevUndone, l.prevUndone),
+        c.swapInterval);
     EVR_LOG("seq: eye R skipped %llu (render-frame guard busy) / %llu (multiplayer guard) / %llu (stack); "
             "eye R chain at most %zu KiB deep, least stack left at eye R %zu KiB",
             d(c.guardBusy, l.guardBusy), d(c.guardTrips, l.guardTrips), d(c.stackSkips, l.stackSkips),
@@ -511,18 +528,30 @@ void XrPresenter::Impl::logSeqStats() {
         static_cast<unsigned long long>(m.stores), static_cast<unsigned long long>(m.loads),
         static_cast<unsigned long long>(m.clears), static_cast<unsigned long long>(m.skipped),
         static_cast<unsigned long long>(m.crops), static_cast<unsigned long long>(m.panels));
+    const ExposureCounters x = exposureCounters();
+    EVR_LOG("seq-exposure: auto-exposure index held for %llu eye L or mono / %llu eye R render(s); "
+            "%llu render(s) whose tag in flight names another eye",
+            d(x.held[0], g_lastExposure.held[0]), d(x.held[1], g_lastExposure.held[1]),
+            d(x.inFlightDiffers, g_lastExposure.inFlightDiffers));
+    g_lastExposure = x;
     const TaaCounters t = taaCounters();
     const TaaCounters& lt = g_lastTaa;
     if (taaRequested()) {
+        const NgxCounters& n = t.ngx;
+        const NgxCounters& ln = lt.ngx;
         EVR_LOG(
             "seq-taa: per-eye %s; accumulation picks %llu eye L / %llu eye R / %llu engine; resets %llu; "
             "DLSS evaluations %llu eye L / %llu eye R (%llu without a twin), twins %llu made / %llu failed, "
-            "%llu twin reset(s); r_antialiasing %d r_TAASafeMode %d r_jitter %d r_TAAAntiGhosting %d",
+            "%llu twin reset(s), %llu eye L reset(s); DLSS eye by the output image %llu (tag in flight names "
+            "the other eye %llu), by the tag in flight %llu; r_antialiasing %d r_TAASafeMode %d r_jitter %d "
+            "r_TAAAntiGhosting %d",
             t.perEye ? "on" : "off", d(t.picks[0], lt.picks[0]), d(t.picks[1], lt.picks[1]),
             d(t.enginePicks, lt.enginePicks), static_cast<unsigned long long>(g_taaResets.load()),
-            d(t.evaluates[0], lt.evaluates[0]), d(t.evaluates[1], lt.evaluates[1]),
-            d(t.evaluatesNoTwin, lt.evaluatesNoTwin), d(t.twinCreates, 0), d(t.twinFailures, 0),
-            d(t.twinResets, lt.twinResets), t.antialiasing, t.safeMode, t.jitter, t.antiGhosting);
+            d(n.evaluates[0], ln.evaluates[0]), d(n.evaluates[1], ln.evaluates[1]),
+            d(n.evaluatesNoTwin, ln.evaluatesNoTwin), d(n.twinCreates, 0), d(n.twinFailures, 0),
+            d(n.twinResets, ln.twinResets), d(n.leftResets, ln.leftResets), d(n.ownTags, ln.ownTags),
+            d(n.inFlightDiffers, ln.inFlightDiffers), d(n.inFlightTags, ln.inFlightTags), t.antialiasing,
+            t.safeMode, t.jitter, t.antiGhosting);
     }
     if (taaRequested()) {
         const auto v = [&](int e, int s) {

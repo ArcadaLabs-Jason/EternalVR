@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 using evr::input::ArmBlend;
 using evr::input::ArmReason;
@@ -185,4 +186,39 @@ TEST_CASE("offhand settings: the arm's wrist offset, shoulder and elbow") {
     CHECK(r.issues.size() == 2);
     CHECK(r.settings.offhandShoulder == ShoulderAnchor::Head);
     CHECK(r.settings.offhandElbow == evr::input::kDefaultOffhandElbow);
+}
+
+TEST_CASE("weapon arm policy: IK on an idle arm, the game's for every arm animation and in game mode") {
+    using evr::input::decideWeaponArm;
+    using evr::input::WeaponArmMode;
+    CHECK(decideWeaponArm(idle(), WeaponArmMode::Ik).controller);
+    const auto game = decideWeaponArm(idle(), WeaponArmMode::Game);
+    CHECK_FALSE(game.controller);
+    CHECK(game.reason == ArmReason::ModeGame);
+    const auto with = [](auto change) {
+        ArmSignals s = idle();
+        change(s);
+        return s;
+    };
+    const std::pair<ArmSignals, ArmReason> cases[] = {
+        {with([](ArmSignals& s) { s.forcedView = true; }), ArmReason::ForcedView},
+        {with([](ArmSignals& s) { s.syncActive = true; }), ArmReason::Sync},
+        {with([](ArmSignals& s) { s.hiddenReasons = 1; }), ArmReason::HandsHidden},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::MeleeRight); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::ThrowItem); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::BringUp); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::CustomAnim); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.handsFlags = hands_flag::kChangingWeapon; }), ArmReason::BusyFlags},
+        {with([](ArmSignals& s) { s.offHandTracked = false; }), ArmReason::Untracked},
+        {with([](ArmSignals& s) { s.modelPlaced = false; }), ArmReason::Untracked},
+    };
+    for (const auto& [signals, reason] : cases) {
+        const auto d = decideWeaponArm(signals, WeaponArmMode::Ik);
+        CHECK_FALSE(d.controller);
+        CHECK(d.reason == reason);
+    }
+    // Firing stays with the IK.
+    ArmSignals firing = idle();
+    firing.handsFlags = (1ull << 10) | (1ull << 13);
+    CHECK(decideWeaponArm(firing, WeaponArmMode::Ik).controller);
 }

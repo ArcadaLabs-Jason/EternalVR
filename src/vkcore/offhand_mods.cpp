@@ -1,4 +1,4 @@
-// The hands' joint-modifier lists for the free off hand's arm (offhand_mods.hpp).
+// The hands' joint-modifier lists for the arms the layer bends (offhand_mods.hpp).
 
 #include "vkcore/offhand_mods.hpp"
 
@@ -7,6 +7,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/seh_filter.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -51,6 +52,13 @@ constexpr Expect kInitExpected[] = {
     {0x1EB, "41 B8 0B 02 00 00 89 83 D4 28 00 00 48 8B CB E8"},    // the third
     {0x207, "89 83 D8 28 00 00 48 C7 83 74 29 00 00 00 00 80 3F"}, // its index stored, then the hook site
 };
+// The weapon arm's attach joint: the second name lookup (mov rcx, [table]; lea rdx, [rsp+0x90]; mov r8,
+// [name]) and the second AddJointMod's arguments (movzx edx, [rsp+0x90]; lea r9, [rbx+0x28E6]).
+constexpr std::size_t kRightNameLookup = 0x164;
+constexpr const char* kRightNameLookupBytes = "48 8B 0D ?? ?? ?? ?? 48 8D 94 24 90 00 00 00 4C 8B 05";
+constexpr Expect kRightAttachExpected[] = {
+    {0x1B9, "0F B7 94 24 90 00 00 00 4C 8D 8B E6 28 00 00"},
+};
 constexpr std::size_t kInitSetNumCall = 0x54;
 constexpr std::size_t kAddJointModCalls[] = {0x1B4, 0x1D7, 0x1FA};
 constexpr std::size_t kHookSite = 0x20D;
@@ -70,11 +78,16 @@ constexpr Expect kSetNumExpected[] = {
 
 using SetNumFn = void(__fastcall*)(void* node, std::int32_t num);
 SetNumFn g_setNum = nullptr;
+std::int32_t g_room = 0; // the modifiers made room for: six per arm (install, then read-only)
 std::atomic<std::uint32_t> g_roomLines{0};
 
+// `hex` at `at`; "??" matches any byte.
 bool bytesMatch(const std::byte* at, std::string_view hex) {
     std::size_t i = 0;
     for (std::size_t p = 0; p + 1 < hex.size(); p += 3, ++i) {
+        if (hex[p] == '?') {
+            continue;
+        }
         const auto nibble = [](char c) {
             return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
         };
@@ -82,6 +95,24 @@ bool bytesMatch(const std::byte* at, std::string_view hex) {
             static_cast<std::uint8_t>(nibble(hex[p]) * 16 + nibble(hex[p + 1]))) {
             return false;
         }
+    }
+    return true;
+}
+
+// The weapon arm's attach joint: the joint InitJointMods stores at idHands+0x28E6 is the one named
+// "righthandattach" (offhand_mods.hpp). False (logged) leaves the weapon arm the game's.
+bool rightAttachChecks(const GameImage& image, const std::byte* init) {
+    const std::byte* lookup = init + kRightNameLookup;
+    bool ok = bytesMatch(lookup, kRightNameLookupBytes);
+    for (const Expect& e : kRightAttachExpected) {
+        ok = ok && bytesMatch(init + e.at, e.bytes);
+    }
+    const std::byte* nameSlot = ok ? ripTarget(image, lookup + 18, lookup + 22) : nullptr;
+    const std::byte* name = nullptr;
+    if (!nameSlot || !safeRead(nameSlot, name) || stringAt(image, name) != "righthandattach") {
+        EVR_LOG("weapon arm: InitJointMods does not store the joint named righthandattach at idHands+0x28E6; "
+                "the weapon arm stays the game's");
+        return false;
     }
     return true;
 }
@@ -118,10 +149,13 @@ bool callSetNum(const std::byte* node, std::int32_t num) {
     __try {
         g_setNum(const_cast<std::byte*>(node), num);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
+
+// Set when SetNum faulted: the game's lists may be half-resized, so it is not called again this session.
+std::atomic<bool> g_setNumFaulted{false};
 
 // A line per event, up to 64 (a map load or a respawn each).
 bool roomLineDue() {
@@ -130,7 +164,7 @@ bool roomLineDue() {
 
 // InitJointMods, right after its third AddJointMod: room for the layer's six in the new lists.
 void onJointModsBuilt(const HookRegisters& regs) {
-    if (!mp_guard::allowsGameTouch()) {
+    if (!mp_guard::allowsGameTouch() || g_setNumFaulted.load(std::memory_order_relaxed)) {
         return;
     }
     const std::byte* node = modNode(reinterpret_cast<const std::byte*>(regs.rbx));
@@ -141,7 +175,7 @@ void onJointModsBuilt(const HookRegisters& regs) {
         }
         return;
     }
-    const arm::RoomPlan plan = arm::planRoom(counts(lists[0]), counts(lists[1]), kLayerCount);
+    const arm::RoomPlan plan = arm::planRoom(counts(lists[0]), counts(lists[1]), g_room);
     if (plan.step != arm::RoomPlan::Step::Grow) {
         if (roomLineDue()) {
             EVR_LOG("%s: arm: the hands' new joint modifier lists (%d of %d, %d of %d) %s", kTag,
@@ -151,7 +185,14 @@ void onJointModsBuilt(const HookRegisters& regs) {
         }
         return;
     }
-    const bool called = callSetNum(node, plan.growTo) && callSetNum(node, plan.num);
+    if (!callSetNum(node, plan.growTo) || !callSetNum(node, plan.num)) {
+        g_setNumFaulted.store(true, std::memory_order_relaxed);
+        EVR_LOG(
+            "%s: arm: the game's SetNum faulted; no room is made for the rest of this session, the off hand "
+            "stays the game's",
+            kTag);
+        return;
+    }
     bool read = readList(node, 0, lists[0]) && readList(node, 1, lists[1]);
     // SetNum lowers no count but the first list's when that one did not grow (mod_room.hpp).
     for (std::size_t which = 0; read && which < 2; ++which) {
@@ -163,38 +204,40 @@ void onJointModsBuilt(const HookRegisters& regs) {
     if (!roomLineDue()) {
         return;
     }
-    if (called && read && arm::roomMade(counts(lists[0]), counts(lists[1]), plan.num, kLayerCount)) {
-        EVR_LOG("%s: arm: the game's SetNum made room for 6 more joint modifiers in the hands' new lists (%d "
-                "in use, room for %d and %d)",
-                kTag, plan.num, lists[0].size, lists[1].size);
+    if (read && arm::roomMade(counts(lists[0]), counts(lists[1]), plan.num, g_room)) {
+        EVR_LOG(
+            "%s: arm: the game's SetNum made room for %d more joint modifiers in the hands' new lists (%d "
+            "in use, room for %d and %d)",
+            kTag, g_room, plan.num, lists[0].size, lists[1].size);
     } else {
-        EVR_LOG("%s: arm: SetNum did not make room for 6 more joint modifiers (%s; %d of %d, %d of %d)", kTag,
-                !called ? "it faulted"
-                : !read ? "the lists cannot be read back"
-                        : "the lists did not grow",
+        EVR_LOG("%s: arm: SetNum did not make room for %d more joint modifiers (%s; %d of %d, %d of %d)",
+                kTag, g_room, !read ? "the lists cannot be read back" : "the lists did not grow",
                 lists[0].num, lists[0].size, lists[1].num, lists[1].size);
     }
 }
 
 } // namespace
 
-bool install(const GameImage& image) {
+ArmSet install(const GameImage& image, ArmSet wanted) {
+    const char* stays = wanted.offHand && wanted.weapon ? "the off hand and the weapon arm stay the game's"
+                        : wanted.weapon                 ? "the weapon arm stays the game's"
+                                                        : "off hand stays the game's";
     const std::byte* init = findUnique(image, kTag, "InitJointMods", kInitJointModsSignature);
     const std::byte* setNum = findUnique(image, kTag, "the joint modifier node's SetNum", kSetNumSignature);
     if (!init || !setNum || !image.inText(init, kHookSite + 16) || !image.inText(setNum, 0x1B4)) {
-        EVR_LOG("%s: arm: InitJointMods or SetNum not found; off hand stays the game's", kTag);
-        return false;
+        EVR_LOG("%s: arm: InitJointMods or SetNum not found; %s", kTag, stays);
+        return {};
     }
     for (const Expect& e : kInitExpected) {
         if (!bytesMatch(init + e.at, e.bytes)) {
-            EVR_LOG("%s: arm: InitJointMods differs at +0x%zX; off hand stays the game's", kTag, e.at);
-            return false;
+            EVR_LOG("%s: arm: InitJointMods differs at +0x%zX; %s", kTag, e.at, stays);
+            return {};
         }
     }
     for (const Expect& e : kSetNumExpected) {
         if (!bytesMatch(setNum + e.at, e.bytes)) {
-            EVR_LOG("%s: arm: SetNum differs at +0x%zX; off hand stays the game's", kTag, e.at);
-            return false;
+            EVR_LOG("%s: arm: SetNum differs at +0x%zX; %s", kTag, e.at, stays);
+            return {};
         }
     }
     const std::byte* add = callTarget(image, init + kAddJointModCalls[0]);
@@ -206,24 +249,31 @@ bool install(const GameImage& image) {
         calls = calls && callTarget(image, init + at) == add;
     }
     if (!calls) {
-        EVR_LOG(
-            "%s: arm: InitJointMods does not call AddJointMod and SetNum where expected; off hand stays the "
-            "game's",
-            kTag);
-        return false;
+        EVR_LOG("%s: arm: InitJointMods does not call AddJointMod and SetNum where expected; %s", kTag,
+                stays);
+        return {};
     }
+    ArmSet ready = wanted;
+    ready.weapon = wanted.weapon && rightAttachChecks(image, init);
+    const std::int32_t arms = (ready.offHand ? 1 : 0) + (ready.weapon ? 1 : 0);
+    if (arms == 0) {
+        return {};
+    }
+    g_room = arm::modsForArms(arms);
     g_setNum = reinterpret_cast<SetNumFn>(const_cast<std::byte*>(setNum));
     std::string error;
     std::byte* site = const_cast<std::byte*>(init + kHookSite);
     if (!installMidHook(site, &onJointModsBuilt, error)) {
-        EVR_LOG("%s: arm: hook at RVA 0x%X failed: %s; off hand stays the game's", kTag, image.rva(site),
-                error.c_str());
-        return false;
+        EVR_LOG("%s: arm: hook at RVA 0x%X failed: %s; %s", kTag, image.rva(site), error.c_str(), stays);
+        return {};
     }
     EVR_LOG("%s: arm: InitJointMods at RVA 0x%X (AddJointMod 0x%X, SetNum 0x%X), hooked at RVA 0x%X to make "
-            "room for the layer's joint modifiers",
-            kTag, image.rva(init), image.rva(add), image.rva(setNum), image.rva(site));
-    return true;
+            "room for the layer's joint modifiers (%d: %s)",
+            kTag, image.rva(init), image.rva(add), image.rva(setNum), image.rva(site), g_room,
+            ready.offHand && ready.weapon ? "the off hand and the weapon arm"
+            : ready.weapon                ? "the weapon arm"
+                                          : "the off hand");
+    return ready;
 }
 
 const std::byte* modNode(const std::byte* hands) {
@@ -255,7 +305,8 @@ bool layerModsInPlace(const std::byte* node, std::int32_t base, const arm::ArmJo
     return true;
 }
 
-std::int32_t addLayerMods(const std::byte* node, const arm::ArmJointIndices& joints, AddError& error) {
+std::int32_t
+addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndices& joints, AddError& error) {
     ModList lists[2];
     if (!readList(node, 0, lists[0]) || !readList(node, 1, lists[1]) ||
         !arm::modListsAgree(counts(lists[0]), counts(lists[1]))) {
@@ -276,8 +327,8 @@ std::int32_t addLayerMods(const std::byte* node, const arm::ArmJointIndices& joi
         for (std::int32_t m = 0; m < base; ++m) {
             for (const arm::ArmJoint j : kLayerJoints) {
                 if (jointAt(list, m) == joints[arm::index(j)]) {
-                    error = {Problem::Taken,
-                             std::string("the game already modifies ") + arm::kArmJointNames[arm::index(j)]};
+                    error = {Problem::Taken, std::string("the game already modifies ") +
+                                                 arm::armJointNames(side)[arm::index(j)]};
                     return -1;
                 }
             }
@@ -308,8 +359,9 @@ std::int32_t addLayerMods(const std::byte* node, const arm::ArmJointIndices& joi
         error = {Problem::List, "the joint modifier count could not be written"};
         return -1;
     }
-    EVR_LOG("%s: arm: 6 joint modifiers added at %d..%d (the hands' list now holds %d, room for %d)", kTag,
-            base, base + kLayerCount - 1, num, lists[0].size);
+    EVR_LOG("%s: 6 joint modifiers added at %d..%d (the hands' list now holds %d, room for %d)",
+            side == arm::ArmSide::Right ? "weapon arm" : "offhand: arm", base, base + kLayerCount - 1, num,
+            lists[0].size);
     return base;
 }
 

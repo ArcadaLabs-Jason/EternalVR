@@ -32,6 +32,13 @@ int ExposurePlanner::indexFor(const RenderTag& tag) {
     return lastLeft_;
 }
 
+bool exposureIndexHeld(const ExposureGate& gate) {
+    if (!gate.hooked || !gate.routeS || !gate.gameTouch) {
+        return false;
+    }
+    return gate.taaPerEye || (gate.exposureOnce && (!gate.taaRequested || gate.taaFailedClosed));
+}
+
 bool TaaResetPlanner::onLeft(std::uint64_t gameFrame) {
     leftFrame_ = gameFrame;
     leftDecision_ = lastRight_ == 0 || gameFrame != lastRight_ + 1;
@@ -145,11 +152,24 @@ const std::vector<CvarExpectation>& stereoTaaCommandLineCvars() {
     return cvars;
 }
 
-int dlssQualityValue(std::string_view value) {
+namespace {
+
+std::string lowerCase(std::string_view value) {
     std::string lower;
     for (const char c : value) {
         lower.push_back(static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
     }
+    return lower;
+}
+
+} // namespace
+
+bool dlssQualityIsDlaa(std::string_view value) {
+    return lowerCase(value) == "dlaa";
+}
+
+int dlssQualityValue(std::string_view value) {
+    const std::string lower = lowerCase(value);
     if (lower == "ultra_performance" || lower == "0") {
         return 0;
     }
@@ -159,7 +179,7 @@ int dlssQualityValue(std::string_view value) {
     if (lower == "balanced" || lower == "2") {
         return 2;
     }
-    if (lower == "quality" || lower == "3") {
+    if (lower == "quality" || lower == "3" || lower == "dlaa") {
         return 3;
     }
     return -1;

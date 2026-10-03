@@ -104,7 +104,9 @@ items and do not block v1.
   a host only in development builds with `ETERNALVR_REPLAY=1`. The full set of environment variables
   is in section 15.
   - The launcher registers the manifest under `HKCU\...\Khronos\Vulkan\ImplicitLayers` for the launch
-    and removes it afterwards, so nothing stays registered between launches. This is the end-user route.
+    and removes it afterwards, so nothing stays registered between launches. As built (T-113): the
+    launcher's default route is the environment route below, and it writes no registry; the HKCU
+    registration is behind `--register-hkcu` and untested.
   - For development, `tools/rig/run.ps1` loads the layer through the process environment:
     `VK_ADD_IMPLICIT_LAYER_PATH` pointing at the build's manifest folder, so development runs exercise
     the implicit-layer path, the manifest gating and the ordering among other implicit layers that
@@ -121,10 +123,14 @@ items and do not block v1.
   - It chooses the OpenXR runtime per launch via `XR_RUNTIME_JSON`, so the user's global runtime choice
     is never touched (R01). The default is the system's active runtime; the runtimes it can offer are
     found by the discovery rule of T-110 (the registry keys read-only, SteamVR through the Steam
-    libraries, known install paths, a browse option); the choice is remembered per machine with a
-    per-profile override, and a refusal names the runtime it tried and how to switch (T-094).
+    libraries, known install paths, a browse option); the choice is remembered per machine (VR
+    settings profiles do not carry it), and a refusal names the runtime it tried and how to switch
+    (T-094).
   - It checks that the runtime is up and the headset connected before launching, because the layer
-    needs an OpenXR system when the game creates its Vulkan instance (section 6, T-082).
+    needs an OpenXR system when the game creates its Vulkan instance (section 6, T-082). As built: a
+    stereo launch with the render size on (the default) asks the runtime for the headset first
+    (`OpenXrProbe`, up to 30 s) and asks the player before launching without one; a mono launch has no
+    check.
   - It isolates known-bad OpenXR API layers through their `disable_environment` variables: OpenXR
     Toolkit, the ReShade OpenXR layer, and Virtual Desktop's compatibility layer when the chosen
     runtime is not VDXR (R01, R02, T-110).
@@ -132,13 +138,15 @@ items and do not block v1.
   `build-info.json`) is green. An unknown hash gets a warning and the resolver runs; if any core
   feature does not resolve (the camera hook, the present path, the BATTLEMODE guard), VR is refused
   with a message naming the feature and asking the player to wait for an update. Other features fail
-  on their own (principle 1).
+  on their own (principle 1). As built: the launcher refuses an unknown build outright (the known
+  hashes and Game Pass versions are in `launcher/data/known-builds.txt`).
 - **Coexistence:**
   - Never occupy the `XINPUT1_3.dll` proxy slot; Meathook uses it (R03).
   - idStudio/decl mods load normally.
   - OptiScaler is downloaded by our launcher, with the user's consent, into the EternalVR data folder
     (section 11). A copy the user installed in the game folder as a proxy DLL conflicts with ours;
-    preflight names it.
+    preflight names it. As built: there is no OptiScaler download; preflight warns about injector DLLs
+    in the game folder, OptiScaler's among them (`CompatibilityChecks.cs`).
   - Other implicit layers (RTSS, OBS game capture, ReShade's Vulkan layer, Overwolf and similar) are
     either tested alongside ours or named and disabled for the launch through their
     `disable_environment` variables; the known-bad list is data, not code (T-095).
@@ -153,13 +161,13 @@ items and do not block v1.
 - **Settings restore** (the one home for the product's rule; the rig's procedure is T-108): any game
   setting we force is applied through the command line and cvars at runtime; we never edit the
   player's saved config ourselves. Every forced cvar is on one authoritative list kept as data in
-  `game/eternal`, with a CI check (T-092). **Primary defence:** at the engine's profile-save point the
+  `launcher/data/forced-cvars.txt` (T-092). **Primary defence:** at the engine's profile-save point the
   adapter writes the player's own values for the forced keys, so VR values never reach the saved
   profile. **Backstop:** the launcher snapshots the game's config files before launch and restores the
   forced keys after exit, and again at its next start if the previous session did not exit cleanly
   (T-036, R14). **Where the files are:** the active Steam user's `userdata\<id>\782330\remote\PROFILE\`
   and `Saved Games\id Software\DOOMEternal`; every location that exists is used; if neither is found
-  the launcher logs it and refuses to force settings (T-094, T-099). **Saves:** before each VR launch
+  the launcher refuses the launch (T-094, T-099). **Saves:** before each VR launch
   the launcher copies the save slots into five rotating, checksummed backups, with a "Restore saves"
   action (T-092). Which file each forced cvar persists to, and how Steam Cloud treats a restore, are
   M1 results **[rig: M1]**.
@@ -170,7 +178,8 @@ Players must never be put at risk of a ban, and online play must never be affect
 decisions are T-109, T-114 and T-117; this section explains them.
 
 - **Opt-in per launch only.** The layer is dormant unless our launcher starts the game with
-  `ETERNALVR_ENABLE_LAYER=1`; the launcher removes its registry entry afterwards and, at every start,
+  `ETERNALVR_ENABLE_LAYER=1`. The default route writes no registry entry (the layer folder is in the
+  game's environment only); the flag-gated HKCU route removes its entry afterwards and, at every start,
   any entry a crashed launcher left behind. A normal Steam launch is the untouched game. The layer is
   pass-through outside `DOOMEternalx64vk.exe`, and Steam must be running first, so our environment
   cannot reach Steam or other games.
@@ -186,21 +195,37 @@ decisions are T-109, T-114 and T-117; this section explains them.
   off for the rest of the process** (T-114): no camera writes, head aim, key injection or keep-active;
   one key-up is posted for any key the layer was holding; the presenter falls back to the flat cinema
   quad; the log says to relaunch without VR for multiplayer. The game is not quit and keeps running
-  flat. The hooks stay installed and only watch; we never unhook live. Each signal is tested by
+  flat. What the layer itself changed is put back once, the only writes after a trip: every cvar it wrote
+  at run time returns to its value before the layer's first write (except the window, present and HDR
+  cvars, which would resize the window or change the swapchain), the wall-climb cvars to the game's, the
+  free off hand's joint modifiers to no change, and the button prompts to the game's key names. The cvars
+  the launcher puts on the command line keep their VR values where the layer never wrote them (their flat
+  values are not known yet: in stereo HDR output, the per-eye temporal effects switched off, dynamic
+  resolution and the window; the comfort set is the layer's alone in stereo), so multiplayer still needs a
+  relaunch without VR
+  (`docs/rig-findings/mp-guard.md`, sections 1 and 5). The hooks stay installed and only watch; we never unhook live. One exception:
+  Parallel Eye Rendering (opt-in, `docs/VR_STEREO.md`) changes the engine at `vkCreateInstance`, under an
+  armed guard (a second view's storage and command contexts, 16 code bytes of the jobs' fan-out), and those
+  changes stay; after a trip it renders view 0 alone, nothing changes view 1's work any more, and the hooks
+  that keep view 0 consistent with the changes keep running, with the locks and the one-view clamp that keep
+  two-view frames' jobs apart (no-ops with one view). Each signal is tested by
   injection; the real-invite test is not run (D-043). On the Game Pass build there are no Steam
   callbacks: the guard watches the Xbox invite path instead (the invite callback the game registers
   and the invitation decoder), and the launcher starts that build without Steam (T-117).
 - **Fails closed.** Every game-touching feature asks the guard before acting and acts only while it is
-  armed. If a signal or the anti-cheat check cannot be resolved, the guard refuses: those features stay
-  off for the process and the log names the missing point. This is the stated exception to principle 1.
-- **Online features are left alone.** No network traffic is touched or generated. Input injection only
+  armed. If a signal cannot be resolved, the guard refuses: those features stay off for the process and
+  the log names the missing point. This is the stated exception to principle 1.
+- **Online features are left alone.** The game's network traffic is not touched. The layer's only
+  connection is the optional bHaptics link to the bHaptics Player on 127.0.0.1; it opens none off the
+  machine (the launcher's update check and DLSS download are the launcher's own). Input injection only
   changes the local player command in single-player sessions. Whether campaign-side online features
   (events, stats, Bethesda.net linking) care about modified clients is checked before public release
   [U].
-- **Anti-cheat tripwire.** Anti-cheat modules loaded in the game process, or anti-cheat binaries in the
-  game folder (Easy Anti-Cheat, BattlEye, Denuvo Anti-Cheat), refuse VR with a clear message; Steam's
-  `installscript.vdf` metadata and other games' system-wide installs do not count. Neither DOOM Eternal
-  exe contains or imports anti-cheat code today; the check future-proofs us.
+- **Anti-cheat tripwire.** The launcher refuses VR with a clear message when anti-cheat files are in the
+  game folder (Easy Anti-Cheat, BattlEye, Denuvo Anti-Cheat; the game root and its first-level folders,
+  `Preflight/AntiCheat.cs`); Steam's `installscript.vdf` metadata and other games' system-wide installs do
+  not count. The layer has no check of its own for anti-cheat modules in the process. Neither DOOM Eternal
+  exe contains or imports anti-cheat code today; the folder check future-proofs us.
 
 ## 5. Engine access (`engine/eternal`)
 
@@ -218,10 +243,10 @@ Resolution order (R03, R04):
 4. **Last resort:** a per-build table of signatures, each verified before use and failing closed
    when it does not match.
 
-Hooks use safetyhook (inline and mid-function). Every hook declares its target resolver, a calling
-signature and the feature it belongs to. The hook table can be bisected by config, because a wrong
-signature can go unnoticed for weeks. A `evr_selftest` console command and a launcher
-diagnostic print every anchor, field and hook with its status.
+Hooks use safetyhook (inline and mid-function). Each feature finds and installs its own hooks and logs
+each one's RVA, or why it stays off. There is no central hook table to bisect and no `evr_selftest`
+command: many features have their own `ETERNALVR_*` switch to turn them off one at a time, and the layer
+log is the list of every anchor and hook with its result.
 
 **Resolver checks (T-060):** a rig script runs the resolver against the current retail exe (and the
 archived exes) and fails if coverage regresses (R04). It runs after every game update and before every external
@@ -300,8 +325,9 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
     - It gives WMR support.
     - **Data path (T-040, provisional).** The game allocates its images itself, and an image cannot be
       made exportable after it is allocated. Every image that reaches the runtime therefore costs
-      **two copies**: a Vulkan copy into a shared image, then a D3D12 copy (a small shader that crops,
-      R01 section 7 D10) into the XR swapchain image **[rig: measure]**.
+      **two copies**: a Vulkan copy into a shared image, then a D3D12 copy into the XR swapchain image.
+      As built, the D3D12 copy is a whole-image `CopyTextureRegion` (presenter_frame.cpp), not a cropping
+      shader.
     - **Colour encoding (T-080, provisional).** The game's final tonemapped image is taken to be
       sRGB-encoded (R01 marks this unverified; M1 reconnaissance records the final eye image's format
       and encoding, and the rule below is revisited if it is a linear or pre-encode target). The
@@ -311,12 +337,11 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       never applied a second time: a second encode gives a washed-out image. The game's HDR output is
       forced off while VR is active (`r_hdrDisplay 0`), because a PQ or scRGB final image would break
       this path.
-      Three kinds of image cross: each eye's colour; each eye's depth whenever the depth layer is
-      submitted (on by default for Meta and VDXR); and the UI target for the UI layers (section 8). The
-      slot layout grows as each first crosses: colour in M3, depth in M4, UI in M6 (T-056). Allocating
-      the final stereo target as exportable, which would save the first colour copy, is a later
-      experiment.
-    - **Depth (T-057).** `vkCmdCopyImage` cannot copy the depth aspect of a D32S8 image into another
+      Two kinds of image cross: each eye's colour, and the UI target for the UI layers (section 8).
+      Depth was planned to cross as well (the depth layer below, T-056); it was not built, and no depth
+      layer is submitted. Allocating the final stereo target as exportable, which would save the first
+      colour copy, is a later experiment.
+    - **Depth (T-057, not built).** The plan, kept for reference: `vkCmdCopyImage` cannot copy the depth aspect of a D32S8 image into another
       format, and D3D12 compute cannot write a depth swapchain. Depth therefore crosses as `R32_FLOAT`:
       a Vulkan shader copies it into the shared image, and a D3D12 draw writes it into the depth
       swapchain image. `nearZ` and `farZ` are submitted in metres, which are game units divided by
@@ -341,14 +366,15 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       barrier from the graphics family to `VK_QUEUE_FAMILY_EXTERNAL` into the agreed layout (`GENERAL`
       unless the driver documents another). Without the release the D3D12 reader sees undefined
       contents; on NVIDIA the release is what resolves compression metadata. On the D3D12 side the
-      resource starts in `COMMON`, is transitioned to `PIXEL_SHADER_RESOURCE` for the read and back to
-      `COMMON` before "slot read" is signalled.
+      resource starts in `COMMON`, is transitioned to `COPY_SOURCE` for the copy and back to `COMMON`
+      before "slot read" is signalled.
     - **Ring and fences.** The shared images form a 3-slot ring; each slot holds every image of one
-      frame. Vulkan signals "slot written" after its copies, and D3D12 waits for it on its own queue.
-      D3D12 signals "slot read" for **every** written slot, including frames it skips or times out on
-      (then without copying). DOOM's queue never waits on the D3D12 side: before recording the Vulkan
-      copies, the present hook reads the slot's "read" value on the CPU (`vkGetSemaphoreCounterValue`)
-      and, if the slot is still in use, skips the copies for that frame and counts the drop.
+      frame. Vulkan signals "slot written" on the shared timeline after its copies, and D3D12 waits for
+      it on its own queue. Slots change hands through CPU atomics (`RingSlot::state`: free, writing,
+      reading; presenter_ring.cpp): the present hook takes a free slot or skips the copies for that frame
+      and counts the drop, so DOOM's queue never waits on the D3D12 side; the XR worker marks the slot
+      it copies from and frees it once its own D3D12 copy has finished (a CPU wait on its copy fence,
+      bounded, fence_wait.hpp).
       `xrWaitSwapchainImage` has a bounded timeout, with the state machine the OpenXR rules require
       (T-081): after `XR_TIMEOUT_EXPIRED` the image stays "acquired, not yet waited"; the next frame
       waits on that same image again and does not acquire another (a naive acquire per frame runs out
@@ -357,10 +383,9 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       **repeats the last good image**: since `xrEndFrame` uses the most recently released image, the
       projection layer is submitted again with it (logged as a repeat). The layer is never dropped
       while a good image exists, because alternating repeats and empty frames strobes the whole field
-      of view. After a long run of repeats the view fades to a static dim layer until good frames return
-      (T-091; the timing is an M7 comfort target, T-111). When SteamVR reports a display time no later
-      than the previous one, the frame resubmits the last good image with the new time (a named quirk
-      flag, T-110). The frame is logged,
+      of view. A repeat resubmits the last good image for as long as no new one arrives. The planned
+      fade to a static dim layer after a long run of repeats (T-091, T-111) and the SteamVR display-time
+      quirk flag (T-110) were not built. The frame is logged,
       and the slot's "read" value is still signalled. A slow runtime can therefore cost frames in the
       headset, never a stall, a flicker or a lost device in the game.
     - **Present-hook copy (T-081).** What is copied is the game's final eye image: the render-sized
@@ -417,16 +442,18 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
     extension the design uses (D3D12 enable, depth and cylinder layers, `XR_EXT_local_floor` on 1.0,
     user presence, eye gaze, visibility mask, display refresh rate) is enabled only if the runtime lists
     it, and every feature that needs one has a fallback.
-- **Frame loop:** shape 1, inside the present hook, with no dedicated XR thread (section 6.1, T-022,
-  T-059).
+- **Frame loop:** on a dedicated XR worker thread (section 6.1); the present hook only copies the
+  game's images into the ring. T-022 and T-059 planned shape 1 (inside the present hook); the code moved
+  to the worker.
 - **Spaces:** see section 6.2, which also covers `ReferenceSpaceChangePending` (T-045, T-063).
 - **Layers:**
-  - Projection layer with depth (`XR_KHR_composition_layer_depth`, reversed-Z, on by default for Meta
-    and VDXR).
-  - UI on cylinder layers where supported, quads elsewhere (SteamVR, WMR and Varjo lack cylinders).
-- **Input** uses the action system with separate `gameplay` and `menu` action sets. Suggested bindings
-  for every major profile come from one data file (Touch, Index, Vive, WMR/Reverb, Pico). PSVR2 binds
-  via Touch/Index on SteamVR.
+  - One projection layer, colour only. No depth layer is submitted (`XR_KHR_composition_layer_depth` is
+    not used).
+  - UI, reticle, vignette, fade and wrist panels on quad layers. Cylinder layers are not used.
+- **Input** uses the action system with one action set, `gameplay`; the menus read the same actions
+  (`docs/VR_MENUS.md`). Suggested bindings for every major profile come from one data file per controller
+  family (`data/input/controllers/`: Touch, Index, Vive, WMR/Reverb, Cosmos, Pico, Steam Frame). PSVR2
+  binds via Touch/Index on SteamVR.
 - **Runtime quirks are data:** runtime name and version map to named quirk flags, overridable in
   config. Startup logs the runtime, version, manifest path, extensions and active implicit layers.
 - **Support tiers v1:** SteamVR, Meta PC (Link/Air Link), VDXR. Best effort: Pimax Play, Varjo, WMR
@@ -438,6 +465,11 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
 id Tech 7 simulates frame N+1 on the game thread while the render thread builds frame N, and the GPU
 may still be finishing frame N-1 (R11 section 8.2). The XR calls sit at these points (k is the XR frame
 begun just before engine frame N is built):
+
+The table below is the original plan (shape 1, T-022). The code runs `xrWaitFrame`, `xrBeginFrame`,
+`xrLocateViews`, the D3D12 copy out of the ring and `xrEndFrame` on a dedicated XR worker thread
+(presenter_frame.cpp: runWorker and frame); the present hook only copies the game's images into a free
+ring slot and publishes it. The snapshot, render-side and record rows below still hold.
 
 | Call | Call site | Thread |
 |---|---|---|
@@ -475,13 +507,16 @@ Rules:
   the shared ring stay, so nothing is imported into the game's Vulkan device again; the ring's size is
   kept, and a headset whose maximum swapchain is smaller waits. The game's presents pass through
   meanwhile and the new LOCAL space re-anchors yaw as after a recenter. EXITING is the runtime closing
-  the application's VR and stays flat. `ETERNALVR_TEST_XR_LOSS=<seconds>` takes the running session as
+  the application's VR and stays flat, and so does a removed D3D12 device (the graphics card was
+  reset): the runtime would refuse every new session on it, so the worker stops trying and the status
+  says so. `ETERNALVR_TEST_XR_LOSS=<seconds>` takes the running session as
   lost once, which exercises the whole path on the OpenXR Simulator (rig run rc1: back in 1.1 s,
   head-tracked frames and controller input as before).
-- **Why not a dedicated XR thread.** R01 section 7 D3 proposed one. R02 section 9 and R11 section 8.2
-  recommend starting with this shape, and a separate XR worker thread risks Win32 message deadlocks
-  (seen with the OpenXR Simulator's lifecycle thread). A dedicated-thread variant is v1.x (T-059),
-  built only if measurements show pose-age problems it would fix.
+- **Why the plan said no dedicated XR thread.** R01 section 7 D3 proposed one. R02 section 9 and R11
+  section 8.2 recommended starting with shape 1, since a separate XR worker thread risks Win32 message
+  deadlocks (seen with the OpenXR Simulator's lifecycle thread). The shipped layer runs the frame loop on
+  a worker anyway (see the note above the table); no lock is held across `xrWaitFrame`, and the worker
+  never touches the game's device once `stop` is set.
 
 ### 6.2 Posture and height (T-029)
 
@@ -516,6 +551,13 @@ Rules:
 - Provisional until the M4 and M7 playtests.
 
 ## 7. Stereo rendering (`vkcore/`)
+
+**As built: Route S, not multiview.** The shipped layer renders the two eyes as two sequential engine
+renders (synchronized sequential stereo, section 5.1), each with its own view and asymmetric
+projection, and pairs them for the headset. docs/VR_STEREO.md describes how it works. The rest of this
+section (camera model, image promotion to 2-layer arrays, multiview pipelines, SPIR-V patching, the
+per-eye constants ring) is the original multiview design, which was not built; it is kept as the
+record of that plan.
 
 **Camera model (R02).** The engine renders from one centred camera whose frustum encloses both eye
 frusta. Each eye gets an exact 4x4 clip-space transform derived from the game's own projection and the
@@ -780,7 +822,7 @@ Layered injection (R13):
     `hands_adjustFirePosDistCheck` fallback, which can pull shots back to the head (R10, R13).
   - The equipment launcher and Flame Belch aim from the head (R06).
 - **Locomotion and turning:**
-  - Stick movement relative to the head (default) or the off hand.
+  - Stick movement relative to the head (default) or the hand with the move stick.
   - Smooth or snap turning applied in the game camera, with full 360 degrees available for seated
     play.
   - Weapon selection never shares the turn stick in a way that causes accidental swaps (R14).
@@ -910,11 +952,16 @@ documentation say so.
   list we already control) during VR sessions only, so flat and BATTLEMODE play use the game's own DLL.
   It can force presets (T-094, superseding T-019's swap clause).
 
-**Foveation (R08).** `VK_KHR_fragment_shading_rate` with a 2-layer shading-rate image; the layer is
-selected by `ViewIndex`.
+**Foveation (R08).** As built: `VK_NV_shading_rate_image` (src/vkcore/vrs_nv.cpp), one rate image per
+eye bound for each render pass into a target in the eye's space, off by default and offered as an
+experimental launcher setting; `adjustForLens` is not called. Each region is anchored on head-forward, has
+the area of the cone of its preset angle and reaches the same fraction of the way to every edge of the eye's
+image (`foveation_region.hpp`). docs/VR_STEREO.md has the details. The
+plan below (`VK_KHR_fragment_shading_rate`, a 2-layer shading-rate image selected by `ViewIndex`, on by
+default) was written for the multiview design and was not built.
 - **Fixed foveation is on by default for every headset.** Regions are defined in degrees and centred per
   eye on head-forward projected into that eye's frustum.
-- Presets: Off / Subtle / Balanced / Aggressive. Pancake-lens headsets default one notch gentler.
+- Presets: Off / Subtle / Balanced / Aggressive / Maximum. Pancake-lens headsets default one notch gentler.
 - **Eye-tracked foveation** from `XR_EXT_eye_gaze_interaction` where available (v1 if time allows;
   verified by a tester with a gaze-capable headset, D-027).
 - **Centre and width.** The owner's requirement is fixed foveation "just centered and perhaps wider than
@@ -958,6 +1005,12 @@ and is labelled with the real size if the two differ.
 
 ## 12. Configuration and profiles (`platform/settings`, launcher)
 
+**As built** (launcher/README.md, "User data" and "Updates"): there is no TOML settings file, hot reload,
+setting class or pending-edits file. The launcher keeps its settings in `launcher.ini` (keyed, with
+`schema_version`) and passes each one to the layer as its own `ETERNALVR_*` variable at launch, so a change
+applies at the next launch. VR settings profiles are `profiles\<name>.ini` files with the same keys (Save,
+Delete and a picker), not presets with overrides. The rest of this section is the design.
+
 - **One keyed TOML settings file,** written by the launcher and hot-reloaded by the layer. Hot reload
   while playing was accepted in principle by the owner (D-028, given alongside D-015); the details are
   T-032 and T-061.
@@ -987,21 +1040,27 @@ and is labelled with the real size if the two differ.
   (R10 section 2.1).
 - **No positional-number config files, no scattered marker files or environment flags**. The
   launcher passes one path to the settings file (`ETERNALVR_SETTINGS`). Environment variables are
-  limited to the fixed set in section 15; features are switched in settings, never by environment.
+  limited to the fixed set in section 15; features are switched in settings, never by environment. As
+  built: the launcher passes about 60 `ETERNALVR_*` variables and no settings file.
 - **Where things live (T-093).** The program folder (wherever the user extracts the release) is
-  treated as read-only. All user data lives under `%LOCALAPPDATA%\EternalVR\`: settings, profiles,
-  pending edits, logs, the patched-module and pipeline caches, downloads (OptiScaler, a user-picked
-  DLSS DLL), config snapshots and save backups. So an update that extracts over the old folder, or into
-  a new one, keeps profiles and bindings. The settings file carries a `schema_version`; the launcher
+  treated as read-only (as built, the in-place update installs over it). All user data lives under
+  `%LOCALAPPDATA%\EternalVR\`: settings, profiles, pending edits, logs, the patched-module and pipeline
+  caches, downloads (OptiScaler, a user-picked DLSS DLL), config snapshots and save backups. So an
+  update that extracts over the old folder, or into a new one, keeps profiles and bindings. The settings file carries a `schema_version`; the launcher
   migrates older versions (keeping a backup of the old file) and refuses a newer one with a message.
-  The launcher and the layer DLL check each other's version at launch and refuse a mismatch.
+  The launcher and the layer DLL check each other's version at launch and refuse a mismatch. As built:
+  an older file is rewritten on the first save, with no backup; only the launcher checks the version
+  (`VersionCheck.cs`); there is no patched-module cache or OptiScaler download, and a DLSS DLL the
+  player picks stays where it is (NVIDIA's, downloaded on request, is kept in the data folder).
 - **Updates (T-093, R09 section 10).** Once a day the launcher checks GitHub Releases for a newer
   version, disclosed in the launcher and switchable off; it never downloads the mod itself, it links to
-  the release.
+  the release. As built: the check runs at most once an hour, and **Download and install** downloads the
+  release zip, checks it and installs it over the program folder.
 - **Uninstall and clean-up (T-093).** A launcher action removes any layer registration, completes any
   pending config restore, deletes downloaded OptiScaler and DLSS copies, and lists what is left (the
   data folder, which the user may keep for profiles) before deleting it on request. At every start the
-  launcher also removes a stale registration and completes a pending restore left by a crash.
+  launcher also removes a stale registration and completes a pending restore left by a crash. As built:
+  there is no uninstall action; the start-up clean-up exists.
 
 ## 13. Diagnostics and degradation (`platform/diagnostics`)
 
@@ -1110,7 +1169,7 @@ Environment variables (the complete set; everything else is a setting):
 |---|---|---|
 | `ETERNALVR_ENABLE_LAYER` | launcher, rig scripts | `1` activates the implicit layer for this process |
 | `ETERNALVR_DISABLE_LAYER` | anyone | `1` keeps the layer inert even when enabled |
-| `ETERNALVR_SETTINGS` | launcher, rig scripts | Path of the settings file |
+| `ETERNALVR_SETTINGS` | launcher, rig scripts | Path of the settings file (planned; as built, the launcher passes no settings file and sets each setting as its own `ETERNALVR_*` variable, section 12) |
 | `ETERNALVR_LOG_DIR` | launcher, rig scripts | Directory for logs, captures and dumps of this run (default `%LOCALAPPDATA%\EternalVR\logs\`) |
 | `ETERNALVR_REPLAY` | rig scripts | `1` lets a development build's layer run its Vulkan core in `gfxrecon-replay`; ignored by release builds (T-109) |
 

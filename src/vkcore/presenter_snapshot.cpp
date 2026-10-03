@@ -38,9 +38,9 @@ void appendPose(std::string& out, const char* what, const XrPosef& p) {
            p.orientation.w);
 }
 
-void appendFov(std::string& out, const char* what, const XrFovf& f) {
-    append(out, "%s: left %.2f right %.2f up %.2f down %.2f degrees\n", what, degrees(f.angleLeft),
-           degrees(f.angleRight), degrees(f.angleUp), degrees(f.angleDown));
+void appendFov(std::string& out, const char* what, const XrFovf& f, const char* end = " degrees\n") {
+    append(out, "%s: left %.2f right %.2f up %.2f down %.2f%s", what, degrees(f.angleLeft),
+           degrees(f.angleRight), degrees(f.angleUp), degrees(f.angleDown), end);
 }
 
 } // namespace
@@ -86,12 +86,16 @@ bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
     const bool hasView = mono ? latestView(view, gap) : viewBySeq(tick, view);
     if (hasView) {
         appendPose(t, "head pose (OpenXR LOCAL)", view.pose);
-        appendFov(t, "game FOV", view.fov);
-        if (view.stereo) {
+        // The game's FOV setting is one symmetric FOV covering both eyes; each eye renders its own.
+        const char* setting = "game FOV setting (the game's own, symmetric, both eyes)";
+        if (!view.stereo) {
+            appendFov(t, setting, view.fov);
+        } else {
+            appendFov(t, setting, view.fov, " degrees; ");
+            appendFov(t, "rendered FOV eye L", view.eyes[0].fov, "; ");
+            appendFov(t, "eye R", view.eyes[1].fov);
             appendPose(t, "eye L pose", view.eyes[0].pose);
-            appendFov(t, "eye L FOV", view.eyes[0].fov);
             appendPose(t, "eye R pose", view.eyes[1].pose);
-            appendFov(t, "eye R FOV", view.eyes[1].fov);
             const XrVector3f& l = view.eyes[0].pose.position;
             const XrVector3f& r = view.eyes[1].pose.position;
             append(t, "eye separation: %.1f mm\n",
@@ -111,14 +115,15 @@ bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
            "%d, r_TAAAntiGhosting %d (-1: not located)\n",
            taa.perEye ? "on" : "off", taaRequested() ? "on" : "off", taa.antialiasing, taa.safeMode,
            taa.jitter, taa.antiGhosting);
-    append(
-        t,
-        "dlss: evaluations so far eye L %llu / eye R %llu (%llu of eye R without its own feature); eye R "
-        "features %llu made / %llu failed; accumulation %dx%d, eye R %dx%d\n",
-        static_cast<unsigned long long>(taa.evaluates[0]), static_cast<unsigned long long>(taa.evaluates[1]),
-        static_cast<unsigned long long>(taa.evaluatesNoTwin),
-        static_cast<unsigned long long>(taa.twinCreates), static_cast<unsigned long long>(taa.twinFailures),
-        taa.sizeA[0], taa.sizeA[1], taa.sizeB[0], taa.sizeB[1]);
+    append(t,
+           "dlss: evaluations so far eye L %llu / eye R %llu (%llu of eye R without its own feature); eye R "
+           "features %llu made / %llu failed; accumulation %dx%d, eye R %dx%d\n",
+           static_cast<unsigned long long>(taa.ngx.evaluates[0]),
+           static_cast<unsigned long long>(taa.ngx.evaluates[1]),
+           static_cast<unsigned long long>(taa.ngx.evaluatesNoTwin),
+           static_cast<unsigned long long>(taa.ngx.twinCreates),
+           static_cast<unsigned long long>(taa.ngx.twinFailures), taa.sizeA[0], taa.sizeA[1], taa.sizeB[0],
+           taa.sizeB[1]);
     append(t, "route S: %s; menu up: %s; UI layer: %s\n", seqActive.load() ? "on" : "off",
            menuUp.load() ? "yes" : "no", settings.ui.enabled ? "on" : "off");
     if (settings.ui.enabled) {

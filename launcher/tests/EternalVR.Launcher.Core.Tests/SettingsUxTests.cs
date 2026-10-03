@@ -192,13 +192,14 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void HandAimSettingsNeedHandAimAndTheDotNeedsStereo()
+        public void HandAimSettingsNeedHandAimInEitherMode()
         {
             var head = new LauncherSettings { Aim = AimMode.Head };
             foreach (var setting in new[] { Setting.AimSteadiness, Setting.AimDot, Setting.ShotsFrom, Setting.AimDotSize })
                 Assert.Equal(SettingRules.NeedsHandAim, SettingRules.WhyNot(setting, head));
             var mono = new LauncherSettings { Mode = VrMode.Mono };
-            Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(Setting.AimDot, mono));
+            Assert.Null(SettingRules.WhyNot(Setting.AimDot, mono));
+            Assert.Null(SettingRules.WhyNot(Setting.AimDotSize, mono));
             Assert.Null(SettingRules.WhyNot(Setting.AimSteadiness, mono));
             Assert.Null(SettingRules.WhyNot(Setting.ShotsFrom, mono));
             Assert.NotNull(SettingRules.WhyNot(Setting.AimDotSize, new LauncherSettings { AimDot = false }));
@@ -217,11 +218,13 @@ namespace EternalVR.Launcher.Core.Tests
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             foreach (var setting in new[]
             {
-                Setting.Resolution, Setting.EachEye, Setting.AntiAliasing, Setting.TextureStreaming, Setting.CpuSaver, Setting.DesktopWindow, Setting.HudDistance, Setting.HudSize,
-                Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace, Setting.Foveation, Setting.FramePacing,
+                Setting.Resolution, Setting.EachEye, Setting.AntiAliasing, Setting.TextureStreaming, Setting.ParallelEyes, Setting.CpuSaver, Setting.DesktopWindow, Setting.Foveation,
+                Setting.FramePacing,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
-            foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime })
+            // The UI layer runs in mono too, so its settings apply.
+            foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime, Setting.HudDistance,
+                                            Setting.HudSize, Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace })
                 Assert.Null(SettingRules.WhyNot(setting, mono));
         }
 

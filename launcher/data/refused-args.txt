@@ -1,10 +1,19 @@
 # Extra command-line text that asks for multiplayer is refused (single-player only, T-109).
 # Matched case-insensitively as a substring of the argument text as the game receives it: quotes
 # removed, '\' read as '/', repeated slashes collapsed, and '+ cmd', '+set cmd', '+seta cmd' read as '+cmd'.
+#
+# One list for the launcher and the layer: the launcher refuses these before the game starts (ArgumentPolicy),
+# and the layer has this file built in (src/platform/mp_policy/CMakeLists.txt) and refuses the same text when
+# the game loads it. Patterns are written as matched: lower case, no spaces, no quotes or '\'; the layer's
+# build stops on anything else. The first pattern found names the reason. Both test suites read
+# tests/platform/mp_policy/argument-cases.txt to check that the two screens agree.
+#
 # pattern | what it requests
 game/pvp/ | a BATTLEMODE map
 battlemode | BATTLEMODE
+# +connect also covers +connect_lobby (a Steam invite at launch).
 +connect | a multiplayer connection
+# +join also covers +JoinShellLobby.
 +join | a multiplayer join
 +lobby | a multiplayer lobby
 +matchmaking | matchmaking
@@ -12,3 +21,20 @@ battlemode | BATTLEMODE
 +net_ | network settings
 +si_ | multiplayer server settings
 +g_gametype | a game type other than the campaign
+# What Steam passes for an invite (+steam_invitationCookie, +steam_inviteSenderId), and the other BATTLEMODE
+# entry points this build accepts as console commands or startup cvars.
++steam_invit | a Steam invite
++com_gamemode | a game mode other than the campaign
++restartmapwithlobby | a multiplayer lobby
+# ConnectOrHostCasualBattleArenaResult and friends.
+battlearena | BATTLEMODE
++pvp_ | BATTLEMODE settings
+/pvp | a BATTLEMODE map
+pvp_ | a BATTLEMODE map
+tutorial_demons | the BATTLEMODE demon tutorial
+invasion | Invasion
+# Game Pass: what the GDK passes when the game is started from an Xbox invite or join.
+ms-xbl- | an Xbox invite
+invitehandleaccept | an Xbox invite
+activityhandlejoin | an Xbox join
+handle= | an Xbox invite

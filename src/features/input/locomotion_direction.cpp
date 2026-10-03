@@ -15,9 +15,37 @@ std::optional<float> horizontalYaw(const Pose& pose, float minHorizontal) {
     return std::atan2(-forward.x, -forward.z);
 }
 
-float LocomotionDirection::update(LocomotionFrame frame, const HeadState& head, const HandState& offHand) {
-    if (frame == LocomotionFrame::OffHand && offHand.poseValid) {
-        if (const auto yaw = horizontalYaw(offHand.aimPose)) {
+const char* locomotionFrameName(LocomotionFrame frame) {
+    switch (frame) {
+    case LocomotionFrame::Head:
+        return "look";
+    case LocomotionFrame::LeftHand:
+        return "left";
+    case LocomotionFrame::RightHand:
+        return "right";
+    case LocomotionFrame::MoveHand:
+        return "hand";
+    }
+    return "look";
+}
+
+std::optional<Hand> locomotionFrameHand(LocomotionFrame frame, Hand moveStickHand) {
+    switch (frame) {
+    case LocomotionFrame::Head:
+        return std::nullopt;
+    case LocomotionFrame::LeftHand:
+        return Hand::Left;
+    case LocomotionFrame::RightHand:
+        return Hand::Right;
+    case LocomotionFrame::MoveHand:
+        return moveStickHand;
+    }
+    return std::nullopt;
+}
+
+float LocomotionDirection::update(LocomotionFrame frame, const HeadState& head, const HandState& moveHand) {
+    if (frame != LocomotionFrame::Head && moveHand.poseValid) {
+        if (const auto yaw = horizontalYaw(moveHand.aimPose)) {
             lastYaw_ = *yaw;
             return lastYaw_;
         }

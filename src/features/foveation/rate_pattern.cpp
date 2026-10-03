@@ -11,16 +11,17 @@ std::uint32_t texels(std::uint32_t pixels, std::uint32_t perTexel) {
     return perTexel == 0 ? 0 : (pixels + perTexel - 1) / perTexel;
 }
 
-// Whether any point of the NDC rectangle [x0, x1] x [y0, y1] lies inside the ellipse: the rectangle's point
-// nearest the centre, in the ellipse's own scaled space.
+// Whether any point of the NDC rectangle [x0, x1] x [y0, y1] lies inside the region: the rectangle's point
+// nearest the centre, in the region's own scaled space. Each side's scaled distance grows with the distance
+// from the centre, so clamping each coordinate on its own finds that point whichever quarter it is in.
 bool touches(const FoveationRegion& e, float x0, float x1, float y0, float y1) {
-    if (e.radiusX <= 0.0f || e.radiusY <= 0.0f) {
+    if (!(e.radiusLeft > 0.0f && e.radiusRight > 0.0f && e.radiusTop > 0.0f && e.radiusBottom > 0.0f)) {
         return false;
     }
-    const float nx = std::clamp(e.centerX, x0, x1);
-    const float ny = std::clamp(e.centerY, y0, y1);
-    const float dx = (nx - e.centerX) / e.radiusX;
-    const float dy = (ny - e.centerY) / e.radiusY;
+    const float nx = std::clamp(e.centerX, x0, x1) - e.centerX;
+    const float ny = std::clamp(e.centerY, y0, y1) - e.centerY;
+    const float dx = nx / (nx < 0.0f ? e.radiusLeft : e.radiusRight);
+    const float dy = ny / (ny < 0.0f ? e.radiusTop : e.radiusBottom);
     return dx * dx + dy * dy <= 1.0f;
 }
 

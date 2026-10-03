@@ -6,6 +6,7 @@
 
 #include <numbers>
 #include <ostream>
+#include <string>
 
 using evr::input::Axis2;
 using evr::input::HandState;
@@ -58,23 +59,50 @@ TEST_CASE("head frame follows the head") {
           doctest::Approx(0.5f));
 }
 
-TEST_CASE("off-hand frame follows the off hand") {
+TEST_CASE("hand frame follows the hand it is given") {
     LocomotionDirection direction;
-    CHECK(direction.update(LocomotionFrame::OffHand, headFacing(0.5f), handPointing(yawPose(-1.0f))) ==
+    CHECK(direction.update(LocomotionFrame::MoveHand, headFacing(0.5f), handPointing(yawPose(-1.0f))) ==
           doctest::Approx(-1.0f));
 }
 
-TEST_CASE("off-hand frame falls back to the head when the hand is untracked") {
+TEST_CASE("each frame names its hand: none for look, left, right, or the move stick's for hand") {
+    using evr::input::Hand;
+    using evr::input::locomotionFrameHand;
+    using evr::input::locomotionFrameName;
+    for (const Hand moveStick : {Hand::Left, Hand::Right}) {
+        CHECK_FALSE(locomotionFrameHand(LocomotionFrame::Head, moveStick).has_value());
+        CHECK(locomotionFrameHand(LocomotionFrame::LeftHand, moveStick) == Hand::Left);
+        CHECK(locomotionFrameHand(LocomotionFrame::RightHand, moveStick) == Hand::Right);
+        CHECK(locomotionFrameHand(LocomotionFrame::MoveHand, moveStick) == moveStick);
+    }
+    CHECK(std::string(locomotionFrameName(LocomotionFrame::Head)) == "look");
+    CHECK(std::string(locomotionFrameName(LocomotionFrame::LeftHand)) == "left");
+    CHECK(std::string(locomotionFrameName(LocomotionFrame::RightHand)) == "right");
+    CHECK(std::string(locomotionFrameName(LocomotionFrame::MoveHand)) == "hand");
+}
+
+TEST_CASE("the left and right frames follow the hand they are given") {
+    for (const LocomotionFrame frame : {LocomotionFrame::LeftHand, LocomotionFrame::RightHand}) {
+        LocomotionDirection direction;
+        CHECK(direction.update(frame, headFacing(0.5f), handPointing(yawPose(-1.0f))) ==
+              doctest::Approx(-1.0f));
+        HandState lost = handPointing(yawPose(-1.0f));
+        lost.poseValid = false;
+        CHECK(direction.update(frame, headFacing(0.5f), lost) == doctest::Approx(0.5f));
+    }
+}
+
+TEST_CASE("hand frame falls back to the head when the hand is untracked") {
     LocomotionDirection direction;
     HandState lost = handPointing(yawPose(-1.0f));
     lost.poseValid = false;
-    CHECK(direction.update(LocomotionFrame::OffHand, headFacing(0.5f), lost) == doctest::Approx(0.5f));
+    CHECK(direction.update(LocomotionFrame::MoveHand, headFacing(0.5f), lost) == doctest::Approx(0.5f));
 }
 
-TEST_CASE("off-hand frame falls back to the head when the hand points at the floor") {
-    // A seated player's off hand resting in the lap.
+TEST_CASE("hand frame falls back to the head when the hand points at the floor") {
+    // A seated player's hand resting in the lap.
     LocomotionDirection direction;
-    CHECK(direction.update(LocomotionFrame::OffHand, headFacing(0.5f), handPointing(pitchPose(-1.4f))) ==
+    CHECK(direction.update(LocomotionFrame::MoveHand, headFacing(0.5f), handPointing(pitchPose(-1.4f))) ==
           doctest::Approx(0.5f));
 }
 

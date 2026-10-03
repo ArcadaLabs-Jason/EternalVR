@@ -16,8 +16,8 @@ namespace EternalVR.Launcher.Core.Report
         /// <summary>Files matching a pattern in each of the newest session log folders (<c>logs\&lt;yyyyMMdd-HHmmss&gt;</c>).</summary>
         SessionFolder,
         /// <summary>
-        /// The in-headset captures (left Menu held + a trigger) in each of the newest session folders' <c>captures</c>
-        /// folder: PNG images taken as they are (not redacted: pixels only) with their text files (redacted),
+        /// The in-headset captures (the capture chord, docs/release/CONTROLS.md) in each of the newest session
+        /// folders' <c>captures</c> folder: PNG images taken as they are (not redacted: pixels only) with their text files (redacted),
         /// newest capture first, whole captures up to <see cref="ReportManifest.CapturesCapBytes"/>.
         /// </summary>
         SessionCaptures,
@@ -111,8 +111,9 @@ namespace EternalVR.Launcher.Core.Report
         {
             new ReportItem(ReportSource.Generated, SystemFile, SystemFile,
                 "Launcher and layer versions and their check, Windows version, GPUs and drivers, the OpenXR runtime, the headset as the last runtime "
-                + "probe read it and the last session's refresh rate and summary (HeadsetView.ReportLines), chosen SteamVR settings (SteamVrSummary), "
-                + "the HAGS state, the game build, the names in the game's Mods folder and any mod loader (GameMods), the folders in use"),
+                + "probe read it and the last session's refresh rate, summary and controls bound (HeadsetView.ReportLines), chosen SteamVR settings (SteamVrSummary), "
+                + "the HAGS state, the game build, the names in the game's Mods folder and any mod loader (GameMods), the folders in use, "
+                + "and the game's video settings as the newest session's layer log last listed them (LastGameSettings)"),
             new ReportItem(ReportSource.Generated, PreflightFile, PreflightFile, "The launcher's checks, run at export time"),
             new ReportItem(ReportSource.DataFolder, @"logs\launcher.log", "launcher.log",
                 "The launcher log (checks, launch plans, settings restores); its last 4 MB", tailBytes: 4 * MiB),
@@ -146,7 +147,7 @@ namespace EternalVR.Launcher.Core.Report
                 "The frame timing table of the newest session only: its header and last 3 MB",
                 headBytes: 16 * 1024, tailBytes: 3 * MiB, sessions: 1),
             new ReportItem(ReportSource.SessionCaptures, "capture-*", "sessions/{session}/captures/{name}",
-                "The in-headset captures (left Menu held + a trigger: eye L, eye R and UI images with a text file each) of the newest 5 sessions, newest first, up to 48 MB",
+                "The in-headset captures (left Menu held + a trigger; under SteamVR with Touch-type controllers, both sticks held, then a trigger; Index: left trackpad pressed firmly + a trigger; Steam Frame: View + a trigger): eye L, eye R and UI images with a text file each, of the newest 5 sessions, newest first, up to 48 MB",
                 sessions: SessionsKept),
         };
 

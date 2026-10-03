@@ -94,9 +94,12 @@ yet).
   that is already taller than wide on a tall image (the game kept the width) keeps its horizontal FOV. The
   log's `cinema: cutscene fov ...` line gives the game's FOV, the one drawn and the rows shown.
 - Glory kills (`ETERNALVR_GLORY_KILLS`, `features/comfort/glory_kill.hpp`, `vkcore/glory_view.hpp`; M7, REQ-15).
-  A glory kill is the game's sync kill: `idPlayer::syncMaster` is set while it runs (the camera hook reads
-  it for the view's object once it is the idPlayer, with the controllers on). The chainsaw's kills are sync
-  kills too [inferred], so they are shown the same way. An episode starts with the
+  A glory kill is the game's sync kill: `idPlayer::savedSyncEntity` holds a `syncmelee/<demon>` entity while
+  it runs (the camera hook reads it for the view's object once it is the idPlayer, with the controllers on;
+  `idPlayer::syncMaster` only as a fallback: it never changed in headset sessions, docs/BHAPTICS.md, and up
+  to 0.1.14 the episode read only it, so the options never engaged in real kills). A pickup's animation
+  (`interact/...`: a Sentinel Crystal, a Praetor token) is a sync too but not a kill. The chainsaw's kills are
+  sync kills too [inferred], so they are shown the same way. An episode starts with the
   flag and ends when the flag has cleared and the game no longer forces the view, at most 0.5 s later
   (`glory: kill N starts (...)` / `ends`, for the first 30). What the headset shows:
   - `follow` (default): as above, the view faces where the kill's camera points and turns with the head
@@ -108,7 +111,10 @@ yet).
     view never turns on its own at either end. With `ETERNALVR_AIM=view` there is no head aim to turn the
     game's aim back, and the view takes the game's heading when the kill ends.
   - `fade`: the view fades to black while the kill runs and back in when it ends, with the room-scale
-    blink's timing (black within 0.10 s, clear 0.25 s after; `RoomScale::holdBlack`).
+    blink's timing (black within 0.10 s, clear 0.25 s after; `RoomScale::holdBlack`), with the head fade
+    (`ETERNALVR_HEAD_FADE`, the launcher's "Fade in walls") on or off: the fade layer is made either way.
+    `glory: kill N starts (fade)`, then `room: fade full N ms after a glory kill started (shown as a fade)`;
+    the session's `room: fade layer ready` line shows the layer was made.
   - `screen`: the kill plays on the flat screen in front of the head, as a cutscene does (the same screen
     shape and placement). The camera hook leaves the game's view alone for those frames, and the worker
     stops showing head-tracked views at once (`GloryKills::flat`), not after the 0.25 s a cutscene takes.
@@ -145,6 +151,7 @@ yet).
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
 | `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
 | `ETERNALVR_TEST_XR_LOSS` | unset | seconds: once the session has run this long, it is taken as lost (as if the headset had gone away) and the worker reconnects (ARCHITECTURE section 6, session state) |
+| `ETERNALVR_TEST_XR_LOSS_REMOVE` | unset | `1`: that test loss also removes the presenter's D3D12 device, as a graphics card reset would; the worker then stops reconnecting and the status says the graphics card was reset |
 | `ETERNALVR_TEST_HEAD_SWAY` | unset | `yaw,pitch,period[,base]` (degrees, seconds): a sinusoidal head turn added to the tracked pose, for checking head tracking and head aim without a moving headset; `base` turns the head by that much yaw first, and a zero amplitude holds that view (`0,0,30,180`), so runs can be compared at one view (with a non-zero amplitude the view was seen to ignore the base: use the held form) |
 
 ## Render size
@@ -186,7 +193,7 @@ $layer = '<workspace>\tmp-vr\<build>'   # a staged copy of build\windows-msvc\sr
 & tools\rig\stop.ps1 -Run latest
 ```
 
-It starts the game with `+logFile 2 +com_skipKeyPressOnLoadScreens 1 +com_skipIntroVideo 1
+It starts the game with `+logFile 1 +com_skipKeyPressOnLoadScreens 1 +com_skipIntroVideo 1
 +com_skipSignInManager 1 +r_hdrDisplay 0 +r_motionblur 0 +r_dof 0 +r_chromaticAberration 0 +r_vignette 0
 +map game/sp/e1m1_intro/e1m1_intro` and `VK_ADD_IMPLICIT_LAYER_PATH`, `ETERNALVR_ENABLE_LAYER=1`,
 `ETERNALVR_LOG_DIR=<layer>-logs`, `ETERNALVR_SKIP_CINEMATICS=1`.
@@ -252,8 +259,9 @@ Runs under `<workspace>\runs\20260926-*-ht4h-*` (layer logs in `tmp-vr\ht4h-logs
 - Recenter, posture, eye height and room-scale: `docs/VR_ROOMSCALE.md`.
 - Head aim was checked with the simulator's static head plus the test sway; it needs a headset run
   (turning quickly, looking straight up and down, a teleport, a glory kill and another cutscene).
-- The multiplayer guard (`src/vkcore/mp_guard.cpp`, `docs/rig-findings/mp-guard.md`) is statically
-  verified only: it refuses multiplayer command lines, and head aim, camera writes, key injection and
-  keep-active act only while it is armed, turning off for the rest of the process on any online signal
-  (BATTLEMODE screens, lobby and game sessions, Steam joins, accepted invites, non-campaign map loads).
-  Until the offline experiments of `mp-guard.md` section 4 have passed, VR launches stay single-player.
+- The multiplayer guard (`src/vkcore/mp_guard.cpp`, `docs/rig-findings/mp-guard.md`) refuses multiplayer
+  command lines, and head aim, camera writes, key injection and keep-active act only while it is armed,
+  turning off for the rest of the process on any online signal (BATTLEMODE screens, lobby and game
+  sessions, Steam joins, accepted invites, non-campaign map loads). The offline experiments were run on the
+  rig (`mp-guard.md` section 4a: start-up, campaign loads, the BATTLEMODE menu, the command line, a refused
+  build and a test trip passed; the lobby, `game/pvp/` load and Steam callback experiments were not run).

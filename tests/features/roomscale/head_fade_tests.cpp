@@ -107,3 +107,26 @@ TEST_CASE("shots start at the contact, never inside the wall, while the head is 
         CHECK(s.validOffset.x < 0.6f * fraction + 1e-6f);
     }
 }
+
+TEST_CASE("a glory kill's fade and the blink go black with the head fade on or off") {
+    for (const bool headFade : {true, false}) {
+        CAPTURE(headFade);
+        CHECK(fadeTarget(shownFadeDepth(headFade, true, 0.0f), {}) == 1.0f);
+        CHECK(fadeTarget(shownFadeDepth(headFade, true, std::nanf("")), {}) == 1.0f);
+        HeadFade fade;
+        const double t = secondsToBlack(fade, [&](double) { return shownFadeDepth(headFade, true, 0.0f); });
+        CHECK(t > 0.0);
+        CHECK(t <= 0.150);
+    }
+}
+
+TEST_CASE("the head's own fade shows only with the head fade on") {
+    CHECK(shownFadeDepth(true, false, 0.05f) == doctest::Approx(0.05f));
+    CHECK(shownFadeDepth(true, false, 0.4f) == doctest::Approx(0.4f));
+    CHECK(shownFadeDepth(false, false, 0.4f) == 0.0f);
+    CHECK(shownFadeDepth(true, false, -0.1f) == 0.0f);
+    CHECK(shownFadeDepth(true, false, std::nanf("")) == 0.0f);
+    HeadFade fade;
+    CHECK(secondsToBlack(fade, [](double) { return shownFadeDepth(false, false, 0.2f); }) < 0.0);
+    CHECK(fade.value() == 0.0f);
+}

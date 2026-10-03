@@ -27,6 +27,8 @@ using evr::test::approxAxis;
 using evr::test::approxEqual;
 using evr::test::approxPose;
 using evr::test::bindArm;
+using evr::test::bindRightArm;
+using evr::test::mirrored;
 using evr::xr_math::ModelPose;
 
 namespace {
@@ -177,4 +179,92 @@ TEST_CASE("the game's arm follows its attach joint rigidly") {
         CHECK(approxEqual(shifted[i].position, a[i].position + shift));
         CHECK(approxAxis(shifted[i].axis, a[i].axis));
     }
+}
+
+TEST_CASE("the right arm, mirrored in the rig, solves to itself") {
+    const ArmPoses a = bindRightArm();
+    // Every joint but the attach joint, which is unturned on both sides.
+    for (std::size_t i = 1; i < kArmJointCount; ++i) {
+        CHECK(approxPose(a[i], mirrored(bindArm()[i]), 1e-5f));
+    }
+    const ArmTargets targets{at(a, ArmJoint::Hand), at(a, ArmJoint::UpperArm).position, animatedPole(a)};
+    const auto s = solveArm(a, targets);
+    REQUIRE(s);
+    CHECK(approxEqual(s->twist, 0.0f));
+    for (std::size_t i = 0; i < kArmJointCount; ++i) {
+        CHECK(approxPose(s->joints[i], a[i], 2e-4f));
+    }
+}
+
+TEST_CASE("the right arm solves as the mirror image of the left") {
+    const ArmPoses left = bindArm();
+    const ArmPoses right = bindRightArm();
+    const Vec3 shoulder = at(left, ArmJoint::UpperArm).position;
+    ArmTargets l;
+    l.shoulder = shoulder + Vec3{0.02f, -0.05f, 0.03f};
+    l.hand = {shoulder + Vec3{0.3f, 0.1f, -0.25f},
+              rotateAbout(at(left, ArmJoint::Hand).axis, normalize(Vec3{0.2f, 0.5f, 0.3f}), 0.6f)};
+    l.pole = {-0.2f, 0.6f, -1.0f};
+    const ArmTargets r{
+        mirrored(l.hand), {l.shoulder.x, -l.shoulder.y, l.shoulder.z}, {l.pole.x, -l.pole.y, l.pole.z}};
+    const auto sl = solveArm(left, l);
+    const auto sr = solveArm(right, r);
+    REQUIRE(sl);
+    REQUIRE(sr);
+    CHECK(std::fabs(sl->twist) > 0.1f);
+    CHECK(approxEqual(sr->twist, -sl->twist, 1e-3f));
+    // Every joint the arm moves itself (the attach joint, unturned on both sides, is placed to carry it).
+    for (std::size_t i = 1; i < kArmJointCount; ++i) {
+        CAPTURE(i);
+        CHECK(approxPose(sr->joints[i], mirrored(sl->joints[i]), 1e-3f));
+    }
+}
+
+TEST_CASE("the weapon arm keeps its wrist and reaches it from a shoulder at the head") {
+    const ArmPoses a = bindRightArm();
+    const ModelPose& hand = at(a, ArmJoint::Hand);
+    // A shoulder beside and above the wrist, within reach, and the elbow bending down and out to the right.
+    const Vec3 shoulder = hand.position + Vec3{-0.3f, -0.15f, 0.2f};
+    const Vec3 pole{-0.2f, -0.6f, -1.0f};
+    const auto s = evr::arm::solveArmToWrist(a, shoulder, pole);
+    REQUIRE(s);
+    CHECK_FALSE(s->ik.clamped);
+    // The wrist and the attach joint are the game's, exactly.
+    CHECK(at(s->joints, ArmJoint::Hand).position == hand.position);
+    CHECK(at(s->joints, ArmJoint::Hand).axis.forward == hand.axis.forward);
+    CHECK(at(s->joints, ArmJoint::Attach).position == at(a, ArmJoint::Attach).position);
+    CHECK(approxEqual(at(s->joints, ArmJoint::UpperArm).position, shoulder));
+    checkBones(s->joints, a);
+    const Vec3 elbow = at(s->joints, ArmJoint::ForeArm).position;
+    const Vec3 mid = shoulder + (hand.position - shoulder) * 0.5f;
+    CHECK(dot(elbow - mid, pole) > 0.0f);
+    // The roll joints stay on the line from the elbow to the wrist, as in the bind pose.
+    for (const ArmJoint j : {ArmJoint::Roll3, ArmJoint::Roll2, ArmJoint::Roll1, ArmJoint::ForeArmRoll}) {
+        const Vec3 along = normalize(hand.position - elbow);
+        const Vec3 off = at(s->joints, j).position - elbow;
+        CHECK(length(off - along * dot(off, along)) < 1e-3f);
+    }
+}
+
+TEST_CASE("a weapon arm's shoulder out of reach is pulled toward the wrist, which stays") {
+    const ArmPoses a = bindRightArm();
+    const ModelPose& hand = at(a, ArmJoint::Hand);
+    const float full = upperLength(a) + lowerLength(a);
+    const Vec3 far = hand.position + Vec3{-0.9f, -0.3f, 0.4f};
+    const auto s = evr::arm::solveArmToWrist(a, far, {0.0f, -0.6f, -1.0f});
+    REQUIRE(s);
+    CHECK_FALSE(s->ik.clamped);
+    CHECK(at(s->joints, ArmJoint::Hand).position == hand.position);
+    const Vec3 shoulder = at(s->joints, ArmJoint::UpperArm).position;
+    CHECK(length(shoulder - hand.position) < full * kMaxReachFraction);
+    CHECK(length(shoulder - hand.position) > full * 0.99f);
+    CHECK(approxEqual(normalize(shoulder - hand.position), normalize(far - hand.position)));
+    checkBones(s->joints, a);
+    // On the wrist itself: too close to fold to, pushed out the same way.
+    const Vec3 near = hand.position + Vec3{-0.001f, 0.0f, 0.0f};
+    const auto n = evr::arm::solveArmToWrist(a, near, {0.0f, -0.6f, -1.0f});
+    REQUIRE(n);
+    CHECK(at(n->joints, ArmJoint::Hand).position == hand.position);
+    CHECK(length(at(n->joints, ArmJoint::UpperArm).position - hand.position) > full * 0.04f);
+    checkBones(n->joints, a);
 }

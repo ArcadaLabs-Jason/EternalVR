@@ -10,6 +10,7 @@
 #include <vector>
 
 using evr::arm::ArmJoint;
+using evr::arm::ArmSide;
 using evr::arm::findArmJoints;
 using evr::arm::index;
 using evr::arm::kArmJointCount;
@@ -21,7 +22,7 @@ using evr::arm::SkeletonRead;
 namespace {
 
 // The arms skeleton's parent table (arms.md6skl, build 25216728): 79 joints, the left arm at 30, 31 and
-// 52 to 57.
+// 52 to 57, the right arm at 2, 3 and 24 to 29.
 const std::vector<std::int16_t> kArmsParents{-1, 0,  0,  2,  3,  4,  5,  3,  7,  8,  9,  3,  11, 12, 13, 3,
                                              15, 16, 17, 3,  19, 20, 21, 3,  3,  24, 25, 26, 27, 28, 0,  30,
                                              31, 32, 33, 31, 35, 36, 37, 31, 39, 40, 41, 31, 43, 44, 45, 31,
@@ -82,11 +83,28 @@ TEST_CASE("the arm's joints are found by shape from the attach joint in the arms
     REQUIRE_MESSAGE(joints, error);
     const evr::arm::ArmJointIndices expected{30, 31, 52, 53, 54, 55, 56, 57};
     CHECK(*joints == expected);
-    CHECK(namesMatch(*skeleton, *joints, handlesOf(expected), error));
-    // The right arm has the same shape from its own attach joint.
+    CHECK(namesMatch(*skeleton, ArmSide::Left, *joints, handlesOf(expected), error));
+}
+
+TEST_CASE("the weapon arm's joints are found by shape from the right attach joint") {
+    // righthandattach 2 (a child of origin), RightHand 3 with the thumb, the finger roots and the prop under
+    // it, then rightforearmroll3..1, RightForeArmRoll, RightForeArm and RightArm (24 to 29).
+    const auto data = buildSkeleton(kArmsParents);
+    std::string error;
+    const auto skeleton = readSkeleton(reader(data), error);
+    REQUIRE_MESSAGE(skeleton, error);
     const auto right = findArmJoints(*skeleton, 2, error);
-    REQUIRE(right);
-    CHECK((*right)[index(ArmJoint::UpperArm)] == 29);
+    REQUIRE_MESSAGE(right, error);
+    const evr::arm::ArmJointIndices expected{2, 3, 24, 25, 26, 27, 28, 29};
+    CHECK(*right == expected);
+    CHECK(namesMatch(*skeleton, ArmSide::Right, *right, handlesOf(expected), error));
+    // The left arm's joints are not the right arm's.
+    CHECK_FALSE(
+        namesMatch(*skeleton, ArmSide::Right, *right, handlesOf({30, 31, 52, 53, 54, 55, 56, 57}), error));
+    CHECK(error == "joint 2 is not named righthandattach (handle 1002, the name's 1030)");
+    // From the wrist or a finger root the shape is not there.
+    CHECK_FALSE(findArmJoints(*skeleton, 3, error));
+    CHECK_FALSE(findArmJoints(*skeleton, 7, error));
 }
 
 TEST_CASE("the marine skeleton the game loads: a forearm device branches off the roll joints") {
@@ -110,6 +128,10 @@ TEST_CASE("the marine skeleton the game loads: a forearm device branches off the
     REQUIRE_MESSAGE(joints, error);
     const evr::arm::ArmJointIndices expected{30, 31, 52, 53, 54, 55, 56, 57};
     CHECK(*joints == expected);
+    // No device on the right forearm: the weapon arm is the same as in arms.md6skl.
+    const auto right = findArmJoints(*skeleton, 2, error);
+    REQUIRE_MESSAGE(right, error);
+    CHECK(*right == evr::arm::ArmJointIndices{2, 3, 24, 25, 26, 27, 28, 29});
 }
 
 TEST_CASE("a name handle that differs is reported") {
@@ -120,8 +142,13 @@ TEST_CASE("a name handle that differs is reported") {
     const evr::arm::ArmJointIndices joints{30, 31, 52, 53, 54, 55, 56, 57};
     auto handles = handlesOf(joints);
     handles[index(ArmJoint::ForeArm)] = 7;
-    CHECK_FALSE(namesMatch(*skeleton, joints, handles, error));
+    CHECK_FALSE(namesMatch(*skeleton, ArmSide::Left, joints, handles, error));
     CHECK(error == "joint 56 is not named LeftForeArm (handle 1056, the name's 7)");
+    const evr::arm::ArmJointIndices right{2, 3, 24, 25, 26, 27, 28, 29};
+    handles = handlesOf(right);
+    handles[index(ArmJoint::Roll1)] = 9;
+    CHECK_FALSE(namesMatch(*skeleton, ArmSide::Right, right, handles, error));
+    CHECK(error == "joint 26 is not named rightforearmroll1 (handle 1026, the name's 9)");
 }
 
 TEST_CASE("a skeleton of another shape is refused") {
@@ -132,6 +159,16 @@ TEST_CASE("a skeleton of another shape is refused") {
     REQUIRE(skeleton);
     CHECK_FALSE(findArmJoints(*skeleton, 30, error));
     CHECK(error == "the wrist has 0 lines of six joints ending in a leaf, not one");
+    parents = kArmsParents;
+    parents[29] = 27; // RightArm under the forearm roll
+    skeleton = readSkeleton(reader(buildSkeleton(parents)), error);
+    REQUIRE(skeleton);
+    CHECK_FALSE(findArmJoints(*skeleton, 2, error));
+    parents = kArmsParents;
+    parents.push_back(29); // something hanging from RightArm: the line no longer ends in a leaf
+    skeleton = readSkeleton(reader(buildSkeleton(parents)), error);
+    REQUIRE(skeleton);
+    CHECK_FALSE(findArmJoints(*skeleton, 2, error));
 
     skeleton = readSkeleton(reader(buildSkeleton(kArmsParents)), error);
     REQUIRE(skeleton);

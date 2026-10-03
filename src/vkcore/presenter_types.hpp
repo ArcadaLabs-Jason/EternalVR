@@ -97,6 +97,9 @@ struct Settings {
     // ETERNALVR_TEST_XR_LOSS=seconds: once the session has run this long, the worker takes it as lost (as
     // if the headset had gone away) and reconnects, for testing the recovery on a desktop runtime.
     float testLossSeconds = 0.0f;
+    // ETERNALVR_TEST_XR_LOSS_REMOVE=1: that loss also removes the presenter's D3D12 device, as a graphics
+    // card reset would (ID3D12Device5::RemoveDevice).
+    bool testLossRemovesDevice = false;
 };
 
 // The session ended, and why (XR worker only; presenter_reconnect.cpp brings VR back when it can).
@@ -193,6 +196,7 @@ struct MenuPointerKept {
     XrSwapchain beamSwapchain = XR_NULL_HANDLE;
     bool beamFailed = false;
     std::array<menu::EnterTick, 2> enterTicks{}; // each hand's vibration tick onto the panel
+    double chordSeconds = 0.0;                   // when the capture chord last ran (qpc seconds)
 };
 
 struct SwapchainState {

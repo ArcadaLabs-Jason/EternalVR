@@ -12,8 +12,9 @@ them is worse for you than described here.
   sits in one place for every weapon, so on some guns it may float a little off the gun.
 - **Glory kills keep the game's camera by default.** The game moves the camera during a glory kill; in VR
   the view follows it, facing the demon, and turns with your head from there. If camera motion bothers you,
-  the Play tab's "Glory kills" setting keeps the view steady, fades it out, or shows the kill on a flat
-  screen instead; these are new and have not been tried in a headset yet. Cutscenes play on a flat 16:9 screen in front of you
+  the Play tab's "Glory kills" setting keeps the view steady, shows the kill on a flat screen, or fades it
+  out instead. Steady view and Flat screen have been tried in a headset; Fade out showed nothing with "Fade in
+  walls" off before this build and has not been tried in a headset since. Cutscenes play on a flat 16:9 screen in front of you
   with the game's own camera (`ETERNALVR_CUTSCENES=immersive` puts you in the cutscene's camera instead).
 - **Room-scale walking is new and lightly tested.** When you step around the room while standing, the
   Slayer walks after you in short pulses, so you may hear footsteps start and stop. It has been tested
@@ -37,10 +38,13 @@ them is worse for you than described here.
   within a few seconds. This has been tested on a headset simulator, not yet with a real headset
   dropping out; please tell me if VR does not come back. If you close VR for the game from the
   headset's own menu, VR stays off until you start the game again from the launcher.
+  If the graphics card is reset while you play, VR stays off until you start the game again; the
+  launcher then says "the graphics card was reset".
 - **A DOOM Eternal update turns VR off** until EternalVR supports the new build; the game then runs flat.
 - **SteamVR has had one test**, with a Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the
-  left Menu button opens SteamVR's dashboard, so hold Y to pause instead, and take a screenshot with Y
-  held and a trigger pulled (instead of left Menu + trigger).
+  left Menu button of Touch controllers opens SteamVR's dashboard, so hold Y to pause instead (B with
+  **Left (buttons and sticks)**), and take a screenshot by holding both sticks pressed and pulling a
+  trigger (instead of left Menu + trigger).
 - **The Game Pass and Microsoft Store version has had one test**, on one PC with a Quest 3 through Virtual
   Desktop: a level and the Revenant in Cultist Base played as on Steam. On its first start that version
   asks you to log in to Bethesda.net, and clicking a text box opens Windows' own typing window on the
@@ -98,8 +102,9 @@ them is worse for you than described here.
 - **DLSS is experimental.** It is offered on NVIDIA RTX cards and helps only when the graphics card, not
   the processor, is what holds the frame rate back; when the processor is, DLSS can be slower than TAA.
   Each eye gets its own DLSS history. Choose DLSS under "Anti-aliasing" on the launcher's Play tab, then its
-  quality (Quality, Balanced, Performance or Ultra Performance) in the DLSS group. In VR the game's own video menu shows the DLSS
-  setting that is running (Ultra Performance shows as Performance, which the menu does not have). With the
+  quality (DLAA, Quality, Balanced, Performance or Ultra Performance) in the DLSS group; DLAA needs a newer DLSS than the
+  game's. In VR the game's own video menu shows the DLSS setting that is running (Ultra Performance shows as Performance and
+  DLAA as Quality, which the menu does not have). With the
   launcher's DLSS or Off, changing DLSS in the game's menu has no effect in VR, and your saved game settings
   keep their own DLSS choice for flat play. With the launcher's TAA the game's own DLSS setting is used: if
   it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
@@ -144,6 +149,15 @@ them is worse for you than described here.
   on TAA, fast-moving demons can smear a little more than without it; Off avoids that. "Auto" does this only
   while your processor cannot keep up with the headset and draws both eyes again once it can (the switch
   takes a second or a few). Turn it off if it does not help.
+- **Parallel Eye Rendering is not in the launcher yet.** It renders both eyes as two views of one game frame
+  instead of one eye after the other. In a headset it still breaks the picture (stretched, shattered geometry and
+  broken effects), so the launcher hides its checkbox until that is fixed; it appears only with the environment
+  variable `ETERNALVR_SHOW_PARALLEL_EYES=1` (for testing). It runs only on the
+  Steam version this release supports; other versions use the standard renderer. The game's async
+  compute is off while it is on. It does not run with DLSS (it is greyed out then), and Alternate eyes is
+  greyed out while it is on. Not yet tried in cutscenes or in long sessions. After the resolution changes
+  several times in one session, both eyes show the same image until the next start. If it cannot finish
+  starting, both eyes show the same image for that session; the log says `parallel eyes: FAILED`.
 
 ## Controllers and aiming
 

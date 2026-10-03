@@ -6,10 +6,14 @@
 #include "stereo_seq/seq_settings.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/presenter_eyes.hpp"
 #include "vkcore/presenter_result.hpp"
+#include "vkcore/runtime_cvars.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/ui_engine.hpp"
+#include "vkcore/view_slots.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/vrs_nv.hpp"
 #include "vkcore/window_timing.hpp"
 
 #include <algorithm>
@@ -214,42 +218,15 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                               nullptr, 0, nullptr, barriers, before.data());
 
-    // One region per eye half the image goes to.
-    const std::uint32_t count = std::min<std::uint32_t>(target.eyeCount, 2);
-    const auto eyeWidth = static_cast<std::int32_t>(eyeExtent.width);
-    const auto eyeHeight = static_cast<std::int32_t>(eyeExtent.height);
-    if (sameShape) {
-        std::array<VkImageCopy, 2> regions{};
-        for (std::uint32_t i = 0; i < count; ++i) {
-            regions[i].srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            regions[i].dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            regions[i].dstOffset = {static_cast<std::int32_t>(target.firstEye + i) * eyeWidth, 0, 0};
-            regions[i].extent = {eyeExtent.width, eyeExtent.height, 1};
-        }
-        dev.vk.CmdCopyImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, slot.image,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data());
-        if (carry) {
-            dev.vk.CmdCopyImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, carry,
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data());
-        }
-    } else {
-        std::array<VkImageBlit, 2> regions{};
-        for (std::uint32_t i = 0; i < count; ++i) {
-            const std::int32_t x = static_cast<std::int32_t>(target.firstEye + i) * eyeWidth;
-            regions[i].srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            regions[i].dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            regions[i].srcOffsets[1] = {static_cast<std::int32_t>(sc.extent.width),
-                                        static_cast<std::int32_t>(sc.extent.height), 1};
-            regions[i].dstOffsets[0] = {x, 0, 0};
-            regions[i].dstOffsets[1] = {x + eyeWidth, eyeHeight, 1};
-        }
-        dev.vk.CmdBlitImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, slot.image,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data(), VK_FILTER_LINEAR);
-        if (carry) {
-            dev.vk.CmdBlitImage(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, carry,
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions.data(),
-                                VK_FILTER_LINEAR);
-        }
+    // The game's image into the slot's eyes (and with the eye copy, each eye from its own view:
+    // presenter_eyes).
+    recordEyeCopies(dev, cb, family, source, sc.extent, sameShape,
+                    EyeCopyTarget{slot.image, carry, ringFormat, eyeExtent, target.firstEye, target.eyeCount,
+                                  ringEyes == 2 && !settings.stereo.sequential && target.eyeCount == 2});
+    if (target.kind != stereo_seq::PresentKind::Mono) { // ETERNALVR_VRS_TINT: the eye's reduced-rate areas
+        vrs_nv::recordMarks(dev, cb, family, {slot.image, carry}, ringFormat,
+                            target.kind == stereo_seq::PresentKind::EyeR ? 1 : 0,
+                            {static_cast<std::int32_t>(target.firstEye * eyeExtent.width), 0}, eyeExtent);
     }
     if (captureBuffer) {
         EyeCapture::record(dev, cb, source, sc.extent, captureBuffer);
@@ -268,7 +245,7 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     motionCapture.record(dev, cb, family, target.kind == stereo_seq::PresentKind::EyeR);
     // The desktop mirror, after the eye is in the ring: keep this eye, or put the kept one in its place.
     const VkImageLayout sourceLayout =
-        mirror.record(dev, cb, source, sc.format, sc.extent, panel.step, target.toWindow);
+        mirror.record(dev, cb, family, source, sc.format, sc.extent, panel.step, target.toWindow);
 
     std::array<VkImageMemoryBarrier, 3> after{};
     // The swapchain image goes back to PRESENT_SRC for the present.
@@ -371,35 +348,6 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
     return value;
 }
 
-void XrPresenter::Impl::logCopyStats(const SwapchainState& sc, std::uint32_t family) {
-    if (!loggedFirstCopy) {
-        loggedFirstCopy = true;
-        EVR_LOG(
-            "presenter: first copy into the ring (%ux%u format %d -> %ux%u format %d, %u eye(s) of %ux%u, "
-            "%s, queue family %u)",
-            sc.extent.width, sc.extent.height, sc.format, ringExtent.width, ringExtent.height, ringFormat,
-            ringEyes, eyeExtent.width, eyeExtent.height,
-            (sc.format == ringFormat && sc.extent.width == eyeExtent.width &&
-             sc.extent.height == eyeExtent.height)
-                ? "copy"
-                : "blit",
-            family);
-    } else if (GetTickCount64() - lastStatsTicks >= 10000) {
-        lastStatsTicks = GetTickCount64();
-        EVR_LOG(
-            "presenter: %llu frame(s) copied, %llu dropped (slot busy or not copyable), %llu of them size or "
-            "format mismatches; %llu with a head-tracked view (average %.2f frame(s) behind the newest), "
-            "%llu "
-            "without",
-            static_cast<unsigned long long>(framesCopied), static_cast<unsigned long long>(framesDropped),
-            static_cast<unsigned long long>(framesShapeMismatch),
-            static_cast<unsigned long long>(presentsWithView),
-            presentsWithView ? static_cast<double>(presentSeqGapSum) / static_cast<double>(presentsWithView)
-                             : 0.0,
-            static_cast<unsigned long long>(presentsWithoutView));
-    }
-}
-
 VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
                                               std::uint32_t family,
                                               const VkPresentInfoKHR* info,
@@ -422,6 +370,11 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     // Route S: every present of the game's swapchain takes its eye tag, copied or not, so that the tags
     // stay in step with the presents.
     const bool seq = seqActive.load(std::memory_order_acquire);
+    if (seq) { // runtime_cvars.hpp: from Route S's first present, before the runtime's session
+        runtime_cvars::apply(true);
+    } else if (parallelEyesChangedEngine()) { // the same for Parallel Eye Rendering's set, every frame
+        runtime_cvars::apply(false);
+    }
     const stereo_seq::PresentMatch match = seq ? seqTakePresent() : stereo_seq::PresentMatch{};
     if (seq && match.tagged) {
         gpu_timing::tagEye(match.tag.eye);
@@ -442,7 +395,8 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     }
     // In a level the game presents from its compute queue (family 2 on the rig), whose last write to
     // the swapchain image leaves it owned by that family. A copy works on any queue with transfer
-    // support (graphics and compute queues included); a blit needs a graphics queue (recordCopy).
+    // support (graphics and compute queues included); a blit needs a graphics queue (recordCopy and the
+    // desktop mirror's crop and panel check the family).
     const VkQueueFlags familyFlags = family < dev.queueFamilyFlags.size() ? dev.queueFamilyFlags[family] : 0;
     if (!(familyFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))) {
         return notCopied();
@@ -488,10 +442,13 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
         return VK_NULL_HANDLE;
     }
     const bool toWindow = decideWindow(info, stereo_seq::PresentKind::Mono);
+    // Parallel Eye Rendering's eye copy (presenter_stereo.cpp): a two-eye ring outside Route S.
+    const bool eyeCopy = ringEyes == 2 && !settings.stereo.sequential;
     const VkBuffer buffer = monoCaptureBuffer(sc, completed); // the in-headset capture (bug_capture.hpp)
     const std::uint64_t value = submitCopy(
         queue, family, info, sc, imageIndex, *fc, slotIndex,
-        CopyTarget{0, 1, false, settings.ui.enabled, stereo_seq::MirrorStep::None, toWindow}, buffer);
+        CopyTarget{0, eyeCopy ? 2u : 1u, false, settings.ui.enabled, stereo_seq::MirrorStep::None, toWindow},
+        buffer);
     captureCopied(buffer, value, true);
     if (value == 0) {
         ring[slotIndex].state.store(kSlotFree);
@@ -503,6 +460,9 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     if (settings.mode == Mode::HeadTracked && mp_guard::allowsGameTouch()) {
         std::uint64_t gap = 0;
         slot.hasView = latestView(slot.view, gap);
+        if (eyeCopy) {
+            slot.view.showEyes = slot.hasView && slot.view.stereo; // the eye copy's two-eye ring
+        }
         if (slot.hasView) {
             ++presentsWithView;
             presentSeqGapSum += gap;

@@ -49,6 +49,9 @@ void thunk(safetyhook::Context& ctx) {
         ctx.r13 = registers.r13;
         ctx.r14 = registers.r14;
         ctx.r15 = registers.r15;
+        if (registers.resumeAt) {
+            ctx.rip = registers.resumeAt;
+        }
     }
 }
 
@@ -84,7 +87,7 @@ bool installMidHookEdit(void* target, MidHookEditCallback callback, std::string&
 bool installInlineHook(void* target, void* destination, void** original, std::string& error) {
     std::lock_guard lock(g_installMutex);
     if (g_inlineCount >= kMaxInlineHooks) {
-        error = "no free inline hook slot";
+        error = "no free inline hook slot (all " + std::to_string(kMaxInlineHooks) + " in use)";
         return false;
     }
     if (!pinSelf()) {
@@ -109,12 +112,22 @@ bool installInlineHook(void* target, void* destination, void** original, std::st
     return true;
 }
 
+int midHookCount() {
+    std::lock_guard lock(g_installMutex);
+    return g_count;
+}
+
+int inlineHookCount() {
+    std::lock_guard lock(g_installMutex);
+    return g_inlineCount;
+}
+
 namespace {
 
 bool install(void* target, MidHookCallback callback, MidHookEditCallback edit, std::string& error) {
     std::lock_guard lock(g_installMutex);
     if (g_count >= kMaxMidHooks) {
-        error = "no free hook slot";
+        error = "no free hook slot (all " + std::to_string(kMaxMidHooks) + " in use)";
         return false;
     }
     // The hook's code lives in this DLL; it must never be unloaded while the game can reach it.

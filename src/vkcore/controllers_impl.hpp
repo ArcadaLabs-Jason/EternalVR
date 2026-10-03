@@ -9,6 +9,12 @@
 // Threads: the XR worker (attach, sync, detach), the camera hook (beginGameView, aimAngles, endGameView),
 // the game's user-command build (the user-command and angle hooks), the game's weapon code (fire and
 // viewmodel hooks) and the pad sampler (XInput). Each piece of state names its lock.
+//
+// State marked "hook thread only" (the viewmodel's offset cache, the off hand's blend and trace state, and
+// camera_anim_hook.cpp's episodes) is plain, unlocked: it assumes the game runs that hook's caller on one
+// thread at a time. That is likely (each is one per-frame call on the player) but not shown, while the
+// camera hook itself is seen on more than one of the game's worker threads (aim_hooks.cpp). If the game
+// ever runs two at once, those caches need a lock or a per-thread copy.
 
 #include "features/input/aim_smoothing.hpp"
 #include "features/input/binding_watch.hpp"
@@ -133,6 +139,9 @@ struct WorldHand {
     // the elbow's bend direction (world), both in the head's yaw frame.
     Vec3 offShoulder;
     Vec3 offElbow;
+    // The weapon arm's IK (weapon_arm.cpp): the same, on the weapon hand's side.
+    Vec3 weaponShoulder;
+    Vec3 weaponElbow;
     float unitsPerMetre = 1.0f;
 };
 
@@ -194,6 +203,7 @@ struct State {
     game::Controller mapperController = game::Controller::OculusTouch;
     bool mapperBroken = false; // the control map for mapperController has issues (reported once)
     input::ActionHold hold;
+    bool menuHold = false; // a menu held gameplay input back at the last mapper run
     input::ViewDeltaQueue viewQueue;
     // The weapon wheel's pointer: the stick as the game's cursor motion while the wheel is held.
     input::WheelMouse wheelMouse;
@@ -239,6 +249,7 @@ struct State {
     bool fireHook = false;
     bool viewmodelHook = false;
     bool offhandHook = false;
+    bool weaponArmHook = false; // the off-hand hook also bends the weapon arm (weapon_arm.cpp)
     bool xinputHook = false;
     bool rumbleHook = false;
     bool demonAimHook = false;
@@ -295,10 +306,10 @@ FamilyData loadControllerData(const input::ControllerSettings& settings);
 // Suggests the bindings of every family whose profile the instance has, and logs which were suggested and
 // which skipped. True when at least one profile was accepted.
 bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const FamilyData& data);
-// The family whose profile the runtime reports for the right hand, if it is one we have data for (the
-// profile of each hand is kept in handProfiles and logged when it changes; a profile without data once). XR
-// worker only.
-std::optional<game::Controller> currentFamily(const XrInput& xr, State& s);
+// The family whose control map is used, from the profiles the runtime reports for both hands
+// (controller_family.hpp; `current` when neither has one we have data for). The profile of each hand is kept
+// in handProfiles and logged when it changes, a profile without data once. XR worker only.
+game::Controller currentFamily(const XrInput& xr, State& s, game::Controller current);
 
 // Whether the runtime binds our actions (input_watch.cpp). XR worker, inside sync under the shared xrMutex:
 // feeds the watch what this sync saw (before any scripted input; the time and the profiles are filled in)
@@ -334,8 +345,13 @@ bool safeRead(const std::byte* at, T& value) {
 // True when `object` is the idPlayer, with its vtable read safely (the pointer came from game memory).
 bool isPlayerSafe(const std::byte* object);
 
-// idPlayer::syncMaster's object: set while a sync or glory kill runs [inferred].
+// idPlayer::syncMaster's object [inferred]: never changed in headset sessions (docs/BHAPTICS.md), so only a
+// fallback for idPlayer::savedSyncEntity's object, the sync entity of the animation the player is in for its
+// whole length (a glory kill's `syncmelee/<demon>`, a pickup's `interact/...`).
 inline constexpr std::size_t kPlayerSyncMaster = 0x7DA8 + 8;
+inline constexpr std::size_t kPlayerSavedSync = 0x8420 + 8;
+// idEntity::entityDef: the entity's decl (its name through itemDeclName).
+inline constexpr std::size_t kEntityDef = 0xA8;
 
 // The hand holding the weapon for the configured handedness.
 input::Hand weaponHand();
@@ -347,9 +363,17 @@ struct MappedInput {
     bool live = false;
     game::GameActionSet actions;
     input::GameInput input;
-    input::Axis2 turnStick; // the raw turn stick (the virtual gamepad's look when turning has no hook)
+    input::Axis2 turnStick; // the turn stick as the mapper read it (the pad's look when turning has no hook)
 };
 MappedInput runMapper();
+
+// The mapper for `controller` (control_map.cpp), built from the family's control map when there is none or it
+// is for another family, which also gives the game's prompts the buttons' names; false when the map has
+// issues (reported once, when it was built). The caller holds mapperMutex. `when` is added to the log line.
+bool ensureMapper(State& s, game::Controller controller, const char* when);
+// XR worker, once the runtime reports a controller: builds the control map ahead of the mapper's first run,
+// so the title screen's and the main menu's prompts name the buttons too (they build no user commands).
+void prepareControlMap(game::Controller controller);
 
 // The whole of a small text file named by a setting (UTF-8 path), or nullopt.
 std::optional<std::string> readTextFile(const std::string& utf8Path);
@@ -415,7 +439,8 @@ bool installBhapticsLaunchHooks();
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
 bool installAimHooks(bool& fireInstalled);
 bool installViewmodelHook();
-bool installOffhandHook();
+// The hook on the game's left-hand modifier, which also bends the weapon arm (`weaponArmInstalled`).
+bool installOffhandHook(bool& weaponArmInstalled);
 bool installXInputHook();
 bool installRumbleHook();
 bool installFacingHook();
@@ -423,7 +448,7 @@ bool installClimbHook();
 bool installPromptHooks();
 
 // The game's prompts name the buttons of `controller` under `profile` from now on (prompt_hooks.cpp). Called
-// under mapperMutex whenever the mapper is built; nothing changes when the texts are the same.
+// under mapperMutex whenever the mapper is built (ensureMapper); nothing changes when the texts are the same.
 void publishPromptLabels(const input::BindingProfile& profile, game::Controller controller);
 
 } // namespace evr::vkcore::controllers

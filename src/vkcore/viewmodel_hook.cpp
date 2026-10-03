@@ -281,19 +281,27 @@ void endGameView(std::byte* renderView,
                      ? xr_math::controllerRelativeToEye(body, headOffset, p.head, p.grip[hand], unitsPerMetre)
                      : world.aim;
     world.grip.axis = world.aim.axis;
+    // The head's yaw frame in the world: the arms' shoulders and their elbows' bend follow the head's
+    // heading.
+    const xr_math::IdViewAxis headAxis =
+        xr_math::composeHeadAxis(body, xr_math::openXrToIdTech(normalize(p.head.orientation)));
+    const xr_math::IdViewAxis yaw = xr_math::yawOnly(headAxis).value_or(body);
+    const auto inYaw = [&yaw](const game::WeaponOffset& o) {
+        return yaw.forward * o.forward + yaw.left * o.left + yaw.up * o.up;
+    };
+    // The weapon arm (weapon_arm.cpp): the off hand's shoulder and elbow on the weapon hand's side.
+    world.weaponShoulder =
+        headOffset + inYaw(cfg.weaponArmTestShoulder
+                               ? *cfg.weaponArmTestShoulder
+                               : input::weaponArmOffsetFor(cfg.offhandShoulderOffset, cfg.handedness)) *
+                         unitsPerMetre;
+    world.weaponElbow = inYaw(input::weaponArmOffsetFor(cfg.offhandElbow, cfg.handedness));
     // The off hand (the left arm, offhand_hook.cpp): its grip with its own orientation.
     const std::size_t off = 1 - hand;
     world.offValid = p.gripValid[off] || p.aimValid[off];
     if (world.offValid) {
         world.offGrip = xr_math::controllerRelativeToEye(
             body, headOffset, p.head, p.gripValid[off] ? p.grip[off] : p.aim[off], unitsPerMetre);
-        // The head's yaw frame in the world: the shoulder and the elbow's bend follow the head's heading.
-        const xr_math::IdViewAxis headAxis =
-            xr_math::composeHeadAxis(body, xr_math::openXrToIdTech(normalize(p.head.orientation)));
-        const xr_math::IdViewAxis yaw = xr_math::yawOnly(headAxis).value_or(body);
-        const auto inYaw = [&yaw](const game::WeaponOffset& o) {
-            return yaw.forward * o.forward + yaw.left * o.left + yaw.up * o.up;
-        };
         // Given for the left hand; mirrored with the weapon in the left hand.
         world.offShoulder =
             headOffset +

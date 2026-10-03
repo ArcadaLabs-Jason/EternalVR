@@ -33,7 +33,8 @@ Names and ETERNALVR_DEBUG_CVARS values, as 'name=cvar=value;cvar=value' strings.
 .PARAMETER SetCommands
 Console commands for a set, as 'name=<ETERNALVR_DEBUG_COMMANDS value>' strings (docs/rig-findings/debug-commands.md;
 seconds count from the player being in the map, so '1:is_update 0' bounds a cvar that cannot be set at start-up).
-A set may have commands and no cvars: 'stream=' in -Sets with 'stream=1:is_update 0' here.
+A set may have commands and no cvars: 'stream=' in -Sets with 'stream=1:is_update 0' here. Only the test
+commands and cvars of the layer's allow-list run (src/vkcore/debug_script.cpp); add a new cvar there first.
 
 .PARAMETER Only
 Run only these set names (plus 'base', always).

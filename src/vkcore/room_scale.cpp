@@ -303,7 +303,10 @@ RoomScale::Head RoomScale::head(const Input& in) {
         clearance_.reset();
         blinkUntil_.store(now + kBlinkHoldSeconds, std::memory_order_release);
         if (++unsticks_ <= 20) {
-            EVR_LOG("room: the view was black %.1f s; the room moved %.2f m onto the body (%llu)",
+            // With the head's fade off the view stayed clear; the room moves all the same.
+            EVR_LOG("room: %s %.1f s; the room moved %.2f m onto the body (%llu)",
+                    roomScaleSettings().fade ? "the view was black"
+                                             : "the head was in geometry or past the lean cap (fade off)",
                     kStuckBlackSeconds, std::sqrt(head.x * head.x + head.z * head.z),
                     static_cast<unsigned long long>(unsticks_));
         }
@@ -411,10 +414,13 @@ float RoomScale::fade(double seconds) {
     const float pastCap = seconds - leanAt > kPenetrationStaleSeconds
                               ? 0.0f
                               : leanExcess_.load(std::memory_order_relaxed) - kLeanFadeStartMetres;
-    // The blink over a re-anchor, and a glory kill shown as a fade, fade out fully whatever the head does.
+    // A glory kill shown as a fade fades out fully whatever the head does, with the head fade on or off; the
+    // blink over a re-anchor and the head's own fade show only with it on (Fade in walls).
+    const bool headFade = roomScaleSettings().fade;
     const bool glory = seconds < holdBlackUntil_.load(std::memory_order_acquire);
-    const bool blink = seconds < blinkUntil_.load(std::memory_order_acquire) || glory;
-    const float depth = blink ? 1.0f : std::max(inGeometry, pastCap);
+    const bool blink = (headFade && seconds < blinkUntil_.load(std::memory_order_acquire)) || glory;
+    const float headDepth = std::max(inGeometry, pastCap);
+    const float depth = roomscale::shownFadeDepth(headFade, blink, headDepth);
     const float before = fade_.value();
     const float value = fade_.update(depth, dt);
     if (before <= 0.0f && value > 0.0f) {
@@ -429,8 +435,10 @@ float RoomScale::fade(double seconds) {
     if (deepSeconds_ < 0.0 && contactSeconds_ >= 0.0 && roomscale::fadeTarget(depth, {}) >= 1.0f) {
         deepSeconds_ = seconds - dt; // the head reached full depth
     }
-    // Fully black from the head (not a blink or a glory kill) for too long: ask for the room to move.
-    if (value >= 1.0f && !blink) {
+    // Fully black from the head (not a blink or a glory kill) for too long: ask for the room to move. With
+    // the head fade off the view stays clear, and the head's depth alone counts.
+    const bool headBlack = headFade ? value >= 1.0f : roomscale::fadeTarget(headDepth, {}) >= 1.0f;
+    if (headBlack && !blink) {
         if (blackSince_ < 0.0) {
             blackSince_ = seconds;
         } else if (seconds - blackSince_ >= kStuckBlackSeconds) {

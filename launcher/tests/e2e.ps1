@@ -2,6 +2,9 @@
 # every settings folder is a fake tree under -Root, and the launcher's data folder is there too.
 # Needs a Release build of launcher\EternalVR.sln. Steam must be running (preflight checks it) and an
 # OpenXR runtime must be set; nothing outside -Root is written.
+# Not covered here: the window's own finisher start, the HKCU registration itself (only its refusal with
+# --test-exe), the disable variables of known layers (they come from this PC's registry), NVIDIA's downloaded
+# DLSS DLL (only a file that fails its pin) and a runtime that answers the probe.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File launcher\tests\e2e.ps1 [-Root <dir>]
 param(
     [string]$Root = $(if ($env:EVR_TEST_TMP) { Join-Path $env:EVR_TEST_TMP 'e2e' } else { Join-Path $env:TEMP 'evr-launcher-e2e' }),
@@ -35,7 +38,9 @@ function New-Tree([string]$dir) {
     [IO.File]::WriteAllText("$($t.Remote)\PROFILE\profile.bin", 'profile')
     [IO.File]::WriteAllText("$($t.Remote)\GAME-AUTOSAVE0\game.details", 'save')
     [IO.File]::WriteAllText("$($t.Layer)\VK_LAYER_ETERNALVR.json", '{}')
-    [IO.File]::WriteAllText("$($t.Layer)\EternalVR.dll", 'stand-in')
+    # The stand-in game is built with the launcher's version, so as the layer it passes the version check of a
+    # Release launcher (which refuses a layer without a version).
+    Copy-Item -LiteralPath $fake -Destination "$($t.Layer)\EternalVR.dll"
     if ($Runtime) { [IO.File]::WriteAllText("$($t.Data)\launcher.ini", "schema_version = 2`nruntime = $Runtime`n") }
     return $t
 }
@@ -56,10 +61,23 @@ function Test-Output([string]$Path, [string]$Pattern) {
 function Wait-Marker($t, [string]$State) {
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline) {
-        if ((Test-Path "$($t.Data)\SESSION_PENDING") -and ((Get-Content "$($t.Data)\SESSION_PENDING") -contains "state = $State")) { return $true }
+        # The launcher may be writing the marker: a read that meets it busy is tried again.
+        try {
+            if ((Test-Path "$($t.Data)\SESSION_PENDING") -and ((Get-Content "$($t.Data)\SESSION_PENDING") -contains "state = $State")) { return $true }
+        } catch [System.IO.IOException] { }
         Start-Sleep -Milliseconds 100
     }
     return $false
+}
+
+# Stops the run when a started launcher never reaches the marker state: every later check of the section
+# would fail for a reason that looks unrelated.
+function Assert-Marker($t, [string]$State, $Launcher, [string]$Out) {
+    if (Wait-Marker $t $State) { Write-Host "  ok   session marker reached state '$State'"; return }
+    Write-Host "  FAIL the launcher did not reach session state '$State' within 30 s (its output: $Out)"
+    if ($Launcher -and -not $Launcher.HasExited) { Stop-Process -Id $Launcher.Id -Force -ErrorAction SilentlyContinue }
+    Write-Host "E2E FAILED: stopped at a missed session marker"
+    exit 1
 }
 
 function Start-Launcher($t, [string[]]$Extra, [string]$Out) {
@@ -99,6 +117,12 @@ Check ([bool]($record | Where-Object { $_ -like 'env:ETERNALVR_WINDOW=*,*,*,*' }
 Check ([bool]($record | Where-Object { $_ -like 'cmdline=*+r_TAASafeMode 0*+r_fullscreen 0*' })) 'stereo cvars on the command line'
 Check (-not ($record | Where-Object { $_ -like 'cmdline=*+map*' })) 'no +map: the game starts normally'
 Check ([bool]($record | Where-Object { $_ -like 'env:ETERNALVR_LOG_DIR=*\data\logs\*' })) 'log folder under the data folder'
+# The fake layer folder has no OpenXR loader: the probe's own process says so, and the launch goes on at Auto.
+Check (Test-Output "$($t.Dir)\launcher.out" 'failed: the OpenXR loader is missing') 'the headset probe ran in its own process and answered'
+Check ($record -contains 'env:ETERNALVR_RENDER_SIZE=auto') 'no answer from the runtime: the render size is Auto'
+if (-not $Runtime -and -not $env:XR_RUNTIME_JSON) {
+    Check (-not ($record | Where-Object { $_ -like 'env:XR_RUNTIME_JSON=*' })) 'system runtime: no XR_RUNTIME_JSON'
+}
 $replaced = @(Get-ChildItem "$($t.Data)\snapshots" -Recurse -Filter 'DOOMEternalConfig.local' | Where-Object { $_.FullName -like '*\replaced\*' })
 $sessionText = if ($replaced.Count -eq 1) { [IO.File]::ReadAllText($replaced[0].FullName) } else { '' }
 Check ($sessionText -match 'r_windowPosY "-?\d+"' -and $sessionText -match 'r_windowWidth "\d+"') 'the stand-in saved the placed window on exit'
@@ -116,7 +140,7 @@ Write-Host "2. launcher killed mid-session, recovery at the next start"
 $t = New-Tree (Join-Path $Root 'crash')
 Set-FakeGame $t 6000
 $p = Start-Launcher $t @('--launch') "$($t.Dir)\launcher.out"
-[void](Wait-Marker $t 'running')
+Assert-Marker $t 'running' $p "$($t.Dir)\launcher.out"
 Stop-Process -Id $p.Id -Force
 $p.WaitForExit()
 Check (Test-Path "$($t.Data)\SESSION_PENDING") 'marker left behind by the killed launcher'
@@ -134,7 +158,7 @@ Write-Host "2b. launcher killed mid-session, the session finisher restores when 
 $t = New-Tree (Join-Path $Root 'finisher')
 Set-FakeGame $t 6000
 $p = Start-Launcher $t @('--launch') "$($t.Dir)\launcher.out"
-[void](Wait-Marker $t 'running')
+Assert-Marker $t 'running' $p "$($t.Dir)\launcher.out"
 # The window starts the finisher with its own path options; start it the same way the window would.
 $f = Start-Launcher $t @('--finish-session') "$($t.Dir)\finisher.out"
 Stop-Process -Id $p.Id -Force
@@ -150,7 +174,7 @@ Write-Host "2c. the finisher leaves the restore to a launcher that is still open
 $t = New-Tree (Join-Path $Root 'finisher-open')
 Set-FakeGame $t 3000
 $p = Start-Launcher $t @('--launch') "$($t.Dir)\launcher.out"
-[void](Wait-Marker $t 'running')
+Assert-Marker $t 'running' $p "$($t.Dir)\launcher.out"
 $f = Start-Launcher $t @('--finish-session') "$($t.Dir)\finisher.out"
 $p.WaitForExit()
 Check ($f.WaitForExit(30000) -and $f.ExitCode -eq 0) 'the finisher exited quietly'
@@ -261,13 +285,126 @@ Write-Host "6. a second launcher on the same data folder is refused"
 $t = New-Tree (Join-Path $Root 'second')
 Set-FakeGame $t 5000
 $p = Start-Launcher $t @('--launch') "$($t.Dir)\launcher.out"
-Check (Wait-Marker $t 'running') 'first launcher running a session'
+Assert-Marker $t 'running' $p "$($t.Dir)\launcher.out"
 $code = Invoke-Launcher $t @('--dry-run') "$($t.Dir)\second.out"
 Check ($code -eq 3 -and (Test-Output "$($t.Dir)\second.out.err" 'already open')) "second launcher refused (exit $code)"
 Check ((Get-Content "$($t.Data)\SESSION_PENDING") -contains 'state = running') 'the first session''s marker is untouched'
 $p.WaitForExit()
 Check ($p.ExitCode -eq 0) "first launcher completed its session (exit $($p.ExitCode))"
 Check ([IO.File]::ReadAllText($t.Local) -eq $expected) 'first session restored'
+
+# The tree's launcher.ini at schema 2 (which reads mode); the -Runtime choice is kept unless the lines name a runtime.
+function Set-Settings($t, [string[]]$Lines) {
+    $all = @('schema_version = 2') + $Lines
+    if ($Runtime -and -not ($Lines | Where-Object { $_ -like 'runtime*' })) { $all += "runtime = $Runtime" }
+    [IO.File]::WriteAllText("$($t.Data)\launcher.ini", ($all -join "`n") + "`n")
+}
+
+# One whole session with the tree's settings; returns the stand-in's record.
+function Invoke-Session($t, [string]$Name) {
+    Remove-Item -LiteralPath $t.Record -ErrorAction SilentlyContinue
+    $code = Invoke-Launcher $t @('--launch') "$($t.Dir)\$Name.out"
+    Check ($code -eq 0) "$Name session exit code 0 (got $code)"
+    return @(Get-Content -LiteralPath $t.Record -ErrorAction SilentlyContinue)
+}
+
+function Has-Line($record, [string]$Like) { [bool]($record | Where-Object { $_ -like $Like }) }
+
+Write-Host "7. mono: no stereo cvars, window, render size, DLSS or headset probe"
+$t = New-Tree (Join-Path $Root 'mono')
+Set-FakeGame $t 100
+Set-Settings $t @('mode = mono', 'anti_aliasing = dlss')
+$record = Invoke-Session $t 'mono'
+Check (-not (Has-Line $record 'env:ETERNALVR_MODE=*')) 'no ETERNALVR_MODE'
+Check ($record -contains 'env:ETERNALVR_ALTERNATE_EYES=0') 'alternate eyes off'
+Check ($record -contains 'env:ETERNALVR_PACE=off') 'frame pacing off'
+Check ($record -contains 'env:ETERNALVR_UI_LAYER=1') 'UI layer on in mono too'
+Check (-not (Has-Line $record 'env:ETERNALVR_WINDOW=*')) 'the layer places no window'
+Check (-not (Has-Line $record 'env:ETERNALVR_RENDER_SIZE=*')) 'no render size'
+Check (-not (Has-Line $record 'env:ETERNALVR_STEREO_DLSS=*')) 'no DLSS in mono'
+Check (Has-Line $record 'cmdline=*+r_hdrDisplay 0*') 'forced cvars on the command line'
+Check (-not (Has-Line $record 'cmdline=*r_TAASafeMode*') -and -not (Has-Line $record 'cmdline=*r_antialiasing*')) 'no stereo cvars on the command line'
+Check (-not (Test-Output "$($t.Dir)\mono.out" 'openxr probe')) 'no headset probe in mono'
+Check ([IO.File]::ReadAllText($t.Local) -eq $expected) 'forced and window keys restored, the player''s change kept'
+
+Write-Host "8. anti-aliasing: DLSS with the player's DLL, a download that fails its pin, and off"
+$t = New-Tree (Join-Path $Root 'aa')
+Set-FakeGame $t 100
+$dll = "$($t.Dir)\dlss-file\nvngx_dlss.dll"
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dll) | Out-Null
+[IO.File]::WriteAllText($dll, 'not a DLL')
+Set-Settings $t @('anti_aliasing = dlss', 'dlss_quality = performance', 'dlss_version = file', "dlss_dll_path = $dll", 'dlss_preset = J')
+$record = Invoke-Session $t 'dlss-file'
+Check ($record -contains 'env:ETERNALVR_STEREO_DLSS=1') 'DLSS on'
+Check ($record -contains 'env:ETERNALVR_STEREO_DLSS_QUALITY=performance') 'DLSS quality passed'
+Check ($record -contains "env:ETERNALVR_DLSS_DLL=$dll") 'the player''s DLL passed from where it is'
+Check ($record -contains 'env:ETERNALVR_DLSS_PRESET=J') 'DLSS preset passed'
+Check (Has-Line $record 'cmdline=*+r_antialiasing 2*') 'r_antialiasing 2 on the command line'
+Check (-not (Has-Line $record 'env:ETERNALVR_STEREO_TAA=*')) 'per-eye TAA not switched off'
+# NVIDIA's newest listed DLL, in its place in the data folder but not the pinned file: never passed.
+$dlssList = "$(Split-Path -Parent $exe)\data\dlss-downloads.txt"
+$newest = Get-Content -LiteralPath $dlssList | Where-Object { $_ -match '^\s*dll\s*\|' } |
+    ForEach-Object { ($_ -split '\|')[1].Trim() } | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
+$pinFail = "$($t.Data)\dlss\$newest\nvngx_dlss.dll"
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $pinFail) | Out-Null
+[IO.File]::WriteAllText($pinFail, 'not NVIDIA''s file')
+Set-Settings $t @('anti_aliasing = dlss', 'dlss_version = newest')
+$record = Invoke-Session $t 'dlss-newest'
+Check ($record -contains 'env:ETERNALVR_STEREO_DLSS=1') 'DLSS on'
+Check (-not (Has-Line $record 'env:ETERNALVR_DLSS_DLL=*')) "a $newest download that fails its size and SHA-256 is not passed"
+Set-Settings $t @('anti_aliasing = off')
+$record = Invoke-Session $t 'aa-off'
+Check ($record -contains 'env:ETERNALVR_STEREO_TAA=0') 'per-eye TAA off'
+Check (Has-Line $record 'cmdline=*+r_antialiasing 0*') 'r_antialiasing 0 on the command line'
+Check (-not (Has-Line $record 'env:ETERNALVR_STEREO_DLSS=*')) 'no DLSS'
+
+Write-Host "9. a chosen runtime and a loader the probe cannot load"
+$t = New-Tree (Join-Path $Root 'runtime')
+Set-FakeGame $t 100
+$manifest = "$($t.Dir)\runtime\evr-test-runtime.json"
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $manifest) | Out-Null
+[IO.File]::WriteAllText($manifest, '{}')
+# Not a DLL: the probe's process fails to load it and never reaches a runtime.
+[IO.File]::WriteAllText("$($t.Layer)\openxr_loader.dll", 'not a DLL')
+Set-Settings $t @("runtime = $manifest")
+$record = Invoke-Session $t 'runtime'
+Check ($record -contains "env:XR_RUNTIME_JSON=$manifest") 'XR_RUNTIME_JSON names the chosen runtime'
+Check (Test-Output "$($t.Dir)\runtime.out" '(chosen for this launch)') 'preflight names the chosen runtime'
+Check (Test-Output "$($t.Dir)\runtime.out" "openxr probe ($manifest): failed: loading") 'the probe ran with the chosen runtime and the layer''s loader'
+Check (Test-Output "$($t.Dir)\runtime.out" 'headset check:') 'the failed probe is logged as a headset check'
+Check ($record -contains 'env:ETERNALVR_RENDER_SIZE=auto') 'no answer from the runtime: the render size is Auto'
+Set-Settings $t @("runtime = $($t.Dir)\runtime\missing.json")
+$code = Invoke-Launcher $t @('--launch') "$($t.Dir)\runtime-missing.out"
+Check ($code -eq 1 -and (Test-Output "$($t.Dir)\runtime-missing.out" 'chosen OpenXR runtime manifest does not exist')) "a missing chosen runtime is refused (exit $code)"
+
+Write-Host "10. the HKCU route is never taken with the stand-in"
+$t = New-Tree (Join-Path $Root 'hkcu')
+Set-FakeGame $t 100
+$code = Invoke-Launcher $t @('--register-hkcu', '--launch') "$($t.Dir)\launcher.out"
+Check ($code -eq 64 -and (Test-Output "$($t.Dir)\launcher.out.err" 'cannot be combined with --test-exe')) "--register-hkcu refused with --test-exe (exit $code)"
+Check (-not (Test-Path $t.Record)) 'the stand-in game was not started'
+Check (-not (Test-Path "$($t.Data)\REGISTRATION_PENDING")) 'no registration marker'
+
+Write-Host "11. multiplayer arguments"
+$t = New-Tree (Join-Path $Root 'multiplayer')
+Set-FakeGame $t 100
+# Spellings the game reads the same way: quotes, backslashes, '+ cmd', '+set' and '+seta'. Then one argument
+# per pattern of the launcher's own list, so a pattern added there is covered too.
+$refused = @('+map "game\pvp\pvp_zap"', '+map game//pvp/pvp_inferno', '+ connect 127.0.0.1', '+connect_lobby 109775241', '+set net_serverDedicated 1',
+             '+seta si_maxPlayers 8', '+g_gametype 2', '-BATTLEMODE')
+$patterns = Get-Content -LiteralPath "$(Split-Path -Parent $exe)\data\refused-args.txt" |
+    Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*#' } | ForEach-Object { ($_ -split '\|')[0].Trim() }
+$refused += @($patterns | ForEach-Object { if ($_ -match '[_/=-]$') { $_ + 'x' } else { $_ } })
+$i = 0
+foreach ($a in $refused) {
+    $i++
+    Set-Settings $t @("extra_args = $a")
+    $code = Invoke-Launcher $t @('--launch') "$($t.Dir)\refused$i.out"
+    Check ($code -eq 1 -and (Test-Output "$($t.Dir)\refused$i.out" 'single-player only') -and -not (Test-Path $t.Record)) "refused, game not started: $a (exit $code)"
+}
+Set-Settings $t @('extra_args = +com_showFPS 1 +map game/sp/e1m1_intro/e1m1_intro')
+$record = Invoke-Session $t 'single-player'
+Check (Has-Line $record 'cmdline=*+com_showFPS 1 +map game/sp/e1m1_intro/e1m1_intro*') 'single-player arguments passed after the forced cvars'
 
 if ($script:failures -gt 0) { Write-Host "E2E FAILED: $script:failures check(s)"; exit 1 }
 Write-Host 'E2E OK'

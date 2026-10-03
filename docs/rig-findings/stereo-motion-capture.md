@@ -7,17 +7,19 @@ without a headset. RVAs are in Steam build 25216728.
 
 ## 1. The capture (`src/vkcore/motion_capture.*`, `src/ui_layer/motion_target.*`)
 
-`ETERNALVR_CAPTURE_MOTION=<dir>[,<every N pairs>]` (default every 60 pairs; per-eye TAA and the UI layer
-must be on, as they are by default under Route S):
+`ETERNALVR_CAPTURE_MOTION=<dir>[,<every N pairs>]` (default every 60 pairs; Route S with its exposure hook
+holding the exposure index, and the UI layer, all as by default; with per-eye TAA off the hook holds only while
+`ETERNALVR_STEREO_EXPOSURE_ONCE` is on):
 
 - Images that could be velocity targets (2D, one mip and layer, a two-channel format, sampled and drawn to)
   get `TRANSFER_SRC` when the game creates them. The game makes about 200 `R16G16_SFLOAT` images of that
   shape, so their layouts are followed only once the capture finds one bound as velocity.
-- The exposure hook of per-eye TAA (render-view job, the eye's tag known) reads the post-process context's
-  velocity pointer (+0x60; +0x68 is the other one of the pair). It is an idImage, not a render target:
-  engine format 26, flags 0x307, bit 8 set, so an image set. The set is idImage + 0xE8; its first int is the
-  member in use and the VkImages start at + 0x108 (the barrier builder 0x1C49270 reads it so). The member
-  changes from frame to frame, so the VkImage is resolved there, while the render is recorded.
+- The exposure hook (`src/vkcore/exposure_hooks.*`, render-view job, the eye's tag known) reads the
+  post-process context's velocity pointer (+0x60; +0x68 is the other one of the pair). It is an idImage, not
+  a render target: engine format 26, flags 0x307, bit 8 set, so an image set. The set is idImage + 0xE8; its
+  first int is the member in use and the VkImages start at + 0x108 (the barrier builder 0x1C49270 reads it
+  so). The member changes from frame to frame, so the VkImage is resolved there, while the render is
+  recorded.
 - With eye R's copy of each Nth pair both eyes' images are copied to host memory and written as
   `mv-<pid>-p<pair>-L.raw` / `-R.raw` with a `.txt` file (format, size, tick, pointers, statistics). The
   in-headset capture takes one too, as `<capture>-MV-L.raw` and so on next to its PNG files.

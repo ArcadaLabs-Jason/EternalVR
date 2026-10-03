@@ -28,15 +28,15 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("45", env["ETERNALVR_SNAP_DEGREES"]);
             Assert.Equal("230", env["ETERNALVR_TURN_RATE"]);
             Assert.Equal("right", env["ETERNALVR_HANDEDNESS"]);
-            Assert.Equal("head", env["ETERNALVR_LOCOMOTION"]);
+            Assert.Equal("look", env["ETERNALVR_LOCOMOTION"]);
             Assert.Equal("hold", env["ETERNALVR_DOSSIER"]);
-            var s = new LauncherSettings { Turn = TurnMode.Snap, SnapDegrees = 120, TurnRate = 90, Hand = Handedness.LeftMirrored, Locomotion = LocomotionMode.Hand, Dossier = DossierPress.Tap };
+            var s = new LauncherSettings { Turn = TurnMode.Snap, SnapDegrees = 120, TurnRate = 90, Hand = Handedness.LeftMirrored, Locomotion = LocomotionMode.LeftHand, Dossier = DossierPress.Tap };
             env = Env(LaunchPlanBuilder.Build(Inputs(s)));
             Assert.Equal("snap", env["ETERNALVR_TURN"]);
             Assert.Equal("90", env["ETERNALVR_SNAP_DEGREES"]); // clamped into the layer's range
             Assert.Equal("150", env["ETERNALVR_TURN_RATE"]);
             Assert.Equal("left_mirror", env["ETERNALVR_HANDEDNESS"]);
-            Assert.Equal("hand", env["ETERNALVR_LOCOMOTION"]);
+            Assert.Equal("left", env["ETERNALVR_LOCOMOTION"]);
             Assert.Equal("tap", env["ETERNALVR_DOSSIER"]);
         }
 
@@ -165,14 +165,14 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void ControlsAndAntiAliasingSettingsRoundTrip()
         {
-            var s = new LauncherSettings { Turn = TurnMode.Off, SnapDegrees = 30, TurnRate = 300, Hand = Handedness.Left, Locomotion = LocomotionMode.Hand, AntiAliasing = AntiAliasingMode.Dlss, Dossier = DossierPress.Tap };
+            var s = new LauncherSettings { Turn = TurnMode.Off, SnapDegrees = 30, TurnRate = 300, Hand = Handedness.Left, Locomotion = LocomotionMode.RightHand, AntiAliasing = AntiAliasingMode.Dlss, Dossier = DossierPress.Tap };
             var back = LauncherSettings.Parse(s.Serialize());
             Assert.Equal(DossierPress.Tap, back.Dossier);
             Assert.Equal(TurnMode.Off, back.Turn);
             Assert.Equal(30, back.SnapDegrees);
             Assert.Equal(300, back.TurnRate);
             Assert.Equal(Handedness.Left, back.Hand);
-            Assert.Equal(LocomotionMode.Hand, back.Locomotion);
+            Assert.Equal(LocomotionMode.RightHand, back.Locomotion);
             Assert.Equal(AntiAliasingMode.Dlss, back.AntiAliasing);
             // A file without the keys (an older launcher's) takes the defaults; junk values do too.
             var old = LauncherSettings.Parse("schema_version = 2\nturn = sideways\nsnap_degrees = lots\n");
@@ -206,7 +206,12 @@ namespace EternalVR.Launcher.Core.Tests
             var old = LauncherSettings.Parse("schema_version = 2\nanti_aliasing = dlss\n");
             Assert.Equal(AntiAliasingMode.Dlss, old.AntiAliasing);
             Assert.Equal("quality", Env(LaunchPlanBuilder.Build(Inputs(old)))["ETERNALVR_STEREO_DLSS_QUALITY"]);
-            Assert.Equal(DlssQuality.Quality, LauncherSettings.Parse("schema_version = 2\ndlss_quality = dlaa\n").Dlss);
+            Assert.Equal(DlssQuality.Quality, LauncherSettings.Parse("schema_version = 2\ndlss_quality = native\n").Dlss);
+            // DLAA: its own name in the file and for the layer.
+            Assert.Equal(DlssQuality.Dlaa, LauncherSettings.Parse("schema_version = 2\ndlss_quality = dlaa\n").Dlss);
+            Assert.Contains("dlss_quality = dlaa", new LauncherSettings { Dlss = DlssQuality.Dlaa }.Serialize());
+            var dlaa = new LauncherSettings { AntiAliasing = AntiAliasingMode.Dlss, Dlss = DlssQuality.Dlaa };
+            Assert.Equal("dlaa", Env(LaunchPlanBuilder.Build(Inputs(dlaa)))["ETERNALVR_STEREO_DLSS_QUALITY"]);
         }
     }
 }

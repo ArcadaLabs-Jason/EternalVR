@@ -198,7 +198,7 @@ if ($Stereo -and -not $NoStereoCvars) {
           '+r_waterGridTAA 0', '+r_refractionTAA 0', '+r_raytracedReflectionsTemporalUpscaleQuality 0') }
                    else { @('+r_TAASafeMode 1', '+r_antialiasing 0', '+r_jitter 0', '+rs_enable 0', '+r_swapInterval 0') }
 }
-$gameArgs = @('+logFile 2', '+com_skipKeyPressOnLoadScreens 1', '+com_skipIntroVideo 1', '+com_skipSignInManager 1',
+$gameArgs = @('+logFile 1', '+com_skipKeyPressOnLoadScreens 1', '+com_skipIntroVideo 1', '+com_skipSignInManager 1',
     '+r_hdrDisplay 0', '+r_motionblur 0', '+r_dof 0', '+r_chromaticAberration 0', '+r_vignette 0') + $stereoCvars + $ExtraArgs
 if ($Map) { $gameArgs += "+map $Map" } # -Map '' starts at the title screen
 $gameEnv = @("VK_ADD_IMPLICIT_LAYER_PATH=$Layer", 'ETERNALVR_ENABLE_LAYER=1', "ETERNALVR_LOG_DIR=$logs")

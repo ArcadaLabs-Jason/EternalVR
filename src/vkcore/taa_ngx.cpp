@@ -2,13 +2,16 @@
 
 #include "features/dlss_dll/dlss_dll.hpp"
 #include "stereo_seq/alternate_eyes.hpp"
+#include "stereo_seq/ngx_eye.hpp"
 #include "stereo_seq/ngx_twin_retry.hpp"
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/seh_filter.hpp"
 #include "vkcore/seq_hooks.hpp"
+#include "vkcore/ui_engine.hpp"
 #include "vkcore/window_timing.hpp"
 
 #include <windows.h>
@@ -16,8 +19,10 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <string>
 
 namespace evr::vkcore {
@@ -31,6 +36,7 @@ constexpr int kNgxSuccess = 0x1;
 constexpr int kNgxFail = static_cast<int>(0xBAD00000u);
 constexpr int kFeatureSuperSampling = 1;
 constexpr const char* kResetParameter = "Reset";
+constexpr const char* kOutputParameter = "Output";
 
 using CreateFn = int (*)(void* commandBuffer, int feature, void* parameters, void** handle);
 using EvaluateFn = int (*)(void* commandBuffer, const void* handle, const void* parameters, void* callback);
@@ -38,6 +44,7 @@ using ReleaseFn = int (*)(void* handle);
 using SetIntFn = void (*)(void* parameters, const char* name, int value);
 using GetIntFn = int (*)(void* parameters, const char* name, int* value);
 using GetUIntFn = int (*)(void* parameters, const char* name, unsigned int* value);
+using GetVoidPointerFn = int (*)(void* parameters, const char* name, void** value);
 
 // The create keys (nvsdk_ngx_defs.h), read back for the log when eye R's feature fails, and the render preset
 // hint for each NVSDK_NGX_PerfQuality_Value (0 MaxPerf, 1 Balanced, 2 MaxQuality, 3 UltraPerformance,
@@ -58,6 +65,8 @@ ReleaseFn g_release = nullptr;
 SetIntFn g_setInt = nullptr;
 GetIntFn g_getInt = nullptr;
 GetUIntFn g_getUInt = nullptr; // optional: only the failure log reads with it
+// Optional: without it each evaluation goes by the tag in flight (counted).
+GetVoidPointerFn g_getVoidPointer = nullptr;
 
 std::once_flag g_installOnce;
 bool g_installed = false;
@@ -69,13 +78,21 @@ std::mutex g_mutex; // g_twins, g_retry
 stereo_seq::NgxTwins g_twins;
 stereo_seq::NgxTwinRetry g_retry;
 
+std::mutex g_eyeMutex; // g_outputs, g_resets
+stereo_seq::NgxOutputBook g_outputs;
+stereo_seq::NgxResetBook g_resets;
+
 struct Counters {
     std::atomic<std::uint64_t> twinCreates{0};
     std::atomic<std::uint64_t> twinFailures{0};
     std::atomic<std::uint64_t> evaluates[2]{};
     std::atomic<std::uint64_t> evaluatesNoTwin{0};
     std::atomic<std::uint64_t> twinResets{0};
+    std::atomic<std::uint64_t> leftResets{0};
     std::atomic<std::uint64_t> releases{0};
+    std::atomic<std::uint64_t> ownTags{0};
+    std::atomic<std::uint64_t> inFlightTags{0};
+    std::atomic<std::uint64_t> inFlightDiffers{0};
     std::atomic<int> logged{0};
     std::atomic<int> failuresLogged{0};
 } g_counters;
@@ -166,14 +183,85 @@ void createTwin(void* commandBuffer, const void* handle, void* parameters) {
     }
 }
 
+// The first two handles of an NVSDK_NGX_Resource_VK (nvsdk_ngx_defs_vk.h): its image view, then its image.
+// Read under a handler: the pointer is the game's, set for this evaluation.
+bool readResourceHandles(const void* resource, std::uint64_t (&out)[2]) {
+    __try {
+        std::memcpy(out, resource, sizeof(out));
+        return true;
+    } __except (accessViolationOnly(GetExceptionCode())) {
+        return false;
+    }
+}
+
+// The render's own tag: the one its output selector noted for the evaluation's `Output` image. Either
+// handle is compared (an image view never has an image's handle).
+std::optional<stereo_seq::RenderTag> ownTag(const void* parameters) {
+    void* output = nullptr;
+    std::uint64_t handles[2] = {};
+    if (!g_getVoidPointer ||
+        g_getVoidPointer(const_cast<void*>(parameters), kOutputParameter, &output) != kNgxSuccess ||
+        !output || !readResourceHandles(output, handles)) {
+        return std::nullopt;
+    }
+    std::lock_guard lock(g_eyeMutex);
+    for (const std::uint64_t handle : handles) {
+        if (auto tag = g_outputs.find(handle)) {
+            return tag;
+        }
+    }
+    return std::nullopt;
+}
+
+stereo_seq::NgxEyePick pickEye(const void* parameters) {
+    const stereo_seq::NgxEyePick pick = stereo_seq::pickNgxEye(ownTag(parameters), seqTagInFlight());
+    if (pick.own) {
+        ++g_counters.ownTags;
+    }
+    if (pick.fallback) {
+        ++g_counters.inFlightTags;
+    }
+    if (pick.inFlightDiffers) {
+        ++g_counters.inFlightDiffers;
+    }
+    return pick;
+}
+
+// The per-eye hook reset this render's history.
+bool takeReset(const stereo_seq::RenderTag& tag) {
+    std::lock_guard lock(g_eyeMutex);
+    return g_resets.take(tag.eye, tag.tick);
+}
+
+// Evaluates `feature`, with "Reset" raised for this evaluation only when `reset`.
+int evaluate(void* commandBuffer, const void* feature, const void* parameters, void* callback, bool reset) {
+    if (!reset) {
+        return g_evaluate(commandBuffer, feature, parameters, callback);
+    }
+    auto* params = const_cast<void*>(parameters);
+    int gameReset = 0;
+    if (g_getInt(params, kResetParameter, &gameReset) != kNgxSuccess) {
+        gameReset = 0;
+    }
+    g_setInt(params, kResetParameter, 1);
+    const int result = g_evaluate(commandBuffer, feature, parameters, callback);
+    g_setInt(params, kResetParameter, gameReset);
+    return result;
+}
+
 int evaluateHook(void* commandBuffer, const void* handle, const void* parameters, void* callback) {
     if (!g_active.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch()) {
         return g_evaluate(commandBuffer, handle, parameters, callback);
     }
-    const std::optional<stereo_seq::RenderTag> tag = seqTagInFlight();
+    const std::optional<stereo_seq::RenderTag> tag = pickEye(parameters).tag;
     if (!tag || tag->eye != stereo_seq::Eye::Right) {
         ++g_counters.evaluates[0];
-        return g_evaluate(commandBuffer, handle, parameters, callback);
+        // Eye L's history is reset with eye R's (the per-eye hook resets both eyes of a tick).
+        const bool reset = tag && tag->eye == stereo_seq::Eye::Left && takeReset(*tag);
+        if (reset) {
+            ++g_counters.leftResets;
+        }
+        return evaluate(commandBuffer, handle, parameters, callback, reset);
     }
     std::uintptr_t twin = 0;
     bool reset = false;
@@ -191,25 +279,17 @@ int evaluateHook(void* commandBuffer, const void* handle, const void* parameters
                                       stereo_seq::eyeFrameStep(seqAlternateEyes()));
         }
     }
+    // Taken either way, so that a reset noted for this render is not left for a later one.
+    reset = takeReset(*tag) || reset;
     if (!twin) {
         ++g_counters.evaluatesNoTwin;
         return g_evaluate(commandBuffer, handle, parameters, callback);
     }
     ++g_counters.evaluates[1];
-    auto* params = const_cast<void*>(parameters);
-    int gameReset = 0;
     if (reset) {
         ++g_counters.twinResets;
-        if (g_getInt(params, kResetParameter, &gameReset) != kNgxSuccess) {
-            gameReset = 0;
-        }
-        g_setInt(params, kResetParameter, 1);
     }
-    const int result = g_evaluate(commandBuffer, reinterpret_cast<const void*>(twin), parameters, callback);
-    if (reset) {
-        g_setInt(params, kResetParameter, gameReset);
-    }
-    return result;
+    return evaluate(commandBuffer, reinterpret_cast<const void*>(twin), parameters, callback, reset);
 }
 
 int releaseHook(void* handle) {
@@ -290,6 +370,8 @@ bool installNgxTwins() {
         g_setInt = reinterpret_cast<SetIntFn>(exported(image, "NVSDK_NGX_Parameter_SetI"));
         g_getInt = reinterpret_cast<GetIntFn>(exported(image, "NVSDK_NGX_Parameter_GetI"));
         g_getUInt = reinterpret_cast<GetUIntFn>(exported(image, "NVSDK_NGX_Parameter_GetUI"));
+        g_getVoidPointer =
+            reinterpret_cast<GetVoidPointerFn>(exported(image, "NVSDK_NGX_Parameter_GetVoidPointer"));
         if (!g_create || !evaluate || !release || !g_setInt || !g_getInt) {
             return;
         }
@@ -303,9 +385,12 @@ bool installNgxTwins() {
         }
         readTestFailures();
         g_installed = true;
-        EVR_LOG("%s: NGX exports hooked (evaluate RVA 0x%X, release RVA 0x%X; create RVA 0x%X)", kTag,
-                image.rva(static_cast<std::byte*>(evaluate)), image.rva(static_cast<std::byte*>(release)),
-                image.rva(reinterpret_cast<std::byte*>(g_create)));
+        EVR_LOG("%s: NGX exports hooked (evaluate RVA 0x%X, release RVA 0x%X; create RVA 0x%X); each "
+                "evaluation's eye by %s",
+                kTag, image.rva(static_cast<std::byte*>(evaluate)),
+                image.rva(static_cast<std::byte*>(release)),
+                image.rva(reinterpret_cast<std::byte*>(g_create)),
+                g_getVoidPointer ? "its Output image (the tag in flight without one)" : "the tag in flight");
     });
     return g_installed;
 }
@@ -349,6 +434,29 @@ bool retryNgxTwins() {
     return true;
 }
 
+void noteNgxOutput(const void* target, const stereo_seq::RenderTag& tag) {
+    if (!g_active.load(std::memory_order_acquire) || !g_getVoidPointer) {
+        return;
+    }
+    // The render target's colour image, or an image set's member in use (read as the motion capture does).
+    const auto fields = ui_engine::readImageOrTarget(reinterpret_cast<std::uintptr_t>(target));
+    if (!fields) {
+        return;
+    }
+    std::uint64_t image = fields->vkImage;
+    if ((fields->flags & ui_layer::engine::kImageSetFlag) != 0) {
+        const auto member = ui_engine::readSetMember(fields->vkImage);
+        image = member ? member->second : 0;
+    }
+    std::lock_guard lock(g_eyeMutex);
+    g_outputs.note(image, tag);
+}
+
+void noteNgxReset(stereo_seq::Eye eye, std::uint64_t gameFrame) {
+    std::lock_guard lock(g_eyeMutex);
+    g_resets.note(eye, gameFrame);
+}
+
 NgxCounters ngxCounters() {
     NgxCounters c;
     c.twinCreates = g_counters.twinCreates.load();
@@ -357,7 +465,11 @@ NgxCounters ngxCounters() {
     c.evaluates[1] = g_counters.evaluates[1].load();
     c.evaluatesNoTwin = g_counters.evaluatesNoTwin.load();
     c.twinResets = g_counters.twinResets.load();
+    c.leftResets = g_counters.leftResets.load();
     c.releases = g_counters.releases.load();
+    c.ownTags = g_counters.ownTags.load();
+    c.inFlightTags = g_counters.inFlightTags.load();
+    c.inFlightDiffers = g_counters.inFlightDiffers.load();
     return c;
 }
 

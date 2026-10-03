@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -109,14 +110,25 @@ namespace EternalVR.Launcher
                 bar.Style = ProgressBarStyle.Marquee;
                 var version = release.Version;
                 installing = true;
-                var installed = await Task.Run(() =>
+                IReadOnlyList<string> installed, removed = null;
+                try
                 {
-                    UpdatePackage.Stage(zip, staging, version);
-                    return UpdatePackage.Install(staging, programDir);
-                });
-                installing = false;
-                log($"update: installed EternalVR {release.Version} over {programDir} ({installed.Count} files)");
+                    installed = await Task.Run(() =>
+                    {
+                        UpdatePackage.Stage(zip, staging, version);
+                        return UpdatePackage.Install(staging, programDir, out removed);
+                    });
+                }
+                finally
+                {
+                    // Whatever went wrong, the dialog can be closed again (Install puts the old files back itself).
+                    installing = false;
+                }
+                // The files are replaced: from here on the new release is the one on disk, and closing restarts into it.
                 Choice = UpdateChoice.Installed;
+                log($"update: installed EternalVR {release.Version} over {programDir} ({installed.Count} files)");
+                if (removed != null && removed.Count > 0)
+                    log("update: removed what the new release no longer ships: " + string.Join(", ", removed));
                 TryClean(Path.Combine(updatesDir, release.Version.ToString()));
                 DialogResult = DialogResult.OK;
             }
@@ -126,17 +138,34 @@ namespace EternalVR.Launcher
             }
             catch (Exception e) when (e is HttpRequestException || e is IOException || e is UnauthorizedAccessException || e is InvalidDataException)
             {
-                installing = false;
                 log("update failed: " + e.Message);
-                TryClean(Path.Combine(updatesDir, release.Version.ToString()));
-                if (IsDisposed) return;
-                bar.Visible = false;
-                bar.Style = ProgressBarStyle.Continuous;
-                status.ForeColor = Color.Firebrick;
-                status.Text = "The update failed: " + e.Message + " Nothing was changed; you can also download it from the release page.";
-                install.Text = "Try again";
-                install.Enabled = skip.Enabled = true;
+                Failed(e.Message);
             }
+            catch (Exception e)
+            {
+                // Anything else (a path or security error) is shown here too: it must not escape this async void.
+                log("update failed: " + e);
+                Failed(e.GetType().Name + ": " + e.Message);
+            }
+        }
+
+        private void Failed(string why)
+        {
+            TryClean(Path.Combine(updatesDir, release.Version.ToString()));
+            if (IsDisposed) return;
+            bar.Visible = false;
+            bar.Style = ProgressBarStyle.Continuous;
+            status.ForeColor = Color.Firebrick;
+            if (Choice == UpdateChoice.Installed)
+            {
+                // The files were replaced before the failure: nothing to try again, and closing restarts into the new release.
+                status.Text = $"EternalVR {release.Version} is installed; a step after it failed: {why} The launcher restarts with it when this window closes.";
+                later.Text = "Close";
+                return;
+            }
+            status.Text = "The update failed: " + why + " Nothing was changed; you can also download it from the release page.";
+            install.Text = "Try again";
+            install.Enabled = skip.Enabled = true;
         }
 
         private void TryClean(string dir)

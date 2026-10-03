@@ -15,6 +15,9 @@
 // game's GUI target: a present that carries it keeps it in the private image (keepPanel, one copy or blit,
 // only for a present whose image the window needs), and a Load puts it over the image the window gets,
 // cut to the band as an eye would be (stereo_seq::panelMirror decides which present does what).
+//
+// A blit needs a graphics queue. A present from a family without one (the game has presented from its
+// compute queue) gets no crop, and no panel for a swapchain that is not RGBA8: the window shows the eye.
 
 #include "stereo_seq/desktop_window.hpp"
 #include "vkcore/dispatch.hpp"
@@ -25,11 +28,13 @@ namespace evr::vkcore {
 
 class DesktopMirror {
 public:
-    // Records `step` into `cb` for the swapchain image `source` (TRANSFER_SRC_OPTIMAL on entry), then the
-    // crop when the image reaches the window (`toWindow`). Returns the layout `source` is left in:
-    // TRANSFER_SRC_OPTIMAL, or TRANSFER_DST_OPTIMAL after a load, a clear or a crop.
+    // Records `step` into `cb` (of queue family `family`) for the swapchain image `source`
+    // (TRANSFER_SRC_OPTIMAL on entry), then the crop when the image reaches the window (`toWindow`). Returns
+    // the layout `source` is left in: TRANSFER_SRC_OPTIMAL, or TRANSFER_DST_OPTIMAL after a load, a clear or
+    // a crop.
     VkImageLayout record(DeviceData& dev,
                          VkCommandBuffer cb,
+                         std::uint32_t family,
                          VkImage source,
                          VkFormat format,
                          VkExtent2D extent,
@@ -46,9 +51,10 @@ public:
                                  stereo_seq::MirrorStep eyeStep);
     // Keeps the game's GUI target `gui` (R8G8B8A8, TRANSFER_SRC_OPTIMAL, `guiExtent`) in the private image,
     // for a swapchain of `format` and `extent`, so that a Load shows it. False (nothing kept) when the
-    // sizes differ or the format cannot take it.
+    // sizes differ, the format cannot take it, or it needs a blit and `cb`'s queue family has no graphics.
     bool keepPanel(DeviceData& dev,
                    VkCommandBuffer cb,
+                   std::uint32_t family,
                    VkImage gui,
                    VkExtent2D guiExtent,
                    VkFormat format,
@@ -75,6 +81,8 @@ private:
                   std::uint32_t y,
                   std::uint32_t height);
     bool canBlit(DeviceData& dev, VkFormat format);
+    // A blit needs a graphics queue; the game has presented from a compute-only family.
+    bool blitsOn(DeviceData& dev, std::uint32_t family);
     bool canTakePanel(DeviceData& dev, VkFormat format);
     void setMenu(bool menu);
 
@@ -87,6 +95,7 @@ private:
     bool failed_ = false;
     VkFormat blitChecked_ = VK_FORMAT_UNDEFINED;
     bool blitOk_ = false;
+    bool noGraphicsLogged_ = false;
     VkFormat panelChecked_ = VK_FORMAT_UNDEFINED;
     bool panelOk_ = false;
     bool menu_ = false;

@@ -1,8 +1,8 @@
 #pragma once
 
 // How glory kills are shown in the headset (ETERNALVR_GLORY_KILLS, docs/VR_HEAD_TRACKED.md). A glory kill
-// (the game's sync kill, idPlayer::syncMaster set) moves and turns the camera on its own, which is the
-// motion some players feel. The options:
+// (the game's sync kill: idPlayer::savedSyncEntity set to a `syncmelee/...` entity) moves and turns the
+// camera on its own, which is the motion some players feel. The options:
 // - Follow: the view follows the kill's camera and turns with the head from there (the first builds'
 //   behaviour, and the default).
 // - Steady: the view stays on the kill's animated eye but keeps the heading it had when the kill started;
@@ -20,6 +20,11 @@
 namespace evr::comfort {
 
 enum class GloryView { Follow, Steady, Fade, Screen };
+
+// Whether a sync entity's entityDef name is a kill's (`syncmelee/<demon>`, the chainsaw's [inferred]) rather
+// than a pickup's animation (`interact/...`: a Sentinel Crystal, a Praetor token, a rune, a mod bot). An
+// unreadable (empty) name counts as a kill.
+bool isKillSync(std::string_view entityDefName);
 
 // "follow", "steady", "fade" or "screen", any case, surrounding spaces ignored; nullopt otherwise.
 std::optional<GloryView> parseGloryView(std::string_view text);
@@ -41,8 +46,8 @@ public:
         bool ended = false;   // the previous frame was its last
     };
 
-    // One game frame: `sync` is idPlayer::syncMaster set, `forcedView` the forced-view gate, `seconds` a
-    // monotonic clock. A non-finite clock changes nothing.
+    // One game frame: `sync` is a kill's sync entity set (isKillSync), `forcedView` the forced-view gate,
+    // `seconds` a monotonic clock. A non-finite clock changes nothing.
     Step update(bool sync, bool forcedView, double seconds);
 
     [[nodiscard]] bool active() const { return active_; }

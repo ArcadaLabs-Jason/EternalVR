@@ -51,6 +51,10 @@ const char* offhandModeName(OffhandMode mode) {
     return "game";
 }
 
+const char* weaponArmModeName(WeaponArmMode mode) {
+    return mode == WeaponArmMode::Ik ? "ik" : "game";
+}
+
 const char* armReasonName(ArmReason reason) {
     switch (reason) {
     case ArmReason::Controller:
@@ -105,6 +109,10 @@ ArmDecision decideArm(const ArmSignals& s, OffhandMode mode) {
         return game(ArmReason::Untracked);
     }
     return {true, ArmReason::Controller};
+}
+
+ArmDecision decideWeaponArm(const ArmSignals& signals, WeaponArmMode mode) {
+    return decideArm(signals, mode == WeaponArmMode::Ik ? OffhandMode::Free : OffhandMode::Game);
 }
 
 float ArmBlend::update(bool controller, float dtSeconds, float blendSeconds, float holdSeconds) {

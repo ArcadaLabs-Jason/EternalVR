@@ -98,7 +98,13 @@ namespace EternalVR.Launcher
             check.Click += (s, e) => RunPreflight();
             restoreSaves.Click += (s, e) => RestoreSaves();
             openData.Click += (s, e) => Process.Start("explorer.exe", "\"" + ctx.Paths.Root + "\"");
-            exportReport.Click += (s, e) => ReportExport.Run(this, ctx);
+            exportReport.Click += async (s, e) =>
+            {
+                // The report is built on a worker; one at a time.
+                exportReport.Enabled = false;
+                try { await ReportExport.Run(this, ctx); }
+                finally { if (!IsDisposed) exportReport.Enabled = true; }
+            };
             header.SupportClicked += (s, e) => OpenSupportPage();
             discardRestore.Click += (s, e) => DiscardPendingRestore();
             recoveryTimer.Tick += (s, e) => TryRecover();
@@ -276,7 +282,9 @@ namespace EternalVR.Launcher
             try
             {
                 runtime.Items.Clear();
-                runtime.Items.Add(new RuntimeItem(LauncherSettings.SystemRuntime, "System default (" + (Platform.WindowsSystem.ActiveOpenXrRuntime() ?? "none set") + ")"));
+                // What the game really gets: XR_RUNTIME_JSON in the environment wins over the active runtime.
+                runtime.Items.Add(new RuntimeItem(LauncherSettings.SystemRuntime, "System default (" + (LauncherContext.SystemDefaultRuntime() ?? "none set")
+                    + (LauncherContext.InheritedRuntime != null ? ", from " + LaunchPlanBuilder.RuntimeVariable : string.Empty) + ")"));
                 foreach (var r in ctx.RuntimeChoices()) runtime.Items.Add(new RuntimeItem(r, r));
                 if (!LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) && !runtime.Items.Cast<RuntimeItem>().Any(i => i.Value.Equals(ctx.Settings.Runtime, StringComparison.OrdinalIgnoreCase)))
                     runtime.Items.Add(new RuntimeItem(ctx.Settings.Runtime, ctx.Settings.Runtime));
@@ -362,7 +370,9 @@ namespace EternalVR.Launcher
 
         private void TryRecover()
         {
-            if (session != null) return;
+            // Not during Restore saves: its resync launch puts back the text configs it touched, which would undo a
+            // restore made meanwhile. The timer tries again afterwards.
+            if (session != null || saveRestore != null) return;
             bool clear;
             try { clear = runner.Recover(); }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
@@ -493,11 +503,19 @@ namespace EternalVR.Launcher
                 return;
             }
             if (session == null) return;
-            var answer = MessageBox.Show(this,
-                "The game is still running. If you close the launcher now, your settings are still restored automatically when the game exits.\n\nClose the launcher?",
-                "EternalVR", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (answer != DialogResult.Yes) { e.Cancel = true; return; }
+            // Asked again when the game started while the question was open: the answer was to the other text.
+            for (bool launched = runner.GameLaunched; ; launched = runner.GameLaunched)
+            {
+                var answer = MessageBox.Show(this, launched
+                        ? "The game is still running. If you close the launcher now, your settings are still restored automatically when the game exits.\n\nClose the launcher?"
+                        : "A launch is being prepared; the game has not started. Closing the launcher stops the launch.\n\nClose the launcher?",
+                    "EternalVR", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (answer != DialogResult.Yes) { e.Cancel = true; return; }
+                if (session == null || runner.GameLaunched == launched) break;
+            }
             closing.Cancel();
+            // A start under way finishes with its session finisher before the process ends; none begins after this.
+            runner.StopLaunching();
         }
 
         private sealed class RuntimeItem

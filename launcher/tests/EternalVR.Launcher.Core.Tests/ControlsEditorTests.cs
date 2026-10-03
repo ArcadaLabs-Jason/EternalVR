@@ -382,11 +382,14 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Contains(issues, i => i.Message == "the file has no [profile] section");
             Assert.Equal(8, issues.Count);
 
-            var noPath = ControllerMapFile.Parse("[profile]\n\"gameplay.left.trigger\" = \"/input/trigger/value\"\n\"gameplay.left.wing\" = \"/input/x\"\n\"menu.right.back\" = \"b\"\n");
+            var noPath = ControllerMapFile.Parse("[profile]\n\"gameplay.left.trigger\" = \"/input/trigger/value\"\n\"gameplay.left.wing\" = \"/input/x\"\n\"gameplay.right.secondary\" = \"b\"\n"
+                + "\"menu.right.back\" = \"/input/b/click\"\n\"menu.left.pointer_pose\" = \"/input/aim/pose\"\n");
             Assert.Equal(3, noPath.FileIssues.Count);
             Assert.Contains(noPath.FileIssues, i => i.Key == "path");
             Assert.Contains(noPath.FileIssues, i => i.Key == "gameplay.left.wing");
-            Assert.Contains(noPath.FileIssues, i => i.Key == "menu.right.back" && i.Kind == ControlIssueKind.UnknownValue);
+            Assert.Contains(noPath.FileIssues, i => i.Key == "gameplay.right.secondary" && i.Kind == ControlIssueKind.UnknownValue);
+            // The retired menu set's keys, in files copied from earlier versions, are skipped as the layer skips them.
+            Assert.DoesNotContain(noPath.FileIssues, i => i.Key.StartsWith("menu.", StringComparison.Ordinal));
         }
 
         // ---- Sticks ----

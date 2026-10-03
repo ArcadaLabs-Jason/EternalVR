@@ -38,8 +38,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("1.00", env["ETERNALVR_WORLD_SCALE"]);
             Assert.Equal("1", env["ETERNALVR_SKIP_CINEMATICS"]);
             Assert.False(env.ContainsKey("XR_RUNTIME_JSON"));
-            foreach (var arg in new[] { "+com_skipIntroVideo 1", "+com_skipSignInManager 1", "+r_hdrDisplay 0", "+r_motionblur 0",
-                                        "+r_dof 0", "+r_chromaticAberration 0", "+r_vignette 0" })
+            // The comfort set is the layer's in stereo (ComfortCvarsTests).
+            foreach (var arg in new[] { "+com_skipIntroVideo 1", "+com_skipSignInManager 1", "+r_hdrDisplay 0" })
                 Assert.Contains(arg, p.CommandLine);
             // The normal game start: the player uses the menus.
             Assert.DoesNotContain("+map", p.CommandLine);
@@ -101,12 +101,13 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void MonoKeepsTheGameWindowAndTheStereoCvarsOut()
         {
-            var p = LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono, Aim = AimMode.Head }));
+            var p = LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono, Aim = AimMode.Head, Hud = HudMode.Wrist }));
             var env = Env(p);
             Assert.False(env.ContainsKey("ETERNALVR_MODE"));
             Assert.False(env.ContainsKey("ETERNALVR_WINDOW"));
-            Assert.False(env.ContainsKey("ETERNALVR_UI_LAYER"));
-            Assert.False(env.ContainsKey("ETERNALVR_HUD"));
+            // The UI layer stays on: menus over the game need it for their panel and pointer.
+            Assert.Equal("1", env["ETERNALVR_UI_LAYER"]);
+            Assert.Equal("wrist", env["ETERNALVR_HUD"]);
             Assert.Equal("head", env["ETERNALVR_AIM"]);
             Assert.Null(p.Window);
             foreach (var name in new[] { "r_TAASafeMode", "r_antialiasing", "r_TAAAntiGhosting", "rs_enable", "r_swapInterval", "r_fullscreen", "r_windowWidth" })
@@ -217,6 +218,18 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("1", Env(LaunchPlanBuilder.Build(i))["DISABLE_XR_APILAYER_NOVENDOR_toolkit"]);
         }
 
+        [Theory]
+        [InlineData("+m_sensitivity 3", new[] { "m_sensitivity" })]
+        [InlineData("+set r_fullscreen 1 +seta m_invertY \"1\" + com_skipIntroVideo 1", new[] { "r_fullscreen", "m_invertY", "com_skipIntroVideo" })]
+        [InlineData("+r_antialiasing 0 +R_ANTIALIASING 1 -nosteam", new[] { "r_antialiasing" })]
+        [InlineData("+map game/sp/e1m1_intro/e1m1_intro", new[] { "map" })]
+        [InlineData("+ +1bad + \"\"", new string[0])]
+        [InlineData(null, new string[0])]
+        public void ExtraArgumentsNameTheCvarsTheySet(string extra, string[] expected)
+        {
+            Assert.Equal(expected, SessionKeys.FromArguments(extra));
+        }
+
         [Fact]
         public void ArgumentsAreSplitAndQuoted()
         {
@@ -264,45 +277,6 @@ namespace EternalVR.Launcher.Core.Tests
             var i = Inputs();
             i.GameRoot = null;
             Assert.Throws<ArgumentException>(() => LaunchPlanBuilder.Build(i));
-        }
-    }
-
-    public class ArgumentPolicyTests
-    {
-        private static ArgumentPolicy Policy() => ArgumentPolicy.Parse(TestData.Read("refused-args.txt"));
-
-        [Theory]
-        [InlineData("+map game/pvp/pvp_inferno")]
-        [InlineData("+map GAME\\PVP\\pvp_darkworld")]
-        [InlineData("+connect 1.2.3.4")]
-        [InlineData("+com_skipIntroVideo 1 +matchmaking_start")]
-        [InlineData("-battlemode")]
-        [InlineData("+net_serverDedicated 1")]
-        [InlineData("+\"connect\" 1.2.3.4")]
-        [InlineData("+map \"game/pvp/pvp_inferno\"")]
-        [InlineData("+map game/\"pvp\"/pvp_inferno")]
-        [InlineData("+map game//pvp//pvp_inferno")]
-        [InlineData("+map game\\\\pvp\\pvp_inferno")]
-        [InlineData("+ connect 1.2.3.4")]
-        [InlineData("+set net_serverDedicated 1")]
-        [InlineData("+SETA si_map x")]
-        [InlineData("battle\"mode\"")]
-        public void MultiplayerRequestsAreRefused(string args)
-        {
-            var reason = Policy().Check(args);
-            Assert.NotNull(reason);
-            Assert.Contains("single-player", reason);
-        }
-
-        [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        [InlineData("+map game/sp/e1m1_intro/e1m1_intro")]
-        [InlineData("+com_skipIntroVideo 1 +r_fullscreen 0")]
-        [InlineData("+set com_skipIntroVideo 1 +map \"game/sp/e1m1_intro/e1m1_intro\"")]
-        public void SinglePlayerArgumentsAreAllowed(string args)
-        {
-            Assert.Null(Policy().Check(args));
         }
     }
 
@@ -493,7 +467,7 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var names = ForcedCvars.Parse(TestData.Read("forced-cvars.txt")).Names.ToList();
             Assert.Contains("r_hdrDisplay", names);
-            // The layer holds the same comfort set at run time (stereo_seq::stereoComfortCvars).
+            // The layer holds the same comfort set at run time in stereo (stereo_seq::stereoComfortCvars); mono forces it.
             foreach (var held in new[] { "r_motionblur", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale", "meatHook_playerViewOverrideMode", "view_skipDamageEffect", "view_showPlayerDamageViewEffect", "view_damageBlur", "g_skipViewEffects" })
                 Assert.Contains(held, names);
             // The restore puts the stereo keys back too.
@@ -502,7 +476,7 @@ namespace EternalVR.Launcher.Core.Tests
             var shipped = ForcedCvars.Parse(TestData.Read("forced-cvars.txt"));
             Assert.DoesNotContain(shipped.For(false), c => c.StereoOnly);
             Assert.Contains(shipped.For(true), c => c.Name == "r_fullscreen" && c.Value == "0");
-            Assert.Throws<FormatException>(() => ForcedCvars.Parse("a | 1 | mono"));
+            Assert.Throws<FormatException>(() => ForcedCvars.Parse("a | 1 | flat"));
             Assert.Throws<FormatException>(() => ForcedCvars.Parse("a | $eye_width"));
             Assert.Throws<FormatException>(() => ForcedCvars.Parse("a | $other | stereo"));
             Assert.Throws<FormatException>(() => ForcedCvars.Parse("a | 1\nA | 2"));

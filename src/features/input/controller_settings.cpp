@@ -127,8 +127,13 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
         s.demonAim = demonAim;
     }
 
+    // head and hand are the values from before look, left and right; hand is the hand with the move stick.
     static constexpr std::pair<const char*, LocomotionFrame> kLocomotion[] = {
-        {"head", LocomotionFrame::Head}, {"hand", LocomotionFrame::OffHand}};
+        {"look", LocomotionFrame::Head},
+        {"left", LocomotionFrame::LeftHand},
+        {"right", LocomotionFrame::RightHand},
+        {"head", LocomotionFrame::Head},
+        {"hand", LocomotionFrame::MoveHand}};
     r.choice("ETERNALVR_LOCOMOTION", kLocomotion, s.locomotion);
 
     static constexpr std::pair<const char*, TurnMode> kTurn[] = {
@@ -234,6 +239,18 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     }
     r.range("ETERNALVR_OFFHAND_BLEND", 0.0f, 1.0f, s.offhandBlendSeconds);
     r.flag("ETERNALVR_OFFHAND_TRACE", s.offhandTrace);
+    static constexpr std::pair<const char*, WeaponArmMode> kWeaponArm[] = {{"ik", WeaponArmMode::Ik},
+                                                                           {"game", WeaponArmMode::Game}};
+    r.choice("ETERNALVR_WEAPON_ARM", kWeaponArm, s.weaponArm);
+    if (r.get("ETERNALVR_WEAPON_ARM_TEST_SHOULDER")) {
+        game::WeaponOffset shoulder;
+        if (game::parseOffsetList(r.raw(), shoulder)) {
+            s.weaponArmTestShoulder = shoulder;
+        } else {
+            r.report("ETERNALVR_WEAPON_ARM_TEST_SHOULDER",
+                     "expected forward,left,up (metres from the eyes); the shoulder stays the default");
+        }
+    }
     if (const auto path = lookup("ETERNALVR_CONTROLLER_DATA"); path && !path->empty()) {
         s.controllerDataPath = *path;
     }
@@ -279,6 +296,12 @@ game::WeaponOffset offhandOffsetFor(const game::WeaponOffset& offset, game::Hand
 
 ShoulderAnchor shoulderAnchorFor(ShoulderAnchor anchor, game::Handedness handedness) {
     return handedness == game::Handedness::Right ? anchor : ShoulderAnchor::Head;
+}
+
+game::WeaponOffset weaponArmOffsetFor(const game::WeaponOffset& offset, game::Handedness handedness) {
+    // The weapon arm is on the side the off hand is not: the off hand's mirroring, the other way round.
+    return offhandOffsetFor(offset, handedness == game::Handedness::Right ? game::Handedness::LeftButtonSwap
+                                                                          : game::Handedness::Right);
 }
 
 const char* inputPathName(InputPath path) {

@@ -8,6 +8,7 @@
 
 using evr::ui_layer::candidateUsage;
 using evr::ui_layer::checkTarget;
+using evr::ui_layer::eyeCopyCandidateUsage;
 using evr::ui_layer::GuiImageFields;
 using evr::ui_layer::ImageCreateDesc;
 using evr::ui_layer::ImageRecord;
@@ -149,4 +150,45 @@ TEST_CASE("gui target: every check has a name") {
     for (int i = 0; i <= static_cast<int>(TargetCheck::OtherQueueFamily); ++i) {
         CHECK(std::string(evr::ui_layer::toString(static_cast<TargetCheck>(i))) != "?");
     }
+}
+
+TEST_CASE("eye copy: screen-sized four-byte colour targets are candidates and get TRANSFER_SRC") {
+    auto d = guiDesc();
+    d.width = 1280;
+    d.height = 720;
+    d.usage = vk::kUsageColorAttachment | vk::kUsageSampled;
+    auto usage = eyeCopyCandidateUsage(d);
+    REQUIRE(usage.has_value());
+    CHECK(*usage == (vk::kUsageColorAttachment | vk::kUsageSampled | vk::kUsageTransferSrc));
+    for (const std::int32_t format : {37, 43, 44, 50, 58, 64, 122}) {
+        d.format = format;
+        CHECK(eyeCopyCandidateUsage(d).has_value());
+    }
+    d = guiDesc();
+    d.usage = vk::kUsageStorage | vk::kUsageSampled;
+    CHECK(eyeCopyCandidateUsage(d).has_value());
+}
+
+TEST_CASE("eye copy: other images are not candidates") {
+    auto d = guiDesc();
+    d.format = 97; // R16G16B16A16_SFLOAT
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
+    d = guiDesc();
+    d.width = 160; // a reduced copy
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
+    d = guiDesc();
+    d.usage = vk::kUsageSampled; // a texture
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
+    d = guiDesc();
+    d.usage = vk::kUsageColorAttachment; // never sampled
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
+    d = guiDesc();
+    d.mipLevels = 2;
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
+    d = guiDesc();
+    d.arrayLayers = 2;
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
+    d = guiDesc();
+    d.samples = 4;
+    CHECK_FALSE(eyeCopyCandidateUsage(d).has_value());
 }

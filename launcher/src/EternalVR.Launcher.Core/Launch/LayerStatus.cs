@@ -118,6 +118,15 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>No loaded marker this long after the game started: the layer did not load.</summary>
         public const double LoadTimeoutSeconds = 45;
 
+        /// <summary>
+        /// Still "starting" this long after the game started: VR has not come up. A layer that refuses the session writes
+        /// <c>flat</c> with its reason; this covers a layer that stopped without saying why.
+        /// </summary>
+        public const double StartTimeoutSeconds = 120;
+
+        public const string StartingMessage = "The mod loaded; VR is starting.";
+        public const string NotStartedMessage = "VR has not started after 2 minutes; the game runs flat until it does.";
+
         public const string NotLoadedMessage =
             "The mod did not load, so the game runs without VR. Check that the whole EternalVR zip was extracted (the layer folder "
             + "next to the launcher), and that your antivirus did not block or remove EternalVR.dll; then quit the game and launch again.";
@@ -133,7 +142,7 @@ namespace EternalVR.Launcher.Core.Launch
                 switch (status.State)
                 {
                     case LayerState.Starting:
-                        return new SessionStatus(StatusKind.Info, "The mod loaded; VR is starting.");
+                        return Starting(secondsSinceStart);
                     case LayerState.Waiting:
                         return new SessionStatus(StatusKind.Warning, "Waiting for the headset: " + Or(status.Reason, "no headset session yet") + " (retried every second).");
                     case LayerState.Flat:
@@ -144,10 +153,14 @@ namespace EternalVR.Launcher.Core.Launch
                         return new SessionStatus(StatusKind.Good, "VR is running" + (status.Stereo == true ? " in stereo." : "."));
                 }
             }
-            if (loaded) return new SessionStatus(StatusKind.Info, "The mod loaded; VR is starting.");
+            if (loaded) return Starting(secondsSinceStart);
             if (secondsSinceStart >= LoadTimeoutSeconds) return new SessionStatus(StatusKind.Problem, NotLoadedMessage);
             return null;
         }
+
+        private static SessionStatus Starting(double secondsSinceStart) => secondsSinceStart >= StartTimeoutSeconds
+            ? new SessionStatus(StatusKind.Warning, NotStartedMessage)
+            : new SessionStatus(StatusKind.Info, StartingMessage);
 
         private static string Or(string text, string fallback) => string.IsNullOrWhiteSpace(text) ? fallback : text.TrimEnd('.');
 

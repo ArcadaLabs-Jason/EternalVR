@@ -17,7 +17,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: controls
         AimWith, RevenantAimWith, WeaponHand, MoveToward, XButton, DossierMapSticks, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, EachEye, AntiAliasing, Sharpening, Foveation, FramePacing, TextureStreaming, CpuSaver,
+        Resolution, EachEye, AntiAliasing, Sharpening, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
@@ -43,6 +43,8 @@ namespace EternalVR.Launcher.Core.Settings
             "Only when the game renders at the headset's size (render_size in launcher.ini): otherwise the window is the eye image.";
         public const string NeedsCinema = "Only with cutscenes on a flat screen (Cutscene view).";
         public const string NeedsDlss = "Only with DLSS (Anti-aliasing).";
+        public const string NotWithDlss = "Not with DLSS (Anti-aliasing).";
+        public const string NotWithParallelEyes = "Not with Parallel Eye Rendering (Play tab).";
         public const string NeedsNewerDlss = "Only with a newer DLSS than the game's (Version).";
         public const string NotWithAutoEyes =
             "Not with Alternate eyes on Auto (Advanced tab): Auto decides by how fast the game runs, which this holds to the headset's rate.";
@@ -65,6 +67,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.WeaponWheel:
                 case Setting.ThrowGesture:
                 case Setting.SwingGesture:
+                case Setting.HandsJump:
                 case Setting.Vibration:
                 case Setting.Bhaptics:
                 case Setting.ButtonLayout:
@@ -74,7 +77,6 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.SnapAngle:
                     return !s.Controllers ? NeedsControllers : s.Turn == TurnMode.Snap ? null : NeedsSnapTurn;
                 case Setting.WalkInRoom:
-                case Setting.HandsJump:
                     return !s.Controllers ? NeedsControllers : s.Posture == PostureMode.Seated ? NotSitting : null;
                 case Setting.RevenantAimWith:
                     // Without the controllers, or with the mouse, there is nothing to choose between.
@@ -86,23 +88,17 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.AimDotSize:
                     if (!s.Controllers) return NeedsControllers;
                     if (!handAim) return NeedsHandAim;
-                    if (!stereo) return NeedsStereo;
                     return setting == Setting.AimDotSize && !s.AimDot ? "Only with the aim dot on (Play tab)." : null;
                 case Setting.MenuLaser:
                 case Setting.HudPlace:
-                    return !s.Controllers ? NeedsControllers : stereo ? null : NeedsStereo;
+                    return s.Controllers ? null : NeedsControllers;
                 case Setting.Resolution:
                 case Setting.EachEye:
                 case Setting.AntiAliasing:
                 case Setting.Sharpening:
-                case Setting.Foveation:
-                case Setting.AlternateEyes:
                 case Setting.TextureStreaming:
                 case Setting.CpuSaver:
                 case Setting.DesktopWindow:
-                case Setting.HudDistance:
-                case Setting.HudSize:
-                case Setting.HudHeight:
                     return stereo ? null : NeedsStereo;
                 case Setting.DesktopMonitor:
                 case Setting.DesktopSize:
@@ -116,9 +112,21 @@ namespace EternalVR.Launcher.Core.Settings
                     if (!stereo) return NeedsStereo;
                     if (s.AntiAliasing != AntiAliasingMode.Dlss) return NeedsDlss;
                     return setting == Setting.DlssPreset && s.DlssDll == DlssDllChoice.Game ? NeedsNewerDlss : null;
+                case Setting.Foveation:
+                    // Its passes take their eye from the standard renderer's eye tags; the layer turns it off with
+                    // Parallel Eye Rendering (docs/VR_STEREO.md).
+                    if (!stereo) return NeedsStereo;
+                    return s.ParallelEyesOn ? NotWithParallelEyes : null;
+                case Setting.ParallelEyes:
+                    if (!stereo) return NeedsStereo;
+                    return s.AntiAliasing == AntiAliasingMode.Dlss ? NotWithDlss : null;
+                case Setting.AlternateEyes:
+                    // Alternate eyes is a mode of the standard renderer; the layer ignores it with Parallel Eye Rendering.
+                    if (!stereo) return NeedsStereo;
+                    return s.ParallelEyesOn ? NotWithParallelEyes : null;
                 case Setting.FramePacing:
                     if (!stereo) return NeedsStereo;
-                    return s.AlternateEyes == AlternateEyesMode.Auto ? NotWithAutoEyes : null;
+                    return s.AlternateEyes == AlternateEyesMode.Auto && !s.ParallelEyesOn ? NotWithAutoEyes : null;
                 case Setting.CutsceneShape:
                     if (!stereo) return NeedsStereo;
                     return s.Cutscenes == CutsceneView.Cinema ? null : NeedsCinema;

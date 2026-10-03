@@ -8,8 +8,9 @@ namespace EternalVR.Launcher.Core.Settings
     public enum AntiAliasingMode { Taa, Dlss, Off }
 
     /// <summary>The DLSS quality the layer holds while DLSS runs (the layer's <c>ETERNALVR_STEREO_DLSS_QUALITY</c>, the game's
-    /// <c>r_dlssQuality</c> 3 to 0): how large the image DLSS scales up from is.</summary>
-    public enum DlssQuality { Quality, Balanced, Performance, UltraPerformance }
+    /// <c>r_dlssQuality</c> 3 to 0): how large the image DLSS scales up from is. DLAA renders at the full size (the layer holds
+    /// Quality and sets NGX's DLAA mode, with a newer DLSS only); the window lists it first (<see cref="DlssDll.QualityOrder"/>).</summary>
+    public enum DlssQuality { Quality, Balanced, Performance, UltraPerformance, Dlaa }
 
     /// <summary>What Resolution's number multiplies (<c>resolution_base</c>): the size the runtime asks for fitted into the
     /// default pixel budget (Auto, the layer's own rule and the default), the size the runtime asks for, or the headset's native
@@ -48,7 +49,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("anti_aliasing", out var aa)) AntiAliasing = Pick(aa, AntiAliasingMode.Taa, ("dlss", AntiAliasingMode.Dlss), ("off", AntiAliasingMode.Off));
             if (map.TryGetValue("dlss_quality", out var dq))
                 Dlss = Pick(dq, DlssQuality.Quality, ("balanced", DlssQuality.Balanced), ("performance", DlssQuality.Performance),
-                    ("ultra_performance", DlssQuality.UltraPerformance));
+                    ("ultra_performance", DlssQuality.UltraPerformance), ("dlaa", DlssQuality.Dlaa));
             if (map.TryGetValue("dlss_dll_path", out var path)) DlssDllPath = path;
             if (map.TryGetValue("dlss_preset", out var preset)) DlssPreset = Settings.DlssDll.NormalisePreset(preset);
             if (map.TryGetValue("dlss_version", out var version))
@@ -80,7 +81,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The layer's <c>ETERNALVR_STEREO_DLSS_QUALITY</c> value (and the settings file's).</summary>
         public static string DlssQualityName(DlssQuality q) =>
             q == DlssQuality.Balanced ? "balanced" : q == DlssQuality.Performance ? "performance"
-            : q == DlssQuality.UltraPerformance ? "ultra_performance" : "quality";
+            : q == DlssQuality.UltraPerformance ? "ultra_performance" : q == DlssQuality.Dlaa ? "dlaa" : "quality";
 
         /// <summary>The settings file's <c>resolution_base</c> value: auto, ask or panel.</summary>
         public static string ResolutionBaseName(ResolutionBase b) => b == ResolutionBase.Ask ? "ask" : b == ResolutionBase.Panel ? "panel" : "auto";

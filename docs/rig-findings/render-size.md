@@ -40,7 +40,7 @@ the window-sized render.
 | What | Where |
 |---|---|
 | Output size (the eye image, `_gui`, `_upscaledOpaqueDepth`) | globals 0x39AABE4 (width) and 0x39AABE8 (height); render system vtable 0x200 (0x1CBF8D0) and 0x208 (0x1CBF8C0) return them (render system vtable at 0x2EAD3F8) |
-| Render size (`_viewColor`; below the output only with DLSS) | 0x39AABDC and 0x39AABE0; vtable 0x1E0 (0x1CBF990) and 0x1E8 (0x1CBF7B0). 0x1CBFA60 sets them to the output size, or through 0x1CC5D40 when DLSS is on (0x14667EC53) |
+| Render size (`_viewColor`; below the output only with DLSS) | 0x39AABDC and 0x39AABE0; vtable 0x1E0 (0x1CBF990) and 0x1E8 (0x1CBF7B0). 0x1CBFA60 sets them to the output size, or through 0x1CC5D40 when DLSS is on (0x14667EC53): NGX's optimal render size for the output size and `PerfQualityValue` (from `r_dlssQuality`: 0 gives 3 Ultra Performance, 1 gives 0, 2 gives 1, 3 gives 2, anything else 1 Balanced). With DLAA (`PerfQualityValue` 5, set by the layer, `dlss-dll.md` section 8) the optimal size is the output size |
 | Video init 0x1CC04D0 (callers 0x1CBEFC0, 0x1CC0430, 0x1CC80E0) | windowed (`r_fullscreen` 0x66E82F0 not 1): the output size is `r_windowWidth` x `r_windowHeight` (0x66E8470, 0x66E84F0) when both are positive, else the mode's size, else 960 x 540; fullscreen: `r_mode` (0x66E8050) through the video modes |
 | Window apply 0x1CC0980 (after init) | windowed: the client rect at `r_windowPosX/Y` (0x66E8570, 0x66E85F0) with the output size, `AdjustWindowRect` (style 0xCE0000, resizable), then **clamped to the monitor's work area** and `SetWindowPos`: the clamp the rig saw |
 | Window moved or sized | the window procedure 0x1DC3B90 handles `WM_WINDOWPOSCHANGED` (0x47, jump table at 0x1DC42D8) by queueing 0x1DC39B0 through 0x1DC0600; it runs **0x1DC3B00**: `GetClientRect` (call 0x1DC3B22) and `ClientToScreen`, then render system vtable 0x298 (**0x1CC1240**) with (x, y, width, height) |
@@ -239,9 +239,9 @@ as before, so a display's taskbar (always on top) can stay over it.
    ring rebuilt for 4112x2216` and every 10 s `size: render size 2056x2216 (swapchain 2056x2216, eye image
    2056x2216)` with client-area answers counting up. The desktop window is 668 x 720 (`mirror: the window
    takes the eye's shape`) and shows eye L without bars.
-2. **Each eye's size and projection**: the `xr: game FOV for the headset ... the game's image is 2056x2216`
-   line, the `latch:` lines (projection `[0][0]` and `[1][1]` against the per-eye tangents), `seq:` pairs all
-   complete, `ui: N shared GUI image(s) of 2056x2216`, captures not refused for a size mismatch.
+2. **Each eye's size and projection**: the `xr: the game's own FOV setting for the headset ... the game's image
+   is 2056x2216` line, the `latch:` lines (projection `[0][0]` and `[1][1]` against the per-eye tangents), `seq:`
+   pairs all complete, `ui: N shared GUI image(s) of 2056x2216`, captures not refused for a size mismatch.
 3. **Sharpness**: `ETERNALVR_CAPTURE_EYES=<dir>,120` in two runs, `ETERNALVR_RENDER_SIZE=off` with the old
    1415 x 1440 window (`ETERNALVR_WINDOW=0,0,1415,1440`) and the default; compare the same view's L/R PNGs at
    100 % crop (edge sharpness of HUD-free geometry, text on world surfaces), and confirm the new eye PNGs are

@@ -68,7 +68,7 @@ namespace EternalVR.Launcher
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            using (var instance = InstanceLock.TryAcquire(LauncherContext.DataRootFor(options)))
+            using (var instance = AcquireInstance(options))
             {
                 if (instance == null)
                 {
@@ -88,7 +88,7 @@ namespace EternalVR.Launcher
             }
             // After an update: the new launcher, started once this one's lock is released, with the same options.
             if (MainForm.RestartExe != null)
-                Process.Start(new ProcessStartInfo(MainForm.RestartExe, string.Join(" ", args.Select(Quote))) { UseShellExecute = false });
+                Process.Start(new ProcessStartInfo(MainForm.RestartExe, string.Join(" ", args.Select(LaunchPlan.QuoteIfNeeded))) { UseShellExecute = false });
             return 0;
         }
 
@@ -126,23 +126,16 @@ namespace EternalVR.Launcher
             TerminateProcess(GetCurrentProcess(), exitCode);
         }
 
-        /// <summary>One argument as Windows splits a command line back into it (backslashes doubled before a quote).</summary>
-        internal static string Quote(string arg)
+        /// <summary>
+        /// The data folder's lock; while the session finisher holds it to complete a restore, it is waited for
+        /// (<see cref="InstanceLock.TryAcquireAfterFinisher"/>) instead of saying another launcher is open.
+        /// </summary>
+        private static InstanceLock AcquireInstance(LauncherOptions options)
         {
-            if (arg.Length > 0 && arg.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return arg;
-            var sb = new System.Text.StringBuilder("\"");
-            int slashes = 0;
-            foreach (var c in arg)
-            {
-                if (c == '\\')
-                {
-                    slashes++;
-                    continue;
-                }
-                sb.Append('\\', c == '"' ? slashes * 2 + 1 : slashes).Append(c);
-                slashes = 0;
-            }
-            return sb.Append('\\', slashes * 2).Append('"').ToString();
+            var root = LauncherContext.DataRootFor(options);
+            var names = options.TestExe != null ? new[] { System.IO.Path.GetFileNameWithoutExtension(options.TestExe) } : Core.Game.GameLayout.GameProcessNames;
+            return InstanceLock.TryAcquireAfterFinisher(root, new Core.DataPaths(root).SessionMarker,
+                () => names.Any(Platform.WindowsSystem.IsProcessRunning));
         }
 
         private static bool IsStartupError(Exception e) =>
@@ -156,7 +149,7 @@ namespace EternalVR.Launcher
                 return 0;
             }
 
-            using (var instance = InstanceLock.TryAcquire(LauncherContext.DataRootFor(options)))
+            using (var instance = AcquireInstance(options))
             {
                 if (instance == null)
                 {

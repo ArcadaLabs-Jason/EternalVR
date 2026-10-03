@@ -5,9 +5,12 @@
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -123,5 +126,32 @@ struct DeviceData {
 
     std::unique_ptr<XrPresenter> presenter;
 };
+
+// The loader's link info of the given function in a create info's pNext chain.
+template <typename Info>
+Info* findLayerCreateInfo(const void* pNext, VkStructureType type, VkLayerFunction function) {
+    auto* node = static_cast<const VkBaseInStructure*>(pNext);
+    while (node) {
+        if (node->sType == type) {
+            auto* info = reinterpret_cast<Info*>(const_cast<VkBaseInStructure*>(node));
+            if (info->function == function) {
+                return info;
+            }
+        }
+        node = node->pNext;
+    }
+    return nullptr;
+}
+
+// True when the list names the extension.
+inline bool hasExtension(const std::vector<const char*>& list, const char* name) {
+    return std::any_of(list.begin(), list.end(), [name](const char* e) { return std::strcmp(e, name) == 0; });
+}
+
+// A Vulkan API version as "major.minor.patch".
+inline std::string versionString(std::uint32_t v) {
+    return std::to_string(VK_API_VERSION_MAJOR(v)) + "." + std::to_string(VK_API_VERSION_MINOR(v)) + "." +
+           std::to_string(VK_API_VERSION_PATCH(v));
+}
 
 } // namespace evr::vkcore

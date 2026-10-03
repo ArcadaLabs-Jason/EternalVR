@@ -167,15 +167,15 @@ TEST_CASE("head-relative locomotion moves where the head faces, whatever the vie
     }
 }
 
-TEST_CASE("hand-relative locomotion moves where the off hand points") {
+TEST_CASE("hand-relative locomotion moves where the hand points") {
     Locomotion locomotion;
     const float handYaw = -kPi / 2.0f; // pointing right (+X)
-    const Axis2 move = locomotion.update({0.0f, 1.0f}, LocomotionFrame::OffHand, headFacing(0.0f),
+    const Axis2 move = locomotion.update({0.0f, 1.0f}, LocomotionFrame::MoveHand, headFacing(0.0f),
                                          handPointing(handYaw), 0.3f);
     CHECK(locomotion.lastYaw() == doctest::Approx(handYaw));
     CHECK(approxEqual(moveInTrackingSpace(move, 0.3f), Vec3{1.0f, 0.0f, 0.0f}, 1e-5f));
     // Strafing right from a hand pointing right goes backwards (+Z).
-    const Axis2 strafe = locomotion.update({1.0f, 0.0f}, LocomotionFrame::OffHand, headFacing(0.0f),
+    const Axis2 strafe = locomotion.update({1.0f, 0.0f}, LocomotionFrame::MoveHand, headFacing(0.0f),
                                            handPointing(handYaw), 0.3f);
     CHECK(approxEqual(moveInTrackingSpace(strafe, 0.3f), Vec3{0.0f, 0.0f, 1.0f}, 1e-5f));
 }

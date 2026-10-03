@@ -52,8 +52,8 @@ Fov rightEye() {
 
 TEST_CASE("eye view plan: per-eye pose and flags") {
     const SeqViewSettings s;
-    const auto l = planEyeView(Eye::Left, s);
-    const auto r = planEyeView(Eye::Right, s);
+    const auto l = planEyeView(Eye::Left, s, true);
+    const auto r = planEyeView(Eye::Right, s, true);
     CHECK(l.writePose);
     CHECK(r.writePose);
     CHECK(l.forceFullResolution);
@@ -68,7 +68,7 @@ TEST_CASE("eye view plan: per-eye pose and flags") {
 TEST_CASE("eye view plan: same view (S1) keeps the game's view but applies the per-view flags") {
     SeqViewSettings s;
     s.sameView = true;
-    const auto r = planEyeView(Eye::Right, s);
+    const auto r = planEyeView(Eye::Right, s, true);
     CHECK_FALSE(r.writePose);
     CHECK_FALSE(r.inhibitModelFovScale);
     CHECK(r.forceFullResolution);
@@ -81,14 +81,23 @@ TEST_CASE("eye view plan: switches") {
     s.exposureOnce = false;
     s.discontinuous = true;
     s.inhibitModelFov = false;
-    const auto r = planEyeView(Eye::Right, s);
+    const auto r = planEyeView(Eye::Right, s, true);
     CHECK_FALSE(r.forceFullResolution);
     CHECK_FALSE(r.skipAutoExposureUpdate);
     CHECK(r.discontinuousViewPosition);
     CHECK_FALSE(r.inhibitModelFovScale);
-    const auto mono = planEyeView(Eye::Mono, s);
+    const auto mono = planEyeView(Eye::Mono, s, true);
     CHECK_FALSE(mono.writePose);
     CHECK_FALSE(mono.discontinuousViewPosition);
+}
+
+TEST_CASE("eye view plan: eye R updates its own exposure while the exposure index is not held") {
+    const SeqViewSettings s; // exposure once (the default)
+    CHECK(planEyeView(Eye::Right, s, true).skipAutoExposureUpdate);
+    // Without the index hook eye L's parity is constant: both eyes update and form one chain.
+    CHECK_FALSE(planEyeView(Eye::Right, s, false).skipAutoExposureUpdate);
+    CHECK_FALSE(planEyeView(Eye::Left, s, false).skipAutoExposureUpdate);
+    CHECK(planEyeView(Eye::Right, s, false).writePose); // the rest of the plan is unchanged
 }
 
 TEST_CASE("per-eye matrices: one tick's two eyes from LOCAL-space locates") {

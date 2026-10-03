@@ -187,7 +187,12 @@ bool shouldRedirect(std::wstring_view requested, std::wstring_view chosen) {
     return !chosen.empty() && hasDllName(requested) && !samePath(requested, chosen);
 }
 
-Decision decide(const FileFacts& facts, std::string_view presetText) {
+std::string dlaaWithoutNewerDll() {
+    return "DLAA needs a newer DLSS than the game's " + versionText(kGameDllVersion) +
+           ": DLSS runs at Quality";
+}
+
+Decision decide(const FileFacts& facts, std::string_view presetText, bool dlaa) {
     Decision d;
     if (!facts.exists) {
         d.reason = "the file does not exist";
@@ -209,6 +214,17 @@ Decision decide(const FileFacts& facts, std::string_view presetText) {
             if (facts.version <= kGameDllVersion) {
                 d.reason = "not newer than the game's own " + versionText(kGameDllVersion);
             }
+        }
+    }
+
+    if (dlaa) {
+        if (!d.use || facts.version <= kGameDllVersion) {
+            d.dlaaNote = dlaaWithoutNewerDll();
+        } else if (facts.version < kFirstDlaaVersion) {
+            d.dlaaNote = "DLAA needs DLSS " + versionText(kFirstDlaaVersion) + " or later (this DLL is " +
+                         versionText(facts.version) + "): DLSS runs at Quality";
+        } else {
+            d.applyDlaa = true;
         }
     }
 

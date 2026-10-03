@@ -36,6 +36,13 @@ namespace EternalVR.Launcher
             return null;
         }
 
+        /// <summary>
+        /// <see cref="TryAcquire"/>, waiting for a session finisher that holds the lock while it completes a restore
+        /// (<see cref="Core.Safety.FinisherWait"/>) before another launcher is assumed.
+        /// </summary>
+        public static InstanceLock TryAcquireAfterFinisher(string dataRoot, string sessionMarker, Func<bool> gameRunning) =>
+            Core.Safety.FinisherWait.Acquire(() => TryAcquire(dataRoot), () => System.IO.File.Exists(sessionMarker), gameRunning, Thread.Sleep);
+
         public void Dispose()
         {
             if (mutex == null) return;

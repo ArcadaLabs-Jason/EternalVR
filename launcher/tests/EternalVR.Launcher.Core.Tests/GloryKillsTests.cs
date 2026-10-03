@@ -6,11 +6,11 @@ using Xunit;
 
 namespace EternalVR.Launcher.Core.Tests
 {
-    /// <summary>"Glory kills": follow the camera (default), a steady view, a fade or a flat screen.</summary>
+    /// <summary>"Glory kills": follow the camera (default), a steady view, a flat screen or a fade.</summary>
     public class GloryKillsTests
     {
         private static readonly GloryKillView[] AllViews =
-            { GloryKillView.Follow, GloryKillView.Steady, GloryKillView.Fade, GloryKillView.Screen };
+            { GloryKillView.Follow, GloryKillView.Steady, GloryKillView.Screen, GloryKillView.Fade };
 
         private static LaunchInputs Inputs(LauncherSettings s = null) => new LaunchInputs
         {
@@ -78,7 +78,10 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var text = SettingTexts.For(Setting.GloryKills);
             Assert.Equal("Glory kills", text.Label);
-            Assert.Equal(new[] { "Follow the camera", "Steady view", "Fade out", "Flat screen" }, text.Choices);
+            Assert.Equal(new[] { "Follow the camera (intense)", "Steady view", "Flat screen", "Fade out" }, text.Choices);
+            // The window maps the list's index to the enum value: the default first, Fade out last.
+            Assert.Equal(new[] { GloryKillView.Follow, GloryKillView.Steady, GloryKillView.Screen, GloryKillView.Fade },
+                (GloryKillView[])System.Enum.GetValues(typeof(GloryKillView)));
             Assert.DoesNotContain("\u2014", text.Tooltip);
         }
     }

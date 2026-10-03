@@ -11,7 +11,8 @@ the threshold, and hides under the pause menu); **not yet tried in a headset**, 
 and real head motion are not scriptable on the rig. All are opt-in until the headset checks pass, and the
 wrist HUD becomes a default only together with the free off hand: the head-locked panel stays the default HUD and the wrist or the weapon is one setting
 away (`ETERNALVR_HUD=wrist` or `weapon`, or the launcher's Advanced tab); the free off hand needs
-`ETERNALVR_OFFHAND=free`.
+`ETERNALVR_OFFHAND=free`. The exception is the weapon arm's IK ("The weapon arm"), on by default because
+without it the arm holding the gun is out of view; `ETERNALVR_WEAPON_ARM=game` turns it off.
 
 ## The wrist HUD
 
@@ -166,7 +167,7 @@ modifier on the attach joint carries the whole arm along rigidly, and the skin b
 and the arm's upper end stretched. Also, the attach joint sits about half a metre from the wrist (it is
 the weapon's grip point), so putting it at the controller did not put the hand there.
 
-**What the layer does** (`features/arm/`, pure and unit-tested; `vkcore/offhand_arm.cpp` for the game):
+**What the layer does** (`features/arm/`, pure and unit-tested; `vkcore/game_arm.cpp` for the game):
 
 - **Joints by shape, checked by name.** The layer reads the parent and name-handle tables of the loaded
   skeleton the way `GetJointTransforms` reaches it (the animator's model +0x80, +0x310, data +0x60; count
@@ -263,6 +264,134 @@ the weapon's grip point), so putting it at the controller did not put the hand t
   (`offhand: arm: ...; the off hand stays the game's`), counted in `N rejected`, and the game's arm is kept
   for that tick with the layer's modifiers set back to no change.
 
+## The weapon arm (ETERNALVR_WEAPON_ARM)
+
+**Why there was no right arm.** Two reasons. First, the viewmodel hook moves the whole arms model so the
+gun's grip sits at the weapon-hand controller, and the arm holding it keeps its flat-screen pose relative to
+the gun: the forearm and upper arm run back from the grip toward where the flat camera would be, below and
+behind the hand, out of view in a normal VR grip. Second, and the reason nothing ever showed: the game does
+not draw the right arm at all with most weapons ("The weapon's mesh kit", below). The rig capture once read
+as "the right forearm" (2026-10-01, the right hand far out front-right) was the left hand on the pump.
+
+**What the layer does** (`vkcore/weapon_arm.cpp`, on the same hook and arm code as the free off hand).
+**Default: `ik`**, whatever `ETERNALVR_OFFHAND` is; `game` leaves the arm as before.
+
+- **The arm.** The arms model is never mirrored, so the weapon arm is always the model's right arm,
+  whichever hand holds the weapon. Its joints are found the off hand's way from the game's right attach
+  joint: `righthandattach` 2 carries `RightHand` 3, then `rightforearmroll3`, `rightforearmroll2`,
+  `rightforearmroll1`, `RightForeArmRoll`, `RightForeArm` and `RightArm`, 24 to 29 [static: marine.md6skl
+  and arms.md6skl, read out of `gameresources.resources`; no device hangs from the right forearm]. The
+  right arm's bind pose is the left's reflected, each joint's axes negated (`features/arm/arm_joints.hpp`);
+  the solver uses only the arm's own geometry, so it serves both (unit-tested: the right arm solves as the
+  left's mirror image). The joint's index is the one `InitJointMods` stores at idHands+0x28E6 for the name
+  handle of "righthandattach"; install checks those instructions and the name (or logs `weapon arm:
+  InitJointMods does not store the joint named righthandattach ...; the weapon arm stays the game's`).
+  The names are checked by name handle, and here a name table that cannot be used refuses the arm.
+- **The wrist stays.** The gun, its attach joint, the game's modifier of it and the wrist are left exactly
+  as the game animates them. Only the four roll joints, `RightForeArm` and `RightArm` get the layer's
+  modifiers, six more in the hands' list (room for twelve when both arms are on), as for the off hand.
+- **The shoulder and the elbow** are the off hand's mirrored to the weapon hand's side: by default 8 cm
+  behind, 18 cm to the side and 24 cm below the eyes, turning with the head's yaw, and the elbow bending
+  down, out and a little back (`ETERNALVR_OFFHAND_SHOULDER`'s f,l,u and `ETERNALVR_OFFHAND_ELBOW` tune both
+  arms; `model` does not apply here). With the weapon in the left hand the side is the left. Two-bone IK
+  reaches the wrist from there with the animated bone lengths; a wrist beyond the arm's reach pulls the
+  shoulder along the line to it instead of parting the sleeve from the glove.
+- **Hand-over.** The arm policy hands the arm back to the game, blended over `ETERNALVR_OFFHAND_BLEND`, for
+  glory and sync kills, melee, throws, weapon switches, custom animations, hidden hands and forced views,
+  and while the head and weapon hand are not tracked or the arms are not placed at the hand.
+  `ETERNALVR_VIEWMODEL=0` installs nothing and the arm is the game's.
+- **Logs.** At start-up `weapon arm: ik on the arms model's right arm (righthandattach, idHands+0x28E6): the
+  wrist stays under the gun, shoulder (-0.08 -0.18 -0.24) m from the eyes, elbow toward (-0.20 -0.60
+  -1.00), blend 0.15 s, hold 0.25 s` and `weapon arm on (ik)` in the `controllers: game hooks:` line; on
+  first use `weapon arm: arm joints (skeleton of 92 joints, found by shape, names checked with the game's
+  name handles): righthandattach 2, RightHand 3, rightforearmroll3 24, ...`, `weapon arm: 6 joint modifiers
+  added at ...` and `weapon arm: upper arm ..., forearm ... ; the first pose moves the arm up to M from the
+  game's`. A refusal logs once `weapon arm: <reason>; the weapon arm stays the game's`. With
+  `ETERNALVR_OFFHAND_TRACE=1`: `weapon arm: ik (controller)` or `game (<reason>)` as the policy changes,
+  and once a second `weapon arm: ik: wrist (...), elbow (...), shoulder (...), D from the head's point,
+  reach R, twist T deg, weight W, up to M from the game's pose, read back within L; N rejected`. `M` is how
+  far the layer moves the arm's joints from the game's pose (game units): near 0 where the game's arm
+  already reaches a shoulder at the head, as in a flat-screen-like grip, and the picture is then the same as
+  with `game`. `L` is how far the joints read back from where they were written a frame before.
+- **Rig check of the overrides.** `ETERNALVR_WEAPON_ARM_TEST_SHOULDER=f,l,u` (test only; metres from the
+  eyes in the head's yaw frame, not mirrored) puts the shoulder anywhere. Use one in front of the face,
+  e.g. `0.45,0.15,0.05` (45 cm ahead, 15 cm left, 5 cm up): with the chest grip of the live test, the arm
+  crosses the middle of both eyes, the forearm from the bottom-right corner to the lower middle and the
+  upper arm up to the left of centre. `M` is well above 0.1, `D` above 0 when the point is out of the
+  arm's reach (the shoulder is pulled toward the wrist), and `L` a few hundredths. A shoulder out to the
+  side, such as `0,-0.5,0.3`, sends the arm out of both eyes. The start-up line ends `, TEST shoulder
+  (ETERNALVR_WEAPON_ARM_TEST_SHOULDER)`.
+- **Unverified.** The overrides read GetJointTransforms, which gives the last frame's pose, so in a fast
+  animation (recoil) the sleeve may trail the glove by a frame. First rig runs (2026-10-02, simulator,
+  `right.position = 0.15, -0.25, -0.35`): joints found, modifiers added, 0 rejected, overrides read back,
+  but the picture was the same as with `game`, even with the arm across the view: the weapon's mesh kit
+  had the arm switched off (below). Showing it is not yet confirmed on the rig.
+
+### The weapon's mesh kit
+
+The first-person hands model draws each arm as its own piece (a "surface"): the right arm, glove included,
+is one surface, `arm_low_rt_base`; the left arm is `arm_low_lf_base` plus two armour plates on its hand. The
+model also has named sets of surfaces, its mesh kits: `BaseSimple` (both arms), `ArmLeft` (the left arm
+only), `ArmRight` (the right arm only), `HideAll` (neither) and a few more. Every weapon names the kit to
+draw while it is held, and the game switches to it when the weapon comes up:
+
+| kit | weapons |
+|---|---|
+| `ArmLeft` | combat shotgun, super shotgun, heavy cannon, plasma rifle, rocket launcher, chaingun |
+| `HideAll` | ballista, BFG 9000, unmaykr |
+| `BaseSimple` | fists, chainsaw (and the game's melee state) |
+| `ArmRight` | the pistol decl (not a campaign weapon) |
+
+So with nearly every gun the right arm is switched off. In flat play that costs nothing: the arm would be
+below the screen anyway. In VR it meant the weapon arm's IK posed an arm that was never drawn (rig runs
+rikA and rikAg, 2026-10-02: the arm placed across the middle of both eyes, nothing drawn, the shotgun's
+pistol grip bare).
+
+**What the layer does** (`vkcore/hands_surfaces.cpp`). While the layer poses an arm (its weight above zero
+and the pose written this tick) it switches that arm's surfaces on with the game's own "show surface"
+function. When the arm goes back to the game (weight zero: untracked, hands hidden, forced view, glory or
+sync kill, melee, throw, weapon switch; a rejected tick; a multiplayer guard trip) it switches off again
+exactly the surfaces it switched on, with the game's "hide surface", so the game's own arm pose, which
+points back at the camera, never pokes into view. A surface the weapon's kit already shows (fists,
+chainsaw, melee) is never touched. The free off hand (`ETERNALVR_OFFHAND=free`) gets the same: with the
+ballista, BFG and unmaykr its left arm is shown while the layer poses it.
+
+- **Found, not fixed.** The surfaces are looked up on each new hands model by name (`arm_low_rt_base`; the
+  left arm's three), compared the game's way (up to a `$`, ignoring case), and failing that taken from the
+  kit holding only that arm (`ArmRight`, `ArmLeft`). The mesh file lists `arm_low_rt_base` second (index 1
+  of 7 expected), but no index is assumed.
+- **Fail closed** [static, build 25216728, every byte checked at install]. idHands' kit apply (RVA
+  0x137F690) takes the model at idHands+0x370 and jumps to the model's apply (0x19C8590), which calls
+  SetMeshKit (0x19CF4B0) for kit group 5 and the per-surface FindSurfaces (0x19CEE30), Hide (0x19CF620)
+  and Show (0x19D0340). Install follows exactly those calls, so the model, Show and Hide the layer uses are
+  the ones the game's kits use. Show and Hide set and clear the surface's bit in the model's 128-bit
+  visibility set (+0x518) and mark the model's surfaces for a rebuild (byte +0x57C |= 0x10), nothing else.
+  Surfaces by name: model+0x4D8 -> +0x78 (pointers) and +0x80 (count), a surface's name at +0x8. Kits:
+  model+0x4D0 -> +0x3B8 + group*0x18 (0x48 bytes each, count at +0x3C0 + group*0x18), a kit's name at +0x8,
+  its surface indices at +0x30 and their count at +0x38. A check that fails leaves every surface to the
+  game's kits (logged); a faulting call turns this off for the session. Same game thread as the pose, no
+  hook of its own.
+- **Not certain.** The layer sees the bits, not the game switching kits. If the game switches to a kit that
+  shows the arm while the layer still shows it (say, a switch to the fists before the arm's blend-out
+  ends), the hand-back hides it once, and it stays hidden until the game applies a kit again. The weight
+  drops within a third of `ETERNALVR_OFFHAND_BLEND` as soon as a switch starts, which should be well before
+  the new weapon's kit; unverified on the rig.
+- **Logs.** At start-up `arm surfaces: idHands show/hide mesh apply at RVA 0x137F690`, `... surface Show at
+  RVA 0x19D0340`, `... surface Hide at RVA 0x19CF620`, `... FindSurfaces at RVA 0x19CEE30`, `... SetMeshKit
+  at RVA 0x19CF4B0`, then `arm surfaces: idHands+0x370's model, kit group 5 (the model's apply at RVA
+  0x19C8590); Show 0x19D0340, Hide 0x19CF620 (bits at +0x518); the arms found by name, else by kit; a posed
+  arm is shown`. On the first pose: `weapon arm: right arm surface 1 of 7 on the hands model, found by name
+  (the kit ArmRight lists 1); shown with the game's Show while the layer poses the arm` and `weapon arm:
+  right arm surface 1 shown (the weapon's mesh kit had hidden it)`; on the first hand-back `weapon arm:
+  right arm surface 1 hidden again as the weapon's mesh kit has it (the arm is the game's)`. The free off
+  hand logs the same as `offhand: arm: left arm surface ...`. Not found: `weapon arm: the right arm's
+  surfaces are not on the hands model (N surfaces: <index name, ...>; kits of group 5: <names>); ...`. With
+  `ETERNALVR_OFFHAND_TRACE=1` the once-a-second pose line ends `; right arm surface shown` (the layer shows
+  it), `the game's` (the weapon's kit shows it), `hidden by the weapon's kit` or `off` (not found, or the
+  checks failed). After a multiplayer guard trip, once: `weapon arm: the multiplayer guard tripped: the
+  layer's arm modifiers set back to no change; ...` and `... surface 1 hidden again as the weapon's mesh
+  kit has it`.
+
 ## Settings
 
 | Variable | Values (default) | Meaning |
@@ -286,7 +415,9 @@ the weapon's grip point), so putting it at the controller did not put the hand t
 | `ETERNALVR_OFFHAND_ELBOW` | f,l,u (-0.2,0.6,-1) | The elbow's bend direction in the head's yaw frame |
 | `ETERNALVR_OFFHAND_PROBE` | f,l,u m (0.10,0,0) | Probe mode: added to the game's own left-hand modifier |
 | `ETERNALVR_OFFHAND_BLEND` | 0..1 s (0.15) | Hand-over blend |
-| `ETERNALVR_OFFHAND_TRACE` | 0 / 1 (0) | Log the left-arm signals when they change, the poses once a second |
+| `ETERNALVR_OFFHAND_TRACE` | 0 / 1 (0) | Log the left-arm signals when they change, the poses once a second (the weapon arm's too) |
+| `ETERNALVR_WEAPON_ARM` | `ik` / `game` (`ik`) | Who poses the weapon arm's forearm, elbow and upper arm; the wrist and gun stay the game's |
+| `ETERNALVR_WEAPON_ARM_TEST_SHOULDER` | f,l,u m (unset) | Rig tests: the weapon arm's shoulder at this point from the eyes (head's yaw frame), not mirrored |
 
 **The weapon in the left hand** (`ETERNALVR_HANDEDNESS=left` or `left_mirror`). The off hand is then the
 right controller. The arms model is not mirrored (a reflected model would turn its triangles inside out),
@@ -300,21 +431,23 @@ scripted poses mirrored (`tmp-vr\rs\lh-drive.sh`), 0 rejected.
 
 The launcher has a row for it on the Advanced tab, in the HUD panel group ("Health and ammo": On the HUD
 panel / On your wrist / On your weapon, default the panel, `hud` in `launcher.ini`: `panel`, `wrist`,
-`weapon`); in stereo it always sends `ETERNALVR_HUD`, `panel` when the controllers are off, and the row is
-greyed out without controllers or in mono. The tuning and off-hand variables are environment only.
+`weapon`); it always sends `ETERNALVR_HUD` (in mono too, where it also turns the UI layer on), `panel` when
+the controllers are off, and the row is greyed out without controllers. The tuning and off-hand variables are environment only.
 
 ## Live-test plan
 
 Run in stereo with the controllers (the launcher defaults) and the wrist turned on: launcher, Advanced tab,
 "Health and ammo" = On your wrist (or `ETERNALVR_HUD=wrist`). Read the layer's
 `eternalvr-<date>-<time>-<pid>.log`. Today's controls that matter here: recenter is both sticks held 2 s (or
-the headset's own recenter), the in-headset capture is the left Menu held + a trigger, the Dossier is on X
-(hold by default), pause is a left Menu tap.
+the headset's own recenter), the in-headset capture is the left Menu held + a trigger (under SteamVR with
+Touch controllers, both sticks held, then a trigger), the Dossier is on X (hold by default), pause is a left
+Menu tap (under SteamVR with Touch controllers, a Y hold; B in the full mirror).
 
 1. **Start-up.** Look for `ui: HUD wrist (corner blocks on the off hand's wrist); wrist: shown while
    facing the head (facing 40/55 deg, gaze 40/55 deg), 0.16 m row ...` and whether it says `(colour scale)`
-   (fades) or `(no colour scale: switched)`. `controllers: game hooks: ... off hand off (game)` by default
-   (`on (game)` with `ETERNALVR_OFFHAND_TRACE=1`: the hook then only logs). Under hand aim (the default) also
+   (fades) or `(no colour scale: switched)`. `controllers: game hooks: ... off hand off (game), weapon arm on
+   (ik)` by default (`off hand on (game)` with `ETERNALVR_OFFHAND_TRACE=1`: the hook then only logs for the
+   off hand). Under hand aim (the default) also
    `ui: wrist HUD: hand aim masks the crosshair and the ability rings; no abilities quad` once the wrist runs.
 2. **Wrist glance.** In a level: the bottom corners are gone from the head-locked HUD; turn the left palm
    up across the chest and look at it. Expect `ui: wrist HUD shown for the first time (left hand, facing
@@ -328,7 +461,7 @@ the headset's own recenter), the in-headset capture is the left Menu held + a tr
    the wrist again: the quads stay on the arm (they are in the grip space) and the glance still triggers at
    the same angles. Walk a few steps with body follow on and turn with the stick: same. The left stick,
    left trigger and left grip still move, fire equipment and Flame Belch while the wrist is shown.
-4. **Crops.** Take a few captures in combat (left Menu held + a trigger; each saves `-UI.png`, the GUI target
+4. **Crops.** Take a few captures in combat (the capture chord above; each saves `-UI.png`, the GUI target
    the quads show) at the headset's eye size and check the blocks fall inside the crops (`hud_regions.hpp`);
    a clipped digit means a margin to widen. `ETERNALVR_CAPTURE_UI` still works for a series.
 5. **Hiding.** A glory kill and a cutscene hide it; the pause menu (left Menu tap) and the Dossier (X hold)
@@ -364,12 +497,14 @@ the headset's own recenter), the in-headset capture is the left Menu held + a tr
 9. **Off hand, the arm.** Same settings. At start-up: `offhand: InitJointMods at RVA 0x138B080`, `offhand:
    the joint modifier node's SetNum at RVA 0x19A61F0`, `offhand: arm: InitJointMods at RVA 0x138B080
    (AddJointMod 0x138B360, SetNum 0x19A61F0), hooked at RVA 0x138B28D to make room for the layer's joint
-   modifiers`, `offhand: arm: animator getter at RVA 0x135EC20, name table at RVA 0x47DDA28; ...`
+   modifiers (12: the off hand and the weapon arm)` (6 with `ETERNALVR_WEAPON_ARM=game`), `offhand: arm:
+   animator getter at RVA 0x135EC20, name table at RVA 0x47DDA28; ...`
    and the hook line with `wrist offset (-0.080 0.035 0.000) m ... shoulder head (-0.08 0.18 -0.24) m, elbow
    toward (-0.20 0.60 -1.00)`. When the controller first takes the arm: `offhand: arm joints
    (skeleton of 92 joints, found by shape, names checked with the game's name handles): lefthandattach 30, LeftHand 31, leftforearmroll3 52, leftforearmroll2 53,
    leftforearmroll1 54, LeftForeArmRoll 55, LeftForeArm 56, LeftArm 57`, `offhand: arm: 6 joint modifiers
-   added at 3..8 (the hands' list now holds 9, room for 9)` and `offhand: arm: upper arm 0.283, forearm 0.281 (animated, game units), model
+   added at 9..14 (the hands' list now holds 15, room for 15)` (at 3..8 when the weapon arm is off or took
+   none yet) and `offhand: arm: upper arm 0.283, forearm 0.281 (animated, game units), model
    scale (1.000 1.000 1.000) ...`; once a second `offhand: ik: wrist (...) target (...), reach R, elbow
    (...), shoulder (...), twist T deg, weight 1.00; 0 rejected` (model space). Scripted poses
    (`ETERNALVR_TEST_INPUT`, metres from the head; the reaches assume the headset faces LOCAL -Z, since the
@@ -383,6 +518,36 @@ the headset's own recenter), the in-headset capture is the left Menu held + a tr
    the wrist). Then `left.aim = 0, 60` and `left.aim = 70, 0` at the chest position (the hand pointing
    up, then across the body, following the controller's orientation). A line `offhand: arm: ...; the off
    hand stays the game's` names what did not check out. On loading a map (and on each respawn or load):
-   `offhand: arm: the game's SetNum made room for 6 more joint modifiers in the hands' new lists (3 in use,
-   room for 9 and 9)`; `SetNum did not make room ...`, `... do not check out; no room made` or `... cannot
-   be read; no room made` instead mean the arm will be refused with `no room for 6 more joint modifiers`.
+   `offhand: arm: the game's SetNum made room for 12 more joint modifiers in the hands' new lists (3 in
+   use, room for 15 and 15)` (6 and 9 without the weapon arm); `SetNum did not make room ...`, `... do not
+   check out; no room made` or `... cannot be read; no room made` instead mean the arm will be refused with
+   `no room for 6 more joint modifiers`.
+10. **The weapon arm.** Defaults (`ETERNALVR_OFFHAND` unset), plus `ETERNALVR_OFFHAND_TRACE=1`. At start-up:
+   `weapon arm: ik on the arms model's right arm (righthandattach, idHands+0x28E6): the wrist stays under the
+   gun, shoulder (-0.08 -0.18 -0.24) m from the eyes, elbow toward (-0.20 -0.60 -1.00), ...`, `offhand: arm:
+   InitJointMods ... (6: the weapon arm)`, `offhand: arm: animator getter ...; ... (two-bone IK) on the weapon
+   arm` and `controllers: game hooks: ... weapon arm on (ik)`. In a level: `weapon arm: arm joints (skeleton
+   of 92 joints, found by shape, names checked with the game's name handles): righthandattach 2, RightHand 3,
+   rightforearmroll3 24, rightforearmroll2 25, rightforearmroll1 26, RightForeArmRoll 27, RightForeArm 28,
+   RightArm 29`, `weapon arm: 6 joint modifiers added at 3..8 (the hands' list now holds 9, room for 9)`,
+   `weapon arm: upper arm ..., forearm ...` and once a second `weapon arm: ik: wrist (...), elbow (...),
+   shoulder (...), 0.00 from the head's point, reach R, twist T deg, weight 1.00; 0 rejected`. Scripted
+   poses (metres from the head, headset facing LOCAL -Z): `right.position = 0.15, -0.25, -0.35` with
+   `right.aim = 0, 0` (a normal grip at the chest: the forearm runs from the glove back and down to the
+   elbow, below and out to the right, the upper arm up toward the right shoulder); `right.position = 0.25,
+   -0.15, -0.6` with `right.aim = 0, 0` (further out: the arm straighter, `reach` near 1, or the shoulder
+   pulled along once past it, depending on where the gun puts the wrist);
+   `right.position = 0.1, -0.1, -1.0` (beyond reach: `D from the head's point` above 0, the arm straight,
+   no gap at the wrist); `right.position = 0.0, -0.25, -0.3` with `right.aim = 40, 0` (across the body:
+   the elbow out to the right). Compare with `ETERNALVR_WEAPON_ARM=game` at the same poses (no arm, or the
+   forearm running off to a screen corner). The gun and hand must sit exactly where they do with `game`. A
+   melee, a grenade, a weapon switch and a glory kill give `weapon arm: game (left-arm action)`, `(left-arm
+   animation)`, `(forced view)` or `(sync)` and the game's arm, then `weapon arm: ik (controller)` again.
+   Repeat with `ETERNALVR_HANDEDNESS=left` (the start-up line says `for the left controller`, the shoulder
+   `0.18` to the left) and with `ETERNALVR_OFFHAND=free` (both arms, `room for 15 and 15`).
+   The right arm's surface ("The weapon's mesh kit"): with the combat shotgun, `weapon arm: right arm
+   surface 1 of 7 on the hands model, found by name ...` and `... surface 1 shown (the weapon's mesh kit
+   had hidden it)` on the first pose, and the pose line ends `; right arm surface shown`; a glove on the
+   pistol grip and a sleeve behind it, where `game` shows a bare grip. With
+   `ETERNALVR_WEAPON_ARM_TEST_SHOULDER=0.45,0.15,0.05` the arm crosses the view. The first melee or switch
+   logs `... surface 1 hidden again ...` and no arm points at the camera during it.

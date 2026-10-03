@@ -109,7 +109,7 @@ void refreshTestInput() {
 
 bool isPlayerSafe(const std::byte* object) {
     const std::byte* vtable = nullptr;
-    return object && safeRead(object, vtable) && state().player.isPlayer(object);
+    return object && safeRead(object, vtable) && state().player.isPlayerVtable(vtable);
 }
 
 std::optional<input::TestInput> testInput() {

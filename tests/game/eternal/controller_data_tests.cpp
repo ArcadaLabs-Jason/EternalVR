@@ -42,7 +42,6 @@ using evr::input::xrAction;
 using evr::input::XrActionDef;
 using evr::input::XrActionId;
 using evr::input::xrActions;
-using evr::input::XrActionSetId;
 using evr::test::questTouchBindings;
 
 namespace {
@@ -191,9 +190,6 @@ TEST_CASE("every gameplay action is bound on both hands, except where a controll
         CAPTURE(controllerName(controller));
         const ControllerData data = dataOf(controller);
         for (const XrActionDef& action : xrActions()) {
-            if (action.set != XrActionSetId::Gameplay) {
-                continue;
-            }
             for (const Hand hand : {Hand::Left, Hand::Right}) {
                 CAPTURE(action.name);
                 CAPTURE(static_cast<int>(hand));
@@ -201,11 +197,13 @@ TEST_CASE("every gameplay action is bound on both hands, except where a controll
                 CHECK((data.find(action.id, hand) != nullptr) == expected);
             }
         }
-        // Menus can be pointed at and confirmed with either hand.
-        for (const Hand hand : {Hand::Left, Hand::Right}) {
-            CHECK(data.find(XrActionId::MenuPointerPose, hand) != nullptr);
-            CHECK(data.find(XrActionId::MenuSelect, hand) != nullptr);
-        }
+    }
+}
+
+TEST_CASE("no built-in file keeps a key of the retired menu set") {
+    for (const Controller controller : kControllers) {
+        CAPTURE(controllerName(controller));
+        CHECK(builtinControllerData(controller).find("\"menu.") == std::string_view::npos);
     }
 }
 
@@ -379,7 +377,6 @@ TEST_CASE("Steam Frame: four face buttons and a bumper per hand, a gamepad's act
     CHECK(data.find(XrActionId::Menu, Hand::Left)->path == "/user/hand/left/input/view/click");
     CHECK(data.find(XrActionId::Menu, Hand::Right)->path == "/user/hand/right/input/menu/click");
     CHECK(data.find(XrActionId::Shoulder, Hand::Right)->path == "/user/hand/right/input/shoulder/click");
-    CHECK(data.find(XrActionId::MenuClose, Hand::Left)->path == "/user/hand/left/input/view/click");
     const BindingProfile right = mapOf(Controller::SteamFrame, Handedness::Right);
     CHECK(bindingOf(right, GameAction::Jump)->input == ButtonInput::Primary);
     CHECK(bindingOf(right, GameAction::Dash)->input == ButtonInput::Secondary);

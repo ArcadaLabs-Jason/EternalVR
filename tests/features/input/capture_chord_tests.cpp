@@ -14,6 +14,8 @@ using evr::test::restingFrame;
 
 namespace {
 
+constexpr float kFrame = 1.0f / 90.0f;
+
 InputFrame frameOf(bool menu, float leftTrigger, float rightTrigger) {
     InputFrame frame = restingFrame();
     frame.left.menuButton = menu;
@@ -26,111 +28,144 @@ InputFrame frameOf(bool menu, float leftTrigger, float rightTrigger) {
 
 TEST_CASE("a trigger pulled while Menu is held asks for one capture per pull") {
     CaptureChord chord;
-    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f)).capture);
-    CHECK(chord.update(frameOf(true, 0.0f, 1.0f)).capture);
-    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 1.0f)).capture); // still the same pull
-    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f)).capture);
-    CHECK(chord.update(frameOf(true, 1.0f, 0.0f)).capture); // the other trigger works too
+    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f), kFrame).capture);
+    CHECK(chord.update(frameOf(true, 0.0f, 1.0f), kFrame).capture);
+    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 1.0f), kFrame).capture); // still the same pull
+    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f), kFrame).capture);
+    CHECK(chord.update(frameOf(true, 1.0f, 0.0f), kFrame).capture); // the other trigger works too
 }
 
 TEST_CASE("a trigger alone, or Menu alone, asks for nothing") {
     CaptureChord chord;
-    CHECK_FALSE(chord.update(frameOf(false, 1.0f, 1.0f)).capture);
-    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 0.0f)).capture);
-    const CaptureChordOutput menu = chord.update(frameOf(true, 0.0f, 0.0f));
+    CHECK_FALSE(chord.update(frameOf(false, 1.0f, 1.0f), kFrame).capture);
+    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 0.0f), kFrame).capture);
+    const CaptureChordOutput menu = chord.update(frameOf(true, 0.0f, 0.0f), kFrame);
     CHECK_FALSE(menu.capture);
     CHECK_FALSE(menu.cancelMenu);
 }
 
 TEST_CASE("a trigger already down when Menu goes down is no capture, but is held back") {
     CaptureChord chord;
-    const CaptureChordOutput firing = chord.update(frameOf(false, 0.0f, 1.0f));
+    const CaptureChordOutput firing = chord.update(frameOf(false, 0.0f, 1.0f), kFrame);
     CHECK_FALSE(firing.triggerHeldBack[1]);
-    const CaptureChordOutput menu = chord.update(frameOf(true, 0.0f, 1.0f));
+    const CaptureChordOutput menu = chord.update(frameOf(true, 0.0f, 1.0f), kFrame);
     CHECK_FALSE(menu.capture);
     CHECK(menu.triggerHeldBack[1]);
 }
 
 TEST_CASE("a trigger pulled during Menu stays held back until it is let go") {
     CaptureChord chord;
-    chord.update(frameOf(true, 0.0f, 0.0f));
-    CHECK(chord.update(frameOf(true, 0.0f, 1.0f)).triggerHeldBack[1]);
-    const CaptureChordOutput menuUp = chord.update(frameOf(false, 0.0f, 1.0f));
+    chord.update(frameOf(true, 0.0f, 0.0f), kFrame);
+    CHECK(chord.update(frameOf(true, 0.0f, 1.0f), kFrame).triggerHeldBack[1]);
+    const CaptureChordOutput menuUp = chord.update(frameOf(false, 0.0f, 1.0f), kFrame);
     CHECK(menuUp.triggerHeldBack[1]);
     CHECK_FALSE(menuUp.triggerHeldBack[0]);
-    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 0.0f)).triggerHeldBack[1]);
-    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 1.0f)).triggerHeldBack[1]); // an ordinary pull again
+    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 0.0f), kFrame).triggerHeldBack[1]);
+    CHECK_FALSE(
+        chord.update(frameOf(false, 0.0f, 1.0f), kFrame).triggerHeldBack[1]); // an ordinary pull again
 }
 
 TEST_CASE("the Menu press with a capture is cancelled until Menu goes up") {
     CaptureChord chord;
-    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f)).cancelMenu);
-    CHECK(chord.update(frameOf(true, 1.0f, 0.0f)).cancelMenu);
-    CHECK(chord.update(frameOf(true, 0.0f, 0.0f)).cancelMenu);
-    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 0.0f)).cancelMenu);
-    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f)).cancelMenu); // the next press starts clean
+    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f), kFrame).cancelMenu);
+    CHECK(chord.update(frameOf(true, 1.0f, 0.0f), kFrame).cancelMenu);
+    CHECK(chord.update(frameOf(true, 0.0f, 0.0f), kFrame).cancelMenu);
+    CHECK_FALSE(chord.update(frameOf(false, 0.0f, 0.0f), kFrame).cancelMenu);
+    CHECK_FALSE(chord.update(frameOf(true, 0.0f, 0.0f), kFrame).cancelMenu); // the next press starts clean
 }
 
 TEST_CASE("a trigger resting below the press threshold does not capture") {
     CaptureChord chord;
-    chord.update(frameOf(true, 0.0f, 0.0f));
-    CHECK_FALSE(chord.update(frameOf(true, 0.5f, 0.3f)).capture);
-    CHECK(chord.update(frameOf(true, 0.6f, 0.3f)).capture);
+    chord.update(frameOf(true, 0.0f, 0.0f), kFrame);
+    CHECK_FALSE(chord.update(frameOf(true, 0.5f, 0.3f), kFrame).capture);
+    CHECK(chord.update(frameOf(true, 0.6f, 0.3f), kFrame).capture);
 }
 
 namespace {
 
-InputFrame secondaryFrame(bool y, float leftTrigger, float rightTrigger) {
+InputFrame sticksFrame(bool sticks, float leftTrigger, float rightTrigger) {
     InputFrame frame = frameOf(false, leftTrigger, rightTrigger);
-    frame.left.secondaryButton = y;
+    frame.left.stickClick = sticks;
+    frame.right.stickClick = sticks;
     return frame;
+}
+
+CaptureChord sticksChord() {
+    return CaptureChord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSticks);
+}
+
+// Both sticks held for `seconds` with the triggers up; returns the last output.
+CaptureChordOutput holdSticks(CaptureChord& chord, float seconds, float rightTrigger = 0.0f) {
+    CaptureChordOutput out;
+    for (int i = 0; i < static_cast<int>(seconds / kFrame); ++i) {
+        out = chord.update(sticksFrame(true, 0.0f, rightTrigger), kFrame);
+    }
+    return out;
 }
 
 } // namespace
 
-TEST_CASE("Menu only: the secondary button does not chord") {
+TEST_CASE("Menu only: both sticks held do not chord") {
     CaptureChord chord;
-    chord.update(secondaryFrame(true, 0.0f, 0.0f));
-    const CaptureChordOutput pull = chord.update(secondaryFrame(true, 0.0f, 1.0f));
+    holdSticks(chord, 0.5f);
+    const CaptureChordOutput pull = chord.update(sticksFrame(true, 0.0f, 1.0f), kFrame);
     CHECK_FALSE(pull.capture);
     CHECK_FALSE(pull.triggerHeldBack[1]);
-    CHECK_FALSE(pull.cancelSecondary);
+    CHECK_FALSE(pull.cancelSticks);
 }
 
-TEST_CASE("SteamVR: the secondary button held + a trigger pulled captures, and the pull never fires") {
-    CaptureChord chord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSecondary);
-    const CaptureChordOutput held = chord.update(secondaryFrame(true, 0.0f, 0.0f));
+TEST_CASE("Menu or sticks: both sticks held past the hold time + a trigger captures, the pull never fires") {
+    CaptureChord chord = sticksChord();
+    const CaptureChordOutput held = holdSticks(chord, 0.3f);
     CHECK_FALSE(held.capture);
-    CHECK_FALSE(held.triggerHeldBack[1]); // Y alone holds nothing back
-    const CaptureChordOutput pull = chord.update(secondaryFrame(true, 0.0f, 1.0f));
+    CHECK_FALSE(held.triggerHeldBack[1]); // the sticks alone hold nothing back
+    const CaptureChordOutput pull = chord.update(sticksFrame(true, 0.0f, 1.0f), kFrame);
     CHECK(pull.capture);
     CHECK(pull.triggerHeldBack[1]);
-    CHECK(pull.cancelSecondary);
+    CHECK(pull.cancelSticks);
     CHECK_FALSE(pull.cancelMenu);
-    // Y up first: the pull stays held back until the trigger is let go, and the cancel ends with the press.
-    const CaptureChordOutput yUp = chord.update(secondaryFrame(false, 0.0f, 1.0f));
-    CHECK(yUp.triggerHeldBack[1]);
-    CHECK_FALSE(yUp.cancelSecondary);
-    CHECK_FALSE(chord.update(secondaryFrame(false, 0.0f, 0.0f)).triggerHeldBack[1]);
-    CHECK_FALSE(chord.update(secondaryFrame(false, 0.0f, 1.0f)).triggerHeldBack[1]); // firing again
+    CHECK(chord.update(sticksFrame(true, 0.0f, 1.0f), kFrame).cancelSticks); // until the chord ends
+    // Sticks up first: the pull stays held back until the trigger is let go, and the cancel ends.
+    const CaptureChordOutput up = chord.update(sticksFrame(false, 0.0f, 1.0f), kFrame);
+    CHECK(up.triggerHeldBack[1]);
+    CHECK_FALSE(up.cancelSticks);
+    CHECK_FALSE(chord.update(sticksFrame(false, 0.0f, 0.0f), kFrame).triggerHeldBack[1]);
+    CHECK_FALSE(chord.update(sticksFrame(false, 0.0f, 1.0f), kFrame).triggerHeldBack[1]); // firing again
 }
 
-TEST_CASE("SteamVR: a Y tap while firing keeps firing and captures nothing") {
-    CaptureChord chord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSecondary);
-    chord.update(secondaryFrame(false, 0.0f, 1.0f));
-    const CaptureChordOutput tap = chord.update(secondaryFrame(true, 0.0f, 1.0f));
-    CHECK_FALSE(tap.capture);
-    CHECK_FALSE(tap.triggerHeldBack[1]);
-    CHECK_FALSE(tap.cancelSecondary);
-    CHECK_FALSE(chord.update(secondaryFrame(false, 0.0f, 1.0f)).triggerHeldBack[1]);
+TEST_CASE("Menu or sticks: a pull before the hold time, or with one stick, is an ordinary pull") {
+    CaptureChord quick = sticksChord();
+    holdSticks(quick, 0.1f);
+    const CaptureChordOutput early = quick.update(sticksFrame(true, 0.0f, 1.0f), kFrame);
+    CHECK_FALSE(early.capture);
+    CHECK_FALSE(early.triggerHeldBack[1]);
+
+    CaptureChord one = sticksChord();
+    for (int i = 0; i < static_cast<int>(0.5f / kFrame); ++i) {
+        InputFrame frame = sticksFrame(false, 0.0f, 0.0f);
+        frame.left.stickClick = true;
+        one.update(frame, kFrame);
+    }
+    InputFrame pull = sticksFrame(false, 0.0f, 1.0f);
+    pull.left.stickClick = true;
+    CHECK_FALSE(one.update(pull, kFrame).capture);
 }
 
-TEST_CASE("SteamVR: the Menu chord still works where the Menu button arrives") {
-    CaptureChord chord(evr::input::kTriggerThresholds, CaptureButtons::MenuOrSecondary);
-    chord.update(frameOf(true, 0.0f, 0.0f));
-    CHECK(chord.update(frameOf(true, 0.0f, 0.0f)).triggerHeldBack[0]);
-    const CaptureChordOutput pull = chord.update(frameOf(true, 1.0f, 0.0f));
+TEST_CASE("Menu or sticks: a trigger already down when the sticks go down keeps firing") {
+    CaptureChord chord = sticksChord();
+    chord.update(sticksFrame(false, 0.0f, 1.0f), kFrame);
+    const CaptureChordOutput held = holdSticks(chord, 0.5f, 1.0f);
+    CHECK_FALSE(held.capture);
+    CHECK_FALSE(held.triggerHeldBack[1]);
+    CHECK_FALSE(held.cancelSticks);
+}
+
+TEST_CASE("Menu or sticks: the Menu chord still works where the Menu button arrives") {
+    CaptureChord chord = sticksChord();
+    chord.update(frameOf(true, 0.0f, 0.0f), kFrame);
+    CHECK(chord.update(frameOf(true, 0.0f, 0.0f), kFrame).triggerHeldBack[0]);
+    const CaptureChordOutput pull = chord.update(frameOf(true, 1.0f, 0.0f), kFrame);
     CHECK(pull.capture);
     CHECK(pull.cancelMenu);
-    CHECK_FALSE(pull.cancelSecondary);
+    CHECK_FALSE(pull.cancelSticks);
 }

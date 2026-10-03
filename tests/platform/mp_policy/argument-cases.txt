@@ -1,0 +1,65 @@
+# Extra game arguments both multiplayer screens must judge the same way: the launcher's ArgumentPolicy
+# (launcher/tests, ArgumentPolicyTests) and the layer's mp_policy::screenArguments (argument_cases_tests.cpp)
+# both read this file. Both take their patterns from launcher/data/refused-args.txt.
+#
+# refuse | arguments | the pattern that refuses them (the first one found)
+# allow | arguments
+# Arguments are taken as written after trimming: quotes and '\' are part of them.
+
+# The launcher review's cases (M2): arguments the layer refused but the launcher let through.
+refuse | +com_gamemode 2 | +com_gamemode
+refuse | +map pvp_zap | pvp_
+refuse | +steam_invitationCookie 1 | +steam_invit
+
+# BATTLEMODE maps however they are spelled.
+refuse | +map game/pvp/pvp_inferno | game/pvp/
+refuse | +map GAME\PVP\pvp_darkworld | game/pvp/
+refuse | +map game//pvp//pvp_inferno | game/pvp/
+refuse | +map game\\pvp\pvp_inferno | game/pvp/
+refuse | +map "game/pvp/pvp_inferno" | game/pvp/
+refuse | +map game/"pvp"/pvp_inferno | game/pvp/
+refuse | +map game/tutorials/tutorial_pvp_laser | pvp_
+refuse | +map game/tutorials/tutorial_demons | tutorial_demons
+refuse | +map game/tutorials/tutorial_invasion | invasion
+refuse | -battlemode | battlemode
+refuse | battle"mode" | battlemode
+refuse | +debug_battlemode_tutorial_screenfade 0 | battlemode
+
+# Multiplayer commands in their +set, +seta, spaced and quoted forms.
+refuse | +connect 1.2.3.4 | +connect
+refuse | + connect 1.2.3.4 | +connect
+refuse | +"connect" 1.2.3.4 | +connect
+refuse | +set connect 1.2.3.4 | +connect
+refuse | +seta   Connect x | +connect
+refuse | +set net_serverDedicated 1 | +net_
+refuse | + seta si_map x | +si_
+refuse | +SETA si_map x | +si_
+refuse | +com_skipIntroVideo 1 +matchmaking_start | +matchmaking
+refuse | +party | +party
+refuse | +lobby | +lobby
+refuse | +g_gametype 2 | +g_gametype
+refuse | +set com_gameMode 2 | +com_gamemode
+refuse | +JoinShellLobby 1 | +join
+refuse | +restartmapwithlobby | +restartmapwithlobby
+refuse | +ConnectOrHostCasualBattleArenaResult 1 | +connect
+refuse | +pvp_skipReadyUp 1 | +pvp_
+
+# What Steam and Xbox pass for an invite or a join.
+refuse | +connect_lobby 109775241234567890 | +connect
+refuse | +steam_inviteSenderId 7656119 | +steam_invit
+refuse | ms-xbl-12345678://inviteHandleAccept/?invitedXuid=1&handle=abc | ms-xbl-
+refuse | -inviteHandleAccept | invitehandleaccept
+refuse | -activityHandleJoin | activityhandlejoin
+refuse | -handle=abc | handle=
+
+# Single-player arguments.
+allow | +s_volume 0
+allow | +com_skipIntroVideo 1 +r_swapInterval 0 +rs_enable 0
+allow | +com_skipIntroVideo 1 +r_fullscreen 0
+allow | +map game/sp/e1m1_intro/e1m1_intro
+allow | +map game/sp/e1m2_battle/e1m2_battle
+allow | +devmap game/dlc2/e5m1_spear/e5m1_spear
+allow | +set com_skipIntroVideo 1 +map "game/sp/e1m1_intro/e1m1_intro"
+allow | +set hands_fovScale 1
+allow | +settings x
+allow | +set

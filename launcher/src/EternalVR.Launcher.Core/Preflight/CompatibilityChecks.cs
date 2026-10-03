@@ -63,8 +63,7 @@ namespace EternalVR.Launcher.Core.Preflight
             var largest = hardware.Where(g => g.DedicatedMemoryBytes.HasValue).OrderByDescending(g => g.DedicatedMemoryBytes).FirstOrDefault();
             if (largest != null && largest.DedicatedMemoryBytes.Value <= LowVramBytes)
                 yield return new Check("vram", Severity.Warn,
-                    $"{largest.Name} has {Gb(largest.DedicatedMemoryBytes.Value)} GB of video memory. Stereo renders two images; "
-                    + "lower the render scale or the game's texture quality if the game stutters or crashes.");
+                    $"{largest.Name} has {Gb(largest.DedicatedMemoryBytes.Value)} GB of video memory; stereo renders two images.");
             if (hardware.Count > 1)
                 yield return new Check("gpus", Severity.Warn,
                     "More than one GPU: " + string.Join(", ", hardware.Select(g => g.Name)) + ". The game, the headset runtime and the "

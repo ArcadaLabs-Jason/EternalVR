@@ -19,6 +19,9 @@
 // +connect_lobby from a Steam invite, network settings and so on) keep the layer from loading.
 
 #include "platform/mp_policy/mp_policy.hpp"
+#include "platform/mp_policy/trip_listeners.hpp"
+
+#include <cstdint>
 
 namespace evr::vkcore::mp_guard {
 
@@ -35,10 +38,19 @@ bool allowsGameTouch();
 
 mp_policy::GuardState state();
 
-// Called once, on the thread that trips the guard, right after the latch closes (key injection uses it to
-// post one release for each key it holds). Registering after a trip calls it at once. One listener.
-using TripListener = void (*)();
-void setTripListener(TripListener listener);
+// The map loads the map-load hook has seen so far (the main menu is one); 0 before the first or without the
+// hook. Any thread.
+std::uint32_t mapLoads();
+
+// Trip listeners: each is called once, on the thread that trips the guard, right after the latch closes, in
+// the order added; one added after a trip is called at once, on the adding thread. A fixed list of
+// mp_policy::TripListeners::kCapacity (8), lock-free (mp_policy/trip_listeners.hpp); false (not added) when
+// it is full or `listener` is null. Key injection posts one release for each key it holds; the cvar book
+// gives back the cvars the layer wrote (cvar_book.hpp); the prompt hooks make the game rebuild its cached
+// prompts. A listener may run on any game thread or the present thread, so it takes its own module's locks
+// and must not wait for another thread.
+using TripListener = mp_policy::TripListeners::Listener;
+bool addTripListener(TripListener listener);
 
 // Reads the main menu's current and next screen and trips on an online one. Cheap; the layer calls it
 // on every present. Also fires the development test trip (ETERNALVR_GUARD_TEST_TRIP_MS).

@@ -52,8 +52,27 @@ namespace EternalVR.Launcher.Core.Tests
                 var snap = SettingsSnapshot.Take(t.Combine("data", "snapshots"), "s1", locs);
                 t.Write("steam/userdata/111/782330/remote/PROFILE/profile.bin", "profile-v2");
                 var report = SettingsSnapshot.Restore(snap, Forced);
-                Assert.Single(report.ChangedNotRestored);
+                // The game rewrites profile.bin every session: a Steam Cloud line, not the warning about local files.
+                Assert.Single(report.ChangedInCloud, l => l.Contains("PROFILE/profile.bin"));
+                Assert.Empty(report.ChangedNotRestored);
                 Assert.Equal("profile-v2", t.Read("steam/userdata/111/782330/remote/PROFILE/profile.bin"));
+            }
+        }
+
+        [Fact]
+        public void AKeyedConfigInASteamCloudFolderIsComparedOnly()
+        {
+            using (var t = MakeTree(out var locs))
+            {
+                // A future game build that keeps a text config under PROFILE: Steam records it, so it is never rewritten.
+                t.Write("steam/userdata/111/782330/remote/PROFILE/x.cfg", "r_dof \"1\"\n");
+                var snap = SettingsSnapshot.Take(t.Combine("data", "snapshots"), "s1", locs);
+                t.Write("steam/userdata/111/782330/remote/PROFILE/x.cfg", "r_dof \"0\"\nr_hdrDisplay \"0\"\n");
+                var report = SettingsSnapshot.Restore(snap, Forced);
+                Assert.Equal("r_dof \"0\"\nr_hdrDisplay \"0\"\n", t.Read("steam/userdata/111/782330/remote/PROFILE/x.cfg"));
+                Assert.Contains(report.ChangedInCloud, l => l.Contains("PROFILE/x.cfg"));
+                Assert.DoesNotContain(report.Restored, l => l.Contains("x.cfg"));
+                Assert.False(Directory.Exists(Path.Combine(snap, "replaced", "steam-111")));
             }
         }
 
@@ -79,6 +98,25 @@ namespace EternalVR.Launcher.Core.Tests
                 t.Write("saved/base/DOOMEternalConfig.local", "r_windowPosX \"2569\"\n");
                 SettingsSnapshot.Restore(snap, Forced);
                 Assert.Contains("r_windowPosX \"2569\"", t.Read("saved/base/DOOMEternalConfig.local"));
+            }
+        }
+
+        [Fact]
+        public void CvarsOfExtraGameArgumentsAreRestoredWithTheSession()
+        {
+            using (var t = MakeTree(out var locs))
+            {
+                t.Write("saved/base/DOOMEternalConfig.local", "r_mode \"25\"\nm_sensitivity \"5\"\n");
+                var extra = Launch.SessionKeys.FromArguments("+m_sensitivity 3 +set r_fullscreen 1");
+                var snap = SettingsSnapshot.Take(t.Combine("data", "snapshots"), "s1", locs, extra);
+
+                // The game saved the session's values on exit.
+                t.Write("saved/base/DOOMEternalConfig.local", "r_mode \"25\"\nm_sensitivity \"3\"\nr_fullscreen \"1\"\n");
+                // The launcher's list alone (as after a crash, from the marker): the snapshot adds its own keys.
+                var report = SettingsSnapshot.Restore(snap, Forced);
+                Assert.Equal("r_mode \"25\"\nm_sensitivity \"5\"\n", t.Read("saved/base/DOOMEternalConfig.local"));
+                Assert.Contains(report.Restored, r => r.Contains("m_sensitivity: \"3\" -> \"5\"") && r.Contains("r_fullscreen: removed"));
+                Assert.Equal(new[] { "m_sensitivity", "r_fullscreen" }, SettingsSnapshot.SessionKeysOf(snap));
             }
         }
 
@@ -197,6 +235,58 @@ namespace EternalVR.Launcher.Core.Tests
                 var names = SaveBackups.List(t.Combine("backups")).Select(Path.GetFileName).ToArray();
                 Assert.Equal(new[] { "20260107-000000", "20260106-000000", "20260105-000000", "20260104-000000", "20260103-000000" }, names);
                 Assert.False(Directory.Exists(t.Combine("backups", "20260109-000000")));
+            }
+        }
+
+        [Fact]
+        public void SevenRestoresKeepFivePreRestoreBackups()
+        {
+            using (var t = MakeSaves(out var locs))
+            {
+                var dir = SaveBackups.Create(t.Combine("backups"), "20260101-000000", locs);
+                for (int i = 1; i <= 7; i++)
+                {
+                    t.Write("steam/userdata/111/782330/remote/GAME-AUTOSAVE0/game.details", "played " + i);
+                    SaveBackups.Restore(t.Combine("backups"), dir, new DateTime(2026, 1, 2, 0, 0, i));
+                }
+                var pre = SaveBackups.PreRestoreBackups(t.Combine("backups")).Select(Path.GetFileName).ToArray();
+                Assert.Equal(new[] { "pre-restore-20260102-000007", "pre-restore-20260102-000006", "pre-restore-20260102-000005",
+                    "pre-restore-20260102-000004", "pre-restore-20260102-000003" }, pre);
+                Assert.Equal("played 7", File.ReadAllText(Path.Combine(t.Combine("backups"), pre[0], "steam-111", "GAME-AUTOSAVE0", "game.details")));
+                // The rotating backup restored from is not one of them.
+                Assert.Equal(new[] { "20260101-000000" }, SaveBackups.List(t.Combine("backups")).Select(Path.GetFileName));
+
+                // Older ones left by an earlier launcher go at the next rotation.
+                Directory.CreateDirectory(t.Combine("backups", "pre-restore-20250101-000000"));
+                SaveBackups.Rotate(t.Combine("backups"));
+                Assert.Equal(SaveBackups.Keep, SaveBackups.PreRestoreBackups(t.Combine("backups")).Count);
+                Assert.False(Directory.Exists(t.Combine("backups", "pre-restore-20250101-000000")));
+            }
+        }
+
+        [Fact]
+        public void AHalfCopiedPreRestoreBackupDoesNotPushOutAComplete()
+        {
+            using (var t = MakeSaves(out var locs))
+            {
+                var dir = SaveBackups.Create(t.Combine("backups"), "20260101-000000", locs);
+                for (int i = 1; i <= 5; i++) SaveBackups.Restore(t.Combine("backups"), dir, new DateTime(2026, 1, 2, 0, 0, i));
+                // A crash in the middle of the next pre-restore copy: files, no sums.
+                t.Write("backups/pre-restore-20260103-000000/steam-111/GAME-AUTOSAVE0/game.details", "half");
+
+                Assert.Equal(5, SaveBackups.PreRestoreBackups(t.Combine("backups")).Count);
+                Assert.DoesNotContain(SaveBackups.PreRestoreBackups(t.Combine("backups")), d => d.EndsWith("20260103-000000", StringComparison.Ordinal));
+                SaveBackups.Rotate(t.Combine("backups"));
+                Assert.False(Directory.Exists(t.Combine("backups", "pre-restore-20260103-000000")));
+                Assert.True(Directory.Exists(t.Combine("backups", "pre-restore-20260102-000001")));
+                Assert.Equal(5, SaveBackups.PreRestoreBackups(t.Combine("backups")).Count);
+
+                // A restore prunes the same way.
+                t.Write("backups/pre-restore-20260103-000000/steam-111/GAME-AUTOSAVE0/game.details", "half");
+                SaveBackups.Restore(t.Combine("backups"), dir, new DateTime(2026, 1, 2, 0, 0, 6));
+                Assert.False(Directory.Exists(t.Combine("backups", "pre-restore-20260103-000000")));
+                Assert.Equal(new[] { "pre-restore-20260102-000006", "pre-restore-20260102-000005", "pre-restore-20260102-000004",
+                    "pre-restore-20260102-000003", "pre-restore-20260102-000002" }, SaveBackups.PreRestoreBackups(t.Combine("backups")).Select(Path.GetFileName));
             }
         }
 

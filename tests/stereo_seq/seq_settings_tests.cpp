@@ -1,4 +1,5 @@
 #include "stereo_seq/seq_settings.hpp"
+#include "stereo_seq/stereo_taa.hpp"
 
 #include <doctest/doctest.h>
 
@@ -65,6 +66,25 @@ TEST_CASE("cvar check: missing, different, overridden and set forms") {
 TEST_CASE("runtime cvars: per-eye temporal effects own the TAA cvars") {
     CHECK(evr::stereo_seq::stereoRuntimeCvars(evr::stereo_seq::StereoTemporal::PerEye).empty());
     CHECK(evr::stereo_seq::stereoRuntimeCvars(evr::stereo_seq::StereoTemporal::Off).size() == 2);
+}
+
+TEST_CASE("runtime cvars: the scattering filter follows its per-eye history, not the TAA mode") {
+    const auto on = evr::stereo_seq::stereoScatterFilterCvar(true);
+    const auto off = evr::stereo_seq::stereoScatterFilterCvar(false);
+    CHECK(std::string(on.name) == "r_lightScatteringTAA");
+    CHECK(std::string(on.value) == "1");
+    CHECK(std::string(off.name) == "r_lightScatteringTAA");
+    CHECK(std::string(off.value) == "0");
+    // Per-eye TAA's own set holds the same cvar (the filter off there unless the history is per eye).
+    bool inPerEyeSet = false;
+    for (const auto& c : evr::stereo_seq::stereoTaaForcedCvars()) {
+        inPerEyeSet = inPerEyeSet || (c.name == off.name && c.value == off.value);
+    }
+    CHECK(inPerEyeSet);
+    // Not in the Off set, which would hold it at one value.
+    for (const auto& c : evr::stereo_seq::stereoRuntimeCvars()) {
+        CHECK((c.name != on.name));
+    }
 }
 
 TEST_CASE("runtime cvars: TAA off, a subset of the v1 set") {

@@ -36,14 +36,15 @@ struct TaaEngine {
     const std::byte* opaqueSelector = nullptr;
     // idCVar::SetString (RVA 0x376020): (cvar object, value, force).
     const std::byte* setCvar = nullptr;
-    // The instruction after the auto-exposure index store (RVA 0x1C98D46, in 0x1C988E0): rsi = the
-    // post-process context, its +0x140 the index just stored.
-    const std::byte* exposureSite = nullptr;
     // The render-view job binding the view colour image (slot + 0x48, the previous frame's scene colour)
     // as distortionLastFrameMap: the `add r8, 0xC8` after its load (RVA 0x1C56657), r8 = the image.
     const std::byte* distortionSite = nullptr;
 };
 bool locateTaaEngine(const GameImage& image, TaaEngine& out);
+
+// The instruction after the auto-exposure index store (RVA 0x1C98D46, in 0x1C988E0): rsi = the post-process
+// context, its +0x140 the index just stored. nullptr (logged under `tag`) unless it matches once.
+const std::byte* locateExposureSite(const GameImage& image, const char* tag);
 
 // idCVar::SetString (RVA 0x376020): (cvar object, value, force). nullptr (logged) unless it matches once.
 const std::byte* findCvarSetter(const GameImage& image);

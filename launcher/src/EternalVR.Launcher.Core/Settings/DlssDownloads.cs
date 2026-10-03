@@ -34,10 +34,10 @@ namespace EternalVR.Launcher.Core.Settings
     }
 
     /// <summary>
-    /// The DLSS DLL the launcher downloads on the player's request, straight from NVIDIA's repository, for "DLSS version:
-    /// From a file" (docs/rig-findings/dlss-dll.md). EternalVR does not ship or host NVIDIA's file: it is fetched on the
-    /// player's click after the player accepts NVIDIA's license, kept in the data folder, and used only when its size and
-    /// SHA-256 are the pinned ones.
+    /// The DLSS DLL the launcher downloads on the player's request, straight from NVIDIA's repository, for the DLSS Version
+    /// choice "Newest from NVIDIA" (docs/rig-findings/dlss-dll.md). EternalVR does not ship or host NVIDIA's file: it is
+    /// fetched on the player's click after the player accepts NVIDIA's license, kept in the data folder, and used only when
+    /// its size and SHA-256 are the pinned ones.
     /// </summary>
     public sealed class DlssDownloads
     {

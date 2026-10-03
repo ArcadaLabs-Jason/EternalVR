@@ -49,8 +49,8 @@ namespace EternalVR.Launcher
                 AutoSize = true, MaximumSize = new Size(440, 0), Margin = new Padding(0, 0, 0, 8),
                 Text = $"The launcher can download DLSS {release.Version.ToString(3)} ({release.SizeText}) for you, straight from NVIDIA's "
                     + "own GitHub repository (github.com/NVIDIA/DLSS). EternalVR does not ship this file: it is NVIDIA's, and NVIDIA's "
-                    + "RTX SDK license applies to it. The file is kept in EternalVR's data folder and used for \"DLSS version: "
-                    + "From a file\".",
+                    + "RTX SDK license applies to it. The file is kept in EternalVR's data folder and used when the DLSS Version is "
+                    + $"\"NVIDIA {release.Version.ToString(3)} (latest)\".",
             };
             var license = new LinkLabel { Text = "Read NVIDIA's license", AutoSize = true, Margin = new Padding(0, 0, 0, 10) };
             license.LinkClicked += (s, e) => Process.Start(release.License.AbsoluteUri);

@@ -88,7 +88,8 @@ namespace EternalVR.Launcher.Core.Steam
                     ? ParseLibraryFolders(File.ReadAllText(vdfPath), steamRoot)
                     : new[] { NormalizeDir(steamRoot) };
             }
-            catch (VdfFormatException)
+            // Unreadable (Steam may hold the file while it writes it) or malformed: the Steam folder alone is searched.
+            catch (Exception e) when (e is VdfFormatException || e is IOException || e is UnauthorizedAccessException)
             {
                 libraries = new[] { NormalizeDir(steamRoot) };
             }
@@ -107,7 +108,7 @@ namespace EternalVR.Launcher.Core.Steam
             if (!File.Exists(manifest)) return null;
             VdfNode state;
             try { state = VdfParser.Parse(File.ReadAllText(manifest))["AppState"]; }
-            catch (Exception e) when (e is VdfFormatException || e is IOException) { return null; }
+            catch (Exception e) when (e is VdfFormatException || e is IOException || e is UnauthorizedAccessException) { return null; }
             var installDir = state?.GetString("installdir");
             if (string.IsNullOrEmpty(installDir)) return null;
             var gameRoot = Path.Combine(libraryRoot, "steamapps", "common", installDir);

@@ -15,7 +15,7 @@ bool handTracked(const HandState& hand) {
 } // namespace
 
 bool HandsJumpDetector::update(const InputFrame& frame, posture::Posture posture, float dtSeconds) {
-    if (!active(frame, posture)) {
+    if (!active(frame)) {
         reset();
         return false;
     }
@@ -32,7 +32,7 @@ bool HandsJumpDetector::update(const InputFrame& frame, posture::Posture posture
         armed_ = true;
     }
 
-    const float headHeight = frame.head.pose.position.y + settings_.minHeightAboveHead;
+    const float headHeight = frame.head.pose.position.y + heightAboveHead(posture);
     const bool bothHigh =
         frame.left.aimPose.position.y >= headHeight && frame.right.aimPose.position.y >= headHeight;
     const bool bothFast = leftSeenFast_ && rightSeenFast_ && sinceLeftFast_ <= settings_.fastWindowSeconds &&
@@ -45,11 +45,13 @@ bool HandsJumpDetector::update(const InputFrame& frame, posture::Posture posture
     return true;
 }
 
-bool HandsJumpDetector::active(const InputFrame& frame, posture::Posture posture) const {
+float HandsJumpDetector::heightAboveHead(posture::Posture posture) const {
+    return settings_.minHeightAboveHead +
+           (posture == posture::Posture::Seated ? settings_.seatedExtraHeight : 0.0f);
+}
+
+bool HandsJumpDetector::active(const InputFrame& frame) const {
     if (!settings_.enabled) {
-        return false;
-    }
-    if (posture == posture::Posture::Seated && !settings_.allowWhenSeated) {
         return false;
     }
     return frame.head.poseValid && std::isfinite(frame.head.pose.position.y) && handTracked(frame.left) &&

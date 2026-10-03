@@ -144,7 +144,7 @@ bool installOnce() {
     std::array<const void*, kCallSites.size()> returns{};
     const void* slot = nullptr;
     for (std::size_t i = 0; i < kCallSites.size(); ++i) {
-        const std::byte* at = findUniqueInText(text, kCallSites[i].name, kCallSites[i].signature);
+        const std::byte* at = findUniqueInText(text, "size", kCallSites[i].name, kCallSites[i].signature);
         if (!at) {
             EVR_LOG("size: the %s call is not in this build", kCallSites[i].name);
             return false;

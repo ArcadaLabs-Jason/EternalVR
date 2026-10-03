@@ -1,30 +1,41 @@
 #pragma once
 
-// The Dossier map from the thumbsticks (docs/VR_MENUS.md): the game pans its map with a left mouse drag and
-// rotates it with a right drag, so a stick held over the map is turned into drags. Each drag is a stroke
-// from the middle of the screen: the cursor goes there with the buttons up, the button goes down, the
-// cursor moves at the stick's speed, and after a short distance (or when the stick is let go) the button
-// goes up and the next stroke starts from the middle again. The cursor never reaches the edge of its range,
-// where the game would clamp it and the drag would stop.
+// The Dossier map from the thumbsticks (docs/VR_MENUS.md). The game's automap pans with a left drag and
+// rotates with a right drag, and it adds up the raw mouse motion that arrives while the button is held
+// (idAutomap::HandleEvent, docs/rig-findings/menus.md section 6), not the cursor's position: the motion still
+// counts with the cursor held at the edge of its range. So a stick held over the map holds one button down
+// for as long as it is off centre and streams the stick's motion: the cursor goes to the middle of the
+// screen with the buttons up, the button goes down, and it stays down until the stick is let go. Before,
+// each drag was a short stroke from the middle (release, back to the middle, press again, three times a
+// second at full deflection), which the owner felt as the map stopping and starting (2026-10-02).
 //
-// While a stroke is going on the drag owns the cursor: the router sends it to `target` instead of where
-// the ray points. Pure: time comes from the input.
+// With both buttons held every motion pans, so a drag pans or rotates, never both. While the rotate stick is
+// held the pan stick pans with W, A, S and D instead (map_pan_keys.hpp), which the automap reads on their
+// own: both sticks work at once. Once a pan has gone onto the keys it stays there until its stick is let go,
+// so the drag does not switch back and forth. Every press is made with the cursor in the middle of the
+// screen, as before (a press goes to the Dossier's screen too).
+//
+// While a button is down the drag owns the cursor: the router sends no move of its own, and the ray has the
+// cursor again once the stick is let go. Pure: time comes from the input.
 
 #include "features/input/axis2.hpp"
+#include "features/menu/map_pan_keys.hpp"
 #include "features/menu/panel_pointer.hpp"
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace evr::menu {
 
 struct MapDragTuning {
     float deadzone = 0.2f;       // stick deflection below this does nothing (the rest is rescaled to 0..1)
-    float panSpeed = 0.6f;       // GUI heights per second at full deflection (left drag)
-    float rotateSpeed = 0.5f;    // GUI heights per second at full deflection (right drag)
-    float strokeLength = 0.2f;   // of the GUI's smaller side: a stroke ends this far from the middle
+    float releaseZone = 0.15f;   // a drag going on ends only once the stick is back within this
+    float rotateStart = 0.3f;    // the rotate stick's left / right starts a rotation beyond this
+    float panSpeed = 1000.0f;    // mouse counts per second at full deflection (left drag)
+    float rotateSpeed = 1100.0f; // mouse counts per second at full deflection (right drag)
     double minHold = 0.06;       // a button is held at least this long
-    double settleTimeout = 0.25; // a press or release waits at most this long for the cursor
+    double settleTimeout = 0.25; // a press waits at most this long for the cursor to reach the middle
 };
 
 enum class DragButton : std::uint8_t {
@@ -32,9 +43,19 @@ enum class DragButton : std::uint8_t {
     Right, // rotates it
 };
 
-struct DragEvent {
+// What the drag sends, in order.
+struct MapEvent {
+    enum class Kind : std::uint8_t {
+        Button, // `button` down or up
+        Key,    // `key` (map_pan_keys.hpp) down or up
+        Move,   // relative motion (dx, dy)
+    };
+    Kind kind = Kind::Move;
     DragButton button = DragButton::Left;
+    std::uint8_t key = 0;
     bool down = false;
+    std::int32_t dx = 0;
+    std::int32_t dy = 0;
 };
 
 struct MapDragInput {
@@ -48,8 +69,15 @@ struct MapDragInput {
 };
 
 struct MapDragOutput {
-    std::optional<CursorPixel> target; // where the cursor must go; nullopt: the ray has it
-    std::optional<DragEvent> event;    // a button to press or release now
+    std::optional<CursorPixel> target; // where the router moves the cursor (the middle, before a press)
+    std::vector<MapEvent> events;      // buttons, keys and the drag's motion, sent in this order
+};
+
+// How the pan stick pans now.
+enum class MapPanBy : std::uint8_t {
+    None,
+    Drag, // the left button
+    Keys, // W, A, S, D
 };
 
 // A stick deflection with the deadzone taken out and the rest rescaled, so the speed starts from 0.
@@ -61,30 +89,38 @@ public:
 
     MapDragOutput update(const MapDragInput& in);
 
-    // The drag's button, if it is down (the router releases it when the menu closes); the drag is reset.
-    std::optional<DragEvent> reset();
+    // The button and keys still down (the router releases them when the menu closes or the page changes);
+    // the drag is reset.
+    std::vector<MapEvent> reset();
 
-    [[nodiscard]] bool active() const { return phase_ != Phase::Idle; }
-    [[nodiscard]] bool buttonDown() const { return phase_ == Phase::Dragging || phase_ == Phase::Releasing; }
+    // A stick moves the map (the drag owns the cursor, or the keys pan).
+    [[nodiscard]] bool active() const { return phase_ != Phase::Idle || panBy_ != MapPanBy::None; }
+    [[nodiscard]] bool buttonDown() const { return phase_ == Phase::Down; }
+    [[nodiscard]] MapPanBy panBy() const { return panBy_; }
+    [[nodiscard]] bool rotating() const { return rotate_; }
 
 private:
     enum class Phase : std::uint8_t {
         Idle,
-        Seeking,   // the cursor goes to the middle with the button up
-        Dragging,  // the button is down and the cursor moves
-        Releasing, // the cursor waits for its last move, then the button goes up
+        Seeking, // the cursor goes to the middle with the buttons up
+        Down,    // the button is down and the stick's motion is sent
     };
+
+    void sendKeys(MapKeys keys, MapDragOutput& out);
+    void release(MapDragOutput& out);
 
     MapDragTuning tuning_;
     Phase phase_ = Phase::Idle;
     DragButton button_ = DragButton::Left;
+    MapPanBy panBy_ = MapPanBy::None;
+    bool rotate_ = false;
     double last_ = -1.0;
-    double phaseStart_ = 0.0;
+    double seekStart_ = 0.0;
     double downAt_ = 0.0;
-    CursorPixel anchor_;
-    CursorPixel target_;
-    float x_ = 0.0f;
-    float y_ = 0.0f;
+    float restX_ = 0.0f; // motion not yet sent (less than a count)
+    float restY_ = 0.0f;
+    MapPanKeys keyPan_;
+    MapKeys keys_;
 };
 
 } // namespace evr::menu

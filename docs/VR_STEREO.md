@@ -4,7 +4,9 @@
 each game tick is rendered twice, once per eye, from the same tick, and the two images go to the headset
 as one projection layer. The design and every address are in `docs/rig-findings/stereo-routes.md`
 section 2 (Steam build 25216728). The engine's own two-view path (EngineNativeStereo) is not available on
-this build; its findings and the experiment harness that remains are at the end of this document.
+this build; its findings and the experiment harness that remains are at the end of this document. Parallel Eye
+Rendering (`ETERNALVR_PARALLEL_EYES=1`, experimental, off by default) renders both eyes as two views of one
+frame instead (section "Parallel Eye Rendering").
 
 Status (2026-09-26): **Route S v1 runs on the rig and is re-tested with the motion controllers** (OpenXR-Simulator): stable, exactly two renders per
 game tick, every eye pair complete and in step, each eye with its own pose, projection and weapon
@@ -28,8 +30,10 @@ tried on the Quest 3.
    position at `ETERNALVR_WORLD_SCALE` plus the eye's offset), view axis and asymmetric projection
    (`explicitProjectionMatrix` with `useExplicitProjectionMatrix`, honoured by the latch: E2), plus the
    per-view flags: `forceFullResolution` (+0x11) on both eyes, `skipAutoExposureUpdate` (+0x74C) on eye R
-   (exposure adapts once per tick, in eye L's frame), `inhibitModelFovScale` (+0x13) and, for S5,
-   `discontinuousViewPosition` (+0xC). After each eye's latch (post-latch hook, RVA 0x1C75772) two sets
+   (exposure adapts once per tick, in eye L's frame; the auto-exposure index hook,
+   `src/vkcore/exposure_hooks.*`, gives eye R the exposure eye L wrote, in every TAA mode; without that
+   hook eye R updates its own, so the two eyes form one adapting chain), `inhibitModelFovScale` (+0x13) and,
+   for S5, `discontinuousViewPosition` (+0xC). After each eye's latch (post-latch hook, RVA 0x1C75772) two sets
    of matrices are repaired (`src/stereo_seq/centered_matrix.*`): with `useExplicitProjectionMatrix` set
    the latch builds `centeredViewProjectionMatrix` (+0x296B0) from the explicit matrix, depth rows
    included, and the weapon disappears (S2), so its depth row is read from the centred matrix the
@@ -123,7 +127,10 @@ only runs the original (no eye R) once the guard is not armed, and asks again ri
 after eye L drops eye L's half), the per-eye hook writes nothing, the
 previous-matrix hook leaves the store alone, and the hooks are installed only while the guard is armed.
 The pointer swap stays in place after a trip (hooks are never removed live); the wrapper then just
-forwards. The engine two-view experiment hooks check the guard the same way.
+forwards. The engine two-view experiment hooks check the guard the same way; Parallel Eye Rendering's are in
+its section. The run-time cvars (TAA,
+comfort, CPU Saver, Sharpening, prompts) go back to their values before the layer's first write on a trip;
+the window and present set and `r_hdrDisplay` stay (mp-guard.md section 1).
 
 ## Cvars (v1)
 
@@ -147,7 +154,7 @@ correctness needs at run time (`src/vkcore/runtime_cvars.*`): `r_TAASafeMode 1` 
 written through `idCVar::SetString` (RVA 0x376020, located by signature; the cvars by their registration),
 checked at every present and written again if the game puts them back, only while the multiplayer guard
 allows touching the game (`cvars: held at run time: ...`, `cvars: r_antialiasing 1 -> 0 (reads 0)`). Nothing
-else is forced (depth of field, motion blur, SSR and the rest stay as the player set them); the present
+else of the v1 set is forced (SSR and the rest stay as the player set them; the comfort set below is held on its own); the present
 interval is the layer's (Desktop window). The writes are not saved: the text configs after such a run carry
 neither key, and the next run reads the player's `r_antialiasing 1` again. `ETERNALVR_STEREO_RUNTIME_CVARS=0`
 leaves the cvars as the game has them. The single policy for these cvars is
@@ -168,6 +175,18 @@ size), `r_windowWidth` / `r_windowHeight` are left to the game and logged (`cvar
 the game's ...`): the eyes then render at the window's size, and holding the render size made the game
 resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_DATE_KHR`; the game then froze.
 
+**The comfort set is held in both temporal modes too** (`stereo_seq::stereoComfortCvars`): HDR output, motion
+blur, depth of field, chromatic aberration, vignette, view bob, the view kicks and shakes, the damage tint and
+blur, the view effects' screen overlays, the weapon's FOV scale and the Meathook's single view turn. The game's
+own settings override the command line here as well (a rig run with them on the command line still wrote
+`pm_noBob 0 -> 1`, `view_damageBlur 1 -> 0` and six more), so in stereo the launcher no longer puts them on the
+command line: the layer's hold sets them, from Route S's first present (`presenter_copy.cpp`, before the
+runtime's session and the first map), and a multiplayer guard trip gives the player's own values back
+(`cvar_book.hpp`). Only `r_hdrDisplay 0` stays on the command line, since the game picks the swapchain's format at
+start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these, so mono launches
+keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`). The launcher's session restore puts
+the player's values back in the game's configs either way.
+
 `ETERNALVR_DEBUG_CVARS="name=value;name=value"` writes more cvars the same way for rig experiments;
 `name=?` only logs the value the game runs with. Writes from it may be saved by the game (a written
 `r_SSR 0` landed in `DOOMEternalConfig.local`), so rig runs restore the configs afterwards as usual.
@@ -175,17 +194,27 @@ resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_
 Two static findings (`docs/rig-findings/stereo-temporal.md`): `+r_jitter 0` has no effect, since the engine
 sets `r_jitter` every backend frame to 1 exactly when `r_TAASafeMode` is 0 and an AA mode is on (reading it
 back tells whether TAA or DLSS runs); and with eye R skipping its exposure update, eye L's auto exposure
-reads a "previous" image nothing writes in steady stereo, so exposure may stop adapting (live test T6).
+reads a "previous" image nothing writes in steady stereo, so exposure stops adapting (live test T6). The
+auto-exposure index hook (`src/vkcore/exposure_hooks.*`) fixes that whenever Route S runs: it needs the eye
+tags only, so it holds with per-eye history off as well.
+
+With per-eye history off or failed closed the layer also holds `r_lightScatteringTAA` at run time
+(`stereo_seq::stereoScatterFilterCvar`): 1 while the scattering history is per eye (Per-eye temporal
+history), else 0. The start-up list says so (`cvars: held at run time: ... r_lightScatteringTAA 1 while
+the scattering history is per eye, else 0`; `... 0` when the scattering hooks are not installed, for
+example with `ETERNALVR_STEREO_SCATTER_TAA=0`; with per-eye history requested, followed by `(if per-eye TAA
+fails closed)`, since per-eye history writes it itself while it runs).
 
 ## Per-eye temporal history (default; `ETERNALVR_STEREO_TAA=0` turns it off)
 
 TAA and DLSS per eye, written up in `docs/rig-findings/stereo-temporal.md`: eye R gets its own TAA
 accumulation images (built by the engine's own slot builder when the renderer starts, from a hook
 installed at `vkCreateInstance`), the two accumulation selectors pick each frame's eye's pair by its eye
-tag, both eyes of a tick share one jitter phase, both are reset together when eye R missed a tick, auto
-exposure alternates per eye, eye R evaluates a twin DLSS feature, and the temporal effects whose history is
-still shared (anti-ghosting mask, SSDO, depth of field, water, refraction, ray-traced
-reflection upscale, dynamic resolution) are switched off (on the command line; the layer writes any that
+tag, both eyes of a tick share one jitter phase, both are reset together when eye R missed a tick (TAA
+by the view's reset flag, DLSS by `Reset` on both eyes' evaluations), eye R evaluates a twin DLSS feature
+(each evaluation's eye found by its output image), and the temporal effects whose history is still shared
+(anti-ghosting mask, SSDO, depth of field, water, refraction, ray-traced reflection upscale, dynamic
+resolution) are switched off (on the command line; the layer writes any that
 differ through the engine's cvar setter), and eye R's slot is rebuilt by the slot builder when the engine
 resizes its own (resizing eye R's targets one by one hung a 12 GB card, `stereo-temporal.md` 5.1). A missing
 piece fails closed: the first stereo tick writes `r_antialiasing 0` and `r_TAASafeMode 1`. The launcher and
@@ -195,11 +224,23 @@ coefficient 0.029 / 0.029 against a control of 0.014, the same as v1 and against
 TAA; DLSS per eye 0.030 / 0.030; TAA costs about 0.09 ms per eye at 1280x740
 (`docs/rig-findings/stereo-temporal.md` section 7).
 
-The light scattering's history is per eye as well (default; `ETERNALVR_STEREO_SCATTER_TAA=0` turns it off), and its filter
-(`r_lightScatteringTAA`) stays on. Eye R gets four volume images of its own, which follow the engine's
-resizes, and each eye's pairs and filter state go into the device context before its render
-(`docs/rig-findings/stereo-scatter.md`). Without the filter the volume's coarse cells crawl as the head
-moves: the "walking texture" in fog and god rays.
+Auto exposure and the light scattering are kept per eye by hooks of their own, which need the eye tags
+only. They run whenever Route S runs: with per-eye history on, off (`ETERNALVR_STEREO_TAA=0`, the
+launcher's Anti-aliasing Off, `-StereoV1`) or failed closed. The start-up line `seq-exposure: per-eye TAA
+...; auto-exposure index per eye hooked, eye R takes eye L's exposure; scattering history per eye hooked`
+names the mode.
+
+- **Auto exposure** (`src/vkcore/exposure_hooks.*`, `docs/rig-findings/stereo-temporal.md` 3.3): eye L and
+  mono frames alternate their exposure image by their own frame count, and eye R takes the one eye L wrote
+  this tick. With per-eye history requested this starts at its first stereo tick, as before. Without it the
+  index is held only while eye R skips its update (`ETERNALVR_STEREO_EXPOSURE_ONCE`, on by default); with
+  the skip off the engine's own parity already makes both eyes one adapting chain.
+- **Light scattering** (default; `ETERNALVR_STEREO_SCATTER_TAA=0` turns it off): the history is per eye, and
+  its filter (`r_lightScatteringTAA`) stays on. Eye R gets four volume images of its own, which follow the
+  engine's resizes, and each eye's pairs and filter state go into the device context before its render
+  (`docs/rig-findings/stereo-scatter.md`). Without the filter the volume's coarse cells crawl as the head
+  moves: the "walking texture" in fog and god rays. Per-eye history writes the cvar in its own set; without
+  it the layer's run-time set holds it (Cvars (v1)).
 
 Moving and animated objects get their previous frame per eye too (default; `ETERNALVR_STEREO_OBJECT_PREV=0`
 turns it off). The engine keeps each render's joint offsets and model matrices in a ring of three buffers and
@@ -223,7 +264,7 @@ or Off, so the entry showed the profile's choice ("Off" with the launcher's DLSS
 
 - **Shown:** a mid hook after the page refresh's call to the index getter (RVA 0x15E8F35, the getter
   0x1415E90 reads settings + 0x122A0) fills the entry with what runs: the launcher's DLSS quality
-  (Ultra Performance, which the menu lacks, as Performance), Off with the launcher's Off, after a failed-closed
+  (Ultra Performance, which the menu lacks, as Performance; DLAA, held as `r_dlssQuality` 3, as Quality), Off with the launcher's Off, after a failed-closed
   start, or when DLSS fell back to TAA, and the profile's own index with the launcher's TAA (which keeps the
   profile's DLSS, per eye).
 - **Applied:** a detour of the setter compares the entry with what was shown. Unchanged: the setter is
@@ -272,6 +313,136 @@ render. The design, the expected saving and the rig recipe are in `docs/rig-find
   (`stereo_seq::AdaptiveEyes`). The way changes only at a pair's eye L and nothing resets. Log: `seq: adaptive
   eyes: ...` at every switch and every 10 s (the design doc, section 10).
 
+## Parallel Eye Rendering (`ETERNALVR_PARALLEL_EYES=1`, off by default, experimental)
+
+Instead of Route S's two renders per tick (eye L's, then eye R's nested in its frame end), the engine renders
+both eyes as two render views of one frame: view 0 is eye L, view 1 eye R, and the two views' job chains run on
+the job workers at the same time. The renderer of build 25216728 keeps per-view storage for one view, so view 1
+gets its own (`docs/rig-findings/perf-multiview-slots.md`, `docs/rig-findings/view-shared-state.md`). The sites
+are RVAs: Steam build 25216728 only (the PE timestamp is checked); any other build logs it and runs Route S.
+Measured (Release, OpenXR-Simulator 1280x720, three interleaved rounds of 120 s, median game ticks a second
+after 60 s): +41.7% in e1m2 and +28.7% in e1m3 on an RTX 3080 Ti with an i7-9700K, +16.7% earlier on the RTX
+4080 rig. The GPU's work is not reduced.
+
+**Turning it on.** `ETERNALVR_MODE=stereo` and `ETERNALVR_PARALLEL_EYES=1`; nothing else. The launcher's
+"Parallel Eye Rendering (experimental)" (Play tab, stereo only; shown with `ETERNALVR_SHOW_PARALLEL_EYES=1`) sets
+exactly that, so a `.cmd` that sets the
+two variables runs the same thing. It stays off (one `parallel eyes: off: ...` line, Route S) when
+`ETERNALVR_STEREO_DLSS=1` (DLSS), when `ETERNALVR_STEREO_EXPERIMENT` is set (the experiment then runs) or the
+UI layer is off (`ETERNALVR_UI_LAYER=0`: its image hooks give each eye its view's picture). Unset or any value
+other than `1`, none of it runs and nothing is logged (`src/vkcore/parallel_eyes_settings.*`, unit-tested).
+
+**Install** (`src/vkcore/view_install.cpp`, from the game's `vkCreateInstance` before its present policy is
+decided, with the multiplayer guard installed first). Every check of every step comes first, with the memory
+the steps take: the sites' bytes, the per-view block's references, the context tables, the 16 code bytes and
+the clones' sites. Every range the changes write is made writable before the first change, so a change
+cannot fail half-way. A failed check (or a storage hook, which is inert until the end) leaves the game
+working as it was, and Route S runs with its present policy. A hook that fails after the first change (the
+redirects' or the clones') leaves the changes made before it: Route S does not run on that engine, which
+renders view 0 alone for the session, as after a guard trip, shown as mono (one `FAILED` line).
+
+**What the layer holds while it is on** (`src/vkcore/view_slots.*`):
+
+- View 1's per-view storage: `r_maxRenderViews` 2, the static per-view block moved to two entries
+  (`view_block.cpp`), a second device context view slot and occlusion-query state, a second render context,
+  one dispatcher call per view (`view_slots.cpp`).
+- View 1's command contexts (slot 1 of the per-view categories, `view_contexts.cpp`) and the per-view redirects:
+  the three four-context categories split two slots per view (16 code bytes of the jobs' fan-out changed),
+  per-view Begin Frame resets, jobs that use the renderer's one scratch one view at a time, skinning and the
+  ray tracing structures for view 0 only, view 1's light binning after view 0's through job graph edges with a
+  bounded wait and a watchdog (`view_redirects.cpp`, `view_binning.cpp`).
+- **Async compute off**: the device setup's one read of `r_enableAsyncCompute` is made 0 (`view_async.cpp`); the
+  cvar itself and the player's config are not changed. With async compute on, both views record into the
+  engine's one set of async compute contexts: a driver crash in the shell world, a hang a few seconds into a
+  map (rig runs pa1, rsa1, rsa2; the headset's black screen). Should the game's device still get a compute-only
+  queue, view 1 is not rendered (one line) and both eyes show view 0's image.
+- View 1's clones of the screen-sized targets (`view_clones.*`, `view_clone_binds.cpp`) and its own passes where
+  the engine has one for the frame: screen pass, environment, light scattering's wait for its volumes, its
+  shadow atlas work left out (it shades with view 0's atlas), its light and decal tile list pool
+  (`view_one_passes.cpp`).
+- The eye copy: eye 0 is the presented image (view 0's screen pass), eye 1 view 1's screen pass output, in a
+  two-eye ring (`presenter_eyes.*`). Eye 1 takes it only when the frame rendered view 1 (the last three frames
+  sent did, and since view 1's clones were last made, `view_frames.hpp`); on frames with view 0 alone (loading
+  screens, the async compute safety net) and for three frames after new clones (a resize without a loading
+  screen) eye 1 takes the presented image too, never an older frame's or an unwritten one (`eye-copy: eye 1
+  takes the presented image: view 1 was not rendered for this frame`).
+- Its cvars, held as Route S holds its own, from the first present on every present (menus and loading
+  screens included): `r_useNewDepthDownscale 0` (with the new downsample view 1 drew tile-shaped black holes
+  in e1m3), the launcher's anti-aliasing (`r_antialiasing 1`, or with Off `r_TAASafeMode 1` and
+  `r_antialiasing 0`; `ETERNALVR_STEREO_RUNTIME_CVARS=0` leaves it as the game has it), Route S's window and
+  present set (`r_fullscreen 0`, `r_swapInterval 0`, the launch size, left to the game once the render size is
+  off) and its comfort set; the launcher's sharpening, CPU Saver and button prompts as under Route S
+  (`runtime_cvars.hpp`).
+- Route S's own modules stay off: per-eye TAA, the scattering and exposure hooks, alternate eyes, its present
+  policy (the window's present gate, present mode and swapchain image count of `stereo_present.hpp`). Frame
+  pacing (`ETERNALVR_PACE=headset`) holds its images to the headset's frames as it does Route S's.
+  `ETERNALVR_ALTERNATE_EYES` is ignored (one `parallel eyes: ETERNALVR_ALTERNATE_EYES is ignored ...` line),
+  and its `auto` does not turn frame pacing off; the launcher passes `0` and greys Alternate eyes out while
+  Parallel Eye Rendering is on.
+
+**Multiplayer guard.** Nothing is installed unless the guard is armed. The dispatcher asks the guard for every
+frame and, once it has tripped, renders view 0 alone. Every hook that changes view 1's work asks
+`parallelEyesTouch()`: the guard, or after a trip only until the frames the game built with two views before
+it are rendered (each must finish the way it started; the stereo layout hook builds no such frame after a
+trip and three one-view frames in a row), then false for good. The device setup's async read, the context
+resize, the pool sizing, the environment fill and the eye copy ask the guard directly. Three kinds keep
+running after a trip, as they must: the storage hooks, which move view index 1's accesses out of the engine's
+one-view storage (`r_maxRenderViews` stays 2) and change nothing for view 0; the hooks that keep view 0 on its
+two command contexts as the changed fan-out bytes expect; and the locks and the one-view clamp that keep
+two-view frames' jobs apart (the render target manager's lock, the serial jobs' locks and the texture
+streamer's gather clamp), which are no-ops with one view. The layer never unhooks or unpatches live.
+
+**Test knobs** (rig experiments only). The release layer carries them; each is inert unless its variable is
+set, and none is set by the launcher:
+
+| Variable | Effect |
+|---|---|
+| `ETERNALVR_TEST_VIEW_CLONES=0` | no clones: view 1 draws into the engine's targets (the eye copy is then off) |
+| `ETERNALVR_TEST_EYE_COPY=0`, `1` | `0`: both eyes the presented image; `1`: each view's image before the screen pass (gamma-darker, from the engine's post-process final target, RVA 0x66E3208) |
+| `ETERNALVR_TEST_VIEW_OFF=<parts>` | leaves fixes out, comma-separated: `edges` (binning edges), `dc` (view 1's device context copy), `binds` (view 1 binds its clones), `pool` (tile list pool), `shadows` (view 1 renders its own shadow atlas work), `env`, `volumes`, `screen` |
+| `ETERNALVR_TEST_VIEW_ONLY=0`, `1` | renders that view alone |
+| `ETERNALVR_TEST_PE_ASYNC=keep` | async compute left as the game has it, to reproduce the hang |
+| `ETERNALVR_TEST_BINNING_DELAY=<ms>` | view 0's binning sleeps before its sinks (1 to 100 ms), so view 1 reaches its roots first |
+| `ETERNALVR_TEST_CB_CHECK=1` | the command buffer check (`cb_check.hpp`; roughly halves the frame rate); with it `ETERNALVR_TEST_VIEW1_GPU_SKIP` / `_VIEW0_GPU_SKIP=<categories>` drop a view's draws by category and `ETERNALVR_TEST_CALLERS=<category>` logs view 1's draw call stacks (`cb_view_skip.hpp`) |
+| `ETERNALVR_TEST_VIEW_LIFT=<view>,<metres>` | raises one view's camera, to tell which eye shows which view |
+| `ETERNALVR_TEST_INSTALL_FAIL=check`, `redirects`, `hook` | the install stops as a failure would: `check` after every check, nothing changed (Route S runs); `redirects` in the redirects' hooks, after the block move and view 1's contexts with their counts raised, before the code bytes; `hook` after the code bytes are changed (both view 0 alone for the session) |
+
+**Logs.** At start-up: `parallel eyes: on: both eyes as two views of one render (29 slot sites, 8 occlusion
+sites); async compute off; view 1's clones on; eye copy each view's screen pass; parts off
+(ETERNALVR_TEST_VIEW_OFF): none`, before it `view-redirects: ... fan-out bytes changed` and `parallel eyes:
+r_maxRenderViews 1 -> 2`; at the device setup `parallel eyes: async compute off (the device setup read
+r_enableAsyncCompute N as 0)`; then `stereo: Parallel Eye Rendering's eye copy on`, `view-clones: build 0:
+...` and `eye-copy: eye 1 takes view 1's image`. Every 10000 two-view frames `parallel eyes: N two-view
+frame(s); view 0 alone: ...` with the redirect and binning counts, every minute the clones' counts. After a
+multiplayer guard trip: `parallel eyes: the multiplayer guard has tripped: view 0 alone from now on`, then
+`parallel eyes: after the multiplayer guard trip no frame holds view 1 any more; ...`. Off: no
+line at all without the variable, else `parallel eyes: off: <why>; the standard renderer` or `parallel eyes:
+not available for this game version`. A hook that failed after the engine was changed: `parallel eyes: FAILED
+after the engine was changed (above): not on; both eyes show the same image (view 0's) for this session, ...`.
+
+**Known limits.**
+
+- Steam build 25216728 only. Anti-aliasing TAA or Off: the layer holds `r_antialiasing 1`, or with
+  `ETERNALVR_STEREO_TAA=0` (the launcher's Off) `r_antialiasing 0` and `r_TAASafeMode 1`. Not with DLSS: with
+  `ETERNALVR_STEREO_DLSS=1` it stays off (one line) and Route S runs DLSS; the launcher greys the option out
+  with DLSS and does not set the variable.
+- Rig-checked on the simulator (deaths, a level change, both eyes matching Route S by numbers in e1m2 and e1m3);
+  not yet the main menu to campaign flow, pause and Dossier menus, cutscenes or long sessions; the headset only
+  in early tries (the black screen there was async compute).
+- The 8th change of the engine's targets (resolution or render scale changes; the first set of clones counts as
+  one of 8 builds) turns the clones off for the process: view 0 alone from then on, both eyes its image
+  (`view-clones: ... clones off, view 0 alone from now on`); a restart brings view 1 back. Up to 64 remakes
+  after map loads are fine.
+- The in-headset bug capture records the presented image only (eye 0).
+- The two views' pictures can still differ in small ways (faint motion-vector blocks low in view 1 were seen).
+- Not with foveated rendering: its passes take their eye from Route S's eye tags, which the two views do not
+  have, so it would keep every pass at full rate. With `ETERNALVR_PARALLEL_EYES=1` on the build Parallel Eye
+  Rendering supports, the layer turns `ETERNALVR_FOVEATION` and the `ETERNALVR_VRS_TEST` experiments off,
+  whether or not Parallel Eye Rendering then runs (the multiplayer guard not armed or a failed check leaves
+  the standard renderer, still without foveation; `vrs: foveated rendering is off: Parallel Eye Rendering is
+  requested (ETERNALVR_PARALLEL_EYES=1 on its build)`). On other builds the variable does nothing and
+  foveation stays on. The launcher greys Foveated rendering out and does not set the variable.
+
 ## Frame pacing (`ETERNALVR_PACE=headset`, the launcher's default)
 
 Without it the game renders stereo pairs as fast as it can and each XR frame shows the newest finished pair
@@ -313,7 +484,7 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   and cutscenes are held to the headset's rate the same way; a loading screen slower than the headset never
   waits. The layer paces whatever mode it runs in when asked; the launcher offers it in stereo only.
 - **Alternate eyes.** Not with `ETERNALVR_ALTERNATE_EYES=auto` (the layer logs it and stays off, the launcher
-  greys it out): the adaptive switch decides by the game's tick rate, which pacing holds at the headset's, so
+  greys it out; with Parallel Eye Rendering, which ignores alternate eyes, pacing stays on): the adaptive switch decides by the game's tick rate, which pacing holds at the headset's, so
   once alternating it would never measure the headroom to render both eyes per tick again. With `1` each
   present hands over a pair (its fresh eye beside the other's newest), so pacing holds the alternating ticks,
   and each eye, to the headset's rate and half of it.
@@ -414,28 +585,33 @@ axis).
 | `ETERNALVR_MIRROR_FRONT` | 1 | 0: the game window is not brought to the front once when its surface is made (never activated either way) |
 | `ETERNALVR_UI_CROP` | 1 | 0: the UI quad and the menu panel show the whole GUI target instead of its 16:9 band |
 | `ETERNALVR_UI_WASH` | 1 | 0: the HUD quad shows the GUI target's full-screen additive wash (the red low-health vignette) as the game drew it (docs/rig-findings/ui-layer.md, section 12) |
-| `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time |
+| `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time; with Parallel Eye Rendering its anti-aliasing (`r_antialiasing 1`, or the Off set) is not held either (one `cvars: Parallel Eye Rendering's anti-aliasing is left as the game has it` line) |
 | `ETERNALVR_PACE` | off | `headset`: one image per headset frame, the game's render thread waiting after each pair for the headset's next frame (at most two display periods); the pose lead then defaults on (Frame pacing) |
 | `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and CPU Saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
 | `ETERNALVR_SHARPENING` | unset | a number from 0 to 10 (the launcher's Sharpening: 0, 1, 2 or 3): `r_sharpening`, the game's post-process sharpening, held at run time and compared as a float (the game's menu sets fractions such as 1.99); unset leaves the player's own setting. With DLSS 2.5.1 and later it is the only sharpening: NGX logs that DLSS's own is deprecated and disabled |
 | `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments); `<=N` is a cap as above; an entry replaces the CPU Saver's value for the same cvar |
+| `ETERNALVR_VRS_TEST` | unset | experiments, over `ETERNALVR_FOVEATION`: `2x2` or `4x4` on every pass, `eyetest` (eye L's left half and eye R's right half at 4x4: which eye each pass got shows in `ETERNALVR_CAPTURE_EYES` captures; the rig QA's `foveation-eyes` scenarios measure it with `tools/rig/qa/qa-blockiness.ps1`), `fovea` (the regions of `ETERNALVR_VRS_FOVEA=<full>,<half>` degrees, default 24,40) |
+| `ETERNALVR_TEST_VRS_PARITY` | 0 | 1, a rig test with foveated rendering or the `eyetest` experiment: render passes whose counters do not agree also take the frame their command buffer's recording or parity guesses (`vrs: ETERNALVR_TEST_VRS_PARITY=1: ...`). The guesses can give a pass the other eye's pattern (`src/stereo_seq/pass_frames.hpp`); never set by the launcher |
+| `ETERNALVR_VRS_TINT` | 0 | 1, with foveated rendering or an `ETERNALVR_VRS_TEST` experiment: a 4x4 dot every 32 pixels of the headset's eye images where that eye's rate image is at half rate (yellow) or quarter rate (red), to see the regions in the headset. It shows the eye's pattern, not each pass's rate: an eye image is dotted only when some of that eye's render passes got a rate image since its previous one, and passes kept at full rate (frame not known, the GUI target, other targets) are dotted where they draw. The captures and the desktop mirror show the game's image without them (`src/vkcore/vrs_marks.cpp`) |
 | `ETERNALVR_PRESENT_IMMEDIATE` | 0 | 1: immediate present mode in any mode (mono frame-rate references) |
 | `ETERNALVR_STEREO_FULL_RES` | 1 | `forceFullResolution` on both eyes |
-| `ETERNALVR_STEREO_EXPOSURE_ONCE` | 1 | `skipAutoExposureUpdate` on eye R |
+| `ETERNALVR_STEREO_EXPOSURE_ONCE` | 1 | `skipAutoExposureUpdate` on eye R while the auto-exposure index hook gives it eye L's exposure (without the hook eye R updates its own); 0: eye R updates its own, and without per-eye history the engine's index is kept (one chain of both eyes) |
 | `ETERNALVR_STEREO_DISCONTINUOUS` | 0 | 1: `discontinuousViewPosition` on both eyes (S5) |
 | `ETERNALVR_STEREO_BIN_TILES` | 1 | the light and decal binning's tile grid set from each view's own projection (docs/rig-findings/stereo-bin-tiles.md); 0: the engine's symmetric grid, whose lit areas end in tile-shaped steps in the headset |
 | `ETERNALVR_STEREO_INHIBIT_MODEL_FOV` | 1 | `inhibitModelFovScale` on each eye's view, and the hands-and-guns matrices in the eye's frustum |
-| `ETERNALVR_STEREO_TAA` | 1 | per-eye temporal history (TAA, DLSS, exposure; section "Per-eye temporal history"); 0: v1, no temporal accumulation |
+| `ETERNALVR_STEREO_TAA` | 1 | per-eye temporal history (TAA and DLSS; section "Per-eye temporal history"); 0: v1, no temporal accumulation (auto exposure and the light scattering stay per eye) |
 | `ETERNALVR_STEREO_DLSS` | 0 | 1: DLSS per eye instead of TAA (`r_antialiasing 2`) |
+| `ETERNALVR_STEREO_DLSS_QUALITY` | unset | with DLSS per eye: `quality`, `balanced`, `performance`, `ultra_performance` (or `3` to `0`), the `r_dlssQuality` held while DLSS runs; `dlaa`: DLSS at the full render size (render size = output size). The game maps `r_dlssQuality` 0 to 3 only (RVA 0x1CC5D40, 0x1CC5760; any other value is Balanced), so DLAA holds `r_dlssQuality` 3 and the layer sets NGX's `PerfQualityValue` to DLAA (5) on every write of it (`src/vkcore/dlss_dll.cpp`): the game's optimal render size, its feature and eye R's twin all become DLAA. Only with `ETERNALVR_DLSS_DLL` of DLSS 3.1 or later; otherwise DLSS runs at Quality and `dlss:` says why. Unset: the player's own quality |
 | `ETERNALVR_DLSS_DLL`, `_PRESET`, `_ROUTE` | unset | a newer `nvngx_dlss.dll` of the player's own (DLSS 310: the transformer model) and its render preset, for both eyes' features; loaded from its own folder, never copied into the game's (`docs/rig-findings/dlss-dll.md`) |
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
-| `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced` or `aggressive` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within 30, 24 or 18 degrees of head-forward in each eye, half rate for 16 degrees more, quarter rate outside (`src/vkcore/vrs_nv.cpp`). NVIDIA RTX only: other cards log it as unsupported and render normally. Mono frames stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`) |
+| `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced`, `aggressive` or `maximum` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within the region of 30, 24, 18 or 12 degrees around head-forward in each eye, half rate within the region of 16 degrees more (12 for `maximum`, so quarter rate from the region of 24 degrees), quarter rate outside (`src/vkcore/vrs_nv.cpp`). A region has the area of the cone of its angle on the eye's tangent plane and reaches the same fraction of the way from head-forward to every edge of the eye's image, so the reduced-rate band takes the same share of the way to the edge on the nasal side and the top as on the temporal side and the bottom (`src/features/foveation/foveation_region.cpp`); in a symmetric square FOV it is the cone's circle. Each render pass gets the pattern of the eye of the backend frame it is recorded for, and only where that frame is sure: the backend counter at the pass equals the counter the render-view job read for its render. Every other pass stays full rate. What its command buffer's recording since its `vkBeginCommandBuffer` or its parity (once two recordings in a row agreed two frames apart) would guess is counted, with the recordings a later agreement contradicts and the parity breaks, but not used: those guesses can name the other eye's frame (`src/stereo_seq/pass_frames.hpp`, `src/vkcore/vrs_command_buffers.cpp`; `vrs: render pass frames: ...` every 200,000 passes; on the rig every pass in the map agreed). A pass's eye so comes only from a frame its two counters agree on; with `ETERNALVR_TEST_VRS_PARITY=1` (a rig test) the guesses are used too. NVIDIA RTX only: other cards log it as unsupported and render normally. Off with Parallel Eye Rendering (one line; "Parallel Eye Rendering", Known limits). Only render targets in the eye's space are foveated: the eye image and any copy of it scaled by one factor down to 1/8 (DLSS's smaller render size, the half size buffers; `src/features/foveation/eye_targets.cpp`); shadow maps and other targets stay full rate. Mono frames (the cinema screen, menus) stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`); without the UI layer they are foveated like the eye image |
 | `ETERNALVR_TEST_DLSS_TWIN_FAIL` | unset | test knob: a count from 1 to 100; eye R's first tries at its own DLSS feature fail without a create (result 0xBAD00000), to exercise the fallback to TAA, the tries after it and the menu's try (`docs/rig-findings/stereo-temporal.md`, Fail closed) |
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end, as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
-| `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S |
+| `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S (Parallel Eye Rendering stays off with either) |
+| `ETERNALVR_PARALLEL_EYES` | unset | `1` in stereo: Parallel Eye Rendering, both eyes as two views of one frame (section "Parallel Eye Rendering"), on Steam build 25216728 only; any other build, DLSS or the UI layer off keep Route S, and with a stereo experiment the experiment runs (logged). Async compute off, view 1's clones and the eye copy come with it. The launcher's "Parallel Eye Rendering (experimental)", off by default |
 | `ETERNALVR_STEREO_EYE_POSES`, `_JITTER_COPY`, `ETERNALVR_TEST_WEAPON_FOV` | | experiments only (below) |
 | `ETERNALVR_GPU_TIMING` | 0 | 1: GPU timestamps around every submit batch, summarized per eye (below); any mode |
 
@@ -450,19 +626,28 @@ cvars, each hook point with its RVA, `frame-end job wrapped`, then `Route S on`.
 - `pairs P complete of S started, M mono; dropped halves ...; pair(s) without a view record (not shown)`.
 - `eye tags in sync: ... matched, ... untagged; out of sync ... (missing present) / ... (untagged frame)
   / ... (overflow) / ... (rebase); ... drain(s), ... failed, ... on a quiet period only, D ms in total,
-  longest L ms; frames without a backend frame ...; previous matrices ... rewritten / ... kept;
-  r_swapInterval V`. D and L are the time the drains held the game's frontend (a hitch in the headset).
+  longest L ms; frames without a backend frame ...; previous matrices ... rewritten / ... kept / ... put
+  back; r_swapInterval V`. D and L are the time the drains held the game's frontend (a hitch in the
+  headset). "Put back" counts alternate-eye eye R renders that stayed mono after their previous matrices
+  were rewritten: they render with what the engine stored.
   A failed drain logs `the render thread did not present every frame within 250 ms; mono for W ms (N
   failed drain(s) in a row)`.
 - `eye R skipped ... (render-frame guard busy) / ... (multiplayer guard) / ... (stack); eye R chain at
   most N KiB deep, least stack left at eye R M KiB`.
+- `seq-exposure: auto-exposure index held for A eye L or mono / B eye R render(s); C render(s) whose tag in
+  flight names another eye`: A and B are above 0 in stereo whatever the TAA mode (both 0: the hook is not
+  installed or not holding, see the `seq-exposure:` start-up line; without per-eye history and with
+  `ETERNALVR_STEREO_EXPOSURE_ONCE=0` that is by design).
 - With alternate eyes: `alternate eyes: A eye L / B eye R render(s); P shown ..., H held without a partner, ...;
   the held eye X game frame(s) older on average` (the first line then shows 1.00 renders per game frame and no
   stereo ticks).
 
 Beside them (the 10 s blocks): `rates: game P present(s)/s, T tick(s)/s, S stereo pair(s)/s shown; XR F
-frame(s)/s, N new image(s)/s`, the game's own rates next to the runtime's (a headset's frame counter shows
-the XR rate, not the game's); `window: last 10 s: A acquire(s), average/max ms; C present call(s),
+frame(s)/s, N new image(s)/s; copy wait A ms average, M ms longest`, the game's own rates next to the
+runtime's (a headset's frame counter shows the XR rate, not the game's) and how long the XR worker waited for
+its copy between xrBeginFrame and xrEndFrame (the copy waits on the GPU for the game's write of the slot, so a
+long wait means the headset frame waited for the game's frame);
+`window: last 10 s: A acquire(s), average/max ms; C present call(s),
 average/max ms` (the time the driver's acquire and present take); `window: ... present(s) to the window,
 ... of the other eye and ... too soon handed back; display H Hz; ... handed back, ... failed, ... held`;
 `mirror: the window shows left ...`; `pace:` (the headset's cadence and, with `ETERNALVR_PACE=headset`, the
@@ -809,9 +994,9 @@ each run from its own call.
   quad (`ETERNALVR_UI_DISTANCE`, `_WIDTH`, `_OFFSET_Y`) and kept out of both eyes; under hand aim the game's
   crosshair is left out and a dot is drawn on the weapon hand's ray. `ETERNALVR_UI_LAYER=0` goes back to
   the HUD in eye L only.
-- Temporal effects other than TAA and DLSS (SSDO, light scattering, depth of field, water, refraction,
-  the anti-ghosting mask) still share their history between the eyes and stay off; the headset check of
-  per-eye TAA is open (`docs/rig-findings/stereo-temporal.md` section 8).
+- Temporal effects other than TAA, DLSS, auto exposure and the light scattering (SSDO, depth of field,
+  water, refraction, the anti-ghosting mask) still share their history between the eyes and stay off; the
+  headset check of per-eye TAA is open (`docs/rig-findings/stereo-temporal.md` section 8).
 - The eye tags rely on one backend frame per tagged frame. A frame the engine kicks but never renders,
   with no present in its place, would shift the pairing by one frame without a counter disagreement. Not
   seen on the rig (0 desyncs in every run), and stereo resuming after 30 mono frames takes a new base

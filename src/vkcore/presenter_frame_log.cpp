@@ -1,6 +1,6 @@
 // The XR worker's frame table (eternalvr-frames-<pid>.csv, docs/VR_HEAD_TRACKED.md), the display lead it
 // measures (xr_math/display_lead.hpp), the display period's watch (presenter_refresh.hpp), and the 10 s
-// lines.
+// lines, the present hook's copies among them.
 
 #include "vkcore/presenter_impl.hpp"
 
@@ -115,15 +115,46 @@ void XrPresenter::Impl::logRates() {
         };
         EVR_LOG(
             "rates: game %.1f present(s)/s, %.1f tick(s)/s, %.1f stereo pair(s)/s shown; XR %.1f frame(s)/s, "
-            "%.1f new image(s)/s",
+            "%.1f new image(s)/s; copy wait %.2f ms average, %.2f ms longest",
             rate(presents, lastRates.presents), rate(ticks, lastRates.ticks), rate(pairs, lastRates.pairs),
-            rate(xrFrames, lastRates.xrFrames), rate(xrCopies, lastRates.xrCopies));
+            rate(xrFrames, lastRates.xrFrames), rate(xrCopies, lastRates.xrCopies), copyWait.averageMs(),
+            copyWait.maxMs);
     }
+    copyWait = {};
     lastRates = {presents, ticks, pairs, xrFrames, xrCopies, now};
     checkGamePresents(*this);   // a line once the game stops presenting (presenter_result.hpp)
     frame_pacing::logSummary(); // the headset's cadence, and ETERNALVR_PACE's waits
     vram::logSummary();
     stall_watch::logSummary();
+}
+
+void XrPresenter::Impl::logCopyStats(const SwapchainState& sc, std::uint32_t family) {
+    if (!loggedFirstCopy) {
+        loggedFirstCopy = true;
+        EVR_LOG(
+            "presenter: first copy into the ring (%ux%u format %d -> %ux%u format %d, %u eye(s) of %ux%u, "
+            "%s, queue family %u)",
+            sc.extent.width, sc.extent.height, sc.format, ringExtent.width, ringExtent.height, ringFormat,
+            ringEyes, eyeExtent.width, eyeExtent.height,
+            (sc.format == ringFormat && sc.extent.width == eyeExtent.width &&
+             sc.extent.height == eyeExtent.height)
+                ? "copy"
+                : "blit",
+            family);
+    } else if (GetTickCount64() - lastStatsTicks >= 10000) {
+        lastStatsTicks = GetTickCount64();
+        EVR_LOG(
+            "presenter: %llu frame(s) copied, %llu dropped (slot busy or not copyable), %llu of them size or "
+            "format mismatches; %llu with a head-tracked view (average %.2f frame(s) behind the newest), "
+            "%llu "
+            "without",
+            static_cast<unsigned long long>(framesCopied), static_cast<unsigned long long>(framesDropped),
+            static_cast<unsigned long long>(framesShapeMismatch),
+            static_cast<unsigned long long>(presentsWithView),
+            presentsWithView ? static_cast<double>(presentSeqGapSum) / static_cast<double>(presentsWithView)
+                             : 0.0,
+            static_cast<unsigned long long>(presentsWithoutView));
+    }
 }
 
 } // namespace evr::vkcore

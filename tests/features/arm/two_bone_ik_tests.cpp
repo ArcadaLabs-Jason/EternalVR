@@ -110,3 +110,32 @@ TEST_CASE("a target on the shoulder or no pole at all still gives a finite arm")
     CHECK(approxEqual(b->end, noPole.target));
     checkLengths(*b, noPole);
 }
+
+TEST_CASE("a root out of reach of an end that must stay is moved along the line to it") {
+    using evr::arm::rootWithinReach;
+    const Vec3 target{0.0f, 0.0f, 0.0f};
+    // Within reach: unchanged.
+    const Vec3 near{0.3f, 0.2f, 0.0f};
+    CHECK(rootWithinReach(near, target, 0.3f, 0.28f) == near);
+    // Beyond reach: just inside it, on the same line, so the IK meets the target unclamped.
+    const Vec3 far{1.0f, 0.5f, -0.2f};
+    const Vec3 moved = rootWithinReach(far, target, 0.3f, 0.28f);
+    CHECK(length(moved - target) < 0.58f * kMaxReachFraction);
+    CHECK(length(moved - target) > 0.57f);
+    CHECK(approxEqual(normalize(moved - target), normalize(far - target)));
+    const auto s = solveTwoBone({moved, target, 0.3f, 0.28f, {0.0f, 0.0f, -1.0f}});
+    REQUIRE(s);
+    CHECK_FALSE(s->clamped);
+    CHECK(approxEqual(s->end, target));
+    // Too close to fold to: pushed out to the shortest reach.
+    const Vec3 close{0.01f, 0.0f, 0.0f};
+    const Vec3 out = rootWithinReach(close, target, 0.3f, 0.28f);
+    CHECK(length(out - target) > 0.58f * 0.05f);
+    const auto c = solveTwoBone({out, target, 0.3f, 0.28f, {0.0f, 0.0f, -1.0f}});
+    REQUIRE(c);
+    CHECK_FALSE(c->clamped);
+    // On the target, or with lengths that cannot be used: unchanged.
+    CHECK(rootWithinReach(target, target, 0.3f, 0.28f) == target);
+    CHECK(rootWithinReach(far, target, 0.0f, 0.28f) == far);
+    CHECK(rootWithinReach(far, target, 0.3f, std::numeric_limits<float>::quiet_NaN()) == far);
+}

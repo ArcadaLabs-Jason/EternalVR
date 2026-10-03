@@ -323,7 +323,7 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
                         regions.data());
     if (panel) {
         // A menu is up: the desktop window shows what the panel shows (presenter_mirror.hpp).
-        mirror.keepPanel(dev, cb, image, uiExtent, panel->format, panel->extent);
+        mirror.keepPanel(dev, cb, family, image, uiExtent, panel->format, panel->extent);
     }
     uiBackdrop.record(dev, cb, image, uiExtent, kCrosshairMask);
     if (const VkBuffer buffer = uiCapture.bufferFor(dev, uiCaptures, uiExtent)) {

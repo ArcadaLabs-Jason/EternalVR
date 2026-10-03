@@ -41,9 +41,9 @@ Locomotion::Locomotion(StickResponse response) : response_(sanitizedResponse(res
 Axis2 Locomotion::update(Axis2 stick,
                          LocomotionFrame frame,
                          const HeadState& head,
-                         const HandState& offHand,
+                         const HandState& moveHand,
                          float viewYawRadians) {
-    lastYaw_ = direction_.update(frame, head, offHand);
+    lastYaw_ = direction_.update(frame, head, moveHand);
     const Axis2 shaped = applyStickResponse(stick, response_);
     if (!std::isfinite(viewYawRadians)) {
         return {};

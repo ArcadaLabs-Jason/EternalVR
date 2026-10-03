@@ -30,13 +30,19 @@ ScatterPlan ScatterHistory::beforeRender(Eye eye, std::uint32_t counter, const S
         eyes_[active_].state = current;
         // The eye's first render takes the other eye's state (then with no last frame, below).
         ScatterState load = p.state ? *p.state : current;
-        // The engine resets the filter when the last frame is not the render just before; an eye's own last
-        // render is always two back (the other eye's in between), so it is passed off as the previous one.
+        // The engine resets the filter when the last frame is not the render just before. When the eye's own
+        // last render is two back (the other eye's in between), its state is passed off as the previous one.
+        // After a longer gap (a skipped eye R, a mono stretch, a load) its volumes are from another place:
+        // the eye starts over and clears both of its pairs.
         std::uint32_t last = 0;
         std::memcpy(&last, load.data() + kScatterLastFrame, sizeof(last));
-        if (last != 0) {
+        if (last != 0 && p.lastRender && *p.lastRender == counter - 2u) {
             last = counter - 1u;
             std::memcpy(load.data() + kScatterLastFrame, &last, sizeof(last));
+        } else {
+            std::memset(load.data() + kScatterLastFrame, 0, sizeof(std::uint32_t));
+            p.clears = 2;
+            plan.restarted = true;
         }
         plan.load = load;
         active_ = e;
@@ -54,6 +60,7 @@ ScatterPlan ScatterHistory::beforeRender(Eye eye, std::uint32_t counter, const S
     plan.slots[parity] = p.pairs[write];
     plan.slots[parity ^ 1u] = p.pairs[read];
     p.written = write;
+    p.lastRender = counter;
     return plan;
 }
 

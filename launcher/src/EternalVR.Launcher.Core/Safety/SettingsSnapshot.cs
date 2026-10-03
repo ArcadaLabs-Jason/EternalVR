@@ -13,14 +13,20 @@ namespace EternalVR.Launcher.Core.Safety
         public List<string> Restored { get; } = new List<string>();
         public List<string> Unchanged { get; } = new List<string>();
         /// <summary>
-        /// Files outside the key-level restore that changed during the session, or a Steam-Cloud file the
-        /// game removed: kept as the game left them, with the snapshot kept.
+        /// Local files outside the key-level restore that changed during the session (<c>user\config.json</c>): kept
+        /// as the game left them, the snapshot holding the old copy. Worth a warning: nothing else puts them back.
         /// </summary>
         public List<string> ChangedNotRestored { get; } = new List<string>();
+        /// <summary>
+        /// Steam Cloud files that changed, appeared or went during the session (<c>profile.bin</c> changes every
+        /// session): never written by the restore (T-115), so they are the game's as Steam synced them. Not a warning.
+        /// </summary>
+        public List<string> ChangedInCloud { get; } = new List<string>();
 
         public IEnumerable<string> Lines =>
             Restored.Select(r => "restored " + r)
                 .Concat(ChangedNotRestored.Select(c => "changed, left as is (snapshot kept): " + c))
+                .Concat(ChangedInCloud.Select(c => "changed, Steam Cloud file kept as the game left it: " + c))
                 .Concat(Unchanged.Select(u => "unchanged " + u));
     }
 
@@ -42,8 +48,14 @@ namespace EternalVR.Launcher.Core.Safety
         private const string AbsentFile = "ABSENT";
         /// <summary>Marks a snapshot taken by <c>--dry-run</c>; never a restore source.</summary>
         public const string DryRunFile = "DRY_RUN";
+        /// <summary>Keys this session's restore puts back besides the launcher's list (the Extra game arguments' cvars), one per line.</summary>
+        private const string KeysFile = "SESSION_KEYS";
 
-        public static string Take(string snapshotsRoot, string sessionId, IReadOnlyList<SettingsLocation> locations)
+        /// <summary>
+        /// Copies the config files of every location. <paramref name="sessionKeys"/> (the cvars the Extra game arguments set)
+        /// are recorded with the snapshot, so its <see cref="Restore"/> puts them back too, also after a crash.
+        /// </summary>
+        public static string Take(string snapshotsRoot, string sessionId, IReadOnlyList<SettingsLocation> locations, IEnumerable<string> sessionKeys = null)
         {
             var dir = Path.Combine(snapshotsRoot, sessionId);
             if (Directory.Exists(dir)) throw new IOException("snapshot folder already exists: " + dir);
@@ -67,6 +79,8 @@ namespace EternalVR.Launcher.Core.Safety
             File.WriteAllText(Path.Combine(dir, LocationsFile), locs.ToString());
             File.WriteAllText(Path.Combine(dir, SumsFile), sums.ToString());
             File.WriteAllText(Path.Combine(dir, AbsentFile), absent.ToString());
+            var keys = (sessionKeys ?? Enumerable.Empty<string>()).Where(k => !string.IsNullOrWhiteSpace(k)).ToList();
+            if (keys.Count > 0) File.WriteAllText(Path.Combine(dir, KeysFile), string.Join("\n", keys) + "\n");
             FileUtil.WriteAllTextAtomic(Path.Combine(dir, CompleteFile), DateTime.UtcNow.ToString("o"));
             return dir;
         }
@@ -121,7 +135,7 @@ namespace EternalVR.Launcher.Core.Safety
         /// </summary>
         public static RestoreReport Restore(string snapshotDir, IEnumerable<string> forcedKeys)
         {
-            var keys = forcedKeys.ToList();
+            var keys = forcedKeys.Concat(SessionKeysOf(snapshotDir)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var report = new RestoreReport();
             foreach (var entry in ReadVerified(snapshotDir))
             {
@@ -137,7 +151,7 @@ namespace EternalVR.Launcher.Core.Safety
                 {
                     // A Steam-Cloud file (the profile) is never put back behind Steam's back: Steam's
                     // record would go stale and the game would reset the profile (T-115).
-                    report.ChangedNotRestored.Add(label + " (removed during the session; Steam Cloud file, the game's state is kept)");
+                    report.ChangedInCloud.Add(label + " (removed during the session)");
                     continue;
                 }
                 if (!File.Exists(live))
@@ -149,6 +163,12 @@ namespace EternalVR.Launcher.Core.Safety
                 if (string.Equals(KnownBuilds.Sha256OfFile(live), entry.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
                     report.Unchanged.Add(label);
+                    continue;
+                }
+                // Compared only, whatever its kind: a keyed config in a Steam Cloud folder is never rewritten either.
+                if (entry.Location.Kind == SettingsLocationKind.SteamRemote)
+                {
+                    report.ChangedInCloud.Add(label);
                     continue;
                 }
                 if (!GameLayout.IsKeyedTextConfig(entry.RelativePath))
@@ -170,6 +190,11 @@ namespace EternalVR.Launcher.Core.Safety
         /// </summary>
         private static void RestoreCreatedFile(string snapshotDir, SnapshotEntry entry, string live, string label, List<string> keys, RestoreReport report)
         {
+            if (entry.Location.Kind == SettingsLocationKind.SteamRemote)
+            {
+                report.ChangedInCloud.Add(label + " (created during the session)");
+                return;
+            }
             if (!GameLayout.IsKeyedTextConfig(entry.RelativePath))
             {
                 report.ChangedNotRestored.Add(label + " (created during the session)");
@@ -192,6 +217,14 @@ namespace EternalVR.Launcher.Core.Safety
             FileUtil.CopyVerified(live, keep);
             FileUtil.WriteAllBytesAtomic(live, current.ToBytes(bom));
             report.Restored.Add(label + ": " + string.Join("; ", changes.Select(c => c.ToString())));
+        }
+
+        /// <summary>The keys recorded with the snapshot for its own session (<see cref="Take"/>); empty when none were.</summary>
+        public static IReadOnlyList<string> SessionKeysOf(string snapshotDir)
+        {
+            var path = Path.Combine(snapshotDir, KeysFile);
+            if (!File.Exists(path)) return new string[0];
+            return File.ReadAllLines(path).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
         }
 
         /// <summary>Deletes all but the newest <paramref name="keep"/> snapshots, never <paramref name="protect"/>.</summary>

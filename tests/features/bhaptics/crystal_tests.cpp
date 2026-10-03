@@ -269,8 +269,10 @@ TEST_CASE("the crystal's wave comes after its upgrade menu, timed from the sync'
         Run r;
         for (double t = back; t < 4.0 + kCrystalDelaySeconds + kCrystalWaveSeconds + 0.5; t += 0.02) {
             s.seconds = t;
+            // Kept for the loop: the pointers of() returns point into it.
+            const std::vector<Frame> frames = body.update(s);
             std::vector<Frame> wave;
-            for (const Frame* f : of(body.update(s), Effect::Crystal)) {
+            for (const Frame* f : of(frames, Effect::Crystal)) {
                 wave.push_back(*f);
             }
             if (!wave.empty()) {

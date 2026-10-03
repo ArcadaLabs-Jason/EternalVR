@@ -17,6 +17,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/player_aim.hpp"
+#include "vkcore/seh_filter.hpp"
 
 #include <windows.h>
 
@@ -95,7 +96,7 @@ bool copyGuarded(void* destination, const void* source, std::size_t size) {
     __try {
         std::memcpy(destination, source, size);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
@@ -108,7 +109,7 @@ bool callTranslation(
         g_translation(collision, &queryId, result, start, end, shape, kIdentityAxis, kContents, spawnId, 0u,
                       kQueryName, nullptr, 0);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }

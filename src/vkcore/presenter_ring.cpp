@@ -1,6 +1,7 @@
 // The shared ring: D3D12 images and fence created with NT handles, imported into the game's Vulkan
 // device (T-040, T-080), and rebuilt when the game's swapchain changes shape.
 
+#include "vkcore/fence_wait.hpp"
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/frame_pacing.hpp"
@@ -253,16 +254,13 @@ void XrPresenter::Impl::recreateRing() {
         lastWrite = timelineValue;
     }
     // Every copy into the old ring, and every D3D12 copy out of it, must finish before it goes.
-    const auto waitFence = [this](ID3D12Fence* fence, std::uint64_t value) {
-        if (fence->GetCompletedValue() >= value) {
-            return true;
-        }
-        fence->SetEventOnCompletion(value, copyEvent);
-        return WaitForSingleObject(copyEvent, 2000) == WAIT_OBJECT_0;
-    };
-    if (!waitFence(sharedFence.Get(), lastWrite) || !waitFence(copyFence.Get(), copyFenceValue)) {
+    if (!waitFence(sharedFence.Get(), lastWrite, copyEvent, 2000) ||
+        !waitFence(copyFence.Get(), copyFenceValue, copyEvent, 2000)) {
+        // Asked again, so the next present retries the rebuild instead of the headset keeping one image
+        // until the game recreates its swapchain.
+        resizeRequested.store(true);
         EVR_LOG("presenter: copies into the old ring did not finish within 2 s; the headset keeps the last "
-                "image");
+                "image and the rebuild is tried again");
         return;
     }
     {

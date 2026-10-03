@@ -8,6 +8,7 @@
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
+#include "vkcore/seh_filter.hpp"
 #include "vkcore/status_file.hpp"
 
 #include <windows.h>
@@ -47,20 +48,13 @@ bool g_commandLineAllowed = true;
 // The idMainMenu* global (RVA 0x46AE140), set before the menu hook is installed.
 std::atomic<const std::byte* const*> g_mainMenuSlot{nullptr};
 std::atomic<ULONGLONG> g_testTripAt{0};
+std::atomic<std::uint32_t> g_mapLoads{0};
 
 // ---------------------------------------------------------------------------------------------------
 // Tripping
 
-std::atomic<TripListener> g_tripListener{nullptr};
-std::atomic<bool> g_listenerCalled{false};
-
-// Calls the listener once the latch is tripped and a listener is registered, exactly once overall.
-void notifyTripListener() {
-    const TripListener listener = g_tripListener.load(std::memory_order_acquire);
-    if (listener && g_latch.state() == GuardState::Tripped && !g_listenerCalled.exchange(true)) {
-        listener();
-    }
-}
+// Fired once, by the call that closed the latch (Latch::trip is true for one call only).
+mp_policy::TripListeners g_tripListeners;
 
 void tripWith(Signal signal, const char* detail) {
     if (g_latch.trip(signal)) {
@@ -69,7 +63,7 @@ void tripWith(Signal signal, const char* detail) {
             "off for the rest of this process and the headset shows the flat screen; relaunch without VR "
             "for multiplayer",
             kTag, mp_policy::toString(signal), detail);
-        notifyTripListener();
+        g_tripListeners.fire();
     }
 }
 
@@ -78,7 +72,7 @@ bool safeCopy(void* destination, const void* source, std::size_t size) {
     __try {
         std::memcpy(destination, source, size);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
@@ -123,6 +117,7 @@ void onMapLoad(const HookRegisters& regs) {
     }
     name[sizeof(name) - 1] = '\0';
     g_startup.mapLoadStarted();
+    g_mapLoads.fetch_add(1, std::memory_order_release);
     const mp_policy::MapClass mapClass = mp_policy::classifyMap(name);
     EVR_LOG("%s: map load '%s' (%s)", kTag, name, mp_policy::toString(mapClass));
     if (mapClass != mp_policy::MapClass::SinglePlayer) {
@@ -457,6 +452,11 @@ bool screenCommandLine() {
                 "argument \"" + std::string(refused->pattern) + "\" requests " + std::string(refused->reason);
             tripWith(Signal::CommandLine, detail.c_str());
             EVR_LOG("%s: the layer does not load; EternalVR is single-player only", kTag);
+            // The launcher shows this in place of "VR is starting" (status::starting ran before the screen).
+            const std::string reason = "\"" + std::string(refused->pattern) +
+                                       "\" on the command line requests " + std::string(refused->reason) +
+                                       "; EternalVR is single-player only";
+            status::flat(reason.c_str());
         }
     });
     return g_commandLineAllowed;
@@ -509,9 +509,8 @@ GuardState install() {
     return g_latch.state();
 }
 
-void setTripListener(TripListener listener) {
-    g_tripListener.store(listener, std::memory_order_release);
-    notifyTripListener();
+bool addTripListener(TripListener listener) {
+    return g_tripListeners.add(listener);
 }
 
 bool allowsGameTouch() {
@@ -520,6 +519,10 @@ bool allowsGameTouch() {
 
 GuardState state() {
     return g_latch.state();
+}
+
+std::uint32_t mapLoads() {
+    return g_mapLoads.load(std::memory_order_acquire);
 }
 
 void poll() {

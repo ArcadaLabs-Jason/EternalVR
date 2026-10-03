@@ -9,9 +9,10 @@
 // node's SetNum; so they end full (3 in use, room for 3), and appending in place is impossible. SetNum
 // grows a list with the game's own allocator (idList Resize: a new block, the old entries copied, the old
 // block freed) and lowers a count without touching the memory. So, right after the game's three
-// AddJointMod calls and still inside InitJointMods, the layer asks SetNum for its six more and then for
-// the old count again: the room is the game's, and the count the game sees is unchanged. The layer's
-// entries are appended into that room later, in place (vkcore/offhand_arm.cpp).
+// AddJointMod calls and still inside InitJointMods, the layer asks SetNum for its six more per arm it moves
+// (the off hand's, the weapon arm's or both) and then for the old count again: the room is the game's, and
+// the count the game sees is unchanged. The layer's entries are appended into that room later, in place
+// (vkcore/game_arm.cpp).
 // [static: InitJointMods 0x138B080, AddJointMod 0x138B360, SetNum 0x19A61F0, Resize 0x4AAB80; build
 // 25216728]
 //
@@ -31,6 +32,14 @@ struct ModListCounts {
 
 // More than this in either list is not the hands' list.
 inline constexpr std::int32_t kMaxJointMods = 256;
+
+// The layer's modifiers for one arm: the forearm's four roll joints, the elbow and the shoulder end.
+inline constexpr std::int32_t kModsPerArm = 6;
+
+// The room to make for `arms` arms (0, 1 or 2; anything else counts as none).
+constexpr std::int32_t modsForArms(std::int32_t arms) {
+    return arms == 1 || arms == 2 ? arms * kModsPerArm : 0;
+}
 
 // Both lists sane (0 <= num <= size <= kMaxJointMods) and holding the same count.
 bool modListsAgree(ModListCounts first, ModListCounts second);

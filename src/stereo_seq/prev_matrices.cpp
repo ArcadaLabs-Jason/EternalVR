@@ -113,12 +113,30 @@ bool PrevMatrixBook::afterStore(std::byte* view, Eye eye, std::uint32_t renderFr
     e.stored = true;
     e.lastFrame = renderFrame;
     e.lastEye = eye == Eye::Right ? Eye::Right : Eye::Left;
+    e.undoable = rewrote && eye == Eye::Right;
     if (rewrote) {
         ++stats_.rewrites;
     } else {
         ++stats_.kept;
     }
     return rewrote;
+}
+
+bool PrevMatrixBook::undoRewrite(std::byte* view) {
+    for (Entry& e : entries_) {
+        if (e.view != view || !e.undoable) {
+            continue;
+        }
+        // The eye R store saved the engine's bytes as eye L's for the next tick before it rewrote them.
+        restore(view, e.saved[0]);
+        // A mono frame: what follows keeps the engine's store, as after any mono frame.
+        e.valid = {};
+        e.lastEye = Eye::Left;
+        e.undoable = false;
+        ++stats_.undone;
+        return true;
+    }
+    return false;
 }
 
 } // namespace evr::stereo_seq

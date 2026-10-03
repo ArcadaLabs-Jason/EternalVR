@@ -167,8 +167,10 @@ not expect is the worst comfort case (high risk in R06). Keep dash on the button
   traversal state (large RE) for nothing the player cannot already do.
 - Pickups are collected by walking over them; doors open by themselves or through a switch (2.3).
 - DOOM Eternal has no flashlight, no reload and no hand-held items to pick up.
-- Two-handed aiming (the off hand on the fore-grip) and pointing at the weapon wheel exist already
-  (`docs/VR_CONTROLLERS.md`).
+- Pointing at the weapon wheel exists already (`docs/VR_CONTROLLERS.md`). Two-handed aiming (the off hand
+  on the fore-grip) does not: the mapper can hold back the off hand's grip bindings while that hand steadies
+  the weapon (`MapperContext::supportHandOnWeapon`), but nothing detects the support grip, so it is never
+  set.
 
 ## 3. Settings
 
@@ -178,13 +180,14 @@ not expect is the worst comfort case (high risk in R06). Keep dash on the button
 | `ETERNALVR_THROW_SPEED` | none | forward speed, 1 to 5 m/s | 2 |
 | `ETERNALVR_SWING` | Overhead swing | `1` / `0` | `0` |
 | `ETERNALVR_SWING_SPEED` | none | downward speed, 1 to 5 m/s | 2.5 |
-| `ETERNALVR_HANDS_JUMP` | Jump with both hands | `1` / `0` (never when seated; `src/features/input/hands_jump.hpp`) | `0` |
+| `ETERNALVR_HANDS_JUMP` | Jump with both hands | `1` / `0` (hands 0.15 m higher when seated; `src/features/input/hands_jump.hpp`) | `0` |
 
 Both follow the weapon hand setting (the off hand throws, the weapon hand swings). Both need motion
 controllers. The `controllers: on:` line ends with `throw gesture on|off, overhead swing on|off`; a gesture
 logs `controllers: gesture: throw` or `gesture: overhead swing`, followed by the action it sent
-(`controllers: action equipment` or `action crucible`). The hands-jump gesture (`hands_jump.hpp`) is
-built but not yet exposed; the same pattern would expose it.
+(`controllers: action equipment` or `action crucible`). The hands-jump gesture (`hands_jump.hpp`) logs
+`gesture: hands-up jump`, or `gesture: hands-up jump (seated height)` when judged with the seated height,
+then `action jump`.
 
 ## 4. Tests
 

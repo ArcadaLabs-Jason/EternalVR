@@ -106,3 +106,12 @@ TEST_CASE("a cancel while the button is up is dropped") {
     detector.update(true, kFrame);
     CHECK(detector.update(false, kFrame).tap);
 }
+
+TEST_CASE("the detector reports whether the button was down at the last update") {
+    TapHoldDetector detector(0.25f);
+    CHECK_FALSE(detector.isDown());
+    detector.update(true, kFrame);
+    CHECK(detector.isDown());
+    detector.update(false, kFrame);
+    CHECK_FALSE(detector.isDown());
+}

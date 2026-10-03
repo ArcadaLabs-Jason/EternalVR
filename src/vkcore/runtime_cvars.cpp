@@ -1,9 +1,13 @@
 #include "vkcore/runtime_cvars.hpp"
 
 #include "stereo_seq/seq_settings.hpp"
+#include "vkcore/cvar_book.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/parallel_eyes_settings.hpp"
+#include "vkcore/scatter_hooks.hpp"
+#include "vkcore/taa_hooks.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/window_cap.hpp"
 
@@ -32,12 +36,8 @@ constexpr int kLoggedWrites = 12; // writes after each cvar's first: the first 1
 constexpr const char* kSetStringSignature =
     "48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B D9 48 8B 09 41 0F "
     "B6 F0 48 8B FA 48 85 D2 75 04 48 8B 79 30 48 8B 09 48 8B D7 E8";
-// A cvar registration: lea r8, [default]; lea rdx, [name]; lea rcx, [object]; call.
-constexpr const char* kRegistration = "4C 8D 05 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8";
-constexpr std::size_t kRegistrationName = 7;
-constexpr std::size_t kRegistrationObject = 14;
 
-using SetStringFn = void (*)(void* cvar, const char* value, bool force);
+using SetStringFn = cvar_book::SetStringFn;
 
 struct Held {
     std::string name;
@@ -45,6 +45,7 @@ struct Held {
     bool stereo = false;   // part of the Route S set (not ETERNALVR_DEBUG_CVARS)
     bool temporal = false; // a TAA cvar: left to the per-eye module once it is active
     bool saver = false;    // from ETERNALVR_CPU_SAVER
+    bool scatter = false;  // r_lightScatteringTAA: follows the scattering history (scatterHold)
     bool cap = false;      // value "<=N": lowered to N while above it, never raised (capValue)
     float capValue = 0.0f;
     bool exact = false; // a float cvar held at exactValue, compared as a float (ETERNALVR_SHARPENING)
@@ -56,6 +57,7 @@ struct Held {
                              // size off (windowSizeLeft)
     bool left = false;       // ... and that was logged
     bool placed = false;     // ... held at the window placed for a device without present scaling instead
+    bool parallel = false;   // Parallel Eye Rendering's own set: an ETERNALVR_DEBUG_CVARS entry replaces it
 };
 
 std::mutex g_mutex;
@@ -65,6 +67,9 @@ std::vector<Held> g_held;
 int g_loggedWrites = 0;
 std::atomic<std::uint64_t> g_writes{0};
 stereo_seq::StereoTemporal g_temporal = stereo_seq::StereoTemporal::Off;
+bool g_parallelEyes = false;
+bool g_parallelAntiAliasingOff = false;
+bool g_parallelAntiAliasingHeld = true;
 
 // The window set's size is left to the game once the render size is off: the game then renders at its
 // window's size, and holding the launch size (the render size) makes the game resize its window, which an
@@ -87,6 +92,17 @@ void holdPlacedWindow(Held& h) {
     EVR_LOG("%s: %s is held at the placed window's %s, not %s (no present scaling)", kTag, h.name.c_str(),
             value.c_str(), h.value.c_str());
     h.value = value;
+}
+
+// The scattering filter follows its per-eye history, whatever the TAA mode
+// (stereo_seq::stereoScatterFilterCvar): held here with per-eye TAA off or failed closed; while per-eye TAA
+// is requested and has not failed closed, its own set writes the same value. False: left alone now.
+bool scatterHold(Held& h) {
+    if (taaRequested() && !taaFailedClosed()) {
+        return false;
+    }
+    h.value = std::string(stereo_seq::stereoScatterFilterCvar(scatterPerEyeReady()).value);
+    return true;
 }
 
 // The cvar's integer value as the engine keeps it (the values block, +0x08).
@@ -148,7 +164,8 @@ Held* heldNamed(std::string_view name) {
 }
 
 // ETERNALVR_CPU_SAVER="name=value;..." (the launcher's CPU Saver, data/cpu-saver.txt): cvars that cut
-// the CPU work of a render, held like the others. A cvar the stereo sets already hold keeps their value.
+// the CPU work of a render, held like the others. A cvar the stereo sets or Parallel Eye Rendering's set
+// already hold keeps their value.
 void addCpuSaver() {
     const std::string text = narrowEnv(L"ETERNALVR_CPU_SAVER");
     if (text.empty() || text == "0") {
@@ -200,7 +217,7 @@ void addDebugList() {
             continue;
         }
         Held* same = heldNamed(c.name);
-        if (same && same->saver) {
+        if (same && (same->saver || same->scatter || same->parallel)) {
             *same = std::move(h);
         } else {
             g_held.push_back(std::move(h));
@@ -234,27 +251,74 @@ std::string commandLine() {
     return line;
 }
 
+// The window and present set (stereo_seq::stereoWindowCvars), as the command line and ETERNALVR_WINDOW size
+// it; r_windowWidth / r_windowHeight follow the render size (windowSizeLeft).
+void addWindowSet(bool parallel) {
+    std::wstring window;
+    readEnv(L"ETERNALVR_WINDOW", window);
+    std::string narrowWindow;
+    for (const wchar_t ch : window) {
+        narrowWindow.push_back(ch < 0x80 ? static_cast<char>(ch) : '?');
+    }
+    for (const auto& c : stereo_seq::stereoWindowCvars(commandLine(), narrowWindow)) {
+        g_held.push_back(Held{c.name, c.value, true, false});
+        g_held.back().windowSize = stereo_seq::isWindowSizeCvar(c.name);
+        g_held.back().parallel = parallel;
+    }
+}
+
+// Parallel Eye Rendering's set, held from its first present (presenter_copy.cpp), on every frame:
+// - r_useNewDepthDownscale 0. With the new depth downsample (0x1C73530) view 1's light binning got wrong tile
+//   depth bounds in e1m3: its light lists drew tile-shaped black holes over the near floor (rig runs cum2,
+//   cnd1); the old downsample (0x1C73780) leaves both views right.
+// - Route S's window and present set, so a load path that applies the player's video mode cannot take the
+//   eyes to the display's size (as in Route S).
+// - Route S's comfort set (stereo_seq::stereoComfortCvars): without it the game's low-health damage view
+//   effect left both eyes red after a death and checkpoint reload (rig runs pe1 and crt1), which Route
+//   S never shows because it holds view_skipDamageEffect and the rest.
+// - The launcher's anti-aliasing (parallel_eyes::antiAliasingCvars): TAA, or with Off the stereo path's
+//   r_TAASafeMode 1 and r_antialiasing 0 (the game applies the player's own mode after the command line).
+//   ETERNALVR_STEREO_RUNTIME_CVARS=0 leaves it as the game has it, as Route S's stereo set (rig experiments).
+// An ETERNALVR_DEBUG_CVARS entry for one of these cvars wins; a CPU Saver item for one is left out, as in
+// Route S.
+void addParallelEyeSet() {
+    g_held.push_back(Held{"r_useNewDepthDownscale", "0", true, false});
+    g_held.back().parallel = true;
+    if (g_parallelAntiAliasingHeld) {
+        for (const auto& c : parallel_eyes::antiAliasingCvars(g_parallelAntiAliasingOff)) {
+            g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
+            g_held.back().parallel = true;
+        }
+    } else {
+        EVR_LOG("%s: Parallel Eye Rendering's anti-aliasing is left as the game has it "
+                "(ETERNALVR_STEREO_RUNTIME_CVARS=0)",
+                kTag);
+    }
+    addWindowSet(true);
+    for (const auto& c : stereo_seq::stereoComfortCvars()) {
+        g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
+        g_held.back().parallel = true;
+    }
+}
+
 void start(bool stereo) {
     std::wstring off;
     if (stereo && !(readEnv(L"ETERNALVR_STEREO_RUNTIME_CVARS", off) && off == L"0")) {
         for (const auto& c : stereo_seq::stereoRuntimeCvars(stereo_seq::StereoTemporal::Off)) {
             g_held.push_back(Held{std::string(c.name), std::string(c.value), true, true});
         }
-        std::wstring window;
-        readEnv(L"ETERNALVR_WINDOW", window);
-        std::string narrowWindow;
-        for (const wchar_t ch : window) {
-            narrowWindow.push_back(ch < 0x80 ? static_cast<char>(ch) : '?');
-        }
-        for (const auto& c : stereo_seq::stereoWindowCvars(commandLine(), narrowWindow)) {
-            g_held.push_back(Held{c.name, c.value, true, false});
-            g_held.back().windowSize = stereo_seq::isWindowSizeCvar(c.name);
-        }
+        const stereo_seq::CvarExpectation scatter = stereo_seq::stereoScatterFilterCvar(false);
+        g_held.push_back(Held{std::string(scatter.name), std::string(scatter.value), true, false});
+        g_held.back().scatter = true;
+        addWindowSet(false);
         for (const auto& c : stereo_seq::stereoComfortCvars()) {
             g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
         }
     } else if (stereo) {
         EVR_LOG("%s: the stereo set is left as the game has it (ETERNALVR_STEREO_RUNTIME_CVARS=0)", kTag);
+    }
+    if (g_parallelEyes) {
+        addParallelEyeSet(); // before the CPU Saver, as the stereo sets
     }
     addCpuSaver();
     addSharpening();
@@ -272,6 +336,8 @@ void start(bool stereo) {
         g_setString = nullptr;
         return;
     }
+    // The trip gives back what the layer writes (cvar_book.hpp); registered now so a trip logs it either way.
+    cvar_book::listen();
     std::vector<const std::byte*> names;
     std::vector<int> found(g_held.size(), 0);
     for (const Held& h : g_held) {
@@ -299,7 +365,12 @@ void start(bool stereo) {
     bool anySaver = false;
     for (Held& h : g_held) {
         holdPlacedWindow(h);
-        if (h.object && !windowSizeLeft(h)) {
+        if (h.object && h.scatter) {
+            // Held only without per-eye TAA (scatterHold); 0 throughout when the scattering hooks are not in.
+            list += (list.empty() ? "" : ", ") + h.name +
+                    (scatterHooksInstalled() ? " 1 while the scattering history is per eye, else 0" : " 0") +
+                    (taaRequested() ? " (if per-eye TAA fails closed)" : "");
+        } else if (h.object && !windowSizeLeft(h)) {
             list += (list.empty() ? "" : ", ") + h.name + (h.cap ? " at most " : " ") + h.value;
         }
         if (h.saver) {
@@ -327,7 +398,8 @@ void apply(bool stereo) {
         return;
     }
     for (Held& h : g_held) {
-        if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off)) {
+        if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off) ||
+            (h.scatter && !scatterHold(h))) {
             continue;
         }
         holdPlacedWindow(h);
@@ -356,7 +428,9 @@ void apply(bool stereo) {
             if (!(value > h.capValue + 1e-4f)) {
                 continue;
             }
-            g_setString(h.object, h.value.c_str(), true);
+            if (!cvar_book::write(h.name, h.object, g_setString, h.value.c_str())) {
+                continue;
+            }
             g_writes.fetch_add(1, std::memory_order_relaxed);
             if (!h.written || g_loggedWrites < kLoggedWrites) {
                 g_loggedWrites += h.written ? 1 : 0;
@@ -371,7 +445,9 @@ void apply(bool stereo) {
             if (std::fabs(value - h.exactValue) < 1e-4f) {
                 continue;
             }
-            g_setString(h.object, h.value.c_str(), true);
+            if (!cvar_book::write(h.name, h.object, g_setString, h.value.c_str())) {
+                continue;
+            }
             g_writes.fetch_add(1, std::memory_order_relaxed);
             if (!h.written || g_loggedWrites < kLoggedWrites) {
                 g_loggedWrites += h.written ? 1 : 0;
@@ -384,7 +460,9 @@ void apply(bool stereo) {
         if (before == std::atoi(h.value.c_str())) {
             continue;
         }
-        g_setString(h.object, h.value.c_str(), true);
+        if (!cvar_book::write(h.name, h.object, g_setString, h.value.c_str())) {
+            continue;
+        }
         g_writes.fetch_add(1, std::memory_order_relaxed);
         if (!h.written || g_loggedWrites < kLoggedWrites) {
             g_loggedWrites += h.written ? 1 : 0;
@@ -410,6 +488,17 @@ void setStereoTemporal(stereo_seq::StereoTemporal temporal) {
 
 std::uint64_t writes() {
     return g_writes.load(std::memory_order_relaxed);
+}
+
+void setParallelEyes(bool antiAliasingOff, bool antiAliasingHeld) {
+    std::lock_guard lock(g_mutex);
+    if (g_started) {
+        EVR_LOG("%s: Parallel Eye set asked for after the first apply; not held", kTag);
+        return;
+    }
+    g_parallelEyes = true;
+    g_parallelAntiAliasingOff = antiAliasingOff;
+    g_parallelAntiAliasingHeld = antiAliasingHeld;
 }
 
 } // namespace evr::vkcore::runtime_cvars

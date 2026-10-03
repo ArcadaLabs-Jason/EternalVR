@@ -14,6 +14,7 @@
 #include "features/input/game_input.hpp"
 #include "features/input/hands_jump.hpp"
 #include "features/input/locomotion_direction.hpp"
+#include "features/input/menu_release_latch.hpp"
 #include "features/input/punch_detector.hpp"
 #include "features/input/stick_chord.hpp"
 #include "features/input/stick_response.hpp"
@@ -23,6 +24,7 @@
 #include "features/posture/posture_detector.hpp"
 
 #include <array>
+#include <string>
 
 namespace evr::input {
 
@@ -44,7 +46,8 @@ struct MapperSettings {
     float menuTapSeconds = 1.0f;
     // Both sticks pressed and held is the recenter chord (stick_chord.hpp): Recenter is down while it is.
     bool stickChordRecenter = true;
-    // The left buttons the capture chord takes (capture_chord.hpp): the secondary one too under SteamVR.
+    // The buttons the capture chord takes (capture_chord.hpp): both sticks too where the runtime keeps the
+    // Menu button.
     CaptureButtons captureButtons = CaptureButtons::Menu;
     StickResponse move = kMoveStickResponse;
     LocomotionFrame locomotionFrame = LocomotionFrame::Head;
@@ -65,8 +68,14 @@ struct MapperContext {
     float viewYawRadians = 0.0f;
     // True while the off hand holds the weapon's fore-grip for two-handed aiming. Its grip bindings
     // are suppressed meanwhile, and until that grip is next released, which is how the off-hand grip
-    // can mean "support" near the weapon and its bound action away from it (R06 section 4.1).
+    // can mean "support" near the weapon and its bound action away from it (R06 section 4.1). Nothing
+    // sets it yet: no support grip is detected.
     bool supportHandOnWeapon = false;
+    // A menu holds the controllers' gameplay input back this frame (the caller drops the actions). The
+    // mapper still reads every input, for the menu's own uses of it (the pause, the capture, a popup's
+    // keys); one still held when the hold ends stays out of gameplay until it is let go
+    // (menu_release_latch.hpp).
+    bool menuHold = false;
 };
 
 class InputMapper {
@@ -80,6 +89,13 @@ public:
     [[nodiscard]] const BindingProfile& profile() const { return profile_; }
     // The settings in use, after invalid values were replaced by defaults.
     [[nodiscard]] const MapperSettings& settings() const { return settings_; }
+    // An input held through the end of a menu's hold is still kept out of gameplay.
+    [[nodiscard]] bool heldFromMenu() const { return menuRelease_.anyLatched(); }
+    // The turn stick as the last update read it: centred while it is held from a menu, or with no turn stick.
+    [[nodiscard]] Axis2 turnStick() const { return turnStickRead_; }
+    // For the log: the weapon hand, the move stick's hand and what forward on it follows, as in
+    // "left-handed, move stick left, moving where the left hand points".
+    [[nodiscard]] std::string summary() const;
 
 private:
     using PerButton = std::array<bool, kButtonInputCount>;
@@ -106,6 +122,7 @@ private:
                           bool triggerSuppressed,
                           game::GameActionSet& down) const;
     void addStickGestureActions(const TurnStickOutput& gestures, game::GameActionSet& down) const;
+    void consumeHeld();
 
     BindingProfile profile_;
     MapperSettings settings_;
@@ -119,6 +136,8 @@ private:
     CaptureChord captureChord_;
     StickChord stickChord_;
     game::GameActionSet previousDown_;
+    MenuReleaseLatch menuRelease_;
+    Axis2 turnStickRead_;
 };
 
 } // namespace evr::input

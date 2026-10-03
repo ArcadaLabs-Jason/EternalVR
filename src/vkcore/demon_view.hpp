@@ -4,7 +4,8 @@
 // controls another body. The Slayer (idPlayer) stays alive, controls a first-person idDemonPlayer that points
 // back at it, and the game builds the demon's camera through the player's view. There the movement stick must
 // follow the demon's own facing (the camera the game builds), not the Slayer's aim, and body follow must not
-// push the demon toward the head. Steam build 25216728 only (checked through the idPlayer vtable, PlayerAim).
+// push the demon toward the head. The offsets were read on Steam build 25216728; they are used on the known
+// builds (checked through the idPlayer vtable, PlayerAim), the Game Pass one being the same code relinked.
 
 #include "game/eternal/game_action.hpp"
 #include "vkcore/player_aim.hpp"

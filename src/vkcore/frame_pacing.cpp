@@ -3,6 +3,7 @@
 #include "features/pacing/pace_policy.hpp"
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -65,8 +66,10 @@ bool configure() {
             }
         }
         // Adaptive alternate eyes switches by the game's tick rate, which pacing holds at the headset's: once
-        // alternating it would never measure enough headroom to render both eyes per tick again.
-        if (mode == pacing::PaceMode::Headset &&
+        // alternating it would never measure enough headroom to render both eyes per tick again. Not with
+        // Parallel Eye Rendering, which ignores alternate eyes (view_slots.hpp; installed at
+        // vkCreateInstance).
+        if (mode == pacing::PaceMode::Headset && !parallelEyesChangedEngine() &&
             stereo_seq::alternateMode(narrowEnv(L"ETERNALVR_ALTERNATE_EYES")) ==
                 stereo_seq::AlternateMode::Auto) {
             EVR_LOG("pace: ETERNALVR_PACE=headset is not used with ETERNALVR_ALTERNATE_EYES=auto (its switch "

@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstddef>
 #include <initializer_list>
+#include <optional>
+#include <string>
 #include <utility>
 
 namespace evr::input {
@@ -16,6 +18,10 @@ constexpr std::size_t handIndex(Hand hand) {
 
 constexpr std::size_t buttonIndex(ButtonInput input) {
     return static_cast<std::size_t>(input);
+}
+
+const char* sideName(Hand hand) {
+    return hand == Hand::Left ? "left" : "right";
 }
 
 float sanitizedDt(float dtSeconds) {
@@ -72,7 +78,9 @@ InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
     : profile_(std::move(profile)), settings_(sanitized(settings)), turnStick_(settings_.turnStick),
       turn_(settings_.turn), handsJump_(settings_.handsJump),
       armGestures_(settings_.throwGesture, settings_.swing), punch_(settings_.punch),
-      captureChord_(settings_.trigger, settings_.captureButtons), stickChord_(settings_.buttonHoldSeconds) {
+      captureChord_(settings_.trigger, settings_.captureButtons, settings_.buttonHoldSeconds),
+      stickChord_(settings_.buttonHoldSeconds),
+      menuRelease_({settings_.trigger.release, settings_.grip.release, settings_.turnStick.centreRadius}) {
     for (HandButtons& hand : hands_) {
         hand.trigger = AnalogButton(settings_.trigger);
         hand.grip = AnalogButton(settings_.grip);
@@ -86,26 +94,30 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     const float dt = sanitizedDt(dtSeconds);
     GameInput input;
 
+    // Inputs held through a menu's hold stay out of gameplay until let go, and the presses and sweeps begun
+    // under it are used up: a release or a stick still out finishes none of them (menu_release_latch.hpp).
+    const MenuReleaseOutput released = menuRelease_.update(raw, context.menuHold);
+    if (released.holdEnded) {
+        consumeHeld();
+    }
+
+    // Left Menu (or where the runtime keeps it, both sticks) held + a trigger pulled: the capture. That Menu
+    // press neither taps nor holds, that stick chord does not recenter, and the trigger is held back
+    // meanwhile (capture_chord.hpp).
+    const CaptureChordOutput chord = captureChord_.update(released.frame, dt);
+    input.capture = chord.capture;
+    if (chord.cancelMenu) {
+        hands_[handIndex(Hand::Left)].tapHold[buttonIndex(ButtonInput::Menu)].cancel();
+    }
+
     // Both sticks pressed: the recenter chord. The sticks' own bindings see a click only when it is not
     // part of the chord (a single click stays instant; stick_chord.hpp).
-    InputFrame frame = raw;
+    InputFrame frame = released.frame;
     const StickChordOutput sticks = stickChord_.update(frame.left.stickClick, frame.right.stickClick, dt);
     frame.left.stickClick = sticks.click[handIndex(Hand::Left)];
     frame.right.stickClick = sticks.click[handIndex(Hand::Right)];
-    if (settings_.stickChordRecenter && sticks.recenter) {
+    if (settings_.stickChordRecenter && sticks.recenter && !chord.cancelSticks) {
         game::add(input.down, game::GameAction::Recenter);
-    }
-
-    // Left Menu (or under SteamVR Y) held + a trigger pulled: the capture. That press neither taps nor holds,
-    // and the trigger is held back meanwhile (capture_chord.hpp).
-    const CaptureChordOutput chord = captureChord_.update(frame);
-    input.capture = chord.capture;
-    HandButtons& left = hands_[handIndex(Hand::Left)];
-    if (chord.cancelMenu) {
-        left.tapHold[buttonIndex(ButtonInput::Menu)].cancel();
-    }
-    if (chord.cancelSecondary) {
-        left.tapHold[buttonIndex(ButtonInput::Secondary)].cancel();
     }
 
     for (const Hand hand : {Hand::Left, Hand::Right}) {
@@ -127,18 +139,24 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     // gestures, as under the stick's own down hold.
     const bool wheelFromButton = game::contains(input.down, game::GameAction::WeaponWheel);
     const Axis2 turnStick = profile_.turnStick ? frame.hand(*profile_.turnStick).stick : Axis2{};
+    turnStickRead_ = turnStick;
     const TurnStickOutput gestures = turnStick_.update(turnStick, dt, wheelFromButton);
     addStickGestureActions(gestures, input.down);
     input.turnDegrees = turn_.update(turnStick, dt, gestures.turnAllowed);
     input.wheelPointer = gestures.wheelPointer;
 
-    const HandState& offHand = frame.hand(otherHand(profile_.weaponHand));
-    const float locomotionYaw = locomotion_.update(settings_.locomotionFrame, frame.head, offHand);
+    // The hand the locomotion frame follows (the head's frame does not read it).
+    const Hand moveStickHand = locomotionHand(profile_);
+    const Hand steering =
+        locomotionFrameHand(settings_.locomotionFrame, moveStickHand).value_or(moveStickHand);
+    const float locomotionYaw =
+        locomotion_.update(settings_.locomotionFrame, frame.head, frame.hand(steering));
     const Axis2 moveStick = profile_.moveStick ? frame.hand(*profile_.moveStick).stick : Axis2{};
     const Axis2 move = applyStickResponse(moveStick, settings_.move);
     input.move = rotateIntoViewFrame(move, locomotionYaw, context.viewYawRadians);
 
-    if (handsJump_.update(frame, context.posture, dt)) {
+    input.handsJumped = handsJump_.update(frame, context.posture, dt);
+    if (input.handsJumped) {
         game::add(input.down, game::GameAction::Jump);
     }
     // A throw or an overhead swing holds back its hand's punch: the gesture's own motion would punch too.
@@ -160,6 +178,16 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     input.released = previousDown_ & ~input.down;
     previousDown_ = input.down;
     return input;
+}
+
+std::string InputMapper::summary() const {
+    std::string text = std::string(sideName(profile_.weaponHand)) + "-handed, move stick ";
+    text += profile_.moveStick ? sideName(*profile_.moveStick) : "none";
+    const std::optional<Hand> steering =
+        locomotionFrameHand(settings_.locomotionFrame, locomotionHand(profile_));
+    text += steering ? std::string(", moving where the ") + sideName(*steering) + " hand points"
+                     : ", moving where the head faces";
+    return text;
 }
 
 InputMapper::ButtonLevels
@@ -200,6 +228,20 @@ void InputMapper::addButtonActions(Hand hand,
             game::add(down, binding.action);
         }
     }
+}
+
+void InputMapper::consumeHeld() {
+    // Only presses going on: a button up until now may be pressed afresh on this very frame.
+    for (HandButtons& hand : hands_) {
+        for (TapHoldDetector& button : hand.tapHold) {
+            if (button.isDown()) {
+                button.cancel();
+            }
+        }
+    }
+    turnStick_.cancelSweep();
+    // A stick click withheld for the chord would be sent late on its release.
+    stickChord_ = StickChord(settings_.buttonHoldSeconds);
 }
 
 void InputMapper::addStickGestureActions(const TurnStickOutput& gestures, game::GameActionSet& down) const {

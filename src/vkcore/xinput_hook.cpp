@@ -10,6 +10,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/virtual_gamepad.hpp"
+#include "vkcore/import_patch.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 
@@ -136,13 +137,10 @@ bool installXInputHook() {
             }
             // The original is stored before the slot is switched, so a racing call never sees null.
             g_original.store(reinterpret_cast<GetStateFn>(slots->u1.Function), std::memory_order_release);
-            DWORD old = 0;
-            if (!VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), PAGE_READWRITE, &old)) {
+            if (!writeReadOnlySlot(&slots->u1.Function, reinterpret_cast<void*>(&hookedGetState))) {
                 EVR_LOG("%s: cannot unprotect the XInputGetState import; no virtual gamepad", kTag);
                 return false;
             }
-            slots->u1.Function = reinterpret_cast<ULONGLONG>(&hookedGetState);
-            VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), old, &old);
             EVR_LOG("%s: virtual gamepad: %s XInputGetState import replaced (IAT RVA 0x%X)", kTag, dll,
                     static_cast<unsigned>(reinterpret_cast<std::byte*>(&slots->u1.Function) - module));
             return true;

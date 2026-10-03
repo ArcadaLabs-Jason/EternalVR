@@ -55,3 +55,18 @@ TEST_CASE("a count SetNum left raised is written back, nothing else") {
     CHECK_FALSE(restoreCount({3, 3}, 3));
     CHECK_FALSE(restoreCount({10, 9}, 3)); // past its size: not a list to write
 }
+
+TEST_CASE("room is made for six modifiers per arm, both arms at once") {
+    CHECK(evr::arm::modsForArms(1) == 6);
+    CHECK(evr::arm::modsForArms(2) == 12);
+    CHECK(evr::arm::modsForArms(0) == 0);
+    CHECK(evr::arm::modsForArms(3) == 0);
+    const RoomPlan plan = planRoom({3, 3}, {3, 3}, evr::arm::modsForArms(2));
+    CHECK(plan.step == RoomPlan::Step::Grow);
+    CHECK(plan.growTo == 15);
+    // The off hand's six appended first, then the weapon arm's six fit after them.
+    CHECK(roomFor({3, 15}, {3, 15}, 6));
+    CHECK(roomFor({9, 15}, {9, 15}, 6));
+    CHECK_FALSE(roomFor({15, 15}, {15, 15}, 6));
+    CHECK_FALSE(roomFor({9, 9}, {9, 9}, 6)); // room for one arm only
+}

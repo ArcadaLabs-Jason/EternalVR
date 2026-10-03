@@ -90,17 +90,22 @@ DWORD sectionCharacteristics(const GameText& text, const void* address, char (&n
 } // namespace
 
 bool locateSeqEngine(const GameText& text, SeqEngine& out) {
-    const std::byte* queue = findUniqueInText(text, "seq frame-end queue site", kQueueSiteSignature);
-    const std::byte* frameEnd = findUniqueInText(text, "seq frame-end job", kFrameEndSignature);
-    const std::byte* guard = findUniqueInText(text, "seq guard clear", kGuardClearSignature);
-    const std::byte* renderOne = findUniqueInText(text, "seq render one frame", kRenderOneSignature);
-    const std::byte* renderJob = findUniqueInText(text, "seq render-frame job", kRenderFrameJobSignature);
-    const std::byte* worldViews = findUniqueInText(text, "seq world-views pass", kWorldViewsSignature);
+    const std::byte* queue =
+        findUniqueInText(text, "stereo", "seq frame-end queue site", kQueueSiteSignature);
+    const std::byte* frameEnd = findUniqueInText(text, "stereo", "seq frame-end job", kFrameEndSignature);
+    const std::byte* guard = findUniqueInText(text, "stereo", "seq guard clear", kGuardClearSignature);
+    const std::byte* renderOne =
+        findUniqueInText(text, "stereo", "seq render one frame", kRenderOneSignature);
+    const std::byte* renderJob =
+        findUniqueInText(text, "stereo", "seq render-frame job", kRenderFrameJobSignature);
+    const std::byte* worldViews =
+        findUniqueInText(text, "stereo", "seq world-views pass", kWorldViewsSignature);
     const std::byte* storeCall =
-        findUniqueInText(text, "seq previous-matrix store call", kPrevStoreCallSignature);
-    const std::byte* store = findUniqueInText(text, "seq previous-matrix store", kPrevStoreSignature);
-    const std::byte* rsSite = findUniqueInText(text, "seq render system", kRenderSystemSignature);
-    const std::byte* swap = findUniqueInText(text, "seq render-thread swap", kSwapSignature);
+        findUniqueInText(text, "stereo", "seq previous-matrix store call", kPrevStoreCallSignature);
+    const std::byte* store =
+        findUniqueInText(text, "stereo", "seq previous-matrix store", kPrevStoreSignature);
+    const std::byte* rsSite = findUniqueInText(text, "stereo", "seq render system", kRenderSystemSignature);
+    const std::byte* swap = findUniqueInText(text, "stereo", "seq render-thread swap", kSwapSignature);
     if (!queue || !frameEnd || !guard || !renderOne || !renderJob || !worldViews || !storeCall || !store ||
         !rsSite || !swap) {
         EVR_LOG("seq: a Route S signature is missing or not unique (another game build?); stereo off");

@@ -71,6 +71,10 @@ public:
     // weapon wheel this frame, and the stick only points at it.
     TurnStickOutput update(Axis2 stick, float dtSeconds, bool wheelHeld = false);
 
+    // The sweep going on, if any, is used up by something else (a menu it began under): it does nothing
+    // more, a quick switch included, until the stick is back in the centre.
+    void cancelSweep();
+
     [[nodiscard]] SweepIntent intent() const { return intent_; }
     [[nodiscard]] const TurnStickSettings& settings() const { return settings_; }
 

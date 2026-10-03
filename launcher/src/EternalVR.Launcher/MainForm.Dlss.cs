@@ -45,8 +45,8 @@ namespace EternalVR.Launcher
             version.Controls.AddRange(new Control[] { dlssDll, buttons });
             return Group("DLSS",
                 Row(Setting.DlssQuality, dlssQuality,
-                    s => dlssQuality.SelectedIndex = (int)s.Dlss,
-                    s => s.Dlss = (DlssQuality)Math.Max(0, dlssQuality.SelectedIndex)),
+                    s => dlssQuality.SelectedIndex = Math.Max(0, Array.IndexOf(DlssDll.QualityOrder, s.Dlss)),
+                    s => s.Dlss = DlssDll.QualityOrder[Math.Max(0, dlssQuality.SelectedIndex)]),
                 Row(Setting.DlssVersion, version, s => SelectDlssVersion(s.DlssDll), s => s.DlssDll = SelectedDlssVersion(), fit: w => FitList(dlssDll, w)),
                 Row(Setting.DlssPreset, dlssPreset,
                     s => dlssPreset.SelectedIndex = DlssDll.PresetIndex(s.DlssPreset),

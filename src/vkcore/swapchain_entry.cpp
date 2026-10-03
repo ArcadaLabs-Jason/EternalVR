@@ -4,6 +4,7 @@
 
 #include "vkcore/cpu_timing.hpp"
 #include "vkcore/frame_pacing.hpp"
+#include "vkcore/game_settings.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -11,6 +12,7 @@
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/stereo_present.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/vrs_nv.hpp"
 #include "vkcore/window_timing.hpp"
 #include "vkcore/xr_presenter.hpp"
 
@@ -68,6 +70,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device,
         EVR_LOG(
             "size: the swapchain is scaled into the window's real client area (scaling 0x%x, gravity 0x%x)",
             scaling.scalingBehavior, scaling.presentGravityX);
+    }
+    if (result == VK_SUCCESS) {
+        vrs_nv::noteSwapchain(device, pCreateInfo->imageExtent); // foveation's eye image size
     }
     if (result != VK_SUCCESS || !data->interopEnabled) {
         return result;
@@ -134,6 +139,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInf
     // Always on for the game's device: the gap since its last present, and our own time in this hook.
     const std::uint64_t entered = data->presenter ? stall_watch::presentEntered() : 0;
     mp_guard::poll();
+    game_settings::poll(); // the game's video settings in the log, after each map load
     virtual_client::poll();
     shader_dump::onPresent(data->device);
     gpu_timing::onPresent(queue); // closes the frame (ETERNALVR_GPU_TIMING)

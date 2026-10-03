@@ -40,4 +40,9 @@ struct TwoBoneSolution {
 // nullopt when a length is not positive and finite, or an input is not finite.
 std::optional<TwoBoneSolution> solveTwoBone(const TwoBoneInput& in);
 
+// For an end that must not move (the weapon arm's wrist under the gun): `root` moved along the line to
+// `target` just inside the reach solveTwoBone meets without clamping. Unchanged when the target is within
+// it already, when root and target coincide, or when the lengths are unusable.
+Vec3 rootWithinReach(Vec3 root, Vec3 target, float upper, float lower);
+
 } // namespace evr::arm

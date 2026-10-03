@@ -176,6 +176,56 @@ namespace EternalVR.Launcher.Core.Tests
             }
         }
 
+        [Theory]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 1 } }", 1)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 3, ""additionalFramesToPredict"" : 4 } }", 3)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 5, ""motionSmoothingOverride"" : 2 } }", 5)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 15 } }", 15)]
+        // Limit at the full rate.
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 0, ""additionalFramesToPredict"" : 0 } }", null)]
+        // Auto: SteamVR removes the key.
+        [InlineData(@"{ ""steam.app.782330"" : { ""motionSmoothingOverride"" : 1 } }", null)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 16 } }", null)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : 1.5 } }", null)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : -1 } }", null)]
+        [InlineData(@"{ ""steam.app.782330"" : { ""framesToThrottle"" : ""2"" } }", null)]
+        [InlineData(@"{ ""steam.app.620980"" : { ""framesToThrottle"" : 1 } }", null)]
+        [InlineData(@"{ ""steam.app.782330"" : ""not a section"" }", null)]
+        [InlineData("{ broken", null)]
+        [InlineData("[1, 2]", null)]
+        [InlineData("", null)]
+        [InlineData(null, null)]
+        public void TheGamesThrottlingIsAWholeNumberAboveZero(string text, int? frames)
+        {
+            Assert.Equal(frames, SteamVrSummary.FramesToThrottle(text));
+        }
+
+        [Fact]
+        public void ReadFramesToThrottleReadsSteamsFolderOrFindsNone()
+        {
+            using (var t = new TempDir())
+            {
+                Assert.Null(SteamVrSummary.ReadFramesToThrottle(null));
+                Assert.Null(SteamVrSummary.ReadFramesToThrottle(t.Combine("steam")));
+                t.Write(@"steam\config\steamvr.vrsettings", @"{ ""steam.app.782330"" : { ""framesToThrottle"" : 2 } }");
+                Assert.Equal(2, SteamVrSummary.ReadFramesToThrottle(t.Combine("steam")));
+                t.Write(@"steam\config\steamvr.vrsettings", "{ broken");
+                Assert.Null(SteamVrSummary.ReadFramesToThrottle(t.Combine("steam")));
+            }
+        }
+
+        [Theory]
+        [InlineData(1, "half the refresh rate")]
+        [InlineData(2, "a third of the refresh rate")]
+        [InlineData(3, "a quarter of the refresh rate")]
+        [InlineData(4, "a fifth of the refresh rate")]
+        [InlineData(5, "a sixth of the refresh rate")]
+        [InlineData(6, "1/7 of the refresh rate")]
+        public void TheThrottledRateIsSaidInWords(int frames, string words)
+        {
+            Assert.Equal(words, SteamVrSummary.ThrottledRate(frames));
+        }
+
         [Fact]
         public void LongOrMultiLineValuesStayOnOneShortLine()
         {

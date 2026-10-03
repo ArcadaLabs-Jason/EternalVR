@@ -125,6 +125,31 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void SystemTextHasTheGameSettingsOfTheNewestSession()
+        {
+            using (var t = new TempDir())
+            {
+                var inputs = Setup(t);
+                Assert.DoesNotContain(ReportBuilder.GameSettingsKey, Unzip(ReportBuilder.Build(inputs).Zip)["system.txt"]);
+
+                t.Write(@"data\logs\20260926-100000\eternalvr-20260926-100000-100.log",
+                    "[   20.000] [ 4120] game settings: r_enableRayTracing 0, g_fov 90\n");
+                t.Write(@"data\logs\20260926-100000-2\eternalvr-20260926-100000-2-100.log",
+                    "[    1.000] [ 4120] game settings cvars: 35 of 35 located (12 ms)\n"
+                    + "[   20.000] [ 4120] mp guard: map load 'game/sp/e1m1_intro/e1m1_intro' (single player)\n"
+                    + "[   25.000] [ 4120] game settings: r_enableRayTracing 1, r_raytracedReflections 1, g_fov 110\n"
+                    + "[  300.000] [ 4120] game settings: r_enableRayTracing 0, r_raytracedReflections 1, g_fov 110\n"
+                    + "[  301.000] [ 4120] aim: head aim on\n");
+                var system = Unzip(ReportBuilder.Build(inputs).Zip)["system.txt"];
+                Assert.Contains("\ngame settings (last session): r_enableRayTracing 0, r_raytracedReflections 1, g_fov 110\n", system);
+                Assert.DoesNotContain("g_fov 90", system);
+                Assert.DoesNotContain("located", system);
+                Assert.Null(ReportBuilder.LastGameSettings(t.Combine("data", "logs", "20260924-100000")));
+                Assert.Null(ReportBuilder.LastGameSettings(t.Combine("data", "logs", "none")));
+            }
+        }
+
+        [Fact]
         public void MissingFilesAreListedNotFatal()
         {
             using (var t = new TempDir())

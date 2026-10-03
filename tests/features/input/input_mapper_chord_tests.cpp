@@ -1,5 +1,6 @@
 // The capture chord and the Menu button's pause through the whole mapper (capture_chord.hpp): left Menu, or
-// under SteamVR Y, held + a trigger captures without pausing, recentering or firing.
+// under SteamVR with Touch controllers both sticks, held + a trigger captures without pausing, recentering
+// or firing.
 
 #include "features/input/input_mapper.hpp"
 
@@ -130,60 +131,108 @@ TEST_CASE("the pause still goes out on the Menu release frame, with no delay") {
 
 namespace {
 
-struct YChordResult {
+struct SteamVrResult {
     int pauses = 0;
     int captures = 0;
     int modSwitches = 0;
     bool fired = false;
+    bool dashed = false;
+    bool recenter = false;
+    bool recenterAfterCapture = false;
 };
 
-// SteamVR: the built-in map with the Y hold turned into a pause, the capture chord on Menu or Y. Y held for
-// `ySeconds`, the right trigger pulled from `pullAt` for 0.1 s (never when negative), then 0.5 s released.
-YChordResult runYChord(float ySeconds, float pullAt) {
-    BindingProfile profile = questTouchProfile();
+// SteamVR with Touch controllers: the built-in map in `handedness` with the dashboard pause, the capture
+// chord on Menu or both sticks. `script` sets each frame's buttons from its time in seconds; 3 s are run.
+template <typename Script>
+SteamVrResult runSteamVr(Handedness handedness, Script script) {
+    BindingProfile profile = questTouchProfile(handedness);
     evr::input::applyDashboardPause(profile);
     MapperSettings settings;
-    settings.captureButtons = evr::input::CaptureButtons::MenuOrSecondary;
+    settings.captureButtons =
+        evr::input::captureButtonsFor("SteamVR/OpenXR", evr::game::Controller::OculusTouch);
     InputMapper mapper(profile, settings);
-    YChordResult result;
-    const int yFrames = static_cast<int>(ySeconds / kFrame);
-    const int pullFrom = pullAt < 0.0f ? -1000 : static_cast<int>(pullAt / kFrame);
-    const int pullTo = pullFrom + static_cast<int>(0.1f / kFrame);
-    for (int i = 0; i < yFrames + static_cast<int>(0.5f / kFrame); ++i) {
+    SteamVrResult result;
+    for (int i = 0; i < static_cast<int>(3.0f / kFrame); ++i) {
         InputFrame frame = restingFrame();
-        frame.left.secondaryButton = i < yFrames;
-        if (i >= pullFrom && i < pullTo) {
-            frame.right.trigger = 1.0f;
-        }
+        script(frame, static_cast<float>(i) * kFrame);
         const GameInput input = mapper.update(frame, {}, kFrame);
         result.pauses += contains(input.pressed, GameAction::Pause) ? 1 : 0;
         result.captures += input.capture ? 1 : 0;
         result.modSwitches += contains(input.pressed, GameAction::SwitchWeaponMod) ? 1 : 0;
         result.fired = result.fired || contains(input.down, GameAction::Fire);
+        result.dashed = result.dashed || contains(input.down, GameAction::Dash);
+        result.recenter = result.recenter || contains(input.down, GameAction::Recenter);
+        result.recenterAfterCapture = result.recenterAfterCapture ||
+                                      (result.captures > 0 && contains(input.down, GameAction::Recenter));
     }
     return result;
 }
 
-} // namespace
-
-TEST_CASE("SteamVR: Y + a trigger captures without switching the mod, pausing or firing") {
-    const YChordResult quick = runYChord(0.15f, 0.05f);
-    CHECK(quick.captures == 1);
-    CHECK(quick.modSwitches == 0);
-    CHECK(quick.pauses == 0);
-    CHECK_FALSE(quick.fired);
-    const YChordResult held = runYChord(1.0f, 0.1f); // held past the pause hold after the pull
-    CHECK(held.captures == 1);
-    CHECK(held.pauses == 0);
-    CHECK_FALSE(held.fired);
+constexpr bool between(float t, float from, float to) {
+    return t >= from && t < to;
 }
 
-TEST_CASE("SteamVR: Y alone still switches the mod on a tap and pauses on a hold") {
-    const YChordResult tap = runYChord(0.1f, -1.0f);
+} // namespace
+
+TEST_CASE("SteamVR, Touch: both sticks held + a trigger captures without recentering or firing") {
+    for (const Handedness handedness :
+         {Handedness::Right, Handedness::LeftButtonSwap, Handedness::LeftButtonAndStickSwap}) {
+        CAPTURE(static_cast<int>(handedness));
+        const SteamVrResult r = runSteamVr(handedness, [](InputFrame& f, float t) {
+            f.left.stickClick = f.right.stickClick = t < 2.5f; // past the recenter time
+            f.left.trigger = f.right.trigger = between(t, 0.5f, 0.6f) ? 1.0f : 0.0f;
+        });
+        CHECK(r.captures == 1);
+        CHECK_FALSE(r.fired);
+        CHECK_FALSE(r.recenterAfterCapture);
+        CHECK(r.pauses == 0);
+    }
+}
+
+TEST_CASE("SteamVR, Touch: both sticks held alone still recenter, and a quick pull with them fires") {
+    const SteamVrResult hold = runSteamVr(
+        Handedness::Right, [](InputFrame& f, float t) { f.left.stickClick = f.right.stickClick = t < 2.5f; });
+    CHECK(hold.recenter);
+    CHECK(hold.captures == 0);
+    // Pulled before the sticks' hold time: an ordinary shot.
+    const SteamVrResult quick = runSteamVr(Handedness::Right, [](InputFrame& f, float t) {
+        f.left.stickClick = f.right.stickClick = t < 0.5f;
+        f.right.trigger = between(t, 0.05f, 0.6f) ? 1.0f : 0.0f;
+    });
+    CHECK(quick.captures == 0);
+    CHECK(quick.fired);
+}
+
+TEST_CASE("SteamVR, Touch, full mirror: dash then fire dashes and fires, and captures nothing") {
+    const SteamVrResult r = runSteamVr(Handedness::LeftButtonAndStickSwap, [](InputFrame& f, float t) {
+        f.left.secondaryButton = t < 1.5f;                     // Y: dash in the full mirror
+        f.left.trigger = between(t, 0.1f, 1.1f) ? 1.0f : 0.0f; // fire
+        f.right.secondaryButton = between(t, 2.0f, 2.5f);      // B held: the pause
+    });
+    CHECK(r.dashed);
+    CHECK(r.fired);
+    CHECK(r.captures == 0);
+    CHECK(r.pauses == 1);
+}
+
+TEST_CASE("SteamVR, Touch: a Y mod switch with a pull before Y is let go switches and fires") {
+    const SteamVrResult r = runSteamVr(Handedness::Right, [](InputFrame& f, float t) {
+        f.left.secondaryButton = t < 0.15f;
+        f.right.trigger = between(t, 0.1f, 1.0f) ? 1.0f : 0.0f;
+    });
+    CHECK(r.modSwitches == 1);
+    CHECK(r.fired);
+    CHECK(r.captures == 0);
+    CHECK(r.pauses == 0);
+}
+
+TEST_CASE("SteamVR, Touch: Y still switches the mod on a tap and pauses on a hold") {
+    const SteamVrResult tap =
+        runSteamVr(Handedness::Right, [](InputFrame& f, float t) { f.left.secondaryButton = t < 0.1f; });
     CHECK(tap.modSwitches == 1);
     CHECK(tap.pauses == 0);
-    CHECK(tap.captures == 0);
-    const YChordResult hold = runYChord(0.6f, -1.0f);
+    const SteamVrResult hold =
+        runSteamVr(Handedness::Right, [](InputFrame& f, float t) { f.left.secondaryButton = t < 0.6f; });
     CHECK(hold.pauses == 1);
     CHECK(hold.modSwitches == 0);
     CHECK(hold.captures == 0);

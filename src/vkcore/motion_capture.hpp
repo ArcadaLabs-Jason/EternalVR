@@ -3,14 +3,14 @@
 // Per-eye motion-vector capture for the TAA smear work (ETERNALVR_CAPTURE_MOTION=<dir>[,<every N pairs>],
 // ui_layer/motion_target.hpp). With the variable set, images that could be the game's velocity targets get
 // TRANSFER_SRC when the game creates them and their layouts are followed (ui_vulkan.hpp); the exposure hook
-// notes the velocity target each eye's render bound (taa_hooks.hpp). On every Nth eye R copy of a Route S
-// pair (and with each in-headset capture), both eyes' velocity images are copied into host buffers in eye R's
-// copy command buffer; once the shared timeline shows them done, a background thread writes
+// notes the velocity target each eye's render bound (exposure_hooks.hpp). On every Nth eye R copy of a Route
+// S pair (and with each in-headset capture), both eyes' velocity images are copied into host buffers in eye
+// R's copy command buffer; once the shared timeline shows them done, a background thread writes
 // <dir>\mv-<pid>-p<n>-L.raw and -R.raw (the pixels as the image holds them, row after row) and a .txt file
 // with the format, size, ticks and statistics of each eye. An in-headset capture writes <base>-MV-L.raw and
 // so on next to its images.
 //
-// Needs per-eye TAA (the exposure hook) and the UI layer (the Vulkan hooks). Reads game memory only.
+// Needs the exposure hook (any Route S run) and the UI layer (the Vulkan hooks). Reads game memory only.
 // All calls except the writer thread run on the present hook under the presenter's mutex.
 
 #include "stereo_seq/eye_tags.hpp"
@@ -44,8 +44,9 @@ struct MotionTarget {
     int setIndex = -1;               // the set's member in use (-1: a single image)
     std::uint64_t vkImage = 0;       // the VkImage the render used
 };
-// The exposure hook (taa_hooks.cpp, render-view job, per-eye TAA on) for each tagged render: notes `tag`'s
-// eye's velocity target from the post-process context. Nothing unless ETERNALVR_CAPTURE_MOTION is set.
+// The exposure hook (exposure_hooks.cpp, render-view job, under Route S) for each tagged render: notes
+// `tag`'s eye's velocity target from the post-process context. Nothing unless ETERNALVR_CAPTURE_MOTION is
+// set.
 void noteMotionTarget(const stereo_seq::RenderTag& tag, const std::byte* postProcessContext);
 // Eye 0 (left) or 1 (right); nullopt before that eye's first noted render.
 std::optional<MotionTarget> motionTargetFor(int eye);

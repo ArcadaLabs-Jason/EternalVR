@@ -266,3 +266,23 @@ TEST_CASE("invalid arbiter settings fall back to the defaults") {
     arbiter.update({}, kFrame);
     CHECK(arbiter.intent() == SweepIntent::None);
 }
+
+TEST_CASE("a cancelled sweep does nothing more until the stick is back in the centre") {
+    TurnStickArbiter arbiter;
+    arbiter.update({0.0f, -1.0f}, kFrame);
+    REQUIRE(arbiter.intent() == SweepIntent::Down);
+    arbiter.cancelSweep();
+    CHECK(arbiter.intent() == SweepIntent::Cancelled);
+    for (int i = 0; i < 60; ++i) {
+        const TurnStickOutput out = arbiter.update({0.0f, -1.0f}, kFrame);
+        CHECK_FALSE(out.downHold);
+        CHECK_FALSE(out.turnAllowed);
+    }
+    CHECK_FALSE(arbiter.update({}, kFrame).downTap); // no quick switch
+    CHECK(arbiter.intent() == SweepIntent::None);
+
+    // With the stick centred there is no sweep to cancel: the next one claims as usual.
+    arbiter.cancelSweep();
+    arbiter.update({0.0f, -1.0f}, kFrame);
+    CHECK(arbiter.update({}, kFrame).downTap);
+}

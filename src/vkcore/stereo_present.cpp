@@ -4,6 +4,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/stereo_hooks.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <cstdint>
 #include <cwchar>
@@ -14,20 +15,24 @@ namespace evr::vkcore {
 
 namespace {
 
-// Route S without an experiment (or a mono frame-rate reference), and the game's swapchain on a surface.
+// Route S without an experiment (or a mono frame-rate reference), and the game's swapchain on a surface. Not
+// once Parallel Eye Rendering has changed the engine (installed, or failed after a change: view_slots.hpp),
+// which the game's vkCreateInstance installs before it first asks; asked again each time, so it follows the
+// install's result, not its request.
 bool routeSPresent() {
-    static const bool wanted = [] {
+    static const bool immediate = [] {
+        std::wstring value;
+        return readEnv(L"ETERNALVR_PRESENT_IMMEDIATE", value) && value == L"1";
+    }();
+    static const bool routeS = [] {
         std::wstring mode;
         std::wstring vsync;
-        std::wstring immediate;
-        if (readEnv(L"ETERNALVR_PRESENT_IMMEDIATE", immediate) && immediate == L"1") {
-            return true; // any mode, for frame-rate comparisons without vsync (S4)
-        }
         return readEnv(L"ETERNALVR_MODE", mode) && _wcsicmp(mode.c_str(), L"stereo") == 0 &&
                stereoExperimentFromEnv() == StereoExperiment::None &&
                !(readEnv(L"ETERNALVR_STEREO_VSYNC", vsync) && vsync == L"1");
     }();
-    return wanted;
+    // ETERNALVR_PRESENT_IMMEDIATE=1: any mode, for frame-rate comparisons without vsync (S4).
+    return immediate || (routeS && !parallelEyesChangedEngine());
 }
 
 std::uint32_t wantedImages() {
@@ -50,12 +55,11 @@ std::uint32_t wantedImages() {
 } // namespace
 
 bool windowPresentsGated() {
-    static const bool gated = [] {
+    static const bool all = [] {
         std::wstring text;
-        return routeSPresent() &&
-               !(readEnv(L"ETERNALVR_WINDOW_PRESENTS", text) && _wcsicmp(text.c_str(), L"all") == 0);
+        return readEnv(L"ETERNALVR_WINDOW_PRESENTS", text) && _wcsicmp(text.c_str(), L"all") == 0;
     }();
-    return gated;
+    return routeSPresent() && !all;
 }
 
 VkPresentModeKHR stereoPresentMode(const DeviceData& data, const VkSwapchainCreateInfoKHR& info) {

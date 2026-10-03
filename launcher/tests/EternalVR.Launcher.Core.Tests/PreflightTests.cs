@@ -89,6 +89,32 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void SteamVrThrottlingForTheGameWarnsUnderSteamVrOnly()
+        {
+            var f = Good();
+            f.SteamVrFramesToThrottle = 1;
+            Assert.DoesNotContain(PreflightEvaluator.Evaluate(f).Checks, c => c.Id == "steamvr-throttle");
+
+            f.RuntimeManifest = @"D:\SteamLibrary\steamapps\common\SteamVR\steamxr_win64.json";
+            var r = PreflightEvaluator.Evaluate(f);
+            Assert.True(r.CanLaunch);
+            var check = Only(r, "steamvr-throttle");
+            Assert.Equal(Severity.Warn, check.Severity);
+            Assert.Equal("SteamVR limits DOOM Eternal to half the refresh rate (Throttling Behavior: Limit); frame pacing follows it. The setting: "
+                + "SteamVR Settings > Video > Per-Application Video Settings > DOOM Eternal > Throttling Behavior.", check.Message);
+
+            f.SteamVrFramesToThrottle = 2;
+            Assert.Contains("to a third of the refresh rate (Throttling Behavior: Limit)", Only(PreflightEvaluator.Evaluate(f), "steamvr-throttle").Message);
+
+            // Auto (the key removed) and Limit at the full rate (0) do not throttle.
+            foreach (var none in new int?[] { null, 0 })
+            {
+                f.SteamVrFramesToThrottle = none;
+                Assert.DoesNotContain(PreflightEvaluator.Evaluate(f).Checks, c => c.Id == "steamvr-throttle");
+            }
+        }
+
+        [Fact]
         public void WarningsDoNotBlock()
         {
             var f = Good();
@@ -109,7 +135,11 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var id in new[] { "steam", "program-folder", "hags", "layer-disabled", "vram", "gpus", "injectors", "vulkan-loader", "path", "data-path" })
                 Assert.Equal(Severity.Warn, Only(r, id).Severity);
             Assert.Contains("Hardware-accelerated GPU scheduling", Only(r, "hags").Message);
-            Assert.Contains("Small GPU has 8 GB", Only(r, "vram").Message);
+            // The fact only: what the player does about it is theirs to decide.
+            Assert.Equal("Small GPU has 8 GB of video memory; stereo renders two images.", Only(r, "vram").Message);
+            Assert.Equal("Hardware-accelerated GPU scheduling is on; it caused frame hitching in VR on the development PC.",
+                Only(r, "hags").Message);
+            foreach (var c in r.Checks) UiText.AssertNoAdvice(c.Message, c.Id);
             Assert.DoesNotContain("VDD", Only(r, "gpus").Message);
             Assert.Contains("dxgi.dll, nvngx.dll", Only(r, "injectors").Message);
             Assert.DoesNotContain("OptiScaler.dll", Only(r, "injectors").Message);
@@ -202,6 +232,30 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void ARuntimeFromTheEnvironmentIsNamedAsSuch()
+        {
+            var f = Good();
+            f.RuntimeFromEnvironment = true;
+            Assert.Contains("XR_RUNTIME_JSON in your environment", Only(PreflightEvaluator.Evaluate(f), "openxr").Message);
+            f.RuntimeManifestExists = false;
+            var msg = Only(PreflightEvaluator.Evaluate(f), "openxr").Message;
+            Assert.Contains("XR_RUNTIME_JSON", msg);
+            Assert.Contains(@"C:\runtime.json", msg);
+        }
+
+        [Fact]
+        public void TheElevationRefusalSaysWhatIsIgnoredAndHowToStart()
+        {
+            var f = Good();
+            f.IsElevated = true;
+            var check = Only(PreflightEvaluator.Evaluate(f), "elevation");
+            Assert.Equal(Severity.Fail, check.Severity);
+            Assert.Equal("The launcher is running as administrator. Close it and start it normally (not as administrator): in elevated processes "
+                + "Windows ignores the layer settings, and OpenXR ignores the helpers registered for your user (HKCU API layers) and the "
+                + "runtime chosen here (XR_RUNTIME_JSON).", check.Message);
+        }
+
+        [Fact]
         public void LayerDecisionsAppearAsChecks()
         {
             var f = Good();
@@ -281,6 +335,29 @@ namespace EternalVR.Launcher.Core.Tests
             var d = Known().Evaluate(new[] { reshadeNoEnv }, false).Single();
             Assert.Equal(LayerAction.Warn, d.Action);
             Assert.Null(d.Environment);
+        }
+
+        [Fact]
+        public void OpenXrToolkitIsSwitchedOffUnderItsCurrentAndOldNames()
+        {
+            // Current versions register XR_APILAYER_MBUCCHIA_toolkit, older ones XR_APILAYER_NOVENDOR_toolkit. Each is switched off through
+            // its own manifest's variable, whatever the runtime, before the MBUCCHIA_* prefix's warning can match.
+            foreach (var name in new[] { "XR_APILAYER_MBUCCHIA_toolkit", "XR_APILAYER_NOVENDOR_toolkit" })
+            {
+                var manifest = "{ \"file_format_version\": \"1.0.0\", \"api_layer\": { \"name\": \"" + name
+                    + "\", \"disable_environment\": \"DISABLE_" + name + "\" } }";
+                var layer = InstalledLayer.FromManifest(LayerApi.OpenXR, name + ".json", manifest, "HKLM", true);
+                foreach (var vdxr in new[] { false, true })
+                {
+                    var d = Known().Evaluate(layer, vdxr).Single();
+                    Assert.Equal(LayerAction.Disable, d.Action);
+                    Assert.Equal(new KeyValuePair<string, string>("DISABLE_" + name, "1"), d.Environment.Value);
+                    Assert.Contains("OpenXR Toolkit", d.Message);
+                }
+            }
+            // The same author's other layers are still only untested.
+            var other = new InstalledLayer(LayerApi.OpenXR, "XR_APILAYER_MBUCCHIA_varjo_foveated", "v.json", "HKLM", true, "DISABLE_X", "1");
+            Assert.Equal(LayerAction.Warn, Known().Evaluate(new[] { other }, false).Single().Action);
         }
 
         [Fact]

@@ -15,6 +15,8 @@ namespace EternalVR.Launcher.Core
     /// refresh rate is the shortest period the session held (a period seen in two windows or more, or the first frame's), a
     /// window at 2 to 6 times it was held to a part of it, and a steady period that is no such multiple is another refresh
     /// rate. The period is a snapshot of the last frame of each window, so the shares are of windows, not of exact time.
+    /// Also the mod's controller actions the runtime bound (<c>controllers: 0 of 12 action(s) bound</c>) and whether the layer
+    /// warned that no hand pose arrived in play (<see cref="UnboundControls"/>).
     /// </summary>
     public sealed class SessionSummary
     {
@@ -27,6 +29,10 @@ namespace EternalVR.Launcher.Core
             @"\] xr: (?<frames>[0-9]+) frame\(s\), .*display period (?<period>[0-9.]+) ms", RegexOptions.CultureInvariant);
         private static readonly Regex RatesLine = new Regex(
             @"\] rates: game [0-9.]+ present\(s\)/s, [0-9.]+ tick\(s\)/s, (?<pairs>[0-9.]+) stereo pair\(s\)/s shown", RegexOptions.CultureInvariant);
+        private const string ControllersTag = "] controllers: ";
+        private static readonly Regex BoundLine = new Regex(
+            @"\] controllers: (?<bound>[0-9]+) of (?<all>[0-9]+) action\(s\) bound", RegexOptions.CultureInvariant);
+        private static readonly Regex NoPoseLine = new Regex(@"\] controllers: WARNING no hand pose has been valid", RegexOptions.CultureInvariant);
 
         private sealed class Window
         {
@@ -56,6 +62,13 @@ namespace EternalVR.Launcher.Core
         /// <summary>The game's new pairs of eye images a second while the headset ran at its refresh rate (the median of those
         /// windows in play); null without enough play.</summary>
         public double? GameRate { get; private set; }
+        /// <summary>The mod's controller actions with a source bound to them, from the layer's last <c>N of M action(s) bound</c>
+        /// line; null when not logged (the controllers never reported, or an older layer).</summary>
+        public int? ControlsBound { get; private set; }
+        /// <summary>The controller actions that line counted (M); null when not logged.</summary>
+        public int? Controls { get; private set; }
+        /// <summary>True when the layer warned that no hand pose became valid in play with the headset tracked.</summary>
+        public bool NoHandPose { get; private set; }
 
         /// <summary>The summary of a layer log's lines; null when it holds no display period (no VR session).</summary>
         public static SessionSummary FromLines(IEnumerable<string> lines)
@@ -66,6 +79,18 @@ namespace EternalVR.Launcher.Core
             foreach (var line in lines ?? Enumerable.Empty<string>())
             {
                 if (line == null) continue;
+                if (line.IndexOf(ControllersTag, StringComparison.Ordinal) >= 0)
+                {
+                    var b = BoundLine.Match(line);
+                    if (b.Success && int.TryParse(b.Groups["bound"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var bound)
+                        && int.TryParse(b.Groups["all"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var all))
+                    {
+                        s.ControlsBound = bound;
+                        s.Controls = all;
+                    }
+                    else if (NoPoseLine.IsMatch(line)) s.NoHandPose = true;
+                    continue;
+                }
                 var p = PeriodLine.Match(line);
                 if (p.Success)
                 {
@@ -205,12 +230,21 @@ namespace EternalVR.Launcher.Core
             return "about " + minutes.ToString(CultureInfo.InvariantCulture) + " minutes";
         }
 
+        /// <summary>The controls: "0 of 12 bound, no hand pose in play"; "not logged" when the layer did not count them.</summary>
+        public string ControlsText()
+        {
+            var text = Controls.HasValue
+                ? string.Format(CultureInfo.InvariantCulture, "{0} of {1} bound", ControlsBound, Controls)
+                : "not logged";
+            return NoHandPose ? text + ", no hand pose in play" : text;
+        }
+
         /// <summary>The numbers for the launcher log.</summary>
         public string LogText() => string.Format(CultureInfo.InvariantCulture,
-            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'",
+            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; controls {9}",
             RefreshHz, Windows, InPlay ? " in play" : " (not enough play: the whole session)", HeldHz, HeldShare * 100,
             OtherRates.Count == 0 ? "none" : string.Join(", ", OtherRates.Select(kv => kv.Key + " Hz x" + kv.Value)),
-            GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName);
+            GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName, ControlsText());
 
         private static double Median(List<double> sorted)
         {

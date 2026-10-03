@@ -4,10 +4,14 @@
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "features/input/controller_family.hpp"
+#include "features/input/dashboard_pause.hpp"
 #include "features/input/dossier_press.hpp"
 #include "features/input/interaction_profiles.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/seh_filter.hpp"
+#include "vkcore/xr_runtime.hpp"
 
 #include <array>
 #include <cmath>
@@ -382,7 +386,7 @@ bool attach(const XrContext& context) {
         !cfg.demonAim                       ? " (as aim)"
         : cfg.aim == input::AimSource::View ? " (ETERNALVR_DEMON_AIM has no effect under view aim)"
                                             : " (ETERNALVR_DEMON_AIM)",
-        cfg.locomotion == input::LocomotionFrame::Head ? "head" : "hand",
+        input::locomotionFrameName(cfg.locomotion),
         cfg.turn.mode == input::TurnMode::Smooth ? "smooth"
         : cfg.turn.mode == input::TurnMode::Snap ? "snap"
                                                  : "off",
@@ -449,7 +453,8 @@ void sync(XrTime predictedDisplayTime, bool focused) {
                                  next.frame.right.poseValid || next.frame.right.gripValid};
         }
     }
-    if (const auto test = testInput()) {
+    const std::optional<input::TestInput> test = testInput();
+    if (test) {
         if (!next.valid) {
             next.valid = true;
             next.qpc = nowQpc();
@@ -460,21 +465,30 @@ void sync(XrTime predictedDisplayTime, bool focused) {
         input::applyTestInput(*test, next.frame);
     }
     const std::uint64_t syncs = s.syncs.fetch_add(1) + 1;
+    const bool familyCheck = syncs == 1 || syncs % kProfileCheckFrames == 0;
     {
         std::lock_guard snapshotLock(s.snapshotMutex);
         next.controller = s.snapshot.controller;
-        if (next.valid && (syncs == 1 || syncs % kProfileCheckFrames == 0)) {
-            const auto family = currentFamily(xr, s);
-            if (family && *family != next.controller) {
+        if (next.valid && familyCheck) {
+            const game::Controller family = currentFamily(xr, s, next.controller);
+            if (family != next.controller) {
                 EVR_LOG("%s: the runtime reports %s controllers", kTag,
-                        std::string(game::controllerName(*family)).c_str());
-                next.controller = *family;
+                        std::string(game::controllerName(family)).c_str());
+                next.controller = family;
             }
         }
         s.snapshot = next;
     }
     watchBindings(xr, s, watched);
     updateHaptics(xr, focused);
+    // The title screen and the main menu build no user commands, so the mapper does not run there: the
+    // control map is built here for their prompts (control_map.cpp), outside the XR lock (attach takes the
+    // mapper's lock under it).
+    const bool profileReported = !s.handProfiles[0].empty() || !s.handProfiles[1].empty();
+    lock.unlock();
+    if (familyCheck && input::buildControlMapAhead(next.valid, profileReported, test.has_value())) {
+        prepareControlMap(next.controller);
+    }
 }
 
 void setRoomFromLocal(const Pose& roomFromLocal) {
@@ -495,6 +509,16 @@ std::optional<input::InputFrame> latestFrame() {
     return s.snapshot.frame;
 }
 
+input::CaptureButtons captureButtons() {
+    State& s = state();
+    game::Controller family = game::Controller::OculusTouch;
+    {
+        std::lock_guard snapshotLock(s.snapshotMutex);
+        family = s.snapshot.controller;
+    }
+    return input::captureButtonsFor(xrRuntimeName(), family);
+}
+
 input::Hand dominantHand() {
     return weaponHand();
 }
@@ -511,7 +535,7 @@ bool safeCopy(void* destination, const void* source, std::size_t size) {
     __try {
         std::memcpy(destination, source, size);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }

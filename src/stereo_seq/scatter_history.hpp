@@ -13,6 +13,8 @@
 // Here each eye has two pairs of its own (eye L the engine's four images, eye R four more) and its own copy
 // of the state. Before each render the plan puts the eye's last written pair where the engine reads and its
 // other pair where it writes, and swaps the state in when the eye changes. Mono renders count as eye L.
+// An eye whose own last render is not two renders back (a skipped eye R, a mono stretch, a load) starts
+// its history over.
 
 #include "stereo_seq/eye_tags.hpp"
 
@@ -41,6 +43,8 @@ struct ScatterPlan {
     std::array<ScatterPair, 2> slots{};
     // The state to put in the engine's struct before the render (the eye changed).
     std::optional<ScatterState> load;
+    // The eye changed and its own last render was not two back: its history starts over.
+    bool restarted = false;
 };
 
 class ScatterHistory {
@@ -64,6 +68,7 @@ private:
         // one), so each of eye R's new pairs is cleared once before it is filtered; the compute pass does not
         // write every cell of the volume, and a cell never cleared shows as a block of stale light.
         int clears = 0;
+        std::optional<std::uint32_t> lastRender; // the render counter of its last render
     };
     std::array<PerEye, 2> eyes_{};
     int active_ = 0; // the eye whose state the engine's struct holds (0 = eye L and mono)

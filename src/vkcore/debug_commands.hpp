@@ -14,7 +14,8 @@
 // thread's restriction at 0, restored right after. The command system is idCmdSystemLocal, reached through
 // the global the engine reads just after naming "cmdSystem->ExecuteCommandText".
 //
-// Only while the multiplayer guard is armed; anything missing leaves the game untouched and logs why.
+// Only while the multiplayer guard is armed; anything missing leaves the game untouched and logs why. Only
+// the test commands of the parser's allow-list run (debug_script.hpp); each one left out is logged once.
 
 namespace evr::vkcore {
 

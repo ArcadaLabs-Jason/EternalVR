@@ -11,30 +11,40 @@
 // arm: the wrist at the off-hand controller's grip with its orientation (features/arm/hand_offset.hpp),
 // the elbow by two-bone IK from a shoulder fixed to the head (features/arm/arm_solve.hpp), the forearm's
 // roll joints sharing the wrist's twist. The attach joint's modifier is rewritten so the wrist lands on
-// target; the forearm, elbow and shoulder get modifiers of the layer's own (offhand_arm.hpp). Everything
+// target; the forearm, elbow and shoulder get modifiers of the layer's own (game_arm.hpp). Everything
 // is blended with the game's own arm by the arm policy (features/input/offhand_policy.hpp), which hands the
 // arm back to the game for glory kills, melee, throws, weapon switches and every other left-arm animation.
 // In probe mode the game's own plus a fixed offset, the first live check of whether the arm follows its
 // attach joint. The rotation goes through a matrix of the hook's own (the pointer argument is redirected),
-// so the shared lag matrix of the other joints is untouched.
+// so the shared lag matrix of the other joints is untouched. The same hook bends the weapon arm
+// (ETERNALVR_WEAPON_ARM, weapon_arm.hpp), whatever the off hand's mode; it never touches the game's
+// modifiers of the right hand.
 //
 // Fail closed: the function, its call of SetJointMod and of GetJointTransforms, and every frame offset the
 // hook reads or writes are checked at install time; each tick the hook writes only while the multiplayer
 // guard allows it, the hands belong to the local player, the skeleton and the animated poses check out,
 // the result is plausible and the policy gives the controller a weight above zero. Otherwise the game's
 // values stay as they are and the layer's own modifiers are set back to no change.
+//
+// The arms' surfaces: a weapon's mesh kit may hide an arm the layer poses (the weapon arm for most weapons,
+// both arms for the ballista, BFG and unmaykr), so while the layer poses an arm its surfaces are shown and
+// afterwards hidden again as the kit had them (hands_surfaces.hpp). After a multiplayer guard trip the one
+// write is that give-back, once per arm, on the first tick of the hands that have them (releaseOnTrip).
 
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/arm/arm_frames.hpp"
 #include "features/arm/arm_solve.hpp"
+#include "features/arm/arm_surfaces.hpp"
 #include "features/arm/hand_offset.hpp"
 #include "features/input/offhand_policy.hpp"
+#include "vkcore/game_arm.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hands_surfaces.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
-#include "vkcore/offhand_arm.hpp"
+#include "vkcore/weapon_arm.hpp"
 #include "xr_math/offhand_pose.hpp"
 
 #include <atomic>
@@ -98,6 +108,9 @@ constexpr float kMaxReachMetres = 1.5f;
 constexpr float kMaxAttachMetres = 3.0f;
 constexpr float kDegreesPerRadian = 180.0f / std::numbers::pi_v<float>;
 
+// Install time, then read-only: the weapon arm passed its checks.
+bool g_weaponArm = false;
+
 // Hook thread (the game thread running idHands::Update) only.
 input::ArmBlend g_blend;
 LONGLONG g_lastQpc = 0;
@@ -117,6 +130,7 @@ TraceKey g_lastTrace;
 std::uint64_t g_traceLines = 0;
 ULONGLONG g_lastPoseTrace = 0;
 bool g_loggedBones = false;
+bool g_tripReleased = false;
 std::atomic<std::uint64_t> g_rejected{0};
 
 bool bytesMatch(const std::byte* at, std::string_view hex) {
@@ -164,8 +178,8 @@ input::ArmSignals readSignals(const std::byte* hands, const std::byte* player) {
     safeRead(hands + kHandsHiddenReasons, s.hiddenReasons);
     safeRead(hands + kHandsFlags, s.handsFlags);
     safeRead(player + kPlayerFpHandsDisabled, s.fpHandsDisabled);
-    const std::byte* sync = nullptr;
-    s.syncActive = safeRead(player + kPlayerSyncMaster, sync) && sync != nullptr;
+    // Any sync: a pickup's animation moves the hands too.
+    s.syncActive = syncEntity(player) != nullptr;
     return s;
 }
 
@@ -212,7 +226,7 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
     if (!safeRead(hands + kHandsLeftAttachJoint, attachJoint)) {
         return std::nullopt;
     }
-    const auto read = offhand_arm::readArm(hands, attachJoint, animatedAttach);
+    const auto read = game_arm::readArm(arm::ArmSide::Left, hands, attachJoint, &animatedAttach);
     if (!read) {
         return std::nullopt;
     }
@@ -254,9 +268,13 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
     const float wristMove =
         length(mixed[index(ArmJoint::Hand)].position - animated[index(ArmJoint::Hand)].position);
     if (!(wristMove <= kMaxReachMetres * upm) || !xr_math::plausibleJointMod(mod, kMaxAttachMetres * upm) ||
-        !mp_guard::allowsGameTouch() || !offhand_arm::writeArm(hands, mixed, read->scale, read->origin)) {
+        !mp_guard::allowsGameTouch() ||
+        !game_arm::writeArm(arm::ArmSide::Left, hands, mixed, read->scale, read->origin)) {
         return std::nullopt;
     }
+
+    // The weapon's mesh kit may hide this arm (HideAll weapons): shown while the layer poses it.
+    hands_surfaces::update(arm::ArmSide::Left, hands, true);
 
     if (!g_loggedBones) {
         g_loggedBones = true;
@@ -273,23 +291,64 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
         const Vec3 s = mixed[index(ArmJoint::UpperArm)].position;
         EVR_LOG(
             "%s: ik: wrist (%.2f %.2f %.2f) target (%.2f %.2f %.2f), reach %.2f%s, elbow (%.2f %.2f %.2f), "
-            "shoulder (%.2f %.2f %.2f), twist %.0f deg, weight %.2f; %llu rejected",
+            "shoulder (%.2f %.2f %.2f), twist %.0f deg, weight %.2f; %llu rejected; left arm surface %s",
             kTag, w.x, w.y, w.z, t.x, t.y, t.z, ours->ik.reach, ours->ik.clamped ? " (clamped)" : "", e.x,
             e.y, e.z, s.x, s.y, s.z, ours->twist * kDegreesPerRadian, weight,
-            static_cast<unsigned long long>(g_rejected.load()));
+            static_cast<unsigned long long>(g_rejected.load()),
+            arm::surfaceStateName(hands_surfaces::state(arm::ArmSide::Left)));
     }
     return mod;
 }
 
+// The left arm back to the game: the layer's modifiers to no change, its surfaces as the weapon's kit has
+// them.
+void giveBackLeft(const std::byte* hands) {
+    game_arm::releaseArm(arm::ArmSide::Left, hands);
+    hands_surfaces::update(arm::ArmSide::Left, hands, false);
+}
+
+// After a multiplayer guard trip, once per arm: the weapon arm given back (its modifiers and its surface),
+// the left arm's modifiers back to no change, so it is the game's again instead of frozen in the last pose
+// written, and its surfaces hidden again if the layer showed them. The one write after a trip: it undoes the
+// layer's own change, like the cvar restore. Done here, not from a trip listener: the modifier lists and the
+// arms' caches belong to this hook's game thread, and the hands pointer is only known here; a listener could
+// run on any thread while the blend reads the lists. Each arm waits for the hands its modifiers were added to
+// (another hands' tick passes); nothing to do when no hands have them.
+void releaseOnTrip(const std::byte* hands) {
+    if (mp_guard::state() != mp_policy::GuardState::Tripped) {
+        return;
+    }
+    if (g_weaponArm) {
+        weapon_arm::releaseOnTrip(hands);
+    }
+    hands_surfaces::releaseAfterTrip(arm::ArmSide::Left, hands);
+    if (g_tripReleased) {
+        return;
+    }
+    const std::byte* armHands = game_arm::armHands(arm::ArmSide::Left);
+    if (armHands && hands != armHands) {
+        return;
+    }
+    g_tripReleased = true;
+    const bool released = armHands && game_arm::releaseArm(arm::ArmSide::Left, hands);
+    EVR_LOG("%s: the multiplayer guard tripped: %s", kTag,
+            released ? "the layer's arm modifiers set back to no change; the left arm is the game's"
+                     : "no arm modifiers of the layer's in place; the left arm is the game's");
+}
+
 void onLeftHandMod(const HookRegisters& regs) {
+    const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
     if (!mp_guard::allowsGameTouch()) {
+        releaseOnTrip(hands);
         return;
     }
     State& s = state();
     const input::ControllerSettings& cfg = settings();
-    const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
     if (!s.attached.load(std::memory_order_acquire)) {
-        offhand_arm::releaseArm(hands);
+        giveBackLeft(hands);
+        if (g_weaponArm) {
+            weapon_arm::release(hands);
+        }
         return;
     }
     const std::byte* owner = nullptr;
@@ -305,19 +364,22 @@ void onLeftHandMod(const HookRegisters& regs) {
     }
     input::ArmSignals sig = readSignals(hands, owner);
     sig.forcedView = s.yielding.load();
-    sig.offHandTracked = world.valid && world.offValid && secondsSince(world.qpc) <= kWorldStaleSeconds;
     sig.modelPlaced = model.valid && secondsSince(model.qpc) <= kWorldStaleSeconds;
-    const input::ArmDecision decision = input::decideArm(sig, cfg.offhand);
     const LONGLONG now = nowQpc();
     const float dt = g_lastQpc ? static_cast<float>(secondsSince(g_lastQpc)) : 0.0f;
     g_lastQpc = now;
+    if (g_weaponArm) {
+        weapon_arm::tick(hands, sig, world, model, dt);
+    }
+    sig.offHandTracked = world.valid && world.offValid && secondsSince(world.qpc) <= kWorldStaleSeconds;
+    const input::ArmDecision decision = input::decideArm(sig, cfg.offhand);
     const float weight =
         g_blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
     if (cfg.offhandTrace) {
         trace(sig, decision, weight);
     }
     if (weight <= 0.0f || cfg.offhand != input::OffhandMode::Free) {
-        offhand_arm::releaseArm(hands);
+        giveBackLeft(hands);
     }
     if (weight <= 0.0f || cfg.offhand == input::OffhandMode::Game) {
         return;
@@ -337,7 +399,7 @@ void onLeftHandMod(const HookRegisters& regs) {
     }
     if (!ok || !xr_math::plausibleAnimatedPose(animated)) {
         g_rejected.fetch_add(1, std::memory_order_relaxed);
-        offhand_arm::releaseArm(hands);
+        giveBackLeft(hands);
         return;
     }
     const float upm = world.unitsPerMetre;
@@ -363,7 +425,7 @@ void onLeftHandMod(const HookRegisters& regs) {
         const auto arm = freeArm(hands, animated, game, world, model, cfg, weight);
         if (!arm) {
             g_rejected.fetch_add(1, std::memory_order_relaxed);
-            offhand_arm::releaseArm(hands);
+            giveBackLeft(hands);
             return;
         }
         mixed = *arm;
@@ -383,7 +445,8 @@ void onLeftHandMod(const HookRegisters& regs) {
 
 } // namespace
 
-bool installOffhandHook() {
+bool installOffhandHook(bool& weaponArmInstalled) {
+    weaponArmInstalled = false;
     GameImage image;
     if (!locateGameImage(image, kTag)) {
         return false;
@@ -409,16 +472,30 @@ bool installOffhandHook() {
         return false;
     }
     const input::ControllerSettings& cfg = settings();
-    // Free mode poses the whole arm and needs the arm's own checks; probe and trace do not.
-    if (cfg.offhand == input::OffhandMode::Free &&
-        !offhand_arm::install(image, start, getJoints, setJointMod)) {
+    // Free mode and the weapon arm pose whole arms and need the arms' own checks; probe and trace do not.
+    const offhand_mods::ArmSet wanted{cfg.offhand == input::OffhandMode::Free,
+                                      cfg.weaponArm == input::WeaponArmMode::Ik};
+    const offhand_mods::ArmSet ready = wanted.offHand || wanted.weapon
+                                           ? game_arm::install(image, start, getJoints, setJointMod, wanted)
+                                           : offhand_mods::ArmSet{};
+    const bool offHandHooks = cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace;
+    if ((wanted.offHand && !ready.offHand) || (!offHandHooks && !ready.weapon)) {
         return false;
+    }
+    if (ready.offHand || ready.weapon) {
+        hands_surfaces::install(image);
     }
     std::string error;
     std::byte* site = const_cast<std::byte*>(start + kHookSite);
+    g_weaponArm = ready.weapon;
     if (!installMidHook(site, &onLeftHandMod, error)) {
+        g_weaponArm = false;
         EVR_LOG("%s: hook at RVA 0x%X failed: %s", kTag, image.rva(site), error.c_str());
         return false;
+    }
+    weaponArmInstalled = g_weaponArm;
+    if (g_weaponArm) {
+        weapon_arm::logSettings();
     }
     // As used: mirrored left to right with the weapon in the left hand.
     const bool mirrored = cfg.handedness != game::Handedness::Right;

@@ -50,8 +50,9 @@ inline constexpr std::size_t kDisableTssaaNextFewFrames = 0x750;
 // idRenderView fields (the view's renderView_t `g` is at +0).
 namespace render_view_object {
 inline constexpr std::size_t kViewIndex = 0x28990;
-inline constexpr std::size_t kLatched = 0x289D0;    // renderView_t r, the latched copy
-inline constexpr std::size_t kProjection = 0x29340; // projectionMatrix built by the latch
+inline constexpr std::size_t kLatched = 0x289D0;                // renderView_t r, the latched copy
+inline constexpr std::size_t kProjection = 0x29340;             // projectionMatrix built by the latch
+inline constexpr std::size_t kCenteredViewProjection = 0x296B0; // built by the latch (RVA 0x1CE1400)
 inline constexpr std::size_t kOwningWorld = 0x29918;
 inline constexpr std::size_t kSize = 0x29950;
 } // namespace render_view_object
@@ -76,6 +77,8 @@ enum class StereoExperiment {
     LeftEye,  // "left-eye" (E2, E3): the game's one view rendered as the left eye (explicit projection)
     TwoViews, // "two-views" (E4): two side-by-side screen views sharing view slot 0; crashes this build
 };
+// The experiment ETERNALVR_STEREO_EXPERIMENT names; without it TwoViews when Parallel Eye Rendering is
+// installed (view_slots.hpp: the two views each with their own per-view storage), else None.
 StereoExperiment stereoExperimentFromEnv();
 
 struct StereoHookStatus {

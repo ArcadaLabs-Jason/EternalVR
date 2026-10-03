@@ -5,19 +5,23 @@
 // input. The controllers' gameplay actions are held back meanwhile.
 
 #include "vkcore/presenter_impl.hpp"
+#include "vkcore/presenter_menu_release.hpp"
 
 #include "features/menu/menu_kind.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/menu_cursor.hpp"
+#include "vkcore/menu_cursor_hide.hpp"
 #include "vkcore/menu_input.hpp"
+#include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "xr_math/cinema_quad.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <string_view>
+#include <utility>
 
 namespace evr::vkcore {
 
@@ -56,6 +60,35 @@ XrPosef toXr(const Pose& p) {
             {p.position.x, p.position.y, p.position.z}};
 }
 
+// How the sticks moved the Dossier map last frame (map_drag.hpp), for the log: each change for the first
+// kMapGestureLines changes (worker only).
+struct MapGesture {
+    menu::MapPanBy pan = menu::MapPanBy::None;
+    bool rotate = false;
+    int logged = 0;
+};
+MapGesture g_mapGesture;
+constexpr int kMapGestureLines = 60;
+
+void logMapGesture(menu::MapPanBy pan, bool rotate) {
+    MapGesture& g = g_mapGesture;
+    if (pan == g.pan && rotate == g.rotate) {
+        return;
+    }
+    g.pan = pan;
+    g.rotate = rotate;
+    if (g.logged >= kMapGestureLines) {
+        return;
+    }
+    ++g.logged;
+    const char* panText = pan == menu::MapPanBy::Drag   ? "pans with the left button held"
+                          : pan == menu::MapPanBy::Keys ? "pans with W A S D"
+                                                        : "does not pan";
+    EVR_LOG("menu: map sticks: the pan stick %s, the other stick %s%s", panText,
+            rotate ? "rotates with the right button held" : "does not rotate",
+            g.logged == kMapGestureLines ? " (the last such line)" : "");
+}
+
 menu::RouterHand routerHand(const input::HandState& h) {
     menu::RouterHand r;
     r.trigger = h.trigger;
@@ -75,6 +108,10 @@ void XrPresenter::Impl::startMenu() {
         return;
     }
     menuInstalled = menu_cursor::install();
+    if (menuInstalled) {
+        menu_cursor_hide::install();
+        menu_model::install(); // a menu's 3D model on the panel (menu_model_hook.hpp)
+    }
     EVR_LOG("menu: pointer %s; panel %.2f m wide, %.2f m ahead, world-locked while a menu is up%s",
             menuInstalled ? "on" : "OFF (reason above)", settings.ui.menuWidthMetres,
             settings.ui.menuDistanceMetres, settings.ui.menuBeam ? "" : "; no beam");
@@ -105,6 +142,17 @@ bool XrPresenter::Impl::placeMenuPanel(XrTime time) {
     menuPanelPlaced = true;
     menuFollow.reset();
     return true;
+}
+
+void releaseMenuInput(XrPresenter::Impl& p, const char* why) {
+    if (!p.menuRouter || !p.menuRouter->holdsInput()) {
+        return;
+    }
+    const menu::RouterOutput out = p.menuRouter->releaseHeld(qpcSeconds(qpcNow()));
+    menu_input::send(out.events);
+    menu_cursor_hide::setHidden(false);
+    menu_input::setSuppressGameplay(false);
+    EVR_LOG("menu: %s: the menu's held input is let go (%zu release(s))", why, out.events.size());
 }
 
 void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
@@ -150,6 +198,9 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     const bool wasHeld = menuHeld;
     menuHeld = !active && (menuOn || menuHeld) && allowed && showing && uiBackdrop.backdrop() &&
                now - menuCursorGone < kMenuHoldSeconds;
+    if (menuHeld && !wasHeld && !shownHasView) {
+        EVR_LOG("menu: the panel keeps the whole frame while the backdrop shows (no head-tracked frame)");
+    }
     if (wasHeld && !menuHeld && !active) {
         EVR_LOG("menu: the panel is down (held %.2f s)", now - menuCursorGone);
     }
@@ -242,8 +293,17 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     }
 
     if (frame) {
-        // Left Menu held + a trigger is the in-headset capture (the mapper asks for it): no click meanwhile.
-        const input::CaptureChordOutput chord = menuChord.update(*frame);
+        // Left Menu held + a trigger is the in-headset capture (the mapper asks for it; under SteamVR with
+        // Touch controllers both sticks held too): no click meanwhile. The chord's buttons follow the runtime
+        // and the family in use, as the mapper's do.
+        if (const input::CaptureButtons buttons = controllers::captureButtons();
+            menuChord.buttons() != buttons) {
+            menuChord = input::CaptureChord(input::kTriggerThresholds, buttons);
+        }
+        // The time since the chord last ran, at most 0.1 s: a stall is not time the sticks were held.
+        const double last = std::exchange(menuPointerKept.chordSeconds, now);
+        const float chordDt = last > 0.0 ? static_cast<float>(std::clamp(now - last, 0.0, 0.1)) : 0.0f;
+        const input::CaptureChordOutput chord = menuChord.update(*frame, chordDt);
         for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
             const input::HandState& h = frame->hand(hand);
             menu::RouterHand& r = in.hands[static_cast<std::size_t>(hand)];
@@ -304,6 +364,8 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                 static_cast<int>(key.size()), key.data(), k.key);
     }
     menu_input::send(out.events);
+    // A stick dragging the map moves the game's cursor about: hidden meanwhile (drag_cursor_hide.hpp).
+    menu_cursor_hide::setHidden(allowed && menuOn && out.hideCursor);
     menu_input::setSuppressGameplay(out.suppressGameplay);
     if (out.mapPage != menuMapPage) {
         menuMapPage = out.mapPage;
@@ -311,6 +373,8 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                                         : "not the Dossier's map page (or not known): the sticks scroll and "
                                           "change tabs");
     }
+
+    logMapGesture(out.mapPan, out.mapRotate);
 
     // What the pointer looks like this frame.
     menuPointer = {};

@@ -32,19 +32,20 @@ bool findGameText(GameText& text) {
     return false;
 }
 
-const std::byte* findUniqueInText(const GameText& text, const char* name, const char* signature) {
+const std::byte*
+findUniqueInText(const GameText& text, const char* tag, const char* name, const char* signature) {
     auto pattern = resolver::Pattern::parse(signature);
     if (!pattern) {
-        EVR_LOG("stereo: %s signature does not parse", name);
+        EVR_LOG("%s: %s signature does not parse", tag, name);
         return nullptr;
     }
     const auto matches = resolver::findAll(text.bytes, *pattern);
     if (matches.size() != 1) {
-        EVR_LOG("stereo: %s signature matched %zu time(s), expected 1", name, matches.size());
+        EVR_LOG("%s: %s signature matched %zu time(s), expected 1", tag, name, matches.size());
         return nullptr;
     }
     const std::byte* at = text.bytes.data() + matches.front();
-    EVR_LOG("stereo: %s at RVA 0x%X", name, rvaOf(text, at));
+    EVR_LOG("%s: %s at RVA 0x%X", tag, name, rvaOf(text, at));
     return at;
 }
 

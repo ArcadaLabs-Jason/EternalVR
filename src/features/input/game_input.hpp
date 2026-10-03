@@ -27,9 +27,10 @@ struct GameInput {
     // Per hand (indexed by Hand): a physical punch this frame (punch_detector.hpp), for its vibration.
     std::array<bool, 2> punch{};
     // A throw of the off hand (the equipment launcher) or an overhead swing of the weapon hand (the Crucible)
-    // this frame (arm_gestures.hpp), for the log.
+    // this frame (arm_gestures.hpp), or a jump with both hands thrown up (hands_jump.hpp), for the log.
     bool thrown = false;
     bool swung = false;
+    bool handsJumped = false;
 };
 
 } // namespace evr::input

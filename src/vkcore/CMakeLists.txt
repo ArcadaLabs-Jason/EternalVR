@@ -31,16 +31,31 @@ target_compile_features(evr_dump_format PUBLIC cxx_std_20)
 target_compile_definitions(evr_dump_format PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(evr_dump_format PRIVATE evr_warnings PUBLIC Vulkan::Headers)
 
+# The game settings line (game_settings.cpp): its cvars, text and schedule, tested without the game.
+add_library(evr_game_settings_line STATIC game_settings_line.cpp)
+target_include_directories(evr_game_settings_line PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_game_settings_line PUBLIC cxx_std_20)
+target_link_libraries(evr_game_settings_line PRIVATE evr_warnings)
+
+# Parallel Eye Rendering's switch and what it selects (parallel_eyes_settings.hpp), tested without the game.
+add_library(evr_parallel_eyes_settings STATIC parallel_eyes_settings.cpp)
+target_include_directories(evr_parallel_eyes_settings PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_parallel_eyes_settings PUBLIC cxx_std_20)
+target_link_libraries(evr_parallel_eyes_settings PUBLIC evr_stereo_seq PRIVATE evr_warnings)
+
 add_library(evr_layer SHARED
     backdrop_probe.cpp
     bin_tile_hooks.cpp
     body_follow.cpp
     bug_capture.cpp
     camera_anim_hook.cpp
+    cb_check.cpp
+    cb_view_skip.cpp
     cinema_view.cpp
     client_rect.cpp
     climb_hook.cpp
     cpu_timing.cpp
+    cvar_book.cpp
     debug_commands.cpp
     demon_aim.cpp
     demon_view.cpp
@@ -49,9 +64,11 @@ add_library(evr_layer SHARED
     dlss_dll.cpp
     dlss_menu_hooks.cpp
     eye_capture.cpp
+    exposure_hooks.cpp
     frame_pacing.cpp
     game_build.cpp
     game_code.cpp
+    game_settings.cpp
     game_text.cpp
     glory_view.cpp
     gpu_timing.cpp
@@ -81,8 +98,11 @@ add_library(evr_layer SHARED
     ring_trace.cpp
     window_timing.cpp
     runtime_cvars.cpp
+    presenter_eyes.cpp
+    fence_wait.cpp
     presenter_frame.cpp
     presenter_frame_log.cpp
+    presenter_fov.cpp
     presenter_head.cpp
     presenter_latch.cpp
     presenter_ring.cpp
@@ -102,7 +122,9 @@ add_library(evr_layer SHARED
     scatter_hooks.cpp
     seq_alternate.cpp
     seq_hooks.cpp
+    seq_render_counter.cpp
     seq_locate.cpp
+    seq_prev.cpp
     seq_stack.cpp
     shader_dump.cpp
     shader_dump_record.cpp
@@ -123,7 +145,17 @@ add_library(evr_layer SHARED
     ui_engine.cpp
     ui_vulkan.cpp
     ui_wash.cpp
+    view_async.cpp
+    view_binning.cpp
+    view_block.cpp
+    view_clone_binds.cpp
+    view_clones.cpp
+    view_contexts.cpp
+    view_redirects.cpp
     view_hook.cpp
+    view_install.cpp
+    view_one_passes.cpp
+    view_slots.cpp
     virtual_client.cpp
     vram_watch.cpp
     window_cap.cpp
@@ -135,6 +167,7 @@ target_sources(evr_layer PRIVATE
     bhaptics_launch.cpp
     bhaptics_link.cpp
     bhaptics_portal.cpp
+    control_map.cpp
     controller_test.cpp
     controllers.cpp
     game_view_poses.cpp
@@ -142,21 +175,30 @@ target_sources(evr_layer PRIVATE
     input_profiles.cpp
     input_watch.cpp
     input_xr.cpp
-    offhand_arm.cpp
+    game_arm.cpp
+    game_arm_joints.cpp
+    hands_surfaces.cpp
     offhand_hook.cpp
     offhand_mods.cpp
+    weapon_arm.cpp
     prompt_hooks.cpp
     rumble_hook.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
+    vrs_command_buffers.cpp
     vrs_gui.cpp
+    vrs_marks.cpp
     vrs_nv.cpp
+    vrs_pass_eye.cpp
+    vrs_rate_images.cpp
     xinput_hook.cpp
     xr_runtime.cpp)
 # Menus on a panel with a laser pointer (M6, docs/VR_MENUS.md).
 target_sources(evr_layer PRIVATE
     menu_cursor.cpp
+    menu_cursor_hide.cpp
     menu_input.cpp
+    menu_model_hook.cpp
     presenter_menu.cpp)
 target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_foveation evr_input evr_menu evr_pacing evr_roomscale)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
@@ -174,6 +216,8 @@ target_link_libraries(evr_layer PRIVATE
     evr_device_features
     evr_dlss_dll
     evr_dump_format
+    evr_game_settings_line
+    evr_parallel_eyes_settings
     evr_gpu_timing
     evr_layer_gate
     evr_key_injection

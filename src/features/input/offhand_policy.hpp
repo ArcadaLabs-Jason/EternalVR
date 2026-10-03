@@ -8,7 +8,8 @@
 // mode the layer writes that modifier from the off hand's pose, except while the game animates the left
 // arm itself: glory and sync kills, Blood Punch and melee, equipment throws, weapon switches, custom
 // animations (ledge grabs, pickups), hidden hands, and any forced view. Those hand the arm back to the
-// game at once; the controller takes it again after a short hold, blended in.
+// game at once; the controller takes it again after a short hold, blended in. The weapon arm's IK
+// (ETERNALVR_WEAPON_ARM) is handed over by the same rules.
 //
 // The signals are read from idHands and idPlayer (type info of build 25216728; bit positions of the
 // hands flags follow the declaration order [inferred], so ETERNALVR_OFFHAND_TRACE logs them for the live
@@ -25,6 +26,16 @@ enum class OffhandMode : std::uint8_t {
 };
 
 const char* offhandModeName(OffhandMode mode);
+
+// Who poses the game's weapon arm (the model's right arm; docs/VR_HANDS_HUD.md, "The weapon arm"). The
+// wrist is always the game's, under the gun at the weapon hand; in `ik` the forearm, elbow and upper arm
+// reach it from a shoulder fixed to the head.
+enum class WeaponArmMode : std::uint8_t {
+    Game, // the game's animation poses the whole arm (nothing is written)
+    Ik,   // the layer poses the forearm, elbow and upper arm outside the game's own arm animations (default)
+};
+
+const char* weaponArmModeName(WeaponArmMode mode);
 
 // idHands::handsAction_t values (reflected enum, build 25216728).
 enum class HandsAction : std::int32_t {
@@ -99,6 +110,12 @@ struct ArmDecision {
 // The decision for this tick. Probe mode counts as free (the offset is applied while nothing else
 // animates the arm).
 ArmDecision decideArm(const ArmSignals& signals, OffhandMode mode);
+
+// The same rules for the weapon arm, which goes back to the game for the same actions: glory and sync
+// kills, melee, throws, weapon switches, custom animations, hidden hands and forced views. Its
+// `offHandTracked` is the head and weapon hand's pose (the shoulder's and the gun's), and `modelPlaced`
+// that the viewmodel hook put the arms at the weapon hand.
+ArmDecision decideWeaponArm(const ArmSignals& signals, WeaponArmMode mode);
 
 // The controller's weight on the arm, 0 (the game's animation) .. 1 (the controller). Handing the arm to
 // the game is quick (`blendSeconds` / 3) so a punch or a throw starts on time; taking it back waits until

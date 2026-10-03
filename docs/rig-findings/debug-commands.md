@@ -17,6 +17,12 @@ its output goes to the game's console log (`qconsole.log`, copied into the rig's
 
 Unset (the default), nothing is located or hooked. Only while the multiplayer guard is armed.
 
+The commands run with the console's restriction lifted, so only test commands run: the first word of each
+command (any case) must be on the allow-list in `src/vkcore/debug_script.cpp` (the commands and cvars the rig
+scripts and the QA suite use), and the command may hold only letters, digits, spaces and `_ - . /`. Anything
+else is left out of the schedule and logged once (`debug-commands: left out of the schedule, step 2: bind ...
+(not a test command)`); the rest runs. A new command or cvar for a rig test goes on that list first.
+
 ## 2. How it works
 
 - The command system is `idCmdSystemLocal`. The engine names it in a log string just before a call:

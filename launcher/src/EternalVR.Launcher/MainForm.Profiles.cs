@@ -104,10 +104,21 @@ namespace EternalVR.Launcher
             else
             {
                 AdoptControls(name);
-                var loaded = Profiles.Load(name, ctx.Settings);
+                LauncherSettings loaded;
+                string why = null;
+                try { loaded = Profiles.Load(name, ctx.Settings); }
+                // A profile saved by a newer launcher (its schema is refused), or a file that cannot be read.
+                catch (Exception e) when (e is SettingsException || e is IOException || e is UnauthorizedAccessException)
+                {
+                    loaded = null;
+                    why = e.Message;
+                }
                 if (loaded == null)
                 {
-                    ctx.Log.Warn("VR settings profile '" + name + "' could not be read");
+                    ctx.Log.Warn("VR settings profile '" + name + "' could not be read" + (why == null ? string.Empty : ": " + why));
+                    if (why != null)
+                        MessageBox.Show(this, "The VR settings profile " + name + " could not be read: " + why, "VR settings profile",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     FillProfiles();
                     return;
                 }

@@ -56,6 +56,23 @@ private:
     int lastLeft_ = 0;
 };
 
+// Whether the auto-exposure index hook gives each render its ExposurePlanner index now. It needs the eye
+// tags, not per-eye TAA: with per-eye TAA off (ETERNALVR_STEREO_TAA=0, the launcher's anti-aliasing Off) or
+// failed closed it holds whenever Route S runs and eye R skips its exposure update; with the skip off
+// (ETERNALVR_STEREO_EXPOSURE_ONCE=0) the engine's parity already makes one chain of both eyes, which the
+// planner's index would break (eye R would update the image eye L just wrote). With per-eye TAA requested it
+// starts with per-eye TAA, at the first stereo tick, whatever the skip.
+struct ExposureGate {
+    bool hooked = false;    // the auto-exposure index hook is installed
+    bool routeS = false;    // the Route S hooks are active (the eye tags exist)
+    bool gameTouch = false; // the multiplayer guard allows game writes
+    bool taaRequested = false;
+    bool taaPerEye = false;
+    bool taaFailedClosed = false;
+    bool exposureOnce = true; // ETERNALVR_STEREO_EXPOSURE_ONCE: eye R skips its exposure update
+};
+bool exposureIndexHeld(const ExposureGate& gate);
+
 // When the TAA history of both eyes is reset (renderView_t.disableTssaaNextFewFrames on both views of a
 // tick; the engine then treats the view's history as invalid for its next three renders). Eye R's history
 // is valid only if eye R rendered the previous game frame; the engine's reset counter is shared by the two
@@ -136,8 +153,13 @@ int heldAntialiasing(int current, bool dlssOption, bool dlssPerEye);
 
 // The r_dlssQuality value (0 ultra performance, 1 performance, 2 balanced, 3 quality) for a quality name or
 // number ("quality", "balanced", "performance", "ultra_performance", or "0" to "3", any case); -1 for
-// anything else, unset and empty included (the game's own setting stays).
+// anything else, unset and empty included (the game's own setting stays). "dlaa" holds 3: the game maps
+// r_dlssQuality 0 to 3 only (any other value is Balanced), so DLAA is set on NGX's parameter instead
+// (dlssQualityIsDlaa, vkcore/dlss_dll.cpp) and runs as Quality where it cannot.
 int dlssQualityValue(std::string_view value);
+
+// True for "dlaa" (any case): DLSS at the full render size (render size = output size).
+bool dlssQualityIsDlaa(std::string_view value);
 
 // The pieces per-eye TAA needs; the first one missing, or nullptr when all are there.
 struct TaaReadiness {

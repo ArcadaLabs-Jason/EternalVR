@@ -12,6 +12,13 @@
 // "Reset" parameter raised on its first use and after eye R missed a tick; a release releases both. A twin
 // that cannot be created makes DLSS fall back to TAA until it is tried again (stereo_seq/ngx_twin_retry.hpp):
 // after a wait, at once when the game releases that feature, or when the player chooses DLSS in the menu.
+//
+// The evaluation's eye is the render's own (stereo_seq/ngx_eye.hpp): the tag its output selector picked the
+// `Output` image for, not the tag in flight, which names the next render once the render thread's swap came
+// in between. The per-eye hook's history resets raise "Reset" on that render's evaluation, eye L's game
+// feature included, so both eyes reset together under DLSS as under TAA.
+
+#include "stereo_seq/eye_tags.hpp"
 
 #include <cstdint>
 
@@ -37,13 +44,27 @@ void ngxTwinsTick();
 // False (nothing changes) without a fallback.
 bool retryNgxTwins();
 
+// The output selector picked `target` (an accumulation render target) for the render tagged `tag`: its
+// VkImage is noted with the tag, for that render's evaluation to find by its `Output` image.
+void noteNgxOutput(const void* target, const stereo_seq::RenderTag& tag);
+
+// The per-eye hook reset `eye`'s history for game frame `gameFrame`: that render's evaluation raises "Reset".
+void noteNgxReset(stereo_seq::Eye eye, std::uint64_t gameFrame);
+
 struct NgxCounters {
     std::uint64_t twinCreates = 0;
     std::uint64_t twinFailures = 0;
     std::uint64_t evaluates[2] = {};
     std::uint64_t evaluatesNoTwin = 0;
     std::uint64_t twinResets = 0;
+    std::uint64_t leftResets = 0; // eye L evaluations with "Reset" raised (the per-eye hook's resets)
     std::uint64_t releases = 0;
+    // Evaluations whose eye came from their own output image, and those by the tag in flight instead (no own
+    // tag found for a render the tag in flight names eye L or eye R).
+    std::uint64_t ownTags = 0;
+    std::uint64_t inFlightTags = 0;
+    // Of the own ones: the tag in flight named the other eye (the swap came in between).
+    std::uint64_t inFlightDiffers = 0;
 };
 NgxCounters ngxCounters();
 

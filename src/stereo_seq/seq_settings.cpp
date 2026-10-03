@@ -109,6 +109,10 @@ const std::vector<CvarExpectation>& stereoRuntimeCvars(StereoTemporal temporal) 
     return temporal == StereoTemporal::PerEye ? perEye : off;
 }
 
+CvarExpectation stereoScatterFilterCvar(bool perEyeHistory) {
+    return {"r_lightScatteringTAA", perEyeHistory ? "1" : "0"};
+}
+
 const std::vector<CvarExpectation>& stereoComfortCvars() {
     static const std::vector<CvarExpectation> cvars{
         {"r_hdrDisplay", "0"},

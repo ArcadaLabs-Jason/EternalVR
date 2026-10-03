@@ -272,6 +272,14 @@ namespace EternalVR.Launcher.Platform
             var result = new List<InstalledLayer>();
             void Collect(LayerApi api, RegistryHive hive, string key)
             {
+                // A key this account may not read lists nothing (as ReadValue does), never a crash of the checks.
+                try { CollectFrom(api, hive, key); }
+                catch (System.Security.SecurityException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+
+            void CollectFrom(LayerApi api, RegistryHive hive, string key)
+            {
                 using (var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64))
                 using (var k = baseKey.OpenSubKey(key, writable: false))
                 {

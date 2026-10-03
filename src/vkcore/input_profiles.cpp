@@ -4,12 +4,14 @@
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "features/input/controller_family.hpp"
 #include "features/input/interaction_profiles.hpp"
 #include "features/input/player_controller_data.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -227,23 +229,28 @@ bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const Family
     return any;
 }
 
-std::optional<game::Controller> currentFamily(const XrInput& xr, State& s) {
-    currentProfile(xr, s, input::Hand::Left); // logged only
-    const std::string text = currentProfile(xr, s, input::Hand::Right);
-    if (text.empty()) {
-        return std::nullopt;
-    }
-    for (const game::Controller family : game::kControllers) {
-        if (s.controllerData[static_cast<std::size_t>(family)].profilePath == text) {
-            return family;
+game::Controller currentFamily(const XrInput& xr, State& s, game::Controller current) {
+    std::array<std::optional<game::Controller>, 2> families;
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        const auto index = static_cast<std::size_t>(hand);
+        const std::string text = currentProfile(xr, s, hand);
+        if (text.empty()) {
+            continue;
+        }
+        for (const game::Controller family : game::kControllers) {
+            if (s.controllerData[static_cast<std::size_t>(family)].profilePath == text) {
+                families[index] = family;
+            }
+        }
+        static std::array<std::string, 2> loggedUnknown; // the input thread only
+        if (!families[index] && loggedUnknown[index] != text) {
+            loggedUnknown[index] = text;
+            EVR_LOG(
+                "input: no bindings for controller profile %s (the %s hand): that controller does nothing",
+                text.c_str(), hand == input::Hand::Left ? "left" : "right");
         }
     }
-    static std::string loggedUnknown; // the input thread only
-    if (loggedUnknown != text) {
-        loggedUnknown = text;
-        EVR_LOG("input: no bindings for controller profile %s: its controllers do nothing", text.c_str());
-    }
-    return std::nullopt;
+    return input::pickControllerFamily(families[0], families[1], current);
 }
 
 } // namespace evr::vkcore::controllers

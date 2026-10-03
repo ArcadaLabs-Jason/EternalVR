@@ -142,6 +142,9 @@ bool installDebugCommands() {
             EVR_LOG("%s: ETERNALVR_DEBUG_COMMANDS not used: %s", kTag, g_script.error.c_str());
             return;
         }
+        for (const std::string& refused : g_script.refused) {
+            EVR_LOG("%s: left out of the schedule, %s", kTag, refused.c_str());
+        }
         if (g_script.steps.empty()) {
             return;
         }

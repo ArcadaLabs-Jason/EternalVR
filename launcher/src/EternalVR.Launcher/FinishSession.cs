@@ -24,7 +24,8 @@ namespace EternalVR.Launcher
         {
             var exe = Process.GetCurrentProcess().MainModule?.FileName;
             if (string.IsNullOrEmpty(exe)) return;
-            var args = Environment.GetCommandLineArgs().Skip(1).Select(Quote).Concat(new[] { "--finish-session" });
+            // Quoted by the rules Windows splits a command line with: a folder ending in a backslash keeps its closing quote.
+            var args = Environment.GetCommandLineArgs().Skip(1).Select(LaunchPlan.QuoteIfNeeded).Concat(new[] { "--finish-session" });
             try
             {
                 using (Process.Start(new ProcessStartInfo(exe, string.Join(" ", args))
@@ -67,8 +68,5 @@ namespace EternalVR.Launcher
                 return clear ? 0 : 1;
             }
         }
-
-        private static string Quote(string arg) =>
-            arg.Length > 0 && arg.IndexOfAny(new[] { ' ', '\t', '"' }) < 0 ? arg : "\"" + arg.Replace("\"", "\\\"") + "\"";
     }
 }

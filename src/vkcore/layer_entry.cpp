@@ -6,6 +6,7 @@
 // shared with its own D3D12 device and shows it in the headset (head-tracked or on a flat screen).
 
 #include "platform/layer_gate/layer_gate.hpp"
+#include "vkcore/cb_check.hpp"
 #include "vkcore/cpu_timing.hpp"
 #include "vkcore/device_augment.hpp"
 #include "vkcore/dispatch.hpp"
@@ -23,6 +24,8 @@
 #include "vkcore/swapchain_entry.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/ui_vulkan.hpp"
+#include "vkcore/view_async.hpp"
+#include "vkcore/view_slots.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/xr_presenter.hpp"
@@ -82,30 +85,6 @@ DeviceData* findDevice(Handle handle) {
     return it == g_devices.end() ? nullptr : it->second.get();
 }
 
-template <typename Info>
-Info* findLayerCreateInfo(const void* pNext, VkStructureType type, VkLayerFunction function) {
-    auto* node = static_cast<const VkBaseInStructure*>(pNext);
-    while (node) {
-        if (node->sType == type) {
-            auto* info = reinterpret_cast<Info*>(const_cast<VkBaseInStructure*>(node));
-            if (info->function == function) {
-                return info;
-            }
-        }
-        node = node->pNext;
-    }
-    return nullptr;
-}
-
-bool hasExtension(const std::vector<const char*>& list, const char* name) {
-    return std::any_of(list.begin(), list.end(), [name](const char* e) { return std::strcmp(e, name) == 0; });
-}
-
-std::string versionString(std::uint32_t v) {
-    return std::to_string(VK_API_VERSION_MAJOR(v)) + "." + std::to_string(VK_API_VERSION_MINOR(v)) + "." +
-           std::to_string(VK_API_VERSION_PATCH(v));
-}
-
 // ---------------------------------------------------------------------------------------------------
 // Instance
 
@@ -158,7 +137,11 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     // Route S: the game's window takes only the presents it shows (stereo_present.hpp), and the render size
     // scales the game's images into its window (virtual_client.hpp); both need VK_KHR_swapchain_maintenance1
     // (or the older EXT one) on the device and this on the instance. Optional: without it every present
-    // reaches the window and the game renders at its window's size.
+    // reaches the window and the game renders at its window's size. Parallel Eye Rendering is installed (with
+    // the multiplayer guard) before this: whether Route S and its present policy run follows its result.
+    if (isGame && apiVersion >= VK_API_VERSION_1_1) {
+        installViewSlotsEarly();
+    }
     const std::size_t beforeSurface = extensions.size();
     bool surfaceMaintenance = false;
     if (isGame && (windowPresentsGated() || virtual_client::wanted())) {
@@ -249,7 +232,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     // The multiplayer guard goes in before the game can reach its menus: every later feature asks it.
     if (data->isGame) {
         mp_guard::install();
-        installTaaEarly(); // per-eye TAA: eye R's images are built with the device context, after this
+        installViewSlotsEarly(); // Parallel Eye Rendering: before the renderer sizes its views
+        installTaaEarly();       // per-eye TAA: eye R's images are built with the device context, after this
     }
     std::unique_lock lock(g_mapMutex);
     g_instances[keyOf(*pInstance)] = std::move(data);
@@ -269,6 +253,8 @@ VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocati
 
 // ---------------------------------------------------------------------------------------------------
 // Device
+
+PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name);
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
                                             const VkDeviceCreateInfo* pCreateInfo,
@@ -376,19 +362,22 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     }
 
     if (inst->isGame && !t_passThrough) {
+        viewAsyncOnDevice(*pCreateInfo, data->queueFamilyFlags); // Parallel Eye Rendering: async compute off
         startStereoHooksEarly(); // stereo mode only; before the first map loads
         installDlssDll();        // ETERNALVR_DLSS_DLL; the game initialises NGX right after this returns
         virtual_client::onGameDevice(*inst, physicalDevice, interop && plan.releaseImages);
     }
 
-    // The shader dump only observes Vulkan calls (no game memory read or written), so it is not gated
-    // on the multiplayer guard yet; once the guard lands it must also stay off when the guard trips.
+    // The shader dump (a rig tool, ETERNALVR_DUMP_SHADERS) only observes Vulkan calls, no game memory, so it
+    // is not gated on the multiplayer guard: it keeps recording after a trip.
     shader_dump::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);
     ui_vulkan::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);      // ETERNALVR_UI_LAYER
     gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
     cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
     stall_watch::onDeviceCreated(*data, inst->isGame && !t_passThrough); // always on, after the dump
     vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate); // ETERNALVR_VRS_TEST, innermost of the chain
+    // ETERNALVR_TEST_CB_CHECK, a Parallel Eye Rendering rig tool: last, it chains to every hook above.
+    cb_check::onDeviceCreated(*data, inst->isGame && !t_passThrough, &findDeviceHookAfterCheck);
 
     std::unique_lock lock(g_mapMutex);
     g_devices[keyOf(*pDevice)] = std::move(data);
@@ -410,6 +399,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     gpu_timing::onDeviceDestroyed(device);
     cpu_timing::onDeviceDestroyed(device);
     stall_watch::onDeviceDestroyed(device);
+    cb_check::onDeviceDestroyed(device);
     const PFN_vkDestroyDevice destroy = data->vk.DestroyDevice;
     destroy(device, pAllocator);
     std::unique_lock lock(g_mapMutex);
@@ -445,7 +435,7 @@ VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device,
 // ---------------------------------------------------------------------------------------------------
 // Proc address lookups
 
-PFN_vkVoidFunction findDeviceHook(const char* name) {
+PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name) {
 #define EVR_HOOK(fn)                                                                                         \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
         return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
@@ -466,6 +456,13 @@ PFN_vkVoidFunction findDeviceHook(const char* name) {
     const PFN_vkVoidFunction dump =
         shader_dump::findHook(name); // chains to the VRS experiment's where both hook
     return cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : vrs_nv::findHook(name);
+}
+
+// The command buffer check (a Parallel Eye Rendering rig tool, off by default: then null) goes before every
+// other hook of the same function, for the game's device only (`device` null: an instance lookup).
+PFN_vkVoidFunction findDeviceHook(VkDevice device, const char* name) {
+    const PFN_vkVoidFunction check = cb_check::findHook(device, name); // chains to findDeviceHookAfterCheck's
+    return check ? check : findDeviceHookAfterCheck(name);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, const char* pName);
@@ -489,7 +486,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance instance
     if (PFN_vkVoidFunction hook = findSurfaceHook(instance, pName)) {
         return hook;
     }
-    if (PFN_vkVoidFunction hook = findDeviceHook(pName)) {
+    if (PFN_vkVoidFunction hook = findDeviceHook(VK_NULL_HANDLE, pName)) {
         return hook;
     }
     if (!instance) {
@@ -507,7 +504,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, cons
     if (!data) {
         return nullptr;
     }
-    if (PFN_vkVoidFunction hook = findDeviceHook(pName)) {
+    if (PFN_vkVoidFunction hook = findDeviceHook(device, pName)) {
         // Only hand out hooks for functions the device actually has (swapchain functions need the
         // extension).
         return data->nextGetDeviceProcAddr(device, pName) ? hook : nullptr;

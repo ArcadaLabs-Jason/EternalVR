@@ -80,6 +80,14 @@ TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds, bool whee
     return output;
 }
 
+void TurnStickArbiter::cancelSweep() {
+    if (intent_ != SweepIntent::None) {
+        intent_ = SweepIntent::Cancelled;
+    }
+    downSeconds_ = 0.0f;
+    holdReached_ = false;
+}
+
 SweepIntent TurnStickArbiter::claim(Axis2 stick) const {
     const bool upCone = inVerticalCone(stick, 1.0f, settings_.claimConeDegrees);
     const bool downCone = inVerticalCone(stick, -1.0f, settings_.claimConeDegrees);

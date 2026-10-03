@@ -93,6 +93,16 @@ std::optional<stereo_seq::RenderTag> seqTagInFlight();
 // render thread's swap has moved the counter on. nullopt when it has none.
 std::optional<stereo_seq::RenderTag> seqTagForBackendFrame(std::uint32_t backendFrame);
 
+// The backend frame counter now, the one seqTagInFlight reads; nullopt while the hooks are not active.
+std::optional<std::uint32_t> seqBackendCounter();
+
+// The counter the render-view job read for its render, noted by the hooks that have it at hand (the
+// exposure index, the scattering setup), for code that runs later in the frame's jobs without it (the
+// foveation's render passes, stereo_seq/pass_frames.hpp). seqRenderViewCounter: the latest noted, nullopt
+// before the first.
+void seqNoteRenderViewCounter(std::uint32_t counter);
+std::optional<std::uint32_t> seqRenderViewCounter();
+
 struct SeqCounters {
     std::uint64_t frameEnds = 0;       // wrapper calls in the engine's own chain
     std::uint64_t stereoTicks = 0;     // eye R renders started
@@ -107,6 +117,7 @@ struct SeqCounters {
     std::uint64_t drainMicros = 0;     // wall time the frontend was held by drains
     std::uint64_t prevRewrites = 0;
     std::uint64_t prevKept = 0;
+    std::uint64_t prevUndone = 0;     // rewrites put back: an eye R render frame stayed mono
     std::uint64_t altRenders[2] = {}; // alternate eyes: stereo renders per eye
     std::uint32_t renderFrames = 0;   // renderSystem + 0x10
     std::uint32_t backendFrames = 0;  // renderBackend + 0xB0

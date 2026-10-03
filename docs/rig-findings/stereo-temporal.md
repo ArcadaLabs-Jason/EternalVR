@@ -46,8 +46,7 @@ the rig has to confirm it).
 - **Implemented** behind `ETERNALVR_STEREO_TAA=1` (section 6): second accumulation pair, selector detours,
   per-eye jitter phase, per-eye resets, per-eye exposure index, DLSS twin, the still-shared temporal effects
   switched off (on the command line, checked and if needed written through the engine's cvar setter), fail
-  closed to the v1 set. Unit tests for the pure logic;
-  not yet run in the game.
+  closed to the v1 set. Unit tests for the pure logic; first run in the game on 2026-09-26 (section 7).
 
 ## 2. The TAA path
 
@@ -135,6 +134,15 @@ any more: the "previous exposure" freezes at its value from the last mono frame 
 the skip (`ETERNALVR_STEREO_EXPOSURE_ONCE=0`) the two eyes form one chain (L reads R's, R reads L's), which
 adapts, twice per tick. [static-verified selection; inferred effect]
 
+The fix (`src/vkcore/exposure_hooks.*`, `stereo_seq::ExposurePlanner`) overrides the index after the engine
+stored it: eye L and mono frames alternate by their own frame count, and eye R takes the one eye L wrote this
+tick. It needs the eye tags only, so it runs whenever Route S runs, with per-eye TAA off
+(`ETERNALVR_STEREO_TAA=0`, the launcher's Anti-aliasing Off) or failed closed as well; before 2026-10-02 it
+ran only with per-eye TAA on, so those modes still froze. Where the hook cannot be installed, eye R no longer
+skips its update and the two eyes form the one chain above; without per-eye TAA and with
+`ETERNALVR_STEREO_EXPOSURE_ONCE=0` the hook leaves the engine's index, which is that chain already (the
+planner's index would have eye R update the image eye L just wrote).
+
 ### 3.4 DLSS (NGX)
 
 - The game links NGX 1.x statically (`C:/dvs/p4/build/sw/devrel/libdev/NGX/core/rel_1_6`) and **exports**
@@ -192,9 +200,9 @@ that frame run before its present, while the counter is one below. So the jobs l
 | Eye R's images | hook after the slot builder call in the device context constructor (0x1C1A1B9, installed from `vkCreateInstance`) | for slot 0, call the builder (0x1C20150) once more with a slot of our own whose index is 1: `_accumulationBuffer10/11`, `_viewColor1`, `_distortion1`, `_accumulationBufferOpaque1`, their render targets and two small buffers, made on the renderer's start-up thread exactly like slot 0 |
 | Accumulation | inline hooks on 0x1CBB5A0 and 0x1CBB6C0 | tagged frame of view 0: pair = eye (L and mono: the engine's slot, R: ours), image = eye frame count parity (output the other one); untagged frames, other views, per-eye TAA off: the engine's own choice |
 | Jitter | per-eye hook (0x1C754BC) | both eyes: `subSampleIndex = gameFrame % r_TAANumSubSamples`; eye R copies eye L's `upsamplerSubSampleIndex` |
-| History reset | per-eye hook | `disableTssaaNextFewFrames` on both eyes of a tick when eye R did not render the previous game frame (first stereo tick, after mono ticks, a skipped eye R) |
+| History reset | per-eye hook | `disableTssaaNextFewFrames` on both eyes of a tick when eye R did not render the previous game frame (first stereo tick, after mono ticks, a skipped eye R); under DLSS, which does not read the flag, `Reset` on both eyes' evaluations of that tick |
 | Exposure | hook after the index store (0x1C98D46) | eye L and mono: eye frame count parity; eye R: eye L's of the tick |
-| DLSS | inline hooks on the exported `EvaluateFeature_C` and `ReleaseFeature` | eye R's first evaluation of a game feature creates a twin from the same parameter block (the game's create keys are still in it) into the same command buffer; eye R evaluates the twin, `Reset` raised on its first use and after eye R missed a tick; releasing the game's feature releases the twin |
+| DLSS | inline hooks on the exported `EvaluateFeature_C` and `ReleaseFeature` | eye R's first evaluation of a game feature creates a twin from the same parameter block (the game's create keys are still in it) into the same command buffer; eye R evaluates the twin, `Reset` raised on its first use and after eye R missed a tick, and on both eyes' evaluations of a tick the per-eye hook reset; releasing the game's feature releases the twin. The evaluation's eye is its render's own: the tag the output selector picked its `Output` image for (the selector notes each image's VkImage with the tag; the evaluation reads `Output` with `NVSDK_NGX_Parameter_GetVoidPointer`), the tag in flight only when none is found |
 | Still-shared effects | the launch helper's command line (`-StereoTaa`); at the first stereo tick the layer writes any that differ through the engine's cvar setter (idCVar::SetString, 0x376020, which the engine itself calls from its render threads) | `r_TAAAntiGhosting`, `r_SSDOTemporalAA`, `r_lightScatteringTAA`, `r_dofTAA`, `r_waterReflectionsTAA`, `r_waterGridTAA`, `r_refractionTAA`, `r_raytracedReflectionsTemporalUpscaleQuality`, `rs_enable` 0 |
 
 **Fail closed.** The first stereo tick checks that every piece is in place (selectors, eye R's images,
@@ -208,7 +216,8 @@ which starts the count over. Each failure logs the NGX result and the create key
 `PerfQualityValue`, preset); a twin made after one logs `DLSS per eye again after a failure`. Every write,
 redirect and creation asks
 `mp_guard::allowsGameTouch()`; after a trip every hook forwards to the engine (the DLSS twin is still
-released with its game feature: it is the layer's own object).
+released with its game feature: it is the layer's own object), and the cvars the module wrote go back to
+their values before the layer's first write (`cvar_book.hpp`, mp-guard.md section 1).
 
 **Cost.** GPU: none beyond TAA or DLSS itself per render. Memory: eye R's slot images (above) and a second
 DLSS feature. CPU: a tag lookup under the tag mutex per selector call (four per backend frame) and per DLSS
@@ -270,12 +279,16 @@ evaluation.
   post-process context + 0x148, stored at 0x1C570D2) and the scattering setup (its context + 0x10, stored
   at 0x1C568FC). The last two count every 10 s the renders whose tag in flight names another eye
   (`seq-taa: ... exposure renders whose tag in flight names another eye N`, `seq-scatter: ... N render(s)
-  whose tag in flight names another eye`). The selectors (the engine's selector reads the same memory), the
-  world GUI check (backend draw jobs, no counter at hand) and the DLSS evaluation (the AA pass) keep the tag
-  in flight. Before the change, the ring traces (two rig runs and one headset run, 1,800 events) had the
+  whose tag in flight names another eye`). The selectors (the engine's selector reads the same memory) and the
+  world GUI check (backend draw jobs, no counter at hand) keep the tag in flight. The DLSS evaluation runs in
+  the AA pass, later in the frame's jobs than the render-view job, with no counter at hand: it goes by the tag
+  its output selector picked its `Output` image for, and counts the evaluations whose tag in flight names the
+  other eye (`seq-taa: ... DLSS eye by the output image N (tag in flight names the other eye N)`). The foveation's render passes have no counter at hand either: the exposure and scattering hooks note the render-view job's read, a pass where it equals the counter now is in that frame, and every other pass stays full rate. The frame each command buffer's recording or counter parity would guess (the engine records a frame into the command buffers of the frame's parity, `vk-pools-per-context.md` section 2; `src/stereo_seq/pass_frames.hpp`) is only counted, as the inputs cannot tell a wrong guess (used with the rig test knob `ETERNALVR_TEST_VRS_PARITY=1`; `vrs: render pass frames: ...`, with the passes the tag in flight would have given another eye than the guess). Before the change, the ring traces (two rig runs and one headset run, 1,800 events) had the
   two lookups name the same eye at every ring site, the selector check had no cross-eye pick in 2,112
   windows of 10 s, and the world GUI counts had no eye L draw one behind and no eye R draw current in 767.
-  [static-verified; live-verified]
+  Later headset runs showed the in-flight read in the render-view job naming the next render under load
+  (the world strobed while the object ring used it, `stereo-object-motion.md`), so agreement in these
+  traces does not prove the remaining in-flight lookups safe under load. [static-verified; live-verified]
 - **The player's profile overrides the command line at run time** (the owner's `r_antialiasing 1`, `r_dof`,
   `r_SSR`). Per-eye TAA checks its cvars on every stereo tick and writes only what differs; it reports itself
   to `runtime_cvars::setStereoTemporal(PerEye)`, so the layer's run-time v1 hold stands down. TAA safe mode
@@ -286,9 +299,11 @@ evaluation.
 | File | Content |
 |---|---|
 | `src/stereo_seq/stereo_taa.*` | pure logic: `pickAccumulation`, `taaSubSample`, `TaaResetPlanner`, `ExposurePlanner`, `NgxTwins`, the cvar sets, `taaMissingPiece`; tests in `tests/stereo_seq/stereo_taa_tests.cpp` |
+| `src/stereo_seq/ngx_eye.*` | pure logic: `NgxOutputBook` (output image to tag), `pickNgxEye` (own tag or the tag in flight), `NgxResetBook` (the per-eye hook's resets for the evaluations); tests in `tests/stereo_seq/ngx_eye_tests.cpp` |
 | `src/stereo_seq/eye_tags.*` | `RenderTag::eyeSeq`, `EyeTagQueue::peek` (tests in `eye_tags_tests.cpp`) |
 | `src/vkcore/taa_locate.*` | signatures (below), cvar objects by their registration |
-| `src/vkcore/taa_hooks.*` | early slot hook, selectors, exposure hook, cvar enforcement and fail-closed, counters |
+| `src/vkcore/taa_hooks.*` | early slot hook, selectors, cvar enforcement and fail-closed, counters |
+| `src/vkcore/exposure_hooks.*` | the exposure hook (`ExposurePlanner`), installed whenever Route S runs, whatever the TAA mode |
 | `src/vkcore/taa_ngx.*` | DLSS twins |
 | `src/vkcore/mid_hook.*` | `installInlineHook` (safetyhook inline hook, created disabled, then enabled) |
 | `src/vkcore/presenter_seq.cpp` | per-eye hook: jitter phase and resets; the 10 s `seq-taa:` line |
@@ -297,9 +312,13 @@ evaluation.
 Log lines start with `seq-taa:`. At start-up: the slot loop hook, eye R's render targets, the selectors, the
 NGX hooks; at the first stereo tick `per-eye TAA on` with the cvar writes, or `writing the v1 set`. Every
 10 s: `per-eye on/off; accumulation picks A eye L / B eye R / C engine; resets; DLSS evaluations ... eye L /
-... eye R (... without a twin), twins made / failed, twin resets; r_antialiasing r_TAASafeMode r_jitter
+... eye R (... without a twin), twins made / failed, twin resets, eye L resets; DLSS eye by the output image
+O (tag in flight names the other eye X), by the tag in flight F; r_antialiasing r_TAASafeMode r_jitter
 r_TAAAntiGhosting`. In steady stereo A and B are four per backend frame of their eye (one output, three
-history reads), C counts menus and mono frames, and `r_jitter 1` confirms the TAA pass.
+history reads), C counts menus and mono frames, and `r_jitter 1` confirms the TAA pass. Under DLSS, O is
+every stereo evaluation and F stays 0 (F counts stereo evaluations whose own tag was not found), X counts
+the renders the tag in flight would have given the wrong eye's feature, and eye L resets follow the twin
+resets at each rebase and skipped eye R.
 
 ### Signatures (each unique in `.text` of build 25216728)
 

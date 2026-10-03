@@ -102,8 +102,10 @@ Ultra Performance), so `default` is a good choice; `K` forces K at every quality
 The layer sets all six keys with `NVSDK_NGX_Parameter_SetUI` on the parameter block passed to CreateFeature. The
 game uses one block for its create and evaluate calls, and eye R's twin is created from the same block through
 the same (detoured) export, so both eyes' features get the same preset. The hint is set only with a chosen DLL of
-3.1 or later (a DLL without presets ignores the keys anyway). It is not gated on the multiplayer guard: it changes
-no game state, only how the player's chosen DLL runs, and both features must get it from the game's first create.
+3.1 or later (a DLL without presets ignores the keys anyway). Like every change the layer makes it asks the
+multiplayer guard: nothing is hooked when the guard is not armed at device creation (a game update the guard does
+not know, an online launch), and after a trip the preset hint, the search path and the redirect stop (a DLL
+already loaded stays loaded until the game exits).
 
 ## 5. Where the player gets the DLL, and the licence
 
@@ -188,3 +190,43 @@ Dev main 19f4e9d, Route S, e1m2_battle, `ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_ST
 NGX's own log on this machine shows an override in its config (`[dlss_override] app_E658700=310.9.0`, left by an
 override tool); with the route the loaded DLL was still ours. NGX cannot write `base/generated/nvsdk_ngx.log`
 (a warning only). Sharpness in the headset and per-eye GPU times were not measured on the simulator.
+
+## 8. DLAA (DLSS at the full render size)
+
+The Play tab's DLSS Quality offers DLAA (`ETERNALVR_STEREO_DLSS_QUALITY=dlaa`): DLSS with the render size equal to the
+output size. [static-verified] The game has no DLAA of its own: both places that read `r_dlssQuality` map it the same
+way, 0 to `PerfQualityValue` 3 (Ultra Performance), 1 to 0 (Performance), 2 to 1 (Balanced), 3 to 2 (Quality) and any
+other value to 1 (Balanced):
+
+| Where | What |
+|---|---|
+| 0x1CC5D40 (render size, through 0x1CBFA60 when DLSS is on) | `NVSDK_NGX_Parameter_SetI(block, "PerfQualityValue", q)` at 0x1CC5E03 with `Width`/`Height` = the output size, then NGX's `DLSSOptimalSettingsCallback`; the game renders at the `OutWidth`/`OutHeight` it returns |
+| 0x1CC5760 (feature create) | the same mapping, `SetI("PerfQualityValue", q)` at 0x1CC598E, then `CreateFeature` with the render and output sizes |
+
+So the layer holds `r_dlssQuality` 3 (Quality) and detours the exported `NVSDK_NGX_Parameter_SetI` (RVA 0x2268080, the same
+prologue as `SetUI`): every write of `PerfQualityValue` becomes `NVSDK_NGX_PerfQuality_Value_DLAA` (5). NGX then gives the
+output size as the optimal render size, the game renders at it, and its feature and eye R's twin (made from the same block,
+`taa_ngx.cpp`) are created as DLAA, with the `DLSS.Hint.Render.Preset.DLAA` preset hint the layer already sets. The
+render size equal to the output size needs nothing else: the game's DLSS path takes both sizes as they are, and
+foveation's eye-space test takes the scene target at scale 1 (`src/features/foveation/eye_targets.cpp`). The game's video
+menu shows Quality (the held `r_dlssQuality` 3).
+
+**Needs a newer DLL.** The game's 2.3.0.0 predates NVIDIA's documented DLAA mode, and what it answers for quality 5 is not
+known, so DLAA runs only with `ETERNALVR_DLSS_DLL` of DLSS 3.1 or later (`dlss_dll::kFirstDlaaVersion`; the launcher's
+default, NVIDIA's newest, is 310.x). Otherwise the hold stays Quality and the log says why:
+`dlss: DLAA needs a newer DLSS than the game's 2.3.0.0: DLSS runs at Quality`, or
+`dlss: DLAA needs DLSS 3.1.0.0 or later (this DLL is 2.5.1.0): DLSS runs at Quality`. A failed detour logs
+`dlss: DLAA: the SetI hook failed (...); DLSS runs at Quality`, and NGX holding another `nvngx_dlss.dll` than the chosen
+one (the search path not taken) logs `dlss: DLAA: NGX loaded <path>, not <chosen>: DLSS runs at Quality` and leaves the
+game's values. Like the preset it asks the multiplayer guard: after a trip the game's own values pass.
+
+Log lines: `dlss: DLAA: SetI (RVA 0x2268080) hooked: PerfQualityValue is DLAA (5) ...`, then
+`dlss: DLAA: PerfQualityValue 2 -> 5` (the first 8 writes), `dlss: DLSS feature create #N: result 0x00000001, feature F,
+preset K, DLAA`, the game's own `Nvidia NGX: Created DLSS feature (F). (WxH)->(WxH)` with both sizes the same, and
+`seq-taa: eye R's DLSS feature for the game's feature F: created ...`; a failed twin logs `PerfQualityValue 5, preset K`
+among its create keys.
+
+Rig check (not run yet): the simulator, stereo, `ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_STEREO_DLSS_QUALITY=dlaa`,
+`ETERNALVR_DLSS_DLL` naming 310.9.1, `+r_antialiasing 2`: the lines above, `_viewColor` at the eye image's size, both eyes
+evaluated each tick with no fallback to TAA; then without `ETERNALVR_DLSS_DLL`: the `needs a newer DLSS` line and
+`Created DLSS feature` at two thirds of the output size.

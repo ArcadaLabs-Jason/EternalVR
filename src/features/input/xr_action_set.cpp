@@ -7,11 +7,8 @@ namespace evr::input {
 
 namespace {
 
-// The menu set outranks gameplay, so while a panel is open its select and back win over fire and
-// dash on the same inputs.
-constexpr std::array<XrActionSetDef, 2> kSets{{
+constexpr std::array<XrActionSetDef, 1> kSets{{
     {XrActionSetId::Gameplay, "gameplay", "Gameplay", 0},
-    {XrActionSetId::Menu, "menu", "Menus", 1},
 }};
 
 constexpr std::array<XrActionDef, kXrActionCount> kActions{{
@@ -32,11 +29,6 @@ constexpr std::array<XrActionDef, kXrActionCount> kActions{{
     {XrActionId::AimPose, XrActionSetId::Gameplay, "aim_pose", "Aim pose", XrActionKind::Pose},
     {XrActionId::GripPose, XrActionSetId::Gameplay, "grip_pose", "Grip pose", XrActionKind::Pose},
     {XrActionId::Haptic, XrActionSetId::Gameplay, "haptic", "Vibration", XrActionKind::Haptic},
-    {XrActionId::MenuSelect, XrActionSetId::Menu, "select", "Menu select", XrActionKind::Boolean},
-    {XrActionId::MenuBack, XrActionSetId::Menu, "back", "Menu back", XrActionKind::Boolean},
-    {XrActionId::MenuScroll, XrActionSetId::Menu, "scroll", "Menu scroll", XrActionKind::Vector2},
-    {XrActionId::MenuPointerPose, XrActionSetId::Menu, "pointer_pose", "Menu pointer", XrActionKind::Pose},
-    {XrActionId::MenuClose, XrActionSetId::Menu, "close", "Close menu", XrActionKind::Boolean},
 }};
 
 } // namespace

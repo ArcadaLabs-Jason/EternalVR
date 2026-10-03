@@ -39,6 +39,7 @@
 #include "vkcore/ui_capture.hpp"
 #include "vkcore/ui_wash.hpp"
 #include "vkcore/view_hook.hpp"
+#include "vkcore/wait_stats.hpp"
 #include "vkcore/xr_presenter.hpp"
 #include "xr_math/aim_check.hpp"
 #include "xr_math/display_lead.hpp"
@@ -185,6 +186,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t xrFrames = 0;
     std::uint64_t xrCopies = 0;
     std::uint64_t xrRepeats = 0;
+    WaitStats copyWait; // the XR worker's waits for its D3D12 copy, incl. its GPU wait for the game's write
     std::uint64_t xrProjectionFrames = 0;
     std::uint64_t xrQuadFrames = 0;
     ViewRecord shownView; // the view of the image in the XR swapchain
@@ -294,8 +296,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     // StereoHookSink
     void onEyeView(std::byte* renderView, int viewIndex, const std::byte* firstViewG) override;
     void onEyeLatched(std::byte* renderView, int viewIndex) override;
-    // Route S: the centred matrix's depth row read before each eye's latch (onSeqEyeView), written back
-    // into the latched eye's (onSeqEyeLatched). Render job threads; the chains never overlap.
+    // The centred matrix's depth row read before each eye's latch (onSeqEyeView; onEyeView under Parallel Eye
+    // Rendering), written back into the latched eye's (onSeqEyeLatched). Render job threads, one per eye.
     std::array<std::optional<stereo_seq::CenteredDepth>, 2> centeredDepth{};
     std::array<bool, 2> eyePoseWritten{};
     std::atomic<std::uint64_t> centeredRepairs{0};
@@ -446,7 +448,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::optional<menu::MenuRouter> menuRouter;
     input::CaptureChord menuChord;   // the capture chord's hold on the triggers (capture_chord.hpp)
     MenuPointer menuPointer;         // rebuilt every frame
-    MenuPointerKept menuPointerKept; // the beam's image and the vibration ticks, kept across frames
+    MenuPointerKept menuPointerKept; // the beam's image, the vibration ticks, the chord's clock: kept
     double menuPanelSeen = 0.0;      // when a panel last had something to show (qpc seconds)
     std::uint64_t menuFrames = 0;
     ULONGLONG lastMenuStatsTicks = 0;

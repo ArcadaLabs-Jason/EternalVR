@@ -22,6 +22,7 @@
 
 #include "common/pose.hpp"
 #include "common/vector.hpp"
+#include "features/input/capture_chord.hpp"
 #include "features/input/controller_settings.hpp"
 #include "features/input/controller_state.hpp"
 #include "features/input/haptics_policy.hpp"
@@ -75,6 +76,9 @@ void sync(XrTime predictedDisplayTime, bool focused);
 // XR worker: the controllers as the last sync saw them (LOCAL, with scripted input laid over), or nullopt
 // when controllers are off or the snapshot is stale. The menu pointer reads its rays from here.
 std::optional<input::InputFrame> latestFrame();
+// The capture chord's buttons for the runtime and the controller family in use (dashboard_pause.hpp), for
+// the menu pointer's own chord.
+input::CaptureButtons captureButtons();
 // The weapon hand (the dominant hand: right unless ETERNALVR_HANDEDNESS says left).
 input::Hand dominantHand();
 // Which stick pans the Dossier's map (ETERNALVR_MAP_STICKS): the weapon hand's unless the player chose the
@@ -145,8 +149,12 @@ game::GameActionSet heldActions();
 // glory kill, the Meathook pull, a melee lunge, a scripted camera; forced_angles.hpp). False while the
 // controllers are off.
 bool forcedView();
-// Camera hook: whether `player` (the view's object) is the idPlayer and a sync or glory kill runs
-// (idPlayer::syncMaster set). False for any other object, and while the controllers are off.
+// Any thread: the sync entity of the animation `player` (the idPlayer) is in, or null: idPlayer::
+// savedSyncEntity, else idPlayer::syncMaster (docs/BHAPTICS.md). A pickup's animation is a sync too.
+const std::byte* syncEntity(const std::byte* player);
+// Camera hook: whether `player` (the view's object) is the idPlayer and a glory kill runs: a sync entity
+// that is not a pickup's animation (comfort::isKillSync). False for any other object, and while the
+// controllers are off.
 bool syncKillActive(const std::byte* player);
 
 // Writes back the game's own values of the wall-climb cvars the layer held (climb_hook.cpp), once; nothing

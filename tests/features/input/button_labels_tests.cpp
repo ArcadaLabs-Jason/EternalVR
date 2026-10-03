@@ -308,3 +308,55 @@ TEST_CASE("label set texts are printable ASCII") {
     CHECK(promptLabelSet(profile, buttonLabelsFor(data)).text[static_cast<std::size_t>(GameAction::Jump)] ==
           "??A");
 }
+
+TEST_CASE("the menus' controls: B goes back, the weapon hand's trigger selects, the grips change tabs") {
+    const ControllerData data = builtin(Controller::OculusTouch);
+    const ButtonLabels labels = buttonLabelsFor(data);
+    const PromptLabelSet right =
+        promptLabelSet(buildBindingProfile(data.maps.at(Handedness::Right)).profile, labels);
+    CHECK(right.menuBack == "B");
+    CHECK(right.menuSelect == "Right Trigger");
+    CHECK(right.menuPreviousTab == "LG");
+    CHECK(right.menuNextTab == "RG");
+    // The router's back and tabs do not follow the handedness; its pointer does.
+    const PromptLabelSet left =
+        promptLabelSet(buildBindingProfile(data.maps.at(Handedness::LeftButtonSwap)).profile, labels);
+    CHECK(left.menuBack == "B");
+    CHECK(left.menuSelect == "Left Trigger");
+    CHECK(left.menuPreviousTab == "LG");
+    CHECK(left.menuNextTab == "RG");
+}
+
+TEST_CASE("the menus' back is the left secondary button where the right hand has none") {
+    const ControllerData data =
+        parseControllerData(kTouchHeader + "\"gameplay.left.secondary\" = \"/input/y/click\"\n");
+    const PromptLabelSet set = promptLabelSet(BindingProfile{}, buttonLabelsFor(data));
+    CHECK(set.menuBack == "Y");
+    CHECK(set.menuPreviousTab.empty());
+    CHECK(set.menuNextTab.empty());
+}
+
+TEST_CASE("Vive wands: the right Menu button goes back in menus") {
+    const ControllerData data = builtin(Controller::ViveWand);
+    const PromptLabelSet set =
+        promptLabelSet(buildBindingProfile(data.maps.at(Handedness::Right)).profile, buttonLabelsFor(data));
+    CHECK(set.menuBack == "Right Menu");
+}
+
+TEST_CASE("every built-in family names the menus' back, select and tab controls") {
+    for (const Controller controller : kControllers) {
+        const ControllerData data = builtin(controller);
+        const ButtonLabels labels = buttonLabelsFor(data);
+        for (const auto& [handedness, entries] : data.maps) {
+            const PromptLabelSet set = promptLabelSet(buildBindingProfile(entries).profile, labels);
+            INFO(controllerName(controller));
+            CHECK_FALSE(set.menuBack.empty());
+            CHECK_FALSE(set.menuSelect.empty());
+            CHECK_FALSE(set.menuPreviousTab.empty());
+            CHECK_FALSE(set.menuNextTab.empty());
+            // The tab lists show about two letters where the game writes Q and E.
+            CHECK(set.menuPreviousTab.size() <= 3);
+            CHECK(set.menuNextTab.size() <= 3);
+        }
+    }
+}

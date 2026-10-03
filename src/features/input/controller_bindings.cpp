@@ -21,6 +21,9 @@ constexpr std::string_view kProfileSection = "profile";
 constexpr std::string_view kMapSectionPrefix = "map.";
 constexpr std::string_view kLabelsSection = "labels";
 constexpr std::string_view kPathKey = "path";
+// Earlier versions also suggested bindings for a "menu" action set that was never synced; a player's file
+// copied from them still has its keys, which are skipped.
+constexpr std::string_view kRetiredSetPrefix = "menu.";
 
 constexpr std::array<std::pair<game::Handedness, std::string_view>, 3> kHandednessNames{{
     {game::Handedness::Right, "right"},
@@ -142,7 +145,7 @@ public:
         const InteractionProfileInfo* profile = readPath(text.entries, lineOf(std::string(kPathKey)));
         std::vector<Candidate> candidates;
         for (const auto& [key, value] : text.entries) {
-            if (key == kPathKey) {
+            if (key == kPathKey || key.starts_with(kRetiredSetPrefix)) {
                 continue;
             }
             if (auto candidate = readBinding(profile, key, value, lineOf(key))) {

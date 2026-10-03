@@ -47,17 +47,16 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.GloryKills] = new Text("Glory kills",
                 "How a glory kill is shown. Follow the camera: your view goes with the game's camera through the kill "
                 + "and turns with your head from there. Steady view: you still see the kill up close, but the view never "
-                + "turns on its own, only when you turn your head, and you face the same way after it. Fade out: the view "
-                + "goes dark for the kill and comes back when it ends. Flat screen: the kill plays on a flat screen in "
-                + "front of you, like a cutscene.",
-                "Follow the camera", "Steady view", "Fade out", "Flat screen"),
+                + "turns on its own, only when you turn your head, and you face the same way after it. Flat screen: the "
+                + "kill plays on a flat screen in front of you, like a cutscene. Fade out: the view goes dark for the kill "
+                + "and comes back when it ends.",
+                "Follow the camera (intense)", "Steady view", "Flat screen", "Fade out"),
             [Setting.WalkInRoom] = new Text("Room-scale",
                 "Walking around your room moves the Slayer with you. Off: you can still lean and peek about 60 cm from where "
                 + "you recentered; past that the view fades until you step back or recenter."),
             [Setting.HeadFade] = new Text("Fade in walls",
                 "The view fades to black when your head goes into a wall or too far from your body, so you cannot see "
-                + "through the level. If you are stuck in the dark for a moment, the game moves you back onto your body. "
-                + "Turn it off if you walk a lot in a big space and the fades get in the way."),
+                + "through the level. If you are stuck in the dark for a moment, the game moves you back onto your body."),
             [Setting.RecenterHold] = new Text("Recenter hold",
                 "Hold both sticks pressed for 2 seconds to turn the game to where you face and reset your height. "
                 + "A single stick click still melees at once. The headset's own recenter works too."),
@@ -75,9 +74,9 @@ namespace EternalVR.Launcher.Core.Settings
                 "Throw a grenade with your off hand, as you would throw a ball: bring the hand up beside your ear, then "
                 + "swing it forward. It fires the equipment launcher, like its button; the grenade flies where you aim. "
                 + "Off by default. Experimental: not yet tried in a headset."),
-            [Setting.HandsJump] = new Text("Jump with both hands (standing)",
+            [Setting.HandsJump] = new Text("Jump with both hands",
                 "Throw both hands up above your head, fast, to jump, like in DOOM VFR. The jump button still works. "
-                + "Off when you play sitting. Off by default: two-handed moves can set it off by accident."),
+                + "Sitting, the hands have to go higher. Off by default: two-handed moves can set it off by accident."),
             [Setting.SwingGesture] = new Text("Overhead swing",
                 "Swing the Crucible (the Sentinel Hammer in The Ancient Gods Part Two) with your weapon hand: raise it above "
                 + "your head, then bring it down hard. It does what the Crucible button does. Both hands up does nothing. "
@@ -94,8 +93,9 @@ namespace EternalVR.Launcher.Core.Settings
                 "The hand that holds the gun. Left swaps the buttons between the hands; the second left option also swaps the sticks.",
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),
             [Setting.MoveToward] = new Text("Move toward",
-                "What pushing the left stick forward moves you toward: where you look, or where your off hand points.",
-                "Where you look", "Where your off hand points"),
+                "What pushing the move stick forward moves you toward: where you look, where your left hand points, or "
+                + "where your right hand points, with either Weapon hand.",
+                "Where you look", "Where your left hand points", "Where your right hand points"),
             [Setting.XButton] = new Text("X button",
                 "Which press of the X button opens the Dossier; the other one switches equipment. Hold means a quarter of "
                 + "a second or more.",
@@ -111,7 +111,7 @@ namespace EternalVR.Launcher.Core.Settings
                 "Stick (default)", "Point with your hand"),
             [Setting.AimSteadiness] = new Text("Aim steadiness",
                 "Steadies the gun and the aim dot against the small shake of a held hand. Higher is steadier but the gun "
-                + "follows your hand a little later; lower it if the gun feels like it trails behind.",
+                + "follows your hand a little later.",
                 AimSteadiness.Names),
             [Setting.AimDot] = new Text("Aim dot",
                 "A dot where your weapon hand aims, in place of the game's crosshair."),
@@ -154,11 +154,11 @@ namespace EternalVR.Launcher.Core.Settings
                 + "of some shimmer on fine edges.",
                 "The game's setting", "Off", "Low", "Medium", "High"),
             [Setting.Foveation] = new Text("Foveated rendering (experimental)",
-                "Shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames on the graphics "
-                + "card (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). It helps only when "
-                + "the graphics card is what limits the frame rate. Subtle keeps the most of each eye at full detail, Aggressive "
-                + "the least. NVIDIA RTX only; other cards ignore it. Off by default. Experimental.",
-                "Off", "Subtle", "Balanced", "Aggressive"),
+                "Shades the edges of each eye at a lower rate, where the lenses blur anyway, so the graphics card does less "
+                + "work (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). "
+                + "It changes the frame rate only when the graphics card is what limits it. Subtle keeps the most of each eye "
+                + "at full detail, Maximum the least. NVIDIA RTX only; other cards ignore it. Off by default. Experimental.",
+                "Off", "Subtle", "Balanced", "Aggressive", "Maximum"),
             [Setting.FramePacing] = new Text("Frame pacing",
                 "How the game's frames are timed against your headset's. As fast as the game runs: the game draws as many "
                 + "frames as it can and the headset shows the newest one at each of its frames; looking around is smooth, "
@@ -175,13 +175,16 @@ namespace EternalVR.Launcher.Core.Settings
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "
                 + "more frames per second on the test rig). Mostly lossless: textures may sharpen a moment later when you turn "
                 + "fast or enter a new area. On by default. The game's own setting is put back after you play."),
+            [Setting.ParallelEyes] = new Text("Parallel Eye Rendering (experimental)",
+                "Renders both eyes in one game frame, their work running at the same time, instead of one eye after the "
+                + "other. Only on the Steam version this release supports; other versions use the standard renderer. The "
+                + "game's async compute is off while it is on. Off by default. Experimental."),
             [Setting.CpuSaver] = new Text("CPU Saver (experimental)",
                 "Turns down a few of the game's detail settings that cost processor time for each eye's picture, one checkbox "
                 + "each; point at one to see what it changes, what it gained on the test rig and what it costs in the picture. "
-                + "Try them if the frame rate drops and your processor, not your graphics card, is what holds it back: in VR "
-                + "the game draws every scene twice, once per eye. All of them together with Texture streaming gave about 24% "
-                + "more frames per second on the test rig. The picture changes only a little. All off by default. The game's "
-                + "own settings are put back after you play. Experimental: the list is still being measured."),
+                + "In VR the game draws every scene twice, once per eye. All of them together with Texture streaming gave about "
+                + "24% more frames per second on the test rig. All off by default. The game's own settings are put back after "
+                + "you play. Experimental: the list is still being measured."),
             [Setting.VrMode] = new Text("VR mode",
                 "Stereo renders one image per eye, for real depth. Mono renders one image for both eyes: flat, but faster.",
                 "Stereo (one image per eye)", "Mono (one for both eyes)"),
@@ -189,15 +192,13 @@ namespace EternalVR.Launcher.Core.Settings
                 "Draws one eye per game frame instead of both, taking turns. The processor does about half the work per "
                 + "frame, so the game runs faster on a slower processor, but each eye updates at half the rate. Fast "
                 + "motion can look doubled or smeared, and some people find it uncomfortable. Auto does this only when "
-                + "your processor cannot keep up with your headset, and draws both eyes again once it can. Leave it off "
-                + "unless the game cannot keep up with your headset.",
+                + "your processor cannot keep up with your headset, and draws both eyes again once it can.",
                 "Off", "Auto (when needed)", "On (for slower processors)"),
             [Setting.WorldSize] = new Text("World size",
-                "How big the world feels around you. 1.00 is the game's own scale; change it a little if rooms and demons "
-                + "feel too big or too small."),
+                "How big the world feels around you. 1.00 is the game's own scale."),
             [Setting.EyeDistance] = new Text("Eye distance",
-                "The distance between your eyes the game renders with. Leave it to the headset unless the world's depth "
-                + "feels wrong; then set your own in millimetres (most people are between 58 and 70)."),
+                "The distance between your eyes the game renders with: the headset's, or your own in millimetres (most "
+                + "people are between 58 and 70)."),
             [Setting.DesktopWindow] = new Text("Desktop window",
                 "What the game's small window on your desktop shows while you play: one eye's view, or nothing.",
                 "The left eye", "The right eye", "Nothing (black)"),
@@ -233,9 +234,10 @@ namespace EternalVR.Launcher.Core.Settings
                 + "gun and health and armour stay on the panel. The wrist and the weapon are experimental.",
                 "On the HUD panel", "On your wrist", "On your weapon"),
             [Setting.DlssQuality] = new Text("Quality",
-                "How large the image DLSS scales up from: Quality renders each eye at two thirds of its size, Balanced at 58%, "
-                + "Performance at half and Ultra Performance at a third. The smaller, the faster and the softer.",
-                DlssDll.QualityNames),
+                "How large the image DLSS scales up from: DLAA renders each eye at its full size, Quality at two thirds, "
+                + "Balanced at 58%, Performance at half and Ultra Performance at a third. The smaller, the faster and the softer. "
+                + "DLAA needs a newer DLSS than the game's (Version); with the game's it runs as Quality.",
+                DlssDll.QualityChoiceNames()),
             [Setting.DlssVersion] = new Text("Version",
                 "The DLSS that runs. NVIDIA's newest (recommended) looks sharper and smears less in motion than the game's "
                 + "own 2.3: Download fetches it once from NVIDIA's GitHub, after you accept NVIDIA's license, and keeps it in "
@@ -243,9 +245,8 @@ namespace EternalVR.Launcher.Core.Settings
                 + "into the game folder. If the game cannot use the newer file, it keeps its own.",
                 "Newest from NVIDIA (recommended)", "The game's (2.3)", "Load file..."),
             [Setting.DlssPreset] = new Text("Preset",
-                "How the newer DLSS renders. K (recommended) is the transformer model at every quality, the sharpest "
-                + "picture; J, M and L are its variants; F is the older model. Automatic lets NVIDIA pick for each quality. "
-                + "A good start: K with Quality on a fast card, J or K with Performance on RTX 20 and 30 series cards.",
+                "How the newer DLSS renders. K is the transformer model at every quality, the sharpest picture; J, M and L "
+                + "are its variants; F is the older model. Automatic lets NVIDIA pick for each quality.",
                 DlssDll.PresetNames),
             [Setting.DlssInHeadset] = new Text("In the headset",
                 "The DLSS that will run in VR with these settings, both eyes the same. The mod's log and Export report "

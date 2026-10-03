@@ -16,8 +16,10 @@ evr_add_module(evr_stereo_seq
         eye_view_plan.cpp
         keep_prev.cpp
         moved_flag.cpp
+        ngx_eye.cpp
         ngx_twin_retry.cpp
         object_prev.cpp
+        pass_frames.cpp
         png_writer.cpp
         present_watch.cpp
         prev_matrices.cpp

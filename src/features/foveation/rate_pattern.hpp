@@ -2,9 +2,8 @@
 
 // A shading rate image's texels for fixed foveation (ARCHITECTURE section 11): each texel covers a block of
 // the render target's pixels and holds a palette index, 0 = full rate, 1 = one shade per 2x2 pixels, 2 = one
-// per 4x4. The full-rate region and the wider half-rate one are ellipses in Vulkan NDC
-// (foveation_region.hpp); a texel takes the finest rate any of its pixels needs, so the full-rate region is
-// never coarsened.
+// per 4x4. The full-rate region and the wider half-rate one are regions in Vulkan NDC (foveation_region.hpp);
+// a texel takes the finest rate any of its pixels needs, so the full-rate region is never coarsened.
 
 #include "features/foveation/foveation_region.hpp"
 

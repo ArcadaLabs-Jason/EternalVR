@@ -3,7 +3,9 @@
 // session, spaces and swapchains are made again on the same device once the runtime finds the headset. The
 // game runs flat meanwhile, as it does before the first session starts.
 
+#include "vkcore/fence_wait.hpp"
 #include "vkcore/presenter_impl.hpp"
+#include "vkcore/presenter_menu_release.hpp"
 
 #include "vkcore/status_file.hpp"
 
@@ -17,16 +19,29 @@ namespace {
 // Every D3D12 copy into the old swapchains must finish before they go; a copy held since a stall (frame())
 // gives its ring slot back once it has.
 bool copiesDone(XrPresenter::Impl& p) {
-    if (p.copyFence->GetCompletedValue() < p.copyFenceValue) {
-        p.copyFence->SetEventOnCompletion(p.copyFenceValue, p.copyEvent);
-        if (WaitForSingleObject(p.copyEvent, 2000) != WAIT_OBJECT_0) {
-            return false;
-        }
+    if (!waitFence(p.copyFence.Get(), p.copyFenceValue, p.copyEvent, 2000)) {
+        return false;
     }
     if (p.copyStalled) {
         p.ring[p.stalledSlot].state.store(kSlotFree);
         p.copyStalled = false;
     }
+    return true;
+}
+
+// A removed D3D12 device (the graphics card was reset: DXGI_ERROR_DEVICE_HUNG, _RESET or _REMOVED) never
+// takes a session again; the runtime refuses it (XR_ERROR_GRAPHICS_DEVICE_INVALID) for the rest of the game.
+// VR stays off and the launcher says why, instead of waiting for a headset that is not the problem.
+bool deviceRemoved(XrPresenter::Impl& p) {
+    const HRESULT reason = p.d3dDevice->GetDeviceRemovedReason();
+    if (SUCCEEDED(reason)) {
+        return false;
+    }
+    p.loggedDeviceRemoved = true;
+    EVR_LOG("xr: reconnect: the presenter's D3D12 device was removed (0x%08lx): the graphics card was reset; "
+            "VR off",
+            static_cast<unsigned long>(reason));
+    status::flat("the graphics card was reset; VR is off");
     return true;
 }
 
@@ -103,11 +118,15 @@ bool tryReconnect(XrPresenter::Impl& p, bool log) {
 } // namespace
 
 bool XrPresenter::Impl::reconnect() {
+    releaseMenuInput(*this, "the session ended");
     consumerAlive.store(false); // the game's presents pass through meanwhile
     const LONGLONG lostQpc = qpcNow();
     EVR_LOG("xr: reconnecting (%s); the D3D12 device and the ring stay, the OpenXR objects are made again",
             xr_recovery::lossName(loss.kind));
     for (std::uint32_t attempt = 0; !stop.load(); ++attempt) {
+        if (deviceRemoved(*this)) {
+            return false;
+        }
         // In short steps, so shutdown is not held up.
         for (std::uint32_t waited = 0; waited < xr_recovery::retryDelayMs(attempt) && !stop.load();
              waited += 100) {

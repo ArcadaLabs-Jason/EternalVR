@@ -10,9 +10,11 @@
 using evr::dlss_dll::checkPeHeaders;
 using evr::dlss_dll::decide;
 using evr::dlss_dll::Decision;
+using evr::dlss_dll::dlaaWithoutNewerDll;
 using evr::dlss_dll::FileFacts;
 using evr::dlss_dll::folderOf;
 using evr::dlss_dll::hasDllName;
+using evr::dlss_dll::kFirstDlaaVersion;
 using evr::dlss_dll::kFirstPresetVersion;
 using evr::dlss_dll::kGameDllVersion;
 using evr::dlss_dll::parsePreset;
@@ -196,6 +198,36 @@ TEST_CASE("a DLL before DLSS 3.1 gets no preset, and an older one than the game'
     const Decision first = decide(goodDll(kFirstPresetVersion), "J");
     CHECK(first.applyPreset);
     CHECK(first.preset == 10u);
+}
+
+TEST_CASE("DLAA runs only with a used DLL of DLSS 3.1 or later, else Quality with the reason") {
+    const Decision d = decide(goodDll(kDlss310), "K", true);
+    CHECK(d.applyDlaa);
+    CHECK(d.dlaaNote.empty());
+    CHECK(d.applyPreset); // the preset is decided as before
+    // Not asked for: never applied, whatever the DLL.
+    CHECK_FALSE(decide(goodDll(kDlss310), "K").applyDlaa);
+    CHECK_FALSE(decide(goodDll(kDlss310), "", false).applyDlaa);
+    // The default preset and an unknown one still decide DLAA.
+    CHECK(decide(goodDll(kDlss310), "", true).applyDlaa);
+    CHECK(decide(goodDll(kDlss310), "Q", true).applyDlaa);
+    CHECK(decide(goodDll(kFirstDlaaVersion), "", true).applyDlaa);
+
+    const Decision older = decide(goodDll({2, 5, 1, 0}), "", true);
+    CHECK(older.use);
+    CHECK_FALSE(older.applyDlaa);
+    CHECK(older.dlaaNote.find("3.1.0.0 or later (this DLL is 2.5.1.0)") != std::string::npos);
+    CHECK(older.dlaaNote.find("Quality") != std::string::npos);
+
+    // The game's own version, or a file that cannot be used: the game's DLL runs, at Quality.
+    const Decision same = decide(goodDll(kGameDllVersion), "", true);
+    CHECK_FALSE(same.applyDlaa);
+    CHECK((same.dlaaNote == dlaaWithoutNewerDll()));
+    FileFacts missing;
+    const Decision none = decide(missing, "K", true);
+    CHECK_FALSE(none.applyDlaa);
+    CHECK((none.dlaaNote == dlaaWithoutNewerDll()));
+    CHECK((dlaaWithoutNewerDll() == "DLAA needs a newer DLSS than the game's 2.3.0.0: DLSS runs at Quality"));
 }
 
 TEST_CASE("an unknown preset keeps the default and says so") {

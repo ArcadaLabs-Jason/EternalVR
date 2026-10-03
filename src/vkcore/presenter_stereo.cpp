@@ -8,6 +8,8 @@
 
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/presenter_eyes.hpp"
+#include "vkcore/view_slots.hpp"
 #include "vkcore/vrs_nv.hpp"
 
 #include <cmath>
@@ -15,6 +17,7 @@
 #include <cstring>
 #include <cwchar>
 #include <string>
+#include <utility>
 
 namespace evr::vkcore {
 
@@ -51,7 +54,9 @@ StereoSettings readStereoSettings() {
     std::wstring value;
     s.requested = readEnv(L"ETERNALVR_MODE", value) && _wcsicmp(value.c_str(), L"stereo") == 0;
     const StereoExperiment experiment = stereoExperimentFromEnv();
-    s.sequential = s.requested && experiment == StereoExperiment::None;
+    // Not on an engine Parallel Eye Rendering changed and then failed to finish (view_slots.hpp): that one
+    // renders view 0 alone, shown as mono.
+    s.sequential = s.requested && experiment == StereoExperiment::None && !parallelEyesChangedEngine();
     s.enabled = s.sequential || experiment != StereoExperiment::None;
     s.views = experiment == StereoExperiment::TwoViews ? 2 : 1;
     s.eyePoses = stereoFlag(L"ETERNALVR_STEREO_EYE_POSES", true);
@@ -140,7 +145,6 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
                               Vec3{v.pose.position.x, v.pose.position.y, v.pose.position.z}};
         eyes[i].pose = xr_math::eyeInHeadFromSpace(rawHead, eyeInSpace);
         eyes[i].fov = fromXr(v.fov);
-        vrs_nv::noteEye(static_cast<int>(i), eyes[i].fov, eyes[i].pose.orientation); // ETERNALVR_VRS_TEST
         if (!xr_math::plausibleEyeInHead(eyes[i].pose)) {
             ++eyesMissing;
             if (eyesMissing <= 3) {
@@ -149,6 +153,8 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
             }
             return;
         }
+        // Foveation keeps the first eye shape it gets: only a plausible eye's.
+        vrs_nv::noteEye(static_cast<int>(i), eyes[i].fov, eyes[i].pose.orientation);
     }
     // ETERNALVR_IPD: the game renders with the player's eye separation; the compositor keeps the runtime's.
     const std::array<Vec3, 2> separated = roomscale::withSeparation(
@@ -251,7 +257,33 @@ void XrPresenter::Impl::onEyeView(std::byte* renderView, int viewIndex, const st
         return;
     }
     const EyeRecord& eye = record.eyes[static_cast<std::size_t>(viewIndex)];
+    // Parallel Eye Rendering, as Route S: under the explicit projection the latch builds the centred matrix
+    // with the world's depth row, which loses the room's geometry and the weapon; the row read here goes back
+    // after the latch (onSeqEyeLatched). The stereo experiments keep the latch's.
+    const auto v = static_cast<std::size_t>(viewIndex);
+    const bool repair = viewSlotsActive();
+    if (repair) {
+        stereo_seq::Matrix4 centered{};
+        std::memcpy(centered.data(), renderView + render_view_object::kCenteredViewProjection,
+                    sizeof(centered));
+        centeredDepth[v] = settings.stereo.fixCentered ? stereo_seq::centeredDepthOf(centered) : std::nullopt;
+    }
     const auto projection = writeEyePose(renderView, eye);
+    if (repair) {
+        eyePoseWritten[v] = projection.has_value();
+    }
+    // Test only: ETERNALVR_TEST_VIEW_LIFT=<view>,<metres> raises one view's camera, to tell which view an eye
+    // shows (two-view renderers).
+    static const std::pair<int, float> lift = [] {
+        std::wstring v;
+        if (!readEnv(L"ETERNALVR_TEST_VIEW_LIFT", v) || v.size() < 3) {
+            return std::pair<int, float>{-1, 0.0f};
+        }
+        return std::pair<int, float>{v[0] - L'0', std::wcstof(v.c_str() + 2, nullptr)};
+    }();
+    if (viewIndex == lift.first) {
+        reinterpret_cast<float*>(renderView + render_view::kViewOrigin)[2] += lift.second;
+    }
     if (!projection) {
         return;
     }
@@ -295,8 +327,8 @@ void XrPresenter::Impl::onEyeLatched(std::byte* renderView, int screenView) {
     // the render frame's).
     const int viewIndex =
         seqActive.load(std::memory_order_acquire) ? stereo_seq::eyeIndex(seqRenderEye()) : screenView;
-    if (seqActive.load(std::memory_order_acquire)) {
-        onSeqEyeLatched(renderView, viewIndex);
+    if (seqActive.load(std::memory_order_acquire) || viewSlotsActive()) {
+        onSeqEyeLatched(renderView, viewIndex); // the centred depth row and the weapon matrices
     }
     const int latchedIndex =
         *reinterpret_cast<const std::int32_t*>(renderView + render_view_object::kViewIndex);
@@ -368,6 +400,13 @@ void XrPresenter::Impl::startStereo() {
     const bool wantTwo = settings.stereo.views == 2;
     stereoHooks = installStereoHooks(this, wantTwo);
     requestTwoViews(wantTwo && stereoHooks.twoViews);
+    if (wantTwo && stereoHooks.twoViews && eyeCopyRequested()) {
+        // Parallel Eye Rendering's eye copy (presenter_eyes.hpp): each eye takes its own view's full image,
+        // so the ring holds two.
+        std::lock_guard lock(mutex);
+        ringEyes = 2;
+        EVR_LOG("stereo: Parallel Eye Rendering's eye copy on: each eye from its own view's image");
+    }
     EVR_LOG("stereo: %s; eye poses %s, inhibitModelFovScale %d, jitter copy %s%s",
             stereoHooks.twoViews && wantTwo ? "two views side by side" : "one view (left eye)",
             settings.stereo.eyePoses ? "per eye" : "head centre (E4)",

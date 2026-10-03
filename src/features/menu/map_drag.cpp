@@ -9,34 +9,33 @@ namespace {
 
 constexpr double kMaxStepSeconds = 0.1;
 
-struct Want {
-    std::optional<DragButton> button;
-    float vx = 0.0f; // pixels per second
-    float vy = 0.0f;
-};
-
-Want wanted(const MapDragInput& in, const MapDragTuning& t) {
-    Want w;
-    const float height = static_cast<float>(in.height);
-    const input::Axis2 pan = withDeadzone(in.pan, t.deadzone);
-    if (pan.x != 0.0f || pan.y != 0.0f) {
-        // The map follows the stick, as the owner expected on the Quest 3 (the first build had both axes the
-        // other way): pushed right, the drag and the map move right; pushed away, they move up the screen.
-        w.button = DragButton::Left;
-        w.vx = pan.x * t.panSpeed * height;
-        w.vy = -pan.y * t.panSpeed * height;
-        return w;
-    }
-    const input::Axis2 turn = withDeadzone(in.turn, t.deadzone);
-    if (turn.x != 0.0f && std::fabs(in.turn.x) > std::fabs(in.turn.y)) {
-        w.button = DragButton::Right;
-        w.vx = turn.x * t.rotateSpeed * height;
-    }
-    return w;
-}
-
 bool finiteTuning(float v) {
     return std::isfinite(v) && v >= 0.0f;
+}
+
+// One axis with the deadzone taken out and the rest rescaled to 0..1, keeping its sign.
+float axisWithDeadzone(float v, float deadzone) {
+    const float a = std::fabs(v);
+    if (!std::isfinite(v) || a <= deadzone) {
+        return 0.0f;
+    }
+    return std::copysign(std::min(1.0f, (a - deadzone) / (1.0f - deadzone)), v);
+}
+
+MapEvent buttonEvent(DragButton button, bool down) {
+    MapEvent e;
+    e.kind = MapEvent::Kind::Button;
+    e.button = button;
+    e.down = down;
+    return e;
+}
+
+MapEvent keyEvent(std::uint8_t key, bool down) {
+    MapEvent e;
+    e.kind = MapEvent::Kind::Key;
+    e.key = key;
+    e.down = down;
+    return e;
 }
 
 } // namespace
@@ -62,99 +61,142 @@ MapDrag::MapDrag(MapDragTuning tuning) : tuning_(tuning) {
     if (!finiteTuning(tuning_.rotateSpeed)) {
         tuning_.rotateSpeed = defaults.rotateSpeed;
     }
-    if (!(tuning_.strokeLength > 0.0f && tuning_.strokeLength < 0.5f)) {
-        tuning_.strokeLength = defaults.strokeLength;
+    if (!(tuning_.deadzone >= 0.0f && tuning_.deadzone < 0.95f)) {
+        tuning_.deadzone = defaults.deadzone;
+    }
+    if (!(tuning_.releaseZone >= 0.0f && tuning_.releaseZone <= tuning_.deadzone)) {
+        tuning_.releaseZone = std::min(defaults.releaseZone, tuning_.deadzone);
+    }
+    if (!(tuning_.rotateStart >= tuning_.deadzone && tuning_.rotateStart < 1.0f)) {
+        tuning_.rotateStart = std::max(defaults.rotateStart, tuning_.deadzone);
     }
 }
 
-std::optional<DragEvent> MapDrag::reset() {
-    std::optional<DragEvent> up;
-    if (buttonDown()) {
-        up = DragEvent{button_, false};
+void MapDrag::sendKeys(MapKeys keys, MapDragOutput& out) {
+    const auto change = [&out](bool was, bool now, std::uint8_t key) {
+        if (was != now) {
+            out.events.push_back(keyEvent(key, now));
+        }
+    };
+    change(keys_.up, keys.up, kMapKeyUp);
+    change(keys_.left, keys.left, kMapKeyLeft);
+    change(keys_.down, keys.down, kMapKeyDown);
+    change(keys_.right, keys.right, kMapKeyRight);
+    keys_ = keys;
+}
+
+void MapDrag::release(MapDragOutput& out) {
+    if (phase_ == Phase::Down) {
+        out.events.push_back(buttonEvent(button_, false));
     }
     phase_ = Phase::Idle;
+}
+
+std::vector<MapEvent> MapDrag::reset() {
+    MapDragOutput out;
+    release(out);
+    sendKeys({}, out);
+    keyPan_.reset();
+    panBy_ = MapPanBy::None;
+    rotate_ = false;
     last_ = -1.0;
-    return up;
+    return out.events;
 }
 
 MapDragOutput MapDrag::update(const MapDragInput& in) {
     MapDragOutput out;
-    const double dt = last_ < 0.0 ? 0.0 : std::clamp(in.seconds - last_, 0.0, kMaxStepSeconds);
-    last_ = in.seconds;
-    const Want want = in.width > 0 && in.height > 0 && in.cursor ? wanted(in, tuning_) : Want{};
-    const auto at = [&](CursorPixel p) {
-        return in.cursorIdle && in.cursor && *in.cursor == p;
-    };
+    const double now = in.seconds;
+    const double dt = last_ < 0.0 ? 0.0 : std::clamp(now - last_, 0.0, kMaxStepSeconds);
+    last_ = now;
+    const bool usable = in.width > 0 && in.height > 0 && in.cursor.has_value();
 
-    if (phase_ == Phase::Idle) {
-        if (!want.button) {
-            return out;
-        }
-        button_ = *want.button;
-        anchor_ = {static_cast<std::int32_t>(in.width / 2), static_cast<std::int32_t>(in.height / 2)};
+    // What the sticks ask for. A pan or rotation going on ends only once its stick is back near the centre,
+    // so one held at the edge of the deadzone does not let go and press again.
+    const input::Axis2 rawPan = usable && input::isFinite(in.pan) ? in.pan : input::Axis2{};
+    const bool panHeld =
+        input::magnitude(rawPan) > (panBy_ != MapPanBy::None ? tuning_.releaseZone : tuning_.deadzone);
+    const input::Axis2 pan = panHeld ? withDeadzone(rawPan, tuning_.deadzone) : input::Axis2{};
+    const input::Axis2 rawTurn = usable && input::isFinite(in.turn) ? in.turn : input::Axis2{};
+    const float turnX = std::fabs(rawTurn.x);
+    rotate_ =
+        rotate_ ? turnX > tuning_.releaseZone : turnX > tuning_.rotateStart && turnX >= std::fabs(rawTurn.y);
+    const float rotation = rotate_ ? axisWithDeadzone(rawTurn.x, tuning_.deadzone) : 0.0f;
+
+    // The pan goes onto the keys while a rotation holds the mouse, and stays there until its stick is let go.
+    if (!panHeld) {
+        panBy_ = MapPanBy::None;
+    } else if (panBy_ == MapPanBy::None) {
+        panBy_ = rotate_ ? MapPanBy::Keys : MapPanBy::Drag;
+    } else if (panBy_ == MapPanBy::Drag && rotate_) {
+        panBy_ = MapPanBy::Keys;
+    }
+    std::optional<DragButton> want;
+    if (rotate_) {
+        want = DragButton::Right;
+    } else if (panBy_ == MapPanBy::Drag) {
+        want = DragButton::Left;
+    }
+
+    // A button no longer wanted goes up (after its minimum hold; meanwhile nothing moves).
+    if (phase_ == Phase::Down && want != button_ && now - downAt_ >= tuning_.minHold) {
+        release(out);
+    }
+    sendKeys(panBy_ == MapPanBy::Keys ? keyPan_.update(pan) : MapKeys{}, out);
+    if (panBy_ != MapPanBy::Keys) {
+        keyPan_.reset();
+    }
+
+    // A wanted button: the cursor to the middle with the buttons up, then the press.
+    if (phase_ == Phase::Seeking && !want) {
+        phase_ = Phase::Idle;
+    }
+    if (phase_ == Phase::Idle && want) {
         phase_ = Phase::Seeking;
-        phaseStart_ = in.seconds;
+        seekStart_ = now;
     }
-    switch (phase_) {
-    case Phase::Idle:
-        break;
-    case Phase::Seeking:
-        if (!want.button) {
-            phase_ = Phase::Idle;
-            return out;
+    if (phase_ == Phase::Seeking) {
+        button_ = *want;
+        const CursorPixel middle{static_cast<std::int32_t>(in.width / 2),
+                                 static_cast<std::int32_t>(in.height / 2)};
+        out.target = middle;
+        const bool there = in.cursorIdle && in.cursor && *in.cursor == middle;
+        if (there || now - seekStart_ > tuning_.settleTimeout) {
+            // From the press on, only the stick's motion moves the cursor: a move to the middle now would
+            // pan.
+            out.target.reset();
+            out.events.push_back(buttonEvent(button_, true));
+            phase_ = Phase::Down;
+            downAt_ = now;
+            restX_ = 0.0f;
+            restY_ = 0.0f;
         }
-        button_ = *want.button;
-        target_ = anchor_;
-        if (at(anchor_) || in.seconds - phaseStart_ > tuning_.settleTimeout) {
-            out.event = DragEvent{button_, true};
-            phase_ = Phase::Dragging;
-            downAt_ = in.seconds;
-            x_ = static_cast<float>(anchor_.x);
-            y_ = static_cast<float>(anchor_.y);
-        }
-        break;
-    case Phase::Dragging: {
-        if (want.button != button_) {
-            phase_ = Phase::Releasing;
-            phaseStart_ = in.seconds;
-            break;
-        }
-        x_ += want.vx * static_cast<float>(dt);
-        y_ += want.vy * static_cast<float>(dt);
-        const float limit = tuning_.strokeLength * static_cast<float>(std::min(in.width, in.height));
-        const float dx = x_ - static_cast<float>(anchor_.x);
-        const float dy = y_ - static_cast<float>(anchor_.y);
-        const float d = std::hypot(dx, dy);
-        if (d >= limit) {
-            x_ = static_cast<float>(anchor_.x) + dx * (limit / d);
-            y_ = static_cast<float>(anchor_.y) + dy * (limit / d);
-            phase_ = Phase::Releasing;
-            phaseStart_ = in.seconds;
-        }
-        target_ = {std::clamp(static_cast<std::int32_t>(std::lround(x_)), 0,
-                              static_cast<std::int32_t>(in.width) - 1),
-                   std::clamp(static_cast<std::int32_t>(std::lround(y_)), 0,
-                              static_cast<std::int32_t>(in.height) - 1)};
-        break;
+        return out;
     }
-    case Phase::Releasing:
-        if ((at(target_) || in.seconds - phaseStart_ > tuning_.settleTimeout) &&
-            in.seconds - downAt_ >= tuning_.minHold) {
-            out.event = DragEvent{button_, false};
-            if (want.button) {
-                button_ = *want.button;
-                phase_ = Phase::Seeking;
-                phaseStart_ = in.seconds;
-            } else {
-                phase_ = Phase::Idle;
-            }
+
+    // The button is down: the stick's motion, every frame, for as long as the stick is held.
+    if (phase_ == Phase::Down && want == button_) {
+        float vx = 0.0f;
+        float vy = 0.0f;
+        if (button_ == DragButton::Left) {
+            // The map follows the stick, as the owner expected on the Quest 3: pushed right, the drag and the
+            // map move right; pushed away, they move up the screen.
+            vx = pan.x * tuning_.panSpeed;
+            vy = -pan.y * tuning_.panSpeed;
+        } else {
+            vx = rotation * tuning_.rotateSpeed;
         }
-        break;
-    }
-    // The cursor stays where the stroke left it until the button is up (the frame of the release
-    // included); after that it goes to the next stroke's start, or back to the ray.
-    if (phase_ != Phase::Idle || out.event) {
-        out.target = target_;
+        restX_ += vx * static_cast<float>(dt);
+        restY_ += vy * static_cast<float>(dt);
+        const auto dx = static_cast<std::int32_t>(std::trunc(restX_));
+        const auto dy = static_cast<std::int32_t>(std::trunc(restY_));
+        restX_ -= static_cast<float>(dx);
+        restY_ -= static_cast<float>(dy);
+        if (dx != 0 || dy != 0) {
+            MapEvent move;
+            move.dx = dx;
+            move.dy = dy;
+            out.events.push_back(move);
+        }
     }
     return out;
 }

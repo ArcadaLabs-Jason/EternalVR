@@ -1,6 +1,7 @@
 // The head-collision fade layer (presenter_fade.hpp).
 
 #include "vkcore/presenter_fade.hpp"
+#include "vkcore/fence_wait.hpp"
 
 #include "vkcore/presenter_impl.hpp"
 
@@ -75,11 +76,8 @@ bool FadeLayer::prepare(const XrFunctions& xr,
         return false;
     }
     // The previous clear must be done before its allocator is reused.
-    if (fence_->GetCompletedValue() < fenceValue_) {
-        fence_->SetEventOnCompletion(fenceValue_, event_);
-        if (WaitForSingleObject(event_, 50) != WAIT_OBJECT_0) {
-            return false;
-        }
+    if (!waitFence(fence_.Get(), fenceValue_, event_, 50)) {
+        return false;
     }
     // OpenXR swapchain rules: an image whose wait timed out stays acquired and is waited on again next
     // time; it is released only after a successful wait.
@@ -131,9 +129,8 @@ bool FadeLayer::prepare(const XrFunctions& xr,
 }
 
 void FadeLayer::destroy(const XrFunctions& xr) {
-    if (fence_ && event_ && fence_->GetCompletedValue() < fenceValue_) {
-        fence_->SetEventOnCompletion(fenceValue_, event_);
-        WaitForSingleObject(event_, 500);
+    if (fence_ && event_) {
+        waitFence(fence_.Get(), fenceValue_, event_, 500);
     }
     if (swapchain_ != XR_NULL_HANDLE) {
         xr.xrDestroySwapchain(swapchain_);

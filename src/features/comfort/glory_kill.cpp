@@ -33,6 +33,10 @@ bool equalsNoCase(std::string_view a, std::string_view b) {
 
 } // namespace
 
+bool isKillSync(std::string_view entityDefName) {
+    return !entityDefName.starts_with("interact/");
+}
+
 std::optional<GloryView> parseGloryView(std::string_view text) {
     const std::string_view t = trim(text);
     for (const GloryView view : {GloryView::Follow, GloryView::Steady, GloryView::Fade, GloryView::Screen}) {

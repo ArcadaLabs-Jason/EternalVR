@@ -1,8 +1,9 @@
 namespace EternalVR.Launcher.Core.Settings
 {
     /// <summary>How glory kills are shown (the layer's <c>ETERNALVR_GLORY_KILLS</c>): the view follows the kill's camera, keeps
-    /// its heading (steady), fades out, or the kill plays on a flat screen.</summary>
-    public enum GloryKillView { Follow, Steady, Fade, Screen }
+    /// its heading (steady), the kill plays on a flat screen, or the view fades out. The Play tab lists them in this order
+    /// (fade last); launcher.ini stores the name, not the number.</summary>
+    public enum GloryKillView { Follow, Steady, Screen, Fade }
 
     /// <summary>The Glory kills setting in launcher.ini: <c>glory_kills = follow|steady|fade|screen</c>.</summary>
     public sealed partial class LauncherSettings

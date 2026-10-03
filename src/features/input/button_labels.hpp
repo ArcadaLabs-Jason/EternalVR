@@ -118,6 +118,16 @@ struct PromptLabelSet {
     std::vector<std::string> distinct;                    // each text once, in action order
     std::array<int, game::kGameActionCount> slot{};       // index into `distinct`, -1 when there is no text
 
+    // The menus' own controls (features/menu/menu_router.hpp), which no control map changes, for the keys
+    // the menus' hints name: back (Escape) is the right secondary button (B on Touch) in every menu, or the
+    // left one where the right hand has none; select (Enter) is the weapon hand's trigger, which clicks what
+    // the pointer is on; the previous and next tab (Q, E) are the left and right grips, in short (LG, RG),
+    // since the tab lists cut longer text. Empty when the controller has no name for the control.
+    std::string menuBack;
+    std::string menuSelect;
+    std::string menuPreviousTab;
+    std::string menuNextTab;
+
     friend bool operator==(const PromptLabelSet&, const PromptLabelSet&) = default;
 };
 

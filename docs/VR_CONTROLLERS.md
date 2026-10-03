@@ -27,22 +27,26 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
 ```
 
 - **OpenXR input** (`src/vkcore/input_xr.cpp`, the families in `input_profiles.cpp`). When the session
-  exists, the `gameplay` and `menu` action sets of `features/input/xr_action_set.hpp` are created with both hands as subaction paths, the
+  exists, the `gameplay` action set of `features/input/xr_action_set.hpp` is created with both hands as subaction paths, the
   suggested bindings of every controller data file in `data/input/controllers/` (one per family, below;
   a player's file, or each `*.toml` of a player's folder, through `ETERNALVR_CONTROLLER_DATA` replaces
   the one with the same profile) are
-  suggested, the sets are attached and aim and grip spaces are created per hand. A family whose profile
+  suggested, the set is attached and aim and grip spaces are created per hand. A family whose profile
   comes with an extension is suggested only when the instance has it (below), and a profile the runtime
   refuses is logged without stopping the others. Every XR frame the worker syncs `gameplay` and publishes
   a snapshot: triggers, grips, sticks, buttons, the aim poses with velocity and the head, all in `LOCAL`.
-  The runtime's current interaction profile for the right hand picks the family whose control map is
-  used; the profile of each hand is logged when it changes (`controllers: the runtime reports ... for the
-  left hand`). Handles are destroyed before the presenter destroys its spaces.
+  The runtime's current interaction profiles pick the family whose control map is used
+  (`features/input/controller_family.hpp`): both hands the same family, or only one hand with one (the other
+  controller off or asleep), that family; two different families keep the one in use if it is one of
+  them, else the right hand's; neither keeps the one in use. The profile of each hand is logged when it
+  changes (`controllers: the runtime reports ... for the left hand`), and a new family as `controllers: the
+  runtime reports <family> controllers`. Handles are destroyed before the presenter destroys its spaces.
 - **Mapper** (`src/vkcore/usercmd_hook.cpp`, `runMapper`). The control map of the family and handedness is
   compiled (`buildBindingProfile`; a map with conflicts is refused with its two-sided messages) and
   `InputMapper` runs once per user command. Its `GameInput` goes through `ActionHold` (a tap is held at
   least 50 ms and two commands, so the game samples it). Every action that starts is logged by name
-  (`controllers: action quick_switch`), which the weapon-swap protocol needs.
+  (`controllers: action quick_switch`), which the weapon-swap protocol needs: the first 500, then one a minute
+  with the count left out (`ETERNALVR_CONTROLLERS_TRACE=1` logs them all).
 - **User command** (L1). A mid-hook on the call of `idUserCmdMgr::PutUserCmd` (RVA 0x43E8DD; r8 the finished
   command, ebx the local user, r14b set while the game suppresses buttons). For local user 0 the actions'
   bits (`game/eternal/usercmd_buttons.hpp`) are ORed into `buttons` (+0x10) and the move is added to
@@ -100,9 +104,17 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   Log: the `controllers: on:` line ends `throw gesture on|off, overhead swing on|off`, and each gesture
   logs `controllers: gesture: throw` (or `overhead swing`) followed by `controllers: action equipment`
   (or `action crucible`).
-- **Locomotion.** The move stick is relative to the head or the off hand (`ETERNALVR_LOCOMOTION`) and is
+- **Locomotion.** The move stick is relative to where the head looks, the left hand points or the right
+  hand points (`ETERNALVR_LOCOMOTION=look|left|right`, `features/input/locomotion_direction.hpp`) and is
   rotated into the game's view yaw, which the camera hook measures each frame as the player's view yaw
-  less the body yaw, so hand aim never bends the direction of travel.
+  less the body yaw, so hand aim never bends the direction of travel. The hand is the one named, whatever
+  the handedness (Jason's headset notes, 2026-10-02: three plain choices instead of "the move hand"). A
+  hand that is untracked or points near vertically falls back to the head. The values from before are
+  still read: `head` is `look`, and `hand` is the map's move stick hand (`locomotionHand`,
+  `features/input/binding_profile.hpp`: the left hand under `right` and `left`, buttons swapped, the
+  right hand under `left_mirror`; a map with no move stick takes the hand not holding the weapon). Log:
+  `controllers: on: ... locomotion left ...` and `controllers: control map for <family> controllers,
+  left-handed, move stick left, moving where the left hand points` (or `moving where the head faces`).
 - **Hand aim** (`ETERNALVR_AIM=hand`, `src/vkcore/aim_hooks.cpp`). Head aim's closed loop is reused: each
   game frame the game's own angles (command + deltaViewAngles) are read back and moved to body + target,
   where the target is the weapon hand's aim ray (`handAimAngles`) instead of the head. The render camera
@@ -208,7 +220,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   wrote, in the test's copy of the look direction. The test is horizontal only. Rig check (e1m4, the ladder
   trigger, the weapon hand 70 degrees off the head): with the head on the target and the gun off it the
   trigger fired on its first test; without the hook it never did, and with the gun on it and the head off
-  it the hook kept it from firing. Each test is logged for the first three and then every sixtieth
+  it the hook kept it from firing. Each test is logged for the first three and then once a minute
   (`look-at trigger test N: head yaw, view yaw`).
 - **Climbable walls** (`src/vkcore/climb_hook.cpp`, GitHub issue 3). The game's wall-climb mechanic
   (`idPlayerMechanicWallClimb`) owns the view while the player clings to a climbable wall when
@@ -260,7 +272,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_CONTROLLERS` | `1` / `0` | `1` |
 | `ETERNALVR_AIM` | `head` (view follows the head), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
 | `ETERNALVR_DEMON_AIM` | what aims a piloted demon (the Cultist Base Revenant, above): `head` or `hand`; unset or empty follows `ETERNALVR_AIM`. No effect under `view` aim, where the demon keeps the game's own aim | unset |
-| `ETERNALVR_LOCOMOTION` | `head` / `hand` (the off hand) | `head` |
+| `ETERNALVR_LOCOMOTION` | `look` / `left` / `right` (that hand, whatever the handedness); the older `head` (= `look`) and `hand` (the hand with the move stick) are still read | `look` |
 | `ETERNALVR_TURN` | `smooth` / `snap` / `off` | `smooth` |
 | `ETERNALVR_TURN_RATE` | smooth turn, 150 to 400 degrees per second | 230 |
 | `ETERNALVR_SNAP_DEGREES` | 30, 45, 90 (15 to 90 accepted) | 45 |
@@ -281,13 +293,14 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_BHAPTICS` | `1`: bHaptics suits and sleeves through the bHaptics Player ([BHAPTICS.md](BHAPTICS.md)) | `0` |
 | `ETERNALVR_BHAPTICS_INTENSITY` | the bHaptics effects' strength, `0` to `1` | `1` |
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
+| `ETERNALVR_WEAPON_ARM` | `ik`: the weapon arm's forearm, elbow and upper arm reach the gun from a shoulder fixed to the head, the gun and wrist where the game puts them; `game`: the game's pose, which points back out of view ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The weapon arm"). Most weapons tell the game not to draw the right arm at all (their mesh kit); with `ik` the layer draws it while it poses it and hides it again when the game takes the arm back ("The weapon's mesh kit"). Needs `ETERNALVR_VIEWMODEL=1`; works with either `ETERNALVR_OFFHAND` | `ik` |
 | `ETERNALVR_BUTTON_PROMPTS` | `0`: the game's prompts keep naming keyboard keys (below) | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
 | `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning) | the table |
 | `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
-| `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Y pause and the Y capture) | none |
+| `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Touch controllers' dashboard pause and stick capture) | none |
 | `ETERNALVR_LOOK_TRIGGERS` | `0`: look-at triggers test the game's view (the gun under hand aim) instead of the head, and the tests are only logged (above) | `1` |
 | `ETERNALVR_CLIMB_LOOK` | `0` (or `off`): on a climbable wall the game's wall-climb mechanic keeps the view and the jump follows the stick, as in the flat game (above) | `1` |
 | `ETERNALVR_DEMON_VIEW` | `0`: no handling for a piloted demon (above) | `1` |
@@ -318,7 +331,7 @@ A value that cannot be used is logged with its name and the default is kept
 | Left Menu tap | Pause | the Escape key |
 | Both sticks pressed, held 2 s | Recenter the room (below, docs/VR_ROOMSCALE.md) | the layer's own |
 | Left Menu held + a trigger | Save a capture of each eye for a bug report (below) | the layer's own |
-| Y held + a trigger (SteamVR) | The same capture, since SteamVR keeps the left Menu button (below) | the layer's own |
+| Both sticks held + a trigger (SteamVR, Touch) | The same capture, since SteamVR keeps the left Menu button (below) | the layer's own |
 | A physical punch | Melee | as the stick click |
 | Off hand wound up by the ear, then thrown forward (`ETERNALVR_THROW=1`) | Equipment launcher | as the left trigger |
 | Weapon hand raised above the head, then swung down (`ETERNALVR_SWING=1`) | Crucible | as the left stick click |
@@ -361,14 +374,21 @@ which a capture fired neither pauses on its release nor recenters (a player's ow
 the left Menu button in every handedness (the right one belongs to the system on Touch; on Index it is
 the firm left trackpad press), and it works in gameplay and in menus (`GameInput::capture`, outside the
 actions a menu holds back; the menu pointer runs its own `CaptureChord` to drop the trigger's click).
-Under SteamVR the left Menu button opens SteamVR's dashboard and never reaches the game, so with that
-runtime the left secondary button (Y on Touch, B on the left Index controller) chords too
-(`CaptureButtons::MenuOrSecondary`, `captureButtonsFor` in `features/input/dashboard_pause.hpp`; the mapper
-and the menu pointer both take it from the runtime's name). Y differs from Menu in two ways: it holds back
-only a trigger pulled while it is down (a Y tap while firing keeps firing), and the pull has to come
-before Y's hold (0.25 s, the SteamVR pause) completes; a Y press with a capture neither taps (switch weapon
-mod) nor holds (pause). A double tap of Menu was the first idea; Virtual Desktop already uses it (it switches to the desktop
-view), so it is not used.
+Under SteamVR the left Menu button of Touch controllers opens SteamVR's dashboard and never reaches the
+game, so with that runtime and family both sticks held as the recenter chord
+(`features/input/stick_chord.hpp`) work as the chord's button too: hold both sticks pressed, then pull a
+trigger (`CaptureButtons::MenuOrSticks`, `captureButtonsFor` in `features/input/dashboard_pause.hpp`; the
+mapper and the menu pointer both take it from the runtime's name and the family in use). Index keeps the
+Menu chord alone: its Menu input is the firm trackpad press, which SteamVR leaves alone, and the other
+families have a system button of their own (`kDashboardMenuFamilies`). Every Touch button carries a gameplay
+action in some map (Y is dash in the full mirror, the mod switch in the others), and a chord on one of them
+took a capture and ate the shot when that action and fire overlapped. The stick chord already takes both
+sticks away from their bindings in every map, so it overlaps no gameplay combination. The sticks count from
+the hold time (0.25 s after the second stick, when the stick chord's recenter level starts), so a quick
+two-stick click with a shot is a shot. They hold back only a trigger pulled while they are held (one already
+firing keeps firing), and a stick chord with a capture does not recenter
+(`CaptureChordOutput::cancelSticks`). A double tap of Menu was the first idea; Virtual Desktop already uses
+it (it switches to the desktop view), so it is not used.
 
 The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`,
 `presenter_snapshot.cpp`): `capture-<date>-<time>-p<pair>-t<tick>-L.png` and `-R.png` (the two eye images
@@ -432,7 +452,12 @@ from another profile, and SteamVR's "Manage controller bindings" starts from the
 - **Touch-like families** (G2, Cosmos, Pico 4) keep the Touch maps; only `[profile]` differs. The Cosmos
   grip is a click, read by the analog grip action as 0 or 1; its shoulder buttons are left free.
 - **The left Menu button is the pause on every family** (View on the Steam Frame). The capture chord
-  reads it (`features/input/capture_chord.hpp`), so no family puts a gameplay action on it.
+  reads it (`features/input/capture_chord.hpp`), so no family puts a gameplay action on it. Under SteamVR
+  with Touch controllers the dashboard takes that button, so the hold that shows mission info pauses
+  instead (`applyDashboardPause`, `features/input/dashboard_pause.hpp`): Y in the right-handed map and the
+  button swap, B in the full mirror, where mission info is on the right hand. The log says `the runtime
+  keeps the Menu button for its dashboard: holding the Y button pauses` (or `B`). A player's map that
+  already pauses on another button is left alone.
 - **Windows Mixed Reality.** No A/B/X/Y. The trackpad click is the primary button on both hands (jump;
   switch equipment tap, Dossier hold), the right Menu button is the right secondary button (dash; back in
   menus), the left Menu button the pause. The missing left secondary button's jobs move: switch weapon mod
@@ -467,8 +492,8 @@ from another profile, and SteamVR's "Manage controller bindings" starts from the
   | D-pad left, tap | Switch equipment |
   | View, tap | Pause |
 
-  Switch equipment is a tap because under SteamVR the D-pad left is also the capture chord's button (the
-  left secondary one), and a press that captured must not switch. The button swap map moves only the
+  Switch equipment is a tap, as on Touch's X. The capture chord is View held + a trigger, under SteamVR
+  too: the Frame's View reaches the game. The button swap map moves only the
   triggers, grips and stick clicks; the full mirror swaps the sticks, the bumpers and each face button with
   the one in its place on the other hand (A with D-pad down, B with D-pad left, X with D-pad right, Y with
   D-pad up), and keeps the pause on View and the Dossier on Menu. `ETERNALVR_DOSSIER=tap` finds no X tap and
@@ -481,7 +506,13 @@ from another profile, and SteamVR's "Manage controller bindings" starts from the
 - **Tests** (`tests/game/eternal/controller_data_tests.cpp`): every file parses against its profile's
   input list, binds each gameplay action on each hand unless the controller lacks the button, compiles
   every map without issues, keeps the pause on the left Menu tap and reaches the essential actions (fire,
-  jump and dash, melee as instant presses) in every handedness. `button_labels_tests.cpp` checks that every
+  jump and dash, melee as instant presses) in every handedness. `controls_coverage_tests.cpp` builds every
+  family and handedness under SteamVR and another runtime as the layer does (the dashboard pause, the
+  capture chord's buttons) and checks a pause on a button the runtime passes on, mission info on a button
+  (except WMR, the Vive wands and Touch under SteamVR, whose mission-info hold is the pause), that the
+  chord's own buttons carry no gameplay action and capture, and that no gameplay button or pair of
+  buttons held with a trigger pull, early or after the hold time, captures or holds the pull back.
+  `button_labels_tests.cpp` checks that every
   input a built-in map binds has a name for game prompts ("X", "D-pad Up", "View", "Right Bumper").
 
 ## Button prompts
@@ -508,11 +539,33 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   button that sends that key: tutorial popups take Space for the jump button, E for melee and Tab for the
   Dossier, so "[SPACE] TO DISMISS" reads "[A] TO DISMISS" on Touch. The game is held on its keyboard
   prompts (`swf_platformOverride 2`), so a gamepad or Steam Input cannot switch them to pad glyphs.
+- **Menu hints.** The menus' hint bars (pause, settings, the Dossier, the main menu) name the menu
+  controls (`docs/VR_MENUS.md`), which no control map changes: "[ESC] BACK" reads "[B] BACK" on Touch
+  (the right secondary button, which goes back in every menu), "[ENTER] SELECT" names the weapon hand's
+  trigger (it clicks what the pointer is on), and the tab lists' Q and E name the left and right grips in
+  short (LG, RG: the tab lists show about two letters, so "Left Grip" read "LE...").
+  The hint bars write their keys as key tokens through the same text pass as the popups; the tab lists
+  ask for their two keys' text on their own, and the layer answers only those two calls. Hint keys the
+  controllers have no button for (R restore defaults, F apply, T and X in the Arsenal) keep the game's
+  keys, as do the few hold buttons in hint bars (the game names their key without a token).
   Everything is found by signature at start; if a part is missing the prompts stay the game's and the log
   says which part.
+- **From the title screen on.** The names come with the control map, and the mapper that builds it runs
+  with the game's user commands, which the title screen and the main menu do not build: the owner's
+  main menu still read "[ESC] BACK" (2026-10-02), the map first built about 1.5 s into the first level.
+  The XR worker now builds it as soon as the runtime reports a controller (or scripted input stands in
+  for one), for the family in use, so the menus name the buttons before any level
+  (`vkcore/control_map.cpp`; `controllers: control map for oculus_touch controllers (ahead of the first
+  user command, for the menus' prompts), ...`, after `controllers: the runtime reports ...`). Publishing
+  the names bumps the bind generation, so the game drops the prompt texts it cached with the keys; whether
+  a hint bar already on screen when the controllers wake redraws at once, or only on the next screen, is
+  not yet seen on the rig.
 - **Limits.** Text is printable ASCII. A prompt for an action the player's keyboard binds leave unbound
   keeps the game's text, since the game only replaces bound actions. The log shows the first few prompts
-  each path answered (`prompts: ... asks for _altfire (bindset 0): Right Grip`).
+  each path answered (`prompts: ... asks for _altfire (bindset 0): Right Grip`), the menu hints' texts when
+  the control map is set (`prompts: menu hints: back (ESC) B, select (ENTER) Right Trigger, tabs (Q / E)
+  Left Grip / Right Grip`) and the first time each fixed key is named (`prompts: the game's text names
+  ESCAPE: B`, `prompts: a tab list names Q: Left Grip`).
 
 ## Scripted input for rig tests
 
@@ -584,6 +637,7 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 12 | Vibration: in e1m2, the file `right.trigger = 1` for 2 s, then `right.trigger = 0`; then `left.menu = 1` with `right.trigger = 1` (the capture), both back to 0; then the Menu button (pause), `right.aim = 0, 0` and a `right.trigger = 1` tap on the pause menu | Pending. Expect `haptics: on, strength 0.60 ...`, `haptics: rumble hook at RVA 0xAAE730` and `rumble on` in the `game hooks:` line, `haptics: the game's first rumble: low L, high H` on the first shot, then within 10 s `haptics: N pulses (fire a, punch 0, menu c, game d, capture e), r refused` with a up to 14 for 2 s held (one at the press, then every 0.15 s; fewer where the game's rumble on that hand is stronger), d above 0 while shooting, e 2 (both hands), c 1 or more after the click. A runtime without haptics shows the pulses as refused (the first one logged with its result). A punch needs hand velocity: `right.velocity = 0, 0, -3.5` with an aim for 0.3 s |
 | 13 | Weapon wheel by the hand (`ETERNALVR_WHEEL_SELECT=hand`): in e1m2 with two or more weapons, the file `right.aim = 0, 0`, then with it `right.stick = 0, -1` for 1.5 s, then (the stick still down) `right.aim = -25, 0` for 1 s, `right.aim = 0, 25` for 1 s, then `right.stick = 0, 0` | Pending. Expect `weapon wheel by the hand` at the end of the `controllers: on:` line, `action weapon_wheel`, `the weapon wheel is up: the weapon hand moves the game's wheel cursor (200 px to the rim at a 20 deg turn)`, no `pointing` line while the hand is still, then `weapon wheel: pointing right (motion 200, 0)`, `pointing up (motion -200, -200)`, `weapon wheel released after N motion(s)` and a `held item` line for the weapon at the wheel's top |
 | 14 | Arm gestures (`ETERNALVR_THROW=1`, `ETERNALVR_SWING=1`), in e1m2: the file `left.aim = 0, 0` with `left.position = -0.15, 0.05, 0.15` (wound up) for 1 s, then `left.position = -0.15, -0.05, -0.3` with `left.velocity = 0, -0.5, -3.5` for 0.3 s, then the left hand at rest; later `right.aim = 0, 0` with `right.position = 0.15, 0.3, -0.1` (raised) for 1 s, then `right.position = 0.15, -0.1, -0.35` with `right.velocity = 0, -3.5, -1.5` for 0.3 s; and a control: `left.position = -0.2, -0.3, -0.45` with `left.velocity = 0, 0, -3.5` (a punch from the chest) | Pending. Expect `throw gesture on, overhead swing on` at the end of the `controllers: on:` line; `controllers: gesture: throw` then `controllers: action equipment` and no `action melee` for the throw; `gesture: overhead swing` then `action crucible` and no `action melee` for the swing (the Crucible itself needs the weapon; the press is what is checked); `action melee` and no gesture line for the control |
+| 15 | Inputs held through a menu's close, in e1m2: `ETERNALVR_TEST_KEYS=<ms>:ESC` opens the pause menu; once the log has `menu: the game shows its cursor`, the file `left.secondary = 1` for 0.15 s, then `left.secondary = 0`. Then the Dossier: `left.primary = 1` for 0.5 s, then 0; once the Dossier is up, `right.stick = 0, -1` for 0.5 s, then `left.secondary = 1` for 0.15 s with the stick still down, the stick held 0.5 s more, then `right.stick = 0, 0` | Pending. Expect for the pause menu `menu: key down 0x1b`, `menu: the cursor is gone`, `menu: controllers' gameplay input back on`, `controllers: gameplay input back on: presses begun in the menu are dropped` and no `controllers: action switch_weapon_mod` after it (before the fix: `action switch_weapon_mod` in the same millisecond); for the Dossier the same line ending `; a control still held stays out of the game until let go`, and no `action weapon_wheel`, `action quick_switch` or `weapon wheel` line after it |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent
@@ -623,7 +677,9 @@ for seconds (below).
 - **One hand model.** The game's hands model holds both arms; placed at the weapon hand, the left arm
   follows it (T-054: no off-hand model in v1). `ETERNALVR_OFFHAND=free` poses the left arm at the off-hand
   controller instead (docs/VR_HANDS_HUD.md, "Off hand"), mirrored to the right side with the weapon in the
-  left hand.
+  left hand. The arm holding the gun keeps the gun's grip; `ETERNALVR_WEAPON_ARM=ik` (the default) bends its
+  forearm and upper arm up to a shoulder beside the head, so it shows in view (docs/VR_HANDS_HUD.md, "The
+  weapon arm").
 - **Seated** offsets are chosen by `ETERNALVR_SEATED`; posture detection is not wired to them yet.
 - **Bindings from the player's profile** (REQ-11) come through `ETERNALVR_CONTROLLER_DATA`: the launcher's
   controls editor (Edit controls) saves the player's edited copies of the built-in files in the controls
@@ -631,10 +687,13 @@ for seconds (below).
   docs/release/CONTROLS.md); each VR settings profile keeps its own folder (`controls\profiles\<name>`).
   The layer uses only the file whose profile the runtime reports, so the editor opens on the controllers of
   the newest session log with a `the runtime reports <profile> for the right hand` line
-  (`SessionLogs.LastControllerProfile`). No haptics yet (v1 if time allows). Aim assist is not forced off (the
-  injected turn does not use the stick path that gates it).
+  (`SessionLogs.LastControllerProfile`). Aim assist is not forced off (the injected turn does not use the
+  stick path that gates it).
 - **Stereo.** Checked live with Route S (docs/VR_STEREO.md, re-test table): with hand aim and snap turn
   every action works as in mono, and the weapon is drawn at the hand in both eyes (Route S retargets the
   hands-and-guns matrices to each eye's frustum). The weapon FOV copy is per game frame.
-- **Mid-hook slots.** With Route S the layer installs more mid-hooks than either alone; `kMaxMidHooks` is
-  24.
+- **Hook slots.** `kMaxMidHooks` is 448 and `kMaxInlineHooks` 48 (src/vkcore/mid_hook.hpp), about twice the
+  most a session can use: 48 mid hooks measured with bHaptics and the free off hand, 13 inline hooks with the
+  launcher's newer DLSS DLL, plus Parallel Eye Rendering's 168 mid and 9 inline hooks (docs/VR_STEREO.md). The log's `controllers: hooks in use` line gives the count; a full pool names itself in the
+  failing hook's line. Up to v0.1.14 the inline pool was 12, so on the newer DLSS DLL the demon aim hook
+  was refused and a piloted Revenant kept the game's own aim.

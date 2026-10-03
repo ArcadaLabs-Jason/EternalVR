@@ -138,6 +138,39 @@ std::string handPrefixed(Hand hand, std::string_view name) {
     return capitalized(handName(hand)) + " " + std::string(name);
 }
 
+// The game's prompt fonts may lack anything outside printable ASCII; such characters become '?'.
+std::string printable(std::string text) {
+    for (char& c : text) {
+        if (c < 0x20 || c > 0x7E) {
+            c = '?';
+        }
+    }
+    return text;
+}
+
+// A control's name in two or three letters for the tab lists, which have room for about that much where
+// the game writes Q and E: the first letter of each word ("Left Grip" is LG), or the first two letters of a
+// one-word name.
+std::string shortName(std::string_view name) {
+    std::string out;
+    bool wordStart = true;
+    for (const char c : name) {
+        if (c == ' ') {
+            wordStart = true;
+        } else if (wordStart) {
+            out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+            wordStart = false;
+        }
+    }
+    if (out.size() == 1) {
+        out = std::string(name.substr(0, 2));
+        for (char& c : out) {
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 std::optional<LabelKey> parseLabelKey(std::string_view text) {
@@ -297,12 +330,7 @@ PromptLabelSet promptLabelSet(const BindingProfile& profile, const ButtonLabels&
     PromptLabelSet set;
     set.slot.fill(-1);
     for (std::size_t i = 0; i < game::kGameActionCount; ++i) {
-        std::string text = actionPromptText(static_cast<game::GameAction>(i), profile, labels);
-        for (char& c : text) {
-            if (c < 0x20 || c > 0x7E) {
-                c = '?';
-            }
-        }
+        std::string text = printable(actionPromptText(static_cast<game::GameAction>(i), profile, labels));
         if (text.empty()) {
             continue;
         }
@@ -314,6 +342,11 @@ PromptLabelSet promptLabelSet(const BindingProfile& profile, const ButtonLabels&
         set.slot[i] = static_cast<int>(it - set.distinct.begin());
         set.text[i] = std::move(text);
     }
+    const std::string& rightBack = labels.name(Hand::Right, LabelInput::Secondary);
+    set.menuBack = printable(rightBack.empty() ? labels.name(Hand::Left, LabelInput::Secondary) : rightBack);
+    set.menuSelect = printable(labels.name(profile.weaponHand, LabelInput::Trigger));
+    set.menuPreviousTab = printable(shortName(labels.name(Hand::Left, LabelInput::Grip)));
+    set.menuNextTab = printable(shortName(labels.name(Hand::Right, LabelInput::Grip)));
     return set;
 }
 

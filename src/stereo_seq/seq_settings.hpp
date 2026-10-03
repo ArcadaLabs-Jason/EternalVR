@@ -41,12 +41,22 @@ enum class StereoTemporal : std::uint8_t {
 // per-eye TAA module writes its own set.
 const std::vector<CvarExpectation>& stereoRuntimeCvars(StereoTemporal temporal = StereoTemporal::Off);
 
-// The comfort and correctness cvars the launcher sets on the command line, held at run time under Route S
-// as well, so a player who turns one back on in the game's own settings during a session gets it off again
-// at once: HDR output (the copy to the headset expects SDR), motion blur, depth of field, chromatic
-// aberration, vignette, view bob and the view kicks and shakes (camera motion the head did not make), the
-// weapon's FOV scale and the Meathook's single view turn (hand aim). Kept in step with the launcher's
-// forced-cvars.txt, which restores the player's own values after the session.
+// r_lightScatteringTAA under Route S, the light scattering's temporal filter: on (1) while the scattering
+// history is per eye (vkcore/scatter_hooks.hpp), off (0) otherwise, since each eye would filter its fog with
+// the other eye's volume. The per-eye history needs only the eye tags, so this holds in either temporal
+// mode: with per-eye TAA off or failed closed the layer holds it beside the Off set, and per-eye TAA writes
+// the same value in its own set.
+CvarExpectation stereoScatterFilterCvar(bool perEyeHistory);
+
+// The comfort and correctness cvars held at run time under Route S, so a player who turns one back on in the
+// game's own settings during a session gets it off again at once: HDR output (the copy to the headset
+// expects SDR), motion blur, depth of field, chromatic aberration, vignette, view bob and the view kicks and
+// shakes (camera motion the head did not make), the damage tint and blur, the view effects' overlays, the
+// weapon's FOV scale and the Meathook's single view turn (hand aim). In stereo the launcher puts only
+// r_hdrDisplay on the command line (the swapchain's format is picked at start-up): this hold sets the rest,
+// so a multiplayer guard trip gives the player's values back (cvar_book.hpp). Mono launches keep them on the
+// command line. Kept in step with the launcher's forced-cvars.txt, which restores the player's own values
+// after the session.
 const std::vector<CvarExpectation>& stereoComfortCvars();
 
 // A cvar held at a value known only at run time (stereoWindowCvars).

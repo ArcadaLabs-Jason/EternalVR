@@ -28,14 +28,6 @@
 "gameplay.right.aim_pose" = "/input/aim/pose"
 "gameplay.right.grip_pose" = "/input/grip/pose"
 "gameplay.right.haptic" = "/output/haptic"
-"menu.left.select" = "/input/trigger/click"
-"menu.left.scroll" = "/input/trackpad"
-"menu.left.pointer_pose" = "/input/aim/pose"
-"menu.left.close" = "/input/menu/click"
-"menu.right.select" = "/input/trigger/click"
-"menu.right.back" = "/input/menu/click"
-"menu.right.scroll" = "/input/trackpad"
-"menu.right.pointer_pose" = "/input/aim/pose"
 
 [map.right]
 "weapon_hand" = "right"

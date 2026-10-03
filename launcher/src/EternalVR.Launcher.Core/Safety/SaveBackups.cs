@@ -11,9 +11,9 @@ namespace EternalVR.Launcher.Core.Safety
     /// Save-slot backups (T-092): before each VR launch every save-slot folder of every Steam settings
     /// location is copied into <c>save-backups\&lt;timestamp&gt;\&lt;location&gt;\&lt;slot&gt;\</c> with a
     /// <c>SHA256SUMS</c> file; only the newest <see cref="Keep"/> backups are kept. "Restore saves" copies
-    /// a verified backup back, after first backing up the current saves under <c>pre-restore-*</c>. The
-    /// save slots are Steam-Cloud files: callers go through <see cref="SaveRestore"/>, which keeps Steam's
-    /// record consistent (T-115). A Game Pass location (its <c>wgs</c> save containers) is copied whole into the
+    /// a verified backup back, after first backing up the current saves under <c>pre-restore-*</c> (the newest
+    /// <see cref="Keep"/> of those are kept too). The save slots are Steam-Cloud files: callers go through
+    /// <see cref="SaveRestore"/>, which keeps Steam's record consistent (T-115). A Game Pass location (its <c>wgs</c> save containers) is copied whole into the
     /// backup and marked in <c>locations.txt</c>; such a backup is a copy only and is never restored.
     /// </summary>
     public static class SaveBackups
@@ -88,7 +88,26 @@ namespace EternalVR.Launcher.Core.Safety
                 .ToList();
         }
 
-        /// <summary>Deletes rotating backups beyond the newest <see cref="Keep"/> (and incomplete ones).</summary>
+        /// <summary>
+        /// The complete <c>pre-restore-*</c> backups "Restore saves" made of the saves it replaced, newest first (one left
+        /// half copied by a crash has no sums and does not count).
+        /// </summary>
+        public static IReadOnlyList<string> PreRestoreBackups(string backupsRoot)
+        {
+            if (!Directory.Exists(backupsRoot)) return new string[0];
+            return PreRestoreFolders(backupsRoot)
+                .Where(d => File.Exists(Path.Combine(d, SumsFile)))
+                .OrderByDescending(d => Path.GetFileName(d), StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private static IEnumerable<string> PreRestoreFolders(string backupsRoot) =>
+            Directory.GetDirectories(backupsRoot).Where(d => Path.GetFileName(d).StartsWith(PreRestorePrefix, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// Deletes rotating backups beyond the newest <see cref="Keep"/>, <c>pre-restore-*</c> backups beyond the newest
+        /// <see cref="Keep"/>, and incomplete ones of either kind.
+        /// </summary>
         public static void Rotate(string backupsRoot)
         {
             if (!Directory.Exists(backupsRoot)) return;
@@ -99,6 +118,16 @@ namespace EternalVR.Launcher.Core.Safety
                     FileUtil.DeleteDirectory(d);
             }
             foreach (var d in List(backupsRoot).Skip(Keep)) FileUtil.DeleteDirectory(d);
+            PrunePreRestore(backupsRoot);
+        }
+
+        /// <summary>Incomplete <c>pre-restore-*</c> folders, and complete ones beyond the newest <see cref="Keep"/>.</summary>
+        private static void PrunePreRestore(string backupsRoot)
+        {
+            if (!Directory.Exists(backupsRoot)) return;
+            foreach (var d in PreRestoreFolders(backupsRoot).Where(d => !File.Exists(Path.Combine(d, SumsFile))).ToList())
+                FileUtil.DeleteDirectory(d);
+            foreach (var d in PreRestoreBackups(backupsRoot).Skip(Keep)) FileUtil.DeleteDirectory(d);
         }
 
         /// <summary>Checks every file of a backup against its sums. Returns the problems found (none = valid).</summary>
@@ -168,6 +197,9 @@ namespace EternalVR.Launcher.Core.Safety
                 }
             }
             foreach (var c in copies) FileUtil.CopyVerified(c.Key, c.Value);
+            // The saves are back: an old pre-restore backup that cannot be removed now goes at the next rotation.
+            try { PrunePreRestore(backupsRoot); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
             return pre;
         }
 

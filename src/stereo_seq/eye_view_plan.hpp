@@ -25,6 +25,10 @@ struct EyeViewPlan {
     bool inhibitModelFovScale = false;      // set to 1
 };
 
-EyeViewPlan planEyeView(Eye eye, const SeqViewSettings& settings);
+// `exposureHeld`: the auto-exposure index hook gives eye R eye L's exposure this render
+// (stereo_seq::exposureIndexHeld). Eye R skips its exposure update only then: without the hook eye L's
+// backend frame parity is constant and its exposure would stop adapting, so both eyes update and form one
+// chain (docs/rig-findings/stereo-temporal.md 3.3).
+EyeViewPlan planEyeView(Eye eye, const SeqViewSettings& settings, bool exposureHeld);
 
 } // namespace evr::stereo_seq

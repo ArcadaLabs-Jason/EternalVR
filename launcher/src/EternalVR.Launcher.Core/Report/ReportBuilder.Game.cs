@@ -14,6 +14,12 @@ namespace EternalVR.Launcher.Core.Report
         /// <summary>The game's minidumps, next to its crash reports: counted in the report, never included.</summary>
         internal const string GameCrashDumpsFolder = "crash-dumps";
 
+        /// <summary>The key of the game's video settings in system.txt (<see cref="LastGameSettings"/>).</summary>
+        public const string GameSettingsKey = "game settings (last session)";
+
+        /// <summary>The layer's line with the game's video settings (src/vkcore/game_settings.hpp), after its time and thread.</summary>
+        private const string GameSettingsMarker = "] game settings: ";
+
         /// <summary><c>Crash.&lt;computer&gt;.&lt;number&gt;.html</c>: the number is kept, the computer name never goes into the zip's file names.</summary>
         private static readonly Regex GameCrashName = new Regex(@"^Crash\..+\.(\d+)\.html$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
@@ -71,6 +77,34 @@ namespace EternalVR.Launcher.Core.Report
             if (!m.Success) return null;
             var item = ReportManifest.Items.First(i => i.Source == ReportSource.GameCrashes);
             return item.ZipPath.Replace("{number}", m.Groups[1].Value);
+        }
+
+        /// <summary>
+        /// The game's video settings as the layer last logged them in <paramref name="sessionDir"/> (its <c>eternalvr-*.log</c> files,
+        /// the last written last): the text of the last <c>game settings:</c> line (<c>r_enableRayTracing 1, ..., g_fov 110</c>), or
+        /// null when there is none. A log still open for writing is read too.
+        /// </summary>
+        public static string LastGameSettings(string sessionDir)
+        {
+            string last = null;
+            foreach (var path in SafeFiles(sessionDir, "eternalvr-*.log").OrderBy(LastWrite))
+            {
+                try
+                {
+                    using (var s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    using (var r = new StreamReader(s, Utf8))
+                    {
+                        string line;
+                        while ((line = r.ReadLine()) != null)
+                        {
+                            int at = line.IndexOf(GameSettingsMarker, StringComparison.Ordinal);
+                            if (at >= 0) last = line.Substring(at + GameSettingsMarker.Length).Trim();
+                        }
+                    }
+                }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
+            }
+            return string.IsNullOrEmpty(last) ? null : last;
         }
 
         /// <summary>The newest of the files that exist, or null.</summary>

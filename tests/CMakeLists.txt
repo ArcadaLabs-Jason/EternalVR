@@ -64,6 +64,7 @@ evr_add_test(evr_settings_tests
 evr_add_test(evr_game_eternal_tests
     SOURCES
         game/eternal/controller_data_tests.cpp
+        game/eternal/controls_coverage_tests.cpp
         game/eternal/game_action_tests.cpp
         game/eternal/quest_touch_bindings_tests.cpp
         game/eternal/usercmd_buttons_tests.cpp
@@ -105,6 +106,7 @@ evr_add_test(evr_pacing_tests
 evr_add_test(evr_foveation_tests
     SOURCES
         features/foveation/attachment_images_tests.cpp
+        features/foveation/eye_targets_tests.cpp
         features/foveation/foveation_preset_tests.cpp
         features/foveation/foveation_region_tests.cpp
         features/foveation/rate_pattern_tests.cpp
@@ -123,6 +125,7 @@ evr_add_test(evr_input_tests
         features/input/button_labels_tests.cpp
         features/input/capture_chord_tests.cpp
         features/input/controller_bindings_tests.cpp
+        features/input/controller_family_tests.cpp
         features/input/controller_settings_tests.cpp
         features/input/cutscene_skip_tests.cpp
         features/input/dashboard_pause_tests.cpp
@@ -133,8 +136,11 @@ evr_add_test(evr_input_tests
         features/input/input_mapper_stick_tests.cpp
         features/input/input_mapper_chord_tests.cpp
         features/input/input_mapper_tests.cpp
+        features/input/input_mapper_menu_tests.cpp
         features/input/input_mapper_wheel_tests.cpp
+        features/input/input_mapper_locomotion_tests.cpp
         features/input/locomotion_direction_tests.cpp
+        features/input/menu_release_latch_tests.cpp
         features/input/offhand_policy_tests.cpp
         features/input/player_controller_data_tests.cpp
         features/input/punch_detector_tests.cpp
@@ -168,6 +174,7 @@ evr_add_test(evr_arm_tests
         features/arm/arm_frames_tests.cpp
         features/arm/arm_skeleton_tests.cpp
         features/arm/arm_solve_tests.cpp
+        features/arm/arm_surfaces_tests.cpp
         features/arm/hand_offset_tests.cpp
         features/arm/mod_room_tests.cpp
         features/arm/two_bone_ik_tests.cpp
@@ -180,8 +187,14 @@ evr_add_test(evr_layer_gate_tests
 
 evr_add_test(evr_mp_policy_tests
     SOURCES
+        platform/mp_policy/argument_cases_tests.cpp
         platform/mp_policy/mp_policy_tests.cpp
+        platform/mp_policy/saved_cvars_tests.cpp
+        platform/mp_policy/trip_listeners_tests.cpp
     DEPENDS evr_mp_policy)
+# The argument cases the launcher's ArgumentPolicy tests read as well.
+target_compile_definitions(evr_mp_policy_tests
+    PRIVATE EVR_MP_ARGUMENT_CASES="${CMAKE_CURRENT_SOURCE_DIR}/platform/mp_policy/argument-cases.txt")
 
 evr_add_test(evr_key_injection_tests
     SOURCES
@@ -195,7 +208,13 @@ if(TARGET evr_device_features)
             vkcore/debug_script_tests.cpp
             vkcore/device_features_tests.cpp
             vkcore/dump_format_tests.cpp
-        DEPENDS evr_debug_script evr_device_features evr_dump_format evr_mp_policy)
+            vkcore/game_settings_line_tests.cpp
+            vkcore/job_nodes_tests.cpp
+            vkcore/log_cap_tests.cpp
+            vkcore/parallel_eyes_settings_tests.cpp
+            vkcore/view_frames_tests.cpp
+        DEPENDS evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
+            evr_parallel_eyes_settings evr_mp_policy)
 endif()
 
 # The shader census tool (tools/shader_census) is tested on synthetic SPIR-V, with no SDK needed.
@@ -230,8 +249,10 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/eye_view_plan_tests.cpp
         stereo_seq/keep_prev_tests.cpp
         stereo_seq/moved_flag_tests.cpp
+        stereo_seq/ngx_eye_tests.cpp
         stereo_seq/ngx_twin_retry_tests.cpp
         stereo_seq/object_prev_tests.cpp
+        stereo_seq/pass_frames_tests.cpp
         stereo_seq/world_gui_tests.cpp
         stereo_seq/png_writer_tests.cpp
         stereo_seq/present_watch_tests.cpp
@@ -245,12 +266,15 @@ evr_add_test(evr_stereo_seq_tests
 
 evr_add_test(evr_menu_tests
     SOURCES
+        features/menu/drag_cursor_hide_tests.cpp
         features/menu/enter_tick_tests.cpp
         features/menu/map_drag_tests.cpp
+        features/menu/map_pan_keys_tests.cpp
         features/menu/menu_kind_tests.cpp
         features/menu/menu_router_map_tests.cpp
         features/menu/menu_router_popup_tests.cpp
         features/menu/menu_router_tests.cpp
+        features/menu/model_camera_tests.cpp
         features/menu/panel_follow_tests.cpp
         features/menu/panel_pointer_tests.cpp
         features/menu/panel_reanchor_tests.cpp

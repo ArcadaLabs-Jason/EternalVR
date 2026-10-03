@@ -108,11 +108,7 @@ namespace EternalVR.Launcher.Core.Launch
                     RedirectStandardInput = true,
                     StandardOutputEncoding = Encoding.UTF8,
                 };
-                foreach (var kv in environment ?? new KeyValuePair<string, string>[0])
-                {
-                    if (kv.Value == null) psi.EnvironmentVariables.Remove(kv.Key);
-                    else psi.EnvironmentVariables[kv.Key] = kv.Value;
-                }
+                ChildEnvironment.Apply(psi, environment);
                 p = new Process { StartInfo = psi };
                 p.OutputDataReceived += (s, e) =>
                 {
@@ -124,7 +120,7 @@ namespace EternalVR.Launcher.Core.Launch
                 p.ErrorDataReceived += (s, e) => { };
                 if (!p.Start()) return OpenXrProbeResult.Failed("the probe could not be started");
             }
-            // ArgumentException: an inherited environment with two names that differ only in case (.NET Framework).
+            // ArgumentException: an environment .NET cannot copy (ChildEnvironment.Open already copes with names that differ only in case).
             catch (Exception e) when (e is InvalidOperationException || e is System.ComponentModel.Win32Exception
                                       || e is System.IO.IOException || e is PlatformNotSupportedException || e is ArgumentException)
             {

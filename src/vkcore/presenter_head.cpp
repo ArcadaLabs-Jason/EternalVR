@@ -12,6 +12,7 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/menu_input.hpp"
+#include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/reticle_depth.hpp"
 #include "vkcore/stall_watch.hpp"
@@ -252,6 +253,14 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     origin[2] += offset.z;
     fov[0] = used.fovX;
     fov[1] = used.fovY;
+    // The head in LOCAL and in the world, for a menu's 3D model on the panel (menu_model_hook.hpp).
+    menu_model::noteHead({{headXr, {p.position.x, p.position.y, p.position.z}},
+                          {origin[0], origin[1], origin[2]},
+                          view.forward,
+                          view.left,
+                          view.up,
+                          settings.unitsPerMetre},
+                         gameFovX);
     controllers::endGameView(renderView, player, *body, eye, clear.validOffset, settings.unitsPerMetre);
     if (settings.ui.reticle && record.weaponAimValid) {
         record.weaponAimHitMetres = reticleHitMetres(player, eye, settings.unitsPerMetre);

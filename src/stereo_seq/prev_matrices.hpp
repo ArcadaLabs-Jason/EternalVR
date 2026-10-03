@@ -21,6 +21,10 @@
 // render frame right after the one that kept them (the render frame counter, renderSystem + 0x10): any
 // frame in between (a mono frame, a loading screen, a map change that gives a new view the address of an
 // old one) makes them stale.
+//
+// With alternate eyes an eye R render frame can turn mono after the store (the tags take a new base, or no
+// view is located): the per-eye hook then writes no view, and the frame renders the game's view with eye
+// L's accumulation. undoRewrite puts back what the engine stored (eye L's matrices) for that frame.
 
 #include "stereo_seq/eye_tags.hpp"
 
@@ -49,12 +53,17 @@ public:
     // true when it rewrote them.
     bool afterStore(std::byte* view, Eye eye, std::uint32_t renderFrame);
 
+    // The eye R render frame whose store of `view` was just rewritten stays mono after all: puts back the
+    // bytes the engine stored and counts the frame as a mono one. Returns true when it undid a rewrite.
+    bool undoRewrite(std::byte* view);
+
     void clear();
 
     struct Stats {
         std::uint64_t stores = 0;
         std::uint64_t rewrites = 0; // stores replaced by this eye's own previous matrices
         std::uint64_t kept = 0;     // stores left as the engine made them (no bytes kept for this eye)
+        std::uint64_t undone = 0;   // rewrites put back: the eye R frame stayed mono
     };
     const Stats& stats() const { return stats_; }
 
@@ -67,6 +76,7 @@ private:
         bool stored = false;         // lastFrame is set
         std::uint32_t lastFrame = 0; // render frame of the last store
         std::uint64_t lastUse = 0;
+        bool undoable = false; // the last store was an eye R rewrite: saved[0] holds the engine's bytes
     };
     Entry& entryFor(const std::byte* view);
     void save(const std::byte* view, std::vector<std::byte>& into) const;

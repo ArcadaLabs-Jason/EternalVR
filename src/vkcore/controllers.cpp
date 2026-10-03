@@ -6,6 +6,7 @@
 #include "vkcore/demon_view.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 
 #include <mutex>
@@ -63,19 +64,27 @@ void install() {
         s.demonAimHook = installDemonAimHook();
         s.facingHook = installFacingHook();
         s.climbHook = installClimbHook();
-        // The off hand on the game's left arm needs the arms at the weapon hand (docs/VR_HANDS_HUD.md).
-        if (s.viewmodelHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)) {
-            s.offhandHook = installOffhandHook();
+        // The off hand on the game's left arm and the weapon arm's IK need the arms at the weapon hand
+        // (docs/VR_HANDS_HUD.md); without the viewmodel hook both arms stay the game's.
+        if (s.viewmodelHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace ||
+                                cfg.weaponArm == input::WeaponArmMode::Ik)) {
+            bool weaponArm = false;
+            s.offhandHook = installOffhandHook(weaponArm);
+            s.weaponArmHook = s.offhandHook && weaponArm;
         }
     }
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
-        "%s, off hand %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable walls %s, button "
-        "prompts %s",
+        "%s, off hand %s (%s), weapon arm %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable "
+        "walls %s, button prompts %s",
         kTag, onOff(s.userCmdHook), onOff(s.angleHook), onOff(s.xinputActive.load()),
-        onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook), onOff(s.offhandHook),
-        input::offhandModeName(cfg.offhand), onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook),
-        onOff(s.climbHook), onOff(s.promptHooks));
+        onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook),
+        onOff(s.offhandHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)),
+        input::offhandModeName(cfg.offhand), onOff(s.weaponArmHook), input::weaponArmModeName(cfg.weaponArm),
+        onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook), onOff(s.climbHook),
+        onOff(s.promptHooks));
+    EVR_LOG("%s: hooks in use: %d of %d mid hooks, %d of %d inline hooks", kTag, midHookCount(), kMaxMidHooks,
+            inlineHookCount(), kMaxInlineHooks);
     if (!s.userCmdHook && !s.xinputActive.load()) {
         EVR_LOG("%s: no input path to the game: controller buttons and movement do nothing", kTag);
     }

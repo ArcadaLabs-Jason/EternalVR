@@ -63,8 +63,8 @@ struct StickGestureBinding {
 };
 
 struct BindingProfile {
-    // The hand holding the weapon. The other hand's grip steadies the weapon during two-handed aim,
-    // and none of its grip bindings fire while it does.
+    // The hand holding the weapon. The other hand's grip bindings would be held back while it steadies
+    // the weapon (MapperContext::supportHandOnWeapon), but no support grip is detected yet.
     Hand weaponHand = Hand::Right;
     std::optional<Hand> moveStick;
     std::optional<Hand> turnStick;
@@ -72,5 +72,12 @@ struct BindingProfile {
     // Gestures on the turn stick.
     std::vector<StickGestureBinding> stickGestures;
 };
+
+// The hand whose pointing steers movement under ETERNALVR_LOCOMOTION=hand (the value from before left and
+// right, still read): the hand with the move stick. A map with
+// no move stick falls back to the hand not holding the weapon.
+inline Hand locomotionHand(const BindingProfile& profile) {
+    return profile.moveStick.value_or(otherHand(profile.weaponHand));
+}
 
 } // namespace evr::input

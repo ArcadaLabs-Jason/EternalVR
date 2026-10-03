@@ -1,6 +1,7 @@
 #include "ui_layer/gui_target.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 namespace evr::ui_layer {
 
@@ -9,6 +10,20 @@ std::optional<std::uint32_t> candidateUsage(const ImageCreateDesc& desc) {
     if (desc.imageType != vk::kImageType2D || desc.format != vk::kFormatR8G8B8A8Unorm || desc.depth != 1 ||
         desc.mipLevels != 1 || desc.arrayLayers != 1 || desc.samples != 1 || desc.usage != kGuiUsage ||
         desc.width == 0 || desc.height == 0) {
+        return std::nullopt;
+    }
+    return desc.usage | vk::kUsageTransferSrc;
+}
+
+std::optional<std::uint32_t> eyeCopyCandidateUsage(const ImageCreateDesc& desc) {
+    // RGBA8, BGRA8 (and sRGB), 10:10:10:2, B10G11R11 float (the engine's final images)
+    constexpr std::int32_t kFourByteFormats[] = {37, 43, 44, 50, 58, 64, 122};
+    const bool fourBytes = std::find(std::begin(kFourByteFormats), std::end(kFourByteFormats), desc.format) !=
+                           std::end(kFourByteFormats);
+    const bool drawn = (desc.usage & (vk::kUsageColorAttachment | vk::kUsageStorage)) != 0;
+    if (desc.imageType != vk::kImageType2D || !fourBytes || desc.depth != 1 || desc.mipLevels != 1 ||
+        desc.arrayLayers != 1 || desc.samples != 1 || !drawn || (desc.usage & vk::kUsageSampled) == 0 ||
+        desc.width < 256 || desc.height == 0) {
         return std::nullopt;
     }
     return desc.usage | vk::kUsageTransferSrc;

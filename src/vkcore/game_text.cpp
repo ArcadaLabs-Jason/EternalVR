@@ -186,4 +186,29 @@ std::vector<const std::byte*> findLeaReferences(const GameImage& image, const st
     return hits;
 }
 
+std::vector<std::uintptr_t>
+callReturns(const GameImage& image, const std::byte* function, const std::byte* target, std::size_t span) {
+    std::vector<std::uintptr_t> found;
+    for (std::size_t i = 0; i + 5 <= span && image.inText(function + i, 5); ++i) {
+        const std::byte* at = function + i;
+        if (at[0] == std::byte{0xE8} && at + 5 + readI32(at + 1) == target) {
+            found.push_back(reinterpret_cast<std::uintptr_t>(at + 5));
+        }
+    }
+    return found;
+}
+
+std::pair<const std::byte*, std::size_t> dataSection(const GameImage& image) {
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image.base);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(image.base + dos->e_lfanew);
+    const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(nt);
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+        if (std::memcmp(section->Name, ".data\0\0\0", 8) == 0 &&
+            image.contains(image.base + section->VirtualAddress, section->Misc.VirtualSize)) {
+            return {image.base + section->VirtualAddress, section->Misc.VirtualSize};
+        }
+    }
+    return {nullptr, 0};
+}
+
 } // namespace evr::vkcore

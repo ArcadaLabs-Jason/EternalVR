@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace evr::vkcore {
@@ -46,6 +47,13 @@ std::int32_t readI32(const std::byte* at);
 // The target of a RIP-relative operand: `dispAt` holds the disp32 and `nextInstruction` is the address
 // after the instruction. nullptr when the target lies outside the module.
 const std::byte* ripTarget(const GameImage& image, const std::byte* dispAt, const std::byte* nextInstruction);
+
+// The return addresses of every `call target` (E8 rel32) within `span` bytes of `function`, in order.
+std::vector<std::uintptr_t>
+callReturns(const GameImage& image, const std::byte* function, const std::byte* target, std::size_t span);
+
+// The module's .data section, or {nullptr, 0}.
+std::pair<const std::byte*, std::size_t> dataSection(const GameImage& image);
 
 // The NUL-terminated string at `p` if it lies in the module and ends within `maxLength` bytes.
 std::string_view stringAt(const GameImage& image, const std::byte* p, std::size_t maxLength = 256);

@@ -42,6 +42,9 @@ std::atomic<float> g_viewX{0.0f};
 std::atomic<float> g_viewY{0.0f};
 std::atomic<double> g_viewSeconds{-1.0};
 std::atomic<std::uint64_t> g_tests{0};
+// The game runs the test every frame the player stands in a trigger, until it passes once: the first three
+// are logged, then one a minute.
+LogCap g_testLines{3};
 
 bool enabled() {
     static const bool on = [] {
@@ -72,9 +75,9 @@ void onFacing(const HookRegisters& regs) {
     if (replace && mp_guard::allowsGameTouch()) {
         safeCopy(forwardAt, head, sizeof(head)); // z stays: the test is horizontal
     }
-    // The game runs the test every frame the player stands in a trigger, until it passes once.
     const std::uint64_t n = g_tests.fetch_add(1) + 1;
-    if (n <= 3 || n % 60 == 0) {
+    std::uint64_t skipped = 0;
+    if (g_testLines.due(GetTickCount64(), skipped)) {
         EVR_LOG("%s: look-at trigger test %llu: head yaw %.1f, view yaw %.1f%s", kTag,
                 static_cast<unsigned long long>(n), std::atan2(head[1], head[0]) * 57.29578f,
                 std::atan2(forward[1], forward[0]) * 57.29578f,

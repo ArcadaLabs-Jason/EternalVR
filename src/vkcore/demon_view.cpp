@@ -4,6 +4,7 @@
 
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/seh_filter.hpp"
 
 #include <windows.h>
 
@@ -63,7 +64,7 @@ bool readHandle(const std::byte* at, Handle& handle) {
     __try {
         std::memcpy(&handle, at, sizeof(handle));
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
@@ -78,7 +79,7 @@ bool readDemon(const std::byte* entity, Handle& player, std::uint8_t& controlled
         controlled = *reinterpret_cast<const std::uint8_t*>(entity + kDemonLocallyControlled);
         firstPerson = *reinterpret_cast<const std::uint8_t*>(entity + kDemonViewedFirstPerson);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
@@ -120,7 +121,7 @@ bool readBindings(std::uintptr_t demon, std::uint64_t (&bindings)[kDemonBindingC
     __try {
         std::memcpy(bindings, reinterpret_cast<const std::byte*>(demon) + kDemonBindings, sizeof(bindings));
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }

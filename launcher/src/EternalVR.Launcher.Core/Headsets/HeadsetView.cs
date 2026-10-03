@@ -173,7 +173,7 @@ namespace EternalVR.Launcher.Core.Headsets
                 int q = Math.Max(0, Math.Min(DlssDll.QualityNames.Length - 1, (int)s.Dlss));
                 double f = DlssDll.QualityFactors[q];
                 var drawn = new Extent((uint)Math.Round(size.Width * f, MidpointRounding.AwayFromZero), (uint)Math.Round(size.Height * f, MidpointRounding.AwayFromZero));
-                lines.Add("DLSS " + DlssDll.QualityNames[q] + " draws about " + Spaced(drawn));
+                lines.Add((s.Dlss == DlssQuality.Dlaa ? "DLAA" : "DLSS " + DlssDll.QualityNames[q]) + " draws about " + Spaced(drawn));
             }
             var auto = RenderSizeChoice.Decide(setting, 1.0, probe).Size;
             if (auto != null && !auto.Value.IsEmpty)
@@ -218,6 +218,7 @@ namespace EternalVR.Launcher.Core.Headsets
                     + (facts.SessionRuntime == null ? string.Empty : ", runtime '" + facts.SessionRuntime + "'")
                     + (facts.SessionRefresh == null ? string.Empty : ": " + facts.SessionRefresh));
                 if (facts.SessionText != null) Add("last session summary", facts.SessionText);
+                Add("last session controls", facts.SessionControls ?? "not logged");
             }
             return lines;
         }

@@ -68,8 +68,17 @@ namespace EternalVR.Launcher.Core.Game
     public sealed class KnownBuilds
     {
         private readonly List<KnownBuild> builds;
+        /// <summary>The exe's hash is read again only when the file changed (<see cref="Check"/> runs at every preflight).</summary>
+        private readonly FileHashCache exeHashes;
 
-        public KnownBuilds(IEnumerable<KnownBuild> builds) { this.builds = builds.ToList(); }
+        public KnownBuilds(IEnumerable<KnownBuild> builds) : this(builds, Sha256OfFile) { }
+
+        /// <summary>With the function that hashes the exe (the tests count its reads).</summary>
+        internal KnownBuilds(IEnumerable<KnownBuild> builds, Func<string, string> hash)
+        {
+            this.builds = builds.ToList();
+            exeHashes = new FileHashCache(hash);
+        }
 
         public IReadOnlyList<KnownBuild> All => builds;
 
@@ -117,7 +126,7 @@ namespace EternalVR.Launcher.Core.Game
         public BuildCheck Check(string exePath)
         {
             if (!File.Exists(exePath)) return new BuildCheck(BuildStatus.Missing, null, null);
-            var hash = Sha256OfFile(exePath);
+            var hash = exeHashes.Get(exePath);
             var build = Find(hash);
             return new BuildCheck(build != null ? BuildStatus.Known : BuildStatus.Unknown, hash, build);
         }

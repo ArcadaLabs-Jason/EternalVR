@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cstdio>
 
 namespace evr::vkcore::menu_input {
 
@@ -21,6 +22,8 @@ std::atomic<std::uint64_t> g_wheels{0};
 std::atomic<std::uint64_t> g_keys{0};
 std::atomic<std::uint64_t> g_failed{0};
 std::atomic<int> g_logged{0};
+// Clicks, keys and wheel steps: each one at first, then one a minute (the counters keep the totals).
+LogCap g_eventLines{300};
 
 const char* kindName(menu::RouterEvent::Kind kind) {
     switch (kind) {
@@ -84,18 +87,32 @@ void send(const std::vector<menu::RouterEvent>& events) {
         if (!ok) {
             g_failed.fetch_add(1, std::memory_order_relaxed);
         }
-        // Moves come every frame the ray moves; the log keeps the first few and every button and key.
+        // Moves come every frame the ray moves; the log keeps the first few. Buttons, keys and wheel steps
+        // are logged one by one for the first few hundred, then once a minute; the Dossier map's pan keys,
+        // which change many times a second, only count.
         const char* failed = ok ? "" : " (not delivered)";
+        std::uint64_t skipped = 0;
+        if (e.quiet) {
+            continue;
+        }
         if (e.kind == menu::RouterEvent::Kind::Move) {
             if (g_logged.fetch_add(1) < 4) {
                 EVR_LOG("menu: move by %d, %d%s", e.dx, e.dy, failed);
             }
-        } else if (e.kind == menu::RouterEvent::Kind::Wheel) {
-            EVR_LOG("menu: wheel %d%s", e.wheel, failed);
-        } else if (e.kind == menu::RouterEvent::Kind::KeyDown || e.kind == menu::RouterEvent::Kind::KeyUp) {
-            EVR_LOG("menu: %s 0x%02x%s", kindName(e.kind), e.key, failed);
-        } else {
-            EVR_LOG("menu: %s%s", kindName(e.kind), failed);
+        } else if (g_eventLines.due(GetTickCount64(), skipped)) {
+            char note[48] = "";
+            if (skipped != 0) {
+                std::snprintf(note, sizeof(note), " (%llu more not logged)",
+                              static_cast<unsigned long long>(skipped));
+            }
+            if (e.kind == menu::RouterEvent::Kind::Wheel) {
+                EVR_LOG("menu: wheel %d%s%s", e.wheel, failed, note);
+            } else if (e.kind == menu::RouterEvent::Kind::KeyDown ||
+                       e.kind == menu::RouterEvent::Kind::KeyUp) {
+                EVR_LOG("menu: %s 0x%02x%s%s", kindName(e.kind), e.key, failed, note);
+            } else {
+                EVR_LOG("menu: %s%s%s", kindName(e.kind), failed, note);
+            }
         }
     }
 }

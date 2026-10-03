@@ -30,7 +30,7 @@ may say "Windows protected your PC". Click **More info**, then **Run anyway**.
    **Check** runs the checks again.
 4. Look at the settings once. The defaults are what I test with: stereo, motion controllers on, hand aim,
    world scale 1.00, posture auto, Slayer eye height, the headset's IPD, recenter with both sticks held, and
-   cutscenes skipped automatically. Settings are saved when you launch.
+   cutscenes skipped automatically. Each change is saved at once.
 5. Click **Launch VR**. The game starts. A small 1280x720 game window opens on your desktop (a virtual
    display if you have one); that is expected, the headset gets its own full-size images. Put the
    headset on.

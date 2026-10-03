@@ -117,13 +117,14 @@ findArmJoints(const Skeleton& skeleton, std::int16_t attach, std::string& error)
 }
 
 bool namesMatch(const Skeleton& skeleton,
+                ArmSide side,
                 const ArmJointIndices& joints,
                 const std::array<std::int16_t, kArmJointCount>& handles,
                 std::string& error) {
     for (std::size_t j = 0; j < kArmJointCount; ++j) {
         const auto joint = static_cast<std::size_t>(joints[j]);
         if (joint >= skeleton.nameHandles.size() || skeleton.nameHandles[joint] != handles[j]) {
-            error = "joint " + std::to_string(joints[j]) + " is not named " + kArmJointNames[j] +
+            error = "joint " + std::to_string(joints[j]) + " is not named " + armJointNames(side)[j] +
                     " (handle " +
                     std::to_string(joint < skeleton.nameHandles.size() ? skeleton.nameHandles[joint] : -1) +
                     ", the name's " + std::to_string(handles[j]) + ")";

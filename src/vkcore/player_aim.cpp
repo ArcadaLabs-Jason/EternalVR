@@ -46,7 +46,11 @@ bool PlayerAim::isPlayer(const std::byte* object) const {
     }
     const std::byte* vtable = nullptr;
     std::memcpy(&vtable, object, sizeof(vtable));
-    return vtable == playerVtable_;
+    return isPlayerVtable(vtable);
+}
+
+bool PlayerAim::isPlayerVtable(const std::byte* vtable) const {
+    return available_ && vtable && vtable == playerVtable_;
 }
 
 PlayerAim::Sample PlayerAim::read(const std::byte* player) const {

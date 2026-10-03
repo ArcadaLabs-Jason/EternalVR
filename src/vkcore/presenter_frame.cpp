@@ -1,7 +1,9 @@
 // The XR worker: its thread body and the frame loop (one image per XR frame, the projection layer for
 // head-tracked images and the cinema quad otherwise).
 
+#include "vkcore/fence_wait.hpp"
 #include "vkcore/presenter_impl.hpp"
+#include "vkcore/presenter_menu_release.hpp"
 
 #include "features/comfort/vignette.hpp"
 #include "game/eternal/game_action.hpp"
@@ -12,6 +14,7 @@
 #include "vkcore/head_sweep.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
+#include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
@@ -19,7 +22,6 @@
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/vram_watch.hpp"
 #include "xr_math/cinema_quad.hpp"
-#include "xr_math/enclosing_fov.hpp"
 
 #include <array>
 #include <cstddef>
@@ -133,20 +135,20 @@ void XrPresenter::Impl::updateImage() {
     ID3D12CommandList* lists[] = {d3dList.Get()};
     d3dQueue->ExecuteCommandLists(1, lists);
     d3dQueue->Signal(copyFence.Get(), ++copyFenceValue);
-    if (copyFence->GetCompletedValue() < copyFenceValue) {
-        copyFence->SetEventOnCompletion(copyFenceValue, copyEvent);
-        if (WaitForSingleObject(copyEvent, 2000) != WAIT_OBJECT_0) {
-            // The slot stays marked as being read, so the game never writes it while D3D12 might, and
-            // nothing is recorded again (the allocator may still be executing) until the copy is done.
-            EVR_LOG("d3d12: copy did not finish within 2 s; slot %u and the XR image are held until it does",
-                    slotIndex);
-            copyStalled = true;
-            stalledSlot = slotIndex;
-            stalledValue = value;
-            stalledView = slotView;
-            stalledHasView = slotHasView;
-            return;
-        }
+    const LONGLONG waitStart = qpcNow();
+    const bool copied = waitFence(copyFence.Get(), copyFenceValue, copyEvent, 2000);
+    copyWait.add(qpcSeconds(qpcNow() - waitStart) * 1000.0);
+    if (!copied) {
+        // The slot stays marked as being read, so the game never writes it while D3D12 might, and
+        // nothing is recorded again (the allocator may still be executing) until the copy is done.
+        EVR_LOG("d3d12: copy did not finish within 2 s; slot %u and the XR image are held until it does",
+                slotIndex);
+        copyStalled = true;
+        stalledSlot = slotIndex;
+        stalledValue = value;
+        stalledView = slotView;
+        stalledHasView = slotHasView;
+        return;
     }
     completeCopy(slotIndex, value, slotView, slotHasView);
 }
@@ -173,59 +175,6 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
     shownView = slotView;
     shownHasView = slotHasView;
     ++xrCopies;
-}
-
-void XrPresenter::Impl::updateTargetFov(XrTime time) {
-    XrViewLocateInfo info{XR_TYPE_VIEW_LOCATE_INFO};
-    info.viewConfigurationType = viewConfig;
-    info.displayTime = time;
-    info.space = viewSpace;
-    XrViewState viewState{XR_TYPE_VIEW_STATE};
-    std::array<XrView, 2> views{};
-    for (XrView& v : views) {
-        v.type = XR_TYPE_VIEW;
-    }
-    std::uint32_t count = 0;
-    if (XR_FAILED(xr.xrLocateViews(session, &info, &viewState, static_cast<std::uint32_t>(views.size()),
-                                   &count, views.data())) ||
-        count != views.size() || !(viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
-        return;
-    }
-    // One image serves both eyes, rendered from the head centre: the eyes' frusta are taken with
-    // their orientation only, and the symmetric FOV enclosing both is what the game renders.
-    std::array<xr_math::EyeView, 2> eyes{};
-    for (std::size_t i = 0; i < views.size(); ++i) {
-        const XrFovf& f = views[i].fov;
-        eyes[i].fov = {f.angleLeft, f.angleRight, f.angleUp, f.angleDown};
-        const XrQuaternionf& q = views[i].pose.orientation;
-        eyes[i].poseInHead.orientation = normalize(Quat{q.x, q.y, q.z, q.w});
-        EVR_LOG("xr: eye %zu fov left %.2f right %.2f up %.2f down %.2f deg, position (%.4f %.4f %.4f)", i,
-                f.angleLeft * 57.29578f, f.angleRight * 57.29578f, f.angleUp * 57.29578f,
-                f.angleDown * 57.29578f, views[i].pose.position.x, views[i].pose.position.y,
-                views[i].pose.position.z);
-    }
-    const auto enclosing = xr_math::enclosingFov(eyes, 1.0f, xr_math::EnclosingShape::Symmetric);
-    if (!enclosing) {
-        EVR_LOG("xr: no enclosing FOV for the eyes; the game keeps its own FOV");
-        fovChecked = true;
-        return;
-    }
-    const auto tangents = xr_math::toTangents(*enclosing);
-    const auto game = xr_math::gameFovFromTangents(tangents.right, tangents.up);
-    fovChecked = true;
-    if (!game) {
-        EVR_LOG("xr: the enclosing FOV has no game equivalent; the game keeps its own FOV");
-        return;
-    }
-    targetFovX.store(game->fovX);
-    targetFovY.store(game->fovY);
-    targetFovValid.store(true, std::memory_order_release);
-    EVR_LOG(
-        "xr: game FOV for the headset %.2f x %.2f deg (tangents %.3f x %.3f, aspect %.3f); the game's image "
-        "is %ux%u (aspect %.3f)%s",
-        game->fovX, game->fovY, tangents.right, tangents.up, tangents.right / tangents.up, eyeExtent.width,
-        eyeExtent.height, static_cast<double>(eyeExtent.width) / static_cast<double>(eyeExtent.height),
-        settings.setGameFov ? "" : "; not applied (ETERNALVR_SET_FOV=0)");
 }
 
 void XrPresenter::Impl::frame() {
@@ -396,6 +345,10 @@ void XrPresenter::Impl::frame() {
                 // The title screen and the main menu: the whole frame on the menu panel, with the pointer.
                 placeOnMenuPanel(quad);
                 addPointer();
+            } else if (menuHeld) {
+                // The cursor went but the backdrop is still up (the end of a loading screen, or the main
+                // menu changing screens): the panel stays, no pointer, instead of a jump to the screen.
+                placeOnMenuPanel(quad);
             } else if (const auto band = cinemaView.band(eyeExtent.width, eyeExtent.height)) {
                 // A cutscene drawn for a flat display's shape: only its band, on a screen of that shape.
                 quad.subImage.imageRect.offset.y = static_cast<std::int32_t>(band->y);
@@ -404,6 +357,11 @@ void XrPresenter::Impl::frame() {
                     quadSize.width * static_cast<float>(band->height) / static_cast<float>(eyeExtent.width);
             }
         }
+        // A menu's 3D model goes where the panel shows the menu (menu_model_hook.hpp).
+        menu_model::notePanel(headTracked && uiShown && (menuOn || menuHeld), uiQuad, uiExtent.width,
+                              uiExtent.height);
+    } else {
+        releaseMenuInput(*this, "the headset is not showing frames");
     }
     // The GUI leaves the eye images only while the quad shows it; menus and loading screens keep it.
     if (settings.ui.enabled) {
@@ -565,6 +523,7 @@ void XrPresenter::Impl::runWorker() {
         EVR_LOG("xr: presenter inert; the game runs flat");
         status::flat("VR could not start (see the reason before this in the log)");
     }
+    releaseMenuInput(*this, "VR stopped");
     consumerAlive.store(false);
     refresh.logSummary(" at session end");
     if (instance) {

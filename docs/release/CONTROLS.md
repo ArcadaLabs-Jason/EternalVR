@@ -34,14 +34,14 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | Y, tap | Switch weapon mod |
 | Y, hold | Mission info (objectives; the map is a page of the Dossier) |
 | Left Menu button, press | Pause menu |
-| Y, hold (under SteamVR only) | Pause menu too: SteamVR opens its own dashboard on the left Menu button, so holding Y pauses instead of showing mission information |
+| Y, hold (under SteamVR, Touch controllers only) | Pause menu: SteamVR opens its own dashboard on the left Menu button, so holding Y pauses instead of showing mission information. With **Left (buttons and sticks)** it is B, held |
 | Both sticks pressed, hold 2 s | Recenter (turn the game to where you face, and reset your height, e.g. after standing up or sitting down) |
-| Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (that press then does not pause, and the trigger does not fire) |
-| Hold Y + pull a trigger (under SteamVR) | The same screenshot, since SteamVR keeps the left Menu button. Pull the trigger within ¼ s of pressing Y, before the pause; that Y press then neither switches the mod nor pauses, and the trigger does not fire |
+| Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (that press then does not pause, and the trigger does not fire). Index: the firm left trackpad press; Steam Frame: View |
+| Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot, since SteamVR keeps the left Menu button. Pull the trigger after ¼ s; the trigger does not fire and the sticks do not recenter |
 | A real punch with your hand | Melee, Glory Kill, Blood Punch, use (punch a switch to press it) |
 | Throw with your left hand (Throw grenades on) | Equipment launcher (below) |
 | Swing your right hand down from above your head (Overhead swing on) | Crucible, or the Sentinel Hammer (below) |
-| Throw both hands up above your head (Jump with both hands (standing) on) | Jump (below) |
+| Throw both hands up above your head (Jump with both hands on) | Jump (below) |
 
 **The weapon wheel.** Push the right stick down and keep it there: after about half a second the wheel
 opens (the game slows time) with the bottom weapon highlighted. Without letting go, roll the stick round to
@@ -75,8 +75,8 @@ box of the launcher's Play tab, and both are new and not yet tried in a headset.
 - **Overhead swing:** raise your gun hand above your head, then bring it down hard, like a hammer. It swings
   the Crucible, or in The Ancient Gods Part Two slams the Sentinel Hammer. Raising both hands does nothing,
   so a stretch does not swing it.
-- **Jump with both hands (standing):** throw both hands up above your head, fast, like in DOOM VFR. The jump button still
-  works. It is off while you play sitting, and both hands have to come down before the next jump.
+- **Jump with both hands:** throw both hands up above your head, fast, like in DOOM VFR. The jump button still works.
+  Sitting, the hands have to go higher. Both hands have to come down before the next jump.
 
 A throw or a swing does not punch as well. With the weapon in your left hand, the hands swap: the right hand
 throws and the left hand swings.
@@ -102,7 +102,8 @@ head and still for a second, the mod recenters once by itself.
 ## Other controllers
 
 **Valve Index, HP Reverb G2, HTC Vive Cosmos, Pico 4:** the Touch layout above. The left Menu button
-pauses; the G2's right Menu button and the Cosmos shoulder buttons do nothing.
+pauses, under SteamVR too, so Y (left B on Index) keeps mission info; the G2's right Menu button and the
+Cosmos shoulder buttons do nothing.
 
 **Windows Mixed Reality** (no A, B, X or Y buttons; the trackpad clicks and Menu buttons take their jobs):
 
@@ -170,7 +171,7 @@ the buttons do a gamepad's jobs, and the triggers, grips and sticks do what they
 | D-pad left, tap | Switch equipment |
 | D-pad down | Mission info |
 | View button, tap | Pause menu |
-| Hold View + pull a trigger | Save a screenshot of each eye for bug reports (under SteamVR, D-pad left held works too) |
+| Hold View + pull a trigger | Save a screenshot of each eye for bug reports |
 
 In menus, B or D-pad left goes back and View closes the menu. With **Left (buttons swapped)** the
 triggers, grips and stick clicks swap sides. With **Left (buttons and sticks)** the sticks, the bumpers
@@ -183,8 +184,9 @@ Steam Frame's own layout needs SteamVR. The launcher's Dossier option does not c
 When the game shows its mouse cursor (the title screen, the main menu, the pause menu, settings, the
 Dossier), the
 menu appears on a flat panel in front of you and your controllers switch to menu controls. Gameplay
-actions are held back while a menu is up, and until you let go of every button after it closes, so the
-pull that clicks Resume does not also fire the gun.
+actions are held back while a menu is up. A button or stick you are still holding when it closes does
+nothing in the game until you let go of it, so the pull that clicks Resume does not also fire the gun and
+backing out with B or Y does not switch the weapon mod.
 
 | Controller | Does |
 |---|---|
@@ -198,10 +200,10 @@ pull that clicks Resume does not also fire the gun.
 | Either stick click | Centre the Dossier map on you (the game's C key) |
 | Left Menu button, tap | Pause / resume |
 | Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (no click) |
-| Hold Y + pull a trigger (under SteamVR) | The same screenshot (no click; Y also goes back a page) |
+| Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot (no click) |
 
-The panel stays where it appeared; if you turn away, turn back to it. Sliders are set by clicking or
-dragging on them.
+The panel stays where it appeared while you look roughly its way; turn away from it for a second and it
+comes back in front of you. Sliders are set by clicking or dragging on them.
 
 **Tutorial and lore popups.** These come up on the panel too. In a tutorial popup, press the button for
 the mechanic it introduces (the Flame Belch popup closes with the Flame Belch button, the chainsaw's with
@@ -255,7 +257,7 @@ values are old.
 | Turn speed | Smooth turning's speed, 150 to 400 degrees per second | 230 |
 | Snap angle | Snap turning's step, 15 to 90 degrees | 45 |
 | Vignette | Off, Light, Strong: darkens the edges of your view while the stick moves or turns you (and during a dash or a glory kill), which helps if stick motion makes you feel sick; moving your head never shows it | Off |
-| Glory kills | Follow the camera (your view goes with the game's camera through the kill), Steady view (you see the kill up close but the view only turns when you turn your head, and you face the same way afterwards), Fade out (the view goes dark for the kill), Flat screen (the kill plays on a flat screen in front of you, like a cutscene) | Follow the camera |
+| Glory kills | Follow the camera (intense: your view goes with the game's camera through the kill), Steady view (you see the kill up close but the view only turns when you turn your head, and you face the same way afterwards), Flat screen (the kill plays on a flat screen in front of you, like a cutscene), Fade out (the view goes dark for the kill, with Fade in walls on or off) | Follow the camera (intense) |
 | Room-scale | Walking around your room moves you in the game; off, you can lean about 60 cm before the view fades | On |
 | Fade in walls | The view fades to black when your head goes into a wall or too far from your body; after a second and a half of black you are moved back onto your body | On |
 | Recenter hold | Hold both sticks pressed for 2 seconds to recenter | On |
@@ -264,11 +266,11 @@ values are old.
 | Eye height | The game's (the Slayer's, whatever your own), Your real height (needs a runtime with a floor level) | The game's |
 | Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
 | Overhead swing | Swing your gun hand down from above your head for the Crucible or the Hammer ([In the game](#in-the-game)) | Off |
-| Jump with both hands (standing) | Throw both hands up above your head to jump, not while sitting ([In the game](#in-the-game)) | Off |
+| Jump with both hands | Throw both hands up above your head to jump; higher when sitting ([In the game](#in-the-game)) | Off |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
-| Move toward | Where you look, Where your off hand points | Where you look |
+| Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
@@ -280,14 +282,15 @@ values are old.
 | Each eye | The size each eye renders at with Resolution and its percent, per side, of what the runtime asks for and of the native panel, for example "2056 x 2216   82% of what VD asks for, 100% of the native panel". With DLSS, about the size DLSS draws; with more than a quarter more pixels than Auto at 1.00, how many more ("47% more pixels than Auto"). After a session whose graphics driver rendered each eye at the window's size (AMD Radeon RX 5000 and 6000), it first says the size that session really got, for example "958 x 1009 last session, 45% of the planned 2056 x 2216", then the plan after "Planned:" | |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), DLSS (NVIDIA RTX only, set up in the DLSS group below), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card) | TAA |
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
-| Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Aggressive the least. The game's menus and HUD stay at full rate, so their text stays sharp. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
-| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"). Stereo only, not with Alternate eyes on Auto | Matched to the headset |
+| Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive, Maximum: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Maximum the least. The game's menus and HUD stay at full rate, so their text stays sharp, and so do cutscenes on the cinema screen. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
+| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
+| Parallel Eye Rendering (experimental) | Renders both eyes as two views of one game frame, their work at the same time, instead of one eye after the other. Only on the Steam version this release supports. Stereo only, not with DLSS; Alternate eyes is greyed out while it is on | Off |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 
 | Setting | Choices | Default |
 |---|---|---|
-| Quality | Quality, Balanced, Performance, Ultra Performance: how small an image each eye renders before DLSS scales it up (two thirds of the size, 58%, half, a third) | Quality |
+| Quality | DLAA, Quality, Balanced, Performance, Ultra Performance: how small an image each eye renders before DLSS scales it up (the full size, two thirds of the size, 58%, half, a third). DLAA needs a newer DLSS than the game's (Version); with the game's it runs as Quality | Quality |
 | Version | NVIDIA's newest (shown as latest, used by default; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or Load file... (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
 | Preset | Automatic (NVIDIA's pick), K (recommended: the transformer model at every quality, the sharpest), J, M, L (its variants) or F (the older model). Needs a newer DLSS than the game's | K |
 | In the headset | What will run in VR with these settings, for example "DLSS 310.9.1, preset K, Quality, both eyes". Until the newest is downloaded, the game's DLSS 2.3 runs | |
@@ -438,7 +441,12 @@ somewhere else), or use **Reset to defaults** and **Save** in the editor. Two fi
 controllers: the one whose name comes later in the alphabet is used, and it is the one the editor opens.
 
 Under SteamVR you can also change which physical button drives each of the mod's inputs (Trigger, Grip,
-Primary button, Menu button and so on) in SteamVR's controller bindings screen ("Manage controller bindings") while the game runs.
+Primary button, Menu button and so on) in SteamVR's controller bindings screen ("Manage controller
+bindings") while the game runs, starting from the default binding. SteamVR then keeps it as a custom
+binding, so the launcher warns "SteamVR uses a custom controller binding for DOOM Eternal" before each
+launch; with a binding edited this way the controls still work. A binding made for another VR mod of DOOM
+Eternal binds none of the mod's inputs: see "Controllers do nothing in game (SteamVR)" in
+`TROUBLESHOOTING.md`. The controls editor above works under every runtime.
 
 ### Controls for each profile
 

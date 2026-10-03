@@ -412,8 +412,10 @@ bool installKeyInjection() {
             EVR_LOG("keys: raw input registered: usage page 0x%x usage 0x%x flags 0x%lx window %p",
                     d.usUsagePage, d.usUsage, d.dwFlags, static_cast<void*>(d.hwndTarget));
         }
-        if (g_installed.load()) {
-            mp_guard::setTripListener(&releaseHeldKeysOnTrip);
+        if (g_installed.load() && !mp_guard::addTripListener(&releaseHeldKeysOnTrip)) {
+            EVR_LOG(
+                "keys: no room in the multiplayer guard's trip listeners; held keys are not released on a "
+                "trip");
         }
         EVR_LOG("keys: key injection %s (keyboard device %p)",
                 g_installed.load() ? "ready (GetRawInputData import replaced)"

@@ -222,7 +222,6 @@ namespace EternalVR.Launcher.Core.Controls
         }
 
         private static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "aim_pose", "grip_pose", "haptic" };
-        private static readonly string[] MenuActions = { "select", "back", "scroll", "pointer_pose", "close" };
 
         /// <summary>
         /// The shape of the <c>[profile]</c> entries. The layer also checks each path against the controller's inputs; the
@@ -236,9 +235,11 @@ namespace EternalVR.Launcher.Core.Controls
                 issues.Add(new ControlIssue { Kind = ControlIssueKind.Syntax, Section = section, Key = "path", Message = "[profile] has no \"path\" naming its interaction profile" });
             foreach (var e in profile.Where(e => e.Key != "path"))
             {
+                // Earlier versions also bound a "menu" action set that was never synced; files copied from them keep its keys,
+                // which the layer skips.
+                if (e.Key.StartsWith("menu.", StringComparison.Ordinal)) continue;
                 var parts = e.Key.Split('.');
-                bool known = parts.Length == 3 && ControlNames.TryParseHand(parts[1], out _)
-                    && (parts[0] == "gameplay" && GameplayActions.Contains(parts[2]) || parts[0] == "menu" && MenuActions.Contains(parts[2]));
+                bool known = parts.Length == 3 && ControlNames.TryParseHand(parts[1], out _) && parts[0] == "gameplay" && GameplayActions.Contains(parts[2]);
                 if (!known)
                     issues.Add(new ControlIssue
                     {

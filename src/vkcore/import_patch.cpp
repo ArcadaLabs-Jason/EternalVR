@@ -2,8 +2,31 @@
 
 #include <cstddef>
 #include <cstring>
+#include <mutex>
 
 namespace evr::vkcore {
+
+namespace {
+
+// Every write to a read-only slot of the exe: an unprotect, write, protect sequence on another slot of the
+// same page must not run in between.
+std::mutex g_slotMutex;
+
+} // namespace
+
+bool writeReadOnlySlot(void* slot, void* value, void** previous) {
+    const std::lock_guard lock(g_slotMutex);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        return false;
+    }
+    void* held = InterlockedExchangePointer(static_cast<void* volatile*>(slot), value);
+    VirtualProtect(slot, sizeof(void*), old, &old);
+    if (previous) {
+        *previous = held;
+    }
+    return true;
+}
 
 void* patchImport(const char* name, void* replacement, const void** slotAddress, const char* dll) {
     auto* module = reinterpret_cast<std::byte*>(GetModuleHandleW(nullptr));
@@ -30,13 +53,10 @@ void* patchImport(const char* name, void* replacement, const void** slotAddress,
             if (std::strcmp(reinterpret_cast<const char*>(byName->Name), name) != 0) {
                 continue;
             }
-            DWORD old = 0;
-            if (!VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), PAGE_READWRITE, &old)) {
+            void* original = nullptr;
+            if (!writeReadOnlySlot(&slots->u1.Function, replacement, &original)) {
                 return nullptr;
             }
-            void* original = reinterpret_cast<void*>(slots->u1.Function);
-            slots->u1.Function = reinterpret_cast<ULONGLONG>(replacement);
-            VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), old, &old);
             if (slotAddress) {
                 *slotAddress = &slots->u1.Function;
             }

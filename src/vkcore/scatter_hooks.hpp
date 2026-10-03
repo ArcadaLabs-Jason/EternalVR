@@ -13,13 +13,18 @@
 // - At the start of the scattering setup (RVA 0x1C71F90, the first of the scattering passes in each render)
 //   the device context's two pairs and the filter's state are set for the eye being rendered.
 //
-// Located by signature; anything missing leaves the game untouched and keeps r_lightScatteringTAA held off.
+// Located by signature; anything missing leaves the game untouched and keeps r_lightScatteringTAA held off
+// (stereo_seq::stereoScatterFilterCvar: per-eye TAA's set, or the layer's run-time set without it).
 
 namespace evr::vkcore {
 
 // Locates and installs the three hooks once per process, before the renderer starts (the images are made with
-// the device context); later calls return the first result.
+// the device context); later calls return the first result. From vkCreateInstance whenever Route S is
+// requested: the history needs the eye tags only, not per-eye TAA.
 bool installScatterHooksEarly();
+
+// The three hooks are installed (eye R's images may not be made yet).
+bool scatterHooksInstalled();
 
 // The per-eye history is in place (requested, installed, eye R's images made): the scattering's temporal
 // filter can stay on in stereo.

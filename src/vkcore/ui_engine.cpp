@@ -4,6 +4,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/seh_filter.hpp"
 
 #include <windows.h>
 
@@ -72,7 +73,7 @@ bool readPointer(const std::byte* at, std::uintptr_t& out) {
     __try {
         std::memcpy(&out, at, sizeof(out));
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
@@ -87,7 +88,7 @@ bool readImageFields(std::uintptr_t image, ui_layer::GuiImageFields& out) {
         std::memcpy(&out.flags, p + kImageFlags, sizeof(out.flags));
         std::memcpy(&out.vkImage, p + kImageVkImage, sizeof(out.vkImage));
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
 }
@@ -138,9 +139,12 @@ void onCompositeLoad(HookRegisters& regs) {
 }
 
 bool locate(const GameText& text, const std::byte*& hookSite) {
-    const std::byte* load = findUniqueInText(text, "ui composite GUI load", kCompositeLoadSignature);
-    const std::byte* bind = findUniqueInText(text, "ui composite guiMap bind", kGuiMapBindSignature);
-    const std::byte* black = findUniqueInText(text, "ui composite no-GUI bind", kBlackBindSignature);
+    const std::byte* load =
+        findUniqueInText(text, "stereo", "ui composite GUI load", kCompositeLoadSignature);
+    const std::byte* bind =
+        findUniqueInText(text, "stereo", "ui composite guiMap bind", kGuiMapBindSignature);
+    const std::byte* black =
+        findUniqueInText(text, "stereo", "ui composite no-GUI bind", kBlackBindSignature);
     if (!load || !bind || !black) {
         return false;
     }

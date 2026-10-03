@@ -47,6 +47,11 @@ struct FadeTiming {
 // The fade the penetration asks for: 0 at the surface, 1 at `fullDepthMetres` and beyond.
 float fadeTarget(float penetrationMetres, const FadeTiming& timing);
 
+// The depth the shown fade follows (metres, as for fadeTarget). `hold` (the blink over a re-anchor, a glory
+// kill shown as a fade) is fully black whatever the head does and whatever `headFade` says; otherwise the
+// head's own depth (in geometry, past the lean cap) counts only with the head fade on (ETERNALVR_HEAD_FADE).
+float shownFadeDepth(bool headFade, bool hold, float headDepthMetres);
+
 class HeadFade {
 public:
     explicit HeadFade(FadeTiming timing = {});

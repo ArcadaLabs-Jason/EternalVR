@@ -7,7 +7,7 @@ Everything is under `%LOCALAPPDATA%\EternalVR\` (the **Open data folder** button
 | Log | What it holds |
 |---|---|
 | `logs\launcher.log` | Every launcher start: the checks, the launch plan (the game's command line and environment, the window and render size), the settings restore after the session |
-| `logs\<session>\eternalvr-*.log` | The mod's log for that session, written from inside the game: your GPU, the OpenXR runtime, which features found what they need in the game, the multiplayer guard, controller actions, and errors |
+| `logs\<session>\eternalvr-*.log` | The mod's log for that session, written from inside the game: your GPU, the OpenXR runtime, which features found what they need in the game, the multiplayer guard, controller actions, the game's own video settings (a `game settings:` line a few seconds after each map load and again when one changes; not in multiplayer), and errors |
 
 The session folder names start with the date and time, so the newest is the last one.
 
@@ -16,12 +16,13 @@ The session folder names start with the date and time, so the newest is the last
 After a problem, click **Export report...** in the launcher (or run
 `EternalVR.Launcher.exe --export-report <file.zip>`). It shows the files it will save and their total size,
 then asks where to save the zip (the Desktop, `EternalVR-report-v<version>-<date>-<ID>.zip`). The ID is six random letters and
-digits, also at the top of `system.txt`; it only tells reports apart and says nothing about you or your PC. Send me that zip, or attach
-it to your GitHub issue if you have access, and say what you were doing. If the game went wrong in an older session than the newest
+digits, also at the top of `system.txt`; it only tells reports apart and says nothing about you or your PC. Attach that zip to a GitHub
+issue (or your Discord message) and say what you were doing. If the game went wrong in an older session than the newest
 five, zip that `logs\<session>` folder by hand as well.
 
 **Something looks wrong in one eye, or only in the headset?** Hold the left Menu button and pull a trigger
-while you see it (under SteamVR: press Y and pull a trigger straight away). The mod saves a screenshot of each eye and of the HUD (the log says `capture: saved`),
+while you see it (under SteamVR with Touch-type controllers: hold both sticks pressed, then pull a trigger; Index: the
+firm left trackpad press; Steam Frame: View). The mod saves a screenshot of each eye and of the HUD (the log says `capture: saved`),
 then carries on: the game does not pause, recenter or fire. Afterwards click **Export report...**: the newest captures go into the zip. Say
 which capture shows the problem (the file names hold the time).
 
@@ -30,7 +31,7 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 | File in the zip | What it is |
 |---|---|
 | `report-contents.txt` | This list for your report: every file and its size, what was shortened, left out or not found |
-| `system.txt` | Launcher and layer versions and whether they match, Windows version, GPUs with driver version and date, the OpenXR runtime (active manifest and its name, and the one used for launches), the headset as the launcher last read it (the Play tab's Headset box: the headset and its route, the runtime's and the system's names, the native panel, the size the runtime asks for, when and with which runtime it was read, and a try that found no headset since) and your last session's refresh rate and summary, hardware-accelerated GPU scheduling (HAGS) on or off, a few SteamVR settings from Steam's `config\steamvr.vrsettings` (the headset SteamVR last saw, supersampling, motion smoothing and supersample filtering, any refresh rate set, and SteamVR's own settings for DOOM Eternal; nothing else from that file, never the headset's serial number), the game build, the names of the files in the game's `Mods` folder (at most 30, never their contents) and any mod loader at the top of the game folder (EternalModInjector, DEternal_loadMods and the like), the folders in use |
+| `system.txt` | Launcher and layer versions and whether they match, Windows version, GPUs with driver version and date, the OpenXR runtime (active manifest and its name, and the one used for launches), the headset as the launcher last read it (the Play tab's Headset box: the headset and its route, the runtime's and the system's names, the native panel, the size the runtime asks for, when and with which runtime it was read, and a try that found no headset since) and your last session's refresh rate and summary, hardware-accelerated GPU scheduling (HAGS) on or off, a few SteamVR settings from Steam's `config\steamvr.vrsettings` (the headset SteamVR last saw, supersampling, motion smoothing and supersample filtering, any refresh rate set, and SteamVR's own settings for DOOM Eternal; nothing else from that file, never the headset's serial number), the game build, the names of the files in the game's `Mods` folder (at most 30, never their contents) and any mod loader at the top of the game folder (EternalModInjector, DEternal_loadMods and the like), the folders in use, and the game's own video settings as your latest session's log last listed them (ray tracing, DLSS, resolution scaling, the Advanced quality settings, field of view) |
 | `preflight.txt` | The launcher's checks, run when you export |
 | `launcher.log` | `logs\launcher.log`, its last 4 MB |
 | `launcher.ini` | The launcher settings |
@@ -45,7 +46,7 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 | `sessions/<session>/LAYER_LOADED` | For each of the newest 5 sessions: the layer's note that it loaded |
 | `sessions/<session>/eternalvr-*.log` | For each of the newest 5 sessions: the mod's log; a longer log keeps its first 1 MB and last 3 MB |
 | `sessions/<session>/eternalvr-frames-*.csv` | The frame timing table of the newest session only: its header and last 3 MB |
-| `sessions/<session>/captures/capture-*` | Your in-headset captures (left Menu held + a trigger) of the newest 5 sessions, newest first, whole captures up to 48 MB: each eye's image, the HUD image and a small text file |
+| `sessions/<session>/captures/capture-*` | Your in-headset captures (left Menu held + a trigger; under SteamVR with Touch-type controllers, both sticks held, then a trigger; Index: left trackpad pressed firmly + a trigger; Steam Frame: View + a trigger) of the newest 5 sessions, newest first, whole captures up to 48 MB: each eye's image, the HUD image and a small text file |
 
 The text in the zip is at most 20 MB (the zip itself is usually one or two MB); a file that would go past
 that is left out and named in `report-contents.txt`. Captures come on top of that and make the zip larger
@@ -76,25 +77,27 @@ warning does not.
 
 | Message | What to do |
 |---|---|
-| Running as administrator | Start the launcher normally, not "as administrator". |
+| Running as administrator | Start the launcher normally, not "as administrator". As administrator, Windows and OpenXR ignore the helpers registered for your user and the runtime chosen in the launcher. |
 | Steam is not running / no user is logged in | Start Steam and log in, then **Check**. (Steam version only; the Game Pass version does not need Steam.) |
 | Already running: DOOMEternalx64vk ... | Quit the game (and id's launcher if it is open) first. |
 | The previous VR session's settings restore has not completed | The game from the last session is still running. Quit it; the restore then runs. |
 | The data folder cannot be written | Something blocks `%LOCALAPPDATA%\EternalVR` (permissions, antivirus). |
 | The launcher is inside Program Files | Warning only. Moving the folder elsewhere is recommended. |
-| DOOM Eternal was not found in the Steam libraries or the Game Pass folders | Click **Choose folder...** and pick the folder that holds `DOOMEternalx64vk.exe` (for Game Pass, its `Content` folder). |
+| DOOM Eternal was not found in the Steam libraries or the Game Pass folders | On the Advanced tab, next to **Game folder**, click **Choose...** and pick the folder that holds `DOOMEternalx64vk.exe` (for Game Pass, its `Content` folder). |
 | ... is not the Content folder of the Game Pass DOOM Eternal | Choose the `Content` folder of the game, usually `XboxGames\Doom Eternal - PC\Content` on the drive it is installed on. |
-| Unknown game build | Your game is a different build from the one this alpha was made for. It may still work: the mod switches off what it cannot find. Please tell me your build. |
+| DOOM Eternal was updated ... Wait for an EternalVR update | VR is refused: your game is a different build from the one this alpha supports. Wait for an EternalVR update for that build. |
 | Anti-cheat components found in the game folder | VR is refused. The retail Steam game has none; something was added to the game folder. |
 | The EternalVR layer is incomplete | The `layer` folder next to the launcher is missing a file. Unzip again, keeping the folders. |
 | Version mismatch: the launcher is X but the layer is Y | The launcher and the `layer` folder come from different releases. Unzip the whole release again into an empty folder, keeping its folders, and start the launcher from there. |
 | Launcher X, layer Y: not compared | Warning only. A development build, or a layer too old to carry a version; a release zip always has a matching pair. |
 | ETERNALVR_DISABLE_LAYER=1 is set | Remove that environment variable. |
 | No active OpenXR runtime is set / manifest does not exist | Start your headset software and make it the active OpenXR runtime (for Virtual Desktop: VDXR), or pick a runtime in the launcher. |
-| A layer warning (RTSS, OBS, Bandicam ...) | That overlay or capture tool is untested with the mod. If VR misbehaves, close it and try again. ReShade, OpenXR Toolkit, Overwolf and other VR mods for DOOM Eternal are switched off for the session automatically. |
-| SteamVR uses a custom controller binding for DOOM Eternal | Warning only. SteamVR applies a binding chosen for the game (often one made for another VR mod of DOOM Eternal) instead of the mod's own. If your controllers do nothing in game, see "Controllers do nothing in game (SteamVR)" below. |
+| A layer warning (RTSS, OBS, Bandicam ...) | That overlay or capture tool is untested with the mod. If VR misbehaves, close it and try again. ReShade, Overwolf and other VR mods for DOOM Eternal are switched off for the session automatically. |
+| OpenXR layer XR_APILAYER_MBUCCHIA_toolkit (or XR_APILAYER_NOVENDOR_toolkit): disabled for this launch | Nothing to do. OpenXR Toolkit is switched off for the game each launch (its current and older versions), so its settings, Turbo Mode included, do not apply in EternalVR; it stays on for your other games. |
+| SteamVR limits DOOM Eternal to half the refresh rate (Throttling Behavior: Limit) | Warning only. SteamVR's per-application setting holds the game at half (or a third, a quarter ...) of the headset's rate, and frame pacing follows it. It is SteamVR Settings > Video > Per-Application Video Settings > DOOM Eternal > Throttling Behavior; Auto does not limit the game and gives no warning. |
+| SteamVR uses a custom controller binding for DOOM Eternal | Warning only. SteamVR applies a binding chosen for the game instead of the mod's default: one you edited from the default in SteamVR (it works, `CONTROLS.md`), or one made for another VR mod of DOOM Eternal (it does not). If your controllers do nothing in game, see "Controllers do nothing in game (SteamVR)" below. |
 | Hardware-accelerated GPU scheduling is on | Warning only. It caused hitching on my PC; the message says how to turn it off (needs a restart). |
-| No DOOM Eternal settings folder was found | Start the game once normally through Steam, then try again. Without it, VR settings are not forced. |
+| DOOM Eternal has not been started on this PC yet (no settings folder) | VR is refused. Start the game once through Steam (or the Xbox app), go to the main menu, quit, then try again. |
 | Steam's cloud record is stale | Start DOOM Eternal once through Steam, wait for the main menu, quit, then use the launcher again. |
 | Extra arguments refused (single-player) | Remove the multiplayer argument from **Extra arguments**. |
 | Last session: Your graphics driver cannot render above the window size | Warning only. See "The picture is soft on an AMD graphics card" below. |
@@ -110,7 +113,7 @@ warning does not.
   line that asks for multiplayer also keeps the mod from loading.
 - A log that says the multiplayer guard was **refused** or **tripped**: VR was switched off on purpose
   (a detection point was not found in your game build, or the game went into a multiplayer screen).
-  Send me an Export report.
+  Send an Export report.
 - A log that stops at the OpenXR runtime: the headset runtime was not running or not connected. Connect
   the headset first, then launch.
 
@@ -163,10 +166,11 @@ turned to follow your head, so looking around stays smooth, but moving things on
 draws. Headset overlays count this differently: some count every frame handed over (then they always show the
 headset's rate), others only frames with a new image, which is close to the real rate. The real number is in the
 mod's log: every 10 s a `rates:` line says how many `stereo pair(s)/s` the game drew and how many `frame(s)/s` went
-to the headset. After a session the launcher's status line sums it up ("The game kept up with your headset: about
-90 new frames a second at 90 Hz", or "The game drew about 72 new frames a second at 90 Hz"), and the Play tab's
-Headset box shows the refresh rate your headset ran at. If the game was well below your headset's rate, see the next
-entries, or lower "Resolution" on the Play tab if your graphics card is the limit.
+to the headset; the `game settings:` line lists the game's video settings the frames were drawn at. After a
+session the launcher's status line sums it up ("The game kept up with your headset: about 90 new frames a second at
+90 Hz", or "The game drew about 72 new frames a second at 90 Hz"), and the Play tab's Headset box shows the refresh
+rate your headset ran at. If the game was well below your headset's rate, see the next entries, or lower
+"Resolution" on the Play tab if your graphics card is the limit.
 
 **The launcher says the game was held to half the refresh rate.** When the game falls behind, Virtual Desktop's
 SSW, Meta's ASW, Pimax's Smart Smoothing and SteamVR's Motion Smoothing or throttling ask the game for only half
@@ -214,7 +218,7 @@ cannot keep up. Turn it off again if you do not like it.
 **Controllers do nothing in game (SteamVR).** The headset works, but the trigger, buttons and sticks do
 nothing, there is no menu pointer and no hand aim. SteamVR keeps controller bindings per game, and every VR mod
 of DOOM Eternal runs under the same game, so a binding chosen there for another mod (a community or workshop
-binding, or one you saved yourself) replaces the mod's own and binds none of its controls. To go back to the
+binding, or one you saved while playing it) replaces the mod's own and binds none of its controls. To go back to the
 default:
 
 1. In SteamVR open **Settings > Controllers > Manage Controller Bindings** (or "Show old binding UI").
@@ -223,7 +227,8 @@ default:
 4. Launch again.
 
 The launcher warns about such a binding before the launch ("SteamVR uses a custom controller binding for DOOM
-Eternal"), and the mod's log has a `controllers: WARNING` line when no hand
+Eternal") and again after a session in which it bound none of the mod's controls ("Controllers did nothing"),
+and the mod's log has a `controllers: WARNING` line when no hand
 pose ever arrives while you play. Also check that both controllers are on and tracked in SteamVR's window before you launch.
 
 **The view is turned or at the wrong height.** Face forward and hold both sticks pressed for 2 seconds

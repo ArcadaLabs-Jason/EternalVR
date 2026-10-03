@@ -11,6 +11,7 @@ evr_add_module(evr_input
         button_labels.cpp
         capture_chord.cpp
         controller_bindings.cpp
+        controller_family.cpp
         controller_settings.cpp
         cutscene_skip.cpp
         dashboard_pause.cpp
@@ -19,6 +20,7 @@ evr_add_module(evr_input
         hands_jump.cpp
         haptics_policy.cpp
         input_mapper.cpp
+        menu_release_latch.cpp
         interaction_profiles.cpp
         locomotion_direction.cpp
         offhand_policy.cpp

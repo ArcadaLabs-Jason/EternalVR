@@ -11,40 +11,6 @@ namespace {
 // ---------------------------------------------------------------------------------------------------
 // Command line
 
-struct ArgumentRule {
-    std::string_view pattern; // normalised (lower case, "+cmd" form)
-    std::string_view reason;
-};
-
-// launcher/data/refused-args.txt (launcher-v0), then what Steam and Xbox pass for an invite and the other
-// BATTLEMODE entry points this build accepts as console commands or startup cvars.
-constexpr std::array kRules{
-    ArgumentRule{"game/pvp/", "a BATTLEMODE map"},
-    ArgumentRule{"battlemode", "BATTLEMODE"},
-    ArgumentRule{"+connect", "a multiplayer connection"}, // also +connect_lobby (Steam invite at launch)
-    ArgumentRule{"+join", "a multiplayer join"},          // also +JoinShellLobby
-    ArgumentRule{"+lobby", "a multiplayer lobby"},
-    ArgumentRule{"+matchmaking", "matchmaking"},
-    ArgumentRule{"+party", "a multiplayer party"},
-    ArgumentRule{"+net_", "network settings"},
-    ArgumentRule{"+si_", "multiplayer server settings"},
-    ArgumentRule{"+g_gametype", "a game type other than the campaign"},
-    ArgumentRule{"+steam_invit", "a Steam invite"}, // +steam_invitationCookie, +steam_inviteSenderId
-    ArgumentRule{"+com_gamemode", "a game mode other than the campaign"},
-    ArgumentRule{"+restartmapwithlobby", "a multiplayer lobby"},
-    ArgumentRule{"battlearena", "BATTLEMODE"}, // ConnectOrHostCasualBattleArenaResult and friends
-    ArgumentRule{"+pvp_", "BATTLEMODE settings"},
-    ArgumentRule{"/pvp", "a BATTLEMODE map"},
-    ArgumentRule{"pvp_", "a BATTLEMODE map"},
-    ArgumentRule{"tutorial_demons", "the BATTLEMODE demon tutorial"},
-    ArgumentRule{"invasion", "Invasion"},
-    // Game Pass: what the GDK passes when the game is started from an Xbox invite or join.
-    ArgumentRule{"ms-xbl-", "an Xbox invite"},
-    ArgumentRule{"invitehandleaccept", "an Xbox invite"},
-    ArgumentRule{"activityhandlejoin", "an Xbox join"},
-    ArgumentRule{"handle=", "an Xbox invite"},
-};
-
 char narrowLower(wchar_t c) {
     if (c >= L'A' && c <= L'Z') {
         return static_cast<char>(c - L'A' + 'a');
@@ -139,9 +105,9 @@ std::string normaliseTokens(const std::vector<std::wstring>& tokens, std::size_t
 }
 
 std::optional<RefusedArgument> screenNormalised(const std::string& text) {
-    for (const ArgumentRule& rule : kRules) {
+    for (const RefusedArgument& rule : refusedArguments()) {
         if (text.find(rule.pattern) != std::string::npos) {
-            return RefusedArgument{rule.pattern, rule.reason};
+            return rule;
         }
     }
     return std::nullopt;

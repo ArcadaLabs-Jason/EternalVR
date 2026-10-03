@@ -1,5 +1,6 @@
 // The hand-aim reticle and the other static images on quads (the menu pointer's dot and beam).
 
+#include "vkcore/fence_wait.hpp"
 #include "vkcore/presenter_impl.hpp"
 
 #include "common/quat.hpp"
@@ -109,16 +110,13 @@ bool XrPresenter::Impl::createStaticImage(XrSwapchain& swapchain,
     ID3D12CommandList* lists[] = {list.Get()};
     d3dQueue->ExecuteCommandLists(1, lists);
     d3dQueue->Signal(copyFence.Get(), ++copyFenceValue);
-    if (copyFence->GetCompletedValue() < copyFenceValue) {
-        copyFence->SetEventOnCompletion(copyFenceValue, copyEvent);
-        if (WaitForSingleObject(copyEvent, 2000) != WAIT_OBJECT_0) {
-            // The queue may still use the buffer and the list: keep them alive rather than free them.
-            upload->AddRef();
-            list->AddRef();
-            allocator->AddRef();
-            EVR_LOG("ui: the %s's upload did not finish; no %s", what, what);
-            return false;
-        }
+    if (!waitFence(copyFence.Get(), copyFenceValue, copyEvent, 2000)) {
+        // The queue may still use the buffer and the list: keep them alive rather than free them.
+        upload->AddRef();
+        list->AddRef();
+        allocator->AddRef();
+        EVR_LOG("ui: the %s's upload did not finish; no %s", what, what);
+        return false;
     }
     XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     EVR_XR_CHECK(xr.xrReleaseSwapchainImage(swapchain, &release));

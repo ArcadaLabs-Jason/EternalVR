@@ -12,9 +12,6 @@
 
 #include "vkcore/controllers_impl.hpp"
 
-#include "features/input/binding_compiler.hpp"
-#include "features/input/dashboard_pause.hpp"
-#include "features/input/dossier_press.hpp"
 #include "features/input/usercmd_motion.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/body_follow.hpp"
@@ -28,12 +25,12 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/room_scale.hpp"
-#include "vkcore/xr_runtime.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <optional>
 #include <string>
@@ -75,6 +72,9 @@ constexpr double kHeldActionsStaleSeconds = 0.25;
 
 std::atomic<bool> g_buttonsAndMove{false};
 std::atomic<std::uint64_t> g_loggedCommands{0};
+// The action lines: every one for the first stretch of play (the weapon-swap protocol checks each switch
+// against a marker), then one a minute; ETERNALVR_CONTROLLERS_TRACE logs them all.
+LogCap g_actionLines{500};
 
 void sendPause(State& s, bool down) {
     if (down == s.pauseKeyDown) {
@@ -90,7 +90,7 @@ void sendPause(State& s, bool down) {
 
 // A tutorial or lore popup suppresses the command's buttons and waits for a key (Space or E), so while
 // the game suppresses buttons jump sends Space and melee/use sends E; each is released when the button
-// is or when the suppression ends.
+// is, when the suppression ends or when the controllers go stale.
 void sendPopupKey(bool& keyDown, std::uint8_t key, bool down) {
     if (down == keyDown) {
         return;
@@ -193,24 +193,22 @@ void onPutUserCmd(const HookRegisters& regs) {
     State& s = state();
     s.commands.fetch_add(1, std::memory_order_relaxed);
     const MappedInput mapped = runMapper();
-    // The pause key goes out even while the game suppresses buttons: that is how its menu is closed.
+    auto* cmd = reinterpret_cast<std::byte*>(regs.r8);
+    const bool suppressed = (regs.r14 & 0xFFu) != 0;
+    // The pause key goes out even while the game suppresses buttons: that is how its menu is closed. Every
+    // key the controllers hold goes up when their input goes stale.
     {
         std::lock_guard lock(s.mapperMutex);
         sendPause(s, mapped.live && game::contains(mapped.actions, game::GameAction::Pause));
         sendCutsceneSkip(s, mapped.live && game::contains(mapped.actions, game::GameAction::Dash));
+        const bool popup = mapped.live && suppressed;
+        sendPopupKey(s.popupSpaceDown, VK_SPACE,
+                     popup && game::contains(mapped.actions, game::GameAction::Jump));
+        sendPopupKey(s.popupUseDown, 'E', popup && game::contains(mapped.actions, game::GameAction::Melee));
     }
-    auto* cmd = reinterpret_cast<std::byte*>(regs.r8);
-    const bool suppressed = (regs.r14 & 0xFFu) != 0;
     if (!mapped.live) {
         addBodyFollow(cmd, suppressed);
         return;
-    }
-    {
-        std::lock_guard lock(s.mapperMutex);
-        sendPopupKey(s.popupSpaceDown, VK_SPACE,
-                     suppressed && game::contains(mapped.actions, game::GameAction::Jump));
-        sendPopupKey(s.popupUseDown, 'E',
-                     suppressed && game::contains(mapped.actions, game::GameAction::Melee));
     }
     if (settings().trace) {
         // The game's own command as built from the keyboard, mouse and pad: which bits and axes a key sets.
@@ -317,38 +315,6 @@ void onAngles(const HookRegisters& regs) {
     }
 }
 
-// The control map for the family and handedness, compiled; nullopt (logged) when it has issues.
-std::optional<input::BindingProfile> controlMap(const State& s, game::Controller family) {
-    const input::ControllerData& data = s.controllerData[static_cast<std::size_t>(family)];
-    const auto map = data.maps.find(s.settings.handedness);
-    if (map == data.maps.end()) {
-        EVR_LOG("%s: the %s data has no control map for this handedness", kTag,
-                std::string(game::controllerName(family)).c_str());
-        return std::nullopt;
-    }
-    input::BindingBuildResult built = input::buildBindingProfile(map->second);
-    for (const input::BindingIssue& issue : built.issues) {
-        EVR_LOG("%s: control map: %s", kTag, issue.message.c_str());
-    }
-    if (!built.ok()) {
-        EVR_LOG("%s: the control map has conflicts; controllers send nothing until it is fixed", kTag);
-        return std::nullopt;
-    }
-    // SteamVR opens its dashboard on the left Menu button: holding Y pauses too (dashboard_pause.hpp).
-    if (input::runtimeTakesMenuButton(xrRuntimeName()) && input::applyDashboardPause(built.profile) > 0) {
-        EVR_LOG("%s: the runtime keeps the Menu button for its dashboard: holding the Y button pauses too",
-                kTag);
-    }
-    // ETERNALVR_DOSSIER=tap: X taps open the Dossier and a hold switches equipment (dossier_press.hpp).
-    if (s.settings.dossier == input::DossierPress::Tap &&
-        input::applyDossierPress(built.profile, s.settings.dossier) == 0) {
-        EVR_LOG("%s: ETERNALVR_DOSSIER=tap: no button taps switch equipment and holds for the Dossier; "
-                "the map is kept",
-                kTag);
-    }
-    return built.profile;
-}
-
 bool hookAt(const GameImage& image, const char* name, const std::byte* at, MidHookCallback callback) {
     std::string error;
     if (!installMidHook(const_cast<std::byte*>(at), callback, error)) {
@@ -436,48 +402,29 @@ MappedInput runMapper() {
         s.wheelHand.reset();
         return out;
     }
-    if (!s.mapper || s.mapperController != snapshot.controller) {
-        if (s.mapperBroken && s.mapperController == snapshot.controller) {
-            return out; // reported once when it was built
-        }
-        s.mapperController = snapshot.controller;
-        auto profile = controlMap(s, snapshot.controller);
-        s.mapperBroken = !profile;
-        if (!profile) {
-            return out;
-        }
-        input::MapperSettings mapperSettings;
-        mapperSettings.locomotionFrame = cfg.locomotion;
-        mapperSettings.turn = cfg.turn;
-        // A Menu press shorter than the recenter hold pauses; with the recenter binding off, any press does.
-        const float recenterHold = roomScaleSettings().recenterHoldSeconds;
-        mapperSettings.menuTapSeconds = recenterHold > 0.0f ? recenterHold : input::kMaxHoldSeconds;
-        // Both sticks held: the recenter chord (off with the recenter hold).
-        mapperSettings.stickChordRecenter = recenterHold > 0.0f;
-        // SteamVR keeps the left Menu button: Y held + a trigger is the capture too (capture_chord.hpp).
-        mapperSettings.captureButtons = input::captureButtonsFor(xrRuntimeName());
-        mapperSettings.throwGesture = cfg.throwGesture;
-        mapperSettings.swing = cfg.swing;
-        mapperSettings.handsJump = cfg.handsJump;
-        s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
-        publishPromptLabels(s.mapper->profile(), snapshot.controller);
-        EVR_LOG("%s: control map for %s controllers, %s-handed", kTag,
-                std::string(game::controllerName(snapshot.controller)).c_str(),
-                s.mapper->profile().weaponHand == input::Hand::Right ? "right" : "left");
+    if (!ensureMapper(s, snapshot.controller, "")) {
+        return out;
     }
     input::MapperContext context;
     context.viewYawRadians = s.viewYawTracking.load(std::memory_order_relaxed);
     context.posture = cfg.seated ? posture::Posture::Seated : roomPosture();
+    const bool menuHold = menu_input::suppressGameplay();
+    context.menuHold = menuHold;
     out.input = s.mapper->update(snapshot.frame, context, dt);
+    if (s.menuHold && !menuHold) {
+        // A tap that fired in the menu is not carried out of it by the minimum hold (menu_release_latch.hpp).
+        s.hold.reset();
+        EVR_LOG("%s: gameplay input back on: presses begun in the menu are dropped%s", kTag,
+                s.mapper->heldFromMenu() ? "; a control still held stays out of the game until let go" : "");
+    }
+    s.menuHold = menuHold;
     if (out.input.capture) {
         bug_capture::request(); // the capture chord (capture_chord.hpp): the in-headset capture, in a menu
                                 // too
     }
     // The recenter binding is the layer's own: a long press re-anchors the room (docs/VR_ROOMSCALE.md).
     noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter));
-    if (const auto turnHand = s.mapper->profile().turnStick) {
-        out.turnStick = snapshot.frame.hand(*turnHand).stick;
-    }
+    out.turnStick = s.mapper->turnStick();
     out.actions = s.hold.update(out.input.down, dt);
     out.live = true;
     if (cfg.wheelSelect == input::WheelSelect::Hand) {
@@ -493,7 +440,7 @@ MappedInput runMapper() {
     // Published before a menu holds them back: in a tutorial popup the menu router presses their keys.
     s.heldActionBits.store(out.actions.to_ullong(), std::memory_order_relaxed);
     s.heldActionsQpc.store(now, std::memory_order_relaxed);
-    if (menu_input::suppressGameplay()) {
+    if (menuHold) {
         // A menu is up (or a control is still held from one): the controllers drive the menu through the
         // pointer (docs/VR_MENUS.md). Only the pause key goes through, so the Menu button still closes it.
         const bool pause = game::contains(out.actions, game::GameAction::Pause);
@@ -507,10 +454,15 @@ MappedInput runMapper() {
         out.input.punch = {};
         out.input.down = out.actions;
         out.turnStick = {};
-    } else if (out.input.thrown || out.input.swung) {
-        // Its action is logged below with every other action sent (arm_gestures.hpp).
-        EVR_LOG("%s: gesture:%s%s", kTag, out.input.thrown ? " throw" : "",
-                out.input.swung ? " overhead swing" : "");
+    } else if (out.input.thrown || out.input.swung || out.input.handsJumped) {
+        // Its action is logged below with every other action sent (arm_gestures.hpp, hands_jump.hpp).
+        const char* jump = "";
+        if (out.input.handsJumped) {
+            jump = context.posture == posture::Posture::Seated ? " hands-up jump (seated height)"
+                                                               : " hands-up jump";
+        }
+        EVR_LOG("%s: gesture:%s%s%s", kTag, out.input.thrown ? " throw" : "",
+                out.input.swung ? " overhead swing" : "", jump);
     }
     s.viewQueue.add({0.0f, out.input.turnDegrees});
     // The comfort vignette follows the motion sent (artificialMotion); the mapper counted at most this step.
@@ -540,9 +492,15 @@ MappedInput runMapper() {
                 if (action == game::GameAction::Dossier || action == game::GameAction::Automap) {
                     s.dossierRequestQpc.store(now, std::memory_order_relaxed);
                 }
-                // Every action sent is logged: the weapon-swap protocol checks each switch against a marker.
-                EVR_LOG("%s: action %s", kTag,
-                        std::string(game::gameActionName(static_cast<game::GameAction>(i))).c_str());
+                std::uint64_t skipped = 0;
+                if (cfg.trace || g_actionLines.due(GetTickCount64(), skipped)) {
+                    char note[48] = "";
+                    if (skipped != 0) {
+                        std::snprintf(note, sizeof(note), " (%llu more not logged)",
+                                      static_cast<unsigned long long>(skipped));
+                    }
+                    EVR_LOG("%s: action %s%s", kTag, std::string(game::gameActionName(action)).c_str(), note);
+                }
             }
         }
     }

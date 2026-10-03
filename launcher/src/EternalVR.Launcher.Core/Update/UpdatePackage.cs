@@ -12,7 +12,9 @@ namespace EternalVR.Launcher.Core.Update
     /// Installs a downloaded release zip over the running launcher's folder. <see cref="Stage"/> unpacks it into a folder
     /// of its own and checks every file against the zip's <c>SHA256SUMS.txt</c>; <see cref="Install"/> then moves each
     /// file it replaces aside (<c>*.evr-old</c>: Windows lets a running exe or a loaded DLL be renamed, not overwritten)
-    /// and copies the new one in, putting everything back if a step fails. The data folder is never touched.
+    /// and copies the new one in, putting everything back if a step fails. A file the previous release shipped (its
+    /// <c>SHA256SUMS.txt</c> in the program folder) and the new one does not is moved aside the same way. The data folder
+    /// is never touched.
     /// <see cref="RemoveOldFiles"/> deletes the moved-aside files once the new launcher runs.
     /// </summary>
     public static class UpdatePackage
@@ -43,11 +45,19 @@ namespace EternalVR.Launcher.Core.Update
                     var rel = e.FullName.Replace('\\', '/').Substring(top.Length);
                     if (rel.Length == 0 || rel.Contains(":") || rel.StartsWith("/", StringComparison.Ordinal) || rel.Split('/').Any(p => p == ".." || p == "."))
                         throw new IOException("the update zip holds a path outside its folder: " + e.FullName);
-                    var target = Path.GetFullPath(Path.Combine(stagingDir, rel.Replace('/', Path.DirectorySeparatorChar)));
-                    if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-                        throw new IOException("the update zip holds a path outside its folder: " + e.FullName);
-                    Directory.CreateDirectory(Path.GetDirectoryName(target));
-                    e.ExtractToFile(target, overwrite: false);
+                    // A name Windows cannot use (a character the path functions refuse) is a bad zip like any other: an IOException.
+                    try
+                    {
+                        var target = Path.GetFullPath(Path.Combine(stagingDir, rel.Replace('/', Path.DirectorySeparatorChar)));
+                        if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                            throw new IOException("the update zip holds a path outside its folder: " + e.FullName);
+                        Directory.CreateDirectory(Path.GetDirectoryName(target));
+                        e.ExtractToFile(target, overwrite: false);
+                    }
+                    catch (Exception x) when (x is ArgumentException || x is NotSupportedException)
+                    {
+                        throw new IOException("the update zip holds a file name that cannot be used: " + e.FullName, x);
+                    }
                 }
             }
             Verify(stagingDir, expected);
@@ -91,10 +101,20 @@ namespace EternalVR.Launcher.Core.Update
         /// Copies every file of <paramref name="stagingDir"/> into <paramref name="programDir"/>, moving each file it replaces
         /// aside first. On a failure every change is undone and the error passed on. Returns the files installed.
         /// </summary>
-        public static IReadOnlyList<string> Install(string stagingDir, string programDir)
+        public static IReadOnlyList<string> Install(string stagingDir, string programDir) => Install(stagingDir, programDir, out _);
+
+        /// <summary>
+        /// <see cref="Install(string, string)"/>, and the files the release installed before shipped (the program folder's
+        /// own <see cref="SumsFile"/>) that the new release no longer has are moved aside like replaced ones, so a dropped
+        /// controller map or data file does not stay behind; <paramref name="removed"/> names them. A file no release listed
+        /// (the player's own) is never touched. On a failure these are put back too.
+        /// </summary>
+        public static IReadOnlyList<string> Install(string stagingDir, string programDir, out IReadOnlyList<string> removed)
         {
             var done = new List<KeyValuePair<string, string>>();
             var installed = new List<string>();
+            // Read before the copy, which replaces it with the new release's list.
+            var shippedBefore = ShippedFiles(programDir);
             try
             {
                 foreach (var file in Directory.GetFiles(stagingDir, "*", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
@@ -112,6 +132,19 @@ namespace EternalVR.Launcher.Core.Update
                     File.Copy(file, target, overwrite: false);
                     installed.Add(rel);
                 }
+
+                var now = new HashSet<string>(installed.Select(Normalise), StringComparer.OrdinalIgnoreCase);
+                var dropped = new List<string>();
+                foreach (var rel in shippedBefore.Where(r => !now.Contains(r)))
+                {
+                    var target = Path.Combine(programDir, rel);
+                    if (!File.Exists(target)) continue;
+                    var old = FreeOldName(target);
+                    File.Move(target, old);
+                    done.Add(new KeyValuePair<string, string>(target, old));
+                    dropped.Add(rel);
+                }
+                removed = dropped;
                 return installed;
             }
             catch
@@ -128,6 +161,37 @@ namespace EternalVR.Launcher.Core.Update
                 }
                 throw;
             }
+        }
+
+        /// <summary>
+        /// The files the release in <paramref name="programDir"/> shipped: the paths its <see cref="SumsFile"/> lists, relative
+        /// and inside the folder (a line that is not a sum or names a path outside is skipped). Empty without the file.
+        /// </summary>
+        public static IReadOnlyList<string> ShippedFiles(string programDir)
+        {
+            var list = new List<string>();
+            var sums = Path.Combine(programDir, SumsFile);
+            if (!File.Exists(sums)) return list;
+            var root = Path.GetFullPath(programDir).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            foreach (var line in File.ReadAllLines(sums))
+            {
+                var t = line.Trim();
+                if (t.Length < 66 || t.IndexOf(' ') != 64 || !KnownBuilds.IsSha256Hex(t.Substring(0, 64))) continue;
+                var raw = t.Substring(64).Trim().TrimStart('*');
+                // A rooted path (\\server\share, \x, /x, C:\x) or a stream (a.txt:b) is never one of the release's files.
+                if (raw.StartsWith("/", StringComparison.Ordinal) || raw.StartsWith("\\", StringComparison.Ordinal) || raw.Contains(":")) continue;
+                var rel = Normalise(raw);
+                if (rel.Length == 0 || string.Equals(rel, SumsFile, StringComparison.OrdinalIgnoreCase)
+                    || rel.Split(Path.DirectorySeparatorChar).Any(p => p == ".." || p == "." || p.Length == 0))
+                    continue;
+                try
+                {
+                    if (!Path.GetFullPath(Path.Combine(programDir, rel)).StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                }
+                catch (Exception e) when (e is ArgumentException || e is NotSupportedException || e is PathTooLongException) { continue; }
+                list.Add(rel);
+            }
+            return list;
         }
 
         /// <summary>Deletes the files an update moved aside; returns how many are left (still in use).</summary>

@@ -41,6 +41,9 @@ public:
     // button's capture chord): from the next update until its release it is neither a hold nor a tap.
     void cancel() { cancelled_ = true; }
 
+    // The button was down at the last update.
+    [[nodiscard]] bool isDown() const { return wasDown_; }
+
     [[nodiscard]] float holdSeconds() const { return holdSeconds_; }
     [[nodiscard]] float tapSeconds() const { return tapSeconds_; }
 

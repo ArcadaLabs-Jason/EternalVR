@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Game;
 using EternalVR.Launcher.Core.Headsets;
@@ -40,7 +41,9 @@ namespace EternalVR.Launcher
             if (adapters.Count == 0) Add("gpu", null);
             foreach (var a in adapters) Add("gpu", a);
             Add("openxr active runtime", active == null ? "none set" : active + RuntimeName(active));
-            Add("openxr runtime for launches", LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? "system active" : effective + RuntimeName(effective));
+            Add("openxr runtime for launches", !LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? effective + RuntimeName(effective)
+                : LauncherContext.InheritedRuntime != null ? LaunchPlanBuilder.RuntimeVariable + " in the environment: " + effective + RuntimeName(effective)
+                : "system active");
             // The Play tab's Headset box as read (the last probe that answered) and the last session's refresh rate and summary.
             system.AddRange(HeadsetView.ReportLines(ctx.Headset, ctx.Identify(ctx.Headset.RuntimeName, ctx.Headset.SystemName)));
             system.AddRange(SteamVrSummary.Read(ctx.SteamRoot)); // chosen keys only, never the headset's serial number
@@ -74,17 +77,22 @@ namespace EternalVR.Launcher
             };
         }
 
-        /// <summary>The window's button: build, confirm with the file list and size, choose where to save, write.</summary>
-        public static void Run(IWin32Window owner, LauncherContext ctx)
+        /// <summary>
+        /// The window's button: build (on a worker thread: the checks, the event logs and up to about 70 MB of files to
+        /// zip), confirm with the file list and size, choose where to save, write.
+        /// </summary>
+        public static async Task Run(Control owner, LauncherContext ctx)
         {
             ReportResult report;
-            try { report = ReportBuilder.Build(Gather(ctx)); }
+            try { report = await Task.Run(() => ReportBuilder.Build(Gather(ctx))); }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
                 ctx.Log.Error("building the report failed: " + e.Message);
-                MessageBox.Show(owner, "The report could not be built: " + e.Message, "Export report", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (!owner.IsDisposed)
+                    MessageBox.Show(owner, "The report could not be built: " + e.Message, "Export report", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
+            if (owner.IsDisposed) return;
 
             var answer = MessageBox.Show(owner,
                 "The report holds these files. Your user folder, user name, computer name, the name you play under and Steam account ID are replaced by placeholders; "

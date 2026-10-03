@@ -86,7 +86,7 @@ void defineSchema(Registrar& r) {
         .defaultValue = std::string("balanced"),
         .min = std::nullopt,
         .max = std::nullopt,
-        .choices = {"off", "subtle", "balanced", "aggressive"},
+        .choices = {"off", "subtle", "balanced", "aggressive", "maximum"},
         .liveTunable = true,
         .description = "Fixed foveated rendering strength.",
     });

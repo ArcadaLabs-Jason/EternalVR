@@ -324,7 +324,9 @@ TEST_CASE("hands jump presses jump when enabled and standing") {
     InputFrame up = restingFrame();
     up.left = trackedHand({-0.2f, 1.8f, -0.2f}, {0.0f, 2.5f, 0.0f});
     up.right = trackedHand({0.2f, 1.8f, -0.2f}, {0.0f, 2.5f, 0.0f});
-    CHECK(contains(mapper.update(up, context, kFrame).pressed, GameAction::Jump));
+    const GameInput input = mapper.update(up, context, kFrame);
+    CHECK(contains(input.pressed, GameAction::Jump));
+    CHECK(input.handsJumped);
 }
 
 TEST_CASE("the mapper is deterministic for a given input sequence") {

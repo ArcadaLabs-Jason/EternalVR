@@ -1,12 +1,13 @@
 #pragma once
 
-// The OpenXR action sets and actions the layer creates (ARCHITECTURE section 6, R06 section 4.3).
+// The OpenXR action set and actions the layer creates (ARCHITECTURE section 6, R06 section 4.3).
 //
 // The actions are the controllers' physical inputs, not game actions: which game action an input
 // triggers is decided by our own bindings (binding_profile.hpp), so remapping never depends on the
 // runtime's binding UI. Each action has both hands as subaction paths, so one action serves either
 // hand and handedness is a question for the control map only. Which input of an interaction profile
-// drives each action is data (controller_bindings.hpp and data/input/controllers/).
+// drives each action is data (controller_bindings.hpp and data/input/controllers/). Menus read the same
+// actions (features/menu/menu_router.hpp), so there is one set.
 //
 // Nothing here calls OpenXR; the names, types and priorities are plain data the XR side turns into
 // xrCreateActionSet / xrCreateAction calls.
@@ -23,7 +24,6 @@ namespace evr::input {
 
 enum class XrActionSetId : std::uint8_t {
     Gameplay,
-    Menu, // Active while one of our panels or the game's menus has the pointer (M6).
     Count,
 };
 
@@ -52,12 +52,6 @@ enum class XrActionId : std::uint8_t {
     AimPose,
     GripPose, // The weapon and arms are placed at this pose (T-054).
     Haptic,
-    // Menu.
-    MenuSelect,
-    MenuBack,
-    MenuScroll,
-    MenuPointerPose,
-    MenuClose,
     Count,
 };
 
@@ -67,7 +61,7 @@ struct XrActionSetDef {
     XrActionSetId id = XrActionSetId::Gameplay;
     std::string_view name;          // XrActionSetCreateInfo::actionSetName
     std::string_view localizedName; // shown by runtime binding UIs
-    std::uint32_t priority = 0;     // higher wins when both sets are active and bind one input
+    std::uint32_t priority = 0;     // XrActionSetCreateInfo::priority
 };
 
 struct XrActionDef {

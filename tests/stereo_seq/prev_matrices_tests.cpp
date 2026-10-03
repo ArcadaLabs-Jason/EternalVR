@@ -192,3 +192,42 @@ TEST_CASE("previous matrices: an eye R frame that does not follow its eye L keep
     // Nothing from that eye R frame counts as eye L's for the next tick.
     CHECK(frame(v, book, frames, Eye::Left, left(3)) == right(2));
 }
+
+TEST_CASE("previous matrices: an eye R frame that stays mono gets the engine's store back") {
+    FakeView v;
+    PrevMatrixBook book(fakeRanges());
+    Frames frames;
+    for (int t = 1; t < 3; ++t) {
+        frame(v, book, frames, Eye::Left, left(t));
+        frame(v, book, frames, Eye::Right, right(t));
+    }
+    CHECK(frame(v, book, frames, Eye::Left, left(3)) == left(2));
+    CHECK_FALSE(book.undoRewrite(v.bytes.data())); // an eye L rewrite stays: a mono frame reads eye L's
+    // Eye R's frame of tick 3: the book writes eye R's previous matrices, then the per-eye hook writes no
+    // view (the tags take a new base) and the frame renders the game's view.
+    v.store();
+    book.afterStore(v.bytes.data(), Eye::Right, frames.next++);
+    CHECK(v.previous() == right(2));
+    CHECK(book.undoRewrite(v.bytes.data()));
+    CHECK(v.previous() == left(3)); // what the engine stored
+    CHECK_FALSE(book.undoRewrite(v.bytes.data()));
+    v.latch(30);
+    // What follows treats it as a mono frame.
+    CHECK(frame(v, book, frames, Eye::Left, left(4)) == 30);
+    CHECK(frame(v, book, frames, Eye::Right, right(4)) == left(4));
+    CHECK(frame(v, book, frames, Eye::Left, left(5)) == left(4));
+    CHECK(frame(v, book, frames, Eye::Right, right(5)) == right(4));
+    CHECK(book.stats().undone == 1);
+}
+
+TEST_CASE("previous matrices: nothing to undo for an eye R store that was left as the engine made it") {
+    FakeView v;
+    PrevMatrixBook book(fakeRanges());
+    Frames frames;
+    frame(v, book, frames, Eye::Left, left(1));
+    CHECK(frame(v, book, frames, Eye::Right, right(1)) == left(1)); // nothing kept for eye R yet
+    CHECK_FALSE(book.undoRewrite(v.bytes.data()));
+    FakeView other;
+    CHECK_FALSE(book.undoRewrite(other.bytes.data())); // a view the book never saw
+    CHECK(book.stats().undone == 0);
+}

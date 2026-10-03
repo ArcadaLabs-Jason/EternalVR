@@ -92,11 +92,14 @@ bool locateTaaEngine(const GameImage& image, TaaEngine& out) {
     out.historySelector = findUnique(image, kTag, "accumulation history selector", kHistorySelectorSignature);
     out.opaqueSelector = findUnique(image, kTag, "opaque accumulation selector", kOpaqueSelectorSignature);
     out.setCvar = findCvarSetter(image);
-    const std::byte* exposure = findUnique(image, kTag, "auto-exposure index", kExposureIndexSignature);
-    out.exposureSite = exposure ? exposure + kExposureIndexHook : nullptr;
     const std::byte* distortion = findUnique(image, kTag, "distortion last-frame bind", kDistortionSignature);
     out.distortionSite = distortion ? distortion + kDistortionHook : nullptr;
     return out.outputSelector && out.historySelector && out.opaqueSelector && out.setCvar;
+}
+
+const std::byte* locateExposureSite(const GameImage& image, const char* tag) {
+    const std::byte* exposure = findUnique(image, tag, "auto-exposure index", kExposureIndexSignature);
+    return exposure ? exposure + kExposureIndexHook : nullptr;
 }
 
 const std::byte* findCvarSetter(const GameImage& image) {

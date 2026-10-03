@@ -32,9 +32,12 @@ the filter on or off).
   the eye's own pairs go into the two slots (its last written pair where the engine reads, its other pair
   where it writes), and the filter's state (the struct at state + 0x60 .. + 0x94: last frame, volume size,
   camera position, reset count) is swapped in when the eye changes. The engine resets the filter when its last
-  frame is not the render just before, and an eye's own last render is always two back, so the state is
-  passed off as the previous render's. Each eye's first two renders clear their history: the compute clears
-  only the pair it reads when the last frame is 0, and cells it never clears show as blocks of stale light.
+  frame is not the render just before. When the eye's own last render is two back (the other eye's in
+  between), the state is passed off as the previous render's. After a longer gap (a skipped eye R, a mono
+  stretch such as a menu, a cutscene or a load) the eye's volumes are from another place, so its last frame
+  is zeroed and it clears its history as on its first renders (the `seq-scatter:` line counts these swaps as
+  "after a gap"). Each eye's first two renders clear their history: the compute clears only the pair it reads
+  when the last frame is 0, and cells it never clears show as blocks of stale light.
 - **Resizes.** When the render size changes, the engine resizes the four volumes in place (RVA 0x1CDD6D0,
   `resize(image, width, height, depth, mips)` at RVA 0x1C4AE30). The start-up size is 98 x 64 x 64. Right after
   the engine's last resize (hook at RVA 0x1CDDD7D), eye R's four follow, and so do whichever of the engine's
@@ -42,8 +45,11 @@ the filter on or off).
   rendered into volumes of the start-up size and its fog showed sharp cell-shaped blocks, with most of the
   haze missing. A diff of the engine's and eye R's image objects mid-run (+ 0x64 width, + 0x68 height,
   + 0x6C depth, + 0x110 memory size) found it.
-- With all three hooks in place, the per-eye TAA set keeps `r_lightScatteringTAA 1`. Anything missing leaves
-  the game untouched and the filter held off.
+- With all three hooks in place, `r_lightScatteringTAA` stays 1: the per-eye TAA set writes it, and with
+  per-eye TAA off (`ETERNALVR_STEREO_TAA=0`, the launcher's Anti-aliasing Off) or failed closed the layer's
+  run-time set does. The hooks need the eye tags only, so they are installed whenever Route S is requested
+  (before 2026-10-02 only with per-eye TAA, so Anti-aliasing Off still had the walking texture). Anything
+  missing leaves the game untouched and the filter held off.
 
 ## 3. Checks (second test PC, 2026-09-27)
 

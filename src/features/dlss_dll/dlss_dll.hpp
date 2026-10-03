@@ -32,6 +32,11 @@ std::string versionText(Version v);
 inline constexpr Version kGameDllVersion{2, 3, 0, 0};
 // The first DLSS with render presets (NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_*).
 inline constexpr Version kFirstPresetVersion{3, 1, 0, 0};
+// The first DLSS the layer runs DLAA with (NVSDK_NGX_PerfQuality_Value_DLAA, and its render preset hint,
+// in NVIDIA's SDK headers). The game's 2.3.0.0 predates the documented DLAA mode: it is not relied on.
+inline constexpr Version kFirstDlaaVersion{3, 1, 0, 0};
+// NVSDK_NGX_PerfQuality_Value_DLAA: the quality whose optimal render size is the output size.
+inline constexpr int kPerfQualityDlaa = 5;
 
 // The file name NGX looks for in each folder of its search path.
 inline constexpr std::wstring_view kDllName = L"nvngx_dlss.dll";
@@ -83,10 +88,16 @@ struct Decision {
     std::uint32_t preset = 0; // the preset for every DLSS quality (0: the DLL's own)
     bool applyPreset = false; // set the preset hints at feature creation
     std::string presetNote;   // why the preset is not applied, when one was asked for
+    bool applyDlaa = false;   // PerfQualityValue set to DLAA (kPerfQualityDlaa) on every write of it
+    std::string dlaaNote;     // why DLAA is not applied, when it was asked for
 };
 
 // The file is used when it exists, is named nvngx_dlss.dll, is an x86-64 DLL and carries an NVIDIA version
-// resource. A preset other than the default is applied only with a used DLL of kFirstPresetVersion or later.
-Decision decide(const FileFacts& facts, std::string_view presetText);
+// resource. A preset other than the default is applied only with a used DLL of kFirstPresetVersion or later,
+// and DLAA (`dlaa`: ETERNALVR_STEREO_DLSS_QUALITY=dlaa) only with a used DLL of kFirstDlaaVersion or later.
+Decision decide(const FileFacts& facts, std::string_view presetText, bool dlaa = false);
+
+// Why DLAA does not run without a newer DLL (ETERNALVR_DLSS_DLL unset): DLSS runs at Quality.
+std::string dlaaWithoutNewerDll();
 
 } // namespace evr::dlss_dll

@@ -16,7 +16,8 @@
 //   "<hand>.<input>" = "<name>"  e.g. "left.primary" = "X"
 //
 // Each section is read with the binding-text reader, so the same lenient rules and line numbers
-// apply. Suggested bindings are checked against the profile's input list (interaction_profiles.hpp)
+// apply. Keys of the retired "menu" set, still in files copied from earlier versions, are skipped.
+// Suggested bindings are checked against the profile's input list (interaction_profiles.hpp)
 // and against each other: two actions of one set on one physical input is a conflict, reported with
 // both action keys and both input paths (BindingConflict::SharedInput), and the later one is left out.
 // The control maps are returned as entries; buildBindingProfile compiles and checks them.

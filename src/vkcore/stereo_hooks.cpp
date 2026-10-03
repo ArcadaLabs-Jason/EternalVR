@@ -1,9 +1,11 @@
 #include "vkcore/stereo_hooks.hpp"
 
 #include "vkcore/game_code.hpp"
+#include "vkcore/import_patch.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <windows.h>
 
@@ -190,13 +192,10 @@ bool patchWorldVtable(std::byte* world) {
                 static_cast<void*>(world), kRenderViewForIndexSlot);
         return false;
     }
-    DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+    if (!writeReadOnlySlot(slot, reinterpret_cast<void*>(&renderViewForIndex))) {
         EVR_LOG("stereo: cannot write the world vtable; two views off");
         return false;
     }
-    *slot = reinterpret_cast<void*>(&renderViewForIndex);
-    VirtualProtect(slot, sizeof(void*), old, &old);
     g_vtablePatched.store(true);
     EVR_LOG("stereo: world vtable %p: RenderViewForIndex(1) now returns each world's second render view",
             static_cast<void*>(vtable));
@@ -332,8 +331,8 @@ void onVisibilityCountHook(HookRegisters& regs) {
 
 void onVisibilityOfViewHook(HookRegisters& regs) {
     auto* renderView = reinterpret_cast<std::byte*>(regs.rcx);
-    if (static_cast<std::uint32_t>(regs.rdx) != 0 || !mp_guard::allowsGameTouch()) {
-        return;
+    if (static_cast<std::uint32_t>(regs.rdx) != 0 || !mp_guard::allowsGameTouch() || viewSlotsActive()) {
+        return; // with view slots the second view has index 1 and its own context already
     }
     auto* world = *reinterpret_cast<std::byte**>(renderView + render_view_object::kOwningWorld);
     if (world && renderView == secondViewOf(world) &&
@@ -370,7 +369,7 @@ void onEyeLatchedHook(const HookRegisters& regs) {
     if (!renderView || eye > 1) {
         return;
     }
-    if (eye == 1 && mp_guard::allowsGameTouch() &&
+    if (eye == 1 && mp_guard::allowsGameTouch() && !viewSlotsActive() &&
         renderView == secondViewOf(*reinterpret_cast<std::byte* const*>(screenView + kScreenViewWorld))) {
         // The latch filed the second eye's render view under viewIndex 1. The screen view and its
         // render-list entry keep 1 (the frame's per-screen-view arrays), but the render view's own index
@@ -417,8 +416,8 @@ bool install(const GameText& text,
 }
 
 bool installEyeHooks(const GameText& text) {
-    const std::byte* eye = findUniqueInText(text, "per-eye view", kEyeViewSignature);
-    const std::byte* latch = findUniqueInText(text, "screen-view latch call", kLatchCallSignature);
+    const std::byte* eye = findUniqueInText(text, "stereo", "per-eye view", kEyeViewSignature);
+    const std::byte* latch = findUniqueInText(text, "stereo", "screen-view latch call", kLatchCallSignature);
     if (!eye || !latch || latch <= eye || latch - eye > 0x400) {
         return false;
     }
@@ -427,14 +426,18 @@ bool installEyeHooks(const GameText& text) {
 }
 
 bool installTwoViewHooks(const GameText& text) {
-    const std::byte* world = findUniqueInText(text, "screen-view build world", kBuildWorldSignature);
-    const std::byte* layout = findUniqueInText(text, "screen-view layout read", kLayoutReadSignature);
-    const std::byte* alloc = findUniqueInText(text, "render view allocation", kViewAllocSignature);
-    const std::byte* dtor = findUniqueInText(text, "world destructor views", kWorldDtorSignature);
-    const std::byte* forIndex = findUniqueInText(text, "RenderViewForIndex", kRenderViewForIndexSignature);
-    const std::byte* visCount = findUniqueInText(text, "visibility context count", kVisibilityCountSignature);
+    const std::byte* world =
+        findUniqueInText(text, "stereo", "screen-view build world", kBuildWorldSignature);
+    const std::byte* layout =
+        findUniqueInText(text, "stereo", "screen-view layout read", kLayoutReadSignature);
+    const std::byte* alloc = findUniqueInText(text, "stereo", "render view allocation", kViewAllocSignature);
+    const std::byte* dtor = findUniqueInText(text, "stereo", "world destructor views", kWorldDtorSignature);
+    const std::byte* forIndex =
+        findUniqueInText(text, "stereo", "RenderViewForIndex", kRenderViewForIndexSignature);
+    const std::byte* visCount =
+        findUniqueInText(text, "stereo", "visibility context count", kVisibilityCountSignature);
     const std::byte* visOfView =
-        findUniqueInText(text, "visibility context of a view", kVisibilityOfViewSignature);
+        findUniqueInText(text, "stereo", "visibility context of a view", kVisibilityOfViewSignature);
     if (!world || !layout || !alloc || !dtor || !forIndex || !visCount || !visOfView || layout <= world ||
         layout - world > 0x200) {
         return false;
@@ -457,10 +460,10 @@ bool installTwoViewHooks(const GameText& text) {
             rvaOf(text, reinterpret_cast<const void*>(g_viewCtor)),
             rvaOf(text, reinterpret_cast<const void*>(g_viewDtor)),
             rvaOf(text, reinterpret_cast<const void*>(g_delete)));
-    if (const std::byte* rs = findUniqueInText(text, "render system", kRenderSystemSignature)) {
+    if (const std::byte* rs = findUniqueInText(text, "stereo", "render system", kRenderSystemSignature)) {
         g_renderSystem = ripTarget(rs + 14, rs + 18);
     }
-    if (const std::byte* be = findUniqueInText(text, "render backend pointer", kBackendSignature)) {
+    if (const std::byte* be = findUniqueInText(text, "stereo", "render backend pointer", kBackendSignature)) {
         g_backendPointer = reinterpret_cast<std::byte* const*>(ripTarget(be + 3, be + 7));
     }
     // The destructor hook first: a second view must never outlive its world.
@@ -493,9 +496,12 @@ StereoHookStatus installStereoHooks(StereoHookSink* sink, bool twoViews) {
 StereoExperiment stereoExperimentFromEnv() {
     std::wstring mode;
     std::wstring experiment;
-    if (!readEnv(L"ETERNALVR_MODE", mode) || _wcsicmp(mode.c_str(), L"stereo") != 0 ||
-        !readEnv(L"ETERNALVR_STEREO_EXPERIMENT", experiment)) {
+    if (!readEnv(L"ETERNALVR_MODE", mode) || _wcsicmp(mode.c_str(), L"stereo") != 0) {
         return StereoExperiment::None;
+    }
+    if (!readEnv(L"ETERNALVR_STEREO_EXPERIMENT", experiment) || experiment.empty()) {
+        // Parallel Eye Rendering is the two-view renderer with view slots (view_slots.hpp), once installed.
+        return viewSlotsActive() ? StereoExperiment::TwoViews : StereoExperiment::None;
     }
     if (_wcsicmp(experiment.c_str(), L"left-eye") == 0) {
         return StereoExperiment::LeftEye;

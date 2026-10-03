@@ -5,7 +5,9 @@
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/presenter_eyes.hpp"
 #include "vkcore/shader_dump.hpp"
+#include "vkcore/vrs_nv.hpp"
 
 #include <atomic>
 #include <cstring>
@@ -98,6 +100,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
     const bool motion = !usage && touch && motionCaptureRequested() && ui_layer::motionCandidateUsage(desc);
     if (motion) {
         usage = ui_layer::motionCandidateUsage(desc);
+    }
+    // Parallel Eye Rendering's eye copy reads each view's image (presenter_eyes.hpp).
+    if (!usage && touch && eyeCopyRequested()) {
+        usage = ui_layer::eyeCopyCandidateUsage(desc);
     }
     if (!usage) {
         return d->createImage(device, pCreateInfo, pAllocator, pImage);
@@ -241,10 +247,12 @@ void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcA
     d.destroyImage = reinterpret_cast<PFN_vkDestroyImage>(nextGetDeviceProcAddr(device, "vkDestroyImage"));
     d.cmdPipelineBarrier =
         reinterpret_cast<PFN_vkCmdPipelineBarrier>(nextGetDeviceProcAddr(device, "vkCmdPipelineBarrier"));
-    // The shader dump hooks these two as well: with both on, ours calls the dump's, which calls the next.
+    // The shader dump hooks these two as well, and foveation vkBeginCommandBuffer: with them on, ours calls
+    // the dump's, which calls foveation's, which calls the next.
     const auto chained = [&](const char* name) {
         const PFN_vkVoidFunction dump = shader_dump::findHook(name);
-        return dump ? dump : nextGetDeviceProcAddr(device, name);
+        const PFN_vkVoidFunction vrs = dump ? nullptr : vrs_nv::findHook(name);
+        return dump ? dump : vrs ? vrs : nextGetDeviceProcAddr(device, name);
     };
     d.beginCommandBuffer = reinterpret_cast<PFN_vkBeginCommandBuffer>(chained("vkBeginCommandBuffer"));
     d.cmdExecuteCommands = reinterpret_cast<PFN_vkCmdExecuteCommands>(chained("vkCmdExecuteCommands"));

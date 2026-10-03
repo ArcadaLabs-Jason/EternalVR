@@ -46,10 +46,6 @@ TEST_CASE("every name is a valid OpenXR name, unique within its set") {
     }
 }
 
-TEST_CASE("the menu set outranks gameplay") {
-    CHECK(xrActionSet(XrActionSetId::Menu).priority > xrActionSet(XrActionSetId::Gameplay).priority);
-}
-
 TEST_CASE("gameplay actions carry every field of the hand state with the right type") {
     CHECK(xrAction(XrActionId::Trigger).kind == XrActionKind::Float);
     CHECK(xrAction(XrActionId::Grip).kind == XrActionKind::Float);
@@ -64,22 +60,20 @@ TEST_CASE("gameplay actions carry every field of the hand state with the right t
     CHECK(xrAction(XrActionId::AimPose).kind == XrActionKind::Pose);
     CHECK(xrAction(XrActionId::GripPose).kind == XrActionKind::Pose);
     CHECK(xrAction(XrActionId::Haptic).kind == XrActionKind::Haptic);
-    for (const XrActionId id : {XrActionId::Trigger, XrActionId::AimPose, XrActionId::Haptic}) {
-        CHECK(xrAction(id).set == XrActionSetId::Gameplay);
+    for (const XrActionDef& action : xrActions()) {
+        CHECK(action.set == XrActionSetId::Gameplay);
     }
 }
 
 TEST_CASE("actions are found by set and name") {
     CHECK(findXrActionSet("gameplay") == XrActionSetId::Gameplay);
-    CHECK(findXrActionSet("menu") == XrActionSetId::Menu);
+    // The menu set of earlier versions is gone: menus read the gameplay actions.
+    CHECK_FALSE(findXrActionSet("menu").has_value());
     CHECK_FALSE(findXrActionSet("Gameplay").has_value());
     CHECK(findXrAction(XrActionSetId::Gameplay, "trigger") == XrActionId::Trigger);
-    CHECK(findXrAction(XrActionSetId::Menu, "select") == XrActionId::MenuSelect);
     CHECK(findXrAction(XrActionSetId::Gameplay, "face3") == XrActionId::Face3);
     CHECK(findXrAction(XrActionSetId::Gameplay, "face4") == XrActionId::Face4);
     CHECK(findXrAction(XrActionSetId::Gameplay, "shoulder") == XrActionId::Shoulder);
-    // Names are looked up within their set only.
-    CHECK_FALSE(findXrAction(XrActionSetId::Menu, "trigger").has_value());
     CHECK_FALSE(findXrAction(XrActionSetId::Gameplay, "select").has_value());
 }
 

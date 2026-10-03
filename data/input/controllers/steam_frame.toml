@@ -13,8 +13,7 @@
 # the left bumper. The D-pad carries what Touch puts on X and Y: switch weapon mod up, switch equipment
 # left, the Crucible right, mission information down. Some actions are on two inputs, so either habit
 # works. The pause is a View tap, on the left like every family's (the capture chord holds that button),
-# and a Menu tap opens the Dossier. Switch equipment is a tap, so under SteamVR, where the D-pad left
-# also works as the capture chord's button, a press that captured switches nothing.
+# and a Menu tap opens the Dossier. Switch equipment is a tap, as on Touch's X.
 #
 # SteamVR 2.17.10 renamed the bumper from /input/bumper/ to /input/shoulder/. When a runtime refuses
 # the newer name, the bindings are suggested again with the older one.
@@ -47,15 +46,6 @@
 "gameplay.right.aim_pose" = "/input/aim/pose"
 "gameplay.right.grip_pose" = "/input/grip/pose"
 "gameplay.right.haptic" = "/output/haptic"
-"menu.left.select" = "/input/trigger/value"
-"menu.left.back" = "/input/dpad_left/click"
-"menu.left.scroll" = "/input/thumbstick"
-"menu.left.pointer_pose" = "/input/aim/pose"
-"menu.left.close" = "/input/view/click"
-"menu.right.select" = "/input/trigger/value"
-"menu.right.back" = "/input/b/click"
-"menu.right.scroll" = "/input/thumbstick"
-"menu.right.pointer_pose" = "/input/aim/pose"
 
 [map.right]
 "weapon_hand" = "right"

@@ -188,6 +188,12 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(DlssDllChoice.File, LauncherSettings.Parse("schema_version = 2\ndlss_version = file\n").DlssDll);
             Assert.Contains("dlss_version = file", new LauncherSettings { DlssDll = DlssDllChoice.File }.Serialize());
             Assert.Equal(Enum.GetValues(typeof(DlssQuality)).Length, SettingTexts.For(Setting.DlssQuality).Choices.Count);
+            // The Quality list: DLAA first, then from the largest image to the smallest, each quality once.
+            Assert.Equal(Enum.GetValues(typeof(DlssQuality)).Length, DlssDll.QualityOrder.Distinct().Count());
+            Assert.Equal(new[] { "DLAA", "Quality", "Balanced", "Performance", "Ultra Performance" }, SettingTexts.For(Setting.DlssQuality).Choices);
+            Assert.Equal(Enum.GetValues(typeof(DlssQuality)).Length, DlssDll.QualityNames.Length);
+            Assert.Equal(DlssDll.QualityNames.Length, DlssDll.QualityFactors.Length);
+            Assert.Equal(1.0, DlssDll.QualityFactors[(int)DlssQuality.Dlaa]);
             Assert.Equal(DlssDll.PresetValues.Length, SettingTexts.For(Setting.DlssPreset).Choices.Count);
             Assert.Equal(1, DlssDll.PresetIndex("k"));
             Assert.Equal(0, DlssDll.PresetIndex("transformer"));
@@ -214,6 +220,33 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("DLSS 2.5.1 from your file, Quality, both eyes", DlssDll.WhatRuns(file, Newest, true, noPresets));
             var gone = new DlssDll.Check { Problem = "The file is not there any more." };
             Assert.Equal("The game's DLSS 2.3, Quality, both eyes: your file cannot be used", DlssDll.WhatRuns(file, Newest, true, gone));
+        }
+
+        [Fact]
+        public void DlaaRunsWithANewerDlssAndAsQualityWithTheGames()
+        {
+            var s = new LauncherSettings { AntiAliasing = AntiAliasingMode.Dlss, Dlss = DlssQuality.Dlaa };
+            Assert.Equal("DLSS 310.9.1, preset K, DLAA, both eyes", DlssDll.WhatRuns(s, Newest, true, null));
+            Assert.Equal("The game's DLSS 2.3, Quality (DLAA needs a newer DLSS), both eyes, until you download DLSS 310.9.1",
+                DlssDll.WhatRuns(s, Newest, false, null));
+            s.DlssDll = DlssDllChoice.Game;
+            Assert.Equal("The game's DLSS 2.3, Quality (DLAA needs a newer DLSS), both eyes", DlssDll.WhatRuns(s, Newest, true, null));
+
+            var file = WithFile();
+            file.Dlss = DlssQuality.Dlaa;
+            Assert.Equal("DLSS 310.5.3 from your file, preset K, DLAA, both eyes",
+                DlssDll.WhatRuns(file, Newest, true, new DlssDll.Check { Version = new Version(310, 5, 3, 0) }));
+            Assert.Equal("DLSS 3.1.0 from your file, preset K, DLAA, both eyes",
+                DlssDll.WhatRuns(file, Newest, true, new DlssDll.Check { Version = DlssDll.FirstDlaaVersion }));
+            Assert.Equal("DLSS 2.5.1 from your file, Quality (DLAA needs DLSS 3.1 or later), both eyes",
+                DlssDll.WhatRuns(file, Newest, true, new DlssDll.Check { Version = new Version(2, 5, 1, 0) }));
+            // A file no newer than the game's: the layer keeps the game's DLSS.
+            Assert.Equal("DLSS 2.3.0 from your file, Quality (DLAA needs a newer DLSS), both eyes",
+                DlssDll.WhatRuns(file, Newest, true, new DlssDll.Check { Version = DlssDll.GameVersion }));
+
+            // The layer gets the name; it decides with the DLL it is given.
+            Assert.Equal("dlaa", Env(s)["ETERNALVR_STEREO_DLSS_QUALITY"]);
+            Assert.Equal("dlaa", Env(new LauncherSettings { AntiAliasing = AntiAliasingMode.Dlss, Dlss = DlssQuality.Dlaa }, Downloaded)["ETERNALVR_STEREO_DLSS_QUALITY"]);
         }
 
         [Fact]

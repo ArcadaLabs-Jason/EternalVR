@@ -38,6 +38,60 @@ std::vector<std::string_view> split(std::string_view text, char separator) {
     return pieces;
 }
 
+// The commands a schedule may run, compared without case: every one the rig's scripts and the QA suite use.
+// Cvars are set by their name followed by the value.
+constexpr std::string_view kAllowedCommands[] = {
+    // The QA suite's token pickup (tools/rig/qa/qa-scenarios.ps1).
+    "god", "sync_printInteractionAndAnimationName", "g_debugTriggers", "setviewpos", "where",
+    "selectDebugEntity",
+    // Rig scripts: positions, pickups, damage, triggers and checkpoints.
+    "getviewpos", "teleport", "teleportposition", "notarget", "noclip", "kill", "damage", "hurt", "health",
+    "give", "trigger", "activatetargets", "activateCheckPoint",
+    // Demons (docs/rig-findings/debug-commands.md).
+    "ai_Show", "ai_Hide", "nextActiveAI", "nextAI", "prevAI", "ai_teleportToPlayer", "moveToFacingPlayer",
+    "ai_forceIdle", "ai_forceFreeze", "ai_forceAnim", "killAI", "removeAI", "healAI", "encounter_clearWait",
+    "gibalicious",
+    // Cvars set in the map (rig scripts, tools/rig/cpu-cvar-ab.ps1).
+    "g_dumpSpawnedEntities", "g_setting_hud_auto_dismiss_tutorials", "g_setting_tutorials",
+    "p_debugAnimatedCamera", "r_sharpening", "is_update", "is_defrag", "r_skipGPUParticles"};
+
+char lower(char c) {
+    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+bool sameName(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (lower(a[i]) != lower(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool plain(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' ||
+           c == '\t' || c == '_' || c == '-' || c == '.' || c == '/';
+}
+
+// Why the allow-list leaves `command` (trimmed, not empty) out, or empty.
+std::string_view offList(std::string_view command) {
+    for (const char c : command) {
+        if (!plain(c)) {
+            return "a character other than letters, digits, spaces and _ - . /";
+        }
+    }
+    const std::string_view name = command.substr(0, command.find_first_of(" \t"));
+    for (const std::string_view allowed : kAllowedCommands) {
+        if (sameName(name, allowed)) {
+            return {};
+        }
+    }
+    return "not a test command";
+}
+
 DebugScript failed(std::size_t step, const std::string& why) {
     DebugScript script;
     script.error = "step " + std::to_string(step + 1) + ": " + why;
@@ -55,11 +109,8 @@ std::string refusal(std::string_view command) {
         return std::string(refused->reason) + " (" + std::string(refused->pattern) + ")";
     }
     const std::size_t space = command.find_first_of(" \t");
-    std::string name(command.substr(0, space));
-    for (char& c : name) {
-        c = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
-    }
-    if (name == "map" || name == "devmap") {
+    const std::string_view name = command.substr(0, space);
+    if (sameName(name, "map") || sameName(name, "devmap")) {
         const std::string_view map =
             space == std::string_view::npos ? std::string_view{} : trim(command.substr(space));
         if (map.empty() || mp_policy::mapTripsGuard(map)) {
@@ -77,6 +128,8 @@ DebugScript parseDebugScript(std::string_view text) {
         return script;
     }
     const std::vector<std::string_view> steps = split(text, '|');
+    double last = 0.0; // the time of the step before, kept or not
+    std::vector<std::string> refused;
     for (std::size_t i = 0; i < steps.size(); ++i) {
         const std::string_view step = trim(steps[i]);
         if (step.empty()) {
@@ -93,22 +146,35 @@ DebugScript parseDebugScript(std::string_view text) {
             !(parsed.seconds >= 0.0) || !std::isfinite(parsed.seconds)) {
             return failed(i, "the time is not a finite non-negative number of seconds");
         }
-        if (!script.steps.empty() && parsed.seconds < script.steps.back().seconds) {
+        if (parsed.seconds < last) {
             return failed(i, "the time is earlier than the step before it");
         }
+        last = parsed.seconds;
+        std::size_t given = 0;
         for (const std::string_view command : split(step.substr(colon + 1), ';')) {
-            if (const std::string_view trimmed = trim(command); !trimmed.empty()) {
-                if (const std::string why = refusal(trimmed); !why.empty()) {
-                    return failed(i, "refused, " + why + ": " + std::string(trimmed));
-                }
-                parsed.commands.emplace_back(trimmed);
+            const std::string_view trimmed = trim(command);
+            if (trimmed.empty()) {
+                continue;
             }
+            ++given;
+            if (const std::string why = refusal(trimmed); !why.empty()) {
+                return failed(i, "refused, " + why + ": " + std::string(trimmed));
+            }
+            if (const std::string_view why = offList(trimmed); !why.empty()) {
+                refused.push_back("step " + std::to_string(i + 1) + ": " + std::string(trimmed) + " (" +
+                                  std::string(why) + ")");
+                continue;
+            }
+            parsed.commands.emplace_back(trimmed);
         }
-        if (parsed.commands.empty()) {
+        if (given == 0) {
             return failed(i, "no command");
         }
-        script.steps.push_back(std::move(parsed));
+        if (!parsed.commands.empty()) {
+            script.steps.push_back(std::move(parsed));
+        }
     }
+    script.refused = std::move(refused);
     return script;
 }
 

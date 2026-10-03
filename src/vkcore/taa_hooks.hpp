@@ -18,30 +18,44 @@
 // - DLSS: eye R evaluates a twin NGX feature (taa_ngx.cpp).
 // - The temporal effects whose history is still shared (anti-ghosting mask, SSDO, light scattering, depth
 //   of field, water, refraction, ray-traced reflection upscale) are switched off through the engine's cvar
-//   setter.
+//   setter; the light scattering's filter stays on while its history is per eye.
+// - The auto-exposure index (exposure_hooks.hpp) and the light scattering's history (scatter_hooks.hpp) are
+//   kept per eye by hooks of their own, which need the eye tags only: they work with per-eye TAA off or
+//   failed closed as well.
 //
 // Fail closed: when any piece is missing, the first stereo tick writes the v1 set instead (r_antialiasing
 // 0, r_TAASafeMode 1: no temporal accumulation at all). Every game write and every redirect asks the
-// multiplayer guard first; after a trip the hooks only forward to the engine.
+// multiplayer guard first; after a trip the hooks only forward to the engine, and the cvars written go back
+// to their values before the layer's first write (cvar_book.hpp).
+
+#include "vkcore/taa_ngx.hpp"
 
 #include <cstdint>
 
 namespace evr::vkcore {
 
-// ETERNALVR_STEREO_TAA=1 with ETERNALVR_MODE=stereo and no stereo experiment.
+// ETERNALVR_MODE=stereo, no stereo experiment and no engine changed by Parallel Eye Rendering
+// (view_slots.hpp: installed, or failed after a change): Route S. The per-eye exposure index
+// (exposure_hooks.hpp) and scattering history (scatter_hooks.hpp) need only this, not per-eye TAA.
+bool routeSRequested();
+// ETERNALVR_STEREO_TAA=1 (the default) under Route S.
 bool taaRequested();
 // ETERNALVR_STEREO_DLSS=1: DLSS per eye instead of TAA.
 bool taaDlssRequested();
 // ETERNALVR_STEREO_DLSS_QUALITY: the r_dlssQuality value held while DLSS runs (stereo_seq::dlssQualityValue),
 // -1 for the game's own.
 int taaDlssQuality();
+// ETERNALVR_STEREO_DLSS_QUALITY=dlaa: DLSS at the full render size. r_dlssQuality is held at Quality and
+// dlss_dll.cpp sets NGX's PerfQualityValue to DLAA, with a newer DLSS only.
+bool taaDlssDlaa();
 
-// From vkCreateInstance, after the multiplayer guard: hooks the device context's slot loop so that eye R's
-// images are built with the renderer. Does nothing unless requested and the guard allows game writes.
+// From vkCreateInstance, after the multiplayer guard: under Route S installs the scattering history's hooks
+// (whatever the TAA mode), then, with per-eye TAA requested, hooks the device context's slot loop so that eye
+// R's images are built with the renderer. Nothing touches the game unless the guard allows game writes.
 void installTaaEarly();
 
-// Route S start (after its own hooks): the selectors, the cvars and the NGX twins. False (logged) when a
-// piece is missing; the first stereo tick then fails closed.
+// Route S start (after its own hooks and the exposure index hook): the selectors, the cvars and the NGX
+// twins. False (logged) when a piece is missing; the first stereo tick then fails closed.
 bool installTaaHooks();
 
 // Eye L's per-eye hook on each stereo tick. The first call switches per-eye TAA on (the forced cvars) or
@@ -69,12 +83,9 @@ struct TaaCounters {
     // Exposure index renders whose tag in flight names another eye than the render's own (by its counter).
     std::uint64_t exposureInFlightDiffers = 0;
     std::uint64_t secondPairBuilds = 0;
-    std::uint64_t twinCreates = 0; // eye R's DLSS features created
-    std::uint64_t twinFailures = 0;
-    std::uint64_t evaluates[2] = {};   // DLSS evaluations per eye
-    std::uint64_t evaluatesNoTwin = 0; // eye R evaluations left on the game's feature
-    std::uint64_t twinResets = 0;
-    std::uint64_t releases = 0;
+    // DLSS: eye R's features created and failed, evaluations per eye (eye R's left on the game's feature),
+    // resets, and how each evaluation's eye was found.
+    NgxCounters ngx;
     // Cvar values read back now (-1: not located): r_jitter is the engine's own verdict, set every frame
     // to 1 exactly when temporal AA or DLSS runs (r_TAASafeMode 0 and an AA mode above 0).
     int antialiasing = -1;

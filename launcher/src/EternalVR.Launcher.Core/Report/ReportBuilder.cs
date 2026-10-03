@@ -139,13 +139,14 @@ namespace EternalVR.Launcher.Core.Report
             var logs =inputs.DataRoot == null ? null : Path.Combine(inputs.DataRoot, "logs");
             var sessions = NewestSessions(logs, int.MaxValue);
             var gameDirs = GameBaseFolders(inputs.GameSavedGamesDirs);
+            var gameSettings = sessions.Count == 0 ? null : LastGameSettings(Path.Combine(logs, sessions[0]));
 
             foreach (var item in ReportManifest.Items)
             {
                 switch (item.Source)
                 {
                     case ReportSource.Generated:
-                        var text = item.ZipPath == ReportManifest.SystemFile ? SystemText(inputs)
+                        var text = item.ZipPath == ReportManifest.SystemFile ? SystemText(inputs, gameSettings)
                             : item.ZipPath == ReportManifest.WindowsEventsFile ? WindowsEvents.Format(inputs.WindowsEvents, inputs.Now)
                             : PreflightText(inputs);
                         files.Add(new ReportFile(item.ZipPath, text, Utf8.GetByteCount(text), false));
@@ -336,12 +337,14 @@ namespace EternalVR.Launcher.Core.Report
             "EternalVR report" + (string.IsNullOrEmpty(inputs.Id) ? string.Empty : " " + inputs.Id) + ", created "
             + inputs.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
-        private static string SystemText(ReportInputs inputs)
+        /// <summary>The lines of <paramref name="inputs"/>, then the game's video settings of the newest session when its log has them.</summary>
+        private static string SystemText(ReportInputs inputs, string gameSettings)
         {
             var sb = new StringBuilder();
             sb.Append(Heading(inputs)).Append('\n');
             foreach (var kv in inputs.System ?? new KeyValuePair<string, string>[0])
                 sb.Append(kv.Key).Append(": ").Append(string.IsNullOrWhiteSpace(kv.Value) ? "unknown" : kv.Value.Trim()).Append('\n');
+            if (!string.IsNullOrEmpty(gameSettings)) sb.Append(GameSettingsKey).Append(": ").Append(gameSettings).Append('\n');
             return sb.ToString();
         }
 

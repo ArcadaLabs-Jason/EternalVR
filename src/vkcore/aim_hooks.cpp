@@ -16,6 +16,8 @@
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "features/comfort/glory_kill.hpp"
+
 #include "vkcore/controllers.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
@@ -37,6 +39,13 @@
 namespace evr::vkcore::controllers {
 
 namespace {
+
+// syncKillActive: the last sync entity seen, whether it is a kill, and how many were logged.
+constexpr int kLoggedSyncs = 40;
+std::mutex g_syncMutex;
+const std::byte* g_syncSeen = nullptr;
+bool g_syncKill = false;
+int g_loggedSyncs = 0;
 
 constexpr const char* kTag = "controllers";
 
@@ -376,10 +385,35 @@ ForeignViewWrites takeForeignViewWrites() {
     return w;
 }
 
-bool syncKillActive(const std::byte* player) {
+const std::byte* syncEntity(const std::byte* player) {
     const std::byte* sync = nullptr;
-    return state().attached.load(std::memory_order_acquire) && isPlayerSafe(player) &&
-           safeRead(player + kPlayerSyncMaster, sync) && sync != nullptr;
+    if (safeRead(player + kPlayerSavedSync, sync) && sync != nullptr) {
+        return sync;
+    }
+    return safeRead(player + kPlayerSyncMaster, sync) ? sync : nullptr;
+}
+
+bool syncKillActive(const std::byte* player) {
+    if (!state().attached.load(std::memory_order_acquire) || !isPlayerSafe(player)) {
+        return false;
+    }
+    const std::byte* sync = syncEntity(player);
+    // The camera hook runs on any of the game's worker threads: the kind is read once per sync entity.
+    std::lock_guard lock(g_syncMutex);
+    if (sync != g_syncSeen) {
+        g_syncSeen = sync;
+        g_syncKill = false;
+        if (sync) {
+            const std::byte* def = nullptr;
+            const std::string name =
+                safeRead(sync + kEntityDef, def) && def ? itemDeclName(def) : std::string{};
+            g_syncKill = comfort::isKillSync(name);
+            if (g_loggedSyncs++ < kLoggedSyncs) {
+                EVR_LOG("controllers: sync '%s' (%s)", name.c_str(), g_syncKill ? "a kill" : "not a kill");
+            }
+        }
+    }
+    return g_syncKill;
 }
 
 std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {

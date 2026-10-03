@@ -129,6 +129,11 @@ void XrPresenter::Impl::pollEvents() {
     if (settings.testLossSeconds > 0.0f && !loss.testLossDone && sessionRunning &&
         qpcSeconds(qpcNow() - loss.runningSinceQpc) >= settings.testLossSeconds) {
         loss.testLossDone = true;
+        ComPtr<ID3D12Device5> device5;
+        if (settings.testLossRemovesDevice && SUCCEEDED(d3dDevice.As(&device5))) {
+            EVR_LOG("xr: test: removing the presenter's D3D12 device (ETERNALVR_TEST_XR_LOSS_REMOVE)");
+            device5->RemoveDevice();
+        }
         loseOnRuntimeFailure(XR_ERROR_SESSION_LOST, "test (ETERNALVR_TEST_XR_LOSS)");
     }
 }

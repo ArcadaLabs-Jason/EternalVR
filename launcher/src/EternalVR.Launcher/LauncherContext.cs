@@ -60,6 +60,11 @@ namespace EternalVR.Launcher
             var ctx = new LauncherContext(options, log);
             ctx.Paths.EnsureCreated();
             log.SetFile(ctx.Paths.LauncherLog);
+            // Started processes get one of each such name, with the value Windows reads (ChildEnvironment).
+            var duplicates = ChildEnvironment.CaseDuplicates(ChildEnvironment.Current().Select(kv => kv.Key));
+            if (duplicates.Count > 0)
+                log.Info("the environment holds names that differ only in case (" + string.Join(", ", duplicates.Select(g => string.Join("/", g)))
+                    + "); started processes get the value Windows reads for each");
             ctx.Data = LauncherData.Load(Path.Combine(ctx.ProgramDir, "data"));
             ctx.Settings = LauncherSettings.Load(ctx.Paths.SettingsFile);
             ctx.Headset = LastHeadset.Read(ctx.Paths.HeadsetFile);
@@ -137,9 +142,25 @@ namespace EternalVR.Launcher
             return saves == null ? g.Locations : g.Locations.Concat(new[] { saves }).ToList();
         }
 
-        /// <summary>The runtime manifest the game will use: the chosen one, else the system's active one.</summary>
+        /// <summary>
+        /// The runtime manifest the game will use (<see cref="LaunchPlanBuilder.EffectiveRuntime"/>): the chosen one, else
+        /// XR_RUNTIME_JSON from the launcher's environment, else the system's active one.
+        /// </summary>
         public string EffectiveRuntime() =>
-            LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? WindowsSystem.ActiveOpenXrRuntime() : Settings.Runtime;
+            LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? SystemDefaultRuntime() : Settings.Runtime;
+
+        /// <summary>What "System default" stands for: XR_RUNTIME_JSON when the launcher's environment has it, else the active runtime.</summary>
+        public static string SystemDefaultRuntime() => InheritedRuntime ?? WindowsSystem.ActiveOpenXrRuntime();
+
+        /// <summary>XR_RUNTIME_JSON in the launcher's own environment, which the game and the probe inherit; null when not set.</summary>
+        public static string InheritedRuntime
+        {
+            get
+            {
+                var v = Environment.GetEnvironmentVariable(LaunchPlanBuilder.RuntimeVariable);
+                return string.IsNullOrWhiteSpace(v) ? null : v;
+            }
+        }
 
         /// <summary>Runtimes to offer (T-110): active, AvailableRuntimes, SteamVR in every Steam library.</summary>
         public IReadOnlyList<string> RuntimeChoices()
@@ -157,7 +178,7 @@ namespace EternalVR.Launcher
                     var libs = File.Exists(vdf) ? SteamLibraries.ParseLibraryFolders(File.ReadAllText(vdf), steam) : new[] { steam };
                     list.AddRange(SteamLibraries.FindSteamVrRuntimes(libs));
                 }
-                catch (Exception e) when (e is IOException || e is Core.Text.VdfFormatException) { Log.Warn("reading Steam libraries: " + e.Message); }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is Core.Text.VdfFormatException) { Log.Warn("reading Steam libraries: " + e.Message); }
             }
             return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
@@ -218,9 +239,14 @@ namespace EternalVR.Launcher
             f.LastRenderCap = LastRenderCap;
 
             f.RuntimeChosen = !LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime);
+            f.RuntimeFromEnvironment = LaunchPlanBuilder.RuntimeFromEnvironment(Settings.Runtime, InheritedRuntime);
             f.RuntimeManifest = EffectiveRuntime();
             f.RuntimeManifestExists = !string.IsNullOrEmpty(f.RuntimeManifest) && File.Exists(f.RuntimeManifest);
-            if (LaunchPlanBuilder.IsSteamVr(f.RuntimeManifest)) f.SteamVrBindings = Core.Report.SteamVrSummary.ReadCustomBindings(SteamRoot);
+            if (LaunchPlanBuilder.IsSteamVr(f.RuntimeManifest))
+            {
+                f.SteamVrBindings = Core.Report.SteamVrSummary.ReadCustomBindings(SteamRoot);
+                f.SteamVrFramesToThrottle = Core.Report.SteamVrSummary.ReadFramesToThrottle(SteamRoot);
+            }
 
             g.LayerDecisions = Data.KnownLayers.Evaluate(WindowsSystem.ImplicitLayers(), LaunchPlanBuilder.IsVdxr(f.RuntimeManifest));
             f.Layers = g.LayerDecisions;
@@ -290,6 +316,7 @@ namespace EternalVR.Launcher
                 NewestDlss = NewestDlss(verify: true),
             });
             if (TestMode) plan.ExePath = Options.TestExe;
+            plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);
             if (plan.RenderSize?.Note != null) Log.Warn(plan.RenderSize.Note + " (" + plan.RenderSize.Reason + ")");
             if (plan.RenderSize?.BaseNote != null) Log.Warn("Resolution: " + plan.RenderSize.BaseNote);
             return plan;
@@ -346,15 +373,19 @@ namespace EternalVR.Launcher
         private OpenXrProbeResult ProbeRuntime(IReadOnlyList<LayerDecision> decisions, HeadsetReadBy by = HeadsetReadBy.Launch)
         {
             if (by == HeadsetReadBy.Launch && !LaunchPlanBuilder.WantsRenderSize(Settings)) return null;
+            // The runtime asked, taken now: the Runtime row can change while the probe runs (Detect again, up to 30 s).
+            var chosen = Settings.Runtime;
+            var runtime = EffectiveRuntime();
             var env = LaunchPlanBuilder.OpenXrEnvironment(Settings, decisions);
             var who = by == HeadsetReadBy.Detect ? "detect again: " : by == HeadsetReadBy.Start ? "headset read at start: " : string.Empty;
             Log.Info($"{who}waiting for the headset runtime (up to {OpenXrProbe.DefaultTimeoutMs / 1000} s)");
             string self;
             using (var me = Process.GetCurrentProcess()) self = me.MainModule?.FileName;
-            var probe = ProbeChild.Run(self, ProbeChild.Switch + " " + Program.Quote(OpenXrLoader), env);
-            Log.Info("openxr probe (" + (LaunchPlanBuilder.IsSystemRuntime(Settings.Runtime) ? "system runtime" : Settings.Runtime) + "): " + probe);
+            var probe = ProbeChild.Run(self, ProbeChild.Switch + " " + LaunchPlan.QuoteIfNeeded(OpenXrLoader), env);
+            Log.Info("openxr probe (" + (!LaunchPlanBuilder.IsSystemRuntime(chosen) ? chosen
+                : InheritedRuntime != null ? LaunchPlanBuilder.RuntimeVariable + " " + InheritedRuntime : "system runtime") + "): " + probe);
             ReadSteamVrSeen();
-            RememberHeadset(LastHeadset.After(Headset, probe, EffectiveRuntime(), DateTime.Now, by));
+            RememberHeadset(LastHeadset.After(Headset, probe, runtime, DateTime.Now, by));
             return probe;
         }
 
@@ -374,8 +405,8 @@ namespace EternalVR.Launcher
         }
 
         /// <summary>Keeps a finished session's refresh rate and summary as the last session's (the Play tab's Refresh line).</summary>
-        public void RememberSession(SessionSummary summary, string sessionId, DateTime endedAt) =>
-            RememberHeadset(LastHeadset.AfterSession(Headset, summary, sessionId, endedAt));
+        public void RememberSession(SessionSummary summary, string sessionId, DateTime endedAt, UnboundCause unbound) =>
+            RememberHeadset(LastHeadset.AfterSession(Headset, summary, sessionId, endedAt, unbound));
 
         /// <summary>
         /// Keeps the headset's facts for the Play tab's Headset box, in memory and in the data folder: a probe that answered

@@ -23,6 +23,9 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The first DLSS with render presets.</summary>
         public static readonly Version FirstPresetVersion = new Version(3, 1, 0, 0);
 
+        /// <summary>The first DLSS the layer runs DLAA with; an older one (the game's 2.3 included) runs Quality instead.</summary>
+        public static readonly Version FirstDlaaVersion = new Version(3, 1, 0, 0);
+
         /// <summary>The preset choices (the layer's values), in the window's order: NVIDIA's pick, then the transformer model's letters.</summary>
         public static readonly string[] PresetValues = { "default", "K", "J", "M", "L", "F" };
 
@@ -64,11 +67,28 @@ namespace EternalVR.Launcher.Core.Settings
         }
 
         /// <summary>The DLSS qualities' names, in <see cref="DlssQuality"/> order.</summary>
-        public static readonly string[] QualityNames = { "Quality", "Balanced", "Performance", "Ultra Performance" };
+        public static readonly string[] QualityNames = { "Quality", "Balanced", "Performance", "Ultra Performance", "DLAA" };
 
         /// <summary>How large an image each quality renders per side before DLSS scales it up, in <see cref="DlssQuality"/> order
-        /// (NVIDIA's factors; the game rounds the sizes its own way, so the window says "about").</summary>
-        public static readonly double[] QualityFactors = { 2.0 / 3.0, 0.58, 0.5, 1.0 / 3.0 };
+        /// (NVIDIA's factors; the game rounds the sizes its own way, so the window says "about"). DLAA renders at the full size.</summary>
+        public static readonly double[] QualityFactors = { 2.0 / 3.0, 0.58, 0.5, 1.0 / 3.0, 1.0 };
+
+        /// <summary>The Quality list's order in the window: from the largest image to the smallest.</summary>
+        public static readonly DlssQuality[] QualityOrder =
+            { DlssQuality.Dlaa, DlssQuality.Quality, DlssQuality.Balanced, DlssQuality.Performance, DlssQuality.UltraPerformance };
+
+        /// <summary>The Quality list's names, in <see cref="QualityOrder"/>.</summary>
+        public static string[] QualityChoiceNames() => Array.ConvertAll(QualityOrder, q => QualityNames[(int)q]);
+
+        /// <summary>The quality's name; DLAA with a DLSS older than <see cref="FirstDlaaVersion"/> (<paramref name="version"/>, null
+        /// for the game's own) runs as Quality and says so.</summary>
+        private static string QualityText(DlssQuality q, Version version)
+        {
+            if (q != DlssQuality.Dlaa) return QualityNames[Math.Max(0, Math.Min(QualityNames.Length - 1, (int)q))];
+            if (version != null && version >= FirstDlaaVersion) return QualityNames[(int)DlssQuality.Dlaa];
+            return QualityNames[(int)DlssQuality.Quality] + (version == null ? " (DLAA needs a newer DLSS)"
+                : " (DLAA needs DLSS " + FirstDlaaVersion.ToString(2) + " or later)");
+        }
 
         /// <summary>
         /// The Play tab's "In the headset" line: the DLSS that runs, its preset and its quality. <paramref name="newest"/> is
@@ -77,18 +97,18 @@ namespace EternalVR.Launcher.Core.Settings
         /// </summary>
         public static string WhatRuns(LauncherSettings s, DlssRelease newest, bool newestReady, Check file)
         {
-            var quality = QualityNames[Math.Max(0, Math.Min(QualityNames.Length - 1, (int)s.Dlss))];
-            var game = "The game's DLSS 2.3, " + quality + ", both eyes";
+            var game = "The game's DLSS 2.3, " + QualityText(s.Dlss, null) + ", both eyes";
             if (s.DlssDll == DlssDllChoice.Newest)
             {
                 if (newest == null) return game;
                 var version = newest.Version.ToString(3);
-                return newestReady ? $"DLSS {version}, {PresetText(s.DlssPreset)}, {quality}, both eyes"
+                return newestReady ? $"DLSS {version}, {PresetText(s.DlssPreset)}, {QualityText(s.Dlss, newest.Version)}, both eyes"
                     : $"{game}, until you download DLSS {version}";
             }
             if (s.DlssDll != DlssDllChoice.File) return game;
             if (file == null || !file.Ok) return game + ": your file cannot be used";
             var own = "DLSS " + file.Version.ToString(3) + " from your file";
+            var quality = QualityText(s.Dlss, file.Version > GameVersion ? file.Version : null);
             return file.HasPresets ? $"{own}, {PresetText(s.DlssPreset)}, {quality}, both eyes" : $"{own}, {quality}, both eyes";
         }
 

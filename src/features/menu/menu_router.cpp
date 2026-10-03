@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace evr::menu {
 
@@ -36,18 +37,40 @@ RouterEvent event(RouterEvent::Kind kind) {
     return e;
 }
 
-RouterEvent dragEvent(const DragEvent& d) {
-    const bool left = d.button == DragButton::Left;
-    if (d.down) {
-        return event(left ? RouterEvent::Kind::ButtonDown : RouterEvent::Kind::RightButtonDown);
-    }
-    return event(left ? RouterEvent::Kind::ButtonUp : RouterEvent::Kind::RightButtonUp);
-}
-
 RouterEvent keyEvent(RouterEvent::Kind kind, std::uint8_t key) {
     RouterEvent e = event(kind);
     e.key = key;
     return e;
+}
+
+RouterEvent mapEvent(const MapEvent& m) {
+    switch (m.kind) {
+    case MapEvent::Kind::Button: {
+        const bool left = m.button == DragButton::Left;
+        if (m.down) {
+            return event(left ? RouterEvent::Kind::ButtonDown : RouterEvent::Kind::RightButtonDown);
+        }
+        return event(left ? RouterEvent::Kind::ButtonUp : RouterEvent::Kind::RightButtonUp);
+    }
+    case MapEvent::Kind::Key: {
+        // The pan keys change many times a second while a stick is held part of the way.
+        RouterEvent e = keyEvent(m.down ? RouterEvent::Kind::KeyDown : RouterEvent::Kind::KeyUp, m.key);
+        e.quiet = true;
+        return e;
+    }
+    case MapEvent::Kind::Move:
+        break;
+    }
+    RouterEvent move = event(RouterEvent::Kind::Move);
+    move.dx = m.dx;
+    move.dy = m.dy;
+    return move;
+}
+
+void sendMapEvents(const std::vector<MapEvent>& events, RouterOutput& out) {
+    for (const MapEvent& m : events) {
+        out.events.push_back(mapEvent(m));
+    }
 }
 
 } // namespace
@@ -66,7 +89,8 @@ std::optional<std::uint8_t> popupActionKey(game::GameAction action) {
 }
 
 MenuRouter::MenuRouter(input::Hand dominant, input::MapSticks mapSticks, RouterTuning tuning)
-    : dominant_(dominant), mapSticks_(mapSticks), tuning_(tuning), pointer_(dominant), drag_(tuning.map) {}
+    : dominant_(dominant), mapSticks_(mapSticks), tuning_(tuning), pointer_(dominant), drag_(tuning.map),
+      cursorHide_(tuning.mapCursor) {}
 
 bool MenuRouter::repeat(Repeater& r, int dir, double now, double delay, double interval) {
     if (dir == 0) {
@@ -184,9 +208,7 @@ void MenuRouter::finishKeys(double now, RouterOutput& out) {
 }
 
 void MenuRouter::releaseAll(double /*now*/, RouterOutput& out) {
-    if (const auto up = drag_.reset()) {
-        out.events.push_back(dragEvent(*up));
-    }
+    sendMapEvents(drag_.reset(), out);
     dragTarget_.reset();
     if (buttonDown_) {
         out.events.push_back(event(RouterEvent::Kind::ButtonUp));
@@ -209,6 +231,16 @@ void MenuRouter::releaseAll(double /*now*/, RouterOutput& out) {
     scroll_ = {};
     tabs_ = {};
     page_ = -1;
+}
+
+RouterOutput MenuRouter::releaseHeld(double now) {
+    RouterOutput out;
+    releaseAll(now, out);
+    return out;
+}
+
+bool MenuRouter::holdsInput() const {
+    return buttonDown_ || !keys_.empty() || altDown_ || actionKeys_.any() || drag_.active();
 }
 
 bool MenuRouter::allReleased(const RouterInput& in) const {
@@ -246,7 +278,7 @@ void MenuRouter::mapSticks(const RouterInput& in, double now, RouterOutput& out)
     const std::size_t panStick = index(pan);
     const std::size_t turnStick = index(input::otherHand(pan));
     const input::Axis2 turn = in.hands[turnStick].stick;
-    // A drag starts only while the left button is not held by a click; one going on is finished.
+    // The sticks move the map only while the left button is not held by a click; a drag going on ends.
     const bool free = !buttonDown_ && !clickWanted_;
     if (free || drag_.active()) {
         MapDragInput drag;
@@ -261,8 +293,12 @@ void MenuRouter::mapSticks(const RouterInput& in, double now, RouterOutput& out)
         drag.height = in.height;
         const MapDragOutput step = drag_.update(drag);
         dragTarget_ = step.target;
-        if (step.event) {
-            out.events.push_back(dragEvent(*step.event));
+        sendMapEvents(step.events, out);
+        // The drag's own motion moves the game's cursor: the closed loop starts again from where the game
+        // shows it.
+        if (std::any_of(step.events.begin(), step.events.end(),
+                        [](const MapEvent& e) { return e.kind == MapEvent::Kind::Move; })) {
+            movePending_ = false;
         }
     }
     int zoom = 0;
@@ -334,6 +370,7 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
     actions_ = in.actions;
 
     if (!in.menuActive) {
+        cursorHide_.reset();
         if (wasActive_) {
             wasActive_ = false;
             latch_ = true;
@@ -387,9 +424,7 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
     if (mapPage) {
         mapSticks(in, now, out);
     } else {
-        if (const auto up = drag_.reset()) {
-            out.events.push_back(dragEvent(*up));
-        }
+        sendMapEvents(drag_.reset(), out);
         dragTarget_.reset();
         menuSticks(in, now, out);
     }
@@ -399,6 +434,12 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
         target = cursorPixel(hand.hit->u, hand.hit->v, in.width, in.height);
     }
     moveCursor(in, target, now, out);
+    DragCursorHideInput hide;
+    hide.seconds = now;
+    hide.menuActive = true;
+    hide.dragOwnsCursor = dragging;
+    hide.cursorSettled = !movePending_;
+    out.hideCursor = cursorHide_.update(hide);
 
     // The left button: pressed once the cursor has settled where the ray points, held at least minHold. Not
     // while a stick drags the map (the drag has the button then).
@@ -432,19 +473,25 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
     // objectives key some tutorial popups wait for).
     const std::size_t left = index(input::Hand::Left);
     const std::size_t right = index(input::Hand::Right);
+    // A map drag lets go before Escape, so the game never resumes with its button or W A S D still down.
+    const auto back = [&] {
+        sendMapEvents(drag_.reset(), out);
+        dragTarget_.reset();
+        tapKey(kKeyEscape, now, out);
+    };
     if (in.popup && secondaryEdge[left] && !altDown_) {
         out.events.push_back(keyEvent(RouterEvent::Kind::KeyDown, kKeyObjectives));
         altDown_ = true;
         altDownAt_ = now;
     } else if (secondaryEdge[left]) {
-        tapKey(kKeyEscape, now, out);
+        back();
     }
     if (altDown_ && !secondary_[left] && now - altDownAt_ >= tuning_.minHold) {
         out.events.push_back(keyEvent(RouterEvent::Kind::KeyUp, kKeyObjectives));
         altDown_ = false;
     }
     if (secondaryEdge[right]) {
-        tapKey(kKeyEscape, now, out);
+        back();
     }
 
     // Tabs: the left grip goes to the previous tab (Q), the right grip to the next (E).
@@ -477,6 +524,8 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
     out.pointerHand = pointer_;
     out.pointerVisible = true;
     out.mapPage = page_ == 0 && !in.popup;
+    out.mapPan = drag_.panBy();
+    out.mapRotate = drag_.rotating();
     return out;
 }
 

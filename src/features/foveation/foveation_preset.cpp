@@ -12,6 +12,22 @@ std::optional<float> fullRateHalfAngleDegrees(FoveationPreset preset) {
         return half_angles::kBalancedDegrees;
     case FoveationPreset::Aggressive:
         return half_angles::kAggressiveDegrees;
+    case FoveationPreset::Maximum:
+        return half_angles::kMaximumDegrees;
+    }
+    return std::nullopt;
+}
+
+std::optional<float> halfRateBandDegrees(FoveationPreset preset) {
+    switch (preset) {
+    case FoveationPreset::Off:
+        return std::nullopt;
+    case FoveationPreset::Subtle:
+    case FoveationPreset::Balanced:
+    case FoveationPreset::Aggressive:
+        return half_rate_bands::kDefaultDegrees;
+    case FoveationPreset::Maximum:
+        return half_rate_bands::kMaximumDegrees;
     }
     return std::nullopt;
 }
@@ -21,6 +37,8 @@ FoveationPreset adjustForLens(FoveationPreset preset, bool gentlerForPancake) {
         return preset;
     }
     switch (preset) {
+    case FoveationPreset::Maximum:
+        return FoveationPreset::Aggressive;
     case FoveationPreset::Aggressive:
         return FoveationPreset::Balanced;
     case FoveationPreset::Balanced:
@@ -44,6 +62,9 @@ std::optional<FoveationPreset> parseFoveationPreset(std::string_view text) {
     }
     if (text == "aggressive") {
         return FoveationPreset::Aggressive;
+    }
+    if (text == "maximum") {
+        return FoveationPreset::Maximum;
     }
     return std::nullopt;
 }

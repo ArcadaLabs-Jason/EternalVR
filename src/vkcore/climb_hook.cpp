@@ -126,9 +126,8 @@ void onDeadZoneStep(const HookRegisters& regs) {
 // Writes each climb cvar that differs from the value held, saving the game's value first; true when all read
 // the held value. g_holdMutex held.
 //
-// idCVar::SetString frees the cvar's old value string. It runs here on the camera hook's thread, so a game
-// thread reading that string at the same instant could read freed memory; the game reads these two as
-// integers, and a write happens about once a session, so the window is left open.
+// idCVar::SetString runs here on the camera hook's thread (the risk and the assumption: cvar_book.hpp); the
+// game reads these two as integers, and a write happens about once a session.
 bool holdCvars() {
     bool held = g_setString != nullptr;
     for (std::size_t i = 0; i < g_cvars.size() && held; ++i) {

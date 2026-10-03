@@ -6,7 +6,9 @@
 // idPlayer::physicsObjHavok (idHavokPhysics_Player) at +0x8A50; inside it the user command at +0x3DE0
 // (idUserCmd::angles, three shorts, at +0x1C), viewAngles at +0x3F10, deltaViewAngles at +0x3F1C and
 // current (playerPState_t, whose deltaViewAngles is at +0x80) at +0x3F28. They are used only when the
-// running exe is that build and the object's vtable is idPlayer's; anything else leaves head aim off.
+// running exe is a known build (game_build.hpp) and the object's vtable is idPlayer's; anything else leaves
+// head aim off. The Game Pass build is the same code relinked: its type-info tables give idPlayer and
+// playerPState_t the same layout (analysis/gamepass); the physics object's fields were not compared there.
 
 #include "xr_math/head_aim.hpp"
 
@@ -21,8 +23,10 @@ public:
     bool init();
     [[nodiscard]] bool available() const { return available_; }
 
-    // True when `object` is an idPlayer (its vtable is idPlayer's).
+    // True when `object` is an idPlayer (its vtable is idPlayer's). Reads the object unguarded: for a
+    // pointer the game itself is about to use; isPlayerVtable for a vtable already read under SEH.
     [[nodiscard]] bool isPlayer(const std::byte* object) const;
+    [[nodiscard]] bool isPlayerVtable(const std::byte* vtable) const;
 
     struct Sample {
         xr_math::IdAngles view;       // idHavokPhysics_Player::viewAngles

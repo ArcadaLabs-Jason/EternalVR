@@ -192,3 +192,19 @@ TEST_CASE("eye tags: each eye counts its own frames, mono with eye L, across bas
     REQUIRE(q.push(tag(Eye::Right, 4)));
     CHECK(q.peek(11)->eyeSeq == 1);
 }
+
+TEST_CASE("eye tags: only an eye frame with its view applied drew one eye's view") {
+    using evr::stereo_seq::drawsEyeView;
+    using evr::stereo_seq::eyeIndex;
+    CHECK(drawsEyeView(tag(Eye::Left, 1)));
+    CHECK(drawsEyeView(tag(Eye::Right, 1)));
+    // A mono frame indexes as eye L, but it drew the game's own view (the cinema screen, menus).
+    RenderTag mono = tag(Eye::Mono, 2);
+    CHECK(eyeIndex(mono.eye) == 0);
+    CHECK_FALSE(drawsEyeView(mono));
+    mono.viewApplied = true;
+    CHECK_FALSE(drawsEyeView(mono));
+    RenderTag noView = tag(Eye::Right, 3);
+    noView.viewApplied = false;
+    CHECK_FALSE(drawsEyeView(noView));
+}

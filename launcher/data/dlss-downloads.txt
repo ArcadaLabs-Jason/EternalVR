@@ -1,5 +1,5 @@
-# NVIDIA's DLSS DLL releases the launcher downloads when the player asks (Advanced tab, DLSS, "Download from
-# NVIDIA..."), for "DLSS version: From a file" (docs/rig-findings/dlss-dll.md). The file comes from NVIDIA's own
+# NVIDIA's DLSS DLL releases the launcher downloads when the player asks (Play tab, DLSS group, "Download..."), for
+# the DLSS Version choice "Newest from NVIDIA" (docs/rig-findings/dlss-dll.md). The file comes from NVIDIA's own
 # repository on the player's click, after the player accepts NVIDIA's license; EternalVR does not ship or host it.
 # A download is used only when its size and SHA-256 match its line. The newest version is offered.
 #

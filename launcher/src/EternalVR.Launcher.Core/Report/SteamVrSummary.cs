@@ -72,6 +72,10 @@ namespace EternalVR.Launcher.Core.Report
         public const string WorkshopScheme = "vr-input-workshop://";
         public const string CurrentUrlSuffix = "_CurrentURL_openxr";
         public const string AutosaveUrlSuffix = "_AutosaveURL_openxr";
+        /// <summary>SteamVR's throttling for one app (a preflight warning; the raw value is in <see cref="AppKey"/>'s line).</summary>
+        public const string FramesToThrottleKey = "framesToThrottle";
+        /// <summary>The largest throttling SteamVR takes ("throttling parameter out of range" above it); a larger value is ignored.</summary>
+        public const int MaxFramesToThrottle = 15;
 
         /// <summary>The longest value written for one key of the game's own section; a longer one is cut short.</summary>
         public const int MaxValueLength = 80;
@@ -130,6 +134,48 @@ namespace EternalVR.Launcher.Core.Report
                     list.Add(new SteamVrBinding(name, kind.Value));
             }
             return list;
+        }
+
+        /// <summary>
+        /// SteamVR's throttling for the game (<see cref="FramesToThrottle(string)"/>) in Steam's folder
+        /// <paramref name="steamRoot"/>; null when the settings file is not there or cannot be read.
+        /// </summary>
+        public static int? ReadFramesToThrottle(string steamRoot)
+        {
+            var text = ReadFile(steamRoot, out _);
+            return text == null ? null : FramesToThrottle(text);
+        }
+
+        /// <summary>SteamVR's throttling for the game in the settings file's text; null when it cannot be read. Never throws.</summary>
+        public static int? FramesToThrottle(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try { return FramesToThrottle(MiniJson.Parse(json)); }
+            catch (Exception e) when (e is FormatException || e is OverflowException || e is ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// <see cref="FramesToThrottleKey"/> of <see cref="AppSection"/>, as SteamVR's Per-Application Video Settings write it (read
+        /// from SteamVR's own code: the dashboard's settings page and vrserver's /app/setsettings). Throttling Behavior "Limit" stores
+        /// the Frame Limit as n, the refresh rate divided by n + 1 (0 is the full rate); "Auto" removes the key (and
+        /// additionalFramesToPredict). So n from 1 to <see cref="MaxFramesToThrottle"/> holds the game below the refresh rate; null when
+        /// the key is absent (Auto), 0, or not such a whole number.
+        /// </summary>
+        public static int? FramesToThrottle(object root)
+        {
+            if (!(MiniJson.Get(root, AppSection, FramesToThrottleKey) is double n)) return null;
+            return n >= 1 && n <= MaxFramesToThrottle && n == Math.Floor(n) ? (int)n : (int?)null;
+        }
+
+        /// <summary>The rate SteamVR holds the game at for <see cref="FramesToThrottle(object)"/> <paramref name="n"/>, in words.</summary>
+        public static string ThrottledRate(int n)
+        {
+            if (n == 1) return "half the refresh rate";
+            var parts = new[] { "a third", "a quarter", "a fifth", "a sixth" };
+            return (n >= 2 && n - 2 < parts.Length ? parts[n - 2] : "1/" + (n + 1).ToString(CultureInfo.InvariantCulture)) + " of the refresh rate";
         }
 
         /// <summary>The non-empty URLs of the keys ending in <paramref name="suffix"/>, by controller type (the key before the suffix).</summary>

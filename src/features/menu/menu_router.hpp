@@ -24,6 +24,7 @@
 #include "features/input/axis2.hpp"
 #include "features/input/controller_state.hpp"
 #include "features/input/map_sticks.hpp"
+#include "features/menu/drag_cursor_hide.hpp"
 #include "features/menu/map_drag.hpp"
 #include "features/menu/panel_pointer.hpp"
 #include "features/menu/wheel_cursor.hpp"
@@ -77,6 +78,7 @@ struct RouterTuning {
     double clickTimeout = 0.25;     // a click waits at most this long for the cursor to settle
     double zoomInterval = 0.1;      // seconds between wheel notches while a stick zooms the map
     MapDragTuning map;              // the map's pan and rotate from the sticks
+    DragCursorHideTuning mapCursor; // the game's cursor hidden while the sticks drag the map
 };
 
 struct RouterHand {
@@ -127,6 +129,7 @@ struct RouterEvent {
     std::int32_t dy = 0;
     std::int16_t wheel = 0;
     std::uint8_t key = 0;
+    bool quiet = false; // counted, not logged one by one (the map's pan keys)
 };
 
 // A gameplay action that pressed its key in a popup, the first time it did in that popup (for the log).
@@ -146,6 +149,11 @@ struct RouterOutput {
     bool pointerVisible = false;
     // The Dossier's map page is taken to be up: the sticks move the map.
     bool mapPage = false;
+    // A stick drag owns the game's cursor (or just did): the layer hides the cursor (drag_cursor_hide.hpp).
+    bool hideCursor = false;
+    // How the map's pan stick pans now, and whether the other stick rotates (map_drag.hpp).
+    MapPanBy mapPan = MapPanBy::None;
+    bool mapRotate = false;
 };
 
 class MenuRouter {
@@ -156,6 +164,10 @@ public:
                         RouterTuning tuning = {});
 
     RouterOutput update(const RouterInput& in);
+    // Lets go of everything the router holds down (the map's button and keys, held keys, Left Alt), for when
+    // update() stops being called: the XR worker reconnects or stops, or the headset is not rendering.
+    RouterOutput releaseHeld(double now);
+    [[nodiscard]] bool holdsInput() const;
 
     [[nodiscard]] input::Hand pointerHand() const { return pointer_; }
     [[nodiscard]] bool buttonDown() const { return buttonDown_; }
@@ -206,6 +218,7 @@ private:
     int page_ = -1;
     MapDrag drag_;
     std::optional<CursorPixel> dragTarget_;
+    DragCursorHide cursorHide_;
 
     // Left Alt, held by Y in a popup.
     bool altDown_ = false;

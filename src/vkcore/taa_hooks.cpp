@@ -1,9 +1,10 @@
 #include "vkcore/taa_hooks.hpp"
 
 #include "stereo_seq/stereo_taa.hpp"
+#include "vkcore/cvar_book.hpp"
+#include "vkcore/exposure_hooks.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
-#include "vkcore/motion_capture.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/scatter_hooks.hpp"
@@ -38,12 +39,10 @@ constexpr std::size_t kSlotSize = 0xA8;
 constexpr std::size_t kSlotAccumulationTargets = 0x58;
 constexpr std::size_t kSlotOpaqueTarget = 0x68;
 constexpr std::uint32_t kSecondSlotIndex = 1; // its images are named "_accumulationBuffer10" and so on
-constexpr std::size_t kPostProcessExposureIndex = 0x140;
-constexpr std::size_t kPostProcessBackendFrame = 0x148;
 
 using SelectorFn = void* (*)(void* renderSystem, const std::byte* renderView);
 using SlotBuilderFn = void (*)(void* deviceContext, void* slot, std::uint64_t deviceContextIndex);
-using SetCvarFn = bool (*)(void* cvar, const char* value, bool force);
+using SetCvarFn = cvar_book::SetStringFn;
 
 // ---- State ----
 
@@ -60,9 +59,6 @@ SelectorFn g_historyOriginal = nullptr;
 SelectorFn g_opaqueOriginal = nullptr;
 SetCvarFn g_setCvar = nullptr;
 bool g_selectorsHooked = false;
-bool g_exposureHooked = false;
-std::mutex g_exposureMutex;
-stereo_seq::ExposurePlanner g_exposure;
 
 // Cvar objects: the forced set, the fail-closed set, then the read-back ones.
 std::vector<std::string_view> g_cvarNames;
@@ -96,7 +92,6 @@ struct Counters {
     // Output picks by the tag's eye (L, R) and by the side the latched projection is shifted to (left of
     // centre, centred, right): each tag eye should see one side only.
     std::atomic<std::uint64_t> tagVsView[2][3]{};
-    std::atomic<std::uint64_t> exposureInFlightDiffers{0};
 } g_counters;
 
 // The horizontal offset of the view's latched projection (idRenderView projectionMatrix [0][2]): each eye's
@@ -235,6 +230,7 @@ void* select(stereo_seq::AccumRole role,
     ++g_counters.picks[pick.pair];
     if (role == stereo_seq::AccumRole::Output) {
         ++g_counters.tagVsView[stereo_seq::eyeIndex(tag->eye)][latchedSide(renderView)];
+        noteNgxOutput(target, *tag); // the render's DLSS evaluation finds its tag by this image
     }
     if (g_counters.loggedPicks.fetch_add(1) < 8) {
         EVR_LOG("%s: %s of backend frame for eye %s (its frame %u): pair %d image %d", kTag,
@@ -293,53 +289,21 @@ void onDistortionBind(HookRegisters& regs) {
     t_lastHistory = nullptr;
 }
 
-// ---- Auto-exposure index (render-view job, after the engine stored its choice) ----
-
-void onExposureIndex(const HookRegisters& regs) {
-    if (!g_perEye.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch()) {
-        return;
-    }
-    // The render's own tag, found by the backend frame counter the render-view job stored in the context for
-    // this render (RVA 0x1C570D2), the one the engine's own index was just chosen from. The tag in flight
-    // reads the counter again now and would name the next render if the render thread's swap came in
-    // between; the count of such renders is the self-check.
-    auto* context = reinterpret_cast<std::byte*>(regs.rsi);
-    std::uint32_t counter = 0;
-    std::memcpy(&counter, context + kPostProcessBackendFrame, sizeof(counter));
-    const std::optional<stereo_seq::RenderTag> tag = seqTagForBackendFrame(counter + 1u);
-    const std::optional<stereo_seq::RenderTag> inFlight = seqTagInFlight();
-    if ((inFlight ? inFlight->eye : stereo_seq::Eye::Mono) != (tag ? tag->eye : stereo_seq::Eye::Mono)) {
-        ++g_counters.exposureInFlightDiffers;
-    }
-    if (!tag) {
-        return;
-    }
-    std::int32_t index = 0;
-    {
-        std::lock_guard lock(g_exposureMutex);
-        index = g_exposure.indexFor(*tag);
-    }
-    std::memcpy(context + kPostProcessExposureIndex, &index, sizeof(index));
-    noteMotionTarget(*tag, context); // ETERNALVR_CAPTURE_MOTION
-}
-
 // ---- Cvars ----
 
-// Writes `value` through the engine's setter unless the cvar already holds it (the launch helper puts the
-// same values on the command line, so a write is the exception). The engine itself sets cvars from its
-// render threads (r_jitter every backend frame, r_dlssForceReset's countdown, r_antialiasing after a DLSS
-// failure).
+// Writes `value` through the cvar book (a trip sets it back) unless the cvar already holds it (the launch
+// helper puts the same values on the command line, so a write is the exception). The engine itself sets
+// cvars from its render threads (r_jitter every backend frame, r_dlssForceReset's countdown, r_antialiasing
+// after a DLSS failure).
 bool setCvar(std::string_view name, const char* value) {
     std::byte* cvar = cvarByName(name);
     if (!cvar || !g_setCvar || !mp_guard::allowsGameTouch()) {
         return false;
     }
-    const std::string text(value);
     const int before = cvarInt(cvar);
-    if (before == std::atoi(text.c_str())) {
-        return true;
+    if (before == std::atoi(value) || !cvar_book::write(name, cvar, g_setCvar, value)) {
+        return before == std::atoi(value);
     }
-    g_setCvar(cvar, text.c_str(), true);
     const std::uint64_t writes = ++g_cvarWrites;
     if (writes <= 30 || writes % 100 == 0) {
         EVR_LOG("%s: %.*s %d -> %s (reads %d; write %llu)", kTag, static_cast<int>(name.size()), name.data(),
@@ -365,7 +329,7 @@ stereo_seq::TaaReadiness readiness() {
     r.selectors = g_selectorsHooked;
     r.secondPair = g_secondSlotContext.load(std::memory_order_acquire) != nullptr;
     r.subSamples = g_numSubSamples != nullptr;
-    r.exposure = g_exposureHooked;
+    r.exposure = exposureHookInstalled(); // installed at Route S start (exposure_hooks.hpp)
     r.cvarSetter = g_setCvar != nullptr;
     for (const auto& c : stereo_seq::stereoTaaForcedCvars()) {
         r.cvarSetter = r.cvarSetter && cvarByName(c.name) != nullptr;
@@ -380,6 +344,11 @@ stereo_seq::TaaReadiness readiness() {
 
 void installTaaEarly() {
     std::call_once(g_earlyOnce, [] {
+        if (!routeSRequested()) {
+            return;
+        }
+        // Eye R's scattering volumes are made with the device context too; they need only the eye tags.
+        installScatterHooksEarly();
         if (!taaRequested()) {
             return;
         }
@@ -408,7 +377,6 @@ void installTaaEarly() {
         }
         EVR_LOG("%s: slot loop hooked at RVA 0x%X: eye R's accumulation images are built with the renderer",
                 kTag, image.rva(site.hookSite));
-        installScatterHooksEarly(); // eye R's scattering volumes are made with the device context too
     });
 }
 
@@ -452,13 +420,6 @@ bool installTaaHooks() {
             return;
         }
         g_selectorsHooked = true;
-        if (engine.exposureSite) {
-            g_exposureHooked =
-                installMidHook(const_cast<std::byte*>(engine.exposureSite), &onExposureIndex, error);
-            if (!g_exposureHooked) {
-                EVR_LOG("%s: auto-exposure index hook failed: %s", kTag, error.c_str());
-            }
-        }
         if (engine.distortionSite) {
             g_distortionHooked =
                 installMidHookEdit(const_cast<std::byte*>(engine.distortionSite), &onDistortionBind, error);
@@ -483,7 +444,9 @@ void taaOnStereoTick() {
         if (missing) {
             // Fail closed: no temporal accumulation, as Route S v1. If even that cannot be written, the eyes
             // would share the history: no stereo at all.
-            EVR_LOG("%s: per-eye TAA not available (%s): writing the v1 set", kTag, missing);
+            EVR_LOG("%s: per-eye TAA not available (%s): writing the v1 set; %s", kTag, missing,
+                    exposureHookInstalled() ? "the exposure index stays per eye"
+                                            : "eye R updates its own exposure (no exposure index hook)");
             applySet(stereo_seq::stereoTaaFailClosedCvars());
             g_failedClosed.store(true);
             const bool closed =
@@ -561,16 +524,9 @@ TaaCounters taaCounters() {
             c.tagVsView[e][s] = g_counters.tagVsView[e][s].load();
         }
     }
-    c.exposureInFlightDiffers = g_counters.exposureInFlightDiffers.load();
+    c.exposureInFlightDiffers = exposureCounters().inFlightDiffers;
     c.secondPairBuilds = g_counters.secondPairBuilds.load();
-    const NgxCounters n = ngxCounters();
-    c.twinCreates = n.twinCreates;
-    c.twinFailures = n.twinFailures;
-    c.evaluates[0] = n.evaluates[0];
-    c.evaluates[1] = n.evaluates[1];
-    c.evaluatesNoTwin = n.evaluatesNoTwin;
-    c.twinResets = n.twinResets;
-    c.releases = n.releases;
+    c.ngx = ngxCounters();
     const auto read = [](const std::byte* cvar) {
         return cvar ? cvarInt(cvar) : -1;
     };

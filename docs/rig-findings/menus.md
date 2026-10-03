@@ -73,3 +73,72 @@ and memory scans while injecting mouse motion). All addresses are RVAs in this b
   the accumulated angles, as the controllers first did, never reaches the wheel.
 - On the rig's log (2026-09-27, Quest 3, `weapon_wheel` at 875.9 s) the wheel showed no menu cursor: the
   menu router stayed out and the wheel took no selection from the angle path.
+
+## 5. Hiding the cursor while the sticks drag the map [static-verified]
+
+- No cvar hides it: `guiCursor_arrow` / `guiCursor_hand` are the cursor's material fields (type info
+  `idCursor` +0x20 / +0x28), not cvars. Their materials are `textures/guis/cursor_empty` (despite the name,
+  the arrow picture `guicursor_arrow.tga`) and `textures/guis/cursor_hover` (`guicursor_hand.tga`), both
+  `template/gui/gui_guiblend` (the `guiblend` program, alpha blending); no other cursor picture is
+  referenced.
+- `idCursor::Update` (0x1800260) is the only place the cursor is drawn. Shown (r8b): `active` = 1, the
+  cursor's own GUI model (+0x30) sized to the render size (0x194F7D0), its blend state set to 0x2C
+  (`[gui+0x4D8]`, source alpha / one minus source alpha), the colour (1, 1, 1, 1) at a constant
+  (0x2A5B950) packed (0x3565C0) and stored in the model (`mov [rbx+0x4D0], eax` at 0x18002DE), then one
+  32 x 32 picture at (`mouseX`, `mouseY`) through 0x7E9380 (into 0x194E0F0, which takes the model's
+  +0x4D0 as the vertex colour). Which picture: `showHitState` (+0x0C) 0 draws +0x28; otherwise
+  `hitState` (+0x04) 0 draws +0x20, 1 draws +0x28, anything else draws nothing. Then the trace (0x1800450)
+  and, when the cursor moved, `hitState` and `numHits` cleared.
+- Hidden (r8b clear): the cursor is put back in the middle and `active` = 0 once, on the change. That is the
+  game's own hide, but it would end menu mode (the layer's signal) and recentre a drag, so it is not used.
+  Forcing `showHitState` / `hitState` would need a write before and a restore after every draw (the trace
+  clears `hitState` as the cursor moves) and a null material logs a warning on every draw.
+- Used: a register-editing mid hook on the colour store (0x18002DE) sets eax to 0 while a stick drag owns
+  the cursor (`vkcore/menu_cursor_hide.cpp`): the picture is drawn with alpha 0, which the blend leaves
+  invisible. Nothing in the game's memory is changed for longer than the frame: the next Update stores the
+  colour afresh. Located by a signature over Update from its start to the `showHitState` test (unique in
+  `.text`), with the packed constant checked to be (1, 1, 1, 1). Log: `menu: cursor update at RVA
+  0x1800260, its draw colour hooked at RVA 0x18002DE: ...`, then once each `a stick drags the map: the
+  game's cursor is hidden (first time)` and `the game's cursor is shown again after the drag (first time;
+  N cursor draw(s) hidden)`.
+- Not yet seen live: that alpha 0 leaves no trace of the cursor on the Dossier map (the blend reading of
+  0x2C follows id Tech's `GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA`; colour 0 hides the
+  picture under additive blending too).
+
+## 6. The Dossier map's input (idAutomap) [static-verified]
+
+- `idAutomap::HandleEvent` (0xA54760; the automap object is `game + 0x1A7380`) gets every event from the
+  game's event handler (0x6CF1C0, through 0x69C750) before the player's handler; its return value is ignored.
+  It acts only while `isActive` (+0x1A28) and `shouldHandleInput` (+0x1A29) are set. Its input is
+  `idAutomapInput_t` at +0x240 (type info): `leftDragDelta` +0x240, `rightDragDelta` +0x248,
+  `middleDragDelta` +0x250, `wheel` +0x258, the three buttons +0x25C..+0x25E, the keys +0x260..+0x264, the
+  pad's sticks, triggers and buttons +0x268..+0x280.
+- **Drags add up raw motion, not the cursor.** For `SE_MOUSE` (0xA5493C): left held -> `leftDragDelta -=
+  (dx, dy)`; else right held -> `rightDragDelta`; else middle held -> `middleDragDelta`. `idCursor` and the
+  SWF stage mouse are not read; `idCursor::HandleEvent` clamps only its own copy of the position. So motion
+  keeps counting while the cursor sits at the edge of its range. With two buttons held, all motion goes to the
+  first in that order (left pans). A button event only sets or clears its flag (keys 0x11E / 0x11F / 0x120);
+  nothing is captured at the press, there is no drag threshold. For each raw record the motion is posted
+  before the buttons, so motion in the record of a press does not count and motion in the record of a release
+  does.
+- `idAutomap::ProcessInput` (0xA56000, once a frame from `Update` 0xA53CF0) uses and clears the deltas: pan
+  += leftDragDelta * `automap_panSpeedMouse` (0.00125), the view focus then moved by pan * max(
+  `automap_minPanSpeedModifier` 100, view distance); yaw += rightDragDelta.x * `automap_rotateSpeedMouse`
+  (0.1 degrees a count), pitch -= rightDragDelta.y * 0.1 * `automap_rotatePitchYawRatio` (0.8), within
+  `automap_minPitchDegrees` 1 .. `automap_maxPitchDegrees` 80; zoom += wheel * `automap_zoomSpeedMouseScroll`
+  (30) + middleDragDelta.y * `automap_zoomSpeedMouseDrag` (1). `wheel` is set to +1 / -1 by the wheel keys,
+  not added: several notches in one frame are one step. The camera moves half way to where it should be
+  every frame.
+- **Keys** (fixed key numbers, not binds; 0xA54834..0xA5489B): 0x11 W up, 0x1E A left, 0x1F S down, 0x20 D
+  right, 0x2E C recentre (on the press; not while the map-group or fast-travel screen is open). Pan +=
+  normalize(A - D, W - S) * `automap_panSpeedKeyboard` (1.25) * dt: W pans as a drag up, D as a drag to the
+  right, and the keyboard's full speed equals 1000 counts a second of a drag. The keys and a drag are read
+  apart, so the keys can pan while the right button rotates (`features/menu/map_pan_keys.hpp`). The arrow keys
+  and the movement binds are not read.
+- **Pad** (`SE_JOYSTICK`, 0xA54A24): the left stick pans (`automap_panSpeedController` 1.25), the right
+  stick rotates (`automap_rotateSpeedController` 150 degrees a second), the triggers zoom
+  (`automap_zoomSpeedController` 500), all at once and scaled by time; deadzone `automap_deadzone` 0.2. Not
+  used by the layer.
+- Not checked: whether the Dossier's screen does anything with the left presses after the automap (the
+  layer presses only with the cursor in the middle of the screen), and the engine handlers before the game in
+  the event loop (mouse drags already reach the map, so they pass motion and buttons through).

@@ -12,7 +12,7 @@
 // model-space pass 0x19E2A60 multiplies the modifier's quaternion on the left, and SetJointMod turns the
 // matrix into the quaternion of its transpose; it matches the lag's row-vector convention]. The blend
 // applies it after the joint's parent, so for a joint whose parent is also modified the change is on top
-// of the parent's result (the arm's other joints use whole-pose overrides instead, vkcore/offhand_arm.hpp).
+// of the parent's result (the arm's other joints use whole-pose overrides instead, vkcore/game_arm.hpp).
 // So the modifier that reaches a target pose is
 //     translation = target.position - animated.position
 //     rotation    = transpose(animated.axis) * target.axis

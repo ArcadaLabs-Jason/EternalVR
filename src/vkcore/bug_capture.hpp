@@ -1,8 +1,8 @@
 #pragma once
 
 // The in-headset capture for bug reports (docs/VR_CONTROLLERS.md, docs/release/CONTROLS.md): pulling a
-// trigger while the left Menu button is held asks for one (features/input/capture_chord.hpp), and the
-// present hook saves the next complete eye pair as eye L and
+// trigger while the left Menu button is held (under SteamVR with Touch controllers, both sticks) asks for one
+// (features/input/capture_chord.hpp), and the present hook saves the next complete eye pair as eye L and
 // eye R PNG files, the game's GUI target (what the HUD quad shows) and a small text file with the head pose,
 // the render size and the TAA / DLSS state, into <ETERNALVR_LOG_DIR>\captures (the launcher's Export
 // report takes that folder). A menu or loading screen shows one image in both eyes: that one is saved as

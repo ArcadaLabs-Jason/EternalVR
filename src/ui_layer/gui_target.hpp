@@ -64,6 +64,12 @@ struct ImageCreateDesc {
 // get TRANSFER_SRC added (the usage this returns) and are followed; nullopt for every other image.
 std::optional<std::uint32_t> candidateUsage(const ImageCreateDesc& desc);
 
+// Parallel Eye Rendering's eye copy only (vkcore/presenter_eyes.hpp): the screen-sized images it may read
+// (each view's final image), 2D with one mip, layer and sample, drawn (colour attachment or storage) and
+// sampled, at least 256 wide, four bytes per texel (RGBA8, BGRA8, 10:10:10:2 or B10G11R11 float). They get
+// TRANSFER_SRC (the usage this returns) and are followed; nullopt for every other image.
+std::optional<std::uint32_t> eyeCopyCandidateUsage(const ImageCreateDesc& desc);
+
 // A candidate image as created.
 struct ImageRecord {
     std::int32_t format = 0; // VkFormat

@@ -3,10 +3,10 @@
 // Locomotion and turning in the form the game's user command takes them (M5, R13 section 6).
 //
 // Movement: the move stick, after its response curve, is a direction in the locomotion frame (the
-// head, or the off hand; locomotion_direction.hpp). The game moves relative to its own view yaw, which
-// under decoupled aim follows the weapon, so the vector is rotated into the view frame and then
-// quantised to the command's integer move axes. Quantising keeps the direction: a diagonal at full
-// deflection stays a unit-length diagonal, never the corner of the square.
+// head, or the hand with the move stick; locomotion_direction.hpp). The game moves relative to its own
+// view yaw, which under decoupled aim follows the weapon, so the vector is rotated into the view frame
+// and then quantised to the command's integer move axes. Quantising keeps the direction: a diagonal at
+// full deflection stays a unit-length diagonal, never the corner of the square.
 //
 // Turning: the turn policy gives float degrees per frame, while the command's angles are 16-bit
 // fractions of a turn (id Tech's ANGLE2SHORT, 65536 per 360 degrees). The accumulator hands out whole
@@ -58,13 +58,13 @@ class Locomotion {
 public:
     explicit Locomotion(StickResponse response = kMoveStickResponse);
 
-    // `stick` is the raw move-stick value; `offHand` the hand not holding the weapon; `viewYawRadians` the
-    // game view's yaw in the tracking space (locomotion_direction.hpp convention). The result has length
-    // at most 1.
+    // `stick` is the raw move-stick value; `moveHand` the hand a hand frame follows (locomotionFrameHand);
+    // `viewYawRadians` the game view's yaw in the tracking space (locomotion_direction.hpp convention). The
+    // result has length at most 1.
     Axis2 update(Axis2 stick,
                  LocomotionFrame frame,
                  const HeadState& head,
-                 const HandState& offHand,
+                 const HandState& moveHand,
                  float viewYawRadians);
 
     // The locomotion yaw the last update used (radians).

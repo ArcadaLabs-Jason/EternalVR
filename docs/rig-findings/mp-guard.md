@@ -36,11 +36,48 @@ argument screening, map classes, menu screens, the latch; tested in `tests/platf
   point refuses them all.
 - **Trip = off, not quit** (T-114). A signal latches every feature off and leaves the game running: the
   player can carry on flat, and the presenter shows the game on the cinema quad (no head-tracked
-  projection) with one log line saying so.
+  projection) with one log line saying so. What the session changed in the game is put back where the
+  layer knows the game's own value (next bullets); the cvars the launcher sets on the command line are not,
+  so multiplayer still needs a relaunch without VR, as the trip's log line says. In stereo the comfort set
+  (view bob, kicks, shakes, the damage tint and blur and the rest of `stereoComfortCvars`) is no longer on the
+  command line: the layer's hold sets it, so a trip gives it back. What stays on the command line keeps its VR
+  value after a trip: `r_hdrDisplay 0`, the per-eye temporal effects switched off (`r_TAAAntiGhosting`,
+  `r_SSDOTemporalAA` and the rest of the stereo set the layer never had to write), `rs_enable 0`, and the window
+  and present cvars.
+- **Trip listeners.** `mp_guard::addTripListener` keeps a fixed list of 8 (`mp_policy::TripListeners`,
+  lock-free, tested in `tests/platform/mp_policy/trip_listeners_tests.cpp`). The call that closes the
+  latch calls each listener once, on its own thread (a game thread or the present thread), right after
+  the latch closes, in the order added; a listener added after a trip is called at once on the adding
+  thread. Each slot has its own called flag, so a listener racing a trip runs exactly once. A listener's
+  write is the one kind of write made after a trip: it undoes the layer's own change.
 - **A held key at trip time** (T-114). The trip closes the latch first, so no key-down is posted or
-  delivered from then on; the guard's trip listener then posts one key-up for each key the layer holds
+  delivered from then on; key injection's trip listener then posts one key-up for each key the layer holds
   (`HeldKeys::releaseAll`, each key exactly once), and only key-ups are delivered after the trip
   (`key_injection::deliverable`). Polls read the real keyboard at once.
+- **What a trip puts back.**
+  - The cvars the layer wrote at run time (`runtime_cvars.cpp`: the stereo and comfort sets, CPU Saver,
+    Sharpening, `swf_platformOverride 2`, `ETERNALVR_DEBUG_CVARS`; `taa_hooks.cpp`: the per-eye TAA set and
+    the v1 fail-closed set). Every such write goes through `cvar_book::write`, which keeps the value the
+    cvar read before the layer's first write (one book for both modules, so the earliest value wins where
+    both write a cvar). The book's trip listener writes each one back once with the engine's setter, on
+    the tripping thread, under the lock every write takes (the guard is asked under it, so no layer write
+    lands after the restore). One line per cvar: `cvar restore: <name> <now> -> <value>, its value before
+    the layer's first write (the multiplayer guard tripped; reads <value>)`, then a summary line.
+  - Left as the layer set them, logged as `cvar restore: <name> left at <now>, not set back to <value>`:
+    `r_windowWidth`, `r_windowHeight`, `r_fullscreen`, `r_swapInterval` and `r_hdrDisplay`
+    (`mp_policy::cvarLeftOnTrip`). Writing them would resize the window, switch its mode or change the
+    swapchain while the game keeps running, and none of them changes play.
+  - The wall-climb cvars: back to the game's values at the camera hook's first frame after the trip
+    (`climb_hook.cpp`, `presenter_head.cpp`).
+  - The free off hand: the layer's forearm, elbow and shoulder modifiers are set back to no change once,
+    on the off-hand hook's first tick of the hands that have them (that hook's game thread owns the
+    modifier list, so not from a listener); one line `offhand: the multiplayer guard tripped: ...`.
+  - The button prompts: the detours give the game's key names from the trip on, and a trip listener bumps
+    the bind generation once so the game rebuilds the prompts it cached with the VR buttons' names; one
+    line `prompts: the multiplayer guard tripped: ...`.
+  - Not put back: the cvars the launcher sets on the command line (`launcher/data/forced-cvars.txt`)
+    where the layer never had to write them. The command line sets them before the layer can read them,
+    and their flat values are not known (section 5).
 - **Test hook.** `ETERNALVR_GUARD_TEST_TRIP_MS=<n>` trips the armed guard with signal `test` `n` ms after
   arming (development use; it can only turn features off).
 
@@ -199,3 +236,20 @@ Run folders are under `<workspace>\runs` (rig), layer logs next to the staged la
 - The screen id set is tied to this build's enum; another build is refused until the table is re-read.
 - `idOnlineSessionInviteManager::ReceivedInvite` (an invite arriving, not accepted) is deliberately not a
   signal, so an invite during the campaign does not end VR unless it is accepted.
+- Closed for the comfort set in stereo (2026-10-02): `pm_noBob`, `view_skipKicks`, `view_skipShakes`,
+  `view_skipDamageEffect`, `view_showPlayerDamageViewEffect`, `view_damageBlur`, `g_skipViewEffects`,
+  `hands_fovScale`, `meatHook_playerViewOverrideMode` and the post effects are no longer on a stereo launch's
+  command line: the layer's hold (`stereoComfortCvars`) is the only writer, from Route S's first present, so
+  the cvar book keeps the player's values and a trip gives them back. Still open: the launcher's remaining
+  command-line cvars after a trip (`r_hdrDisplay`, the stereo set, and the comfort set in mono, where the layer
+  holds nothing) keep their VR values unless the
+  layer had to write them. Setting them back needs each one's flat value, and none of the sources is good
+  enough yet: the registration's default (the `lea r8` of each cvar's registration, read by
+  `analysis/ui-layer/cvars.py`) disagrees with the 2024 cvar dump (`reference/idtech7/typeinfo/
+  kex-cvarlist-2024.tsv`) for `view_skipShakes` (0 / 1), `hands_fovScale` (0 / 1.15), `r_motionblur`,
+  `r_chromaticAberration` and `rs_enable` (1 / 0), so the registration value is not necessarily the value a
+  flat game runs with; the dump's values are not guaranteed defaults either; and the idCVar reset string's offset is not known (`idCVar::SetString`
+  substitutes the values block's +0x30 for a null value, which fits a reset string but is not verified).
+  What would close it: each cvar's value read on the rig in a launch without the forced cvars (for
+  example `ETERNALVR_DEBUG_CVARS=pm_noBob=?;...`, which only logs), recorded here as a table the layer can
+  use, or the launcher handing the layer the player's own values from its config snapshot.

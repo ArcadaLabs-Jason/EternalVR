@@ -3,8 +3,11 @@
 evr_add_module(evr_menu
     SOURCES
         enter_tick.cpp
+        drag_cursor_hide.cpp
         map_drag.cpp
+        map_pan_keys.cpp
         menu_kind.cpp
+        model_camera.cpp
         panel_follow.cpp
         menu_router.cpp
         panel_pointer.cpp

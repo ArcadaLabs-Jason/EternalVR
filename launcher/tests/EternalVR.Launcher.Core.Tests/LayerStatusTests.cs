@@ -55,6 +55,32 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void StartingThatNeverEndsIsNotShownAsStartingForever()
+        {
+            var early = LayerWatch.Decide(true, File("state=starting"), LayerWatch.StartTimeoutSeconds - 1);
+            Assert.Equal(new SessionStatus(StatusKind.Info, LayerWatch.StartingMessage), early);
+            foreach (var status in new[] { File("state=starting"), null })
+            {
+                var late = LayerWatch.Decide(true, status, LayerWatch.StartTimeoutSeconds);
+                Assert.Equal(new SessionStatus(StatusKind.Warning, LayerWatch.NotStartedMessage), late);
+                Assert.False(LayerWatch.NeedsDialog(late));
+            }
+            // VR coming up late replaces it.
+            Assert.Equal(StatusKind.Good, LayerWatch.Decide(true, File("state=vr\nstereo=on"), 600).Kind);
+        }
+
+        [Fact]
+        public void AMultiplayerArgumentRefusedByTheLayerIsShownWithItsReason()
+        {
+            // What the layer writes when the command line asks for multiplayer (mp_guard.cpp, screenCommandLine).
+            var s = LayerWatch.Decide(true, File("state=flat\nreason=\"+com_gamemode\" on the command line requests a game mode "
+                + "other than the campaign; EternalVR is single-player only"), 3);
+            Assert.Equal(StatusKind.Problem, s.Kind);
+            Assert.Equal("VR is off for this session: \"+com_gamemode\" on the command line requests a game mode other than the "
+                + "campaign; EternalVR is single-player only. The game runs flat.", s.Text);
+        }
+
+        [Fact]
         public void TheStatusFileWinsOverTheTimeout()
         {
             // A status file without the marker (a marker removed by a cleaner) still counts.

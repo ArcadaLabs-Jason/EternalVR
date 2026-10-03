@@ -54,10 +54,26 @@ TEST_CASE("defaults: on, head aim and head locomotion, smooth turning, right-han
     CHECK(s.testInputPath.empty());
 }
 
+TEST_CASE("locomotion: look, left or right, and the values from before them") {
+    CHECK(parse({{"ETERNALVR_LOCOMOTION", "look"}}).settings.locomotion == LocomotionFrame::Head);
+    CHECK(parse({{"ETERNALVR_LOCOMOTION", "left"}}).settings.locomotion == LocomotionFrame::LeftHand);
+    CHECK(parse({{"ETERNALVR_LOCOMOTION", "right"}}).settings.locomotion == LocomotionFrame::RightHand);
+    // head is look; hand is the hand with the move stick, as before.
+    CHECK(parse({{"ETERNALVR_LOCOMOTION", "head"}}).settings.locomotion == LocomotionFrame::Head);
+    CHECK(parse({{"ETERNALVR_LOCOMOTION", "hand"}}).settings.locomotion == LocomotionFrame::MoveHand);
+    for (const char* value : {"look", "left", "right", "head", "hand"}) {
+        CAPTURE(value);
+        CHECK(parse({{"ETERNALVR_LOCOMOTION", value}}).issues.empty());
+    }
+    const auto bad = parse({{"ETERNALVR_LOCOMOTION", "toward"}});
+    CHECK(bad.issues.size() == 1);
+    CHECK(bad.settings.locomotion == LocomotionFrame::Head);
+}
+
 TEST_CASE("every setting reads its documented values") {
     const auto result = parse({{"ETERNALVR_CONTROLLERS", "0"},
                                {"ETERNALVR_AIM", "hand"},
-                               {"ETERNALVR_LOCOMOTION", "hand"},
+                               {"ETERNALVR_LOCOMOTION", "right"},
                                {"ETERNALVR_TURN", "snap"},
                                {"ETERNALVR_TURN_RATE", "300"},
                                {"ETERNALVR_SNAP_DEGREES", "30"},
@@ -77,7 +93,7 @@ TEST_CASE("every setting reads its documented values") {
     const auto& s = result.settings;
     CHECK_FALSE(s.enabled);
     CHECK(s.aim == AimSource::Hand);
-    CHECK(s.locomotion == LocomotionFrame::OffHand);
+    CHECK(s.locomotion == LocomotionFrame::RightHand);
     CHECK(s.turn.mode == TurnMode::Snap);
     CHECK(s.turn.smoothDegreesPerSecond == 300.0f);
     CHECK(s.turn.snapDegrees == 30.0f);
@@ -270,7 +286,6 @@ TEST_CASE("the hands-up jump is off unless turned on") {
     const auto on = parse({{"ETERNALVR_HANDS_JUMP", "1"}});
     CHECK(on.issues.empty());
     CHECK(on.settings.handsJump.enabled);
-    CHECK_FALSE(on.settings.handsJump.allowWhenSeated);
     const auto bad = parse({{"ETERNALVR_HANDS_JUMP", "sometimes"}});
     CHECK(bad.issues.size() == 1);
     CHECK_FALSE(bad.settings.handsJump.enabled);
@@ -298,4 +313,50 @@ TEST_CASE("the game's shoulder anchors the off arm only with the weapon in the r
           ShoulderAnchor::Head);
     CHECK(evr::input::shoulderAnchorFor(ShoulderAnchor::Model, Handedness::LeftButtonAndStickSwap) ==
           ShoulderAnchor::Head);
+}
+
+TEST_CASE("the weapon arm is posed by IK unless ETERNALVR_WEAPON_ARM says game") {
+    using evr::input::WeaponArmMode;
+    CHECK(parse({}).settings.weaponArm == WeaponArmMode::Ik);
+    CHECK(parse({{"ETERNALVR_WEAPON_ARM", "game"}}).settings.weaponArm == WeaponArmMode::Game);
+    CHECK(parse({{"ETERNALVR_WEAPON_ARM", " IK "}}).settings.weaponArm == WeaponArmMode::Ik);
+    const auto bad = parse({{"ETERNALVR_WEAPON_ARM", "free"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_WEAPON_ARM");
+    CHECK(bad.settings.weaponArm == WeaponArmMode::Ik);
+    // Whatever the off hand does.
+    CHECK(parse({{"ETERNALVR_OFFHAND", "free"}}).settings.weaponArm == WeaponArmMode::Ik);
+    CHECK(std::string(evr::input::weaponArmModeName(WeaponArmMode::Ik)) == "ik");
+    CHECK(std::string(evr::input::weaponArmModeName(WeaponArmMode::Game)) == "game");
+}
+
+TEST_CASE("the weapon arm's shoulder and elbow are the off hand's on the weapon hand's side") {
+    using evr::input::kDefaultOffhandElbow;
+    using evr::input::kDefaultOffhandShoulder;
+    using evr::input::weaponArmOffsetFor;
+    // Weapon in the right hand: 18 cm to the right of the eyes, the elbow out to the right.
+    const auto shoulder = weaponArmOffsetFor(kDefaultOffhandShoulder, Handedness::Right);
+    CHECK(shoulder == evr::game::WeaponOffset{-0.08f, -0.18f, -0.24f, 0.0f, 0.0f, 0.0f});
+    CHECK(weaponArmOffsetFor(kDefaultOffhandElbow, Handedness::Right) ==
+          evr::game::WeaponOffset{-0.2f, -0.6f, -1.0f, 0.0f, 0.0f, 0.0f});
+    // Weapon in the left hand (the model's right arm at the left controller): to the left, as given, the
+    // off hand's mirrored to the right.
+    for (const Handedness left : {Handedness::LeftButtonSwap, Handedness::LeftButtonAndStickSwap}) {
+        CHECK(weaponArmOffsetFor(kDefaultOffhandShoulder, left) == kDefaultOffhandShoulder);
+        CHECK(weaponArmOffsetFor(kDefaultOffhandElbow, left) == kDefaultOffhandElbow);
+        CHECK(evr::input::offhandOffsetFor(kDefaultOffhandShoulder, left).left == -0.18f);
+    }
+}
+
+TEST_CASE("the weapon arm's test shoulder is unset unless given, and a bad one is reported") {
+    CHECK_FALSE(parse({}).settings.weaponArmTestShoulder.has_value());
+    const auto set = parse({{"ETERNALVR_WEAPON_ARM_TEST_SHOULDER", "0,-0.5,0.3"}});
+    CHECK(set.issues.empty());
+    REQUIRE(set.settings.weaponArmTestShoulder.has_value());
+    CHECK(*set.settings.weaponArmTestShoulder ==
+          evr::game::WeaponOffset{0.0f, -0.5f, 0.3f, 0.0f, 0.0f, 0.0f});
+    const auto bad = parse({{"ETERNALVR_WEAPON_ARM_TEST_SHOULDER", "right"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_WEAPON_ARM_TEST_SHOULDER");
+    CHECK_FALSE(bad.settings.weaponArmTestShoulder.has_value());
 }

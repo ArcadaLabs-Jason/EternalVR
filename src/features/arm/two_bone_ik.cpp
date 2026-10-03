@@ -62,4 +62,21 @@ std::optional<TwoBoneSolution> solveTwoBone(const TwoBoneInput& in) {
     return out;
 }
 
+Vec3 rootWithinReach(Vec3 root, Vec3 target, float upper, float lower) {
+    if (!std::isfinite(upper) || !std::isfinite(lower) || !(upper > 1e-6f) || !(lower > 1e-6f) ||
+        !finite(root) || !finite(target)) {
+        return root;
+    }
+    const float full = upper + lower;
+    // A little inside the limits, so rounding never clamps.
+    const float maxReach = full * kMaxReachFraction * 0.999f;
+    const float minReach = std::max(std::fabs(upper - lower), full * kMinReachFraction) * 1.001f;
+    const Vec3 fromTarget = root - target;
+    const float d = length(fromTarget);
+    if (!(d > 1e-6f * full) || (d <= maxReach && d >= minReach)) {
+        return root;
+    }
+    return target + fromTarget * (std::clamp(d, minReach, maxReach) / d);
+}
+
 } // namespace evr::arm

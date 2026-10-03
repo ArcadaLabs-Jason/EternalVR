@@ -41,8 +41,8 @@ namespace EternalVR.Launcher.Core.Safety
         public int Start(string exe, string arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment)
         {
             var psi = new ProcessStartInfo(exe, arguments) { UseShellExecute = false, WorkingDirectory = workingDirectory };
-            // Set on the start info only: the launcher's own environment is never changed.
-            foreach (var kv in environment) psi.EnvironmentVariables[kv.Key] = kv.Value;
+            // Set on the start info only (ChildEnvironment).
+            Launch.ChildEnvironment.Apply(psi, environment);
             using (var p = Process.Start(psi) ?? throw new InvalidOperationException("the game process did not start"))
                 return p.Id;
         }

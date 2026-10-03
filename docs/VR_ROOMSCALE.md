@@ -106,7 +106,8 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
   walking while using the stick, went black here before (a tester's report, 2026-09-30).
 - **Never stuck in the dark.** The head's fade (geometry or the lean cap, not a blink or a glory kill shown
   as a fade) held fully black for 1.5 s moves the room onto the body, heading kept, behind the blink: `room:
-  the view was black 1.5 s; the room moved N m onto the body`. The same tester stood in a train door with a
+  the view was black 1.5 s; the room moved N m onto the body` (with the fade off, which leaves the view clear:
+  `the head was in geometry or past the lean cap (fade off) 1.5 s`). The same tester stood in a train door with a
   black view and could not tell which way was out.
 - **Head in geometry** (T-062, R10 section 3.2 step 4; `src/vkcore/head_sweep.cpp`,
   `src/features/roomscale/head_fade.hpp`). Each game frame with an offset over 1 cm, the engine's own
@@ -119,7 +120,10 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
     clearing over 0.25 s. The fade is a head-locked black quad layer (16 x 16 swapchain cleared to
     `(0, 0, 0, alpha)`, source alpha) over the projection layer: core OpenXR, the same on VDXR, SteamVR and
     the simulator (`src/vkcore/presenter_fade.cpp`). `room: fade full N ms after the head entered geometry`
-    logs the time.
+    logs the time. The layer is made with `ETERNALVR_HEAD_FADE=0` too (`room: fade layer ready`): that
+    setting turns off the head's own fade and the blink over a re-anchor, while a glory kill shown as a fade
+    still goes black (`shownFadeDepth`). Before 2026-10-02 the layer was not made with the setting off,
+    so `ETERNALVR_GLORY_KILLS=fade` logged `room: fade full ... (shown as a fade)` and showed nothing.
   - shots and the hand's aim ray start from the head where the sweep first touched (the last clear point
     between the eye and the head) while the head is in geometry (`controllers::endGameView` gets it instead
     of the rendered offset), so a head in a wall cannot shoot from inside it. The previous frame's clear
@@ -299,7 +303,7 @@ different speed on another build, `_WALK` and `_CREEP` move the values (a `TEST_
 | `ETERNALVR_RECENTER_HOLD` | 2.0 | seconds both sticks are held to recenter (0.3–5); 0 turns the chord off |
 | `ETERNALVR_LEAN_CAP` | 0.60 | metres (0.05–2) |
 | `ETERNALVR_HEAD_COLLISION` | 1 | 0: no head sweep (cap only, no fade) |
-| `ETERNALVR_HEAD_FADE` | 1 | 0: no fade layer (the launcher's "Fade in walls", Play tab) |
+| `ETERNALVR_HEAD_FADE` | 1 | 0: no fade for the head in geometry or past the lean cap (the launcher's "Fade in walls", Play tab) and no blink over a re-anchor; a glory kill's fade still shows |
 | `ETERNALVR_IPD` | unset | millimetres (50–80) the game renders with; unset or 0: the runtime's |
 | `ETERNALVR_BODY_FOLLOW` | 1 | 0: no body follow (Body follow above) |
 | `ETERNALVR_BODY_FOLLOW_DEADZONE` | 0.04 | metres (0.01–0.5) of gap before the body follows; it stops within 40 % of it |
@@ -335,7 +339,7 @@ Problems in a value are logged (`room: ETERNALVR_...='...': ...`) and the defaul
   0.60 m in the same direction; a rise, within the allowance or beyond it, is never lean), the height
   clamps and Real height with world
   scale, the fade (black within 150 ms for a head put into a wall and for one walked in at 1 m/s; partial
-  fade; clears gradually), the first contact as the shot start while blocked, the long press, the settings parser and the
+  fade; clears gradually; with the head fade off a glory kill's fade still shows), the first contact as the shot start while blocked, the long press, the settings parser and the
   eye separation. Body follow (`body_follow_tests.cpp`, `follow_test_steps_tests.cpp`): the controller
   (deadzone and hysteresis, walk, creep and coast by the stop distance), the displacement in room axes
   through a turned body, the anchor shift, 10, 20 and 40 cm steps against a model of the game's tiers

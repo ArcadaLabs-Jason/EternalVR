@@ -36,9 +36,6 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>The weapon hand (the layer's <c>ETERNALVR_HANDEDNESS</c>): left swaps the buttons, left mirrored also the sticks.</summary>
     public enum Handedness { Right, Left, LeftMirrored }
 
-    /// <summary>What forward on the move stick means (the layer's <c>ETERNALVR_LOCOMOTION</c>): where the head or the off hand points.</summary>
-    public enum LocomotionMode { Head, Hand }
-
     /// <summary>Which press of the X button opens the Dossier (the layer's <c>ETERNALVR_DOSSIER</c>); the other one switches equipment.</summary>
     public enum DossierPress { Hold, Tap }
 
@@ -47,7 +44,7 @@ namespace EternalVR.Launcher.Core.Settings
 
     /// <summary>Fixed foveated rendering in stereo (the layer's <c>ETERNALVR_FOVEATION</c>, experimental, NVIDIA RTX only): the edges
     /// of each eye shaded at a lower rate, from the gentlest preset to the strongest.</summary>
-    public enum FoveationMode { Off, Subtle, Balanced, Aggressive }
+    public enum FoveationMode { Off, Subtle, Balanced, Aggressive, Maximum }
 
     /// <summary>What the game's desktop window shows during stereo (the layer's <c>ETERNALVR_MIRROR</c>): one eye, or black.</summary>
     public enum MirrorMode { Left, Right, Off }
@@ -72,7 +69,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
     /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening and resolution_base
+    /// revenant_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base and parallel_eyes
     /// (dlss_version replaced dlss_dll, which is still read once).
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
@@ -132,6 +129,13 @@ namespace EternalVR.Launcher.Core.Settings
         /// <c>ETERNALVR_ALTERNATE_EYES</c>, docs/rig-findings/alternate-eye.md): always, only while the processor cannot keep
         /// up with the headset (auto), or never. Off by default.</summary>
         public AlternateEyesMode AlternateEyes { get; set; } = AlternateEyesMode.Off;
+        /// <summary>Stereo starts both eyes' rendering work at the same time instead of eye L's frame and then eye R's
+        /// (<c>ETERNALVR_PARALLEL_EYES=1</c>: the layer's two-view renderer on the game version it knows, docs/VR_STEREO.md
+        /// "Parallel Eye Rendering"). Experimental, off by default.</summary>
+        public bool ParallelEyes { get; set; } = false;
+        /// <summary>Parallel Eye Rendering in this launch: on, in stereo and not with DLSS (the layer keeps the standard
+        /// renderer with DLSS, which runs DLSS per eye).</summary>
+        public bool ParallelEyesOn => ParallelEyes && Mode == VrMode.Stereo && AntiAliasing != AntiAliasingMode.Dlss;
         /// <summary>Motion controllers drive the game (docs/VR_CONTROLLERS.md); off leaves keyboard, mouse and pad only.</summary>
         public bool Controllers { get; set; } = true;
         public AimMode Aim { get; set; } = AimMode.Hand;
@@ -162,7 +166,6 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The comfort vignette while the stick moves or turns you; off by default.</summary>
         public VignetteMode Vignette { get; set; } = VignetteMode.Off;
         public Handedness Hand { get; set; } = Handedness.Right;
-        public LocomotionMode Locomotion { get; set; } = LocomotionMode.Head;
         public DossierPress Dossier { get; set; } = DossierPress.Hold;
         /// <summary>What points at the weapon wheel: the stick (default) or the weapon hand.</summary>
         public WheelSelect Wheel { get; set; } = WheelSelect.Stick;
@@ -219,7 +222,7 @@ namespace EternalVR.Launcher.Core.Settings
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
-            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
+            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -297,6 +300,7 @@ namespace EternalVR.Launcher.Core.Settings
                 }
             }
             if (map.TryGetValue("alternate_eyes", out var ae)) s.AlternateEyes = ParseAlternateEyes(ae);
+            if (map.TryGetValue("parallel_eyes", out var pe)) s.ParallelEyes = On(pe);
             if (map.TryGetValue("render_size", out var rs) && NormaliseRenderSize(rs) is string renderSize) s.RenderSize = renderSize;
             if (map.TryGetValue("render_scale", out var sc))
             {
@@ -317,7 +321,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("glory_kills", out var gk)) s.GloryKills = ParseGloryKills(gk);
             if (map.TryGetValue("handedness", out var hd)) s.Hand = Pick(hd, Handedness.Right, ("left", Handedness.Left), ("left_mirror", Handedness.LeftMirrored));
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
-            if (map.TryGetValue("locomotion", out var lm)) s.Locomotion = Pick(lm, LocomotionMode.Head, ("hand", LocomotionMode.Hand));
+            s.ReadLocomotion(map);
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
             s.ReadMapSticks(map);
             if (map.TryGetValue("wheel_select", out var ws)) s.Wheel = Pick(ws, WheelSelect.Stick, ("hand", WheelSelect.Hand));
@@ -325,7 +329,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.ReadPicture(map);
             s.ReadPacing(map);
             if (map.TryGetValue("foveation", out var fv))
-                s.Foveation = Pick(fv, FoveationMode.Off, ("subtle", FoveationMode.Subtle), ("balanced", FoveationMode.Balanced), ("aggressive", FoveationMode.Aggressive));
+                s.Foveation = Pick(fv, FoveationMode.Off, ("subtle", FoveationMode.Subtle), ("balanced", FoveationMode.Balanced), ("aggressive", FoveationMode.Aggressive), ("maximum", FoveationMode.Maximum));
             if (map.TryGetValue("cpu_saver", out var cs)) s.CpuSaverAllOn = On(cs);
             s.CpuSaverChoices = order.Where(IsCpuSaverKey).Select(k => (Key: k.Substring(CpuSaverKeyPrefix.Length).ToLowerInvariant(), On: Switch(map[k])))
                 .Where(x => x.On.HasValue).Select(x => new KeyValuePair<string, bool>(x.Key, x.On.Value)).ToList();
@@ -380,6 +384,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("world_scale = " + ClampWorldScale(WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
             sb.AppendLine("mode = " + (Mode == VrMode.Mono ? "mono" : "stereo"));
             sb.AppendLine("alternate_eyes = " + AlternateEyesValue(AlternateEyes));
+            sb.AppendLine("parallel_eyes = " + (ParallelEyes ? "1" : "0"));
             sb.AppendLine("controllers = " + (Controllers ? "1" : "0"));
             sb.AppendLine("aim = " + AimName(Aim));
             sb.AppendLine("revenant_aim = " + RevenantAimName(RevenantAim));
@@ -397,7 +402,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("vignette = " + VignetteName(Vignette));
             sb.AppendLine("glory_kills = " + GloryKillName(GloryKills));
             sb.AppendLine("handedness = " + HandednessName(Hand));
-            sb.AppendLine("locomotion = " + LocomotionName(Locomotion));
+            WriteLocomotion(sb);
             sb.AppendLine("dossier = " + DossierName(Dossier));
             WriteMapSticks(sb);
             sb.AppendLine("wheel_select = " + WheelSelectName(Wheel));
@@ -475,9 +480,6 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The layer's <c>ETERNALVR_HANDEDNESS</c> value.</summary>
         public static string HandednessName(Handedness h) => h == Handedness.Left ? "left" : h == Handedness.LeftMirrored ? "left_mirror" : "right";
 
-        /// <summary>The layer's <c>ETERNALVR_LOCOMOTION</c> value.</summary>
-        public static string LocomotionName(LocomotionMode l) => l == LocomotionMode.Hand ? "hand" : "head";
-
         /// <summary>The layer's <c>ETERNALVR_DOSSIER</c> value.</summary>
         public static string DossierName(DossierPress d) => d == DossierPress.Tap ? "tap" : "hold";
 
@@ -487,9 +489,9 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The layer's <c>ETERNALVR_MIRROR</c> value.</summary>
         public static string MirrorName(MirrorMode m) => m == MirrorMode.Right ? "right" : m == MirrorMode.Off ? "off" : "left";
 
-        /// <summary>The settings file's and the layer's <c>ETERNALVR_FOVEATION</c> value: off, subtle, balanced or aggressive.</summary>
+        /// <summary>The settings file's and the layer's <c>ETERNALVR_FOVEATION</c> value: off, subtle, balanced, aggressive or maximum.</summary>
         public static string FoveationName(FoveationMode f) =>
-            f == FoveationMode.Subtle ? "subtle" : f == FoveationMode.Balanced ? "balanced" : f == FoveationMode.Aggressive ? "aggressive" : "off";
+            f == FoveationMode.Subtle ? "subtle" : f == FoveationMode.Balanced ? "balanced" : f == FoveationMode.Aggressive ? "aggressive" : f == FoveationMode.Maximum ? "maximum" : "off";
 
         /// <summary>The layer's <c>ETERNALVR_CUTSCENES</c> value.</summary>
         public static string CutsceneName(CutsceneView c) => c == CutsceneView.Immersive ? "immersive" : "cinema";

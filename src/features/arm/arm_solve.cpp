@@ -64,6 +64,8 @@ std::optional<ArmSolution> solveArm(const ArmPoses& animated, const ArmTargets& 
     Vec3 normalA = cross(elbowA - shoulderA, wristA - elbowA);
     if (!(length(normalA) > 1e-4f * out.upper * out.lower)) {
         // A straight animated arm: the forearm frame's -z is the bend normal in the rig [static, bind pose].
+        // The same on the right arm: its axes are the left's reflected and negated, and so is the normal
+        // of its reflected bones.
         normalA = -at(animated, ArmJoint::ForeArm).axis.up;
     }
     const Vec3 normal = cross(ik->bend, normalize(wrist - shoulder));
@@ -101,6 +103,22 @@ std::optional<ArmSolution> solveArm(const ArmPoses& animated, const ArmTargets& 
             return std::nullopt;
         }
     }
+    return out;
+}
+
+std::optional<ArmSolution> solveArmToWrist(const ArmPoses& animated, Vec3 shoulder, Vec3 pole) {
+    const ModelPose& hand = at(animated, ArmJoint::Hand);
+    const float upper =
+        length(at(animated, ArmJoint::ForeArm).position - at(animated, ArmJoint::UpperArm).position);
+    const float lower = length(hand.position - at(animated, ArmJoint::ForeArm).position);
+    const ArmTargets targets{hand, rootWithinReach(shoulder, hand.position, upper, lower), pole};
+    auto out = solveArm(animated, targets);
+    if (!out || out->ik.clamped) {
+        return std::nullopt;
+    }
+    // The IK lands on the wrist to rounding; the wrist is the game's, exactly.
+    at(out->joints, ArmJoint::Hand) = hand;
+    at(out->joints, ArmJoint::Attach) = at(animated, ArmJoint::Attach);
     return out;
 }
 

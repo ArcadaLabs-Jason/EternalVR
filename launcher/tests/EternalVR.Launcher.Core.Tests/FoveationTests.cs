@@ -10,7 +10,7 @@ namespace EternalVR.Launcher.Core.Tests
     public class FoveationTests
     {
         private static readonly FoveationMode[] AllModes =
-            { FoveationMode.Off, FoveationMode.Subtle, FoveationMode.Balanced, FoveationMode.Aggressive };
+            { FoveationMode.Off, FoveationMode.Subtle, FoveationMode.Balanced, FoveationMode.Aggressive, FoveationMode.Maximum };
 
         private static LaunchInputs Inputs(LauncherSettings s = null) => new LaunchInputs
         {
@@ -39,6 +39,7 @@ namespace EternalVR.Launcher.Core.Tests
                 [FoveationMode.Subtle] = "subtle",
                 [FoveationMode.Balanced] = "balanced",
                 [FoveationMode.Aggressive] = "aggressive",
+                [FoveationMode.Maximum] = "maximum",
             };
             foreach (var kv in expected)
             {
@@ -65,6 +66,8 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal(mode, LauncherSettings.Parse(new LauncherSettings { Foveation = mode }.Serialize()).Foveation);
             Assert.Contains("foveation = balanced", new LauncherSettings { Foveation = FoveationMode.Balanced }.Serialize());
             Assert.Contains("foveation = off", new LauncherSettings().Serialize());
+            Assert.Contains("foveation = maximum", new LauncherSettings { Foveation = FoveationMode.Maximum }.Serialize());
+            Assert.Equal(FoveationMode.Maximum, LauncherSettings.Parse("schema_version = 2\nfoveation = maximum\n").Foveation);
             Assert.Contains("schema_version = 2", new LauncherSettings { Foveation = FoveationMode.Aggressive }.Serialize());
             // A file from before the key, or a value this version does not know: off.
             var old = LauncherSettings.Parse("schema_version = 2\nanti_aliasing = dlss\nworld_scale = 1.10\n");
@@ -89,11 +92,42 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void NotWithParallelEyeRendering()
+        {
+            foreach (var mode in AllModes)
+            {
+                var s = new LauncherSettings { ParallelEyes = true, Foveation = mode };
+                Assert.False(Env(LaunchPlanBuilder.Build(Inputs(s))).ContainsKey("ETERNALVR_FOVEATION"));
+                Assert.Equal("1", Env(LaunchPlanBuilder.Build(Inputs(s)))["ETERNALVR_PARALLEL_EYES"]);
+                Assert.Equal(SettingRules.NotWithParallelEyes, SettingRules.WhyNot(Setting.Foveation, s));
+                // The value is kept for when Parallel Eye Rendering is off again.
+                Assert.Equal(mode, LauncherSettings.Parse(s.Serialize()).Foveation);
+            }
+            Assert.Equal("Not with Parallel Eye Rendering (Play tab).", SettingRules.NotWithParallelEyes);
+            // Mono comes first.
+            Assert.Equal(SettingRules.NeedsStereo,
+                SettingRules.WhyNot(Setting.Foveation, new LauncherSettings { Mode = VrMode.Mono, ParallelEyes = true }));
+            // With DLSS, Parallel Eye Rendering does not run: foveation applies and is passed.
+            var dlss = new LauncherSettings
+            {
+                ParallelEyes = true, AntiAliasing = AntiAliasingMode.Dlss, Foveation = FoveationMode.Balanced,
+            };
+            Assert.Null(SettingRules.WhyNot(Setting.Foveation, dlss));
+            var env = Env(LaunchPlanBuilder.Build(Inputs(dlss)));
+            Assert.Equal("balanced", env["ETERNALVR_FOVEATION"]);
+            Assert.False(env.ContainsKey("ETERNALVR_PARALLEL_EYES"));
+            // Parallel Eye Rendering off again: passed as before.
+            var off = new LauncherSettings { ParallelEyes = false, Foveation = FoveationMode.Subtle };
+            Assert.Null(SettingRules.WhyNot(Setting.Foveation, off));
+            Assert.Equal("subtle", Env(LaunchPlanBuilder.Build(Inputs(off)))["ETERNALVR_FOVEATION"]);
+        }
+
+        [Fact]
         public void TheRowShowsItsChoicesInEnumOrder()
         {
             var text = SettingTexts.For(Setting.Foveation);
             Assert.Equal("Foveated rendering (experimental)", text.Label);
-            Assert.Equal(new[] { "Off", "Subtle", "Balanced", "Aggressive" }, text.Choices);
+            Assert.Equal(new[] { "Off", "Subtle", "Balanced", "Aggressive", "Maximum" }, text.Choices);
             Assert.Contains("NVIDIA RTX only", text.Tooltip);
             Assert.Contains("Experimental", text.Tooltip);
             Assert.DoesNotContain("\u2014", text.Tooltip);

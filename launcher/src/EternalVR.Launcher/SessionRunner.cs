@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using EternalVR.Launcher.Core;
 using EternalVR.Launcher.Core.Launch;
+using EternalVR.Launcher.Core.Report;
 using EternalVR.Launcher.Core.Safety;
 using EternalVR.Launcher.Platform;
 
@@ -29,12 +30,24 @@ namespace EternalVR.Launcher
         private Log Log => ctx.Log;
         private SessionStatus lastStatus;
         private ProblemHold problemHold = new ProblemHold();
+        /// <summary>The game's start with its marker and <see cref="GameStarted"/>; closed by <see cref="StopLaunching"/>.</summary>
+        private readonly StartGate gate = new StartGate();
+        private volatile bool gameLaunched;
 
         /// <summary>Why the last restore attempt failed; null when it succeeded or only waits for the game to exit.</summary>
         public string LastRestoreError { get; private set; }
 
         /// <summary>Called on the session's thread once the game process has started (the window starts the finisher here).</summary>
         public Action GameStarted { get; set; }
+
+        /// <summary>True from the game's start to the end of the session; false while a launch is still being prepared.</summary>
+        public bool GameLaunched => gameLaunched;
+
+        /// <summary>
+        /// The window is closing: no game is started any more. Returns once a start under way has also started the finisher,
+        /// so the launcher's process can end without leaving a game that nothing restores after.
+        /// </summary>
+        public void StopLaunching() => gate.Close();
 
         /// <summary>
         /// Asked on the session's thread when the runtime probe found no headset (the problem's text): true launches
@@ -99,8 +112,10 @@ namespace EternalVR.Launcher
                     Log.Warn("the session marker is damaged; restoring from " + snapshot);
                 var report = SettingsSnapshot.Restore(snapshot, ctx.Data.RestoredKeys);
                 foreach (var line in report.Lines) Log.Info("restore: " + line);
+                // Steam Cloud files (profile.bin changes every session) are the game's by design: their lines above are enough.
                 if (report.ChangedNotRestored.Count > 0)
-                    Log.Warn("some settings files changed during the session and are not restored key by key; the snapshot is kept in " + snapshot);
+                    Log.Warn($"local settings files changed during the session and are not restored key by key: {string.Join(", ", report.ChangedNotRestored)}; "
+                        + $"their old copies are in {snapshot}, kept with the last {SnapshotsKept} sessions' snapshots");
                 if (!SessionMarker.DeleteIfOwned(ctx.Paths.SessionMarker, marker.SessionId))
                     Log.Warn("the session marker now belongs to another session; it is left in place");
                 Log.Info("settings restore complete");
@@ -130,7 +145,7 @@ namespace EternalVR.Launcher
             if (takeCopies && !quiet) Log.Info("dry run: no snapshot or save backup while the game runs or a restore is pending");
             if (takeCopies && quiet && gathered.Locations.Count > 0)
             {
-                var snap = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, gathered.Locations);
+                var snap = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, gathered.Locations, SessionKeys.FromArguments(ctx.Settings.ExtraArguments));
                 File.WriteAllText(Path.Combine(snap, SettingsSnapshot.DryRunFile), "taken by --dry-run; no game was started");
                 Log.Info("dry run: settings snapshot in " + snap);
                 BackUpSaves(id, gathered);
@@ -146,6 +161,7 @@ namespace EternalVR.Launcher
         {
             lastStatus = null;
             problemHold = new ProblemHold();
+            gameLaunched = false;
             if (!Recover())
             {
                 Log.Error("a previous session is still pending; not launching");
@@ -177,32 +193,48 @@ namespace EternalVR.Launcher
                 Log.Info("headset check: launching anyway");
             }
             var marker = new SessionMarker { State = SessionState.Preparing, SessionId = id, GameExe = plan.ExePath };
-            marker.Write(ctx.Paths.SessionMarker);
-
             Process game = null;
             try
             {
-                marker.SnapshotDir = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, g.Locations);
-                marker.State = SessionState.Snapshotted;
-                marker.Write(ctx.Paths.SessionMarker);
-                Log.Info("settings snapshot: " + marker.SnapshotDir);
+                // Closing the window stops the launch before the marker, or after the preparation and before the game's
+                // start; the start, its marker and the finisher's start are one step the closing window waits for (StartGate).
+                var outcome = gate.Launch(cancel, () =>
+                {
+                    marker.Write(ctx.Paths.SessionMarker);
+                    // The cvars of Extra game arguments are put back with the forced ones (the game saves them on exit too).
+                    var extraKeys = SessionKeys.FromArguments(ctx.Settings.ExtraArguments);
+                    marker.SnapshotDir = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, g.Locations, extraKeys);
+                    marker.State = SessionState.Snapshotted;
+                    marker.Write(ctx.Paths.SessionMarker);
+                    Log.Info("settings snapshot: " + marker.SnapshotDir);
+                    if (extraKeys.Count > 0) Log.Info("restored after the session as well (Extra game arguments): " + string.Join(", ", extraKeys));
 
-                BackUpSaves(id, g);
+                    BackUpSaves(id, g);
 
-                if (plan.Route == LayerRoute.HkcuRegistration)
-                    registration.Register(Path.Combine(ctx.LayerDir, "VK_LAYER_ETERNALVR.json"));
+                    if (plan.Route == LayerRoute.HkcuRegistration)
+                        registration.Register(Path.Combine(ctx.LayerDir, "VK_LAYER_ETERNALVR.json"));
 
-                Directory.CreateDirectory(ctx.Paths.SessionLogDir(id));
-                foreach (var old in SessionLogs.Prune(ctx.Paths.Logs, SessionLogs.Kept, ctx.Paths.SessionLogDir(id)))
-                    Log.Info("removed an old session log folder: " + old);
-                Log.Info("launch plan:" + Environment.NewLine + plan.Describe());
-                game = Start(plan);
-                marker.State = SessionState.Running;
-                marker.GamePid = game.Id;
-                marker.GameStartUtc = game.StartTime.ToUniversalTime();
-                marker.Write(ctx.Paths.SessionMarker);
-                Log.Info($"game started, pid {game.Id}");
-                GameStarted?.Invoke();
+                    Directory.CreateDirectory(ctx.Paths.SessionLogDir(id));
+                    foreach (var old in SessionLogs.Prune(ctx.Paths.Logs, SessionLogs.Kept, ctx.Paths.SessionLogDir(id)))
+                        Log.Info("removed an old session log folder: " + old);
+                    Log.Info("launch plan:" + Environment.NewLine + plan.Describe());
+                }, () =>
+                {
+                    game = Start(plan);
+                    gameLaunched = true;
+                    marker.State = SessionState.Running;
+                    marker.GamePid = game.Id;
+                    marker.GameStartUtc = game.StartTime.ToUniversalTime();
+                    marker.Write(ctx.Paths.SessionMarker);
+                    Log.Info($"game started, pid {game.Id}");
+                    GameStarted?.Invoke();
+                });
+                if (outcome != LaunchOutcome.Started)
+                {
+                    Log.Warn("the launcher is closing; the game is not started");
+                    if (outcome == LaunchOutcome.StoppedAfterPreparing) CleanUpAfterSession(marker);
+                    return false;
+                }
             }
             catch (Exception e)
             {
@@ -243,11 +275,14 @@ namespace EternalVR.Launcher
             var rates = SessionRates.FromLines(layerLines);
             if (rates != null) Log.Info(rates.LogText());
             var summary = SessionSummary.FromLines(layerLines);
+            // No controller action bound: SteamVR's binding chosen for the game is named as the cause, any other gets the report.
+            var unbound = UnboundControls.Decide(summary, () => SteamVrSummary.ReadCustomBindings(ctx.SteamRoot).Count > 0);
             if (summary != null)
             {
                 Log.Info(summary.LogText());
-                ctx.RememberSession(summary, id, DateTime.Now);
+                ctx.RememberSession(summary, id, DateTime.Now, unbound);
             }
+            var controlsText = UnboundControls.StatusText(unbound);
             var summaryText = summary?.Describe();
             var ratesText = !string.IsNullOrEmpty(summaryText) ? " " + summaryText : rates != null ? " " + rates.Describe() : string.Empty;
             // Each eye below the planned size: the graphics driver held it at the window's size (RenderCap).
@@ -261,9 +296,10 @@ namespace EternalVR.Launcher
             }
             // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended.
             if (lastStatus == null || lastStatus.Kind != StatusKind.Problem)
-                Report(restored && exitText.Length == 0 && !capped ? StatusKind.Good : StatusKind.Warning, exitText + (restored
+                Report(restored && exitText.Length == 0 && !capped && controlsText.Length == 0 ? StatusKind.Good : StatusKind.Warning, exitText + (restored
                     ? "The game has exited and your settings were restored."
-                    : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).") + ratesText);
+                    : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).")
+                    + (controlsText.Length == 0 ? string.Empty : " " + controlsText) + ratesText);
             return restored;
         }
 
@@ -329,7 +365,7 @@ namespace EternalVR.Launcher
                 UseShellExecute = false,
                 WorkingDirectory = plan.WorkingDirectory,
             };
-            foreach (var kv in plan.Environment) psi.EnvironmentVariables[kv.Key] = kv.Value;
+            ChildEnvironment.Apply(psi, plan.Environment);
             return Process.Start(psi) ?? throw new InvalidOperationException("the game process did not start");
         }
 
