@@ -245,7 +245,10 @@ namespace EternalVR.Launcher
                 Log.Error("launch failed: " + e.Message);
                 if (game == null)
                 {
-                    Report(StatusKind.Problem, "The launch failed: " + e.Message);
+                    if (storeGame) RestoreBethesdaTarget(plan.ExePath);
+                    Report(StatusKind.Problem, e is PackageLaunch.GameGoneException
+                        ? StartWatch.EarlyExitMessage(0, unchecked((int)0xC0000005), false)
+                        : "The launch failed: " + e.Message);
                     CleanUpAfterSession(marker);
                     return false;
                 }
@@ -263,6 +266,7 @@ namespace EternalVR.Launcher
                 WaitForAllGameProcesses(game, cancel, logDir, startedUtc);
                 if (game.HasExited) exitCode = game.ExitCode;
             }
+            if (storeGame) RestoreBethesdaTarget(plan.ExePath);
             if (cancel.IsCancellationRequested)
             {
                 Log.Warn("stopped waiting for the game; the restore runs at the next launcher start");
@@ -362,8 +366,41 @@ namespace EternalVR.Launcher
             return RestoreAndClear(marker);
         }
 
-        /// <summary>ETERNALVR_PACKAGE_START=0 in the launcher's environment starts a Game Pass game directly, as before 0.1.18.</summary>
+        // The DOOM Eternal Launcher's launch_target before the start (PackageStart.BethesdaSettings): the copy inside the
+        // package puts it back once the game runs; the session puts it back again if anything left it changed.
+        private string bethesdaTarget;
+
+        private static string ReadBethesdaTarget(string gameExe)
+        {
+            try { return PackageStart.LaunchTarget(File.ReadAllText(PackageStart.BethesdaSettings(gameExe))); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException) { return null; }
+        }
+
+        private void RestoreBethesdaTarget(string gameExe)
+        {
+            if (bethesdaTarget == null) return;
+            var file = PackageStart.BethesdaSettings(gameExe);
+            try
+            {
+                var bytes = File.ReadAllBytes(file);
+                bool bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+                var text = new System.Text.UTF8Encoding(false).GetString(bytes, bom ? 3 : 0, bytes.Length - (bom ? 3 : 0));
+                var now = PackageStart.LaunchTarget(text);
+                if (now == null || now == bethesdaTarget) return;
+                File.WriteAllText(file, PackageStart.WithLaunchTarget(text, bethesdaTarget), new System.Text.UTF8Encoding(bom));
+                Log.Info("the DOOM Eternal Launcher's launch_target put back to " + bethesdaTarget + " (was " + now + ")");
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException)
+            {
+                Log.Warn("the DOOM Eternal Launcher's launch_target could not be put back to " + bethesdaTarget + ": " + e.Message);
+            }
+        }
+
+        /// <summary>ETERNALVR_PACKAGE_START=0 in the launcher's environment starts a Game Pass game directly, as before 0.1.18;
+        /// =game starts it inside the package without the DOOM Eternal Launcher, as 0.1.18 did.</summary>
         private static bool PackageStartOn() => Environment.GetEnvironmentVariable("ETERNALVR_PACKAGE_START") != "0";
+
+        private static bool PackageStartViaLauncher() => Environment.GetEnvironmentVariable("ETERNALVR_PACKAGE_START") != "game";
 
         /// <summary>
         /// The Game Pass or Microsoft Store game started inside its package, as the Xbox app starts it (PackageStart), with the
@@ -372,6 +409,7 @@ namespace EternalVR.Launcher
         private Process StartInPackage(LaunchPlan plan, string id)
         {
             var planFile = Path.Combine(ctx.Paths.SessionLogDir(id), "package-start.txt");
+            bethesdaTarget = ReadBethesdaTarget(plan.ExePath);
             try
             {
                 var env = ChildEnvironment.Merge(ChildEnvironment.Current(), plan.Environment, Environment.GetEnvironmentVariable);
@@ -381,13 +419,16 @@ namespace EternalVR.Launcher
                     WorkingDirectory = plan.WorkingDirectory,
                     CommandLine = plan.CommandLine,
                     Environment = env.ToList(),
-                }, planFile, Log);
-                Log.Info("started inside the package " + PackageStart.PackageName);
+                    ViaLauncher = PackageStartViaLauncher(),
+                }, planFile, Log, out var viaLauncher);
+                Log.Info("started inside the package " + PackageStart.PackageName
+                    + (viaLauncher ? " through the DOOM Eternal Launcher" : " directly"));
                 return game;
             }
             catch (Exception e) when (e is InvalidOperationException || e is IOException || e is UnauthorizedAccessException
                                       || e is System.ComponentModel.Win32Exception)
             {
+                RestoreBethesdaTarget(plan.ExePath);
                 Log.Warn("starting the game inside its package failed (" + e.Message + "); starting it directly");
                 return Start(plan);
             }
@@ -420,7 +461,8 @@ namespace EternalVR.Launcher
                 bool exited = game.HasExited;
                 if (exited && exitSeen == null) exitSeen = now;
                 var sinceExit = exitSeen.HasValue ? (now - exitSeen.Value).TotalSeconds : 0;
-                bool other = ctx.GameProcessNames.SelectMany(WindowsSystem.RunningProcessIds).Any(pid => pid != game.Id);
+                // A hand-off is Steam's (it restarts the game itself); a Store game's DOOM Eternal Launcher outlives it briefly.
+                bool other = !storeGame && ctx.GameProcessNames.SelectMany(WindowsSystem.RunningProcessIds).Any(pid => pid != game.Id);
                 var outcome = StartWatch.Decide(exited, elapsed, sinceExit, other);
                 if (outcome == StartOutcome.HandOff)
                 {

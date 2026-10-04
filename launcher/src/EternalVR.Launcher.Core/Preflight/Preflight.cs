@@ -113,7 +113,9 @@ namespace EternalVR.Launcher.Core.Preflight
             else if (f.SteamLoggedIn == null) Add("steam", Severity.Warn, "Steam is running; whether a user is logged in could not be determined.");
             else Add("steam", Severity.Pass, "Steam is running and logged in");
 
-            if (f.GameProcessesRunning.Count > 0)
+            if (f.GameProcessesRunning.Count > 0 && f.GameProcessesRunning.All(n => n == "idTechLauncher"))
+                Add("game-running", Severity.Fail, "The DOOM Eternal Launcher is open (idTechLauncher). Close it first.");
+            else if (f.GameProcessesRunning.Count > 0)
                 Add("game-running", Severity.Fail, "Already running: " + string.Join(", ", f.GameProcessesRunning) + ". Quit the game (and its launcher) first.");
             else Add("game-running", Severity.Pass, "The game is not running");
 

@@ -24,7 +24,7 @@ namespace EternalVR.Launcher.Core.Preflight
             {
                 case "elevation": return "the launcher runs as administrator";
                 case "steam": return m.IndexOf("not running", StringComparison.OrdinalIgnoreCase) >= 0 ? "Steam is not running" : "no one is logged in to Steam";
-                case "game-running": return "DOOM Eternal is already running";
+                case "game-running": return m.StartsWith("The DOOM Eternal Launcher", StringComparison.Ordinal) ? "close the DOOM Eternal Launcher first" : "DOOM Eternal is already running";
                 case "pending-restore": return "your game settings from the last session are not put back yet";
                 case "data-folder": return "the launcher's data folder cannot be written";
                 case "game": return "DOOM Eternal was not found";

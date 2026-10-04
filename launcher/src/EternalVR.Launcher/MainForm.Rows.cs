@@ -163,9 +163,17 @@ namespace EternalVR.Launcher
                 var disk = File.Exists(path) ? File.ReadAllText(path) : null;
                 if (settingsWritten != null && disk != null && disk != settingsWritten)
                 {
-                    ctx.Settings = LauncherSettings.Parse(LauncherSettings.MergeHandEdits(settingsWritten, ctx.Settings.Serialize(), disk));
-                    ctx.Log.Info("launcher.ini was edited outside the launcher; those edits are kept");
-                    LoadSettingsIntoControls();
+                    try
+                    {
+                        ctx.Settings = LauncherSettings.Parse(LauncherSettings.MergeHandEdits(settingsWritten, ctx.Settings.Serialize(), disk));
+                        ctx.Log.Info("launcher.ini was edited outside the launcher; those edits are kept");
+                        LoadSettingsIntoControls();
+                    }
+                    catch (SettingsException e)
+                    {
+                        // A hand edit that does not parse would otherwise stop every later save.
+                        ctx.Log.Error("launcher.ini was edited outside the launcher but could not be read (" + e.Message + "); the launcher's settings are saved instead");
+                    }
                 }
                 ctx.Settings.Save(path);
                 settingsWritten = File.ReadAllText(path);

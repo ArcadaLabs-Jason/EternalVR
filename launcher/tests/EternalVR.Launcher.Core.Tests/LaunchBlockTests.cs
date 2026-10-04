@@ -33,6 +33,15 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheDoomEternalLauncherAloneIsNamed()
+        {
+            Assert.Equal("Launch VR is off: close the DOOM Eternal Launcher first (see Checks and log).",
+                StatusWith(f => f.GameProcessesRunning = new[] { "idTechLauncher" }));
+            Assert.Equal("Launch VR is off: DOOM Eternal is already running (see Checks and log).",
+                StatusWith(f => f.GameProcessesRunning = new[] { "idTechLauncher", "DOOMEternalx64vk" }));
+        }
+
+        [Fact]
         public void NothingIsSaidWhenLaunchVrIsOn()
         {
             Assert.Null(LaunchBlock.Status(PreflightEvaluator.Evaluate(Good())));

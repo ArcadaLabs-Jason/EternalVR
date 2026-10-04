@@ -58,5 +58,41 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Contains(@"-Args '--start-in-package ""C:\data\logs\1\package-start.txt""'", command);
             Assert.Contains("$ProgressPreference = 'SilentlyContinue'", command);
         }
+
+        [Fact]
+        public void TheLauncherRouteSurvivesThePlanFile()
+        {
+            var plan = new PackageStartPlan { ExePath = @"C:\XboxGames\Doom Eternal - PC\Content\DOOMEternalx64vk.exe", ViaLauncher = true };
+            Assert.True(PackageStart.Read(PackageStart.Write(plan)).ViaLauncher);
+            plan.ViaLauncher = false;
+            Assert.False(PackageStart.Read(PackageStart.Write(plan)).ViaLauncher);
+        }
+
+        [Fact]
+        public void TheDoomEternalLauncherAndItsSettingsAreInTheGameFolder()
+        {
+            const string exe = @"C:\XboxGames\Doom Eternal - PC\Content\DOOMEternalx64vk.exe";
+            Assert.Equal(@"C:\XboxGames\Doom Eternal - PC\Content\launcher\idTechLauncher.exe", PackageStart.BethesdaLauncher(exe));
+            Assert.Equal(@"C:\XboxGames\Doom Eternal - PC\Content\doom-launcher-settings.json", PackageStart.BethesdaSettings(exe));
+        }
+
+        [Fact]
+        public void OnlyTheLaunchTargetChanges()
+        {
+            const string settings = "{\n\t\"_settings\": {\n\t\t\"remember_login\": true,\n\t\t\"launch_target\": \"portal\",\n\t\t\"language\": \"en-us\"\n\t}\n}";
+            Assert.Equal("portal", PackageStart.LaunchTarget(settings));
+            var skipped = PackageStart.WithLaunchTarget(settings, PackageStart.SkipLauncherTarget);
+            Assert.Equal(settings.Replace("\"portal\"", "\"retail\""), skipped);
+            Assert.Equal(settings, PackageStart.WithLaunchTarget(skipped, "portal"));
+            Assert.Equal("retail", PackageStart.LaunchTarget("{\"launch_target\" : \"retail\"}"));
+        }
+
+        [Fact]
+        public void SettingsWithoutALaunchTargetAreLeftAlone()
+        {
+            Assert.Null(PackageStart.LaunchTarget("{\"_settings\": {}}"));
+            Assert.Null(PackageStart.WithLaunchTarget("{\"_settings\": {}}", "retail"));
+            Assert.Null(PackageStart.WithLaunchTarget(null, "retail"));
+        }
     }
 }
