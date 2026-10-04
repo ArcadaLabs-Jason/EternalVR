@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -19,6 +20,7 @@ using evr::input::forcedReasonName;
 using evr::input::kClimbLookCvars;
 using evr::input::kInhibitViewMask;
 using evr::input::SavedCvarValue;
+using evr::input::yieldsAimOnly;
 
 namespace {
 
@@ -198,10 +200,102 @@ TEST_CASE("off a wall a foreign SetViewAngles still yields everything") {
 TEST_CASE("only the climbable wall aims with the head") {
     for (const ForcedReason r :
          {ForcedReason::None, ForcedReason::SetViewAngles, ForcedReason::Inhibit, ForcedReason::Cutscene,
-          ForcedReason::CameraAnimation, ForcedReason::Settling}) {
+          ForcedReason::CameraAnimation, ForcedReason::WeaponWheel, ForcedReason::Settling}) {
         CHECK_FALSE(aimsWithHead(r));
     }
     CHECK(aimsWithHead(ForcedReason::WallClimb));
+}
+
+namespace {
+
+ForcedAngleSignals wheel(std::uint32_t inhibitFlags) {
+    ForcedAngleSignals s;
+    s.weaponWheel = true;
+    s.inhibitFlags = inhibitFlags;
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("the weapon wheel's inhibit bits yield the aim only, with no settling after") {
+    ForcedAngleGate gate(2);
+    CHECK(gate.update(wheel(0x18)));
+    CHECK(gate.reason() == ForcedReason::WeaponWheel);
+    CHECK(yieldsAimOnly(gate.reason()));
+    CHECK(gate.update(wheel(0x8)));
+    CHECK(gate.reason() == ForcedReason::WeaponWheel);
+    CHECK_FALSE(gate.update(quiet())); // released: nothing forced the view
+    CHECK(gate.reason() == ForcedReason::None);
+    CHECK(gate.episodes() == 1);
+}
+
+TEST_CASE("the wheel held does not soften other inhibit bits, a cutscene or a forced call") {
+    ForcedAngleGate gate(2);
+    CHECK(gate.update(wheel(0x1F87F)));
+    CHECK(gate.reason() == ForcedReason::Inhibit);
+    CHECK(gate.update(wheel(0x118)));
+    CHECK(gate.reason() == ForcedReason::Inhibit);
+    ForcedAngleSignals call = wheel(0x18);
+    call.foreignSetViewAngles = true;
+    CHECK(gate.update(call));
+    CHECK(gate.reason() == ForcedReason::SetViewAngles);
+    ForcedAngleSignals scene = wheel(0x18);
+    scene.cutscene = true;
+    CHECK(gate.update(scene));
+    CHECK(gate.reason() == ForcedReason::Cutscene);
+}
+
+TEST_CASE("the wheel's bits outliving the button keep the wheel's reason until they clear") {
+    ForcedAngleGate gate(2);
+    CHECK(gate.update(wheel(0x18)));
+    ForcedAngleSignals lingering;
+    lingering.inhibitFlags = 0x18; // the button is up, the game has not taken the release yet
+    CHECK(gate.update(lingering));
+    CHECK(gate.reason() == ForcedReason::WeaponWheel);
+    CHECK_FALSE(gate.update(quiet()));
+    CHECK(gate.episodes() == 1);
+}
+
+TEST_CASE("the wheel on a climbable wall or in a camera animation yields everything") {
+    ForcedAngleGate gate(2);
+    ForcedAngleSignals climb = wheel(0x18);
+    climb.wallClimb = true;
+    CHECK(gate.update(climb));
+    CHECK(gate.reason() == ForcedReason::Inhibit);
+    ForcedAngleSignals anim = wheel(0x18);
+    anim.cameraAnimation = true;
+    CHECK(gate.update(anim));
+    CHECK(gate.reason() == ForcedReason::Inhibit);
+}
+
+TEST_CASE("the wheel's bits without the wheel held yield everything") {
+    ForcedAngleGate gate(2);
+    ForcedAngleSignals s;
+    s.inhibitFlags = 0x18;
+    CHECK(gate.update(s));
+    CHECK(gate.reason() == ForcedReason::Inhibit);
+    CHECK_FALSE(yieldsAimOnly(gate.reason()));
+}
+
+TEST_CASE("a forced view settling when the wheel opens still settles after it") {
+    ForcedAngleGate gate(2);
+    CHECK(gate.update(forcedCall()));
+    CHECK(gate.update(wheel(0x18)));
+    CHECK(gate.reason() == ForcedReason::WeaponWheel);
+    CHECK(gate.update(quiet()));
+    CHECK(gate.reason() == ForcedReason::Settling);
+    CHECK(gate.update(quiet()));
+    CHECK_FALSE(gate.update(quiet()));
+}
+
+TEST_CASE("only the weapon wheel yields the aim only") {
+    for (const ForcedReason r :
+         {ForcedReason::None, ForcedReason::SetViewAngles, ForcedReason::Inhibit, ForcedReason::Cutscene,
+          ForcedReason::CameraAnimation, ForcedReason::WallClimb, ForcedReason::Settling}) {
+        CHECK_FALSE(yieldsAimOnly(r));
+    }
+    CHECK(yieldsAimOnly(ForcedReason::WeaponWheel));
+    CHECK(std::string(forcedReasonName(ForcedReason::WeaponWheel)) == "weapon wheel");
 }
 
 TEST_CASE("the climb-look switch is on unless 0 or off") {

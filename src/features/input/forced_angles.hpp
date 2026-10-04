@@ -18,6 +18,12 @@
 // on the wall the game calls it every tick to apply the climb animation's deltas to the player (returning
 // to RVA 0x138F33B in Steam build 25216728) and once when the player lets go (DisconnectFromWall, 0x13B4677),
 // both with the player's own angles. A cutscene and the view inhibit bits still take the view from the head.
+//
+// The weapon wheel yields only the aim: while it is up the game sets the view and button inhibit bits (0x18)
+// and leaves the view alone, but nothing forces it, so the gun, the off hand, the shots and the head's place
+// stay the player's (before, the gun dropped to the game's flatscreen placement and the camera eased onto the
+// game's eye for as long as the wheel was up). Any other inhibit bit, a foreign SetViewAngles or a cutscene
+// still yields everything.
 
 #include <array>
 #include <cstdint>
@@ -28,6 +34,8 @@ namespace evr::input {
 
 // idPlayer::inhibitFlags bits that stop the game's own view update: VIEW (0x8) and VIEW_ONCE (0x100).
 inline constexpr std::uint32_t kInhibitViewMask = 0x108;
+// The bits the game sets while its weapon wheel is up: VIEW (0x8) and BUTTONS (0x10).
+inline constexpr std::uint32_t kInhibitWheelBits = 0x18;
 
 struct ForcedAngleSignals {
     bool foreignSetViewAngles = false; // a SetViewAngles call not from the per-tick update since last frame
@@ -36,6 +44,7 @@ struct ForcedAngleSignals {
     bool cutscene = false;             // renderView_t::inCutscene
     bool cameraAnimation = false;      // a hands animation moves the camera
     bool wallClimb = false;            // on a climbable wall whose view is the player's own (ClimbFrames)
+    bool weaponWheel = false;          // the weapon wheel's button is held
 };
 
 enum class ForcedReason : std::uint8_t {
@@ -44,14 +53,19 @@ enum class ForcedReason : std::uint8_t {
     Inhibit,
     Cutscene,
     CameraAnimation,
-    WallClimb, // yields all but the aim, which follows the head (aimsWithHead)
-    Settling,  // none holds now, but one did within the resume delay
+    WallClimb,   // yields all but the aim, which follows the head (aimsWithHead)
+    WeaponWheel, // yields the aim only (yieldsAimOnly); no settling after it
+    Settling,    // none holds now, but one did within the resume delay
 };
 
 const char* forcedReasonName(ForcedReason reason);
 
 // True for the reason under which hand aim aims with the head instead of sending nothing.
 bool aimsWithHead(ForcedReason reason);
+
+// True for the reason under which only the aim yields: the viewmodel, the off hand, the shots and the head's
+// place stay the player's.
+bool yieldsAimOnly(ForcedReason reason);
 
 class ForcedAngleGate {
 public:

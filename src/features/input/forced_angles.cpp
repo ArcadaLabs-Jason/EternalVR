@@ -20,6 +20,8 @@ const char* forcedReasonName(ForcedReason reason) {
         return "camera animation";
     case ForcedReason::WallClimb:
         return "climbable wall";
+    case ForcedReason::WeaponWheel:
+        return "weapon wheel";
     case ForcedReason::Settling:
         return "settling after a forced view";
     }
@@ -28,6 +30,10 @@ const char* forcedReasonName(ForcedReason reason) {
 
 bool aimsWithHead(ForcedReason reason) {
     return reason == ForcedReason::WallClimb;
+}
+
+bool yieldsAimOnly(ForcedReason reason) {
+    return reason == ForcedReason::WeaponWheel;
 }
 
 ForcedAngleGate::ForcedAngleGate(int resumeFrames)
@@ -42,7 +48,13 @@ bool ForcedAngleGate::update(const ForcedAngleSignals& signals) {
         // every tick, the let-go once): they do not take the view from the head.
         now = ForcedReason::SetViewAngles;
     } else if ((signals.inhibitFlags & kInhibitViewMask) != 0) {
-        now = ForcedReason::Inhibit;
+        // The wheel's own bits and nothing else: the game only leaves the view alone while the wheel is up.
+        // The wheel stays the reason while its bits outlive the button (the game clears them when it takes
+        // the release); on a climbable wall or in a camera animation the game moves the hands, so all yields.
+        const bool wheel = signals.weaponWheel || reason_ == ForcedReason::WeaponWheel;
+        const bool wheelOnly = wheel && !signals.wallClimb && !signals.cameraAnimation &&
+                               (signals.inhibitFlags & ~kInhibitWheelBits) == 0;
+        now = wheelOnly ? ForcedReason::WeaponWheel : ForcedReason::Inhibit;
     } else if (signals.wallClimb) {
         // Before a camera animation: on the wall the aim behaves as head aim does, whatever the hands play.
         now = ForcedReason::WallClimb;
@@ -50,7 +62,11 @@ bool ForcedAngleGate::update(const ForcedAngleSignals& signals) {
         now = ForcedReason::CameraAnimation;
     }
     const bool wasYielding = reason_ != ForcedReason::None;
-    if (now != ForcedReason::None) {
+    if (now == ForcedReason::WeaponWheel) {
+        // Nothing forces the view, so no forced angle can land after it: the settling count is left as it
+        // was (an earlier forced view still settling finishes after the wheel; otherwise none follows).
+        reason_ = now;
+    } else if (now != ForcedReason::None) {
         sinceSignal_ = 0;
         reason_ = now;
     } else if (sinceSignal_ < resumeFrames_) {

@@ -204,6 +204,14 @@ The forced-angle input of `closedLoopAim` is then: a foreign SetViewAngles call 
 any holds no aim delta is sent, and the body yaw is re-read afterwards, as head aim already does after a
 cutscene.
 
+The weapon wheel sets `inhibitFlags` to 0x18 (VIEW 0x8 and BUTTONS 0x10) about 60 ms before it shows and
+clears them when it closes (player logs 2026-10-03: `forced view starts (view inhibited; inhibit 0x18)` just
+before `the weapon wheel is up`). Treated as a forced view, it handed the viewmodel back to the game's
+flatscreen placement and eased the head onto the game's eye for as long as the wheel was up. So with the
+wheel's button held and no inhibit bit but those two, the gate's reason is `WeaponWheel`, which yields only
+the aim (hand aim sends nothing, as the game skips the view update anyway): the viewmodel, the off hand, the
+shots and the head's place go on, and no settling frames follow.
+
 ## 3. Viewmodel placement (T-054)
 
 `idHands::UpdatePosition` 0x137FD60 (named by its log string) runs once per game frame from 0x1380F70

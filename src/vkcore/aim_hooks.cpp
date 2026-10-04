@@ -110,6 +110,8 @@ std::atomic<const std::byte*> g_updateViewAnglesReturn{nullptr};
 std::atomic<const std::byte*> g_viewPlayer{nullptr};
 // The gate yields everything but the aim, which takes the head (a climbable wall; camera hook only).
 std::atomic<bool> g_headAims{false};
+// The gate yields only the aim (the weapon wheel is up; camera hook only): `yielding` stays false.
+std::atomic<bool> g_aimOnly{false};
 const std::byte* g_imageBase = nullptr;
 
 // Distinct foreign SetViewAngles callers seen, for the log (the live check of section 2's table).
@@ -383,26 +385,37 @@ void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimati
     signals.cutscene = cutscene;
     signals.cameraAnimation = cameraAnimation;
     signals.wallClimb = wallClimb;
+    signals.weaponWheel = game::contains(heldActions(), game::GameAction::WeaponWheel);
     if (isPlayerSafe(player)) {
         g_viewPlayer.store(player, std::memory_order_relaxed);
         safeRead(player + kPlayerInhibitFlags, signals.inhibitFlags);
     }
     const bool yield = s.gate.update(signals);
     const bool headAims = yield && input::aimsWithHead(s.gate.reason());
+    // The weapon wheel: hand aim sends nothing, the viewmodel, the off hand, the shots and the head go on.
+    const bool aimOnly = yield && input::yieldsAimOnly(s.gate.reason());
     g_headAims.store(headAims);
-    s.yielding.store(yield);
+    g_aimOnly.store(aimOnly);
+    s.yielding.store(yield && !aimOnly);
     noteClimbAim(headAims && settings().aim == input::AimSource::Hand);
     if (s.gate.reason() != s.lastReason) {
         if (s.gate.episodes() <= 50) {
             EVR_LOG("%s: forced view %s (%s; inhibit 0x%X): %s %s", kTag, yield ? "starts" : "ends",
                     input::forcedReasonName(s.gate.reason()), signals.inhibitFlags,
-                    headAims ? "shots and viewmodel" : "hand aim, shots and viewmodel",
+                    aimOnly    ? "hand aim"
+                    : headAims ? "shots and viewmodel"
+                               : "hand aim, shots and viewmodel",
                     !yield     ? "resume"
+                    : aimOnly  ? "leaves the game alone; the viewmodel, the off hand and the head go on"
                     : headAims ? "leave the game alone; hand aim aims with the head"
                                : "leave the game alone");
         }
         s.lastReason = s.gate.reason();
     }
+}
+
+bool wheelView() {
+    return state().attached.load(std::memory_order_acquire) && g_aimOnly.load();
 }
 
 bool forcedView() {
@@ -455,6 +468,9 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
     const input::ControllerSettings& cfg = settings();
     if (cfg.aim != input::AimSource::Hand || !s.attached.load(std::memory_order_acquire)) {
         return head;
+    }
+    if (g_aimOnly.load()) {
+        return std::nullopt; // the weapon wheel is up: the game leaves the view alone
     }
     if (s.yielding.load()) {
         // On a climbable wall the view is the player's own and follows the head (climb_hook.cpp).

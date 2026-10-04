@@ -149,6 +149,10 @@ game::GameActionSet heldActions();
 // glory kill, the Meathook pull, a melee lunge, a scripted camera; forced_angles.hpp). False while the
 // controllers are off.
 bool forcedView();
+
+// Any thread: whether the weapon wheel is up with only its own inhibit bits, so only the aim yields and
+// forcedView() is false (forced_angles.hpp). The game skips its view update meanwhile.
+bool wheelView();
 // Any thread: the sync entity of the animation `player` (the idPlayer) is in, or null: idPlayer::
 // savedSyncEntity, else idPlayer::syncMaster (docs/BHAPTICS.md). A pickup's animation is a sync too.
 const std::byte* syncEntity(const std::byte* player);

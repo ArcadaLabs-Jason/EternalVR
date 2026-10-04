@@ -418,7 +418,8 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
     if (aimPhase == AimPhase::Verifying) {
         using Event = xr_math::AimCheck::Event;
         constexpr int kTries = xr_math::AimCheck::kRetries + 1;
-        const bool forced = controllers::forcedView();
+        // The weapon wheel too: the game skips its view update while it is up.
+        const bool forced = controllers::forcedView() || controllers::wheelView();
         const bool menu = menuUp.load(std::memory_order_relaxed);
         const xr_math::AimCheck::Step check = aimCheck.update(sample.view, sample.command, sample.delta,
                                                               sample.stateDelta, cutscene || forced || menu);
