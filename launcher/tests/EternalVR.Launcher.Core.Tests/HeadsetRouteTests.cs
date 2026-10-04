@@ -122,6 +122,18 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheSteamFramesDriverIsTakenOnItsTrackingSystem()
+        {
+            // A player's report: SteamVR last saw "Valve" "Steam Frame" on driver vrlink, the system was "SteamVR/OpenXR : cv".
+            var frame = HeadsetIdentity.Identify("SteamVR/OpenXR", "SteamVR/OpenXR : cv", Seen("Valve", "Steam Frame", "vrlink"), Table);
+            Assert.Equal("Steam Frame (last seen by SteamVR) via SteamVR", frame.Describe());
+            Assert.Equal(new Extent(2160, 2160), frame.Known.Panel);
+            // The pair is that driver on that tracking system only.
+            Assert.Null(HeadsetIdentity.Identify("SteamVR/OpenXR", "SteamVR/OpenXR : lighthouse", Seen("Valve", "Steam Frame", "vrlink"), Table).Known);
+            Assert.Null(HeadsetIdentity.Identify("SteamVR/OpenXR", "SteamVR/OpenXR : cv", Seen("Valve", "Steam Frame", "lighthouse"), Table).Known);
+        }
+
+        [Fact]
         public void ATrackingSystemOneHeadsetAloneUsesNamesIt()
         {
             // PlayStation VR2's own SteamVR driver (a player's report: "xr: system 'SteamVR/OpenXR : playstation_vr2'").

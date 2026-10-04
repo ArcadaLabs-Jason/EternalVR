@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using EternalVR.Launcher.Core.Report;
 using EternalVR.Launcher.Core.Text;
 
@@ -171,15 +172,25 @@ namespace EternalVR.Launcher.Core.Headsets
         }
 
         /// <summary>
+        /// Drivers whose headsets name another tracking system: the Steam Frame's driver is <c>vrlink</c> and its system name
+        /// <c>SteamVR/OpenXR : cv</c> (a player's report, 2026-10-04).
+        /// </summary>
+        private static readonly string[][] DriverTrackingPairs = { new[] { "vrlink", "cv" } };
+
+        /// <summary>
         /// Whether SteamVR's last seen headset can be the one on <paramref name="trackingSystem"/>: its driver is the tracking
-        /// system or contains it (<c>oculus_virtualdesktop</c> on <c>oculus</c>); either unknown counts as the same.
+        /// system or contains it (<c>oculus_virtualdesktop</c> on <c>oculus</c>), or is paired with it in
+        /// <see cref="DriverTrackingPairs"/>; either unknown counts as the same.
         /// </summary>
         private static bool SameHeadset(SteamVrHeadset seen, string trackingSystem)
         {
             if (seen == null || string.IsNullOrWhiteSpace(seen.Model)) return false;
             if (string.IsNullOrWhiteSpace(seen.Driver) || trackingSystem == null) return true;
-            return seen.Driver.IndexOf(trackingSystem, StringComparison.OrdinalIgnoreCase) >= 0
-                || trackingSystem.IndexOf(seen.Driver, StringComparison.OrdinalIgnoreCase) >= 0;
+            var driver = seen.Driver.Trim();
+            return driver.IndexOf(trackingSystem, StringComparison.OrdinalIgnoreCase) >= 0
+                || trackingSystem.IndexOf(driver, StringComparison.OrdinalIgnoreCase) >= 0
+                || DriverTrackingPairs.Any(p => string.Equals(p[0], driver, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(p[1], trackingSystem, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>"Valve Corporation Index"; the model alone when it already starts with its maker ("Oculus Quest2").</summary>

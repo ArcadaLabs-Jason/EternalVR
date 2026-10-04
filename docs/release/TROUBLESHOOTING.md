@@ -184,6 +184,12 @@ until it can. If you set SteamVR's per-game throttling or forced Motion Smoothin
 at half the rate all the time. Virtual Desktop's SSW set to Always does the same. A refresh rate that changed
 during play is said too ("The headset ran at 144 Hz, and at 90 Hz for about 2 minutes").
 
+**The launcher says the game used more video memory than your graphics card had free.** Each eye's images, at a
+high "Resolution", and the game's ray tracing all take video memory; past what Windows gives the game, it slows
+down and the runtime throttles it. The mod's log has a `vram:` line every 10 s with the use against that budget,
+and the launcher says so after the session when it was over for a tenth of the session or more. Lower
+"Resolution" on the Play tab, or turn ray tracing off in the game's settings.
+
 **Moving things look less smooth than in other VR games.** When the game draws more frames than your headset
 shows (say 140 a second on a 90 Hz headset) and each headset frame shows the newest one, the world, your gun
 and your movement advance in uneven steps, while looking around stays smooth. "Frame pacing: Matched to the

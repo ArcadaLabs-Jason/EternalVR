@@ -196,11 +196,12 @@ namespace EternalVR.Launcher.Platform
             finally
             {
                 // A failed start leaves nothing running: the launcher it started (it would count as the game running) and any
-                // game it started late, before the game is started directly.
+                // game it started late, before the game is started directly. The launchers first, so that none can start a
+                // game after the games were ended.
                 if (!started)
                 {
-                    EndNew(gameName, gamesBefore);
                     EndNew(launcherName, launchersBefore);
+                    EndNew(gameName, gamesBefore);
                 }
                 Marshal.FreeHGlobal(block);
                 if (changed)

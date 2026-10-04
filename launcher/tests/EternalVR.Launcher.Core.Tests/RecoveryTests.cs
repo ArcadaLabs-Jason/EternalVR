@@ -132,6 +132,20 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheDoomEternalLaunchersTargetIsKeptInTheMarker()
+        {
+            using (var t = new TempDir())
+            {
+                var path = t.Combine("SESSION_PENDING");
+                new SessionMarker { State = SessionState.Snapshotted, SessionId = "s", GameExe = @"C:\g\DOOMEternalx64vk.exe", BethesdaTarget = "launcher" }.Write(path);
+                Assert.Equal("launcher", SessionMarker.Read(path).BethesdaTarget);
+                new SessionMarker { State = SessionState.Snapshotted, SessionId = "s" }.Write(path);
+                Assert.DoesNotContain("bethesda_target", File.ReadAllText(path));
+                Assert.Equal(string.Empty, SessionMarker.Read(path).BethesdaTarget);
+            }
+        }
+
+        [Fact]
         public void ADamagedMarkerStillFindsItsSnapshot()
         {
             using (var t = new TempDir())

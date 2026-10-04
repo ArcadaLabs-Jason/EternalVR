@@ -429,6 +429,16 @@ namespace EternalVR.Launcher.Core.Launch
                 + "If it keeps happening: " + Report.ReportHint.Ask;
         }
 
+        /// <summary>The status line when the game the DOOM Eternal Launcher started had ended before the launcher could open
+        /// it (no exit code to read): the session's <c>LAYER_LOADED</c> marker says whether EternalVR had loaded.</summary>
+        public static string GoneMessage(bool layerLoaded)
+        {
+            if (!layerLoaded)
+                return "The game closed right after it started, before EternalVR loaded. Start it once from the Xbox app, "
+                    + "or restart the PC, then try again. Still closing? " + Report.ReportHint.Ask;
+            return "The game closed right after it started. If it keeps happening: " + Report.ReportHint.Ask;
+        }
+
         public const string HandOffMessage =
             "The game was restarted by Steam without EternalVR (a hand-off). VR is not active in this game window. " +
             "Quit the game, make sure Steam is running and logged in, and launch again from the EternalVR launcher.";

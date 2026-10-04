@@ -93,6 +93,32 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(48, third.HeldHz);
         }
 
+        private static string Vram(double t, int over, int readings, int percent) => FormattableString.Invariant(
+            $"[{t,9:0.000}] [28900] vram: the process uses 11433 MB of local video memory, budget 8878 MB ({percent}%); last 10 s: peak 11433 MB, {over} of {readings} reading(s) over the budget");
+
+        [Fact]
+        public void VideoMemoryOverTheBudgetIsSaidWithWhatHelps()
+        {
+            // A Steam Frame on a 12 GB card at Resolution 2.00 with ray tracing (a player's report, 2026-10-04): over all session.
+            var lines = Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100));
+            for (int i = 0; i < 10; i++) lines.Add(Vram(20 + 10 * i, i < 8 ? 10 : 2, 10, i < 8 ? 129 : 95));
+            var s = SessionSummary.FromLines(lines);
+            Assert.Equal(10, s.VramWindows);
+            Assert.Equal(0.8, s.VramOverShare, 6);
+            Assert.EndsWith("The game used more video memory than your graphics card had free for 80% of the session: a lower Resolution, "
+                + "or ray tracing off in the game, makes it smoother.", s.Describe());
+            Assert.Contains("video memory over the budget in 8 of 10 window(s)", s.LogText());
+            // Now and then over the budget, or too few windows: nothing said.
+            var rare = Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100));
+            for (int i = 0; i < 20; i++) rare.Add(Vram(20 + 10 * i, i == 3 ? 10 : 0, 10, 80));
+            Assert.DoesNotContain("video memory", SessionSummary.FromLines(rare).Describe());
+            var short_ = Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100));
+            short_.Add(Vram(20, 10, 10, 129));
+            Assert.DoesNotContain("video memory", SessionSummary.FromLines(short_).Describe());
+            // No vram line (an older layer): nothing said, none counted.
+            Assert.Equal(0, SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100))).VramWindows);
+        }
+
         [Fact]
         public void VirtualDesktopsSswAndMetasAswAreNamed()
         {

@@ -28,6 +28,9 @@ namespace EternalVR.Launcher.Core.Safety
         public int GamePid { get; set; }
         public DateTime GameStartUtc { get; set; }
         public string GameExe { get; set; }
+        /// <summary>The DOOM Eternal Launcher's <c>launch_target</c> before a Game Pass or Store start (empty: none), put back
+        /// by the restore if the launcher was closed or ended while the start had it changed.</summary>
+        public string BethesdaTarget { get; set; }
 
         public static SessionMarker Read(string path)
         {
@@ -45,6 +48,7 @@ namespace EternalVR.Launcher.Core.Safety
             m.SessionId = Get(map, "session");
             m.SnapshotDir = Get(map, "snapshot");
             m.GameExe = Get(map, "exe");
+            m.BethesdaTarget = Get(map, "bethesda_target");
             if (int.TryParse(Get(map, "pid"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid)) m.GamePid = pid;
             if (long.TryParse(Get(map, "start_utc_ticks"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var ticks) && ticks > 0)
                 m.GameStartUtc = new DateTime(ticks, DateTimeKind.Utc);
@@ -58,6 +62,7 @@ namespace EternalVR.Launcher.Core.Safety
             sb.AppendLine("session = " + SessionId);
             sb.AppendLine("snapshot = " + SnapshotDir);
             sb.AppendLine("exe = " + GameExe);
+            if (!string.IsNullOrEmpty(BethesdaTarget)) sb.AppendLine("bethesda_target = " + BethesdaTarget);
             sb.AppendLine("pid = " + GamePid.ToString(CultureInfo.InvariantCulture));
             sb.AppendLine("start_utc_ticks = " + GameStartUtc.Ticks.ToString(CultureInfo.InvariantCulture));
             Directory.CreateDirectory(Path.GetDirectoryName(path));

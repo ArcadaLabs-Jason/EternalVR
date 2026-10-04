@@ -332,6 +332,18 @@ namespace EternalVR.Launcher.Core.Tests
             // A plain exit without the marker is not called a crash.
             Assert.DoesNotContain("crashed", StartWatch.EarlyExitMessage(2.0, 1, layerLoaded: false));
         }
+
+        [Fact]
+        public void AGameThatEndedBeforeItWasOpenedIsNotGivenAnExitCode()
+        {
+            var before = StartWatch.GoneMessage(layerLoaded: false);
+            Assert.StartsWith("The game closed right after it started, before EternalVR loaded.", before);
+            Assert.True(Report.ReportHint.In(before));
+            var after = StartWatch.GoneMessage(layerLoaded: true);
+            Assert.DoesNotContain("before EternalVR loaded", after);
+            Assert.DoesNotContain("exit code", after);
+            Assert.True(Report.ReportHint.In(after));
+        }
     }
 
     public class LauncherSettingsTests

@@ -118,6 +118,8 @@ namespace EternalVR.Launcher
                 if (report.ChangedNotRestored.Count > 0)
                     Log.Warn($"local settings files changed during the session and are not restored key by key: {string.Join(", ", report.ChangedNotRestored)}; "
                         + $"their old copies are in {snapshot}, kept with the last {SnapshotsKept} sessions' snapshots");
+                if (!string.IsNullOrEmpty(marker.BethesdaTarget) && !string.IsNullOrEmpty(marker.GameExe))
+                    RestoreBethesdaTarget(marker.GameExe, marker.BethesdaTarget);
                 if (!SessionMarker.DeleteIfOwned(ctx.Paths.SessionMarker, marker.SessionId))
                     Log.Warn("the session marker now belongs to another session; it is left in place");
                 Log.Info("settings restore complete");
@@ -222,6 +224,13 @@ namespace EternalVR.Launcher
                         Log.Info("removed an old session log folder: " + old);
                     Log.Info("launch plan:" + Environment.NewLine + plan.Describe());
                     if (storeGame) Log.Info(StoreProcesses.Describe("at launch", WindowsSystem.RunningProcesses(StoreProcesses.Names)));
+                    if (storeGame && PackageStartOn())
+                    {
+                        // Kept in the marker before the start changes it, so a launcher ended mid-start still puts it back.
+                        bethesdaTarget = ReadBethesdaTarget(plan.ExePath);
+                        marker.BethesdaTarget = bethesdaTarget;
+                        marker.Write(ctx.Paths.SessionMarker);
+                    }
                 }, () =>
                 {
                     game = storeGame && PackageStartOn() ? StartInPackage(plan, id) : Start(plan);
@@ -247,7 +256,7 @@ namespace EternalVR.Launcher
                 {
                     if (storeGame) RestoreBethesdaTarget(plan.ExePath);
                     Report(StatusKind.Problem, e is PackageLaunch.GameGoneException
-                        ? StartWatch.EarlyExitMessage(0, unchecked((int)0xC0000005), false)
+                        ? StartWatch.GoneMessage(File.Exists(Path.Combine(ctx.Paths.SessionLogDir(id), LayerStatusFile.LoadedMarker)))
                         : "The launch failed: " + e.Message);
                     CleanUpAfterSession(marker);
                     return false;
@@ -376,9 +385,11 @@ namespace EternalVR.Launcher
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException) { return null; }
         }
 
-        private void RestoreBethesdaTarget(string gameExe)
+        private void RestoreBethesdaTarget(string gameExe) => RestoreBethesdaTarget(gameExe, bethesdaTarget);
+
+        private void RestoreBethesdaTarget(string gameExe, string target)
         {
-            if (bethesdaTarget == null) return;
+            if (target == null) return;
             var file = PackageStart.BethesdaSettings(gameExe);
             try
             {
@@ -386,13 +397,13 @@ namespace EternalVR.Launcher
                 bool bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
                 var text = new System.Text.UTF8Encoding(false).GetString(bytes, bom ? 3 : 0, bytes.Length - (bom ? 3 : 0));
                 var now = PackageStart.LaunchTarget(text);
-                if (now == null || now == bethesdaTarget) return;
-                File.WriteAllText(file, PackageStart.WithLaunchTarget(text, bethesdaTarget), new System.Text.UTF8Encoding(bom));
-                Log.Info("the DOOM Eternal Launcher's launch_target put back to " + bethesdaTarget + " (was " + now + ")");
+                if (now == null || now == target) return;
+                File.WriteAllText(file, PackageStart.WithLaunchTarget(text, target), new System.Text.UTF8Encoding(bom));
+                Log.Info("the DOOM Eternal Launcher's launch_target put back to " + target + " (was " + now + ")");
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException)
             {
-                Log.Warn("the DOOM Eternal Launcher's launch_target could not be put back to " + bethesdaTarget + ": " + e.Message);
+                Log.Warn("the DOOM Eternal Launcher's launch_target could not be put back to " + target + ": " + e.Message);
             }
         }
 
@@ -409,7 +420,8 @@ namespace EternalVR.Launcher
         private Process StartInPackage(LaunchPlan plan, string id)
         {
             var planFile = Path.Combine(ctx.Paths.SessionLogDir(id), "package-start.txt");
-            bethesdaTarget = ReadBethesdaTarget(plan.ExePath);
+            // The DOOM Eternal Launcher can take a while to start the game: say what is happening meanwhile.
+            if (PackageStartViaLauncher()) Report(StatusKind.Info, "Starting the game through the DOOM Eternal Launcher...");
             try
             {
                 var env = ChildEnvironment.Merge(ChildEnvironment.Current(), plan.Environment, Environment.GetEnvironmentVariable);

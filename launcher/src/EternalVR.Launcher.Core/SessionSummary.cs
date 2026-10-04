@@ -16,12 +16,15 @@ namespace EternalVR.Launcher.Core
     /// window at 2 to 6 times it was held to a part of it, and a steady period that is no such multiple is another refresh
     /// rate. The period is a snapshot of the last frame of each window, so the shares are of windows, not of exact time.
     /// Also the mod's controller actions the runtime bound (<c>controllers: 0 of 12 action(s) bound</c>) and whether the layer
-    /// warned that no hand pose arrived in play (<see cref="UnboundControls"/>).
+    /// warned that no hand pose arrived in play (<see cref="UnboundControls"/>), and how often the game's video memory was over
+    /// the budget Windows gives it (<c>vram: ... N of M reading(s) over the budget</c>, also every 10 s).
     /// </summary>
     public sealed class SessionSummary
     {
         /// <summary>A game this close to the refresh rate (its share) kept up.</summary>
         public const double KeptUpShare = 0.95;
+        /// <summary>From this share of the session's vram windows over the budget, the summary says so.</summary>
+        public const double VramOverShareToSay = 0.10;
 
         private static readonly Regex RuntimeLine = new Regex(@"\] xr: runtime '(?<name>[^']*)'", RegexOptions.CultureInvariant);
         private static readonly Regex SystemLine = new Regex(@"\] xr: system '(?<name>.*)', max swapchain", RegexOptions.CultureInvariant);
@@ -33,6 +36,9 @@ namespace EternalVR.Launcher.Core
         private static readonly Regex BoundLine = new Regex(
             @"\] controllers: (?<bound>[0-9]+) of (?<all>[0-9]+) action\(s\) bound", RegexOptions.CultureInvariant);
         private static readonly Regex NoPoseLine = new Regex(@"\] controllers: WARNING no hand pose has been valid", RegexOptions.CultureInvariant);
+        private static readonly Regex VramLine = new Regex(
+            @"\] vram: the process uses .*; last 10 s: peak [0-9.]+ MB, (?<over>[0-9]+) of (?<all>[0-9]+) reading\(s\) over the budget",
+            RegexOptions.CultureInvariant);
 
         private sealed class Window
         {
@@ -69,6 +75,10 @@ namespace EternalVR.Launcher.Core
         public int? Controls { get; private set; }
         /// <summary>True when the layer warned that no hand pose became valid in play with the headset tracked.</summary>
         public bool NoHandPose { get; private set; }
+        /// <summary>The layer's 10 s vram windows with a reading; 0 when it logged none (no budget, or an older layer).</summary>
+        public int VramWindows { get; private set; }
+        /// <summary>The share (0 to 1) of <see cref="VramWindows"/> with most of their readings over the budget.</summary>
+        public double VramOverShare { get; private set; }
 
         /// <summary>The summary of a layer log's lines; null when it holds no display period (no VR session).</summary>
         public static SessionSummary FromLines(IEnumerable<string> lines)
@@ -76,9 +86,21 @@ namespace EternalVR.Launcher.Core
             var s = new SessionSummary();
             var windows = new List<Window>();
             int? firstHz = null;
+            int vramOver = 0;
             foreach (var line in lines ?? Enumerable.Empty<string>())
             {
                 if (line == null) continue;
+                var v = VramLine.Match(line);
+                if (v.Success)
+                {
+                    if (int.TryParse(v.Groups["over"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var over)
+                        && int.TryParse(v.Groups["all"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var readings) && readings > 0)
+                    {
+                        s.VramWindows++;
+                        if (over * 2 > readings) vramOver++;
+                    }
+                    continue;
+                }
                 if (line.IndexOf(ControllersTag, StringComparison.Ordinal) >= 0)
                 {
                     var b = BoundLine.Match(line);
@@ -121,6 +143,7 @@ namespace EternalVR.Launcher.Core
             }
             if (windows.Count == 0 && firstHz == null) return null;
             s.Route = HeadsetIdentity.RouteOf(s.RuntimeName);
+            if (s.VramWindows > 0) s.VramOverShare = (double)vramOver / s.VramWindows;
 
             // The refresh rate: the highest rate held for two windows or more, or the first frame's.
             var counts = windows.GroupBy(w => w.Hz).ToDictionary(g => g.Key, g => g.Count());
@@ -198,6 +221,11 @@ namespace EternalVR.Launcher.Core
                     string.Join(" and at ", OtherRates.Select(kv => kv.Key.ToString(CultureInfo.InvariantCulture) + " Hz for " + Duration(kv.Value)))));
             if (HeldShare > 0) parts.Add(HeldSentence());
             if (GameRate.HasValue) parts.Add(RateSentence(GameRate.Value));
+            if (VramWindows >= SessionRates.MinWindows && VramOverShare >= VramOverShareToSay)
+                parts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "The game used more video memory than your graphics card had free for {0}% of the session: a lower Resolution, "
+                    + "or ray tracing off in the game, makes it smoother.",
+                    Math.Max(1, (int)Math.Round(VramOverShare * 100, MidpointRounding.AwayFromZero))));
             return string.Join(" ", parts);
         }
 
@@ -241,10 +269,11 @@ namespace EternalVR.Launcher.Core
 
         /// <summary>The numbers for the launcher log.</summary>
         public string LogText() => string.Format(CultureInfo.InvariantCulture,
-            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; controls {9}",
+            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; video memory over the budget in {10} of {11} window(s); controls {9}",
             RefreshHz, Windows, InPlay ? " in play" : " (not enough play: the whole session)", HeldHz, HeldShare * 100,
             OtherRates.Count == 0 ? "none" : string.Join(", ", OtherRates.Select(kv => kv.Key + " Hz x" + kv.Value)),
-            GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName, ControlsText());
+            GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName, ControlsText(),
+            (int)Math.Round(VramOverShare * VramWindows, MidpointRounding.AwayFromZero), VramWindows);
 
         private static double Median(List<double> sorted)
         {
