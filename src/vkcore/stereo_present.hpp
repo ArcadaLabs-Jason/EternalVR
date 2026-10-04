@@ -21,10 +21,14 @@ VkPresentModeKHR stereoPresentMode(const DeviceData& data, const VkSwapchainCrea
 // ETERNALVR_STEREO_SWAP_IMAGES (default 4; 0 keeps the game's count) within the surface's limits.
 std::uint32_t stereoImageCount(const DeviceData& data, const VkSwapchainCreateInfoKHR& info);
 
-// Route S, and ETERNALVR_WINDOW_PRESENTS is not `all`: the game's window takes only the presents it shows
-// (the mirrored eye, at most one per two refreshes of its display; stereo_seq::WindowPresentGate); the
-// others are handed back unpresented (VK_KHR_swapchain_maintenance1), so no present waits for the
-// desktop display, whatever the display, the compositor or a desktop capture do with them.
+// Route S, and ETERNALVR_WINDOW_PRESENTS is not `all` (the setting allows the gate; whether this GPU gets it
+// is windowGateForDevice): the game's window takes only the presents it shows (the mirrored eye, at most one
+// per two refreshes of its display; stereo_seq::WindowPresentGate); the others are handed back unpresented
+// (VK_KHR_swapchain_maintenance1), so no present waits for the desktop display, whatever the display, the
+// compositor or a desktop capture do with them.
 bool windowPresentsGated();
+// The same for this device's GPU: by default only on NVIDIA (stereo_seq::windowGateWanted; an AMD driver
+// froze with it); ETERNALVR_WINDOW_PRESENTS=gated gates on any GPU.
+bool windowGateForDevice(const DeviceData& data);
 
 } // namespace evr::vkcore

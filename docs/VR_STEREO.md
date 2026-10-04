@@ -574,7 +574,7 @@ axis).
 | `ETERNALVR_STEREO_FIX_CENTERED` | 1 | 0: leave the centred matrix as the latch builds it (the weapon disappears) |
 | `ETERNALVR_STEREO_VSYNC` | 0 | 1: keep the game's FIFO present mode (tick rate capped at half the refresh) |
 | `ETERNALVR_STEREO_SWAP_IMAGES` | 4 | the game's swapchain image count under Route S (0: the game's own, 2) |
-| `ETERNALVR_WINDOW_PRESENTS` | gated | `all`: every present reaches the game's window (no image is handed back) |
+| `ETERNALVR_WINDOW_PRESENTS` | gated on NVIDIA | `all`: every present reaches the game's window (no image is handed back); `gated`: hand images back on any GPU |
 | `ETERNALVR_MIRROR` | left | what the game's window shows during stereo pairs: `left`, `right` (one tick late) or `off` (black); while a menu is up over the game, the menu panel's image (Desktop window, Menus in the window) |
 | `ETERNALVR_RENDER_SIZE` | off (launcher: auto) | `auto`: each eye at the runtime's recommended size (budget 2064 x 2208 pixels) times the scale; `WxH`: that size; `off`: the window's size (docs/rig-findings/render-size.md) |
 | `ETERNALVR_RENDER_SCALE` | 1.0 | 0.5 to 2.0, multiplies the `auto` size (above 1 past the budget) |
@@ -692,7 +692,10 @@ irrelevant to the game's pace in three steps (`src/vkcore/stereo_present.cpp`, `
    `EnumDisplaySettingsW`, which the XR worker reads every 3 s so that the query never runs on the game's
    present path or under the presenter's lock; 60 Hz when unknown). At most
    two images are held; beyond that, and whenever the multiplayer guard is not armed, every present goes
-   out as before. `ETERNALVR_WINDOW_PRESENTS=all` turns this off. A present that returns
+   out as before. This runs only on NVIDIA GPUs by default: on an AMD Radeon 890M the GPU stopped answering
+   seconds into VR with it (Windows reset the GPU and the game froze) and ran without it, so on any other
+   vendor every present reaches the window. `ETERNALVR_WINDOW_PRESENTS=all` turns it off everywhere,
+   `ETERNALVR_WINDOW_PRESENTS=gated` turns it on for any GPU. A present that returns
    `VK_ERROR_OUT_OF_DATE_KHR` or `VK_ERROR_SURFACE_LOST_KHR` hands every held image back at once (after its
    copy, waiting up to 250 ms) instead of at the next present, since a game that recreates its swapchain or
    waits in `vkAcquireNextImageKHR` may not present again first, and the image gets a new present semaphore

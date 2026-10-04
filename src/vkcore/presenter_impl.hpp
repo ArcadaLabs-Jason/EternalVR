@@ -474,7 +474,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     // Present hook, under the mutex. With VK_KHR_swapchain_maintenance1 under Route S only the presents the
     // window shows reach it; the others are handed back once their ring copy is done.
     bool windowGateChecked = false;
-    bool windowGate = false; // presents are gated (the extension is on and ETERNALVR_WINDOW_PRESENTS allows)
+    bool windowGate = false; // presents are gated (the extension is on and windowGateForDevice)
     stereo_seq::WindowPresentGate windowPresents;
     bool windowHold = false; // this present is handed back (decideWindow; read by present())
     std::uint64_t lastSubmittedValue = 0;

@@ -36,13 +36,16 @@ bool XrPresenter::Impl::decideWindow(const VkPresentInfoKHR* info, stereo_seq::P
     windowHold = false;
     if (!windowGateChecked) {
         windowGateChecked = true;
-        windowGate = dev.releaseSwapchainImages != nullptr && windowPresentsGated();
-        EVR_LOG(
-            "window: %s",
-            windowGate ? "only the presents the window shows reach it (the mirrored eye, at most one per two "
-                         "refreshes of its display); the others are handed back unpresented"
-            : windowPresentsGated() ? "every present reaches the window (no swapchain maintenance extension)"
-                                    : "every present reaches the window (ETERNALVR_WINDOW_PRESENTS=all)");
+        windowGate = dev.releaseSwapchainImages != nullptr && windowGateForDevice(dev);
+        EVR_LOG("window: %s",
+                windowGate
+                    ? "only the presents the window shows reach it (the mirrored eye, at most one per two "
+                      "refreshes of its display); the others are handed back unpresented"
+                : !windowPresentsGated() ? "every present reaches the window (ETERNALVR_WINDOW_PRESENTS=all)"
+                : !dev.releaseSwapchainImages
+                    ? "every present reaches the window (no swapchain maintenance extension)"
+                    : "every present reaches the window (not an NVIDIA GPU; "
+                      "ETERNALVR_WINDOW_PRESENTS=gated hands the others back)");
     }
     if (!windowGate || info->swapchainCount != 1 || heldImages.size() >= kMaxHeldImages ||
         !mp_guard::allowsGameTouch()) {

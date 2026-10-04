@@ -58,6 +58,30 @@ std::optional<Mirror> parseMirror(std::wstring_view text) {
     return std::nullopt;
 }
 
+WindowPresents parseWindowPresents(std::wstring_view text) {
+    const std::wstring t = lowerTrimmed(text);
+    if (t == L"all") {
+        return WindowPresents::All;
+    }
+    if (t == L"gated") {
+        return WindowPresents::Gated;
+    }
+    return WindowPresents::Default;
+}
+
+bool windowGateWanted(WindowPresents setting, std::uint32_t vendorId) {
+    constexpr std::uint32_t kNvidia = 0x10DE;
+    switch (setting) {
+    case WindowPresents::All:
+        return false;
+    case WindowPresents::Gated:
+        return true;
+    case WindowPresents::Default:
+        break;
+    }
+    return vendorId == kNvidia;
+}
+
 const char* toString(Mirror mirror) {
     switch (mirror) {
     case Mirror::Left:

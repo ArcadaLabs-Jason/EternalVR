@@ -130,3 +130,23 @@ TEST_CASE("menu panel mirror: mono frames carry the GUI; off stays black") {
     CHECK_FALSE(panelMirror(Mirror::Off, false, PresentKind::EyeL, true).keep);
     CHECK(panelMirror(Mirror::Off, true, PresentKind::Mono, false).step == MirrorStep::None);
 }
+
+TEST_CASE("window presents setting") {
+    using evr::stereo_seq::parseWindowPresents;
+    using evr::stereo_seq::WindowPresents;
+    CHECK(parseWindowPresents(L"all") == WindowPresents::All);
+    CHECK(parseWindowPresents(L" ALL ") == WindowPresents::All);
+    CHECK(parseWindowPresents(L"gated") == WindowPresents::Gated);
+    CHECK(parseWindowPresents(L"") == WindowPresents::Default);
+    CHECK(parseWindowPresents(L"some") == WindowPresents::Default);
+}
+
+TEST_CASE("window presents are gated by default on NVIDIA only") {
+    using evr::stereo_seq::windowGateWanted;
+    using evr::stereo_seq::WindowPresents;
+    CHECK(windowGateWanted(WindowPresents::Default, 0x10DE));
+    CHECK_FALSE(windowGateWanted(WindowPresents::Default, 0x1002)); // AMD
+    CHECK_FALSE(windowGateWanted(WindowPresents::Default, 0x8086)); // Intel
+    CHECK_FALSE(windowGateWanted(WindowPresents::All, 0x10DE));
+    CHECK(windowGateWanted(WindowPresents::Gated, 0x1002));
+}

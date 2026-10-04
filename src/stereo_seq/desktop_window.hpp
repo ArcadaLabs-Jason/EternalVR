@@ -69,6 +69,15 @@ private:
     Counters counters_;
 };
 
+// ETERNALVR_WINDOW_PRESENTS: Default (unset or anything else), All (every present reaches the window) or
+// Gated (only the presents the window shows, on any GPU).
+enum class WindowPresents : std::uint8_t { Default, All, Gated };
+WindowPresents parseWindowPresents(std::wstring_view text);
+// Whether the window's presents are gated (WindowPresentGate) on a GPU of PCI vendor `vendorId`, given the
+// setting. By default only on NVIDIA (0x10DE), the only driver the hand-back is verified on: an AMD Radeon
+// 890M froze seconds into VR with it (the GPU stopped answering and Windows reset it) and ran with All.
+bool windowGateWanted(WindowPresents setting, std::uint32_t vendorId);
+
 // While a menu is up over a head-tracked frame (the pause menu, the in-game screens, a popup) the headset
 // shows the GUI on the menu panel, and the engine's composite leaves it out of the eye images (the UI layer,
 // docs/VR_MENUS.md): the eye image the window would get is the world alone, black behind the pause menu. The

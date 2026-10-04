@@ -54,12 +54,30 @@ std::uint32_t wantedImages() {
 
 } // namespace
 
-bool windowPresentsGated() {
-    static const bool all = [] {
+namespace {
+
+stereo_seq::WindowPresents windowPresentsSetting() {
+    static const stereo_seq::WindowPresents setting = [] {
         std::wstring text;
-        return readEnv(L"ETERNALVR_WINDOW_PRESENTS", text) && _wcsicmp(text.c_str(), L"all") == 0;
+        return readEnv(L"ETERNALVR_WINDOW_PRESENTS", text) ? stereo_seq::parseWindowPresents(text)
+                                                           : stereo_seq::WindowPresents::Default;
     }();
-    return routeSPresent() && !all;
+    return setting;
+}
+
+} // namespace
+
+bool windowPresentsGated() {
+    return routeSPresent() && windowPresentsSetting() != stereo_seq::WindowPresents::All;
+}
+
+bool windowGateForDevice(const DeviceData& data) {
+    if (!windowPresentsGated() || !data.instance->vk.GetPhysicalDeviceProperties) {
+        return false;
+    }
+    VkPhysicalDeviceProperties props{};
+    data.instance->vk.GetPhysicalDeviceProperties(data.physicalDevice, &props);
+    return stereo_seq::windowGateWanted(windowPresentsSetting(), props.vendorID);
 }
 
 VkPresentModeKHR stereoPresentMode(const DeviceData& data, const VkSwapchainCreateInfoKHR& info) {
