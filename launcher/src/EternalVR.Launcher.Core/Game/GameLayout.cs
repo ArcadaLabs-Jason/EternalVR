@@ -137,6 +137,26 @@ namespace EternalVR.Launcher.Core.Game
                 .ToList();
         }
 
+        /// <summary>
+        /// A cvar's value in the player's text configs, the last file that sets it winning (DOOMEternalConfig.cfg before
+        /// .local); null when none sets it or none can be read.
+        /// </summary>
+        public static string PlayerCvar(IEnumerable<SettingsLocation> locations, string name)
+        {
+            string value = null;
+            foreach (var location in locations)
+                foreach (var file in ConfigFilesOf(location).Where(IsKeyedTextConfig))
+                {
+                    try
+                    {
+                        if (CvarConfig.ParseBytes(File.ReadAllBytes(Path.Combine(location.Path, file)), out _).TryGet(name, out var v)) value = v;
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            return value;
+        }
+
         /// <summary>True for the id Tech text configs whose keys we restore one by one.</summary>
         public static bool IsKeyedTextConfig(string relativePath)
         {

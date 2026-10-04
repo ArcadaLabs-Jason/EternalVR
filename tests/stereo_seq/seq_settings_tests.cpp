@@ -235,6 +235,24 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
     }
 }
 
+TEST_CASE("SSDO cvar: held on unless the setting is 0, never part of the other sets") {
+    for (const char* on : {"", "1"}) {
+        const auto c = evr::stereo_seq::stereoSsdoCvar(on);
+        REQUIRE(c.has_value());
+        CHECK((c->name == "r_SSDO"));
+        CHECK((c->value == "1"));
+    }
+    for (const char* none : {"0", "2", "on", " 1"}) {
+        CHECK_FALSE(evr::stereo_seq::stereoSsdoCvar(none).has_value());
+    }
+    for (const auto& c : evr::stereo_seq::stereoComfortCvars()) {
+        CHECK((c.name != "r_SSDO"));
+    }
+    for (const auto& t : evr::stereo_seq::stereoRuntimeCvars()) {
+        CHECK((t.name != "r_SSDO"));
+    }
+}
+
 TEST_CASE("cvar list: name=value items, trimmed, a later item replaces an earlier one") {
     const auto held = evr::stereo_seq::parseCvarList(
         " r_shadowMaxStaleFrames = 1,1,1,2,2 ;r_skipPlayerShadow=1;;=5;noequals;R_SKIPPLAYERSHADOW=0;x=");

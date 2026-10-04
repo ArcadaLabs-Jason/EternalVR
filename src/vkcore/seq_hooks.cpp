@@ -18,6 +18,7 @@
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/test_cpu_load.hpp"
+#include "vkcore/vis_gate_hooks.hpp"
 #include "vkcore/window_timing.hpp"
 #include "vkcore/world_gui_hooks.hpp"
 
@@ -49,9 +50,8 @@ constexpr std::size_t kBackendFrame = 0xB0;
 constexpr std::size_t kFrameInfoScreenshot = 0x2A44;
 constexpr std::size_t kCvarIntValue = 0x08;
 
-// Holding the frontend for a new tag base gives up after this long (stereo_seq/render_idle.hpp decides
-// when the render thread is idle); how long stereo then waits before the next try is
-// stereo_seq/drain_backoff.hpp's.
+// Holding the frontend for a new tag base gives up after this long (idle test: stereo_seq/render_idle.hpp);
+// the wait before stereo's next try is stereo_seq/drain_backoff.hpp's.
 constexpr ULONGLONG kDrainTimeoutMs = 250;
 constexpr ULONGLONG kDrainSpacingMs = 1000;
 // Stereo resuming after this many mono frames takes a fresh tag base.
@@ -447,6 +447,7 @@ bool installSeqHooks(const SeqHookSettings& settings) {
         g_active.store(true, std::memory_order_release);
         installBinTileHook(); // lights and decals binned in each eye's own frustum; a missing piece only logs
         installObjectPrevHooks(); // the object ring, a slot per render: eye R's objects keep their motion
+        installVisGateHooks();    // models one eye sees are drawn (the first-visible gate)
         installWorldGuiHook();    // world GUIs (holograms, screens) in eye R too
         installMovedFlagHooks();  // moving objects keep their motion vectors in eye R
         installKeepPrevHooks();   // and their previous model matrix from eye L

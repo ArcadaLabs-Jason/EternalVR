@@ -85,6 +85,7 @@ add_library(evr_layer SHARED
     moved_flag_hooks.cpp
     mp_guard.cpp
     object_prev_hooks.cpp
+    vis_gate_hooks.cpp
     world_gui_hooks.cpp
     player_aim.cpp
     presenter_alt.cpp

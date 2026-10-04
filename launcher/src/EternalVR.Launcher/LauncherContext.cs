@@ -315,6 +315,7 @@ namespace EternalVR.Launcher
                 Panel = probe != null && probe.Ok ? Identify(probe.RuntimeName, probe.SystemName).Known?.Panel : null,
                 Controls = Controls,
                 NewestDlss = NewestDlss(verify: true),
+                PlayerSsdo = GameLayout.PlayerCvar(g.Locations, "r_SSDO"),
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);

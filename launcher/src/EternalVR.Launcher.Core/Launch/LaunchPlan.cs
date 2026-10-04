@@ -43,6 +43,8 @@ namespace EternalVR.Launcher.Core.Launch
         public ControlsFolder Controls { get; set; }
         /// <summary>NVIDIA's newest DLSS when the launcher has downloaded it (checked); null when it has not.</summary>
         public string NewestDlss { get; set; }
+        /// <summary>The player's own <c>r_SSDO</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
+        public string PlayerSsdo { get; set; }
     }
 
     /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
@@ -258,6 +260,9 @@ namespace EternalVR.Launcher.Core.Launch
             }
             // The game's post-process sharpening held at the chosen strength; absent, the player's own setting stays.
             if (stereo && LauncherSettings.SharpeningValue(s.Sharpening) is string sharpening) Set("ETERNALVR_SHARPENING", sharpening);
+            // SSDO: the game turns it off itself after r_TAASafeMode 1, which stereo holds at start-up; the layer holds the
+            // player's own r_SSDO instead (on, the game's default, unless their config turns it off).
+            if (stereo) Set("ETERNALVR_STEREO_SSDO", inputs.PlayerSsdo == "0" ? "0" : "1");
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading

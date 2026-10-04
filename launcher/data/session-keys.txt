@@ -16,7 +16,8 @@ r_displayRefresh
 # Knock-on keys: the game changes and saves these itself because of a stereo setting (runs on a second
 # test PC, 2026-09-27, config before and after each run): r_SSDO 0 and r_SSR 0 follow r_TAASafeMode 1
 # (0x1C6FCC0; the layer holds it while per-eye TAA is not active, and in the v1 fallback), r_blurRadialScale
-# 1 follows the forced r_motionblur 0. A player's flat game must not keep them.
+# 1 follows the forced r_motionblur 0. A player's flat game must not keep them. In stereo the layer holds
+# r_SSDO at the player's own value (ETERNALVR_STEREO_SSDO), which the restore puts back either way.
 r_SSDO
 r_SSR
 r_blurRadialScale

@@ -264,6 +264,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/seq_settings_tests.cpp
         stereo_seq/stack_budget_tests.cpp
         stereo_seq/stereo_taa_tests.cpp
+        stereo_seq/vis_gate_tests.cpp
     DEPENDS evr_stereo_seq evr_xr_math)
 
 evr_add_test(evr_menu_tests

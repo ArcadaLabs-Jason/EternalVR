@@ -59,6 +59,13 @@ CvarExpectation stereoScatterFilterCvar(bool perEyeHistory);
 // after the session.
 const std::vector<CvarExpectation>& stereoComfortCvars();
 
+// r_SSDO under Route S (ETERNALVR_STEREO_SSDO). The game turns SSDO off itself after r_TAASafeMode 1
+// (0x1C6FCC0), which Route S holds at start-up, so without a hold every Route S session ran without it.
+// SSDO's own temporal filter stays off (r_SSDOTemporalAA 0, the per-eye TAA set), so it reads no other eye's
+// history. Unset or "1": held at 1, the game's default (the launcher passes the player's own 0 from their
+// config); "0": no hold, the game's knock-on stays. Nothing for any other value.
+std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting);
+
 // A cvar held at a value known only at run time (stereoWindowCvars).
 struct CvarHold {
     std::string name;

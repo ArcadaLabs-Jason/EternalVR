@@ -137,6 +137,13 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
     return cvars;
 }
 
+std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting) {
+    if (setting.empty() || setting == "1") {
+        return CvarExpectation{"r_SSDO", "1"};
+    }
+    return std::nullopt;
+}
+
 std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::string_view windowSetting) {
     std::vector<CvarHold> held{{"r_fullscreen", "0"}, {"r_swapInterval", "0"}};
     // The command line's size, when it sets both to a positive number.

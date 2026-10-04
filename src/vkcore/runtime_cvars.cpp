@@ -314,6 +314,12 @@ void start(bool stereo) {
         for (const auto& c : stereo_seq::stereoComfortCvars()) {
             g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
         }
+        const std::string ssdo = narrowEnv(L"ETERNALVR_STEREO_SSDO");
+        if (const auto c = stereo_seq::stereoSsdoCvar(ssdo)) {
+            g_held.push_back(Held{std::string(c->name), std::string(c->value), true, false});
+        } else {
+            EVR_LOG("%s: r_SSDO is left as the game has it (ETERNALVR_STEREO_SSDO=%s)", kTag, ssdo.c_str());
+        }
     } else if (stereo) {
         EVR_LOG("%s: the stereo set is left as the game has it (ETERNALVR_STEREO_RUNTIME_CVARS=0)", kTag);
     }
