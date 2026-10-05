@@ -69,7 +69,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
     /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base and parallel_eyes
+    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed and hold_time
     /// (dlss_version replaced dlss_dll, which is still read once).
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
@@ -108,6 +108,10 @@ namespace EternalVR.Launcher.Core.Settings
         public const double DefaultAimSmoothing = 0.3;
         /// <summary>Controller vibration strength, 0 (off) to 1 (the strongest); the layer's default.</summary>
         public const double DefaultVibration = 0.6;
+        /// <summary>How fast a hand must move to punch, metres per second (the layer's <c>ETERNALVR_PUNCH_SPEED</c>).</summary>
+        public const double MinPunchSpeed = 1.0, MaxPunchSpeed = 4.0, DefaultPunchSpeed = 2.8;
+        /// <summary>How long a button is held before its hold action starts, seconds (<c>ETERNALVR_HOLD_SECONDS</c>).</summary>
+        public const double MinHoldTime = 0.1, MaxHoldTime = 1.0, DefaultHoldTime = 0.25;
         /// <summary>The bHaptics effects' strength, 0 to 1 (the layer's <c>ETERNALVR_BHAPTICS_INTENSITY</c>); set in the file only.</summary>
         public const double DefaultBhapticsIntensity = 1.0;
         /// <summary>The HUD panel (src/ui_layer/ui_settings.hpp): distance ahead, width, height offset, in metres.</summary>
@@ -177,6 +181,10 @@ namespace EternalVR.Launcher.Core.Settings
         public double AimSmoothing { get; set; } = DefaultAimSmoothing;
         /// <summary>The layer's <c>ETERNALVR_HAPTICS</c>, 0 (off) to 1.</summary>
         public double Vibration { get; set; } = DefaultVibration;
+        /// <summary>The layer's <c>ETERNALVR_PUNCH_SPEED</c>, metres per second.</summary>
+        public double PunchSpeed { get; set; } = DefaultPunchSpeed;
+        /// <summary>The layer's <c>ETERNALVR_HOLD_SECONDS</c>.</summary>
+        public double HoldTime { get; set; } = DefaultHoldTime;
         /// <summary>bHaptics suits and sleeves through the bHaptics Player (the layer's <c>ETERNALVR_BHAPTICS</c>); off by default.</summary>
         public bool Bhaptics { get; set; } = false;
         /// <summary>The layer's <c>ETERNALVR_BHAPTICS_INTENSITY</c>, 0 to 1.</summary>
@@ -223,6 +231,7 @@ namespace EternalVR.Launcher.Core.Settings
             "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
+            "punch_speed", "hold_time",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -338,6 +347,8 @@ namespace EternalVR.Launcher.Core.Settings
             s.ReadRoom(map);
             if (map.TryGetValue("aim_smoothing", out var sm)) s.AimSmoothing = Number(sm, 0.0, 1.0, DefaultAimSmoothing);
             if (map.TryGetValue("vibration", out var vb)) s.Vibration = Number(vb, 0.0, 1.0, DefaultVibration);
+            if (map.TryGetValue("punch_speed", out var ps)) s.PunchSpeed = Number(ps, MinPunchSpeed, MaxPunchSpeed, DefaultPunchSpeed);
+            if (map.TryGetValue("hold_time", out var ht)) s.HoldTime = Number(ht, MinHoldTime, MaxHoldTime, DefaultHoldTime);
             if (map.TryGetValue("bhaptics", out var bh)) s.Bhaptics = On(bh);
             if (map.TryGetValue("bhaptics_intensity", out var bi)) s.BhapticsIntensity = Number(bi, 0.0, 1.0, DefaultBhapticsIntensity);
             if (map.TryGetValue("hud_distance", out var hd2)) s.HudDistance = Number(hd2, MinHudDistance, MaxHudDistance, DefaultHudDistance);
@@ -418,6 +429,8 @@ namespace EternalVR.Launcher.Core.Settings
             WriteRoom(sb);
             sb.AppendLine("aim_smoothing = " + Metres(Clamp(AimSmoothing, 0.0, 1.0, DefaultAimSmoothing)));
             sb.AppendLine("vibration = " + Metres(Clamp(Vibration, 0.0, 1.0, DefaultVibration)));
+            sb.AppendLine("punch_speed = " + Metres(Clamp(PunchSpeed, MinPunchSpeed, MaxPunchSpeed, DefaultPunchSpeed)));
+            sb.AppendLine("hold_time = " + Metres(Clamp(HoldTime, MinHoldTime, MaxHoldTime, DefaultHoldTime)));
             sb.AppendLine("bhaptics = " + (Bhaptics ? "1" : "0"));
             sb.AppendLine("bhaptics_intensity = " + Metres(Clamp(BhapticsIntensity, 0.0, 1.0, DefaultBhapticsIntensity)));
             sb.AppendLine("hud_distance = " + Metres(Clamp(HudDistance, MinHudDistance, MaxHudDistance, DefaultHudDistance)));

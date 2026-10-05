@@ -12,6 +12,9 @@ namespace evr::input {
 // Short enough to feel immediate for the hold action, long enough that a quick tap never opens it.
 inline constexpr float kDefaultHoldSeconds = 0.25f;
 inline constexpr float kMaxHoldSeconds = 5.0f;
+// Range offered in settings (ETERNALVR_HOLD_SECONDS).
+inline constexpr float kMinHoldSettingSeconds = 0.1f;
+inline constexpr float kMaxHoldSettingSeconds = 1.0f;
 
 struct TapHoldOutput {
     bool tap = false;  // One frame, on a release before the tap time (by default the hold time).

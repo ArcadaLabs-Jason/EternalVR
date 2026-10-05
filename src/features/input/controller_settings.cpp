@@ -173,6 +173,8 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     r.flag("ETERNALVR_SWING", s.swing.enabled);
     r.range("ETERNALVR_SWING_SPEED", kMinGestureSpeed, kMaxGestureSpeed, s.swing.speed);
     r.flag("ETERNALVR_HANDS_JUMP", s.handsJump.enabled);
+    r.range("ETERNALVR_PUNCH_SPEED", kMinPunchMetresPerSecond, kMaxPunchMetresPerSecond, s.punchSpeed);
+    r.range("ETERNALVR_HOLD_SECONDS", kMinHoldSettingSeconds, kMaxHoldSettingSeconds, s.holdSeconds);
 
     static constexpr std::pair<const char*, InputPath> kPath[] = {{"auto", InputPath::Auto},
                                                                   {"0", InputPath::UserCmd},

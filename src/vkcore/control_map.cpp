@@ -94,6 +94,12 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     mapperSettings.throwGesture = cfg.throwGesture;
     mapperSettings.swing = cfg.swing;
     mapperSettings.handsJump = cfg.handsJump;
+    mapperSettings.punch.thresholdMetresPerSecond = cfg.punchSpeed;
+    // The hold time (the launcher's Hold time) for the buttons, and for the stick held down to open the
+    // weapon wheel, which keeps its own margin over the buttons' (0.3 s against 0.25 s by default).
+    mapperSettings.buttonHoldSeconds = cfg.holdSeconds;
+    mapperSettings.turnStick.holdSeconds =
+        cfg.holdSeconds + (input::TurnStickSettings{}.holdSeconds - input::kDefaultHoldSeconds);
     s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
     publishPromptLabels(s.mapper->profile(), controller);
     EVR_LOG("%s: control map for %s controllers%s, %s", kTag,

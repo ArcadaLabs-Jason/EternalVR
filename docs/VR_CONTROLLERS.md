@@ -330,6 +330,8 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_THROW_SPEED` | the throw's forward speed, 1 to 5 metres per second | 2 |
 | `ETERNALVR_SWING` | `1`: the weapon hand's overhead swing presses the Crucible (above) | `0` |
 | `ETERNALVR_SWING_SPEED` | the swing's downward speed, 1 to 5 metres per second | 2.5 |
+| `ETERNALVR_PUNCH_SPEED` | how fast a hand must move where the head looks to punch, 1 to 4 metres per second; the launcher's Punch speed: Light 1.6, Medium 2.2, Hard 2.8, Very hard 3.4 | 2.8 |
+| `ETERNALVR_HOLD_SECONDS` | how long a button is held before its hold action starts (a shorter press is a tap), 0.1 to 1 s; the stick held down for the weapon wheel waits 0.05 s longer; it also sets the both-sticks recenter and capture chords (the recenter hold still totals its own time); the launcher's Hold time: Short 0.15, Medium 0.25, Long 0.4, Very long 0.6 | 0.25 |
 | `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
 | `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
 | `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |

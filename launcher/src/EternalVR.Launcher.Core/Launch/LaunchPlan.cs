@@ -226,6 +226,8 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_THROW", s.ThrowGesture ? "1" : "0");
             Set("ETERNALVR_SWING", s.SwingGesture ? "1" : "0");
             Set("ETERNALVR_HANDS_JUMP", s.HandsJump ? "1" : "0");
+            Set("ETERNALVR_PUNCH_SPEED", Number(s.PunchSpeed, LauncherSettings.MinPunchSpeed, LauncherSettings.MaxPunchSpeed, LauncherSettings.DefaultPunchSpeed));
+            Set("ETERNALVR_HOLD_SECONDS", Number(s.HoldTime, LauncherSettings.MinHoldTime, LauncherSettings.MaxHoldTime, LauncherSettings.DefaultHoldTime));
             // The player's own maps, each in place of the built-in one for its controllers (docs/release/CONTROLS.md).
             if (s.Controllers && inputs.Controls != null && inputs.Controls.HasPlayerMaps) Set("ETERNALVR_CONTROLLER_DATA", inputs.Controls.Dir);
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");

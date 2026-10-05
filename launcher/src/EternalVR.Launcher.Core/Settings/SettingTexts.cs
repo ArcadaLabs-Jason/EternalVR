@@ -123,6 +123,12 @@ namespace EternalVR.Launcher.Core.Settings
                 AimSteadiness.Names),
             [Setting.AimDot] = new Text("Aim dot",
                 "A dot where your weapon hand aims, in place of the game's crosshair."),
+            [Setting.PunchSpeed] = new Text("Punch speed",
+                "How fast your hand must move toward where you look to punch. Light needs the slowest punch.",
+                PunchSpeed.Names),
+            [Setting.HoldTime] = new Text("Hold time",
+                "How long you hold a button before its hold action starts, such as the weapon wheel. A shorter press is a tap.",
+                HoldTime.Names),
             [Setting.Vibration] = new Text("Vibration",
                 "How strongly the controllers vibrate. They pulse when you fire, punch, point at and click menus, and when the "
                 + "game rumbles. Off turns vibration off.",

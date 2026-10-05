@@ -36,6 +36,12 @@
 //   ETERNALVR_SWING_SPEED    1 to 5             the swing's downward speed, metres per second (2.5)
 //   ETERNALVR_HANDS_JUMP     1 / 0              throw both hands up above the head to jump (off by default;
 //                                               higher when seated; hands_jump.hpp)
+//   ETERNALVR_PUNCH_SPEED    1 to 4             how fast a hand must move where the head looks to punch,
+//                                               metres per second (2.8; punch_detector.hpp)
+//   ETERNALVR_HOLD_SECONDS   0.1 to 1           how long a button is held before its hold action starts, in
+//                                               seconds; a shorter press is a tap (0.25; tap_hold.hpp); the
+//                                               stick held down for the weapon wheel waits 0.05 s longer;
+//                                               also the both-sticks recenter and capture chords
 //   ETERNALVR_XINPUT         auto / 1 / 0       the virtual gamepad: only when the user-command hooks
 //                                               cannot be installed (auto), instead of them (1), never (0)
 //   ETERNALVR_SHOT_ORIGIN    hand / eye         where shots start under hand aim
@@ -82,6 +88,8 @@
 #include "features/input/locomotion_direction.hpp"
 #include "features/input/map_sticks.hpp"
 #include "features/input/offhand_policy.hpp"
+#include "features/input/punch_detector.hpp"
+#include "features/input/tap_hold.hpp"
 #include "features/input/turn_policy.hpp"
 #include "features/input/wheel_hand.hpp"
 #include "game/eternal/quest_touch_bindings.hpp"
@@ -155,7 +163,9 @@ struct ControllerSettings {
     float wheelHandDegrees = kDefaultWheelHandDegrees;
     ThrowSettings throwGesture; // arm_gestures.hpp
     SwingSettings swing;
-    HandsJumpSettings handsJump; // hands_jump.hpp
+    HandsJumpSettings handsJump;                     // hands_jump.hpp
+    float punchSpeed = kDefaultPunchMetresPerSecond; // punch_detector.hpp
+    float holdSeconds = kDefaultHoldSeconds;         // tap_hold.hpp
     InputPath path = InputPath::Auto;
     ShotOrigin shotOrigin = ShotOrigin::Hand;
     float aimSmoothing = kDefaultAimSmoothing; // aim_smoothing.hpp

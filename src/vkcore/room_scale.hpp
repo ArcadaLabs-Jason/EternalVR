@@ -39,8 +39,9 @@ namespace evr::vkcore {
 const roomscale::RoomScaleSettings& roomScaleSettings();
 
 // Input mapper (any thread): whether the recenter binding is active this mapper frame. Held for the
-// configured time it asks for a user recenter.
-void noteRecenterBinding(bool active);
+// configured time it asks for a user recenter. `buttonHoldSeconds`: the mapper's hold time (the launcher's
+// Hold time), after which a held binding turns active.
+void noteRecenterBinding(bool active, float buttonHoldSeconds);
 
 // Any thread: the posture in force (the override, else the one detected at the last anchor or noticed
 // since, when the player stood up or sat down; Unknown before the first anchor without an override).

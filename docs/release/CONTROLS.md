@@ -267,6 +267,7 @@ values are old.
 | Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
 | Overhead swing | Swing your gun hand down from above your head for the Crucible or the Hammer ([In the game](#in-the-game)) | Off |
 | Jump with both hands | Throw both hands up above your head to jump; higher when sitting ([In the game](#in-the-game)) | Off |
+| Punch speed | Light, Medium, Hard, Very hard: how fast your hand must move toward where you look to punch | Hard |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Melee aim with | Same as Aim with, Head, Off hand: what aims melee, Blood Punch, glory kills and use (and a real punch). Only when the weapon hand aims | Same as Aim with |
@@ -275,6 +276,7 @@ values are old.
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
+| Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap | Medium |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |

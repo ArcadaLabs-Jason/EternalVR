@@ -13,9 +13,9 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: body
         PlayPosition, EyeHeight,
         // Play: gestures
-        ThrowGesture, SwingGesture, HandsJump,
+        ThrowGesture, SwingGesture, HandsJump, PunchSpeed,
         // Play: controls
-        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, MoveToward, XButton, DossierMapSticks, WeaponWheel, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
+        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, MoveToward, XButton, DossierMapSticks, WeaponWheel, HoldTime, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
         Resolution, EachEye, AntiAliasing, Sharpening, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
@@ -68,6 +68,8 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.ThrowGesture:
                 case Setting.SwingGesture:
                 case Setting.HandsJump:
+                case Setting.PunchSpeed:
+                case Setting.HoldTime:
                 case Setting.Vibration:
                 case Setting.Bhaptics:
                 case Setting.ButtonLayout:
@@ -161,6 +163,36 @@ namespace EternalVR.Launcher.Core.Settings
         {
             for (int i = 0; i < Values.Length; i++)
                 if (Math.Abs(Values[i] - smoothing) < 0.005) return i;
+            return -1;
+        }
+    }
+
+    /// <summary>"Punch speed": named steps of how fast a hand must move to punch, metres per second.</summary>
+    public static class PunchSpeed
+    {
+        public static readonly string[] Names = { "Light", "Medium", "Hard (default)", "Very hard" };
+        public static readonly double[] Values = { 1.6, 2.2, 2.8, 3.4 };
+
+        /// <summary>The step of <paramref name="speed"/>, or -1 for a value that is none of them (set in the file by hand).</summary>
+        public static int IndexOf(double speed)
+        {
+            for (int i = 0; i < Values.Length; i++)
+                if (Math.Abs(Values[i] - speed) < 0.005) return i;
+            return -1;
+        }
+    }
+
+    /// <summary>"Hold time": named steps of how long a button is held before its hold action starts, seconds.</summary>
+    public static class HoldTime
+    {
+        public static readonly string[] Names = { "Short", "Medium (default)", "Long", "Very long" };
+        public static readonly double[] Values = { 0.15, 0.25, 0.4, 0.6 };
+
+        /// <summary>The step of <paramref name="seconds"/>, or -1 for a value that is none of them (set in the file by hand).</summary>
+        public static int IndexOf(double seconds)
+        {
+            for (int i = 0; i < Values.Length; i++)
+                if (Math.Abs(Values[i] - seconds) < 0.005) return i;
             return -1;
         }
     }

@@ -2,7 +2,6 @@
 
 #include "vkcore/room_scale.hpp"
 
-#include "features/input/tap_hold.hpp"
 #include "game/eternal/player_dimensions.hpp"
 #include "vkcore/log.hpp"
 
@@ -140,14 +139,14 @@ posture::Posture roomPosture() {
     return g_posture.load(std::memory_order_relaxed);
 }
 
-void noteRecenterBinding(bool active) {
+void noteRecenterBinding(bool active, float buttonHoldSeconds) {
     const float hold = roomScaleSettings().recenterHoldSeconds;
     if (hold <= 0.0f) {
         return;
     }
     std::lock_guard lock(g_bindingMutex);
     if (!g_bindingPress) {
-        g_bindingPress.emplace(std::max(0.05f, hold - input::kDefaultHoldSeconds));
+        g_bindingPress.emplace(std::max(0.05f, hold - buttonHoldSeconds));
     }
     const double now = nowSeconds();
     if (g_bindingLast >= 0.0 && now - g_bindingLast > kBindingGapSeconds) {
@@ -169,7 +168,7 @@ void noteRecenterBinding(bool active) {
         if (!g_bindingFired) {
             // A hold too short to recenter (the pause menu takes it): say how long it was.
             EVR_LOG("room: recenter binding released after %.2f s; hold it %.2f s to recenter",
-                    now - g_bindingStart + input::kDefaultHoldSeconds, hold);
+                    now - g_bindingStart + buttonHoldSeconds, hold);
         }
         g_bindingStart = -1.0;
         g_bindingFired = false;

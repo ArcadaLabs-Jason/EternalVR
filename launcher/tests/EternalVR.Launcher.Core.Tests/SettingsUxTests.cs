@@ -107,6 +107,28 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void PunchSpeedAndHoldTimeReachTheLayerWithinItsRanges()
+        {
+            var env = Env();
+            Assert.Equal("2.80", env["ETERNALVR_PUNCH_SPEED"]);
+            Assert.Equal("0.25", env["ETERNALVR_HOLD_SECONDS"]);
+            env = Env(new LauncherSettings { PunchSpeed = 9.0, HoldTime = 0.0 });
+            Assert.Equal("4.00", env["ETERNALVR_PUNCH_SPEED"]);
+            Assert.Equal("0.10", env["ETERNALVR_HOLD_SECONDS"]);
+            var back = LauncherSettings.Parse(new LauncherSettings { PunchSpeed = 1.6, HoldTime = 0.4 }.Serialize());
+            Assert.Equal(1.6, back.PunchSpeed, 3);
+            Assert.Equal(0.4, back.HoldTime, 3);
+            var old = LauncherSettings.Parse("schema_version = 2\npunch_speed = fast\n");
+            Assert.Equal(LauncherSettings.DefaultPunchSpeed, old.PunchSpeed);
+            Assert.Equal(LauncherSettings.DefaultHoldTime, old.HoldTime);
+            // The named steps hold the defaults, and every step is in range.
+            Assert.Equal(2, PunchSpeed.IndexOf(LauncherSettings.DefaultPunchSpeed));
+            Assert.Equal(1, HoldTime.IndexOf(LauncherSettings.DefaultHoldTime));
+            Assert.All(PunchSpeed.Values, v => Assert.InRange(v, LauncherSettings.MinPunchSpeed, LauncherSettings.MaxPunchSpeed));
+            Assert.All(HoldTime.Values, v => Assert.InRange(v, LauncherSettings.MinHoldTime, LauncherSettings.MaxHoldTime));
+        }
+
+        [Fact]
         public void UnknownKeysAreKeptInFileOrder()
         {
             var s = LauncherSettings.Parse("schema_version = 2\nfuture_b = 2\nturn = snap\nfuture_a = some text\n");

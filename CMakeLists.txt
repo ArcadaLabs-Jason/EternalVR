@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(EternalVR
-    VERSION 0.1.25
+    VERSION 0.1.26
     DESCRIPTION "VR mod for DOOM Eternal"
     LANGUAGES CXX)
 

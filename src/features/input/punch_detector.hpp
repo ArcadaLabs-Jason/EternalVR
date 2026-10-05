@@ -15,13 +15,14 @@
 
 namespace evr::input {
 
-// Range offered in settings; 2.8 m/s is our Recommended preset.
+// Range offered in settings (ETERNALVR_PUNCH_SPEED); 2.8 m/s is our Recommended preset.
 inline constexpr float kMinPunchMetresPerSecond = 1.0f;
 inline constexpr float kMaxPunchMetresPerSecond = 4.0f;
+inline constexpr float kDefaultPunchMetresPerSecond = 2.8f;
 
 struct PunchSettings {
     bool enabled = true;
-    float thresholdMetresPerSecond = 2.8f;
+    float thresholdMetresPerSecond = kDefaultPunchMetresPerSecond;
     float rearmFraction = 0.5f;
 };
 

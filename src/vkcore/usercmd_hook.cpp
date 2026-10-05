@@ -424,7 +424,7 @@ MappedInput runMapper() {
                                 // too
     }
     // The recenter binding is the layer's own: a long press re-anchors the room (docs/VR_ROOMSCALE.md).
-    noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter));
+    noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter), cfg.holdSeconds);
     out.turnStick = s.mapper->turnStick();
     // A melee or equipment press that aims with the head or the off hand waits for the view (action_aim.hpp).
     out.actions = s.hold.update(aimActions(s, out.input.down, menuHold, dt), dt);

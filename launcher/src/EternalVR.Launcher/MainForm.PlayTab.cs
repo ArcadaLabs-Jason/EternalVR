@@ -39,6 +39,8 @@ namespace EternalVR.Launcher
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly ComboBox vibration = Choices(Setting.Vibration);
+        private readonly ComboBox punchSpeed = Choices(Setting.PunchSpeed);
+        private readonly ComboBox holdTime = Choices(Setting.HoldTime);
         private readonly CheckBox bhaptics = new CheckBox { AutoSize = true };
         /// <summary>Whether the controls folder holds maps of the player's own (<see cref="ShowControlsState"/>).</summary>
         private readonly Label controlsState = Caption(string.Empty);
@@ -57,6 +59,8 @@ namespace EternalVR.Launcher
         private double customSmoothing = -1;
         /// <summary>A hand-set vibration strength that is none of the named steps, shown the same way.</summary>
         private double customVibration = -1;
+        /// <summary>A hand-set punch speed or hold time that is none of the named steps, shown the same way.</summary>
+        private double customPunchSpeed = -1, customHoldTime = -1;
 
         private TabPage PlayTab()
         {
@@ -90,7 +94,8 @@ namespace EternalVR.Launcher
             var gestures = Group("Gestures",
                 Row(Setting.ThrowGesture, throwGesture, s => throwGesture.Checked = s.ThrowGesture, s => s.ThrowGesture = throwGesture.Checked),
                 Row(Setting.SwingGesture, swingGesture, s => swingGesture.Checked = s.SwingGesture, s => s.SwingGesture = swingGesture.Checked),
-                Row(Setting.HandsJump, handsJump, s => handsJump.Checked = s.HandsJump, s => s.HandsJump = handsJump.Checked));
+                Row(Setting.HandsJump, handsJump, s => handsJump.Checked = s.HandsJump, s => s.HandsJump = handsJump.Checked),
+                Row(Setting.PunchSpeed, punchSpeed, LoadPunchSpeed, ReadPunchSpeed));
             var controls = Group("Controls",
                 Row(Setting.AimWith, aim,
                     s => aim.SelectedIndex = (int)s.Aim,
@@ -119,6 +124,7 @@ namespace EternalVR.Launcher
                 Row(Setting.WeaponWheel, wheel,
                     s => wheel.SelectedIndex = (int)s.Wheel,
                     s => s.Wheel = (WheelSelect)wheel.SelectedIndex),
+                Row(Setting.HoldTime, holdTime, LoadHoldTime, ReadHoldTime),
                 Row(Setting.AimSteadiness, steadiness, LoadSteadiness, ReadSteadiness),
                 Row(Setting.AimDot, aimDot, s => aimDot.Checked = s.AimDot, s => s.AimDot = aimDot.Checked),
                 Row(Setting.Vibration, vibration, LoadVibration, ReadVibration),
@@ -251,6 +257,34 @@ namespace EternalVR.Launcher
             int i = vibration.SelectedIndex;
             if (i >= 0 && i < Vibration.Values.Length) s.Vibration = Vibration.Values[i];
             else if (customVibration >= 0) s.Vibration = customVibration;
+        }
+
+        private void LoadPunchSpeed(LauncherSettings s)
+        {
+            var speed = LauncherSettings.Clamp(s.PunchSpeed, LauncherSettings.MinPunchSpeed, LauncherSettings.MaxPunchSpeed,
+                LauncherSettings.DefaultPunchSpeed);
+            customPunchSpeed = SelectStep(punchSpeed, PunchSpeed.Names.Length, PunchSpeed.IndexOf(speed), speed);
+        }
+
+        private void ReadPunchSpeed(LauncherSettings s)
+        {
+            int i = punchSpeed.SelectedIndex;
+            if (i >= 0 && i < PunchSpeed.Values.Length) s.PunchSpeed = PunchSpeed.Values[i];
+            else if (customPunchSpeed >= 0) s.PunchSpeed = customPunchSpeed;
+        }
+
+        private void LoadHoldTime(LauncherSettings s)
+        {
+            var seconds = LauncherSettings.Clamp(s.HoldTime, LauncherSettings.MinHoldTime, LauncherSettings.MaxHoldTime,
+                LauncherSettings.DefaultHoldTime);
+            customHoldTime = SelectStep(holdTime, HoldTime.Names.Length, HoldTime.IndexOf(seconds), seconds);
+        }
+
+        private void ReadHoldTime(LauncherSettings s)
+        {
+            int i = holdTime.SelectedIndex;
+            if (i >= 0 && i < HoldTime.Values.Length) s.HoldTime = HoldTime.Values[i];
+            else if (customHoldTime >= 0) s.HoldTime = customHoldTime;
         }
 
         /// <summary>Selects step <paramref name="index"/> of a list of named steps, or a "Custom" choice added after them for a

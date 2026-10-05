@@ -291,6 +291,20 @@ TEST_CASE("the hands-up jump is off unless turned on") {
     CHECK_FALSE(bad.settings.handsJump.enabled);
 }
 
+TEST_CASE("the punch speed and the button hold time can be set within their ranges") {
+    const auto defaults = parse({});
+    CHECK(defaults.settings.punchSpeed == evr::input::kDefaultPunchMetresPerSecond);
+    CHECK(defaults.settings.holdSeconds == evr::input::kDefaultHoldSeconds);
+    const auto set = parse({{"ETERNALVR_PUNCH_SPEED", "1.6"}, {"ETERNALVR_HOLD_SECONDS", "0.4"}});
+    CHECK(set.issues.empty());
+    CHECK(set.settings.punchSpeed == doctest::Approx(1.6f));
+    CHECK(set.settings.holdSeconds == doctest::Approx(0.4f));
+    const auto bad = parse({{"ETERNALVR_PUNCH_SPEED", "9"}, {"ETERNALVR_HOLD_SECONDS", "0.01"}});
+    CHECK(bad.issues.size() == 2);
+    CHECK(bad.settings.punchSpeed == evr::input::kDefaultPunchMetresPerSecond);
+    CHECK(bad.settings.holdSeconds == evr::input::kDefaultHoldSeconds);
+}
+
 TEST_CASE("the off-hand arm's offsets are mirrored with the weapon in the left hand") {
     using evr::game::Handedness;
     using evr::input::kDefaultOffhandShoulder;
