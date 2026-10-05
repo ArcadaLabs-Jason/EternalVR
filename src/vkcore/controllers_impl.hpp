@@ -471,6 +471,10 @@ bool installBhapticsLaunchHooks();
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
 bool installAimHooks(bool& fireInstalled);
 bool installViewmodelHook();
+// The held item is the swim fists, which the game puts in the hands while the player swims
+// (viewmodel_hook.cpp): under hand aim the view then follows the head (aimAngles), since the game swims and
+// dashes along its view.
+bool swimFistsHeld();
 // The hook on the game's left-hand modifier, which also bends the weapon arm (`weaponArmInstalled`).
 bool installOffhandHook(bool& weaponArmInstalled);
 bool installXInputHook();

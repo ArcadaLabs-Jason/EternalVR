@@ -119,6 +119,11 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   game frame the game's own angles (command + deltaViewAngles) are read back and moved to body + target,
   where the target is the weapon hand's aim ray (`handAimAngles`) instead of the head. The render camera
   stays `body * head`. A hand that loses tracking keeps its last angles for 0.5 s, then the head aims.
+  While the player swims the head aims too: the game swims and dashes along its view, so with the weapon hand
+  aiming a level hand kept a dive level (Discord, 2026-10-04). The swim fists in the hands
+  (`weapon/player/fists_swim`) mark swimming; the viewmodel hook sees them (`viewmodel_hook.cpp`), so with
+  `ETERNALVR_VIEWMODEL=0` the weapon hand still aims in the water. Log: `controllers: swimming: the view
+  follows the head` and `controllers: out of the water: the weapon hand aims again`.
 - **Melee and equipment aim** (`ETERNALVR_MELEE_AIM`, `ETERNALVR_EQUIPMENT_AIM`,
   `features/input/action_aim.hpp`, `src/vkcore/action_aim_hook.cpp`, `src/vkcore/equipment_launch_hook.cpp`;
   the launcher's Play tab, Controls, "Melee aim with" and "Equipment aim with", GitHub issue 11). Under hand

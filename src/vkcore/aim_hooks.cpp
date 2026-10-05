@@ -17,6 +17,8 @@
 //   head's or the off hand's ray under ETERNALVR_EQUIPMENT_AIM (action_aim_hook.cpp).
 // - Melee aim (features/input/action_aim.hpp): while a melee press asks for it, the view follows the head
 //   or the off hand instead of the weapon hand.
+// - Swimming: the game swims and dashes along its view, so while the swim fists are in the hands
+//   (viewmodel_hook.cpp) the view follows the head, as on a climbable wall: the player dives where they look.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -112,6 +114,9 @@ std::atomic<const std::byte*> g_viewPlayer{nullptr};
 std::atomic<bool> g_headAims{false};
 // The gate yields only the aim (the weapon wheel is up; camera hook only): `yielding` stays false.
 std::atomic<bool> g_aimOnly{false};
+// The view follows the head because the player swims (camera hook only), and how often that changed.
+std::atomic<bool> g_swimAims{false};
+std::atomic<std::uint64_t> g_loggedSwims{0};
 const std::byte* g_imageBase = nullptr;
 
 // Distinct foreign SetViewAngles callers seen, for the log (the live check of section 2's table).
@@ -479,8 +484,19 @@ std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {
         }
         return std::nullopt;
     }
-    // A melee or equipment press may ask for the head or the off hand (action_aim.hpp).
-    switch (actionAimTarget(s)) {
+    // A melee or equipment press may ask for the head or the off hand (action_aim.hpp). Read first, also
+    // while swimming: it notes the target generation this frame writes, which a held-back press waits for.
+    const input::ActionAimSource action = actionAimTarget(s);
+    const bool swimming = swimFistsHeld();
+    if (swimming != g_swimAims.exchange(swimming) && g_loggedSwims.fetch_add(1) < 20) {
+        EVR_LOG("%s: %s", kTag,
+                swimming ? "swimming: the view follows the head"
+                         : "out of the water: the weapon hand aims again");
+    }
+    if (swimming) {
+        return head;
+    }
+    switch (action) {
     case input::ActionAimSource::Head:
         return head;
     case input::ActionAimSource::OffHand:

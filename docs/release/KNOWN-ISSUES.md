@@ -223,8 +223,8 @@ them is worse for you than described here.
 ## The DLC (The Ancient Gods, parts one and two)
 
 - The DLC missions, the ARC Carrier and the Master Levels are single-player and allowed, but they have
-  only had a short check. Things to watch: swimming (you swim where the game's view points, so under hand
-  aim a lowered gun can make you dive), the Sentinel Hammer (on the Crucible button, the left stick
+  only had a short check. Things to watch: swimming (you swim and dash where you look, also under hand
+  aim), the Sentinel Hammer (on the Crucible button, the left stick
   click), the DLC's in-mission videos, and underwater scenes in both eyes. Holding both sticks pressed
   for 2 seconds recenters, so a very long Hammer and Blood Punch together can cancel both.
 - A red overlay with light rays sometimes shows as a rectangle in the middle of the view instead of

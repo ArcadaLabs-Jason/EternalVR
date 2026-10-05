@@ -74,12 +74,19 @@ constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 // hands are left where the game puts them from its view while the fists are held: the punch goes where the
 // view looks (issue #15: with the arms kept on the weapon hand the punch went along the controller).
 constexpr std::string_view kFistsPrefix = "weapon/player/fists";
+// While the player swims the game puts these fists in the hands; the swim and its dash follow the game's
+// view.
+constexpr std::string_view kSwimFists = "weapon/player/fists_swim";
 
 // The held item's decl and its offset (viewmodel hook thread only).
 const std::byte* g_cachedDecl = nullptr;
 bool g_cachedSeated = false;
 game::WeaponOffset g_cachedOffset;
 bool g_cachedFists = false; // the held item is the fists of a melee or a Blood Punch
+// The held item's decl the swim check last saw (viewmodel hook thread only), and its answer (read by the
+// camera hook on any thread).
+const std::byte* g_swimDecl = nullptr;
+std::atomic<bool> g_swimFists{false};
 std::atomic<std::uint64_t> g_loggedFists{0};
 std::atomic<std::uint64_t> g_loggedWeapons{0};
 std::atomic<std::uint64_t> g_loggedPlacements{0};
@@ -112,11 +119,15 @@ std::string declName(const std::byte* decl) {
 
 game::WeaponOffset offsetFor(const std::byte* hands) {
     const input::ControllerSettings& cfg = settings();
+    const std::byte* decl = nullptr;
+    safeRead(hands + kHandsRightItemDecl, decl);
+    if (decl != g_swimDecl) {
+        g_swimDecl = decl;
+        g_swimFists.store(decl && declName(decl).starts_with(kSwimFists), std::memory_order_relaxed);
+    }
     if (cfg.viewmodelOffset) {
         return *cfg.viewmodelOffset;
     }
-    const std::byte* decl = nullptr;
-    safeRead(hands + kHandsRightItemDecl, decl);
     // Seated offsets when ETERNALVR_SEATED says so or the room's posture is seated (T-074).
     const bool seated = cfg.seated || roomPosture() == posture::Posture::Seated;
     if (decl != g_cachedDecl || seated != g_cachedSeated) {
@@ -211,6 +222,10 @@ bool viewmodelSiteChecks(const std::byte* site) {
 
 std::string itemDeclName(const std::byte* decl) {
     return declName(decl);
+}
+
+bool swimFistsHeld() {
+    return g_swimFists.load(std::memory_order_relaxed);
 }
 
 const std::byte* heldItemDecl(const std::byte* hands) {
