@@ -121,6 +121,8 @@ them is worse for you than described here.
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn.
 - **Shadows can pop in** on some walls as you turn your head.
+- **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
+  other eye shows it.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.

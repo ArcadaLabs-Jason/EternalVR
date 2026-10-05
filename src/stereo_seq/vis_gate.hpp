@@ -20,8 +20,9 @@ constexpr bool visGateContinues(std::int32_t lastVisible, std::int32_t counter, 
 }
 
 // True when an UpdateInView model (particles) simulates in this render: it was updated in one of the last
-// `renders` renders (1: the engine's own test, `stamp == frame - 1`; 2 under Route S). The engine steps the
-// 32-bit frame number and compares for equality, so the distance is taken modulo 2^32 as it would wrap.
+// `renders` renders (1: the engine's own test, `stamp == frame - 1`). The engine steps the 32-bit frame
+// number and compares for equality, so the distance is taken modulo 2^32 as it would wrap. Not hooked since
+// 0.1.24 (effects keep the engine's test, vis_gate_hooks.hpp); kept for the record of 0.1.22-0.1.23.
 constexpr bool updateInViewContinues(std::int32_t stamp, std::int32_t frame, std::int32_t renders) {
     const std::uint32_t behind = static_cast<std::uint32_t>(frame) - static_cast<std::uint32_t>(stamp);
     return behind >= 1 && behind <= static_cast<std::uint32_t>(renders);

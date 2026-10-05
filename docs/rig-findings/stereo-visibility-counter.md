@@ -57,19 +57,25 @@ Alternate eyes (one eye per tick) had the same problem and gets the same fix. Pa
 eyes as two view slots, each with its own counter, so it is unaffected. The log counts, every 10 s, the counts
 that went on only through the wider test, those the engine's test passed, and the restarts.
 
-Two companions are installed with the gates, or none of the six hooks is (all stay inert until every one is in):
+Only models are widened, never effects. At each gate rbx holds the model's flags; bits 25-27 are its type, and
+types 0-3 (particles, flares, beams, ribbons) keep the engine's one-render test.
 
-- **Occlusion query copies without the wait.** Each view's emissive and blend job starts by copying every pending
-  occlusion query's result with `VK_QUERY_RESULT_WAIT_BIT` (0x1C32F20; the flag stores at 0x1C32FAF and 0x1C33039).
-  With the gates alone the game's queue stalled for good a few seconds after the first teleport (render thread
-  waiting in the driver from the game's submit path, XR still at 90 Hz, no TDR): 3 of 3 runs, and 1 more with only
-  the main gate widened; 0 of 1 with the gates off. With the copies made without the wait: no stall, and the shells
-  draw. Same mechanism as the Parallel Eye hang (pe-geom `view_query_copy.cpp`): the pending bits are global, so a
-  model drawn in one eye's render only leaves queries pending that the other eye's render never issues. Unfinished
-  queries keep their previous results (a stale occlusion result for a frame at worst).
-- **Particles simulate through either eye's last render.** Each `UpdateInView` model simulates only if its stamp
-  (`[model + 0x61C]`) equals the particle frame number (P + 0x4D0, stepped once per render at 0x1A0F692) minus 1,
-  so an effect one eye sees was drawn but never simulated. The check at 0x195523D takes the last two renders.
+- **Why not effects.** 0.1.22 widened every gate and added two companions: occlusion query copies without
+  `VK_QUERY_RESULT_WAIT_BIT` (0x1C32F20; the flag stores at 0x1C32FAF and 0x1C33039) and a particle
+  `UpdateInView` check over the last two renders (0x195523D). Flares are the only users of that query pool (the
+  slot allocator 0x1C343C0 has one caller, the flare `UpdateInView`): each takes two slots per render. A flare
+  drawn in one eye's render only left queries pending that the other eye's copy waited on forever (the game's queue
+  stalled a few seconds after the first teleport, XR still at 90 Hz). Copied without the wait, an unfinished query
+  kept another flare's count instead (slot numbers restart every frame), and a flare could flash at full brightness
+  for a frame: public issue #18, lightning in Exultia. The widened particle check also drew a one-eye system from
+  another render's ring slot.
+- **Rig check (RTX 3080 Ti, 2026-10-05, e1m1 shells in each eye's outer strip, `vis-run.sh`).** Effects not widened
+  and the engine's waiting copies back: the shells draw at yaw 45/40/35 and no stall in 130 s. The old widening of
+  every gate with the waiting copies back: stalled at 80 s (0 ticks/s). All two-render continues came from the
+  main gate (0x1C775E4), half of type 0 and half of type 4.
+
+So the query copies and the particle check are the engine's own again. Effects one eye sees stay unseen there,
+as before 0.1.22.
 
 Rejected: skipping the counter's step (`inc dword [r8 + 0x2BC1F4]` at 0x1C5DF63) in eye R's render, so both
 eyes share one value per tick. It drew the pickup, and hung like the gates alone (the query copies' wait, found
@@ -80,11 +86,8 @@ hooks were kept.
 
 - The surface-spawned particle slots compare `[model + 0x4AC]` with worldData + 0xBFD8 minus 1 (0x18DA66D) and
   reset every tick under Route S.
-- Only the particle `UpdateInView` is widened. Beams (0x18F21E0), effects (0x19511E0), flares (0x1936650),
-  ribbons (0x1970BD0) and tracers (0x1A0E470) have their own and were not checked.
-- If a particle system simulates a fixed step per update, one that only one eye sees now runs at half rate
-  (one update per tick instead of two).
-- The no-wait query copies apply to every copy while the gates are live, so any object can take a stale
-  occlusion result for a frame; check for one-frame pops in the headset.
+- Effects (particles, flares, beams, ribbons) one eye sees are not drawn there, as before 0.1.22: a wall glow at
+  the strip edge can be missing in that eye.
+- Which type values ordinary models carry was checked only for the e1m1 shells (type 4).
 
 Full notes in the analysis write-up.

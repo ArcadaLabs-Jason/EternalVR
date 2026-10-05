@@ -13,15 +13,14 @@
 // stereo_seq::visGateContinues over the last two renders and resumes on the engine's own continue or restart
 // path, so the engine's stores and the counter are unchanged.
 //
-// Two companions go in with the gates, or nothing does. Particles (UpdateInView, 0x195523D) simulate only
-// when updated in the previous render, which is always the other eye's: the check is widened to the last two
-// renders too, so an effect one eye sees is simulated. And the copies of the occlusion queries' results
-// (0x1C32FAF, 0x1C33039) are made without VK_QUERY_RESULT_WAIT_BIT: once a one-eye model is drawn, a copy
-// waits on queries its render never issued and the game's queue stalls for good (as under Parallel Eye
-// Rendering); without the wait, unfinished queries keep their previous results.
+// Only models are widened, never effects (model type 0-3: particles, flares, beams, ribbons). A flare one eye
+// drew left the other eye's occlusion query copy waiting on queries its render never issued (the queue
+// stalled for good); 0.1.22 copied without the wait instead, and a flare could then read another flare's
+// stale count and flash at full brightness (issue #18). Effects one eye sees stay unseen there, as before
+// 0.1.22.
 //
-// All six sites are located by signature (Steam and Store builds); a miss leaves the game untouched and logs
-// why.
+// The three sites are located by signature (Steam and Store builds); a miss leaves the game untouched and
+// logs why.
 
 namespace evr::vkcore {
 

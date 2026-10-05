@@ -41,18 +41,15 @@ constexpr std::size_t kSecondGoesOn = 0x10;
 constexpr std::size_t kSecondRestarts = 0x18;
 static_assert(kSecondRestarts == kSecondGoesOn + 0x08);
 
-// Particles' UpdateInView (0x1955150, at RVA 0x195523D): `mov rax, [rdi]` (P, the particle frame owner),
-// `mov ecx, [rax + 0x4D0]` (the frame number, stepped once per render), `dec ecx`, `cmp [rbx + 0x61C], ecx`
-// (the model's last update), `jne skip` (+0x11): +0x13 simulates, the jump target +0x29 skips the simulation.
-constexpr const char* kParticleSignature =
-    "48 8B 07 8B 88 D0 04 00 00 FF C9 39 8B 1C 06 00 00 75 16 48 8B CB E8";
-constexpr std::size_t kParticleSimulatesAt = 0x13;
-constexpr std::size_t kParticleSkipsAt = 0x29;
-static_assert(kParticleSkipsAt == kParticleSimulatesAt + 0x16); // `jne` (75 16) ends at the simulation
-constexpr std::size_t kParticleFrame = 0x4D0;
-constexpr std::size_t kParticleStamp = 0x61C;
-std::uintptr_t g_particleSimulates = 0;
-std::uintptr_t g_particleSkips = 0;
+// The gates' rbx holds the model's flags; bits 25-27 are its type, and types 0-3 (particles, flares, beams
+// and ribbons) are never widened. Flares take two occlusion query slots per render: one a single eye drew
+// left the other eye's query copy (0x1C32F20) waiting on queries its render never issued, and the game's
+// queue stalled for good; copied without the wait instead, a flare read another flare's stale count and could
+// flash at full brightness (public issue #18, lightning in Exultia). Effects one eye sees stay unseen there,
+// as before 0.1.22.
+constexpr unsigned kTypeShift = 25;
+constexpr std::uint64_t kTypeMask = 7;
+constexpr std::uint64_t kFirstModelType = 4;
 
 struct Site {
     int base = 0; // x86 register numbers (registerByNumber)
@@ -65,24 +62,9 @@ struct Site {
 Site g_sites[3];
 std::once_flag g_once;
 bool g_installed = false;
-// Set once all six hooks are in: until then they keep the engine's own behaviour, so a failed install never
-// counts a model with one test in one gather and the other test in another (the stamps are shared), and never
-// draws a one-eye model without the no-wait query copies and the particle check.
+// Set once all three hooks are in: until then they keep the engine's own behaviour, so a failed install never
+// counts a model with one test in one gather and the other test in another (the stamps are shared).
 std::atomic<bool> g_live{false};
-
-// The copies of the occlusion queries' results (0x1C32F20, at the start of each view's emissive and blend
-// job): `mov dword [rsp + 0x38], 3`, the flags argument VK_QUERY_RESULT_64_BIT | WAIT_BIT, at RVA 0x1C32FAF
-// (a run of pending queries) and 0x1C33039 (the last run). Once a model one eye sees is drawn, the copy in
-// the other eye's render waits on queries that render never issued, and the game's queue stalls for good (the
-// Parallel Eye hang, pe-geom view_query_copy.cpp). The hooks write the flags without the wait, for every
-// copy: which queries are left over is not known, and an unfinished query keeps its slot's previous result
-// (an object culled or kept by a stale occlusion result for a frame). Pending queries are plain counts: no
-// crash path.
-constexpr const char* kQueryRunSignature = "C7 44 24 38 03 00 00 00 45 2B C8 49 63 C0 41 FF";
-constexpr const char* kQueryLastSignature = "C7 44 24 38 03 00 00 00 49 63 C0 48 C1 E0 03 48";
-constexpr std::size_t kQueryFlagsSize = 8;  // the store's length
-constexpr std::uint32_t kQueryNoWait = 0x1; // VK_QUERY_RESULT_64_BIT
-std::uintptr_t g_queryResume[2] = {};
 
 // Counted on the gather jobs' threads for the periodic line: relaxed, and the report is tried once per 4096
 // gate hits rather than on every one.
@@ -90,8 +72,7 @@ struct Counters {
     std::atomic<std::uint64_t> widened{0}; // continued only thanks to the two-render test (the other eye's)
     std::atomic<std::uint64_t> engine{0};  // continued by the engine's own test
     std::atomic<std::uint64_t> restarted{0};
-    std::atomic<std::uint64_t> particleWidened{0}; // simulated only thanks to the two-render test
-    std::atomic<std::uint64_t> queryNoWait{0};     // occlusion query copies made without the wait
+    std::atomic<std::uint64_t> effectsKept{0}; // effects the two-render test would have continued
     std::atomic<std::uint64_t> lastReport{0};
 } g_counters;
 
@@ -117,13 +98,11 @@ void report() {
         return;
     }
     EVR_LOG("%s: first-visible gate: %llu count(s) went on through the other eye's render, %llu by the "
-            "engine's own test, %llu restarted; %llu particle update(s) through the other eye's render; %llu "
-            "occlusion query copies without the wait",
+            "engine's own test, %llu restarted (%llu of them effects, not widened)",
             kTag, static_cast<unsigned long long>(g_counters.widened.exchange(0)),
             static_cast<unsigned long long>(g_counters.engine.exchange(0)),
             static_cast<unsigned long long>(g_counters.restarted.exchange(0)),
-            static_cast<unsigned long long>(g_counters.particleWidened.exchange(0)),
-            static_cast<unsigned long long>(g_counters.queryNoWait.exchange(0)));
+            static_cast<unsigned long long>(g_counters.effectsKept.exchange(0)));
 }
 
 std::int32_t readI32(std::uintptr_t at) {
@@ -141,8 +120,13 @@ void onGate(HookRegisters& r, const Site& site) {
     // The `mov eax` the resume skips (zero-extended, as it would).
     r.rax = static_cast<std::uint32_t>(counter);
     const bool engine = stereo_seq::visGateContinues(lastVisible, counter, 1);
-    const bool widen = g_live.load(std::memory_order_acquire) && mp_guard::allowsGameTouch();
-    const bool goesOn = engine || (widen && stereo_seq::visGateContinues(lastVisible, counter, 2));
+    const bool model = ((r.rbx >> kTypeShift) & kTypeMask) >= kFirstModelType;
+    const bool live = g_live.load(std::memory_order_acquire) && mp_guard::allowsGameTouch();
+    const bool twoRenders = !engine && live && stereo_seq::visGateContinues(lastVisible, counter, 2);
+    const bool goesOn = engine || (twoRenders && model);
+    if (twoRenders && !model) {
+        add(g_counters.effectsKept);
+    }
     r.resumeAt = goesOn ? site.goesOn : site.restarts;
     std::atomic<std::uint64_t>& counted =
         goesOn ? (engine ? g_counters.engine : g_counters.widened) : g_counters.restarted;
@@ -150,34 +134,6 @@ void onGate(HookRegisters& r, const Site& site) {
         report();
     }
 }
-// On the particle frame load: the loads and the compare done here, then on to the simulation or past it.
-void onParticle(HookRegisters& r) {
-    const std::uintptr_t p = *reinterpret_cast<const std::uintptr_t*>(r.rdi);
-    const std::int32_t frame = readI32(p + kParticleFrame);
-    const std::int32_t stamp = readI32(r.rbx + kParticleStamp);
-    r.rax = p; // the skipped `mov rax, [rdi]`
-    r.rcx = static_cast<std::uint32_t>(static_cast<std::uint32_t>(frame) - 1u); // and `mov ecx` + `dec ecx`
-    const bool engine = stereo_seq::updateInViewContinues(stamp, frame, 1);
-    const bool widen = !engine && g_live.load(std::memory_order_acquire) && mp_guard::allowsGameTouch() &&
-                       stereo_seq::updateInViewContinues(stamp, frame, 2);
-    r.resumeAt = engine || widen ? g_particleSimulates : g_particleSkips;
-    if (widen) {
-        add(g_counters.particleWidened);
-    }
-}
-
-// On a query copy's flags store: the flags written without the wait, once the gates draw one-eye models. Like
-// every hook here it stands down when the multiplayer guard trips (a multiplayer map load or menu screen).
-template <int I>
-void onQueryFlags(HookRegisters& r) {
-    if (!g_live.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch()) {
-        return; // the game's own store runs
-    }
-    std::memcpy(reinterpret_cast<void*>(r.rsp + 0x38), &kQueryNoWait, sizeof(kQueryNoWait));
-    r.resumeAt = g_queryResume[I];
-    add(g_counters.queryNoWait);
-}
-
 void onGate0(HookRegisters& r) {
     onGate(r, g_sites[0]);
 }
@@ -211,17 +167,11 @@ bool installVisGateHooks() {
                 second.push_back(image.text.data() + offset);
             }
         }
-        const std::byte* particle =
-            findUnique(image, kTag, "particles' update-in-view check", kParticleSignature);
-        const std::byte* queryRun = findUnique(image, kTag, "occlusion query copy (run)", kQueryRunSignature);
-        const std::byte* queryLast =
-            findUnique(image, kTag, "occlusion query copy (last)", kQueryLastSignature);
-        if (!main || second.size() != 2 || !particle || !queryRun || !queryLast) {
+        if (!main || second.size() != 2) {
             EVR_LOG(
-                "%s: %s, %zu of 2 second-gather gate(s), particle check %s, query copies %s; not installed: "
-                "models seen by one eye only are not drawn",
-                kTag, main ? "main gate found" : "main gate missing", second.size(),
-                particle ? "found" : "missing", queryRun && queryLast ? "found" : "missing");
+                "%s: %s, %zu of 2 second-gather gate(s); not installed: models seen by one eye only are not "
+                "drawn",
+                kTag, main ? "main gate found" : "main gate missing", second.size());
             return;
         }
         const auto at = [](const std::byte* p, std::size_t off) {
@@ -231,18 +181,11 @@ bool installVisGateHooks() {
         g_sites[0] = {1, 2, at(main, kMainGoesOn), at(main, kMainRestarts)};
         g_sites[1] = {2, 15, at(second[0], kSecondGoesOn), at(second[0], kSecondRestarts)};
         g_sites[2] = {2, 15, at(second[1], kSecondGoesOn), at(second[1], kSecondRestarts)};
-        g_particleSimulates = at(particle, kParticleSimulatesAt);
-        g_particleSkips = at(particle, kParticleSkipsAt);
-        g_queryResume[0] = at(queryRun, kQueryFlagsSize);
-        g_queryResume[1] = at(queryLast, kQueryFlagsSize);
-        // All hooks stay inert until g_live, set only once every one is in: a gate that draws one-eye models
-        // must never run without the no-wait copies (the queue stalls) or the particle check (effects never
-        // simulated).
-        MidHookEditCallback callbacks[6] = {&onQueryFlags<0>, &onQueryFlags<1>, &onParticle,
-                                            &onGate0,         &onGate1,         &onGate2};
-        const std::byte* sites[6] = {queryRun, queryLast, particle, main, second[0], second[1]};
+        // All hooks stay inert until g_live, set only once every one is in.
+        MidHookEditCallback callbacks[3] = {&onGate0, &onGate1, &onGate2};
+        const std::byte* sites[3] = {main, second[0], second[1]};
         std::string error;
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < 3; ++i) {
             if (!installMidHookEdit(const_cast<std::byte*>(sites[i]), callbacks[i], error)) {
                 // Hooks already in stay in (they cannot be removed) and keep the engine's own test (g_live).
                 EVR_LOG("%s: hook at RVA 0x%X failed: %s; the gates keep the engine's test", kTag,
@@ -252,12 +195,9 @@ bool installVisGateHooks() {
         }
         g_installed = true;
         g_live.store(true, std::memory_order_release);
-        EVR_LOG(
-            "%s: first-visible gates at RVA 0x%X, 0x%X, 0x%X, the particle check at 0x%X, query copies at "
-            "0x%X, 0x%X: a model counts on and simulates through either eye's last render; query copies do "
-            "not wait",
-            kTag, image.rva(sites[3]), image.rva(sites[4]), image.rva(sites[5]), image.rva(sites[2]),
-            image.rva(sites[0]), image.rva(sites[1]));
+        EVR_LOG("%s: first-visible gates at RVA 0x%X, 0x%X, 0x%X: a model (not an effect) counts on through "
+                "either eye's last render",
+                kTag, image.rva(sites[0]), image.rva(sites[1]), image.rva(sites[2]));
     });
     return g_installed;
 }
