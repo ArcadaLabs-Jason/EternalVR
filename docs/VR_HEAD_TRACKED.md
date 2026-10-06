@@ -43,7 +43,12 @@ yet).
   `xr_math/aim_check.hpp`). Frames in a cutscene, a forced view or a menu are not counted, and a failed
   try runs again after 120, 240, ... 600 frames of the player's own view, six tries in all: a check
   that overlapped a level's opening cutscene once left head aim off for the whole session (issue 7,
-  2026-10-01: a save loaded straight into a level, 51/60 through the state delta). Once it passes, it
+  2026-10-01: a save loaded straight into a level, 51/60 through the state delta). When both deltas
+  pass, the frames that match only one of them decide, and a tie goes to the state delta: a level that
+  starts at yaw 0 with both deltas 0 matches both in every frame, and the physics delta taken there left
+  the view ignoring every value head aim wrote (issue 22). After the check, 30 frames in a row of the
+  player's own view that hold `command + the other delta` and not `command + the written one` move head
+  aim to the other delta (`aim: the view follows the ... deltaViewAngles`, at most 4 times). Once it passes, it
   adds to that delta each frame: yaw by the change in head yaw since the last frame (the mouse
   keeps turning the body), pitch to reach the head's pitch (the head owns pitch). The rendered axis is
   then `body yaw * head` with `body = command yaw + delta yaw - the head yaw the delta holds`. The

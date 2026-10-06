@@ -303,7 +303,7 @@ void XrPresenter::Impl::recreateRing() {
     destroyUiXrObjects();
     acquiredIndex = -1;
     acquiredWaited = false;
-    copyStalled = false;
+    heldCopy.stalled = false;
     hasImage = false;
     shownHasView = false;
     lastConsumed = latest.load() >> 2; // the old ring's contents are gone

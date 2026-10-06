@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <string>
+#include <thread>
 
 namespace evr::vkcore::frame_pacing {
 
@@ -43,6 +44,7 @@ struct State {
     pacing::HeadsetLoop loop;
     pacing::FramePacer pacer;
     pacing::Cadence cadence;
+    pacing::UnfocusedCap unfocusedCap;
     // The counters at the last 10 s line.
     pacing::FramePacer::Counters lastPacer;
     pacing::Cadence::Counters lastCadence;
@@ -50,8 +52,21 @@ struct State {
 State& g_state = *new State;
 
 std::atomic<bool> g_on{false};
+std::atomic<bool> g_unfocused{false};      // a runtime's menu is over the game (setUnfocused)
 std::atomic<std::uint64_t> g_handOvers{0}; // images handed to the XR worker (publishSlot)
 std::atomic<std::uint64_t> g_seen{0};      // the hand-overs the present hook has looked at
+
+// Behind a runtime's menu: the render thread sleeps out the rest of the cap's interval, with no lock held.
+void holdUnfocused() {
+    double seconds = 0.0;
+    {
+        std::lock_guard lock(g_state.mutex);
+        seconds = g_state.unfocusedCap.afterHandOver(g_state.loop.periodSeconds, secondsNow());
+    }
+    if (seconds > 0.0) {
+        std::this_thread::sleep_for(std::chrono::duration<double>(seconds));
+    }
+}
 
 } // namespace
 
@@ -118,13 +133,20 @@ void noteShown(std::uint64_t seq, std::int64_t lateNs) {
 }
 
 void afterPresent() {
-    if (!g_on.load(std::memory_order_acquire)) {
+    const bool unfocused = g_unfocused.load(std::memory_order_acquire);
+    if (!g_on.load(std::memory_order_acquire) && !unfocused) {
         return;
     }
     // Only a present that handed an image over waits (under Route S eye R's, which completes the pair; eye
     // L's present only copies its half).
     const std::uint64_t handed = g_handOvers.load(std::memory_order_acquire);
     if (g_seen.exchange(handed, std::memory_order_acq_rel) == handed) {
+        return;
+    }
+    if (unfocused) {
+        holdUnfocused();
+    }
+    if (!g_on.load(std::memory_order_acquire)) {
         return;
     }
     std::unique_lock lock(g_state.mutex);
@@ -138,6 +160,19 @@ void afterPresent() {
         [&step] { return g_state.loop.frames >= step.untilFrame; });
     g_state.pacer.waited(g_state.loop.frames, std::chrono::duration<double>(Clock::now() - start).count(),
                          begun);
+}
+
+void setUnfocused(bool unfocused) {
+    if (g_unfocused.exchange(unfocused, std::memory_order_acq_rel) == unfocused) {
+        return;
+    }
+    if (unfocused) {
+        EVR_LOG("pace: a runtime menu is over the game: the game is held to one image per display period "
+                "until it has focus again");
+    } else {
+        EVR_LOG("pace: the menu is gone; the game renders %s again",
+                g_on.load(std::memory_order_relaxed) ? "paced to the headset" : "as fast as it can");
+    }
 }
 
 void logSummary() {

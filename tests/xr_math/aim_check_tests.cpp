@@ -124,3 +124,75 @@ TEST_CASE("aim check: yaw is compared across the wrap at 180 degrees") {
     CHECK(step.physicsMatch);
     CHECK_FALSE(step.stateMatch);
 }
+
+TEST_CASE("aim check: frames that match both deltas pass through the state delta (issue #22)") {
+    // A level that starts at yaw 0 with both deltas 0: every frame matches both.
+    AimCheck check;
+    const IdAngles zero{0.0f, 0.0f, 0.0f};
+    AimCheck::Step step;
+    for (int i = 0; i < AimCheck::kFrames; ++i) {
+        step = check.update(zero, zero, zero, zero, false);
+    }
+    CHECK(step.event == AimCheck::Event::Passed);
+    CHECK_FALSE(check.physics());
+    CHECK(check.physicsOnly() == 0);
+    CHECK(check.stateOnly() == 0);
+}
+
+TEST_CASE("aim check: when both deltas pass, the frames that tell them apart decide") {
+    AimCheck check;
+    const IdAngles zero{0.0f, 0.0f, 0.0f};
+    AimCheck::Step step;
+    for (int i = 0; i < AimCheck::kFrames; ++i) {
+        // 55 frames match both, 5 only the physics delta.
+        step = i < 55 ? check.update(zero, zero, zero, zero, false) : frame(check, kPhysicsView);
+    }
+    CHECK(step.event == AimCheck::Event::Passed);
+    CHECK(check.physics());
+    CHECK(check.physicsOnly() == 5);
+}
+
+TEST_CASE("aim check: head aim moves to the delta the view follows") {
+    AimCheck check;
+    CHECK_FALSE(check.watchField(kStateView, kCommand, kDelta, kStateDelta)); // not passed yet
+    runTry(check, kPhysicsView, AimCheck::kFrames);
+    REQUIRE(check.passed());
+    REQUIRE(check.physics());
+    // The view follows the state delta while head aim writes the physics one.
+    for (int i = 1; i < AimCheck::kFieldFrames; ++i) {
+        REQUIRE_FALSE(check.watchField(kStateView, kCommand, kDelta, kStateDelta));
+    }
+    // A frame where the written delta holds starts the count again.
+    CHECK_FALSE(check.watchField(kPhysicsView, kCommand, kDelta, kStateDelta));
+    for (int i = 1; i < AimCheck::kFieldFrames; ++i) {
+        REQUIRE_FALSE(check.watchField(kStateView, kCommand, kDelta, kStateDelta));
+    }
+    CHECK(check.watchField(kStateView, kCommand, kDelta, kStateDelta));
+    CHECK_FALSE(check.physics());
+    CHECK(check.fieldSwitches() == 1);
+    // A view that follows neither delta (a scripted camera) moves nothing.
+    for (int i = 0; i < 2 * AimCheck::kFieldFrames; ++i) {
+        REQUIRE_FALSE(check.watchField(kOtherView, kCommand, kStateDelta, kDelta));
+    }
+}
+
+TEST_CASE("aim check: head aim moves between the deltas a few times at most") {
+    AimCheck check;
+    runTry(check, kPhysicsView, AimCheck::kFrames);
+    REQUIRE(check.passed());
+    for (int s = 0; s < AimCheck::kFieldSwitches; ++s) {
+        const bool physics = check.physics();
+        const IdAngles& written = physics ? kDelta : kStateDelta;
+        const IdAngles& other = physics ? kStateDelta : kDelta;
+        const IdAngles& view = physics ? kStateView : kPhysicsView;
+        bool moved = false;
+        for (int i = 0; i < AimCheck::kFieldFrames; ++i) {
+            moved = check.watchField(view, kCommand, written, other);
+        }
+        REQUIRE(moved);
+    }
+    CHECK(check.fieldSwitches() == AimCheck::kFieldSwitches);
+    for (int i = 0; i < 2 * AimCheck::kFieldFrames; ++i) {
+        REQUIRE_FALSE(check.watchField(kStateView, kCommand, kDelta, kStateDelta));
+    }
+}

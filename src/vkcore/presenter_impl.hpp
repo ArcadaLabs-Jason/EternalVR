@@ -134,12 +134,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint32_t maxSwapchainHeight = 16384;
     std::vector<std::int64_t> xrFormats;
 
-    // A D3D12 copy that did not finish in time: its slot and swapchain image stay held until it does.
-    bool copyStalled = false;
-    std::uint32_t stalledSlot = 0;
-    std::uint64_t stalledValue = 0;
-    ViewRecord stalledView;
-    bool stalledHasView = false;
+    HeldCopy heldCopy; // a D3D12 copy that did not finish in time (presenter_types.hpp)
 
     // D3D12 (worker thread only, then released at shutdown)
     ComPtr<ID3D12Device> d3dDevice;
@@ -171,7 +166,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::vector<ID3D12Resource*> xrImages;
     XrSessionState sessionState = XR_SESSION_STATE_UNKNOWN;
     bool sessionRunning = false;
-    XrLossState loss; // presenter_types.hpp
+    ClockWatchState clock; // presenter_types.hpp
+    XrLossState loss;      // presenter_types.hpp
     std::int64_t acquiredIndex = -1;
     bool acquiredWaited = false;
     bool hasImage = false;
@@ -585,6 +581,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     void openFrameLog();
     void noteShownView(const XrFrameState& state);
     void logFrame(const XrFrameState& state);
+    // Worker, after each frame: the runtime's frame clock; a stall ends the session to start a new one.
+    void watchFrameClock(const XrFrameState& state);
     // Worker, after each frame: the display period's watch and, every 10 s, the xr line and the statistics.
     void afterFrame(const XrFrameState& state);
     // Worker, every 10 s: the game's present, tick and stereo pair rates beside the XR frame rate.

@@ -472,6 +472,13 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   still ends it in time), at most 50 ms, and counts as a timeout. Once the headset has begun no frame for three
   periods (not shown, the dashboard, a lost session, shutdown) nothing waits until it does again: the game
   never hangs on the headset.
+- **Behind a runtime's menu.** While the session is VISIBLE, or SYNCHRONIZED once hidden, after it had focus
+  (SteamVR's dashboard, Meta's menu), keep-active keeps the game running without input, so the present hook
+  holds it to one image per display period (clamped to 1/90 to 1/30 s; 1/72 s while no period is known; not fewer, as a session can stay VISIBLE while the game is what the player sees) on
+  its own clock, pacing on or off and whether or not the headset's frames come (`UnfocusedCap`; public issue
+  #19). Letting the game pause instead was not used: the dashboard does not take the window's focus, and a
+  posted deactivation would change the game's own state (its pause) where the cap only holds frames back. Log: `pace: a runtime menu is over the game: ...` and
+  `pace: the menu is gone; ...`.
 - **Slower PCs.** A game that cannot keep up with the headset never waits (a headset frame always began while it
   drew), so below the headset's rate nothing changes; the uneven cadence of a game just below the rate (an
   occasional repeated frame) remains.

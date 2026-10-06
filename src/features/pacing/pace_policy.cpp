@@ -95,6 +95,26 @@ double FramePacer::takeLongestWait() {
     return longest;
 }
 
+double UnfocusedCap::interval(double periodSeconds) {
+    if (!std::isfinite(periodSeconds) || periodSeconds <= 0.0) {
+        return kPeriodsPerImage * kDefaultPeriodSeconds;
+    }
+    return kPeriodsPerImage * std::clamp(periodSeconds, kMinPeriodSeconds, kMaxPeriodSeconds);
+}
+
+double UnfocusedCap::afterHandOver(double periodSeconds, double nowSeconds) {
+    if (!std::isfinite(nowSeconds)) {
+        return 0.0;
+    }
+    const double next = release_ ? *release_ + interval(periodSeconds) : nowSeconds;
+    if (nowSeconds >= next) {
+        release_ = nowSeconds;
+        return 0.0;
+    }
+    release_ = next;
+    return next - nowSeconds;
+}
+
 void Cadence::frame(std::uint64_t handOvers) {
     if (!lastHandOvers_) {
         lastHandOvers_ = handOvers; // the first frame only sets the baseline

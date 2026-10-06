@@ -31,7 +31,7 @@ AimCheck::Step AimCheck::update(const IdAngles& view,
         }
         ++retries_;
         phase_ = Phase::Checking;
-        checks_ = physicsMatches_ = stateMatches_ = mismatches_ = skipped_ = 0;
+        checks_ = physicsMatches_ = stateMatches_ = mismatches_ = skipped_ = physicsOnly_ = stateOnly_ = 0;
         out.event = Event::Retry;
         return out;
     }
@@ -47,10 +47,13 @@ AimCheck::Step AimCheck::update(const IdAngles& view,
     physicsMatches_ += out.physicsMatch ? 1 : 0;
     stateMatches_ += out.stateMatch ? 1 : 0;
     mismatches_ += (out.physicsMatch || out.stateMatch) ? 0 : 1;
+    physicsOnly_ += (out.physicsMatch && !out.stateMatch) ? 1 : 0;
+    stateOnly_ += (out.stateMatch && !out.physicsMatch) ? 1 : 0;
     if (checks_ < kFrames) {
         out.event = Event::Counted;
     } else if (physicsMatches_ >= kNeeded || stateMatches_ >= kNeeded) {
-        physics_ = physicsMatches_ >= kNeeded;
+        // Both held: the frames that tell them apart decide, and the state delta wins a tie.
+        physics_ = stateMatches_ >= kNeeded ? physicsOnly_ > stateOnly_ : true;
         phase_ = Phase::Passed;
         out.event = Event::Passed;
     } else if (retries_ >= kRetries) {
@@ -62,6 +65,26 @@ AimCheck::Step AimCheck::update(const IdAngles& view,
         out.event = Event::Failed;
     }
     return out;
+}
+
+bool AimCheck::watchField(const IdAngles& view,
+                          const IdAngles& command,
+                          const IdAngles& written,
+                          const IdAngles& other) {
+    if (phase_ != Phase::Passed || fieldSwitches_ >= kFieldSwitches) {
+        return false;
+    }
+    if (holds(view, command, written) || !holds(view, command, other)) {
+        fieldWrong_ = 0;
+        return false;
+    }
+    if (++fieldWrong_ < kFieldFrames) {
+        return false;
+    }
+    fieldWrong_ = 0;
+    ++fieldSwitches_;
+    physics_ = !physics_;
+    return true;
 }
 
 } // namespace evr::xr_math

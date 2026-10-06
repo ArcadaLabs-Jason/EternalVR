@@ -22,9 +22,9 @@ bool copiesDone(XrPresenter::Impl& p) {
     if (!waitFence(p.copyFence.Get(), p.copyFenceValue, p.copyEvent, 2000)) {
         return false;
     }
-    if (p.copyStalled) {
-        p.ring[p.stalledSlot].state.store(kSlotFree);
-        p.copyStalled = false;
+    if (p.heldCopy.stalled) {
+        p.ring[p.heldCopy.slot].state.store(kSlotFree);
+        p.heldCopy.stalled = false;
     }
     return true;
 }
@@ -50,6 +50,8 @@ void resetSessionState(XrPresenter::Impl& p) {
     p.sessionState = XR_SESSION_STATE_UNKNOWN;
     p.sessionRunning = false;
     p.sessionFocused.store(false, std::memory_order_relaxed);
+    p.clock.wasFocused = false;
+    p.clock.watch.reset();
     p.acquiredIndex = -1;
     p.acquiredWaited = false;
     p.hasImage = false;

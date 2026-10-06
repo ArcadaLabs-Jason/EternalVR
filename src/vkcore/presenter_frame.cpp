@@ -26,20 +26,32 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <utility>
 #include <vector>
 
 namespace evr::vkcore {
 
 void XrPresenter::Impl::updateImage() {
-    if (copyStalled) {
+    if (heldCopy.stalled) {
         if (copyFence->GetCompletedValue() < copyFenceValue) {
             ++xrRepeats;
+            // Held this long, the GPU itself is in trouble (a graphics card reset), not one slow frame.
+            if (!heldCopy.longLogged && qpcSeconds(qpcNow() - heldCopy.sinceQpc) >= 2.0) {
+                heldCopy.longLogged = true;
+                heldCopy.logged = true;
+                EVR_LOG(
+                    "d3d12: copy did not finish within 2 s; slot %u and the XR image are held until it does",
+                    heldCopy.slot);
+            }
             return;
         }
-        copyStalled = false;
-        EVR_LOG("d3d12: the held copy finished; copies resume");
-        completeCopy(stalledSlot, stalledValue, stalledView, stalledHasView);
+        heldCopy.stalled = false;
+        if (heldCopy.logged) {
+            EVR_LOG("d3d12: the held copy finished after %.0f ms; copies resume",
+                    qpcSeconds(qpcNow() - heldCopy.sinceQpc) * 1000.0);
+        }
+        completeCopy(heldCopy.slot, heldCopy.value, heldCopy.view, heldCopy.hasView);
         return;
     }
     const std::uint64_t packed = latest.load();
@@ -135,19 +147,30 @@ void XrPresenter::Impl::updateImage() {
     ID3D12CommandList* lists[] = {d3dList.Get()};
     d3dQueue->ExecuteCommandLists(1, lists);
     d3dQueue->Signal(copyFence.Get(), ++copyFenceValue);
+    // At most a couple of display periods, so the frame loop never waits on a busy GPU for long (public issue
+    // #19); past that the frame shows the last image and a later frame picks the copy up.
+    const std::uint32_t waitMs = pacing::copyWaitMs(displayPeriod.load());
     const LONGLONG waitStart = qpcNow();
-    const bool copied = waitFence(copyFence.Get(), copyFenceValue, copyEvent, 2000);
+    const bool copied = waitFence(copyFence.Get(), copyFenceValue, copyEvent, waitMs);
     copyWait.add(qpcSeconds(qpcNow() - waitStart) * 1000.0);
     if (!copied) {
         // The slot stays marked as being read, so the game never writes it while D3D12 might, and
         // nothing is recorded again (the allocator may still be executing) until the copy is done.
-        EVR_LOG("d3d12: copy did not finish within 2 s; slot %u and the XR image are held until it does",
-                slotIndex);
-        copyStalled = true;
-        stalledSlot = slotIndex;
-        stalledValue = value;
-        stalledView = slotView;
-        stalledHasView = slotHasView;
+        ++heldCopy.count;
+        heldCopy.logged = heldCopy.count <= 5 || heldCopy.count % 100 == 0;
+        heldCopy.longLogged = false;
+        if (heldCopy.logged) {
+            EVR_LOG(
+                "d3d12: copy did not finish within %u ms; slot %u and the XR image are held until it does "
+                "(%u so far)",
+                waitMs, slotIndex, heldCopy.count);
+        }
+        heldCopy.sinceQpc = waitStart;
+        heldCopy.stalled = true;
+        heldCopy.slot = slotIndex;
+        heldCopy.value = value;
+        heldCopy.view = slotView;
+        heldCopy.hasView = slotHasView;
         return;
     }
     completeCopy(slotIndex, value, slotView, slotHasView);
@@ -386,12 +409,46 @@ void XrPresenter::Impl::frame() {
         logFrame(state);
     }
     afterFrame(state);
+    watchFrameClock(state);
+}
+
+void XrPresenter::Impl::watchFrameClock(const XrFrameState& state) {
+    const auto stall =
+        clock.watch.onFrame(state.predictedDisplayTime, state.predictedDisplayPeriod, qpcSeconds(qpcNow()),
+                            gamePresents.load(std::memory_order_relaxed), state.shouldRender != XR_FALSE);
+    if (!stall || loss.lost) {
+        return;
+    }
+    char what[160];
+    if (stall->stuck) {
+        std::snprintf(what, sizeof(what), "the runtime's display time has not moved on for %d frames",
+                      pacing::FrameClockWatch::kStuckFrames);
+    } else {
+        std::snprintf(
+            what, sizeof(what), "the runtime gave %.1f frame(s)/s for %.0f s while the game presented %.1f/s",
+            stall->framesPerSecond, pacing::FrameClockWatch::kSlowSeconds, stall->presentsPerSecond);
+    }
+    if (clock.restarts >= ClockWatchState::kMaxRestarts) {
+        if (!clock.loggedKept) {
+            clock.loggedKept = true;
+            EVR_LOG("xr: %s; the session was started again %u times already, so it is left as it is", what,
+                    ClockWatchState::kMaxRestarts);
+        }
+        return;
+    }
+    // No call failed and the runtime does not end the session itself (public issue #19): the session is taken
+    // as lost, and the worker starts a new one as after a headset that went away (presenter_reconnect.cpp).
+    ++clock.restarts;
+    EVR_LOG("xr: %s; ending the session to start a new one (%u of %u)", what, clock.restarts,
+            ClockWatchState::kMaxRestarts);
+    loseOnRuntimeFailure(XR_ERROR_SESSION_LOST, "frame clock watch");
 }
 
 void XrPresenter::Impl::destroyXrObjects() {
     trackingReady.store(false);
     controllers::detach();
     disableKeepActive();
+    frame_pacing::setUnfocused(false);
     std::unique_lock spaceLock(spaceMutex); // no camera hook is locating the head past this point
     // xrEndSession is only valid in STOPPING; destroying the session is valid in any state.
     if (session && sessionRunning && sessionState == XR_SESSION_STATE_STOPPING) {

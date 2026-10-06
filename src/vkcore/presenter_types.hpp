@@ -9,6 +9,7 @@
 #include "common/xr_recovery.hpp"
 #include "features/input/cutscene_skip.hpp"
 #include "features/menu/enter_tick.hpp"
+#include "features/pacing/frame_clock_watch.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/glory_view.hpp"
@@ -132,6 +133,30 @@ struct ViewRecord {
     XrQuaternionf weaponAimTracked{0.0f, 0.0f, 0.0f, 1.0f};
     // How far along that ray the world is hit, in metres (reticle_depth.hpp); 0 when not known.
     float weaponAimHitMetres = 0.0f;
+};
+
+// A D3D12 copy that did not finish within the frame's wait (XR worker only): its slot and swapchain image
+// stay held until it does (presenter_frame.cpp).
+struct HeldCopy {
+    bool stalled = false;
+    std::uint32_t slot = 0;
+    std::uint64_t value = 0;
+    ViewRecord view;
+    bool hasView = false;
+    LONGLONG sinceQpc = 0;   // when the held copy was submitted
+    bool logged = false;     // the held copy's start or its 2 s mark is in the log (so is its end)
+    bool longLogged = false; // the held copy's 2 s mark is in the log
+    std::uint32_t count = 0; // copies not finished within the frame's wait, so far
+};
+
+// The runtime's frame clock (XR worker only; frame_clock_watch.hpp, public issue #19): a stall ends the
+// session to start a new one, at most kMaxRestarts times in a game.
+struct ClockWatchState {
+    static constexpr std::uint32_t kMaxRestarts = 3;
+    bool wasFocused = false; // FOCUSED since the session became READY
+    pacing::FrameClockWatch watch;
+    std::uint32_t restarts = 0;
+    bool loggedKept = false; // a stall past the limit is in the log
 };
 
 // Where a present's image goes in a ring slot (Route S rings hold two eye images side by side).

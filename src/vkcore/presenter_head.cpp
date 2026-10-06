@@ -522,6 +522,20 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
             {0.0f, xr_math::drivenBodyYaw(aimState, sample.command.yaw + current.yaw, current.yaw, rewrote),
              0.0f});
     }
+    // The view keeps following the other delta, not the one head aim writes: head aim moves there (public
+    // issue #22); this frame writes nothing.
+    const xr_math::IdAngles other =
+        aimField == PlayerAim::DeltaField::Physics ? sample.stateDelta : sample.delta;
+    if (!rewrote && aimCheck.watchField(sample.view, sample.command, current, other)) {
+        aimField = aimCheck.physics() ? PlayerAim::DeltaField::Physics : PlayerAim::DeltaField::State;
+        aimWritten = false;
+        EVR_LOG(
+            "aim: the view follows the %s deltaViewAngles, not the one head aim wrote: head aim writes that "
+            "one now (%d of %d)",
+            aimCheck.physics() ? "physics" : "state", aimCheck.fieldSwitches(),
+            xr_math::AimCheck::kFieldSwitches);
+        return std::nullopt;
+    }
     const xr_math::IdAngles head = *target;
     // The game's own angles are command + delta: after a cutscene the game rewrites the delta after it
     // built the frame's view angles from the injected one, and scripted views ignore the delta, so the view

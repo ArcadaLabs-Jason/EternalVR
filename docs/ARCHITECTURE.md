@@ -511,7 +511,13 @@ Rules:
   reset): the runtime would refuse every new session on it, so the worker stops trying and the status
   says so. `ETERNALVR_TEST_XR_LOSS=<seconds>` takes the running session as
   lost once, which exercises the whole path on the OpenXR Simulator (rig run rc1: back in 1.1 s,
-  head-tracked frames and controller input as before).
+  head-tracked frames and controller input as before). A runtime whose frame clock stops without failing
+  a call (public issue #19: SteamVR's predicted display time moving 1 ns per frame after a graphics card
+  reset behind its dashboard) takes the same path: the display time moving less than half a period per
+  frame for 60 frames, or under 10 frames a second for 5 s while shown and the game presents, at most
+  three times in a game (`features/pacing/frame_clock_watch.hpp`). The worker's wait for its D3D12 copy
+  lasts at most two display periods (8 to 50 ms); past it the frame shows the last image and a later
+  frame takes the held copy, so the frame loop never waits on the GPU for seconds.
 - **Why the plan said no dedicated XR thread.** R01 section 7 D3 proposed one. R02 section 9 and R11
   section 8.2 recommended starting with shape 1, since a separate XR worker thread risks Win32 message
   deadlocks (seen with the OpenXR Simulator's lifecycle thread). The shipped layer runs the frame loop on

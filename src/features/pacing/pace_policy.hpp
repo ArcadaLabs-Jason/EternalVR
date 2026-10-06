@@ -82,6 +82,28 @@ private:
     Counters counters_;
 };
 
+// While a runtime's menu or dashboard is over the game (the session VISIBLE, or SYNCHRONIZED once hidden,
+// after it had focus; public issue #19) the game gets no input, and keep-active stops it from pausing, so it
+// would render as fast as it can behind the menu. The cap holds it to one image per display period on its own
+// clock, pacing or not, so it holds whether or not the headset's frames come. Not fewer: a session can stay
+// VISIBLE while the game is what the player sees (the OpenXR simulator once its window is not in front).
+class UnfocusedCap {
+public:
+    static constexpr double kDefaultPeriodSeconds = 1.0 / 72.0; // while the runtime has given no period
+    static constexpr double kMinPeriodSeconds = 1.0 / 90.0;
+    static constexpr double kMaxPeriodSeconds = 1.0 / 30.0;
+    static constexpr double kPeriodsPerImage = 1.0;
+
+    // The time between images for the runtime's display period (not positive or not finite: none given), the
+    // period clamped to kMinPeriodSeconds..kMaxPeriodSeconds.
+    static double interval(double periodSeconds);
+    // The game handed an image over at `nowSeconds`: how long its render thread waits before going on.
+    double afterHandOver(double periodSeconds, double nowSeconds);
+
+private:
+    std::optional<double> release_; // when the game was last let go on
+};
+
 // Per headset frame: how many images the game handed over since the previous headset frame, and how late
 // the shown game frames were against the time their pose was predicted for.
 class Cadence {

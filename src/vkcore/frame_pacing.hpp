@@ -20,6 +20,9 @@
 //
 // Off (the default) nothing waits; the counters still run, so the 10 s `pace:` line shows the cadence the
 // headset got either way.
+//
+// Behind a runtime's menu (setUnfocused, pace_policy.hpp's UnfocusedCap) the same present hook holds the game
+// to one image per display period on its own clock, whether pacing is on or off.
 
 #include <cstdint>
 
@@ -41,8 +44,12 @@ void onHeadsetFrame(std::int64_t periodNs);
 void noteShown(std::uint64_t seq, std::int64_t lateNs);
 
 // The layer's present hook, after the present and outside every lock: waits for the headset's next frame
-// when this present handed an image over and pacing is on.
+// when this present handed an image over and pacing is on, and holds the game to the cap while unfocused.
 void afterPresent();
+
+// XR worker, on session state changes and when the session ends: whether a runtime's menu is over the game
+// (the session VISIBLE, or SYNCHRONIZED once hidden, after it had focus). Logged when it changes.
+void setUnfocused(bool unfocused);
 
 // XR worker, every 10 s with the rates line: the `pace:` line.
 void logSummary();

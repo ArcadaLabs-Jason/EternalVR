@@ -4,6 +4,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "vkcore/frame_pacing.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/status_file.hpp"
 #include "xr_math/cinema_quad.hpp"
@@ -33,6 +34,7 @@ void markLost(XrPresenter::Impl& p, xr_recovery::Loss kind, const char* what) {
     }
     p.trackingReady.store(false);
     disableKeepActive();
+    frame_pacing::setUnfocused(false);
     p.sessionRunning = false;
     p.loss.lost = true;
 }
@@ -63,6 +65,16 @@ void XrPresenter::Impl::pollEvents() {
             sessionState = changed.state;
             sessionFocused.store(sessionState == XR_SESSION_STATE_FOCUSED, std::memory_order_relaxed);
             EVR_LOG("xr: session state %d", static_cast<int>(sessionState));
+            if (sessionState == XR_SESSION_STATE_READY) {
+                clock.wasFocused = false;
+                clock.watch.reset();
+            } else if (sessionState == XR_SESSION_STATE_FOCUSED) {
+                clock.wasFocused = true;
+            }
+            // A runtime's menu or dashboard over the game, or the game hidden after it: keep-active keeps the
+            // game running, so it is held to the display rate meanwhile (public issue #19).
+            frame_pacing::setUnfocused(clock.wasFocused && (sessionState == XR_SESSION_STATE_VISIBLE ||
+                                                            sessionState == XR_SESSION_STATE_SYNCHRONIZED));
             if (sessionState == XR_SESSION_STATE_READY) {
                 XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
                 begin.primaryViewConfigurationType = viewConfig;
