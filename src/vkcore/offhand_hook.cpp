@@ -321,6 +321,9 @@ void releaseOnTrip(const std::byte* hands) {
     if (g_weaponArm) {
         weapon_arm::releaseOnTrip(hands);
     }
+    if (settings().armsHidden) {
+        hands_surfaces::releaseAfterTrip(arm::ArmSide::Right, hands); // hiding stops; logged, nothing written
+    }
     hands_surfaces::releaseAfterTrip(arm::ArmSide::Left, hands);
     if (g_tripReleased) {
         return;
@@ -344,6 +347,12 @@ void onLeftHandMod(const HookRegisters& regs) {
     }
     State& s = state();
     const input::ControllerSettings& cfg = settings();
+    if (cfg.armsHidden) {
+        // Every tick, whatever else runs below: the weapon's kit shows arms again on an equip, and fists,
+        // melee and glory kills show them too (hands_surfaces.hpp).
+        hands_surfaces::update(arm::ArmSide::Right, hands, false);
+        hands_surfaces::update(arm::ArmSide::Left, hands, false);
+    }
     if (!s.attached.load(std::memory_order_acquire)) {
         giveBackLeft(hands);
         if (g_weaponArm) {
@@ -479,11 +488,12 @@ bool installOffhandHook(bool& weaponArmInstalled) {
                                            ? game_arm::install(image, start, getJoints, setJointMod, wanted)
                                            : offhand_mods::ArmSet{};
     const bool offHandHooks = cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace;
-    if ((wanted.offHand && !ready.offHand) || (!offHandHooks && !ready.weapon)) {
+    if ((wanted.offHand && !ready.offHand) || (!offHandHooks && !ready.weapon && !cfg.armsHidden)) {
         return false;
     }
-    if (ready.offHand || ready.weapon) {
-        hands_surfaces::install(image);
+    if ((ready.offHand || ready.weapon || cfg.armsHidden) &&
+        !hands_surfaces::install(image, cfg.armsHidden) && cfg.armsHidden) {
+        EVR_LOG("%s: the arms' surfaces could not be reached (above); the arms stay shown", kTag);
     }
     std::string error;
     std::byte* site = const_cast<std::byte*>(start + kHookSite);

@@ -170,6 +170,8 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The comfort vignette while the stick moves or turns you; off by default.</summary>
         public VignetteMode Vignette { get; set; } = VignetteMode.Off;
         public Handedness Hand { get; set; } = Handedness.Right;
+        /// <summary>The first-person arms drawn (default) or hidden, the weapon alone (the layer's <c>ETERNALVR_ARMS</c>).</summary>
+        public bool ShowArms { get; set; } = true;
         public DossierPress Dossier { get; set; } = DossierPress.Hold;
         /// <summary>What points at the weapon wheel: the stick (default) or the weapon hand.</summary>
         public WheelSelect Wheel { get; set; } = WheelSelect.Stick;
@@ -228,7 +230,7 @@ namespace EternalVR.Launcher.Core.Settings
         {
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "melee_aim", "equipment_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
-            "turn_rate", "handedness", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
+            "turn_rate", "handedness", "show_arms", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
             "punch_speed", "hold_time",
@@ -330,6 +332,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("vignette", out var vg)) s.Vignette = Pick(vg, VignetteMode.Off, ("light", VignetteMode.Light), ("strong", VignetteMode.Strong));
             if (map.TryGetValue("glory_kills", out var gk)) s.GloryKills = ParseGloryKills(gk);
             if (map.TryGetValue("handedness", out var hd)) s.Hand = Pick(hd, Handedness.Right, ("left", Handedness.Left), ("left_mirror", Handedness.LeftMirrored));
+            if (map.TryGetValue("show_arms", out var sa)) s.ShowArms = !(sa == "0" || string.Equals(sa, "false", StringComparison.OrdinalIgnoreCase));
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
             s.ReadLocomotion(map);
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
@@ -415,6 +418,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("vignette = " + VignetteName(Vignette));
             sb.AppendLine("glory_kills = " + GloryKillName(GloryKills));
             sb.AppendLine("handedness = " + HandednessName(Hand));
+            sb.AppendLine("show_arms = " + (ShowArms ? "1" : "0"));
             WriteLocomotion(sb);
             sb.AppendLine("dossier = " + DossierName(Dossier));
             WriteMapSticks(sb);

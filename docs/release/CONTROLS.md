@@ -273,6 +273,7 @@ values are old.
 | Melee aim with | Same as Aim with, Head, Off hand: what aims melee, Blood Punch, glory kills and use (and a real punch). Only when the weapon hand aims | Same as Aim with |
 | Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch (and a grenade throw), which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
+| Show arms | On, Off: Off hides the Slayer's arms and leaves the weapon alone, for example with the weapon in the left hand, where the game still draws its right arm reaching across to the gun | On |
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |

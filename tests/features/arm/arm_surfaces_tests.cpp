@@ -151,3 +151,32 @@ TEST_CASE("the plan's table") {
     CHECK(planSurface(false, true, false).step == SurfaceStep::None);
     CHECK(planSurface(false, false, false).step == SurfaceStep::None);
 }
+
+TEST_CASE("with the arms hidden a visible surface is hidden every time it shows, and never shown") {
+    using evr::arm::planHiddenSurface;
+    bool visible = true; // the weapon's kit shows the arm (fists, melee)
+    bool ours = false;
+    int hides = 0;
+    const auto tick = [&] {
+        const SurfacePlan plan = planHiddenSurface(visible, ours);
+        if (plan.step == SurfaceStep::Hide) {
+            visible = false;
+            ++hides;
+        }
+        CHECK(plan.step != SurfaceStep::Show);
+        ours = plan.ours;
+    };
+    tick();
+    CHECK_FALSE(visible);
+    CHECK(ours);
+    tick(); // hidden: nothing more, still ours
+    CHECK(hides == 1);
+    CHECK(ours);
+    visible = true; // an equip applies the weapon's kit again
+    tick();
+    CHECK_FALSE(visible);
+    CHECK(hides == 2);
+    // A surface the kit already hides is not ours.
+    CHECK(planHiddenSurface(false, false).step == SurfaceStep::None);
+    CHECK_FALSE(planHiddenSurface(false, false).ours);
+}

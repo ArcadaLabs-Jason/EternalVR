@@ -78,6 +78,8 @@
 //                                               keep the game's pose (offhand_policy.hpp)
 //   ETERNALVR_WEAPON_ARM_TEST_SHOULDER  f,l,u   rig tests: the weapon arm's shoulder at this point (metres
 //                                               from the eyes, the head's yaw frame), not mirrored
+//   ETERNALVR_ARMS           shown / hidden      the first-person arms drawn (default) or hidden, the weapon
+//                                               alone (hands_surfaces.hpp)
 
 #include "features/input/action_aim.hpp"
 #include "features/input/aim_smoothing.hpp"
@@ -196,6 +198,8 @@ struct ControllerSettings {
     // Rig tests only (ETERNALVR_WEAPON_ARM_TEST_SHOULDER): the weapon arm's shoulder at this point, metres
     // from the eyes in the head's yaw frame (forward, left, up), whatever the hand and handedness.
     std::optional<game::WeaponOffset> weaponArmTestShoulder;
+    // Both first-person arms hidden, the weapon alone (ETERNALVR_ARMS=hidden).
+    bool armsHidden = false;
 };
 
 struct SettingsIssue {

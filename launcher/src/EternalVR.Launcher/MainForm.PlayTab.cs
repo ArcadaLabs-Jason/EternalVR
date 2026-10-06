@@ -38,6 +38,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox wheel = Choices(Setting.WeaponWheel);
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
+        private readonly CheckBox showArms = new CheckBox { AutoSize = true };
         private readonly ComboBox vibration = Choices(Setting.Vibration);
         private readonly ComboBox punchSpeed = Choices(Setting.PunchSpeed);
         private readonly ComboBox holdTime = Choices(Setting.HoldTime);
@@ -112,6 +113,7 @@ namespace EternalVR.Launcher
                 Row(Setting.WeaponHand, hand,
                     s => hand.SelectedIndex = (int)s.Hand,
                     s => s.Hand = (Handedness)hand.SelectedIndex),
+                Row(Setting.Arms, showArms, s => showArms.Checked = s.ShowArms, s => s.ShowArms = showArms.Checked),
                 Row(Setting.MoveToward, locomotion,
                     s => locomotion.SelectedIndex = (int)s.Locomotion,
                     s => s.Locomotion = (LocomotionMode)locomotion.SelectedIndex),

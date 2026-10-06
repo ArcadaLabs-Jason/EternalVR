@@ -218,6 +218,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_VIGNETTE", LauncherSettings.VignetteName(s.Vignette));
             Set("ETERNALVR_GLORY_KILLS", LauncherSettings.GloryKillName(s.GloryKills));
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
+            Set("ETERNALVR_ARMS", s.ShowArms ? "shown" : "hidden");
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
             Set("ETERNALVR_MAP_STICKS", LauncherSettings.MapSticksName(s.MapSticks));

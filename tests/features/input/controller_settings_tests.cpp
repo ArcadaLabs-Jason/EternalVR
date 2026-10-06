@@ -344,6 +344,17 @@ TEST_CASE("the weapon arm is posed by IK unless ETERNALVR_WEAPON_ARM says game")
     CHECK(std::string(evr::input::weaponArmModeName(WeaponArmMode::Game)) == "game");
 }
 
+TEST_CASE("the arms are shown unless ETERNALVR_ARMS says hidden") {
+    CHECK_FALSE(parse({}).settings.armsHidden);
+    CHECK(parse({{"ETERNALVR_ARMS", "hidden"}}).settings.armsHidden);
+    CHECK(parse({{"ETERNALVR_ARMS", " Hidden "}}).settings.armsHidden);
+    CHECK_FALSE(parse({{"ETERNALVR_ARMS", "shown"}}).settings.armsHidden);
+    const auto bad = parse({{"ETERNALVR_ARMS", "off"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_ARMS");
+    CHECK_FALSE(bad.settings.armsHidden);
+}
+
 TEST_CASE("the weapon arm's shoulder and elbow are the off hand's on the weapon hand's side") {
     using evr::input::kDefaultOffhandElbow;
     using evr::input::kDefaultOffhandShoulder;

@@ -73,6 +73,10 @@ SurfacePlan planSurface(bool posed, bool visible, bool ours) {
     return {SurfaceStep::None, false};
 }
 
+SurfacePlan planHiddenSurface(bool visible, bool ours) {
+    return visible ? SurfacePlan{SurfaceStep::Hide, true} : SurfacePlan{SurfaceStep::None, ours};
+}
+
 const char* surfaceStateName(SurfaceState state) {
     switch (state) {
     case SurfaceState::Off:
@@ -83,6 +87,8 @@ const char* surfaceStateName(SurfaceState state) {
         return "shown";
     case SurfaceState::Games:
         return "the game's";
+    case SurfaceState::Removed:
+        return "hidden (arms hidden)";
     }
     return "?";
 }

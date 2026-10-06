@@ -260,6 +260,8 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                      "expected forward,left,up (metres from the eyes); the shoulder stays the default");
         }
     }
+    static constexpr std::pair<const char*, bool> kArms[] = {{"shown", false}, {"hidden", true}};
+    r.choice("ETERNALVR_ARMS", kArms, s.armsHidden);
     if (const auto path = lookup("ETERNALVR_CONTROLLER_DATA"); path && !path->empty()) {
         s.controllerDataPath = *path;
     }

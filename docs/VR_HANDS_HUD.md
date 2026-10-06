@@ -392,6 +392,33 @@ ballista, BFG and unmaykr its left arm is shown while the layer poses it.
   layer's arm modifiers set back to no change; ...` and `... surface 1 hidden again as the weapon's mesh
   kit has it`.
 
+## Hidden arms (ETERNALVR_ARMS)
+
+`ETERNALVR_ARMS=hidden` (the launcher's "Show arms" off) hides both first-person arms and leaves the weapon
+alone. It is the fallback for the weapon in the left hand: the arms model is not mirrored, so the game's
+right arm keeps reaching across the view to the gun in the left hand (GitHub issue #23). Mirrored arms are
+the real fix and need an arm model of their own (the free-arm survey above).
+
+- **How.** The same surfaces as above (`arm_low_rt_base`; `arm_low_lf_base` with its two armour plates),
+  hidden with the game's own Hide on every hands tick, whatever the weapon's kit or the layer's posing: an
+  equip applies the weapon's kit again and fists, melee and glory kills show the arms, so a visible surface
+  is hidden again on the tick it shows. The weapon arm's IK and the free off hand still run; they draw
+  nothing. The hands hook is installed for this alone when neither of them is on.
+- **After a multiplayer guard trip** the layer stops hiding and writes nothing more. It does not show the
+  surfaces it hid: once a surface is hidden it cannot tell whether the current weapon's kit wants it hidden
+  too (most weapons hide the right arm), and showing it would bring back the game's pointing-back arm. The
+  weapon's next kit (an equip) or new hands (a map load, as a multiplayer map loads) show what the game
+  wants. Logged once per arm: `... the multiplayer guard tripped: right arm no longer hidden by the layer;
+  ...`.
+- **Not hidden.** Hidden arms need the viewmodel and hands hooks (motion controllers on, a known game
+  build); without them the start-up says `controllers: the arms stay shown (ETERNALVR_ARMS=hidden needs the
+  viewmodel and hands hooks)`, and if the arms' surfaces cannot be reached `offhand: the arms' surfaces could
+  not be reached (above); the arms stay shown`.
+- **Logs.** The start-up line ends `both arms hidden (ETERNALVR_ARMS=hidden)`; on each model `... surface N
+  of M on the hands model, found by name (...); hidden with the game's Hide (arms hidden)`, then once
+  `weapon arm: right arm surface 1 hidden (arms hidden)` and `offhand: arm: left arm surface ... hidden
+  (arms hidden)`. With `ETERNALVR_OFFHAND_TRACE=1` the pose line ends `hidden (arms hidden)`.
+
 ## Settings
 
 | Variable | Values (default) | Meaning |
@@ -418,6 +445,7 @@ ballista, BFG and unmaykr its left arm is shown while the layer poses it.
 | `ETERNALVR_OFFHAND_TRACE` | 0 / 1 (0) | Log the left-arm signals when they change, the poses once a second (the weapon arm's too) |
 | `ETERNALVR_WEAPON_ARM` | `ik` / `game` (`ik`) | Who poses the weapon arm's forearm, elbow and upper arm; the wrist and gun stay the game's |
 | `ETERNALVR_WEAPON_ARM_TEST_SHOULDER` | f,l,u m (unset) | Rig tests: the weapon arm's shoulder at this point from the eyes (head's yaw frame), not mirrored |
+| `ETERNALVR_ARMS` | `shown` / `hidden` (`shown`) | Both first-person arms drawn, or hidden with the weapon alone ("Hidden arms" above; the launcher's "Show arms") |
 
 **The weapon in the left hand** (`ETERNALVR_HANDEDNESS=left` or `left_mirror`). The off hand is then the
 right controller. The arms model is not mirrored (a reflected model would turn its triangles inside out),

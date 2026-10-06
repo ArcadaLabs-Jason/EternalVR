@@ -100,6 +100,9 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.WeaponHand] = new Text("Weapon hand",
                 "The hand that holds the gun. Left swaps the buttons between the hands; the second left option also swaps the sticks.",
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),
+            [Setting.Arms] = new Text("Show arms",
+                "Off hides the Slayer's arms and leaves the weapon alone. Useful with the weapon in the left hand, where the "
+                + "game still draws its right arm reaching across to the gun."),
             [Setting.MoveToward] = new Text("Move toward",
                 "What pushing the move stick forward moves you toward: where you look, where your left hand points, or "
                 + "where your right hand points, with either Weapon hand.",

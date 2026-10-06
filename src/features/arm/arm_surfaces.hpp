@@ -70,12 +70,20 @@ struct SurfacePlan {
 };
 SurfacePlan planSurface(bool posed, bool visible, bool ours);
 
+// With the arms hidden (ETERNALVR_ARMS=hidden), whatever the weapon's kit or the layer's posing: a visible
+// surface is hidden and is then ours; a hidden one is left as it is (ours stays what it was). There is no
+// give-back after a multiplayer guard trip: once a surface is hidden the layer cannot tell whether the
+// current weapon's kit wants it hidden too, so it stops hiding and leaves the next kit (an equip) or new
+// hands (a map load) to show what the game wants.
+SurfacePlan planHiddenSurface(bool visible, bool ours);
+
 // What the arm's surfaces look like after a tick, for the trace.
 enum class SurfaceState : std::uint8_t {
-    Off,    // not found on the model, or the code did not check out: the game's kit decides
-    Hidden, // the game's kit hides them and the layer is not posing the arm
-    Shown,  // the layer shows at least one of them
-    Games,  // all visible by the game's own kit
+    Off,     // not found on the model, or the code did not check out: the game's kit decides
+    Hidden,  // the game's kit hides them and the layer is not posing the arm
+    Shown,   // the layer shows at least one of them
+    Games,   // all visible by the game's own kit
+    Removed, // the layer hides them all (ETERNALVR_ARMS=hidden)
 };
 const char* surfaceStateName(SurfaceState state);
 

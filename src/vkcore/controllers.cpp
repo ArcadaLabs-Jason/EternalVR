@@ -70,12 +70,17 @@ void install() {
             s.belchAxisHook = installBelchAxisHook();
         }
         // The off hand on the game's left arm and the weapon arm's IK need the arms at the weapon hand
-        // (docs/VR_HANDS_HUD.md); without the viewmodel hook both arms stay the game's.
+        // (docs/VR_HANDS_HUD.md); without the viewmodel hook both arms stay the game's. Hidden arms use the
+        // same hook (its tick hides them).
         if (s.viewmodelHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace ||
-                                cfg.weaponArm == input::WeaponArmMode::Ik)) {
+                                cfg.weaponArm == input::WeaponArmMode::Ik || cfg.armsHidden)) {
             bool weaponArm = false;
             s.offhandHook = installOffhandHook(weaponArm);
             s.weaponArmHook = s.offhandHook && weaponArm;
+        }
+        if (cfg.armsHidden && !s.offhandHook) {
+            EVR_LOG("%s: the arms stay shown (ETERNALVR_ARMS=hidden needs the viewmodel and hands hooks)",
+                    kTag);
         }
     }
     EVR_LOG(

@@ -340,6 +340,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_BHAPTICS_INTENSITY` | the bHaptics effects' strength, `0` to `1` | `1` |
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
 | `ETERNALVR_WEAPON_ARM` | `ik`: the weapon arm's forearm, elbow and upper arm reach the gun from a shoulder fixed to the head, the gun and wrist where the game puts them; `game`: the game's pose, which points back out of view ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The weapon arm"). Most weapons tell the game not to draw the right arm at all (their mesh kit); with `ik` the layer draws it while it poses it and hides it again when the game takes the arm back ("The weapon's mesh kit"). Needs `ETERNALVR_VIEWMODEL=1`; works with either `ETERNALVR_OFFHAND` | `ik` |
+| `ETERNALVR_ARMS` | `shown`: the first-person arms drawn; `hidden`: both hidden, the weapon alone, whatever the weapon's mesh kit or the layer's posing ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hidden arms") | `shown` |
 | `ETERNALVR_BUTTON_PROMPTS` | `0`: the game's prompts keep naming keyboard keys (below) | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |

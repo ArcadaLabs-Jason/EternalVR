@@ -164,7 +164,9 @@ them is worse for you than described here.
 ## Controllers and aiming
 
 - **Weapon placement** in your hand is one estimate for all weapons; some guns may sit a little off.
-- **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand.
+- **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
+  weapon in your left hand the game still draws its right arm, reaching across to the gun. Turning off Show
+  arms (Play tab) hides both arms. Arms that mirror properly for the left hand are planned.
   `ETERNALVR_OFFHAND=free` lets the off arm reach for your off-hand controller instead. That is
   experimental: it has not been tried in a headset, in glory kills or across a level change, and the
   hand's angle and the shoulder are rough.

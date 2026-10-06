@@ -38,8 +38,10 @@
 
 namespace evr::vkcore::controllers::hands_surfaces {
 
-// Finds and checks the game's code (logged). False leaves every surface to the game's kits.
-bool install(const GameImage& image);
+// Finds and checks the game's code (logged). False leaves every surface to the game's kits. `armsHidden`
+// (ETERNALVR_ARMS=hidden): both arms' surfaces are hidden every tick instead, posed or not; after a
+// multiplayer guard trip hiding stops (no give-back: arm_surfaces.hpp, planHiddenSurface).
+bool install(const GameImage& image, bool armsHidden);
 
 // Every tick of the arm on `side`: `posed` when the layer posed that arm this tick. Shows its hidden
 // surfaces on the hands' model while posed, hides again the ones it showed otherwise.

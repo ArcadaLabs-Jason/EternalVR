@@ -94,6 +94,8 @@ SurfaceFn g_show = nullptr;
 SurfaceFn g_hide = nullptr;
 bool g_byName = false;
 bool g_byKit = false;
+// Both arms hidden (ETERNALVR_ARMS=hidden): every surface of theirs hidden each tick, whatever the posing.
+bool g_armsHidden = false;
 // Hook thread only: a call faulted, nothing is called again.
 bool g_faulted = false;
 
@@ -111,6 +113,7 @@ struct Side {
     bool loggedMissing = false;
     bool loggedShown = false;
     bool loggedRestored = false;
+    bool loggedHidden = false;
     bool tripDone = false;
 };
 Side g_sides[2];
@@ -295,10 +298,11 @@ void resolve(arm::ArmSide side, Side& s) {
         if (byKit.count > 0) {
             kitText = "the kit " + std::string(arm::armKitName(side)) + " lists " + indexList(byKit);
         }
-        EVR_LOG("%s: %s surface %s of %d on the hands model, found %s (%s); shown with the game's Show while "
-                "the layer poses the arm",
-                prefix(side), arm::armLabel(side), indexList(s).c_str(), total,
-                usedName ? "by name" : "by kit", kitText.c_str());
+        EVR_LOG("%s: %s surface %s of %d on the hands model, found %s (%s); %s", prefix(side),
+                arm::armLabel(side), indexList(s).c_str(), total, usedName ? "by name" : "by kit",
+                kitText.c_str(),
+                g_armsHidden ? "hidden with the game's Hide (arms hidden)"
+                             : "shown with the game's Show while the layer poses the arm");
     }
 }
 
@@ -321,8 +325,8 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
     }
     if (hands != s.hands || model != s.model) {
         // A new model (a map load, a respawn): what was shown on the old one is not touched again, and the
-        // new one is looked at when the arm is first posed on it.
-        if (afterTrip || !posed) {
+        // new one is looked at when the arm is first posed on it (with the arms hidden, at once).
+        if (afterTrip || !(posed || g_armsHidden)) {
             if (!afterTrip) {
                 s.hands = nullptr;
                 s.model = nullptr;
@@ -350,7 +354,8 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
             s.state = arm::SurfaceState::Off;
             return;
         }
-        const arm::SurfacePlan plan = arm::planSurface(posed, visible, surface.ours);
+        const arm::SurfacePlan plan = g_armsHidden ? arm::planHiddenSurface(visible, surface.ours)
+                                                   : arm::planSurface(posed, visible, surface.ours);
         if (plan.step == arm::SurfaceStep::Show) {
             if (!callSurfaceFn(g_show, model, surface.index)) {
                 turnOff(side, "Show");
@@ -369,6 +374,15 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
         anyOurs = anyOurs || surface.ours;
         allVisible = allVisible && visible;
     }
+    if (g_armsHidden) {
+        s.state = arm::SurfaceState::Removed;
+        if (restored && !s.loggedHidden) {
+            s.loggedHidden = true;
+            EVR_LOG("%s: %s surface %s hidden (arms hidden)", prefix(side), arm::armLabel(side),
+                    indexList(s).c_str());
+        }
+        return;
+    }
     s.state = anyOurs      ? arm::SurfaceState::Shown
               : allVisible ? arm::SurfaceState::Games
                            : arm::SurfaceState::Hidden;
@@ -386,7 +400,7 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
 
 } // namespace
 
-bool install(const GameImage& image) {
+bool install(const GameImage& image, bool armsHidden) {
     const std::byte* handsApply =
         findUnique(image, kTag, "idHands show/hide mesh apply", kHandsApplySignature);
     const std::byte* show = findUnique(image, kTag, "surface Show", kShowSignature);
@@ -423,13 +437,15 @@ bool install(const GameImage& image) {
     }
     g_show = reinterpret_cast<SurfaceFn>(const_cast<std::byte*>(show));
     g_hide = reinterpret_cast<SurfaceFn>(const_cast<std::byte*>(hide));
+    g_armsHidden = armsHidden;
     EVR_LOG("%s: idHands+0x%zX's model, kit group %d (the model's apply at RVA 0x%X); Show 0x%X, Hide 0x%X "
-            "(bits at +0x%zX); the arms found %s; a posed arm is shown",
+            "(bits at +0x%zX); the arms found %s; %s",
             kTag, kHandsRenderModel, kBodyKitGroup, image.rva(modelApply), image.rva(show), image.rva(hide),
             kModelVisible,
             g_byName && g_byKit ? "by name, else by kit"
             : g_byName          ? "by name (the kits do not check out)"
-                                : "by kit (FindSurfaces does not check out)");
+                                : "by kit (FindSurfaces does not check out)",
+            armsHidden ? "both arms hidden (ETERNALVR_ARMS=hidden)" : "a posed arm is shown");
     return true;
 }
 
@@ -443,6 +459,14 @@ void update(arm::ArmSide side, const std::byte* hands, bool posed) {
 bool releaseAfterTrip(arm::ArmSide side, const std::byte* hands) {
     Side& s = sideOf(side);
     if (s.tripDone) {
+        return true;
+    }
+    if (g_armsHidden) {
+        // No give-back (arm_surfaces.hpp, planHiddenSurface): hiding stops, nothing is written.
+        s.tripDone = true;
+        EVR_LOG("%s: the multiplayer guard tripped: %s no longer hidden by the layer; the weapon's next mesh "
+                "kit or new hands show it as the game wants",
+                prefix(side), arm::armLabel(side));
         return true;
     }
     bool anyOurs = false;
