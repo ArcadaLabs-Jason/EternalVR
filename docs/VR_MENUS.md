@@ -289,7 +289,28 @@ camera at the panel instead (`vkcore/menu_model_hook.hpp`, the maths in `feature
   asked the world for its render view, hands the function a copy of that view (the whole idRenderView,
   0x29950 bytes, kept per game thread) with the panel camera's place, direction and field of view; the game's
   own view is not changed. The second, after the function wrote the model's position, moves the position
-  and the scale onto the panel. The model's lights follow its joints, so they move with it.
+  and the scale onto the panel.
+- **Its lights.** The weapon in the weapon mod and customize screens is an entity lit by its own light rig
+  (three point lights for the combat shotgun), which the game places every tick at fixed offsets from the
+  model with a fixed size. Magnified about twelve times, the model outgrew its lights: it came out about a
+  third darker, and parts away from them black (the far end of a weapon seen end-on). Two more hooks around
+  the widget tick's light rig update (RVA 0x15A83FD and 0x15A840A) grow the rig with the model for that
+  update and put the offsets back after it (`features/menu/model_camera.hpp`, `rigFactor`, `grownRigLight`):
+  - each point light's offset, radius, centre and visible ranges grow by the rig's factor, which is the
+    model's, but no more than keeps every light within 5 units of the model (lights further out light nothing
+    of it, measured on the rig; the engine limit behind that is not known): about 4.3 for the shotgun;
+  - its intensity grows by that factor squared (the light falls off with the square of the distance); a rig
+    capped like that has its lights nearer the model, for its size, than on the flat screen, so they are
+    dimmed by the rig's factor over the model's, to no less than half (half for the shotgun);
+  - its shadows are off while it is grown (grown, the lights shadow the model onto itself, which on the flat
+    screen they never do);
+  - spot, parallel and area lights are left as they are (none in the rigs seen).
+
+  Measured on the rig (mean brightness of the shotgun in the customize screen, flat screen 84): 60 before,
+  98 grown, with no part left black. A rig grown before gets its lights back as the engine has them (from each
+  light's own values) once its model is not magnified. The log says `the first light rig grown with its model` with both factors and each
+  light's type, offset, radius and intensity. The Codex's models light themselves from their joints and are
+  not changed.
 
 `ETERNALVR_MENU_MODEL_PANEL=0` leaves the model where the game puts it (in front of the head);
 `ETERNALVR_MENU_MODEL_PANEL=near` places it from the panel camera but leaves it a few centimetres in front of

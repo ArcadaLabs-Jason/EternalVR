@@ -14,8 +14,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <memory>
@@ -55,6 +57,41 @@ constexpr unsigned char kPositionBytes[] = {0xF3, 0x0F, 0x58, 0xAB, 0x94, 0x00, 
                                             0x54, 0x24, 0x08, 0xF3, 0x0F, 0x10, 0xBB, 0xAC, 0x00, 0x00, 0x00};
 constexpr std::size_t kPlacedHook = 0x3B0;
 
+// The weapon's light rig. The weapon mod and customize screens show an entity (the widget's handle at
+// +0x190); the widget's tick (RVA 0x15A8130) calls UpdatePosition with its position at [rsp+0x20], sets the
+// entity's origin, axis and scale from it, then calls the entity's UpdateLightRig (vtbl+0x3F0, RVA 0xBE4930),
+// which puts each rig light at origin + offset * axis with the offset and the light's size unscaled. Before
+// that call: `mov rcx, [rbx+8]; mov rax, [rcx]; call [rax+0x3F0]` (rbx = the handle), then `mov rcx,
+// [rsp+0x68]; xor rcx, rsp`. Unique in build 25216728 at RVA 0x15A83FD.
+constexpr const char* kRigSignature = "48 8B 4B 08 48 8B 01 FF 90 F0 03 00 00 48 8B 4C 24 68 48 33 CC";
+constexpr std::size_t kRigDoneHook = 0xD; // mov rcx, [rsp+0x68], also where the tick's early exits jump
+constexpr std::uintptr_t kTickPositionFromRsp = 0x20;
+// The entity's rig: entries at [+0x3F8], count [+0x400], 0x50 bytes each: a handle {id, cached id, idLight*}
+// at +0 and the light's offset from the origin (3 floats) at +0x44.
+constexpr std::size_t kRigEntries = 0x3F8;
+constexpr std::size_t kRigCount = 0x400;
+constexpr std::size_t kRigStride = 0x50;
+constexpr std::size_t kRigOffset = 0x44;
+// idLight fields and the render light's (idRenderLight = 0x18 bytes + renderLight_t) they are copied to at
+// spawn (RVA 0xCAF6D0, 0xCB051D): type 0xB88 -> 0x74, intensity (colorScale) 0xBA8 -> 0x70, radius 0xBAC ->
+// 0xA8 and centre 0xBB8 -> 0xB4 (3 floats each), maxVisibleRange 0xCDC -> 0x104, fadeVisibilityOver 0xCE0 ->
+// 0x108, maxShadowVisibleRange 0xCE4 -> 0x10C; the render light at 0xD18.
+constexpr std::size_t kLightType = 0xB88;
+constexpr std::size_t kLightIntensity = 0xBA8;
+constexpr std::size_t kLightRadius = 0xBAC;
+constexpr std::size_t kLightCenter = 0xBB8;
+constexpr std::size_t kLightRanges = 0xCDC;      // 3 floats: visible, fade over, shadow
+constexpr std::size_t kLightCastShadows = 0xBCC; // bit 0, copied to the render light's castShadows
+constexpr std::size_t kLightRender = 0xD18;
+constexpr std::size_t kRenderIntensity = 0x70;
+constexpr std::size_t kRenderRadius = 0xA8;
+constexpr std::size_t kRenderCenter = 0xB4;
+constexpr std::size_t kRenderRanges = 0x104;
+// The render light's first flag byte: stationary 0x01, castShadows 0x02, ... (renderLight_t's bit fields).
+constexpr std::size_t kRenderFlags = 0x88;
+constexpr unsigned char kCastShadows = 0x02;
+constexpr int kMaxRigLights = 16;
+
 // The idRenderView RenderViewForIndex returns: operator new(0x29950) in the world constructor (RVA
 // 0x18E29F8).
 constexpr std::size_t kViewSize = render_view_object::kSize;
@@ -83,8 +120,23 @@ struct ThreadState {
     std::unique_ptr<std::byte[]> view;
     bool pending = false;
     menu::ModelCamera camera;
+    // The last model put on the panel: its position (the tick's [rsp+0x20]) and factor, for the light rig.
+    std::uintptr_t placedAt = 0;
+    float placedFactor = 1.0f;
+    // The rig offsets grown for this thread's UpdateLightRig call, put back after it.
+    struct SavedOffset {
+        std::byte* at;
+        float offset[3];
+    };
+    SavedOffset saved[kMaxRigLights] = {};
+    int savedCount = 0;
 };
 thread_local ThreadState t_state;
+
+// The entity whose light rig was last grown (its tick may run on any game thread), and whether the first
+// grown rig was logged.
+std::atomic<std::uintptr_t> g_grownEntity{0};
+std::atomic<bool> g_loggedRig{false};
 
 double nowSeconds() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -134,6 +186,7 @@ void writeCamera(std::byte* view, const menu::ModelCamera& c) {
 void onRenderView(HookRegisters& regs) {
     ThreadState& t = t_state;
     t.pending = false;
+    t.placedAt = 0;
     if (regs.rax == 0 || !mp_guard::allowsGameTouch()) {
         return;
     }
@@ -202,7 +255,181 @@ void onModelPlaced(HookRegisters& regs) {
     const float scaled[3] = {on->scale.x, on->scale.y, on->scale.z};
     if (guardedCopy(positionAt, placed, sizeof(placed)) && guardedCopy(scaleAt, scaled, sizeof(scaled))) {
         logFirst(t.camera, placed, on->factor);
+        t.placedAt = regs.r12;
+        t.placedFactor = on->factor;
     }
+}
+
+// The light of a rig entry, when its handle is resolved (id == cached id), as the game reads it.
+std::byte* rigLight(const std::byte* entry) {
+    std::int32_t ids[2] = {};
+    std::byte* light = nullptr;
+    if (!guardedCopy(ids, entry, sizeof(ids)) || ids[0] != ids[1] ||
+        !guardedCopy(&light, entry + 8, sizeof(light))) {
+        return nullptr;
+    }
+    return light;
+}
+
+// The offsets grown for this thread's UpdateLightRig call go back.
+void restoreOffsets(ThreadState& t) {
+    for (int i = 0; i < t.savedCount; ++i) {
+        guardedCopy(t.saved[i].at, t.saved[i].offset, sizeof(t.saved[i].offset));
+    }
+    t.savedCount = 0;
+}
+
+// Before the entity's UpdateLightRig: when this tick's UpdatePosition put the model on the panel, the rig
+// grows with it (menu::rigFactor): each point light's offset (for this call), radius, centre and visible
+// ranges by the rig's factor, its intensity by that squared (menu::rigIntensityTrim), and its shadows go off
+// (grown, the lights shadow the model onto itself, which on the flat screen they never do). A rig grown
+// before and not magnified now gets its lights back as the engine has them, from each idLight.
+void onLightRig(const HookRegisters& regs) {
+    ThreadState& t = t_state;
+    // A call that never reached the hook after it (an error unwound it) gives its offsets back first, so they
+    // never grow twice.
+    restoreOffsets(t);
+    const bool placed = t.placedAt != 0 && t.placedAt == regs.rsp + kTickPositionFromRsp;
+    const float modelFactor = placed ? t.placedFactor : 1.0f;
+    t.placedAt = 0;
+    std::uintptr_t entity = 0;
+    if (!guardedCopy(&entity, reinterpret_cast<const void*>(regs.rbx + 8), sizeof(entity)) || entity == 0) {
+        return;
+    }
+    if (!placed && entity != g_grownEntity.load()) {
+        return;
+    }
+    if (!mp_guard::allowsGameTouch()) {
+        return;
+    }
+    const auto* base = reinterpret_cast<const std::byte*>(entity);
+    std::byte* entries = nullptr;
+    std::int32_t rigCount = 0;
+    if (!guardedCopy(&entries, base + kRigEntries, sizeof(entries)) ||
+        !guardedCopy(&rigCount, base + kRigCount, sizeof(rigCount)) || entries == nullptr || rigCount <= 0) {
+        g_grownEntity.store(0);
+        return;
+    }
+    const std::int32_t count = rigCount > kMaxRigLights ? kMaxRigLights : rigCount;
+    float offsets[kMaxRigLights][3] = {};
+    float farthest = 0.0f;
+    for (std::int32_t i = 0; i < count; ++i) {
+        float* o = offsets[i];
+        if (guardedCopy(o, entries + static_cast<std::size_t>(i) * kRigStride + kRigOffset,
+                        sizeof(offsets[i]))) {
+            const float length = std::sqrt(o[0] * o[0] + o[1] * o[1] + o[2] * o[2]);
+            farthest = std::isfinite(length) && length > farthest ? length : farthest;
+        }
+    }
+    const float factor = menu::rigFactor(modelFactor, farthest);
+    const bool grow = factor != 1.0f;
+    const float trim = grow ? menu::rigIntensityTrim(modelFactor, factor) : 1.0f;
+    const bool describe = grow && !g_loggedRig.load();
+    char lights[512] = "";
+    std::size_t used = 0;
+    for (std::int32_t i = 0; i < count; ++i) {
+        std::byte* entry = entries + static_cast<std::size_t>(i) * kRigStride;
+        // The light first: an entry whose light is not resolved yet (the game resolves it in the call) or not
+        // a point light is left whole as it is, offset included.
+        std::byte* light = rigLight(entry);
+        std::int32_t type = 0;
+        float radius[3] = {};
+        float center[3] = {};
+        float ranges[3] = {};
+        unsigned char shadowSource = 0;
+        menu::RigLight rig;
+        std::byte* render = nullptr;
+        if (light == nullptr || !guardedCopy(&type, light + kLightType, sizeof(type)) ||
+            !guardedCopy(&rig.intensity, light + kLightIntensity, sizeof(rig.intensity)) ||
+            !guardedCopy(radius, light + kLightRadius, sizeof(radius)) ||
+            !guardedCopy(center, light + kLightCenter, sizeof(center)) ||
+            !guardedCopy(ranges, light + kLightRanges, sizeof(ranges)) ||
+            !guardedCopy(&shadowSource, light + kLightCastShadows, sizeof(shadowSource)) ||
+            !guardedCopy(&render, light + kLightRender, sizeof(render)) || render == nullptr) {
+            continue;
+        }
+        rig.type = type;
+        rig.radius = {radius[0], radius[1], radius[2]};
+        rig.center = {center[0], center[1], center[2]};
+        rig.visibleRange = ranges[0];
+        rig.fadeOver = ranges[1];
+        rig.shadowRange = ranges[2];
+        const std::optional<menu::RigLight> grown = menu::grownRigLight(rig, factor, trim);
+        if (describe && used < sizeof(lights) - 1) {
+            const int n =
+                std::snprintf(lights + used, sizeof(lights) - used,
+                              "; type %d offset (%.3f %.3f %.3f) radius (%.2f %.2f %.2f) intensity %.2f%s",
+                              type, offsets[i][0], offsets[i][1], offsets[i][2], radius[0], radius[1],
+                              radius[2], rig.intensity, grown ? "" : " (left as it is)");
+            used = n > 0 ? used + static_cast<std::size_t>(n) : used;
+        }
+        if (!grown) {
+            continue;
+        }
+        if (grow) {
+            const float* o = offsets[i];
+            const float scaled[3] = {o[0] * factor, o[1] * factor, o[2] * factor};
+            ThreadState::SavedOffset& s = t.saved[t.savedCount];
+            s.at = entry + kRigOffset;
+            std::memcpy(s.offset, o, sizeof(s.offset));
+            if (guardedCopy(entry + kRigOffset, scaled, sizeof(scaled))) {
+                ++t.savedCount;
+            }
+        }
+        const float r[3] = {grown->radius.x, grown->radius.y, grown->radius.z};
+        const float c[3] = {grown->center.x, grown->center.y, grown->center.z};
+        const float g[3] = {grown->visibleRange, grown->fadeOver, grown->shadowRange};
+        guardedCopy(render + kRenderIntensity, &grown->intensity, sizeof(grown->intensity));
+        guardedCopy(render + kRenderRadius, r, sizeof(r));
+        guardedCopy(render + kRenderCenter, c, sizeof(c));
+        guardedCopy(render + kRenderRanges, g, sizeof(g));
+        // castShadows: off while grown, else the idLight's own, as the engine copies it (RVA 0xCAFD10).
+        unsigned char flags = 0;
+        if (guardedCopy(&flags, render + kRenderFlags, sizeof(flags))) {
+            const unsigned char cast = grow ? 0 : static_cast<unsigned char>((shadowSource & 1) << 1);
+            flags = static_cast<unsigned char>((flags & ~kCastShadows) | cast);
+            guardedCopy(render + kRenderFlags, &flags, sizeof(flags));
+        }
+    }
+    g_grownEntity.store(grow ? entity : 0);
+    if (describe && !g_loggedRig.exchange(true)) {
+        EVR_LOG(
+            "%s: the first light rig grown with its model: model x%.2f, rig x%.2f (lights kept within %.1f "
+            "units), intensity x%.2f, shadows off; entity %p, %d light(s)%s%s",
+            kTag, modelFactor, factor, menu::kRigLightReach, factor * factor * trim,
+            reinterpret_cast<void*>(entity), rigCount, rigCount > count ? " (only the first 16 grown)" : "",
+            lights);
+    }
+}
+
+// After UpdateLightRig (and where the tick's early exits land, with nothing saved): the offsets go back.
+void onLightRigDone(const HookRegisters&) {
+    restoreOffsets(t_state);
+}
+
+// The light rig hooks, after the placement hooks: without them the model is still on the panel, only lit as
+// before.
+void installRigHooks(const GameImage& image) {
+    const std::byte* site = findUnique(image, kTag, "the widget tick's UpdateLightRig call", kRigSignature);
+    if (!site) {
+        EVR_LOG("%s: the weapon's light rig is not grown with the model", kTag);
+        return;
+    }
+    std::string error;
+    std::byte* before = const_cast<std::byte*>(site);
+    std::byte* after = const_cast<std::byte*>(site + kRigDoneHook);
+    if (!installMidHook(after, &onLightRigDone, error)) {
+        EVR_LOG("%s: hook at RVA 0x%X failed: %s; the weapon's light rig is not grown with the model", kTag,
+                image.rva(after), error.c_str());
+        return;
+    }
+    if (!installMidHook(before, &onLightRig, error)) {
+        EVR_LOG("%s: hook at RVA 0x%X failed: %s; the weapon's light rig is not grown with the model", kTag,
+                image.rva(before), error.c_str());
+        return;
+    }
+    EVR_LOG("%s: light rig hooks at RVA 0x%X and 0x%X: the weapon's lights grow with the model on the panel",
+            kTag, image.rva(before), image.rva(after));
 }
 
 bool installOnce() {
@@ -248,6 +475,9 @@ bool installOnce() {
             "over a head-tracked frame, a menu's 3D model is placed from a camera at the panel%s",
             kTag, image.rva(viewAt), image.rva(placedAt),
             g_mode == Mode::Near ? " and left near it (ETERNALVR_MENU_MODEL_PANEL=near)" : " and put on it");
+    if (g_mode == Mode::Panel) {
+        installRigHooks(image);
+    }
     return true;
 }
 

@@ -82,4 +82,44 @@ inline constexpr float kMinModelFactor = 0.01f;
 inline constexpr float kMaxModelFactor = 1000.0f;
 std::optional<ModelOnPanel> modelOnPanel(const ModelCamera& camera, Vec3 position, Vec3 scale);
 
+// A light of a menu model's light rig, as the engine's renderLight_t has it (game units): its type (0 point,
+// 1 spot, 2 parallel, 3 area), radius and centre, intensity (colorScale), and the distances from the view it
+// is culled at (maxVisibleRange), fades over (fadeVisibilityOver) and casts shadows to
+// (maxShadowVisibleRange); 0 there is no limit.
+struct RigLight {
+    int type = 0;
+    Vec3 radius;
+    Vec3 center;
+    float intensity = 1.0f;
+    float visibleRange = 0.0f;
+    float fadeOver = 0.0f;
+    float shadowRange = 0.0f;
+};
+inline constexpr int kPointLight = 0;
+inline constexpr int kSpotLight = 1;
+// The engine gives a light of this type with a radius of all zeros its default radius (RVA 0xCAFBB9).
+inline constexpr int kDefaultRadiusType = 4;
+inline constexpr float kDefaultRadius = 6.0f;
+// The light for its rig grown by `factor` (see rigFactor): every distance times `factor`, the intensity times
+// factor squared (the light falls off with the square of the distance, and the rig's offsets grow by `factor`
+// too) and `intensityTrim`. Point lights only (type 0, and the engine's type 4): nullopt for the others
+// (their frustums are left as they are), anything not finite, a factor outside
+// kMinModelFactor..kMaxModelFactor or a trim not above 0.
+std::optional<RigLight> grownRigLight(const RigLight& light, float factor, float intensityTrim = 1.0f);
+
+// How far the rig grows for a model magnified by `modelFactor`: as far as the model, but no light further
+// from the model than kRigLightReach (measured on the rig 2026-10-07: rig lights 7.9 and 14.6 units from the
+// magnified weapon lit nothing of it, one 4.6 units away did; the engine limit behind it is not known). Never
+// below 1; 1 for a rig whose size is not known. `farthestOffset` is the rig's largest light offset from the
+// model, game units.
+inline constexpr float kRigLightReach = 5.0f;
+float rigFactor(float modelFactor, float farthestOffset);
+// A rig that grows less than its model (rigFactor capped it) has its lights closer to the model, for its
+// size, than on the flat screen, so they light it brighter; they are dimmed by rigFactor / modelFactor, but
+// no more than to kRigIntensityTrim (measured on the rig with the combat shotgun, rig x4.28 for model x12.46:
+// mean brightness 98 against the flat screen's 84; 120 untrimmed, 60 with the rig not grown). 1 for a rig
+// that grows with its model.
+inline constexpr float kRigIntensityTrim = 0.5f;
+float rigIntensityTrim(float modelFactor, float rigFactor);
+
 } // namespace evr::menu

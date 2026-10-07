@@ -11,10 +11,14 @@
 using evr::Pose;
 using evr::Quat;
 using evr::Vec3;
+using evr::menu::grownRigLight;
 using evr::menu::ModelCamera;
 using evr::menu::modelOnPanel;
 using evr::menu::panelCamera;
 using evr::menu::PanelImage;
+using evr::menu::rigFactor;
+using evr::menu::rigIntensityTrim;
+using evr::menu::RigLight;
 using evr::menu::WorldHead;
 using evr::menu::worldPoint;
 
@@ -221,4 +225,128 @@ TEST_CASE("nothing is placed from a bad panel, field of view, head or model") {
     CHECK_FALSE(modelOnPanel(*camera, camera->origin + camera->forward * 1e-5f, one)); // factor too large
     CHECK_FALSE(modelOnPanel(*camera, camera->origin + camera->forward * 0.1f, {std::nanf(""), 1.0f, 1.0f}));
     CHECK(modelOnPanel(*camera, camera->origin + camera->forward * 2.0f, one)); // beyond the panel: drawn in
+}
+
+TEST_CASE("a magnified model's light rig grows with it") {
+    RigLight light;
+    light.radius = {0.5f, 0.5f, 0.25f};
+    light.center = {0.1f, 0.0f, -0.2f};
+    light.intensity = 1.5f;
+    light.visibleRange = 6.0f;
+    light.fadeOver = 1.0f;
+    light.shadowRange = 4.0f;
+    const auto grown = grownRigLight(light, 12.0f);
+    REQUIRE(grown);
+    CHECK(grown->type == 0);
+    CHECK(grown->radius.x == doctest::Approx(6.0f));
+    CHECK(grown->radius.y == doctest::Approx(6.0f));
+    CHECK(grown->radius.z == doctest::Approx(3.0f));
+    CHECK(grown->center.x == doctest::Approx(1.2f));
+    CHECK(grown->center.y == doctest::Approx(0.0f));
+    CHECK(grown->center.z == doctest::Approx(-2.4f));
+    CHECK(grown->intensity == doctest::Approx(216.0f)); // 1.5 x 12 x 12
+    CHECK(grown->visibleRange == doctest::Approx(72.0f));
+    CHECK(grown->fadeOver == doctest::Approx(12.0f));
+    CHECK(grown->shadowRange == doctest::Approx(48.0f));
+
+    // No limit stays no limit.
+    RigLight unlimited;
+    unlimited.radius = {1.0f, 1.0f, 1.0f};
+    const auto open = grownRigLight(unlimited, 12.0f);
+    REQUIRE(open);
+    CHECK(open->visibleRange == 0.0f);
+    CHECK(open->shadowRange == 0.0f);
+
+    // A radius of all zeros: the engine's default for its type 4, kept as it is for the others.
+    RigLight unset;
+    unset.type = evr::menu::kDefaultRadiusType;
+    const auto byDefault = grownRigLight(unset, 2.0f);
+    REQUIRE(byDefault);
+    CHECK(byDefault->radius.x == doctest::Approx(12.0f));
+    CHECK(byDefault->radius.z == doctest::Approx(12.0f));
+    unset.type = evr::menu::kPointLight;
+    const auto point = grownRigLight(unset, 2.0f);
+    REQUIRE(point);
+    CHECK(point->radius.x == 0.0f);
+    // The engine's type 4 default comes back at factor 1.
+    unset.type = evr::menu::kDefaultRadiusType;
+    const auto atOne = grownRigLight(unset, 1.0f);
+    REQUIRE(atOne);
+    CHECK(atOne->radius.y == doctest::Approx(6.0f));
+    CHECK(atOne->fadeOver == 0.0f);
+
+    // Factor 1 gives the light back as the engine has it.
+    const auto same = grownRigLight(light, 1.0f);
+    REQUIRE(same);
+    CHECK(same->radius.z == doctest::Approx(0.25f));
+    CHECK(same->intensity == doctest::Approx(1.5f));
+    CHECK(same->visibleRange == doctest::Approx(6.0f));
+
+    // The trim scales the intensity only.
+    const auto trimmed = grownRigLight(light, 4.0f, 0.5f);
+    REQUIRE(trimmed);
+    CHECK(trimmed->intensity == doctest::Approx(12.0f)); // 1.5 x 4 x 4 x 0.5
+    CHECK(trimmed->radius.x == doctest::Approx(2.0f));
+    CHECK_FALSE(grownRigLight(light, 4.0f, 0.0f));
+    CHECK_FALSE(grownRigLight(light, 4.0f, std::nanf("")));
+}
+
+TEST_CASE("the rig grows with the model but keeps its lights within reach") {
+    // The rig measured on the rig: farthest light 1.168 from the weapon, the weapon magnified 12.46 times.
+    CHECK(rigFactor(12.46f, 1.168f) == doctest::Approx(evr::menu::kRigLightReach / 1.168f));
+    // A small rig grows with the model.
+    CHECK(rigFactor(3.0f, 0.5f) == doctest::Approx(3.0f));
+    // Never shrinks the rig, never grows it for a model that is not magnified.
+    CHECK(rigFactor(12.0f, 50.0f) == doctest::Approx(1.0f));
+    CHECK(rigFactor(1.0f, 0.5f) == doctest::Approx(1.0f));
+    CHECK(rigFactor(0.5f, 0.5f) == doctest::Approx(1.0f));
+    // No offsets: the model's factor.
+    CHECK(rigFactor(12.0f, 0.0f) == doctest::Approx(12.0f));
+    CHECK(rigFactor(std::nanf(""), 1.0f) == doctest::Approx(1.0f));
+    // A rig whose size is not known does not grow.
+    CHECK(rigFactor(12.0f, std::nanf("")) == doctest::Approx(1.0f));
+    CHECK(rigFactor(12.0f, INFINITY) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("a capped rig is dimmed, one that grows with its model is not") {
+    // The shotgun: rig x4.28 for model x12.46, dimmed to the floor.
+    CHECK(rigIntensityTrim(12.46f, 4.28f) == doctest::Approx(evr::menu::kRigIntensityTrim));
+    // Capped a little: dimmed by the ratio.
+    CHECK(rigIntensityTrim(10.0f, 8.0f) == doctest::Approx(0.8f));
+    // Not capped, not magnified, or barely: no trim, and no jump just above 1.
+    CHECK(rigIntensityTrim(12.0f, 12.0f) == doctest::Approx(1.0f));
+    CHECK(rigIntensityTrim(1.0f, 1.0f) == doctest::Approx(1.0f));
+    CHECK(rigIntensityTrim(1.01f, 1.01f) == doctest::Approx(1.0f));
+    CHECK(rigIntensityTrim(std::nanf(""), 2.0f) == doctest::Approx(1.0f));
+    CHECK(rigIntensityTrim(12.0f, std::nanf("")) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("spot, parallel and area lights, bad values and bad factors are left alone") {
+    RigLight light;
+    light.radius = {1.0f, 1.0f, 1.0f};
+    CHECK(grownRigLight(light, 12.0f));
+    RigLight spot = light;
+    spot.type = evr::menu::kSpotLight;
+    CHECK_FALSE(grownRigLight(spot, 12.0f));
+    RigLight parallel = light;
+    parallel.type = 2;
+    CHECK_FALSE(grownRigLight(parallel, 12.0f));
+    RigLight area = light;
+    area.type = 3;
+    CHECK_FALSE(grownRigLight(area, 12.0f));
+    RigLight bad = light;
+    bad.radius.x = std::nanf("");
+    CHECK_FALSE(grownRigLight(bad, 12.0f));
+    bad = light;
+    bad.center.y = INFINITY;
+    CHECK_FALSE(grownRigLight(bad, 12.0f));
+    bad = light;
+    bad.intensity = std::nanf("");
+    CHECK_FALSE(grownRigLight(bad, 12.0f));
+    bad = light;
+    bad.visibleRange = INFINITY;
+    CHECK_FALSE(grownRigLight(bad, 12.0f));
+    CHECK_FALSE(grownRigLight(light, 0.0f));
+    CHECK_FALSE(grownRigLight(light, 5000.0f));
+    CHECK_FALSE(grownRigLight(light, std::nanf("")));
 }

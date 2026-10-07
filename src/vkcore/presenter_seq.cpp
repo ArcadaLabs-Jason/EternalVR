@@ -8,11 +8,13 @@
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/dlss_menu_hooks.hpp"
 #include "vkcore/exposure_hooks.hpp"
+#include "vkcore/flare_views.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/seq_prev.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/taa_ngx.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -138,6 +140,7 @@ void XrPresenter::Impl::startSequential() {
     }
     // Eye R takes eye L's exposure whatever the TAA mode: the hook needs only the eye tags.
     installExposureHook(settings.stereo.seqView.exposureOnce);
+    installFlareViewHooks(); // lens flares at each eye's own position (flare_views.hpp)
     if (taaRequested()) {
         installTaaHooks(); // a missing piece fails closed on the first stereo tick
     }
@@ -297,6 +300,11 @@ void XrPresenter::Impl::onSeqEyeLatched(std::byte* renderView, int eyeIndex) {
                 ++weaponRetargets;
             }
         }
+    }
+    if (!viewSlotsActive()) {
+        // Lens flares: the engine built their quads from the head-centred world-views latch; again from this
+        // eye's (flare_views.hpp). Route S only.
+        rebuildFlaresForEye(renderView);
     }
 }
 

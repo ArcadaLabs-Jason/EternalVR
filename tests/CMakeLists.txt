@@ -105,6 +105,11 @@ evr_add_test(evr_pacing_tests
         features/pacing/slot_choice_tests.cpp
     DEPENDS evr_pacing)
 
+evr_add_test(evr_flares_tests
+    SOURCES
+        features/flares/flare_book_tests.cpp
+    DEPENDS evr_flares)
+
 evr_add_test(evr_foveation_tests
     SOURCES
         features/foveation/attachment_images_tests.cpp

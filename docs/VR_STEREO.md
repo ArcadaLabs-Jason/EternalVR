@@ -86,6 +86,21 @@ the desktop display from pacing it is in Desktop window, below. The ring keeps o
 command buffer per slot half: eye R's copy into a slot is recorded while eye L's may still be pending. A pair
 whose game frame record is gone is not shown (the headset repeats the last pair).
 
+**Lens flares.** A lens flare (idRenderModelFlare) builds its quads on the CPU in clip space: its update (RVA
+0x1936650) projects the flare with the render view's view and projection matrices and writes the quads into
+the transparency-quad ring, once per render. Its only caller, the flare job of the world update (RVA
+0x18E1670), runs before the screen-views pass, so the matrices were the world-views latch of the game's
+head-centred view and both eyes drew every flare at the head's position: a floor flare 28 px apart between
+the eyes where the scenery next to it is 251 px apart, so it looked farther than infinity. The layer records
+each flare the job updated (its vertex block, quad count and the intensity the prepare left; hooks at RVA
+0x18E1704 and 0x18E1716, `src/vkcore/flare_views.cpp`) and after each eye's latch runs the update again with
+the eye's render view, over the same block, with the intensity put back and with the two occlusion query
+slots the engine's call took in that render (hook at RVA 0x1936731), so nothing is allocated and the queries
+the render issues still go with the vertices. Mono renders keep the engine's quads; Parallel Eye Rendering is
+left alone (both of its views draw one set of quads). The log has the hooks at start-up (`seq-flares:`), the
+first eye with its own flares and every 10 s the flares rebuilt and anything left as the engine wrote it.
+`ETERNALVR_FLARES_PER_EYE=0` turns it off.
+
 ## Stack
 
 Eye R's whole chain runs nested inside eye L's frame-end job on the same job thread's stack (the engine
@@ -626,6 +641,7 @@ axis).
 | `ETERNALVR_DLSS_DLL`, `_PRESET`, `_ROUTE` | unset | a newer `nvngx_dlss.dll` of the player's own (DLSS 310: the transformer model) and its render preset, for both eyes' features; loaded from its own folder, never copied into the game's (`docs/rig-findings/dlss-dll.md`) |
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
 | `ETERNALVR_STEREO_VIS_GATE` | 1 | models one eye sees are drawn: the first-visible gate takes either eye's last render for models; particles, flares, beams and ribbons keep the engine's test (`docs/rig-findings/stereo-visibility-counter.md`); 0: the engine's own test, so a pickup in one eye's outer strip only is not drawn |
+| `ETERNALVR_FLARES_PER_EYE` | 1 | lens flares built again from each eye's own view after its latch (How Route S works, Lens flares); 0: the engine's quads from the head-centred view, at the same place in both eyes (farther than infinity) |
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
 | `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced`, `aggressive` or `maximum` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within the region of 30, 24, 18 or 12 degrees around head-forward in each eye, half rate within the region of 16 degrees more (12 for `maximum`, so quarter rate from the region of 24 degrees), quarter rate outside (`src/vkcore/vrs_nv.cpp`). A region has the area of the cone of its angle on the eye's tangent plane and reaches the same fraction of the way from head-forward to every edge of the eye's image, so the reduced-rate band takes the same share of the way to the edge on the nasal side and the top as on the temporal side and the bottom (`src/features/foveation/foveation_region.cpp`); in a symmetric square FOV it is the cone's circle. Each render pass gets the pattern of the eye of the backend frame it is recorded for, and only where that frame is sure: the backend counter at the pass equals the counter the render-view job read for its render. Every other pass stays full rate. What its command buffer's recording since its `vkBeginCommandBuffer` or its parity (once two recordings in a row agreed two frames apart) would guess is counted, with the recordings a later agreement contradicts and the parity breaks, but not used: those guesses can name the other eye's frame (`src/stereo_seq/pass_frames.hpp`, `src/vkcore/vrs_command_buffers.cpp`; `vrs: render pass frames: ...` every 200,000 passes; on the rig every pass in the map agreed). A pass's eye so comes only from a frame its two counters agree on; with `ETERNALVR_TEST_VRS_PARITY=1` (a rig test) the guesses are used too. NVIDIA RTX only: other cards log it as unsupported and render normally. Off with Parallel Eye Rendering (one line; "Parallel Eye Rendering", Known limits). Only render targets in the eye's space are foveated: the eye image and any copy of it scaled by one factor down to 1/8 (DLSS's smaller render size, the half size buffers; `src/features/foveation/eye_targets.cpp`); shadow maps and other targets stay full rate. Mono frames (the cinema screen, menus) stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`); without the UI layer they are foveated like the eye image |
 | `ETERNALVR_TEST_DLSS_TWIN_FAIL` | unset | test knob: a count from 1 to 100; eye R's first tries at its own DLSS feature fail without a create (result 0xBAD00000), to exercise the fallback to TAA, the tries after it and the menu's try (`docs/rig-findings/stereo-temporal.md`, Fail closed) |

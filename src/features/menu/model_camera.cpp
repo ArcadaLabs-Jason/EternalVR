@@ -93,4 +93,49 @@ std::optional<ModelOnPanel> modelOnPanel(const ModelCamera& camera, Vec3 positio
     return ModelOnPanel{camera.origin + fromCamera * factor, scale * factor, factor};
 }
 
+std::optional<RigLight> grownRigLight(const RigLight& light, float factor, float intensityTrim) {
+    if ((light.type != kPointLight && light.type != kDefaultRadiusType) || !finite(light.radius) ||
+        !finite(light.center) || !std::isfinite(light.intensity) || !std::isfinite(light.visibleRange) ||
+        !std::isfinite(light.fadeOver) || !std::isfinite(light.shadowRange) ||
+        !finiteInRange(factor, kMinModelFactor, kMaxModelFactor) || !std::isfinite(intensityTrim) ||
+        !(intensityTrim > 0.0f)) {
+        return std::nullopt;
+    }
+    RigLight grown = light;
+    if (light.type == kDefaultRadiusType && light.radius.x == 0.0f && light.radius.y == 0.0f &&
+        light.radius.z == 0.0f) {
+        grown.radius = {kDefaultRadius, kDefaultRadius, kDefaultRadius};
+    }
+    grown.radius = grown.radius * factor;
+    grown.center = light.center * factor;
+    grown.intensity = light.intensity * factor * factor * intensityTrim;
+    grown.visibleRange = light.visibleRange * factor;
+    grown.fadeOver = light.fadeOver * factor;
+    grown.shadowRange = light.shadowRange * factor;
+    return grown;
+}
+
+float rigFactor(float modelFactor, float farthestOffset) {
+    if (!std::isfinite(modelFactor) || !(modelFactor > 1.0f)) {
+        return 1.0f;
+    }
+    if (!std::isfinite(farthestOffset)) {
+        return 1.0f;
+    }
+    if (!(farthestOffset > 0.0f)) {
+        return modelFactor;
+    }
+    const float reach = kRigLightReach / farthestOffset;
+    return reach < 1.0f ? 1.0f : (reach < modelFactor ? reach : modelFactor);
+}
+
+float rigIntensityTrim(float modelFactor, float rigFactor) {
+    if (!std::isfinite(modelFactor) || !std::isfinite(rigFactor) || !(modelFactor > 0.0f) ||
+        !(rigFactor < modelFactor)) {
+        return 1.0f;
+    }
+    const float trim = rigFactor / modelFactor;
+    return trim < kRigIntensityTrim ? kRigIntensityTrim : trim;
+}
+
 } // namespace evr::menu
