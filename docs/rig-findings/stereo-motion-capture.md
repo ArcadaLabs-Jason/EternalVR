@@ -44,9 +44,9 @@ both eyes render one view and should match exactly.
 
 - The object-motion and moved-flag fixes are both needed and, together, make eye R's motion vectors match
   eye L's for skinned meshes such as the gun.
-- The swaying banner at the top of the start view (Havok cloth) has motion in eye L and exactly zero in eye
-  R in every run. Exactly zero is what a mesh drawn as still gives: none of the existing fixes covers it,
-  and it does not use compute skinning.
+- The swaying banner at the top of the start view has motion in eye L and exactly zero in eye R in every
+  run. Exactly zero is what a mesh drawn as still gives: none of the existing fixes covers it, and it does
+  not use compute skinning. It is an Alembic geometry cache, not Havok cloth (`stereo-geomcache-motion.md`).
 - The remaining 12 to 40% of eye L's moving pixels that are zero in eye R are the next thing to explain;
   the banner is the largest part of them in this view.
 
@@ -57,7 +57,8 @@ What the banner is not (same-view probes):
   because its velocity is zero.
 - Not the object ring (`stereo-object-motion.md`): a probe that makes eye L read its own render as the
   previous one (branch `banner-probe`) stops eye L's gun completely, and eye L's banner keeps moving. Its
-  motion comes from another source that steps per render, still to be found.
+  motion comes from another source that steps per render: the geometry cache's output slots
+  (`stereo-geomcache-motion.md`).
 
 Skinned meshes step a ring of vertex buffers in `idSkinningBuffers` (idJointAnimator + 0x20: `index`
 +0x2D8, `indexCommitted` +0x2DC, `indexCommittedPrevious` +0x2E0; the step at 0x19D1540 copies committed

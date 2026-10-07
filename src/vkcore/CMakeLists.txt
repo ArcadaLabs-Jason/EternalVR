@@ -82,6 +82,7 @@ add_library(evr_layer SHARED
     log.cpp
     mirror_place.cpp
     keep_prev_hooks.cpp
+    geomcache_prev_hooks.cpp
     motion_capture.cpp
     moved_flag_hooks.cpp
     mp_guard.cpp
@@ -123,6 +124,7 @@ add_library(evr_layer SHARED
     save_hook.cpp
     scatter_hooks.cpp
     seq_alternate.cpp
+    seq_eye_fixes.cpp
     seq_hooks.cpp
     seq_render_counter.cpp
     seq_locate.cpp

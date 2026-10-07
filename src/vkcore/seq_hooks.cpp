@@ -3,24 +3,19 @@
 #include "stereo_seq/drain_backoff.hpp"
 #include "stereo_seq/render_idle.hpp"
 #include "stereo_seq/stack_budget.hpp"
-#include "vkcore/bin_tile_hooks.hpp"
 #include "vkcore/cpu_timing.hpp"
-#include "vkcore/keep_prev_hooks.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
-#include "vkcore/moved_flag_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
-#include "vkcore/object_prev_hooks.hpp"
 #include "vkcore/seq_alternate.hpp"
+#include "vkcore/seq_eye_fixes.hpp"
 #include "vkcore/seq_locate.hpp"
 #include "vkcore/seq_prev.hpp"
 #include "vkcore/seq_stack.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/test_cpu_load.hpp"
-#include "vkcore/vis_gate_hooks.hpp"
 #include "vkcore/window_timing.hpp"
-#include "vkcore/world_gui_hooks.hpp"
 
 #include <windows.h>
 
@@ -445,12 +440,7 @@ bool installSeqHooks(const SeqHookSettings& settings) {
                                             : stereo_seq::AlternateMode::On);
         g_installed = true;
         g_active.store(true, std::memory_order_release);
-        installBinTileHook(); // lights and decals binned in each eye's own frustum; a missing piece only logs
-        installObjectPrevHooks(); // the object ring, a slot per render: eye R's objects keep their motion
-        installVisGateHooks();    // models one eye sees are drawn (the first-visible gate)
-        installWorldGuiHook();    // world GUIs (holograms, screens) in eye R too
-        installMovedFlagHooks();  // moving objects keep their motion vectors in eye R
-        installKeepPrevHooks();   // and their previous model matrix from eye L
+        installSeqEyeFixes(); // the per-eye fixes (object ring, visibility, world GUIs, previous frames)
         EVR_LOG("seq: frame-end job wrapped; per-eye previous matrices %s%s",
                 settings.prevMatrices ? "on" : "off",
                 g_adaptive    ? "; adaptive eyes (eye R nested while the processor keeps up)"

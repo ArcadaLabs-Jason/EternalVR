@@ -256,6 +256,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/eye_pairing_tests.cpp
         stereo_seq/eye_tags_tests.cpp
         stereo_seq/eye_view_plan_tests.cpp
+        stereo_seq/geomcache_prev_tests.cpp
         stereo_seq/keep_prev_tests.cpp
         stereo_seq/moved_flag_tests.cpp
         stereo_seq/ngx_eye_tests.cpp

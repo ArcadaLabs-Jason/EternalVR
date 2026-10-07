@@ -170,5 +170,6 @@ own tag is the one that presents with backend frame counter + 1, on every render
 Still open:
 
 - The damned souls reaching out of the walls can still differ slightly between the eyes.
-- The swaying banner at the top of the `e1m2_battle` start view (Havok cloth) has exactly zero motion in
-  eye R. It is not the object ring: see `stereo-motion-capture.md`.
+- The swaying banner at the top of the `e1m2_battle` start view has exactly zero motion in eye R. It is not
+  the object ring (`stereo-motion-capture.md`) but a geometry cache, which steps its own two output slots on
+  every commit: `stereo-geomcache-motion.md`.

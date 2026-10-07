@@ -14,6 +14,7 @@ evr_add_module(evr_stereo_seq
         eye_pairing.cpp
         eye_tags.cpp
         eye_view_plan.cpp
+        geomcache_prev.cpp
         keep_prev.cpp
         moved_flag.cpp
         ngx_eye.cpp

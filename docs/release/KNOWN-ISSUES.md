@@ -93,9 +93,11 @@ them is worse for you than described here.
   occlusion's temporal filter, water reflections and refraction) are turned off because the two eyes
   would share their history. The picture looks slightly different from the flat game.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
-  for each eye, and moving demons look the same in both eyes. A few animated shapes, such as the damned
-  souls reaching out of the walls, can still look slightly different between the eyes. The launcher's
-  "Anti-aliasing" setting can switch to Off (sharp, with some shimmer on edges) or DLSS.
+  for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
+  banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before
+  0.1.31; they now get their motion in both eyes, which has not been checked in a headset yet. If one eye
+  still looks different on a moving shape, please report where. The launcher's "Anti-aliasing" setting can
+  switch to Off (sharp, with some shimmer on edges) or DLSS.
 - **Pickup camera animations do not play.** At a pickup that moves the camera (the chainsaw, for
   example) the view holds still until the tutorial popup instead of playing the animation. The game
   carries on normally afterwards.
