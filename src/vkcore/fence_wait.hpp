@@ -18,4 +18,9 @@ namespace evr::vkcore {
 // cannot be registered.
 bool waitFence(ID3D12Fence* fence, std::uint64_t value, HANDLE event, DWORD timeoutMs);
 
+// The same, waiting at most `seconds` measured on a high-resolution timer (one per thread), so a short wait
+// ends on time and not at the next tick of the system timer (about 15.6 ms when no one raised its rate). Less
+// than a second; anything else (or no timer) does not wait.
+bool waitFenceFor(ID3D12Fence* fence, std::uint64_t value, HANDLE event, double seconds);
+
 } // namespace evr::vkcore

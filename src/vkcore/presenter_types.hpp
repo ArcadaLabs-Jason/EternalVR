@@ -36,7 +36,10 @@ namespace evr::vkcore {
 
 using Microsoft::WRL::ComPtr;
 
-inline constexpr std::uint32_t kRingSize = 3;
+// Four: one being shown, the newest published, the newest finished one not shown yet, and one to write. With
+// three, a game running a frame or more ahead of its GPU wrote over finished frames before the headset showed
+// them (measured: ~2/3 of the game's frames shown at 56-70 fps).
+inline constexpr std::uint32_t kRingSize = 4;
 // `latest` packs the slot index into its low two bits.
 static_assert(kRingSize <= 4);
 inline constexpr float kScreenWidthMetres = 2.4f;
@@ -191,7 +194,8 @@ struct RingSlot {
     VkDeviceMemory memory = VK_NULL_HANDLE;
     ComPtr<ID3D12Resource> resource;
     std::atomic<int> state{kSlotFree};
-    std::atomic<std::uint64_t> value{0}; // timeline value whose signal completes the last write
+    std::atomic<std::uint64_t> value{0};     // timeline value whose signal completes the last write
+    std::atomic<std::uint64_t> published{0}; // the value it held when last published (a present), 0: never
     // The view the image in this slot was rendered with (valid when hasView); written by the present
     // hook while the slot is kSlotWriting, read by the worker while it is kSlotReading.
     ViewRecord view;

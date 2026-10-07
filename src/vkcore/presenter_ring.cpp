@@ -1,6 +1,7 @@
 // The shared ring: D3D12 images and fence created with NT handles, imported into the game's Vulkan
 // device (T-040, T-080), and rebuilt when the game's swapchain changes shape.
 
+#include "features/pacing/slot_choice.hpp"
 #include "vkcore/fence_wait.hpp"
 #include "vkcore/presenter_impl.hpp"
 
@@ -307,6 +308,9 @@ void XrPresenter::Impl::recreateRing() {
     hasImage = false;
     shownHasView = false;
     lastConsumed = latest.load() >> 2; // the old ring's contents are gone
+    for (RingSlot& slot : ring) {
+        slot.published.store(0);
+    }
     const bool made = createXrSwapchain();
     if (oldSwapchain) {
         xr.xrDestroySwapchain(oldSwapchain); // valid with an image still acquired
@@ -324,14 +328,33 @@ void XrPresenter::Impl::recreateRing() {
     requestRebuildIfStale();
 }
 
+// The slot of the newest image published before `below` that finished rendering (`completed`), is newer than
+// the last one shown (`shown`) and was not written again since, packed as `latest`; 0: none.
+static std::uint64_t newestFinished(const std::array<RingSlot, kRingSize>& ring,
+                                    std::uint64_t shown,
+                                    std::uint64_t below,
+                                    std::uint64_t completed) {
+    std::uint64_t best = 0;
+    for (std::uint32_t i = 0; i < kRingSize; ++i) {
+        const std::uint64_t value = ring[i].published.load();
+        if (value > shown && value <= completed && value < below && value > (best >> 2) &&
+            ring[i].value.load() == value) {
+            best = (value << 2) | i;
+        }
+    }
+    return best;
+}
+
 std::uint32_t XrPresenter::Impl::acquireFreeSlot(const FamilyCommands& fc, std::uint64_t completed) {
     // With two eyes per slot, never the newest published slot: the worker may not have taken it yet, and a
-    // left half written into it would mix with the pair it holds.
+    // left half written into it would mix with the pair it holds. Never the newest finished one the worker
+    // has not shown either: it falls back to that one while the newest is still rendering.
     const auto newest = static_cast<std::uint32_t>(latest.load() & 3u);
     const bool skipNewest = ringEyes == 2 && (latest.load() >> 2) != 0;
+    const std::uint64_t finished = newestFinished(ring, lastConsumed.load(), latest.load() >> 2, completed);
     for (std::uint32_t n = 0; n < kRingSize; ++n) {
         const std::uint32_t candidate = (nextSlot + n) % kRingSize;
-        if (skipNewest && candidate == newest) {
+        if ((skipNewest && candidate == newest) || (finished != 0 && candidate == (finished & 3u))) {
             continue;
         }
         RingSlot& slot = ring[candidate];
@@ -353,10 +376,78 @@ std::uint32_t XrPresenter::Impl::acquireFreeSlot(const FamilyCommands& fc, std::
 void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value) {
     RingSlot& slot = ring[slotIndex];
     slot.value.store(value);
+    slot.published.store(value);
     slot.state.store(kSlotFree);
     latest.store((value << 2) | slotIndex);
     ++framesCopied;
     frame_pacing::onHandOver(); // the present hook waits for the headset's next frame under ETERNALVR_PACE
+}
+
+// The worker's slot for this frame, marked as being read (the choice: features/pacing/slot_choice.hpp). A
+// slot is published at present time, before the game's GPU work for it is done, so the newest is waited for
+// on the shared fence while the headset's frame (begun at `frameStart`, when xrWaitFrame returned) has time;
+// then the newest finished one not shown yet (newestFinished).
+bool XrPresenter::Impl::takeRenderedSlot(std::uint32_t& slotIndex,
+                                         std::uint64_t& value,
+                                         LONGLONG frameStart) {
+    const auto take = [&](std::uint64_t packed) {
+        const auto index = static_cast<std::uint32_t>(packed & 3u);
+        int expected = kSlotFree;
+        if (!ring[index].state.compare_exchange_strong(expected, kSlotReading)) {
+            return false; // being written right now
+        }
+        if (ring[index].value.load() != packed >> 2) {
+            ring[index].state.store(kSlotFree); // written again since it was published
+            return false;
+        }
+        slotIndex = index;
+        value = packed >> 2;
+        return true;
+    };
+    double waitSeconds = pacing::newestWaitSeconds(static_cast<double>(displayPeriod.load()) / 1e9,
+                                                   qpcSeconds(qpcNow() - frameStart));
+    int lostRaces = 0;
+    for (;;) {
+        const std::uint64_t completed = sharedFence->GetCompletedValue();
+        const std::uint64_t newest = latest.load();
+        const std::uint64_t before = newestFinished(ring, lastConsumed.load(), newest >> 2, completed);
+        pacing::SlotOffer offer;
+        offer.newestUnshown = (newest >> 2) > lastConsumed.load();
+        offer.newestRendered = (newest >> 2) <= completed;
+        offer.previousReady = before != 0;
+        switch (pacing::chooseSlot(offer, waitSeconds)) {
+        case pacing::SlotChoice::TakeNewest:
+            if (take(newest)) {
+                ++xrNewestTaken;
+                return true;
+            }
+            return offer.previousReady && take(before);
+        case pacing::SlotChoice::WaitNewest: {
+            ++xrNewestWaits;
+            const LONGLONG waitStart = qpcNow();
+            const bool rendered = waitFenceFor(sharedFence.Get(), newest >> 2, copyEvent, waitSeconds);
+            newestWait.add(qpcSeconds(qpcNow() - waitStart) * 1000.0);
+            if (rendered && take(newest)) { // even if the game published again meanwhile
+                ++xrNewestTaken;
+                return true;
+            }
+            waitSeconds = 0.0; // one wait per frame
+            continue;
+        }
+        case pacing::SlotChoice::TakePrevious:
+            if (take(before)) {
+                return true;
+            }
+            waitSeconds = 0.0; // the game wrote it meanwhile: choose again (a newer one finished, or repeat)
+            if (++lostRaces > 2) {
+                return false;
+            }
+            continue;
+        case pacing::SlotChoice::Repeat:
+            return false;
+        }
+        return false;
+    }
 }
 
 void XrPresenter::Impl::setRingExtent(VkExtent2D game) {

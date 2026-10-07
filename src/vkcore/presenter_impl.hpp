@@ -113,7 +113,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint32_t ringEyes = 1; // 2 with Route S active; set by the worker before the first ring
     std::atomic<bool> ringReady{false};
     std::atomic<bool> consumerAlive{false};
-    std::atomic<std::uint64_t> latest{0}; // (timeline value << 2) | slot of the newest written slot
+    std::atomic<std::uint64_t> latest{0}; // (timeline value << 2) | slot of the newest published image
 
     // Worker
     std::thread worker;
@@ -178,11 +178,12 @@ struct XrPresenter::Impl final : ViewHookSink,
     CinemaView cinemaView; // cutscenes at a flat display's shape (camera hook and worker)
     XrPosef quadPose{{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -kScreenDistanceMetres}};
     XrExtent2Df quadSize{kScreenWidthMetres, kScreenWidthMetres * 9.0f / 16.0f};
-    std::uint64_t lastConsumed = 0;
+    std::atomic<std::uint64_t> lastConsumed{0}; // the worker's; the present hook keeps the newest after it
     std::uint64_t xrFrames = 0;
     std::uint64_t xrCopies = 0;
     std::uint64_t xrRepeats = 0;
-    WaitStats copyWait; // the XR worker's waits for its D3D12 copy, incl. its GPU wait for the game's write
+    std::uint64_t xrBusyRepeats = 0, xrNewestWaits = 0, xrNewestTaken = 0; // no image, waits, newest
+    WaitStats copyWait, newestWait; // the worker's waits: its D3D12 copy, the newest image's frame
     std::uint64_t xrProjectionFrames = 0;
     std::uint64_t xrQuadFrames = 0;
     ViewRecord shownView; // the view of the image in the XR swapchain
@@ -533,6 +534,7 @@ struct XrPresenter::Impl final : ViewHookSink,
                              VkBuffer captureBuffer);
     // Under `mutex`: hands a written slot to the worker.
     void publishSlot(std::uint32_t slotIndex, std::uint64_t value);
+    bool takeRenderedSlot(std::uint32_t& slotIndex, std::uint64_t& value, LONGLONG frameStart);
     void logCopyStats(const SwapchainState& sc, std::uint32_t family);
     bool importRing(const std::array<HANDLE, kRingSize>& imageHandles, HANDLE fenceHandle);
     void shutdown();
@@ -575,7 +577,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint32_t endFrameFailures = 0;
     void placeQuad(XrTime time);
     void updateTargetFov(XrTime time);
-    void updateImage();
+    void updateImage(LONGLONG frameStart);
     void completeCopy(std::uint32_t slotIndex, std::uint64_t value, const ViewRecord& view, bool hasView);
     // Worker (presenter_frame_log.cpp): the frame table, and the shown view's lateness for the display lead.
     void openFrameLog();

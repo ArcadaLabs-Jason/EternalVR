@@ -2,7 +2,7 @@
 
 // The OpenXR presenter: the game's presented frame in the headset.
 //
-// Data path (ARCHITECTURE section 6, T-040, T-080, T-081): a 3-slot ring of images created on our own
+// Data path (ARCHITECTURE section 6, T-040, T-080, T-081): a 4-slot ring of images created on our own
 // D3D12 device (the OpenXR runtime's adapter) and imported into the game's Vulkan device, plus a
 // shared D3D12 fence imported as a Vulkan timeline semaphore. The present hook copies the presented
 // swapchain image into a free slot on the game's queue and signals the timeline; the XR worker waits

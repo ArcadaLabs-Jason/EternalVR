@@ -81,14 +81,18 @@ void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
         return;
     }
     lastXrStatsTicks = GetTickCount64();
-    EVR_LOG("xr: %llu frame(s), %llu new image(s), %llu repeat(s); %llu head-tracked, %llu on the "
-            "screen; pose age average %.1f ms, max %.1f ms; display period %.2f ms, pose lead %.1f ms",
+    EVR_LOG("xr: %llu frame(s), %llu new image(s), %llu repeat(s) (%llu with no finished image to "
+            "take); %llu head-tracked, %llu on the screen; pose age average %.1f ms, max %.1f ms; display "
+            "period %.2f ms, pose lead %.1f ms; %llu newest image(s), %llu wait(s) for one",
             static_cast<unsigned long long>(xrFrames), static_cast<unsigned long long>(xrCopies),
-            static_cast<unsigned long long>(xrRepeats), static_cast<unsigned long long>(xrProjectionFrames),
+            static_cast<unsigned long long>(xrRepeats + xrBusyRepeats),
+            static_cast<unsigned long long>(xrBusyRepeats),
+            static_cast<unsigned long long>(xrProjectionFrames),
             static_cast<unsigned long long>(xrQuadFrames),
             poseAgeCount ? poseAgeSum / static_cast<double>(poseAgeCount) : 0.0, poseAgeMax,
             static_cast<double>(state.predictedDisplayPeriod) / 1e6,
-            static_cast<double>(displayLead.leadNs()) / 1e6);
+            static_cast<double>(displayLead.leadNs()) / 1e6, static_cast<unsigned long long>(xrNewestTaken),
+            static_cast<unsigned long long>(xrNewestWaits));
     poseAgeSum = 0.0;
     poseAgeMax = 0.0;
     poseAgeCount = 0;
@@ -115,12 +119,15 @@ void XrPresenter::Impl::logRates() {
         };
         EVR_LOG(
             "rates: game %.1f present(s)/s, %.1f tick(s)/s, %.1f stereo pair(s)/s shown; XR %.1f frame(s)/s, "
-            "%.1f new image(s)/s; copy wait %.2f ms average, %.2f ms longest",
+            "%.1f new image(s)/s; copy wait %.2f ms average, %.2f ms longest; newest image wait %.2f ms "
+            "average, "
+            "%.2f ms longest",
             rate(presents, lastRates.presents), rate(ticks, lastRates.ticks), rate(pairs, lastRates.pairs),
             rate(xrFrames, lastRates.xrFrames), rate(xrCopies, lastRates.xrCopies), copyWait.averageMs(),
-            copyWait.maxMs);
+            copyWait.maxMs, newestWait.averageMs(), newestWait.maxMs);
     }
     copyWait = {};
+    newestWait = {};
     lastRates = {presents, ticks, pairs, xrFrames, xrCopies, now};
     checkGamePresents(*this);   // a line once the game stops presenting (presenter_result.hpp)
     frame_pacing::logSummary(); // the headset's cadence, and ETERNALVR_PACE's waits

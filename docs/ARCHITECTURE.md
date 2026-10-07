@@ -368,8 +368,8 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       contents; on NVIDIA the release is what resolves compression metadata. On the D3D12 side the
       resource starts in `COMMON`, is transitioned to `COPY_SOURCE` for the copy and back to `COMMON`
       before "slot read" is signalled.
-    - **Ring and fences.** The shared images form a 3-slot ring; each slot holds every image of one
-      frame. Vulkan signals "slot written" on the shared timeline after its copies, and D3D12 waits for
+    - **Ring and fences.** The shared images form a 4-slot ring (one shown, the newest, the newest
+      finished one not shown yet, one to write); each slot holds every image of one frame. Vulkan signals "slot written" on the shared timeline after its copies, and D3D12 waits for
       it on its own queue. Slots change hands through CPU atomics (`RingSlot::state`: free, writing,
       reading; presenter_ring.cpp): the present hook takes a free slot or skips the copies for that frame
       and counts the drop, so DOOM's queue never waits on the D3D12 side; the XR worker marks the slot

@@ -446,12 +446,25 @@ after the engine was changed (above): not on; both eyes show the same image (vie
 ## Frame pacing (`ETERNALVR_PACE=headset`, the launcher's default)
 
 Without it the game renders stereo pairs as fast as it can and each XR frame shows the newest finished pair
-(`updateImage` takes the ring's newest slot). A game faster than the headset (a player's RTX 5080 drew a median
-of 142 pairs a second on a 90 Hz Quest 2) gets an uneven pulldown: some headset frames show a pair one game
-frame newer than the last, others two. Head rotation stays smooth (the compositor turns every frame to the
-head), but the world's animation, locomotion and the gun advance at an irregular cadence that a native VR game,
-which renders one frame per `xrWaitFrame`, does not have. The launcher turns pacing on by default since 0.1.12
-(players preferred it in 0.1.11, where it was an option); the layer's own default without the variable stays off.
+(`updateImage` takes the ring's newest slot; which one exactly: below). A game faster than the headset (a player's
+RTX 5080 drew a median of 142 pairs a second on a 90 Hz Quest 2) gets an uneven pulldown: some headset frames show
+a pair one game frame newer than the last, others two. Head rotation stays smooth (the compositor turns every
+frame to the head), but the world's animation, locomotion and the gun advance at an irregular cadence that a
+native VR game, which renders one frame per `xrWaitFrame`, does not have. The launcher turns pacing on by default
+since 0.1.12 (players preferred it in 0.1.11, where it was an option); the layer's own default without the
+variable stays off.
+
+**Which image a headset frame shows** (`src/features/pacing/slot_choice.*`, the decision; `takeRenderedSlot` in
+`src/vkcore/presenter_ring.cpp`). The game publishes an image when it presents, before its GPU work for it is
+done, and runs about a frame ahead, so at the start of a headset frame the newest image is often still
+rendering. The worker takes it if it is done; else it waits for it on the shared fence while the headset's frame
+has time (until 4 ms before the end of the display period, counted from `xrWaitFrame`'s return, on a
+high-resolution timer); else it takes the image published before it if that one was not shown yet, is done and
+was not written again; else it shows the last image again. Before 0.1.29 the worker took the newest image and
+waited up to two periods for its copy, which under Parallel Eye Rendering (both eyes in one frame) cost a
+display slot whenever the frame ran past its period (rig, e1m1 GPU-bound: 2.7% of slots skipped, now 0.5-1.6%;
+Route S unchanged). Taking the previous image without waiting kept the slots but showed fewer new images (63-65
+of the game's 85-87 a second, against 70-71 with the wait) and older ones (pose age p95 80-91 ms against 58-63).
 
 `ETERNALVR_PACE=headset` (the launcher's "Frame pacing: Matched to the headset", Play tab,
 Picture, stereo only) holds the game to one image per headset frame (`src/features/pacing/pace_policy.*`, the
@@ -652,11 +665,12 @@ cvars, each hook point with its RVA, `frame-end job wrapped`, then `Route S on`.
   stereo ticks).
 
 Beside them (the 10 s blocks): `rates: game P present(s)/s, T tick(s)/s, S stereo pair(s)/s shown; XR F
-frame(s)/s, N new image(s)/s; copy wait A ms average, M ms longest`, the game's own rates next to the
-runtime's (a headset's frame counter shows the XR rate, not the game's) and how long the XR worker waited for
-its copy between xrBeginFrame and xrEndFrame (the copy waits on the GPU for the game's write of the slot, so a
-long wait means the headset frame waited for the game's frame);
-`window: last 10 s: A acquire(s), average/max ms; C present call(s),
+frame(s)/s, N new image(s)/s; copy wait A ms average, M ms longest; newest image wait W ms average, L ms
+longest`, the game's own rates next to the runtime's (a headset's frame counter shows the XR rate, not the
+game's), how long the XR worker waited for its copy between xrBeginFrame and xrEndFrame, and how long it waited
+for the newest image's frame to finish rendering (Which image a headset frame shows); the `xr:` line counts the
+repeats with no finished image to take (still rendering, or being written), the newest images taken and the waits
+for one; `window: last 10 s: A acquire(s), average/max ms; C present call(s),
 average/max ms` (the time the driver's acquire and present take); `window: ... present(s) to the window,
 ... of the other eye and ... too soon handed back; display H Hz; ... handed back, ... failed, ... held`;
 `mirror: the window shows left ...`; `pace:` (the headset's cadence and, with `ETERNALVR_PACE=headset`, the

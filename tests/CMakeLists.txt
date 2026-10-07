@@ -102,6 +102,7 @@ evr_add_test(evr_pacing_tests
         features/pacing/display_period_watch_tests.cpp
         features/pacing/frame_clock_watch_tests.cpp
         features/pacing/pace_policy_tests.cpp
+        features/pacing/slot_choice_tests.cpp
     DEPENDS evr_pacing)
 
 evr_add_test(evr_foveation_tests

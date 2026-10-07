@@ -32,7 +32,7 @@
 
 namespace evr::vkcore {
 
-void XrPresenter::Impl::updateImage() {
+void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     if (heldCopy.stalled) {
         if (copyFence->GetCompletedValue() < copyFenceValue) {
             ++xrRepeats;
@@ -55,7 +55,7 @@ void XrPresenter::Impl::updateImage() {
         return;
     }
     const std::uint64_t packed = latest.load();
-    frame_pacing::onHeadsetFrame(displayPeriod.load()); // the image is chosen: a paced game goes on
+    frame_pacing::onHeadsetFrame(displayPeriod.load()); // the headset's frame began: a paced game goes on
     const std::uint64_t newest = packed >> 2;
     if (newest <= lastConsumed) {
         ++xrRepeats;
@@ -85,13 +85,14 @@ void XrPresenter::Impl::updateImage() {
         acquiredWaited = true;
     }
 
-    const std::uint32_t slotIndex = static_cast<std::uint32_t>(packed & 3u);
-    RingSlot& slot = ring[slotIndex];
-    int expected = kSlotFree;
-    if (!slot.state.compare_exchange_strong(expected, kSlotReading)) {
-        return; // being written right now; the image stays acquired for the next frame
+    // A slot whose frame finished rendering (presenter_ring.cpp); none yet: the image stays acquired.
+    std::uint32_t slotIndex = 0;
+    std::uint64_t value = 0;
+    if (!takeRenderedSlot(slotIndex, value, frameStart)) {
+        ++xrBusyRepeats;
+        return;
     }
-    const std::uint64_t value = slot.value.load();
+    RingSlot& slot = ring[slotIndex];
     const ViewRecord slotView = slot.view;
     const bool slotHasView = slot.hasView;
     const bool slotUi = slot.ui.written && acquireUiXrImage(); // UI layer: the GUI image goes along
@@ -209,6 +210,7 @@ void XrPresenter::Impl::frame() {
         }
         return;
     }
+    const LONGLONG frameStart = qpcNow(); // the headset's frame begins (slot_choice.hpp's wait)
     XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
     if (const XrResult r = xr.xrBeginFrame(session, &beginInfo); XR_FAILED(r)) {
         loseOnRuntimeFailure(r, "xrBeginFrame");
@@ -258,7 +260,7 @@ void XrPresenter::Impl::frame() {
         if (settings.mode == Mode::HeadTracked && !fovChecked) {
             updateTargetFov(state.predictedDisplayTime);
         }
-        updateImage();
+        updateImage(frameStart);
         // Once the multiplayer guard is off the game's image is shown only on the flat cinema quad,
         // never as a head-tracked projection (the camera hook no longer writes the view).
         const bool guardOff = !mp_guard::allowsGameTouch();
