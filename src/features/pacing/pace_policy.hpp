@@ -49,8 +49,14 @@ public:
     static constexpr double kTimeoutPeriods = 2.0;
     static constexpr double kMaxTimeoutSeconds = 0.05;
     // The headset's loop counts as running while its newest frame began less than this many periods ago;
-    // past it the game runs free (a wait never reaches past this point either).
-    static constexpr double kIdlePeriods = 3.0;
+    // past it the game runs free (a wait never reaches past this point either). Ten, not three: a streaming
+    // runtime whose encoder falls behind stalls its loop for 40-100 ms at a time, and with three the game ran
+    // free in every stall (a Virtual Desktop log: 158 such releases and 186 images never shown in 10 s at
+    // 90 Hz), adding GPU work behind the runtime's own. About 110 ms at 90 Hz, still short of a hitch when
+    // the loop really stops (headset off, a lost session).
+    static constexpr double kIdlePeriods = 10.0;
+    // ... and never longer than this, whatever the period reads (a runtime at 30 Hz would hold 333 ms).
+    static constexpr double kMaxIdleSeconds = 0.12;
 
     struct Counters {
         std::uint64_t handOvers = 0;

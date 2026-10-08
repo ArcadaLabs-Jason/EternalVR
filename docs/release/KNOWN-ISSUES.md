@@ -45,6 +45,11 @@ them is worse for you than described here.
   left Menu button of Touch controllers opens SteamVR's dashboard, so hold Y to pause instead (B with
   **Left (buttons and sticks)**), and take a screenshot by holding both sticks pressed and pulling a
   trigger (instead of left Menu + trigger).
+- **SteamVR's dashboard can reset the graphics driver when video memory is nearly full.** A player's game
+  used 97 to 99% of the video memory Windows gave it (a 12 GB card next to two large monitors); opening
+  the dashboard over the game then reset the NVIDIA driver and SteamVR stopped showing the game. A lower
+  Texture Pool Size in the game's video settings fixed it. After a session that close to the limit the
+  launcher says so ("The game used nearly all the video memory Windows gives it ...").
 - **The Game Pass and Microsoft Store version has had one test**, on one PC with a Quest 3 through Virtual
   Desktop: a level and the Revenant in Cultist Base played as on Steam. On its first start that version
   asks you to log in to Bethesda.net, and clicking a text box opens Windows' own typing window on the
@@ -89,9 +94,10 @@ them is worse for you than described here.
 - **Some effects are off in stereo.** Motion blur, depth of field, chromatic aberration and vignette are
   off in VR, and so are the red tint and blur when you take damage (the arrows showing where the hit
   came from and the low health warning stay). The game's other screen overlays are off too: the red
-  edges at low health, double vision and screen shakes. A few temporal effects (screen-space ambient
-  occlusion's temporal filter, water reflections and refraction) are turned off because the two eyes
-  would share their history. The picture looks slightly different from the flat game.
+  edges at low health, double vision and screen shakes, and the wobble of the whole picture under water
+  (the water's tint and fog stay). A few effects lose the smoothing they get over several frames, because
+  the two eyes would share it: ambient occlusion, water reflections and refraction still show, only that
+  smoothing is off. The picture looks slightly different from the flat game.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
   for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
   banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before

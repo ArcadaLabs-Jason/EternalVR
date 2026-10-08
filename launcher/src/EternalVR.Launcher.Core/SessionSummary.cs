@@ -17,7 +17,8 @@ namespace EternalVR.Launcher.Core
     /// rate. The period is a snapshot of the last frame of each window, so the shares are of windows, not of exact time.
     /// Also the mod's controller actions the runtime bound (<c>controllers: 0 of 12 action(s) bound</c>) and whether the layer
     /// warned that no hand pose arrived in play (<see cref="UnboundControls"/>), and how often the game's video memory was over
-    /// the budget Windows gives it (<c>vram: ... N of M reading(s) over the budget</c>, also every 10 s).
+    /// the budget Windows gives it, or near it (<c>vram: the process uses U MB ..., budget B MB ...; ... N of M reading(s) over
+    /// the budget</c>, also every 10 s).
     /// </summary>
     public sealed class SessionSummary
     {
@@ -25,6 +26,12 @@ namespace EternalVR.Launcher.Core
         public const double KeptUpShare = 0.95;
         /// <summary>From this share of the session's vram windows over the budget, the summary says so.</summary>
         public const double VramOverShareToSay = 0.10;
+        /// <summary>A vram window using this share of the budget or more is near it.</summary>
+        public const double VramNearBudget = 0.95;
+        /// <summary>From this share of the session's vram windows near the budget (and the over-budget sentence not said), the
+        /// summary says so: a runtime menu opening over the game can then reset the graphics driver (issue #19: SteamVR's
+        /// dashboard at 97 to 99% of the budget, fixed by a lower texture pool).</summary>
+        public const double VramNearShareToSay = 0.50;
 
         private static readonly Regex RuntimeLine = new Regex(@"\] xr: runtime '(?<name>[^']*)'", RegexOptions.CultureInvariant);
         private static readonly Regex SystemLine = new Regex(@"\] xr: system '(?<name>.*)', max swapchain", RegexOptions.CultureInvariant);
@@ -37,7 +44,7 @@ namespace EternalVR.Launcher.Core
             @"\] controllers: (?<bound>[0-9]+) of (?<all>[0-9]+) action\(s\) bound", RegexOptions.CultureInvariant);
         private static readonly Regex NoPoseLine = new Regex(@"\] controllers: WARNING no hand pose has been valid", RegexOptions.CultureInvariant);
         private static readonly Regex VramLine = new Regex(
-            @"\] vram: the process uses .*; last 10 s: peak [0-9.]+ MB, (?<over>[0-9]+) of (?<all>[0-9]+) reading\(s\) over the budget",
+            @"\] vram: the process uses (?<use>[0-9]+) MB of local video memory, budget (?<budget>[0-9]+) MB.*; last 10 s: peak [0-9.]+ MB, (?<over>[0-9]+) of (?<all>[0-9]+) reading\(s\) over the budget",
             RegexOptions.CultureInvariant);
 
         private sealed class Window
@@ -79,6 +86,9 @@ namespace EternalVR.Launcher.Core
         public int VramWindows { get; private set; }
         /// <summary>The share (0 to 1) of <see cref="VramWindows"/> with most of their readings over the budget.</summary>
         public double VramOverShare { get; private set; }
+        /// <summary>The share (0 to 1) of <see cref="VramWindows"/> whose last reading used <see cref="VramNearBudget"/> of the
+        /// budget or more (over-budget windows included).</summary>
+        public double VramNearShare { get; private set; }
 
         /// <summary>The summary of a layer log's lines; null when it holds no display period (no VR session).</summary>
         public static SessionSummary FromLines(IEnumerable<string> lines)
@@ -87,6 +97,7 @@ namespace EternalVR.Launcher.Core
             var windows = new List<Window>();
             int? firstHz = null;
             int vramOver = 0;
+            int vramNear = 0;
             foreach (var line in lines ?? Enumerable.Empty<string>())
             {
                 if (line == null) continue;
@@ -98,6 +109,10 @@ namespace EternalVR.Launcher.Core
                     {
                         s.VramWindows++;
                         if (over * 2 > readings) vramOver++;
+                        if (long.TryParse(v.Groups["use"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var use)
+                            && long.TryParse(v.Groups["budget"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var budget)
+                            && budget > 0 && use >= VramNearBudget * budget)
+                            vramNear++;
                     }
                     continue;
                 }
@@ -143,7 +158,11 @@ namespace EternalVR.Launcher.Core
             }
             if (windows.Count == 0 && firstHz == null) return null;
             s.Route = HeadsetIdentity.RouteOf(s.RuntimeName);
-            if (s.VramWindows > 0) s.VramOverShare = (double)vramOver / s.VramWindows;
+            if (s.VramWindows > 0)
+            {
+                s.VramOverShare = (double)vramOver / s.VramWindows;
+                s.VramNearShare = (double)vramNear / s.VramWindows;
+            }
 
             // The refresh rate: the highest rate held for two windows or more, or the first frame's.
             var counts = windows.GroupBy(w => w.Hz).ToDictionary(g => g.Key, g => g.Count());
@@ -226,6 +245,12 @@ namespace EternalVR.Launcher.Core
                     "The game used more video memory than your graphics card had free for {0}% of the session: a lower Resolution, "
                     + "or ray tracing off in the game, makes it smoother.",
                     Math.Max(1, (int)Math.Round(VramOverShare * 100, MidpointRounding.AwayFromZero))));
+            else if (VramWindows >= SessionRates.MinWindows && VramNearShare >= VramNearShareToSay)
+                parts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "The game used nearly all the video memory Windows gives it for {0}% of the session, so a headset menu opening "
+                    + "over it (like SteamVR's dashboard) can reset the graphics driver: a lower Texture Pool Size in the game's "
+                    + "video settings makes room.",
+                    (int)Math.Round(VramNearShare * 100, MidpointRounding.AwayFromZero)));
             return string.Join(" ", parts);
         }
 
@@ -269,11 +294,12 @@ namespace EternalVR.Launcher.Core
 
         /// <summary>The numbers for the launcher log.</summary>
         public string LogText() => string.Format(CultureInfo.InvariantCulture,
-            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; video memory over the budget in {10} of {11} window(s); controls {9}",
+            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; video memory over the budget in {10} of {11} window(s), at 95% of it or more in {12}; controls {9}",
             RefreshHz, Windows, InPlay ? " in play" : " (not enough play: the whole session)", HeldHz, HeldShare * 100,
             OtherRates.Count == 0 ? "none" : string.Join(", ", OtherRates.Select(kv => kv.Key + " Hz x" + kv.Value)),
             GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName, ControlsText(),
-            (int)Math.Round(VramOverShare * VramWindows, MidpointRounding.AwayFromZero), VramWindows);
+            (int)Math.Round(VramOverShare * VramWindows, MidpointRounding.AwayFromZero), VramWindows,
+            (int)Math.Round(VramNearShare * VramWindows, MidpointRounding.AwayFromZero));
 
         private static double Median(List<double> sorted)
         {

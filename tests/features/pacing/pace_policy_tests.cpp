@@ -95,19 +95,26 @@ TEST_CASE("pacer: a missed headset frame times out, and a stopped loop lets the 
     // No frame comes: the wait times out after two periods and counts a miss.
     pacer.waited(7, step.timeoutSeconds, false);
     CHECK(pacer.counters().timeouts == 1);
-    // The next image: the wait would end where the loop counts as stopped (three periods after its last
-    // frame).
-    const double now = last + 0.003 + step.timeoutSeconds + 0.002;
+    // A stall (a streaming runtime's encoder behind): the next images still wait, two periods each.
+    double now = last + 0.003 + step.timeoutSeconds + 0.002;
     step = pacer.afterHandOver(loopAt(7, last), now);
     REQUIRE(step.wait);
-    CHECK(step.timeoutSeconds == doctest::Approx(last + 3.0 * kPeriod - now));
+    CHECK(step.timeoutSeconds == doctest::Approx(FramePacer::kTimeoutPeriods * kPeriod));
     pacer.waited(7, step.timeoutSeconds, false);
+    // Near the point where the loop counts as stopped (ten periods after its last frame): the wait ends
+    // there.
+    now = last + 9.5 * kPeriod;
+    step = pacer.afterHandOver(loopAt(7, last), now);
+    REQUIRE(step.wait);
+    CHECK(step.timeoutSeconds == doctest::Approx(last + FramePacer::kIdlePeriods * kPeriod - now));
+    pacer.waited(7, step.timeoutSeconds, false);
+    CHECK(pacer.counters().timeouts == 3);
     // From then on: no waits while no headset frame comes.
     for (int i = 0; i < 10; ++i) {
-        CHECK_FALSE(pacer.afterHandOver(loopAt(7, last), last + 0.05 + 0.01 * i).wait);
+        CHECK_FALSE(pacer.afterHandOver(loopAt(7, last), last + 0.12 + 0.01 * i).wait);
     }
     CHECK(pacer.counters().idle == 10);
-    CHECK(pacer.counters().timeouts == 2);
+    CHECK(pacer.counters().timeouts == 3);
     // The loop runs again: the first image goes on at once, the next waits again.
     CHECK_FALSE(pacer.afterHandOver(loopAt(8, last + 1.0), last + 1.002).wait);
     CHECK(pacer.afterHandOver(loopAt(8, last + 1.0), last + 1.006).wait);
@@ -126,6 +133,21 @@ TEST_CASE("pacer: no wait before the loop is known, or with a period that makes 
     const PaceStep step = pacer.afterHandOver(loopAt(4, 1.0, 1.0), 1.002);
     REQUIRE(step.wait);
     CHECK(step.timeoutSeconds == doctest::Approx(FramePacer::kMaxTimeoutSeconds));
+}
+
+TEST_CASE("pacer: a slow refresh rate does not stretch the held window past its cap") {
+    // 30 Hz: ten periods would be 333 ms; the loop counts as stopped after kMaxIdleSeconds.
+    FramePacer pacer(PaceMode::Headset);
+    const double period = 1.0 / 30.0;
+    const double last = 2.0;
+    CHECK_FALSE(pacer.afterHandOver(loopAt(5, last, period), last + 0.001).wait);
+    const PaceStep step = pacer.afterHandOver(loopAt(5, last, period), last + 0.1);
+    REQUIRE(step.wait);
+    CHECK(step.timeoutSeconds == doctest::Approx(FramePacer::kMaxIdleSeconds - 0.1));
+    pacer.waited(5, step.timeoutSeconds, false);
+    CHECK_FALSE(
+        pacer.afterHandOver(loopAt(5, last, period), last + FramePacer::kMaxIdleSeconds + 0.001).wait);
+    CHECK(pacer.counters().idle == 1);
 }
 
 TEST_CASE("cadence: images per headset frame, the ones never shown, first showings' lateness") {

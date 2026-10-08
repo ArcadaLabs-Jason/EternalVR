@@ -21,3 +21,7 @@ r_displayRefresh
 r_SSDO
 r_SSR
 r_blurRadialScale
+# Held by the layer in stereo only (stereo_seq::stereoComfortCvars), so not in forced-cvars.txt: the underwater
+# screen warp. The game saves it to DOOMEternalConfig.local (its console: "Cvar 'r_waterPostProcess' was modified
+# to '0' local"), and a player's flat game must keep its own warp.
+r_waterPostProcess

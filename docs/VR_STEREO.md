@@ -192,7 +192,9 @@ resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_
 
 **The comfort set is held in both temporal modes too** (`stereo_seq::stereoComfortCvars`): HDR output, motion
 blur, depth of field, chromatic aberration, vignette, view bob, the view kicks and shakes, the damage tint and
-blur, the view effects' screen overlays, the weapon's FOV scale and the Meathook's single view turn. The game's
+blur, the view effects' screen overlays, the underwater screen warp (`r_waterPostProcess 0`: it moves the
+picture the same way in both eyes' screen coordinates, so it has no depth in a headset), the weapon's FOV scale
+and the Meathook's single view turn. The game's
 own settings override the command line here as well (a rig run with them on the command line still wrote
 `pm_noBob 0 -> 1`, `view_damageBlur 1 -> 0` and six more), so in stereo the launcher no longer puts them on the
 command line: the layer's hold sets them, from Route S's first present (`presenter_copy.cpp`, before the
@@ -497,9 +499,11 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   image is shown exactly once. It comes before `updateImage` waits for the image's copy (which waits for the
   game's GPU work), so the game's next frame never waits for the previous one's GPU work.
 - **Timeout.** A wait ends after two display periods without a new headset frame (one frame the runtime skipped
-  still ends it in time), at most 50 ms, and counts as a timeout. Once the headset has begun no frame for three
-  periods (not shown, the dashboard, a lost session, shutdown) nothing waits until it does again: the game
-  never hangs on the headset.
+  still ends it in time), at most 50 ms, and counts as a timeout. Once the headset has begun no frame for ten
+  periods, about 110 ms at 90 Hz (not shown, the dashboard, a lost session, shutdown), nothing waits until it
+  does again: the game never hangs on the headset. Shorter stalls keep the game held: a streaming runtime
+  whose encoder falls behind stalls its loop for 40-100 ms, and with three periods (before 0.1.32) the game
+  ran free in every stall, rendering images nobody saw (a Virtual Desktop log: 186 in 10 s at 90 Hz).
 - **Behind a runtime's menu.** While the session is VISIBLE, or SYNCHRONIZED once hidden, after it had focus
   (SteamVR's dashboard, Meta's menu), keep-active keeps the game running without input, so the present hook
   holds it to one image per display period (clamped to 1/90 to 1/30 s; 1/72 s while no period is known; not fewer, as a session can stay VISIBLE while the game is what the player sees) on

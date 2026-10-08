@@ -13,7 +13,8 @@ namespace EternalVR.Launcher.Core.Tests
     /// </summary>
     public class ComfortCvarsTests
     {
-        /// <summary>stereo_seq::stereoComfortCvars without r_hdrDisplay.</summary>
+        /// <summary>stereo_seq::stereoComfortCvars without r_hdrDisplay and r_waterPostProcess (held in stereo only, never on the
+        /// command line; session-keys.txt restores it).</summary>
         private static readonly string[] ComfortSet =
         {
             "r_motionblur", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale",

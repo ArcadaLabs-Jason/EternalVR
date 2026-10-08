@@ -133,6 +133,13 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
         // The view effects' screen overlays: the low health red vignette in the eyes (headset-checked),
         // double vision and the shakes. The HUD's directional damage arcs are the HUD's, so they stay.
         {"g_skipViewEffects", "1"},
+        // Under water (swimming): the game warps the whole picture in screen space, the same in both eyes'
+        // screen coordinates, so in the headset it sits at no depth and wobbles like wrong glasses (a
+        // player's report; rig, UAC Atlantica under water, head still: a static scene's frame-to-frame
+        // change 4.86 -> 1.6 with it off, the underwater tint and fog unchanged). Not in the launcher's
+        // forced-cvars.txt: in mono both eyes see one picture, so the warp stays as the game has it. The
+        // game saves it to DOOMEternalConfig.local, so the launcher's session-keys.txt restores it.
+        {"r_waterPostProcess", "0"},
     };
     return cvars;
 }

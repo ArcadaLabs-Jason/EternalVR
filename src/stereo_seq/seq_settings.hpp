@@ -52,11 +52,12 @@ CvarExpectation stereoScatterFilterCvar(bool perEyeHistory);
 // game's own settings during a session gets it off again at once: HDR output (the copy to the headset
 // expects SDR), motion blur, depth of field, chromatic aberration, vignette, view bob and the view kicks and
 // shakes (camera motion the head did not make), the damage tint and blur, the view effects' overlays, the
-// weapon's FOV scale and the Meathook's single view turn (hand aim). In stereo the launcher puts only
-// r_hdrDisplay on the command line (the swapchain's format is picked at start-up): this hold sets the rest,
-// so a multiplayer guard trip gives the player's values back (cvar_book.hpp). Mono launches keep them on the
-// command line. Kept in step with the launcher's forced-cvars.txt, which restores the player's own values
-// after the session.
+// underwater screen warp, the weapon's FOV scale and the Meathook's single view turn (hand aim). In stereo
+// the launcher puts only r_hdrDisplay on the command line (the swapchain's format is picked at start-up):
+// this hold sets the rest, so a multiplayer guard trip gives the player's values back (cvar_book.hpp). Mono
+// launches keep them on the command line. Kept in step with the launcher's forced-cvars.txt, which restores
+// the player's own values after the session, except r_waterPostProcess: in mono both eyes see one picture, so
+// it is held in stereo only, and session-keys.txt restores it (the game saves it).
 const std::vector<CvarExpectation>& stereoComfortCvars();
 
 // r_SSDO under Route S (ETERNALVR_STEREO_SSDO). The game turns SSDO off itself after r_TAASafeMode 1

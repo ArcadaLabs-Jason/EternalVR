@@ -56,7 +56,8 @@ PaceStep FramePacer::afterHandOver(const HeadsetLoop& loop, double nowSeconds) {
     const double period = loop.periodSeconds;
     const bool known = loop.frames > 0 && std::isfinite(period) && period > 0.0 &&
                        std::isfinite(loop.lastFrameSeconds) && std::isfinite(nowSeconds);
-    const double idleAt = known ? loop.lastFrameSeconds + kIdlePeriods * period : 0.0;
+    const double idleAt =
+        known ? loop.lastFrameSeconds + std::min(kIdlePeriods * period, kMaxIdleSeconds) : 0.0;
     if (!known || nowSeconds >= idleAt) {
         // Not shown, lost, stopping or not started: nothing to keep in step with.
         ++counters_.idle;

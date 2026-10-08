@@ -135,14 +135,14 @@ been valid.
   ticks: without the rule eye R moves 0, with it both eyes move one tick, also when eye L's update stamps the
   cache only after eye R's check; a cache only eye R updates, another model time, a still cache, mono and
   alternate renders, the first stereo tick after mono and a tick without eye R keep the engine's behaviour.
-- Rig, still to do (`e1m2_battle` start view, OpenXR simulator, `ETERNALVR_STEREO_SAME_VIEW=1`,
-  `ETERNALVR_CAPTURE_MOTION`): `+r_skipGeomCacheModels 1` without the fix should take the banners out of both
-  eyes and eye L's moving pixels at 0 in eye R (20 to 40%, `stereo-motion-capture.md`) to about 0; with the
-  fix `tools/stereo/motion_diff.py` should show the same, with the banner's motion in eye R matching eye L's;
-  `ETERNALVR_STEREO_GEOMCACHE_PREV=0` should bring eye R's zero back.
+- Rig, done 2026-10-07 (`e1m2_battle` start view, OpenXR simulator, `ETERNALVR_STEREO_SAME_VIEW=1`,
+  `ETERNALVR_CAPTURE_MOTION`, head still): with the fix `tools/stereo/motion_diff.py` shows eye R's moving pixels
+  equal to eye L's in every pair (lost share 0.00), and the log reads `slots kept 11910; updates with a valid
+  previous frame L 11910 of 11910, R 11910 of 11910`. With `ETERNALVR_STEREO_GEOMCACHE_PREV=0` eye R loses 24 to
+  27% of eye L's moving pixels (the banner).
 - Headset, still to do: the `e1m2_battle` banners, the `e2m1_nest` hanging corpses and the `e1m1_intro` cages
-  with TAA on, in both eyes, watching for smearing in eye R and for strobing. No player-visible result is
-  claimed before these checks.
+  with TAA on, in both eyes, watching for smearing in eye R and for strobing. 0.1.31's notes say the fix was
+  checked on the test PC only.
 
 ## 4. Open
 

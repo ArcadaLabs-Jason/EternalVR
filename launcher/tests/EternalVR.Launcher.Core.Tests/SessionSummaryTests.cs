@@ -94,7 +94,7 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         private static string Vram(double t, int over, int readings, int percent) => FormattableString.Invariant(
-            $"[{t,9:0.000}] [28900] vram: the process uses 11433 MB of local video memory, budget 8878 MB ({percent}%); last 10 s: peak 11433 MB, {over} of {readings} reading(s) over the budget");
+            $"[{t,9:0.000}] [28900] vram: the process uses {8878 * percent / 100} MB of local video memory, budget 8878 MB ({percent}%); last 10 s: peak 11433 MB, {over} of {readings} reading(s) over the budget");
 
         [Fact]
         public void VideoMemoryOverTheBudgetIsSaidWithWhatHelps()
@@ -117,6 +117,33 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.DoesNotContain("video memory", SessionSummary.FromLines(short_).Describe());
             // No vram line (an older layer): nothing said, none counted.
             Assert.Equal(0, SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100))).VramWindows);
+        }
+
+        private static string VramUse(double t, int use, int budget) => FormattableString.Invariant(
+            $"[{t,9:0.000}] [48148] vram: the process uses {use} MB of local video memory, budget {budget} MB ({use * 100 / budget}%); last 10 s: peak {use} MB, 0 of 10 reading(s) over the budget");
+
+        [Fact]
+        public void VideoMemoryNearTheBudgetWarnsAboutHeadsetMenus()
+        {
+            // Issue #19 (a player's 0.1.29 export, 2026-10-07): a 12 GB card at 98% of an 8.9 GB budget, never over it; the
+            // SteamVR dashboard reset the driver, a lower texture pool fixed it.
+            var lines = Session(Steam, "SteamVR/OpenXR : oculus", 11.11, Repeat(10, 11.11, 62));
+            for (int i = 0; i < 10; i++) lines.Add(VramUse(20 + 10 * i, 8742, i < 9 ? 8926 : 9900));
+            var s = SessionSummary.FromLines(lines);
+            Assert.Equal(0.0, s.VramOverShare, 6);
+            Assert.Equal(0.9, s.VramNearShare, 6);
+            Assert.EndsWith("The game used nearly all the video memory Windows gives it for 90% of the session, so a headset menu "
+                + "opening over it (like SteamVR's dashboard) can reset the graphics driver: a lower Texture Pool Size in the game's "
+                + "video settings makes room.", s.Describe());
+            Assert.Contains("video memory over the budget in 0 of 10 window(s), at 95% of it or more in 9", s.LogText());
+            // At 87% of the budget (the rig's SteamVR runs): nothing said.
+            var roomy = Session(Steam, "SteamVR/OpenXR : oculus", 11.11, Repeat(10, 11.11, 62));
+            for (int i = 0; i < 10; i++) roomy.Add(VramUse(20 + 10 * i, 9131, 10504));
+            Assert.DoesNotContain("video memory", SessionSummary.FromLines(roomy).Describe());
+            // Near it for under half the session: nothing said.
+            var some = Session(Steam, "SteamVR/OpenXR : oculus", 11.11, Repeat(10, 11.11, 62));
+            for (int i = 0; i < 10; i++) some.Add(VramUse(20 + 10 * i, 8742, i < 4 ? 8926 : 10504));
+            Assert.DoesNotContain("video memory", SessionSummary.FromLines(some).Describe());
         }
 
         [Fact]

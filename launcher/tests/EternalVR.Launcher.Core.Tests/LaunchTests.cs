@@ -531,7 +531,10 @@ namespace EternalVR.Launcher.Core.Tests
             // Knock-on keys the game saves itself because of a stereo setting.
             foreach (var k in new[] { "r_SSDO", "r_SSR", "r_blurRadialScale" })
                 Assert.Contains(k, session);
+            // Held by the layer in stereo only and saved by the game: restored after the session.
+            Assert.Contains("r_waterPostProcess", session);
             var restored = LauncherData.Load(TestData.Dir).RestoredKeys;
+            Assert.Contains("r_waterPostProcess", restored);
             Assert.Contains("r_windowPosX", restored);
             Assert.Contains("r_hdrDisplay", restored);
             Assert.Equal(restored.Count, restored.Distinct(StringComparer.OrdinalIgnoreCase).Count());

@@ -218,6 +218,9 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
     CHECK(value("view_damageBlur") == "0");
     // The low health red vignette in the eyes goes with the view effects' screen overlays.
     CHECK(value("g_skipViewEffects") == "1");
+    // The underwater screen-space warp goes; the water itself stays.
+    CHECK(value("r_waterPostProcess") == "0");
+    CHECK(value("r_water") == "absent");
     CHECK(value("view_enableHelmetFX") == "absent");
     CHECK(value("hud_showDamage") == "absent");
     for (std::size_t i = 0; i < held.size(); ++i) {
