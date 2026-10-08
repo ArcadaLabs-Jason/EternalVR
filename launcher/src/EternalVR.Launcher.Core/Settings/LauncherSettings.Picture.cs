@@ -21,11 +21,16 @@ namespace EternalVR.Launcher.Core.Settings
     /// player's own setting from the game's menu, or held at 0, 1, 2 or 3.</summary>
     public enum SharpeningMode { Game, Off, Low, Medium, High }
 
+    /// <summary>The game's screen-space reflections in VR (<c>r_SSR</c>, the layer's <c>ETERNALVR_STEREO_SSR</c>): the player's
+    /// own Reflections setting from the game's menu (off at Low), or off.</summary>
+    public enum ReflectionsMode { Game, Off }
+
     /// <summary>
     /// The Play tab's picture settings in launcher.ini: <c>resolution_base = auto|ask|panel</c>, <c>anti_aliasing</c>,
-    /// <c>dlss_quality</c>, <c>dlss_version = newest|game|file</c>, <c>dlss_dll_path</c>, <c>dlss_preset</c> and <c>sharpening =
-    /// game|off|low|medium|high</c>. A file without <c>resolution_base</c> (launcher 0.1.11 and older) is Auto with its
-    /// <c>render_scale</c> as it was: Auto is exactly the size those launchers rendered, so updating changes no one's size.
+    /// <c>dlss_quality</c>, <c>dlss_version = newest|game|file</c>, <c>dlss_dll_path</c>, <c>dlss_preset</c>, <c>sharpening =
+    /// game|off|low|medium|high</c> and <c>screen_reflections = game|off</c>. A file without <c>resolution_base</c> (launcher
+    /// 0.1.11 and older) is Auto with its <c>render_scale</c> as it was: Auto is exactly the size those launchers rendered, so
+    /// updating changes no one's size.
     /// </summary>
     public sealed partial class LauncherSettings
     {
@@ -39,6 +44,8 @@ namespace EternalVR.Launcher.Core.Settings
         public string DlssPreset { get; set; } = Settings.DlssDll.RecommendedPreset;
         /// <summary>The game's sharpening in VR; the player's own setting by default.</summary>
         public SharpeningMode Sharpening { get; set; } = SharpeningMode.Game;
+        /// <summary>The game's screen-space reflections in VR; the player's own Reflections setting by default.</summary>
+        public ReflectionsMode Reflections { get; set; } = ReflectionsMode.Game;
         /// <summary>What Resolution's number multiplies; Auto by default (<see cref="ResolutionBase"/>).</summary>
         public ResolutionBase ResolutionBase { get; set; } = ResolutionBase.Auto;
 
@@ -65,6 +72,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("sharpening", out var sh))
                 Sharpening = Pick(sh, SharpeningMode.Game, ("off", SharpeningMode.Off), ("low", SharpeningMode.Low),
                     ("medium", SharpeningMode.Medium), ("high", SharpeningMode.High));
+            if (map.TryGetValue("screen_reflections", out var sr)) Reflections = Pick(sr, ReflectionsMode.Game, ("off", ReflectionsMode.Off));
         }
 
         private void WritePicture(StringBuilder sb)
@@ -76,6 +84,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("dlss_dll_path = " + OneLine(DlssDllPath));
             sb.AppendLine("dlss_preset = " + Settings.DlssDll.NormalisePreset(DlssPreset));
             sb.AppendLine("sharpening = " + SharpeningName(Sharpening));
+            sb.AppendLine("screen_reflections = " + ReflectionsName(Reflections));
         }
 
         /// <summary>The layer's <c>ETERNALVR_STEREO_DLSS_QUALITY</c> value (and the settings file's).</summary>
@@ -94,6 +103,9 @@ namespace EternalVR.Launcher.Core.Settings
         public static string SharpeningName(SharpeningMode m) =>
             m == SharpeningMode.Off ? "off" : m == SharpeningMode.Low ? "low" : m == SharpeningMode.Medium ? "medium"
             : m == SharpeningMode.High ? "high" : "game";
+
+        /// <summary>The settings file's <c>screen_reflections</c> value: game or off.</summary>
+        public static string ReflectionsName(ReflectionsMode m) => m == ReflectionsMode.Off ? "off" : "game";
 
         /// <summary>The <c>r_sharpening</c> the layer holds (<c>ETERNALVR_SHARPENING</c>); null for the player's own setting.</summary>
         public static string SharpeningValue(SharpeningMode m) =>

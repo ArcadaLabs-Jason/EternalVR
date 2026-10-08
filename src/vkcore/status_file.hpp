@@ -22,6 +22,13 @@
 //   render_capped=1                 ... 1 when `render` is below it on either side (no present scaling)
 //   refresh_hz=144.0                the base refresh rate (presenter_refresh.hpp)
 //   throttled_share=0.181           the share of time at 2x the base or more (with each refresh summary)
+//
+// And in Route S, written when they change (runtime_cvars.cpp):
+//
+//   ssr_follow=1                    r_SSR is held at the game's own Reflections setting with per-eye TAA on
+//   ssdo_follow=1                   r_SSDO is held at the game's own Directional Occlusion setting, the same
+//
+// 0 otherwise. The launcher's settings restore keeps the r_SSR or r_SSDO the game saved only after 1.
 
 #include <string>
 
@@ -33,7 +40,7 @@ void vr(const char* what);
 void flat(const char* reason);
 // Whether the headset gets true stereo (on) or one image for both eyes (off, with the reason).
 void stereo(bool on, const char* reason);
-// Sets `key` (one of the headset keys above) to `value`; the file is rewritten only when it changed.
+// Sets `key` (one of the keys above) to `value`; the file is rewritten only when it changed.
 void field(const char* key, const std::string& value);
 
 } // namespace evr::vkcore::status

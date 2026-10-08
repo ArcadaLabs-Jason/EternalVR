@@ -328,6 +328,49 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("capture-1-p2-t3", ReportBuilder.CaptureStem("capture-1-p2-t3-UI.png"));
             Assert.Equal("capture-1-p2-t3", ReportBuilder.CaptureStem("capture-1-p2-t3-mono.png"));
             Assert.Equal("capture-1-p2-t3", ReportBuilder.CaptureStem("capture-1-p2-t3.txt"));
+            // A burst's frames go with its text file.
+            Assert.Equal("capture-1-p2-t3", ReportBuilder.CaptureStem("capture-1-p2-t3-f00-L.png", out var first));
+            Assert.Equal(0, first);
+            Assert.Equal("capture-1-p2-t3", ReportBuilder.CaptureStem("capture-1-p2-t3-f15-R.png", out var last));
+            Assert.Equal(15, last);
+            ReportBuilder.CaptureStem("capture-1-p2-t3-UI.png", out var ui);
+            Assert.Equal(-1, ui);
+            // A burst of mono frames (head-tracked play, a menu).
+            Assert.Equal("capture-1-p2-t3", ReportBuilder.CaptureStem("capture-1-p2-t3-f02-mono.png", out var mono));
+            Assert.Equal(2, mono);
+        }
+
+        [Fact]
+        public void BurstFramesComeWithTheirTextFileInOrderWhileTheyFit()
+        {
+            using (var t = new TempDir())
+            {
+                var inputs = Setup(t);
+                var png = new byte[] { 0x89, (byte)'P', (byte)'N', (byte)'G', 0, 0xFF, 13, 10 };
+                // Six frames of a fifth of the cap each: with the text file and the GUI image, the first four fit.
+                long eye = ReportManifest.CapturesCapBytes / 10;
+                var dir = t.Combine("data", "logs", "20260926-100000-2", "captures");
+                Directory.CreateDirectory(dir);
+                const string stem = "capture-20260926-100300-p000030-t300";
+                for (int f = 0; f < 6; f++)
+                    foreach (var side in new[] { "-L.png", "-R.png" })
+                        File.WriteAllBytes(Path.Combine(dir, $"{stem}-f{f:00}{side}"), png.Concat(new byte[eye]).ToArray());
+                File.WriteAllBytes(Path.Combine(dir, stem + "-UI.png"), png);
+                File.WriteAllText(Path.Combine(dir, stem + ".txt"), "burst frame 00: game frame record 1\n");
+                var report = ReportBuilder.Build(inputs);
+                var names = report.Files.Select(f => f.ZipPath).ToList();
+                string Zip(string suffix) => "sessions/20260926-100000-2/captures/" + stem + suffix;
+                Assert.Contains(Zip(".txt"), names);
+                Assert.Contains(Zip("-UI.png"), names);
+                for (int f = 0; f < 4; f++)
+                {
+                    Assert.Contains(Zip($"-f{f:00}-L.png"), names);
+                    Assert.Contains(Zip($"-f{f:00}-R.png"), names);
+                }
+                Assert.DoesNotContain(names, n => n.Contains("-f04-") || n.Contains("-f05-"));
+                Assert.Contains(report.Dropped, d => d.StartsWith(stem + ": 2 of its 6 burst frame(s)"));
+                Assert.DoesNotContain(report.Dropped, d => d.Contains("older capture(s)"));
+            }
         }
     }
 }

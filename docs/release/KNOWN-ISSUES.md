@@ -30,7 +30,11 @@ them is worse for you than described here.
   sit back, or hold both sticks pressed for 2 seconds to recenter. After a second and a half of black you
   are moved back onto your body, and "Fade in walls" on the Play tab turns the fade off. Standing up or sitting
   down is noticed after a second or so (the view blinks while your height is reset); if it is not (a very
-  tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds.
+  tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds. If walking stops
+  following you while you stand (a headset that reports the floor in the wrong place), set Play position
+  to Standing in the launcher. If you play lying down, set Play position to Sitting: the mod ignores
+  a head that low. On a chair with wheels, set Play position to Sitting too: rolling more than a metre
+  counts as walking and switches to standing.
 - **Only tested on NVIDIA:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have not
   been tried.
 - **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands, Pico 4 and Steam

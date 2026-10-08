@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -112,7 +113,8 @@ namespace EternalVR.Launcher
                     throw new IOException("the session marker names no complete snapshot: " + marker.SnapshotDir);
                 if (!string.Equals(snapshot, marker.SnapshotDir, StringComparison.OrdinalIgnoreCase))
                     Log.Warn("the session marker is damaged; restoring from " + snapshot);
-                var report = SettingsSnapshot.Restore(snapshot, ctx.Data.RestoredKeys);
+                // r_SSR and r_SSDO stay as the game saved them only when the layer said it held them at the player's own setting.
+                var report = SettingsSnapshot.Restore(snapshot, ctx.Data.RestoredKeys, FollowedKeys(marker.SessionId));
                 foreach (var line in report.Lines) Log.Info("restore: " + line);
                 // Steam Cloud files (profile.bin changes every session) are the game's by design: their lines above are enough.
                 if (report.ChangedNotRestored.Count > 0)
@@ -149,7 +151,7 @@ namespace EternalVR.Launcher
             if (takeCopies && !quiet) Log.Info("dry run: no snapshot or save backup while the game runs or a restore is pending");
             if (takeCopies && quiet && gathered.Locations.Count > 0)
             {
-                var snap = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, gathered.Locations, SessionKeys.FromArguments(ctx.Settings.ExtraArguments));
+                var snap = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, gathered.Locations, SessionKeys.FromArguments(ctx.Settings.ExtraArguments), plan?.KeptKeys);
                 File.WriteAllText(Path.Combine(snap, SettingsSnapshot.DryRunFile), "taken by --dry-run; no game was started");
                 Log.Info("dry run: settings snapshot in " + snap);
                 BackUpSaves(id, gathered);
@@ -208,11 +210,13 @@ namespace EternalVR.Launcher
                     marker.Write(ctx.Paths.SessionMarker);
                     // The cvars of Extra game arguments are put back with the forced ones (the game saves them on exit too).
                     var extraKeys = SessionKeys.FromArguments(ctx.Settings.ExtraArguments);
-                    marker.SnapshotDir = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, g.Locations, extraKeys);
+                    marker.SnapshotDir = SettingsSnapshot.Take(ctx.Paths.Snapshots, id, g.Locations, extraKeys, plan.KeptKeys);
                     marker.State = SessionState.Snapshotted;
                     marker.Write(ctx.Paths.SessionMarker);
                     Log.Info("settings snapshot: " + marker.SnapshotDir);
                     if (extraKeys.Count > 0) Log.Info("restored after the session as well (Extra game arguments): " + string.Join(", ", extraKeys));
+                    // r_SSDO and r_SSR while they are the player's own settings (LaunchPlanBuilder.KeptKeysOf).
+                    if (plan.KeptKeys.Count > 0) Log.Info("kept as the game saves them after the session: " + string.Join(", ", plan.KeptKeys));
 
                     BackUpSaves(id, g);
 
@@ -318,6 +322,16 @@ namespace EternalVR.Launcher
                     : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).")
                     + (controlsText.Length == 0 ? string.Empty : " " + controlsText) + ratesText);
             return restored;
+        }
+
+        /// <summary>The cvars the session's layer status file names as held at the player's own setting; none when it cannot be read.</summary>
+        private IReadOnlyList<string> FollowedKeys(string sessionId)
+        {
+            if (string.IsNullOrEmpty(sessionId)) return new string[0];
+            var file = Path.Combine(ctx.Paths.SessionLogDir(sessionId), LayerStatusFile.FileName);
+            try { return File.Exists(file) ? LayerStatusFile.Parse(File.ReadAllText(file)).FollowedKeys : new string[0]; }
+            catch (IOException) { return new string[0]; }
+            catch (UnauthorizedAccessException) { return new string[0]; }
         }
 
         /// <summary>The session's eye size against the plan from the layer's status file; null when it is not there.</summary>

@@ -111,21 +111,29 @@ void XrPresenter::Impl::pollEvents() {
         case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING: {
             const auto& change = reinterpret_cast<const XrEventDataReferenceSpaceChangePending&>(event);
             if (change.referenceSpaceType != XR_REFERENCE_SPACE_TYPE_LOCAL) {
-                EVR_LOG("xr: reference space %d change pending", static_cast<int>(change.referenceSpaceType));
+                // The floor's spaces: a floor that moves is not used for the posture until it is back.
+                const bool floor = change.referenceSpaceType == XR_REFERENCE_SPACE_TYPE_STAGE ||
+                                   change.referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL_FLOOR;
+                if (floor) {
+                    room.onFloorChange();
+                }
+                EVR_LOG("xr: reference space %d change pending%s",
+                        static_cast<int>(change.referenceSpaceType), floor ? "; watching the floor" : "");
                 break;
             }
             quadPlaced = false;
             placeAttempts = 0;
             menuReplace.store(true, std::memory_order_relaxed);
             const XrPosef& p = change.poseInPreviousSpace;
-            // T-063: every recenter re-anchors yaw; the room keeps its height across the runtime's move.
+            // The room follows the runtime's move, then re-anchors heading, position and height on the head;
+            // the posture stays (the runtime may have moved its floor too).
             room.onSpaceChange(change.poseValid
                                    ? std::optional<Pose>(Pose{Quat{p.orientation.x, p.orientation.y,
                                                                    p.orientation.z, p.orientation.w},
                                                               Vec3{p.position.x, p.position.y, p.position.z}})
                                    : std::nullopt);
             EVR_LOG("xr: LOCAL change pending (pose %s: (%.3f %.3f %.3f)); re-placing the screen and "
-                    "re-anchoring the room's heading",
+                    "re-anchoring the room",
                     change.poseValid ? "valid" : "not given", p.position.x, p.position.y, p.position.z);
             break;
         }

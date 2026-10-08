@@ -1,6 +1,7 @@
 #include "vkcore/seq_eye_fixes.hpp"
 
 #include "vkcore/bin_tile_hooks.hpp"
+#include "vkcore/fx_sync_hooks.hpp"
 #include "vkcore/geomcache_prev_hooks.hpp"
 #include "vkcore/keep_prev_hooks.hpp"
 #include "vkcore/moved_flag_hooks.hpp"
@@ -18,6 +19,7 @@ void installSeqEyeFixes() {
     installMovedFlagHooks();  // moving objects keep their motion vectors in eye R
     installKeepPrevHooks();   // and their previous model matrix from eye L
     installGeomCachePrevHooks(); // and geometry caches (banners, hanging bodies) their previous frame
+    installFxSyncHooks();        // CPU particles and effects alike in both eyes
 }
 
 } // namespace evr::vkcore

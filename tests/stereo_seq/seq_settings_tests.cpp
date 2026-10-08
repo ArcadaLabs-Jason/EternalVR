@@ -7,8 +7,26 @@
 #include <string>
 
 using evr::stereo_seq::cvarsOnCommandLine;
+using evr::stereo_seq::kMaxCaptureBurst;
+using evr::stereo_seq::parseCaptureBurst;
 using evr::stereo_seq::parseCaptureSetting;
 using evr::stereo_seq::sequentialCvars;
+
+TEST_CASE("capture burst: 1 to the maximum, spaces trimmed") {
+    CHECK(parseCaptureBurst(L"1") == 1u);
+    CHECK(parseCaptureBurst(L" 10 ") == 10u);
+    CHECK(parseCaptureBurst(L"16") == kMaxCaptureBurst);
+}
+
+TEST_CASE("capture burst: anything else is refused") {
+    CHECK_FALSE(parseCaptureBurst(L""));
+    CHECK_FALSE(parseCaptureBurst(L"0"));
+    CHECK_FALSE(parseCaptureBurst(L"17"));
+    CHECK_FALSE(parseCaptureBurst(L"100"));
+    CHECK_FALSE(parseCaptureBurst(L"4294967297"));
+    CHECK_FALSE(parseCaptureBurst(L"-3"));
+    CHECK_FALSE(parseCaptureBurst(L"5x"));
+}
 
 TEST_CASE("capture setting: folder and interval") {
     const auto s = parseCaptureSetting(L"D:\\evr\\tmp-vr\\eyes,30");
@@ -269,8 +287,24 @@ TEST_CASE("SSDO cvar: held on unless the setting is 0, never part of the other s
         CHECK((c->name == "r_SSDO"));
         CHECK((c->value == "1"));
     }
-    for (const char* none : {"0", "2", "on", " 1"}) {
+    const auto off = evr::stereo_seq::stereoSsdoCvar("0");
+    REQUIRE(off.has_value());
+    CHECK((off->value == "0"));
+    for (const char* none : {"2", "on", " 1", "off"}) {
         CHECK_FALSE(evr::stereo_seq::stereoSsdoCvar(none).has_value());
+    }
+    // The game's Directional Occlusion setting (0x1420F20): off only at level 0.
+    const auto level0 = evr::stereo_seq::directionalOcclusionSsdoCvar(0);
+    REQUIRE(level0.has_value());
+    CHECK((level0->name == "r_SSDO"));
+    CHECK((level0->value == "0"));
+    for (int level = 1; level <= 6; ++level) {
+        const auto c = evr::stereo_seq::directionalOcclusionSsdoCvar(level);
+        REQUIRE(c.has_value());
+        CHECK((c->value == "1"));
+    }
+    for (int none : {-1, 7}) {
+        CHECK_FALSE(evr::stereo_seq::directionalOcclusionSsdoCvar(none).has_value());
     }
     for (const auto& c : evr::stereo_seq::stereoComfortCvars()) {
         CHECK((c.name != "r_SSDO"));
@@ -280,14 +314,24 @@ TEST_CASE("SSDO cvar: held on unless the setting is 0, never part of the other s
     }
 }
 
-TEST_CASE("SSR cvar: held on unless the setting is 0, never part of the other sets") {
+TEST_CASE("SSR cvar: held on unless the setting is 0 or off, never part of the other sets") {
     for (const char* on : {"", "1"}) {
         const auto c = evr::stereo_seq::stereoSsrCvar(on);
         REQUIRE(c.has_value());
         CHECK((c->name == "r_SSR"));
         CHECK((c->value == "1"));
+        CHECK(evr::stereo_seq::stereoSsrFollowsGame(on));
     }
-    for (const char* none : {"0", "2", "on", " 1"}) {
+    for (const char* off : {"0", "off"}) {
+        const auto c = evr::stereo_seq::stereoSsrCvar(off);
+        REQUIRE(c.has_value());
+        CHECK((c->name == "r_SSR"));
+        CHECK((c->value == "0"));
+    }
+    // The player's Low follows the game's Reflections setting; the launcher's Off does not.
+    CHECK(evr::stereo_seq::stereoSsrFollowsGame("0"));
+    CHECK_FALSE(evr::stereo_seq::stereoSsrFollowsGame("off"));
+    for (const char* none : {"2", "on", " 1", "OFF"}) {
         CHECK_FALSE(evr::stereo_seq::stereoSsrCvar(none).has_value());
     }
     for (const auto& c : evr::stereo_seq::stereoComfortCvars()) {
@@ -303,6 +347,29 @@ TEST_CASE("SSR cvar: held on unless the setting is 0, never part of the other se
             CHECK((c.name != "r_SSR"));
         }
     }
+}
+
+TEST_CASE("SSR cvar: the game's Reflections setting is told by the ray-traced upscale quality it writes") {
+    // 0x1421DC0: Low writes r_SSR 0 with quality 3, Medium r_SSR 1 with 2, High and above r_SSR 1 with 1.
+    const auto low = evr::stereo_seq::reflectionsSsrCvar(3);
+    REQUIRE(low.has_value());
+    CHECK((low->name == "r_SSR"));
+    CHECK((low->value == "0"));
+    for (int on : {1, 2}) {
+        const auto c = evr::stereo_seq::reflectionsSsrCvar(on);
+        REQUIRE(c.has_value());
+        CHECK((c->value == "1"));
+    }
+    // 0 is per-eye TAA's own hold: the setting has not run since.
+    for (int none : {0, -1, 4}) {
+        CHECK_FALSE(evr::stereo_seq::reflectionsSsrCvar(none).has_value());
+    }
+    // The hold that tells it apart: per-eye TAA writes the quality 0 on every tick.
+    bool held = false;
+    for (const auto& c : evr::stereo_seq::stereoTaaForcedCvars()) {
+        held = held || (c.name == "r_raytracedReflectionsTemporalUpscaleQuality" && c.value == "0");
+    }
+    CHECK(held);
 }
 
 TEST_CASE("cvar list: name=value items, trimmed, a later item replaces an earlier one") {

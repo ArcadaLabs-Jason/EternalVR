@@ -90,9 +90,10 @@ jump goes where you look, with hand aim or head aim, and you no longer have to t
 The stick still turns you as usual. Looking at the wall and pressing jump lets go, as in the flat game.
 
 Recentering: hold both sticks pressed for 2 seconds, or use the headset's own recenter (hold the
-Meta / Oculus button), e.g. after standing up or sitting down; the mod also notices when you stand up or sit
-down. Face forward first: the game turns to where you face, your height is reset, and the view blinks black
-for a moment while it moves. Do it whenever you turn your chair or the view feels too high or too low. A
+Meta / Oculus button). Face forward first: the game turns to where you face, your height is reset, and the
+view blinks black for a moment while it moves. Do it whenever you turn your chair or the view feels too high
+or too low. The mod notices when you stand up or sit down; if it does not, use the both-sticks recenter: it
+also checks again whether you sit or stand, and the headset's own recenter does not. A
 single stick click still melees (or swings the Crucible) at once; when you press both sticks, the second
 one does nothing and the first one's action has already gone out. The left Menu button is no longer held
 to recenter: Virtual Desktop and the Quest watch a held Menu button and take you out of the game. The
@@ -287,6 +288,7 @@ values are old.
 | Each eye | The size each eye renders at with Resolution and its percent, per side, of what the runtime asks for and of the native panel, for example "2056 x 2216   82% of what VD asks for, 100% of the native panel". With DLSS, about the size DLSS draws; with more than a quarter more pixels than Auto at 1.00, how many more ("47% more pixels than Auto"). After a session whose graphics driver rendered each eye at the window's size (AMD Radeon RX 5000 and 6000), it first says the size that session really got, for example "958 x 1009 last session, 45% of the planned 2056 x 2216", then the plan after "Planned:" | |
 | Anti-aliasing | TAA (recommended: smooth edges, each eye with its own history), DLSS (NVIDIA RTX only, set up in the DLSS group below), Off (sharp, some shimmer on edges and shiny surfaces, a little lighter on the graphics card) | TAA |
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
+| Screen-space reflections | The game's setting (Reflections in its own video menu: off at Low, on from Medium; a change made in the menu during play is followed and kept), Off (off in VR, a little lighter on the graphics card; your flat game keeps its setting). Stereo only, not with Anti-aliasing Off (they are off then) | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive, Maximum: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Maximum the least. The game's menus and HUD stay at full rate, so their text stays sharp, and so do cutscenes on the cinema screen. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
 | Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
 | Parallel Eye Rendering (experimental) | Renders both eyes as two views of one game frame, their work at the same time, instead of one eye after the other. Only on the Steam version this release supports. Stereo only, not with DLSS; Alternate eyes is greyed out while it is on | Off |

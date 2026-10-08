@@ -50,6 +50,7 @@ namespace EternalVR.Launcher
         private readonly Label eachEye = new Label { AutoSize = true, MaximumSize = new Size(260, 0), Margin = new Padding(3, 4, 3, 4) };
         private readonly ComboBox antiAliasing = Choices(Setting.AntiAliasing);
         private readonly ComboBox sharpening = Choices(Setting.Sharpening);
+        private readonly ComboBox reflections = Choices(Setting.ScreenReflections);
         private readonly ComboBox foveation = Choices(Setting.Foveation);
         /// <summary>Its matched choice names the last session's refresh rate (<see cref="ShowPacingChoice"/>).</summary>
         private readonly ComboBox pacing = Choices(Setting.FramePacing);
@@ -145,6 +146,9 @@ namespace EternalVR.Launcher
                 Row(Setting.Sharpening, sharpening,
                     s => sharpening.SelectedIndex = (int)s.Sharpening,
                     s => s.Sharpening = (SharpeningMode)Math.Max(0, sharpening.SelectedIndex)),
+                Row(Setting.ScreenReflections, reflections,
+                    s => reflections.SelectedIndex = (int)s.Reflections,
+                    s => s.Reflections = (ReflectionsMode)Math.Max(0, reflections.SelectedIndex)),
                 Row(Setting.Foveation, foveation,
                     s => foveation.SelectedIndex = (int)s.Foveation,
                     s => s.Foveation = (FoveationMode)foveation.SelectedIndex),

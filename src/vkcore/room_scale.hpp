@@ -11,13 +11,15 @@
 // anchor before the head is placed, and the move for the next user command is published.
 //
 // Threads: head() and clearance() run on the camera hook (the game-frame thread) and own the anchor;
-// onSpaceChange() and fade() run on the XR worker; noteRecenterBinding() runs wherever the input mapper
-// runs. Cross-thread state is atomic or under `mutex_`.
+// onSpaceChange(), onFloorChange() and fade() run on the XR worker; noteRecenterBinding() runs wherever the
+// input mapper runs. Cross-thread state is atomic or under `mutex_`.
 
 #include "common/pose.hpp"
 #include "features/posture/anchor_detector.hpp"
+#include "features/posture/floor_check.hpp"
 #include "features/posture/posture_detector.hpp"
 #include "features/posture/posture_tracker.hpp"
+#include "features/posture/seated_walk.hpp"
 #include "features/roomscale/body_follow.hpp"
 #include "features/roomscale/driven_offset.hpp"
 #include "features/roomscale/follow_test_steps.hpp"
@@ -84,7 +86,11 @@ public:
     void noteBody(Vec3 forward, Vec3 left);
 
     // XR worker: the runtime moved LOCAL (ReferenceSpaceChangePending); `newInPrevious` when it said how.
-    void onSpaceChange(std::optional<Pose> newInPrevious);
+    // `reconnect`: a new session after the old one was lost (LOCAL may be elsewhere, the head may have moved
+    // meanwhile). Either way the room re-anchors and the posture stays.
+    void onSpaceChange(std::optional<Pose> newInPrevious, bool reconnect = false);
+    // XR worker: the runtime changed its STAGE or LOCAL_FLOOR space; the floor is watched for a move.
+    void onFloorChange();
     // XR worker, once per XR frame: the fade to show now (0 clear, 1 black).
     float fade(double seconds);
     // Camera hook: the view fades to black and stays black until `untilSeconds` (qpcSeconds clock), with the
@@ -93,11 +99,23 @@ public:
 
 private:
     // `lift`: the test head offset's height (ETERNALVR_TEST_HEAD_OFFSET), added to the head's height so a
-    // scripted stand-up is anchored and detected like a real one; 0 outside tests.
-    void anchorOn(const Input& in, roomscale::RecenterKind kind, const char* why, float lift);
+    // scripted stand-up is anchored and detected like a real one; 0 outside tests. `detectPosture`: a full
+    // anchor detects the posture again (the player's recenter); the first anchor always does, and the
+    // runtime's recenter keeps the posture in force (posture::postureAtAnchor).
+    void
+    anchorOn(const Input& in, roomscale::RecenterKind kind, const char* why, float lift, bool detectPosture);
     // A re-anchor a moment from now, with the view faded out over the jump (the blink).
-    void scheduleReanchor(roomscale::RecenterKind kind, const char* why, double now);
-    void trackPosture(const Input& in, float lift, double now);
+    void scheduleReanchor(roomscale::RecenterKind kind, const char* why, double now, bool detectPosture);
+    // room_posture.cpp. The floor's reading this frame: `floorNow_` is set to it when it can be used, and
+    // a run of readings no head can have, or the floor moving and coming back, is logged.
+    void readFloor(const Input& in, float lift);
+    // Feeds one reading to `floor_` (`floorNow_`), logging the floor moving or coming back.
+    void updateFloor(std::optional<float> headAboveFloor, float headLocalY, double seconds);
+    void trackPosture(const Input& in, double now);
+    // The posture in force for the rest of the mod (roomPosture()).
+    static void publishPosture(posture::Posture posture);
+    // Walking while seated (posture::SeatedWalk, noticed by follow()) switches to standing.
+    void switchSeatedWalk(double now);
     Vec3 testStep(double seconds);
     void follow(const Input& in, Vec3 testOffset);
     void logStats(double seconds);
@@ -113,10 +131,24 @@ private:
         roomscale::RecenterKind kind = roomscale::RecenterKind::Full;
         const char* why = "";
         double at = 0.0; // nowSeconds()
+        bool detectPosture = false;
     };
     PendingAnchor reanchor_;
-    double postureGraceUntil_ = -1.0; // the lean-cap fade stays off until then after a posture change
-    std::optional<float> anchorAboveFloor_;
+    double postureGraceUntil_ = -1.0;       // the lean-cap fade stays off until then after a posture change
+    std::optional<float> anchorAboveFloor_; // the last usable reading at an anchor
+    posture::FloorCheck floor_;
+    std::optional<float> floorNow_; // this frame's reading when usable (with the test lift)
+    bool floorImplausible_ = false;
+    double floorImplausibleSince_ = 0.0;
+    std::uint64_t floorImplausibleRuns_ = 0;
+    std::uint32_t floorMoveLogs_ = 0;
+    std::uint32_t floorBackLogs_ = 0;
+    // Walking while seated: the wait, how far the room was moved onto the body meanwhile (room axes), and
+    // the distance when it fired (follow -> head()).
+    posture::SeatedWalk seatedWalk_;
+    Vec3 seatShift_{};
+    float seatedWalkMetres_ = 0.0f;
+    std::uint64_t seatedWalks_ = 0;
     bool anchorTaken_ = false;
     bool testRecenterDone_ = false;
     double firstSeconds_ = -1.0;
@@ -167,6 +199,8 @@ private:
     // Worker -> camera hook.
     std::mutex mutex_;
     bool spaceChanged_ = false;
+    bool reconnected_ = false;
+    bool floorChanged_ = false;
     std::optional<Pose> spaceChange_;
 
     // Camera hook -> worker.

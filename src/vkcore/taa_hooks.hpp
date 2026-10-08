@@ -20,8 +20,10 @@
 //   of field, water, refraction, ray-traced reflection upscale) are switched off through the engine's cvar
 //   setter; the light scattering's and SSDO's filters stay on while their history is per eye.
 // - Screen-space reflections are held at the player's r_SSR (ETERNALVR_STEREO_SSR): they read the last
-//   frame's colour through the history selector, so each eye reads its own. Without per-eye TAA the game
-//   writes r_SSR 0 itself (r_TAASafeMode 1), and they stay off.
+//   frame's colour through the history selector, so each eye reads its own. The hold follows the game's
+//   Reflections setting whenever it runs (profile load, video menu), told apart from the TAA safe mode
+//   knock-on by the ray-traced upscale quality it writes too; the launcher's Off holds 0 throughout. Without
+//   per-eye TAA the game writes r_SSR 0 itself (r_TAASafeMode 1), and they stay off.
 // - The auto-exposure index (exposure_hooks.hpp), the light scattering's history (scatter_hooks.hpp) and
 //   SSDO's (ssdo_hooks.hpp) are kept per eye by hooks of their own, which need the eye tags only: they work
 //   with per-eye TAA off or failed closed as well.
@@ -53,8 +55,8 @@ int taaDlssQuality();
 // ETERNALVR_STEREO_DLSS_QUALITY=dlaa: DLSS at the full render size. r_dlssQuality is held at Quality and
 // dlss_dll.cpp sets NGX's PerfQualityValue to DLAA, with a newer DLSS only.
 bool taaDlssDlaa();
-// ETERNALVR_STEREO_SSR as given (empty when unset; the launcher passes the player's own r_SSR, "1" or "0"):
-// stereo_seq::stereoSsrCvar decides whether r_SSR is held while per-eye TAA runs.
+// ETERNALVR_STEREO_SSR as given (empty when unset; the launcher passes the player's own r_SSR, "1" or "0", or
+// "off"): stereo_seq::stereoSsrCvar decides whether r_SSR is held while per-eye TAA runs.
 const std::string& taaSsrSetting();
 
 // From vkCreateInstance, after the multiplayer guard: under Route S installs the scattering and SSDO history

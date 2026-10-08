@@ -19,7 +19,9 @@ r_displayRefresh
 # 1 follows the forced r_motionblur 0. A player's flat game must not keep them. In stereo the layer holds
 # r_SSDO at the player's own value (ETERNALVR_STEREO_SSDO), r_SSR too while per-eye TAA runs
 # (ETERNALVR_STEREO_SSR), and r_blurRadialScale at 0 with the comfort set (no dash zoom blur), which the
-# restore puts back either way.
+# restore puts back either way. r_SSDO and r_SSR are kept as the game saved them when the layer held them at the
+# player's own Directional Occlusion and Reflections settings (LaunchPlan.KeptKeys, confirmed by the layer's
+# status file: ssr_follow / ssdo_follow), so a change made in the game's menu during the session stays.
 r_SSDO
 r_SSR
 r_blurRadialScale

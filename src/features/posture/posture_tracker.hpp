@@ -13,7 +13,9 @@
 // flips it.
 //
 // The tracker only watches: the caller re-anchors the height on a change and resets the tracker after
-// every anchor. With the posture unknown (no floor space, or not anchored) it reports nothing.
+// every anchor. With the posture unknown (no usable floor at the anchor) it detects one once the head has
+// read in one posture's range (posture_detector.hpp) for a second, and reports it as a change from Unknown;
+// without a floor reading it reports nothing.
 
 #include "features/posture/posture_detector.hpp"
 
@@ -43,11 +45,12 @@ public:
     explicit PostureTracker(PostureTrackerSettings settings = {});
 
     // After an anchor: the posture in force and the head's height above the floor it was taken at.
-    // Unknown (or no height) stops the tracking until the next reset.
+    // Unknown (or no height): the posture is unknown and is detected from the readings (above).
     void reset(Posture current, std::optional<float> anchorHeightMetres);
 
-    // One head-height sample (metres above the floor; nullopt or non-finite: no reading, which neither
-    // counts toward nor breaks a dwell) at `seconds` (monotonic; going backwards restarts a dwell).
+    // One head-height sample (metres above the floor; nullopt, non-finite or a height no head can have
+    // (plausibleHeadHeight): no reading, which does not count toward a dwell; more than 0.25 s without one
+    // starts it again) at `seconds` (monotonic; going backwards restarts a dwell).
     // Returns the change on the sample that completes a dwell; the tracker is then in the new posture,
     // referenced to that sample's height.
     std::optional<PostureChange> update(std::optional<float> headAboveFloorMetres, double seconds);
@@ -68,6 +71,7 @@ private:
     Posture candidate_ = Posture::Unknown;
     double since_ = 0.0;
     double last_ = 0.0;
+    double lastReading_ = -1.0; // the last sample with a reading
     bool changing_ = false;
 };
 

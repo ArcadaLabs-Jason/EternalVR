@@ -1,12 +1,14 @@
 // The in-headset capture's presenter part (bug_capture.hpp): when the controllers asked for a capture, the
 // next Route S eye pair (or, when none comes, a mono frame such as a menu's) is copied into the eye
-// capture's host buffers with the game's GUI target, and a text file describes the frame.
+// capture's host buffers with the game's GUI target, and a text file describes the frame. A burst
+// (ETERNALVR_CAPTURE_BURST) goes on with the next pairs (or mono frames), a line each in the text file.
 
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/bug_capture.hpp"
 #include "vkcore/taa_hooks.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -43,6 +45,26 @@ void appendFov(std::string& out, const char* what, const XrFovf& f, const char* 
            degrees(f.angleRight), degrees(f.angleUp), degrees(f.angleDown), end);
 }
 
+// A burst's line for the frame just taken into `buffer` (nothing for a capture of one frame): which pair and
+// game tick it is, or for a mono frame the newest game frame record.
+void appendBurstFrame(
+    XrPresenter::Impl& p, VkBuffer buffer, bool mono, std::uint64_t pairIndex, std::uint64_t tick) {
+    OneShot* shot = p.capture.once();
+    if (!buffer || !shot || shot->frames < 2) {
+        return;
+    }
+    if (!mono) {
+        append(shot->sidecar, "burst frame %02u: stereo pair %llu, game tick %llu\n", p.capture.frame(),
+               static_cast<unsigned long long>(pairIndex), static_cast<unsigned long long>(tick));
+        return;
+    }
+    ViewRecord view;
+    std::uint64_t gap = 0;
+    append(shot->sidecar, "burst frame %02u: game frame record %llu, head-tracked game frames so far %llu\n",
+           p.capture.frame(), p.latestView(view, gap) ? static_cast<unsigned long long>(view.seq) : 0ull,
+           static_cast<unsigned long long>(p.gameTicks.load()));
+}
+
 } // namespace
 
 bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
@@ -66,6 +88,12 @@ bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
     OneShot shot;
     shot.base = dir + stem;
     shot.mono = mono;
+    // A burst takes no more frames than the session's limit leaves (bug_capture::kMaxFramesPerSession).
+    shot.frames = std::min(bug_capture::burstFrames(), std::max(1u, bug_capture::framesLeft()));
+    if (shot.frames < bug_capture::burstFrames()) {
+        EVR_LOG("capture: %u frame(s) left this session; this burst takes %u", bug_capture::framesLeft(),
+                shot.frames);
+    }
     shot.requestQpc = bug_capture::requestQpc();
 
     std::string& t = shot.sidecar;
@@ -142,7 +170,9 @@ VkBuffer XrPresenter::Impl::takeArmedCapture(VkBuffer buffer) {
         uiCapture.disarmOnce();
         return buffer;
     }
-    capture.once()->number = bug_capture::take();
+    OneShot* shot = capture.once();
+    shot->reserved = shot->frames; // a burst that ends early gives back the rest (EyeCapture::writeOnce)
+    shot->number = bug_capture::take(shot->frames);
     return buffer;
 }
 
@@ -150,20 +180,40 @@ VkBuffer XrPresenter::Impl::pairCaptureBuffer(const SwapchainState& sc,
                                               std::uint64_t completed,
                                               std::uint64_t pairIndex,
                                               std::uint64_t tick) {
-    const bool armed = bug_capture::wanted() && armCapture(sc, pairIndex, tick, false);
-    const VkBuffer buffer = capture.bufferFor(dev, 0, pairIndex, sc.format, sc.extent, completed);
-    return armed ? takeArmedCapture(buffer) : buffer;
+    if (const OneShot* shot = capture.once(); capture.between() && shot && shot->mono) {
+        capture.endBurst(); // a burst of mono frames goes on with mono frames only
+    }
+    const bool goesOn = capture.between(); // a burst's next pair (ETERNALVR_CAPTURE_BURST)
+    const bool armed = !goesOn && bug_capture::wanted() && armCapture(sc, pairIndex, tick, false);
+    VkBuffer buffer = capture.bufferFor(dev, 0, pairIndex, sc.format, sc.extent, completed);
+    if (armed) {
+        buffer = takeArmedCapture(buffer);
+    }
+    appendBurstFrame(*this, buffer, false, pairIndex, tick);
+    return buffer;
 }
 
 VkBuffer XrPresenter::Impl::monoCaptureBuffer(const SwapchainState& sc, std::uint64_t completed) {
     capture.poll(dev, completed); // without Route S nothing else polls it
+    if (capture.between()) {      // a burst's next frame (ETERNALVR_CAPTURE_BURST)
+        const OneShot* shot = capture.once();
+        if (!shot || !shot->mono) {
+            capture.endBurst(); // a burst of pairs goes on with pairs only
+            return VK_NULL_HANDLE;
+        }
+        const VkBuffer buffer = capture.bufferFor(dev, 0, 0, sc.format, sc.extent, completed);
+        appendBurstFrame(*this, buffer, true, 0, 0);
+        return buffer;
+    }
     // Under Route S a pair normally comes within a frame or two; a menu or loading screen has none.
     if (!bug_capture::wanted() ||
         (seqActive.load() && bug_capture::secondsWaiting() < bug_capture::kMonoAfterSeconds) ||
         !armCapture(sc, pairing.stats().pairsStarted, gameTicks.load(), true)) {
         return VK_NULL_HANDLE;
     }
-    return takeArmedCapture(capture.bufferFor(dev, 0, 0, sc.format, sc.extent, completed));
+    const VkBuffer buffer = takeArmedCapture(capture.bufferFor(dev, 0, 0, sc.format, sc.extent, completed));
+    appendBurstFrame(*this, buffer, true, 0, 0);
+    return buffer;
 }
 
 void XrPresenter::Impl::captureCopied(VkBuffer buffer, std::uint64_t value, bool mono) {
@@ -175,7 +225,9 @@ void XrPresenter::Impl::captureCopied(VkBuffer buffer, std::uint64_t value, bool
         return;
     }
     capture.copySubmitted(value);
-    if (OneShot* shot = capture.once()) {
+    // The GUI target is armed with the capture and comes with its first frame only: a burst's later frames
+    // leave the first one's result.
+    if (OneShot* shot = capture.once(); shot && capture.frame() == 0) {
         shot->ui = settings.ui.enabled && !uiCapture.disarmOnce();
         if (!settings.ui.enabled) {
             shot->uiNote = "the UI layer is off: the HUD is in the eye images";

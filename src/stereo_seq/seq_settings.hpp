@@ -19,6 +19,13 @@ struct CaptureSetting {
 };
 std::optional<CaptureSetting> parseCaptureSetting(std::wstring_view text);
 
+// ETERNALVR_CAPTURE_BURST=<n>: an in-headset capture saves n consecutive frames instead of one, Route S pairs
+// (both eyes each) or mono frames. 1 to kMaxCaptureBurst: each frame holds a host copy of each of its images
+// (about 18 MB per image at 2056x2216, so 36 MB per pair) until the burst is written, and the background
+// writer compresses them one after another (about 0.35 s per image). nullopt for anything else.
+inline constexpr std::uint32_t kMaxCaptureBurst = 16;
+std::optional<std::uint32_t> parseCaptureBurst(std::wstring_view text);
+
 // A cvar value Route S v1 expects (docs/rig-findings/stereo-routes.md section 2.6).
 struct CvarExpectation {
     std::string_view name;
@@ -71,17 +78,37 @@ const std::vector<CvarExpectation>& stereoComfortCvars();
 // r_SSDO under Route S (ETERNALVR_STEREO_SSDO). The game turns SSDO off itself after r_TAASafeMode 1
 // (0x1C6FCC0), which Route S holds at start-up, so without a hold every Route S session ran without it.
 // SSDO's own temporal filter runs only while its history is per eye (stereoSsdoFilterCvar), so it reads no
-// other eye's history. Unset or "1": held at 1, the game's default (the launcher passes the player's own 0
-// from their config); "0": no hold, the game's knock-on stays. Nothing for any other value.
+// other eye's history. Unset or "1": held at 1, the game's default; "0": held at 0 (the launcher passes the
+// player's own 0 from their config). Both follow the game's Directional Occlusion setting once it runs
+// (directionalOcclusionSsdoCvar, vkcore/ssdo_menu_hook.hpp). Nothing for any other value.
 std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting);
+
+// The r_SSDO the game's Directional Occlusion setting writes for a profile level (0x1420F20): 0 at level 0,
+// 1 at levels 1 to 6 (Low to Ultra Nightmare; r_SSDOQuality 0, 1, 2 from Low). Nothing for any other level.
+std::optional<CvarExpectation> directionalOcclusionSsdoCvar(int level);
 
 // r_SSR while per-eye TAA (or per-eye DLSS) runs (ETERNALVR_STEREO_SSR; taa_hooks.cpp holds it). The same
 // knock-on as SSDO: the game writes r_SSR 0 on every render while r_TAASafeMode is not 0 (0x1C6FCC0,
 // 0x1C71630). SSR keeps no history of its own: it reads the last frame's colour through the TAA history
 // selector (0x1CBB6C0), which per-eye TAA gives each eye's own, so it is held only then. Unset or "1": held
-// at 1, the game's default (the launcher passes the player's own 0 from their config, Reflections at Low);
-// "0": no hold, the game's value stays. Nothing for any other value.
+// at 1, the game's default; "0": held at 0 (the launcher passes the player's own 0 from their config,
+// Reflections at Low); both follow the game's Reflections setting once it runs (reflectionsSsrCvar). "off":
+// held at 0 whatever the game's setting (the launcher's Screen-space reflections Off). Nothing for any other
+// value.
 std::optional<CvarExpectation> stereoSsrCvar(std::string_view setting);
+
+// Whether the r_SSR hold follows the game's Reflections setting: every setting but "off".
+bool stereoSsrFollowsGame(std::string_view setting);
+
+// The r_SSR the game's Reflections setting writes (0x1421DC0), told by the
+// r_raytracedReflectionsTemporalUpscaleQuality it writes with it: 3 at Low (r_SSR 0), 2 at Medium and 1 from
+// High (r_SSR 1). The setting runs at every profile load and every apply of the video menu, never from the
+// TAA safe mode knock-on, and per-eye TAA holds that cvar at 0 (stereoTaaForcedCvars): a value from 1 to 3
+// read before the hold writes it means the player's Reflections setting ran since (SsrHold,
+// setting_follow.hpp). That needs the cvar at 0 from the start: the command line's
+// +r_raytracedReflectionsTemporalUpscaleQuality 0 (its default 1 would read as Medium or higher until the
+// profile's load). Nothing for any other value.
+std::optional<CvarExpectation> reflectionsSsrCvar(int upscaleQuality);
 
 // A cvar held at a value known only at run time (stereoWindowCvars).
 struct CvarHold {

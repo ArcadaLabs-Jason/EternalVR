@@ -43,7 +43,7 @@ counts twice, and the critical path is each eye's command recording and submissi
 | Particles (0x1421880) | `r_particlesLightAtlasQuality` 0,1,1,2,2,3; `r_particleFadeQualityMultiplier` 0.8, 0.9, 1.0, 1.5, 2.0, 2.5 |
 | Decals (0x1420CB0) | `r_decalDistanceFadeMultiplier` 0.25, 0.5, 1, 2, 4, 8; `r_decalLifetimeMultiplier` 1, 1, 1, 1.15, 1.3, 1.5; `r_decalFadeCulling` 2 |
 | Directional occlusion (0x1420F20) | `r_SSDO` / `r_SSDOQuality`: off at 0, on with quality 0, 1, 2 from Low |
-| Reflections (0x1421DC0) | `r_SSR` off at Low, quality 0/1/2 from Medium; `r_environmentProbes`; `r_raytracedReflectionsTemporalUpscaleQuality` 3,3,2,1,1,1; `r_SSRMinSmoothness` |
+| Reflections (0x1421DC0) | `r_SSR` 0, 1, 1, 1, 1, 1; `r_SSRQuality` 0, 0, 1, 2, 2, 2; `r_environmentProbes` 1 (0 only at level 0); `r_raytracedReflectionsTemporalUpscaleQuality` 3, 2, 1, 1, 1, 1 (level 0: 3); `r_SSRMinSmoothness` |
 | Volumetrics (0x14225C0) | `r_lightScatteringQuality` 0 at Low, else 1 |
 | Water (0x1422650) | `r_waterInterleaveUpdates` 1,1,1,0,0,0; `r_waterLodViewDistance` 16..64; caustics, hit simulation, post process off at L/M; `r_waterGridResolution` 192/256; `r_rainQuality` |
 | Texture filtering (0x14221A0) | `r_materialAniso`, `r_materialAnisoCover` 1..16 |

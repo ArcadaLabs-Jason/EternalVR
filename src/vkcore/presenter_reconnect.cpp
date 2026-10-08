@@ -155,8 +155,9 @@ bool XrPresenter::Impl::reconnect() {
         }
         loss.lost = false;
         ++loss.reconnects;
-        // The new LOCAL space may not be where the old one was: re-anchored as after a recenter.
-        room.onSpaceChange(std::nullopt);
+        // The new LOCAL space may not be where the old one was: re-anchored as after a recenter (the posture
+        // stays).
+        room.onSpaceChange(std::nullopt, true);
         menuReplace.store(true, std::memory_order_relaxed);
         consumerAlive.store(true);
         status::waiting("the headset is back; waiting for its session to start");

@@ -95,6 +95,24 @@ std::optional<CaptureSetting> parseCaptureSetting(std::wstring_view text) {
     return setting;
 }
 
+std::optional<std::uint32_t> parseCaptureBurst(std::wstring_view text) {
+    text = trim(text);
+    if (text.empty() || text.size() > 3) {
+        return std::nullopt;
+    }
+    std::uint32_t n = 0;
+    for (const wchar_t c : text) {
+        if (c < L'0' || c > L'9') {
+            return std::nullopt;
+        }
+        n = n * 10 + static_cast<std::uint32_t>(c - L'0');
+    }
+    if (n < 1 || n > kMaxCaptureBurst) {
+        return std::nullopt;
+    }
+    return n;
+}
+
 const std::vector<CvarExpectation>& sequentialCvars() {
     static const std::vector<CvarExpectation> cvars{
         {"r_TAASafeMode", "1"}, {"r_antialiasing", "0"}, {"r_jitter", "0"},
@@ -159,11 +177,41 @@ std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting) {
     if (setting.empty() || setting == "1") {
         return CvarExpectation{"r_SSDO", "1"};
     }
+    if (setting == "0") {
+        return CvarExpectation{"r_SSDO", "0"};
+    }
+    return std::nullopt;
+}
+
+std::optional<CvarExpectation> directionalOcclusionSsdoCvar(int level) {
+    if (level == 0) {
+        return CvarExpectation{"r_SSDO", "0"};
+    }
+    if (level >= 1 && level <= 6) {
+        return CvarExpectation{"r_SSDO", "1"};
+    }
     return std::nullopt;
 }
 
 std::optional<CvarExpectation> stereoSsrCvar(std::string_view setting) {
     if (setting.empty() || setting == "1") {
+        return CvarExpectation{"r_SSR", "1"};
+    }
+    if (setting == "0" || setting == "off") {
+        return CvarExpectation{"r_SSR", "0"};
+    }
+    return std::nullopt;
+}
+
+bool stereoSsrFollowsGame(std::string_view setting) {
+    return setting != "off";
+}
+
+std::optional<CvarExpectation> reflectionsSsrCvar(int upscaleQuality) {
+    if (upscaleQuality == 3) {
+        return CvarExpectation{"r_SSR", "0"};
+    }
+    if (upscaleQuality == 1 || upscaleQuality == 2) {
         return CvarExpectation{"r_SSR", "1"};
     }
     return std::nullopt;

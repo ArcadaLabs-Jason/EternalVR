@@ -438,21 +438,28 @@ firing keeps firing), and a stick chord with a capture does not recenter
 (`CaptureChordOutput::cancelSticks`). A double tap of Menu was the first idea; Virtual Desktop already uses
 it (it switches to the desktop view), so it is not used.
 
-The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`,
-`presenter_snapshot.cpp`): `capture-<date>-<time>-p<pair>-t<tick>-L.png` and `-R.png` (the two eye images
-as presented), `-UI.png` (the game's GUI target, what the HUD quad shows, with its alpha) and `.txt` (the
-head and eye poses and FOVs, the render size, the TAA / DLSS state, the tick). In a menu or loading
-screen there is no stereo pair: after 0.3 s the next mono frame is saved as `-mono.png` instead. The
-copies are the periodic capture's (`ETERNALVR_CAPTURE_EYES`, `ETERNALVR_CAPTURE_UI`), the PNG files are
-written on a background thread and the log says `capture: saved eye L/R + UI to ...` with the render
-thread's share (a few ms of copying out of the host buffers) and the time since the trigger pull. At most
-50 captures per session. The PNG files are compressed (unlike the periodic eye pairs;
-`stereo_seq/deflate.hpp`, each row with the PNG filter that suits it): at a 2056x2216 render size an eye
-image is 6 to 7.5 MB (about half its raw size) and the UI image well under 1 MB, so a capture is about
-13 MB; the background thread takes about 0.35 s per eye image and 0.1 s for the UI image. The launcher's
-Export report takes the newest captures, up to 20 MB
-(`ReportManifest.CapturesCapBytes`: one capture at that render size, and the zip stays under GitHub's 25 MB
-attachment limit).
+The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`, `presenter_snapshot.cpp`):
+`capture-<date>-<time>-p<pair>-t<tick>-L.png` and `-R.png` (the two eye images as presented), `-UI.png` (the
+game's GUI target, what the HUD quad shows, with its alpha) and `.txt` (the head and eye poses and FOVs, the
+render size, the TAA / DLSS state, the tick). In a menu or loading screen there is no stereo pair: after
+0.3 s the next mono frame is saved as `-mono.png` instead. With `ETERNALVR_CAPTURE_BURST=<n>`
+(docs/VR_STEREO.md) a capture is n consecutive pairs (or mono frames), saved as `-f00-L.png`, `-f00-R.png`,
+`-f01-L.png` ... (`-f00-mono.png` ...) with one text file and one GUI image (frame 00's); a frame of the
+other kind ends a burst early. The copies are the periodic capture's (`ETERNALVR_CAPTURE_EYES`,
+`ETERNALVR_CAPTURE_UI`), the PNG files are written on a background thread straight from the host buffers and
+the log says `capture: saved eye L/R + UI to ...` with the number of frames and the time since the trigger
+pull. At most 50 frames per session (`bug_capture::kMaxFramesPerSession`): a capture of one frame counts
+one, a burst each of its frames, and a burst takes no more than are left. The PNG files are compressed
+(unlike the periodic eye pairs; `stereo_seq/deflate.hpp`, each row with the PNG filter that suits it): at a
+2056x2216 render size an eye image is 6 to 7.5 MB (about half its raw size) and the UI image well under
+1 MB, so a capture is about 13 MB and a session's captures at most about 650 MB; the background thread
+takes about 0.35 s per eye image and 0.1 s for the UI image. A burst is a little under n times that (about
+12 MB per pair, 0.7 s of writing), and until it is written it holds n pairs of host buffers (about 36 MB
+per pair at that size; freed once it is written). The launcher's Export report takes the newest captures, up
+to 20 MB (`ReportManifest.CapturesCapBytes`: one capture at that render size, and the zip stays under
+GitHub's 25 MB attachment limit); of a burst, its text file, its GUI image and as many of its frames, in
+order, as fit (the first at that size), and the report's list of left-out files says how many frames stayed
+out.
 
 **Skipping a cutscene by hand.** With the automatic skip off (`ETERNALVR_SKIP_CINEMATICS=0`, the
 launcher's "Skip cutscenes automatically" unticked), holding the dash action (B on the weapon hand; the

@@ -18,7 +18,8 @@ namespace EternalVR.Launcher.Core.Report
         /// <summary>
         /// The in-headset captures (the capture chord, docs/release/CONTROLS.md) in each of the newest session
         /// folders' <c>captures</c> folder: PNG images taken as they are (not redacted: pixels only) with their text files (redacted),
-        /// newest capture first, whole captures up to <see cref="ReportManifest.CapturesCapBytes"/>.
+        /// newest capture first, whole captures (of a burst, its text file and its first frames that fit) up to
+        /// <see cref="ReportManifest.CapturesCapBytes"/>.
         /// </summary>
         SessionCaptures,
         /// <summary>
@@ -111,7 +112,9 @@ namespace EternalVR.Launcher.Core.Report
         /// from <see cref="TotalCapBytes"/>. The layer's PNG files are compressed (a capture is about 13 MB at a
         /// 2056x2216 render size), so they keep their size in the zip: this cap holds one whole capture at that size
         /// and leaves room for the zipped logs under GitHub's 25 MB attachment limit. A capture that would pass this
-        /// cap is left out whole and listed as left out.
+        /// cap is left out whole and listed as left out. Of a burst (ETERNALVR_CAPTURE_BURST, about 12 MB per frame at
+        /// that size), its text file and GUI image come first, then its frames in order while they fit: its first frame
+        /// at that size, and the frames left out are listed.
         /// </summary>
         public const long CapturesCapBytes = 20 * MiB;
 

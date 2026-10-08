@@ -14,7 +14,9 @@ namespace EternalVR.Launcher.Core
     /// The layer logs the runtime's display period every 10 s (<c>xr: N frame(s), ...; display period 11.11 ms</c>): the
     /// refresh rate is the shortest period the session held (a period seen in two windows or more, or the first frame's), a
     /// window at 2 to 6 times it was held to a part of it, and a steady period that is no such multiple is another refresh
-    /// rate. The period is a snapshot of the last frame of each window, so the shares are of windows, not of exact time.
+    /// rate. The period is a snapshot of the last frame of each window, so the shares are of windows, not of exact time: the
+    /// layer's time-based summary (<c>xr: refresh summary at session end: base 11.11 ms (90 Hz); 1x 90.6%, 2x 9.3%, ...</c>,
+    /// also every 60 s) gives the held share instead when it is logged, and a share of windows from a short session says so.
     /// Also the mod's controller actions the runtime bound (<c>controllers: 0 of 12 action(s) bound</c>) and whether the layer
     /// warned that no hand pose arrived in play (<see cref="UnboundControls"/>), and how often the game's video memory was over
     /// the budget Windows gives it, or near it (<c>vram: the process uses U MB ..., budget B MB ...; ... N of M reading(s) over
@@ -32,6 +34,9 @@ namespace EternalVR.Launcher.Core
         /// summary says so: a runtime menu opening over the game can then reset the graphics driver (issue #19: SteamVR's
         /// dashboard at 97 to 99% of the budget, fixed by a lower texture pool).</summary>
         public const double VramNearShareToSay = 0.50;
+        /// <summary>Fewer 10 s windows than this (10 minutes) make a short session: a share of so few one-frame snapshots can
+        /// be far from the time it took (a player's 13 minutes: 16% of the windows, 9.3% of the time).</summary>
+        public const int ShortSessionWindows = 60;
 
         private static readonly Regex RuntimeLine = new Regex(@"\] xr: runtime '(?<name>[^']*)'", RegexOptions.CultureInvariant);
         private static readonly Regex SystemLine = new Regex(@"\] xr: system '(?<name>.*)', max swapchain", RegexOptions.CultureInvariant);
@@ -39,6 +44,10 @@ namespace EternalVR.Launcher.Core
             @"\] xr: (?<frames>[0-9]+) frame\(s\), .*display period (?<period>[0-9.]+) ms", RegexOptions.CultureInvariant);
         private static readonly Regex RatesLine = new Regex(
             @"\] rates: game [0-9.]+ present\(s\)/s, [0-9.]+ tick\(s\)/s, (?<pairs>[0-9.]+) stereo pair\(s\)/s shown", RegexOptions.CultureInvariant);
+        private static readonly Regex RefreshSummaryLine = new Regex(
+            @"\] xr: refresh summary(?: at session end)?: base (?<base>[0-9.]+) ms \([^)]*\); (?<shares>[^;]*); [0-9]+ change\(s\) in [0-9.]+ s",
+            RegexOptions.CultureInvariant);
+        private static readonly Regex MultipleShare = new Regex(@"\b(?<k>[0-9]+)x (?<share>[0-9.]+)%", RegexOptions.CultureInvariant);
         private const string ControllersTag = "] controllers: ";
         private static readonly Regex BoundLine = new Regex(
             @"\] controllers: (?<bound>[0-9]+) of (?<all>[0-9]+) action\(s\) bound", RegexOptions.CultureInvariant);
@@ -70,6 +79,9 @@ namespace EternalVR.Launcher.Core
         public double HeldShare { get; private set; }
         /// <summary>The rate it was held to most often (a half or a third of the refresh rate); 0 when never.</summary>
         public int HeldHz { get; private set; }
+        /// <summary>True when <see cref="HeldShare"/> and <see cref="HeldHz"/> are of the session's time, from the layer's last
+        /// refresh summary (its base the refresh rate), false when they are of <see cref="Windows"/>.</summary>
+        public bool HeldByTime { get; private set; }
         /// <summary>Other refresh rates the headset held for two windows or more, with their windows, most first.</summary>
         public IReadOnlyList<KeyValuePair<int, int>> OtherRates { get; private set; } = new KeyValuePair<int, int>[0];
         /// <summary>The game's new pairs of eye images a second while the headset ran at its refresh rate (the median of those
@@ -98,6 +110,8 @@ namespace EternalVR.Launcher.Core
             int? firstHz = null;
             int vramOver = 0;
             int vramNear = 0;
+            int? timeHz = null;
+            Dictionary<int, double> timeShares = null;
             foreach (var line in lines ?? Enumerable.Empty<string>())
             {
                 if (line == null) continue;
@@ -140,6 +154,21 @@ namespace EternalVR.Launcher.Core
                         continue;
                     }
                     windows.Add(new Window { Hz = hz });
+                    continue;
+                }
+                var rs = RefreshSummaryLine.Match(line);
+                if (rs.Success)
+                {
+                    // The last one counts: each sums up the whole session so far.
+                    if (double.TryParse(rs.Groups["base"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var baseMs) && baseMs > 0.5)
+                    {
+                        timeHz = (int)Math.Round(1000.0 / baseMs, MidpointRounding.AwayFromZero);
+                        timeShares = new Dictionary<int, double>();
+                        foreach (Match m in MultipleShare.Matches(rs.Groups["shares"].Value))
+                            if (int.TryParse(m.Groups["k"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var k)
+                                && double.TryParse(m.Groups["share"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var share))
+                                timeShares[k] = share / 100.0;
+                    }
                     continue;
                 }
                 var r = RatesLine.Match(line);
@@ -189,6 +218,17 @@ namespace EternalVR.Launcher.Core
                 int most = held.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).First().Key;
                 s.HeldHz = (int)Math.Round((double)s.RefreshHz / most, MidpointRounding.AwayFromZero);
             }
+            // The layer's time-based shares, when its base is the refresh rate found here: a share under half a percent is none.
+            if (timeShares != null && timeHz == s.RefreshHz)
+            {
+                var heldTime = timeShares.Where(kv => kv.Key >= 2 && kv.Key <= 6).ToList();
+                double share = heldTime.Sum(kv => kv.Value);
+                s.HeldByTime = true;
+                s.HeldShare = share >= 0.005 ? share : 0.0;
+                s.HeldHz = s.HeldShare > 0
+                    ? (int)Math.Round((double)s.RefreshHz / heldTime.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).First().Key, MidpointRounding.AwayFromZero)
+                    : 0;
+            }
             s.OtherRates = others.Where(kv => kv.Value >= 2).OrderByDescending(kv => kv.Value).ThenByDescending(kv => kv.Key).ToList();
 
             var atRefresh = play.Where(w => w.Hz == s.RefreshHz).Select(w => w.Pairs.Value).OrderBy(v => v).ToList();
@@ -209,8 +249,8 @@ namespace EternalVR.Launcher.Core
             return m >= 2 && m <= 6 && Math.Abs(ratio - m) < 0.05 * m ? m : 0;
         }
 
-        /// <summary>"of play" or "of the session".</summary>
-        private string Scope => InPlay ? "of play" : "of the session";
+        /// <summary>"of play", "of the session" (also the time-based share) or "of a short session".</summary>
+        private string Scope => HeldByTime ? "of the session" : Windows < ShortSessionWindows ? "of a short session" : InPlay ? "of play" : "of the session";
 
         /// <summary>The held share as a whole percent, at least 1 when there was any.</summary>
         private string HeldPercent => Math.Max(1, (int)Math.Round(HeldShare * 100, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture) + "%";
@@ -294,12 +334,12 @@ namespace EternalVR.Launcher.Core
 
         /// <summary>The numbers for the launcher log.</summary>
         public string LogText() => string.Format(CultureInfo.InvariantCulture,
-            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; video memory over the budget in {10} of {11} window(s), at 95% of it or more in {12}; controls {9}",
+            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%{13}; other rates {5}; new stereo pairs/s at the refresh rate {6}; runtime '{7}', system '{8}'; video memory over the budget in {10} of {11} window(s), at 95% of it or more in {12}; controls {9}",
             RefreshHz, Windows, InPlay ? " in play" : " (not enough play: the whole session)", HeldHz, HeldShare * 100,
             OtherRates.Count == 0 ? "none" : string.Join(", ", OtherRates.Select(kv => kv.Key + " Hz x" + kv.Value)),
             GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName, ControlsText(),
             (int)Math.Round(VramOverShare * VramWindows, MidpointRounding.AwayFromZero), VramWindows,
-            (int)Math.Round(VramNearShare * VramWindows, MidpointRounding.AwayFromZero));
+            (int)Math.Round(VramNearShare * VramWindows, MidpointRounding.AwayFromZero), HeldByTime ? " of the time (the layer's refresh summary)" : " of the windows");
 
         private static double Median(List<double> sorted)
         {

@@ -16,6 +16,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/shader_dump.hpp"
+#include "vkcore/ssdo_menu_hook.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/stereo_hooks.hpp"
@@ -231,6 +232,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
         mp_guard::install();
         installViewSlotsEarly(); // Parallel Eye Rendering: before the renderer sizes its views
         installTaaEarly();       // per-eye TAA: eye R's images are built with the device context, after this
+        installSsdoMenuHook();   // Route S's r_SSDO hold follows the game's setting from the profile's load
     }
     std::unique_lock lock(g_mapMutex);
     g_instances[keyOf(*pInstance)] = std::move(data);

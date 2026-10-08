@@ -2,8 +2,6 @@
 
 #include "common/finite.hpp"
 
-#include <cmath>
-
 namespace evr::posture {
 
 namespace {
@@ -22,9 +20,13 @@ PostureThresholds sanitized(PostureThresholds thresholds) {
 
 PostureDetector::PostureDetector(PostureThresholds thresholds) : thresholds_(sanitized(thresholds)) {}
 
+bool plausibleHeadHeight(float headAboveFloorMetres) {
+    return finiteInRange(headAboveFloorMetres, kMinHeadAboveFloorMetres, kMaxHeadAboveFloorMetres);
+}
+
 Posture PostureDetector::update(std::optional<float> headHeightAboveFloor) {
-    // A non-finite height is a tracking glitch, not a measurement.
-    if (!headHeightAboveFloor || !std::isfinite(*headHeightAboveFloor)) {
+    // A non-finite height is a tracking glitch, not a measurement; an implausible one is a broken floor.
+    if (!headHeightAboveFloor || !plausibleHeadHeight(*headHeightAboveFloor)) {
         return current_;
     }
     const float height = *headHeightAboveFloor;
@@ -50,6 +52,18 @@ Posture effectivePosture(PostureOverride playerOverride, Posture detected) {
         break;
     }
     return detected;
+}
+
+AnchorPosture postureAtAnchor(PostureDetector& detector,
+                              Posture inForce,
+                              std::optional<float> headAboveFloor,
+                              bool detect) {
+    if ((!detect && inForce != Posture::Unknown) || !headAboveFloor ||
+        !plausibleHeadHeight(*headAboveFloor)) {
+        return {inForce, false};
+    }
+    detector.reset();
+    return {detector.update(headAboveFloor), true};
 }
 
 } // namespace evr::posture

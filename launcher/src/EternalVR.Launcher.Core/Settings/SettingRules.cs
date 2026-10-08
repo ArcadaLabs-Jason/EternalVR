@@ -17,7 +17,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: controls
         AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, HoldTime, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, EachEye, AntiAliasing, Sharpening, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
+        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
@@ -46,6 +46,7 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NeedsShownArms = "Only with Show arms on (Play tab): otherwise the arms are hidden in cutscenes too.";
         public const string NeedsDlss = "Only with DLSS (Anti-aliasing).";
         public const string NotWithDlss = "Not with DLSS (Anti-aliasing).";
+        public const string NotWithAntiAliasingOff = "Not with Anti-aliasing Off: screen-space reflections are off then.";
         public const string NotWithParallelEyes = "Not with Parallel Eye Rendering (Play tab).";
         public const string NeedsNewerDlss = "Only with a newer DLSS than the game's (Version).";
         public const string NotWithAutoEyes =
@@ -119,6 +120,10 @@ namespace EternalVR.Launcher.Core.Settings
                     if (!stereo) return NeedsStereo;
                     if (s.AntiAliasing != AntiAliasingMode.Dlss) return NeedsDlss;
                     return setting == Setting.DlssPreset && s.DlssDll == DlssDllChoice.Game ? NeedsNewerDlss : null;
+                case Setting.ScreenReflections:
+                    // Without per-eye TAA the game turns them off itself (r_TAASafeMode 1).
+                    if (!stereo) return NeedsStereo;
+                    return s.AntiAliasing == AntiAliasingMode.Off ? NotWithAntiAliasingOff : null;
                 case Setting.Foveation:
                     // Its passes take their eye from the standard renderer's eye tags; the layer turns it off with
                     // Parallel Eye Rendering (docs/VR_STEREO.md).

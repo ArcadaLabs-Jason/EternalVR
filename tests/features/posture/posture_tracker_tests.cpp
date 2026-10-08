@@ -101,30 +101,87 @@ TEST_CASE("sitting up straight near the top of the seated band is not standing")
     CHECK(feed(tracker, 1.85f, 5.0, 2.0).change);
 }
 
-TEST_CASE("unknown posture or no floor reports nothing") {
-    PostureTracker unknown;
-    unknown.reset(Posture::Unknown, 1.0f);
-    CHECK_FALSE(feed(unknown, 1.8f, 0.0, 5.0).change);
+TEST_CASE("an unknown posture is detected once the floor has read the head for a second") {
+    // No floor at the anchor (a WMR headset logged 'head (no floor space)' while STAGE existed).
     PostureTracker noHeight;
     noHeight.reset(Posture::Seated, std::nullopt);
     CHECK(noHeight.current() == Posture::Unknown);
-    CHECK_FALSE(feed(noHeight, 1.8f, 0.0, 5.0).change);
+    // No reading, or none a head can have: nothing.
+    for (double t = 0.0; t < 5.0; t += kFrame) {
+        CHECK_FALSE(noHeight.update(std::nullopt, t));
+        CHECK_FALSE(noHeight.update(0.06f, t));
+    }
+    const Fed stood = feed(noHeight, 1.75f, 5.0, 3.0);
+    REQUIRE(stood.change);
+    CHECK(stood.change->from == Posture::Unknown);
+    CHECK(stood.change->to == Posture::Standing);
+    CHECK(stood.at == doctest::Approx(1.0).epsilon(0.02));
+    CHECK(noHeight.current() == Posture::Standing);
+    // Then tracked as usual from that height.
+    CHECK(feed(noHeight, 1.0f, 8.0, 3.0).change);
+    CHECK(noHeight.current() == Posture::Seated);
+
+    PostureTracker unknown;
+    unknown.reset(Posture::Unknown, 1.0f);
+    const Fed sat = feed(unknown, 1.1f, 0.0, 3.0);
+    REQUIRE(sat.change);
+    CHECK(sat.change->to == Posture::Seated);
+    // Readings that cross between the ranges restart the second.
+    PostureTracker unsure;
+    unsure.reset(Posture::Unknown, std::nullopt);
+    for (double t = 0.0; t < 5.0; t += 0.5) {
+        CHECK_FALSE(feed(unsure, (static_cast<int>(t * 2.0) % 2 == 0) ? 1.1f : 1.6f, t, 0.5).change);
+    }
 }
 
-TEST_CASE("missing samples neither count nor break a dwell; time going backwards restarts it") {
+TEST_CASE("missing samples up to 0.25 s neither count nor break a dwell; time going backwards restarts it") {
     PostureTracker tracker;
     tracker.reset(Posture::Seated, 1.0f);
     CHECK_FALSE(tracker.update(1.7f, 0.0));
-    CHECK_FALSE(tracker.update(std::nullopt, 0.5));
-    CHECK_FALSE(tracker.update(std::nanf(""), 0.6));
+    CHECK_FALSE(tracker.update(std::nullopt, 0.1));
+    CHECK_FALSE(tracker.update(std::nanf(""), 0.2));
+    CHECK_FALSE(tracker.update(1.7f, 0.25));
+    CHECK_FALSE(tracker.update(std::nullopt, 0.4));
+    CHECK_FALSE(tracker.update(1.7f, 0.5));
+    CHECK_FALSE(tracker.update(1.7f, 0.75));
     CHECK(tracker.update(1.7f, 1.0));
 
     PostureTracker back;
     back.reset(Posture::Seated, 1.0f);
     CHECK_FALSE(back.update(1.7f, 10.0));
     CHECK_FALSE(back.update(1.7f, 5.0)); // backwards: the dwell starts again at 5.0
-    CHECK_FALSE(back.update(1.7f, 5.9));
+    CHECK_FALSE(feed(back, 1.7f, 5.0 + kFrame, 0.9).change);
     CHECK(back.update(1.7f, 6.0));
+}
+
+TEST_CASE("a floor no head can have is no reading") {
+    // A player's SteamVR recenter put the floor at head height: standing, the head read 0.06 m above it.
+    PostureTracker standing;
+    standing.reset(Posture::Standing, 1.67f);
+    CHECK_FALSE(feed(standing, 0.06f, 0.0, 10.0).change);
+    CHECK(standing.current() == Posture::Standing);
+    CHECK_FALSE(standing.changing());
+    CHECK_FALSE(standing.pending());
+    // Seated under a floor far below: no stand-up either.
+    PostureTracker seated;
+    seated.reset(Posture::Seated, 1.0f);
+    CHECK_FALSE(feed(seated, 2.6f, 0.0, 10.0).change);
+    CHECK(seated.current() == Posture::Seated);
+    // Like a missing sample, it does not count toward a dwell, and a long run of them starts it again: one
+    // reading before and one after never flip the posture at once.
+    PostureTracker dwell;
+    dwell.reset(Posture::Standing, 1.7f);
+    CHECK_FALSE(dwell.update(1.0f, 0.0));
+    CHECK_FALSE(dwell.update(0.06f, 1.0));
+    CHECK(dwell.pending());
+    CHECK_FALSE(dwell.update(1.0f, 1.6));
+    CHECK(dwell.pending());
+    CHECK_FALSE(feed(dwell, 1.0f, 1.6 + kFrame, 1.4).change);
+    CHECK(dwell.update(1.0f, 3.11));
+    // The edges of the range are heads.
+    PostureTracker low;
+    low.reset(Posture::Standing, 1.7f);
+    CHECK(feed(low, 0.5f, 0.0, 2.0).change);
 }
 
 TEST_CASE("a reset re-references the height (a recenter while standing)") {

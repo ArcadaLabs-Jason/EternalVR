@@ -58,8 +58,9 @@ namespace EternalVR.Launcher.Core.Settings
                 "The view fades to black when your head goes into a wall or too far from your body, so you cannot see "
                 + "through the level. If you are stuck in the dark for a moment, the game moves you back onto your body."),
             [Setting.RecenterHold] = new Text("Recenter hold",
-                "Hold both sticks pressed for 2 seconds to turn the game to where you face and reset your height. "
-                + "A single stick click still melees at once. The headset's own recenter works too."),
+                "Hold both sticks pressed for 2 seconds to turn the game to where you face and reset your height; it also "
+                + "checks again whether you sit or stand. A single stick click still melees at once. The headset's own "
+                + "recenter works too, but keeps sitting or standing as it was."),
             [Setting.SkipCutscenes] = new Text("Skip cutscenes",
                 "Skips the game's cutscenes automatically. The first part of the very first cinematic cannot be skipped: "
                 + "the game makes you watch it."),
@@ -170,6 +171,10 @@ namespace EternalVR.Launcher.Core.Settings
                 + "in VR and leave your flat game's setting as it was. Low to High make distant detail crisper, at the cost "
                 + "of some shimmer on fine edges.",
                 "The game's setting", "Off", "Low", "Medium", "High"),
+            [Setting.ScreenReflections] = new Text("Screen-space reflections",
+                "The game's setting follows Reflections in its video menu (off at Low); Off turns screen-space reflections off "
+                + "in VR, a little lighter on the graphics card, and leaves your flat game's setting as it was.",
+                "The game's setting", "Off"),
             [Setting.Foveation] = new Text("Foveated rendering (experimental)",
                 "Shades the edges of each eye at a lower rate, where the lenses blur anyway, so the graphics card does less "
                 + "work (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). "

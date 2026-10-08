@@ -76,8 +76,10 @@ evr_add_test(evr_posture_tests
     SOURCES
         features/posture/anchor_detector_tests.cpp
         features/posture/eye_height_tests.cpp
+        features/posture/floor_check_tests.cpp
         features/posture/posture_detector_tests.cpp
         features/posture/posture_tracker_tests.cpp
+        features/posture/seated_walk_tests.cpp
     DEPENDS evr_posture)
 
 evr_add_test(evr_roomscale_tests
@@ -258,6 +260,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/eye_pairing_tests.cpp
         stereo_seq/eye_tags_tests.cpp
         stereo_seq/eye_view_plan_tests.cpp
+        stereo_seq/fx_sync_tests.cpp
         stereo_seq/geomcache_prev_tests.cpp
         stereo_seq/keep_prev_tests.cpp
         stereo_seq/moved_flag_tests.cpp
@@ -272,6 +275,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/render_idle_tests.cpp
         stereo_seq/scatter_history_tests.cpp
         stereo_seq/seq_settings_tests.cpp
+        stereo_seq/setting_follow_tests.cpp
         stereo_seq/ssdo_history_tests.cpp
         stereo_seq/stack_budget_tests.cpp
         stereo_seq/stereo_taa_tests.cpp

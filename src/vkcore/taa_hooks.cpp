@@ -14,6 +14,7 @@
 #include "vkcore/taa_locate.hpp"
 #include "vkcore/taa_ngx.hpp"
 #include "vkcore/taa_resize.hpp"
+#include "vkcore/taa_ssr.hpp"
 
 #include <windows.h>
 
@@ -82,9 +83,6 @@ std::atomic<int> g_dlssFallbacks{0};
 bool g_ngxHooked = false;
 std::atomic<bool> g_failedClosed{false};
 std::atomic<std::uint64_t> g_cvarWrites{0};
-// r_SSR held at the player's value while per-eye history is in place (decideSsrHold).
-std::string g_ssrValue;
-std::atomic<bool> g_ssrHeld{false};
 
 struct Counters {
     std::atomic<std::uint64_t> picks[2]{};
@@ -316,8 +314,12 @@ bool setCvar(std::string_view name, const char* value) {
     return true;
 }
 
-void applySet(const std::vector<stereo_seq::CvarExpectation>& set) {
+// `skip`: a cvar of the set written elsewhere (takeUpscaleQuality).
+void applySet(const std::vector<stereo_seq::CvarExpectation>& set, std::string_view skip = {}) {
     for (const auto& c : set) {
+        if (c.name == skip) {
+            continue;
+        }
         // With the scattering or SSDO history per eye (scatter_hooks.hpp, ssdo_hooks.hpp) its temporal filter
         // stays on.
         if ((c.name == "r_lightScatteringTAA" && scatterPerEyeReady()) ||
@@ -330,25 +332,22 @@ void applySet(const std::vector<stereo_seq::CvarExpectation>& set) {
     }
 }
 
-// Screen-space reflections keep no history of their own: they read the last frame's colour through the
-// history selector above, so with per-eye history each eye reads its own, and r_SSR is held at the player's
-// value (ETERNALVR_STEREO_SSR, stereo_seq::stereoSsrCvar). Without it the game writes r_SSR 0 on every render
-// itself (r_TAASafeMode 1, 0x1C6FCC0), which is right then: the eyes would share that colour.
-void decideSsrHold(bool perEye) {
-    const std::string& setting = taaSsrSetting();
-    const auto c = stereo_seq::stereoSsrCvar(setting);
-    if (!c) {
-        EVR_LOG("%s: r_SSR is left as the game has it (ETERNALVR_STEREO_SSR=%s)", kTag, setting.c_str());
-    } else if (!perEye) {
-        EVR_LOG("%s: r_SSR is not held: per-eye TAA failed closed", kTag);
-    } else if (!cvarByName(c->name)) {
-        EVR_LOG("%s: r_SSR not located; left as the game has it", kTag);
-    } else {
-        g_ssrValue = std::string(c->value);
-        g_ssrHeld.store(true);
-        EVR_LOG("%s: r_SSR held at %s (ETERNALVR_STEREO_SSR=%s; per-eye TAA)", kTag, g_ssrValue.c_str(),
-                setting.empty() ? "unset" : setting.c_str());
+constexpr std::string_view kUpscaleQuality = "r_raytracedReflectionsTemporalUpscaleQuality";
+
+// The forced set's r_raytracedReflectionsTemporalUpscaleQuality 0, read and written back at once here, not in
+// applySet: the game's Reflections setting writes it last (after r_SSR), and a write landing between this
+// read and a later write in applySet would be put back to 0 unseen, leaving the r_SSR before it held
+// (taa_ssr.hpp). The value read; -1 when not located.
+int takeUpscaleQuality() {
+    const std::byte* cvar = cvarByName(kUpscaleQuality);
+    if (!cvar) {
+        return -1;
     }
+    const int value = cvarInt(cvar);
+    if (value != 0) {
+        setCvar(kUpscaleQuality, "0");
+    }
+    return value;
 }
 
 stereo_seq::TaaReadiness readiness() {
@@ -478,7 +477,7 @@ void taaOnStereoTick() {
                                             : "eye R updates its own exposure (no exposure index hook)");
             applySet(stereo_seq::stereoTaaFailClosedCvars());
             g_failedClosed.store(true);
-            decideSsrHold(false);
+            ssrDecide(false, cvarByName("r_SSR") != nullptr);
             const bool closed =
                 g_antialiasing && g_safeMode && cvarInt(g_antialiasing) == 0 && cvarInt(g_safeMode) == 1;
             if (!closed) {
@@ -493,27 +492,27 @@ void taaOnStereoTick() {
         setNgxTwinsActive(g_ngxHooked);
         EVR_LOG("%s: per-eye TAA on: r_antialiasing %d, r_TAASafeMode %d, r_TAANumSubSamples %d", kTag,
                 cvarInt(g_antialiasing), cvarInt(g_safeMode), taaNumSubSamples());
-        decideSsrHold(true);
+        ssrDecide(true, cvarByName("r_SSR") != nullptr);
     }
     // Every stereo tick: the game applies the player's profile at run time as well (it can bring back
     // r_TAASafeMode, r_antialiasing and the effects), so the set is checked each tick and written only
     // where it differs.
     if (g_failedClosed.load()) {
-        if (g_ssrHeld.exchange(false)) {
-            EVR_LOG("%s: r_SSR no longer held: per-eye TAA failed closed", kTag);
-        }
+        ssrRelease();
         applySet(stereo_seq::stereoTaaFailClosedCvars());
         return;
     }
     if (!g_perEye.load()) {
         return;
     }
-    applySet(stereo_seq::stereoTaaForcedCvars());
+    // r_SSR (taa_ssr.hpp) from the upscale quality the game's Reflections setting may have written since.
+    const char* ssr = ssrHoldTick(takeUpscaleQuality());
+    applySet(stereo_seq::stereoTaaForcedCvars(), kUpscaleQuality);
     // Per-eye history is in place: temporal AA on, deliberately.
     const bool safeModeOff = setCvar("r_TAASafeMode", "0");
     // Only once safe mode is off: while it is on, the game writes r_SSR 0 on every render.
-    if (g_ssrHeld.load() && safeModeOff) {
-        setCvar("r_SSR", g_ssrValue.c_str());
+    if (ssr && safeModeOff) {
+        setCvar("r_SSR", ssr);
     }
     // DLSS without a per-eye feature for eye R would mix the eyes: TAA (per eye) until it is tried again.
     ngxTwinsTick();

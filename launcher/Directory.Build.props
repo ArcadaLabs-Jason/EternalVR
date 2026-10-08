@@ -4,7 +4,7 @@
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <Version>0.1.33</Version>
+    <Version>0.1.34</Version>
     <!-- Debug builds carry the -dev marker, so the launcher and layer version check only warns (VersionCheck). -->
     <Version Condition="'$(Configuration)' == 'Debug'">$(Version)-dev</Version>
     <!-- Debug builds carry the -dev marker, so the launcher and layer version check only warns (VersionCheck). -->

@@ -176,9 +176,10 @@ rate your headset ran at. If the game was well below your headset's rate, see th
 
 **The launcher says the game was held to half the refresh rate.** When the game falls behind, Virtual Desktop's
 SSW, Meta's ASW, Pimax's Smart Smoothing and SteamVR's Motion Smoothing or throttling ask the game for only half
-the frames (or a third) and make up the rest; with Frame pacing the game is matched to that. The launcher counts
-the 10-second stretches of play where that happened, from the mod's log, and says so after the session ("SteamVR
-throttled the game to 72 of 144 Hz for 18% of play"). A large share means the game cannot keep the refresh rate
+the frames (or a third) and make up the rest; with Frame pacing the game is matched to that. The launcher reads
+the time that happened from the mod's log (or counts the 10-second stretches of play where it did, with an older
+log) and says so after the session ("SteamVR throttled the game to 72 of 144 Hz for 18% of the session"; "of a
+short session" when fewer than 10 minutes of stretches were counted, so the share is rough). A large share means the game cannot keep the refresh rate
 with these settings: lower the refresh rate in your runtime (or its resolution, or "Resolution" on the Play tab)
 until it can. If you set SteamVR's per-game throttling or forced Motion Smoothing for DOOM Eternal, the game stays
 at half the rate all the time. Virtual Desktop's SSW set to Always does the same. A refresh rate that changed

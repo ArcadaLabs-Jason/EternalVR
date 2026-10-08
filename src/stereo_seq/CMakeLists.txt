@@ -15,6 +15,7 @@ evr_add_module(evr_stereo_seq
         eye_pairing.cpp
         eye_tags.cpp
         eye_view_plan.cpp
+        fx_sync.cpp
         geomcache_prev.cpp
         keep_prev.cpp
         moved_flag.cpp
@@ -28,6 +29,7 @@ evr_add_module(evr_stereo_seq
         render_idle.cpp
         scatter_history.cpp
         seq_settings.cpp
+        setting_follow.cpp
         ssdo_history.cpp
         stack_budget.cpp
         stereo_taa.cpp

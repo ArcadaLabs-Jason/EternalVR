@@ -174,6 +174,17 @@ void RoomScale::follow(const Input& in, Vec3 testOffset) {
         loggedBlocks_ |= bitOf(step.cause);
         EVR_LOG("room: body follow: first frame blocked by %s", roomscale::followBlockName(step.cause));
     }
+    // Walking while blocked as seated (a detected posture, never the player's own setting): how far the head
+    // is from the seat, counting what the room was moved onto the body meanwhile.
+    const bool seatedBlocked = step.block == roomscale::FollowBlock::Seated && in.positionValid &&
+                               cfg.posture == posture::PostureOverride::Auto;
+    if (!seatedBlocked) {
+        seatShift_ = {};
+    }
+    const float fromSeat = flatLength(tick.gapRoom + seatShift_);
+    if (seatedWalk_.update(seatedBlocked, fromSeat, in.seconds)) {
+        seatedWalkMetres_ = fromSeat;
+    }
     if (step.request.engaged && !loggedFollowStart_) {
         loggedFollowStart_ = true;
         EVR_LOG(

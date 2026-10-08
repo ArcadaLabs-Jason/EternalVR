@@ -8,6 +8,11 @@ namespace evr::posture {
 
 namespace {
 
+// Longer than this without a reading the tracker can use, a dwell starts again.
+constexpr double kReadingGapSeconds = 0.25;
+// With the posture unknown, readings in one posture's range this long detect it.
+constexpr double kDetectSeconds = 1.0;
+
 PostureTrackerSettings sanitized(PostureTrackerSettings s) {
     const bool valid =
         finiteInRange(s.standingAboveMetres, 0.5f, 2.5f) && finiteInRange(s.seatedBelowMetres, 0.5f, 2.5f) &&
@@ -27,25 +32,34 @@ void PostureTracker::reset(Posture current, std::optional<float> anchorHeightMet
     reference_ = known ? *anchorHeightMetres : 0.0f;
     candidate_ = Posture::Unknown;
     changing_ = false;
+    lastReading_ = -1.0;
 }
 
 std::optional<PostureChange> PostureTracker::update(std::optional<float> headAboveFloorMetres,
                                                     double seconds) {
-    if (current_ == Posture::Unknown || !std::isfinite(seconds)) {
+    if (!std::isfinite(seconds)) {
         return std::nullopt;
     }
     if (candidate_ != Posture::Unknown && seconds < last_) {
         since_ = seconds; // time went backwards: the dwell starts again
     }
     last_ = seconds;
-    if (!headAboveFloorMetres || !std::isfinite(*headAboveFloorMetres)) {
+    // A height no head can have is a broken floor, not the player standing up or sitting down.
+    if (!headAboveFloorMetres || !plausibleHeadHeight(*headAboveFloorMetres)) {
         return std::nullopt;
     }
+    if (candidate_ != Posture::Unknown && seconds - lastReading_ > kReadingGapSeconds) {
+        since_ = seconds; // too long without a reading: the dwell starts again
+    }
+    lastReading_ = seconds;
     const float height = *headAboveFloorMetres;
     const PostureTrackerSettings& s = settings_;
 
     Posture target = Posture::Unknown;
-    if (current_ == Posture::Seated) {
+    if (current_ == Posture::Unknown) {
+        // No usable floor at the anchor: detected as at an anchor once the floor has read the head a while.
+        target = PostureDetector().update(height);
+    } else if (current_ == Posture::Seated) {
         changing_ = height > reference_ + 0.5f * s.minChangeMetres;
         if (height > s.standingAboveMetres && height >= reference_ + s.minChangeMetres) {
             target = Posture::Standing;
@@ -65,8 +79,10 @@ std::optional<PostureChange> PostureTracker::update(std::optional<float> headAbo
         since_ = seconds;
     }
     const double held = seconds - since_;
-    const float dwell = target == Posture::Standing ? s.standingSeconds : s.seatedSeconds;
-    if (held < static_cast<double>(dwell)) {
+    const double dwell = current_ == Posture::Unknown  ? kDetectSeconds
+                         : target == Posture::Standing ? static_cast<double>(s.standingSeconds)
+                                                       : static_cast<double>(s.seatedSeconds);
+    if (held < dwell) {
         return std::nullopt;
     }
     PostureChange change;

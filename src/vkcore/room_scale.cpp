@@ -175,13 +175,14 @@ void noteRecenterBinding(bool active, float buttonHoldSeconds) {
     }
 }
 
-void RoomScale::anchorOn(const Input& in, roomscale::RecenterKind kind, const char* why, float lift) {
+void RoomScale::anchorOn(
+    const Input& in, roomscale::RecenterKind kind, const char* why, float lift, bool detectPosture) {
     const roomscale::RoomScaleSettings& cfg = roomScaleSettings();
     const roomscale::RoomAnchor before = anchor_;
     anchoredNow_ = true;
     Pose head = in.localHead;
     head.position.y += lift;
-    const std::optional<float> above = lifted(in.headAboveFloor, lift);
+    const std::optional<float> raw = lifted(in.headAboveFloor, lift);
     anchor_ = roomscale::recenter(anchor_, head, kind);
     if (kind == roomscale::RecenterKind::YawAndOrigin) {
         EVR_LOG("room: %s: heading %.1f -> %.1f deg, origin (%.3f %.3f) LOCAL, height kept at %.3f", why,
@@ -189,56 +190,80 @@ void RoomScale::anchorOn(const Input& in, roomscale::RecenterKind kind, const ch
                 anchor_.origin.y);
         return;
     }
-    anchorAboveFloor_ = above;
+    if (floor_.pending()) {
+        // After the runtime's recenter: a floor that moved while the head stayed is not used until it is
+        // back.
+        // (Not logged when the player's recenter came with it: that uses the floor again just below.)
+        if (const auto moved = floor_.afterSpaceChange(raw, head.position.y, in.seconds);
+            moved && !detectPosture && ++floorMoveLogs_ <= 20) {
+            EVR_LOG("room: %s: the floor moved %.2f m; its readings are ignored until it is back", why,
+                    static_cast<double>(*moved));
+        }
+    }
+    if (detectPosture) {
+        floor_.trustAgain(); // the player's recenter: the floor is used again from here
+    }
+    updateFloor(raw, head.position.y, in.seconds);
+    // Only a usable reading (present, one a head can have, the floor not moved) is kept or decides anything.
+    const std::optional<float> above = floorNow_;
+    if (above) {
+        anchorAboveFloor_ = above;
+    }
     clearance_.reset();
+    seatedWalk_.reset();
+    seatShift_ = {};
     const bool autoPosture = cfg.posture == posture::PostureOverride::Auto;
     posture::Posture effective = posture::effectivePosture(cfg.posture, postureTracker_.current());
+    // A height re-anchor takes the tracker's posture and re-references it, when there is a reading.
+    bool detected = true;
+    bool resetTracker = above.has_value();
     if (kind == roomscale::RecenterKind::Full) {
-        // Every full anchor detects the posture again from the head's height now.
-        postureDetector_.reset();
-        effective = posture::effectivePosture(cfg.posture, postureDetector_.update(above));
+        // Detected again by the first anchor and the player's own recenter. The runtime's recenter keeps the
+        // posture in force and the tracker's reference (SteamVR has moved its floor to head height on a
+        // recenter): standing up or sitting down is the tracker's to notice.
+        const posture::AnchorPosture at = posture::postureAtAnchor(
+            postureDetector_, postureTracker_.current(), above, detectPosture || !anchorTaken_);
+        effective = posture::effectivePosture(cfg.posture, at.posture);
+        detected = at.detected;
+        resetTracker = at.detected;
         anchorTaken_ = true;
         if (firstAnchorSeconds_ < 0.0) {
             firstAnchorSeconds_ = in.seconds;
         }
     }
-    g_posture.store(effective, std::memory_order_relaxed);
-    postureTracker_.reset(autoPosture ? effective : posture::Posture::Unknown, above);
-    const float eyeUnits =
-        cfg.height == roomscale::HeightMode::Real && above ? *above * in.unitsPerMetre : kGameEyeUnits;
+    publishPosture(effective);
+    if (resetTracker) {
+        postureTracker_.reset(autoPosture ? effective : posture::Posture::Unknown, anchorAboveFloor_);
+    }
+    const float eyeUnits = cfg.height == roomscale::HeightMode::Real && anchorAboveFloor_
+                               ? *anchorAboveFloor_ * in.unitsPerMetre
+                               : kGameEyeUnits;
     EVR_LOG("room: %s: posture %s (%s), head %s above the floor; anchored at (%.3f %.3f %.3f) LOCAL (height "
             "was %.3f), heading %.1f deg (was %.1f); eye height %.3f unit(s) = %.3f m at world scale %.2f",
-            why, roomscale::postureName(effective), autoPosture ? "detected" : "override",
-            metresText(above).c_str(), anchor_.origin.x, anchor_.origin.y, anchor_.origin.z, before.origin.y,
-            anchor_.yaw * kDegrees, before.yaw * kDegrees, eyeUnits, eyeUnits / in.unitsPerMetre,
-            in.unitsPerMetre);
+            why, roomscale::postureName(effective),
+            !autoPosture ? "override"
+            : detected   ? "detected"
+                         : "kept",
+            (metresText(raw) + (raw && !above ? " (floor ignored)" : "")).c_str(), anchor_.origin.x,
+            anchor_.origin.y, anchor_.origin.z, before.origin.y, anchor_.yaw * kDegrees,
+            before.yaw * kDegrees, eyeUnits, eyeUnits / in.unitsPerMetre, in.unitsPerMetre);
 }
 
-void RoomScale::scheduleReanchor(roomscale::RecenterKind kind, const char* why, double now) {
+void RoomScale::scheduleReanchor(roomscale::RecenterKind kind,
+                                 const char* why,
+                                 double now,
+                                 bool detectPosture) {
     if (reanchor_.active && reanchor_.kind == roomscale::RecenterKind::Full &&
         kind != roomscale::RecenterKind::Full) {
         return; // a full re-anchor already on its way covers the height
     }
+    // The player's recenter still detects the posture if the runtime's arrives before it is applied.
+    reanchor_.detectPosture = detectPosture || (reanchor_.active && reanchor_.detectPosture);
     reanchor_.active = true;
     reanchor_.kind = kind;
     reanchor_.why = why;
     reanchor_.at = now + kBlinkLeadSeconds;
     blinkUntil_.store(reanchor_.at + kBlinkHoldSeconds, std::memory_order_release);
-}
-
-void RoomScale::trackPosture(const Input& in, float lift, double now) {
-    if (roomScaleSettings().posture != posture::PostureOverride::Auto || !anchorTaken_ || !in.positionValid ||
-        reanchor_.active) {
-        return;
-    }
-    const std::optional<float> above = lifted(in.headAboveFloor, lift);
-    if (const auto change = postureTracker_.update(above, in.seconds)) {
-        EVR_LOG("room: posture change: %s -> %s (head %.2f m above the floor for %.1f s); re-anchoring the "
-                "height",
-                roomscale::postureName(change->from), roomscale::postureName(change->to),
-                static_cast<double>(change->heightMetres), static_cast<double>(change->heldSeconds));
-        scheduleReanchor(roomscale::RecenterKind::Height, "posture change", now);
-    }
 }
 
 RoomScale::Head RoomScale::head(const Input& in) {
@@ -249,8 +274,10 @@ RoomScale::Head RoomScale::head(const Input& in) {
     const double now = nowSeconds();
     const float lift =
         cfg.testOffset ? roomscale::testOffsetAt(*cfg.testOffset, in.seconds - firstSeconds_).y : 0.0f;
-    // The runtime's recenter: the anchor follows the move at once (nothing jumps), then re-anchors fully
-    // (heading, position, height and posture) on the head a moment later, behind the blink.
+    // The runtime's recenter: the anchor follows the move at once (nothing jumps), then re-anchors heading,
+    // position and height on the head a moment later, behind the blink. The posture stays. A reconnect
+    // re-anchors the same way once anchored (before that, the first stable head pose anchors as usual);
+    // nothing is compared across it, and a floor that had moved stays ignored until it is back.
     {
         std::lock_guard lock(mutex_);
         if (spaceChanged_) {
@@ -258,9 +285,25 @@ RoomScale::Head RoomScale::head(const Input& in) {
             if (spaceChange_) {
                 anchor_ = roomscale::afterSpaceChange(anchor_, *spaceChange_);
             }
-            scheduleReanchor(roomscale::RecenterKind::Full, "runtime recenter", now);
+            if (reconnected_) {
+                floor_.sessionRestarted();
+                if (anchorTaken_) {
+                    scheduleReanchor(roomscale::RecenterKind::Full, "reconnect", now, false);
+                }
+            } else {
+                floor_.spaceChangePending();
+                scheduleReanchor(roomscale::RecenterKind::Full, "runtime recenter", now, false);
+            }
+            reconnected_ = false;
+        }
+        if (floorChanged_) {
+            floorChanged_ = false;
+            if (anchorTaken_) {
+                floor_.floorChangePending(in.seconds); // before the first anchor nothing is decided from it
+            }
         }
     }
+    readFloor(in, lift);
     if (in.positionValid) {
         bool user = g_userRecenter.exchange(false, std::memory_order_acq_rel);
         if (!user && cfg.testRecenterSeconds > 0.0f && !testRecenterDone_ &&
@@ -269,7 +312,7 @@ RoomScale::Head RoomScale::head(const Input& in) {
             user = true;
         }
         if (user) {
-            scheduleReanchor(roomscale::RecenterKind::Full, "user recenter", now);
+            scheduleReanchor(roomscale::RecenterKind::Full, "user recenter", now, true);
         } else if (cfg.autoAnchor && !anchorTaken_ && !reanchor_.active) {
             posture::HeadSample sample;
             sample.seconds = in.seconds;
@@ -277,14 +320,14 @@ RoomScale::Head RoomScale::head(const Input& in) {
             sample.tracked = true;
             sample.focused = in.focused;
             if (detector_.update(sample)) {
-                anchorOn(in, roomscale::RecenterKind::Full, "first stable head pose", lift);
+                anchorOn(in, roomscale::RecenterKind::Full, "first stable head pose", lift, true);
             }
         }
     }
-    trackPosture(in, lift, now);
+    trackPosture(in, now);
     if (reanchor_.active && in.positionValid && now >= reanchor_.at) {
         reanchor_.active = false;
-        anchorOn(in, reanchor_.kind, reanchor_.why, lift);
+        anchorOn(in, reanchor_.kind, reanchor_.why, lift, reanchor_.detectPosture);
         if (reanchor_.kind == roomscale::RecenterKind::Height) {
             postureGraceUntil_ = now + kPostureGraceSeconds;
         }
@@ -296,10 +339,12 @@ RoomScale::Head RoomScale::head(const Input& in) {
         testOffset = testOffset + roomscale::testOffsetAt(*cfg.testOffset, in.seconds - firstSeconds_);
     }
     follow(in, testOffset);
+    switchSeatedWalk(now);
     if (unstick_.exchange(false, std::memory_order_acq_rel) && in.positionValid) {
         // Black too long: the head goes back over the body (the game's eye is always clear), heading kept.
         const Vec3 head = roomscale::toRoom(anchor_, in.localHead).position + testOffset;
         anchor_ = roomscale::shiftedBy(anchor_, {head.x, 0.0f, head.z});
+        seatShift_ = seatShift_ + Vec3{head.x, 0.0f, head.z}; // still that far from the seat
         anchoredNow_ = true;
         clearance_.reset();
         blinkUntil_.store(now + kBlinkHoldSeconds, std::memory_order_release);
@@ -406,10 +451,20 @@ RoomScale::clearance(Vec3 desiredOffset, std::optional<float> hitFraction, float
     return step;
 }
 
-void RoomScale::onSpaceChange(std::optional<Pose> newInPrevious) {
+void RoomScale::onSpaceChange(std::optional<Pose> newInPrevious, bool reconnect) {
     std::lock_guard lock(mutex_);
     spaceChanged_ = true;
+    reconnected_ = reconnected_ || reconnect;
     spaceChange_ = newInPrevious;
+}
+
+void RoomScale::onFloorChange() {
+    std::lock_guard lock(mutex_);
+    floorChanged_ = true;
+}
+
+void RoomScale::publishPosture(posture::Posture posture) {
+    g_posture.store(posture, std::memory_order_relaxed);
 }
 
 float RoomScale::fade(double seconds) {

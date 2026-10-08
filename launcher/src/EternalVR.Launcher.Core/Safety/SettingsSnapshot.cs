@@ -12,6 +12,8 @@ namespace EternalVR.Launcher.Core.Safety
     {
         public List<string> Restored { get; } = new List<string>();
         public List<string> Unchanged { get; } = new List<string>();
+        /// <summary>Keys the session changed that are left as the game saved them (the player's own setting, followed in VR).</summary>
+        public List<string> Kept { get; } = new List<string>();
         /// <summary>
         /// Local files outside the key-level restore that changed during the session (<c>user\config.json</c>): kept
         /// as the game left them, the snapshot holding the old copy. Worth a warning: nothing else puts them back.
@@ -25,6 +27,7 @@ namespace EternalVR.Launcher.Core.Safety
 
         public IEnumerable<string> Lines =>
             Restored.Select(r => "restored " + r)
+                .Concat(Kept.Select(k => "kept " + k))
                 .Concat(ChangedNotRestored.Select(c => "changed, left as is (snapshot kept): " + c))
                 .Concat(ChangedInCloud.Select(c => "changed, Steam Cloud file kept as the game left it: " + c))
                 .Concat(Unchanged.Select(u => "unchanged " + u));
@@ -50,12 +53,17 @@ namespace EternalVR.Launcher.Core.Safety
         public const string DryRunFile = "DRY_RUN";
         /// <summary>Keys this session's restore puts back besides the launcher's list (the Extra game arguments' cvars), one per line.</summary>
         private const string KeysFile = "SESSION_KEYS";
+        /// <summary>Keys of the launcher's list this session's restore may leave as the game saved them, one per line.</summary>
+        private const string KeptFile = "KEPT_KEYS";
 
         /// <summary>
         /// Copies the config files of every location. <paramref name="sessionKeys"/> (the cvars the Extra game arguments set)
-        /// are recorded with the snapshot, so its <see cref="Restore"/> puts them back too, also after a crash.
+        /// are recorded with the snapshot, so its <see cref="Restore"/> puts them back too, also after a crash;
+        /// <paramref name="keptKeys"/> (<see cref="Launch.LaunchPlan.KeptKeys"/>) the same way, so it may leave them as the game
+        /// saved them.
         /// </summary>
-        public static string Take(string snapshotsRoot, string sessionId, IReadOnlyList<SettingsLocation> locations, IEnumerable<string> sessionKeys = null)
+        public static string Take(string snapshotsRoot, string sessionId, IReadOnlyList<SettingsLocation> locations, IEnumerable<string> sessionKeys = null,
+                                  IEnumerable<string> keptKeys = null)
         {
             var dir = Path.Combine(snapshotsRoot, sessionId);
             if (Directory.Exists(dir)) throw new IOException("snapshot folder already exists: " + dir);
@@ -81,6 +89,8 @@ namespace EternalVR.Launcher.Core.Safety
             File.WriteAllText(Path.Combine(dir, AbsentFile), absent.ToString());
             var keys = (sessionKeys ?? Enumerable.Empty<string>()).Where(k => !string.IsNullOrWhiteSpace(k)).ToList();
             if (keys.Count > 0) File.WriteAllText(Path.Combine(dir, KeysFile), string.Join("\n", keys) + "\n");
+            var kept = (keptKeys ?? Enumerable.Empty<string>()).Where(k => !string.IsNullOrWhiteSpace(k)).ToList();
+            if (kept.Count > 0) File.WriteAllText(Path.Combine(dir, KeptFile), string.Join("\n", kept) + "\n");
             FileUtil.WriteAllTextAtomic(Path.Combine(dir, CompleteFile), DateTime.UtcNow.ToString("o"));
             return dir;
         }
@@ -132,10 +142,18 @@ namespace EternalVR.Launcher.Core.Safety
         /// <summary>
         /// Restores the forced keys (see the class summary). A file being rewritten is first kept in
         /// <c>replaced\</c> inside the snapshot. Throws on a corrupt snapshot; the caller keeps the marker.
+        /// A key recorded as kept (<see cref="KeptKeysOf"/>) is left as the game saved it only when <paramref name="followedKeys"/>
+        /// names it too (the layer's status file said the session held it at the player's own setting,
+        /// <see cref="Launch.LayerStatusFile.FollowedKeys"/>) and no Extra game argument set it; otherwise it is put back.
         /// </summary>
-        public static RestoreReport Restore(string snapshotDir, IEnumerable<string> forcedKeys)
+        public static RestoreReport Restore(string snapshotDir, IEnumerable<string> forcedKeys, IEnumerable<string> followedKeys = null)
         {
-            var keys = forcedKeys.Concat(SessionKeysOf(snapshotDir)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var session = SessionKeysOf(snapshotDir);
+            var followed = (followedKeys ?? Enumerable.Empty<string>()).ToList();
+            var kept = KeptKeysOf(snapshotDir)
+                .Where(k => followed.Contains(k, StringComparer.OrdinalIgnoreCase) && !session.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
+            var keys = forcedKeys.Concat(session).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(k => !kept.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
             var report = new RestoreReport();
             foreach (var entry in ReadVerified(snapshotDir))
             {
@@ -143,7 +161,7 @@ namespace EternalVR.Launcher.Core.Safety
                 var label = entry.Location.Name + "/" + entry.RelativePath.Replace('\\', '/');
                 if (entry.WasAbsent)
                 {
-                    if (File.Exists(live)) RestoreCreatedFile(snapshotDir, entry, live, label, keys, report);
+                    if (File.Exists(live)) RestoreCreatedFile(snapshotDir, entry, live, label, keys, kept, report);
                     else report.Unchanged.Add(label + " (absent)");
                     continue;
                 }
@@ -178,7 +196,7 @@ namespace EternalVR.Launcher.Core.Safety
                 }
 
                 var before = CvarConfig.ParseBytes(File.ReadAllBytes(entry.CopyPath), out _);
-                RestoreKeys(snapshotDir, entry, live, label, before, keys, report, "changed by the player only");
+                RestoreKeys(snapshotDir, entry, live, label, before, keys, kept, report, "changed by the player only");
             }
             File.WriteAllText(Path.Combine(snapshotDir, "restore.txt"), string.Join(Environment.NewLine, report.Lines) + Environment.NewLine);
             return report;
@@ -188,7 +206,8 @@ namespace EternalVR.Launcher.Core.Safety
         /// A config the game created during the session: for a text config every forced key is taken out
         /// (none was set before, as the file did not exist); any other file is reported and left.
         /// </summary>
-        private static void RestoreCreatedFile(string snapshotDir, SnapshotEntry entry, string live, string label, List<string> keys, RestoreReport report)
+        private static void RestoreCreatedFile(string snapshotDir, SnapshotEntry entry, string live, string label, List<string> keys, List<string> kept,
+                                               RestoreReport report)
         {
             if (entry.Location.Kind == SettingsLocationKind.SteamRemote)
             {
@@ -200,13 +219,17 @@ namespace EternalVR.Launcher.Core.Safety
                 report.ChangedNotRestored.Add(label + " (created during the session)");
                 return;
             }
-            RestoreKeys(snapshotDir, entry, live, label + " (created during the session)", CvarConfig.Parse(string.Empty), keys, report, "no forced key in it");
+            RestoreKeys(snapshotDir, entry, live, label + " (created during the session)", CvarConfig.Parse(string.Empty), keys, kept, report, "no forced key in it");
         }
 
         private static void RestoreKeys(string snapshotDir, SnapshotEntry entry, string live, string label, CvarConfig before,
-                                        List<string> keys, RestoreReport report, string unchangedNote)
+                                        List<string> keys, List<string> kept, RestoreReport report, string unchangedNote)
         {
             var current = CvarConfig.ParseBytes(File.ReadAllBytes(live), out var bom);
+            // What putting the kept keys back would have changed, said in the log (applied to a copy only).
+            foreach (var k in ForcedKeyRestore.Apply(before, CvarConfig.ParseBytes(File.ReadAllBytes(live), out _), kept))
+                report.Kept.Add(label + ": " + k.Key + " as the game saved it (" + (k.SessionValue == null ? "removed" : "\"" + k.SessionValue + "\"")
+                    + "; " + (k.RestoredValue == null ? "absent" : "\"" + k.RestoredValue + "\"") + " before)");
             var changes = ForcedKeyRestore.Apply(before, current, keys);
             if (changes.Count == 0)
             {
@@ -220,9 +243,13 @@ namespace EternalVR.Launcher.Core.Safety
         }
 
         /// <summary>The keys recorded with the snapshot for its own session (<see cref="Take"/>); empty when none were.</summary>
-        public static IReadOnlyList<string> SessionKeysOf(string snapshotDir)
+        public static IReadOnlyList<string> SessionKeysOf(string snapshotDir) => KeysIn(Path.Combine(snapshotDir, KeysFile));
+
+        /// <summary>The keys its session's restore leaves as the game saved them (<see cref="Take"/>); empty when none were.</summary>
+        public static IReadOnlyList<string> KeptKeysOf(string snapshotDir) => KeysIn(Path.Combine(snapshotDir, KeptFile));
+
+        private static IReadOnlyList<string> KeysIn(string path)
         {
-            var path = Path.Combine(snapshotDir, KeysFile);
             if (!File.Exists(path)) return new string[0];
             return File.ReadAllLines(path).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
         }

@@ -1,6 +1,7 @@
 #include "vkcore/runtime_cvars.hpp"
 
 #include "stereo_seq/seq_settings.hpp"
+#include "stereo_seq/setting_follow.hpp"
 #include "vkcore/cvar_book.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
@@ -8,7 +9,10 @@
 #include "vkcore/parallel_eyes_settings.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/ssdo_hooks.hpp"
+#include "vkcore/ssdo_menu_hook.hpp"
+#include "vkcore/status_file.hpp"
 #include "vkcore/taa_hooks.hpp"
+#include "vkcore/taa_ssr.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/window_cap.hpp"
 
@@ -60,6 +64,7 @@ struct Held {
     bool left = false;       // ... and that was logged
     bool placed = false;     // ... held at the window placed for a device without present scaling instead
     bool parallel = false;   // Parallel Eye Rendering's own set: an ETERNALVR_DEBUG_CVARS entry replaces it
+    bool menuSsdo = false;   // r_SSDO: follows the game's Directional Occlusion setting (followSsdoSetting)
 };
 
 std::mutex g_mutex;
@@ -107,6 +112,42 @@ bool historyFilterHold(Held& h) {
     h.value = std::string(h.ssdo ? stereo_seq::stereoSsdoFilterCvar(ssdoPerEyeReady()).value
                                  : stereo_seq::stereoScatterFilterCvar(scatterPerEyeReady()).value);
     return true;
+}
+
+// r_SSDO follows the game's Directional Occlusion setting once it has run (ssdo_menu_hook.hpp: the profile's
+// load, an overall preset or the video menu's apply); the knock-on's r_SSDO 0 is still written over.
+void followSsdoSetting(Held& h) {
+    const std::string_view value = stereo_seq::ssdoHoldValue(h.value, ssdoMenuChoice());
+    if (value == h.value) {
+        return;
+    }
+    h.value = std::string(value);
+    EVR_LOG("%s: r_SSDO held at %s from now on (the game's Directional Occlusion setting)", kTag,
+            h.value.c_str());
+}
+
+// The status file's ssr_follow and ssdo_follow (status_file.hpp): 1 while the hold is at the player's own
+// setting (the game's setting has run) with per-eye TAA on, so r_TAASafeMode is 0 and the knock-on's 0 is not
+// what the game saves; 0 otherwise (before the first stereo tick, failed closed, after a multiplayer guard
+// trip, the setter not found). The launcher's restore keeps the r_SSR or r_SSDO the game saved only after 1.
+void reportFollows() {
+    static int ssrReported = -1;
+    static int ssdoReported = -1;
+    const bool perEye = taaPerEyeActive();
+    const int ssr = perEye && ssrFollowed() ? 1 : 0;
+    bool ssdoHeld = false;
+    for (const Held& h : g_held) {
+        ssdoHeld = ssdoHeld || (h.menuSsdo && h.object);
+    }
+    const int ssdo = perEye && ssdoHeld && ssdoMenuChoice() >= 0 ? 1 : 0;
+    if (ssr != ssrReported) {
+        ssrReported = ssr;
+        status::field("ssr_follow", std::to_string(ssr));
+    }
+    if (ssdo != ssdoReported) {
+        ssdoReported = ssdo;
+        status::field("ssdo_follow", std::to_string(ssdo));
+    }
 }
 
 // The cvar's integer value as the engine keeps it (the values block, +0x08).
@@ -293,6 +334,8 @@ void addWindowSet(bool parallel) {
 // - The launcher's anti-aliasing (parallel_eyes::antiAliasingCvars): TAA, or with Off the stereo path's
 //   r_TAASafeMode 1 and r_antialiasing 0 (the game applies the player's own mode after the command line).
 //   ETERNALVR_STEREO_RUNTIME_CVARS=0 leaves it as the game has it, as Route S's stereo set (rig experiments).
+// - r_SSR 0 with the launcher's Screen-space reflections Off (ETERNALVR_STEREO_SSR=off); otherwise the game's
+//   own setting stays (Route S's per-eye TAA holds it in taa_hooks.cpp).
 // An ETERNALVR_DEBUG_CVARS entry for one of these cvars wins; a CPU Saver item for one is left out, as in
 // Route S.
 void addParallelEyeSet() {
@@ -311,6 +354,11 @@ void addParallelEyeSet() {
     addWindowSet(true);
     for (const auto& c : stereo_seq::stereoComfortCvars()) {
         g_held.push_back(comfortHeld(c));
+        g_held.back().parallel = true;
+    }
+    const std::string ssr = narrowEnv(L"ETERNALVR_STEREO_SSR");
+    if (stereo_seq::stereoSsrCvar(ssr) && !stereo_seq::stereoSsrFollowsGame(ssr)) {
+        g_held.push_back(Held{"r_SSR", "0", true, false});
         g_held.back().parallel = true;
     }
 }
@@ -334,6 +382,7 @@ void start(bool stereo) {
         const std::string ssdo = narrowEnv(L"ETERNALVR_STEREO_SSDO");
         if (const auto c = stereo_seq::stereoSsdoCvar(ssdo)) {
             g_held.push_back(Held{std::string(c->name), std::string(c->value), true, false});
+            g_held.back().menuSsdo = true;
         } else {
             EVR_LOG("%s: r_SSDO is left as the game has it (ETERNALVR_STEREO_SSDO=%s)", kTag, ssdo.c_str());
         }
@@ -421,6 +470,9 @@ void apply(bool stereo) {
         g_started = true;
         start(stereo);
     }
+    if (stereo) {
+        reportFollows();
+    }
     if (!g_setString || !mp_guard::allowsGameTouch()) {
         return;
     }
@@ -430,6 +482,9 @@ void apply(bool stereo) {
             continue;
         }
         holdPlacedWindow(h);
+        if (h.menuSsdo) {
+            followSsdoSetting(h);
+        }
         if (windowSizeLeft(h)) {
             if (!h.left) {
                 h.left = true;
@@ -496,7 +551,7 @@ void apply(bool stereo) {
             h.written = true;
             EVR_LOG("%s: %s %d -> %s (reads %d)%s", kTag, h.name.c_str(), before, h.value.c_str(),
                     readValue(h.object),
-                    h.stereo  ? "; the game's setting is not changed"
+                    h.stereo  ? "; held in VR"
                     : h.saver ? "; CPU Saver"
                               : "");
         }

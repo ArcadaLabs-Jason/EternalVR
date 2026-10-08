@@ -45,17 +45,42 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
     into the next one.
   - The runtime's recenter (`XrEventDataReferenceSpaceChangePending` for `LOCAL`, e.g. holding the Meta
     button): the anchor first follows the runtime's move (`poseInPreviousSpace`, when given; VDXR gives
-    none), then re-anchors like ours.
+    none), then re-anchors like ours, except for the posture (below).
   - **Every recenter is a full re-anchor** (owner's session 4, refining T-063, which kept the height on
-    runtime events): heading, horizontal origin and height at the current head pose, and the posture is
-    detected again from the head's height above the floor. So a recenter after standing up or sitting down
-    puts the Slayer's eye right and unblocks (or blocks) body follow. The re-anchor happens 0.12 s after the
+    runtime events): heading, horizontal origin and height at the current head pose. So a recenter after
+    standing up or sitting down puts the Slayer's eye right. The re-anchor happens 0.12 s after the
     request, behind a **blink**: the fade layer goes black (0.10 s), the anchor jumps, and the view clears
     over 0.25 s. The runtime's event is also taken this way because the head pose of the frame it arrives in
     may still be in the old space.
-  - Every recenter is logged: `room: user recenter: posture standing (detected), head 1.62 m above the
-    floor; anchored at (...) LOCAL (height was 0.254), heading ... (was ...); eye height ...`, or the same
-    with `runtime recenter`.
+  - **Only our recenter detects the posture again** from the head's height above the floor (and unblocks or
+    blocks body follow). The runtime's recenter keeps the posture in force (it detects one only while the
+    posture is still unknown), and posture re-detection (below) notices standing up or sitting down as usual.
+    A runtime recenter can move the floor as well: on a player's Steam Frame (2026-10-08) SteamVR recentered
+    `LOCAL` and `STAGE` together and put its floor at head height (head 0.06 m above it); detected again from
+    that, the posture went seated and body follow stayed blocked for the rest of the session. So the floor's
+    reading just before the runtime's event is compared with the one at the re-anchor: more than 0.3 m apart
+    (the head barely moves in that moment), the floor moved, and its readings are not used until one is within
+    0.3 m of the reading before again (`room: runtime recenter: the floor moved 1.61 m; its readings are
+    ignored until it is back`, then `room: the floor is back (head 1.64 m above it); its readings are used
+    again`). With no move found, the floor is watched for 3 s more (below), as SteamVR may move it a moment
+    after `LOCAL`. Our recenter uses the floor again whatever it did before: it is how a player says the floor
+    is right, and walking while seated (below) corrects a wrong result.
+  - **A reconnect** (a new session after the headset or its runtime came back, including the frame watchdog's
+    session restarts) re-anchors like the runtime's recenter and keeps the posture. Nothing is compared across
+    it (the head may have moved meanwhile), and a floor that had moved stays ignored until its reading is
+    back. Before the first anchor it leaves anchoring to the first stable head pose (it used to anchor
+    wherever the head was).
+  - **The floor space changing alone** (`STAGE` or `LOCAL_FLOOR` change pending without `LOCAL`'s, seen on
+    WMR), once anchored: for 3 s the floor's own height in `LOCAL` (the head's `LOCAL` height less its height
+    above the floor, which the head moving does not change) is compared with the one before. More than 0.3 m
+    apart, with the reading itself stepping that much from one frame to the next, its readings are not used
+    until the floor is back within 0.3 m (`xr: reference space 3 change pending; watching the floor`, `room:
+    the floor moved 0.50 m; its readings are ignored until it is back`). A step of the floor's `LOCAL` height
+    alone is `LOCAL` moving late or unannounced, not the floor.
+  - Every recenter is logged: `room: user recenter: posture standing (detected), head 1.62 m above the floor;
+    anchored at (...) LOCAL (height was 0.254), heading ... (was ...); eye height ...`, or the same with
+    `runtime recenter` or `reconnect` and `(kept)`; `(floor ignored)` follows the height when the reading was
+    not used.
 - **First stable head pose** (T-045, T-106; `src/features/posture/anchor_detector.hpp`). With
   `ETERNALVR_AUTO_ANCHOR` on (default), the first window of 1 s in which the session is focused, the head is
   tracked, it moves less than 2 cm (stable) and more than tracking noise (1 mm of position or 0.2 degrees of
@@ -66,8 +91,22 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
   `src/features/roomscale/head_offset.hpp`). Where the runtime has `LOCAL_FLOOR` (OpenXR 1.1, else
   `XR_EXT_local_floor`) or `STAGE`, the head's height above the floor at the anchor picks seated (below
   1.30 m) or standing (above 1.45 m); `ETERNALVR_POSTURE` overrides it. Without a floor the posture is
-  unknown unless overridden. Seated feeds the input mapper's seated behaviour, the seated viewmodel
-  offsets (T-074) and body follow's seated block. The height mode:
+  unknown unless overridden; when a usable reading comes later (the floor could not be read at the anchor),
+  1 s of readings in one posture's range detects it and re-anchors the height behind the blink, as a posture
+  change does, so `real` eye height takes the player's own height from then on (`room: posture standing
+  (detected once the floor could be read: head 1.75 m above it for 1.0 s); re-anchoring the height`).
+  Seated feeds the input mapper's seated behaviour, the seated viewmodel offsets (T-074) and body follow's
+  seated block.
+  - **A floor no head can have is ignored**: a head less than 0.5 m or more than 2.3 m above the floor
+    (sitting on the floor or a deep crouch is still above 0.5 m; a 2.2 m tall player's eyes are below
+    2.3 m) never decides the posture, at an anchor or in re-detection, and the anchor keeps the last usable
+    floor height for `real` eye height. At the first anchor the posture is then unknown, as without a floor (a
+    later usable reading detects it). Players lying down set Play position to Sitting. Logged once each time
+    it starts and ends (bending to the floor can start it): `room: head 0.06 m above the floor, too low to
+    trust; floor ignored, posture stays standing`, then `room: head 1.66 m above the floor again; floor used
+    (ignored for 12.3 s)`.
+
+  The height mode:
   - `slayer` (default): the anchored head is at the game's own eye (`pm_normalViewHeight`, 1.65735 units =
     metres) whatever the player's height; ducking lowers the view one to one.
   - `real`: the anchored head is at the player's own eye height above the floor, times the world scale
@@ -76,18 +115,19 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
     height (a seated player who stands up is held there until the posture change below re-anchors).
 - **Posture re-detection** (`src/features/posture/posture_tracker.hpp`). With `ETERNALVR_POSTURE` auto and a
   floor space, the head's height above the floor is watched after the anchor. Seated, it must stay above
-  1.35 m for 1.0 s to become standing; standing, below 1.20 m for 1.5 s to become seated. The head must also
-  be at least 0.30 m from the height the posture was detected at, so a tall player detected seated near the
-  top of the band does not flip by sitting up straight. A shorter dip or rise (ducking, reaching) never
-  flips it. On a change the **height only** is re-anchored at the current head (heading and horizontal
-  origin stay: the step forward out of the chair is left to body follow), behind the same blink, and the
-  new posture is in force at once (body follow unblocks when standing). Logged: `room: posture change:
-  seated -> standing (head 1.66 m above the floor for 1.0 s); re-anchoring the height`, then `room: posture
-  change: posture standing (detected), head 1.66 m above the floor; anchored at ...`. A forced posture
-  (`ETERNALVR_POSTURE=seated` or `standing`) turns re-detection off; without a floor space the posture is
-  unknown and nothing is re-detected (the recenter binding still re-anchors the height).
-  The thresholds bracket the anchor's own (seated below 1.30 m, standing above 1.45 m): seated heads sit
-  around 1.1 to 1.25 m on a chair (the owner's 0.96 m), standing ones from about 1.5 m.
+  1.35 m for 1.0 s to become standing; standing, below 1.20 m for 1.5 s to become seated. The head must
+  also be at least 0.30 m from the height the posture was detected at, so a tall player detected seated near
+  the top of the band does not flip by sitting up straight. A shorter dip or rise (ducking, reaching) never
+  flips it; more than 0.25 s without a usable reading starts the wait again. On a change the **height only**
+  is re-anchored at the current head (heading and horizontal origin stay: the step forward out of the chair is
+  left to body follow), behind the same blink, and the new posture is in force at once (body follow unblocks
+  when standing). Logged: `room: posture change: seated -> standing (head 1.66 m above the floor for 1.0 s);
+  re-anchoring the height`, then `room: posture change: posture standing (detected), head 1.66 m above the
+  floor; anchored at ...`. A forced posture (`ETERNALVR_POSTURE=seated` or `standing`) turns re-detection off;
+  without a floor space the posture is unknown and nothing is re-detected (the recenter binding still
+  re-anchors the height). The thresholds bracket the anchor's own (seated below 1.30 m, standing above
+  1.45 m): seated heads sit around 1.1 to 1.25 m on a chair (the owner's 0.96 m), standing ones from about
+  1.5 m.
 - **Lean cap** (T-062). The horizontal offset from the anchor is capped at `ETERNALVR_LEAN_CAP` (0.60 m) in
   the same direction; the first frame of each clamp is logged: `room: lean 0.800 m clamped to 0.600 m`. The
   lean is measured across the floor only: rising is the separate height clamp above (0.25 m allowance) and
@@ -210,8 +250,14 @@ origin(N) - origin(N-1)  --body frame (N-1)--> room displacement
   offset turns with the body. Body follow keeps the gap within 1.6 cm while standing still, so a turn
   swings the view by at most that much; while walking the gap is the follow lag and the swing is that size.
 - **Seated.** Seated posture blocks follow (a seated lean stays a lean). The block follows the posture in
-  force, so it lifts when the player stands up (posture re-detection or a recenter) and returns when they sit
-  down. Without a floor space the posture is unknown and follow runs.
+  force, so it lifts when the player stands up (posture re-detection or our recenter) and returns when they
+  sit down. Without a floor space the posture is unknown and follow runs. **Walking while seated**
+  (`src/features/posture/seated_walk.hpp`): a seated head reaches about 0.6 m from the seat, so a detected
+  seated posture with the head more than 1 m from the seat for 2 s (counting what the room was moved onto
+  the body meanwhile) is a wrong floor: the posture switches to standing with a height re-anchor (`room:
+  seated, but the head was 1.12 m from the seat for 2.0 s; switching to standing`). Play position Sitting is
+  never switched, and a player on a chair with wheels sets it (rolling more than 1 m counts as walking). With
+  body follow off nothing is blocked, so nothing is switched.
 - **Test offsets.** `ETERNALVR_TEST_HEAD_OFFSET` is followed too (the body walks to the fake head), so the
   lean-cap and wall checks of the live test plan need `ETERNALVR_BODY_FOLLOW=0`.
 
@@ -332,8 +378,20 @@ Problems in a value are logged (`room: ETERNALVR_...='...': ...`) and the defaul
 
 - `evr_posture_tests` (`posture_tracker_tests.cpp`): sit to stand at the owner's heights (0.96 -> 1.66 m,
   after 1.0 s), stand to sit (after 1.5 s) and back, a brief crouch or rise never flips, sitting up straight
-  near the top of the seated band is not standing, unknown posture or no floor reports nothing, missing
-  samples, time going backwards, a reset re-references the height, bad settings fall back.
+  near the top of the seated band is not standing, an unknown posture is detected after 1 s of readings (none
+  without a reading or with readings crossing between the ranges), missing samples (up to 0.25 s; a longer
+  gap restarts the dwell), time going backwards, a reset re-references the height, bad settings fall back, a
+  floor no head can have (0.06 m standing, 2.6 m seated) is no reading.
+- `evr_posture_tests` (`posture_detector_tests.cpp`): seated and standing at the thresholds and in the band,
+  heights no head can have never decide, a runtime recenter keeps the posture (the player's 0.06 m floor and
+  a plausible seated one) and detects one still unknown, the player's recenter detects again on a good floor
+  and keeps it on a broken one, the first anchor on a broken floor is unknown. `floor_check_tests.cpp`: a
+  floor moved up or down across the runtime's recenter is not used until it is back, a recenter that leaves it
+  is not a move but starts a 3 s watch that sees a later move; after a floor space change a crouch is not a
+  move but the floor's own move is, until it is back, and the watch ends after 3 s; a LOCAL change while
+  moved waits for the reading's return; a reconnect compares nothing and keeps a moved floor until it reads
+  back; the player's recenter uses the floor again. `seated_walk_tests.cpp`: 1.4 m from the seat for 2 s
+  fires, a 0.8 m lean or a short walk never does.
 - `evr_posture_tests` (`tests/features/posture/anchor_detector_tests.cpp`): a desk headset held perfectly
   still, and one with 0.1 mm of tracking noise, for 60 s never anchor; worn-head jitter (five seeds)
   anchors between 1 and 2 s; a head still moving into place anchors only once settled; unfocused, absent
@@ -390,9 +448,9 @@ focus; the scripted offset needs no focus.
 5. Recenter chord: scripted `left.click = 1` and `right.click = 1` for 2.5 s, then 0. Expect `room: recenter
    binding held for 2.00 s`, `room: user recenter: ...`, and no `action melee` or `action crucible`; a short
    `right.click = 1` then 0 still melees, and `left.menu = 1` then 0 still pauses.
-6. Runtime recenter: needs a headset (the simulator is not expected to send the event): the runtime's recenter shows
-   `xr: LOCAL change pending` and `room: runtime recenter: posture ..., head ... above the floor; anchored at
-   ...`, with the height re-anchored.
+6. Runtime recenter: needs a headset (the simulator is not expected to send the event): the runtime's
+   recenter shows `xr: LOCAL change pending` and `room: runtime recenter: posture ... (kept), head ... above
+   the floor; anchored at ...`, with the height re-anchored.
 6b. Posture re-detection (the simulator's head stands 1.7 m above the floor, so detection starts standing):
    `ETERNALVR_TEST_RECENTER=3`, `ETERNALVR_TEST_HEAD_OFFSET=0,-0.7,0,24` (the head sinks to 1.0 m and rises
    again over 24 s). Expect `posture change: standing -> seated`, then `seated -> standing`, each with the

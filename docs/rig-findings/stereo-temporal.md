@@ -294,7 +294,10 @@ evaluation.
   to `runtime_cvars::setStereoTemporal(PerEye)`, so the layer's run-time v1 hold stands down. TAA safe mode
   also forces `r_SSDO 0` and `r_SSR 0` in the game's config (0x1C6FCC0), which the game then saves.
   Route S holds `r_SSDO` at the player's value (`ETERNALVR_STEREO_SSDO`), and the per-eye check holds `r_SSR`
-  at the player's value while per-eye TAA or DLSS runs (`ETERNALVR_STEREO_SSR`, after `r_TAASafeMode 0`):
+  at the player's value while per-eye TAA or DLSS runs (`ETERNALVR_STEREO_SSR`, after `r_TAASafeMode 0`), following
+  the game's Reflections setting (0x1421DC0) whenever it runs, told by the `r_raytracedReflectionsTemporalUpscaleQuality`
+  it writes with `r_SSR` (3 at Low, 2 at Medium, 1 above; the forced set holds it at 0; a player's 0.1.33 export: the
+  menu's `r_SSR 0` was overwritten by the hold at 649.8 s, with `r_TAASafeMode` already 0):
   SSR has no history of its own and reads the last frame's colour through the history selector (0x1CBB6C0),
   which is per eye then. Off or failed closed, the engine's own `r_SSR 0` stays. Static evidence: SSR
   reprojects with `ssrReprojectionMatrix`, built in the render-view job (0x1C54650) from `prevViewProjection`

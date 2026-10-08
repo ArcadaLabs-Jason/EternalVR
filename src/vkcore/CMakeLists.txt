@@ -83,6 +83,7 @@ add_library(evr_layer SHARED
     mirror_place.cpp
     keep_prev_hooks.cpp
     geomcache_prev_hooks.cpp
+    fx_sync_hooks.cpp
     motion_capture.cpp
     moved_flag_hooks.cpp
     mp_guard.cpp
@@ -120,6 +121,7 @@ add_library(evr_layer SHARED
     presenter_xr.cpp
     presenter_xr_events.cpp
     room_follow.cpp
+    room_posture.cpp
     reticle_depth.cpp
     room_scale.cpp
     save_hook.cpp
@@ -134,6 +136,7 @@ add_library(evr_layer SHARED
     shader_dump.cpp
     shader_dump_record.cpp
     ssdo_hooks.cpp
+    ssdo_menu_hook.cpp
     stall_watch.cpp
     status_file.cpp
     stereo_hooks.cpp
@@ -142,6 +145,7 @@ add_library(evr_layer SHARED
     swapchain_entry.cpp
     taa_env.cpp
     taa_hooks.cpp
+    taa_ssr.cpp
     taa_locate.cpp
     taa_ngx.cpp
     taa_resize.cpp

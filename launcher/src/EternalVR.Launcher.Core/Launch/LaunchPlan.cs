@@ -72,6 +72,13 @@ namespace EternalVR.Launcher.Core.Launch
         /// (<see cref="ChildEnvironment.Inherited"/>); logged with the plan.
         /// </summary>
         public IReadOnlyList<KeyValuePair<string, string>> Inherited { get; set; } = new KeyValuePair<string, string>[0];
+        /// <summary>
+        /// Keys of the settings restore that this session may leave as the game saves them (recorded with the snapshot,
+        /// <see cref="Safety.SettingsSnapshot.Take"/>): <c>r_SSDO</c> and <c>r_SSR</c> while the layer can hold them at the
+        /// player's own Directional Occlusion and Reflections settings. The restore keeps one only when the layer's status file
+        /// confirms it did (<see cref="LayerStatusFile.FollowedKeys"/>).
+        /// </summary>
+        public IReadOnlyList<string> KeptKeys { get; set; } = new string[0];
 
         public string CommandLine => string.Join(" ", Arguments.Select(QuoteIfNeeded));
 
@@ -267,11 +274,14 @@ namespace EternalVR.Launcher.Core.Launch
             // The game's post-process sharpening held at the chosen strength; absent, the player's own setting stays.
             if (stereo && LauncherSettings.SharpeningValue(s.Sharpening) is string sharpening) Set("ETERNALVR_SHARPENING", sharpening);
             // SSDO: the game turns it off itself after r_TAASafeMode 1, which stereo holds at start-up; the layer holds the
-            // player's own r_SSDO instead (on, the game's default, unless their config turns it off).
+            // player's own r_SSDO instead (on, the game's default, unless their config turns it off), then what the game's
+            // Directional Occlusion setting writes whenever it runs (the profile's load, the video menu).
             if (stereo) Set("ETERNALVR_STEREO_SSDO", inputs.PlayerSsdo == "0" ? "0" : "1");
-            // Screen-space reflections, the same knock-on: the layer holds the player's own r_SSR while per-eye TAA runs (on,
-            // the game's default, unless their config turns it off: Reflections at Low).
-            if (stereo) Set("ETERNALVR_STEREO_SSR", inputs.PlayerSsr == "0" ? "0" : "1");
+            // Screen-space reflections, the same knock-on: the layer holds r_SSR while per-eye TAA runs, from the player's own
+            // (on, the game's default, unless their config turns it off: Reflections at Low) and then at what the game's
+            // Reflections setting writes whenever it runs (the profile's load, the video menu). A config without r_SSR cannot
+            // tell Low from Medium (both write r_SSRQuality 0), so the layer's reading of the setting decides. Off: held off.
+            if (stereo) Set("ETERNALVR_STEREO_SSR", s.Reflections == ReflectionsMode.Off ? "off" : inputs.PlayerSsr == "0" ? "0" : "1");
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
@@ -305,7 +315,35 @@ namespace EternalVR.Launcher.Core.Launch
                 Window = window,
                 RenderSize = renderChoice,
                 HeadsetProblem = HeadsetProblemOf(inputs.RuntimeProbe),
+                KeptKeys = KeptKeysOf(s),
             };
+        }
+
+        /// <summary>
+        /// Whether the <c>r_SSR</c> the game saves after the session can be the player's Reflections setting, so the restore may
+        /// keep a change they made in the game's menu: in stereo while the layer can follow that setting (per-eye TAA or DLSS,
+        /// the launcher's Screen-space reflections at the game's setting), confirmed after the session by the layer's
+        /// <c>ssr_follow=1</c>. Otherwise the game's own r_SSR 0 after r_TAASafeMode 1, or the launcher's Off, is put back
+        /// (session-keys.txt), and so is a mono session's, as before.
+        /// </summary>
+        public static bool SsrIsThePlayers(LauncherSettings s) =>
+            s.Mode == VrMode.Stereo && s.AntiAliasing != AntiAliasingMode.Off && s.Reflections == ReflectionsMode.Game;
+
+        /// <summary>
+        /// Whether the <c>r_SSDO</c> the game saves after the session can be the player's Directional Occlusion setting: in
+        /// stereo with TAA or DLSS (the layer holds it at that setting, and r_TAASafeMode is 0), confirmed by the layer's
+        /// <c>ssdo_follow=1</c>. With anti-aliasing Off the game writes r_SSDO 0 on every render against the hold, so the
+        /// restore puts it back.
+        /// </summary>
+        public static bool SsdoIsThePlayers(LauncherSettings s) => s.Mode == VrMode.Stereo && s.AntiAliasing != AntiAliasingMode.Off;
+
+        /// <summary>The plan's <see cref="LaunchPlan.KeptKeys"/>.</summary>
+        public static IReadOnlyList<string> KeptKeysOf(LauncherSettings s)
+        {
+            var kept = new List<string>();
+            if (SsdoIsThePlayers(s)) kept.Add("r_SSDO");
+            if (SsrIsThePlayers(s)) kept.Add("r_SSR");
+            return kept;
         }
 
         /// <summary>What the window says before a launch whose runtime probe found no headset; null when it did, or none was made.</summary>

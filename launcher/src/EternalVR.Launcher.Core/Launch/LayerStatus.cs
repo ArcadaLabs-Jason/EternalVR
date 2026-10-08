@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace EternalVR.Launcher.Core.Launch
 {
@@ -8,7 +9,8 @@ namespace EternalVR.Launcher.Core.Launch
     /// <summary>
     /// <c>&lt;ETERNALVR_LOG_DIR&gt;\eternalvr-status.txt</c>, rewritten atomically by the layer on every change:
     /// <c>state=starting|waiting|vr|flat</c>, <c>reason=</c> (a sentence for the player), <c>stereo=on|off: reason</c> (empty until
-    /// decided), <c>version=</c>, <c>pid=</c>. <c>flat</c> is final for the session.
+    /// decided), <c>version=</c>, <c>pid=</c>. <c>flat</c> is final for the session. Also <c>ssr_follow=0|1</c> and
+    /// <c>ssdo_follow=0|1</c>: 1 while the layer held r_SSR or r_SSDO at the player's own game setting (<see cref="FollowedKeys"/>).
     /// </summary>
     public sealed class LayerStatusFile
     {
@@ -23,6 +25,14 @@ namespace EternalVR.Launcher.Core.Launch
         public string StereoReason { get; private set; } = string.Empty;
         public string Version { get; private set; } = string.Empty;
         public string Pid { get; private set; } = string.Empty;
+        /// <summary>
+        /// The cvars the layer last reported as held at the player's own game setting with per-eye TAA on (<c>r_SSR</c> for
+        /// <c>ssr_follow=1</c>, <c>r_SSDO</c> for <c>ssdo_follow=1</c>): the r_SSR or r_SSDO the game saved is then the player's, and
+        /// the settings restore keeps it (<see cref="Safety.SettingsSnapshot.Restore"/>). Empty for an older layer.
+        /// </summary>
+        public IReadOnlyList<string> FollowedKeys => followed;
+
+        private readonly List<string> followed = new List<string>();
 
         public static LayerStatusFile Parse(string text)
         {
@@ -39,6 +49,8 @@ namespace EternalVR.Launcher.Core.Launch
                     case "reason": s.Reason = value; break;
                     case "version": s.Version = value; break;
                     case "pid": s.Pid = value; break;
+                    case "ssr_follow": s.Follow("r_SSR", value == "1"); break;
+                    case "ssdo_follow": s.Follow("r_SSDO", value == "1"); break;
                     case "stereo":
                         if (value.StartsWith("on", StringComparison.OrdinalIgnoreCase)) s.Stereo = true;
                         else if (value.StartsWith("off", StringComparison.OrdinalIgnoreCase)) s.Stereo = false;
@@ -48,6 +60,12 @@ namespace EternalVR.Launcher.Core.Launch
                 }
             }
             return s;
+        }
+
+        private void Follow(string cvar, bool on)
+        {
+            followed.Remove(cvar);
+            if (on) followed.Add(cvar);
         }
 
         private static LayerState ParseState(string v)

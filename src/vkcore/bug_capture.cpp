@@ -1,5 +1,6 @@
 #include "vkcore/bug_capture.hpp"
 
+#include "stereo_seq/seq_settings.hpp"
 #include "vkcore/log.hpp"
 
 #include <atomic>
@@ -11,6 +12,7 @@ namespace {
 std::atomic<bool> g_wanted{false};
 std::atomic<LONGLONG> g_requestQpc{0};
 std::atomic<std::uint32_t> g_taken{0};
+std::atomic<std::uint32_t> g_frames{0}; // counted against kMaxFramesPerSession
 std::atomic<bool> g_loggedLimit{false};
 std::atomic<bool> g_loggedNoFolder{false};
 
@@ -23,10 +25,11 @@ LONGLONG now() {
 } // namespace
 
 void request() {
-    if (g_taken.load() >= kMaxPerSession) {
+    if (framesLeft() == 0) {
         if (!g_loggedLimit.exchange(true)) {
-            EVR_LOG("capture: %u captures taken this session; no more until the game restarts",
-                    kMaxPerSession);
+            EVR_LOG("capture: %u frames captured this session (a burst counts each of its frames); no more "
+                    "until the game restarts",
+                    kMaxFramesPerSession);
         }
         return;
     }
@@ -53,15 +56,44 @@ double secondsWaiting() {
            static_cast<double>(f.QuadPart);
 }
 
-std::uint32_t take() {
+std::uint32_t take(std::uint32_t frames) {
     g_wanted.store(false, std::memory_order_release);
+    g_frames.fetch_add(frames);
     return g_taken.fetch_add(1) + 1;
 }
 
-void retake() {
+void retake(std::uint32_t frames) {
     g_taken.fetch_sub(1);
+    giveBack(frames);
     g_wanted.store(true, std::memory_order_release);
     EVR_LOG("capture: the eye pair was given up; taking the next one");
+}
+
+std::uint32_t burstFrames() {
+    static const std::uint32_t frames = [] {
+        std::wstring text;
+        if (!readEnv(L"ETERNALVR_CAPTURE_BURST", text) || text.empty()) {
+            return 1u;
+        }
+        const auto n = stereo_seq::parseCaptureBurst(text);
+        if (!n) {
+            EVR_LOG("capture: ETERNALVR_CAPTURE_BURST is not 1 to %u; one frame per capture",
+                    stereo_seq::kMaxCaptureBurst);
+            return 1u;
+        }
+        EVR_LOG("capture: %u consecutive frame(s) per capture (ETERNALVR_CAPTURE_BURST)", *n);
+        return *n;
+    }();
+    return frames;
+}
+
+void giveBack(std::uint32_t frames) {
+    g_frames.fetch_sub(frames);
+}
+
+std::uint32_t framesLeft() {
+    const std::uint32_t taken = g_frames.load();
+    return taken >= kMaxFramesPerSession ? 0 : kMaxFramesPerSession - taken;
 }
 
 LONGLONG requestQpc() {

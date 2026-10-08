@@ -13,6 +13,9 @@
 // - Route S, whatever the temporal mode: the comfort set (stereo_seq::stereoComfortCvars), which in stereo
 //   only this hold sets (the launcher's command line has only r_hdrDisplay of it). apply() runs from Route
 //   S's first present (presenter_copy.cpp), before the runtime's session and the first map.
+// - Route S: r_SSDO at ETERNALVR_STEREO_SSDO's value (stereo_seq::stereoSsdoCvar), against the game's own
+//   r_SSDO 0 after r_TAASafeMode 1, then at what the game's Directional Occlusion setting writes whenever it
+//   runs (ssdo_menu_hook.hpp).
 // - Route S, whatever the temporal mode: the window and present set (stereo_seq::stereoWindowCvars:
 //   r_fullscreen 0, r_swapInterval 0, the command line's r_windowWidth / r_windowHeight), so a load path
 //   that applies the player's video mode cannot take the eyes to the display's size. Once the render size is

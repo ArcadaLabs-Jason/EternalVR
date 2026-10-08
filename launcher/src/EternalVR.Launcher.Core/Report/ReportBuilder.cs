@@ -309,7 +309,8 @@ namespace EternalVR.Launcher.Core.Report
 
         /// <summary>
         /// The captures of <paramref name="sessions"/> (newest first): each capture's files (one name stem: -L.png, -R.png,
-        /// -UI.png or -mono.png, and .txt) are taken whole while they fit in <see cref="ReportManifest.CapturesCapBytes"/>.
+        /// -UI.png or -mono.png, and .txt) are taken whole while they fit in <see cref="ReportManifest.CapturesCapBytes"/>;
+        /// of a burst (-f00-L.png, -f01-L.png, ...), its text file and GUI image, then its frames in order while they fit.
         /// </summary>
         private static void AddCaptures(List<ReportFile> files, List<string> dropped, string logs, IEnumerable<string> sessions, ReportItem item)
         {
@@ -323,28 +324,46 @@ namespace EternalVR.Launcher.Core.Report
                     .OrderByDescending(g => g.Key, StringComparer.Ordinal); // the names start with the time
                 foreach (var g in groups)
                 {
-                    long bytes = g.Sum(p => { try { return new FileInfo(p).Length; } catch (IOException) { return 0L; } });
-                    if (total + bytes > ReportManifest.CapturesCapBytes) { left++; continue; }
-                    total += bytes;
-                    foreach (var path in g)
+                    // Frame -1 (the text file, the GUI image, a capture of one frame) first, then a burst's frames.
+                    var parts = g.GroupBy(p => { CaptureStem(Path.GetFileName(p), out var frame); return frame; }).OrderBy(f => f.Key).ToList();
+                    int taken = 0;
+                    foreach (var part in parts)
                     {
-                        var zipPath = item.ZipPath.Replace("{session}", s).Replace("{name}", Path.GetFileName(path));
-                        if (path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) { AddFile(files, dropped, path, item, zipPath); continue; }
-                        try { files.Add(new ReportFile(zipPath, File.ReadAllBytes(path))); }
-                        catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { dropped.Add($"{zipPath}: could not be read ({e.GetType().Name})"); }
+                        long bytes = part.Sum(p => { try { return new FileInfo(p).Length; } catch (IOException) { return 0L; } });
+                        if (total + bytes > ReportManifest.CapturesCapBytes) break;
+                        total += bytes;
+                        taken++;
+                        foreach (var path in part)
+                        {
+                            var zipPath = item.ZipPath.Replace("{session}", s).Replace("{name}", Path.GetFileName(path));
+                            if (path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) { AddFile(files, dropped, path, item, zipPath); continue; }
+                            try { files.Add(new ReportFile(zipPath, File.ReadAllBytes(path))); }
+                            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { dropped.Add($"{zipPath}: could not be read ({e.GetType().Name})"); }
+                        }
                     }
+                    if (taken == 0) left++;
+                    else if (taken < parts.Count)
+                        dropped.Add($"{g.Key}: {parts.Count - taken} of its {parts.Count(f => f.Key >= 0)} burst frame(s): the captures would pass {Size(ReportManifest.CapturesCapBytes)}");
                 }
             }
             if (left > 0) dropped.Add($"{left} older capture(s): the captures would pass {Size(ReportManifest.CapturesCapBytes)}");
         }
 
         /// <summary><c>capture-20260927-153012-p000123-t4567-L.png</c> to <c>capture-20260927-153012-p000123-t4567</c>.</summary>
-        internal static string CaptureStem(string name)
+        internal static string CaptureStem(string name) => CaptureStem(name, out _);
+
+        /// <summary>
+        /// As <see cref="CaptureStem(string)"/>; a burst's frame (<c>...-t4567-f03-L.png</c>) has its burst's stem, and
+        /// <paramref name="frame"/> is its number (3), or -1 for any other file.
+        /// </summary>
+        internal static string CaptureStem(string name, out int frame)
         {
             var stem = Path.GetFileNameWithoutExtension(name);
             foreach (var suffix in new[] { "-L", "-R", "-UI", "-mono" })
-                if (stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return stem.Substring(0, stem.Length - suffix.Length);
-            return stem;
+                if (stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) { stem = stem.Substring(0, stem.Length - suffix.Length); break; }
+            var burst = Regex.Match(stem, "-f([0-9][0-9])$", RegexOptions.IgnoreCase);
+            frame = burst.Success ? int.Parse(burst.Groups[1].Value, CultureInfo.InvariantCulture) : -1;
+            return burst.Success ? stem.Substring(0, burst.Index) : stem;
         }
 
         private static IReadOnlyList<string> SafeFiles(string dir, string pattern)
