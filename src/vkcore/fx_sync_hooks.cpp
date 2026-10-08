@@ -447,8 +447,9 @@ bool installFxSyncHooks() {
         const std::string value = requestedValue();
         g_mode = stereo_seq::fxSyncMode(value);
         if (g_mode == stereo_seq::FxSyncMode::Off) {
-            EVR_LOG("%s: off (ETERNALVR_STEREO_FX_SYNC=%s): eye L is a tick behind on CPU particles", kTag,
-                    value.c_str());
+            EVR_LOG("%s: off (ETERNALVR_STEREO_FX_SYNC=%s; =1 turns it on): eye L is a tick behind on CPU "
+                    "particles",
+                    kTag, value.empty() ? "unset" : value.c_str());
             return;
         }
         if (!mp_guard::allowsGameTouch()) {

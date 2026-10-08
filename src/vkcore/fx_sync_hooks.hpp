@@ -1,8 +1,8 @@
 #pragma once
 
 // CPU particles and effects in both eyes of a Route S tick (stereo_seq/fx_sync.hpp,
-// docs/rig-findings/stereo-fx-lag.md; Steam build 25216728). On by default; ETERNALVR_STEREO_FX_SYNC=0
-// patches nothing, =count only counts.
+// docs/rig-findings/stereo-fx-lag.md; Steam build 25216728). Off by default since 0.1.35;
+// ETERNALVR_STEREO_FX_SYNC=1 turns it on, =count only counts, unset patches nothing.
 //
 // The world's per-render prepare (0x18E78D0) advances the particle vertex ring (call 0x1A0F5D0 at RVA
 // 0x18E791C) and resets the particle light pool's count (call 0x1953D80 at RVA 0x18E7ABD); the particle

@@ -16,20 +16,20 @@ using evr::stereo_seq::FxSyncMode;
 using evr::stereo_seq::fxSyncMode;
 
 TEST_CASE("fx sync: the switch") {
-    CHECK(fxSyncMode("") == FxSyncMode::On);
     CHECK(fxSyncMode("1") == FxSyncMode::On);
     CHECK(fxSyncMode("on") == FxSyncMode::On);
-    CHECK(fxSyncMode("0") == FxSyncMode::Off);
-    CHECK(fxSyncMode(" Off ") == FxSyncMode::Off);
-    CHECK(fxSyncMode("NO") == FxSyncMode::Off);
-    CHECK(fxSyncMode("false") == FxSyncMode::Off);
+    CHECK(fxSyncMode(" On ") == FxSyncMode::On);
+    CHECK(fxSyncMode("TRUE") == FxSyncMode::On);
+    CHECK(fxSyncMode("yes") == FxSyncMode::On);
     CHECK(fxSyncMode("Count") == FxSyncMode::Count);
     CHECK(fxSyncMode("\tcount\n") == FxSyncMode::Count);
-    // Anything else is on.
-    CHECK(fxSyncMode("yes") == FxSyncMode::On);
-    CHECK(fxSyncMode("2") == FxSyncMode::On);
-    CHECK(fxSyncMode("o f f") == FxSyncMode::On);
-    CHECK(fxSyncMode("counting") == FxSyncMode::On);
+    // Unset and anything else is off.
+    CHECK(fxSyncMode("") == FxSyncMode::Off);
+    CHECK(fxSyncMode("0") == FxSyncMode::Off);
+    CHECK(fxSyncMode("off") == FxSyncMode::Off);
+    CHECK(fxSyncMode("2") == FxSyncMode::Off);
+    CHECK(fxSyncMode("o n") == FxSyncMode::Off);
+    CHECK(fxSyncMode("counting") == FxSyncMode::Off);
 }
 
 TEST_CASE("fx sync: only eye R leaves the ring and the generation to eye L") {

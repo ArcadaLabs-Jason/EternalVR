@@ -24,7 +24,9 @@ enum class FxSyncMode {
     On,    // eye R reuses eye L's particle ring, light pool and generation
 };
 
-// ETERNALVR_STEREO_FX_SYNC: "0"/"off"/"false"/"no" Off, "count" Count, anything else (or unset) On.
+// ETERNALVR_STEREO_FX_SYNC: "1"/"on"/"true"/"yes" On, "count" Count, anything else (or unset) Off. Off by
+// default since 0.1.35: in 0.1.34 eye R drew snow and some effects as tiles of their whole sprite sheet in
+// e1m3 (a player's headset captures), which the storm deck A/B never showed.
 FxSyncMode fxSyncMode(std::string_view value);
 
 enum class FxAction {

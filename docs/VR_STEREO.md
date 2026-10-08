@@ -101,7 +101,9 @@ left alone (both of its views draw one set of quads). The log has the hooks at s
 first eye with its own flares and every 10 s the flares rebuilt and anything left as the engine wrote it.
 `ETERNALVR_FLARES_PER_EYE=0` turns it off.
 
-**CPU particles and effects** (default; `ETERNALVR_STEREO_FX_SYNC=0` patches nothing, `=count` only counts).
+**CPU particles and effects** (off by default since 0.1.35, `ETERNALVR_STEREO_FX_SYNC=1` turns it on, `=count` only
+counts; 0.1.34 had it on, and eye R drew snow and some effects in e1m3 as tiles of their whole sprite sheet, seen in
+a player's headset captures and never on the storm deck).
 Sprites, smoke, sparks and blood go through a ring of three vertex slots: each render draws the vertices the render
 before it generated and generates new ones for the render after it. Under Route S that put eye L one tick behind
 eye R on every CPU particle. In eye R's render the ring is not advanced (its previous slot, which eye L's frame
@@ -689,7 +691,7 @@ axis).
 | `ETERNALVR_STEREO_DLSS` | 0 | 1: DLSS per eye instead of TAA (`r_antialiasing 2`) |
 | `ETERNALVR_STEREO_DLSS_QUALITY` | unset | with DLSS per eye: `quality`, `balanced`, `performance`, `ultra_performance` (or `3` to `0`), the `r_dlssQuality` held while DLSS runs; `dlaa`: DLSS at the full render size (render size = output size). The game maps `r_dlssQuality` 0 to 3 only (RVA 0x1CC5D40, 0x1CC5760; any other value is Balanced), so DLAA holds `r_dlssQuality` 3 and the layer sets NGX's `PerfQualityValue` to DLAA (5) on every write of it (`src/vkcore/dlss_dll.cpp`): the game's optimal render size, its feature and eye R's twin all become DLAA. Only with `ETERNALVR_DLSS_DLL` of DLSS 3.1 or later; otherwise DLSS runs at Quality and `dlss:` says why. Unset: the player's own quality |
 | `ETERNALVR_DLSS_DLL`, `_PRESET`, `_ROUTE` | unset | a newer `nvngx_dlss.dll` of the player's own (DLSS 310: the transformer model) and its render preset, for both eyes' features; loaded from its own folder, never copied into the game's (`docs/rig-findings/dlss-dll.md`) |
-| `ETERNALVR_STEREO_FX_SYNC` | 1 | CPU particles and effects alike in both eyes: eye R draws eye L's particle vertices and lights and generates only what eye L did not (How Route S works, CPU particles and effects; `docs/rig-findings/stereo-fx-lag.md`); `count`: nothing changes, what would be reused is counted; 0: no game code patched, eye L one tick behind on CPU particles |
+| `ETERNALVR_STEREO_FX_SYNC` | 0 | 1: CPU particles and effects alike in both eyes (off by default since 0.1.35: snow and some effects broke in eye R in e1m3): eye R draws eye L's particle vertices and lights and generates only what eye L did not (How Route S works, CPU particles and effects; `docs/rig-findings/stereo-fx-lag.md`); `count`: nothing changes, what would be reused is counted; unset or 0: no game code patched, eye L one tick behind on CPU particles |
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
 | `ETERNALVR_STEREO_VIS_GATE` | 1 | models one eye sees are drawn: the first-visible gate takes either eye's last render for models; particles, flares, beams and ribbons keep the engine's test (`docs/rig-findings/stereo-visibility-counter.md`); 0: the engine's own test, so a pickup in one eye's outer strip only is not drawn |
 | `ETERNALVR_FLARES_PER_EYE` | 1 | lens flares built again from each eye's own view after its latch (How Route S works, Lens flares); 0: the engine's quads from the head-centred view, at the same place in both eyes (farther than infinity) |

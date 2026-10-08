@@ -16,13 +16,13 @@ FxSyncMode fxSyncMode(std::string_view value) {
     for (const char c : value) {
         lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
     }
-    if (lower == "0" || lower == "off" || lower == "false" || lower == "no") {
-        return FxSyncMode::Off;
+    if (lower == "1" || lower == "on" || lower == "true" || lower == "yes") {
+        return FxSyncMode::On;
     }
     if (lower == "count") {
         return FxSyncMode::Count;
     }
-    return FxSyncMode::On;
+    return FxSyncMode::Off;
 }
 
 FxAction fxActionFor(FxSyncMode mode, Eye eye, bool gameTouchAllowed) {

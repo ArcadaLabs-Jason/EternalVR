@@ -4,6 +4,10 @@ Burst captures of explosions, smoke and sparks showed eye L's render of tick N m
 CPU particle and effect sprite was one game tick behind in eye L. GPU particles and the scenery were not. RVAs are
 in Steam build 25216728. Section 6 has the first rig run and what is still to check.
 
+0.1.34 shipped the fix on by default. A player's headset captures in e1m3 (Cultist Base, 2026-10-08) showed eye R
+drawing the snow and some ice effects as tiles of what looks like their whole sprite sheet, while eye L was right.
+The storm deck runs never showed it. 0.1.35 turns the fix off by default until that is understood.
+
 ## 1. Cause
 
 Names: the world's particle vertex ring P is `[world + 0x25060]`; it has three slots of 0x68 bytes at P + 0x4D8,
@@ -38,7 +42,7 @@ render of tick N drew what eye R's render of tick N-1 generated, and eye R's dre
 one tick behind. The deferred fill (`r_useParticleGenJobs`, default 1) is not the cause: the next prepare waits
 for it.
 
-## 2. Fix: `src/vkcore/fx_sync_hooks.*`, `src/stereo_seq/fx_sync.*` (default on; `ETERNALVR_STEREO_FX_SYNC=0` turns it off, `=count` only counts)
+## 2. Fix: `src/vkcore/fx_sync_hooks.*`, `src/stereo_seq/fx_sync.*` (off by default since 0.1.35; `ETERNALVR_STEREO_FX_SYNC=1` turns it on, `=count` only counts)
 
 Eye R of a Route S tick leaves the ring, the light pool and the generation of what eye L generated to eye L. Four
 mid hooks:
