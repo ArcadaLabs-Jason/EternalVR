@@ -180,3 +180,55 @@ TEST_CASE("with the arms hidden a visible surface is hidden every time it shows,
     CHECK(planHiddenSurface(false, false).step == SurfaceStep::None);
     CHECK_FALSE(planHiddenSurface(false, false).ours);
 }
+
+TEST_CASE("a cutscene hides the arm the game's kit shows and shows exactly that again when it ends") {
+    using evr::arm::HeldPlan;
+    using evr::arm::planHeldSurface;
+    bool visible = true; // the left arm, shown by the weapon's kit
+    bool ours = false;
+    bool held = false;
+    int shows = 0;
+    const auto tick = [&](bool holding) {
+        const HeldPlan plan = planHeldSurface(holding, visible, ours, held);
+        if (plan.step == SurfaceStep::Hide) {
+            visible = false;
+        } else if (plan.step == SurfaceStep::Show) {
+            visible = true;
+            ++shows;
+        }
+        ours = plan.ours;
+        held = plan.held;
+    };
+    tick(true);
+    CHECK_FALSE(visible);
+    CHECK(held);
+    tick(true); // hidden: nothing more
+    CHECK_FALSE(visible);
+    visible = true; // the cutscene's own kit shows it again: hidden again, still held
+    tick(true);
+    CHECK_FALSE(visible);
+    CHECK(held);
+    tick(false); // the cutscene ends
+    CHECK(visible);
+    CHECK_FALSE(held);
+    CHECK(shows == 1);
+    tick(false); // nothing more
+    CHECK(shows == 1);
+}
+
+TEST_CASE("a cutscene leaves what it did not hide: the kit's hidden arm, and the arm the layer posed") {
+    using evr::arm::planHeldSurface;
+    // The weapon's kit hides the arm: never shown by the hold.
+    CHECK(planHeldSurface(true, false, false, false).step == SurfaceStep::None);
+    CHECK_FALSE(planHeldSurface(true, false, false, false).held);
+    CHECK(planHeldSurface(false, false, false, false).step == SurfaceStep::None);
+    // The layer showed it (posing): hidden, no longer ours, and not held, so posing shows it again after.
+    const auto posed = planHeldSurface(true, true, true, false);
+    CHECK(posed.step == SurfaceStep::Hide);
+    CHECK_FALSE(posed.ours);
+    CHECK_FALSE(posed.held);
+    // Held but visible again at the end (an equip showed it): nothing to show, no longer held.
+    const auto shown = planHeldSurface(false, true, false, true);
+    CHECK(shown.step == SurfaceStep::None);
+    CHECK_FALSE(shown.held);
+}

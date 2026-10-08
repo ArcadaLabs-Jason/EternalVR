@@ -60,6 +60,15 @@ bool taaDlssDlaa() {
     return dlaa;
 }
 
+const std::string& taaSsrSetting() {
+    static const std::string setting = [] {
+        std::wstring value;
+        readEnv(L"ETERNALVR_STEREO_SSR", value);
+        return narrow(value);
+    }();
+    return setting;
+}
+
 bool taaDlssRequested() {
     static const bool requested = [] {
         std::wstring value;

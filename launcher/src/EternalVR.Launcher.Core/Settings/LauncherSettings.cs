@@ -67,7 +67,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// recenter_hold) are optional in schema 2: a file without them takes the defaults, and an older launcher
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
-    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
+    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
     /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
     /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed and hold_time
     /// (dlss_version replaced dlss_dll, which is still read once).
@@ -197,6 +197,8 @@ namespace EternalVR.Launcher.Core.Settings
         public double HudHeight { get; set; } = 0.0;
         public MirrorMode Mirror { get; set; } = MirrorMode.Left;
         public CutsceneView Cutscenes { get; set; } = CutsceneView.Cinema;
+        /// <summary>The first-person arms in cutscenes around you: hidden (default) or drawn as the game has them (the layer's <c>ETERNALVR_CUTSCENE_ARMS</c>).</summary>
+        public bool CutsceneArms { get; set; } = false;
         /// <summary>The cutscene screen's shape (<see cref="MirrorSettings"/>).</summary>
         public CinemaShape Cinema { get; set; } = CinemaShape.Wide16x9;
         /// <summary>The desktop mirror's display: <c>auto</c>, <c>primary</c> or a desktop point <c>x,y</c> (<see cref="MirrorSettings"/>).</summary>
@@ -231,7 +233,7 @@ namespace EternalVR.Launcher.Core.Settings
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "melee_aim", "equipment_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "show_arms", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
-            "hud_width", "hud_height", "mirror", "cutscene_view", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
+            "hud_width", "hud_height", "mirror", "cutscene_view", "cutscene_arms", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
             "punch_speed", "hold_time",
         };
@@ -359,6 +361,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("hud_height", out var hh)) s.HudHeight = Number(hh, MinHudHeight, MaxHudHeight, 0.0);
             if (map.TryGetValue("mirror", out var mi)) s.Mirror = Pick(mi, MirrorMode.Left, ("right", MirrorMode.Right), ("off", MirrorMode.Off));
             if (map.TryGetValue("cutscene_view", out var cv)) s.Cutscenes = Pick(cv, CutsceneView.Cinema, ("immersive", CutsceneView.Immersive));
+            if (map.TryGetValue("cutscene_arms", out var cuta)) s.CutsceneArms = On(cuta);
             if (map.TryGetValue("shot_origin", out var so)) s.Shots = Pick(so, ShotOrigin.Hand, ("eye", ShotOrigin.Eye));
             if (map.TryGetValue("aim_dot_size", out var ds)) s.AimDotSize = Number(ds, MinAimDotSize, MaxAimDotSize, DefaultAimDotSize);
             if (map.TryGetValue("menu_beam", out var mb)) s.MenuBeam = Flag(mb);
@@ -442,6 +445,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("hud_height = " + Metres(Clamp(HudHeight, MinHudHeight, MaxHudHeight, 0.0)));
             sb.AppendLine("mirror = " + MirrorName(Mirror));
             sb.AppendLine("cutscene_view = " + CutsceneName(Cutscenes));
+            sb.AppendLine("cutscene_arms = " + (CutsceneArms ? "1" : "0"));
             sb.AppendLine("shot_origin = " + ShotOriginName(Shots));
             sb.AppendLine("aim_dot_size = " + Metres(Clamp(AimDotSize, MinAimDotSize, MaxAimDotSize, DefaultAimDotSize)));
             sb.AppendLine("menu_beam = " + (MenuBeam ? "1" : "0"));

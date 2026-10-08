@@ -45,6 +45,8 @@ namespace EternalVR.Launcher.Core.Launch
         public string NewestDlss { get; set; }
         /// <summary>The player's own <c>r_SSDO</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
         public string PlayerSsdo { get; set; }
+        /// <summary>The player's own <c>r_SSR</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
+        public string PlayerSsr { get; set; }
     }
 
     /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
@@ -246,6 +248,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_UI_RETICLE_SIZE", Number(s.AimDotSize, LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, LauncherSettings.DefaultAimDotSize));
             Set("ETERNALVR_MIRROR", LauncherSettings.MirrorName(s.Mirror));
             Set("ETERNALVR_CUTSCENES", LauncherSettings.CutsceneName(s.Cutscenes));
+            Set("ETERNALVR_CUTSCENE_ARMS", s.CutsceneArms ? "shown" : "hidden");
             Set("ETERNALVR_SHOT_ORIGIN", LauncherSettings.ShotOriginName(s.Shots));
             Set("ETERNALVR_MENU_BEAM", s.MenuBeam ? "1" : "0");
             // The per-eye temporal set holds r_antialiasing at run time; it keeps DLSS (2) only when asked to (taa_hooks.cpp).
@@ -266,6 +269,9 @@ namespace EternalVR.Launcher.Core.Launch
             // SSDO: the game turns it off itself after r_TAASafeMode 1, which stereo holds at start-up; the layer holds the
             // player's own r_SSDO instead (on, the game's default, unless their config turns it off).
             if (stereo) Set("ETERNALVR_STEREO_SSDO", inputs.PlayerSsdo == "0" ? "0" : "1");
+            // Screen-space reflections, the same knock-on: the layer holds the player's own r_SSR while per-eye TAA runs (on,
+            // the game's default, unless their config turns it off: Reflections at Low).
+            if (stereo) Set("ETERNALVR_STEREO_SSR", inputs.PlayerSsr == "0" ? "0" : "1");
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading

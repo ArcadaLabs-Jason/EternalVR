@@ -113,6 +113,10 @@ CvarExpectation stereoScatterFilterCvar(bool perEyeHistory) {
     return {"r_lightScatteringTAA", perEyeHistory ? "1" : "0"};
 }
 
+CvarExpectation stereoSsdoFilterCvar(bool perEyeHistory) {
+    return {"r_SSDOTemporalAA", perEyeHistory ? "1" : "0"};
+}
+
 const std::vector<CvarExpectation>& stereoComfortCvars() {
     static const std::vector<CvarExpectation> cvars{
         {"r_hdrDisplay", "0"},
@@ -123,7 +127,8 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
         {"pm_noBob", "1"},
         {"view_skipKicks", "1"},
         {"view_skipShakes", "1"},
-        {"hands_fovScale", "1"},
+        // A float: held as a float, so a scale such as 1.15 is not taken for 1.
+        {"hands_fovScale", "1", true},
         {"meatHook_playerViewOverrideMode", "1"},
         // Taking damage: no full-screen tint (it filled the HUD panel in the headset) and no blur; the
         // directional arcs (view_enableHelmetFX, hud_showDamage) and the low health banner stay.
@@ -140,6 +145,12 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
         // forced-cvars.txt: in mono both eyes see one picture, so the warp stays as the game has it. The
         // game saves it to DOOMEternalConfig.local, so the launcher's session-keys.txt restores it.
         {"r_waterPostProcess", "0"},
+        // The dash's radial (zoom) blur: a screen-space blur from the picture's centre, the same in both
+        // eyes, which the game runs whatever r_motionblur is. The game itself writes r_blurRadialScale 1 when
+        // r_motionblur goes to 0 (session-keys.txt), so in VR its scale was full. Off in the headset, as
+        // motion blur is (it can make players sick); a float, so a scale such as 0.5 is held too.
+        // session-keys.txt restores the player's value after the session.
+        {"r_blurRadialScale", "0", true},
     };
     return cvars;
 }
@@ -147,6 +158,13 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
 std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting) {
     if (setting.empty() || setting == "1") {
         return CvarExpectation{"r_SSDO", "1"};
+    }
+    return std::nullopt;
+}
+
+std::optional<CvarExpectation> stereoSsrCvar(std::string_view setting) {
+    if (setting.empty() || setting == "1") {
+        return CvarExpectation{"r_SSR", "1"};
     }
     return std::nullopt;
 }

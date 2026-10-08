@@ -257,7 +257,13 @@ a step not yet followed, a crouch) would put the camera that far from the animat
 had when the game took over eases out (`driven_offset.hpp`, 0.06 s time constant, about 0.2 s): the camera
 sits on the game's eye and moves only by what the head does from there, and the offset eases back in when
 the game lets go, after which body follow closes it as before. The log says `room: the game drives the view
-(...)` with the offset held back, for the first 20 episodes.
+(...)` with the offset held back, for the first 20 episodes. The room anchored during an episode (the first
+anchor, which came 3 s into the e1m1 intro's cutscene on the owner's Quest 3, or a recenter) re-bases it: the
+part held back moves by the jump the anchor gave the head's offset (`DrivenViewOffset::rebase`), so the
+camera stays where it was, on the game's eye plus what the head did since the game took over. Before, only the
+offset from before the anchor was held, so the camera sat that far off the game's eye the other way until the
+cutscene ended (about 0.5 m in that run, worked out from the logged offset of (0.153 -0.122 0.456) m; not
+seen in the headset). Logged as `room: anchored while the game drives the view: ...`.
 
 The view's heading during and after a driven view is head aim's (`VR_HEAD_TRACKED.md`): the game's forced
 angles or camera heading re-aim the view the player had, so it faces where the game points it whatever the

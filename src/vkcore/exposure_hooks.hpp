@@ -25,8 +25,8 @@ bool exposureHookInstalled();
 // per-eye TAA on, or failed closed or not requested with eye R's exposure skip on).
 bool exposureIndexHeld();
 
-// Route S start, after its hooks: one line naming how exposure and the scattering history are kept per eye
-// (`seq-exposure: ...`), so a run's log shows the mode.
+// Route S start, after its hooks: one line naming how exposure and the scattering and SSDO histories are kept
+// per eye (`seq-exposure: ...`), so a run's log shows the mode.
 void logStereoTemporalMode();
 
 struct ExposureCounters {

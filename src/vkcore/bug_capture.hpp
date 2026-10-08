@@ -18,7 +18,7 @@
 
 namespace evr::vkcore::bug_capture {
 
-// Captures per session: each is about 20 MB of uncompressed PNG.
+// Captures per session: each is about 13 MB of PNG at a 2056x2216 render size.
 inline constexpr std::uint32_t kMaxPerSession = 50;
 // Under Route S a request waits this long for a stereo pair before a mono frame (a menu) is taken instead.
 inline constexpr double kMonoAfterSeconds = 0.3;

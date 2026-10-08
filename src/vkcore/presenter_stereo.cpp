@@ -224,10 +224,7 @@ std::optional<xr_math::EngineMatrix> XrPresenter::Impl::writeEyePose(std::byte* 
         ++stereoStats.noProjection;
         return std::nullopt;
     }
-    auto* origin = reinterpret_cast<float*>(renderView + render_view::kViewOrigin);
-    origin[0] += eye.offset[0];
-    origin[1] += eye.offset[1];
-    origin[2] += eye.offset[2];
+    render_view::moveViewOrigin(renderView, eye.offset[0], eye.offset[1], eye.offset[2]);
     std::memcpy(renderView + render_view::kViewAxis, eye.axis.data(), sizeof(eye.axis));
     std::memcpy(renderView + stereo_view_fields::kExplicitProjection, projection->data(),
                 sizeof(*projection));
@@ -271,6 +268,9 @@ void XrPresenter::Impl::onEyeView(std::byte* renderView, int viewIndex, const st
     const auto projection = writeEyePose(renderView, eye);
     if (repair) {
         eyePoseWritten[v] = projection.has_value();
+        eyeInCutscene[v] = record.cutscene;
+        eyeArmsHidden[v] = record.cutsceneArms;
+        eyeSeq[v] = record.seq;
     }
     // Test only: ETERNALVR_TEST_VIEW_LIFT=<view>,<metres> raises one view's camera, to tell which view an eye
     // shows (two-view renderers).
@@ -287,8 +287,9 @@ void XrPresenter::Impl::onEyeView(std::byte* renderView, int viewIndex, const st
     if (!projection) {
         return;
     }
+    // A cutscene with its arms hidden keeps the game's own model FOV scale (controllers::cutsceneArmsHidden).
     renderView[stereo_view_fields::kInhibitModelFovScale] =
-        std::byte{settings.stereo.inhibitModelFov ? 1u : 0u};
+        std::byte{settings.stereo.inhibitModelFov && !record.cutsceneArms ? 1u : 0u};
     if (settings.stereo.copyJitter && xr_math::copiesFirstViewJitter(viewIndex) && firstViewG != renderView) {
         const std::byte first = firstViewG[stereo_view_fields::kSubSampleIndex];
         if (renderView[stereo_view_fields::kSubSampleIndex] != first) {

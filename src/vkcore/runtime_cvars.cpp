@@ -7,6 +7,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/parallel_eyes_settings.hpp"
 #include "vkcore/scatter_hooks.hpp"
+#include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/window_cap.hpp"
@@ -45,7 +46,8 @@ struct Held {
     bool stereo = false;   // part of the Route S set (not ETERNALVR_DEBUG_CVARS)
     bool temporal = false; // a TAA cvar: left to the per-eye module once it is active
     bool saver = false;    // from ETERNALVR_CPU_SAVER
-    bool scatter = false;  // r_lightScatteringTAA: follows the scattering history (scatterHold)
+    bool scatter = false;  // r_lightScatteringTAA: follows the scattering history (historyFilterHold)
+    bool ssdo = false;     // r_SSDOTemporalAA: follows SSDO's history (historyFilterHold)
     bool cap = false;      // value "<=N": lowered to N while above it, never raised (capValue)
     float capValue = 0.0f;
     bool exact = false; // a float cvar held at exactValue, compared as a float (ETERNALVR_SHARPENING)
@@ -97,11 +99,13 @@ void holdPlacedWindow(Held& h) {
 // The scattering filter follows its per-eye history, whatever the TAA mode
 // (stereo_seq::stereoScatterFilterCvar): held here with per-eye TAA off or failed closed; while per-eye TAA
 // is requested and has not failed closed, its own set writes the same value. False: left alone now.
-bool scatterHold(Held& h) {
+// SSDO's filter (h.ssdo) by the same rule (stereo_seq::stereoSsdoFilterCvar).
+bool historyFilterHold(Held& h) {
     if (taaRequested() && !taaFailedClosed()) {
         return false;
     }
-    h.value = std::string(stereo_seq::stereoScatterFilterCvar(scatterPerEyeReady()).value);
+    h.value = std::string(h.ssdo ? stereo_seq::stereoSsdoFilterCvar(ssdoPerEyeReady()).value
+                                 : stereo_seq::stereoScatterFilterCvar(scatterPerEyeReady()).value);
     return true;
 }
 
@@ -217,7 +221,7 @@ void addDebugList() {
             continue;
         }
         Held* same = heldNamed(c.name);
-        if (same && (same->saver || same->scatter || same->parallel)) {
+        if (same && (same->saver || same->scatter || same->ssdo || same->parallel)) {
             *same = std::move(h);
         } else {
             g_held.push_back(std::move(h));
@@ -249,6 +253,16 @@ std::string commandLine() {
     WideCharToMultiByte(CP_UTF8, 0, wide, -1, line.data(), bytes, nullptr, nullptr);
     line.resize(static_cast<std::size_t>(bytes - 1));
     return line;
+}
+
+// One of the comfort set (stereo_seq::stereoComfortCvars); a float one is compared as a float.
+Held comfortHeld(const stereo_seq::CvarExpectation& c) {
+    Held h{std::string(c.name), std::string(c.value), true, false};
+    if (c.fraction) {
+        h.exact = true;
+        h.exactValue = std::strtof(h.value.c_str(), nullptr);
+    }
+    return h;
 }
 
 // The window and present set (stereo_seq::stereoWindowCvars), as the command line and ETERNALVR_WINDOW size
@@ -296,7 +310,7 @@ void addParallelEyeSet() {
     }
     addWindowSet(true);
     for (const auto& c : stereo_seq::stereoComfortCvars()) {
-        g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
+        g_held.push_back(comfortHeld(c));
         g_held.back().parallel = true;
     }
 }
@@ -310,9 +324,12 @@ void start(bool stereo) {
         const stereo_seq::CvarExpectation scatter = stereo_seq::stereoScatterFilterCvar(false);
         g_held.push_back(Held{std::string(scatter.name), std::string(scatter.value), true, false});
         g_held.back().scatter = true;
+        const stereo_seq::CvarExpectation ssdoFilter = stereo_seq::stereoSsdoFilterCvar(false);
+        g_held.push_back(Held{std::string(ssdoFilter.name), std::string(ssdoFilter.value), true, false});
+        g_held.back().ssdo = true;
         addWindowSet(false);
         for (const auto& c : stereo_seq::stereoComfortCvars()) {
-            g_held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
+            g_held.push_back(comfortHeld(c));
         }
         const std::string ssdo = narrowEnv(L"ETERNALVR_STEREO_SSDO");
         if (const auto c = stereo_seq::stereoSsdoCvar(ssdo)) {
@@ -371,10 +388,14 @@ void start(bool stereo) {
     bool anySaver = false;
     for (Held& h : g_held) {
         holdPlacedWindow(h);
-        if (h.object && h.scatter) {
-            // Held only without per-eye TAA (scatterHold); 0 throughout when the scattering hooks are not in.
+        if (h.object && (h.scatter || h.ssdo)) {
+            // Held only without per-eye TAA (historyFilterHold); 0 throughout when the history's hooks are
+            // not in.
+            const bool hooked = h.ssdo ? ssdoHooksInstalled() : scatterHooksInstalled();
             list += (list.empty() ? "" : ", ") + h.name +
-                    (scatterHooksInstalled() ? " 1 while the scattering history is per eye, else 0" : " 0") +
+                    (!hooked  ? " 0"
+                     : h.ssdo ? " 1 while the SSDO history is per eye, else 0"
+                              : " 1 while the scattering history is per eye, else 0") +
                     (taaRequested() ? " (if per-eye TAA fails closed)" : "");
         } else if (h.object && !windowSizeLeft(h)) {
             list += (list.empty() ? "" : ", ") + h.name + (h.cap ? " at most " : " ") + h.value;
@@ -405,7 +426,7 @@ void apply(bool stereo) {
     }
     for (Held& h : g_held) {
         if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off) ||
-            (h.scatter && !scatterHold(h))) {
+            ((h.scatter || h.ssdo) && !historyFilterHold(h))) {
             continue;
         }
         holdPlacedWindow(h);

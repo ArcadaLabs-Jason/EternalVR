@@ -22,6 +22,7 @@ namespace EternalVR.Launcher
         private readonly CheckBox mirrorCrop = new CheckBox { AutoSize = true };
         private readonly ComboBox cutscenes = Choices(Setting.CutsceneView);
         private readonly ComboBox cinemaShape = Choices(Setting.CutsceneShape);
+        private readonly CheckBox cutsceneArms = new CheckBox { AutoSize = true };
         /// <summary>The ini value of each entry of <see cref="mirrorMonitor"/>: auto, primary, then each display's top-left x,y.</summary>
         private readonly List<string> monitorValues = new List<string>();
         /// <summary>A size that is none of the named ones (set in the file by hand): shown as a last, "Custom" choice.</summary>
@@ -75,7 +76,8 @@ namespace EternalVR.Launcher
                     s => s.Cutscenes = (CutsceneView)cutscenes.SelectedIndex),
                 Row(Setting.CutsceneShape, cinemaShape,
                     s => cinemaShape.SelectedIndex = (int)s.Cinema,
-                    s => s.Cinema = (CinemaShape)cinemaShape.SelectedIndex));
+                    s => s.Cinema = (CinemaShape)cinemaShape.SelectedIndex),
+                Row(Setting.CutsceneArms, cutsceneArms, s => cutsceneArms.Checked = s.CutsceneArms, s => s.CutsceneArms = cutsceneArms.Checked));
             var hud = Group("HUD panel",
                 Row(Setting.HudDistance, WithUnit(hudDistance, "m"),
                     s => hudDistance.Value = Clamped(s.HudDistance, hudDistance, LauncherSettings.DefaultHudDistance),

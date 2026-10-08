@@ -55,6 +55,7 @@ Settings readSettings() {
     if (readEnv(L"ETERNALVR_CUTSCENES", value) && _wcsicmp(value.c_str(), L"immersive") == 0) {
         s.cutsceneCinema = false;
     }
+    s.cutsceneCutRebase = envFlag(L"ETERNALVR_CUTSCENE_CUT_REBASE", true);
     if (readEnv(L"ETERNALVR_GLORY_KILLS", value) && !value.empty()) {
         std::string narrow;
         for (const wchar_t c : value) {
@@ -167,11 +168,12 @@ void XrPresenter::Impl::shutdown() {
     setViewHookSink(nullptr); // no camera hook callback runs past this point
     setStereoHookSink(nullptr);
     controllers::restoreClimbCvars("the layer shuts down"); // the game's own wall climbing again
+    controllers::noteImmersiveCutscene(false);              // no cutscene keeps the arms hidden
     ui_engine::setSkipComposite(false);                     // the game composites its own GUI again
     requestTwoViews(false);                                 // the game goes back to its own single view
-    if (skipHolding) {
+    if (cutsceneTrack.skipHolding) {
         injectKey(kSkipKey, false, gameWindow());
-        skipHolding = false;
+        cutsceneTrack.skipHolding = false;
     }
     disableKeepActive();
     stop.store(true);

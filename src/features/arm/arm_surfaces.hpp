@@ -77,6 +77,22 @@ SurfacePlan planSurface(bool posed, bool visible, bool ours);
 // hands (a map load) to show what the game wants.
 SurfacePlan planHiddenSurface(bool visible, bool ours);
 
+// The arms hidden for a while (a cutscene shown around the player, ETERNALVR_CUTSCENE_ARMS), on top of the
+// plans above. `holding`: the arms are hidden this tick; `held`: the hold hid this surface and has not shown
+// it again since.
+//
+// - Holding and visible: hide it. A surface the layer showed is no longer ours (posing shows it again after);
+//   one the game's kit showed is held.
+// - Holding and hidden: nothing.
+// - Not holding and held: show it again if still hidden; either way no longer held. Only what the hold hid
+//   is shown, so the game's kit and ETERNALVR_ARMS=hidden keep what they hide.
+struct HeldPlan {
+    SurfaceStep step = SurfaceStep::None;
+    bool ours = false; // after the step
+    bool held = false; // after the step
+};
+HeldPlan planHeldSurface(bool holding, bool visible, bool ours, bool held);
+
 // What the arm's surfaces look like after a tick, for the trace.
 enum class SurfaceState : std::uint8_t {
     Off,     // not found on the model, or the code did not check out: the game's kit decides

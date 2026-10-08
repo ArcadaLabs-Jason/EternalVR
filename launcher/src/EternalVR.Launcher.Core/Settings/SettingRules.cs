@@ -21,7 +21,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
-        VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape,
+        VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms,
         HudDistance, HudSize, HudHeight, HudPlace,
         MotionControllers, ShotsFrom, AimDotSize, MenuLaser, GameFolder, Runtime, ExtraArguments,
     }
@@ -42,6 +42,8 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NeedsRenderSize =
             "Only when the game renders at the headset's size (render_size in launcher.ini): otherwise the window is the eye image.";
         public const string NeedsCinema = "Only with cutscenes on a flat screen (Cutscene view).";
+        public const string NeedsImmersive = "Only with cutscenes around you (Cutscene view).";
+        public const string NeedsShownArms = "Only with Show arms on (Play tab): otherwise the arms are hidden in cutscenes too.";
         public const string NeedsDlss = "Only with DLSS (Anti-aliasing).";
         public const string NotWithDlss = "Not with DLSS (Anti-aliasing).";
         public const string NotWithParallelEyes = "Not with Parallel Eye Rendering (Play tab).";
@@ -135,6 +137,10 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.CutsceneShape:
                     if (!stereo) return NeedsStereo;
                     return s.Cutscenes == CutsceneView.Cinema ? null : NeedsCinema;
+                case Setting.CutsceneArms:
+                    if (!s.Controllers) return NeedsControllers;
+                    if (s.Cutscenes != CutsceneView.Immersive) return NeedsImmersive;
+                    return s.ShowArms ? null : NeedsShownArms;
                 default:
                     return null;
             }

@@ -26,6 +26,10 @@
 // The arm's surfaces are found on each new model by name (arm_low_rt_base; the left arm's three), else as
 // the surfaces of the kit holding only that arm ("ArmRight", "ArmLeft"); never by a fixed index.
 //
+// A cutscene shown around the player (controllers::cutsceneArmsHidden) hides every visible surface of both
+// arms while it plays and, when it ends, shows again exactly the ones it hid (arm::planHeldSurface); with
+// ETERNALVR_ARMS=hidden it does nothing.
+//
 // Fail closed: nothing is shown unless every check passed and the surfaces were found; a faulting call
 // turns this off for the session (logged). Writes only while the multiplayer guard allows them, except the
 // one give-back after a trip. Off-hand hook thread (the game thread running idHands::Update) only.
@@ -50,6 +54,13 @@ void update(arm::ArmSide side, const std::byte* hands, bool posed);
 // After a multiplayer guard trip, once: hides again what the layer showed on that arm. Waits for the hands
 // it was shown on (another hands' tick passes). True once done (or nothing to give back).
 bool releaseAfterTrip(arm::ArmSide side, const std::byte* hands);
+
+// Any thread: the code checked out at install, so the arms can be hidden.
+bool installed();
+
+// Off-hand hook thread: a cutscene hides the arms now, or what it hid is not shown again yet. Both arms are
+// then updated every tick.
+bool holdPending();
 
 // The arm's surfaces after the last update, for the trace.
 arm::SurfaceState state(arm::ArmSide side);

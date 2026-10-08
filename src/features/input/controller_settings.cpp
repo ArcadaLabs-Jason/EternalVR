@@ -262,6 +262,7 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     }
     static constexpr std::pair<const char*, bool> kArms[] = {{"shown", false}, {"hidden", true}};
     r.choice("ETERNALVR_ARMS", kArms, s.armsHidden);
+    r.choice("ETERNALVR_CUTSCENE_ARMS", kArms, s.cutsceneArmsHidden);
     if (const auto path = lookup("ETERNALVR_CONTROLLER_DATA"); path && !path->empty()) {
         s.controllerDataPath = *path;
     }

@@ -13,6 +13,16 @@ bool finite(Vec3 v) {
 
 } // namespace
 
+bool DrivenViewOffset::rebase(Vec3 offset) {
+    if (!driven_ || !finite(offset)) {
+        return false;
+    }
+    const Vec3 jump = offset - lastOffset_;
+    base_ = base_ + jump;
+    held_ = held_ + jump;
+    return true;
+}
+
 Vec3 DrivenViewOffset::update(Vec3 offset, bool driven, double seconds) {
     if (!finite(offset)) {
         return offset; // head_offset.hpp never gives one; nothing here is kept from it
@@ -22,6 +32,7 @@ Vec3 DrivenViewOffset::update(Vec3 offset, bool driven, double seconds) {
     if (std::isfinite(seconds)) {
         last_ = seconds;
     }
+    lastOffset_ = offset;
     began_ = driven && !driven_;
     if (began_) {
         base_ = offset;

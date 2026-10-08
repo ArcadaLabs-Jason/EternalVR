@@ -2,11 +2,13 @@
 
 #include "vkcore/hands_surfaces.hpp"
 
+#include "vkcore/controllers.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -98,10 +100,13 @@ bool g_byKit = false;
 bool g_armsHidden = false;
 // Hook thread only: a call faulted, nothing is called again.
 bool g_faulted = false;
+// Set once the code checked out (install); read by the camera hook (installed()).
+std::atomic<bool> g_installed{false};
 
 struct Surface {
     std::int32_t index = -1;
     bool ours = false;
+    bool held = false; // hidden by the cutscene's hold (arm::planHeldSurface)
 };
 struct Side {
     const std::byte* hands = nullptr;
@@ -114,6 +119,7 @@ struct Side {
     bool loggedShown = false;
     bool loggedRestored = false;
     bool loggedHidden = false;
+    int heldLogs = 0; // the hold's hide and show lines, the first few
     bool tripDone = false;
 };
 Side g_sides[2];
@@ -318,6 +324,9 @@ void turnOff(arm::ArmSide side, const char* call) {
 
 void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip) {
     Side& s = sideOf(side);
+    // A cutscene shown around the player hides the arms; never on top of ETERNALVR_ARMS=hidden, and the
+    // give-back after a trip shows what it hid.
+    const bool hold = !afterTrip && !g_armsHidden && cutsceneArmsHidden();
     const std::byte* model = nullptr;
     if (!g_show || g_faulted || !hands || !safeRead(hands + kHandsRenderModel, model) || !model) {
         s.state = arm::SurfaceState::Off;
@@ -326,7 +335,7 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
     if (hands != s.hands || model != s.model) {
         // A new model (a map load, a respawn): what was shown on the old one is not touched again, and the
         // new one is looked at when the arm is first posed on it (with the arms hidden, at once).
-        if (afterTrip || !(posed || g_armsHidden)) {
+        if (afterTrip || !(posed || g_armsHidden || hold)) {
             if (!afterTrip) {
                 s.hands = nullptr;
                 s.model = nullptr;
@@ -347,6 +356,8 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
     bool allVisible = true;
     bool shown = false;
     bool restored = false;
+    bool heldNow = false;
+    bool unheld = false;
     for (std::size_t i = 0; i < s.count; ++i) {
         Surface& surface = s.surfaces[i];
         bool visible = false;
@@ -354,8 +365,15 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
             s.state = arm::SurfaceState::Off;
             return;
         }
-        const arm::SurfacePlan plan = g_armsHidden ? arm::planHiddenSurface(visible, surface.ours)
-                                                   : arm::planSurface(posed, visible, surface.ours);
+        arm::SurfacePlan plan = g_armsHidden ? arm::planHiddenSurface(visible, surface.ours)
+                                             : arm::planSurface(posed, visible, surface.ours);
+        if (!g_armsHidden && (hold || surface.held)) {
+            const arm::HeldPlan held = arm::planHeldSurface(hold, visible, surface.ours, surface.held);
+            plan = {held.step, held.ours};
+            heldNow = heldNow || (held.held && !surface.held);
+            unheld = unheld || (surface.held && !held.held);
+            surface.held = held.held;
+        }
         if (plan.step == arm::SurfaceStep::Show) {
             if (!callSurfaceFn(g_show, model, surface.index)) {
                 turnOff(side, "Show");
@@ -374,9 +392,14 @@ void apply(arm::ArmSide side, const std::byte* hands, bool posed, bool afterTrip
         anyOurs = anyOurs || surface.ours;
         allVisible = allVisible && visible;
     }
-    if (g_armsHidden) {
+    if ((heldNow || unheld) && s.heldLogs < 20) {
+        ++s.heldLogs;
+        EVR_LOG("%s: %s surface %s %s", prefix(side), arm::armLabel(side), indexList(s).c_str(),
+                heldNow ? "hidden for the cutscene" : "shown again after the cutscene");
+    }
+    if (g_armsHidden || hold) {
         s.state = arm::SurfaceState::Removed;
-        if (restored && !s.loggedHidden) {
+        if (g_armsHidden && restored && !s.loggedHidden) {
             s.loggedHidden = true;
             EVR_LOG("%s: %s surface %s hidden (arms hidden)", prefix(side), arm::armLabel(side),
                     indexList(s).c_str());
@@ -438,6 +461,7 @@ bool install(const GameImage& image, bool armsHidden) {
     g_show = reinterpret_cast<SurfaceFn>(const_cast<std::byte*>(show));
     g_hide = reinterpret_cast<SurfaceFn>(const_cast<std::byte*>(hide));
     g_armsHidden = armsHidden;
+    g_installed.store(true, std::memory_order_release);
     EVR_LOG("%s: idHands+0x%zX's model, kit group %d (the model's apply at RVA 0x%X); Show 0x%X, Hide 0x%X "
             "(bits at +0x%zX); the arms found %s; %s",
             kTag, kHandsRenderModel, kBodyKitGroup, image.rva(modelApply), image.rva(show), image.rva(hide),
@@ -471,7 +495,7 @@ bool releaseAfterTrip(arm::ArmSide side, const std::byte* hands) {
     }
     bool anyOurs = false;
     for (std::size_t i = 0; i < s.count; ++i) {
-        anyOurs = anyOurs || s.surfaces[i].ours;
+        anyOurs = anyOurs || s.surfaces[i].ours || s.surfaces[i].held;
     }
     if (anyOurs && hands != s.hands) {
         return false;
@@ -479,11 +503,28 @@ bool releaseAfterTrip(arm::ArmSide side, const std::byte* hands) {
     s.tripDone = true;
     if (anyOurs) {
         apply(side, hands, false, true);
-        EVR_LOG(
-            "%s: the multiplayer guard tripped: %s surface %s hidden again as the weapon's mesh kit has it",
-            prefix(side), arm::armLabel(side), indexList(s).c_str());
+        EVR_LOG("%s: the multiplayer guard tripped: %s surface %s back as the weapon's mesh kit has it",
+                prefix(side), arm::armLabel(side), indexList(s).c_str());
     }
     return true;
+}
+
+bool installed() {
+    return g_installed.load(std::memory_order_acquire);
+}
+
+bool holdPending() {
+    if (cutsceneArmsHidden()) {
+        return true;
+    }
+    for (const Side& s : g_sides) {
+        for (std::size_t i = 0; i < s.count; ++i) {
+            if (s.surfaces[i].held) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 arm::SurfaceState state(arm::ArmSide side) {

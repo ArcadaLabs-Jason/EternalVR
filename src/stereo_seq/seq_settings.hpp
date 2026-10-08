@@ -23,6 +23,7 @@ std::optional<CaptureSetting> parseCaptureSetting(std::wstring_view text);
 struct CvarExpectation {
     std::string_view name;
     std::string_view value;
+    bool fraction = false; // a float cvar: a hold compares it as a float (0.5 is not taken for 0)
 };
 
 // r_TAASafeMode 1, r_antialiasing 0, r_jitter 0, rs_enable 0, r_swapInterval 0.
@@ -48,24 +49,39 @@ const std::vector<CvarExpectation>& stereoRuntimeCvars(StereoTemporal temporal =
 // the same value in its own set.
 CvarExpectation stereoScatterFilterCvar(bool perEyeHistory);
 
+// r_SSDOTemporalAA under Route S, SSDO's temporal filter, by the same rule: on (1) while SSDO's history is
+// per eye (vkcore/ssdo_hooks.hpp), off (0) otherwise, since each eye would filter its occlusion with the
+// other eye's. Held beside the Off set with per-eye TAA off or failed closed; per-eye TAA writes it in its
+// own set.
+CvarExpectation stereoSsdoFilterCvar(bool perEyeHistory);
+
 // The comfort and correctness cvars held at run time under Route S, so a player who turns one back on in the
 // game's own settings during a session gets it off again at once: HDR output (the copy to the headset
 // expects SDR), motion blur, depth of field, chromatic aberration, vignette, view bob and the view kicks and
 // shakes (camera motion the head did not make), the damage tint and blur, the view effects' overlays, the
-// underwater screen warp, the weapon's FOV scale and the Meathook's single view turn (hand aim). In stereo
-// the launcher puts only r_hdrDisplay on the command line (the swapchain's format is picked at start-up):
-// this hold sets the rest, so a multiplayer guard trip gives the player's values back (cvar_book.hpp). Mono
-// launches keep them on the command line. Kept in step with the launcher's forced-cvars.txt, which restores
-// the player's own values after the session, except r_waterPostProcess: in mono both eyes see one picture, so
-// it is held in stereo only, and session-keys.txt restores it (the game saves it).
+// underwater screen warp, the dash's radial blur, the weapon's FOV scale and the Meathook's single view turn
+// (hand aim). In stereo the launcher puts only r_hdrDisplay on the command line (the swapchain's format is
+// picked at start-up): this hold sets the rest, so a multiplayer guard trip gives the player's values back
+// (cvar_book.hpp). Mono launches keep them on the command line. Kept in step with the launcher's
+// forced-cvars.txt, which restores the player's own values after the session, except r_waterPostProcess: in
+// mono both eyes see one picture, so it is held in stereo only. session-keys.txt restores it and
+// r_blurRadialScale (the game saves both; it writes r_blurRadialScale itself after r_motionblur 0).
 const std::vector<CvarExpectation>& stereoComfortCvars();
 
 // r_SSDO under Route S (ETERNALVR_STEREO_SSDO). The game turns SSDO off itself after r_TAASafeMode 1
 // (0x1C6FCC0), which Route S holds at start-up, so without a hold every Route S session ran without it.
-// SSDO's own temporal filter stays off (r_SSDOTemporalAA 0, the per-eye TAA set), so it reads no other eye's
-// history. Unset or "1": held at 1, the game's default (the launcher passes the player's own 0 from their
-// config); "0": no hold, the game's knock-on stays. Nothing for any other value.
+// SSDO's own temporal filter runs only while its history is per eye (stereoSsdoFilterCvar), so it reads no
+// other eye's history. Unset or "1": held at 1, the game's default (the launcher passes the player's own 0
+// from their config); "0": no hold, the game's knock-on stays. Nothing for any other value.
 std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting);
+
+// r_SSR while per-eye TAA (or per-eye DLSS) runs (ETERNALVR_STEREO_SSR; taa_hooks.cpp holds it). The same
+// knock-on as SSDO: the game writes r_SSR 0 on every render while r_TAASafeMode is not 0 (0x1C6FCC0,
+// 0x1C71630). SSR keeps no history of its own: it reads the last frame's colour through the TAA history
+// selector (0x1CBB6C0), which per-eye TAA gives each eye's own, so it is held only then. Unset or "1": held
+// at 1, the game's default (the launcher passes the player's own 0 from their config, Reflections at Low);
+// "0": no hold, the game's value stays. Nothing for any other value.
+std::optional<CvarExpectation> stereoSsrCvar(std::string_view setting);
 
 // A cvar held at a value known only at run time (stereoWindowCvars).
 struct CvarHold {

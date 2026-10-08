@@ -16,6 +16,11 @@ them is worse for you than described here.
   out instead. Steady view and Flat screen have been tried in a headset; Fade out showed nothing with "Fade in
   walls" off before this build and has not been tried in a headset since. Cutscenes play on a flat 16:9 screen in front of you
   with the game's own camera (`ETERNALVR_CUTSCENES=immersive` puts you in the cutscene's camera instead).
+  With cutscenes around you (Advanced tab, Cutscene view) and motion controllers on, cutscenes keep the game's
+  own weapon view ("Arms in cutscenes" on keeps the VR one, as before). Whether that keeps the Slayer's arms out
+  of sight has not been checked in a headset yet. A camera cut that turns the view more than 90 degrees puts
+  the new shot in front of where you look. Close-ups can still feel very near: the game frames them for a
+  narrow flat screen.
 - **Room-scale walking is new and lightly tested.** When you step around the room while standing, the
   Slayer walks after you in short pulses, so you may hear footsteps start and stop. It has been tested
   in a headset, but not much against walls, on stairs or in heavy combat. It
@@ -91,13 +96,13 @@ them is worse for you than described here.
   switches size a few seconds in; on graphics cards
   with 12 GB or less that switch can fail with "Failed to allocate video memory". Launch again with the
   headset connected.
-- **Some effects are off in stereo.** Motion blur, depth of field, chromatic aberration and vignette are
-  off in VR, and so are the red tint and blur when you take damage (the arrows showing where the hit
-  came from and the low health warning stay). The game's other screen overlays are off too: the red
-  edges at low health, double vision and screen shakes, and the wobble of the whole picture under water
-  (the water's tint and fog stay). A few effects lose the smoothing they get over several frames, because
-  the two eyes would share it: ambient occlusion, water reflections and refraction still show, only that
-  smoothing is off. The picture looks slightly different from the flat game.
+- **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
+  chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
+  (the arrows showing where the hit came from and the low health warning stay). The game's other screen
+  overlays are off too: the red edges at low health, double vision and screen shakes, and the wobble of
+  the whole picture under water (the water's tint and fog stay). A few effects lose the smoothing they get
+  over several frames, because the two eyes would share it: water reflections and refraction still show,
+  only that smoothing is off. The picture looks slightly different from the flat game.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
   for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
   banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before

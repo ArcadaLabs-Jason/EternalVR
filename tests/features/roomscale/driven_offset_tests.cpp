@@ -76,3 +76,41 @@ TEST_CASE("a long stall eases at most a tenth of a second, and bad input is pass
     const Vec3 bad = d.update({std::nanf(""), 0.0f, 0.0f}, true, 100.1);
     CHECK(std::isnan(bad.x));
 }
+
+TEST_CASE("the first anchor during a cutscene re-bases the episode: the camera stays where it was") {
+    DrivenViewOffset d;
+    double t = 0.0;
+    // Before the first anchor the head is 0.15 m right, 0.12 m low and 0.46 m back in LOCAL as the runtime
+    // set it, and a cutscene starts (the owner's e1m1 intro, 2026-10-07).
+    const Vec3 beforeAnchor{0.153f, -0.122f, 0.456f};
+    run(d, beforeAnchor, true, 60, t);
+    CHECK(approxEqual(d.held(), beforeAnchor, 1e-3f));
+    // The head leans 0.04 m right: the camera moves that much from the game's eye.
+    const Vec3 lean{0.04f, 0.0f, 0.0f};
+    Vec3 out = run(d, beforeAnchor + lean, true, 5, t);
+    CHECK(approxEqual(out, lean, 1e-3f));
+    // Anchored: the head's offset jumps to the lean and a little lift. The camera stays where it was;
+    // without the re-base it would sit the old offset off the eye the other way (-0.11 0.14 -0.46 m).
+    const Vec3 anchored{0.04f, 0.02f, 0.0f};
+    CHECK(d.rebase(anchored));
+    out = d.update(anchored, true, t);
+    t += kFrame;
+    CHECK(approxEqual(out, lean, 1e-3f));
+    // The head moves from there and the camera with it.
+    out = run(d, anchored + Vec3{0.02f, 0.0f, 0.0f}, true, 5, t);
+    CHECK(approxEqual(out, lean + Vec3{0.02f, 0.0f, 0.0f}, 1e-3f));
+    // The cutscene ends: the whole anchored offset comes back.
+    out = run(d, anchored + Vec3{0.02f, 0.0f, 0.0f}, false, 60, t);
+    CHECK(approxEqual(out, anchored + Vec3{0.02f, 0.0f, 0.0f}, 1e-3f));
+}
+
+TEST_CASE("a re-base outside a driven view, or with bad input, does nothing") {
+    DrivenViewOffset d;
+    double t = 0.0;
+    run(d, {0.0f, 0.0f, -0.3f}, false, 10, t);
+    CHECK_FALSE(d.rebase({0.0f, 0.0f, 0.0f}));
+    CHECK(approxEqual(run(d, {0.0f, 0.0f, -0.3f}, false, 1, t), Vec3{0.0f, 0.0f, -0.3f}));
+    run(d, {0.0f, 0.0f, -0.3f}, true, 60, t);
+    CHECK_FALSE(d.rebase({std::nanf(""), 0.0f, 0.0f}));
+    CHECK(approxEqual(d.held(), Vec3{0.0f, 0.0f, -0.3f}, 1e-3f));
+}

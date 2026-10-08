@@ -108,10 +108,12 @@ namespace EternalVR.Launcher.Core.Report
 
         /// <summary>
         /// The most capture files (<see cref="ReportSource.SessionCaptures"/>) a report holds, uncompressed, apart
-        /// from <see cref="TotalCapBytes"/>. The layer's PNG files are not compressed, so they shrink severalfold in
-        /// the zip; a capture that would pass this cap is left out whole and listed as left out.
+        /// from <see cref="TotalCapBytes"/>. The layer's PNG files are compressed (a capture is about 13 MB at a
+        /// 2056x2216 render size), so they keep their size in the zip: this cap holds one whole capture at that size
+        /// and leaves room for the zipped logs under GitHub's 25 MB attachment limit. A capture that would pass this
+        /// cap is left out whole and listed as left out.
         /// </summary>
-        public const long CapturesCapBytes = 48 * MiB;
+        public const long CapturesCapBytes = 20 * MiB;
 
         public static readonly IReadOnlyList<ReportItem> Items = new[]
         {
@@ -156,7 +158,7 @@ namespace EternalVR.Launcher.Core.Report
                 "The frame timing table of the newest session only: its header and last 3 MB",
                 headBytes: 16 * 1024, tailBytes: 3 * MiB, sessions: 1),
             new ReportItem(ReportSource.SessionCaptures, "capture-*", "sessions/{session}/captures/{name}",
-                "The in-headset captures (left Menu held + a trigger; under SteamVR with Touch-type controllers, both sticks held, then a trigger; Index: left trackpad pressed firmly + a trigger; Steam Frame: View + a trigger): eye L, eye R and UI images with a text file each, of the newest 5 sessions, newest first, up to 48 MB",
+                "The in-headset captures (left Menu held + a trigger; under SteamVR with Touch-type controllers, both sticks held, then a trigger; Index: left trackpad pressed firmly + a trigger; Steam Frame: View + a trigger): eye L, eye R and UI images with a text file each, of the newest 5 sessions, newest first, up to 20 MB",
                 sessions: SessionsKept),
         };
 

@@ -12,8 +12,9 @@ horizontal shift that best matches the two eyes in a band across the image centr
 
   python tools/stereo/eye_diff.py <folder> [--threshold 8] [--disparity] [--diff-out <folder>]
 
-Reads 8-bit RGB or RGBA PNGs (any filter); uses numpy when it is installed, pure Python otherwise (slow on
-full-size images).
+Reads 8-bit RGB or RGBA PNGs (any filter); decodes them with Pillow when it is installed (the layer's PNGs
+are filtered per row, which pure Python takes seconds to undo on a full-size image) and compares with numpy
+when it is installed, pure Python otherwise (slow on full-size images).
 """
 import argparse
 import glob
@@ -27,9 +28,15 @@ try:
 except ImportError:  # pragma: no cover - the rig's venv has numpy
     np = None
 
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover - read_png decodes in pure Python instead
+    Image = None
 
-def read_png(path):
-    """Returns (width, height, channels, bytes) of an 8-bit RGB/RGBA PNG, rows tightly packed."""
+
+def read_png(path, pillow=True):
+    """Returns (width, height, channels, bytes) of an 8-bit RGB/RGBA PNG, rows tightly packed (decoded by
+    Pillow when it is installed and `pillow` is set)."""
     data = open(path, 'rb').read()
     if data[:8] != b'\x89PNG\r\n\x1a\n':
         raise ValueError(f'{path}: not a PNG')
@@ -47,6 +54,10 @@ def read_png(path):
         elif kind == b'IEND':
             break
         at += 12 + length
+    if pillow and Image is not None:
+        with Image.open(path) as image:
+            image.load()
+            return width, height, channels, image.tobytes()
     raw = zlib.decompress(b''.join(idat))
     stride = width * channels
     out = bytearray(stride * height)

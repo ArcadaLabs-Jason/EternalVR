@@ -5,6 +5,7 @@ evr_add_module(evr_xr_math
         eye_clip_transform.cpp
         camera_anim.cpp
         cinema_quad.cpp
+        cutscene_cuts.cpp
         display_lead.cpp
         fov.cpp
         hand_aim.cpp

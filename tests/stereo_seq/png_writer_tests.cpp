@@ -1,5 +1,7 @@
 #include "stereo_seq/png_writer.hpp"
 
+#include "support/inflate.hpp"
+
 #include <doctest/doctest.h>
 
 #include <cstddef>
@@ -9,6 +11,7 @@
 #include <vector>
 
 using evr::stereo_seq::adler32;
+using evr::stereo_seq::Compression;
 using evr::stereo_seq::crc32;
 using evr::stereo_seq::encodePngRgb8;
 using evr::stereo_seq::encodePngRgba8;
@@ -49,32 +52,40 @@ std::vector<Chunk> chunks(const std::vector<std::uint8_t>& png) {
     return out;
 }
 
-// Inflates a zlib stream made of stored blocks only.
-std::vector<std::uint8_t> inflateStored(const std::vector<std::uint8_t>& z) {
-    REQUIRE(z.size() >= 6);
-    CHECK(((std::uint32_t{z[0]} << 8) | z[1]) % 31 == 0);
-    CHECK((z[0] & 0x0F) == 8);
-    std::vector<std::uint8_t> out;
-    std::size_t at = 2;
-    for (;;) {
-        REQUIRE(at + 5 <= z.size());
-        const std::uint8_t header = z[at];
-        CHECK((header & 0x06) == 0); // stored
-        const std::uint16_t len = static_cast<std::uint16_t>(z[at + 1] | (z[at + 2] << 8));
-        const std::uint16_t nlen = static_cast<std::uint16_t>(z[at + 3] | (z[at + 4] << 8));
-        CHECK(static_cast<std::uint16_t>(~len) == nlen);
-        at += 5;
-        REQUIRE(at + len <= z.size());
-        out.insert(out.end(), z.begin() + static_cast<std::ptrdiff_t>(at),
-                   z.begin() + static_cast<std::ptrdiff_t>(at + len));
-        at += len;
-        if (header & 1) {
-            break;
-        }
+// The image's rows back from its IDAT chunk: inflated, the Adler-32 checked, unfiltered.
+std::vector<std::uint8_t>
+decodeRows(const std::vector<std::uint8_t>& idat, std::size_t rowBytes, std::size_t height, std::size_t bpp) {
+    const auto z = evr::test::inflateZlib(idat);
+    REQUIRE(z.ok);
+    CHECK(z.adler == adler32(z.bytes.data(), z.bytes.size()));
+    REQUIRE(z.bytes.size() == (rowBytes + 1) * height);
+    for (std::size_t y = 0; y < height; ++y) {
+        CHECK(z.bytes[y * (rowBytes + 1)] <= 4); // filter type
     }
-    REQUIRE(at + 4 == z.size());
-    CHECK(adler32(out.data(), out.size()) == be32(z.data() + at));
-    return out;
+    const auto rows = evr::test::unfilterPng(z.bytes, rowBytes, height, bpp);
+    REQUIRE(rows.size() == rowBytes * height);
+    return rows;
+}
+
+// The filter type of each scanline.
+std::vector<std::uint8_t>
+filterTypes(const std::vector<std::uint8_t>& idat, std::size_t rowBytes, std::size_t height) {
+    const auto z = evr::test::inflateZlib(idat);
+    REQUIRE(z.ok);
+    std::vector<std::uint8_t> types;
+    for (std::size_t y = 0; y < height && y * (rowBytes + 1) < z.bytes.size(); ++y) {
+        types.push_back(z.bytes[y * (rowBytes + 1)]);
+    }
+    return types;
+}
+
+// Paeth's predictor as the PNG specification writes it.
+int paethOf(int a, int b, int c) {
+    const int p = a + b - c;
+    const int pa = p > a ? p - a : a - p;
+    const int pb = p > b ? p - b : b - p;
+    const int pc = p > c ? p - c : c - p;
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
 } // namespace
@@ -106,12 +117,28 @@ TEST_CASE("png: a small image round-trips through the file layout") {
     CHECK(be32(c[0].data.data() + 4) == h);
     CHECK(c[0].data[8] == 8);
     CHECK(c[0].data[9] == 2);
-    const auto raw = inflateStored(c[1].data);
-    REQUIRE(raw.size() == h * (1 + w * 3));
-    for (std::uint32_t y = 0; y < h; ++y) {
-        CHECK(raw[y * (1 + w * 3)] == 0);
-        CHECK(std::memcmp(raw.data() + y * (1 + w * 3) + 1, rgb.data() + y * w * 3, w * 3) == 0);
+    CHECK(decodeRows(c[1].data, w * 3, h, 3) == rgb);
+}
+
+TEST_CASE("png: a stored image has unfiltered rows and the same pixels") {
+    const std::uint32_t w = 40;
+    const std::uint32_t h = 30;
+    std::vector<std::uint8_t> rgb(w * h * 3);
+    for (std::size_t i = 0; i < rgb.size(); ++i) {
+        rgb[i] = static_cast<std::uint8_t>(i * 13 + i / 7);
     }
+    const auto c = chunks(encodePngRgb8(rgb.data(), w, h, Compression::Stored));
+    REQUIRE(c.size() == 3);
+    REQUIRE(c[1].data.size() >= 2);
+    CHECK(c[1].data[0] == 0x78);
+    CHECK(c[1].data[1] == 0x01);
+    const auto scanlines = evr::test::inflateZlib(c[1].data);
+    REQUIRE(scanlines.ok);
+    REQUIRE(scanlines.bytes.size() == (w * 3 + 1) * h);
+    for (std::uint32_t y = 0; y < h; ++y) {
+        CHECK(scanlines.bytes[y * (w * 3 + 1)] == 0); // filter None
+    }
+    CHECK(decodeRows(c[1].data, w * 3, h, 3) == rgb);
 }
 
 TEST_CASE("png: an RGBA image keeps its alpha channel") {
@@ -123,22 +150,100 @@ TEST_CASE("png: an RGBA image keeps its alpha channel") {
     REQUIRE(c[0].data.size() == 13);
     CHECK(c[0].data[8] == 8);
     CHECK(c[0].data[9] == 6);
-    const auto raw = inflateStored(c[1].data);
-    REQUIRE(raw.size() == h * (1 + w * 4));
-    for (std::uint32_t y = 0; y < h; ++y) {
-        CHECK(raw[y * (1 + w * 4)] == 0);
-        CHECK(std::memcmp(raw.data() + y * (1 + w * 4) + 1, rgba.data() + y * w * 4, w * 4) == 0);
-    }
+    CHECK(decodeRows(c[1].data, w * 4, h, 4) == rgba);
 }
 
-TEST_CASE("png: an image larger than one stored block") {
+TEST_CASE("png: a flat image is a small file") {
     const std::uint32_t w = 200;
-    const std::uint32_t h = 150; // 90,150 bytes of scanlines: two blocks
+    const std::uint32_t h = 150;
     std::vector<std::uint8_t> rgb(w * h * 3, 0x5A);
-    const auto c = chunks(encodePngRgb8(rgb.data(), w, h));
+    const auto png = encodePngRgb8(rgb.data(), w, h);
+    CHECK(png.size() < 1000); // 90,150 bytes of scanlines
+    const auto c = chunks(png);
     REQUIRE(c.size() == 3);
-    const auto raw = inflateStored(c[1].data);
-    CHECK(raw.size() == h * (1 + w * 3));
+    CHECK(decodeRows(c[1].data, w * 3, h, 3) == rgb);
+}
+
+TEST_CASE("png: each row takes the filter that suits it, and every filter round-trips") {
+    const std::uint32_t w = 320;
+    const std::uint32_t h = 96;
+    const std::size_t rowBytes = w * 4;
+    std::vector<std::uint8_t> rgba(rowBytes * h);
+    std::uint32_t s = 1;
+    const auto random = [&s] {
+        s = s * 1103515245u + 12345u;
+        return static_cast<std::uint8_t>(s >> 16);
+    };
+    for (std::uint32_t y = 0; y < h; ++y) {
+        std::uint8_t* row = rgba.data() + y * rowBytes;
+        for (std::uint32_t x = 0; x < w; ++x) {
+            std::uint8_t* p = row + x * 4;
+            if (y < 32) { // a horizontal ramp from a different start on each row: Sub (Paeth gives the same)
+                p[0] = static_cast<std::uint8_t>(x + y * 71);
+                p[1] = static_cast<std::uint8_t>(x * 2 + y * 53);
+                p[2] = static_cast<std::uint8_t>(y * 97);
+                p[3] = 255;
+            } else if (y < 64) { // vertical stripes: Up
+                p[0] = static_cast<std::uint8_t>((x * 37) ^ (x >> 2));
+                p[1] = static_cast<std::uint8_t>(x * 91);
+                p[2] = static_cast<std::uint8_t>(x * 13 + 7);
+                p[3] = static_cast<std::uint8_t>(x);
+            }
+        }
+        if (y < 64) {
+            continue;
+        }
+        const std::uint8_t* up = row - rowBytes;
+        // Noise rows, each followed by a row that Average (y % 4 == 1) or Paeth (y % 4 == 3) predicts
+        // exactly. The Paeth row's first pixel is off the one above, so its predictions do not all come
+        // from the row above (which would make it a copy of that row: Up).
+        for (std::size_t i = 0; i < rowBytes; ++i) {
+            const int a = i >= 4 ? row[i - 4] : 0;
+            const int b = up[i];
+            const int c = i >= 4 ? up[i - 4] : 0;
+            const int predicted = y % 4 == 1 ? (a + b) >> 1 : i < 4 ? b + 64 : paethOf(a, b, c);
+            row[i] = y % 2 == 0 ? random() : static_cast<std::uint8_t>(predicted);
+        }
+    }
+    const auto png = encodePngRgba8(rgba.data(), w, h);
+    CHECK(png.size() < rgba.size() / 2);
+    const auto c = chunks(png);
+    REQUIRE(c.size() == 3);
+    CHECK(decodeRows(c[1].data, rowBytes, h, 4) == rgba);
+    const auto types = filterTypes(c[1].data, rowBytes, h);
+    REQUIRE(types.size() == h);
+    CHECK((types[10] == 1 || types[10] == 4));
+    CHECK(types[40] == 2);
+    CHECK(types[65] == 3);
+    CHECK(types[67] == 4);
+
+    std::vector<std::uint8_t> rgb(w * h * 3);
+    for (std::size_t i = 0; i < w * h; ++i) {
+        for (int k = 0; k < 3; ++k) {
+            rgb[i * 3 + k] = rgba[i * 4 + k];
+        }
+    }
+    const auto c3 = chunks(encodePngRgb8(rgb.data(), w, h));
+    REQUIRE(c3.size() == 3);
+    CHECK(decodeRows(c3[1].data, w * 3, h, 3) == rgb);
+}
+
+TEST_CASE("png: noise round-trips") {
+    const std::uint32_t w = 97; // odd sizes
+    const std::uint32_t h = 61;
+    std::vector<std::uint8_t> rgb(w * h * 3);
+    std::uint32_t s = 7;
+    for (auto& b : rgb) {
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        b = static_cast<std::uint8_t>(s);
+    }
+    const auto png = encodePngRgb8(rgb.data(), w, h);
+    CHECK(png.size() < rgb.size() + h + 200); // stored at worst
+    const auto c = chunks(png);
+    REQUIRE(c.size() == 3);
+    CHECK(decodeRows(c[1].data, w * 3, h, 3) == rgb);
 }
 
 TEST_CASE("png: swapchain pixels to RGB") {

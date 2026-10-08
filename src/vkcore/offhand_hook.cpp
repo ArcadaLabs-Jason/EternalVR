@@ -321,9 +321,9 @@ void releaseOnTrip(const std::byte* hands) {
     if (g_weaponArm) {
         weapon_arm::releaseOnTrip(hands);
     }
-    if (settings().armsHidden) {
-        hands_surfaces::releaseAfterTrip(arm::ArmSide::Right, hands); // hiding stops; logged, nothing written
-    }
+    // Whatever the weapon arm did: hidden arms stop hiding (logged, nothing written), and what a cutscene hid
+    // on the right arm is shown again (the weapon arm's own give-back skips an arm it never posed).
+    hands_surfaces::releaseAfterTrip(arm::ArmSide::Right, hands);
     hands_surfaces::releaseAfterTrip(arm::ArmSide::Left, hands);
     if (g_tripReleased) {
         return;
@@ -347,9 +347,10 @@ void onLeftHandMod(const HookRegisters& regs) {
     }
     State& s = state();
     const input::ControllerSettings& cfg = settings();
-    if (cfg.armsHidden) {
+    if (cfg.armsHidden || hands_surfaces::holdPending()) {
         // Every tick, whatever else runs below: the weapon's kit shows arms again on an equip, and fists,
-        // melee and glory kills show them too (hands_surfaces.hpp).
+        // melee and glory kills show them too; a cutscene's hold hides them and gives them back
+        // (hands_surfaces.hpp).
         hands_surfaces::update(arm::ArmSide::Right, hands, false);
         hands_surfaces::update(arm::ArmSide::Left, hands, false);
     }

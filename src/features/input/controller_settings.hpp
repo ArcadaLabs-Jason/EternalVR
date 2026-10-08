@@ -80,6 +80,8 @@
 //                                               from the eyes, the head's yaw frame), not mirrored
 //   ETERNALVR_ARMS           shown / hidden      the first-person arms drawn (default) or hidden, the weapon
 //                                               alone (hands_surfaces.hpp)
+//   ETERNALVR_CUTSCENE_ARMS  shown / hidden      in cutscenes shown around the player the first-person arms
+//                                               hidden (default) or drawn as in play (hands_surfaces.hpp)
 
 #include "features/input/action_aim.hpp"
 #include "features/input/aim_smoothing.hpp"
@@ -200,6 +202,9 @@ struct ControllerSettings {
     std::optional<game::WeaponOffset> weaponArmTestShoulder;
     // Both first-person arms hidden, the weapon alone (ETERNALVR_ARMS=hidden).
     bool armsHidden = false;
+    // The arms hidden while a cutscene plays around the player (ETERNALVR_CUTSCENE_ARMS, hidden by default),
+    // with the game's own weapon FOV kept for its hands model.
+    bool cutsceneArmsHidden = true;
 };
 
 struct SettingsIssue {

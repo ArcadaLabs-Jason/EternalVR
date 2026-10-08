@@ -273,6 +273,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(ReportManifest.SessionsKept, sessionLog.Sessions);
             Assert.True(Worst(ReportManifest.Items) - (ReportManifest.SessionsKept - 2) * (sessionLog.HeadBytes + sessionLog.TailBytes) < ReportManifest.TotalCapBytes);
             Assert.True(ReportManifest.TotalCapBytes < 25L * 1024 * 1024, "GitHub's attachment limit");
+            // The capture PNGs keep their size in the zip; the logs shrink about tenfold.
+            Assert.True(ReportManifest.CapturesCapBytes + ReportManifest.TotalCapBytes / 10 < 25L * 1000 * 1000, "GitHub's attachment limit");
         }
 
         [Fact]

@@ -128,6 +128,14 @@ std::optional<WeaponAim> beginGameView(
 // (features/input/cutscene_skip.hpp).
 void noteSkippableCutscene(bool playing);
 
+// Camera hook, every game frame before endGameView: whether the frame is a cutscene shown around the player
+// (ETERNALVR_CUTSCENES=immersive). Under ETERNALVR_CUTSCENE_ARMS=hidden (the default) the first-person arms
+// are hidden meanwhile (hands_surfaces.hpp) and the game's own weapon FOV is kept for its hands model.
+void noteImmersiveCutscene(bool playing);
+// Any thread: whether that holds now (the last game frame was such a cutscene and the setting hides the
+// arms).
+bool cutsceneArmsHidden();
+
 // Any thread: whether the controllers asked the game for a menu screen (the pause key, the Dossier or
 // mission information; game::opensMenu) within the last `seconds`. A menu screen that comes up without
 // that is one the game raised by itself (a tutorial or lore popup; docs/VR_MENUS.md).

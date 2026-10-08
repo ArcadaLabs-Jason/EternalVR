@@ -506,7 +506,7 @@ namespace EternalVR.Launcher.Core.Tests
             var names = ForcedCvars.Parse(TestData.Read("forced-cvars.txt")).Names.ToList();
             Assert.Contains("r_hdrDisplay", names);
             // The layer holds the same comfort set at run time in stereo (stereo_seq::stereoComfortCvars); mono forces it.
-            foreach (var held in new[] { "r_motionblur", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale", "meatHook_playerViewOverrideMode", "view_skipDamageEffect", "view_showPlayerDamageViewEffect", "view_damageBlur", "g_skipViewEffects" })
+            foreach (var held in new[] { "r_motionblur", "r_blurRadialScale", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale", "meatHook_playerViewOverrideMode", "view_skipDamageEffect", "view_showPlayerDamageViewEffect", "view_damageBlur", "g_skipViewEffects" })
                 Assert.Contains(held, names);
             // The restore puts the stereo keys back too.
             Assert.Contains("r_TAASafeMode", names);

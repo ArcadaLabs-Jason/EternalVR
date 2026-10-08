@@ -129,6 +129,9 @@ private:
     roomscale::HeadClearance clearance_;
     roomscale::DrivenViewOffset driven_; // the offset eased out while the game drives the view
     std::uint64_t drivenEpisodes_ = 0;
+    bool anchoredNow_ =
+        false; // the anchor moved this frame: a driven episode is re-based (driven_offset.hpp)
+    std::uint64_t drivenRebases_ = 0;
     bool blocked_ = false;
     std::uint64_t blocks_ = 0;
     std::uint64_t sweeps_ = 0;

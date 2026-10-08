@@ -21,6 +21,8 @@ r_hdrDisplay | 0
 # game's own settings override the command line anyway, and a multiplayer guard trip gives the player's
 # values back only for cvars the layer wrote. Still restored after the session.
 r_motionblur | 0 | mono
+# The dash's radial blur, which the game sets to full scale itself after r_motionblur 0 (session-keys.txt).
+r_blurRadialScale | 0 | mono
 r_dof | 0 | mono
 r_chromaticAberration | 0 | mono
 r_vignette | 0 | mono

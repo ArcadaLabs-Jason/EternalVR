@@ -77,6 +77,17 @@ SurfacePlan planHiddenSurface(bool visible, bool ours) {
     return visible ? SurfacePlan{SurfaceStep::Hide, true} : SurfacePlan{SurfaceStep::None, ours};
 }
 
+HeldPlan planHeldSurface(bool holding, bool visible, bool ours, bool held) {
+    if (holding) {
+        return visible ? HeldPlan{SurfaceStep::Hide, false, held || !ours}
+                       : HeldPlan{SurfaceStep::None, ours, held};
+    }
+    if (held && !visible) {
+        return {SurfaceStep::Show, ours, false};
+    }
+    return {SurfaceStep::None, ours, false};
+}
+
 const char* surfaceStateName(SurfaceState state) {
     switch (state) {
     case SurfaceState::Off:

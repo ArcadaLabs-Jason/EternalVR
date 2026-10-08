@@ -68,9 +68,10 @@ class EyeDiffTests(unittest.TestCase):
         rgb = bytes((i * 37) & 0xFF for i in range(3 * 3 * 3))
         with open(self.path('f.png'), 'wb') as f:
             f.write(png_with_filters(3, 3, rgb, [1, 2, 0]))
-        w, h, c, data = eye_diff.read_png(self.path('f.png'))
-        self.assertEqual((w, h, c), (3, 3, 3))
-        self.assertEqual(data, rgb)
+        for pillow in (False, True):
+            w, h, c, data = eye_diff.read_png(self.path('f.png'), pillow=pillow)
+            self.assertEqual((w, h, c), (3, 3, 3))
+            self.assertEqual(data, rgb)
 
     def test_main_lists_pairs(self):
         rgb = bytes(2 * 2 * 3)

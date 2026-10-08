@@ -7,6 +7,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/seq_hooks.hpp"
+#include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/taa_locate.hpp"
 #include "vkcore/vrs_nv.hpp"
@@ -123,17 +124,19 @@ bool exposureIndexHeld() {
 void logStereoTemporalMode() {
     const bool hooked = exposureHookInstalled();
     const bool exposureOnce = g_exposureOnce.load(std::memory_order_acquire);
-    EVR_LOG("%s: per-eye TAA %s; auto-exposure index per eye %s, eye R %s; scattering history per eye %s",
-            kTag,
-            taaRequested() ? "requested (the exposure index is held from its first stereo tick)"
-                           : "off (ETERNALVR_STEREO_TAA=0)",
-            !hooked                          ? "NOT hooked"
-            : exposureOnce || taaRequested() ? "hooked"
-                                             : "hooked, left to the engine (one chain with eye L)",
-            !exposureOnce ? "updates its own exposure (ETERNALVR_STEREO_EXPOSURE_ONCE=0)"
-            : hooked      ? "takes eye L's exposure"
-                          : "updates its own exposure (one chain with eye L)",
-            scatterHooksInstalled() ? "hooked" : "off");
+    EVR_LOG(
+        "%s: per-eye TAA %s; auto-exposure index per eye %s, eye R %s; scattering history per eye %s; SSDO "
+        "history per eye %s",
+        kTag,
+        taaRequested() ? "requested (the exposure index is held from its first stereo tick)"
+                       : "off (ETERNALVR_STEREO_TAA=0)",
+        !hooked                          ? "NOT hooked"
+        : exposureOnce || taaRequested() ? "hooked"
+                                         : "hooked, left to the engine (one chain with eye L)",
+        !exposureOnce ? "updates its own exposure (ETERNALVR_STEREO_EXPOSURE_ONCE=0)"
+        : hooked      ? "takes eye L's exposure"
+                      : "updates its own exposure (one chain with eye L)",
+        scatterHooksInstalled() ? "hooked" : "off", ssdoHooksInstalled() ? "hooked" : "off");
 }
 
 ExposureCounters exposureCounters() {

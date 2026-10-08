@@ -29,6 +29,7 @@ evr_add_test(evr_xr_math_tests
         xr_math/aim_check_tests.cpp
         xr_math/camera_anim_tests.cpp
         xr_math/cinema_quad_tests.cpp
+        xr_math/cutscene_cuts_tests.cpp
         xr_math/display_lead_tests.cpp
         xr_math/enclosing_fov_tests.cpp
         xr_math/eye_clip_transform_tests.cpp
@@ -250,6 +251,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/alternate_prev_tests.cpp
         stereo_seq/bin_tiles_tests.cpp
         stereo_seq/centered_matrix_tests.cpp
+        stereo_seq/deflate_tests.cpp
         stereo_seq/desktop_window_tests.cpp
         stereo_seq/dlss_menu_tests.cpp
         stereo_seq/drain_backoff_tests.cpp
@@ -270,6 +272,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/render_idle_tests.cpp
         stereo_seq/scatter_history_tests.cpp
         stereo_seq/seq_settings_tests.cpp
+        stereo_seq/ssdo_history_tests.cpp
         stereo_seq/stack_budget_tests.cpp
         stereo_seq/stereo_taa_tests.cpp
         stereo_seq/vis_gate_tests.cpp

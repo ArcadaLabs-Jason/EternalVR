@@ -179,14 +179,17 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleAndDlss()
+        public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleDlssAndTheCutsceneArms()
         {
             var inapplicable = SettingRules.Inapplicable(new LauncherSettings());
-            Assert.Equal(new[] { Setting.SnapAngle, Setting.DlssQuality, Setting.DlssVersion, Setting.DlssPreset, Setting.DlssInHeadset },
+            Assert.Equal(new[] { Setting.SnapAngle, Setting.DlssQuality, Setting.DlssVersion, Setting.DlssPreset, Setting.DlssInHeadset,
+                                 Setting.CutsceneArms },
                 inapplicable.Keys);
             Assert.Equal(SettingRules.NeedsSnapTurn, inapplicable[Setting.SnapAngle]);
             // TAA is the default anti-aliasing: the DLSS rows wait for DLSS.
             Assert.Equal(SettingRules.NeedsDlss, inapplicable[Setting.DlssVersion]);
+            // Cutscenes play on the flat screen by default: the arms in cutscenes around you wait for that view.
+            Assert.Equal(SettingRules.NeedsImmersive, inapplicable[Setting.CutsceneArms]);
         }
 
         [Fact]

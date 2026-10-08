@@ -25,6 +25,13 @@ public:
     // whether the game drives the view this frame, `seconds` a monotonic time. Returns the offset to use.
     Vec3 update(Vec3 offset, bool driven, double seconds);
 
+    // The room was anchored again (the first anchor, a recenter) while the game drives the view, and the
+    // head's offset jumped from the last update's to `offset`: the part held back moves by the same jump, so
+    // the camera stays where it was (on the game's eye, plus what the head did since the game took over).
+    // Holding back only the offset from before the anchor would have put the camera the jump off the eye for
+    // the rest of the episode. True when an episode was re-based; nothing outside one.
+    bool rebase(Vec3 offset);
+
     // The part of the offset held back now (room metres).
     [[nodiscard]] Vec3 held() const { return held_; }
     // True on the frame a driven episode began (the call's `driven` was true, the last one's false).
@@ -35,6 +42,7 @@ private:
     bool began_ = false;
     Vec3 base_;
     Vec3 held_;
+    Vec3 lastOffset_; // the last update's offset
     double last_ = -1.0;
 };
 

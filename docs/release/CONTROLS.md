@@ -309,6 +309,7 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Eye distance | The headset's, or your own in millimetres (50 to 80) | The headset's |
 | Desktop window | What the game's desktop window shows: the left eye, the right eye, or nothing | The left eye |
 | Cutscene view | Flat screen in front of you, Around you (immersive) | Flat screen |
+| Arms in cutscenes | On, Off: with cutscenes around you, Off keeps the game's own weapon view in them (it may keep the Slayer's arms out of sight; not checked in a headset yet), On keeps the VR one as before. Show arms off hides the arms anyway | Off |
 | Motion controllers | Play with the headset's controllers; off for keyboard, mouse or a gamepad | On |
 | Shots come from | Your weapon hand, Your eyes (stops shots through thin walls) | Your weapon hand |
 | Aim dot size | 0.2 to 5 degrees | 1.0 |

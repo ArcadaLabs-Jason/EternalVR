@@ -106,6 +106,7 @@ add_library(evr_layer SHARED
     presenter_frame.cpp
     presenter_frame_log.cpp
     presenter_fov.cpp
+    presenter_cutscene.cpp
     presenter_head.cpp
     presenter_latch.cpp
     presenter_ring.cpp
@@ -132,6 +133,7 @@ add_library(evr_layer SHARED
     seq_stack.cpp
     shader_dump.cpp
     shader_dump_record.cpp
+    ssdo_hooks.cpp
     stall_watch.cpp
     status_file.cpp
     stereo_hooks.cpp

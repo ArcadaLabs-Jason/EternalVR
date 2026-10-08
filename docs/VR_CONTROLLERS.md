@@ -341,6 +341,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
 | `ETERNALVR_WEAPON_ARM` | `ik`: the weapon arm's forearm, elbow and upper arm reach the gun from a shoulder fixed to the head, the gun and wrist where the game puts them; `game`: the game's pose, which points back out of view ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The weapon arm"). Most weapons tell the game not to draw the right arm at all (their mesh kit); with `ik` the layer draws it while it poses it and hides it again when the game takes the arm back ("The weapon's mesh kit"). Needs `ETERNALVR_VIEWMODEL=1`; works with either `ETERNALVR_OFFHAND` | `ik` |
 | `ETERNALVR_ARMS` | `shown`: the first-person arms drawn; `hidden`: both hidden, the weapon alone, whatever the weapon's mesh kit or the layer's posing ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hidden arms") | `shown` |
+| `ETERNALVR_CUTSCENE_ARMS` | `hidden`: in cutscenes around the player (`ETERNALVR_CUTSCENES=immersive`) both arms hidden, the game's weapon FOV kept; `shown`: as in play. Nothing with `ETERNALVR_ARMS=hidden` ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms in cutscenes"; the launcher's "Arms in cutscenes") | `hidden` |
 | `ETERNALVR_BUTTON_PROMPTS` | `0`: the game's prompts keep naming keyboard keys (below) | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
@@ -445,8 +446,13 @@ screen there is no stereo pair: after 0.3 s the next mono frame is saved as `-mo
 copies are the periodic capture's (`ETERNALVR_CAPTURE_EYES`, `ETERNALVR_CAPTURE_UI`), the PNG files are
 written on a background thread and the log says `capture: saved eye L/R + UI to ...` with the render
 thread's share (a few ms of copying out of the host buffers) and the time since the trigger pull. At most
-50 captures per session; each is about 20 MB at 1280x1400 (the PNG files are not compressed). The
-launcher's Export report takes the newest captures, up to 48 MB.
+50 captures per session. The PNG files are compressed (unlike the periodic eye pairs;
+`stereo_seq/deflate.hpp`, each row with the PNG filter that suits it): at a 2056x2216 render size an eye
+image is 6 to 7.5 MB (about half its raw size) and the UI image well under 1 MB, so a capture is about
+13 MB; the background thread takes about 0.35 s per eye image and 0.1 s for the UI image. The launcher's
+Export report takes the newest captures, up to 20 MB
+(`ReportManifest.CapturesCapBytes`: one capture at that render size, and the zip stays under GitHub's 25 MB
+attachment limit).
 
 **Skipping a cutscene by hand.** With the automatic skip off (`ETERNALVR_SKIP_CINEMATICS=0`, the
 launcher's "Skip cutscenes automatically" unticked), holding the dash action (B on the weapon hand; the

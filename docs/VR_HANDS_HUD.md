@@ -419,6 +419,30 @@ the real fix and need an arm model of their own (the free-arm survey above).
   `weapon arm: right arm surface 1 hidden (arms hidden)` and `offhand: arm: left arm surface ... hidden
   (arms hidden)`. With `ETERNALVR_OFFHAND_TRACE=1` the pose line ends `hidden (arms hidden)`.
 
+## Arms in cutscenes (ETERNALVR_CUTSCENE_ARMS)
+
+In a cutscene shown around the player (`ETERNALVR_CUTSCENES=immersive`) the game draws its own hands model
+in its own pose (the layer's posing yields to the forced view), with the headset's FOV the layer gave it, and
+the Slayer's left forearm and blade showed at the bottom of the view (GitHub issue #24). With
+`ETERNALVR_CUTSCENE_ARMS=hidden` (the default; the launcher's "Arms in cutscenes" off) the camera hook marks
+each such cutscene frame (`controllers::noteImmersiveCutscene`) and while it lasts:
+
+- every visible surface of both arms is hidden with the game's Hide on each hands tick, and when the
+  cutscene ends exactly the surfaces it hid are shown again (`arm::planHeldSurface`); what the weapon's kit
+  hides stays hidden;
+- the game's weapon FOV is left as it is (no headset FOV in `weaponFOVX/Y` and `customFOV2X/Y`), and the
+  stereo eyes neither set `inhibitModelFovScale` nor retarget the hands and guns matrices.
+
+Glory kills, the Meathook and menus are not cutscenes (`renderView_t.inCutscene`) and keep all of this as
+before. `shown` keeps the old behaviour in cutscenes, and so does `ETERNALVR_ARMS=hidden` whatever this says
+(the arms are hidden anyway, and the weapon FOV stays the headset's). It needs the hands hook and its surface
+code (the controllers on); without them nothing changes. What the cutscene hid is shown again after a
+multiplayer guard trip too. On the test PC the hands tick did not run during cutscenes, so the surface hide
+above took effect only at the cutscene's end (rig, 2026-10-08); the kept weapon FOV is what changes during the
+cutscene, and whether it keeps the arms out of sight has not been checked in a headset. Logs: `controllers:
+cutscene around the player starts: the arms hidden, the weapon FOV the game's` / `... ends`, and per arm
+`... surface N hidden for the cutscene` / `... shown again after the cutscene`.
+
 ## Settings
 
 | Variable | Values (default) | Meaning |
@@ -446,6 +470,7 @@ the real fix and need an arm model of their own (the free-arm survey above).
 | `ETERNALVR_WEAPON_ARM` | `ik` / `game` (`ik`) | Who poses the weapon arm's forearm, elbow and upper arm; the wrist and gun stay the game's |
 | `ETERNALVR_WEAPON_ARM_TEST_SHOULDER` | f,l,u m (unset) | Rig tests: the weapon arm's shoulder at this point from the eyes (head's yaw frame), not mirrored |
 | `ETERNALVR_ARMS` | `shown` / `hidden` (`shown`) | Both first-person arms drawn, or hidden with the weapon alone ("Hidden arms" above; the launcher's "Show arms") |
+| `ETERNALVR_CUTSCENE_ARMS` | `shown` / `hidden` (`hidden`) | In cutscenes shown around the player the arms hidden with the game's weapon FOV kept, or as before; nothing with `ETERNALVR_ARMS=hidden` ("Arms in cutscenes" above and in the launcher) |
 
 **The weapon in the left hand** (`ETERNALVR_HANDEDNESS=left` or `left_mirror`). The off hand is then the
 right controller. The arms model is not mirrored (a reflected model would turn its triangles inside out),

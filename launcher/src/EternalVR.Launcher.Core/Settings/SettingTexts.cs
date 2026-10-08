@@ -239,6 +239,9 @@ namespace EternalVR.Launcher.Core.Settings
                 "The shape of the flat screen cutscenes play on: a 16:9 or 16:10 screen, or the whole eye image as the game "
                 + "draws it.",
                 "16:9", "16:10", "Full eye image"),
+            [Setting.CutsceneArms] = new Text("Arms in cutscenes",
+                "In cutscenes around you, On shows the Slayer's arms as before. Off keeps the game's own weapon view, "
+                + "which may keep them out of sight."),
             [Setting.HudDistance] = new Text("HUD distance",
                 "How far in front of you the HUD panel (health, armour, ammo) floats, in metres."),
             [Setting.HudSize] = new Text("HUD size",

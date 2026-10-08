@@ -8,7 +8,8 @@
 //   eye's history and leave a faint copy of the other eye's image in every frame. On by default under
 //   Route S; ETERNALVR_STEREO_RUNTIME_CVARS=0 leaves the cvars as the game has them. With it, while per-eye
 //   TAA is not requested or failed closed, r_lightScatteringTAA (stereo_seq::stereoScatterFilterCvar): 1
-//   while the scattering history is per eye (scatter_hooks.hpp), else 0.
+//   while the scattering history is per eye (scatter_hooks.hpp), else 0; and r_SSDOTemporalAA
+//   (stereo_seq::stereoSsdoFilterCvar): 1 while SSDO's history is per eye (ssdo_hooks.hpp), else 0.
 // - Route S, whatever the temporal mode: the comfort set (stereo_seq::stereoComfortCvars), which in stereo
 //   only this hold sets (the launcher's command line has only r_hdrDisplay of it). apply() runs from Route
 //   S's first present (presenter_copy.cpp), before the runtime's session and the first map.
@@ -32,9 +33,9 @@
 //   the new one view 1's light binning got wrong tile depth bounds), the launcher's anti-aliasing (TAA, or
 //   with ETERNALVR_STEREO_TAA=0 r_TAASafeMode 1 and r_antialiasing 0, as the stereo set; neither with
 //   ETERNALVR_STEREO_RUNTIME_CVARS=0), Route S's window and present set (with its render size rule) and its
-//   comfort set; not Route S's scattering filter (per-eye TAA is a Route S module). apply() runs from
-//   Parallel Eye Rendering's first present, on every present as under Route S (menus, loading screens and
-//   frames without a world included).
+//   comfort set; not Route S's scattering and SSDO filters (per-eye TAA is a Route S module). apply() runs
+//   from Parallel Eye Rendering's first present, on every present as under Route S (menus, loading screens
+//   and frames without a world included).
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
 //   replaces the CPU Saver's value for the same cvar.
 //

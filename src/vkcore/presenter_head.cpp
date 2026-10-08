@@ -9,8 +9,6 @@
 #include "vkcore/debug_commands.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/head_sweep.hpp"
-#include "vkcore/keep_active.hpp"
-#include "vkcore/key_inject.hpp"
 #include "vkcore/menu_input.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -67,10 +65,12 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
             EVR_LOG("head: the multiplayer guard is %s; the game's view and aim are no longer changed",
                     mp_policy::toString(mp_guard::state()));
             controllers::restoreClimbCvars("the multiplayer guard stopped game touches");
+            controllers::noteImmersiveCutscene(false); // the arms and the weapon FOV as in play
         }
         return;
     }
     trackCutscene(renderView[render_view::kInCutscene] != std::byte{0});
+    cutscene_eyes::noteGameView(renderView, cutscene);
     // Glory kills (glory_view.hpp): on the flat screen, faded out, or with a steady heading (below).
     const double now = qpcSeconds(qpcNow());
     if (glory.frame(player, controllers::forcedView(), now).started && glory.onScreen()) {
@@ -188,6 +188,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         const Quat& q = weapon->tracked.orientation;
         record.weaponAimTracked = {q.x, q.y, q.z, q.w};
     }
+    rebaseAfterCutscene(headId); // the first frame after a cutscene shown around the player
     std::optional<xr_math::IdViewAxis> body;
     if (settings.headAim) {
         body = aimWithHead(player, anim.gameAxis, headId);
@@ -203,6 +204,13 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     if (const std::optional<float> steady = glory.steadyYaw()) {
         // A glory kill shown steady: the view stays on the kill's eye with the heading it had before it.
         body = xr_math::axisFromAngles({0.0f, *steady, 0.0f});
+    }
+    // A cutscene shown around the player: its cuts keep the new shot's forward where the head looks.
+    const float bodyYaw = xr_math::anglesFromAxis(*body).yaw;
+    const float cutYaw =
+        cutsceneBodyYaw(bodyYaw, anim.gameAxis, headId, renderView[render_view::kCameraCut] != std::byte{0});
+    if (cutYaw != bodyYaw) {
+        body = xr_math::axisFromAngles({0.0f, cutYaw, 0.0f});
     }
     glory.noteBody(xr_math::anglesFromAxis(*body).yaw);
     watchBodyYaw(xr_math::anglesFromAxis(*body).yaw, headAimed, roomIn.forcedView, cutscene,
@@ -248,9 +256,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     }
     std::memcpy(axis, written.data(), sizeof(written));
     controllers::noteViewForward(view.forward.x, view.forward.y);
-    origin[0] += offset.x;
-    origin[1] += offset.y;
-    origin[2] += offset.z;
+    render_view::moveViewOrigin(renderView, offset.x, offset.y, offset.z);
     fov[0] = used.fovX;
     fov[1] = used.fovY;
     // The head in LOCAL and in the world, for a menu's 3D model on the panel (menu_model_hook.hpp).
@@ -266,6 +272,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         record.weaponAimHitMetres = reticleHitMetres(player, eye, settings.unitsPerMetre);
     }
     record.axis = written;
+    record.cutscene = cutscene;
+    record.cutsceneArms = controllers::cutsceneArmsHidden();
     if (settings.stereo.enabled) {
         prepareEyes(record, *body, headGame);
         if (settings.stereo.testWeaponFov > 0.0f) {
@@ -310,46 +318,6 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
             "head fwd (%.2f %.2f %.2f)",
             static_cast<unsigned long long>(gameViews), static_cast<unsigned long long>(gameViewsSkipped),
             gameFovX, gameFovY, used.fovX, used.fovY, view.forward.x, view.forward.y, view.forward.z);
-    }
-}
-
-void XrPresenter::Impl::trackCutscene(bool inCutscene) {
-    const ULONGLONG now = GetTickCount64();
-    if (inCutscene != cutscene) {
-        cutscene = inCutscene;
-        cutsceneSince = now;
-        ++cutsceneChanges;
-        if (cutsceneChanges <= 20) {
-            EVR_LOG("game: %s%s", inCutscene ? "cutscene starts" : "cutscene ends; the player's view is back",
-                    inCutscene && settings.cutsceneCinema ? " (on the flat screen)" : "");
-        }
-        if (inCutscene && settings.cutsceneCinema) {
-            replaceScreen.store(true, std::memory_order_release);
-        }
-    }
-    // Without the automatic skip, holding the dash button skips by hand (controllers.hpp).
-    controllers::noteSkippableCutscene(inCutscene && !settings.skipCinematics);
-    if (!settings.skipCinematics) {
-        return;
-    }
-    // Holds R (the game's skip key) while a cutscene plays: 2.5 s holds with short gaps, released as
-    // soon as the cutscene ends.
-    HWND window = gameWindow();
-    if (skipHolding) {
-        if (!inCutscene || now - skipHoldStart >= 2500) {
-            injectKey(kSkipKey, false, window);
-            skipHolding = false;
-            skipReleased = now;
-        }
-    } else if (inCutscene && now - cutsceneSince >= 300 && now - skipReleased >= 400) {
-        if (injectKey(kSkipKey, true, window)) {
-            skipHolding = true;
-            skipHoldStart = now;
-            ++skipHolds;
-            if (skipHolds <= 10) {
-                EVR_LOG("game: holding the skip key (hold %llu)", static_cast<unsigned long long>(skipHolds));
-            }
-        }
     }
 }
 
@@ -489,7 +457,10 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
 
     // Only while the view is the player's own (not a cinematic or scripted camera).
     const xr_math::IdViewAxis angleAxis = xr_math::axisFromAngles({sample.view.pitch, sample.view.yaw, 0.0f});
-    if (dot(angleAxis.forward, gameAxis.forward) < 0.966f) { // 15 degrees
+    // In a cutscene shown around the player, with its cuts re-based, every frame is the camera's: a camera
+    // within 15 degrees of the player's angles does not turn head aim back on mid-cutscene.
+    const bool cutsceneCamera = cutscene && !settings.cutsceneCinema && settings.cutsceneCutRebase;
+    if (cutsceneCamera || dot(angleAxis.forward, gameAxis.forward) < 0.966f) { // 15 degrees
         // A scripted camera (a glory kill's): nothing is written, and the view faces the camera's heading
         // while the head is where it was when the camera took over (not the camera plus the head's whole
         // yaw in the room, which faces backwards for a player turned round in the room).

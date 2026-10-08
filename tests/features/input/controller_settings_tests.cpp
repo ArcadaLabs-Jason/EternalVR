@@ -355,6 +355,18 @@ TEST_CASE("the arms are shown unless ETERNALVR_ARMS says hidden") {
     CHECK_FALSE(bad.settings.armsHidden);
 }
 
+TEST_CASE("the arms are hidden in cutscenes around the player unless ETERNALVR_CUTSCENE_ARMS says shown") {
+    CHECK(parse({}).settings.cutsceneArmsHidden);
+    CHECK_FALSE(parse({{"ETERNALVR_CUTSCENE_ARMS", "shown"}}).settings.cutsceneArmsHidden);
+    CHECK(parse({{"ETERNALVR_CUTSCENE_ARMS", "hidden"}}).settings.cutsceneArmsHidden);
+    // Independent of the arms in play.
+    CHECK(parse({{"ETERNALVR_ARMS", "hidden"}}).settings.cutsceneArmsHidden);
+    const auto bad = parse({{"ETERNALVR_CUTSCENE_ARMS", "1"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_CUTSCENE_ARMS");
+    CHECK(bad.settings.cutsceneArmsHidden);
+}
+
 TEST_CASE("the weapon arm's shoulder and elbow are the off hand's on the weapon hand's side") {
     using evr::input::kDefaultOffhandElbow;
     using evr::input::kDefaultOffhandShoulder;

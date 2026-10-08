@@ -26,6 +26,7 @@
 #include "vkcore/motion_capture.hpp"
 #include "vkcore/player_aim.hpp"
 #include "vkcore/presenter_alt.hpp"
+#include "vkcore/presenter_cutscene.hpp"
 #include "vkcore/presenter_fade.hpp"
 #include "vkcore/presenter_mirror.hpp"
 #include "vkcore/presenter_refresh.hpp"
@@ -224,12 +225,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     // Cutscenes and glory kills (camera hook thread only; the worker reads glory.flat()).
     GloryKills glory{settings.gloryKills, settings.testGloryStart, settings.testGloryDuration};
     bool cutscene = false;
-    ULONGLONG cutsceneSince = 0;
-    std::uint64_t cutsceneChanges = 0;
-    bool skipHolding = false;
-    ULONGLONG skipHoldStart = 0;
-    ULONGLONG skipReleased = 0;
-    std::uint64_t skipHolds = 0;
+    CutsceneTrack cutsceneTrack; // changes, the skip key's hold, the cuts' re-base (presenter_cutscene.hpp)
 
     // Head aim (camera hook thread only).
     enum class AimPhase { Unchecked, Verifying, Active, Off };
@@ -273,8 +269,12 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t presentSeqGapSum = 0;
 
     void onGameView(std::byte* renderView, std::byte* player) override; // ViewHookSink
-    // Logs cutscene changes and, with ETERNALVR_SKIP_CINEMATICS, holds the skip key during them.
+    // presenter_cutscene.cpp: logs cutscene changes and, with ETERNALVR_SKIP_CINEMATICS, holds the skip key
+    // during them; in a cutscene shown around the player, the body yaw re-based on its cuts, and head aim's
+    // yaw re-based on the first frame after it (before aimWithHead).
     void trackCutscene(bool inCutscene);
+    float cutsceneBodyYaw(float bodyYaw, const xr_math::IdViewAxis& camera, Quat head, bool cameraCut);
+    void rebaseAfterCutscene(Quat headInIdTech);
     // Head aim: moves the player's view angles toward body + head; returns the body yaw axis when it
     // did (first-person play with a verified layout), nullopt to fall back to the game's own yaw.
     std::optional<xr_math::IdViewAxis>
@@ -296,7 +296,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     // The centred matrix's depth row read before each eye's latch (onSeqEyeView; onEyeView under Parallel Eye
     // Rendering), written back into the latched eye's (onSeqEyeLatched). Render job threads, one per eye.
     std::array<std::optional<stereo_seq::CenteredDepth>, 2> centeredDepth{};
-    std::array<bool, 2> eyePoseWritten{};
+    std::array<bool, 2> eyePoseWritten{}, eyeInCutscene{}, eyeArmsHidden{}; // with its record's flags
+    std::array<std::uint64_t, 2> eyeSeq{};                                  // and its game frame
     std::atomic<std::uint64_t> centeredRepairs{0};
     std::atomic<std::uint64_t> weaponRetargets{0};
     void onSeqEyeLatched(std::byte* renderView, int eyeIndex);
@@ -591,8 +592,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     void logRates();
     // Worker, with the rates: the D3D12 debug layer's messages (ETERNALVR_D3D12_DEBUG) and a removed device.
     void logD3dHealth();
-    bool loggedDeviceRemoved = false;
-    bool loggedCloseFailure = false;
+    bool loggedDeviceRemoved = false, loggedCloseFailure = false;
     void destroyXrObjects();
     const char* xrText(XrResult result, char (&buffer)[XR_MAX_RESULT_STRING_SIZE]) const;
 };

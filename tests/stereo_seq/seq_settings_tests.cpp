@@ -87,6 +87,24 @@ TEST_CASE("runtime cvars: the scattering filter follows its per-eye history, not
     }
 }
 
+TEST_CASE("runtime cvars: SSDO's filter follows its per-eye history, not the TAA mode") {
+    const auto on = evr::stereo_seq::stereoSsdoFilterCvar(true);
+    const auto off = evr::stereo_seq::stereoSsdoFilterCvar(false);
+    CHECK(std::string(on.name) == "r_SSDOTemporalAA");
+    CHECK(std::string(on.value) == "1");
+    CHECK(std::string(off.name) == "r_SSDOTemporalAA");
+    CHECK(std::string(off.value) == "0");
+    // Per-eye TAA's own set holds it at 0 (written 1 there only while the history is per eye).
+    bool inPerEyeSet = false;
+    for (const auto& c : evr::stereo_seq::stereoTaaForcedCvars()) {
+        inPerEyeSet = inPerEyeSet || (c.name == off.name && c.value == off.value);
+    }
+    CHECK(inPerEyeSet);
+    for (const auto& c : evr::stereo_seq::stereoRuntimeCvars()) {
+        CHECK((c.name != on.name));
+    }
+}
+
 TEST_CASE("runtime cvars: TAA off, a subset of the v1 set") {
     const auto& runtime = evr::stereo_seq::stereoRuntimeCvars();
     REQUIRE(runtime.size() == 2);
@@ -221,6 +239,12 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
     // The underwater screen-space warp goes; the water itself stays.
     CHECK(value("r_waterPostProcess") == "0");
     CHECK(value("r_water") == "absent");
+    // The dash's radial blur goes with motion blur.
+    CHECK(value("r_blurRadialScale") == "0");
+    for (const auto& c : held) {
+        // Float scales: held as floats, so 0.5 is not read as the integer 0, nor 1.15 as 1.
+        CHECK(c.fraction == (c.name == "r_blurRadialScale" || c.name == "hands_fovScale"));
+    }
     CHECK(value("view_enableHelmetFX") == "absent");
     CHECK(value("hud_showDamage") == "absent");
     for (std::size_t i = 0; i < held.size(); ++i) {
@@ -253,6 +277,31 @@ TEST_CASE("SSDO cvar: held on unless the setting is 0, never part of the other s
     }
     for (const auto& t : evr::stereo_seq::stereoRuntimeCvars()) {
         CHECK((t.name != "r_SSDO"));
+    }
+}
+
+TEST_CASE("SSR cvar: held on unless the setting is 0, never part of the other sets") {
+    for (const char* on : {"", "1"}) {
+        const auto c = evr::stereo_seq::stereoSsrCvar(on);
+        REQUIRE(c.has_value());
+        CHECK((c->name == "r_SSR"));
+        CHECK((c->value == "1"));
+    }
+    for (const char* none : {"0", "2", "on", " 1"}) {
+        CHECK_FALSE(evr::stereo_seq::stereoSsrCvar(none).has_value());
+    }
+    for (const auto& c : evr::stereo_seq::stereoComfortCvars()) {
+        CHECK((c.name != "r_SSR"));
+    }
+    for (const auto& t : evr::stereo_seq::stereoRuntimeCvars()) {
+        CHECK((t.name != "r_SSR"));
+    }
+    // Per-eye TAA writes r_SSR on its own (taa_hooks.cpp), never through its forced or fail-closed sets.
+    for (const auto* set :
+         {&evr::stereo_seq::stereoTaaForcedCvars(), &evr::stereo_seq::stereoTaaFailClosedCvars()}) {
+        for (const auto& c : *set) {
+            CHECK((c.name != "r_SSR"));
+        }
     }
 }
 

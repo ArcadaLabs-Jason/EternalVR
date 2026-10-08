@@ -8,6 +8,7 @@ evr_add_module(evr_stereo_seq
         alternate_prev.cpp
         bin_tiles.cpp
         centered_matrix.cpp
+        deflate.cpp
         desktop_window.cpp
         dlss_menu.cpp
         drain_backoff.cpp
@@ -27,6 +28,7 @@ evr_add_module(evr_stereo_seq
         render_idle.cpp
         scatter_history.cpp
         seq_settings.cpp
+        ssdo_history.cpp
         stack_budget.cpp
         stereo_taa.cpp
         world_gui.cpp)

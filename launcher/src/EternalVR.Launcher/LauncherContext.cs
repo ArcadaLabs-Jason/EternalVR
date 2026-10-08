@@ -316,6 +316,7 @@ namespace EternalVR.Launcher
                 Controls = Controls,
                 NewestDlss = NewestDlss(verify: true),
                 PlayerSsdo = GameLayout.PlayerCvar(g.Locations, "r_SSDO"),
+                PlayerSsr = GameLayout.PlayerCvar(g.Locations, "r_SSR"),
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);

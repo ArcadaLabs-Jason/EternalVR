@@ -14,6 +14,7 @@
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hands_surfaces.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -91,6 +92,8 @@ std::atomic<std::uint64_t> g_loggedFists{0};
 std::atomic<std::uint64_t> g_loggedWeapons{0};
 std::atomic<std::uint64_t> g_loggedPlacements{0};
 std::atomic<bool> g_loggedEyeMismatch{false};
+// A cutscene shown around the player with the arms hidden (noteImmersiveCutscene; camera hook writes).
+std::atomic<bool> g_cutsceneArms{false};
 
 // The decl name of the item in the right hand, or empty.
 std::string declName(const std::byte* decl) {
@@ -220,6 +223,27 @@ bool viewmodelSiteChecks(const std::byte* site) {
 
 } // namespace
 
+void noteImmersiveCutscene(bool playing) {
+    // Only where the arms can be hidden: the controllers on and the hands hook's surface code found. With
+    // ETERNALVR_ARMS=hidden the arms are hidden anyway and nothing changes (the weapon FOV stays the
+    // headset's).
+    const input::ControllerSettings& cfg = settings();
+    const bool hidden = playing && cfg.cutsceneArmsHidden && !cfg.armsHidden &&
+                        state().attached.load(std::memory_order_acquire) && hands_surfaces::installed();
+    if (g_cutsceneArms.exchange(hidden, std::memory_order_relaxed) != hidden) {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 20) {
+            EVR_LOG("%s: cutscene around the player %s: the arms %s, the weapon FOV %s", kTag,
+                    hidden ? "starts" : "ends", hidden ? "hidden" : "as in play",
+                    hidden ? "the game's" : "the headset's");
+        }
+    }
+}
+
+bool cutsceneArmsHidden() {
+    return g_cutsceneArms.load(std::memory_order_relaxed);
+}
+
 std::string itemDeclName(const std::byte* decl) {
     return declName(decl);
 }
@@ -256,7 +280,8 @@ void endGameView(std::byte* renderView,
         return;
     }
     const input::ControllerSettings& cfg = settings();
-    if (cfg.weaponFov) {
+    // In a cutscene around the player the game's hands model keeps the game's own FOV (the arms are hidden).
+    if (cfg.weaponFov && !g_cutsceneArms.load(std::memory_order_relaxed)) {
         float fov[2];
         std::memcpy(fov, renderView + kFovX, sizeof(fov));
         std::memcpy(renderView + kWeaponFovX, fov, sizeof(fov));

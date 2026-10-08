@@ -21,12 +21,32 @@ namespace evr::vkcore {
 // renderView_t field offsets (build 25216728; stable fields of the type-info record).
 namespace render_view {
 inline constexpr std::size_t kInCutscene = 0x15;
+inline constexpr std::size_t kCameraCut = 0x16;
 inline constexpr std::size_t kFovX = 0x28;
 inline constexpr std::size_t kFovY = 0x2C;
 inline constexpr std::size_t kZNear = 0x48;
 inline constexpr std::size_t kViewOrigin = 0x94;
 inline constexpr std::size_t kViewAxis = 0xA0;
+// usesViewOriginOffset (a byte), localViewOrigin: a cutscene camera renders relative to viewOriginOffset
+// (+0xD4), and meshes are then drawn from viewOriginOffset + localViewOrigin, not from vieworg.
+inline constexpr std::size_t kUsesViewOriginOffset = 0xC4;
+inline constexpr std::size_t kLocalViewOrigin = 0xC8;
 inline constexpr std::size_t kSize = 0x970;
+
+// Moves the view's origin by (x, y, z): vieworg, and localViewOrigin too while the view renders relative to
+// viewOriginOffset (a cutscene camera), where a moved vieworg alone changes nothing on screen.
+inline void moveViewOrigin(std::byte* renderView, float x, float y, float z) {
+    auto* origin = reinterpret_cast<float*>(renderView + kViewOrigin);
+    origin[0] += x;
+    origin[1] += y;
+    origin[2] += z;
+    if (renderView[kUsesViewOriginOffset] != std::byte{0}) {
+        auto* local = reinterpret_cast<float*>(renderView + kLocalViewOrigin);
+        local[0] += x;
+        local[1] += y;
+        local[2] += z;
+    }
+}
 } // namespace render_view
 
 class ViewHookSink {

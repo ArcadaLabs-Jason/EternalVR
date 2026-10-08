@@ -191,7 +191,8 @@ the game's ...`): the eyes then render at the window's size, and holding the ren
 resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_DATE_KHR`; the game then froze.
 
 **The comfort set is held in both temporal modes too** (`stereo_seq::stereoComfortCvars`): HDR output, motion
-blur, depth of field, chromatic aberration, vignette, view bob, the view kicks and shakes, the damage tint and
+blur and the dash's radial blur (`r_blurRadialScale 0`: the game writes 1 there itself when `r_motionblur` goes
+to 0), depth of field, chromatic aberration, vignette, view bob, the view kicks and shakes, the damage tint and
 blur, the view effects' screen overlays, the underwater screen warp (`r_waterPostProcess 0`: it moves the
 picture the same way in both eyes' screen coordinates, so it has no depth in a headset), the weapon's FOV scale
 and the Meathook's single view turn. The game's
@@ -201,7 +202,8 @@ command line: the layer's hold sets them, from Route S's first present (`present
 runtime's session and the first map), and a multiplayer guard trip gives the player's own values back
 (`cvar_book.hpp`). Only `r_hdrDisplay 0` stays on the command line, since the game picks the swapchain's format at
 start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these, so mono launches
-keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`). The launcher's session restore puts
+keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`), all but the underwater warp (one
+picture for both eyes, so it stays as the game has it). The launcher's session restore puts
 the player's values back in the game's configs either way.
 
 `ETERNALVR_DEBUG_CVARS="name=value;name=value"` writes more cvars the same way for rig experiments;
@@ -220,7 +222,9 @@ With per-eye history off or failed closed the layer also holds `r_lightScatterin
 history), else 0. The start-up list says so (`cvars: held at run time: ... r_lightScatteringTAA 1 while
 the scattering history is per eye, else 0`; `... 0` when the scattering hooks are not installed, for
 example with `ETERNALVR_STEREO_SCATTER_TAA=0`; with per-eye history requested, followed by `(if per-eye TAA
-fails closed)`, since per-eye history writes it itself while it runs).
+fails closed)`, since per-eye history writes it itself while it runs). `r_SSDOTemporalAA` follows SSDO's
+history the same way (`stereo_seq::stereoSsdoFilterCvar`; `r_SSDOTemporalAA 1 while the SSDO history is per
+eye, else 0`, or `... 0` without the SSDO hooks, for example with `ETERNALVR_STEREO_SSDO_TAA=0`).
 
 ## Per-eye temporal history (default; `ETERNALVR_STEREO_TAA=0` turns it off)
 
@@ -230,22 +234,28 @@ installed at `vkCreateInstance`), the two accumulation selectors pick each frame
 tag, both eyes of a tick share one jitter phase, both are reset together when eye R missed a tick (TAA
 by the view's reset flag, DLSS by `Reset` on both eyes' evaluations), eye R evaluates a twin DLSS feature
 (each evaluation's eye found by its output image), and the temporal effects whose history is still shared
-(anti-ghosting mask, SSDO, depth of field, water, refraction, ray-traced reflection upscale, dynamic
-resolution) are switched off (on the command line; the layer writes any that
+(anti-ghosting mask, SSDO without its per-eye history, depth of field, water, refraction, ray-traced
+reflection upscale, dynamic resolution) are switched off (on the command line; the layer writes any that
 differ through the engine's cvar setter), and eye R's slot is rebuilt by the slot builder when the engine
 resizes its own (resizing eye R's targets one by one hung a 12 GB card, `stereo-temporal.md` 5.1). A missing
-piece fails closed: the first stereo tick writes `r_antialiasing 0` and `r_TAASafeMode 1`. The launcher and
+piece fails closed: the first stereo tick writes `r_antialiasing 0` and `r_TAASafeMode 1`. While per-eye
+history runs, screen-space reflections are held at the player's own `r_SSR` (`ETERNALVR_STEREO_SSR`; before,
+the game's own `r_SSR 0` after the start-up `r_TAASafeMode 1` left them off in every session): SSR keeps no
+history of its own and reads the last frame's colour through the TAA history selector (0x1CBB6C0), which
+gives each eye its own (static reading; no headset check yet). Without per-eye history (`ETERNALVR_STEREO_TAA=0`,
+failed closed) the game writes `r_SSR 0` on every render itself while `r_TAASafeMode` is 1, and that stays:
+the eyes would share that colour. The launcher and
 `launch-ht.ps1 -Stereo` put the cvars on the command line (`-StereoV1`: the v1 set and
 `ETERNALVR_STEREO_TAA=0`; `-StereoDlss`: `ETERNALVR_STEREO_DLSS=1`). Live on the rig (2026-09-26): ghost
 coefficient 0.029 / 0.029 against a control of 0.014, the same as v1 and against 0.21 for the game's shared
 TAA; DLSS per eye 0.030 / 0.030; TAA costs about 0.09 ms per eye at 1280x740
 (`docs/rig-findings/stereo-temporal.md` section 7).
 
-Auto exposure and the light scattering are kept per eye by hooks of their own, which need the eye tags
-only. They run whenever Route S runs: with per-eye history on, off (`ETERNALVR_STEREO_TAA=0`, the
+Auto exposure, the light scattering and SSDO are kept per eye by hooks of their own, which need the eye
+tags only. They run whenever Route S runs: with per-eye history on, off (`ETERNALVR_STEREO_TAA=0`, the
 launcher's Anti-aliasing Off, `-StereoV1`) or failed closed. The start-up line `seq-exposure: per-eye TAA
-...; auto-exposure index per eye hooked, eye R takes eye L's exposure; scattering history per eye hooked`
-names the mode.
+...; auto-exposure index per eye hooked, eye R takes eye L's exposure; scattering history per eye hooked;
+SSDO history per eye hooked` names the mode.
 
 - **Auto exposure** (`src/vkcore/exposure_hooks.*`, `docs/rig-findings/stereo-temporal.md` 3.3): eye L and
   mono frames alternate their exposure image by their own frame count, and eye R takes the one eye L wrote
@@ -258,6 +268,25 @@ names the mode.
   (`docs/rig-findings/stereo-scatter.md`). Without the filter the volume's coarse cells crawl as the head
   moves: the "walking texture" in fog and god rays. Per-eye history writes the cvar in its own set; without
   it the layer's run-time set holds it (Cvars (v1)).
+- **SSDO** (default; `ETERNALVR_STEREO_SSDO_TAA=0` turns it off; `src/vkcore/ssdo_hooks.*`,
+  `src/stereo_seq/ssdo_history.*`): the ambient occlusion's temporal filter (`r_SSDOTemporalAA`) stays on with
+  a history per eye. The engine keeps two half-size accumulation targets and the unfiltered one in one array
+  of the device context (+ 0x550 .. + 0x560) and writes the target of the backend counter's parity, so under
+  Route S each eye read the other eye's occlusion and the filter was held off (static reading of build
+  25216728). Eye R gets two targets of its own, made with the engine's (hook at RVA 0x1C1EC1D in the device
+  context constructor) and resized with them (RVA 0x1C2199A in the render-size change 0x1C21600). At the entry
+  of SSDO's parameter setup (RVA 0x1C71630) the array the render's targets come from is pointed at the eye's
+  own pair, with the eye's last written target where the engine reads. The filter state stays the engine's;
+  when an eye's own history is stale (its first render, after a resize or a gap, or both eyes after a skipped
+  eye R) its last frame is moved back so the engine resets the filter. Mono renders follow eye L's chain; a
+  mono render right after eye L's (eye R's render whose tag was not found) starts over instead. Anything
+  missing or a size that differs after a resize fails closed: `r_SSDOTemporalAA` stays 0, with one
+  `seq-ssdo:` line saying why. While `rs_enable` reads non-zero (dynamic resolution, which the engine applies
+  to the target of the counter's parity; per-eye TAA holds it at 0, Anti-aliasing Off does not) the filter is
+  held off as well and the renders are left to the engine; when it is 0 again both eyes start over. The first
+  stereo tick logs whether the history is ready (`seq-ssdo: the SSDO history per eye is ready at the first
+  stereo tick ...`, or `... is not ready ...: <why>`, for example eye R's targets never made). Route S only: Parallel Eye Rendering keeps the launcher's `r_SSDOTemporalAA 0`.
+  Static work so far; the rig A/B (noise at a still view against mono, the ghost check) is still to do.
 
 Moving and animated objects get their previous frame per eye too (default; `ETERNALVR_STEREO_OBJECT_PREV=0`
 turns it off). The engine keeps each render's joint offsets and model matrices in a ring of three buffers and
@@ -608,7 +637,7 @@ axis).
 |---|---|---|
 | `ETERNALVR_MODE` | head-tracked | `stereo`: Route S (or an experiment, below) |
 | `ETERNALVR_STEREO_SAME_VIEW` | 0 | 1: both eyes render the game's own view (S1); pairs are shown with the head pose |
-| `ETERNALVR_CAPTURE_EYES` | unset | `<dir>[,<N>]`: every Nth pair (default 60) written as `eyes-<pid>-p<pair>-t<tick>-L.png` / `-R.png` |
+| `ETERNALVR_CAPTURE_EYES` | unset | `<dir>[,<N>]`: every Nth pair (default 60) written as `eyes-<pid>-p<pair>-t<tick>-L.png` / `-R.png`, uncompressed (one pair is written at a time and compression would take about 0.7 s per pair; the in-headset capture's files are compressed) |
 | `ETERNALVR_STEREO_PREV_MATRICES` | 1 | 0: no previous-matrix hook (the eyes share the engine's) |
 | `ETERNALVR_STEREO_FIX_CENTERED` | 1 | 0: leave the centred matrix as the latch builds it (the weapon disappears) |
 | `ETERNALVR_STEREO_VSYNC` | 0 | 1: keep the game's FIFO present mode (tick rate capped at half the refresh) |
@@ -627,7 +656,8 @@ axis).
 | `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time; with Parallel Eye Rendering its anti-aliasing (`r_antialiasing 1`, or the Off set) is not held either (one `cvars: Parallel Eye Rendering's anti-aliasing is left as the game has it` line) |
 | `ETERNALVR_PACE` | off | `headset`: one image per headset frame, the game's render thread waiting after each pair for the headset's next frame (at most two display periods); the pose lead then defaults on (Frame pacing) |
 | `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and CPU Saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
-| `ETERNALVR_STEREO_SSDO` | unset (= 1) | 1 or unset: `r_SSDO 1` held at run time under Route S (the launcher passes the player's own value from their config, 1 unless it sets 0). The game turns SSDO off itself after `r_TAASafeMode 1` (0x1C6FCC0), which Route S holds at start-up, so before this every Route S session ran without it and each eye's outer strip read 15 to 20% too bright against a mono reference in shadowed corners. SSDO's own temporal filter stays off (`r_SSDOTemporalAA 0`), so neither eye reads the other's history (sway ghost check: no cross-eye ghost; about +0.5 ms GPU per stereo pair on an RTX 3080 Ti at 2048x2208). 0: not held, the game's knock-on stays (one `cvars: r_SSDO is left as the game has it` line) |
+| `ETERNALVR_STEREO_SSDO` | unset (= 1) | 1 or unset: `r_SSDO 1` held at run time under Route S (the launcher passes the player's own value from their config, 1 unless it sets 0). The game turns SSDO off itself after `r_TAASafeMode 1` (0x1C6FCC0), which Route S holds at start-up, so before this every Route S session ran without it and each eye's outer strip read 15 to 20% too bright against a mono reference in shadowed corners. SSDO's own temporal filter runs only with its history per eye (`ETERNALVR_STEREO_SSDO_TAA`), else it stays off (`r_SSDOTemporalAA 0`), so neither eye reads the other's history (with the filter off: sway ghost check, no cross-eye ghost; about +0.5 ms GPU per stereo pair on an RTX 3080 Ti at 2048x2208). 0: not held, the game's knock-on stays (one `cvars: r_SSDO is left as the game has it` line) |
+| `ETERNALVR_STEREO_SSR` | unset (= 1) | 1 or unset: `r_SSR 1` held while per-eye TAA or per-eye DLSS runs, by its per-tick check and only once its `r_TAASafeMode 0` holds (the launcher passes the player's own value from their config, 1 unless it sets 0, as Reflections Low does; `seq-taa: r_SSR held at 1 (ETERNALVR_STEREO_SSR=1; per-eye TAA)`, `=unset` without the variable). The same knock-on as SSDO: the game writes `r_SSR 0` on every render while `r_TAASafeMode` is not 0 (0x1C6FCC0, 0x1C71630), so before this Route S sessions ran without screen-space reflections. SSR keeps no history of its own; it reads the last frame's colour through the TAA history selector (0x1CBB6C0), which per-eye TAA gives each eye's own (static reading, not rig-checked yet). Not held with per-eye TAA off (`ETERNALVR_STEREO_TAA=0`) or failed closed, where that colour would be shared (`seq-taa: r_SSR is not held: per-eye TAA is off (ETERNALVR_STEREO_TAA=0)` or `... failed closed`, and `seq-taa: r_SSR no longer held: per-eye TAA failed closed` when it fails closed later). As with SSDO, a Reflections change made in the game's menu during a VR session is undone, by the hold while it runs and by the launcher's restore after the session. Parallel Eye Rendering launches get the variable too, but the layer reads it only under Route S (per-eye TAA is a Route S module); Parallel Eye Rendering does not hold `r_TAASafeMode 1` with its TAA, so the player's `r_SSR` stays there anyway. 0: not held (`seq-taa: r_SSR is left as the game has it (ETERNALVR_STEREO_SSR=0)`) |
 | `ETERNALVR_SHARPENING` | unset | a number from 0 to 10 (the launcher's Sharpening: 0, 1, 2 or 3): `r_sharpening`, the game's post-process sharpening, held at run time and compared as a float (the game's menu sets fractions such as 1.99); unset leaves the player's own setting. With DLSS 2.5.1 and later it is the only sharpening: NGX logs that DLSS's own is deprecated and disabled |
 | `ETERNALVR_DEBUG_CVARS` | unset | `name=value;...` written at run time; `name=?` only logs (rig experiments); `<=N` is a cap as above; an entry replaces the CPU Saver's value for the same cvar |
 | `ETERNALVR_VRS_TEST` | unset | experiments, over `ETERNALVR_FOVEATION`: `2x2` or `4x4` on every pass, `eyetest` (eye L's left half and eye R's right half at 4x4: which eye each pass got shows in `ETERNALVR_CAPTURE_EYES` captures; the rig QA's `foveation-eyes` scenarios measure it with `tools/rig/qa/qa-blockiness.ps1`), `fovea` (the regions of `ETERNALVR_VRS_FOVEA=<full>,<half>` degrees, default 24,40) |
@@ -639,7 +669,7 @@ axis).
 | `ETERNALVR_STEREO_DISCONTINUOUS` | 0 | 1: `discontinuousViewPosition` on both eyes (S5) |
 | `ETERNALVR_STEREO_BIN_TILES` | 1 | the light and decal binning's tile grid set from each view's own projection (docs/rig-findings/stereo-bin-tiles.md); 0: the engine's symmetric grid, whose lit areas end in tile-shaped steps in the headset |
 | `ETERNALVR_STEREO_INHIBIT_MODEL_FOV` | 1 | `inhibitModelFovScale` on each eye's view, and the hands-and-guns matrices in the eye's frustum |
-| `ETERNALVR_STEREO_TAA` | 1 | per-eye temporal history (TAA and DLSS; section "Per-eye temporal history"); 0: v1, no temporal accumulation (auto exposure and the light scattering stay per eye) |
+| `ETERNALVR_STEREO_TAA` | 1 | per-eye temporal history (TAA and DLSS; section "Per-eye temporal history"); 0: v1, no temporal accumulation (auto exposure, the light scattering and SSDO stay per eye) |
 | `ETERNALVR_STEREO_DLSS` | 0 | 1: DLSS per eye instead of TAA (`r_antialiasing 2`) |
 | `ETERNALVR_STEREO_DLSS_QUALITY` | unset | with DLSS per eye: `quality`, `balanced`, `performance`, `ultra_performance` (or `3` to `0`), the `r_dlssQuality` held while DLSS runs; `dlaa`: DLSS at the full render size (render size = output size). The game maps `r_dlssQuality` 0 to 3 only (RVA 0x1CC5D40, 0x1CC5760; any other value is Balanced), so DLAA holds `r_dlssQuality` 3 and the layer sets NGX's `PerfQualityValue` to DLAA (5) on every write of it (`src/vkcore/dlss_dll.cpp`): the game's optimal render size, its feature and eye R's twin all become DLAA. Only with `ETERNALVR_DLSS_DLL` of DLSS 3.1 or later; otherwise DLSS runs at Quality and `dlss:` says why. Unset: the player's own quality |
 | `ETERNALVR_DLSS_DLL`, `_PRESET`, `_ROUTE` | unset | a newer `nvngx_dlss.dll` of the player's own (DLSS 310: the transformer model) and its render preset, for both eyes' features; loaded from its own folder, never copied into the game's (`docs/rig-findings/dlss-dll.md`) |
@@ -652,6 +682,7 @@ axis).
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end, as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
+| `ETERNALVR_STEREO_SSDO_TAA` | 1 | SSDO's temporal filter (`r_SSDOTemporalAA`) per eye under Route S (section "Per-eye temporal history", SSDO); 0: the filter held off in stereo (`seq-ssdo: off (ETERNALVR_STEREO_SSDO_TAA=0); ...`) |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S (Parallel Eye Rendering stays off with either) |
 | `ETERNALVR_PARALLEL_EYES` | unset | `1` in stereo: Parallel Eye Rendering, both eyes as two views of one frame (section "Parallel Eye Rendering"), on Steam build 25216728 only; any other build, DLSS or the UI layer off keep Route S, and with a stereo experiment the experiment runs (logged). Async compute off, view 1's clones and the eye copy come with it. The launcher's "Parallel Eye Rendering (experimental)", off by default |
 | `ETERNALVR_STEREO_EYE_POSES`, `_JITTER_COPY`, `ETERNALVR_TEST_WEAPON_FOV` | | experiments only (below) |
@@ -680,6 +711,14 @@ cvars, each hook point with its RVA, `frame-end job wrapped`, then `Route S on`.
   flight names another eye`: A and B are above 0 in stereo whatever the TAA mode (both 0: the hook is not
   installed or not holding, see the `seq-exposure:` start-up line; without per-eye history and with
   `ETERNALVR_STEREO_EXPOSURE_ONCE=0` that is by design).
+- `seq-ssdo: SSDO history per eye: A eye L / mono and B eye R render(s); restarts F first, Z after a resize, G
+  after a gap, M eye R missed a tick, U untagged after eye L, D after dynamic resolution; V other view(s) and
+  R dynamic resolution render(s) left to the engine; C render(s) whose tag in flight names another eye; targets
+  WxH, eye R's WxH / WxH; r_SSDOTemporalAA N`: in steady stereo A equals B, the restarts come only at the
+  start, a resize and a skipped eye R, U and R are 0, the three sizes are equal and N is 1. At start-up
+  `seq-ssdo: SSDO targets (RVA ...), setup (RVA ...) and resize (RVA ...) hooked`, `seq-ssdo: eye R's SSDO
+  targets made with device context ...` and the first four renders (`seq-ssdo: render N for eye X: writes ...,
+  reads ...`, with `history reset: ...` where it starts over).
 - With alternate eyes: `alternate eyes: A eye L / B eye R render(s); P shown ..., H held without a partner, ...;
   the held eye X game frame(s) older on average` (the first line then shows 1.00 renders per game frame and no
   stereo ticks).

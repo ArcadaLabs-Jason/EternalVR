@@ -47,11 +47,11 @@ What the zip holds, in this order (the list lives in the launcher as `ReportMani
 | `sessions/<session>/LAYER_LOADED` | For each of the newest 5 sessions: the layer's note that it loaded |
 | `sessions/<session>/eternalvr-*.log` | For each of the newest 5 sessions: the mod's log; a longer log keeps its first 1 MB and last 3 MB |
 | `sessions/<session>/eternalvr-frames-*.csv` | The frame timing table of the newest session only: its header and last 3 MB |
-| `sessions/<session>/captures/capture-*` | Your in-headset captures (left Menu held + a trigger; under SteamVR with Touch-type controllers, both sticks held, then a trigger; Index: left trackpad pressed firmly + a trigger; Steam Frame: View + a trigger) of the newest 5 sessions, newest first, whole captures up to 48 MB: each eye's image, the HUD image and a small text file |
+| `sessions/<session>/captures/capture-*` | Your in-headset captures (left Menu held + a trigger; under SteamVR with Touch-type controllers, both sticks held, then a trigger; Index: left trackpad pressed firmly + a trigger; Steam Frame: View + a trigger) of the newest 5 sessions, newest first, whole captures up to 20 MB: each eye's image, the HUD image and a small text file |
 
 The text in the zip is at most 20 MB (the zip itself is usually one or two MB); a file that would go past
 that is left out and named in `report-contents.txt`. Captures come on top of that and make the zip larger
-(the images shrink a lot in the zip; captures past 48 MB are left out, the oldest first). **Never included:** memory dumps (the mod's and the game's), save games and save
+(the images are already compressed, about 13 MB per capture at a 2056x2216 render size, so they do not shrink in the zip; captures past 20 MB are left out, the oldest first, so the zip stays under GitHub's 25 MB attachment limit: at that render size it holds the newest capture). **Never included:** memory dumps (the mod's and the game's), save games and save
 backups, settings snapshots, the game's `structured.log` (it holds account IDs) and its other files, older session
 folders and anything not in the table. The launcher log names the settings files and keys it restored, as it always does.
 

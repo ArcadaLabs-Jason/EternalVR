@@ -9,6 +9,7 @@
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/seq_hooks.hpp"
+#include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/stereo_hooks.hpp"
 #include "vkcore/taa_locate.hpp"
 #include "vkcore/taa_ngx.hpp"
@@ -60,7 +61,7 @@ SelectorFn g_opaqueOriginal = nullptr;
 SetCvarFn g_setCvar = nullptr;
 bool g_selectorsHooked = false;
 
-// Cvar objects: the forced set, the fail-closed set, then the read-back ones.
+// Cvar objects: the forced set, the fail-closed set, then the read-back ones and r_SSR.
 std::vector<std::string_view> g_cvarNames;
 std::vector<std::byte*> g_cvars;
 std::byte* g_numSubSamples = nullptr;
@@ -81,6 +82,9 @@ std::atomic<int> g_dlssFallbacks{0};
 bool g_ngxHooked = false;
 std::atomic<bool> g_failedClosed{false};
 std::atomic<std::uint64_t> g_cvarWrites{0};
+// r_SSR held at the player's value while per-eye history is in place (decideSsrHold).
+std::string g_ssrValue;
+std::atomic<bool> g_ssrHeld{false};
 
 struct Counters {
     std::atomic<std::uint64_t> picks[2]{};
@@ -314,13 +318,36 @@ bool setCvar(std::string_view name, const char* value) {
 
 void applySet(const std::vector<stereo_seq::CvarExpectation>& set) {
     for (const auto& c : set) {
-        // With the scattering history per eye (scatter_hooks.hpp) its temporal filter stays on.
-        if (c.name == "r_lightScatteringTAA" && scatterPerEyeReady()) {
+        // With the scattering or SSDO history per eye (scatter_hooks.hpp, ssdo_hooks.hpp) its temporal filter
+        // stays on.
+        if ((c.name == "r_lightScatteringTAA" && scatterPerEyeReady()) ||
+            (c.name == "r_SSDOTemporalAA" && ssdoPerEyeReady())) {
             setCvar(c.name, "1");
             continue;
         }
         const std::string value(c.value);
         setCvar(c.name, value.c_str());
+    }
+}
+
+// Screen-space reflections keep no history of their own: they read the last frame's colour through the
+// history selector above, so with per-eye history each eye reads its own, and r_SSR is held at the player's
+// value (ETERNALVR_STEREO_SSR, stereo_seq::stereoSsrCvar). Without it the game writes r_SSR 0 on every render
+// itself (r_TAASafeMode 1, 0x1C6FCC0), which is right then: the eyes would share that colour.
+void decideSsrHold(bool perEye) {
+    const std::string& setting = taaSsrSetting();
+    const auto c = stereo_seq::stereoSsrCvar(setting);
+    if (!c) {
+        EVR_LOG("%s: r_SSR is left as the game has it (ETERNALVR_STEREO_SSR=%s)", kTag, setting.c_str());
+    } else if (!perEye) {
+        EVR_LOG("%s: r_SSR is not held: per-eye TAA failed closed", kTag);
+    } else if (!cvarByName(c->name)) {
+        EVR_LOG("%s: r_SSR not located; left as the game has it", kTag);
+    } else {
+        g_ssrValue = std::string(c->value);
+        g_ssrHeld.store(true);
+        EVR_LOG("%s: r_SSR held at %s (ETERNALVR_STEREO_SSR=%s; per-eye TAA)", kTag, g_ssrValue.c_str(),
+                setting.empty() ? "unset" : setting.c_str());
     }
 }
 
@@ -347,8 +374,10 @@ void installTaaEarly() {
         if (!routeSRequested()) {
             return;
         }
-        // Eye R's scattering volumes are made with the device context too; they need only the eye tags.
+        // Eye R's scattering volumes and SSDO targets are made with the device context too; they need only
+        // the eye tags.
         installScatterHooksEarly();
+        installSsdoHooksEarly();
         if (!taaRequested()) {
             return;
         }
@@ -396,7 +425,7 @@ bool installTaaHooks() {
             }
         }
         for (const std::string_view name : {"r_TAANumSubSamples", "r_jitter", "r_antialiasing",
-                                            "r_TAASafeMode", "r_TAAAntiGhosting", "r_dlssQuality"}) {
+                                            "r_TAASafeMode", "r_TAAAntiGhosting", "r_dlssQuality", "r_SSR"}) {
             g_cvarNames.push_back(name);
         }
         g_cvars = findCvarObjects(image, g_cvarNames);
@@ -449,6 +478,7 @@ void taaOnStereoTick() {
                                             : "eye R updates its own exposure (no exposure index hook)");
             applySet(stereo_seq::stereoTaaFailClosedCvars());
             g_failedClosed.store(true);
+            decideSsrHold(false);
             const bool closed =
                 g_antialiasing && g_safeMode && cvarInt(g_antialiasing) == 0 && cvarInt(g_safeMode) == 1;
             if (!closed) {
@@ -463,11 +493,15 @@ void taaOnStereoTick() {
         setNgxTwinsActive(g_ngxHooked);
         EVR_LOG("%s: per-eye TAA on: r_antialiasing %d, r_TAASafeMode %d, r_TAANumSubSamples %d", kTag,
                 cvarInt(g_antialiasing), cvarInt(g_safeMode), taaNumSubSamples());
+        decideSsrHold(true);
     }
     // Every stereo tick: the game applies the player's profile at run time as well (it can bring back
     // r_TAASafeMode, r_antialiasing and the effects), so the set is checked each tick and written only
     // where it differs.
     if (g_failedClosed.load()) {
+        if (g_ssrHeld.exchange(false)) {
+            EVR_LOG("%s: r_SSR no longer held: per-eye TAA failed closed", kTag);
+        }
         applySet(stereo_seq::stereoTaaFailClosedCvars());
         return;
     }
@@ -476,7 +510,11 @@ void taaOnStereoTick() {
     }
     applySet(stereo_seq::stereoTaaForcedCvars());
     // Per-eye history is in place: temporal AA on, deliberately.
-    setCvar("r_TAASafeMode", "0");
+    const bool safeModeOff = setCvar("r_TAASafeMode", "0");
+    // Only once safe mode is off: while it is on, the game writes r_SSR 0 on every render.
+    if (g_ssrHeld.load() && safeModeOff) {
+        setCvar("r_SSR", g_ssrValue.c_str());
+    }
     // DLSS without a per-eye feature for eye R would mix the eyes: TAA (per eye) until it is tried again.
     ngxTwinsTick();
     const bool dlssPerEye = g_ngxHooked && !ngxTwinFailed();

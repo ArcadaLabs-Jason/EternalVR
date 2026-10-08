@@ -11,6 +11,7 @@
 #include "vkcore/flare_views.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/seq_prev.hpp"
+#include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/taa_ngx.hpp"
@@ -79,6 +80,7 @@ ExposureCounters g_lastExposure;
 void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame) {
     if (eye == Eye::Left) {
         taaOnStereoTick(); // the first stereo tick switches per-eye TAA on, or fails closed
+        ssdoOnStereoTick();
     }
     if (!taaPerEyeActive()) {
         return;
@@ -143,6 +145,11 @@ void XrPresenter::Impl::startSequential() {
     installFlareViewHooks(); // lens flares at each eye's own position (flare_views.hpp)
     if (taaRequested()) {
         installTaaHooks(); // a missing piece fails closed on the first stereo tick
+    } else if (stereo_seq::stereoSsrCvar(taaSsrSetting())) {
+        EVR_LOG("seq-taa: r_SSR is not held: per-eye TAA is off (ETERNALVR_STEREO_TAA=0)");
+    } else {
+        EVR_LOG("seq-taa: r_SSR is left as the game has it (ETERNALVR_STEREO_SSR=%s)",
+                taaSsrSetting().c_str());
     }
     logStereoTemporalMode();
     installDlssMenuHooks(); // the game's video menu shows the DLSS state the layer holds
@@ -236,6 +243,9 @@ void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
             settings.stereo.fixCentered ? stereo_seq::centeredDepthOf(centered) : std::nullopt;
         projection = writeEyePose(renderView, record.eyes[static_cast<std::size_t>(index)]);
         eyePoseWritten[static_cast<std::size_t>(index)] = projection.has_value();
+        eyeInCutscene[static_cast<std::size_t>(index)] = record.cutscene;
+        eyeArmsHidden[static_cast<std::size_t>(index)] = record.cutsceneArms;
+        eyeSeq[static_cast<std::size_t>(index)] = record.seq;
         if (!projection) {
             stayMono();
             return; // no usable projection: nothing written, the tick stays mono
@@ -250,7 +260,8 @@ void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
     setFlag(plan.forceFullResolution, stereo_view_fields::kForceFullResolution);
     setFlag(plan.skipAutoExposureUpdate, stereo_view_fields::kSkipAutoExposureUpdate);
     setFlag(plan.discontinuousViewPosition, stereo_view_fields::kDiscontinuousViewPosition);
-    setFlag(plan.inhibitModelFovScale, stereo_view_fields::kInhibitModelFovScale);
+    // A cutscene with its arms hidden keeps the game's own model FOV scale (controllers::cutsceneArmsHidden).
+    setFlag(plan.inhibitModelFovScale && !record.cutsceneArms, stereo_view_fields::kInhibitModelFovScale);
     writeTaaEye(renderView, eye, record.seq);
     seqMarkEyeView(eye, record.seq);
     ++stereoStats.eyeViews[index];
@@ -290,8 +301,11 @@ void XrPresenter::Impl::onSeqEyeLatched(std::byte* renderView, int eyeIndex) {
         depth.reset();
         ++centeredRepairs;
     }
-    if (settings.stereo.inhibitModelFov) {
-        // Hands and guns in the eye's frustum (the latch builds them from the symmetric weapon FOV).
+    cutscene_eyes::noteLatchedEye(renderView, eyeIndex, eyeSeq[eye], eyeInCutscene[eye],
+                                  settings.unitsPerMetre);
+    if (settings.stereo.inhibitModelFov && !eyeArmsHidden[eye]) {
+        // Hands and guns in the eye's frustum (the latch builds them from the symmetric weapon FOV); not in a
+        // cutscene with its arms hidden, which keeps the game's weapon FOV.
         const stereo_seq::Matrix4 eyeProjection = load(render_view_object::kProjection);
         for (const std::size_t offset : kWeaponViewProjections) {
             stereo_seq::Matrix4 m = load(offset);

@@ -162,7 +162,7 @@ Every name below exists in this build's string table; flags from the registratio
 | Ambient occlusion (SSDO) history | `r_SSDOTemporalAA` | 0 | `ambientOcclusionAcc0/1` |
 | Light scattering history | `r_lightScatteringTAA` | 0 | froxel volume history |
 | Depth of field history | `r_dofTAA` (or `r_dof 0`) | 0 | |
-| Screen-space reflections | `r_SSR` | 0 in v1 | whether SSR reads the previous frame is S3; re-enable if not |
+| Screen-space reflections | `r_SSR` | 0 in v1 (the game's own while `r_TAASafeMode` is 1) | SSR reads the previous frame through the TAA history selector; with per-eye TAA the layer holds the player's `r_SSR` (`ETERNALVR_STEREO_SSR`, `stereo-temporal.md` 5) |
 | RT reflections temporal upscale | `r_raytracedReflectionsTemporalUpscaleQuality` (or `r_raytracedReflections 0`) | 0 | also feeds `upsamplerSubSampleIndex` |
 | Water | `r_waterReflectionsTAA`, `r_waterGridTAA`, `r_refractionTAA` | 0 | |
 | Motion blur | `r_motionblur` | 0 (default) | needs correct previous matrices, which 2.4 provides |

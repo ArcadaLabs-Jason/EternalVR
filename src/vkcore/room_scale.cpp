@@ -178,6 +178,7 @@ void noteRecenterBinding(bool active, float buttonHoldSeconds) {
 void RoomScale::anchorOn(const Input& in, roomscale::RecenterKind kind, const char* why, float lift) {
     const roomscale::RoomScaleSettings& cfg = roomScaleSettings();
     const roomscale::RoomAnchor before = anchor_;
+    anchoredNow_ = true;
     Pose head = in.localHead;
     head.position.y += lift;
     const std::optional<float> above = lifted(in.headAboveFloor, lift);
@@ -299,6 +300,7 @@ RoomScale::Head RoomScale::head(const Input& in) {
         // Black too long: the head goes back over the body (the game's eye is always clear), heading kept.
         const Vec3 head = roomscale::toRoom(anchor_, in.localHead).position + testOffset;
         anchor_ = roomscale::shiftedBy(anchor_, {head.x, 0.0f, head.z});
+        anchoredNow_ = true;
         clearance_.reset();
         blinkUntil_.store(now + kBlinkHoldSeconds, std::memory_order_release);
         if (++unsticks_ <= 20) {
@@ -330,6 +332,13 @@ RoomScale::Head RoomScale::head(const Input& in) {
     // it rather than where the head was from the body when the game took over (the player saw the Slayer's
     // own shoulders in standing glory kills).
     const Vec3 full = out.offset.offset;
+    if (anchoredNow_ && driven_.rebase(full) && ++drivenRebases_ <= 20) {
+        EVR_LOG(
+            "room: anchored while the game drives the view: the head's offset is now (%.3f %.3f %.3f) m and "
+            "what is held back moves with it, the camera stays where it was (re-base %llu)",
+            full.x, full.y, full.z, static_cast<unsigned long long>(drivenRebases_));
+    }
+    anchoredNow_ = false;
     out.offset.offset = driven_.update(full, in.forcedView || in.cutscene, in.seconds);
     if (driven_.began() && ++drivenEpisodes_ <= 20) {
         EVR_LOG("room: the game drives the view (%s); the head's offset (%.3f %.3f %.3f) m eases out, the "

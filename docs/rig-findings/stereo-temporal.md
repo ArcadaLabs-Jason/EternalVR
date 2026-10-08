@@ -293,6 +293,14 @@ evaluation.
   `r_SSR`). Per-eye TAA checks its cvars on every stereo tick and writes only what differs; it reports itself
   to `runtime_cvars::setStereoTemporal(PerEye)`, so the layer's run-time v1 hold stands down. TAA safe mode
   also forces `r_SSDO 0` and `r_SSR 0` in the game's config (0x1C6FCC0), which the game then saves.
+  Route S holds `r_SSDO` at the player's value (`ETERNALVR_STEREO_SSDO`), and the per-eye check holds `r_SSR`
+  at the player's value while per-eye TAA or DLSS runs (`ETERNALVR_STEREO_SSR`, after `r_TAASafeMode 0`):
+  SSR has no history of its own and reads the last frame's colour through the history selector (0x1CBB6C0),
+  which is per eye then. Off or failed closed, the engine's own `r_SSR 0` stays. Static evidence: SSR
+  reprojects with `ssrReprojectionMatrix`, built in the render-view job (0x1C54650) from `prevViewProjection`
+  (+0x29480); its only colour input, `viewColorLastFrameMap`, is bound at 0x1C5661C from the TAA history
+  selector (0x1CBB6C0); no SSR history image or cvar exists; the engine writes `r_SSR 0` on every render
+  while `r_TAASafeMode` is not 0 (0x1C6FCD8, 0x1C7163D). [static, not rig-checked]
 
 ## 6. Implementation (this branch)
 

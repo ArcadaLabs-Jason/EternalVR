@@ -4,7 +4,8 @@
 // docs/VR_STEREO.md): every Nth complete eye pair, both presented images are also copied into host
 // buffers by the present hook's own copy command buffers; once the shared timeline shows the copies done,
 // a background thread writes them as <dir>\eyes-<pid>-p<pair>-t<tick>-L.png and -R.png (S1 pixel diff,
-// S2 fusion checks). At most one pair is in flight, so a slow disk skips pairs rather than piling up.
+// S2 fusion checks), uncompressed so that a pair is written in a few tens of ms. At most one pair is in
+// flight, so a slow disk or a small N skips pairs rather than piling up.
 //
 // The same copies take the in-headset capture for bug reports (bug_capture.hpp): one pair (or one mono
 // image) armed with armOnce, whatever the every-N setting and whether it is on.

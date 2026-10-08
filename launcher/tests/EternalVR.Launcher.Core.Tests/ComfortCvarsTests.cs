@@ -17,7 +17,7 @@ namespace EternalVR.Launcher.Core.Tests
         /// command line; session-keys.txt restores it).</summary>
         private static readonly string[] ComfortSet =
         {
-            "r_motionblur", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale",
+            "r_motionblur", "r_blurRadialScale", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale",
             "meatHook_playerViewOverrideMode", "view_skipDamageEffect", "view_showPlayerDamageViewEffect", "view_damageBlur", "g_skipViewEffects",
         };
 
@@ -44,7 +44,7 @@ namespace EternalVR.Launcher.Core.Tests
         public void MonoKeepsTheComfortSetOnTheCommandLine()
         {
             var line = CommandLine(VrMode.Mono);
-            foreach (var arg in new[] { "+r_motionblur 0", "+r_dof 0", "+r_chromaticAberration 0", "+r_vignette 0", "+pm_noBob 1", "+view_skipKicks 1",
+            foreach (var arg in new[] { "+r_motionblur 0", "+r_blurRadialScale 0", "+r_dof 0", "+r_chromaticAberration 0", "+r_vignette 0", "+pm_noBob 1", "+view_skipKicks 1",
                                         "+view_skipShakes 1", "+view_skipDamageEffect 1", "+view_showPlayerDamageViewEffect 0", "+view_damageBlur 0",
                                         "+g_skipViewEffects 1", "+hands_fovScale 1", "+meatHook_playerViewOverrideMode 1", "+r_hdrDisplay 0" })
                 Assert.Contains(arg + " ", line);

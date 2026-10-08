@@ -98,6 +98,38 @@ yet).
   subtitles included, sits in that band already, section 6 of docs/rig-findings/render-size.md). A game FOV
   that is already taller than wide on a tall image (the game kept the width) keeps its horizontal FOV. The
   log's `cinema: cutscene fov ...` line gives the game's FOV, the one drawn and the rows shown.
+- Cutscenes around the player (`ETERNALVR_CUTSCENES=immersive`, the launcher's "Around you"): the head-tracked
+  view on the cutscene's camera, its yaw only (`xr_math/cutscene_cuts.hpp`). A reverse shot turns that camera
+  about 170 degrees in one frame, which swung the world by as much and left the action behind a player who had
+  turned to follow it (GitHub issue #24). With `ETERNALVR_CUTSCENE_CUT_REBASE` on (the default) the body yaw is
+  re-based on the cutscene's first frame, on every cut (the camera's yaw changing more than 90 degrees in
+  one game frame, except while the camera looks within 10 degrees of straight up or down, where its yaw
+  flips) and on the first frame after a gap of more than 0.5 s (a map load between two cutscenes, a hitch),
+  so the new shot's forward is where the head looks (body = camera yaw - head yaw); within a shot the view
+  follows the camera's turns as before, a long pan included. While a menu is over the cutscene nothing is
+  detected and the offset stays (once head aim has written, the menu's own held body is used, as in play).
+  On the first frame after the cutscene head aim's yaw is re-based the same way (`rebaseHeadYaw`: the game's
+  yaw is taken to hold the head's yaw now, the values head aim wrote before are forgotten), so the player's
+  view faces the game's heading where the head looks; under head aim nothing is added to the game's aim
+  then, under hand aim the hand's yaw from there is. Before head aim is on the view keeps the game's heading.
+  A camera within 15 degrees of the player's angles stays a scripted camera for the whole cutscene.
+  `renderView_t.cameraCut` (+0x16) is logged with each re-base but not used yet. Logs: `cutscene: start / cut
+  / gap, yaw re-based by X deg (camera turned Y deg in one frame, Z s since the last frame, cameraCut N;
+  ...)`, `cutscene: end, the cuts' re-base of X deg dropped`, then `cutscene: end, yaw re-based by X deg:
+  ...` (or `cutscene: end; head aim is not on, ...`). The arms: docs/VR_HANDS_HUD.md, "Arms in cutscenes".
+  Depth in these cutscenes (issue #24): a cutscene camera renders relative to `viewOriginOffset`
+  (`renderView_t.usesViewOriginOffset` +0xC4 set), and the engine then draws meshes from `viewOriginOffset +
+  localViewOrigin` (+0xD4, +0xC8; its `computeMVP` shader), not from `vieworg`, so an eye or head offset written
+  to `vieworg` alone left both eyes at one point. `render_view::moveViewOrigin` moves `localViewOrigin` with
+  `vieworg` while the flag is set (`viewOriginOffset` stays the same for both eyes, and the shaders need
+  `vieworg == viewOriginOffset + localViewOrigin`). Rig, e1m1 opening cutscene: the eyes' disparity in the ship
+  went from 0 to up to 80 px on near objects. The logs:
+  `cutscene-eyes: cutscene start / in the cutscene / play: vieworg ..., usesViewOriginOffset ...,
+  localViewOrigin ..., viewOriginOffset ..., viewBypass.allowBypass ..., forceIdentityViewMatrix ..., cameraCut
+  ...` (at each start, every 10 s inside, once in play) and `cutscene-eyes: eye L-R distance of game frame N
+  (both eyes of it) ... m (r.vieworg), ... (inverse view matrix, row-major), ... (its column-major reading),
+  ... (view matrix); cutscene yes / no` from an eye R latch whose eye L was of the same game frame (so none
+  with alternate eyes), every 10 s for each, 200 lines each (about 0.065 m in play).
 - Glory kills (`ETERNALVR_GLORY_KILLS`, `features/comfort/glory_kill.hpp`, `vkcore/glory_view.hpp`; M7, REQ-15).
   A glory kill is the game's sync kill: `idPlayer::savedSyncEntity` holds a `syncmelee/<demon>` entity while
   it runs (the camera hook reads it for the view's object once it is the idPlayer, with the controllers on;
@@ -149,6 +181,7 @@ yet).
 | `ETERNALVR_KEEP_ACTIVE` | 1 | 0 lets focus changes reach the game (it pauses) |
 | `ETERNALVR_AIM` | head | `view` keeps the game's own aim (render-only head tracking) |
 | `ETERNALVR_SKIP_CINEMATICS` | 0 | 1 holds the skip key while a cutscene plays |
+| `ETERNALVR_CUTSCENE_CUT_REBASE` | 1 | in cutscenes around the player (`ETERNALVR_CUTSCENES=immersive`) each big camera cut, and the end, turn the view so the new shot faces where the head looks (Cutscenes around the player, above); 0 leaves the cuts as the camera makes them |
 | `ETERNALVR_CAMERA_ANIMATIONS` | 0 | 1 plays a hands animation's camera rotation (5 degrees or more) on top of the head-tracked view |
 | `ETERNALVR_CAMERA_ANIM_MIN` | 5 | degrees (0.5 to 45): where the camera animation ramp starts (full at twice), for rig tests |
 | `ETERNALVR_GLORY_KILLS` | follow | how glory kills are shown: `follow`, `steady`, `fade` or `screen` (Glory kills, above) |

@@ -75,6 +75,10 @@ struct Settings {
     // ETERNALVR_CUTSCENES: "cinema" (default) shows cutscenes on the flat screen in front of the player, with
     // the game's own camera; "immersive" keeps the head in the cutscene's moving camera.
     bool cutsceneCinema = true;
+    // ETERNALVR_CUTSCENE_CUT_REBASE (on by default): in a cutscene shown around the player each cut of its
+    // camera, and its end, turn the view so the new shot's forward is where the head looks
+    // (xr_math/cutscene_cuts.hpp).
+    bool cutsceneCutRebase = true;
     // ETERNALVR_CINEMA_ASPECT: the flat screen's shape during a cutscene, `16:9` (default) or `16:10` drawn
     // as a flat display of that shape shows it, or `full` (the eye image as the game draws it;
     // cinema_view.hpp).
@@ -125,6 +129,10 @@ struct ViewRecord {
     XrFovf fov{};                                               // the game's FOV for this frame
     std::array<float, 9> axis{};                                // the viewaxis written, the latch's match key
     bool stereo = false;                                        // eyes valid: rendered as two views
+    // A cutscene frame (renderView_t.inCutscene), and one whose arms are hidden with the game's weapon FOV
+    // kept (controllers::cutsceneArmsHidden): the per-eye hooks leave the hands and guns matrices alone then.
+    bool cutscene = false;
+    bool cutsceneArms = false;
     std::array<EyeRecord, 2> eyes{};
     // Route S: the ring image holds this frame's two eyes, each shown with its own pose and FOV (false:
     // both halves show the head's).

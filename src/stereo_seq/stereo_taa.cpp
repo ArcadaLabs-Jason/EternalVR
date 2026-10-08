@@ -120,7 +120,9 @@ const std::vector<CvarExpectation>& stereoTaaForcedCvars() {
     // Each of these keeps its own history, picked by the backend frame's parity like the TAA images, so
     // with two renders per tick each eye would read the other's: TAA's anti-ghosting mask pair
     // (_taaGhostingMask0/1), SSDO, the light-scattering volumes, depth of field, water reflections and
-    // grid, refraction and the ray-traced reflections' temporal upscale. Dynamic resolution stays off.
+    // grid, refraction and the ray-traced reflections' temporal upscale. Dynamic resolution stays off. The
+    // light scattering's and SSDO's filters are written 1 instead while their history is per eye
+    // (taa_hooks.cpp).
     static const std::vector<CvarExpectation> cvars = {
         {"r_TAAAntiGhosting", "0"},
         {"r_SSDOTemporalAA", "0"},

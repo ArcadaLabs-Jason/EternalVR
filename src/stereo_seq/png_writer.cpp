@@ -1,7 +1,11 @@
 #include "stereo_seq/png_writer.hpp"
 
+#include "stereo_seq/deflate.hpp"
+
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace evr::stereo_seq {
@@ -147,62 +151,92 @@ std::uint32_t crc32(const std::uint8_t* data, std::size_t size, std::uint32_t cr
     return ~crc;
 }
 
-std::uint32_t adler32(const std::uint8_t* data, std::size_t size, std::uint32_t adler) {
-    std::uint32_t a = adler & 0xFFFFu;
-    std::uint32_t b = adler >> 16;
-    constexpr std::uint32_t kMod = 65521;
-    while (size > 0) {
-        const std::size_t n = std::min<std::size_t>(size, 5552); // no overflow before the modulo
-        for (std::size_t i = 0; i < n; ++i) {
-            a += data[i];
-            b += a;
-        }
-        a %= kMod;
-        b %= kMod;
-        data += n;
-        size -= n;
-    }
-    return (b << 16) | a;
-}
-
 namespace {
 
-// 8-bit PNG of `channels` (3: RGB, 4: RGBA) tightly packed bytes per pixel.
-std::vector<std::uint8_t>
-encodePng(const std::uint8_t* pixels, std::uint32_t width, std::uint32_t height, std::uint32_t channels) {
-    const std::uint8_t* rgb = pixels;
-    // Scanlines, each with filter type 0 (none).
-    const std::size_t rowBytes = static_cast<std::size_t>(width) * channels;
-    std::vector<std::uint8_t> raw;
-    raw.reserve((rowBytes + 1) * height);
-    for (std::uint32_t y = 0; y < height; ++y) {
-        raw.push_back(0);
-        const std::uint8_t* row = rgb + y * rowBytes;
-        raw.insert(raw.end(), row, row + rowBytes);
-    }
+// Paeth's predictor (PNG filter type 4), written to compile to selects rather than branches.
+inline int paeth(int a, int b, int c) {
+    const int pa = std::abs(b - c); // |p - a| with p = a + b - c
+    const int pb = std::abs(a - c);
+    const int pc = std::abs(a + b - 2 * c);
+    const int bc = pb <= pc ? b : c;
+    return pa <= pb && pa <= pc ? a : bc;
+}
 
-    // zlib stream of stored deflate blocks.
-    constexpr std::size_t kBlock = 65535;
-    std::vector<std::uint8_t> z;
-    z.reserve(raw.size() + raw.size() / kBlock * 5 + 16);
-    z.push_back(0x78);
-    z.push_back(0x01);
-    std::size_t at = 0;
-    do {
-        const std::size_t n = std::min(kBlock, raw.size() - at);
-        const bool last = at + n == raw.size();
-        z.push_back(last ? 1 : 0);
-        const auto len = static_cast<std::uint16_t>(n);
-        const auto nlen = static_cast<std::uint16_t>(~len);
-        z.push_back(static_cast<std::uint8_t>(len & 0xFFu));
-        z.push_back(static_cast<std::uint8_t>(len >> 8));
-        z.push_back(static_cast<std::uint8_t>(nlen & 0xFFu));
-        z.push_back(static_cast<std::uint8_t>(nlen >> 8));
-        z.insert(z.end(), raw.begin() + static_cast<std::ptrdiff_t>(at),
-                 raw.begin() + static_cast<std::ptrdiff_t>(at + n));
-        at += n;
-    } while (at < raw.size());
-    putU32(z, adler32(raw.data(), raw.size()));
+// Row filters 1 to 4 (Sub, Up, Average, Paeth) of one scanline (`bytes` long, `bpp` bytes per pixel, the
+// row above in `up`) into out[0..3]. The first pixel has no left neighbour (it counts as 0).
+void filterRows(const std::uint8_t* row,
+                const std::uint8_t* up,
+                std::size_t bytes,
+                std::size_t bpp,
+                std::uint8_t* const out[4]) {
+    for (std::size_t i = 0; i < bpp; ++i) {
+        out[0][i] = row[i];
+        out[1][i] = static_cast<std::uint8_t>(row[i] - up[i]);
+        out[2][i] = static_cast<std::uint8_t>(row[i] - (up[i] >> 1));
+        out[3][i] = static_cast<std::uint8_t>(row[i] - up[i]); // Paeth of (0, b, 0) is b
+    }
+    for (std::size_t i = bpp; i < bytes; ++i) {
+        const int x = row[i];
+        const int a = row[i - bpp];
+        const int b = up[i];
+        const int c = up[i - bpp];
+        out[0][i] = static_cast<std::uint8_t>(x - a);
+        out[1][i] = static_cast<std::uint8_t>(x - b);
+        out[2][i] = static_cast<std::uint8_t>(x - ((a + b) >> 1));
+        out[3][i] = static_cast<std::uint8_t>(x - paeth(a, b, c));
+    }
+}
+
+// The sum of a filtered row's bytes read as signed magnitudes. The filter with the smallest sum is the one
+// the PNG specification suggests per row; its output is the one deflate packs best, near enough.
+std::uint32_t magnitudeSum(const std::uint8_t* v, std::size_t bytes) {
+    std::uint32_t sum = 0;
+    for (std::size_t i = 0; i < bytes; ++i) {
+        const std::uint32_t x = v[i];
+        sum += x < 128 ? x : 256u - x;
+    }
+    return sum;
+}
+
+// 8-bit PNG of `channels` (3: RGB, 4: RGBA) tightly packed bytes per pixel.
+std::vector<std::uint8_t> encodePng(const std::uint8_t* pixels,
+                                    std::uint32_t width,
+                                    std::uint32_t height,
+                                    std::uint32_t channels,
+                                    Compression compression) {
+    const std::size_t rowBytes = static_cast<std::size_t>(width) * channels;
+    // Each scanline: its filter type byte, then the row filtered by whichever of None, Sub, Up, Average and
+    // Paeth gives the smallest magnitude sum (stored: always None, as filters only help compression).
+    std::vector<std::uint8_t> raw((rowBytes + 1) * height);
+    const std::vector<std::uint8_t> zeros(rowBytes);
+    std::vector<std::uint8_t> scratch(rowBytes * 4);
+    std::uint8_t* const filtered[4] = {scratch.data(), scratch.data() + rowBytes,
+                                       scratch.data() + 2 * rowBytes, scratch.data() + 3 * rowBytes};
+    for (std::uint32_t y = 0; y < height; ++y) {
+        const std::uint8_t* row = pixels + y * rowBytes;
+        if (compression == Compression::Stored) {
+            std::uint8_t* out = raw.data() + y * (rowBytes + 1);
+            out[0] = 0;
+            std::memcpy(out + 1, row, rowBytes);
+            continue;
+        }
+        filterRows(row, y == 0 ? zeros.data() : row - rowBytes, rowBytes, channels, filtered);
+        const std::uint8_t* best = row;
+        std::uint8_t type = 0;
+        std::uint32_t bestSum = magnitudeSum(row, rowBytes);
+        for (std::uint8_t f = 0; f < 4; ++f) {
+            const std::uint32_t sum = magnitudeSum(filtered[f], rowBytes);
+            if (sum < bestSum) {
+                bestSum = sum;
+                best = filtered[f];
+                type = static_cast<std::uint8_t>(f + 1);
+            }
+        }
+        std::uint8_t* out = raw.data() + y * (rowBytes + 1);
+        out[0] = type;
+        std::memcpy(out + 1, best, rowBytes);
+    }
+    const std::vector<std::uint8_t> z = zlibCompress(raw.data(), raw.size(), compression);
 
     std::vector<std::uint8_t> png{0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
     std::vector<std::uint8_t> header;
@@ -221,13 +255,14 @@ encodePng(const std::uint8_t* pixels, std::uint32_t width, std::uint32_t height,
 
 } // namespace
 
-std::vector<std::uint8_t> encodePngRgb8(const std::uint8_t* rgb, std::uint32_t width, std::uint32_t height) {
-    return encodePng(rgb, width, height, 3);
+std::vector<std::uint8_t>
+encodePngRgb8(const std::uint8_t* rgb, std::uint32_t width, std::uint32_t height, Compression compression) {
+    return encodePng(rgb, width, height, 3, compression);
 }
 
 std::vector<std::uint8_t>
 encodePngRgba8(const std::uint8_t* rgba, std::uint32_t width, std::uint32_t height) {
-    return encodePng(rgba, width, height, 4);
+    return encodePng(rgba, width, height, 4, Compression::Best);
 }
 
 } // namespace evr::stereo_seq

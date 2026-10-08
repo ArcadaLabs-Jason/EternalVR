@@ -1,8 +1,11 @@
 #pragma once
 
 // Minimal image output for the per-eye capture (ETERNALVR_CAPTURE_EYES, docs/VR_STEREO.md): swapchain
-// pixels to 8-bit RGB, and RGB to a PNG file image. The PNG uses stored (uncompressed) deflate blocks, so
-// no compression library is needed; files are about width * height * 3 bytes. Any PNG reader opens them.
+// pixels to 8-bit RGB, and RGB to a PNG file image. Each row takes the PNG filter that suits it best and
+// the rows are compressed by our own deflate (deflate.hpp), so no compression library is needed. Any PNG
+// reader opens them.
+
+#include "stereo_seq/deflate.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -44,14 +47,17 @@ AlphaStats alphaStats(const std::uint8_t* pixels,
                       std::size_t rowPitch,
                       PixelLayout layout);
 
-// A complete PNG file (8-bit RGB, not interlaced) of tightly packed RGB8 rows.
-std::vector<std::uint8_t> encodePngRgb8(const std::uint8_t* rgb, std::uint32_t width, std::uint32_t height);
+// A complete PNG file (8-bit RGB, not interlaced) of tightly packed RGB8 rows. Compression::Stored skips the
+// row filters and the compression (about 10x faster, about 2x larger) for captures taken while the game runs.
+std::vector<std::uint8_t> encodePngRgb8(const std::uint8_t* rgb,
+                                        std::uint32_t width,
+                                        std::uint32_t height,
+                                        Compression compression = Compression::Best);
 
 // A complete PNG file (8-bit RGBA, not interlaced) of tightly packed RGBA8 rows (the UI capture keeps the
 // alpha channel of the game's GUI target).
 std::vector<std::uint8_t> encodePngRgba8(const std::uint8_t* rgba, std::uint32_t width, std::uint32_t height);
 
 std::uint32_t crc32(const std::uint8_t* data, std::size_t size, std::uint32_t crc = 0);
-std::uint32_t adler32(const std::uint8_t* data, std::size_t size, std::uint32_t adler = 1);
 
 } // namespace evr::stereo_seq

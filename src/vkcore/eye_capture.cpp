@@ -259,11 +259,14 @@ void EyeCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
         try {
             alpha = stereo_seq::alphaStats(left->data(), extent.width, extent.height,
                                            std::size_t{extent.width} * 4, layout);
+            // Stored, not compressed: a periodic pair must be written before the next one is due (one is
+            // in flight at a time), and compressing both eyes takes about 0.7 s of a core.
             for (const auto& [pixels, suffix] : eyes) {
                 const auto rgb = stereo_seq::toRgb8(pixels->data(), extent.width, extent.height,
                                                     std::size_t{extent.width} * 4, layout);
                 ok = writeFile(base + suffix,
-                               stereo_seq::encodePngRgb8(rgb.data(), extent.width, extent.height)) &&
+                               stereo_seq::encodePngRgb8(rgb.data(), extent.width, extent.height,
+                                                         stereo_seq::Compression::Stored)) &&
                      ok;
             }
         } catch (const std::exception&) {
