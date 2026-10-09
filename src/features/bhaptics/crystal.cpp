@@ -1,5 +1,5 @@
 // The Sentinel Crystal's wave and BodyHaptics::crystal: the ring as frames on the vest and both sleeves.
-// A Praetor Suit token's pickup plays it too (crystalWaveDelay).
+// A Praetor Suit token's pickup and a rune's play it too (crystalWaveDelay).
 
 #include "features/bhaptics/crystal.hpp"
 
@@ -34,6 +34,8 @@ std::optional<double> crystalWaveDelay(SyncKind kind) {
         return kCrystalDelaySeconds;
     case SyncKind::Token:
         return kTokenDelaySeconds;
+    case SyncKind::Rune:
+        return kRuneDelaySeconds;
     case SyncKind::GloryKill:
     case SyncKind::Pickup:
         break;

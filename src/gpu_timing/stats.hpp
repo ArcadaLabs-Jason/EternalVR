@@ -3,6 +3,7 @@
 // Summaries of timing samples for the 10 s log lines (docs/VR_STEREO.md, "GPU timing").
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,7 +25,14 @@ Summary summarize(std::vector<double> values);
 // "mean/p50/p95/p99/max 1.23/1.10/2.00/2.50/3.00 ms (n 600)", or "no samples".
 std::string formatSummary(const Summary& s);
 
-// ETERNALVR_GPU_TIMING: "1", "on" or "true" turns GPU timing on; anything else (or unset) leaves it off.
+// "1", "on" or "true" (ETERNALVR_TEST_CB_CHECK and the like); anything else is no.
 bool parseEnabled(std::wstring_view value);
+
+// GPU timing's mode: off (the default), a few frames in every second or every frame.
+enum class TimingMode : std::uint8_t { Off, Sampled, EveryFrame };
+
+// ETERNALVR_GPU_TIMING: "1", "on" or "true" times every frame; "sample" or "sampled" times a few frames in
+// every second; unset (or anything else, "0" included) leaves GPU timing off.
+TimingMode parseMode(bool set, std::wstring_view value);
 
 } // namespace evr::gpu_timing

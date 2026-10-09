@@ -111,8 +111,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     const std::uint32_t apiVersion = app && app->apiVersion ? app->apiVersion : VK_API_VERSION_1_0;
     const bool isGame =
         !t_passThrough && std::strcmp(appName, "DOOMEternal") == 0 && std::strcmp(engineName, "idTech") == 0;
-    EVR_LOG("vkCreateInstance: app '%s' engine '%s' api %s, %u extension(s)%s", appName, engineName,
-            versionString(apiVersion).c_str(), pCreateInfo->enabledExtensionCount,
+    // The app's own layers: the loader passes the app's create info on, so implicit layers never show.
+    EVR_LOG("vkCreateInstance: app '%s' engine '%s' api %s, %u extension(s), layers asked for: %s%s", appName,
+            engineName, versionString(apiVersion).c_str(), pCreateInfo->enabledExtensionCount,
+            nameList(pCreateInfo->enabledLayerCount, pCreateInfo->ppEnabledLayerNames, 8).c_str(),
             isGame ? "" : " (not the game's; pass-through)");
 
     // Below 1.1 the LUID and external capability queries need these instance extensions (T-082). The

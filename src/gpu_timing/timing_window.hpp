@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace evr::gpu_timing {
@@ -59,5 +60,16 @@ private:
     std::array<double, kFamilies> familySum_{};
     std::optional<FrameSample> left_; // the latest eye L frame, waiting for its eye R
 };
+
+// Sampled GPU timing (ETERNALVR_GPU_TIMING=sample): the frames whose present count (1 for the first) is
+// among the first kSampleRun of every kSampleEvery. Three in a row hold an eye L frame and the eye R frame
+// after it.
+inline constexpr std::uint64_t kSampleEvery = 45;
+inline constexpr std::uint64_t kSampleRun = 3;
+bool sampledFrame(std::uint64_t frame);
+
+// The sampled 10 s line's figures: "eye L GPU busy 6.10 ms average, 8.40 ms longest (n 24); eye R ...;
+// stereo tick GPU busy ..." (mono frames as "mono"), or "no frame timed".
+std::string sampledSummary(const TimingWindow::Report& r);
 
 } // namespace evr::gpu_timing

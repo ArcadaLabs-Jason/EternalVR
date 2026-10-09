@@ -44,9 +44,13 @@ TimingDevice* deviceOf(DispatchKey key) {
     return it == g_devices.end() ? nullptr : it->second.get();
 }
 
-bool readEnabled() {
-    std::wstring value;
-    return readEnv(L"ETERNALVR_GPU_TIMING", value) && gt::parseEnabled(value);
+gt::TimingMode mode() {
+    static const gt::TimingMode m = [] {
+        std::wstring value;
+        const bool set = readEnv(L"ETERNALVR_GPU_TIMING", value);
+        return gt::parseMode(set, value);
+    }();
+    return m;
 }
 
 // Under d.mutex: the queue's family (from the layer's queue records, cached).
@@ -161,7 +165,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            const VkSubmitInfo* pSubmits,
                                            VkFence fence) {
     TimingDevice* d = deviceOf(keyOf(queue));
-    if (!d->active || submitCount == 0) {
+    if (!d->active || submitCount == 0 || !d->sampling.load(std::memory_order_relaxed)) {
         return d->fn.queueSubmit(queue, submitCount, pSubmits, fence);
     }
     std::vector<std::uint32_t> planned; // the pairs of the timed batches
@@ -179,7 +183,8 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
             total += pSubmits[i].commandBufferCount + 2;
         }
         buffers.reserve(total); // no reallocation: the batches point into it
-        for (std::uint32_t i = 0; i < submitCount; ++i) {
+        // A present may have closed the sampled frame since `sampling` was read: then nothing is timed.
+        for (std::uint32_t i = 0; i < submitCount && d->open.timed; ++i) {
             const VkSubmitInfo& s = pSubmits[i];
             if (s.commandBufferCount == 0) {
                 continue; // semaphores only: no work to time
@@ -253,8 +258,7 @@ void destroyObjects(TimingDevice& d) {
 } // namespace
 
 bool enabled() {
-    static const bool on = readEnabled();
-    return on;
+    return mode() != gt::TimingMode::Off;
 }
 
 void onDeviceCreated(DeviceData& data,
@@ -294,9 +298,14 @@ void onDeviceCreated(DeviceData& data,
         bits += (bits.empty() ? "" : " ") + std::to_string(family.timestampValidBits);
     }
     d->periodNs = properties.limits.timestampPeriod;
+    d->everyFrame = mode() == gt::TimingMode::EveryFrame;
+    d->open.timed = d->everyFrame || gt::sampledFrame(1);
+    d->sampling.store(d->open.timed, std::memory_order_relaxed);
     if (isGame) {
-        EVR_LOG("gpu: GPU timing requested: timestamp period %.3f ns, valid bits per queue family [%s], "
+        EVR_LOG("gpu: GPU timing requested (%s): timestamp period %.3f ns, valid bits per queue family [%s], "
                 "compute and graphics %s",
+                d->everyFrame ? "every frame, ETERNALVR_GPU_TIMING=1"
+                              : "sampled, ETERNALVR_GPU_TIMING=sample; =1 times every frame",
                 static_cast<double>(d->periodNs), bits.c_str(),
                 properties.limits.timestampComputeAndGraphics ? "yes" : "no");
     }
@@ -307,9 +316,12 @@ void onDeviceCreated(DeviceData& data,
         if (f.createQueryPool(data.device, &info, nullptr, &d->pool) == VK_SUCCESS) {
             d->active = true;
             d->lastReport = Clock::now();
-            openCsv(*d);
-            EVR_LOG("gpu: GPU timing on: %u query pairs; every submit batch is bracketed with timestamps",
-                    kPairs);
+            if (d->everyFrame) {
+                openCsv(*d);
+            }
+            EVR_LOG(
+                "gpu: GPU timing on: %u query pairs; the submit batches of %s are bracketed with timestamps",
+                kPairs, d->everyFrame ? "every frame" : "the sampled frames");
         } else {
             EVR_LOG("gpu: vkCreateQueryPool failed; GPU timing off");
         }
@@ -368,6 +380,8 @@ void onPresent(VkQueue queue) {
     }
     d->lastPresent = now;
     d->closed.push_back(std::move(frame));
+    d->open.timed = d->everyFrame || gt::sampledFrame(d->presents + 1);
+    d->sampling.store(d->open.timed, std::memory_order_relaxed);
     t_closed = ClosedFrame{keyOf(queue), d->presents};
     resolveFrames(*d);
     reportIfDue(*d, now);
@@ -391,8 +405,8 @@ void tagEye(stereo_seq::Eye eye) {
 }
 
 void notePoseAge(double ms) {
-    if (!enabled()) {
-        return;
+    if (mode() != gt::TimingMode::EveryFrame) {
+        return; // only the full summary has it
     }
     std::shared_lock devicesLock(g_devicesMutex);
     for (auto& [key, d] : g_devices) {

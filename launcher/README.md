@@ -184,16 +184,18 @@ A launch, in order (`SessionRunner`):
    them); other keys the player changed stay. A key the plan keeps (`LaunchPlan.KeptKeys`, recorded in the
    snapshot's `KEPT_KEYS`) stays as the game saved it when the layer's status file confirms it
    (`ssr_follow=1`, `ssdo_follow=1`: the layer held it at the player's own game setting with per-eye TAA on;
-   `LayerStatusFile.FollowedKeys`) and no Extra game argument set it: `r_SSDO` and `r_SSR` in stereo with TAA or
-   DLSS (for `r_SSR` also Screen-space reflections at the game's setting), so a change made in the game's menu
-   during the session stays (logged as `restore: kept ...: r_SSR as the game saved it ("0"; absent before)`).
-   Without the confirmation (the player quit before a map, per-eye TAA failed closed, the game's setter was not
-   found, mono, an older layer) they are put back as before. Every other byte of the file is kept
-   as it was. Other files are compared and a change is logged with the snapshot kept. The Steam-Cloud
-   files (everything under `782330\remote\`, the profile and the save slots) are never written, not even
-   when the game removed one: that is logged and the game's state kept (T-115). Then the marker
-   is removed, only if it is still this session's. If a game process is still running at that point,
-   the restore waits for it.
+   `LayerStatusFile.Followed`), the game saved it at the value the layer held (`ssr_value=`, `ssdo_value=`; a
+   key the game left out counts as its default, 1 for both) and no Extra game argument set it: `r_SSDO` and
+   `r_SSR` in stereo with TAA or DLSS (for `r_SSR` also Screen-space reflections at the game's setting), so a
+   change made in the game's menu during the session stays (logged as `restore: kept ...: r_SSR as the game
+   saved it ("0"; absent before)`). Without the confirmation (the player quit before a map, per-eye TAA failed
+   closed, the game's setter was not found, mono, an older layer without the value) they are put back as
+   before, and so is a value saved before the follow (the game crashed after it; logged as `restore: not
+   kept, saved at another value than the layer held: ...`). Every other byte of the file is kept as it was.
+   Other files are compared and a change is logged with the snapshot kept. The Steam-Cloud files (everything
+   under `782330\remote\`, the profile and the save slots) are never written, not even when the game removed
+   one: that is logged and the game's state kept (T-115). Then the marker is removed, only if it is still
+   this session's. If a game process is still running at that point, the restore waits for it.
 
 If the launcher is closed or killed while the game runs, the marker stays and step 1 of the next start
 finishes the job. The marker, settings and restored configs are written through a flushed temporary

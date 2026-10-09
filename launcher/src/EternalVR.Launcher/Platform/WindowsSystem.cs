@@ -284,45 +284,7 @@ namespace EternalVR.Launcher.Platform
         }
 
         /// <summary>Implicit Vulkan and OpenXR layers registered in HKLM and HKCU, with their manifests read.</summary>
-        public static IReadOnlyList<InstalledLayer> ImplicitLayers()
-        {
-            var result = new List<InstalledLayer>();
-            void Collect(LayerApi api, RegistryHive hive, string key)
-            {
-                // A key this account may not read lists nothing (as ReadValue does), never a crash of the checks.
-                try { CollectFrom(api, hive, key); }
-                catch (System.Security.SecurityException) { }
-                catch (UnauthorizedAccessException) { }
-            }
-
-            void CollectFrom(LayerApi api, RegistryHive hive, string key)
-            {
-                using (var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64))
-                using (var k = baseKey.OpenSubKey(key, writable: false))
-                {
-                    if (k == null) return;
-                    foreach (var manifest in k.GetValueNames())
-                    {
-                        bool enabled = k.GetValue(manifest) is int v && v == 0;
-                        string text = null;
-                        try { if (File.Exists(manifest)) text = File.ReadAllText(manifest); }
-                        catch (IOException) { }
-                        catch (UnauthorizedAccessException) { }
-                        var scope = hive == RegistryHive.CurrentUser ? "HKCU" : "HKLM";
-                        // A manifest that cannot be read cannot be loaded either, so it counts as disabled.
-                        result.AddRange(text == null
-                            ? new[] { new InstalledLayer(api, manifest, manifest, scope, false, null, null) }
-                            : InstalledLayer.FromManifest(api, manifest, text, scope, enabled));
-                    }
-                }
-            }
-
-            Collect(LayerApi.Vulkan, RegistryHive.LocalMachine, @"SOFTWARE\Khronos\Vulkan\ImplicitLayers");
-            Collect(LayerApi.Vulkan, RegistryHive.CurrentUser, @"SOFTWARE\Khronos\Vulkan\ImplicitLayers");
-            Collect(LayerApi.OpenXR, RegistryHive.LocalMachine, @"SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit");
-            Collect(LayerApi.OpenXR, RegistryHive.CurrentUser, @"SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit");
-            return result;
-        }
+        public static IReadOnlyList<InstalledLayer> ImplicitLayers() => LayerInventory.Implicit(LayerRegistry.Manifests());
 
         /// <summary>The user's Saved Games folder (FOLDERID_SavedGames), else %USERPROFILE%\Saved Games.</summary>
         public static string SavedGamesFolder()

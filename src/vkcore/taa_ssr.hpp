@@ -15,7 +15,7 @@
 // needs the quality at 0 from the start: the launcher's command line sets
 // +r_raytracedReflectionsTemporalUpscaleQuality 0 (its default 1 would read as Medium or higher until the
 // profile's load). ETERNALVR_STEREO_SSR=off (the launcher's Screen-space reflections Off) holds 0 whatever
-// the setting. Every call comes from per-eye TAA's stereo tick, except ssrFollowed.
+// the setting. Every call comes from per-eye TAA's stereo tick, except ssrFollowedValue.
 
 namespace evr::vkcore {
 
@@ -30,8 +30,9 @@ const char* ssrHoldTick(int upscaleQuality);
 // Per-eye TAA failed closed after it started: r_SSR is no longer held (logged once).
 void ssrRelease();
 
-// The hold follows the game's Reflections setting and that setting has run: the r_SSR the game saves is the
-// player's own (the status file's ssr_follow, runtime_cvars.cpp).
-bool ssrFollowed();
+// The r_SSR held (0 or 1) while the hold follows the game's Reflections setting and that setting has run: the
+// r_SSR the game saves is then the player's own (the status file's ssr_follow and ssr_value,
+// runtime_cvars.cpp). -1 otherwise.
+int ssrFollowedValue();
 
 } // namespace evr::vkcore

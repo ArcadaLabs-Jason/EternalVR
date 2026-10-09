@@ -13,9 +13,15 @@ using evr::gpu_timing::BatchTimes;
 using evr::gpu_timing::FrameEye;
 using evr::gpu_timing::FrameGpu;
 using evr::gpu_timing::FrameSample;
+using evr::gpu_timing::kSampleEvery;
+using evr::gpu_timing::kSampleRun;
 using evr::gpu_timing::measureFrame;
 using evr::gpu_timing::parseEnabled;
+using evr::gpu_timing::parseMode;
+using evr::gpu_timing::sampledFrame;
+using evr::gpu_timing::sampledSummary;
 using evr::gpu_timing::summarize;
+using evr::gpu_timing::TimingMode;
 using evr::gpu_timing::TimingWindow;
 using evr::gpu_timing::validMask;
 
@@ -131,7 +137,7 @@ TEST_CASE("summaries format for the log") {
           "mean/p50/p95/p99/max 2.50/2.00/4.00/4.00/4.00 ms (n 4)");
 }
 
-TEST_CASE("GPU timing is on only for an explicit yes") {
+TEST_CASE("an explicit yes is 1, on or true") {
     CHECK(parseEnabled(L"1"));
     CHECK(parseEnabled(L"on"));
     CHECK(parseEnabled(L"true"));
@@ -189,4 +195,50 @@ TEST_CASE("untimed frames count for the CPU only, and clearing starts a new peri
     r = w.report();
     CHECK(r.frames == 1);
     CHECK(r.ticks == 0);
+}
+
+TEST_CASE("GPU timing is off unless ETERNALVR_GPU_TIMING asks for sampled or every frame") {
+    CHECK(parseMode(false, L"") == TimingMode::Off);
+    CHECK(parseMode(true, L"") == TimingMode::Off);
+    CHECK(parseMode(true, L"yes please") == TimingMode::Off);
+    CHECK(parseMode(true, L"0") == TimingMode::Off);
+    CHECK(parseMode(true, L"off") == TimingMode::Off);
+    CHECK(parseMode(true, L"false") == TimingMode::Off);
+    CHECK(parseMode(true, L"sample") == TimingMode::Sampled);
+    CHECK(parseMode(true, L"sampled") == TimingMode::Sampled);
+    CHECK(parseMode(true, L"1") == TimingMode::EveryFrame);
+    CHECK(parseMode(true, L"on") == TimingMode::EveryFrame);
+    CHECK(parseMode(true, L"true") == TimingMode::EveryFrame);
+}
+
+TEST_CASE("sampling takes the first three frames of every 45, so a run holds eye L then eye R") {
+    std::vector<std::uint64_t> sampled;
+    for (std::uint64_t frame = 0; frame <= 2 * kSampleEvery + 1; ++frame) {
+        if (sampledFrame(frame)) {
+            sampled.push_back(frame);
+        }
+    }
+    CHECK(kSampleRun == 3);
+    CHECK(sampled == std::vector<std::uint64_t>{1, 2, 3, 46, 47, 48, 91});
+    // Under Route S frames alternate eyes: three in a row always hold an eye L followed by its eye R.
+    TimingWindow w;
+    w.add(sample(46, FrameEye::Right, 5.0, 3.0));
+    w.add(sample(47, FrameEye::Left, 5.0, 4.0));
+    w.add(sample(48, FrameEye::Right, 5.0, 3.5));
+    CHECK(w.report().ticks == 1);
+}
+
+TEST_CASE("the sampled line gives each eye's and the tick's GPU busy average and longest") {
+    TimingWindow w;
+    CHECK(sampledSummary(w.report()) == "no frame timed");
+    w.add(sample(1, FrameEye::Left, 5.0, 4.0));
+    w.add(sample(2, FrameEye::Right, 6.0, 3.0));
+    w.add(sample(46, FrameEye::Left, 5.0, 6.0));
+    w.add(sample(47, FrameEye::Right, 6.0, 5.0));
+    CHECK(sampledSummary(w.report()) ==
+          "eye L GPU busy 5.00 ms average, 6.00 ms longest (n 2); eye R GPU busy 4.00 ms average, 5.00 ms "
+          "longest (n 2); stereo tick GPU busy 9.00 ms average, 11.00 ms longest (n 2)");
+    TimingWindow mono;
+    mono.add(sample(1, FrameEye::Mono, 8.0, 2.5));
+    CHECK(sampledSummary(mono.report()) == "mono GPU busy 2.50 ms average, 2.50 ms longest (n 1)");
 }

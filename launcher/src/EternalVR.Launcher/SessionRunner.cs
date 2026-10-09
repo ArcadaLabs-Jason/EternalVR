@@ -113,8 +113,9 @@ namespace EternalVR.Launcher
                     throw new IOException("the session marker names no complete snapshot: " + marker.SnapshotDir);
                 if (!string.Equals(snapshot, marker.SnapshotDir, StringComparison.OrdinalIgnoreCase))
                     Log.Warn("the session marker is damaged; restoring from " + snapshot);
-                // r_SSR and r_SSDO stay as the game saved them only when the layer said it held them at the player's own setting.
-                var report = SettingsSnapshot.Restore(snapshot, ctx.Data.RestoredKeys, FollowedKeys(marker.SessionId));
+                // r_SSR and r_SSDO stay as the game saved them only when the layer said it held them at the player's own setting,
+                // at the value the game saved.
+                var report = SettingsSnapshot.Restore(snapshot, ctx.Data.RestoredKeys, Followed(marker.SessionId));
                 foreach (var line in report.Lines) Log.Info("restore: " + line);
                 // Steam Cloud files (profile.bin changes every session) are the game's by design: their lines above are enough.
                 if (report.ChangedNotRestored.Count > 0)
@@ -324,14 +325,18 @@ namespace EternalVR.Launcher
             return restored;
         }
 
-        /// <summary>The cvars the session's layer status file names as held at the player's own setting; none when it cannot be read.</summary>
-        private IReadOnlyList<string> FollowedKeys(string sessionId)
+        /// <summary>
+        /// The cvars the session's layer status file names as held at the player's own setting, with the value held; none when it
+        /// cannot be read.
+        /// </summary>
+        private IReadOnlyDictionary<string, string> Followed(string sessionId)
         {
-            if (string.IsNullOrEmpty(sessionId)) return new string[0];
+            var none = new Dictionary<string, string>();
+            if (string.IsNullOrEmpty(sessionId)) return none;
             var file = Path.Combine(ctx.Paths.SessionLogDir(sessionId), LayerStatusFile.FileName);
-            try { return File.Exists(file) ? LayerStatusFile.Parse(File.ReadAllText(file)).FollowedKeys : new string[0]; }
-            catch (IOException) { return new string[0]; }
-            catch (UnauthorizedAccessException) { return new string[0]; }
+            try { return File.Exists(file) ? LayerStatusFile.Parse(File.ReadAllText(file)).Followed : none; }
+            catch (IOException) { return none; }
+            catch (UnauthorizedAccessException) { return none; }
         }
 
         /// <summary>The session's eye size against the plan from the layer's status file; null when it is not there.</summary>

@@ -83,6 +83,26 @@ ripTarget(const GameImage& image, const std::byte* dispAt, const std::byte* next
     return image.contains(target) ? target : nullptr;
 }
 
+bool matchesAt(const GameImage& image, const std::byte* at, const char* signature) {
+    auto pattern = resolver::Pattern::parse(signature);
+    return pattern && at && image.inText(at, pattern->size()) &&
+           pattern->matchesAt(image.text, static_cast<std::size_t>(at - image.text.data()));
+}
+
+const std::byte* branchTarget(const GameImage& image, const std::byte* at) {
+    if (!image.inText(at, 6)) {
+        return nullptr;
+    }
+    const auto opcode = std::to_integer<unsigned>(at[0]);
+    const std::byte* target = nullptr;
+    if (opcode == 0xE8 || opcode == 0xE9) {
+        target = at + 5 + readI32(at + 1);
+    } else if (opcode == 0x0F && (std::to_integer<unsigned>(at[1]) & 0xF0) == 0x80) {
+        target = at + 6 + readI32(at + 2);
+    }
+    return target && image.inText(target) ? target : nullptr;
+}
+
 std::string_view stringAt(const GameImage& image, const std::byte* p, std::size_t maxLength) {
     if (!image.contains(p)) {
         return {};

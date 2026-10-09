@@ -440,7 +440,7 @@ bool XrPresenter::Impl::acquireUiXrImage() {
     if (!uiAcquiredWaited) {
         XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
         wait.timeout = kSwapchainWaitTimeout;
-        if (xr.xrWaitSwapchainImage(uiSwapchain, &wait) != XR_SUCCESS) {
+        if (timedCall(inRuntime.waitImage, xr.xrWaitSwapchainImage, uiSwapchain, &wait) != XR_SUCCESS) {
             return false; // a timeout keeps the image acquired for the next frame (T-081)
         }
         uiAcquiredWaited = true;

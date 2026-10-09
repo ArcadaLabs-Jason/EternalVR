@@ -381,12 +381,14 @@ TEST_CASE("every frame stays within its device's motors and 0..100, and the coun
     CHECK(counted == frames);
 }
 
-TEST_CASE("a sync is a crystal, a Praetor token, a pickup or a glory kill by its entity's name") {
+TEST_CASE("a sync is a crystal, a Praetor token, a rune, a pickup or a glory kill by its entity's name") {
     using evr::bhaptics::SyncKind;
     using evr::bhaptics::syncKindOf;
     CHECK(syncKindOf("interact/argent_cell/use_sync") == SyncKind::Crystal);
     CHECK(syncKindOf("interact/argent_cell/use_sync_e3") == SyncKind::Crystal);
-    CHECK(syncKindOf("interact/rune/use_sync") == SyncKind::Pickup);
+    // A rune's, as a player's log has it (public issue #25, 0.1.33).
+    CHECK(syncKindOf("interact/rune/use_sync") == SyncKind::Rune);
+    CHECK(syncKindOf("interact/automap/automap_sync") == SyncKind::Pickup);
     // The token's name as the game spells it (traced on the rig, 2026-10-01), and spelt right.
     CHECK(syncKindOf("interact/preator_suit_token/preator_suit_token_sync") == SyncKind::Token);
     CHECK(syncKindOf("interact/praetor_suit_token/praetor_suit_token_sync") == SyncKind::Token);

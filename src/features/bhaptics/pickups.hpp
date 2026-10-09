@@ -10,9 +10,12 @@
 // - rises in the first kPickupSettleSeconds of the readings (the detector starting, after a gap in the
 //   readings, which is a load: loading screens run no game view) and after the player comes back from
 //   death; health and armor are set then;
-// - rises while dead, and rises from 0 or below (a respawn, an extra life).
+// - rises while dead, and health rising from 0 or below (a respawn). Armor rising from 0 is a pickup: armor
+//   runs out in most fights, and a player's log (public issue #25, 0.1.33) logged 20 armor rises from 0
+//   (the log's cap), none felt, with no death. Only while health is at 0 too, or its own gain started from
+//   0, is armor from 0 part of the respawn.
 // Gains under kMinPickup are float noise and not reported at all. A health gain of kMegaHealthGain or more
-// is a Mega Health. Pure.
+// is a Mega Health; an armor gain with a single step of more than kLargeArmorStep a large armor. Pure.
 //
 // PickupWave is the effect: a band of motors moving along the vest's rows, up for health, down for armor.
 
@@ -50,6 +53,12 @@ inline constexpr float kMinPickup = 1.0f;
 // A Mega Health gives 100 (less float rounding). Health above 100 alone is no sign of one: the Sentinel
 // Crystals' upgrades raise the maximum.
 inline constexpr float kMegaHealthGain = 99.5f;
+// The game's large armor (pickup/armor/large) and its Mega Armor are taken to give 50 or more, in one step
+// (not in a log yet). Players' logs show the other armor pickups one step each, +25 and +5, and the Flame
+// Belch's shards +2 at a time, up to about +25 merged into one gain. A step of more than this is a large
+// armor: a medium armor merged with a burst of shards adds up past 25 but never in one step, and a large
+// one capped by the maximum still counts while it gives more than a medium one could.
+inline constexpr float kLargeArmorStep = 26.0f;
 
 struct Pickup {
     PickupKind kind = PickupKind::Health;
@@ -58,7 +67,10 @@ struct Pickup {
     float to = 0.0f;          // the value after the last
     int steps = 0;            // readings that rose
     double spanSeconds = 0.0; // from the first rise to the last
-    bool mega = false;        // health only: amount of kMegaHealthGain or more
+    float biggestStep = 0.0f; // the biggest rise from one reading to the next
+    // The biggest kind: a Mega Health (health, an amount of kMegaHealthGain or more) or a large armor
+    // (armor, a step of more than kLargeArmorStep).
+    bool mega = false;
     PickupSkip skip = PickupSkip::None;
 };
 
@@ -89,11 +101,13 @@ private:
         double lastRise = 0.0;
     };
 
+    // `fromZeroSkips`: a rise from 0 or below is not felt (PickupSkip::FromZero).
     void step(Track& track,
               PickupKind kind,
               float value,
               double seconds,
               PickupSkip skip,
+              bool fromZeroSkips,
               std::vector<Pickup>& out);
 
     bool primed_ = false;
@@ -108,9 +122,9 @@ private:
 void addPickup(std::optional<Pickup>& pending, const Pickup& pickup);
 
 // The wave: one row of the vest after the other, each for kPickupRowSeconds (kMegaHealthSlower times that
-// for a Mega Health), the row just left at kPickupTrailShare of the band. Its intensity grows with the
-// amount, from kPickupLight plus kPickupPerPoint a point up to kPickupStrong; a Mega Health's is
-// kMegaHealthIntensity.
+// for a Mega Health or a large armor), the row just left at kPickupTrailShare of the band. Its intensity
+// grows with the amount, from kPickupLight plus kPickupPerPoint a point up to kPickupStrong; a Mega Health's
+// and a large armor's is kMegaHealthIntensity (full: the tester's ask in public issue #25).
 inline constexpr double kPickupRowSeconds = 0.05;
 inline constexpr double kMegaHealthSlower = 1.5;
 inline constexpr float kPickupLight = 20.0f;
@@ -125,7 +139,7 @@ float pickupIntensity(const Pickup& pickup);
 
 struct WaveStep {
     PickupKind kind = PickupKind::Health;
-    bool mega = false;
+    bool mega = false;      // a Mega Health or a large armor
     int row = 0;            // the band, row 0 at the top
     int trailRow = -1;      // the row it just left, or -1
     float intensity = 0.0f; // the band's, 0..100 before the strength

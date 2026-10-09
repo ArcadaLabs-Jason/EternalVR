@@ -68,6 +68,7 @@ void XrPresenter::Impl::pollEvents() {
             if (sessionState == XR_SESSION_STATE_READY) {
                 clock.wasFocused = false;
                 clock.watch.reset();
+                clock.gaps.restart();
             } else if (sessionState == XR_SESSION_STATE_FOCUSED) {
                 clock.wasFocused = true;
             }

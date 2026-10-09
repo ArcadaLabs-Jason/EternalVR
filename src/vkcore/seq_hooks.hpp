@@ -56,6 +56,11 @@ void seqMarkWanted();
 // flags) leave every render as the engine made it; with auto there is one in a tick that renders both eyes.
 stereo_seq::Eye seqChainEye();
 
+// The chain eye (as seqChainEye) of the frame-end job that started last. Work a frame-end job hands to the
+// job system, such as the GPU particle step (fx_gpu_stages.hpp), can run after the chain has moved on (eye
+// L's during eye R's render): until the next frame-end job starts, it belongs to this eye's render.
+stereo_seq::Eye seqFrameEndEye();
+
 // The eye the running render draws: seqChainEye() under Route S; with alternate eyes the eye the engine's own
 // chain draws in this render frame (Left, then Right in the next one; stereo_seq::EyeAlternator).
 stereo_seq::Eye seqRenderEye();

@@ -100,6 +100,10 @@ them is worse for you than described here.
   switches size a few seconds in; on graphics cards
   with 12 GB or less that switch can fail with "Failed to allocate video memory". Launch again with the
   headset connected.
+- **Smoke, sparks, blood and other sprite effects are one frame behind in the left eye.** The left eye
+  draws them as they were a frame earlier than the right eye; the scenery is not affected.
+  0.1.34 fixed this, but the fix drew snow and some ice effects in the right eye as tiles in one mission, so
+  0.1.35 turns it off until that is solved. `ETERNALVR_STEREO_FX_SYNC=1` turns it back on.
 - **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
@@ -140,6 +144,9 @@ them is worse for you than described here.
 - **Shadows can pop in** on some walls as you turn your head.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
+- **Particles in ray-traced reflections.** With the game's ray tracing on, smoke, sparks and other particles
+  may be missing from the right eye's reflections while the left eye shows them. This has not been checked
+  yet.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.

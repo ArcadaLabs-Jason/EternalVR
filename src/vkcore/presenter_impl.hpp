@@ -185,8 +185,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t xrRepeats = 0;
     std::uint64_t xrBusyRepeats = 0, xrNewestWaits = 0, xrNewestTaken = 0; // no image, waits, newest
     WaitStats copyWait, newestWait; // the worker's waits: its D3D12 copy, the newest image's frame
-    std::uint64_t xrProjectionFrames = 0;
-    std::uint64_t xrQuadFrames = 0;
+    RuntimeCallTimes inRuntime;     // the worker's time inside xrWaitFrame and the like (presenter_types.hpp)
+    std::uint64_t xrProjectionFrames = 0, xrQuadFrames = 0;
     ViewRecord shownView; // the view of the image in the XR swapchain
     bool shownHasView = false;
     bool fovChecked = false;

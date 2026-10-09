@@ -50,4 +50,14 @@ bool parseEnabled(std::wstring_view value) {
     return value == L"1" || value == L"on" || value == L"true";
 }
 
+TimingMode parseMode(bool set, std::wstring_view value) {
+    if (set && parseEnabled(value)) {
+        return TimingMode::EveryFrame;
+    }
+    if (set && (value == L"sample" || value == L"sampled")) {
+        return TimingMode::Sampled;
+    }
+    return TimingMode::Off;
+}
+
 } // namespace evr::gpu_timing

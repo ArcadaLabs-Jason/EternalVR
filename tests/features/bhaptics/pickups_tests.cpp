@@ -176,7 +176,138 @@ TEST_CASE("armor going up") {
     CHECK(felt[0].kind == PickupKind::Armor);
     CHECK(felt[0].amount == doctest::Approx(5.0f));
     CHECK(felt[1].amount == doctest::Approx(50.0f));
-    CHECK_FALSE(felt[1].mega); // only health has one
+    CHECK(felt[1].mega); // a large armor
+}
+
+TEST_CASE("a large armor is a step of 50, a medium one or a burst of shards is not") {
+    Player p;
+    p.settle();
+    p.armor = 45.0f; // the medium armor, one step
+    p.run(0.5);
+    // The Flame Belch's shards: +2 a few frames apart, merged into one gain.
+    for (int i = 0; i < 12; ++i) {
+        p.armor += 2.0f;
+        p.run(0.03);
+    }
+    p.run(0.5);
+    p.armor += 50.0f;
+    p.run(0.5);
+    // Health gains of the same size are no Mega Health.
+    p.health += 50.0f;
+    p.run(0.5);
+    const auto felt = p.felt();
+    REQUIRE(felt.size() == 4);
+    CHECK(felt[0].amount == doctest::Approx(25.0f));
+    CHECK_FALSE(felt[0].mega);
+    CHECK(felt[1].amount == doctest::Approx(24.0f));
+    CHECK_FALSE(felt[1].mega);
+    CHECK(felt[2].amount == doctest::Approx(50.0f));
+    CHECK(felt[2].biggestStep == doctest::Approx(50.0f));
+    CHECK(felt[2].mega);
+    CHECK(felt[3].kind == PickupKind::Health);
+    CHECK_FALSE(felt[3].mega);
+}
+
+TEST_CASE("a medium armor inside a burst of shards is not a large armor, a capped large one is") {
+    Player p;
+    p.settle();
+    // The Flame Belch's shards, a medium armor among them, then more shards: one gain past 50.
+    for (int i = 0; i < 4; ++i) {
+        p.armor += 2.0f;
+        p.run(0.03);
+    }
+    p.armor += 25.0f;
+    p.run(0.03);
+    for (int i = 0; i < 6; ++i) {
+        p.armor += 2.0f;
+        p.run(0.03);
+    }
+    p.run(0.5);
+    // A large armor with the maximum near: it gives only 30.
+    p.armor += 30.0f;
+    p.run(0.5);
+    const auto felt = p.felt();
+    REQUIRE(felt.size() == 2);
+    CHECK(felt[0].amount == doctest::Approx(45.0f));
+    CHECK(felt[0].steps == 11);
+    CHECK(felt[0].biggestStep == doctest::Approx(25.0f));
+    CHECK_FALSE(felt[0].mega);
+    CHECK(felt[1].amount == doctest::Approx(30.0f));
+    CHECK(felt[1].mega);
+    // A burst that adds up past 50 on its own is no large armor either.
+    Player q;
+    q.settle();
+    for (int i = 0; i < 13; ++i) {
+        q.armor += 4.0f;
+        q.run(0.02);
+    }
+    q.run(0.5);
+    REQUIRE(q.felt().size() == 1);
+    CHECK(q.felt()[0].amount == doctest::Approx(52.0f));
+    CHECK_FALSE(q.felt()[0].mega);
+}
+
+TEST_CASE("armor picked up from 0 is felt") {
+    // As in a player's log (public issue #25): armor at 0 after a fight, then an armor pickup and shards.
+    Player p;
+    p.settle();
+    p.armor = 0.0f; // a hit took it all
+    p.health = 40.0f;
+    p.run(0.5);
+    p.armor = 25.0f;
+    p.run(0.5);
+    p.armor = 0.0f;
+    p.run(0.5);
+    p.armor = 2.0f;
+    p.frame();
+    p.armor = 4.0f;
+    p.run(0.5);
+    const auto felt = p.felt();
+    REQUIRE(felt.size() == 2);
+    CHECK(felt[0].kind == PickupKind::Armor);
+    CHECK(felt[0].from == doctest::Approx(0.0f));
+    CHECK(felt[0].amount == doctest::Approx(25.0f));
+    CHECK(felt[1].amount == doctest::Approx(4.0f));
+    CHECK(p.gains.size() == 2);
+}
+
+TEST_CASE("armor from 0 with health back from 0 is a respawn or an extra life") {
+    // In the same frame as health.
+    Player p;
+    p.settle();
+    p.health = 0.0f;
+    p.armor = 0.0f;
+    p.run(0.3);
+    p.health = 100.0f;
+    p.armor = 50.0f;
+    p.run(0.5);
+    CHECK(p.felt().empty());
+    REQUIRE(p.gains.size() == 2);
+    CHECK(p.gains[0].skip == PickupSkip::FromZero);
+    CHECK(p.gains[1].skip == PickupSkip::FromZero);
+    // A few frames after it, while health's gain from 0 is still open.
+    Player q;
+    q.settle();
+    q.health = 0.0f;
+    q.armor = 0.0f;
+    q.run(0.3);
+    q.health = 100.0f;
+    q.frame();
+    q.frame();
+    q.armor = 50.0f;
+    q.run(0.5);
+    CHECK(q.felt().empty());
+    // While health still reads 0.
+    Player r;
+    r.settle();
+    r.health = 0.0f;
+    r.armor = 0.0f;
+    r.run(0.3);
+    r.armor = 50.0f;
+    r.frame();
+    r.health = 100.0f;
+    r.run(0.5);
+    CHECK(r.felt().empty());
 }
 
 TEST_CASE("health and armor at once are two gains") {
@@ -293,10 +424,12 @@ TEST_CASE("gains not yet taken add up") {
     b.from = 55.0f;
     b.to = 155.0f;
     b.mega = true;
+    b.biggestStep = 100.0f;
     addPickup(pending, b);
     CHECK(pending->amount == doctest::Approx(105.0f));
     CHECK(pending->from == doctest::Approx(50.0f));
     CHECK(pending->to == doctest::Approx(155.0f));
     CHECK(pending->steps == 2);
+    CHECK(pending->biggestStep == doctest::Approx(100.0f));
     CHECK(pending->mega);
 }

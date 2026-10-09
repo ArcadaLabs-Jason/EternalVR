@@ -8,6 +8,8 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace evr::stereo_seq {
 
@@ -51,5 +53,11 @@ private:
 // The r_SSDO to hold: the game's Directional Occlusion setting's value once it ran (`menuChoice` 0 or 1, -1
 // before), else `held` (ETERNALVR_STEREO_SSDO's).
 std::string_view ssdoHoldValue(std::string_view held, int menuChoice);
+
+// The status file's lines for one of these holds (vkcore/status_file.hpp), `name` "ssr" or "ssdo", when
+// `value` is not `reported` (the last one written): with 0 or 1 (held at the player's own setting, at that
+// value) <name>_value=<value> then <name>_follow=1; with -1 <name>_follow=0 alone. The value comes first, so
+// a file read between the two writes never pairs a new follow with an old value. Empty when unchanged.
+std::vector<std::pair<std::string, std::string>> followFields(std::string_view name, int value, int reported);
 
 } // namespace evr::stereo_seq

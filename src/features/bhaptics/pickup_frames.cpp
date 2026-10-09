@@ -56,7 +56,7 @@ void BodyHaptics::pickups(std::vector<Frame>& out, const BodySignals& signals) {
         }
         Effect effect = step->mega ? Effect::MegaHealth : Effect::Health;
         if (step->kind == PickupKind::Armor) {
-            effect = Effect::Armor;
+            effect = step->mega ? Effect::LargeArmor : Effect::Armor;
         }
         for (const Device side : {Device::VestFront, Device::VestBack}) {
             std::vector<Dot> dots;

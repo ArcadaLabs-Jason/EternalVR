@@ -185,12 +185,6 @@ bool hookAt(const GameImage& image, const char* name, const std::byte* at, MidHo
     return true;
 }
 
-bool matchesAt(const GameImage& image, const std::byte* at, const char* signature) {
-    auto pattern = resolver::Pattern::parse(signature);
-    return pattern && image.inText(at) &&
-           pattern->matchesAt(image.text, static_cast<std::size_t>(at - image.text.data()));
-}
-
 bool vtableIs(const GameImage& image, const std::byte* dispAt, std::string_view expected) {
     const std::byte* vtable = ripTarget(image, dispAt, dispAt + 4);
     return vtable && rttiName(image, vtable) == expected;

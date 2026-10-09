@@ -29,10 +29,18 @@ enum class FxSyncMode {
 // e1m3 (a player's headset captures), which the storm deck A/B never showed.
 FxSyncMode fxSyncMode(std::string_view value);
 
+// ETERNALVR_STEREO_FX_SYNC_GPU: "0"/"off"/"false"/"no" leave the particle systems with GPU particles to eye L
+// like every other (0.1.34, for A/B); anything else (or unset) has eye R bind their GPU particle stages and
+// generate them itself (fxGenerationFor).
+bool fxGpuStages(std::string_view value);
+
 enum class FxAction {
     Run,        // the engine's code
     RunCounted, // the engine's code, counted as one On would change (Count)
     UseEyeL,    // eye R: the ring stays where eye L left it (its previous slot reopened), no generation
+    // Eye R, a particle system eye L generated that has GPU particles: the GPU particle stages' part of the
+    // bind, then the engine's generation (fxGenerationFor only).
+    BindGpuThenRun,
 };
 
 // The render's answer, the same at every site (the ring's advance, the light pool's reset, the particle and
@@ -53,7 +61,13 @@ FxAction fxPoolResetFor(std::optional<FxAction> ringAdvance);
 // R's render advanced the ring, so one below it. Any other model (one eye L did not have in its list) runs
 // the engine's code: eye R binds it when it was generated the render before (adding its lights after eye L's)
 // and generates it, and eye L's next render binds that.
-FxAction fxGenerationFor(FxAction render, std::uint32_t stamp, std::uint32_t ringFrame);
+//
+// `gpuStaged`: a particle system with a GPU particle instance, handled (fxGpuStages; effects have none). The
+// GPU particle manager's draw lists and emitter records are reset every render, eye R's included, and only
+// the bind and the generation fill them, so with the ring kept eye R binds its GPU stages and generates it
+// itself (BindGpuThenRun) while eye L's binding of its CPU stages stays; counting, it is counted like the
+// rest (RunCounted).
+FxAction fxGenerationFor(FxAction render, std::uint32_t stamp, std::uint32_t ringFrame, bool gpuStaged);
 
 // The ring's previous slot from its current index, as the engine computes it (0x18E7928, 0x1A0F580):
 // (index + 2) % 3.

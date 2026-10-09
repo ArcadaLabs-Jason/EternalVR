@@ -15,6 +15,11 @@ namespace EternalVR.Launcher.Core.Safety
         /// <summary>Keys the session changed that are left as the game saved them (the player's own setting, followed in VR).</summary>
         public List<string> Kept { get; } = new List<string>();
         /// <summary>
+        /// Keys the layer followed that the game saved at another value than the one held (a config last saved before the
+        /// follow, as after a crash): put back like the forced keys.
+        /// </summary>
+        public List<string> NotKept { get; } = new List<string>();
+        /// <summary>
         /// Local files outside the key-level restore that changed during the session (<c>user\config.json</c>): kept
         /// as the game left them, the snapshot holding the old copy. Worth a warning: nothing else puts them back.
         /// </summary>
@@ -28,6 +33,7 @@ namespace EternalVR.Launcher.Core.Safety
         public IEnumerable<string> Lines =>
             Restored.Select(r => "restored " + r)
                 .Concat(Kept.Select(k => "kept " + k))
+                .Concat(NotKept.Select(k => "not kept, saved at another value than the layer held: " + k))
                 .Concat(ChangedNotRestored.Select(c => "changed, left as is (snapshot kept): " + c))
                 .Concat(ChangedInCloud.Select(c => "changed, Steam Cloud file kept as the game left it: " + c))
                 .Concat(Unchanged.Select(u => "unchanged " + u));
@@ -142,18 +148,22 @@ namespace EternalVR.Launcher.Core.Safety
         /// <summary>
         /// Restores the forced keys (see the class summary). A file being rewritten is first kept in
         /// <c>replaced\</c> inside the snapshot. Throws on a corrupt snapshot; the caller keeps the marker.
-        /// A key recorded as kept (<see cref="KeptKeysOf"/>) is left as the game saved it only when <paramref name="followedKeys"/>
+        /// A key recorded as kept (<see cref="KeptKeysOf"/>) is left as the game saved it only when <paramref name="followed"/>
         /// names it too (the layer's status file said the session held it at the player's own setting,
-        /// <see cref="Launch.LayerStatusFile.FollowedKeys"/>) and no Extra game argument set it; otherwise it is put back.
+        /// <see cref="Launch.LayerStatusFile.Followed"/>), the game saved it at the value held there, and no Extra game argument
+        /// set it; otherwise it is put back. A config last saved before the follow (the game crashed after it) still has a
+        /// launch or knock-on value, which the value check puts back. A key the game left out of the config counts as saved at
+        /// its default (<see cref="FollowedDefaults"/>).
         /// </summary>
-        public static RestoreReport Restore(string snapshotDir, IEnumerable<string> forcedKeys, IEnumerable<string> followedKeys = null)
+        public static RestoreReport Restore(string snapshotDir, IEnumerable<string> forcedKeys, IReadOnlyDictionary<string, string> followed = null)
         {
             var session = SessionKeysOf(snapshotDir);
-            var followed = (followedKeys ?? Enumerable.Empty<string>()).ToList();
-            var kept = KeptKeysOf(snapshotDir)
-                .Where(k => followed.Contains(k, StringComparer.OrdinalIgnoreCase) && !session.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
+            var held = (followed ?? new Dictionary<string, string>()).ToDictionary(f => f.Key, f => f.Value, StringComparer.OrdinalIgnoreCase);
+            var kept = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var k in KeptKeysOf(snapshotDir))
+                if (!session.Contains(k, StringComparer.OrdinalIgnoreCase) && held.TryGetValue(k, out var value)) kept[k] = value;
             var keys = forcedKeys.Concat(session).Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(k => !kept.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
+                .Where(k => !kept.ContainsKey(k)).ToList();
             var report = new RestoreReport();
             foreach (var entry in ReadVerified(snapshotDir))
             {
@@ -206,8 +216,8 @@ namespace EternalVR.Launcher.Core.Safety
         /// A config the game created during the session: for a text config every forced key is taken out
         /// (none was set before, as the file did not exist); any other file is reported and left.
         /// </summary>
-        private static void RestoreCreatedFile(string snapshotDir, SnapshotEntry entry, string live, string label, List<string> keys, List<string> kept,
-                                               RestoreReport report)
+        private static void RestoreCreatedFile(string snapshotDir, SnapshotEntry entry, string live, string label, List<string> keys,
+                                               Dictionary<string, string> kept, RestoreReport report)
         {
             if (entry.Location.Kind == SettingsLocationKind.SteamRemote)
             {
@@ -223,14 +233,22 @@ namespace EternalVR.Launcher.Core.Safety
         }
 
         private static void RestoreKeys(string snapshotDir, SnapshotEntry entry, string live, string label, CvarConfig before,
-                                        List<string> keys, List<string> kept, RestoreReport report, string unchangedNote)
+                                        List<string> keys, Dictionary<string, string> kept, RestoreReport report, string unchangedNote)
         {
             var current = CvarConfig.ParseBytes(File.ReadAllBytes(live), out var bom);
+            // A kept key stays only at the value the layer held: any other was saved before the follow, and is put back.
+            var keptHere = kept.Where(k => SavedValue(current, k.Key) == k.Value).Select(k => k.Key).ToList();
+            foreach (var k in kept.Keys.Except(keptHere, StringComparer.OrdinalIgnoreCase))
+            {
+                bool has = current.TryGet(k, out var saved);
+                if (has || before.TryGet(k, out _))
+                    report.NotKept.Add(label + ": " + k + " (" + (has ? "\"" + saved + "\"" : "absent") + " saved, \"" + kept[k] + "\" held)");
+            }
             // What putting the kept keys back would have changed, said in the log (applied to a copy only).
-            foreach (var k in ForcedKeyRestore.Apply(before, CvarConfig.ParseBytes(File.ReadAllBytes(live), out _), kept))
+            foreach (var k in ForcedKeyRestore.Apply(before, CvarConfig.ParseBytes(File.ReadAllBytes(live), out _), keptHere))
                 report.Kept.Add(label + ": " + k.Key + " as the game saved it (" + (k.SessionValue == null ? "removed" : "\"" + k.SessionValue + "\"")
                     + "; " + (k.RestoredValue == null ? "absent" : "\"" + k.RestoredValue + "\"") + " before)");
-            var changes = ForcedKeyRestore.Apply(before, current, keys);
+            var changes = ForcedKeyRestore.Apply(before, current, keys.Concat(kept.Keys.Except(keptHere, StringComparer.OrdinalIgnoreCase)));
             if (changes.Count == 0)
             {
                 report.Unchanged.Add(label + " (" + unchangedNote + ")");
@@ -241,6 +259,20 @@ namespace EternalVR.Launcher.Core.Safety
             FileUtil.WriteAllBytesAtomic(live, current.ToBytes(bom));
             report.Restored.Add(label + ": " + string.Join("; ", changes.Select(c => c.ToString())));
         }
+
+        /// <summary>
+        /// The defaults of the keys the layer follows: the game leaves a cvar at its default out of the config, so a followed key it
+        /// did not save was saved at this value.
+        /// </summary>
+        private static readonly Dictionary<string, string> FollowedDefaults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["r_SSR"] = "1",
+            ["r_SSDO"] = "1",
+        };
+
+        /// <summary>The value <paramref name="config"/> saved for <paramref name="key"/>, its default when left out; null when unknown.</summary>
+        private static string SavedValue(CvarConfig config, string key) =>
+            config.TryGet(key, out var saved) ? saved : FollowedDefaults.TryGetValue(key, out var fallback) ? fallback : null;
 
         /// <summary>The keys recorded with the snapshot for its own session (<see cref="Take"/>); empty when none were.</summary>
         public static IReadOnlyList<string> SessionKeysOf(string snapshotDir) => KeysIn(Path.Combine(snapshotDir, KeysFile));

@@ -23,6 +23,8 @@
 // - Praetor Suit token: its pickup animation (no menu: the Slayer's hands take the coin and hold it up) plays
 //   the crystal's wave from kTokenDelaySeconds into it, as the hands close on the coin (a tester's idea,
 //   public issue #1; crystalWaveDelay);
+// - rune: its pickup animation (after the rune's menu, as for a crystal: the Slayer takes the rune's charge)
+//   plays the crystal's wave from kRuneDelaySeconds into it (a tester's ask, public issue #25);
 // - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
 //   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
 //   lighter and shorter (a tester's suggestion, public issue #1);
@@ -108,6 +110,7 @@ enum class Effect : std::uint8_t {
     Health,
     MegaHealth,
     Armor,
+    LargeArmor,
     Launch,
     Count,
 };
@@ -148,15 +151,17 @@ inline constexpr float kLandingDrop = 3.5f;
 
 // What a sync (the player's sync master set) is, from its sync entity's entityDef name: a Sentinel Crystal's
 // pickup (interact/argent_cell/use_sync), a Praetor Suit token's (the game spells it
-// interact/preator_suit_token/preator_suit_token_sync), another pickup (interact/...: runes, mod bots,
-// batteries), or anything else, taken for a glory kill (as before, also when the name could not be read).
-enum class SyncKind : std::uint8_t { GloryKill, Pickup, Crystal, Token };
+// interact/preator_suit_token/preator_suit_token_sync), a rune's (interact/rune/use_sync), another pickup
+// (interact/...: mod bots, the automap, batteries), or anything else, taken for a glory kill (as before,
+// also when the name could not be read).
+enum class SyncKind : std::uint8_t { GloryKill, Pickup, Crystal, Token, Rune };
 
 SyncKind syncKindOf(std::string_view entityDefName);
 const char* syncKindName(SyncKind kind);
 
 // How far into a sync of `kind` the crystal's wave starts: kCrystalDelaySeconds for a Sentinel Crystal,
-// kTokenDelaySeconds for a Praetor token, none for the other kinds (crystal.cpp).
+// kTokenDelaySeconds for a Praetor token, kRuneDelaySeconds for a rune, none for the other kinds
+// (crystal.cpp).
 std::optional<double> crystalWaveDelay(SyncKind kind);
 
 // What a trigger teleport of the player is (idTrigger_Teleporter, and its _Fade kind that fades out first):

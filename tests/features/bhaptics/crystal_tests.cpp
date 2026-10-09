@@ -20,6 +20,7 @@ using evr::bhaptics::Frame;
 using evr::bhaptics::kCrystalDelaySeconds;
 using evr::bhaptics::kCrystalSleeveDistance;
 using evr::bhaptics::kCrystalWaveSeconds;
+using evr::bhaptics::kRuneDelaySeconds;
 using evr::bhaptics::kTokenDelaySeconds;
 using evr::bhaptics::kVestColumns;
 using evr::bhaptics::SyncKind;
@@ -303,11 +304,17 @@ TEST_CASE("the crystal's wave comes after its upgrade menu, timed from the sync'
     CHECK(run(4.0 + kCrystalDelaySeconds + kCrystalWaveSeconds + 0.1).times.empty());
 }
 
-TEST_CASE("the crystal's wave plays for a Sentinel Crystal and a Praetor token, each with its own delay") {
+TEST_CASE(
+    "the crystal's wave plays for a Sentinel Crystal, a Praetor token and a rune, each with its delay") {
     REQUIRE(crystalWaveDelay(SyncKind::Crystal).has_value());
     CHECK(*crystalWaveDelay(SyncKind::Crystal) == kCrystalDelaySeconds);
     REQUIRE(crystalWaveDelay(SyncKind::Token).has_value());
     CHECK(*crystalWaveDelay(SyncKind::Token) == kTokenDelaySeconds);
+    REQUIRE(crystalWaveDelay(SyncKind::Rune).has_value());
+    CHECK(*crystalWaveDelay(SyncKind::Rune) == kRuneDelaySeconds);
+    // The tester feels for it right after the perk is picked; the rune's animation runs about 7.6 s.
+    CHECK(kRuneDelaySeconds > 0.0);
+    CHECK(kRuneDelaySeconds + kCrystalWaveSeconds < 7.6);
     CHECK_FALSE(crystalWaveDelay(SyncKind::Pickup).has_value());
     CHECK_FALSE(crystalWaveDelay(SyncKind::GloryKill).has_value());
     // The hands close on the coin right after Use; the crystal is taken much later.
@@ -378,4 +385,44 @@ TEST_CASE("a Praetor token's wave plays once per pickup, and a crystal right aft
     }
     CHECK(firstCrystal >= 6.0 + kCrystalDelaySeconds - 1e-9);
     CHECK(firstCrystal < 6.0 + kCrystalDelaySeconds + 0.03);
+}
+
+TEST_CASE("a rune's pickup plays the crystal's wave after its menu, timed from the sync's start") {
+    // As in a player's log (public issue #25): the rune's menu is up, its sync starts as the menu closes and
+    // play is back a frame or so later.
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto menu = playing(1.1);
+    menu.gameplay = false;
+    body.update(menu);
+    auto s = crystalSync(4.0, SyncKind::Rune);
+    s.gameplay = false;
+    CHECK(body.update(s).empty());
+    s.gameplay = true;
+    const double start = 4.0 + kRuneDelaySeconds;
+    std::vector<double> times;
+    std::vector<Frame> first;
+    // The animation runs about 7.6 s; nothing after the wave.
+    for (double t = 4.1; t < 4.0 + 7.6; t += 0.02) {
+        s.seconds = t;
+        const auto frames = body.update(s);
+        CHECK(of(frames, Effect::GloryKill).empty());
+        const auto wave = of(frames, Effect::Crystal);
+        if (!wave.empty()) {
+            if (times.empty()) {
+                for (const Frame* f : wave) {
+                    first.push_back(*f);
+                }
+            }
+            times.push_back(t);
+        }
+    }
+    REQUIRE(times.size() >= 22);
+    CHECK(times.size() <= 26);
+    CHECK(times.front() >= start - 1e-9);
+    CHECK(times.front() < start + 0.03);
+    CHECK(times.back() < start + kCrystalWaveSeconds);
+    REQUIRE(on(first, Device::VestFront) != nullptr);
+    REQUIRE(on(first, Device::VestBack) != nullptr);
+    CHECK(hasCentre(*on(first, Device::VestFront)));
 }

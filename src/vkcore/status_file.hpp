@@ -26,9 +26,13 @@
 // And in Route S, written when they change (runtime_cvars.cpp):
 //
 //   ssr_follow=1                    r_SSR is held at the game's own Reflections setting with per-eye TAA on
+//   ssr_value=0                     ... the r_SSR held then, written before ssr_follow=1
 //   ssdo_follow=1                   r_SSDO is held at the game's own Directional Occlusion setting, the same
+//   ssdo_value=1                    ... the r_SSDO held then
 //
-// 0 otherwise. The launcher's settings restore keeps the r_SSR or r_SSDO the game saved only after 1.
+// 0 otherwise. The launcher's settings restore keeps the r_SSR or r_SSDO the game saved only after 1, and
+// only when the game saved the value held (a config last saved before the follow, as after a crash, is put
+// back).
 
 #include <string>
 

@@ -48,6 +48,17 @@ std::optional<ClockStall> FrameClockWatch::onFrame(std::int64_t displayTimeNs,
     return std::nullopt;
 }
 
+void FrameGaps::onFrame(std::int64_t displayTimeNs, std::int64_t periodNs) {
+    if (lastDisplayTime_ && displayTimeNs > *lastDisplayTime_) {
+        const std::int64_t interval = displayTimeNs - *lastDisplayTime_;
+        longestNs_ = std::max(longestNs_, interval);
+        if (periodNs > 0 && static_cast<double>(interval) > kGapPeriods * static_cast<double>(periodNs)) {
+            ++gaps_;
+        }
+    }
+    lastDisplayTime_ = displayTimeNs;
+}
+
 std::uint32_t copyWaitMs(std::int64_t periodNs) {
     const double periodMs = periodNs > 0 ? static_cast<double>(periodNs) / 1e6 : 1000.0 / 72.0;
     const double ms = std::ceil(kCopyWaitPeriods * periodMs);

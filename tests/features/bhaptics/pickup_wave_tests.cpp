@@ -54,7 +54,8 @@ std::vector<Played> play(BodyHaptics& body,
             (pickup.kind == PickupKind::Armor ? s.armorGain : s.healthGain) = pickup;
         }
         for (const Frame& f : body.update(s)) {
-            if (f.effect == Effect::Health || f.effect == Effect::MegaHealth || f.effect == Effect::Armor) {
+            if (f.effect == Effect::Health || f.effect == Effect::MegaHealth || f.effect == Effect::Armor ||
+                f.effect == Effect::LargeArmor) {
                 out.push_back({s.seconds, f});
             }
         }
@@ -158,6 +159,30 @@ TEST_CASE("a bigger gain is stronger, up to a limit") {
         halfBest = std::max(halfBest, strongest(p.frame));
     }
     CHECK(halfBest == 50);
+}
+
+TEST_CASE("a large armor goes down the vest at full strength, slower") {
+    BodyHaptics a;
+    BodyHaptics b;
+    const auto medium = play(a, gain(PickupKind::Armor, 25.0f));
+    const auto large = play(b, gain(PickupKind::Armor, 50.0f, true));
+    REQUIRE_FALSE(medium.empty());
+    REQUIRE_FALSE(large.empty());
+    CHECK(rowsOn(large, Device::VestFront) == std::vector<int>{0, 1, 2, 3, 4});
+    CHECK(rowsOn(large, Device::VestBack) == std::vector<int>{0, 1, 2, 3, 4});
+    int best = 0;
+    for (const Played& p : large) {
+        CHECK(p.frame.effect == Effect::LargeArmor);
+        best = std::max(best, strongest(p.frame));
+    }
+    CHECK(best == 100);
+    int mediumBest = 0;
+    for (const Played& p : medium) {
+        CHECK(p.frame.effect == Effect::Armor);
+        mediumBest = std::max(mediumBest, strongest(p.frame));
+    }
+    CHECK(mediumBest < best);
+    CHECK(large.back().seconds - 5.0 > (medium.back().seconds - 5.0) * 1.3);
 }
 
 TEST_CASE("a Mega Health's wave is slower") {

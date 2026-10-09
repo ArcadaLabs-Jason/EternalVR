@@ -102,8 +102,11 @@ void resolveFrames(TimingDevice& d) {
             d.closed.pop_front();
             continue;
         }
-        d.window.add(sample);
-        writeRow(d, sample, f.untimed);
+        // A frame between samples holds only batches a present raced (timed, so their pairs are read back).
+        if (f.timed) {
+            d.window.add(sample);
+            writeRow(d, sample, f.untimed);
+        }
         d.counters.timedBatches += f.batches.size();
         d.closed.pop_front();
     }
@@ -121,6 +124,16 @@ void reportIfDue(TimingDevice& d, Clock::time_point now) {
     const gt::TimingWindow::Report r = d.window.report();
     const Counters& c = d.counters;
     const Counters& l = d.reported;
+    if (!d.everyFrame) {
+        EVR_LOG("gpu: last %.1f s, %llu of every %llu frames timed: %s; %llu frame(s) lost", seconds,
+                static_cast<unsigned long long>(gt::kSampleRun),
+                static_cast<unsigned long long>(gt::kSampleEvery), gt::sampledSummary(r).c_str(),
+                delta(c.lostFrames, l.lostFrames));
+        d.window.clear();
+        d.reported = d.counters;
+        d.lastReport = now;
+        return;
+    }
     EVR_LOG("gpu: last %.1f s: %llu frame(s) measured, %llu stereo tick(s); %llu batch(es) timed, untimed "
             "%llu (ring full) / %llu (device group or protected) / %llu (no timestamps) / %llu (frame "
             "cap); %llu frame(s) lost; %u of %u query pairs in use",

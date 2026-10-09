@@ -83,6 +83,7 @@ add_library(evr_layer SHARED
     mirror_place.cpp
     keep_prev_hooks.cpp
     geomcache_prev_hooks.cpp
+    fx_gpu_stages.cpp
     fx_sync_hooks.cpp
     motion_capture.cpp
     moved_flag_hooks.cpp

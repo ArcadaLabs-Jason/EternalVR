@@ -76,7 +76,7 @@ namespace EternalVR.Launcher.Core.Launch
         /// Keys of the settings restore that this session may leave as the game saves them (recorded with the snapshot,
         /// <see cref="Safety.SettingsSnapshot.Take"/>): <c>r_SSDO</c> and <c>r_SSR</c> while the layer can hold them at the
         /// player's own Directional Occlusion and Reflections settings. The restore keeps one only when the layer's status file
-        /// confirms it did (<see cref="LayerStatusFile.FollowedKeys"/>).
+        /// confirms it did, at the value the game saved (<see cref="LayerStatusFile.Followed"/>).
         /// </summary>
         public IReadOnlyList<string> KeptKeys { get; set; } = new string[0];
 

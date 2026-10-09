@@ -15,6 +15,7 @@
 #include "vkcore/glory_view.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/presenter_stereo.hpp"
+#include "vkcore/wait_stats.hpp"
 #include "vkcore/xr_presenter.hpp"
 
 #include <windows.h>
@@ -166,6 +167,7 @@ struct ClockWatchState {
     static constexpr std::uint32_t kMaxRestarts = 3;
     bool wasFocused = false; // FOCUSED since the session became READY
     pacing::FrameClockWatch watch;
+    pacing::FrameGaps gaps; // the 10 s xr line's runtime gaps (presenter_frame_log.cpp)
     std::uint32_t restarts = 0;
     bool loggedKept = false; // a stall past the limit is in the log
 };
@@ -214,6 +216,22 @@ struct RingSlot {
 Settings readSettings();
 LONGLONG qpcNow();
 double qpcSeconds(LONGLONG delta);
+
+// The XR worker's time inside the runtime's frame calls over a 10 s line (presenter_frame_log.cpp): each
+// xrWaitFrame, each xrWaitSwapchainImage call (the game's image and the UI image) and each xrEndFrame.
+struct RuntimeCallTimes {
+    WaitStats waitFrame, waitImage, endFrame;
+};
+
+// `call(args...)`, its time in milliseconds added to `stats` (two QueryPerformanceCounter reads).
+template <typename Call, typename... Args>
+XrResult timedCall(WaitStats& stats, Call call, Args... args) {
+    const LONGLONG start = qpcNow();
+    const XrResult r = call(args...);
+    stats.add(qpcSeconds(qpcNow() - start) * 1000.0);
+    return r;
+}
+
 // The folder this DLL was loaded from (openxr_loader.dll sits next to it).
 std::wstring moduleDirectory();
 

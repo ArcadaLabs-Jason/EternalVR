@@ -5,6 +5,7 @@
 #include "vkcore/taa_hooks.hpp"
 
 #include <atomic>
+#include <cstdlib>
 #include <string>
 
 namespace evr::vkcore {
@@ -14,7 +15,8 @@ namespace {
 constexpr const char* kTag = "seq-taa";
 
 stereo_seq::SsrHold g_hold;
-std::atomic<bool> g_followed{false}; // g_hold.followed(), for the status file's writer on another thread
+// The r_SSR held while g_hold.followed(), else -1: for the status file's writer on another thread.
+std::atomic<int> g_followed{-1};
 
 } // namespace
 
@@ -37,7 +39,8 @@ void ssrDecide(bool perEye, bool located) {
 
 const char* ssrHoldTick(int upscaleQuality) {
     const stereo_seq::SsrHold::Tick t = g_hold.tick(upscaleQuality);
-    const bool first = g_hold.followed() && !g_followed.exchange(g_hold.followed());
+    const int followed = g_hold.followed() ? std::atoi(g_hold.value().c_str()) : -1;
+    const bool first = followed >= 0 && g_followed.exchange(followed) < 0;
     if (t.changed || first) {
         EVR_LOG("%s: r_SSR held at %s from now on (the game's Reflections setting: %s)", kTag,
                 g_hold.value().c_str(), g_hold.value() == "0" ? "off, Low" : "on, Medium or higher");
@@ -48,12 +51,12 @@ const char* ssrHoldTick(int upscaleQuality) {
 void ssrRelease() {
     if (g_hold.held()) {
         g_hold.release();
-        g_followed.store(false);
+        g_followed.store(-1);
         EVR_LOG("%s: r_SSR no longer held: per-eye TAA failed closed", kTag);
     }
 }
 
-bool ssrFollowed() {
+int ssrFollowedValue() {
     return g_followed.load();
 }
 

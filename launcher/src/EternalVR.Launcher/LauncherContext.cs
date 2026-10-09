@@ -190,6 +190,8 @@ namespace EternalVR.Launcher
             public GameInstallLocation Game;
             public IReadOnlyList<SettingsLocation> Locations;
             public IReadOnlyList<LayerDecision> LayerDecisions;
+            /// <summary>Every OpenXR and Vulkan layer registered, with its manifest (for the report and the launch's log).</summary>
+            public IReadOnlyList<RegisteredManifest> RegisteredLayers;
         }
 
         public Gathered GatherPreflight()
@@ -248,7 +250,8 @@ namespace EternalVR.Launcher
                 f.SteamVrFramesToThrottle = Core.Report.SteamVrSummary.ReadFramesToThrottle(SteamRoot);
             }
 
-            g.LayerDecisions = Data.KnownLayers.Evaluate(WindowsSystem.ImplicitLayers(), LaunchPlanBuilder.IsVdxr(f.RuntimeManifest));
+            g.RegisteredLayers = LayerRegistry.Manifests();
+            g.LayerDecisions = Data.KnownLayers.Evaluate(LayerInventory.Implicit(g.RegisteredLayers), LaunchPlanBuilder.IsVdxr(f.RuntimeManifest));
             f.Layers = g.LayerDecisions;
             f.HagsMode = WindowsSystem.HagsMode();
 
@@ -322,6 +325,17 @@ namespace EternalVR.Launcher
             plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);
             if (plan.RenderSize?.Note != null) Log.Warn(plan.RenderSize.Note + " (" + plan.RenderSize.Reason + ")");
             if (plan.RenderSize?.BaseNote != null) Log.Warn("Resolution: " + plan.RenderSize.BaseNote);
+            // Other layers in the game hook every frame too (overlays, capture tools) and can slow the stream: one line each.
+            // Only a log line: it never stops the launch.
+            try
+            {
+                var gameEnv = ChildEnvironment.Merge(ChildEnvironment.Current(), plan.Environment, Environment.GetEnvironmentVariable);
+                foreach (var line in LayerInventory.LaunchLines(g.RegisteredLayers, n => gameEnv.TryGetValue(n, out var v) ? v : null)) Log.Info(line);
+            }
+            catch (Exception e) when (!(e is OutOfMemoryException))
+            {
+                Log.Warn("Other layers not listed: " + e.Message);
+            }
             return plan;
         }
 

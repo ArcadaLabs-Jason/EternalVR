@@ -10,7 +10,8 @@ namespace EternalVR.Launcher.Core.Launch
     /// <c>&lt;ETERNALVR_LOG_DIR&gt;\eternalvr-status.txt</c>, rewritten atomically by the layer on every change:
     /// <c>state=starting|waiting|vr|flat</c>, <c>reason=</c> (a sentence for the player), <c>stereo=on|off: reason</c> (empty until
     /// decided), <c>version=</c>, <c>pid=</c>. <c>flat</c> is final for the session. Also <c>ssr_follow=0|1</c> and
-    /// <c>ssdo_follow=0|1</c>: 1 while the layer held r_SSR or r_SSDO at the player's own game setting (<see cref="FollowedKeys"/>).
+    /// <c>ssdo_follow=0|1</c>: 1 while the layer held r_SSR or r_SSDO at the player's own game setting, at <c>ssr_value=</c>
+    /// and <c>ssdo_value=</c> (<see cref="Followed"/>).
     /// </summary>
     public sealed class LayerStatusFile
     {
@@ -26,13 +27,16 @@ namespace EternalVR.Launcher.Core.Launch
         public string Version { get; private set; } = string.Empty;
         public string Pid { get; private set; } = string.Empty;
         /// <summary>
-        /// The cvars the layer last reported as held at the player's own game setting with per-eye TAA on (<c>r_SSR</c> for
-        /// <c>ssr_follow=1</c>, <c>r_SSDO</c> for <c>ssdo_follow=1</c>): the r_SSR or r_SSDO the game saved is then the player's, and
-        /// the settings restore keeps it (<see cref="Safety.SettingsSnapshot.Restore"/>). Empty for an older layer.
+        /// The cvars the layer last reported as held at the player's own game setting with per-eye TAA on, with the value held
+        /// (<c>r_SSR</c> for <c>ssr_follow=1</c> and <c>ssr_value=</c>, <c>r_SSDO</c> for <c>ssdo_follow=1</c> and <c>ssdo_value=</c>):
+        /// an r_SSR or r_SSDO the game saved at that value is the player's, and the settings restore keeps it
+        /// (<see cref="Safety.SettingsSnapshot.Restore"/>). A follow without its value (an older layer) is not in it.
         /// </summary>
-        public IReadOnlyList<string> FollowedKeys => followed;
+        public IReadOnlyDictionary<string, string> Followed => followed;
 
-        private readonly List<string> followed = new List<string>();
+        private readonly Dictionary<string, string> followed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, bool> follows = new Dictionary<string, bool>();
+        private readonly Dictionary<string, string> values = new Dictionary<string, string>();
 
         public static LayerStatusFile Parse(string text)
         {
@@ -49,8 +53,10 @@ namespace EternalVR.Launcher.Core.Launch
                     case "reason": s.Reason = value; break;
                     case "version": s.Version = value; break;
                     case "pid": s.Pid = value; break;
-                    case "ssr_follow": s.Follow("r_SSR", value == "1"); break;
-                    case "ssdo_follow": s.Follow("r_SSDO", value == "1"); break;
+                    case "ssr_follow": s.follows["r_SSR"] = value == "1"; break;
+                    case "ssdo_follow": s.follows["r_SSDO"] = value == "1"; break;
+                    case "ssr_value": s.values["r_SSR"] = value; break;
+                    case "ssdo_value": s.values["r_SSDO"] = value; break;
                     case "stereo":
                         if (value.StartsWith("on", StringComparison.OrdinalIgnoreCase)) s.Stereo = true;
                         else if (value.StartsWith("off", StringComparison.OrdinalIgnoreCase)) s.Stereo = false;
@@ -59,13 +65,9 @@ namespace EternalVR.Launcher.Core.Launch
                         break;
                 }
             }
+            foreach (var f in s.follows)
+                if (f.Value && s.values.TryGetValue(f.Key, out var held) && held.Length > 0) s.followed[f.Key] = held;
             return s;
-        }
-
-        private void Follow(string cvar, bool on)
-        {
-            followed.Remove(cvar);
-            if (on) followed.Add(cvar);
         }
 
         private static LayerState ParseState(string v)

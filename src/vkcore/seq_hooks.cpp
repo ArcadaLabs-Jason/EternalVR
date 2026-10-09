@@ -73,6 +73,7 @@ std::byte* const* g_backend = nullptr;
 const std::byte* const* g_swapIntervalCvar = nullptr;
 
 std::atomic<bool> g_inRight{false};
+std::atomic<bool> g_frameEndRight{false}; // the frame-end job that started last ran in eye R's chain
 std::atomic<std::uint64_t> g_rightTick{0};
 std::atomic<std::uint32_t> g_marks{0};
 std::atomic<std::uint64_t> g_markTick{0};
@@ -261,6 +262,7 @@ bool renderRightEye(std::byte* rs, void* arg, void* frameInfo, std::uint8_t flag
 
 // The frame-end job's replacement. Every render frame of the engine ends here.
 void frameEndWrapper(void* packet, void* a2, void* a3, void* a4) {
+    g_frameEndRight.store(g_inRight.load(std::memory_order_acquire), std::memory_order_release);
     seq_alternate::countRender();
     test_cpu_load::atFrameEnd(); // ETERNALVR_TEST_CPU_LOAD_MS, a test knob
     auto* p = static_cast<std::byte*>(packet);
@@ -476,6 +478,10 @@ void seqMarkWanted() {
 
 Eye seqChainEye() {
     return g_inRight.load(std::memory_order_acquire) ? Eye::Right : Eye::Left;
+}
+
+Eye seqFrameEndEye() {
+    return g_frameEndRight.load(std::memory_order_acquire) ? Eye::Right : Eye::Left;
 }
 
 Eye seqRenderEye() {

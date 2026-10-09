@@ -157,4 +157,19 @@ inline std::string versionString(std::uint32_t v) {
            std::to_string(VK_API_VERSION_PATCH(v));
 }
 
+// Names joined with ", " (at most `most`, then how many more), or "none" (no names, a null list included).
+inline std::string nameList(std::uint32_t count, const char* const* names, std::uint32_t most) {
+    if (names == nullptr) {
+        return "none";
+    }
+    std::string text;
+    for (std::uint32_t i = 0; i < count && i < most; ++i) {
+        text += (text.empty() ? "" : ", ") + std::string(names[i] ? names[i] : "?");
+    }
+    if (count > most) {
+        text += (text.empty() ? "" : " and ") + std::to_string(count - most) + " more";
+    }
+    return text.empty() ? "none" : text;
+}
+
 } // namespace evr::vkcore

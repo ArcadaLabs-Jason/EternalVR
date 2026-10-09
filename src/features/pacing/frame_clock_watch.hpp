@@ -14,6 +14,8 @@
 // work) lasts at most a couple of display periods, so a slow GPU never holds the frame loop for seconds; the
 // frame then shows the last image and the copy is picked up in a later frame.
 //
+// The frame gaps: for the 10 s `xr:` line, the runtime's display intervals longer than two display periods.
+//
 // No OpenXR or Windows here: times are nanoseconds as the runtime gives them and the caller's seconds on any
 // monotonic clock.
 
@@ -52,6 +54,33 @@ private:
     std::optional<double> windowStart_; // the slow window, while the session is shown
     std::uint64_t windowFrames_ = 0;
     std::uint64_t windowPresents_ = 0;
+};
+
+// The runtime's frame gaps over a log period: intervals between consecutive predicted display times (as
+// xrWaitFrame gave them) longer than kGapPeriods display periods, and the longest interval. A runtime that
+// holds frames back for a while (a Virtual Desktop session at 77-85 frame(s)/s on a 90 Hz display, with
+// ~100 ms stalls) shows here even when its average rate looks close to the display's.
+class FrameGaps {
+public:
+    static constexpr double kGapPeriods = 2.0;
+
+    // One frame: its predicted display time and period (ns). A display time that does not move on is no
+    // interval.
+    void onFrame(std::int64_t displayTimeNs, std::int64_t periodNs);
+    std::uint64_t gaps() const { return gaps_; }
+    double longestMs() const { return static_cast<double>(longestNs_) / 1e6; }
+    // A new log period: the counts start over; the next interval still spans the boundary.
+    void newPeriod() {
+        gaps_ = 0;
+        longestNs_ = 0;
+    }
+    // A new session: no interval back to the last session's frames.
+    void restart() { lastDisplayTime_.reset(); }
+
+private:
+    std::optional<std::int64_t> lastDisplayTime_;
+    std::uint64_t gaps_ = 0;
+    std::int64_t longestNs_ = 0;
 };
 
 // The longest the worker waits for one copy: kCopyWaitPeriods display periods (1/72 s while the runtime has

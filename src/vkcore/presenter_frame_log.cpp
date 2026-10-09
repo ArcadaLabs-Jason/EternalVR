@@ -77,13 +77,16 @@ void XrPresenter::Impl::logFrame(const XrFrameState& state) {
 
 void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
     refresh.onFrame(state.predictedDisplayPeriod);
+    clock.gaps.onFrame(state.predictedDisplayTime, state.predictedDisplayPeriod);
     if (GetTickCount64() - lastXrStatsTicks < 10000) {
         return;
     }
     lastXrStatsTicks = GetTickCount64();
+    const auto gaps = static_cast<unsigned long long>(clock.gaps.gaps());
     EVR_LOG("xr: %llu frame(s), %llu new image(s), %llu repeat(s) (%llu with no finished image to "
             "take); %llu head-tracked, %llu on the screen; pose age average %.1f ms, max %.1f ms; display "
-            "period %.2f ms, pose lead %.1f ms; %llu newest image(s), %llu wait(s) for one",
+            "period %.2f ms, pose lead %.1f ms; %llu newest image(s), %llu wait(s) for one; runtime gaps "
+            "over 2 periods %llu, longest %.1f ms",
             static_cast<unsigned long long>(xrFrames), static_cast<unsigned long long>(xrCopies),
             static_cast<unsigned long long>(xrRepeats + xrBusyRepeats),
             static_cast<unsigned long long>(xrBusyRepeats),
@@ -92,7 +95,16 @@ void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
             poseAgeCount ? poseAgeSum / static_cast<double>(poseAgeCount) : 0.0, poseAgeMax,
             static_cast<double>(state.predictedDisplayPeriod) / 1e6,
             static_cast<double>(displayLead.leadNs()) / 1e6, static_cast<unsigned long long>(xrNewestTaken),
-            static_cast<unsigned long long>(xrNewestWaits));
+            static_cast<unsigned long long>(xrNewestWaits), gaps, clock.gaps.longestMs());
+    // The time the worker sat inside the runtime: a runtime holding its frames back shows here.
+    EVR_LOG("xr: inside the runtime last 10 s: xrWaitFrame %.2f ms average, %.2f ms longest; "
+            "xrWaitSwapchainImage %.2f ms average, %.2f ms longest per call (%llu call(s)); xrEndFrame "
+            "%.2f ms average, %.2f ms longest",
+            inRuntime.waitFrame.averageMs(), inRuntime.waitFrame.maxMs, inRuntime.waitImage.averageMs(),
+            inRuntime.waitImage.maxMs, static_cast<unsigned long long>(inRuntime.waitImage.count),
+            inRuntime.endFrame.averageMs(), inRuntime.endFrame.maxMs);
+    clock.gaps.newPeriod();
+    inRuntime = {};
     poseAgeSum = 0.0;
     poseAgeMax = 0.0;
     poseAgeCount = 0;

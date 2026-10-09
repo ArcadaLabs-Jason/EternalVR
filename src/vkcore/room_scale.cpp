@@ -184,6 +184,12 @@ void RoomScale::anchorOn(
     head.position.y += lift;
     const std::optional<float> raw = lifted(in.headAboveFloor, lift);
     anchor_ = roomscale::recenter(anchor_, head, kind);
+    // Every kind starts the clearance, the seated-walk wait and the seat's distance over (Full and
+    // YawAndOrigin put the origin over the head, Height follows a posture change), so room shifts from before
+    // the re-anchor never count toward walking while seated.
+    clearance_.reset();
+    seatedWalk_.reset();
+    seatShift_ = {};
     if (kind == roomscale::RecenterKind::YawAndOrigin) {
         EVR_LOG("room: %s: heading %.1f -> %.1f deg, origin (%.3f %.3f) LOCAL, height kept at %.3f", why,
                 before.yaw * kDegrees, anchor_.yaw * kDegrees, anchor_.origin.x, anchor_.origin.z,
@@ -209,9 +215,6 @@ void RoomScale::anchorOn(
     if (above) {
         anchorAboveFloor_ = above;
     }
-    clearance_.reset();
-    seatedWalk_.reset();
-    seatShift_ = {};
     const bool autoPosture = cfg.posture == posture::PostureOverride::Auto;
     posture::Posture effective = posture::effectivePosture(cfg.posture, postureTracker_.current());
     // A height re-anchor takes the tracker's posture and re-references it, when there is a reading.

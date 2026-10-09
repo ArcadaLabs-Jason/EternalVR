@@ -8,16 +8,21 @@ namespace EternalVR.Launcher.Core.Text
     /// <summary>
     /// A small JSON reader for layer and runtime manifests. Objects become
     /// <c>Dictionary&lt;string, object&gt;</c> (case-sensitive keys), arrays <c>List&lt;object&gt;</c>,
-    /// numbers <c>double</c>, plus string, bool and null.
+    /// numbers <c>double</c>, plus string, bool and null. Anything malformed (a number out of range, nesting deeper than
+    /// <see cref="MostDepth"/> included) throws <see cref="FormatException"/>, never anything else.
     /// </summary>
     public static class MiniJson
     {
+        /// <summary>The deepest nesting of objects and arrays read; deeper throws (a manifest of "[[[[..." would else
+        /// overflow the stack, which nothing can catch).</summary>
+        public const int MostDepth = 64;
+
         public static object Parse(string text)
         {
             int i = 0;
             var s = text ?? string.Empty;
             if (s.Length > 0 && s[0] == '﻿') i = 1;
-            var value = ReadValue(s, ref i);
+            var value = ReadValue(s, ref i, 0);
             SkipWs(s, ref i);
             if (i != s.Length) throw new FormatException("trailing characters at " + i);
             return value;
@@ -33,13 +38,14 @@ namespace EternalVR.Launcher.Core.Text
             return node;
         }
 
-        private static object ReadValue(string s, ref int i)
+        private static object ReadValue(string s, ref int i, int depth)
         {
             SkipWs(s, ref i);
             if (i >= s.Length) throw new FormatException("unexpected end");
             char c = s[i];
-            if (c == '{') return ReadObject(s, ref i);
-            if (c == '[') return ReadArray(s, ref i);
+            if ((c == '{' || c == '[') && depth >= MostDepth) throw new FormatException("nested deeper than " + MostDepth + " at " + i);
+            if (c == '{') return ReadObject(s, ref i, depth + 1);
+            if (c == '[') return ReadArray(s, ref i, depth + 1);
             if (c == '"') return ReadString(s, ref i);
             if (Match(s, ref i, "true")) return true;
             if (Match(s, ref i, "false")) return false;
@@ -47,7 +53,7 @@ namespace EternalVR.Launcher.Core.Text
             return ReadNumber(s, ref i);
         }
 
-        private static Dictionary<string, object> ReadObject(string s, ref int i)
+        private static Dictionary<string, object> ReadObject(string s, ref int i, int depth)
         {
             var obj = new Dictionary<string, object>(StringComparer.Ordinal);
             i++;
@@ -61,7 +67,7 @@ namespace EternalVR.Launcher.Core.Text
                 SkipWs(s, ref i);
                 if (i >= s.Length || s[i] != ':') throw new FormatException("expected ':' at " + i);
                 i++;
-                obj[key] = ReadValue(s, ref i);
+                obj[key] = ReadValue(s, ref i, depth);
                 SkipWs(s, ref i);
                 if (i < s.Length && s[i] == ',') { i++; continue; }
                 if (i < s.Length && s[i] == '}') { i++; return obj; }
@@ -69,7 +75,7 @@ namespace EternalVR.Launcher.Core.Text
             }
         }
 
-        private static List<object> ReadArray(string s, ref int i)
+        private static List<object> ReadArray(string s, ref int i, int depth)
         {
             var list = new List<object>();
             i++;
@@ -77,7 +83,7 @@ namespace EternalVR.Launcher.Core.Text
             if (i < s.Length && s[i] == ']') { i++; return list; }
             while (true)
             {
-                list.Add(ReadValue(s, ref i));
+                list.Add(ReadValue(s, ref i, depth));
                 SkipWs(s, ref i);
                 if (i < s.Length && s[i] == ',') { i++; continue; }
                 if (i < s.Length && s[i] == ']') { i++; return list; }
@@ -122,7 +128,21 @@ namespace EternalVR.Launcher.Core.Text
             int start = i;
             while (i < s.Length && "+-0123456789.eE".IndexOf(s[i]) >= 0) i++;
             if (start == i) throw new FormatException("unexpected character '" + s[i] + "' at " + i);
-            return double.Parse(s.Substring(start, i - start), NumberStyles.Float, CultureInfo.InvariantCulture);
+            return Number(s.Substring(start, i - start), t => double.Parse(t, NumberStyles.Float, CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// A number token through <paramref name="parse"/>: out of range is a <see cref="FormatException"/> like any other
+        /// bad number, whether the framework throws <see cref="OverflowException"/> (.NET Framework 4.8, the launcher's) or
+        /// returns infinity (.NET Core 3.0 and later).
+        /// </summary>
+        internal static double Number(string token, Func<string, double> parse)
+        {
+            double value;
+            try { value = parse(token); }
+            catch (OverflowException) { throw new FormatException("number out of range: " + token); }
+            if (double.IsInfinity(value) || double.IsNaN(value)) throw new FormatException("number out of range: " + token);
+            return value;
         }
 
         private static bool Match(string s, ref int i, string word)

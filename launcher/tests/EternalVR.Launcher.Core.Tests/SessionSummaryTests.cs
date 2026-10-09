@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using EternalVR.Launcher.Core.Headsets;
 using EternalVR.Launcher.Core.Launch;
 using Xunit;
@@ -60,6 +61,42 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(0.0, s.HeldShare);
             Assert.Equal("90 Hz, steady", s.Compact());
             Assert.Equal("The game kept up with your headset: about 90 new frames a second at 90 Hz.", s.Describe());
+        }
+
+        [Fact]
+        public void AHeadsetThatTookFewerFramesThanItsRefreshRateIsNotSteady()
+        {
+            // A player's session: the display period said 90 Hz all along, the headset took 77 to 81 frames a second.
+            var lines = Session(Vd, Quest3, 11.11);
+            double t = 7.8;
+            long frames = 1;
+            foreach (var xr in new[] { 79.0, 81.0, 77.0, 80.0, 81.0 })
+            {
+                t += 10;
+                frames += (long)(xr * 10);
+                lines.Add(Xr(t, frames, 11.11));
+                lines.Add(Rates(t, 70, xr));
+            }
+            var s = SessionSummary.FromLines(lines);
+            Assert.Equal(90, s.RefreshHz);
+            Assert.Equal(0.0, s.HeldShare);
+            Assert.Equal(80.0, s.HeadsetRate.Value, 6);
+            Assert.False(s.Steady);
+            Assert.Equal("display 90 Hz; the headset took about 80 frames a second (not steady)", s.Compact());
+            Assert.Equal("The headset took about 80 frames a second at 90 Hz (not steady). The game drew about 70 new frames a second at 90 Hz.", s.Describe());
+            Assert.Contains("headset frames/s at the refresh rate 80.0", s.LogText());
+
+            // Within 5% of the refresh rate it is steady.
+            var near = SessionSummary.FromLines(lines.Select(l => l.Contains("] rates: ") ? Regex.Replace(l, @"XR [0-9.]+ frame", "XR 86.0 frame") : l));
+            Assert.Equal(86.0, near.HeadsetRate.Value, 6);
+            Assert.True(near.Steady);
+            Assert.Equal("90 Hz, steady", near.Compact());
+            Assert.Equal("The game drew about 70 new frames a second at 90 Hz.", near.Describe());
+            // An older layer's rates line without the XR rate: the display period alone, as before.
+            var older = SessionSummary.FromLines(lines.Select(l => l.Contains("] rates: ") ? l.Substring(0, l.IndexOf("; XR", StringComparison.Ordinal)) : l));
+            Assert.Null(older.HeadsetRate);
+            Assert.Equal("90 Hz, steady", older.Compact());
+            Assert.Contains("headset frames/s at the refresh rate unknown", older.LogText());
         }
 
         [Fact]

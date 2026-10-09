@@ -254,10 +254,10 @@ origin(N) - origin(N-1)  --body frame (N-1)--> room displacement
   sit down. Without a floor space the posture is unknown and follow runs. **Walking while seated**
   (`src/features/posture/seated_walk.hpp`): a seated head reaches about 0.6 m from the seat, so a detected
   seated posture with the head more than 1 m from the seat for 2 s (counting what the room was moved onto
-  the body meanwhile) is a wrong floor: the posture switches to standing with a height re-anchor (`room:
-  seated, but the head was 1.12 m from the seat for 2.0 s; switching to standing`). Play position Sitting is
-  never switched, and a player on a chair with wheels sets it (rolling more than 1 m counts as walking). With
-  body follow off nothing is blocked, so nothing is switched.
+  the body meanwhile; every re-anchor starts that over) is a wrong floor: the posture switches to standing
+  with a height re-anchor (`room: seated, but the head was 1.12 m from the seat for 2.0 s; switching to
+  standing`). Play position Sitting is never switched, and a player on a chair with wheels sets it (rolling
+  more than 1 m counts as walking). With body follow off nothing is blocked, so nothing is switched.
 - **Test offsets.** `ETERNALVR_TEST_HEAD_OFFSET` is followed too (the body walks to the fake head), so the
   lean-cap and wall checks of the live test plan need `ETERNALVR_BODY_FOLLOW=0`.
 

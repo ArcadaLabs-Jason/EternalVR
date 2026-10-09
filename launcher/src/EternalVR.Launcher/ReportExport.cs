@@ -46,6 +46,11 @@ namespace EternalVR.Launcher
             Add("openxr runtime for launches", !LaunchPlanBuilder.IsSystemRuntime(ctx.Settings.Runtime) ? effective + RuntimeName(effective)
                 : LauncherContext.InheritedRuntime != null ? LaunchPlanBuilder.RuntimeVariable + " in the environment: " + effective + RuntimeName(effective)
                 : "system active");
+            // Every OpenXR API layer and Vulkan layer registered, and whether it loads with a launch (the launch's own disable
+            // variables applied): overlays and capture tools hook every frame and can slow the stream.
+            var launchEnv = ChildEnvironment.Merge(ChildEnvironment.Current(), LayerInventory.LaunchDisables(g.LayerDecisions), Environment.GetEnvironmentVariable);
+            system.AddRange(LayerInventory.ReportLines(g.RegisteredLayers, n => launchEnv.TryGetValue(n, out var v) ? v : null,
+                Environment.GetEnvironmentVariable));
             // The Play tab's Headset box as read (the last probe that answered) and the last session's refresh rate and summary.
             system.AddRange(HeadsetView.ReportLines(ctx.Headset, ctx.Identify(ctx.Headset.RuntimeName, ctx.Headset.SystemName)));
             system.AddRange(SteamVrSummary.Read(ctx.SteamRoot)); // chosen keys only, never the headset's serial number

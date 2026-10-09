@@ -45,4 +45,18 @@ std::string_view ssdoHoldValue(std::string_view held, int menuChoice) {
     return held;
 }
 
+std::vector<std::pair<std::string, std::string>>
+followFields(std::string_view name, int value, int reported) {
+    std::vector<std::pair<std::string, std::string>> fields;
+    if (value == reported) {
+        return fields;
+    }
+    const std::string key(name);
+    if (value >= 0) {
+        fields.emplace_back(key + "_value", std::to_string(value));
+    }
+    fields.emplace_back(key + "_follow", value >= 0 ? "1" : "0");
+    return fields;
+}
+
 } // namespace evr::stereo_seq

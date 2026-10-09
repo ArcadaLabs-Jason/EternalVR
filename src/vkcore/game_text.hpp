@@ -48,6 +48,12 @@ std::int32_t readI32(const std::byte* at);
 // after the instruction. nullptr when the target lies outside the module.
 const std::byte* ripTarget(const GameImage& image, const std::byte* dispAt, const std::byte* nextInstruction);
 
+// `signature` matches the code at `at`, all of it within .text (false for nullptr).
+bool matchesAt(const GameImage& image, const std::byte* at, const char* signature);
+
+// The target of the rel32 `call` / `jmp` (E8 / E9) or `jcc` (0F 8x) at `at`; nullptr outside .text.
+const std::byte* branchTarget(const GameImage& image, const std::byte* at);
+
 // The return addresses of every `call target` (E8 rel32) within `span` bytes of `function`, in order.
 std::vector<std::uintptr_t>
 callReturns(const GameImage& image, const std::byte* function, const std::byte* target, std::size_t span);

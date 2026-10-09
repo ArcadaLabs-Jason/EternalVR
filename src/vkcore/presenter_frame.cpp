@@ -74,7 +74,7 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     if (!acquiredWaited) {
         XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
         wait.timeout = kSwapchainWaitTimeout;
-        const XrResult r = xr.xrWaitSwapchainImage(xrSwapchain, &wait);
+        const XrResult r = timedCall(inRuntime.waitImage, xr.xrWaitSwapchainImage, xrSwapchain, &wait);
         if (r == XR_TIMEOUT_EXPIRED) {
             EVR_LOG("xr: swapchain image wait timed out; repeating the last image");
             return;
@@ -183,8 +183,6 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
                                      bool hasView) {
     ring[slotIndex].state.store(kSlotFree);
     lastConsumed = value;
-    const ViewRecord& slotView = view;
-    const bool slotHasView = hasView;
 
     XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xr.xrReleaseSwapchainImage(xrSwapchain, &release);
@@ -196,15 +194,16 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
                 static_cast<unsigned long long>(value));
     }
     hasImage = true;
-    shownView = slotView;
-    shownHasView = slotHasView;
+    shownView = view;
+    shownHasView = hasView;
     ++xrCopies;
 }
 
 void XrPresenter::Impl::frame() {
     XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
     XrFrameState state{XR_TYPE_FRAME_STATE};
-    if (const XrResult r = xr.xrWaitFrame(session, &waitInfo, &state); XR_FAILED(r)) {
+    if (const XrResult r = timedCall(inRuntime.waitFrame, xr.xrWaitFrame, session, &waitInfo, &state);
+        XR_FAILED(r)) {
         if (!loseOnRuntimeFailure(r, "xrWaitFrame")) {
             Sleep(5);
         }
@@ -397,7 +396,7 @@ void XrPresenter::Impl::frame() {
     endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     endInfo.layerCount = layerCount;
     endInfo.layers = layerCount ? layers.data() : nullptr;
-    const XrResult r = xr.xrEndFrame(session, &endInfo);
+    const XrResult r = timedCall(inRuntime.endFrame, xr.xrEndFrame, session, &endInfo);
     if (XR_FAILED(r) && !loseOnRuntimeFailure(r, "xrEndFrame")) {
         // Every frame can fail the same way: the first ones, then one line per 900 (10 s at 90 Hz).
         if (++endFrameFailures <= 5 || endFrameFailures % 900 == 0) {

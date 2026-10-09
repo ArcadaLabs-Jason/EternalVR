@@ -21,7 +21,8 @@ r_displayRefresh
 # (ETERNALVR_STEREO_SSR), and r_blurRadialScale at 0 with the comfort set (no dash zoom blur), which the
 # restore puts back either way. r_SSDO and r_SSR are kept as the game saved them when the layer held them at the
 # player's own Directional Occlusion and Reflections settings (LaunchPlan.KeptKeys, confirmed by the layer's
-# status file: ssr_follow / ssdo_follow), so a change made in the game's menu during the session stays.
+# status file: ssr_follow / ssdo_follow, and saved at the value it held, ssr_value / ssdo_value, a key left out
+# of the config counting as its default 1), so a change made in the game's menu during the session stays.
 r_SSDO
 r_SSR
 r_blurRadialScale

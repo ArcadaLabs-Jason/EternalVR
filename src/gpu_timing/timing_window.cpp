@@ -1,6 +1,7 @@
 #include "gpu_timing/timing_window.hpp"
 
 #include <cstddef>
+#include <cstdio>
 
 namespace evr::gpu_timing {
 
@@ -70,6 +71,28 @@ TimingWindow::Report TimingWindow::report() const {
 
 void TimingWindow::clear() {
     *this = TimingWindow{};
+}
+
+bool sampledFrame(std::uint64_t frame) {
+    return frame > 0 && (frame - 1) % kSampleEvery < kSampleRun;
+}
+
+std::string sampledSummary(const TimingWindow::Report& r) {
+    std::string text;
+    const auto add = [&text](const char* label, const Summary& s) {
+        if (s.count == 0) {
+            return;
+        }
+        char part[128];
+        std::snprintf(part, sizeof(part), "%s GPU busy %.2f ms average, %.2f ms longest (n %zu)", label,
+                      s.mean, s.max, s.count);
+        text += (text.empty() ? "" : "; ") + std::string(part);
+    };
+    add("mono", r.busy[static_cast<std::size_t>(FrameEye::Mono)]);
+    add("eye L", r.busy[static_cast<std::size_t>(FrameEye::Left)]);
+    add("eye R", r.busy[static_cast<std::size_t>(FrameEye::Right)]);
+    add("stereo tick", r.tickBusy);
+    return text.empty() ? "no frame timed" : text;
 }
 
 } // namespace evr::gpu_timing

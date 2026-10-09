@@ -129,25 +129,26 @@ void followSsdoSetting(Held& h) {
 // The status file's ssr_follow and ssdo_follow (status_file.hpp): 1 while the hold is at the player's own
 // setting (the game's setting has run) with per-eye TAA on, so r_TAASafeMode is 0 and the knock-on's 0 is not
 // what the game saves; 0 otherwise (before the first stereo tick, failed closed, after a multiplayer guard
-// trip, the setter not found). The launcher's restore keeps the r_SSR or r_SSDO the game saved only after 1.
+// trip, the setter not found). With 1, ssr_value and ssdo_value are the value held. The launcher's restore
+// keeps the r_SSR or r_SSDO the game saved only after 1, and only when the game saved that value.
 void reportFollows() {
-    static int ssrReported = -1;
-    static int ssdoReported = -1;
+    static int ssrReported = -2; // the value last written (stereo_seq::followFields), -2 before the first
+    static int ssdoReported = -2;
     const bool perEye = taaPerEyeActive();
-    const int ssr = perEye && ssrFollowed() ? 1 : 0;
+    const int ssr = perEye ? ssrFollowedValue() : -1;
     bool ssdoHeld = false;
     for (const Held& h : g_held) {
         ssdoHeld = ssdoHeld || (h.menuSsdo && h.object);
     }
-    const int ssdo = perEye && ssdoHeld && ssdoMenuChoice() >= 0 ? 1 : 0;
-    if (ssr != ssrReported) {
-        ssrReported = ssr;
-        status::field("ssr_follow", std::to_string(ssr));
+    const int ssdo = perEye && ssdoHeld ? ssdoMenuChoice() : -1; // the hold's value (followSsdoSetting)
+    for (const auto& [key, value] : stereo_seq::followFields("ssr", ssr, ssrReported)) {
+        status::field(key.c_str(), value);
     }
-    if (ssdo != ssdoReported) {
-        ssdoReported = ssdo;
-        status::field("ssdo_follow", std::to_string(ssdo));
+    for (const auto& [key, value] : stereo_seq::followFields("ssdo", ssdo, ssdoReported)) {
+        status::field(key.c_str(), value);
     }
+    ssrReported = ssr;
+    ssdoReported = ssdo;
 }
 
 // The cvar's integer value as the engine keeps it (the values block, +0x08).

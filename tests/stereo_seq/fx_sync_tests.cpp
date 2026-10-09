@@ -10,6 +10,7 @@ using evr::stereo_seq::Eye;
 using evr::stereo_seq::FxAction;
 using evr::stereo_seq::fxActionFor;
 using evr::stereo_seq::fxGenerationFor;
+using evr::stereo_seq::fxGpuStages;
 using evr::stereo_seq::fxPoolResetFor;
 using evr::stereo_seq::fxPreviousSlot;
 using evr::stereo_seq::FxSyncMode;
@@ -60,28 +61,53 @@ TEST_CASE("fx sync: the light pool's reset follows the ring in the same prepare"
 
 TEST_CASE("fx sync: eye R reuses only what eye L generated in this tick") {
     const std::uint32_t frame = 500;
-    CHECK(fxGenerationFor(FxAction::UseEyeL, frame, frame) == FxAction::UseEyeL);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame, frame, false) == FxAction::UseEyeL);
     // Eye L did not have the model: generated the render before (eye R binds it, then generates), long ago,
     // or never.
-    CHECK(fxGenerationFor(FxAction::UseEyeL, frame - 1, frame) == FxAction::Run);
-    CHECK(fxGenerationFor(FxAction::UseEyeL, frame - 40, frame) == FxAction::Run);
-    CHECK(fxGenerationFor(FxAction::UseEyeL, 0, frame) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame - 1, frame, false) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame - 40, frame, false) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, 0, frame, false) == FxAction::Run);
     // The ring advanced in this eye R render (the hooks went live after its prepare): no stamp is the frame.
-    CHECK(fxGenerationFor(FxAction::UseEyeL, frame, frame + 1) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame, frame + 1, false) == FxAction::Run);
+}
+
+TEST_CASE("fx sync: eye R binds the GPU stages of what eye L generated and generates it itself") {
+    const std::uint32_t frame = 500;
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame, frame, true) == FxAction::BindGpuThenRun);
+    // A model eye L did not generate in this tick runs the engine's code, its whole bind included.
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame - 1, frame, true) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, 0, frame, true) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::UseEyeL, frame, frame + 1, true) == FxAction::Run);
+    // Counting changes nothing: it is counted like any other model eye L generated.
+    CHECK(fxGenerationFor(FxAction::RunCounted, frame - 1, frame, true) == FxAction::RunCounted);
+    CHECK(fxGenerationFor(FxAction::RunCounted, frame, frame, true) == FxAction::Run);
+    // The engine's renders run every generation.
+    CHECK(fxGenerationFor(FxAction::Run, frame, frame, true) == FxAction::Run);
+}
+
+TEST_CASE("fx sync: the GPU stage switch") {
+    CHECK(fxGpuStages(""));
+    CHECK(fxGpuStages("1"));
+    CHECK(fxGpuStages(" on "));
+    CHECK(fxGpuStages("2"));
+    CHECK_FALSE(fxGpuStages("0"));
+    CHECK_FALSE(fxGpuStages(" Off"));
+    CHECK_FALSE(fxGpuStages("FALSE"));
+    CHECK_FALSE(fxGpuStages("no\n"));
 }
 
 TEST_CASE("fx sync: counting, eye R's render advanced the ring") {
     const std::uint32_t frame = 501;
-    CHECK(fxGenerationFor(FxAction::RunCounted, frame - 1, frame) == FxAction::RunCounted);
-    CHECK(fxGenerationFor(FxAction::RunCounted, frame, frame) == FxAction::Run);
-    CHECK(fxGenerationFor(FxAction::RunCounted, frame - 2, frame) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::RunCounted, frame - 1, frame, false) == FxAction::RunCounted);
+    CHECK(fxGenerationFor(FxAction::RunCounted, frame, frame, false) == FxAction::Run);
+    CHECK(fxGenerationFor(FxAction::RunCounted, frame - 2, frame, false) == FxAction::Run);
     // The frame counter wraps.
-    CHECK(fxGenerationFor(FxAction::RunCounted, 0xFFFFFFFFu, 0) == FxAction::RunCounted);
+    CHECK(fxGenerationFor(FxAction::RunCounted, 0xFFFFFFFFu, 0, false) == FxAction::RunCounted);
 }
 
 TEST_CASE("fx sync: the engine's renders run every generation") {
     for (const std::uint32_t stamp : {0u, 499u, 500u}) {
-        CHECK(fxGenerationFor(FxAction::Run, stamp, 500) == FxAction::Run);
+        CHECK(fxGenerationFor(FxAction::Run, stamp, 500, false) == FxAction::Run);
     }
 }
 

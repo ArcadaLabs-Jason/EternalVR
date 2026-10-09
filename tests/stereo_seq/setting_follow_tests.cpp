@@ -3,7 +3,10 @@
 #include <doctest/doctest.h>
 
 #include <string>
+#include <utility>
+#include <vector>
 
+using evr::stereo_seq::followFields;
 using evr::stereo_seq::ssdoHoldValue;
 using evr::stereo_seq::SsrHold;
 
@@ -68,4 +71,19 @@ TEST_CASE("SSDO hold: the launch value until the game's Directional Occlusion se
     CHECK((ssdoHoldValue("1", 0) == "0"));
     CHECK((ssdoHoldValue("0", 1) == "1"));
     CHECK((ssdoHoldValue("1", 7) == "1"));
+}
+
+TEST_CASE("Status file: the followed value goes with the follow, written before it") {
+    using Fields = std::vector<std::pair<std::string, std::string>>;
+    // The first report: not followed yet.
+    CHECK((followFields("ssr", -1, -2) == Fields{{"ssr_follow", "0"}}));
+    // The setting ran: its value, then the follow.
+    CHECK((followFields("ssr", 0, -1) == Fields{{"ssr_value", "0"}, {"ssr_follow", "1"}}));
+    // Unchanged: nothing written.
+    CHECK(followFields("ssr", 0, 0).empty());
+    CHECK(followFields("ssdo", -1, -1).empty());
+    // A menu apply changed the value while followed.
+    CHECK((followFields("ssdo", 1, 0) == Fields{{"ssdo_value", "1"}, {"ssdo_follow", "1"}}));
+    // Failed closed: the follow alone goes to 0 (the launcher ignores the value then).
+    CHECK((followFields("ssr", -1, 1) == Fields{{"ssr_follow", "0"}}));
 }

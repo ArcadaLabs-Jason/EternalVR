@@ -9,6 +9,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -62,6 +63,7 @@ struct Frame {
     gt::FrameEye eye = gt::FrameEye::Mono;
     double cpuMs = 0.0;
     std::uint32_t untimed = 0; // batches submitted without timestamps
+    bool timed = true;         // sampled (or every frame): its submits are bracketed
     std::vector<Batch> batches;
 };
 
@@ -78,7 +80,11 @@ struct TimingDevice {
     VkDevice device = VK_NULL_HANDLE;
     DeviceData* data = nullptr;
     Functions fn;
-    bool active = false; // the game's device with timestamps: submits are bracketed
+    bool active = false;     // the game's device with timestamps: submits are bracketed
+    bool everyFrame = false; // ETERNALVR_GPU_TIMING=1; else a few frames in every second (kSampleEvery)
+    // The open frame's `timed`, read by submits before they take the mutex (they check `open` again under
+    // it).
+    std::atomic<bool> sampling{false};
     float periodNs = 1.0f;
     std::vector<std::uint32_t> validBits; // per queue family
 

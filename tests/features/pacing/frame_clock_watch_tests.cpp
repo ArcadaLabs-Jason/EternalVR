@@ -98,6 +98,64 @@ TEST_CASE("frame clock watch: slow frames are no stall while hidden or while the
     CHECK_FALSE(run(watch, clock, displayTime, presents, 80, 0.25, 250'000'000, 0).has_value());
 }
 
+TEST_CASE("frame gaps: a runtime keeping time has none, its longest interval one period") {
+    FrameGaps gaps;
+    std::int64_t displayTime = 1'000'000'000;
+    for (int i = 0; i < 900; ++i) {
+        gaps.onFrame(displayTime, kPeriodNs);
+        displayTime += kPeriodNs;
+    }
+    CHECK(gaps.gaps() == 0);
+    CHECK(gaps.longestMs() == doctest::Approx(11.111111));
+}
+
+TEST_CASE("frame gaps: intervals over two periods count, and the longest is kept") {
+    FrameGaps gaps;
+    std::int64_t displayTime = 1'000'000'000;
+    const auto frame = [&](std::int64_t advanceNs) {
+        displayTime += advanceNs;
+        gaps.onFrame(displayTime, kPeriodNs);
+    };
+    frame(0);
+    frame(kPeriodNs);
+    frame(2 * kPeriodNs);     // exactly two periods: no gap
+    frame(2 * kPeriodNs + 1); // just over
+    frame(kPeriodNs);
+    frame(100'000'000); // a 100 ms stall
+    frame(kPeriodNs);
+    CHECK(gaps.gaps() == 2);
+    CHECK(gaps.longestMs() == doctest::Approx(100.0));
+}
+
+TEST_CASE("frame gaps: a new period starts the counts over, the interval across it still counts") {
+    FrameGaps gaps;
+    gaps.onFrame(1'000'000'000, kPeriodNs);
+    gaps.onFrame(1'050'000'000, kPeriodNs);
+    REQUIRE(gaps.gaps() == 1);
+    gaps.newPeriod();
+    CHECK(gaps.gaps() == 0);
+    CHECK(gaps.longestMs() == 0.0);
+    gaps.onFrame(1'100'000'000, kPeriodNs);
+    CHECK(gaps.gaps() == 1);
+    CHECK(gaps.longestMs() == doctest::Approx(50.0));
+}
+
+TEST_CASE("frame gaps: no interval back to a past session, a stuck or backward clock, or without a period") {
+    FrameGaps gaps;
+    gaps.onFrame(1'000'000'000, kPeriodNs);
+    gaps.restart();
+    gaps.onFrame(9'000'000'000, kPeriodNs); // the next session, 8 s later
+    CHECK(gaps.gaps() == 0);
+    CHECK(gaps.longestMs() == 0.0);
+    gaps.onFrame(9'000'000'000, kPeriodNs); // not moved on
+    gaps.onFrame(8'000'000'000, kPeriodNs); // backwards
+    CHECK(gaps.gaps() == 0);
+    CHECK(gaps.longestMs() == 0.0);
+    gaps.onFrame(8'100'000'000, 0); // no period: only the longest interval
+    CHECK(gaps.gaps() == 0);
+    CHECK(gaps.longestMs() == doctest::Approx(100.0));
+}
+
 TEST_CASE("copy wait: two display periods within the bounds") {
     CHECK(copyWaitMs(kPeriodNs) == 23);  // 90 Hz: 22.2 ms, rounded up
     CHECK(copyWaitMs(13'888'889) == 28); // 72 Hz

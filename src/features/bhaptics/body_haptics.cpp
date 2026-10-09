@@ -149,6 +149,8 @@ const char* effectName(Effect effect) {
         return "megahealth";
     case Effect::Armor:
         return "armor";
+    case Effect::LargeArmor:
+        return "largearmor";
     case Effect::Launch:
         return "launch";
     case Effect::Count:
@@ -165,6 +167,9 @@ SyncKind syncKindOf(std::string_view entityDefName) {
         entityDefName.find("praetor_suit_token") != std::string_view::npos) {
         return SyncKind::Token;
     }
+    if (entityDefName.starts_with("interact/rune/")) {
+        return SyncKind::Rune;
+    }
     return entityDefName.starts_with("interact/") ? SyncKind::Pickup : SyncKind::GloryKill;
 }
 
@@ -176,6 +181,8 @@ const char* syncKindName(SyncKind kind) {
         return "Sentinel Crystal";
     case SyncKind::Token:
         return "Praetor token";
+    case SyncKind::Rune:
+        return "rune";
     case SyncKind::GloryKill:
         break;
     }
