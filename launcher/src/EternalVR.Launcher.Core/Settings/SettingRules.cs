@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: gestures
         ThrowGesture, SwingGesture, HandsJump, PunchSpeed,
         // Play: controls
-        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, HoldTime, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
+        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
         Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
@@ -38,6 +38,8 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NeedsHeadOrHandAim = "Only when the weapon hand or the head aims (Aim with).";
         public const string NeedsSmoothTurn = "Only with smooth turning.";
         public const string NeedsSnapTurn = "Only with snap turning.";
+        public const string NeedsThumbRest = "Only with the thumb-rest wheel on.";
+        public const string NeedsWheelPick = "Only when the weapon wheel picks.";
         public const string NotSitting = "Not while sitting: your body stays put (Play position).";
         public const string NeedsRenderSize =
             "Only when the game renders at the headset's size (render_size in launcher.ini): otherwise the window is the eye image.";
@@ -69,6 +71,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.XButton:
                 case Setting.DossierMapSticks:
                 case Setting.WeaponWheel:
+                case Setting.ThumbRestWheel:
                 case Setting.ThrowGesture:
                 case Setting.SwingGesture:
                 case Setting.HandsJump:
@@ -82,6 +85,12 @@ namespace EternalVR.Launcher.Core.Settings
                     return !s.Controllers ? NeedsControllers : s.Turn == TurnMode.Smooth ? null : NeedsSmoothTurn;
                 case Setting.SnapAngle:
                     return !s.Controllers ? NeedsControllers : s.Turn == TurnMode.Snap ? null : NeedsSnapTurn;
+                case Setting.ThumbRestPicks:
+                case Setting.ThumbRestFaceTouch:
+                case Setting.ThumbRestSlowdown:
+                    if (!s.Controllers) return NeedsControllers;
+                    if (s.ThumbRest == ThumbRestMode.Off) return NeedsThumbRest;
+                    return setting == Setting.ThumbRestSlowdown && s.ThumbRestPicks == ThumbRestPick.Directions ? NeedsWheelPick : null;
                 case Setting.WalkInRoom:
                     return !s.Controllers ? NeedsControllers : s.Posture == PostureMode.Seated ? NotSitting : null;
                 case Setting.RevenantAimWith:

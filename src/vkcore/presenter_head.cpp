@@ -1,6 +1,7 @@
 // Head tracking: the game's camera hook, head aim and cutscene handling (docs/VR_HEAD_TRACKED.md). The render
 // latch and the view each present carries are in presenter_latch.cpp.
 
+#include "vkcore/presenter_fov.hpp"
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/body_follow.hpp"
@@ -12,6 +13,7 @@
 #include "vkcore/menu_input.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/pose_guards.hpp"
 #include "vkcore/reticle_depth.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "xr_math/camera_anim.hpp"
@@ -65,6 +67,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
             EVR_LOG("head: the multiplayer guard is %s; the game's view and aim are no longer changed",
                     mp_policy::toString(mp_guard::state()));
             controllers::restoreClimbCvars("the multiplayer guard stopped game touches");
+            controllers::restoreWheelSlowdown("the multiplayer guard stopped game touches");
             controllers::noteImmersiveCutscene(false); // the arms and the weapon FOV as in play
         }
         return;
@@ -73,7 +76,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     cutscene_eyes::noteGameView(renderView, cutscene);
     // Glory kills (glory_view.hpp): on the flat screen, faded out, or with a steady heading (below).
     const double now = qpcSeconds(qpcNow());
-    if (glory.frame(player, controllers::forcedView(), now).started && glory.onScreen()) {
+    const bool menu = menuUp.load(std::memory_order_relaxed);
+    if (glory.frame(player, controllers::forcedView(), menu, now).started && glory.onScreen()) {
         replaceScreen.store(true, std::memory_order_release);
     }
     if (glory.black()) {
@@ -147,6 +151,13 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         !std::isfinite(p.position.y) || !std::isfinite(p.position.z)) {
         ++gameViewsSkipped;
         return;
+    }
+    // A position no head can reach from the last good one is held, and that frame's floor reading (taken with
+    // it) is not used (pose_guards.hpp): a jump never reaches body follow, the lean cap or the posture.
+    if (Vec3 position{p.position.x, p.position.y, p.position.z};
+        positionValid && pose_guards::check(pose_guards::Slot::Head, position, record.poseTime)) {
+        record.pose.position = {position.x, position.y, position.z};
+        headAboveFloor.reset();
     }
     Quat headXr = normalize(Quat{record.pose.orientation.x, record.pose.orientation.y,
                                  record.pose.orientation.z, record.pose.orientation.w});
@@ -226,8 +237,9 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     const float gameFovX = fov[0];
     const float gameFovY = fov[1];
     xr_math::GameFov used{gameFovX, gameFovY};
-    if (settings.setGameFov && targetFovValid.load(std::memory_order_acquire)) {
-        used = {targetFovX.load(), targetFovY.load()};
+    if (const auto target = unpackGameFov(targetFov.load(std::memory_order_acquire));
+        target && settings.setGameFov) {
+        used = *target;
     }
     const auto xrFov = xr_math::fovFromGame(used);
     if (!xrFov) {

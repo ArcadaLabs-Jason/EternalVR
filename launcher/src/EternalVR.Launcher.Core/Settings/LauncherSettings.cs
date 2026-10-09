@@ -68,7 +68,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
-    /// wheel_select, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
+    /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
     /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed and hold_time
     /// (dlss_version replaced dlss_dll, which is still read once).
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
@@ -226,6 +226,8 @@ namespace EternalVR.Launcher.Core.Settings
         public LauncherSettings WithDefaults() => new LauncherSettings
         {
             GameDir = GameDir, LayerDir = LayerDir, Runtime = Runtime, UnknownKeys = UnknownKeys, Profile = Profile, DlssDllPath = DlssDllPath,
+            // Written by hand only, so the window has nothing to reset it to.
+            WeaponDirections = WeaponDirections,
         };
 
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -233,7 +235,7 @@ namespace EternalVR.Launcher.Core.Settings
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "melee_aim", "equipment_aim", "render_size",
             "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "show_arms", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "screen_reflections", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
-            "hud_width", "hud_height", "mirror", "cutscene_view", "cutscene_arms", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
+            "hud_width", "hud_height", "mirror", "cutscene_view", "cutscene_arms", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "thumb_rest_wheel", "thumb_rest_pick", "thumb_rest_face_touch", "thumb_rest_slowdown", "weapon_directions", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
             "punch_speed", "hold_time",
         };
@@ -340,6 +342,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
             s.ReadMapSticks(map);
             if (map.TryGetValue("wheel_select", out var ws)) s.Wheel = Pick(ws, WheelSelect.Stick, ("hand", WheelSelect.Hand));
+            s.ReadThumbRest(map);
             s.ReadGestures(map);
             s.ReadPicture(map);
             s.ReadPacing(map);
@@ -426,6 +429,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("dossier = " + DossierName(Dossier));
             WriteMapSticks(sb);
             sb.AppendLine("wheel_select = " + WheelSelectName(Wheel));
+            WriteThumbRest(sb);
             WriteGestures(sb);
             sb.AppendLine("aim_dot = " + (AimDot ? "1" : "0"));
             WritePicture(sb);

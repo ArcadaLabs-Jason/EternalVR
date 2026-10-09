@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstddef>
 #include <map>
 #include <optional>
 #include <ostream>
@@ -256,6 +257,45 @@ TEST_CASE("the weapon wheel is pointed at with the stick unless hand is chosen")
     CHECK(bad.issues.size() == 2);
     CHECK(bad.settings.wheelSelect == WheelSelect::Stick);
     CHECK(bad.settings.wheelHandDegrees == evr::input::kDefaultWheelHandDegrees);
+}
+
+TEST_CASE("the thumb-rest wheel: off and the game's wheel by default, face touch off, slowdown on") {
+    using evr::input::RestWheelMode;
+    using evr::input::RestWheelPick;
+    using evr::input::WheelDirection;
+    const auto defaults = parse({});
+    CHECK(defaults.settings.thumbRest.mode == RestWheelMode::Off);
+    CHECK(defaults.settings.thumbRest.pick == RestWheelPick::Wheel);
+    CHECK(defaults.settings.thumbRest.windowSeconds == evr::input::kEdgeWindowSeconds);
+    CHECK(defaults.settings.thumbRest.directions == evr::input::kDefaultWeaponDirections);
+    CHECK_FALSE(defaults.settings.thumbRestFaceTouch);
+    CHECK(defaults.settings.thumbRestSlowdown);
+
+    const auto set = parse({{"ETERNALVR_THUMBREST_WHEEL", "Extreme"},
+                            {"ETERNALVR_THUMBREST_PICK", "slots"},
+                            {"ETERNALVR_THUMBREST_FACE_TOUCH", "1"},
+                            {"ETERNALVR_THUMBREST_SLOWDOWN", "0"},
+                            {"ETERNALVR_THUMBREST_WINDOW", "0.8"},
+                            {"ETERNALVR_WEAPON_DIRECTIONS", "up=4"}});
+    CHECK(set.issues.empty());
+    CHECK(set.settings.thumbRest.mode == RestWheelMode::Extreme);
+    CHECK(set.settings.thumbRest.pick == RestWheelPick::Slots);
+    CHECK(set.settings.thumbRestFaceTouch);
+    CHECK_FALSE(set.settings.thumbRestSlowdown);
+    CHECK(set.settings.thumbRest.windowSeconds == 0.8f);
+    CHECK(set.settings.thumbRest.directions[static_cast<std::size_t>(WheelDirection::Up)] == 4);
+    CHECK(parse({{"ETERNALVR_THUMBREST_WHEEL", "full"}}).settings.thumbRest.mode == RestWheelMode::Full);
+    CHECK(parse({{"ETERNALVR_THUMBREST_WHEEL", "off"}}).settings.thumbRest.mode == RestWheelMode::Off);
+
+    const auto bad = parse({{"ETERNALVR_THUMBREST_WHEEL", "always"},
+                            {"ETERNALVR_THUMBREST_WINDOW", "2"},
+                            {"ETERNALVR_WEAPON_DIRECTIONS", "up=9,down=2"}});
+    CHECK(bad.issues.size() == 3);
+    CHECK(bad.settings.thumbRest.mode == RestWheelMode::Off);
+    CHECK(parse({{"ETERNALVR_THUMBREST_WHEEL", "edge"}}).settings.thumbRest.mode == RestWheelMode::Edge);
+    CHECK(bad.settings.thumbRest.windowSeconds == evr::input::kEdgeWindowSeconds);
+    CHECK(bad.settings.thumbRest.directions[static_cast<std::size_t>(WheelDirection::Up)] == 1);
+    CHECK(bad.settings.thumbRest.directions[static_cast<std::size_t>(WheelDirection::Down)] == 2);
 }
 
 TEST_CASE("the throw and the overhead swing are off unless turned on") {

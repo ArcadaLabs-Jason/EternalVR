@@ -8,6 +8,7 @@
 #include "features/input/dashboard_pause.hpp"
 #include "features/input/dossier_press.hpp"
 #include "features/input/interaction_profiles.hpp"
+#include "features/tracking/pose_guard.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/seh_filter.hpp"
@@ -215,7 +216,8 @@ bool locate(const XrInput& xr,
             Pose& out,
             Vec3* velocity,
             bool* velocityValid,
-            const Pose* roomOverride) {
+            const Pose* roomOverride,
+            pose_guards::Slot guard) {
     XrSpaceVelocity v{XR_TYPE_SPACE_VELOCITY};
     XrSpaceLocation location{XR_TYPE_SPACE_LOCATION, velocity ? &v : nullptr};
     if (!space || XR_FAILED(xr.xrLocateSpace(space, xr.localSpace, time, &location))) {
@@ -232,13 +234,19 @@ bool locate(const XrInput& xr,
         !std::isfinite(p.position.y) || !std::isfinite(p.position.z)) {
         return false;
     }
+    // In LOCAL, which our recenter does not move: a jump here is the tracking's (or the runtime's recenter,
+    // which resets the guards).
+    Pose local = toPose(p);
+    const bool held = pose_guards::check(guard, local.position, time);
     const Pose room = roomOverride ? *roomOverride : currentRoomFromLocal();
-    out = compose(room, toPose(p));
+    out = compose(room, local);
     out.orientation = normalize(out.orientation);
     if (velocity && velocityValid) {
-        *velocityValid = (v.velocityFlags & XR_SPACE_VELOCITY_LINEAR_VALID_BIT) != 0;
-        *velocity =
-            rotate(room.orientation, Vec3{v.linearVelocity.x, v.linearVelocity.y, v.linearVelocity.z});
+        const Vec3 linear{v.linearVelocity.x, v.linearVelocity.y, v.linearVelocity.z};
+        *velocityValid = (v.velocityFlags & XR_SPACE_VELOCITY_LINEAR_VALID_BIT) != 0 && !held &&
+                         (guard == pose_guards::Slot::Count || !pose_guards::enabled() ||
+                          tracking::plausibleHandVelocity(linear));
+        *velocity = rotate(room.orientation, linear);
     }
     return true;
 }
@@ -290,9 +298,15 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     h.face4Button = readBool(xr, input::XrActionId::Face4, path);
     h.shoulderButton = readBool(xr, input::XrActionId::Shoulder, path);
     h.menuButton = readBool(xr, input::XrActionId::Menu, path);
+    h.thumbRest = readBool(xr, input::XrActionId::ThumbRest, path);
+    h.primaryTouch = readBool(xr, input::XrActionId::PrimaryTouch, path);
+    h.secondaryTouch = readBool(xr, input::XrActionId::SecondaryTouch, path);
+    const bool left = hand == input::Hand::Left;
+    using pose_guards::Slot;
     h.poseValid = locate(xr, xr.aimSpaces[handIndex(hand)], time, h.aimPose, &h.linearVelocity,
-                         &h.velocityValid, &room);
-    h.gripValid = locate(xr, xr.gripSpaces[handIndex(hand)], time, h.gripPose, nullptr, nullptr, &room);
+                         &h.velocityValid, &room, left ? Slot::SyncAimLeft : Slot::SyncAimRight);
+    h.gripValid = locate(xr, xr.gripSpaces[handIndex(hand)], time, h.gripPose, nullptr, nullptr, &room,
+                         left ? Slot::SyncGripLeft : Slot::SyncGripRight);
     return h;
 }
 
@@ -382,7 +396,8 @@ bool attach(const XrContext& context) {
         "turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
         "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
         "Dossier map panned by the %s stick, weapon wheel by the %s, throw gesture %s, overhead swing %s, "
-        "hands-up jump %s, punch at %.1f m/s, button hold %.2f s",
+        "hands-up jump %s, punch at %.1f m/s, button hold %.2f s, thumb-rest wheel %s (picks with %s, face "
+        "touch %s, slowdown %s)",
         kTag, input::aimSourceName(cfg.aim), input::aimSourceName(input::demonAimSource(cfg)),
         !cfg.demonAim                       ? " (as aim)"
         : cfg.aim == input::AimSource::View ? " (ETERNALVR_DEMON_AIM has no effect under view aim)"
@@ -400,7 +415,9 @@ bool attach(const XrContext& context) {
         cfg.mapSticks == input::MapSticks::OtherPans ? "other" : "weapon hand's",
         input::wheelSelectName(cfg.wheelSelect), cfg.throwGesture.enabled ? "on" : "off",
         cfg.swing.enabled ? "on" : "off", cfg.handsJump.enabled ? "on" : "off", cfg.punchSpeed,
-        cfg.holdSeconds);
+        cfg.holdSeconds, input::restWheelModeName(cfg.thumbRest.mode),
+        input::restWheelPickName(cfg.thumbRest.pick), cfg.thumbRestFaceTouch ? "on" : "off",
+        cfg.thumbRestSlowdown ? "on" : "off");
     return true;
 }
 
@@ -449,8 +466,8 @@ void sync(XrTime predictedDisplayTime, bool focused) {
             const Pose& room = next.frame.roomFromLocal;
             next.frame.left = readHand(xr, input::Hand::Left, predictedDisplayTime, room);
             next.frame.right = readHand(xr, input::Hand::Right, predictedDisplayTime, room);
-            next.frame.head.poseValid =
-                locate(xr, xr.viewSpace, predictedDisplayTime, next.frame.head.pose, nullptr, nullptr, &room);
+            next.frame.head.poseValid = locate(xr, xr.viewSpace, predictedDisplayTime, next.frame.head.pose,
+                                               nullptr, nullptr, &room, pose_guards::Slot::SyncHead);
             watched.synced = true;
             watched.headTracked = next.frame.head.poseValid;
             watched.poseValid = {next.frame.left.poseValid || next.frame.left.gripValid,

@@ -1,19 +1,25 @@
-// OpenXR session events on the XR worker: session state changes, a lost runtime or instance, a LOCAL
-// space change (a recenter), a refresh rate change (presenter_refresh.hpp), and placing the flat screen in
-// front of the head.
+// OpenXR session events on the XR worker: session state changes (a failed xrBeginSession is made again), a
+// lost runtime or instance, a LOCAL space change (a recenter), a refresh rate change (presenter_refresh.hpp),
+// and placing the flat screen in front of the head.
 
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/keep_active.hpp"
+#include "vkcore/pose_guards.hpp"
 #include "vkcore/status_file.hpp"
 #include "xr_math/cinema_quad.hpp"
 
+#include <algorithm>
 #include <optional>
 
 namespace evr::vkcore {
 
 namespace {
+
+// After a reference space change the tracked positions' guards take every position this long past the
+// change's time (pose_guards.hpp).
+constexpr XrDuration kGuardOpenNs = 1'000'000'000;
 
 // The session ended: tracking stops and the worker leaves its frame loop, to reconnect when the loss allows
 // it (presenter_reconnect.cpp). The first cause is the one kept.
@@ -37,6 +43,59 @@ void markLost(XrPresenter::Impl& p, xr_recovery::Loss kind, const char* what) {
     frame_pacing::setUnfocused(false);
     p.sessionRunning = false;
     p.loss.lost = true;
+}
+
+// READY: the session starts showing frames. A call that fails without a loss is made again from
+// pollEvents, then the session is made again; a loss makes it again at once. Both are bounded
+// (xr_recovery::afterBeginFailure), so a runtime that fails every begin does not cycle for good.
+void beginSession(XrPresenter::Impl& p) {
+    XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
+    begin.primaryViewConfigurationType = p.viewConfig;
+    const XrResult r = p.xr.xrBeginSession(p.session, &begin);
+    // Already running: an earlier call went through after all.
+    p.sessionRunning = XR_SUCCEEDED(r) || r == XR_ERROR_SESSION_RUNNING;
+    EVR_LOG("xr: xrBeginSession: %d", static_cast<int>(r));
+    p.loss.beginFailedQpc = 0;
+    if (p.sessionRunning) {
+        p.loss.beginFailures = 0;
+        p.loss.runningSinceQpc = qpcNow();
+        status::vr("the headset shows the game");
+        p.refresh.onSessionRunning(p.session);
+        if (p.settings.keepActive) {
+            enableKeepActive();
+        }
+        return;
+    }
+    const bool lost =
+        r == XR_ERROR_SESSION_LOST || r == XR_ERROR_INSTANCE_LOST || r == XR_ERROR_RUNTIME_FAILURE;
+    const std::uint32_t failures = ++p.loss.beginFailures;
+    char text[XR_MAX_RESULT_STRING_SIZE];
+    switch (xr_recovery::afterBeginFailure(failures, p.loss.beginRestarts, lost)) {
+    case xr_recovery::BeginNext::Retry:
+        p.loss.beginFailedQpc = qpcNow();
+        EVR_LOG("xr: xrBeginSession failed: %s; trying again in %u s (%u of %u)", p.xrText(r, text),
+                xr_recovery::kBeginRetryMs / 1000, failures + 1, xr_recovery::kBeginTries);
+        break;
+    case xr_recovery::BeginNext::Restart:
+        ++p.loss.beginRestarts;
+        EVR_LOG("xr: xrBeginSession failed %u time(s) (%s); ending the session to start a new one (%u of %u)",
+                failures, p.xrText(r, text), p.loss.beginRestarts, xr_recovery::kBeginRestarts);
+        p.loseOnRuntimeFailure(lost ? r : XR_ERROR_SESSION_LOST, "xrBeginSession");
+        status::waiting("the headset runtime did not start VR for the game; trying again with a new session");
+        break;
+    case xr_recovery::BeginNext::GiveUp:
+        EVR_LOG(
+            "xr: xrBeginSession failed %u time(s) (%s); the session was started again %u times already, so "
+            "the game stays flat",
+            failures, p.xrText(r, text), xr_recovery::kBeginRestarts);
+        if (lost) {
+            p.loss.beginGaveUp = true;
+            p.loseOnRuntimeFailure(r, "xrBeginSession");
+        }
+        status::flat(
+            "the headset runtime would not start VR for the game; restart the runtime, then the game");
+        break;
+    }
 }
 
 } // namespace
@@ -77,19 +136,8 @@ void XrPresenter::Impl::pollEvents() {
             frame_pacing::setUnfocused(clock.wasFocused && (sessionState == XR_SESSION_STATE_VISIBLE ||
                                                             sessionState == XR_SESSION_STATE_SYNCHRONIZED));
             if (sessionState == XR_SESSION_STATE_READY) {
-                XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
-                begin.primaryViewConfigurationType = viewConfig;
-                const XrResult r = xr.xrBeginSession(session, &begin);
-                sessionRunning = XR_SUCCEEDED(r);
-                EVR_LOG("xr: xrBeginSession: %d", static_cast<int>(r));
-                if (sessionRunning) {
-                    loss.runningSinceQpc = qpcNow();
-                    status::vr("the headset shows the game");
-                    refresh.onSessionRunning(session);
-                }
-                if (sessionRunning && settings.keepActive) {
-                    enableKeepActive();
-                }
+                loss.beginFailures = 0;
+                beginSession(*this);
             } else if (sessionState == XR_SESSION_STATE_STOPPING) {
                 trackingReady.store(false);
                 disableKeepActive();
@@ -111,6 +159,8 @@ void XrPresenter::Impl::pollEvents() {
             break;
         case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING: {
             const auto& change = reinterpret_cast<const XrEventDataReferenceSpaceChangePending&>(event);
+            // A tracked position's jump up to a moment after the change is the runtime's move, not a glitch.
+            pose_guards::resetAll(std::max(change.changeTime, nextDisplayTime.load()) + kGuardOpenNs);
             if (change.referenceSpaceType != XR_REFERENCE_SPACE_TYPE_LOCAL) {
                 // The floor's spaces: a floor that moves is not used for the posture until it is back.
                 const bool floor = change.referenceSpaceType == XR_REFERENCE_SPACE_TYPE_STAGE ||
@@ -145,6 +195,11 @@ void XrPresenter::Impl::pollEvents() {
     }
     if (polled != XR_EVENT_UNAVAILABLE) {
         loseOnRuntimeFailure(polled, "xrPollEvent");
+    }
+    // A failed xrBeginSession, made again while the session is still READY.
+    if (!loss.lost && !sessionRunning && loss.beginFailedQpc != 0 && sessionState == XR_SESSION_STATE_READY &&
+        qpcSeconds(qpcNow() - loss.beginFailedQpc) * 1000.0 >= xr_recovery::kBeginRetryMs) {
+        beginSession(*this);
     }
     // ETERNALVR_TEST_XR_LOSS: the running session taken as lost once, as a headset going away would be.
     if (settings.testLossSeconds > 0.0f && !loss.testLossDone && sessionRunning &&

@@ -26,8 +26,8 @@ public:
     [[nodiscard]] comfort::GloryView view() const { return view_; }
 
     // Camera hook, each game view: whether a sync kill runs for `player` (the view's object), the forced-view
-    // gate, and a monotonic clock (qpcSeconds).
-    comfort::GloryEpisode::Step frame(const std::byte* player, bool forcedView, double seconds);
+    // gate, whether a menu is up (the game paused: not the kill's time), and a monotonic clock (qpcSeconds).
+    comfort::GloryEpisode::Step frame(const std::byte* player, bool forcedView, bool menu, double seconds);
 
     // Screen: this game view goes to the flat screen, as a cutscene does.
     [[nodiscard]] bool onScreen() const { return view_ == comfort::GloryView::Screen && episode_.active(); }
@@ -61,6 +61,7 @@ private:
     float killTurn_ = 0.0f;              // the largest turn of the body from it during the kill (degrees)
     double restoreUntil_ = -1.0;
     bool loggedRestore_ = false;
+    unsigned timeouts_ = 0; // kills ended at the episode's maximum duration
     std::atomic<bool> flat_{false};
 };
 

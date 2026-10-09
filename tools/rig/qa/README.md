@@ -53,6 +53,16 @@ restores the save, then checks the layer log (the stage's logs, else the run fol
 | arm-pose | The right hand at (0.35, -0.15, -0.45), aim yaw 45: screenshot `arm-pose-arm-pose.png` to compare with the references by eye (no image check yet) |
 | token-pickup | e1m3 `cp_03_shoot_gate`, debug schedule into the token's use trigger, Use under hand aim at pitch -15, -30, 0 until a sync starts: `controllers: sync 'interact/preator_suit_token...' (not a kill)`, no `glory: kill`; screenshot 4 s after |
 | action-aim | e1m3 `cp_03_shoot_gate` as token-pickup, hand aim with `ETERNALVR_MELEE_AIM=offhand` and `ETERNALVR_EQUIPMENT_AIM=head`, the weapon hand 90 degrees to the left: Use with the off hand pointing away, then at the token (pitch -15); the token is picked up (`controllers: sync 'interact/preator_suit_token`; its Use is a trigger box, so this does not test the aim); the melee press is held back until the view took the off hand's target and reaches the game with the view within 3 degrees of the off hand (`action aim: melee press, game frame N ...`), the view goes back to the weapon hand, no press sent without its target; the equipment launch hook installed and a frag turned onto the head (`equipment launch (slot N): ... along the head`) with the view left on the weapon hand; a Flame Belch shot recognised as the Belch's (`action aim: a Flame Belch shot while flame_belch held`) |
+| thumbrest-pick | `qa-scenarios-wheel.ps1`, window 1 s: the left thumb rest, then the turn stick up within the window: `thumb-rest wheel: armed: the right stick picks (left thumb rest, edge`, the game's wheel held pointing up (`action weapon_wheel`, the wheel cursor moving), then right, let go (`the game's wheel let go pointing right`, `weapon wheel released after`); no quick switch or chainsaw; the held item changes after the pick (which weapon depends on the game's wheel layout) |
+| thumbrest-resting-turns | The default window, the left thumb resting from the start: the turn stick turns (`trace: mapper turn` with `ETERNALVR_CONTROLLERS_TRACE=1`), nothing arms, no `weapon_wheel` |
+| thumbrest-flick | A push to 0.4 (out of the centre, short of a direction) is armed then cancelled: no `weapon_wheel`, `quick_switch` or `chainsaw` |
+| thumbrest-window-expiry | The default window: the left thumb rests, 0.9 s later a turn-stick flick turns (`trace: mapper turn`); nothing arms |
+| thumbrest-cancel-then-flick | Window 1 s: a push to 0.4 is cancelled, then a flick with the thumb still resting turns; exactly one `armed` line, no `weapon_wheel` |
+| thumbrest-quick-pick | The turn stick right for about 0.2 s, then let go: the wheel held pointing right, let go after the hold (`the game opens its wheel ... held at least`), no quick switch, the held item changes |
+| thumbrest-extreme | `ETERNALVR_THUMBREST_WHEEL=extreme`: the turn stick opens the wheel with no thumb resting (`armed: the turn stick picks weapons; the left thumb rest gives turning back`), and turns with the left thumb on its rest |
+| thumbrest-slots | `ETERNALVR_THUMBREST_PICK=slots`: the turn stick held right picks `weapon_slot_3` on letting go; no `weapon_wheel` |
+| thumbrest-menu | The pause menu up (`action pause`, then `gameplay input back on`): a resting thumb and a pushed stick arm nothing |
+| thumbrest-slowdown | `ETERNALVR_THUMBREST_SLOWDOWN=0`: `weaponWheel_slowTimeScale <value> -> 1 while the wheel is open`, then `back to <value>, the game's own value (the wheel closed)` with the same value |
 | launcher-e2e | `launcher\tests\e2e.ps1 -Root <Out>\e2e -Runtime <simulator json>` prints `E2E OK` (skipped without a Release build) |
 
 Every game scenario also checks: in the map, stopped and cleaned up, save restored, no crash dump.
@@ -79,7 +89,8 @@ by where the half starts against the blocks.
 
 ## Adding a scenario
 
-Add a hashtable to `$script:QaScenarios` in `qa-scenarios.ps1`: `Name`, `Kind = 'game'`, `Proves`,
+Add a hashtable to `$script:QaScenarios` in `qa-scenarios.ps1` (the thumb-rest wheel's are in
+`qa-scenarios-wheel.ps1`, dot-sourced after it): `Name`, `Kind = 'game'`, `Proves`,
 `Env`, optional `Map`, `Args` (game command-line arguments), `EyeCaptures` (every how many pairs eye captures go to
 `<stage>-eyes`) and `Input` (initial input lines), `Timeline = { param($c) ... }` and
 `Asserts = { param($c) ... }`. Helpers (`qa-common.ps1`): `Wait-QaSeconds $c <s>`, `Wait-QaLog $c <regex>

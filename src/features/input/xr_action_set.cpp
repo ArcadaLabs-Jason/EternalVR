@@ -29,6 +29,12 @@ constexpr std::array<XrActionDef, kXrActionCount> kActions{{
     {XrActionId::AimPose, XrActionSetId::Gameplay, "aim_pose", "Aim pose", XrActionKind::Pose},
     {XrActionId::GripPose, XrActionSetId::Gameplay, "grip_pose", "Grip pose", XrActionKind::Pose},
     {XrActionId::Haptic, XrActionSetId::Gameplay, "haptic", "Vibration", XrActionKind::Haptic},
+    {XrActionId::ThumbRest, XrActionSetId::Gameplay, "thumbrest", "Thumb rest (touch)",
+     XrActionKind::Boolean},
+    {XrActionId::PrimaryTouch, XrActionSetId::Gameplay, "primary_touch", "Primary button (touch)",
+     XrActionKind::Boolean},
+    {XrActionId::SecondaryTouch, XrActionSetId::Gameplay, "secondary_touch", "Secondary button (touch)",
+     XrActionKind::Boolean},
 }};
 
 } // namespace

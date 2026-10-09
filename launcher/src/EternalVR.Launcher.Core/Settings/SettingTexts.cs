@@ -121,6 +121,22 @@ namespace EternalVR.Launcher.Core.Settings
                 + "Point with your hand: hold the wheel open with its stick or button, then turn your weapon hand toward "
                 + "a weapon (a small turn of the wrist is enough) and let go to pick it.",
                 "Stick (default)", "Point with your hand"),
+            [Setting.ThumbRestWheel] = new Text("Thumb-rest wheel",
+                "Rest a thumb on its thumb rest and the other stick picks weapons. Touch, then push: only a push within "
+                + "half a second of the touch. While touched: for as long as the thumb rests. Needs a thumb-rest sensor "
+                + "(Quest and Rift controllers).",
+                "Touch, then push", "While touched", "Off (default)"),
+            [Setting.ThumbRestPicks] = new Text("Thumb-rest picks",
+                "Weapon wheel: the game's wheel opens and the stick points at a weapon; letting go picks it. Weapon by "
+                + "direction: each of the eight stick directions is one weapon slot, picked on letting go; the wheel stays "
+                + "closed.",
+                "Weapon wheel (default)", "Weapon by direction"),
+            [Setting.ThumbRestFaceTouch] = new Text("Face buttons as thumb rest",
+                "On controllers without a thumb rest (Index, Pico 4), a thumb resting on the A/B or X/Y buttons counts as "
+                + "one. Off by default: thumbs also brush them on the way to a press."),
+            [Setting.ThumbRestSlowdown] = new Text("Slow time on the thumb-rest wheel",
+                "Time slows while the game's weapon wheel is open. Off keeps full speed when the wheel opens from the thumb "
+                + "rest; the stick-held wheel always slows time."),
             [Setting.AimSteadiness] = new Text("Aim steadiness",
                 "Steadies the gun and the aim dot against the small shake of a held hand. Higher is steadier but the gun "
                 + "follows your hand a little later.",

@@ -1,6 +1,7 @@
 evr_add_module(evr_foveation
     SOURCES
         attachment_images.cpp
+        eye_shape_latch.cpp
         eye_targets.cpp
         foveation_preset.cpp
         foveation_region.cpp

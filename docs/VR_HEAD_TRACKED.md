@@ -17,7 +17,8 @@ yet).
   - Render latch: after `r = g` in `idRenderWorldLocal::Render` (RVA 0x1CE1464); read-only. It tells
     which game view the renderer latched, and exposes the previous projection matrix as a check.
 - Each game frame the hook locates `VIEW` in `LOCAL` at the XR worker's latest `predictedDisplayTime`
-  plus one display period, and rewrites the view:
+  plus one display period (at most 1.5 times the headset's refresh period while the runtime throttles,
+  docs/VR_STEREO.md "Pose"), and rewrites the view:
   - `viewaxis = body * head`, where body is the game's axis with pitch and roll removed (yaw only), and
     head is the headset orientation converted from OpenXR (+X right, +Y up, -Z forward) to id Tech
     (+X forward, +Y left, +Z up): `id = (-z, -x, y)` for vectors and the quaternion's vector part.
@@ -25,7 +26,26 @@ yet).
     (default 1.0; id Tech 7 units are metres, docs/notes/eternal-unit-scale-evidence.md).
   - `fov_x / fov_y` are set to the symmetric FOV that encloses both eyes (`xrLocateViews`, eye
     orientations only, `enclosingFov(..., Symmetric)`). On the Quest 3 through VDXR that is 108 x 110
-    degrees (eyes: 54/40 horizontal, 44 up, 55 down).
+    degrees (eyes: 54/40 horizontal, 44 up, 55 down). The XR worker reads the eyes' FOVs again every 2 s
+    (`src/features/tracking/fov_watch.*`): player logs showed a session's first read that was no headset's
+    (Virtual Desktop on a Quest 3 gave an eye -15/40/14/-26 degrees, a Steam Frame session half its usual
+    FOV, a Rift S one 29 x 32 degrees), and the mono image rendered and shown at it was a tunnel. A read
+    counts only when each eye spans at least 50 degrees across and 45 up and down (a FOV narrowed on purpose,
+    as by Quest Link's FOV tangent multiplier at 0.5, still counts), every side reaches 10 to 87 degrees from
+    the eye's centre (a Pimax's outer side at its largest FOV), neither axis has one side over 2.5 times the
+    other, and the eyes' spans agree within 20%. The first such read is taken; a different one once three
+    reads in a row (0.25 s apart) agree on it. A first read at half the usual FOV (the Steam Frame session)
+    now counts, and the real FOV takes over within about 2.5 s once the runtime gives it; a runtime that gives
+    half its FOV for the whole session also shows its frames at that FOV, so the image matches it. After 20
+    implausible reads in a row the reads go back to every 2 s. Before a plausible read the game keeps its own FOV (the projection views then use it, so
+    the image is shown at the size it was drawn); after one, an implausible read keeps it. The render size
+    does not follow the FOV (it comes from the runtime's recommended image size), so a change only changes
+    the projection: the game's FOV and the projection views' FOV move together with the frame's record.
+    Log: `xr: the runtime's eye FOVs (...) are not a headset's: <why> (N such read(s)); ...` (the first five,
+    then every 100th, 20 lines at most), `xr: the eyes' FOV differs from the one in use (...)` (10 at most),
+    `xr: the headset's FOV changed (change N); the game's FOV follows` before the usual eye and FOV lines (10
+    changes at most). In stereo with foveation on, eye FOVs refused for foveation's eye shape log
+    `stereo: the eye FOVs (...) are not a headset's: ...; foveation takes no eye shape from them` (3 lines).
   - The frame's record (pose, pose time, FOV, the axis written) goes into a 32-entry history.
 - Present: the ring slot carries the record of the view the render latch matched most recently (the
   newest view if the latch did not match), unless it is older than 250 ms.
@@ -138,7 +158,11 @@ yet).
   (`interact/...`: a Sentinel Crystal, a Praetor token) is a sync too but not a kill. The chainsaw's kills are
   sync kills too [inferred], so they are shown the same way. An episode starts with the
   flag and ends when the flag has cleared and the game no longer forces the view, at most 0.5 s later
-  (`glory: kill N starts (...)` / `ends`, for the first 30). What the headset shows:
+  (`glory: kill N starts (...)` / `ends`, for the first 30). An episode lasts at most 10 s of its own time
+  (not while a menu is up, and a gap between game views counts 0.25 s at most): a flag still set then has lost
+  its end, so the episode ends there and the next starts once the flag has cleared (`glory:
+  kill N still running after 10 s; taken as ended`), and a fade or the flat screen never stays. What the
+  headset shows:
   - `follow` (default): as above, the view faces where the kill's camera points and turns with the head
     from there; the camera's own pitch and roll never reach the view.
   - `steady`: the view stays on the kill's animated eye (the head's room offset eases out as for any driven
@@ -178,6 +202,7 @@ yet).
 | `ETERNALVR_WORLD_SCALE` | 1.0 | game units per metre for the head position |
 | `ETERNALVR_HEAD_POSITION` | 1 | 0 keeps the game's eye position (rotation only) |
 | `ETERNALVR_SET_FOV` | 1 | 0 keeps the game's FOV (the projection views then use it) |
+| `ETERNALVR_FOV_CHECK` | 1 | 0 takes every finite eye FOV the runtime gives as the headset's (for a headset narrower than the check allows); it is still read again during the session |
 | `ETERNALVR_KEEP_ACTIVE` | 1 | 0 lets focus changes reach the game (it pauses) |
 | `ETERNALVR_AIM` | head | `view` keeps the game's own aim (render-only head tracking) |
 | `ETERNALVR_SKIP_CINEMATICS` | 0 | 1 holds the skip key while a cutscene plays |

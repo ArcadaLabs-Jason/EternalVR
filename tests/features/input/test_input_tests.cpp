@@ -49,6 +49,21 @@ TEST_CASE("the extra face buttons and the bumper can be pressed") {
     CHECK_FALSE(frame.left.shoulderButton);
 }
 
+TEST_CASE("the touch sensors can be touched and let go") {
+    const auto input = parseTestInput(
+        "left.thumbrest = 1\nright.primary_touch = 1\nright.secondary_touch = 1\nright.thumbrest = 0\n");
+    CHECK(input.issues.empty());
+    InputFrame frame;
+    frame.right.thumbRest = true;
+    applyTestInput(input, frame);
+    CHECK(frame.left.thumbRest);
+    CHECK_FALSE(frame.right.thumbRest);
+    CHECK(frame.right.primaryTouch);
+    CHECK(frame.right.secondaryTouch);
+    CHECK_FALSE(frame.left.primaryTouch);
+    CHECK(parseTestInput("left.thumbrest = 0, 1\n").issues.size() == 1);
+}
+
 TEST_CASE("an aim makes the hand tracked, pointing where it says") {
     const auto input =
         parseTestInput("right.aim = 90, 0\nleft.aim = 0, 30\nleft.position = -0.1, -0.2, -0.4\n");

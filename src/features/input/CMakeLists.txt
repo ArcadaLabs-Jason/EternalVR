@@ -27,6 +27,8 @@ evr_add_module(evr_input
         offhand_policy.cpp
         player_controller_data.cpp
         punch_detector.cpp
+        rest_touch_bindings.cpp
+        rest_wheel.cpp
         stick_chord.cpp
         stick_response.cpp
         tap_hold.cpp
@@ -36,8 +38,10 @@ evr_add_module(evr_input
         usercmd_injection.cpp
         usercmd_motion.cpp
         virtual_gamepad.cpp
+        weapon_directions.cpp
         wheel_hand.cpp
         wheel_mouse.cpp
+        wheel_slowdown.cpp
         xr_action_set.cpp
     DEPENDS
         evr_common

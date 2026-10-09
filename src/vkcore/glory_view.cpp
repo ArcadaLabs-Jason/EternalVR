@@ -16,6 +16,8 @@ namespace {
 constexpr double kRestoreSeconds = 0.5;
 // Episodes logged at their start and end.
 constexpr unsigned long long kLoggedEpisodes = 30;
+// Kills ended at the episode's maximum duration (comfort::GloryTiming::maxSeconds) that are logged.
+constexpr unsigned kLoggedTimeouts = 5;
 
 } // namespace
 
@@ -28,7 +30,8 @@ GloryKills::GloryKills(comfort::GloryView view, double testStart, double testDur
     }
 }
 
-comfort::GloryEpisode::Step GloryKills::frame(const std::byte* player, bool forcedView, double seconds) {
+comfort::GloryEpisode::Step
+GloryKills::frame(const std::byte* player, bool forcedView, bool menu, double seconds) {
     bool sync = controllers::syncKillActive(player);
     if (testStart_ >= 0.0) {
         const double inMap = secondsInMap();
@@ -37,7 +40,7 @@ comfort::GloryEpisode::Step GloryKills::frame(const std::byte* player, bool forc
     // On the flat screen the view is the game's own, so the kill ends with the sync flag: the gate, updated
     // only for head-tracked views, would hold a stale value.
     const comfort::GloryEpisode::Step step =
-        episode_.update(sync, forcedView && view_ != comfort::GloryView::Screen, seconds);
+        episode_.update(sync, forcedView && view_ != comfort::GloryView::Screen, seconds, menu);
     if (step.started) {
         latched_ = view_ == comfort::GloryView::Steady ? lastBody_ : std::nullopt;
         killStartBody_ = lastBody_; // the turn is measured from the body before the kill
@@ -57,7 +60,14 @@ comfort::GloryEpisode::Step GloryKills::frame(const std::byte* player, bool forc
         if (latched_) {
             restoreUntil_ = seconds + kRestoreSeconds;
         }
-        if (episode_.episodes() <= kLoggedEpisodes) {
+        if (step.timedOut) {
+            if (++timeouts_ <= kLoggedTimeouts) {
+                EVR_LOG(
+                    "glory: kill %llu still running after %.0f s; taken as ended (%s), the next starts once "
+                    "the game ends it",
+                    episode_.episodes(), episode_.timing().maxSeconds, comfort::gloryViewName(view_));
+            }
+        } else if (episode_.episodes() <= kLoggedEpisodes) {
             EVR_LOG("glory: kill %llu ends; the view's body turned up to %.1f deg during it",
                     episode_.episodes(), killTurn_);
         }

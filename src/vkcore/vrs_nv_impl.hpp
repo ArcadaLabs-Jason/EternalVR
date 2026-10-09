@@ -64,7 +64,9 @@ struct VrsDevice {
     PFN_vkCreateImageView createImageView = nullptr;
     PFN_vkCmdCopyBufferToImage cmdCopyBufferToImage = nullptr;
     std::mutex imagesMutex;
-    std::unordered_map<std::uint64_t, RateImage> images;
+    std::unordered_map<std::uint64_t, RateImage> images; // by eye shape generation, size and eye
+    std::uint32_t imagesGeneration = 0;                  // the generation made last, and its images
+    std::size_t generationImages = 0;
     bool imagesFull = false;
     std::atomic<std::uint64_t> pipelines{0};
     std::array<std::atomic<std::uint64_t>, 3> binds{}; // eye L, eye R, mono, untagged or not known
@@ -112,6 +114,9 @@ std::uint32_t memoryType(DeviceData& data, std::uint32_t bits, VkMemoryPropertyF
 inline std::uint64_t packed(VkExtent2D extent) {
     return (static_cast<std::uint64_t>(extent.width) << 32) | extent.height;
 }
+
+// One more each time an eye's shape for foveation changes (noteEye): rate images and marks are made again.
+std::uint32_t eyeShapeGeneration();
 
 // The texels of `eye`'s pattern for a render target of `extent` (`texel` pixels per texel); empty while the
 // eye's shape is not known yet. `log`: the regions are logged (once per rate image).

@@ -42,9 +42,10 @@ struct DotImage {
 std::mutex& g_mutex = *new std::mutex;
 // By device, format and queue family; a failed one is kept (VK_NULL_HANDLE) so it is not tried again.
 auto& g_dots = *new std::map<std::tuple<VkDevice, VkFormat, std::uint32_t>, DotImage>;
-// By eye, size and offset: the copies for one eye image.
-auto& g_regions = *new std::map<std::tuple<int, std::uint32_t, std::uint32_t, std::int32_t, std::int32_t>,
-                                std::vector<VkImageCopy>>;
+// By eye shape generation, eye, size and offset: the copies for one eye image.
+auto& g_regions =
+    *new std::map<std::tuple<std::uint32_t, int, std::uint32_t, std::uint32_t, std::int32_t, std::int32_t>,
+                  std::vector<VkImageCopy>>;
 
 // Under g_mutex: the dot image for `format` on `family`, cleared into `commandBuffer` the first time;
 // VK_NULL_HANDLE while it cannot be made or is not ready.
@@ -124,7 +125,8 @@ VkImage dotImage(DeviceData& dev, VkCommandBuffer commandBuffer, std::uint32_t f
 // known (asked again at the next copy).
 const std::vector<VkImageCopy>& regionsFor(VkExtent2D texel, int eye, VkOffset2D offset, VkExtent2D extent) {
     static const std::vector<VkImageCopy> kNone;
-    const auto key = std::make_tuple(eye, extent.width, extent.height, offset.x, offset.y);
+    const auto key =
+        std::make_tuple(eyeShapeGeneration(), eye, extent.width, extent.height, offset.x, offset.y);
     if (const auto it = g_regions.find(key); it != g_regions.end()) {
         return it->second;
     }

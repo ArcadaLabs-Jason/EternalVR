@@ -55,13 +55,15 @@ void logSummary(State& s) {
     }
     s.hapticLoggedTotal = total;
     s.hapticLoggedRefused = refused;
-    EVR_LOG("%s: %llu pulses (fire %llu, punch %llu, menu %llu, game %llu, capture %llu), %llu refused", kTag,
-            static_cast<unsigned long long>(total),
+    EVR_LOG("%s: %llu pulses (fire %llu, punch %llu, menu %llu, game %llu, capture %llu, wheel %llu), %llu "
+            "refused",
+            kTag, static_cast<unsigned long long>(total),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Fire)),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Punch)),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Menu)),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Game)),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Capture)),
+            static_cast<unsigned long long>(pulses(s, input::HapticSource::Wheel)),
             static_cast<unsigned long long>(refused));
 }
 
@@ -101,6 +103,12 @@ void noteMapperHaptics(const game::GameActionSet& sent, const input::GameInput& 
         s.hapticEvents.punch[i] = s.hapticEvents.punch[i] || input.punch[i];
     }
     s.hapticEvents.capture = s.hapticEvents.capture || input.capture;
+    for (std::size_t i = 0; i < input.restWheel.tick.size(); ++i) {
+        input::WheelTick& pending = s.hapticEvents.wheel[i];
+        if (input.restWheel.tick[i] == input::WheelTick::Pick || pending == input::WheelTick::None) {
+            pending = input.restWheel.tick[i];
+        }
+    }
 }
 
 void noteMenuHaptic(input::Hand hand, input::MenuTick tick) {
@@ -129,12 +137,14 @@ void updateHaptics(const XrInput& xr, bool focused) {
         s.hapticEvents.punch = {};
         s.hapticEvents.capture = false;
         s.hapticEvents.menu = {};
+        s.hapticEvents.wheel = {};
     }
     if (!s.haptics) {
         const float strength = settings().haptics;
         s.haptics.emplace(strength);
         if (strength > 0.0f) {
-            EVR_LOG("%s: on, strength %.2f (fire, punch, menu, capture, game rumble)", kTag, strength);
+            EVR_LOG("%s: on, strength %.2f (fire, punch, menu, capture, game rumble, thumb-rest wheel)", kTag,
+                    strength);
         } else {
             EVR_LOG("%s: off (ETERNALVR_HAPTICS=0)", kTag);
         }
@@ -150,6 +160,7 @@ void updateHaptics(const XrInput& xr, bool focused) {
     frame.punch = events.punch;
     frame.capture = events.capture;
     frame.menu = events.menu;
+    frame.wheel = events.wheel;
     // No game rumble while a menu holds gameplay back (the game may keep its last mix under a menu).
     if (events.rumbleQpc && secondsSince(events.rumbleQpc) < kRumbleStaleSeconds &&
         !menu_input::suppressGameplay()) {

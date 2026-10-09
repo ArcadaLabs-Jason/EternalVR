@@ -215,9 +215,13 @@ void XrPresenter::Impl::frame() {
         loseOnRuntimeFailure(r, "xrBeginFrame");
         return;
     }
-    // The camera hook predicts the head for about when the game's next frame will be shown; under
-    // ETERNALVR_POSE_LEAD, later by how late the frames shown were (display_lead.hpp).
-    nextDisplayTime.store(state.predictedDisplayTime + state.predictedDisplayPeriod + displayLead.leadNs());
+    // The camera hook predicts the head for about when the game's next frame will be shown: one display
+    // period on, at most 1.5x the headset's refresh period while the runtime throttles
+    // (presenter_refresh.hpp); under ETERNALVR_POSE_LEAD the period as reported, later by how late the frames
+    // shown were (display_lead.hpp).
+    nextDisplayTime.store(state.predictedDisplayTime +
+                          refresh.predictionPeriod(state.predictedDisplayPeriod, settings.poseLead) +
+                          displayLead.leadNs());
     displayPeriod.store(state.predictedDisplayPeriod);
     controllers::sync(state.predictedDisplayTime, sessionState == XR_SESSION_STATE_FOCUSED);
     test_keys::poll(gameWindow());
@@ -256,7 +260,7 @@ void XrPresenter::Impl::frame() {
         if (!quadPlaced || replaceScreen.exchange(false, std::memory_order_acq_rel)) {
             placeQuad(state.predictedDisplayTime);
         }
-        if (settings.mode == Mode::HeadTracked && !fovChecked) {
+        if (settings.mode == Mode::HeadTracked && fovWatch.due(qpcSeconds(frameStart))) {
             updateTargetFov(state.predictedDisplayTime);
         }
         updateImage(frameStart);
@@ -411,38 +415,6 @@ void XrPresenter::Impl::frame() {
     }
     afterFrame(state);
     watchFrameClock(state);
-}
-
-void XrPresenter::Impl::watchFrameClock(const XrFrameState& state) {
-    const auto stall =
-        clock.watch.onFrame(state.predictedDisplayTime, state.predictedDisplayPeriod, qpcSeconds(qpcNow()),
-                            gamePresents.load(std::memory_order_relaxed), state.shouldRender != XR_FALSE);
-    if (!stall || loss.lost) {
-        return;
-    }
-    char what[160];
-    if (stall->stuck) {
-        std::snprintf(what, sizeof(what), "the runtime's display time has not moved on for %d frames",
-                      pacing::FrameClockWatch::kStuckFrames);
-    } else {
-        std::snprintf(
-            what, sizeof(what), "the runtime gave %.1f frame(s)/s for %.0f s while the game presented %.1f/s",
-            stall->framesPerSecond, pacing::FrameClockWatch::kSlowSeconds, stall->presentsPerSecond);
-    }
-    if (clock.restarts >= ClockWatchState::kMaxRestarts) {
-        if (!clock.loggedKept) {
-            clock.loggedKept = true;
-            EVR_LOG("xr: %s; the session was started again %u times already, so it is left as it is", what,
-                    ClockWatchState::kMaxRestarts);
-        }
-        return;
-    }
-    // No call failed and the runtime does not end the session itself (public issue #19): the session is taken
-    // as lost, and the worker starts a new one as after a headset that went away (presenter_reconnect.cpp).
-    ++clock.restarts;
-    EVR_LOG("xr: %s; ending the session to start a new one (%u of %u)", what, clock.restarts,
-            ClockWatchState::kMaxRestarts);
-    loseOnRuntimeFailure(XR_ERROR_SESSION_LOST, "frame clock watch");
 }
 
 void XrPresenter::Impl::destroyXrObjects() {

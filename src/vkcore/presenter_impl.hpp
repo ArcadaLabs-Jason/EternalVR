@@ -15,6 +15,7 @@
 #include "features/menu/menu_router.hpp"
 #include "features/menu/panel_follow.hpp"
 #include "features/menu/panel_pointer.hpp"
+#include "features/tracking/fov_watch.hpp"
 #include "stereo_seq/centered_matrix.hpp"
 #include "ui_layer/gui_target.hpp"
 #include "ui_layer/ui_settings.hpp"
@@ -189,7 +190,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t xrProjectionFrames = 0, xrQuadFrames = 0;
     ViewRecord shownView; // the view of the image in the XR swapchain
     bool shownHasView = false;
-    bool fovChecked = false;
+    tracking::FovWatch fovWatch; // the headset's FOV, read again during the session (presenter_fov.cpp)
     bool loggedFirstProjection = false;
     bool loggedGuardCinema = false; // XR worker only
     XrViewConfigurationType viewConfig = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -213,13 +214,12 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::atomic<bool> sessionFocused{false};
     // Room-scale, recenter, posture and the head-collision fade (room_scale.hpp).
     RoomScale room;
-    // Latest predictedDisplayTime + one period (+ the display lead under ETERNALVR_POSE_LEAD).
+    // Latest predictedDisplayTime + one period, at most 1.5x the refresh (+ the lead of ETERNALVR_POSE_LEAD).
     std::atomic<XrTime> nextDisplayTime{0};
     std::atomic<XrDuration> displayPeriod{0};
-    // The game FOV covering both eyes (set by the worker from xrLocateViews once).
-    std::atomic<bool> targetFovValid{false};
-    std::atomic<float> targetFovX{0.0f};
-    std::atomic<float> targetFovY{0.0f};
+    // The game FOV covering both eyes (the worker's, from its FOV reads; presenter_fov.hpp packs it), 0:
+    // none.
+    std::atomic<std::uint64_t> targetFov{0};
     ViewHookStatus hooks;
 
     // Cutscenes and glory kills (camera hook thread only; the worker reads glory.flat()).
@@ -584,7 +584,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     void openFrameLog();
     void noteShownView(const XrFrameState& state);
     void logFrame(const XrFrameState& state);
-    // Worker, after each frame: the runtime's frame clock; a stall ends the session to start a new one.
+    // Worker, after each frame (presenter_clock.cpp): the runtime's clock; a stall restarts the session.
     void watchFrameClock(const XrFrameState& state);
     // Worker, after each frame: the display period's watch and, every 10 s, the xr line and the statistics.
     void afterFrame(const XrFrameState& state);

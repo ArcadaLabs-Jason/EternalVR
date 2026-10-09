@@ -38,6 +38,8 @@ void install() {
     bool angle = false;
     s.userCmdHook = installUserCmdHooks(cfg.path != input::InputPath::XInput, angle);
     s.angleHook = angle;
+    // The thumb-rest wheel's cvars: the game's wheel open delay, and its slowdown (rest_wheel.cpp).
+    locateWheelCvars();
     const bool wantPad =
         cfg.path == input::InputPath::XInput || (cfg.path == input::InputPath::Auto && !s.userCmdHook);
     if (wantPad) {

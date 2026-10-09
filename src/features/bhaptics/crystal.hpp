@@ -20,8 +20,11 @@ inline constexpr double kTokenDelaySeconds = 0.1;
 // A rune plays it too (a tester's ask, public issue #25: the Slayer is shocked right after the perk is
 // picked). Its sync (interact/rune/use_sync) starts as the rune's menu closes, as the crystal's does, and
 // runs about 7.6 s (a player's log, 0.1.33). The moment of the shock in it is not timed yet: the wave
-// starts soon after the menu, as the tester describes it, until a headset session times it.
+// starts soon after the menu, as the tester describes it, until a headset session times it. The Slayer is
+// shocked for about 4 to 5 s, so a rune plays the wave kRuneWaves times back to back (the tester's ask on
+// 0.1.36: twice as long).
 inline constexpr double kRuneDelaySeconds = 1.0;
+inline constexpr int kRuneWaves = 2;
 inline constexpr double kCrystalWaveSeconds = 2.0;
 inline constexpr double kCrystalStepSeconds = 0.08;
 

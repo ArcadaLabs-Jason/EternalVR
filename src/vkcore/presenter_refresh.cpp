@@ -2,6 +2,7 @@
 
 #include "vkcore/presenter_refresh.hpp"
 
+#include "features/pacing/prediction_period.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/presenter_types.hpp"
 #include "vkcore/status_file.hpp"
@@ -121,6 +122,40 @@ void RefreshLog::onFrame(XrDuration period) {
     }
 }
 
+XrDuration RefreshLog::predictionPeriod(XrDuration reported, bool poseLead) {
+    if (poseLead) {
+        if (!loggedLeadPrediction_) {
+            loggedLeadPrediction_ = true;
+            EVR_LOG("xr: pose prediction: the pose lead is on, so the display period is added as the runtime "
+                    "reports it (the lead measures how late frames are shown)");
+        }
+        return reported;
+    }
+    const double measured = watch_.baseMs() > 0.0 ? watch_.baseMs() : watch_.referenceMs();
+    const double base = pacing::predictionBaseMs(measured, runtimeMs());
+    const XrDuration used = pacing::predictionPeriodNs(reported, base, false);
+    const bool held = used != reported;
+    predictionHeldFrames_ += held ? 1 : 0;
+    if (held != predictionHeld_ && predictionLines_ < kMaxPredictionLines) {
+        ++predictionLines_;
+        if (held) {
+            EVR_LOG("xr: pose prediction: the display period %.2f ms is over %.1fx the headset's %.2f ms; "
+                    "the head and hands are predicted %.2f ms past the display time instead",
+                    static_cast<double>(reported) / 1e6, pacing::kMaxBaseMultiple, base,
+                    static_cast<double>(used) / 1e6);
+        } else {
+            EVR_LOG("xr: pose prediction: one display period (%.2f ms) past the display time again",
+                    static_cast<double>(reported) / 1e6);
+        }
+        if (predictionLines_ == kMaxPredictionLines) {
+            EVR_LOG("xr: pose prediction: %u lines logged; later holds are counted in the refresh summary",
+                    kMaxPredictionLines);
+        }
+    }
+    predictionHeld_ = held;
+    return used;
+}
+
 double RefreshLog::baseMs() const {
     const double measured = watch_.baseMs() > 0.0 ? watch_.baseMs() : watch_.referenceMs();
     return pacing::summaryBase(measured, runtimeMs());
@@ -132,6 +167,10 @@ void RefreshLog::logSummary(const char* when) {
     if (!text.empty()) {
         EVR_LOG("xr: refresh summary%s: %s", when, text.c_str());
         status::field("throttled_share", pacing::throttledShareValue(shares));
+    }
+    if (predictionHeldFrames_ > 0) {
+        EVR_LOG("xr: pose prediction held to %.1fx the headset's refresh period in %llu frame(s) so far",
+                pacing::kMaxBaseMultiple, static_cast<unsigned long long>(predictionHeldFrames_));
     }
 }
 

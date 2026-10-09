@@ -34,6 +34,10 @@ struct HandState {
     bool face4Button = false;     // Y on the right, D-pad up on the left.
     bool shoulderButton = false;  // The bumper above the trigger.
     bool menuButton = false;
+    // Touch sensors (rest_wheel.hpp): a thumb on the thumb rest, or on the primary or secondary button.
+    bool thumbRest = false;
+    bool primaryTouch = false;
+    bool secondaryTouch = false;
 
     // The aim pose: -Z runs along the controller's pointing ray.
     bool poseValid = false;

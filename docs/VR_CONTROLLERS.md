@@ -92,6 +92,67 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   centre and drifts with the body. The weapon hand is the handedness's (left in both left modes). Log: the
   `controllers: on:` line ends `weapon wheel by the hand` (or `stick`), and `the weapon wheel is up: the
   weapon hand moves the game's wheel cursor (200 px to the rim at a 20 deg turn)`.
+- **The thumb-rest wheel** (`ETERNALVR_THUMBREST_WHEEL`, `features/input/rest_wheel.hpp`, T-118; the
+  launcher's Play tab, Controls, "Thumb-rest wheel"). A thumb resting on its controller's thumb rest turns the
+  other hand's stick into a weapon picker, beside the turn stick's down hold and the slot bindings, which
+  stay. The rest is the `thumbrest` action (`/input/thumbrest/touch`, Touch controllers only; Touch Pro and
+  Plus report as Touch), debounced 0.06 s each way; with `ETERNALVR_THUMBREST_FACE_TOUCH=1` the A/B or X/Y
+  touch (`primary_touch`, `secondary_touch`, while touched and not pressed) stands in on controllers without
+  one (Index, Pico 4; not the Steam Frame, whose right bumper already holds the wheel). A player's controls
+  file replaces the built-in file whole, so the layer adds these bindings to a family's data that lacks them
+  (`rest_touch_bindings.hpp`; logged as `N touch binding(s) for the thumb-rest wheel added`, nothing
+  rewritten), and a runtime that refuses the profile with them is asked again without them (the family then
+  has no rest for the session). Modes (off by default since 2026-10-09, after the first headset test; the launcher offers edge and full,
+  `extreme` is layer-only until it is redesigned): `edge`: a landing arms the other stick for 0.5 s
+  (`ETERNALVR_THUMBREST_WINDOW`, 0.2 to 1); it counts only with both sticks within 0.25 at that moment, so a
+  thumb that lands while the other stick moves or turns does nothing, and pushing the other stick past 0.25 in
+  the window starts picking; a thumb left resting never stops that stick. A thumb that comes straight from its
+  own controls opens no window either: a landing within 0.4 s of that hand's primary or secondary button going
+  up (`kOwnButtonVoidSeconds`: jump or dash, then the thumb on the rest) or of its own stick being out of the
+  centre (`kOwnStickVoidSeconds`: turn, rest, walk; walk, rest, turn). After a pick (never after a cancel, so
+  snap flicks with a resting thumb are not taken one after another) the window opens again once the stick has
+  been back in the centre for 0.05 s. `full`: while the thumb rests the other stick is the wheel's (it neither
+  moves nor turns; a stick out when the thumb lands waits for the centre). `extreme`: the turn stick is always
+  the wheel's; the rest on the other hand (the move stick's) gives it back its turning, chainsaw and quick
+  switch, and ends a pick in progress. `off`. Picking: nothing is pressed until the stick has stayed 0.1 s in
+  one of the eight directions at 0.5 or more (a direction is kept until the stick is 7.5 degrees past the edge
+  of its eighth), so a flick presses nothing; with `slots` the first direction a stick reaches past 0.85
+  (`kFlickThreshold`) counts at once, so a flick picks. Then with `ETERNALVR_THUMBREST_PICK=wheel` (default)
+  `weapon_wheel` goes down and the stick points as under the stick's own hold (`wheelPointer`; below 0.5 the
+  last direction, so the highlight stays); the stick back in the centre, the thumb lifted (or in `extreme` the
+  other thumb resting) closes it, held at least the game's open delay plus 0.12 s from the press, never under
+  0.3 s (`wheelHoldSeconds`; the delay is `weaponWheel_HoldTimeForOpeningWheel`, the game's Weapon Wheel Open
+  Delay, 180 ms by default, read every mapper run; 0.3 s when the cvar is not found), so a quick pick is never
+  a quick switch. There is no cancel once it is open. With `slots` the wheel stays closed and the direction
+  held last is remembered; letting go presses its `weapon_slot_N` once (held by `ActionHold`), from
+  `ETERNALVR_WEAPON_DIRECTIONS` (`up=1,up_right=2,...`, `weapon_directions.hpp`; the default, clockwise slots
+  1 to 8 from up, is to be matched to the game's wheel layout from a rig screenshot). The mapper runs the
+  wheel before the turn stick's arbiter and the turn: the stick it takes goes to the arbiter as a held wheel
+  from the frame it leaves 0.25, so a snap (0.70) or a smooth turn (0.35) never fires first; the move stick is
+  zeroed. After a pick or a cancel that stick stays out of play until it is back within 0.25. Blocked (no
+  arming, picking cancelled, an open wheel closed): a menu's hold, the game suppressing buttons (r14b, kept
+  from the user command before the mapper runs), a forced view (`forcedView()`), a skippable cutscene, a
+  piloted demon, and another route holding the wheel (a button bound to `weapon_wheel`, the turn stick's down
+  sweep). With both thumbs resting the first to start picking wins. Under `ETERNALVR_WHEEL_SELECT=hand` this
+  wheel still points with its stick. Vibration (`HapticSource::Wheel`): a tick on the picking stick's hand
+  when picking starts (0.25, 0.02 s) and a firmer one on the pick (0.5, 0.035 s), times the strength. The
+  slowdown (`features/input/wheel_slowdown.hpp`, `src/vkcore/rest_wheel.cpp`): the game slows time while its
+  wheel is open (`weaponWheel_slowTimeScale`, 0.14); with `ETERNALVR_THUMBREST_SLOWDOWN=0` the layer holds
+  that cvar at 1 from this wheel's press until 0.3 s after it lets go, through the cvar book, and writes the
+  game's own value (read just before each hold) back; at once when the stick's wheel or a button takes over
+  (they always slow time), when the controllers go stale, on a multiplayer guard trip (the book's restore) and
+  when the layer shuts down. With the slowdown on (default) the cvar is never looked up. Log: the
+  `controllers: on:` line ends `thumb-rest wheel edge (picks with wheel, face touch off, slowdown on)`; the
+  control map line is followed by `thumb-rest wheel edge: rest sensors on both hands, picks with the game's
+  wheel, window 0.50 s` (or `off for these controllers (no thumb-rest sensor)`); `thumb-rest wheel: the left
+  controller reports a resting thumb` at each hand's first touch, and one line when none has after a minute of
+  play; `the game opens its wheel 180 ms after the press (weaponWheel_HoldTimeForOpeningWheel): held at least
+  0.30 s` when the delay is read or changes; then per use `armed: the right stick picks (left thumb rest,
+  edge, 0.21 s after the touch)` (under `extreme`: `armed: the turn stick picks weapons; the left thumb rest
+  gives turning back`), `the game's wheel is held, pointing up`, `the game's wheel let go pointing right`,
+  `weapon_slot_3 picked by the right stick pointing right`, `cancelled, nothing pressed`, and `the left thumb
+  landed with a stick out of the centre; no window` (or `straight from its own stick`, `straight from its own
+  face button`; capped like the action lines). Scripted input counts as a rest on both hands.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
   Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
   off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along
@@ -326,10 +387,17 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_MAP_STICKS` | `weapon`: on the Dossier's map the weapon hand's stick pans and the other stick zooms and rotates; `other`: the other way round (docs/VR_MENUS.md) | `weapon` |
 | `ETERNALVR_WHEEL_SELECT` | `stick`: the turn stick points at the weapon wheel, whether it or a button holds it; `hand`: the weapon hand points, the stick or button only holds it (above) | `stick` |
 | `ETERNALVR_WHEEL_HAND_DEGREES` | the hand's turn that reaches the wheel's rim, 5 to 45 degrees (half of it highlights a weapon) | 20 |
+| `ETERNALVR_THUMBREST_WHEEL` | the thumb-rest wheel (above): `edge` (a thumb on its rest, then the other stick pushed within the window), `full` (the other stick picks while the thumb rests), `extreme` (the turn stick always picks; the other thumb's rest turns), `off` | `off` |
+| `ETERNALVR_THUMBREST_PICK` | `wheel`: the game's wheel opens and the stick points; `slots`: each direction presses a weapon slot on letting go | `wheel` |
+| `ETERNALVR_WEAPON_DIRECTIONS` | under `slots`, the slot (1 to 8, or `none`) of each direction: `up=1,up_right=2,right=3,down_right=4,down=5,down_left=6,left=7,up_left=8`; a direction left out keeps its default | that table |
+| `ETERNALVR_THUMBREST_FACE_TOUCH` | `1`: a thumb on A/B or X/Y counts as resting, on Index and Pico 4 controllers (their touch bindings are added for the session) | `0` |
+| `ETERNALVR_THUMBREST_SLOWDOWN` | `0`: no slowdown while the thumb-rest wheel holds the game's wheel open (`weaponWheel_slowTimeScale` held at 1); `1` writes nothing | `1` |
+| `ETERNALVR_THUMBREST_WINDOW` | `edge`: seconds from the thumb's landing to the push, 0.2 to 1 (tuning) | 0.5 |
 | `ETERNALVR_THROW` | `1`: the off hand's overhand throw presses the equipment launcher (above) | `0` |
 | `ETERNALVR_THROW_SPEED` | the throw's forward speed, 1 to 5 metres per second | 2 |
 | `ETERNALVR_SWING` | `1`: the weapon hand's overhead swing presses the Crucible (above) | `0` |
 | `ETERNALVR_SWING_SPEED` | the swing's downward speed, 1 to 5 metres per second | 2.5 |
+| `ETERNALVR_POSE_GUARD` | `1` / `0`: with `0` hand positions that jump further than a hand moves are used as they are, and so is any hand velocity (docs/VR_ROOMSCALE.md, Tracked positions that jump) | `1` |
 | `ETERNALVR_PUNCH_SPEED` | how fast a hand must move where the head looks to punch, 1 to 4 metres per second; the launcher's Punch speed: Light 1.6, Medium 2.2, Hard 2.8, Very hard 3.4 | 2.8 |
 | `ETERNALVR_HOLD_SECONDS` | how long a button is held before its hold action starts (a shorter press is a tap), 0.1 to 1 s; the stick held down for the weapon wheel waits 0.05 s longer; it also sets the both-sticks recenter and capture chords (the recenter hold still totals its own time); the launcher's Hold time: Short 0.15, Medium 0.25, Long 0.4, Very long 0.6 | 0.25 |
 | `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
@@ -637,6 +705,7 @@ it. When the XR worker's snapshot is stale the mapper builds its frame from the 
 right.trigger = 1          # 0..1 (also grip)
 left.stick = 0, 1          # x, y
 right.primary = 1          # primary, secondary, face3, face4, shoulder, click (stick click), menu
+left.thumbrest = 1         # touch sensors: thumbrest, primary_touch, secondary_touch
 right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOCAL)
 left.aim = 0, 0, 90        # an optional roll, counter-clockwise as the user sees it: the left palm up
 right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)
@@ -731,6 +800,16 @@ for seconds (below).
   a headset: that 20 degrees (10 to highlight) feels right, that the wheel's segments match the directions
   the hand turns as the player sees the wheel, and that hand aim turning the view while the hand points
   does not disturb the wheel (the game reads the cursor, not the view).
+- **The thumb-rest wheel** (`ETERNALVR_THUMBREST_WHEEL`, off by default) is covered by unit tests
+  and scripted rig scenarios (`tools/rig/qa/qa-scenarios-wheel.ps1`), not yet a headset. To confirm: that
+  SteamVR's and Virtual Desktop's Touch emulation report the thumb rest at all (the log's `reports a resting
+  thumb` line), the window and the dwell, how often a thumb landing after a jump arms the move stick while
+  walking starts, the ticks, the face-button touch on Index, and the slowdown's feel. The slot table's
+  default is a guess until a screenshot of the wheel on the rig shows where the game puts each slot. The
+  wheel cannot be cancelled once open. The wheel is held for the game's open delay, but the pointer still
+  starts moving 0.25 s after the press, so with a Weapon Wheel Open Delay above about 0.25 s the first motion
+  can turn the view, as with the stick's own wheel. Under the virtual gamepad (`ETERNALVR_XINPUT`) weapon by
+  direction presses nothing: the pad has no weapon slot binds. No hint in the headset yet.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`) are covered by unit tests only. To confirm in a
   headset: the thresholds, false triggers in a real fight, and whether the grenade should fly along the
   throw rather than the view (`docs/VR_INTERACTIONS.md` section 5).

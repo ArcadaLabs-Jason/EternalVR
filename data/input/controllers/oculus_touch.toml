@@ -8,7 +8,8 @@
 # Jump on A and dash on B mirror the console layout, so thumb habits transfer. The chainsaw is up and
 # weapon selection down on the turn stick. The equipment launcher and Flame Belch are
 # shoulder-mounted and aim from the head, so they sit on the off hand. Only the left Menu button can
-# be read by an application on Touch controllers, so the pause stays there in every map.
+# be read by an application on Touch controllers, so the pause stays there in every map. The thumb
+# rests' touch sensors serve the thumb-rest weapon wheel (docs/VR_CONTROLLERS.md).
 
 [profile]
 "path" = "/interaction_profiles/oculus/touch_controller"
@@ -22,6 +23,7 @@
 "gameplay.left.aim_pose" = "/input/aim/pose"
 "gameplay.left.grip_pose" = "/input/grip/pose"
 "gameplay.left.haptic" = "/output/haptic"
+"gameplay.left.thumbrest" = "/input/thumbrest/touch"
 "gameplay.right.trigger" = "/input/trigger/value"
 "gameplay.right.grip" = "/input/squeeze/value"
 "gameplay.right.thumbstick" = "/input/thumbstick"
@@ -31,6 +33,7 @@
 "gameplay.right.aim_pose" = "/input/aim/pose"
 "gameplay.right.grip_pose" = "/input/grip/pose"
 "gameplay.right.haptic" = "/output/haptic"
+"gameplay.right.thumbrest" = "/input/thumbrest/touch"
 
 [map.right]
 "weapon_hand" = "right"

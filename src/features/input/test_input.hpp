@@ -12,6 +12,7 @@
 //   left.stick = 0, 1            x, y in -1..1 (also right.stick)
 //   right.primary = 1            buttons: primary, secondary, face3, face4, shoulder, click (stick click),
 //                                menu; 1 or 0
+//   left.thumbrest = 1           touch sensors: thumbrest, primary_touch, secondary_touch; 1 or 0
 //   right.aim = 20, -10          the hand points 20 degrees left and 10 degrees down of LOCAL's -Z
 //   left.aim = 0, 0, 90          an optional roll about the pointing axis, counter-clockwise as the user
 //                                sees it (the controller's top to the left): 90 turns the left palm up
@@ -46,6 +47,9 @@ struct TestHand {
     std::optional<bool> face4;
     std::optional<bool> shoulder;
     std::optional<bool> menu;
+    std::optional<bool> thumbRest;
+    std::optional<bool> primaryTouch;
+    std::optional<bool> secondaryTouch;
     std::optional<float> aimYawDegrees;   // counter-clockwise seen from above
     std::optional<float> aimPitchDegrees; // positive up
     float aimRollDegrees = 0.0f;          // about the pointing axis, counter-clockwise as the user sees it

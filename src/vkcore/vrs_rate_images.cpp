@@ -1,8 +1,9 @@
 // Foveated rendering's settings and rate images (vrs_nv.hpp): the pattern for each render target size and
-// eye, made and uploaded once.
+// eye, made and uploaded once for each eye shape (features/foveation/eye_shape_latch.hpp).
 
 #include "vkcore/vrs_nv.hpp"
 
+#include "features/foveation/eye_shape_latch.hpp"
 #include "features/foveation/foveation_preset.hpp"
 #include "features/foveation/foveation_region.hpp"
 #include "features/foveation/rate_pattern.hpp"
@@ -11,6 +12,7 @@
 #include "vkcore/vrs_nv_impl.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
@@ -22,7 +24,7 @@ namespace evr::vkcore::vrs_nv {
 
 namespace {
 
-// Rate images kept per device, one per render target size and eye.
+// Rate images made per device for one eye shape, one per render target size and eye.
 constexpr std::size_t kMaxImages = 32;
 // A rate image is used from its first command buffer on; other command buffers wait this long, so the one
 // that uploads it has run.
@@ -93,13 +95,12 @@ Settings readSettings() {
     return requested;
 }
 
-// Each eye's FOV and orientation in the head, published by the presenter.
-struct EyeShape {
-    xr_math::Fov fov;
-    Quat orientation;
-};
+// Each eye's FOV and orientation in the head, published by the presenter, and the eye shapes' generation: one
+// more each time an eye's shape changes, so the rate images are made again.
 std::mutex& g_eyesMutex = *new std::mutex;
-std::array<std::optional<EyeShape>, 2> g_eyes;
+std::array<foveation::EyeShapeLatch, 2> g_eyes;
+std::array<bool, 2> g_loggedCapped{};
+std::atomic<std::uint32_t> g_shapeGeneration{0};
 
 // Creates the rate image for `pattern` and records its upload into `commandBuffer` (outside a render pass).
 bool createAndUpload(VrsDevice& d,
@@ -214,11 +215,27 @@ void noteEye(int eye, const xr_math::Fov& fov, const Quat& orientationInHead) {
     if (settings().mode != Mode::Fovea || (eye != 0 && eye != 1)) {
         return;
     }
+    using Note = foveation::EyeShapeLatch::Note;
+    constexpr float kDegrees = 57.29578f;
+    const auto e = static_cast<std::size_t>(eye);
     std::lock_guard lock(g_eyesMutex);
-    auto& slot = g_eyes[static_cast<std::size_t>(eye)];
-    if (!slot) {
-        slot = EyeShape{fov, orientationInHead};
+    const Note note = g_eyes[e].note({fov, orientationInHead});
+    if (note == Note::Changed) {
+        g_shapeGeneration.fetch_add(1, std::memory_order_release);
+        EVR_LOG(
+            "vrs: eye %d's shape changed: FOV left %.2f right %.2f up %.2f down %.2f deg (change %d of at "
+            "most %d); its rate images are made again",
+            eye, fov.angleLeft * kDegrees, fov.angleRight * kDegrees, fov.angleUp * kDegrees,
+            fov.angleDown * kDegrees, g_eyes[e].changes(), foveation::EyeShapeLatch::kMaxChanges);
+    } else if (note == Note::Capped && !g_loggedCapped[e]) {
+        g_loggedCapped[e] = true;
+        EVR_LOG("vrs: eye %d's shape changed again after %d changes; its rate images stay as they are", eye,
+                foveation::EyeShapeLatch::kMaxChanges);
     }
+}
+
+std::uint32_t eyeShapeGeneration() {
+    return g_shapeGeneration.load(std::memory_order_acquire);
 }
 
 std::vector<std::uint8_t> patternFor(VkExtent2D texel, VkExtent2D extent, int eye, bool log) {
@@ -232,10 +249,10 @@ std::vector<std::uint8_t> patternFor(VkExtent2D texel, VkExtent2D extent, int ey
         std::fill(out.begin(), out.end(), s.rate);
         return out;
     }
-    std::optional<EyeShape> shape;
+    std::optional<foveation::EyeShape> shape;
     {
         std::lock_guard lock(g_eyesMutex);
-        shape = g_eyes[static_cast<std::size_t>(eye)];
+        shape = g_eyes[static_cast<std::size_t>(eye)].shape();
     }
     if (!shape) {
         return {};
@@ -273,7 +290,10 @@ void noteOtherTarget(VrsDevice& d, VkExtent2D extent, foveation::TargetSize eye)
 }
 
 VkImageView viewFor(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D extent, int eye) {
-    const std::uint64_t key = (static_cast<std::uint64_t>(extent.width) << 33) |
+    // The images of an earlier eye shape stay (a command buffer may still use one) and are no longer found.
+    const std::uint32_t generation = eyeShapeGeneration();
+    const std::uint64_t key = (static_cast<std::uint64_t>(generation & 0xFFFF) << 48) |
+                              (static_cast<std::uint64_t>(extent.width) << 33) |
                               (static_cast<std::uint64_t>(extent.height) << 1) |
                               static_cast<std::uint64_t>(eye);
     std::lock_guard lock(d.imagesMutex);
@@ -283,7 +303,12 @@ VkImageView viewFor(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D exte
             image.uploadedBy == commandBuffer || nowSeconds() - image.uploadedAt > kReadySeconds;
         return ready ? image.view : VK_NULL_HANDLE;
     }
-    if (d.images.size() >= kMaxImages) {
+    if (generation != d.imagesGeneration) {
+        d.imagesGeneration = generation;
+        d.generationImages = 0;
+        d.imagesFull = false;
+    }
+    if (d.generationImages >= kMaxImages) {
         if (!d.imagesFull) {
             d.imagesFull = true;
             EVR_LOG("vrs: %zu rate images made; render targets of new sizes keep full rate", kMaxImages);
@@ -302,6 +327,7 @@ VkImageView viewFor(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D exte
                 extent.height);
     }
     d.images[key] = image; // kept even when it failed, so it is not tried again
+    ++d.generationImages;
     return image.view;
 }
 

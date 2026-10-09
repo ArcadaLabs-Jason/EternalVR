@@ -28,6 +28,19 @@
 //   ETERNALVR_WHEEL_SELECT   stick / hand       what points at the weapon wheel: the stick that holds it
 //                                               (stick), or the weapon hand (hand); wheel_hand.hpp
 //   ETERNALVR_WHEEL_HAND_DEGREES  5 to 45       the hand's turn that reaches the wheel's rim (20)
+//   ETERNALVR_THUMBREST_WHEEL  edge / full / extreme / off   the thumb-rest weapon wheel: a thumb on its
+//                                               rest, then the other stick pushed (edge); the other stick
+//                                               picks while the thumb rests (full); the turn stick always
+//                                               picks, the other thumb's rest turns (extreme); off by default
+//                                               until more players have tried it (rest_wheel.hpp)
+//   ETERNALVR_THUMBREST_PICK   wheel / slots    the thumb-rest wheel opens the game's wheel (wheel), or each
+//                                               direction picks a weapon slot (slots)
+//   ETERNALVR_WEAPON_DIRECTIONS  up=1,...       each direction's slot under slots (weapon_directions.hpp)
+//   ETERNALVR_THUMBREST_FACE_TOUCH  1 / 0       a thumb on A/B or X/Y counts as resting, on controllers with
+//                                               no thumb rest (off by default; rest_touch_bindings.hpp)
+//   ETERNALVR_THUMBREST_SLOWDOWN  1 / 0         time slows while the thumb-rest wheel holds the game's wheel
+//                                               open, as the game does for its wheel (on by default)
+//   ETERNALVR_THUMBREST_WINDOW  0.2 to 1        edge: seconds from the thumb landing to the push (0.5)
 //   ETERNALVR_THROW          1 / 0              wind up the off hand beside the head and throw: the equipment
 //                                               launcher (off by default; arm_gestures.hpp)
 //   ETERNALVR_THROW_SPEED    1 to 5             the throw's forward speed, metres per second (2)
@@ -93,6 +106,7 @@
 #include "features/input/map_sticks.hpp"
 #include "features/input/offhand_policy.hpp"
 #include "features/input/punch_detector.hpp"
+#include "features/input/rest_wheel.hpp"
 #include "features/input/tap_hold.hpp"
 #include "features/input/turn_policy.hpp"
 #include "features/input/wheel_hand.hpp"
@@ -165,6 +179,9 @@ struct ControllerSettings {
     MapSticks mapSticks = MapSticks::WeaponPans; // map_sticks.hpp
     WheelSelect wheelSelect = WheelSelect::Stick;
     float wheelHandDegrees = kDefaultWheelHandDegrees;
+    RestWheelSettings thumbRest{RestWheelMode::Off}; // rest_wheel.hpp
+    bool thumbRestFaceTouch = false;
+    bool thumbRestSlowdown = true;
     ThrowSettings throwGesture; // arm_gestures.hpp
     SwingSettings swing;
     HandsJumpSettings handsJump;                     // hands_jump.hpp

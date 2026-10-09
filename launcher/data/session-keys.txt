@@ -30,3 +30,8 @@ r_blurRadialScale
 # screen warp. The game saves it to DOOMEternalConfig.local (its console: "Cvar 'r_waterPostProcess' was modified
 # to '0' local"), and a player's flat game must keep its own warp.
 r_waterPostProcess
+# Held by the layer only while the thumb-rest wheel holds the game's wheel open with its slowdown off
+# (ETERNALVR_THUMBREST_SLOWDOWN=0, src/vkcore/rest_wheel.cpp), then written back. Whether the game saves it to its
+# config is not known; if a save ever caught the held 1, the restore puts the flat value back. Harmless when the
+# game never saves it.
+weaponWheel_slowTimeScale

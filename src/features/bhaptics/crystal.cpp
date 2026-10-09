@@ -1,5 +1,5 @@
 // The Sentinel Crystal's wave and BodyHaptics::crystal: the ring as frames on the vest and both sleeves.
-// A Praetor Suit token's pickup and a rune's play it too (crystalWaveDelay).
+// A Praetor Suit token's pickup and a rune's play it too (crystalWaveDelay, crystalWaveCount).
 
 #include "features/bhaptics/crystal.hpp"
 
@@ -43,6 +43,10 @@ std::optional<double> crystalWaveDelay(SyncKind kind) {
     return std::nullopt;
 }
 
+int crystalWaveCount(SyncKind kind) {
+    return kind == SyncKind::Rune ? kRuneWaves : 1;
+}
+
 float crystalDistance(int row, int column) {
     const float down = static_cast<float>(row) - static_cast<float>(kVestRows - 1) / 2.0f;
     const float across = static_cast<float>(column) - static_cast<float>(kVestColumns - 1) / 2.0f;
@@ -66,8 +70,9 @@ void BodyHaptics::crystal(std::vector<Frame>& out, double seconds) {
         return;
     }
     nextCrystal_ = std::max(nextCrystal_ + kCrystalStepSeconds, seconds);
-    // A late update plays the ring where it is by now, not the steps it missed.
-    const double sinceStart = seconds - crystalWaveStart_;
+    // A late update plays the ring where it is by now, not the steps it missed. A rune's waves follow each
+    // other, each from the centre again.
+    const double sinceStart = std::fmod(seconds - crystalWaveStart_, kCrystalWaveSeconds);
     for (const Device side : {Device::VestFront, Device::VestBack}) {
         std::vector<Dot> dots;
         for (int row = 0; row < kVestRows; ++row) {

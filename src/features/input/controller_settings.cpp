@@ -106,6 +106,35 @@ private:
     std::string raw_;
 };
 
+void readThumbRest(Reader& r, ControllerSettings& s) {
+    static constexpr std::pair<const char*, RestWheelMode> kModes[] = {{"edge", RestWheelMode::Edge},
+                                                                       {"full", RestWheelMode::Full},
+                                                                       {"extreme", RestWheelMode::Extreme},
+                                                                       {"off", RestWheelMode::Off},
+                                                                       {"0", RestWheelMode::Off}};
+    r.choice("ETERNALVR_THUMBREST_WHEEL", kModes, s.thumbRest.mode);
+    static constexpr std::pair<const char*, RestWheelPick> kPicks[] = {{"wheel", RestWheelPick::Wheel},
+                                                                       {"slots", RestWheelPick::Slots}};
+    r.choice("ETERNALVR_THUMBREST_PICK", kPicks, s.thumbRest.pick);
+    r.flag("ETERNALVR_THUMBREST_FACE_TOUCH", s.thumbRestFaceTouch);
+    r.flag("ETERNALVR_THUMBREST_SLOWDOWN", s.thumbRestSlowdown);
+    if (const auto v = r.get("ETERNALVR_THUMBREST_WINDOW")) {
+        const auto n = number(*v);
+        if (n && *n >= kMinEdgeWindowSeconds && *n <= kMaxEdgeWindowSeconds) {
+            s.thumbRest.windowSeconds = *n;
+        } else {
+            r.report("ETERNALVR_THUMBREST_WINDOW", "expected seconds from 0.2 to 1; the default is kept");
+        }
+    }
+    if (r.get("ETERNALVR_WEAPON_DIRECTIONS")) {
+        WeaponDirectionsResult directions = parseWeaponDirections(r.raw());
+        s.thumbRest.directions = directions.table;
+        for (const std::string& issue : directions.issues) {
+            r.report("ETERNALVR_WEAPON_DIRECTIONS", issue + "; that direction keeps its slot");
+        }
+    }
+}
+
 } // namespace
 
 ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
@@ -167,6 +196,7 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                                                                      {"hand", WheelSelect::Hand}};
     r.choice("ETERNALVR_WHEEL_SELECT", kWheel, s.wheelSelect);
     r.range("ETERNALVR_WHEEL_HAND_DEGREES", kMinWheelHandDegrees, kMaxWheelHandDegrees, s.wheelHandDegrees);
+    readThumbRest(r, s);
 
     r.flag("ETERNALVR_THROW", s.throwGesture.enabled);
     r.range("ETERNALVR_THROW_SPEED", kMinGestureSpeed, kMaxGestureSpeed, s.throwGesture.speed);

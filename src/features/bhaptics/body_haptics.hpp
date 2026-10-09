@@ -24,7 +24,8 @@
 //   the crystal's wave from kTokenDelaySeconds into it, as the hands close on the coin (a tester's idea,
 //   public issue #1; crystalWaveDelay);
 // - rune: its pickup animation (after the rune's menu, as for a crystal: the Slayer takes the rune's charge)
-//   plays the crystal's wave from kRuneDelaySeconds into it (a tester's ask, public issue #25);
+//   plays the crystal's wave from kRuneDelaySeconds into it, kRuneWaves times back to back (a tester's
+//   ask, public issue #25);
 // - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
 //   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
 //   lighter and shorter (a tester's suggestion, public issue #1);
@@ -164,6 +165,10 @@ const char* syncKindName(SyncKind kind);
 // (crystal.cpp).
 std::optional<double> crystalWaveDelay(SyncKind kind);
 
+// How many times the crystal's wave plays back to back for a sync of `kind`: kRuneWaves for a rune, once for
+// the others (crystal.cpp).
+int crystalWaveCount(SyncKind kind);
+
 // What a trigger teleport of the player is (idTrigger_Teleporter, and its _Fade kind that fades out first):
 // a portal or pad, or one of the same classes the maps use to put the player back after a fall (a hazard
 // with a damage decl, or out of bounds with the falling stinger for its fade sound). The hub's secret
@@ -263,6 +268,7 @@ private:
     bool crystalPending_ = false;   // that sync started and its wave is not timed yet
     double crystalStart_ = 0.0;     // when that sync started
     double crystalDelay_ = 0.0;     // its wave's delay (crystalWaveDelay)
+    int crystalWaves_ = 1;          // and how many times it plays (crystalWaveCount)
     double crystalWaveStart_ = 0.0; // and when its wave starts
     double portalStart_ = 0.0;
     double nextPortal_ = 0.0;   // the sweep's next step

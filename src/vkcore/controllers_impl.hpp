@@ -36,6 +36,7 @@
 #include "game/eternal/weapon_offsets.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/player_aim.hpp"
+#include "vkcore/pose_guards.hpp"
 #include "xr_math/weapon_pose.hpp"
 
 #include <windows.h>
@@ -114,6 +115,7 @@ struct HapticEvents {
     std::array<bool, 2> punch{};
     bool capture = false;
     std::array<input::MenuTick, 2> menu{};
+    std::array<input::WheelTick, 2> wheel{};
     input::GameRumble rumble; // the game's motors as its rumble hook last saw them (a level)
     LONGLONG rumbleQpc = 0;   // when; 0 for never
 };
@@ -238,6 +240,9 @@ struct State {
     bool skipKeyDown = false;
     input::GameInput lastInput;
     game::GameActionSet lastSent;
+    // The game suppressed buttons in its last user command (r14b at the PutUserCmd call): the thumb-rest
+    // wheel starts nothing (restWheelBlocked).
+    std::atomic<bool> gameSuppressing{false};
 
     // Forced angles: the SetViewAngles hook counts, the camera hook's gate decides (camera hook only).
     std::atomic<std::uint32_t> foreignSetViewAngles{0};
@@ -319,11 +324,12 @@ const char* xrText(XrResult result, char (&buffer)[XR_MAX_RESULT_STRING_SIZE]);
 
 // Controller families (input_profiles.cpp). Every family's data: the built-in files, with a player's file
 // (ETERNALVR_CONTROLLER_DATA, a file or every *.toml in a folder) in place of the family whose profile it
-// names.
+// names, and the thumb-rest wheel's touch bindings added where they are missing.
 FamilyData loadControllerData(const input::ControllerSettings& settings);
 // Suggests the bindings of every family whose profile the instance has, and logs which were suggested and
-// which skipped. True when at least one profile was accepted.
-bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const FamilyData& data);
+// which skipped. True when at least one profile was accepted. A family the runtime took only without the
+// thumb-rest wheel's touch bindings loses them in `data`.
+bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, FamilyData& data);
 // The family whose control map is used, from the profiles the runtime reports for both hands
 // (controller_family.hpp; `current` when neither has one we have data for). The profile of each hand is kept
 // in handProfiles and logged when it changes, a profile without data once. XR worker only.
@@ -339,14 +345,16 @@ const input::ControllerSettings& settings();
 
 // Locates `space` in room space (LOCAL under the recenter transform): true with both orientation and
 // position valid. The caller holds xrMutex (shared at least). `room`: the room transform to use (the
-// current one when null).
+// current one when null). `guard`: the position goes through that guard in LOCAL (pose_guards.hpp); a held
+// position, or a velocity no hand has, leaves the velocity not valid.
 bool locate(const XrInput& xr,
             XrSpace space,
             XrTime time,
             Pose& out,
             Vec3* velocity = nullptr,
             bool* velocityValid = nullptr,
-            const Pose* room = nullptr);
+            const Pose* room = nullptr,
+            pose_guards::Slot guard = pose_guards::Slot::Count);
 
 // Seconds since a QueryPerformanceCounter value.
 double secondsSince(LONGLONG qpc);
@@ -440,6 +448,20 @@ ForeignViewWrites takeForeignViewWrites();
 bool climbFrame();
 // Camera hook: the gate had hand aim aim with the head this frame (the counters).
 void noteClimbAim(bool headAims);
+
+// The thumb-rest weapon wheel (rest_wheel.cpp, features/input/rest_wheel.hpp). The mapper, under mapperMutex:
+// whether the game has it start nothing this frame (the game suppresses buttons, forces the view, plays a
+// cutscene the player may skip, or a demon is piloted); and after the mapper ran, its log lines and whether
+// the rests report a touch at all.
+bool restWheelBlocked(const State& s);
+void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input, float dt);
+// installGameHooks, with the thumb-rest wheel on: finds the game's wheel open delay
+// (weaponWheel_HoldTimeForOpeningWheel) and, when the player turned the wheel's slowdown off,
+// weaponWheel_slowTimeScale (each logged when not found).
+void locateWheelCvars();
+// The mapper: the least time the thumb-rest wheel holds the game's wheel, from the game's open delay now
+// (input::wheelHoldSeconds; logged when the delay changes).
+float restWheelHoldSeconds();
 
 // Vibration (haptics_xr.cpp). The mapper, after a menu held its actions back: the actions sent and the
 // command's punch and capture.

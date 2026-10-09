@@ -103,7 +103,8 @@ them is worse for you than described here.
 - **Smoke, sparks, blood and other sprite effects are one frame behind in the left eye.** The left eye
   draws them as they were a frame earlier than the right eye; the scenery is not affected.
   0.1.34 fixed this, but the fix drew snow and some ice effects in the right eye as tiles in one mission, so
-  0.1.35 turns it off until that is solved. `ETERNALVR_STEREO_FX_SYNC=1` turns it back on.
+  0.1.35 turned it off. 0.1.36 fixes the cause of the tiles but keeps the fix off until it has had more
+  testing. `ETERNALVR_STEREO_FX_SYNC=1` turns it on.
 - **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
@@ -144,9 +145,9 @@ them is worse for you than described here.
 - **Shadows can pop in** on some walls as you turn your head.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
-- **Particles in ray-traced reflections.** With the game's ray tracing on, smoke, sparks and other particles
-  may be missing from the right eye's reflections while the left eye shows them. This has not been checked
-  yet.
+- **Particles in ray-traced reflections.** With `ETERNALVR_STEREO_FX_SYNC=1` and the game's ray tracing on,
+  smoke, sparks and other particles may be missing from the right eye's reflections while the left eye shows
+  them. This has not been checked yet.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.
@@ -209,6 +210,14 @@ them is worse for you than described here.
   new and has not been tried in a headset yet. How far you need to turn your hand may change.
 - **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new
   and has not been tried in a headset yet.
+- **The weapon wheel from the thumb rest** (Quest and Rift controllers; Thumb-rest wheel on the Play tab, off
+  by default) is new and has had one headset test. Touch, then push is hard to get right and picking with the
+  game's wheel is slow to open; While touched with Weapon by direction works best so far. Weapon by direction
+  uses up = slot 1, then clockwise to slot 8, which may not match the game's own wheel: `weapon_directions` in
+  launcher.ini changes it. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
+  rest. Once the game's wheel is open it cannot be cancelled.
+- **Edit controls... can take several seconds to open** (the window shows "Not Responding" first). It does
+  open; a fix is coming.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and
   have not been tried in a headset yet. How hard you need to throw or swing may change. The grenade flies
   where your gun points (or where you look with head aim), not where your hand threw it. A throw or a swing

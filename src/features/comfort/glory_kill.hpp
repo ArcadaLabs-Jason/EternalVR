@@ -34,6 +34,11 @@ struct GloryTiming {
     // After the sync flag clears, the episode lasts while the game still forces the view (its camera eases
     // back to the player's), at most this long.
     double settleSeconds = 0.5;
+    // A kill lasts a few seconds; one that runs this long has lost its end (a sync flag left set) and ends
+    // here, so a fade or the flat screen never stays. The next starts once the flag has cleared. Time paused
+    // (a menu up) does not count, and a gap between frames counts at most maxFrameSeconds.
+    double maxSeconds = 10.0;
+    double maxFrameSeconds = 0.25;
 };
 
 class GloryEpisode {
@@ -41,17 +46,20 @@ public:
     explicit GloryEpisode(GloryTiming timing = {});
 
     struct Step {
-        bool active = false;  // a glory kill is being shown
-        bool started = false; // this frame is its first
-        bool ended = false;   // the previous frame was its last
+        bool active = false;   // a glory kill is being shown
+        bool started = false;  // this frame is its first
+        bool ended = false;    // the previous frame was its last
+        bool timedOut = false; // ended at GloryTiming::maxSeconds with the sync flag still set
     };
 
     // One game frame: `sync` is a kill's sync entity set (isKillSync), `forcedView` the forced-view gate,
-    // `seconds` a monotonic clock. A non-finite clock changes nothing.
-    Step update(bool sync, bool forcedView, double seconds);
+    // `seconds` a monotonic clock, `paused` a menu up (its time is not the kill's). A non-finite clock
+    // changes nothing.
+    Step update(bool sync, bool forcedView, double seconds, bool paused = false);
 
     [[nodiscard]] bool active() const { return active_; }
     [[nodiscard]] unsigned long long episodes() const { return episodes_; }
+    [[nodiscard]] const GloryTiming& timing() const { return timing_; }
     void reset();
 
 private:
@@ -59,6 +67,9 @@ private:
     bool active_ = false;
     bool syncSeen_ = false;
     double syncEndedAt_ = -1.0;
+    double lastSeconds_ = -1.0; // the last frame's clock
+    double runSeconds_ = 0.0;   // the running kill's time, pauses and gaps left out
+    bool timedOut_ = false;     // the last kill hit maxSeconds; none starts until the flag clears
     unsigned long long episodes_ = 0;
 };
 

@@ -47,8 +47,9 @@ planDevice(InstanceData& inst, VkPhysicalDevice physicalDevice, std::vector<cons
 void onDeviceCreated(DeviceData& data, bool enabled);
 void onDeviceDestroyed(VkDevice device);
 
-// The presenter's eye `eye` (0 = L, 1 = R): its FOV and its orientation in the head, from a frame whose eye
-// passed the plausibility check. The first one seen shapes that eye's foveation for the whole process.
+// The presenter's eye `eye` (0 = L, 1 = R): its FOV and its orientation in the head, from a frame whose eyes
+// passed the plausibility checks. The first one seen shapes that eye's foveation; a different one that holds
+// changes it, a few times at most (features/foveation/eye_shape_latch.hpp).
 void noteEye(int eye, const xr_math::Fov& fov, const Quat& orientationInHead);
 
 // The game's swapchain on `device` was created with `extent`, the game's output size: the eye image's size

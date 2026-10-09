@@ -13,6 +13,10 @@
 //
 // The base refresh rate and the throttled share also go to the status file (status_file.hpp), as do the
 // runtime, the system and the sizes (writeHeadsetStatus).
+//
+// The camera hook predicts the head one display period past the predicted display time; the period it adds
+// is held to 1.5x the headset's refresh period while the runtime reports a throttled one, unless the pose
+// lead is on (features/pacing/prediction_period.hpp, predictionPeriod).
 
 #include "features/pacing/display_period_watch.hpp"
 
@@ -48,6 +52,11 @@ public:
     void onRateChanged(const XrEventDataDisplayRefreshRateChangedFB& event);
     // Every XR frame: its predicted display period.
     void onFrame(XrDuration period);
+    // Every XR frame, before the camera hook's next pose time is set: the period to predict with, `reported`
+    // held to 1.5x the headset's refresh period, or as it is with the pose lead on (`poseLead`). A hold's
+    // start and end are logged, at most kMaxPredictionLines; with the lead, one line once.
+    XrDuration predictionPeriod(XrDuration reported, bool poseLead);
+    static constexpr std::uint32_t kMaxPredictionLines = 20;
     // The summary line now (`when`: appended to "refresh summary", e.g. " at session end"); nothing before a
     // period settled.
     void logSummary(const char* when);
@@ -69,7 +78,11 @@ private:
     bool started_ = false;
     std::uint32_t changeLines_ = 0;
     std::uint64_t lastSummaryTicks_ = 0;
-    double statusBaseMs_ = 0.0; // the base in the status file's refresh_hz
+    double statusBaseMs_ = 0.0;              // the base in the status file's refresh_hz
+    bool predictionHeld_ = false;            // the last frame's period was held
+    bool loggedLeadPrediction_ = false;      // the line saying the pose lead keeps the reported period
+    std::uint32_t predictionLines_ = 0;      // hold lines logged
+    std::uint64_t predictionHeldFrames_ = 0; // frames held so far
 };
 
 } // namespace evr::vkcore

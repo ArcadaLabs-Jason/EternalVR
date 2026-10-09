@@ -31,6 +31,38 @@ TEST_CASE("the first attempts are logged, then one a minute") {
     CHECK(evr::xr_recovery::logsAttempt(17));
 }
 
+TEST_CASE("a failed xrBeginSession is tried again, then the session is made again, then VR stays off") {
+    using evr::xr_recovery::afterBeginFailure;
+    using evr::xr_recovery::BeginNext;
+    using evr::xr_recovery::kBeginRestarts;
+    using evr::xr_recovery::kBeginTries;
+    for (std::uint32_t failures = 1; failures < kBeginTries; ++failures) {
+        CHECK(afterBeginFailure(failures, 0) == BeginNext::Retry);
+        CHECK(afterBeginFailure(failures, kBeginRestarts) == BeginNext::Retry);
+    }
+    CHECK(afterBeginFailure(kBeginTries, 0) == BeginNext::Restart);
+    CHECK(afterBeginFailure(kBeginTries, kBeginRestarts - 1) == BeginNext::Restart);
+    CHECK(afterBeginFailure(kBeginTries, kBeginRestarts) == BeginNext::GiveUp);
+    CHECK(afterBeginFailure(kBeginTries + 5, kBeginRestarts + 1) == BeginNext::GiveUp);
+}
+
+TEST_CASE("a loss from xrBeginSession makes the session again at once, within the same budget") {
+    using evr::xr_recovery::afterBeginFailure;
+    using evr::xr_recovery::BeginNext;
+    using evr::xr_recovery::kBeginRestarts;
+    CHECK(afterBeginFailure(1, 0, true) == BeginNext::Restart);
+    CHECK(afterBeginFailure(1, kBeginRestarts - 1, true) == BeginNext::Restart);
+    CHECK(afterBeginFailure(1, kBeginRestarts, true) == BeginNext::GiveUp);
+    // A runtime that loses every session as it begins: each new session's first call is a loss.
+    std::uint32_t restarts = 0;
+    int cycles = 0;
+    while (afterBeginFailure(1, restarts, true) == BeginNext::Restart && cycles < 100) {
+        ++restarts;
+        ++cycles;
+    }
+    CHECK(cycles == static_cast<int>(kBeginRestarts));
+}
+
 TEST_CASE("each loss has a name for the log") {
     CHECK(std::string(evr::xr_recovery::lossName(Loss::Session)) == "session lost");
     CHECK(std::string(evr::xr_recovery::lossName(Loss::Instance)) == "runtime lost");

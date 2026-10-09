@@ -82,7 +82,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(0.0, s.HeldShare);
             Assert.Equal(80.0, s.HeadsetRate.Value, 6);
             Assert.False(s.Steady);
-            Assert.Equal("display 90 Hz; the headset took about 80 frames a second (not steady)", s.Compact());
+            Assert.Equal("90 Hz, not steady: about 80 frames a second", s.Compact());
             Assert.Equal("The headset took about 80 frames a second at 90 Hz (not steady). The game drew about 70 new frames a second at 90 Hz.", s.Describe());
             Assert.Contains("headset frames/s at the refresh rate 80.0", s.LogText());
 

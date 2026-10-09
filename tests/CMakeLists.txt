@@ -105,8 +105,16 @@ evr_add_test(evr_pacing_tests
         features/pacing/display_period_watch_tests.cpp
         features/pacing/frame_clock_watch_tests.cpp
         features/pacing/pace_policy_tests.cpp
+        features/pacing/prediction_period_tests.cpp
+        features/pacing/restart_budget_tests.cpp
         features/pacing/slot_choice_tests.cpp
     DEPENDS evr_pacing)
+
+evr_add_test(evr_tracking_tests
+    SOURCES
+        features/tracking/fov_watch_tests.cpp
+        features/tracking/pose_guard_tests.cpp
+    DEPENDS evr_tracking)
 
 evr_add_test(evr_flares_tests
     SOURCES
@@ -116,6 +124,7 @@ evr_add_test(evr_flares_tests
 evr_add_test(evr_foveation_tests
     SOURCES
         features/foveation/attachment_images_tests.cpp
+        features/foveation/eye_shape_latch_tests.cpp
         features/foveation/eye_targets_tests.cpp
         features/foveation/foveation_preset_tests.cpp
         features/foveation/foveation_region_tests.cpp
@@ -148,6 +157,7 @@ evr_add_test(evr_input_tests
         features/input/input_mapper_chord_tests.cpp
         features/input/input_mapper_tests.cpp
         features/input/input_mapper_menu_tests.cpp
+        features/input/input_mapper_rest_tests.cpp
         features/input/input_mapper_wheel_tests.cpp
         features/input/input_mapper_locomotion_tests.cpp
         features/input/locomotion_direction_tests.cpp
@@ -155,6 +165,8 @@ evr_add_test(evr_input_tests
         features/input/offhand_policy_tests.cpp
         features/input/player_controller_data_tests.cpp
         features/input/punch_detector_tests.cpp
+        features/input/rest_touch_bindings_tests.cpp
+        features/input/rest_wheel_tests.cpp
         features/input/stick_chord_tests.cpp
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp
@@ -164,8 +176,10 @@ evr_add_test(evr_input_tests
         features/input/usercmd_injection_tests.cpp
         features/input/usercmd_motion_tests.cpp
         features/input/virtual_gamepad_tests.cpp
+        features/input/weapon_directions_tests.cpp
         features/input/wheel_hand_tests.cpp
         features/input/wheel_mouse_tests.cpp
+        features/input/wheel_slowdown_tests.cpp
         features/input/xr_action_set_tests.cpp
     DEPENDS evr_input)
 

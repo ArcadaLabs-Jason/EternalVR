@@ -32,6 +32,23 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
   `input_xr.cpp`) and the mapper's head all use room space, so a recenter turns and moves the game world
   around the player in one step. The compositor still gets the `LOCAL` poses the frames were rendered with,
   so a recenter never disturbs reprojection.
+- **Tracked positions that jump** (`src/features/tracking/pose_guard.*`, `src/vkcore/pose_guards.*`). A
+  runtime can give a position with its valid bit set that is not where the device is (player logs: an eye
+  2.90 m from the head on a Steam Frame, 9.9 and 12.7 m on WMR). The head the camera hook locates, and each
+  hand's aim and grip pose (at the XR worker's sync and at the camera hook), go through a guard in `LOCAL`:
+  a position further from the last good one than 0.25 m plus 6 m/s times the time between them (a hand:
+  0.5 m plus 20 m/s) is held, the last good position used in its place, with the new orientation. The
+  frame's floor reading is not used while the head is held, and a held hand's velocity, or one over 25 m/s,
+  is not valid (no punch or hands-up jump from it). A new place is taken once the positions there agree for
+  0.5 s (a move no event announced). Positions that jump about never settle, but the reach from the last
+  good position grows with the time held, so no hold lasts long (a head 10 m away is within reach after
+  about 1.6 s). A pose time up to 5 ms back counts as the same time; further back is a new clock. The
+  runtime's recenter and any reference space change open the guards until 1 s past the change's time, and a
+  new session resets them, so those jumps are taken at once; our own recenter moves room space, not
+  `LOCAL`, and is not seen by them. Log (at most 30 lines for the head, 30 for the controllers): `head: the
+  tracked head position jumped D m in T ms, further than a head moves; the last good one is held (hold
+  N)`, `... is back within reach after T ms held`, `... stayed D m from the last good one for S s; taken as
+  it is`. `ETERNALVR_POSE_GUARD=0` turns the guards off, the 25 m/s limit on hand velocities with them.
 - **Recenter** (T-029, T-063).
   - Recenter: hold both sticks pressed for 2 s, or use the headset's own recenter (hold the Meta / Oculus
     button). The `recenter` action goes down while **both thumbsticks are held pressed** (the mapper's
@@ -357,6 +374,7 @@ different speed on another build, `_WALK` and `_CREEP` move the values (a `TEST_
 | `ETERNALVR_HEAD_COLLISION` | 1 | 0: no head sweep (cap only, no fade) |
 | `ETERNALVR_HEAD_FADE` | 1 | 0: no fade for the head in geometry or past the lean cap (the launcher's "Fade in walls", Play tab) and no blink over a re-anchor; a glory kill's fade still shows |
 | `ETERNALVR_IPD` | unset | millimetres (50–80) the game renders with; unset or 0: the runtime's |
+| `ETERNALVR_POSE_GUARD` | 1 | 0: tracked head and hand positions are used as the runtime gives them, jumps included (Tracked positions that jump, above) |
 | `ETERNALVR_BODY_FOLLOW` | 1 | 0: no body follow (Body follow above) |
 | `ETERNALVR_BODY_FOLLOW_DEADZONE` | 0.04 | metres (0.01–0.5) of gap before the body follows; it stops within 40 % of it |
 | `ETERNALVR_BODY_FOLLOW_WALK` | 85 | the move value (30–127) of the game's walk tier |

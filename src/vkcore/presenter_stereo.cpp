@@ -5,6 +5,7 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "features/roomscale/eye_separation.hpp"
+#include "features/tracking/fov_watch.hpp"
 
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -46,6 +47,10 @@ bool finitePose(const XrPosef& p) {
 }
 
 constexpr float kDegrees = 57.29578f;
+
+// Frames whose eye FOVs foveation refused, logged (camera hook thread only); later ones are not.
+constexpr int kRefusedShapeLines = 3;
+int g_refusedShapeLines = 0;
 
 } // namespace
 
@@ -153,8 +158,25 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
             }
             return;
         }
-        // Foveation keeps the first eye shape it gets: only a plausible eye's.
-        vrs_nv::noteEye(static_cast<int>(i), eyes[i].fov, eyes[i].pose.orientation);
+    }
+    // Foveation's eye shapes (vrs_nv.hpp): only from plausible eyes with FOVs a headset has
+    // (ETERNALVR_FOV_CHECK).
+    const tracking::FovProblem fovProblem =
+        settings.checkFov ? tracking::fovProblem({eyes[0].fov, eyes[1].fov}) : tracking::FovProblem::None;
+    if (fovProblem == tracking::FovProblem::None) {
+        for (std::size_t i = 0; i < 2; ++i) {
+            vrs_nv::noteEye(static_cast<int>(i), eyes[i].fov, eyes[i].pose.orientation);
+        }
+    } else if (vrs_nv::wanted() && g_refusedShapeLines < kRefusedShapeLines) {
+        ++g_refusedShapeLines;
+        const xr_math::Fov& l = eyes[0].fov;
+        const xr_math::Fov& r = eyes[1].fov;
+        EVR_LOG("stereo: the eye FOVs (eye L %.2f/%.2f/%.2f/%.2f, eye R %.2f/%.2f/%.2f/%.2f deg) are not a "
+                "headset's: %s; foveation takes no eye shape from them%s",
+                l.angleLeft * kDegrees, l.angleRight * kDegrees, l.angleUp * kDegrees, l.angleDown * kDegrees,
+                r.angleLeft * kDegrees, r.angleRight * kDegrees, r.angleUp * kDegrees, r.angleDown * kDegrees,
+                tracking::fovProblemText(fovProblem),
+                g_refusedShapeLines == kRefusedShapeLines ? " (later frames are not logged)" : "");
     }
     // ETERNALVR_IPD: the game renders with the player's eye separation; the compositor keeps the runtime's.
     const std::array<Vec3, 2> separated = roomscale::withSeparation(

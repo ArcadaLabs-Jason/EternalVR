@@ -132,13 +132,13 @@ $watch = Start-Job -ArgumentList $rig, $WatchSeconds, $timeline, $logs, $Externa
         }
         $script:qseen = $lines.Count
     }
-    $deadline = (Get-Date).AddSeconds(90)
+    $deadline = (Get-Date).AddSeconds(240)
     $proc = $null
     while ((Get-Date) -lt $deadline -and -not $proc) {
         $proc = Get-Process DOOMEternalx64vk -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.StartTime -gt $launched } | Select-Object -First 1
         if (-not $proc) { Start-Sleep -Milliseconds 250 }
     }
-    if (-not $proc) { Note 'no game window within 90 s'; return }
+    if (-not $proc) { Note 'no game window within 240 s'; return }
     Note "process start $($proc.StartTime.ToString('HH:mm:ss.fff')) (pid $($proc.Id)); game window 0x$('{0:X}' -f $proc.MainWindowHandle.ToInt64())"
     # qconsole.log is rewritten by this run; skip what an earlier run left.
     if (Test-Path $qlog) { try { $script:qseen = [IO.File]::ReadAllLines($qlog).Count } catch {} }

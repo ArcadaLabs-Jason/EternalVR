@@ -44,6 +44,7 @@ Settings readSettings() {
     }
     s.headPosition = envFlag(L"ETERNALVR_HEAD_POSITION", true);
     s.setGameFov = envFlag(L"ETERNALVR_SET_FOV", true);
+    s.checkFov = envFlag(L"ETERNALVR_FOV_CHECK", true);
     s.keepActive = envFlag(L"ETERNALVR_KEEP_ACTIVE", true);
     if (readEnv(L"ETERNALVR_AIM", value) && _wcsicmp(value.c_str(), L"view") == 0) {
         s.headAim = false;
@@ -171,6 +172,7 @@ void XrPresenter::Impl::shutdown() {
     controllers::noteImmersiveCutscene(false);              // no cutscene keeps the arms hidden
     ui_engine::setSkipComposite(false);                     // the game composites its own GUI again
     requestTwoViews(false);                                 // the game goes back to its own single view
+    controllers::restoreWheelSlowdown("the layer shuts down");
     if (cutsceneTrack.skipHolding) {
         injectKey(kSkipKey, false, gameWindow());
         cutsceneTrack.skipHolding = false;

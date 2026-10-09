@@ -107,6 +107,8 @@ add_library(evr_layer SHARED
     fence_wait.cpp
     presenter_frame.cpp
     presenter_frame_log.cpp
+    presenter_clock.cpp
+    pose_guards.cpp
     presenter_fov.cpp
     presenter_cutscene.cpp
     presenter_head.cpp
@@ -195,6 +197,7 @@ target_sources(evr_layer PRIVATE
     offhand_mods.cpp
     weapon_arm.cpp
     prompt_hooks.cpp
+    rest_wheel.cpp
     rumble_hook.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
@@ -213,7 +216,7 @@ target_sources(evr_layer PRIVATE
     menu_input.cpp
     menu_model_hook.cpp
     presenter_menu.cpp)
-target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_flares evr_foveation evr_input evr_menu evr_pacing evr_roomscale)
+target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_flares evr_foveation evr_input evr_menu evr_pacing evr_roomscale evr_tracking)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
 target_compile_features(evr_layer PRIVATE cxx_std_20)
 target_compile_definitions(evr_layer PRIVATE

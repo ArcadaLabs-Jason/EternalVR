@@ -7,6 +7,7 @@
 #include "features/input/controller_family.hpp"
 #include "features/input/interaction_profiles.hpp"
 #include "features/input/player_controller_data.hpp"
+#include "features/input/rest_touch_bindings.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
 
@@ -85,7 +86,9 @@ XrResult suggestPaths(XrInput& xr, const input::ControllerData& data, const std:
     return xr.xrSuggestInteractionProfileBindings(xr.instance, &suggested);
 }
 
-bool suggestBindings(XrInput& xr, const input::ControllerData& data) {
+// Suggests `data`, again with the bumper's older name when the runtime refuses the newer one. `names` says
+// which name went through.
+XrResult suggestWithBumperNames(XrInput& xr, const input::ControllerData& data, const char*& names) {
     std::vector<std::string> paths;
     std::vector<std::string> olderPaths;
     bool renamed = false;
@@ -95,7 +98,7 @@ bool suggestBindings(XrInput& xr, const input::ControllerData& data) {
         renamed = renamed || older.has_value();
         olderPaths.push_back(older.value_or(b.path));
     }
-    const char* names = "";
+    names = "";
     XrResult r = suggestPaths(xr, data, paths);
     if (renamed) {
         names = " (the bumper as /input/shoulder/)";
@@ -107,13 +110,37 @@ bool suggestBindings(XrInput& xr, const input::ControllerData& data) {
             r = suggestPaths(xr, data, olderPaths);
         }
     }
+    return r;
+}
+
+// A refused profile is suggested once more without the thumb-rest wheel's touch bindings
+// (rest_touch_bindings.hpp), which are then dropped from `data`: that family has no thumb rest this session.
+bool suggestBindings(XrInput& xr, input::ControllerData& data) {
+    const char* names = "";
+    XrResult r = suggestWithBumperNames(xr, data, names);
+    if (XR_FAILED(r) && input::hasRestTouchBindings(data)) {
+        char text[XR_MAX_RESULT_STRING_SIZE];
+        EVR_LOG(
+            "%s: %s: the runtime refuses the bindings (%s); trying again without the touch bindings of the "
+            "thumb-rest wheel",
+            kTag, data.profilePath.c_str(), xrText(r, text));
+        input::ControllerData without = input::withoutRestTouch(data);
+        r = suggestWithBumperNames(xr, without, names);
+        if (XR_SUCCEEDED(r)) {
+            data = std::move(without);
+            EVR_LOG("%s: %s: suggested without the touch bindings; the thumb-rest wheel is off for these "
+                    "controllers",
+                    kTag, data.profilePath.c_str());
+        }
+    }
     if (XR_FAILED(r)) {
         char text[XR_MAX_RESULT_STRING_SIZE];
         EVR_LOG("%s: xrSuggestInteractionProfileBindings failed for %s: %s", kTag, data.profilePath.c_str(),
                 xrText(r, text));
         return false;
     }
-    EVR_LOG("%s: %zu binding(s) suggested for %s%s", kTag, paths.size(), data.profilePath.c_str(), names);
+    EVR_LOG("%s: %zu binding(s) suggested for %s%s", kTag, data.suggested.size(), data.profilePath.c_str(),
+            names);
     return true;
 }
 
@@ -145,6 +172,20 @@ std::string currentProfile(const XrInput& xr, State& s, input::Hand hand) {
     return text;
 }
 
+// The touch bindings of the thumb-rest wheel a family's data lacks (a player's file from before it), added
+// for this session (rest_touch_bindings.hpp).
+void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
+    input::RestTouchOptions options;
+    options.thumbRest = settings.thumbRest.mode != input::RestWheelMode::Off;
+    options.faceTouch = settings.thumbRestFaceTouch;
+    for (input::ControllerData& d : data) {
+        if (const std::size_t added = input::addRestTouchBindings(d, options); added > 0) {
+            EVR_LOG("%s: %zu touch binding(s) for the thumb-rest wheel added to the %s data", kTag, added,
+                    d.profilePath.c_str());
+        }
+    }
+}
+
 } // namespace
 
 std::vector<std::string> profileExtensions(std::span<const XrExtensionProperties> offered) {
@@ -173,6 +214,7 @@ FamilyData loadControllerData(const input::ControllerSettings& settings) {
     }
     const std::string& path = settings.controllerDataPath;
     if (path.empty()) {
+        addRestTouch(data, settings);
         return data;
     }
     // A folder: every *.toml directly inside it, in name order; a file: that file alone.
@@ -206,14 +248,15 @@ FamilyData loadControllerData(const input::ControllerSettings& settings) {
                                      : "names no supported profile; unused");
         }
     }
+    addRestTouch(data, settings);
     return data;
 }
 
-bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, const FamilyData& data) {
+bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, FamilyData& data) {
     bool any = false;
     std::string suggested;
     std::string skipped;
-    for (const input::ControllerData& d : data) {
+    for (input::ControllerData& d : data) {
         if (!profileAvailable(support, d)) {
             append(skipped, d.profilePath);
             continue;

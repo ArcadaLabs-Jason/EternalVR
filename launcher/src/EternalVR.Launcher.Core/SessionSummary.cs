@@ -274,7 +274,7 @@ namespace EternalVR.Launcher.Core
         private string HeldPercent => Math.Max(1, (int)Math.Round(HeldShare * 100, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture) + "%";
 
         /// <summary>The Play tab's Refresh value: "90 Hz, steady", "144 Hz, throttled to 72 for 18% of play", "varied 72-144 Hz,
-        /// mostly 144", "display 90 Hz; the headset took about 81 frames a second (not steady)".</summary>
+        /// mostly 144", "90 Hz, not steady: about 81 frames a second".</summary>
         public string Compact()
         {
             if (OtherRates.Count > 0)
@@ -288,7 +288,7 @@ namespace EternalVR.Launcher.Core
                 return string.Format(CultureInfo.InvariantCulture, "{0} Hz, {1} to {2} for {3} {4}", RefreshHz, Route == RouteKind.SteamVr ? "throttled" : "held",
                     HeldHz, HeldPercent, Scope);
             if (!Steady)
-                return string.Format(CultureInfo.InvariantCulture, "display {0} Hz; the headset took about {1:0} frames a second (not steady)",
+                return string.Format(CultureInfo.InvariantCulture, "{0} Hz, not steady: about {1:0} frames a second",
                     RefreshHz, HeadsetRate.Value);
             return RefreshHz.ToString(CultureInfo.InvariantCulture) + " Hz, steady";
         }

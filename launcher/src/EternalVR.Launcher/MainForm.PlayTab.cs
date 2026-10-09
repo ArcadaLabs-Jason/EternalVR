@@ -36,6 +36,10 @@ namespace EternalVR.Launcher
         private readonly ComboBox xButton = Choices(Setting.XButton);
         private readonly ComboBox mapSticks = Choices(Setting.DossierMapSticks);
         private readonly ComboBox wheel = Choices(Setting.WeaponWheel);
+        private readonly ComboBox thumbRest = Choices(Setting.ThumbRestWheel);
+        private readonly ComboBox thumbRestPicks = Choices(Setting.ThumbRestPicks);
+        private readonly CheckBox thumbRestFaceTouch = new CheckBox { AutoSize = true };
+        private readonly CheckBox thumbRestSlowdown = new CheckBox { AutoSize = true };
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly CheckBox showArms = new CheckBox { AutoSize = true };
@@ -127,6 +131,16 @@ namespace EternalVR.Launcher
                 Row(Setting.WeaponWheel, wheel,
                     s => wheel.SelectedIndex = (int)s.Wheel,
                     s => s.Wheel = (WheelSelect)wheel.SelectedIndex),
+                Row(Setting.ThumbRestWheel, thumbRest,
+                    s => thumbRest.SelectedIndex = (int)s.ThumbRest,
+                    s => s.ThumbRest = (ThumbRestMode)thumbRest.SelectedIndex),
+                Row(Setting.ThumbRestPicks, thumbRestPicks,
+                    s => thumbRestPicks.SelectedIndex = (int)s.ThumbRestPicks,
+                    s => s.ThumbRestPicks = (ThumbRestPick)thumbRestPicks.SelectedIndex),
+                Row(Setting.ThumbRestFaceTouch, thumbRestFaceTouch,
+                    s => thumbRestFaceTouch.Checked = s.ThumbRestFaceTouch, s => s.ThumbRestFaceTouch = thumbRestFaceTouch.Checked),
+                Row(Setting.ThumbRestSlowdown, thumbRestSlowdown,
+                    s => thumbRestSlowdown.Checked = s.ThumbRestSlowdown, s => s.ThumbRestSlowdown = thumbRestSlowdown.Checked),
                 Row(Setting.HoldTime, holdTime, LoadHoldTime, ReadHoldTime),
                 Row(Setting.AimSteadiness, steadiness, LoadSteadiness, ReadSteadiness),
                 Row(Setting.AimDot, aimDot, s => aimDot.Checked = s.AimDot, s => s.AimDot = aimDot.Checked),

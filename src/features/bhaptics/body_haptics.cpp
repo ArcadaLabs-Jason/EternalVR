@@ -466,6 +466,7 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
     if (crystalSync && !crystalSync_) {
         crystalStart_ = signals.seconds;
         crystalDelay_ = *waveDelay;
+        crystalWaves_ = crystalWaveCount(signals.syncKind);
         crystalPending_ = true;
     }
     crystalSync_ = crystalSync;
@@ -535,7 +536,7 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         crystalPending_ = false;
         crystalWaveStart_ = crystalStart_ + crystalDelay_;
         nextCrystal_ = std::max(crystalWaveStart_, signals.seconds);
-        crystalUntil_ = crystalWaveStart_ + kCrystalWaveSeconds;
+        crystalUntil_ = crystalWaveStart_ + crystalWaves_ * kCrystalWaveSeconds;
     }
     heartbeat(out, signals);
     crystal(out, signals.seconds);

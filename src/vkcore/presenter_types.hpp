@@ -10,6 +10,7 @@
 #include "features/input/cutscene_skip.hpp"
 #include "features/menu/enter_tick.hpp"
 #include "features/pacing/frame_clock_watch.hpp"
+#include "features/pacing/restart_budget.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/glory_view.hpp"
@@ -66,6 +67,7 @@ struct Settings {
     float unitsPerMetre = 1.0f;  // ETERNALVR_WORLD_SCALE
     bool headPosition = true;    // ETERNALVR_HEAD_POSITION
     bool setGameFov = true;      // ETERNALVR_SET_FOV
+    bool checkFov = true;        // ETERNALVR_FOV_CHECK: eye FOVs no headset has are refused (fov_watch.hpp)
     bool keepActive = true;      // ETERNALVR_KEEP_ACTIVE
     bool headAim = true;         // ETERNALVR_AIM: "head" (default) or "view"
     bool skipCinematics = false; // ETERNALVR_SKIP_CINEMATICS
@@ -118,6 +120,11 @@ struct XrLossState {
     std::uint32_t reconnects = 0; // sessions made again after a loss
     LONGLONG runningSinceQpc = 0; // when the current session began running
     bool testLossDone = false;    // ETERNALVR_TEST_XR_LOSS has been applied
+    // xrBeginSession failing in READY (presenter_xr_events.cpp, xr_recovery::afterBeginFailure).
+    std::uint32_t beginFailures = 0; // failed calls since the session became READY
+    LONGLONG beginFailedQpc = 0;     // the last one; 0: no call is due again
+    std::uint32_t beginRestarts = 0; // sessions made again because of it, this game
+    bool beginGaveUp = false;        // a loss past the budget: no reconnect (presenter_reconnect.cpp)
 };
 
 // What one game frame was rendered with: written by the camera hook, carried with the presented image
@@ -162,14 +169,14 @@ struct HeldCopy {
 };
 
 // The runtime's frame clock (XR worker only; frame_clock_watch.hpp, public issue #19): a stall ends the
-// session to start a new one, at most kMaxRestarts times in a game.
+// session to start a new one, as often as the restart budget allows (restart_budget.hpp,
+// presenter_clock.cpp).
 struct ClockWatchState {
-    static constexpr std::uint32_t kMaxRestarts = 3;
     bool wasFocused = false; // FOCUSED since the session became READY
     pacing::FrameClockWatch watch;
     pacing::FrameGaps gaps; // the 10 s xr line's runtime gaps (presenter_frame_log.cpp)
-    std::uint32_t restarts = 0;
-    bool loggedKept = false; // a stall past the limit is in the log
+    pacing::RestartBudget budget;
+    bool loggedKept = false; // a stall the budget did not allow is in the log (again once one is earned)
 };
 
 // Where a present's image goes in a ring slot (Route S rings hold two eye images side by side).

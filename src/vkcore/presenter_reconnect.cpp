@@ -4,6 +4,7 @@
 // game runs flat meanwhile, as it does before the first session starts.
 
 #include "vkcore/fence_wait.hpp"
+#include "vkcore/pose_guards.hpp"
 #include "vkcore/presenter_impl.hpp"
 #include "vkcore/presenter_menu_release.hpp"
 
@@ -59,9 +60,12 @@ void resetSessionState(XrPresenter::Impl& p) {
     p.shownHasView = false;
     p.quadPlaced = false;
     p.placeAttempts = 0;
-    p.fovChecked = false;
+    p.fovWatch.reset();
+    pose_guards::resetAll();
     p.loggedFirstProjection = false;
     p.endFrameFailures = 0;
+    p.loss.beginFailures = 0;
+    p.loss.beginFailedQpc = 0;
 }
 
 // One attempt: a new instance, the headset's system on the same graphics card, and a session on the
@@ -121,6 +125,10 @@ bool tryReconnect(XrPresenter::Impl& p, bool log) {
 } // namespace
 
 bool XrPresenter::Impl::reconnect() {
+    if (loss.beginGaveUp) {
+        EVR_LOG("xr: no reconnect: xrBeginSession kept losing the session; VR is off for this game");
+        return false;
+    }
     releaseMenuInput(*this, "the session ended");
     consumerAlive.store(false); // the game's presents pass through meanwhile
     const LONGLONG lostQpc = qpcNow();

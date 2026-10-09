@@ -232,6 +232,12 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
             Set("ETERNALVR_MAP_STICKS", LauncherSettings.MapSticksName(s.MapSticks));
             Set("ETERNALVR_WHEEL_SELECT", LauncherSettings.WheelSelectName(s.Wheel));
+            // The thumb-rest wheel (docs/VR_CONTROLLERS.md), always explicit; the direction table only when set by hand.
+            Set("ETERNALVR_THUMBREST_WHEEL", LauncherSettings.ThumbRestName(s.ThumbRest));
+            Set("ETERNALVR_THUMBREST_PICK", LauncherSettings.ThumbRestPickEnvironment(s.ThumbRestPicks));
+            Set("ETERNALVR_THUMBREST_FACE_TOUCH", s.ThumbRestFaceTouch ? "1" : "0");
+            Set("ETERNALVR_THUMBREST_SLOWDOWN", s.ThumbRestSlowdown ? "1" : "0");
+            if (!string.IsNullOrWhiteSpace(s.WeaponDirections)) Set("ETERNALVR_WEAPON_DIRECTIONS", s.WeaponDirections.Trim());
             // Arm gestures (docs/VR_INTERACTIONS.md), off by default: the throw and the overhead swing.
             Set("ETERNALVR_THROW", s.ThrowGesture ? "1" : "0");
             Set("ETERNALVR_SWING", s.SwingGesture ? "1" : "0");

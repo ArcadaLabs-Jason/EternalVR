@@ -60,6 +60,9 @@ TEST_CASE("gameplay actions carry every field of the hand state with the right t
     CHECK(xrAction(XrActionId::AimPose).kind == XrActionKind::Pose);
     CHECK(xrAction(XrActionId::GripPose).kind == XrActionKind::Pose);
     CHECK(xrAction(XrActionId::Haptic).kind == XrActionKind::Haptic);
+    CHECK(xrAction(XrActionId::ThumbRest).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::PrimaryTouch).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::SecondaryTouch).kind == XrActionKind::Boolean);
     for (const XrActionDef& action : xrActions()) {
         CHECK(action.set == XrActionSetId::Gameplay);
     }
@@ -74,6 +77,9 @@ TEST_CASE("actions are found by set and name") {
     CHECK(findXrAction(XrActionSetId::Gameplay, "face3") == XrActionId::Face3);
     CHECK(findXrAction(XrActionSetId::Gameplay, "face4") == XrActionId::Face4);
     CHECK(findXrAction(XrActionSetId::Gameplay, "shoulder") == XrActionId::Shoulder);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "thumbrest") == XrActionId::ThumbRest);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "primary_touch") == XrActionId::PrimaryTouch);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "secondary_touch") == XrActionId::SecondaryTouch);
     CHECK_FALSE(findXrAction(XrActionSetId::Gameplay, "select").has_value());
 }
 

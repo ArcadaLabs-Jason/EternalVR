@@ -21,6 +21,7 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | Right stick up | Chainsaw |
 | Right stick down, tap | Quick switch (last weapon) |
 | Right stick down, hold | Weapon wheel: keep the stick pushed, turn it toward a weapon, let it go to pick (below) |
+| Rest your left thumb on its thumb rest, then push the right stick (or the right thumb, then the left stick) | Weapon wheel from the thumb rest, with Thumb-rest wheel on (below) |
 | Right stick click | Melee, Glory Kill, Blood Punch, use (instant; see recentering for both sticks) |
 | A | Jump |
 | B | Dash |
@@ -64,6 +65,34 @@ about 10 degrees highlights a weapon, and turning further does not change which 
 right are measured from where your hand pointed when the wheel opened, so it works whichever way you face.
 Twisting your wrist does nothing. Let go of the stick or button to pick the highlighted weapon. If you
 bring your hand back toward the middle, the highlight stays where it was.
+
+**The weapon wheel from the thumb rest** (Quest and Rift controllers; off by default: turn it on with
+**Thumb-rest wheel** on the launcher's Play tab). Rest one thumb on its thumb rest,
+the flat spot beside the buttons, and within half a second push the other stick toward a weapon: the wheel
+opens and points where the stick points. Let the stick spring back (or lift your thumb) to pick. With the
+game's wheel, a quick flick that does not stay in one direction picks nothing (Weapon by direction, below,
+takes a flick), and a tick in the controller tells you when picking
+starts and when a weapon is picked. A thumb you leave on the rest does nothing on its own: after half a
+second the other stick moves and turns you as usual, and the stick's own wheel (right stick down, hold)
+still works. To pick again, let the stick come back to the centre and push it again with your thumb still
+resting. Once the wheel is open it cannot be cancelled; it picks what is highlighted.
+
+The trade-off: for half a second after a thumb lands on a rest, the other stick's first push picks a weapon
+instead of moving or turning you. A thumb that comes straight from its own controls does not count: one that
+lands on the rest within 0.4 s of letting go of A or B (X or Y), or of its own stick, so jumping or turning
+and then resting the thumb leaves the other stick alone. If it still gets in the way, set **Thumb-rest
+wheel** to **Off** on the launcher's Play tab.
+
+On the launcher's Play tab, **Thumb-rest wheel** chooses how it works: **Touch, then push** (above), **While touched** (the other stick picks weapons for as long as the thumb rests, and does not move
+or turn you meanwhile) or **Off**. **Thumb-rest picks: Weapon by
+direction** keeps the wheel closed: each of the eight stick directions picks one weapon slot when you let
+go (up is slot 1, then clockwise to slot 8; a line such as `weapon_directions = up=1,right=3,left=7` in
+launcher.ini changes them). A quick flick all the way out counts at once; a smaller push has to stay in
+one direction for a moment. **Slow time on the thumb-rest wheel** off keeps the game at full speed while
+this wheel is open. **Face buttons as thumb rest** lets a thumb resting on A/B or X/Y count as the thumb
+rest on Index and Pico 4 controllers, which have none. Nothing happens in menus, during cutscenes, while
+you pilot a demon, or while the game moves your view itself (glory kills, Meathook pulls, melee lunges):
+picking that has started is cancelled there, and a wheel already open closes and picks what is highlighted.
 
 **Gestures.** Two motions can do the work of a button. Both are off until you turn them on in the Gestures
 box of the launcher's Play tab, and both are new and not yet tried in a headset.
@@ -278,6 +307,10 @@ values are old.
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
+| Thumb-rest wheel | Touch, then push, While touched, Off: the weapon wheel from a thumb rest, on Quest and Rift controllers ([In the game](#in-the-game)) | Off |
+| Thumb-rest picks | Weapon wheel, Weapon by direction: the game's wheel, or one weapon slot per stick direction | Weapon wheel |
+| Face buttons as thumb rest | A thumb resting on A/B or X/Y counts as the thumb rest, on Index and Pico 4 controllers | Off |
+| Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open; the stick's own wheel always slows time | On |
 | Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap | Medium |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |

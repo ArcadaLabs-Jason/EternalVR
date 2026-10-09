@@ -174,6 +174,10 @@ bool syncKillActive(const std::byte* player);
 // touches (the hold itself no longer runs then), and the presenter's shutdown after the camera hook's last
 // callback. `why` goes into the log line.
 void restoreClimbCvars(const char* why);
+// Writes back the game's own weaponWheel_slowTimeScale when the thumb-rest wheel holds it (its slowdown
+// turned off, rest_wheel.cpp); nothing otherwise. The same callers as restoreClimbCvars; `why` goes into the
+// log line.
+void restoreWheelSlowdown(const char* why);
 
 // Any thread: the artificial motion of the last mapper run, for the comfort vignette: the turn rate (degrees
 // per second, smooth or snap, either direction) and the move stick's magnitude after its response (0 to 1).

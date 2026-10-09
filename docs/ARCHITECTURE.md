@@ -514,10 +514,20 @@ Rules:
   head-tracked frames and controller input as before). A runtime whose frame clock stops without failing
   a call (public issue #19: SteamVR's predicted display time moving 1 ns per frame after a graphics card
   reset behind its dashboard) takes the same path: the display time moving less than half a period per
-  frame for 60 frames, or under 10 frames a second for 5 s while shown and the game presents, at most
-  three times in a game (`features/pacing/frame_clock_watch.hpp`). The worker's wait for its D3D12 copy
+  frame for 60 frames, or under 10 frames a second for 5 s while shown and the game presents
+  (`features/pacing/frame_clock_watch.hpp`). Three restarts are available, and one comes back after each
+  10 min of shown frames without a stall (0.1.34's three per game never came back, and a player used two
+  within 100 s in two sessions); never more than 6 in an hour (`features/pacing/restart_budget.hpp`,
+  `src/vkcore/presenter_clock.cpp`). Log: `xr: ...; ending the session to start a new one (restart N; M
+  more available, ...)`, `xr: frame clock watch: 10 min without a stall gave a session restart back; ...`,
+  and once per run of refusals `xr: ...; ... so it is left as it is`. The worker's wait for its D3D12 copy
   lasts at most two display periods (8 to 50 ms); past it the frame shows the last image and a later
   frame takes the held copy, so the frame loop never waits on the GPU for seconds.
+  An `xrBeginSession` that fails in READY without a loss is called again every 2 s, four calls in all;
+  then the session is taken as lost and made again. One that returns a loss (session or instance lost, a
+  runtime failure) makes it again at once. Both count against one budget of two new sessions a game: past
+  it the game stays flat, until the runtime makes the session READY again after a failure without a loss,
+  and for the rest of the game after a loss (no reconnect; `xr_recovery::afterBeginFailure`).
 - **Why the plan said no dedicated XR thread.** R01 section 7 D3 proposed one. R02 section 9 and R11
   section 8.2 recommended starting with shape 1, since a separate XR worker thread risks Win32 message
   deadlocks (seen with the OpenXR Simulator's lifecycle thread). The shipped layer runs the frame loop on

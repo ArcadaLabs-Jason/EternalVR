@@ -19,6 +19,7 @@ add_subdirectory(features/menu)
 add_subdirectory(features/render_size)
 add_subdirectory(features/dlss_dll)
 add_subdirectory(features/pacing)
+add_subdirectory(features/tracking)
 add_subdirectory(features/flares)
 add_subdirectory(engine/eternal/resolver)
 

@@ -4,6 +4,7 @@
 // fallback, R13 section 5).
 
 #include "features/input/axis2.hpp"
+#include "features/input/rest_wheel_output.hpp"
 #include "game/eternal/game_action.hpp"
 
 #include <array>
@@ -21,6 +22,9 @@ struct GameInput {
     float turnDegrees = 0.0f;
     // Weapon wheel selection direction while the wheel is held open, zero otherwise.
     Axis2 wheelPointer;
+    // What the thumb-rest wheel did this frame (rest_wheel.hpp): whether it holds WeaponWheel (its pointer is
+    // then the stick's, never the weapon hand's), its haptic ticks and what to log.
+    RestWheelOutput restWheel;
     // One frame, when a trigger is pulled while the left Menu button is held (capture_chord.hpp): save the
     // next eye pair for a bug report (the layer's own, like the recenter; never sent to the game).
     bool capture = false;

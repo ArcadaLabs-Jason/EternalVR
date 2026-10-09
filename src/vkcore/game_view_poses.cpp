@@ -54,9 +54,13 @@ std::optional<WeaponAim> beginGameView(
         if (!s.attached.load()) {
             return std::nullopt;
         }
+        // Each hand's positions through their guards (pose_guards.hpp), as at the worker's sync.
+        using pose_guards::Slot;
         for (std::size_t i = 0; i < 2; ++i) {
-            poses.aimValid[i] = locate(s.xr, s.xr.aimSpaces[i], poseTime, poses.aim[i]);
-            poses.gripValid[i] = locate(s.xr, s.xr.gripSpaces[i], poseTime, poses.grip[i]);
+            poses.aimValid[i] = locate(s.xr, s.xr.aimSpaces[i], poseTime, poses.aim[i], nullptr, nullptr,
+                                       nullptr, i == 0 ? Slot::ViewAimLeft : Slot::ViewAimRight);
+            poses.gripValid[i] = locate(s.xr, s.xr.gripSpaces[i], poseTime, poses.grip[i], nullptr, nullptr,
+                                        nullptr, i == 0 ? Slot::ViewGripLeft : Slot::ViewGripRight);
         }
     }
     if (const auto test = testInput()) {

@@ -16,6 +16,7 @@ using evr::input::HapticsPolicy;
 using evr::input::kFireRepeatSeconds;
 using evr::input::kMenuGapSeconds;
 using evr::input::MenuTick;
+using evr::input::WheelTick;
 
 namespace {
 
@@ -110,6 +111,24 @@ TEST_CASE("menu ticks are light and at least the gap apart on one hand") {
     const auto click = policy.update(frame);
     CHECK(pulse(click[kRight], HapticSource::Menu));
     CHECK(click[kRight].amplitude > enter[kRight].amplitude);
+}
+
+TEST_CASE("the thumb-rest wheel ticks the picking hand, lightly to start and firmer on a pick") {
+    HapticsPolicy policy(1.0f);
+    HapticsFrame frame = at(1.0);
+    frame.wheel[kLeft] = WheelTick::Arm;
+    const auto arm = policy.update(frame);
+    CHECK(pulse(arm[kLeft], HapticSource::Wheel));
+    CHECK(none(arm[kRight]));
+    frame = at(2.0);
+    frame.wheel[kLeft] = WheelTick::Pick;
+    const auto pick = policy.update(frame);
+    CHECK(pulse(pick[kLeft], HapticSource::Wheel));
+    CHECK(pick[kLeft].amplitude > arm[kLeft].amplitude);
+    CHECK(pick[kLeft].seconds > arm[kLeft].seconds);
+    // Scaled by the strength like every pulse.
+    HapticsPolicy off(0.0f);
+    CHECK(none(off.update(frame)[kLeft]));
 }
 
 TEST_CASE("the strength scales every pulse, and 0 gives nothing") {
@@ -253,4 +272,5 @@ TEST_CASE("every source has a name for the log") {
     CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Fire)) == "fire");
     CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Game)) == "game");
     CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Capture)) == "capture");
+    CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Wheel)) == "wheel");
 }

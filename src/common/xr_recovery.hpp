@@ -1,8 +1,8 @@
 #pragma once
 
 // Bringing VR back after the headset or its runtime went away (presenter_reconnect.cpp): which losses are
-// recovered from, how often the XR worker tries again, and which attempts it logs. Pure, so the rules are
-// tested without a runtime.
+// recovered from, how often the XR worker tries again, which attempts it logs, and what follows a failed
+// xrBeginSession. Pure, so the rules are tested without a runtime.
 
 #include <cstdint>
 
@@ -44,6 +44,30 @@ constexpr std::uint32_t retryDelayMs(std::uint32_t attempt) {
 // Whether attempt `attempt` is logged: the first five, then one a minute.
 constexpr bool logsAttempt(std::uint32_t attempt) {
     return attempt < 5 || (attempt - 5) % 12 == 0;
+}
+
+// xrBeginSession failing in READY (presenter_xr_events.cpp). Each READY gets kBeginTries calls,
+// kBeginRetryMs apart; then the session is made again as after a loss, at once when the call returned a loss
+// (the session or instance lost, a runtime failure). Either way at most kBeginRestarts times a game: past
+// that the game stays flat, until the runtime makes the session READY again after a failure without a loss,
+// for the rest of the game after a loss (no reconnect is tried).
+inline constexpr std::uint32_t kBeginTries = 4;
+inline constexpr std::uint32_t kBeginRetryMs = 2000;
+inline constexpr std::uint32_t kBeginRestarts = 2;
+
+enum class BeginNext : std::uint8_t {
+    Retry,   // call xrBeginSession again after kBeginRetryMs
+    Restart, // take the session as lost: the worker makes a new one (presenter_reconnect.cpp)
+    GiveUp,  // stay flat
+};
+
+// What follows the `failures`-th failed call (1 is the first) of this READY, with `restarts` sessions made
+// again for it already this game; `lost`: the call returned a loss.
+constexpr BeginNext afterBeginFailure(std::uint32_t failures, std::uint32_t restarts, bool lost = false) {
+    if (!lost && failures < kBeginTries) {
+        return BeginNext::Retry;
+    }
+    return restarts < kBeginRestarts ? BeginNext::Restart : BeginNext::GiveUp;
 }
 
 } // namespace evr::xr_recovery

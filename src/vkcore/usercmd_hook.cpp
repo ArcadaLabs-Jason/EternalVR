@@ -192,9 +192,10 @@ void onPutUserCmd(const HookRegisters& regs) {
     }
     State& s = state();
     s.commands.fetch_add(1, std::memory_order_relaxed);
+    const bool suppressed = (regs.r14 & 0xFFu) != 0;
+    s.gameSuppressing.store(suppressed, std::memory_order_relaxed);
     const MappedInput mapped = runMapper();
     auto* cmd = reinterpret_cast<std::byte*>(regs.r8);
-    const bool suppressed = (regs.r14 & 0xFFu) != 0;
     // The pause key goes out even while the game suppresses buttons: that is how its menu is closed. Every
     // key the controllers hold goes up when their input goes stale.
     {
@@ -401,6 +402,7 @@ MappedInput runMapper() {
         s.viewQueue.drain();
         sendWheelPointer(s, false, {}, 0.0f);
         s.wheelHand.reset();
+        restoreWheelSlowdown("the controllers' input went stale");
         return out;
     }
     if (!ensureMapper(s, snapshot.controller, "")) {
@@ -411,7 +413,10 @@ MappedInput runMapper() {
     context.posture = cfg.seated ? posture::Posture::Seated : roomPosture();
     const bool menuHold = menu_input::suppressGameplay();
     context.menuHold = menuHold;
+    context.restWheelBlocked = restWheelBlocked(s);
+    context.restWheelHoldSeconds = restWheelHoldSeconds();
     out.input = s.mapper->update(snapshot.frame, context, dt);
+    noteRestWheel(snapshot.frame, out.input, std::min(dt, input::kMaxFrameSeconds));
     if (s.menuHold && !menuHold) {
         // A tap that fired in the menu is not carried out of it by the minimum hold (menu_release_latch.hpp).
         s.hold.reset();
@@ -429,8 +434,9 @@ MappedInput runMapper() {
     // A melee or equipment press that aims with the head or the off hand waits for the view (action_aim.hpp).
     out.actions = s.hold.update(aimActions(s, out.input.down, menuHold, dt), dt);
     out.live = true;
-    if (cfg.wheelSelect == input::WheelSelect::Hand) {
-        // The weapon hand points at the wheel; the stick or button only holds it (wheel_hand.hpp).
+    if (cfg.wheelSelect == input::WheelSelect::Hand && !out.input.restWheel.wheelDown) {
+        // The weapon hand points at the wheel; the stick or button only holds it (wheel_hand.hpp). The
+        // thumb-rest wheel always points with its stick.
         if (!s.wheelHand) {
             s.wheelHand.emplace(cfg.wheelHandDegrees);
         }

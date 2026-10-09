@@ -9,6 +9,8 @@
 // - punch: a physical punch (punch_detector.hpp) pulses the hand that punched;
 // - menu: a light tick on the pointing hand when its ray comes onto the menu panel, and on a click;
 // - capture: the capture chord (capture_chord.hpp) pulses both hands to confirm the capture;
+// - wheel: the thumb-rest wheel (rest_wheel.hpp) ticks the picking stick's hand lightly when picking starts,
+//   and more firmly when a weapon is picked;
 // - game: the game's own rumble as it mixes it each frame, two motors: the low-frequency one on both hands,
 //   the high-frequency one on the weapon hand only (it is the sharp, weapon-like one). Played as pulses of
 //   kRumbleHoldSeconds renewed while the level lasts, so it ends by itself if the frames stop coming, and
@@ -21,6 +23,7 @@
 // and sends what it returns.
 
 #include "features/input/controller_state.hpp"
+#include "features/input/rest_wheel_output.hpp"
 
 #include <array>
 #include <cstddef>
@@ -42,6 +45,7 @@ enum class HapticSource : std::uint8_t {
     Menu,
     Game,
     Capture,
+    Wheel,
     Count,
 };
 
@@ -64,10 +68,11 @@ struct GameRumble {
 struct HapticsFrame {
     double seconds = 0.0; // a steady clock
     Hand weaponHand = Hand::Right;
-    bool fireHeld = false;          // the fire action is down (and sent to the game)
-    std::array<bool, 2> punch{};    // per hand (indexed by Hand): a punch this frame
-    bool capture = false;           // the capture chord fired since the last frame
-    std::array<MenuTick, 2> menu{}; // per hand
+    bool fireHeld = false;            // the fire action is down (and sent to the game)
+    std::array<bool, 2> punch{};      // per hand (indexed by Hand): a punch this frame
+    bool capture = false;             // the capture chord fired since the last frame
+    std::array<MenuTick, 2> menu{};   // per hand
+    std::array<WheelTick, 2> wheel{}; // per hand
     GameRumble rumble;
 };
 

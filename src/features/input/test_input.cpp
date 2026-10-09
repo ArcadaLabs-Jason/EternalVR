@@ -47,8 +47,16 @@ Vec3 restPosition(Hand hand) {
 // The button a key names, or null.
 std::optional<bool>* buttonOf(TestHand& h, std::string_view key) {
     const std::pair<std::string_view, std::optional<bool>*> buttons[] = {
-        {"primary", &h.primary},   {"secondary", &h.secondary}, {"face3", &h.face3}, {"face4", &h.face4},
-        {"shoulder", &h.shoulder}, {"click", &h.stickClick},    {"menu", &h.menu},
+        {"primary", &h.primary},
+        {"secondary", &h.secondary},
+        {"face3", &h.face3},
+        {"face4", &h.face4},
+        {"shoulder", &h.shoulder},
+        {"click", &h.stickClick},
+        {"menu", &h.menu},
+        {"thumbrest", &h.thumbRest},
+        {"primary_touch", &h.primaryTouch},
+        {"secondary_touch", &h.secondaryTouch},
     };
     for (const auto& [name, button] : buttons) {
         if (name == key) {
@@ -132,7 +140,7 @@ TestInput parseTestInput(std::string_view text) {
             h.velocity = Vec3{v[0], v[1], v[2]};
         } else {
             issue("unknown input (trigger, grip, stick, primary, secondary, face3, face4, shoulder, click, "
-                  "menu, aim, position, velocity)");
+                  "menu, thumbrest, primary_touch, secondary_touch, aim, position, velocity)");
         }
     }
     return input;
@@ -163,6 +171,9 @@ void applyTestInput(const TestInput& input, InputFrame& frame) {
         h.face4Button = t.face4.value_or(h.face4Button);
         h.shoulderButton = t.shoulder.value_or(h.shoulderButton);
         h.menuButton = t.menu.value_or(h.menuButton);
+        h.thumbRest = t.thumbRest.value_or(h.thumbRest);
+        h.primaryTouch = t.primaryTouch.value_or(h.primaryTouch);
+        h.secondaryTouch = t.secondaryTouch.value_or(h.secondaryTouch);
         const Vec3 head = frame.head.poseValid ? frame.head.pose.position : Vec3{};
         if (const auto pose = testHandPose(input, which, head)) {
             h.poseValid = true;

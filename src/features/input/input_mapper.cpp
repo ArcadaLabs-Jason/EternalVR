@@ -80,6 +80,7 @@ InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
       armGestures_(settings_.throwGesture, settings_.swing), punch_(settings_.punch),
       captureChord_(settings_.trigger, settings_.captureButtons, settings_.buttonHoldSeconds),
       stickChord_(settings_.buttonHoldSeconds),
+      restWheel_(settings_.restWheel, {settings_.restSensors, profile_.moveStick, profile_.turnStick}),
       menuRelease_({settings_.trigger.release, settings_.grip.release, settings_.turnStick.centreRadius}) {
     for (HandButtons& hand : hands_) {
         hand.trigger = AnalogButton(settings_.trigger);
@@ -138,12 +139,24 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     // A button holding the weapon wheel: the turn stick points at it instead of turning or firing its
     // gestures, as under the stick's own down hold.
     const bool wheelFromButton = game::contains(input.down, game::GameAction::WeaponWheel);
+    // The thumb-rest wheel decides before the turn: on the frame a stick leaves the centre it is the wheel's
+    // or it is not, so a flick that picks a weapon never snaps or turns first.
+    input.restWheel = updateRestWheel(frame, context, wheelFromButton, dt);
+    const RestWheelOutput& rest = input.restWheel;
+    const bool restTakesTurn = profile_.turnStick && rest.taken[handIndex(*profile_.turnStick)];
     const Axis2 turnStick = profile_.turnStick ? frame.hand(*profile_.turnStick).stick : Axis2{};
     turnStickRead_ = turnStick;
-    const TurnStickOutput gestures = turnStick_.update(turnStick, dt, wheelFromButton);
+    const TurnStickOutput gestures = turnStick_.update(turnStick, dt, wheelFromButton || restTakesTurn);
     addStickGestureActions(gestures, input.down);
     input.turnDegrees = turn_.update(turnStick, dt, gestures.turnAllowed);
-    input.wheelPointer = gestures.wheelPointer;
+    input.wheelPointer = restTakesTurn && !wheelFromButton ? Axis2{} : gestures.wheelPointer;
+    if (rest.wheelDown) {
+        game::add(input.down, game::GameAction::WeaponWheel);
+        input.wheelPointer = rest.pointer;
+    }
+    if (rest.slot) {
+        game::add(input.down, *rest.slot);
+    }
 
     // The hand the locomotion frame follows (the head's frame does not read it).
     const Hand moveStickHand = locomotionHand(profile_);
@@ -151,7 +164,9 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         locomotionFrameHand(settings_.locomotionFrame, moveStickHand).value_or(moveStickHand);
     const float locomotionYaw =
         locomotion_.update(settings_.locomotionFrame, frame.head, frame.hand(steering));
-    const Axis2 moveStick = profile_.moveStick ? frame.hand(*profile_.moveStick).stick : Axis2{};
+    const bool restTakesMove = profile_.moveStick && rest.taken[handIndex(*profile_.moveStick)];
+    const Axis2 moveStick =
+        profile_.moveStick && !restTakesMove ? frame.hand(*profile_.moveStick).stick : Axis2{};
     const Axis2 move = applyStickResponse(moveStick, settings_.move);
     input.move = rotateIntoViewFrame(move, locomotionYaw, context.viewYawRadians);
 
@@ -230,6 +245,27 @@ void InputMapper::addButtonActions(Hand hand,
     }
 }
 
+RestWheelOutput InputMapper::updateRestWheel(const InputFrame& frame,
+                                             const MapperContext& context,
+                                             bool wheelFromButton,
+                                             float dt) {
+    RestWheelFrame rest;
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        const HandState& h = frame.hand(hand);
+        // A face button counts while touched and not pressed: a thumb pressing jump is not resting.
+        const bool face = settings_.restFaceTouch &&
+                          ((h.primaryTouch && !h.primaryButton) || (h.secondaryTouch && !h.secondaryButton));
+        rest.rest[handIndex(hand)] = h.thumbRest || face;
+        rest.sticks[handIndex(hand)] = h.stick;
+        rest.faceButtons[handIndex(hand)] = h.primaryButton || h.secondaryButton;
+    }
+    rest.minWheelHoldSeconds = context.restWheelHoldSeconds;
+    // Another route holding the wheel (a button, or the turn stick's own down sweep) keeps it.
+    rest.blocked = context.menuHold || context.restWheelBlocked || wheelFromButton ||
+                   turnStick_.intent() == SweepIntent::Down;
+    return restWheel_.update(rest, dt);
+}
+
 void InputMapper::consumeHeld() {
     // Only presses going on: a button up until now may be pressed afresh on this very frame.
     for (HandButtons& hand : hands_) {
@@ -240,6 +276,7 @@ void InputMapper::consumeHeld() {
         }
     }
     turnStick_.cancelSweep();
+    restWheel_.cancel();
     // A stick click withheld for the chord would be sent late on its release.
     stickChord_ = StickChord(settings_.buttonHoldSeconds);
 }

@@ -16,6 +16,7 @@
 #include "features/input/locomotion_direction.hpp"
 #include "features/input/menu_release_latch.hpp"
 #include "features/input/punch_detector.hpp"
+#include "features/input/rest_wheel.hpp"
 #include "features/input/stick_chord.hpp"
 #include "features/input/stick_response.hpp"
 #include "features/input/tap_hold.hpp"
@@ -58,6 +59,11 @@ struct MapperSettings {
     // The throw and the overhead swing (arm_gestures.hpp), both off by default.
     ThrowSettings throwGesture;
     SwingSettings swing;
+    // The thumb-rest weapon wheel (rest_wheel.hpp), which hands can sense a resting thumb (the control map's
+    // controllers), and whether a face button's touch counts as the rest where there is no thumb rest.
+    RestWheelSettings restWheel;
+    std::array<bool, 2> restSensors{};
+    bool restFaceTouch = false;
 };
 
 // Per-frame facts the mapper needs from outside the input system.
@@ -76,6 +82,12 @@ struct MapperContext {
     // keys); one still held when the hold ends stays out of gameplay until it is let go
     // (menu_release_latch.hpp).
     bool menuHold = false;
+    // The thumb-rest wheel starts nothing and ends what it was doing (rest_wheel.hpp): the game suppresses
+    // buttons, forces the view, plays a cutscene, or the player pilots a demon.
+    bool restWheelBlocked = false;
+    // The least time the thumb-rest wheel holds the game's wheel (wheelHoldSeconds, from the game's open
+    // delay).
+    float restWheelHoldSeconds = kMinWheelHoldSeconds;
 };
 
 class InputMapper {
@@ -93,6 +105,7 @@ public:
     [[nodiscard]] bool heldFromMenu() const { return menuRelease_.anyLatched(); }
     // The turn stick as the last update read it: centred while it is held from a menu, or with no turn stick.
     [[nodiscard]] Axis2 turnStick() const { return turnStickRead_; }
+    [[nodiscard]] const RestWheel& restWheel() const { return restWheel_; }
     // For the log: the weapon hand, the move stick's hand and what forward on it follows, as in
     // "left-handed, move stick left, moving where the left hand points".
     [[nodiscard]] std::string summary() const;
@@ -123,6 +136,8 @@ private:
                           game::GameActionSet& down) const;
     void addStickGestureActions(const TurnStickOutput& gestures, game::GameActionSet& down) const;
     void consumeHeld();
+    RestWheelOutput
+    updateRestWheel(const InputFrame& frame, const MapperContext& context, bool wheelFromButton, float dt);
 
     BindingProfile profile_;
     MapperSettings settings_;
@@ -135,6 +150,7 @@ private:
     PunchDetector punch_;
     CaptureChord captureChord_;
     StickChord stickChord_;
+    RestWheel restWheel_;
     game::GameActionSet previousDown_;
     MenuReleaseLatch menuRelease_;
     Axis2 turnStickRead_;

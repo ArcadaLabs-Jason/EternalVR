@@ -21,6 +21,8 @@ constexpr PulseShape kPunch{1.0f, 0.08f};
 constexpr PulseShape kMenuEnter{0.2f, 0.015f};
 constexpr PulseShape kMenuClick{0.35f, 0.02f};
 constexpr PulseShape kCapture{0.8f, 0.12f};
+constexpr PulseShape kWheelArm{0.25f, 0.02f};
+constexpr PulseShape kWheelPick{0.5f, 0.035f};
 // A game rumble pulse still playing is renewed when it has less than this left or its level moved by more
 // than kRumbleStep; weaker than kMinRumble (after the strength) counts as none.
 constexpr double kRumbleRenewSeconds = 0.04;
@@ -49,6 +51,8 @@ const char* hapticSourceName(HapticSource source) {
         return "game";
     case HapticSource::Capture:
         return "capture";
+    case HapticSource::Wheel:
+        return "wheel";
     case HapticSource::Count:
         break;
     }
@@ -146,6 +150,10 @@ std::array<HapticCommand, 2> HapticsPolicy::update(const HapticsFrame& frame) {
             const PulseShape& shape = tick == MenuTick::Click ? kMenuClick : kMenuEnter;
             state.lastMenu = now;
             offer(b, HapticSource::Menu, shape.amplitude, shape.seconds);
+        }
+        if (const WheelTick wheel = frame.wheel[index(hand)]; wheel != WheelTick::None) {
+            const PulseShape& shape = wheel == WheelTick::Pick ? kWheelPick : kWheelArm;
+            offer(b, HapticSource::Wheel, shape.amplitude, shape.seconds);
         }
     }
 

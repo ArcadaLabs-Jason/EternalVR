@@ -12,6 +12,7 @@
 using evr::bhaptics::BodyHaptics;
 using evr::bhaptics::BodySignals;
 using evr::bhaptics::crystalDistance;
+using evr::bhaptics::crystalWaveCount;
 using evr::bhaptics::crystalWaveDelay;
 using evr::bhaptics::crystalWaveShare;
 using evr::bhaptics::Device;
@@ -21,6 +22,7 @@ using evr::bhaptics::kCrystalDelaySeconds;
 using evr::bhaptics::kCrystalSleeveDistance;
 using evr::bhaptics::kCrystalWaveSeconds;
 using evr::bhaptics::kRuneDelaySeconds;
+using evr::bhaptics::kRuneWaves;
 using evr::bhaptics::kTokenDelaySeconds;
 using evr::bhaptics::kVestColumns;
 using evr::bhaptics::SyncKind;
@@ -314,7 +316,11 @@ TEST_CASE(
     CHECK(*crystalWaveDelay(SyncKind::Rune) == kRuneDelaySeconds);
     // The tester feels for it right after the perk is picked; the rune's animation runs about 7.6 s.
     CHECK(kRuneDelaySeconds > 0.0);
-    CHECK(kRuneDelaySeconds + kCrystalWaveSeconds < 7.6);
+    CHECK(kRuneDelaySeconds + kRuneWaves * kCrystalWaveSeconds < 7.6);
+    // The Slayer is shocked for about 4 to 5 s: a rune's wave plays twice, the others once.
+    CHECK(crystalWaveCount(SyncKind::Rune) == 2);
+    CHECK(crystalWaveCount(SyncKind::Crystal) == 1);
+    CHECK(crystalWaveCount(SyncKind::Token) == 1);
     CHECK_FALSE(crystalWaveDelay(SyncKind::Pickup).has_value());
     CHECK_FALSE(crystalWaveDelay(SyncKind::GloryKill).has_value());
     // The hands close on the coin right after Use; the crystal is taken much later.
@@ -402,7 +408,8 @@ TEST_CASE("a rune's pickup plays the crystal's wave after its menu, timed from t
     const double start = 4.0 + kRuneDelaySeconds;
     std::vector<double> times;
     std::vector<Frame> first;
-    // The animation runs about 7.6 s; nothing after the wave.
+    std::vector<Frame> second;
+    // The animation runs about 7.6 s; the wave plays twice, then nothing.
     for (double t = 4.1; t < 4.0 + 7.6; t += 0.02) {
         s.seconds = t;
         const auto frames = body.update(s);
@@ -414,15 +421,26 @@ TEST_CASE("a rune's pickup plays the crystal's wave after its menu, timed from t
                     first.push_back(*f);
                 }
             }
+            if (second.empty() && t >= start + kCrystalWaveSeconds) {
+                for (const Frame* f : wave) {
+                    second.push_back(*f);
+                }
+            }
             times.push_back(t);
         }
     }
-    REQUIRE(times.size() >= 22);
-    CHECK(times.size() <= 26);
+    REQUIRE(times.size() >= 44);
+    CHECK(times.size() <= 52);
     CHECK(times.front() >= start - 1e-9);
     CHECK(times.front() < start + 0.03);
-    CHECK(times.back() < start + kCrystalWaveSeconds);
+    CHECK(times.back() > start + kCrystalWaveSeconds * 1.5);
+    CHECK(times.back() < start + kRuneWaves * kCrystalWaveSeconds);
     REQUIRE(on(first, Device::VestFront) != nullptr);
     REQUIRE(on(first, Device::VestBack) != nullptr);
     CHECK(hasCentre(*on(first, Device::VestFront)));
+    // The second wave starts from the centre again, sleeves not yet.
+    REQUIRE(on(second, Device::VestFront) != nullptr);
+    CHECK(hasCentre(*on(second, Device::VestFront)));
+    CHECK_FALSE(hasCorner(*on(second, Device::VestFront)));
+    CHECK(on(second, Device::ForearmL) == nullptr);
 }

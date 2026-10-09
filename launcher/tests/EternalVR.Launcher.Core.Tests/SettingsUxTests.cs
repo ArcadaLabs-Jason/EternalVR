@@ -179,12 +179,14 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleDlssAndTheCutsceneArms()
+        public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleThumbRestDlssAndTheCutsceneArms()
         {
             var inapplicable = SettingRules.Inapplicable(new LauncherSettings());
-            Assert.Equal(new[] { Setting.SnapAngle, Setting.DlssQuality, Setting.DlssVersion, Setting.DlssPreset, Setting.DlssInHeadset,
-                                 Setting.CutsceneArms },
+            Assert.Equal(new[] { Setting.SnapAngle, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown,
+                                 Setting.DlssQuality, Setting.DlssVersion, Setting.DlssPreset, Setting.DlssInHeadset, Setting.CutsceneArms },
                 inapplicable.Keys);
+            // The thumb-rest wheel is off by default: its rows wait for it.
+            Assert.Equal(SettingRules.NeedsThumbRest, inapplicable[Setting.ThumbRestPicks]);
             Assert.Equal(SettingRules.NeedsSnapTurn, inapplicable[Setting.SnapAngle]);
             // TAA is the default anti-aliasing: the DLSS rows wait for DLSS.
             Assert.Equal(SettingRules.NeedsDlss, inapplicable[Setting.DlssVersion]);
@@ -208,7 +210,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.GloryKills, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
-                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
+                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.Bhaptics, Setting.RevenantAimWith,
                 Setting.MeleeAimWith, Setting.EquipmentAimWith,
             })
@@ -280,6 +282,8 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<DossierPress>(Setting.XButton);
             Choices<MapPanStick>(Setting.DossierMapSticks);
             Choices<WheelSelect>(Setting.WeaponWheel);
+            Choices<ThumbRestMode>(Setting.ThumbRestWheel);
+            Choices<ThumbRestPick>(Setting.ThumbRestPicks);
             Choices<AntiAliasingMode>(Setting.AntiAliasing);
             Choices<SharpeningMode>(Setting.Sharpening);
             Choices<DlssQuality>(Setting.DlssQuality);
