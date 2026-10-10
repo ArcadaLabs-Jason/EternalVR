@@ -130,7 +130,6 @@ namespace EternalVR.Launcher
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
             }
             loading = true;
-            if (!ParallelEyesOffered) ctx.Settings.ParallelEyes = false;
             try
             {
                 foreach (var r in rows) r.Load(ctx.Settings);
@@ -146,8 +145,6 @@ namespace EternalVR.Launcher
         private void ReadControlsIntoSettings()
         {
             foreach (var r in rows) r.Read(ctx.Settings);
-            // A launcher.ini from a test build cannot turn on Parallel Eye Rendering while its row is hidden.
-            if (!ParallelEyesOffered) ctx.Settings.ParallelEyes = false;
         }
 
         // The settings file as the launcher last read or wrote it: an edit made by hand while the launcher is open is merged

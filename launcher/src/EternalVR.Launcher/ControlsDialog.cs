@@ -44,6 +44,11 @@ namespace EternalVR.Launcher
         private readonly Label gestureName = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
         private readonly ComboBox[] gestures = AllGestures.Select(g => ActionList()).ToArray();
 
+        /// <summary>The button and stick grids, held still while their rows are made and refilled.</summary>
+        private readonly List<TableLayoutPanel> grids = new List<TableLayoutPanel>();
+        /// <summary>From the editor's creation to the first show, for the log (the editor once took about 8 s to open).</summary>
+        private readonly Stopwatch opening = Stopwatch.StartNew();
+
         private IReadOnlyList<ControllerFamily> families;
         private ControlsEdit edit;
         private int familyIndex = -1;
@@ -91,6 +96,8 @@ namespace EternalVR.Launcher
             FormClosing += (s, e) => { if (!KeepOrDiscardChanges()) e.Cancel = true; };
             Resize += (s, e) => WrapProblems();
             Load += (s, e) => { FitToScreen(); WrapProblems(); };
+            log.Info("controls editor: made in " + opening.ElapsedMilliseconds + " ms");
+            Shown += (s, e) => log.Info("controls editor: shown " + opening.ElapsedMilliseconds + " ms after it was asked for");
             Disposed += (s, e) => { errors.Dispose(); tips.Dispose(); };
         }
 
@@ -149,6 +156,7 @@ namespace EternalVR.Launcher
         private GroupBox ButtonsGroup()
         {
             var grid = Grid();
+            grid.SuspendLayout();
             grid.Controls.Add(new Label { AutoSize = true });
             foreach (var press in AllPresses) grid.Controls.Add(Heading(PressHeading(press), PressTip(press)));
             foreach (var h in Hands)
@@ -166,12 +174,14 @@ namespace EternalVR.Launcher
                     grid.Controls.Add(name);
                     grid.Controls.AddRange(cells);
                 }
+            grid.ResumeLayout(true);
             return Box("Buttons", grid);
         }
 
         private GroupBox SticksGroup()
         {
             var grid = Grid();
+            grid.SuspendLayout();
             grid.Controls.Add(new Label { AutoSize = true });
             grid.Controls.Add(Heading("Role", "Move walks you where the Move toward setting says; Turn turns you and takes the "
                 + "stick gestures below. The other stick swaps roles when you pick one it has."));
@@ -209,13 +219,15 @@ namespace EternalVR.Launcher
                 };
                 grid.Controls.Add(box);
             }
+            grid.ResumeLayout(true);
             return Box("Sticks", grid);
         }
 
-        private static TableLayoutPanel Grid()
+        private TableLayoutPanel Grid()
         {
             var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 4 };
             for (int i = 0; i < 4; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            grids.Add(grid);
             return grid;
         }
 
@@ -250,7 +262,8 @@ namespace EternalVR.Launcher
                 DropDownStyle = ComboBoxStyle.DropDownList, Width = ActionWidth, DropDownWidth = ActionWidth + 40, Anchor = AnchorStyles.Left,
                 MaxDropDownItems = 16, Margin = CellMargin,
             };
-            FillActions(box, null);
+            box.Enter += (s, e) => ShowAllActions(box);
+            box.DropDown += (s, e) => ShowAllActions(box);
             return box;
         }
 
@@ -274,29 +287,59 @@ namespace EternalVR.Launcher
 
         private const string FreeLabel = "(none)";
 
+        /// <summary>The free item and every action, shared by all the lists.</summary>
+        private static readonly object[] KnownActions = new object[] { new ActionItem(null, FreeLabel) }
+            .Concat(ControlNames.Actions.Select(a => (object)new ActionItem(a.Name, a.Label))).ToArray();
+
+        private static ActionItem UnknownItem(string name) => new ActionItem(name, "'" + name + "' (not an action)");
+
+        /// <summary>
+        /// A list holds only the action it shows until the player reaches it (the editor's ~70 full lists took about a second
+        /// to make when it opened); then it holds every action.
+        /// </summary>
+        private static bool HoldsAll(ComboBox box) => box.Items.Count > 1;
+
         /// <summary>
         /// Fills a list with every action, plus <paramref name="unknown"/> (a value the file holds that is not an action) so
-        /// it can be shown; the list is only refilled when that extra item changes.
+        /// it can be shown; a full list is only refilled when that extra item changes.
         /// </summary>
         private static void FillActions(ComboBox box, string unknown)
         {
             var extra = box.Items.Count > ControlNames.Actions.Count + 1 ? ((ActionItem)box.Items[box.Items.Count - 1]).Name : null;
-            if (box.Items.Count > 0 && extra == unknown) return;
+            if (HoldsAll(box) && extra == unknown) return;
             box.BeginUpdate();
             box.Items.Clear();
-            box.Items.Add(new ActionItem(null, FreeLabel));
-            foreach (var a in ControlNames.Actions) box.Items.Add(new ActionItem(a.Name, a.Label));
-            if (unknown != null) box.Items.Add(new ActionItem(unknown, "'" + unknown + "' (not an action)"));
+            box.Items.AddRange(KnownActions);
+            if (unknown != null) box.Items.Add(UnknownItem(unknown));
             box.EndUpdate();
+        }
+
+        /// <summary>Gives a list every action when the player first reaches it, keeping the action it shows.</summary>
+        private static void ShowAllActions(ComboBox box)
+        {
+            if (HoldsAll(box)) return;
+            var shown = box.Items.Count == 1 ? (ActionItem)box.Items[0] : null;
+            FillActions(box, shown?.Name != null && ControlNames.FindAction(shown.Name) == null ? shown.Name : null);
+            if (shown != null) SelectAction(box, shown.Name);
         }
 
         private static void ShowAction(ComboBox box, string value)
         {
-            var known = value == null || value == ControlNames.Unbound || ControlNames.FindAction(value) != null;
-            FillActions(box, known ? null : value);
             var name = value == ControlNames.Unbound ? null : value;
-            box.SelectedIndex = box.Items.Cast<ActionItem>().ToList().FindIndex(i => i.Name == name);
+            var known = name == null || ControlNames.FindAction(name) != null;
+            if (HoldsAll(box)) FillActions(box, known ? null : name);
+            else if (box.Items.Count == 0 || ((ActionItem)box.Items[0]).Name != name)
+            {
+                box.BeginUpdate();
+                box.Items.Clear();
+                box.Items.Add(known ? KnownActions.Cast<ActionItem>().First(i => i.Name == name) : UnknownItem(name));
+                box.EndUpdate();
+            }
+            SelectAction(box, name);
         }
+
+        private static void SelectAction(ComboBox box, string name) =>
+            box.SelectedIndex = box.Items.Cast<ActionItem>().ToList().FindIndex(i => i.Name == name);
 
         private void SelectFamily(int index)
         {
@@ -328,6 +371,7 @@ namespace EternalVR.Launcher
             if (edit == null || filling) return;
             filling = true;
             SuspendLayout();
+            foreach (var g in grids) g.SuspendLayout();
             try
             {
                 var weaponHand = WeaponHand;
@@ -361,6 +405,7 @@ namespace EternalVR.Launcher
             }
             finally
             {
+                foreach (var g in grids) g.ResumeLayout(true);
                 ResumeLayout(true);
                 filling = false;
             }

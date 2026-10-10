@@ -59,7 +59,6 @@ namespace EternalVR.Launcher
         /// <summary>Its matched choice names the last session's refresh rate (<see cref="ShowPacingChoice"/>).</summary>
         private readonly ComboBox pacing = Choices(Setting.FramePacing);
         private readonly CheckBox parallelEyes = new CheckBox { AutoSize = true };
-        private static readonly bool ParallelEyesOffered = Environment.GetEnvironmentVariable("ETERNALVR_SHOW_PARALLEL_EYES") == "1";
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
         private double customSmoothing = -1;
@@ -172,11 +171,9 @@ namespace EternalVR.Launcher
             };
             // Texture streaming and the CPU Saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
             if (StreamingRow() is SettingRow streaming) pictureRows.Add(streaming);
-            // Both eyes' rendering work at the same time, for processor-limited systems (experimental, off by default).
-            // Shown only with ETERNALVR_SHOW_PARALLEL_EYES=1 (the release zip's Launch-Parallel-Eye-Test.cmd) while it is
-            // experimental; hidden, it stays off.
-            if (ParallelEyesOffered)
-                pictureRows.Add(Row(Setting.ParallelEyes, parallelEyes, s => parallelEyes.Checked = s.ParallelEyes, s => s.ParallelEyes = parallelEyes.Checked));
+            // Both eyes' rendering work at the same time, for processor-limited systems (highly experimental, off by
+            // default; offered to everyone since 2026-10-10, the owner's call).
+            pictureRows.Add(Row(Setting.ParallelEyes, parallelEyes, s => parallelEyes.Checked = s.ParallelEyes, s => s.ParallelEyes = parallelEyes.Checked));
             var picture = Group("Picture", pictureRows.ToArray());
             var left = new List<Control> { comfort, body, gestures };
             if (SaverGroup() is GroupBox saver) left.Add(saver);

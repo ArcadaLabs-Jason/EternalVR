@@ -9,7 +9,7 @@ build.
 ## 1. Reproduction
 
 - The late-campaign hub (Continue from a finished campaign; `-Map game/hub/hub` loads the early hub, where it
-  does not show). Jason's view is `setviewpos 0.5 21.96 5.0 90`: the player lands on the step below the dais,
+  does not show). The reported view is `setviewpos 0.5 21.96 5.0 90`: the player lands on the step below the dais,
   view origin z 4.16 to 4.24. The dais itself sits around (0.4, 28): `teleport interact_hub_mission_select_1`
   gives 3.78 26.39, `interact_hub_arc_console_1` -2.97 30.11, `interact_hub_master_level_panel` -3.53 26.01.
 - Static head, the position stepped up the approach (`setviewpos` every 3 s, a capture every second; each

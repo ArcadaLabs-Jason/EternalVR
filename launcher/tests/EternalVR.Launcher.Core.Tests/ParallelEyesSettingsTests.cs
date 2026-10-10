@@ -232,11 +232,11 @@ namespace EternalVR.Launcher.Core.Tests
         public void ItsWordsSayWhatItDoes()
         {
             var text = SettingTexts.For(Setting.ParallelEyes);
-            Assert.Equal("Parallel Eye Rendering (experimental)", text.Label);
+            Assert.Equal("Parallel Eye Rendering (highly experimental)", text.Label);
             Assert.Empty(text.Choices);
             Assert.Contains("at the same time", text.Tooltip);
             Assert.Contains("Off by default", text.Tooltip);
-            Assert.Contains("Experimental", text.Tooltip);
+            Assert.Contains("Highly experimental", text.Tooltip);
             // One Steam build, not every Steam version: a Steam update falls back to the standard renderer.
             Assert.Contains("the Steam version this release supports", text.Tooltip);
             Assert.DoesNotContain("Steam version only", text.Tooltip);

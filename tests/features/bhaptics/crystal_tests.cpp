@@ -12,7 +12,7 @@
 using evr::bhaptics::BodyHaptics;
 using evr::bhaptics::BodySignals;
 using evr::bhaptics::crystalDistance;
-using evr::bhaptics::crystalWaveCount;
+using evr::bhaptics::crystalEffectSeconds;
 using evr::bhaptics::crystalWaveDelay;
 using evr::bhaptics::crystalWaveShare;
 using evr::bhaptics::Device;
@@ -22,9 +22,12 @@ using evr::bhaptics::kCrystalDelaySeconds;
 using evr::bhaptics::kCrystalSleeveDistance;
 using evr::bhaptics::kCrystalWaveSeconds;
 using evr::bhaptics::kRuneDelaySeconds;
-using evr::bhaptics::kRuneWaves;
+using evr::bhaptics::kRuneShockFadeSeconds;
+using evr::bhaptics::kRuneShockSeconds;
 using evr::bhaptics::kTokenDelaySeconds;
 using evr::bhaptics::kVestColumns;
+using evr::bhaptics::kVestMotors;
+using evr::bhaptics::runeShockShare;
 using evr::bhaptics::SyncKind;
 
 namespace {
@@ -316,11 +319,12 @@ TEST_CASE(
     CHECK(*crystalWaveDelay(SyncKind::Rune) == kRuneDelaySeconds);
     // The tester feels for it right after the perk is picked; the rune's animation runs about 7.6 s.
     CHECK(kRuneDelaySeconds > 0.0);
-    CHECK(kRuneDelaySeconds + kRuneWaves * kCrystalWaveSeconds < 7.6);
-    // The Slayer is shocked for about 4 to 5 s: a rune's wave plays twice, the others once.
-    CHECK(crystalWaveCount(SyncKind::Rune) == 2);
-    CHECK(crystalWaveCount(SyncKind::Crystal) == 1);
-    CHECK(crystalWaveCount(SyncKind::Token) == 1);
+    CHECK(kRuneDelaySeconds + kRuneShockSeconds < 7.6);
+    // The Slayer is shocked for about 4 to 5 s: a rune's shock lasts about 4 s, the others' wave its 2 s.
+    CHECK(crystalEffectSeconds(SyncKind::Rune) == kRuneShockSeconds);
+    CHECK(kRuneShockSeconds >= 3.5);
+    CHECK(crystalEffectSeconds(SyncKind::Crystal) == kCrystalWaveSeconds);
+    CHECK(crystalEffectSeconds(SyncKind::Token) == kCrystalWaveSeconds);
     CHECK_FALSE(crystalWaveDelay(SyncKind::Pickup).has_value());
     CHECK_FALSE(crystalWaveDelay(SyncKind::GloryKill).has_value());
     // The hands close on the coin right after Use; the crystal is taken much later.
@@ -393,7 +397,22 @@ TEST_CASE("a Praetor token's wave plays once per pickup, and a crystal right aft
     CHECK(firstCrystal < 6.0 + kCrystalDelaySeconds + 0.03);
 }
 
-TEST_CASE("a rune's pickup plays the crystal's wave after its menu, timed from the sync's start") {
+TEST_CASE("a rune's shock starts at once, holds and fades out by its end") {
+    CHECK(runeShockShare(0.0) > 0.2f);
+    CHECK(runeShockShare(kRuneShockSeconds / 2.0) == doctest::Approx(1.0f));
+    CHECK(runeShockShare(kRuneShockSeconds - kRuneShockFadeSeconds / 2.0) == doctest::Approx(0.5f));
+    float last = 1.0f;
+    for (double t = kRuneShockSeconds - kRuneShockFadeSeconds; t < kRuneShockSeconds; t += 0.01) {
+        const float share = runeShockShare(t);
+        CHECK(share <= last);
+        last = share;
+    }
+    CHECK(runeShockShare(kRuneShockSeconds) == 0.0f);
+    CHECK(runeShockShare(-0.01) == 0.0f);
+    CHECK(runeShockShare(std::numeric_limits<double>::quiet_NaN()) == 0.0f);
+}
+
+TEST_CASE("a rune's pickup shocks the whole suit at random after its menu, timed from the sync's start") {
     // As in a player's log (public issue #25): the rune's menu is up, its sync starts as the menu closes and
     // play is back a frame or so later.
     BodyHaptics body;
@@ -407,40 +426,87 @@ TEST_CASE("a rune's pickup plays the crystal's wave after its menu, timed from t
     s.gameplay = true;
     const double start = 4.0 + kRuneDelaySeconds;
     std::vector<double> times;
-    std::vector<Frame> first;
-    std::vector<Frame> second;
-    // The animation runs about 7.6 s; the wave plays twice, then nothing.
+    std::vector<std::vector<int>> fronts;
+    std::vector<bool> felt(kVestMotors, false);
+    int backs = 0;
+    int sleeves = 0;
+    float middle = 0.0f;
+    int middleDots = 0;
+    float end = 0.0f;
+    int endDots = 0;
+    // The animation runs about 7.6 s; the shock plays once, then nothing.
     for (double t = 4.1; t < 4.0 + 7.6; t += 0.02) {
         s.seconds = t;
         const auto frames = body.update(s);
         CHECK(of(frames, Effect::GloryKill).empty());
-        const auto wave = of(frames, Effect::Crystal);
-        if (!wave.empty()) {
-            if (times.empty()) {
-                for (const Frame* f : wave) {
-                    first.push_back(*f);
+        const auto shock = of(frames, Effect::Crystal);
+        if (shock.empty()) {
+            continue;
+        }
+        times.push_back(t);
+        for (const Frame* f : shock) {
+            if (f->device == Device::VestBack) {
+                ++backs;
+            } else if (f->device == Device::ForearmL || f->device == Device::ForearmR) {
+                ++sleeves;
+            } else if (f->device == Device::VestFront) {
+                std::vector<int> indices;
+                for (const auto& dot : f->dots) {
+                    CHECK(dot.intensity > 0);
+                    indices.push_back(dot.index);
+                    felt[dot.index] = true;
+                    if (t > start + 1.0 && t < start + 2.5) {
+                        middle += dot.intensity;
+                        ++middleDots;
+                    } else if (t > start + kRuneShockSeconds - 0.3) {
+                        end += dot.intensity;
+                        ++endDots;
+                    }
                 }
+                fronts.push_back(std::move(indices));
             }
-            if (second.empty() && t >= start + kCrystalWaveSeconds) {
-                for (const Frame* f : wave) {
-                    second.push_back(*f);
-                }
-            }
-            times.push_back(t);
         }
     }
-    REQUIRE(times.size() >= 44);
+    // About a step every kCrystalStepSeconds for kRuneShockSeconds, from the delay on.
+    REQUIRE(times.size() >= 40);
     CHECK(times.size() <= 52);
     CHECK(times.front() >= start - 1e-9);
     CHECK(times.front() < start + 0.03);
-    CHECK(times.back() > start + kCrystalWaveSeconds * 1.5);
-    CHECK(times.back() < start + kRuneWaves * kCrystalWaveSeconds);
+    CHECK(times.back() > start + kRuneShockSeconds - 0.2);
+    CHECK(times.back() < start + kRuneShockSeconds);
+    // One crackle, not a ring: the motors change at random from step to step, every one of them is felt, and
+    // the back and both sleeves crackle all along.
+    std::sort(fronts.begin(), fronts.end());
+    CHECK(std::unique(fronts.begin(), fronts.end()) - fronts.begin() > 20);
+    CHECK(std::all_of(felt.begin(), felt.end(), [](bool b) { return b; }));
+    CHECK(backs > 30);
+    CHECK(sleeves > 40);
+    // Weaker as it fades out at the end.
+    REQUIRE(middleDots > 0);
+    REQUIRE(endDots > 0);
+    CHECK(end / static_cast<float>(endDots) < middle / static_cast<float>(middleDots) * 0.6f);
+}
+
+TEST_CASE("a Praetor token right after a rune plays the crystal's wave again, not the rune's shock") {
+    BodyHaptics body;
+    body.update(playing(1.0));
+    auto s = crystalSync(2.0, SyncKind::Rune);
+    for (double t = 2.0; t < 2.0 + kRuneDelaySeconds + kRuneShockSeconds + 0.5; t += 0.02) {
+        s.seconds = t;
+        body.update(s);
+    }
+    body.update(playing(8.0));
+    auto token = crystalSync(9.0, SyncKind::Token);
+    std::vector<Frame> first;
+    for (double t = 9.0; t < 9.0 + kTokenDelaySeconds + 0.2 && first.empty(); t += 0.02) {
+        token.seconds = t;
+        const auto frames = body.update(token);
+        for (const Frame* f : of(frames, Effect::Crystal)) {
+            first.push_back(*f);
+        }
+    }
     REQUIRE(on(first, Device::VestFront) != nullptr);
-    REQUIRE(on(first, Device::VestBack) != nullptr);
     CHECK(hasCentre(*on(first, Device::VestFront)));
-    // The second wave starts from the centre again, sleeves not yet.
-    REQUIRE(on(second, Device::VestFront) != nullptr);
-    CHECK(hasCentre(*on(second, Device::VestFront)));
-    CHECK_FALSE(hasCorner(*on(second, Device::VestFront)));
-    CHECK(on(second, Device::ForearmL) == nullptr);
+    CHECK_FALSE(hasCorner(*on(first, Device::VestFront)));
+    CHECK(on(first, Device::ForearmL) == nullptr);
 }

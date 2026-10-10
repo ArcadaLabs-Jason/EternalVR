@@ -6,7 +6,7 @@
     <Deterministic>true</Deterministic>
     <!-- The build folder is left out of the binaries (the PDB path and source paths read from \_\). -->
     <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))=\_\</PathMap>
-    <Version>0.1.39</Version>
+    <Version>0.1.40</Version>
     <!-- Debug builds carry the -dev marker, so the launcher and layer version check only warns (VersionCheck). -->
     <Version Condition="'$(Configuration)' == 'Debug'">$(Version)-dev</Version>
     <Company>ArcadaLabs</Company>

@@ -19,7 +19,6 @@ Then it assembles EternalVR-<channel>-<version>-<shortsha>\ in the output folder
   data\controllers\*.toml
   layer\EternalVR.dll, layer\VK_LAYER_ETERNALVR.json, layer\openxr_loader.dll
   README-ALPHA.md, docs\INSTALL.md, docs\CONTROLS.md, docs\KNOWN-ISSUES.md, docs\TROUBLESHOOTING.md
-  Launch-Parallel-Eye-Test.cmd (starts the launcher with the Parallel Eye Rendering box shown)
   LICENSE, THIRD_PARTY_NOTICES.md, BUILD-INFO.txt, SHA256SUMS.txt (every other file in the zip)
 
 and zips it (entries dated at the commit time), with the PDBs in a separate -symbols zip. The zip is
@@ -134,16 +133,11 @@ function Test-RelSources($state) {
     if ($maps.Count -eq 0) { Stop-Refused 'data\input\controllers holds no controller map for the launcher to ship' }
     $manifest = [IO.File]::ReadAllText((Join-Path $repo 'src\vkcore\VK_LAYER_ETERNALVR.json.in'))
     if ($manifest -notmatch '"name":\s*"VK_LAYER_ETERNALVR"') { Stop-Refused 'The layer manifest template does not name VK_LAYER_ETERNALVR' }
-    # The tester script shows the experimental box and starts the launcher next to it, nothing else.
-    $peCmd = [IO.File]::ReadAllText((Join-Path $repo 'tools\release\Launch-Parallel-Eye-Test.cmd'))
-    if ($peCmd -notmatch '(?m)^set ETERNALVR_SHOW_PARALLEL_EYES=1\r$' -or $peCmd -notmatch '(?m)^start "" "%~dp0EternalVR\.Launcher\.exe"\r$') {
-        Stop-Refused 'tools\release\Launch-Parallel-Eye-Test.cmd must set ETERNALVR_SHOW_PARALLEL_EYES=1 and start the launcher next to it, with CRLF lines'
-    }
     $notices = [IO.File]::ReadAllText((Join-Path $repo 'THIRD_PARTY_NOTICES.md'))
     foreach ($name in $script:ThirdPartyBinaries) {
         if ($notices.IndexOf($name, [StringComparison]::OrdinalIgnoreCase) -lt 0) { Stop-Refused "THIRD_PARTY_NOTICES.md does not name $name" }
     }
-    Write-RelLog "sources: version $($state.Version) (layer and launcher agree), $($builds.Count) supported game build(s), $($maps.Count) controller map(s), docs, notices and the tester script present"
+    Write-RelLog "sources: version $($state.Version) (layer and launcher agree), $($builds.Count) supported game build(s), $($maps.Count) controller map(s), docs and notices present"
     return $builds
 }
 
@@ -158,7 +152,6 @@ function Get-RelDocs([string]$Repo) {
         [pscustomobject]@{ Source = (Join-Path $d 'CONTROLS.md'); Target = 'docs\CONTROLS.md' }
         [pscustomobject]@{ Source = (Join-Path $d 'KNOWN-ISSUES.md'); Target = 'docs\KNOWN-ISSUES.md' }
         [pscustomobject]@{ Source = (Join-Path $d 'TROUBLESHOOTING.md'); Target = 'docs\TROUBLESHOOTING.md' }
-        [pscustomobject]@{ Source = (Join-Path $Repo 'tools\release\Launch-Parallel-Eye-Test.cmd'); Target = 'Launch-Parallel-Eye-Test.cmd' }
         [pscustomobject]@{ Source = (Join-Path $Repo 'LICENSE'); Target = 'LICENSE' }
         [pscustomobject]@{ Source = (Join-Path $Repo 'THIRD_PARTY_NOTICES.md'); Target = 'THIRD_PARTY_NOTICES.md' }
     )

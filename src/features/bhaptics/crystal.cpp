@@ -1,5 +1,6 @@
 // The Sentinel Crystal's wave and BodyHaptics::crystal: the ring as frames on the vest and both sleeves.
-// A Praetor Suit token's pickup and a rune's play it too (crystalWaveDelay, crystalWaveCount).
+// A Praetor Suit token's pickup plays it too; a rune's plays BodyHaptics::runeShock (crystalWaveDelay,
+// crystalEffectSeconds).
 
 #include "features/bhaptics/crystal.hpp"
 
@@ -22,6 +23,10 @@ constexpr float kCrystalPeak = 85.0f;
 constexpr float kCrystalSleevePeak = 70.0f;
 constexpr float kCrystalFlicker = 0.75f;
 constexpr int kCrystalMillis = 100;
+// A rune's sparks: at most these on the vest and the sleeves, each at kRuneSparkLow to 1 of it at random.
+constexpr float kRunePeak = 80.0f;
+constexpr float kRuneSleevePeak = 70.0f;
+constexpr float kRuneSparkLow = 0.5f;
 
 // The ring's radius at the end: its tail has just left the sleeves.
 constexpr float kCrystalEndRadius = kCrystalSleeveDistance + kCrystalTrail;
@@ -43,8 +48,8 @@ std::optional<double> crystalWaveDelay(SyncKind kind) {
     return std::nullopt;
 }
 
-int crystalWaveCount(SyncKind kind) {
-    return kind == SyncKind::Rune ? kRuneWaves : 1;
+double crystalEffectSeconds(SyncKind kind) {
+    return kind == SyncKind::Rune ? kRuneShockSeconds : kCrystalWaveSeconds;
 }
 
 float crystalDistance(int row, int column) {
@@ -65,14 +70,26 @@ float crystalWaveShare(double sinceStart, float distance) {
     return std::max(0.0f, share);
 }
 
+float runeShockShare(double sinceStart) {
+    if (!std::isfinite(sinceStart) || sinceStart < 0.0 || sinceStart >= kRuneShockSeconds) {
+        return 0.0f;
+    }
+    const double rise = 0.3 + 0.7 * sinceStart / kRuneShockRiseSeconds;
+    const double fade = (kRuneShockSeconds - sinceStart) / kRuneShockFadeSeconds;
+    return static_cast<float>(std::min({1.0, rise, fade}));
+}
+
 void BodyHaptics::crystal(std::vector<Frame>& out, double seconds) {
     if (seconds < nextCrystal_ || seconds >= crystalUntil_) {
         return;
     }
     nextCrystal_ = std::max(nextCrystal_ + kCrystalStepSeconds, seconds);
-    // A late update plays the ring where it is by now, not the steps it missed. A rune's waves follow each
-    // other, each from the centre again.
-    const double sinceStart = std::fmod(seconds - crystalWaveStart_, kCrystalWaveSeconds);
+    // A late update plays the ring where it is by now, not the steps it missed.
+    const double sinceStart = seconds - crystalWaveStart_;
+    if (crystalRune_) {
+        runeShock(out, sinceStart);
+        return;
+    }
     for (const Device side : {Device::VestFront, Device::VestBack}) {
         std::vector<Dot> dots;
         for (int row = 0; row < kVestRows; ++row) {
@@ -99,6 +116,27 @@ void BodyHaptics::crystal(std::vector<Frame>& out, double seconds) {
         }
         add(out, Effect::Crystal, sleeve, kCrystalMillis, std::move(dots));
     }
+}
+
+void BodyHaptics::runeShock(std::vector<Frame>& out, double sinceStart) {
+    const float share = runeShockShare(sinceStart);
+    if (share <= 0.0f) {
+        return;
+    }
+    const auto sparks = [&](Device device, int motors, float peak) {
+        std::vector<Dot> dots;
+        for (int i = 0; i < motors; ++i) {
+            if (randomLevel(0.0f, 1.0f) < kRuneSparkShare) {
+                dots.push_back(
+                    {static_cast<std::uint8_t>(i), scaled(peak * share * randomLevel(kRuneSparkLow, 1.0f))});
+            }
+        }
+        add(out, Effect::Crystal, device, kCrystalMillis, std::move(dots));
+    };
+    sparks(Device::VestFront, kVestMotors, kRunePeak);
+    sparks(Device::VestBack, kVestMotors, kRunePeak);
+    sparks(Device::ForearmL, kSleeveMotors, kRuneSleevePeak);
+    sparks(Device::ForearmR, kSleeveMotors, kRuneSleevePeak);
 }
 
 } // namespace evr::bhaptics

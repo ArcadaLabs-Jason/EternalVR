@@ -17,9 +17,16 @@
 //   out of the centre (turning or walking, then the thumb resting), opens no window. After a pick (not a
 //   cancel), the window opens again once the stick is back in the centre (picks in a row).
 // - full: while touched. For as long as the thumb rests, the other stick picks weapons and neither moves nor
-//   turns.
-// - extreme: the turn stick is the wheel. It always picks weapons; resting the other thumb on its rest gives
-//   it back its turning, chainsaw and quick switch.
+//   turns. While a touch is sensed but not yet past kRestDebounceSeconds, the other stick is held back from
+//   the game if it left the centre after the touch began, or kHeldLeadSeconds before (a flick and a touch
+//   that start together: a player report, 2026-10-10, quick switches from a down flick before the rest
+//   registered); when the touch registers, a stick held out picks, and when it does not, the stick is the
+//   game's again.
+// - extreme: the turn stick is the wheel, for standing players who turn with their body (the owner's spec,
+//   2026-10-09/10). It picks weapons while neither thumb rests; resting the other thumb on its rest gives it
+//   back its turning, chainsaw and quick switch, and a pick in progress is cancelled (an open game wheel
+//   still closes on its highlight); resting the turn hand's thumb instead makes the other stick the picker
+//   (it does not walk meanwhile).
 // - off (default).
 //
 // Picking (ETERNALVR_THUMBREST_PICK): the stick has to stay kDwellSeconds in one of the eight directions,
@@ -38,7 +45,8 @@
 // kArmDeadzone. After the route, that stick stays out of play until it is back in the centre.
 //
 // Blocked (a menu, the game suppressing buttons, a forced view, a cutscene, piloting a demon, the wheel
-// held by another route): nothing arms, picking is cancelled, and an open wheel closes.
+// held by another route): nothing arms, picking is cancelled, an open wheel closes, and a stick the wheel
+// holds goes back to the game (once it has been back in the centre).
 //
 // Pure, no clock of its own: the mapper feeds it once per frame (input_mapper.hpp).
 
@@ -91,6 +99,9 @@ inline constexpr float kRearmGapSeconds = 0.05f;
 // out of the centre no longer than this when the rest registered (the flick began with the touch).
 inline constexpr float kQuickReturnSeconds = 0.25f;
 inline constexpr float kRecentStickSeconds = 0.2f;
+// While touched: a stick that left the centre no earlier than this before its rest's touch was sensed is held
+// while the touch registers (the flick and the touch start together, in either order).
+inline constexpr float kHeldLeadSeconds = 0.05f;
 
 enum class RestWheelMode : std::uint8_t {
     Off,
@@ -132,6 +143,9 @@ struct RestWheelFrame {
     std::array<Axis2, 2> sticks{};
     std::array<bool, 2> faceButtons{}; // the hand's primary or secondary button is pressed
     bool blocked = false;
+    // The turn stick's own down sweep holds the game's wheel: as blocked, except that it does not stop a
+    // stick being held while a rest's touch registers (holding the stick cancels the sweep).
+    bool sweepDown = false;
     // The least time the wheel is held from its press (wheelHoldSeconds).
     float minWheelHoldSeconds = kMinWheelHoldSeconds;
 };
@@ -149,6 +163,8 @@ struct RestWheelStats {
     // of those, the ones whose stick had been out no longer than kRecentStickSeconds.
     std::array<std::uint32_t, 2> stickOut{};
     std::array<std::uint32_t, 2> stickOutRecent{};
+    // Under while touched: pushes of the other stick held while the touch registered, then picking.
+    std::array<std::uint32_t, 2> heldPushes{};
 };
 
 class RestWheel {
@@ -202,6 +218,11 @@ private:
     // `picked`: a weapon was picked, so under edge the window opens again for the next pick.
     void finishRoute(bool picked);
     [[nodiscard]] bool restGone() const;
+    // Under extreme: the stick that picks now (the turn stick, the other stick while only the turn hand's
+    // thumb rests, or none while the other thumb rests).
+    [[nodiscard]] std::optional<Hand> extremeStick() const;
+    // Under extreme a pick in progress is cancelled by the other thumb landing (it wants turning back).
+    [[nodiscard]] bool restCancels() const;
     [[nodiscard]] bool hasRole(Hand hand) const;
     [[nodiscard]] Hand restoreHand() const;
     [[nodiscard]] bool out(Hand hand) const;
@@ -213,6 +234,9 @@ private:
     std::array<Rest, 2> rests_{};
     std::array<Axis2, 2> sticks_{};
     std::array<bool, 2> latched_{};
+    // Under while touched: the stick is held while the other hand's rest has a touch that has not registered
+    // yet.
+    std::array<bool, 2> held_{};
     // Seconds each stick has been centred, and since each hand's face button was last down (long ago at the
     // start).
     std::array<float, 2> centredSeconds_{kLongAgoSeconds, kLongAgoSeconds};

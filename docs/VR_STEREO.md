@@ -405,7 +405,7 @@ with ray tracing on at a Quest 3's resolution both ways ran close to 90 (`docs/r
 GPU's work is not reduced.
 
 **Turning it on.** `ETERNALVR_MODE=stereo` and `ETERNALVR_PARALLEL_EYES=1`; nothing else. The launcher's
-"Parallel Eye Rendering (experimental)" (Play tab, stereo only; shown with `ETERNALVR_SHOW_PARALLEL_EYES=1`) sets
+"Parallel Eye Rendering (highly experimental)" (Play tab, stereo only; shown to everyone since 2026-10-10) sets
 exactly that, so a `.cmd` that sets the
 two variables runs the same thing. It stays off (one `parallel eyes: off: ...` line, Route S) when
 `ETERNALVR_STEREO_EXPERIMENT` is set (the experiment then runs), the UI layer is off (`ETERNALVR_UI_LAYER=0`:
@@ -1043,7 +1043,7 @@ axis).
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
 | `ETERNALVR_STEREO_SSDO_TAA` | 1 | SSDO's temporal filter (`r_SSDOTemporalAA`) per eye under Route S (section "Per-eye temporal history", SSDO); 0: the filter held off in stereo (`seq-ssdo: off (ETERNALVR_STEREO_SSDO_TAA=0); ...`) |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S (Parallel Eye Rendering stays off with either) |
-| `ETERNALVR_PARALLEL_EYES` | unset | `1` in stereo: Parallel Eye Rendering, both eyes as two views of one frame (section "Parallel Eye Rendering"), on Steam build 25216728 only; any other build, the UI layer off or DLSS with `ETERNALVR_PE_DLSS=0` keep Route S, and with a stereo experiment the experiment runs (logged). Async compute off, view 1's clones and the eye copy come with it. The launcher's "Parallel Eye Rendering (experimental)", off by default |
+| `ETERNALVR_PARALLEL_EYES` | unset | `1` in stereo: Parallel Eye Rendering, both eyes as two views of one frame (section "Parallel Eye Rendering"), on Steam build 25216728 only; any other build, the UI layer off or DLSS with `ETERNALVR_PE_DLSS=0` keep Route S, and with a stereo experiment the experiment runs (logged). Async compute off, view 1's clones and the eye copy come with it. The launcher's "Parallel Eye Rendering (highly experimental)", off by default |
 | `ETERNALVR_PE_EXPOSURE` | `same` | under Parallel Eye Rendering, the auto-exposure image view 1 reads: `same` the one view 0 writes this frame, `prev` the one view 0 wrote the frame before, `engine` the engine's own index (the parity of view 1's last own update, image 0 until it runs one) and view 1's update skipped only where its eye pose was written (the rig's positive control); section "Parallel Eye Rendering", one auto exposure for both eyes |
 | `ETERNALVR_STEREO_EYE_POSES`, `_JITTER_COPY`, `ETERNALVR_TEST_WEAPON_FOV` | | experiments only (below) |
 | `ETERNALVR_GPU_TIMING` | 0 | `sample` (or `sampled`): GPU timestamps around the submit batches of 3 frames in every 45, each eye's GPU busy time in a 10 s line (below); `1`, `on` or `true`: every frame, with the full summary and CSV; anything else: off; any mode |

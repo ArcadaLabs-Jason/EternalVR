@@ -123,9 +123,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "Stick (default)", "Point with your hand"),
             [Setting.ThumbRestWheel] = new Text("Thumb-rest wheel",
                 "Rest a thumb on its thumb rest and the other stick picks weapons. Touch, then push: only a push within "
-                + "half a second of the touch. While touched: for as long as the thumb rests. Needs a thumb-rest sensor "
+                + "half a second of the touch. While touched: for as long as the thumb rests. Turn stick picks: for playing "
+                + "standing, the turn stick always picks; rest the other thumb to turn with it. Needs a thumb-rest sensor "
                 + "(Quest and Rift controllers).",
-                "Touch, then push", "While touched", "Off (default)"),
+                "Touch, then push", "While touched", "Turn stick picks (standing)", "Off (default)"),
             [Setting.ThumbRestPicks] = new Text("Thumb-rest picks",
                 "Weapon wheel: the game's wheel opens and the stick points at a weapon; letting go picks it. Weapon by "
                 + "direction: push toward a weapon where the game's wheel shows it and let go; the wheel stays "
@@ -213,10 +214,11 @@ namespace EternalVR.Launcher.Core.Settings
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "
                 + "more frames per second on the test rig). Mostly lossless: textures may sharpen a moment later when you turn "
                 + "fast or enter a new area. On by default. The game's own setting is put back after you play."),
-            [Setting.ParallelEyes] = new Text("Parallel Eye Rendering (experimental)",
+            [Setting.ParallelEyes] = new Text("Parallel Eye Rendering (highly experimental)",
                 "Renders both eyes in one game frame, their work running at the same time, instead of one eye after the "
                 + "other. Only on the Steam version this release supports; other versions use the standard renderer. The "
-                + "game's async compute is off while it is on. Off by default. Experimental."),
+                + "game's async compute is off while it is on. Off by default. Highly experimental: it needs more video "
+                + "memory and some effects can differ between the eyes (Known issues)."),
             [Setting.CpuSaver] = new Text("CPU Saver (experimental)",
                 "Turns down a few of the game's detail settings that cost processor time for each eye's picture, one checkbox "
                 + "each; point at one to see what it changes, what it gained on the test rig and what it costs in the picture. "

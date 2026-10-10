@@ -460,13 +460,14 @@ void BodyHaptics::heartbeat(std::vector<Frame>& out, const BodySignals& signals)
 std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
     std::vector<Frame> out;
     // The crystal's sync starts as its upgrade menu closes, before gameplay is back: its start is taken in
-    // every update, and its wave timed from it below. A Praetor token's (no menu) the same way.
+    // every update, and its wave timed from it below. A Praetor token's (no menu) and a rune's the same way.
     const std::optional<double> waveDelay = signals.sync ? crystalWaveDelay(signals.syncKind) : std::nullopt;
     const bool crystalSync = waveDelay.has_value() && std::isfinite(signals.seconds);
     if (crystalSync && !crystalSync_) {
         crystalStart_ = signals.seconds;
         crystalDelay_ = *waveDelay;
-        crystalWaves_ = crystalWaveCount(signals.syncKind);
+        crystalSeconds_ = crystalEffectSeconds(signals.syncKind);
+        crystalRune_ = signals.syncKind == SyncKind::Rune;
         crystalPending_ = true;
     }
     crystalSync_ = crystalSync;
@@ -536,7 +537,7 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         crystalPending_ = false;
         crystalWaveStart_ = crystalStart_ + crystalDelay_;
         nextCrystal_ = std::max(crystalWaveStart_, signals.seconds);
-        crystalUntil_ = crystalWaveStart_ + crystalWaves_ * kCrystalWaveSeconds;
+        crystalUntil_ = crystalWaveStart_ + crystalSeconds_;
     }
     heartbeat(out, signals);
     crystal(out, signals.seconds);

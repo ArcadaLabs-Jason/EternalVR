@@ -145,7 +145,8 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     const RestWheelOutput& rest = input.restWheel;
     const bool restTakesTurn = profile_.turnStick && rest.taken[handIndex(*profile_.turnStick)];
     const Axis2 turnStick = profile_.turnStick ? frame.hand(*profile_.turnStick).stick : Axis2{};
-    turnStickRead_ = turnStick;
+    // The virtual gamepad's look reads it (no turn hook): nothing while the thumb-rest wheel holds the stick.
+    turnStickRead_ = restTakesTurn ? Axis2{} : turnStick;
     const TurnStickOutput gestures = turnStick_.update(turnStick, dt, wheelFromButton || restTakesTurn);
     addStickGestureActions(gestures, input.down);
     input.turnDegrees = turn_.update(turnStick, dt, gestures.turnAllowed);
@@ -260,9 +261,10 @@ RestWheelOutput InputMapper::updateRestWheel(const InputFrame& frame,
         rest.faceButtons[handIndex(hand)] = h.primaryButton || h.secondaryButton;
     }
     rest.minWheelHoldSeconds = context.restWheelHoldSeconds;
-    // Another route holding the wheel (a button, or the turn stick's own down sweep) keeps it.
-    rest.blocked = context.menuHold || context.restWheelBlocked || wheelFromButton ||
-                   turnStick_.intent() == SweepIntent::Down;
+    // Another route holding the wheel (a button, or the turn stick's own down sweep) keeps it; a down sweep
+    // begun with a rest's touch is taken back while the touch registers (RestWheel holds the stick).
+    rest.blocked = context.menuHold || context.restWheelBlocked || wheelFromButton;
+    rest.sweepDown = turnStick_.intent() == SweepIntent::Down;
     return restWheel_.update(rest, dt);
 }
 

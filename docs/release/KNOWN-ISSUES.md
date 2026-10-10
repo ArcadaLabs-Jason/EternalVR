@@ -181,8 +181,8 @@ them is worse for you than described here.
   while your processor cannot keep up with the headset and draws both eyes again once it can (the switch
   takes a second or a few). Turn it off if it does not help.
 - **Parallel Eye Rendering is experimental and for testing.** It renders both eyes as two views of one game
-  frame instead of one eye after the other. Its checkbox shows only when you start the launcher with
-  `Launch-Parallel-Eye-Test.cmd` (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Steam version only
+  frame instead of one eye after the other: the Play tab's Parallel Eye Rendering (highly experimental),
+  off by default (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Steam version only
   (greyed out on Game Pass), tried on NVIDIA only. It works with Anti-aliasing TAA, DLSS or Off; Foveated
   rendering and Alternate eyes are greyed out while it is on. What is still wrong with it:
   - **It needs more video memory.** On a 12 GB card the game can run at about 95% of its video memory and
@@ -234,9 +234,10 @@ them is worse for you than described here.
   the game's wheel is slow to open; While touched with Weapon by direction works best so far. Weapon by
   direction follows the game's own wheel (the rocket launcher left, the heavy cannon right, and so on):
   `weapon_directions` in launcher.ini changes it. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
-  rest. Once the game's wheel is open it cannot be cancelled.
-- **Edit controls... can take several seconds to open** (the window shows "Not Responding" first). It does
-  open; a fix is coming.
+  rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
+  in a headset yet.
+- **Edit controls...** should open much faster now (it used to take several seconds and show "Not
+  Responding" first). If it still takes several seconds, tell me.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and
   have not been tried in a headset yet. How hard you need to throw or swing may change. The grenade flies
   where your gun points (or where you look with head aim), not where your hand threw it. A throw or a swing

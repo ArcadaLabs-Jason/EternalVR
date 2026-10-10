@@ -103,7 +103,8 @@ public:
     [[nodiscard]] const MapperSettings& settings() const { return settings_; }
     // An input held through the end of a menu's hold is still kept out of gameplay.
     [[nodiscard]] bool heldFromMenu() const { return menuRelease_.anyLatched(); }
-    // The turn stick as the last update read it: centred while it is held from a menu, or with no turn stick.
+    // The turn stick as the last update read it: centred while it is held from a menu, while the thumb-rest
+    // wheel holds it, or with no turn stick.
     [[nodiscard]] Axis2 turnStick() const { return turnStickRead_; }
     [[nodiscard]] const RestWheel& restWheel() const { return restWheel_; }
     // For the log: the weapon hand, the move stick's hand and what forward on it follows, as in

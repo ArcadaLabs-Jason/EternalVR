@@ -24,8 +24,8 @@
 //   the crystal's wave from kTokenDelaySeconds into it, as the hands close on the coin (a tester's idea,
 //   public issue #1; crystalWaveDelay);
 // - rune: its pickup animation (after the rune's menu, as for a crystal: the Slayer takes the rune's charge)
-//   plays the crystal's wave from kRuneDelaySeconds into it, kRuneWaves times back to back (a tester's
-//   ask, public issue #25);
+//   shocks the whole suit from kRuneDelaySeconds into it: motors at random all over the vest and both
+//   sleeves for kRuneShockSeconds (crystal.hpp; a tester's ask, public issue #25);
 // - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
 //   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
 //   lighter and shorter (a tester's suggestion, public issue #1);
@@ -165,9 +165,9 @@ const char* syncKindName(SyncKind kind);
 // (crystal.cpp).
 std::optional<double> crystalWaveDelay(SyncKind kind);
 
-// How many times the crystal's wave plays back to back for a sync of `kind`: kRuneWaves for a rune, once for
-// the others (crystal.cpp).
-int crystalWaveCount(SyncKind kind);
+// How long the effect for a sync of `kind` plays: kRuneShockSeconds for a rune's shock, kCrystalWaveSeconds
+// for the others' wave (crystal.cpp).
+double crystalEffectSeconds(SyncKind kind);
 
 // What a trigger teleport of the player is (idTrigger_Teleporter, and its _Fade kind that fades out first):
 // a portal or pad, or one of the same classes the maps use to put the player back after a fall (a hazard
@@ -235,8 +235,10 @@ private:
     void damage(std::vector<Frame>& out, float amount, std::optional<float> yawDegrees);
     void heartbeat(std::vector<Frame>& out, const BodySignals& signals);
     void landing(std::vector<Frame>& out, const BodySignals& signals);
-    // The crystal's wave (crystal.cpp).
+    // The crystal's wave, or a rune's shock (crystal.cpp).
     void crystal(std::vector<Frame>& out, double seconds);
+    // A rune's shock instead of the wave (crystal.cpp).
+    void runeShock(std::vector<Frame>& out, double sinceStart);
     void portal(std::vector<Frame>& out, double seconds);
     // The launch's curve (launch.cpp).
     void launch(std::vector<Frame>& out, double seconds);
@@ -264,11 +266,12 @@ private:
     std::uint64_t landings_ = 0;
     double nextCrystal_ = 0.0;      // the wave's next step
     double crystalUntil_ = -1.0;    // no step from here on
-    bool crystalSync_ = false;      // a crystal's or a token's sync ran at the last update, gameplay or not
+    bool crystalSync_ = false;      // a crystal's, a token's or a rune's sync ran at the last update
     bool crystalPending_ = false;   // that sync started and its wave is not timed yet
     double crystalStart_ = 0.0;     // when that sync started
     double crystalDelay_ = 0.0;     // its wave's delay (crystalWaveDelay)
-    int crystalWaves_ = 1;          // and how many times it plays (crystalWaveCount)
+    double crystalSeconds_ = 0.0;   // and how long it plays (crystalEffectSeconds)
+    bool crystalRune_ = false;      // a rune's: its shock instead of the wave
     double crystalWaveStart_ = 0.0; // and when its wave starts
     double portalStart_ = 0.0;
     double nextPortal_ = 0.0;   // the sweep's next step

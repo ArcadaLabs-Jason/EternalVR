@@ -182,7 +182,7 @@ $wheelScenarios = @(
     },
     @{
         Name = 'thumbrest-extreme'; Kind = 'game'
-        Proves = 'Turn stick is the wheel: with no thumb resting the turn stick opens the wheel, and with the left thumb on its rest it turns'
+        Proves = 'Turn stick picks (standing): with no thumb resting the turn stick opens the wheel, with the left thumb on its rest it turns, and with the right thumb on its rest the left stick picks'
         Env = @('ETERNALVR_THUMBREST_WHEEL=extreme', 'ETERNALVR_CONTROLLERS_TRACE=1')
         Input = @()
         Timeline = {
@@ -195,11 +195,16 @@ $wheelScenarios = @(
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 1, 0'); Wait-QaSeconds $c 1
             Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 1
             Write-QaInput $c @(); Wait-QaSeconds $c 2
+            Write-QaInput $c @('right.thumbrest = 1'); Wait-QaSeconds $c 0.5
+            Write-QaInput $c @('right.thumbrest = 1', 'left.stick = 0, 1'); Wait-QaSeconds $c 1.2
+            Write-QaInput $c @('right.thumbrest = 1'); Wait-QaSeconds $c 1
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
         }
         Asserts = {
             param($c)
             Test-QaPresent $c 'thumb-rest wheel extreme: rest sensors on both hands'
-            Test-QaPresent $c 'thumb-rest wheel: armed: the turn stick picks weapons; the left thumb rest gives turning back'
+            Test-QaPresent $c 'thumb-rest wheel: armed: the right (turn) stick picks weapons; the left thumb rest gives turning back'
+            Test-QaPresent $c 'thumb-rest wheel: armed: the left stick picks (right thumb rest, extreme'
             Test-QaPresent $c 'controllers: action weapon_wheel'
             Test-QaPresent $c "thumb-rest wheel: the game's wheel let go"
             Test-QaPresent $c 'trace: mapper turn'

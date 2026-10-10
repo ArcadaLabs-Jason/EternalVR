@@ -58,7 +58,7 @@ float g_untouchedSeconds = 0.0f;
 bool g_noTouchLogged = false;
 input::RestWheelStats g_loggedStats;
 float g_statsSeconds = 0.0f;
-LogCap g_statsLines{360}; // an hour of touch lines, then one a minute
+LogCap g_statsLines{360}; // shared by both rests: up to an hour of touch lines, then one a minute
 
 bool due(LogCap& cap, char (&note)[48]) {
     std::uint64_t skipped = 0;
@@ -226,13 +226,15 @@ void noteTouchStats(const input::RestWheel& rest, float dt) {
                 "%s: thumb-rest wheel: %s rest, last %.0f s: %u touch(es) from the sensor, %u gone within "
                 "%.2f s (not registered), %u gap(s) under %.2f s bridged; %u landing(s), %u back within %.2f "
                 "s "
-                "of letting go, %u with the %s stick already out (%u of it out %.2f s or less)%s",
+                "of letting go, %u with the %s stick already out (%u of it out %.2f s or less), %u push(es) "
+                "held while the touch registered%s",
                 kTag, side(hand), kStatsSeconds, raw, since(now.shortTouches, g_loggedStats.shortTouches),
                 input::kRestDebounceSeconds, since(now.bridgedGaps, g_loggedStats.bridgedGaps),
                 input::kRestDebounceSeconds, since(now.landings, g_loggedStats.landings),
                 since(now.quickReturns, g_loggedStats.quickReturns), input::kQuickReturnSeconds,
                 since(now.stickOut, g_loggedStats.stickOut), side(input::otherHand(hand)),
-                since(now.stickOutRecent, g_loggedStats.stickOutRecent), input::kRecentStickSeconds, note);
+                since(now.stickOutRecent, g_loggedStats.stickOutRecent), input::kRecentStickSeconds,
+                since(now.heldPushes, g_loggedStats.heldPushes), note);
         }
     }
     g_loggedStats = now;
@@ -271,10 +273,11 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
     case input::RestWheelEvent::Armed:
         if (due(g_lines, note)) {
             const input::RestWheelSettings& settings = s.mapper->restWheel().settings();
-            if (settings.mode == input::RestWheelMode::Extreme) {
-                EVR_LOG("%s: thumb-rest wheel: armed: the turn stick picks weapons; the %s thumb rest gives "
-                        "turning back (extreme)%s",
-                        kTag, side(w.restHand), note);
+            if (settings.mode == input::RestWheelMode::Extreme &&
+                s.mapper->restWheel().hands().turnStick == w.stickHand) {
+                EVR_LOG("%s: thumb-rest wheel: armed: the %s (turn) stick picks weapons; the %s thumb rest "
+                        "gives turning back (extreme)%s",
+                        kTag, side(w.stickHand), side(w.restHand), note);
                 break;
             }
             char after[48] = "";

@@ -59,7 +59,6 @@ Please do not try to play multiplayer with it anyway.
 | Path | What it is |
 |---|---|
 | `EternalVR.Launcher.exe` | The launcher. Start this. |
-| `Launch-Parallel-Eye-Test.cmd` | Starts the launcher with the experimental Parallel Eye Rendering option shown (see below) |
 | `EternalVR.Launcher.Core.dll`, `EternalVR.Launcher.exe.config`, `data\` | Parts of the launcher |
 | `layer\` | The mod itself (`EternalVR.dll`), its Vulkan layer manifest, and the Khronos OpenXR loader. The launcher loads it into the game for each VR session only. |
 | `docs\INSTALL.md` | Setup, first launch, what the launcher changes, uninstalling |
@@ -93,13 +92,12 @@ Rendering").
 - **12 GB of video memory or less:** set Texture Pool Size in the game's video settings one step lower
   before you try it. At the usual setting a 12 GB card can run out and the game turns into a slideshow.
 
-**Turning it on:** close the launcher if it is open (a second one does not start), then start
-`Launch-Parallel-Eye-Test.cmd` (in this folder) instead of `EternalVR.Launcher.exe`. On the Play tab, under
-Picture, tick **Parallel Eye Rendering (experimental)**, then Launch VR. It cannot be switched during a session:
-quit the game to change it.
+**Turning it on:** on the Play tab, under Picture, tick **Parallel Eye Rendering (highly experimental)**,
+then Launch VR. It cannot be switched during a session: quit the game to change it. (Releases 0.1.38 and 0.1.39
+showed the box only through `Launch-Parallel-Eye-Test.cmd`; that script is no longer needed, and an old copy in
+your folder does no harm.)
 
-**Turning it off:** untick the box, or start `EternalVR.Launcher.exe` as usual (without the script the box
-is hidden and Parallel Eye Rendering stays off).
+**Turning it off:** untick the box.
 
 After a session the launcher's status line usually says whether it ran ("Parallel Eye Rendering was on.") or
 why it did not. It may not when another problem is shown there; the logs in the exported report always say.

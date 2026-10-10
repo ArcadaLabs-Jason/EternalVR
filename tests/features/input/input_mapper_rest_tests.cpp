@@ -157,6 +157,21 @@ TEST_CASE("a turn stick already held down for the game's wheel keeps it when the
     CHECK_FALSE(run.last.restWheel.wheelDown);
 }
 
+TEST_CASE("while touched: a down flick that starts with the touch picks, and is no quick switch or wheel") {
+    // The flick reaches the down sweep's claim before the touch is sensed (lead frames) or with it.
+    for (const int lead : {0, 2}) {
+        InputMapper mapper(questTouchProfile(),
+                           restSettings(TurnMode::Smooth, RestWheelMode::Full, RestWheelPick::Slots));
+        feed(mapper, frame(false, false, kCentre, kCentre), 5);
+        Run run = feed(mapper, frame(false, false, kCentre, kDown), lead);
+        run = feed(mapper, frame(true, false, kCentre, kDown), 20, run);
+        run = feed(mapper, frame(true, false, kCentre, kCentre), 3, run);
+        CHECK_FALSE(contains(run.everDown, GameAction::QuickSwitch));
+        CHECK_FALSE(contains(run.everDown, GameAction::WeaponWheel));
+        CHECK(contains(run.everDown, GameAction::WeaponSlot3));
+    }
+}
+
 TEST_CASE("nothing arms while a menu holds input or the game holds the wheel back") {
     InputMapper mapper(questTouchProfile(), restSettings());
     feed(mapper, frame(true, false, kCentre, kCentre), 8);
@@ -213,6 +228,19 @@ TEST_CASE("the turn stick is the wheel under extreme, and turns while the other 
     run = feed(mapper, frame(true, false, kCentre, kRight), 30);
     CHECK(run.turned > 0.0f);
     CHECK(run.wheelFrames == 0);
+}
+
+TEST_CASE(
+    "under extreme the gamepad look never turns with the wheel's stick, and the picking stick never walks") {
+    InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Smooth, RestWheelMode::Extreme));
+    feed(mapper, frame(false, false, kCentre, kCentre), 2);
+    feed(mapper, frame(false, false, kCentre, kRight), 5);
+    CHECK(mapper.turnStick() == Axis2{}); // the virtual gamepad's look (no turn hook) reads it
+    // The right thumb rests: the left stick picks and does not walk.
+    feed(mapper, frame(false, true, kCentre, kCentre), 40);
+    const Run run = feed(mapper, frame(false, true, kRight, kCentre), 30);
+    CHECK(run.moved == 0.0f);
+    CHECK(contains(run.last.down, GameAction::WeaponWheel));
 }
 
 TEST_CASE("without a rest sensor the wheel does nothing") {

@@ -84,7 +84,11 @@ and then resting the thumb leaves the other stick alone. If it still gets in the
 wheel** to **Off** on the launcher's Play tab.
 
 On the launcher's Play tab, **Thumb-rest wheel** chooses how it works: **Touch, then push** (above), **While touched** (the other stick picks weapons for as long as the thumb rests, and does not move
-or turn you meanwhile) or **Off**. **Thumb-rest picks: Weapon by
+or turn you meanwhile), **Turn stick picks (standing)** or **Off**. Turn stick picks is for playing standing,
+turning with your body: the turn stick (the right one, unless you swapped them) always picks weapons; rest your
+other thumb on its rest to turn with it, use the chainsaw or quick switch (resting it in the middle of a pick
+cancels it, unless the game's wheel is already open: then it takes the highlighted weapon), or rest the turn
+stick's thumb to pick with the other stick instead (it does not walk meanwhile). **Thumb-rest picks: Weapon by
 direction** keeps the wheel closed: push the stick toward a weapon where the game's wheel shows it and let
 go (up combat shotgun, then clockwise super shotgun, heavy cannon, chaingun, plasma rifle, ballista, rocket
 launcher, BFG; a line such as `weapon_directions = up=1,right=2,left=4` in launcher.ini changes them, by
@@ -308,7 +312,7 @@ values are old.
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
-| Thumb-rest wheel | Touch, then push, While touched, Off: the weapon wheel from a thumb rest, on Quest and Rift controllers ([In the game](#in-the-game)) | Off |
+| Thumb-rest wheel | Touch, then push, While touched, Turn stick picks (standing), Off: the weapon wheel from a thumb rest, on Quest and Rift controllers ([In the game](#in-the-game)) | Off |
 | Thumb-rest picks | Weapon wheel, Weapon by direction: the game's wheel, or one weapon slot per stick direction | Weapon wheel |
 | Face buttons as thumb rest | A thumb resting on A/B or X/Y counts as the thumb rest, on Index and Pico 4 controllers | Off |
 | Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open; the stick's own wheel always slows time | On |
@@ -325,7 +329,7 @@ values are old.
 | Screen-space reflections | The game's setting (Reflections in its own video menu: off at Low, on from Medium; a change made in the menu during play is followed and kept), Off (off in VR, a little lighter on the graphics card; your flat game keeps its setting). Stereo only, not with Anti-aliasing Off (they are off then) | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive, Maximum: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Maximum the least. The game's menus and HUD stay at full rate, so their text stays sharp, and so do cutscenes on the cinema screen. NVIDIA RTX only; other cards ignore it. Stereo only | Off |
 | Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
-| Parallel Eye Rendering (experimental) | Renders both eyes as two views of one game frame, their work at the same time, instead of one eye after the other. Shown only when the launcher is started with `Launch-Parallel-Eye-Test.cmd` (`README-ALPHA.md`). Only on the Steam version this release supports. Stereo only (with TAA, DLSS or Off); Alternate eyes and Foveated rendering are greyed out while it is on | Off |
+| Parallel Eye Rendering (highly experimental) | Renders both eyes as two views of one game frame, their work at the same time, instead of one eye after the other (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Only on the Steam version this release supports. Stereo only (with TAA, DLSS or Off); Alternate eyes and Foveated rendering are greyed out while it is on | Off |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 

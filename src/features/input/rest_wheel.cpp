@@ -122,9 +122,25 @@ void RestWheel::note(RestWheelOutput& out, RestWheelEvent event) {
 
 bool RestWheel::restGone() const {
     if (settings_.mode == RestWheelMode::Extreme) {
-        return rests_[index(restoreHand())].touched;
+        return extremeStick() != stickHand_;
     }
     return !rests_[index(restHand_)].touched;
+}
+
+std::optional<Hand> RestWheel::extremeStick() const {
+    const Hand turn = hands_.turnStick.value_or(Hand::Right);
+    const Hand restore = restoreHand();
+    if (rests_[index(restore)].touched) {
+        return std::nullopt;
+    }
+    if (rests_[index(turn)].touched) {
+        return hasRole(restore) ? std::optional<Hand>(restore) : std::nullopt;
+    }
+    return turn;
+}
+
+bool RestWheel::restCancels() const {
+    return settings_.mode == RestWheelMode::Extreme && rests_[index(restoreHand())].touched;
 }
 
 void RestWheel::debounce(const RestWheelFrame& frame,
@@ -232,13 +248,24 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
     if (route_ != Route::Idle) {
         const float minHold = finiteInRangeOr(frame.minWheelHoldSeconds, kMinWheelHoldSeconds,
                                               kMaxWheelHoldSeconds, kMinWheelHoldSeconds);
-        continueRoute(frame.blocked, dt, minHold, o);
+        continueRoute(frame.blocked || frame.sweepDown, dt, minHold, o);
     }
-    if (route_ == Route::Idle && !frame.blocked) {
+    if (route_ == Route::Idle && !frame.blocked && !frame.sweepDown) {
         startRoute(crossed, o);
     }
     if (route_ == Route::Pointing) {
         point(dt, o);
+    }
+
+    // While touched: a stick that left the centre after its rest's touch was sensed (or kHeldLeadSeconds
+    // before) is held until the touch registers or goes.
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        const Rest& r = rests_[index(hand)];
+        const Hand other = otherHand(hand);
+        const bool pending = settings_.mode == RestWheelMode::Full && r.raw && !r.touched && hasRole(other) &&
+                             route_ == Route::Idle && !frame.blocked && !latched_[index(other)];
+        held_[index(other)] =
+            pending && (held_[index(other)] || outSeconds_[index(other)] <= r.rawSeconds + kHeldLeadSeconds);
     }
 
     const Axis2 stick = sticks_[index(stickHand_)];
@@ -247,7 +274,8 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
         o.pointer = route_ == Route::Open && magnitude(stick) >= kSelectThreshold ? stick : lastUnit_;
     }
     for (const Hand hand : {Hand::Left, Hand::Right}) {
-        o.taken[index(hand)] = latched_[index(hand)] || (route_ != Route::Idle && hand == stickHand_);
+        o.taken[index(hand)] =
+            latched_[index(hand)] || held_[index(hand)] || (route_ != Route::Idle && hand == stickHand_);
     }
     return o;
 }
@@ -259,11 +287,10 @@ void RestWheel::continueRoute(bool blocked, float dt, float minHold, RestWheelOu
     case Route::Idle:
         break;
     case Route::Taken:
-        if (restGone()) {
+        if (restGone() || blocked) {
+            // Blocked (piloting a demon, a forced view, a cutscene): the stick goes back to the game. A stick
+            // out stays out of play until it is back in the centre, so a push made now starts nothing later.
             finishRoute(false);
-        } else if (blocked) {
-            // A push made while blocked starts nothing, then or later: the stick has to come back first.
-            latched_[index(s)] = latched_[index(s)] || this->out(s);
         } else if (this->out(s) && !latched_[index(s)]) {
             arm(out);
         }
@@ -271,8 +298,10 @@ void RestWheel::continueRoute(bool blocked, float dt, float minHold, RestWheelOu
     case Route::Pointing:
         if (blocked) {
             endPointing(false, out);
-        } else if (centred || restGone()) {
+        } else if (centred) {
             endPointing(true, out);
+        } else if (restGone()) {
+            endPointing(!restCancels(), out);
         }
         break;
     case Route::Open:
@@ -324,15 +353,23 @@ void RestWheel::startRoute(const std::array<bool, 2>& crossed, RestWheelOutput& 
                 restHand_ = hand;
                 stickHand_ = stick;
                 route_ = Route::Taken;
-                latched_[index(stick)] = latched_[index(stick)] || this->out(stick);
+                // A stick held while the touch registered picks; one already out before it waits for the
+                // centre.
+                if (held_[index(stick)] && this->out(stick)) {
+                    ++stats_.heldPushes[index(hand)];
+                } else {
+                    latched_[index(stick)] = latched_[index(stick)] || this->out(stick);
+                }
+                held_[index(stick)] = false;
                 return;
             }
         }
         return;
     case RestWheelMode::Extreme:
-        if (!rests_[index(restoreHand())].touched) {
-            restHand_ = restoreHand();
-            stickHand_ = *hands_.turnStick;
+        if (const std::optional<Hand> stick = extremeStick()) {
+            const Hand turn = hands_.turnStick.value_or(Hand::Right);
+            stickHand_ = *stick;
+            restHand_ = *stick == turn ? restoreHand() : turn;
             route_ = Route::Taken;
             latched_[index(stickHand_)] = latched_[index(stickHand_)] || this->out(stickHand_);
         }

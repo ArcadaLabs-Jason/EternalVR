@@ -4,9 +4,10 @@ using System.Text;
 namespace EternalVR.Launcher.Core.Settings
 {
     /// <summary>The thumb-rest weapon wheel (the layer's <c>ETERNALVR_THUMBREST_WHEEL</c>): a thumb on its thumb rest, then the
-    /// other stick pushed (edge); the other stick picks for as long as the thumb rests (full); off (the default). The layer's
-    /// 'extreme' (the turn stick always picks) is not offered until it is redesigned; a file that names it reads as off.</summary>
-    public enum ThumbRestMode { Edge, Full, Off }
+    /// other stick pushed (edge); the other stick picks for as long as the thumb rests (full); the turn stick picks, for players
+    /// who turn with their body, and the other thumb's rest gives it turning back (extreme); off (the default). The order is
+    /// the Play tab's.</summary>
+    public enum ThumbRestMode { Edge, Full, Extreme, Off }
 
     /// <summary>What the thumb-rest wheel picks with (the layer's <c>ETERNALVR_THUMBREST_PICK</c>): the game's weapon wheel, or
     /// one weapon slot per stick direction.</summary>
@@ -35,6 +36,7 @@ namespace EternalVR.Launcher.Core.Settings
             switch (w)
             {
                 case ThumbRestMode.Full: return "full";
+                case ThumbRestMode.Extreme: return "extreme";
                 case ThumbRestMode.Off: return "off";
                 default: return "edge";
             }
@@ -50,7 +52,8 @@ namespace EternalVR.Launcher.Core.Settings
         private void ReadThumbRest(IDictionary<string, string> map)
         {
             if (map.TryGetValue("thumb_rest_wheel", out var tw))
-                ThumbRest = Pick(tw, ThumbRestMode.Off, ("edge", ThumbRestMode.Edge), ("full", ThumbRestMode.Full));
+                ThumbRest = Pick(tw, ThumbRestMode.Off, ("edge", ThumbRestMode.Edge), ("full", ThumbRestMode.Full),
+                    ("extreme", ThumbRestMode.Extreme));
             if (map.TryGetValue("thumb_rest_pick", out var tp)) ThumbRestPicks = Pick(tp, ThumbRestPick.Wheel, ("directions", ThumbRestPick.Directions));
             if (map.TryGetValue("thumb_rest_face_touch", out var ft)) ThumbRestFaceTouch = On(ft);
             if (map.TryGetValue("thumb_rest_slowdown", out var sl)) ThumbRestSlowdown = Switch(sl) ?? true;

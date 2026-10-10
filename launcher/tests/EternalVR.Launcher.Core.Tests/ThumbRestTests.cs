@@ -47,8 +47,9 @@ namespace EternalVR.Launcher.Core.Tests
             };
             var env = Env(LaunchPlanBuilder.Build(Inputs(s)));
             Assert.Equal("full", env["ETERNALVR_THUMBREST_WHEEL"]);
-            // The turn-stick mode is not offered: a settings file that still names it reads as off.
-            Assert.Equal(ThumbRestMode.Off, LauncherSettings.Parse("schema_version = 2\nthumb_rest_wheel = extreme\n").ThumbRest);
+            // The turn-stick mode (room scale), offered again since the owner's spec of 2026-10-10.
+            Assert.Equal(ThumbRestMode.Extreme, LauncherSettings.Parse("schema_version = 2\nthumb_rest_wheel = extreme\n").ThumbRest);
+            Assert.Equal("extreme", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { ThumbRest = ThumbRestMode.Extreme })))["ETERNALVR_THUMBREST_WHEEL"]);
             Assert.Equal("slots", env["ETERNALVR_THUMBREST_PICK"]);
             Assert.Equal("1", env["ETERNALVR_THUMBREST_FACE_TOUCH"]);
             Assert.Equal("0", env["ETERNALVR_THUMBREST_SLOWDOWN"]);
@@ -115,7 +116,7 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var wheel = SettingTexts.For(Setting.ThumbRestWheel);
             Assert.Equal("Thumb-rest wheel", wheel.Label);
-            Assert.Equal(new[] { "Touch, then push", "While touched", "Off (default)" }, wheel.Choices);
+            Assert.Equal(new[] { "Touch, then push", "While touched", "Turn stick picks (standing)", "Off (default)" }, wheel.Choices);
             Assert.Contains("Quest and Rift", wheel.Tooltip);
             Assert.Equal(new[] { "Weapon wheel (default)", "Weapon by direction" }, SettingTexts.For(Setting.ThumbRestPicks).Choices);
             foreach (var setting in new[] { Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown })

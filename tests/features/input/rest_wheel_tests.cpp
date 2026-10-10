@@ -407,33 +407,13 @@ TEST_CASE("while touched: the other stick is the wheel's for as long as the thum
 
 TEST_CASE("while touched: a stick already out when the thumb lands waits for the centre") {
     RestWheel w = wheel(RestWheelMode::Full);
+    // Out for a while before the touch (a flick that starts with the touch is held and picks instead).
+    feed(w, frame(false, false, kCentre, kRight), frames(0.3f));
     Run run = feed(w, frame(true, false, kCentre, kRight), 20);
     CHECK(run.last.taken[kRightHand]);
     CHECK(run.events.empty());
     feed(w, frame(true, false, kCentre, kCentre), 2);
     CHECK(w.update(frame(true, false, kCentre, kUp), kFrame).event == RestWheelEvent::Armed);
-}
-
-TEST_CASE("the turn stick is the wheel: resting the other thumb gives it back") {
-    RestWheel w = wheel(RestWheelMode::Extreme);
-    REQUIRE(w.usable());
-    Run run = feed(w, frame(false, false, kCentre, kCentre), 2);
-    CHECK(run.last.taken[kRightHand]);
-    CHECK_FALSE(run.last.taken[kLeft]);
-    run = feed(w, frame(false, false, kCentre, kUp), frames(0.3f));
-    CHECK(run.saw(RestWheelEvent::Armed));
-    CHECK(run.last.wheelDown);
-    // The left thumb rests: the wheel closes, and the stick turns once it has been back to the centre.
-    run = feed(w, frame(true, false, kCentre, kUp), frames(0.4f));
-    CHECK(run.saw(RestWheelEvent::Released));
-    CHECK(run.last.taken[kRightHand]);
-    run = feed(w, frame(true, false, kCentre, kCentre), 2);
-    CHECK_FALSE(run.last.taken[kRightHand]);
-    CHECK(feed(w, frame(true, false, kCentre, kRight), 20).takenFrames[kRightHand] == 0);
-    // Lifted again: the turn stick is the wheel's once more (after coming back to the centre).
-    run = feed(w, frame(false, false, kCentre, kRight), 10);
-    CHECK(run.last.taken[kRightHand]);
-    CHECK_FALSE(run.saw(RestWheelEvent::Armed));
 }
 
 TEST_CASE("with both thumbs resting the first push wins") {
