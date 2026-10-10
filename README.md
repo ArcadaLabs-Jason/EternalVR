@@ -15,7 +15,13 @@ through OpenXR.
 - Motion controllers with hand aiming: the gun goes where your hand points.
 - Punch for real to melee, glory kill a staggered demon or Blood Punch.
 - Room-scale: walk around your room and the Slayer walks with you.
-- The weapon wheel on the right stick, and every tutorial and popup action on a button.
+- The weapon wheel on the right stick or by pointing with your hand, and every tutorial and popup action
+  on a button.
+- Weapon switching from the thumb rest on Quest and Rift controllers: rest one thumb and pick with the
+  other stick, flick toward a weapon, or play standing with the turn stick picking (off by default, on the
+  Play tab).
+- Optional gestures (new, off by default): throw grenades with your off hand, swing down from above your
+  head for the Crucible or the Hammer, throw both hands up to jump.
 - The HUD and menus on panels in VR, with a laser pointer; cutscenes on a big screen.
 - Controller vibration for shots, punches, the game's own rumble and menu clicks.
 - bHaptics vest and sleeves (experimental): hits from the direction they came, glory kills, landings,
@@ -24,6 +30,8 @@ through OpenXR.
 - The full campaign and both DLC (single-player only).
 - Full ray tracing support: the testing so far has been at maximum settings with ray tracing on.
 - DLSS in both eyes, with NVIDIA's newest DLSS one click away in the launcher, and a sharpening setting.
+- Foveated rendering on NVIDIA RTX cards (experimental), and Parallel Eye Rendering, a highly experimental
+  way to draw both eyes as two views of one game frame.
 - A launcher that checks your game version, sets everything up for the session and restores your
   settings afterwards.
 
@@ -36,7 +44,7 @@ No dates yet:
 - Full rigging for each arm: both arms follow your hands, with a free off hand and left-handed play.
 - More VR interactions with the world, beyond punching.
 - Optimizations, especially on the processor side, for more frames on more PCs.
-- More ways to use the weapon wheel (pointing or motion).
+- Every control fully remappable, including the thumb rests as buttons of their own.
 
 ## Headsets, and I need testers
 
