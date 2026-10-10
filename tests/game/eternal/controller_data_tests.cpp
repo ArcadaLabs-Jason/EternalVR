@@ -95,12 +95,13 @@ std::string_view expectedProfile(Controller controller) {
 
 // The gameplay actions a family leaves unbound on a hand, because the controller has no input for them.
 bool expectedUnbound(Controller controller, XrActionId action, Hand hand) {
-    // Only Touch controllers have a thumb rest. The face buttons' touch is added by the layer, and only when
-    // a player asks for it (rest_touch_bindings.hpp).
+    // Only Touch controllers have a thumb rest. The face buttons' and the stick's touch are added by the
+    // layer, and only with the wheel on (rest_touch_bindings.hpp).
     if (action == XrActionId::ThumbRest) {
         return controller != Controller::OculusTouch;
     }
-    if (action == XrActionId::PrimaryTouch || action == XrActionId::SecondaryTouch) {
+    if (action == XrActionId::PrimaryTouch || action == XrActionId::SecondaryTouch ||
+        action == XrActionId::ThumbstickTouch || action == XrActionId::TrackpadTouch) {
         return true;
     }
     // The Frame has every button on both hands: four face buttons, a bumper and a Menu or View button.

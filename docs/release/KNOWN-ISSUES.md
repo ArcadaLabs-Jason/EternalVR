@@ -235,7 +235,8 @@ them is worse for you than described here.
   direction follows the game's own wheel (the rocket launcher left, the heavy cannon right, and so on):
   `weapon_directions` in launcher.ini changes it. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
   rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
-  in a headset yet.
+  in a headset yet, nor has the thumb rest's new touch handling (0.1.41: a touch counts at once, a short loss
+  is forgiven).
 - **Edit controls...** should open much faster now (it used to take several seconds and show "Not
   Responding" first). If it still takes several seconds, tell me.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and

@@ -135,6 +135,9 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         mapperSettings.restSensors[static_cast<std::size_t>(hand)] =
             input::handHasRest(data, hand, cfg.thumbRestFaceTouch) || !cfg.testInputPath.empty();
+        // Beside a thumb rest the face buttons' touch says the thumb is elsewhere, never that it rests.
+        mapperSettings.restIsThumbRest[static_cast<std::size_t>(hand)] =
+            data.find(input::XrActionId::ThumbRest, hand) != nullptr;
     }
     s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
     publishPromptLabels(s.mapper->profile(), controller);

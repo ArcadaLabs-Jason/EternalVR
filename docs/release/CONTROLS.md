@@ -67,15 +67,15 @@ Twisting your wrist does nothing. Let go of the stick or button to pick the high
 bring your hand back toward the middle, the highlight stays where it was.
 
 **The weapon wheel from the thumb rest** (Quest and Rift controllers; off by default: turn it on with
-**Thumb-rest wheel** on the launcher's Play tab). Rest one thumb on its thumb rest,
-the flat spot beside the buttons, and within half a second push the other stick toward a weapon: the wheel
-opens and points where the stick points. Let the stick spring back (or lift your thumb) to pick. With the
-game's wheel, a quick flick that does not stay in one direction picks nothing (Weapon by direction, below,
-takes a flick), and a tick in the controller tells you when picking
-starts and when a weapon is picked. A thumb you leave on the rest does nothing on its own: after half a
-second the other stick moves and turns you as usual, and the stick's own wheel (right stick down, hold)
-still works. To pick again, let the stick come back to the centre and push it again with your thumb still
-resting. Once the wheel is open it cannot be cancelled; it picks what is highlighted.
+**Thumb-rest wheel** on the launcher's Play tab). Rest one thumb on its thumb rest, the flat spot beside
+the buttons, and within half a second push the other stick toward a weapon: the wheel opens and points
+where the stick points. Let the stick spring back to pick (once picking has started, lifting your thumb
+does not stop it). With the game's wheel, a quick flick that does not stay in one direction picks nothing
+(Weapon by direction, below, takes a flick), and a tick in the controller tells you when picking starts and
+when a weapon is picked. A thumb you leave on the rest does nothing on its own: after half a second the
+other stick moves and turns you as usual, and the stick's own wheel (right stick down, hold) still works.
+To pick again, let the stick come back to the centre and push it again with your thumb still resting. Once
+the wheel is open it cannot be cancelled; it picks what is highlighted.
 
 The trade-off: for half a second after a thumb lands on a rest, the other stick's first push picks a weapon
 instead of moving or turning you. A thumb that comes straight from its own controls does not count: one that

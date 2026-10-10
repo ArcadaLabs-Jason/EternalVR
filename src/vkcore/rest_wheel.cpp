@@ -8,8 +8,9 @@
 // starts and from which rest, and so does the first touch each rest reports: a runtime that never reports the
 // thumb rest (a Touch emulation that leaves the sensor out) shows as no such line, and one line says so after
 // a minute of play. Every 10 s with any touch, one line per rest counts what its sensor did (RestWheelStats):
-// touches too short to register, gaps bridged, quick returns, and landings with the other stick already out,
-// so a player's log shows whether touches go missing.
+// touches shorter than the debounce (flutter), touches begun with the thumb elsewhere, gaps forgiven, quick
+// returns, landings with the other stick already out, pushes held, lifts made at once with the thumb
+// elsewhere, and touch sensors ignored as stuck, so a player's log shows whether touches go missing.
 //
 // The slowdown (features/input/wheel_slowdown.hpp): with ETERNALVR_THUMBREST_SLOWDOWN=0, weaponWheel_
 // slowTimeScale is held at 1 while this wheel holds the game's wheel open, written through the cvar book
@@ -174,15 +175,18 @@ std::optional<int> openDelayMilliseconds() {
     return milliseconds;
 }
 
-void noteTouches(const input::InputFrame& frame, const input::RestWheel& rest, float dt) {
+void noteTouches(const input::InputFrame& frame, const input::InputMapper& mapper, float dt) {
+    const input::RestWheel& rest = mapper.restWheel();
     if (!rest.usable()) {
         return;
     }
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         const std::size_t i = static_cast<std::size_t>(hand);
         const input::HandState& h = frame.hand(hand);
-        if (!g_touchSeen[i] && rest.hands().hasRest[i] &&
-            (h.thumbRest || h.primaryTouch || h.secondaryTouch)) {
+        // The face buttons' touch only where it is the rest (beside a thumb rest it is the thumb elsewhere).
+        const bool face =
+            input::faceTouchIsRest(mapper.settings(), hand) && (h.primaryTouch || h.secondaryTouch);
+        if (!g_touchSeen[i] && rest.hands().hasRest[i] && (h.thumbRest || face)) {
             g_touchSeen[i] = true;
             EVR_LOG("%s: thumb-rest wheel: the %s controller reports a resting thumb", kTag, side(hand));
         }
@@ -224,17 +228,19 @@ void noteTouchStats(const input::RestWheel& rest, float dt) {
         if (due(g_statsLines, note)) {
             EVR_LOG(
                 "%s: thumb-rest wheel: %s rest, last %.0f s: %u touch(es) from the sensor, %u gone within "
-                "%.2f s (not registered), %u gap(s) under %.2f s bridged; %u landing(s), %u back within %.2f "
-                "s "
-                "of letting go, %u with the %s stick already out (%u of it out %.2f s or less), %u push(es) "
-                "held while the touch registered%s",
+                "%.2f s, %u begun with the thumb elsewhere, %u gap(s) under %.2f s forgiven; %u landing(s), "
+                "%u back within %.2f s of letting go, %u with the %s stick already out (%u of it out %.2f s "
+                "or less), %u push(es) held until the touch registered or came back, %u lift(s) at once with "
+                "the thumb elsewhere, %u veto(es) ignored as stuck%s",
                 kTag, side(hand), kStatsSeconds, raw, since(now.shortTouches, g_loggedStats.shortTouches),
-                input::kRestDebounceSeconds, since(now.bridgedGaps, g_loggedStats.bridgedGaps),
-                input::kRestDebounceSeconds, since(now.landings, g_loggedStats.landings),
+                input::kRestDebounceSeconds, since(now.vetoedLandings, g_loggedStats.vetoedLandings),
+                since(now.bridgedGaps, g_loggedStats.bridgedGaps), rest.settings().holdOverSeconds,
+                since(now.landings, g_loggedStats.landings),
                 since(now.quickReturns, g_loggedStats.quickReturns), input::kQuickReturnSeconds,
                 since(now.stickOut, g_loggedStats.stickOut), side(input::otherHand(hand)),
                 since(now.stickOutRecent, g_loggedStats.stickOutRecent), input::kRecentStickSeconds,
-                since(now.heldPushes, g_loggedStats.heldPushes), note);
+                since(now.heldPushes, g_loggedStats.heldPushes), since(now.cutLifts, g_loggedStats.cutLifts),
+                since(now.stuckVetoes, g_loggedStats.stuckVetoes), note);
         }
     }
     g_loggedStats = now;
@@ -252,7 +258,7 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
     if (!s.mapper) {
         return;
     }
-    noteTouches(frame, s.mapper->restWheel(), dt);
+    noteTouches(frame, *s.mapper, dt);
     noteTouchStats(s.mapper->restWheel(), dt);
     const input::RestWheelOutput& w = input.restWheel;
     {

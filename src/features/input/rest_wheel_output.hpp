@@ -45,7 +45,14 @@ struct RestWheelOutput {
     Axis2 pointer;                        // where the wheel points while it is held
     std::optional<game::GameAction> slot; // one frame
     std::array<bool, 2> taken{};          // the hand's stick belongs to the wheel: no turn, move or gesture
-    std::array<WheelTick, 2> tick{};      // a haptic tick, on the picking stick's hand
+    // ... while a rest's touch decides whose it is (its hold-over): to the turn stick's gestures and turn it
+    // is still centred, so given back to the game it claims, turns or snaps as a fresh push.
+    std::array<bool, 2> deferred{};
+    // A push held that way and short of its furthest point (on its way back, or back in the centre) when the
+    // touch gave it to the game: for this one frame the gestures and the turn read this furthest point, so
+    // the flick is not lost.
+    std::array<std::optional<Axis2>, 2> replay{};
+    std::array<WheelTick, 2> tick{}; // a haptic tick, on the picking stick's hand
     // For the log: what happened this frame, with whose rest and stick.
     RestWheelEvent event = RestWheelEvent::None;
     RestWheelVoid voided = RestWheelVoid::None;

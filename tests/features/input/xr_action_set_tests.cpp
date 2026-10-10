@@ -63,6 +63,8 @@ TEST_CASE("gameplay actions carry every field of the hand state with the right t
     CHECK(xrAction(XrActionId::ThumbRest).kind == XrActionKind::Boolean);
     CHECK(xrAction(XrActionId::PrimaryTouch).kind == XrActionKind::Boolean);
     CHECK(xrAction(XrActionId::SecondaryTouch).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::ThumbstickTouch).kind == XrActionKind::Boolean);
+    CHECK(xrAction(XrActionId::TrackpadTouch).kind == XrActionKind::Boolean);
     for (const XrActionDef& action : xrActions()) {
         CHECK(action.set == XrActionSetId::Gameplay);
     }
@@ -80,6 +82,8 @@ TEST_CASE("actions are found by set and name") {
     CHECK(findXrAction(XrActionSetId::Gameplay, "thumbrest") == XrActionId::ThumbRest);
     CHECK(findXrAction(XrActionSetId::Gameplay, "primary_touch") == XrActionId::PrimaryTouch);
     CHECK(findXrAction(XrActionSetId::Gameplay, "secondary_touch") == XrActionId::SecondaryTouch);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "thumbstick_touch") == XrActionId::ThumbstickTouch);
+    CHECK(findXrAction(XrActionSetId::Gameplay, "trackpad_touch") == XrActionId::TrackpadTouch);
     CHECK_FALSE(findXrAction(XrActionSetId::Gameplay, "select").has_value());
 }
 

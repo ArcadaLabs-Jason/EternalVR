@@ -105,7 +105,7 @@ int frames(float seconds) {
     return static_cast<int>(std::ceil(seconds / kFrame));
 }
 
-// The left thumb rests (past the debounce), both sticks centred.
+// The left thumb rests (a few frames), both sticks centred.
 void landLeft(RestWheel& w) {
     feed(w, frame(true, false, kCentre, kCentre), 8);
 }
@@ -153,17 +153,22 @@ TEST_CASE("the move stick picks when the right thumb rests") {
 
 TEST_CASE("after the window a resting thumb leaves the other stick alone") {
     RestWheel w = wheel();
-    feed(w, frame(true, false, kCentre, kCentre), frames(0.06f) + frames(0.55f));
+    feed(w, frame(true, false, kCentre, kCentre), frames(0.55f));
     const Run run = feed(w, frame(true, false, kCentre, kRight), frames(0.5f));
     CHECK(run.events.empty());
     CHECK(run.takenFrames[kRightHand] == 0);
     CHECK(run.wheelFrames == 0);
 }
 
-TEST_CASE("a push inside the window arms; the window counts from the debounced landing") {
+TEST_CASE("a push inside the window arms; the window counts from the touch's first frame") {
     RestWheel w = wheel();
-    feed(w, frame(true, false, kCentre, kCentre), frames(0.06f) + frames(0.4f));
+    feed(w, frame(true, false, kCentre, kCentre), frames(0.4f));
     CHECK(w.update(frame(true, false, kCentre, kRight), kFrame).event == RestWheelEvent::Armed);
+    // Just past the window from the first frame: nothing (it would still be open from a landing a debounce
+    // later).
+    RestWheel late = wheel();
+    feed(late, frame(true, false, kCentre, kCentre), frames(0.52f));
+    CHECK(feed(late, frame(true, false, kCentre, kRight), 1).events.empty());
 }
 
 TEST_CASE("a thumb landing while a stick is out does nothing until it lands again") {
@@ -179,17 +184,17 @@ TEST_CASE("a thumb landing while a stick is out does nothing until it lands agai
     feed(own, frame(true, false, kUp, kCentre), 10);
     feed(own, frame(true, false, kCentre, kCentre), 3);
     CHECK(feed(own, frame(true, false, kCentre, kUp), 20).events.empty());
-    // Lifted and landed again with the sticks centred: it arms.
-    feed(w, frame(false, false, kCentre, kCentre), 10);
+    // Lifted (past the hold-over) and landed again with the sticks centred: it arms.
+    feed(w, frame(false, false, kCentre, kCentre), frames(0.2f));
     landLeft(w);
     CHECK(w.update(frame(true, false, kCentre, kUp), kFrame).event == RestWheelEvent::Armed);
 }
 
-TEST_CASE("a touch shorter than the debounce is no landing, and a brief lift does not end picking") {
+TEST_CASE("a touch lands on its first frame, and a brief lift does not end picking") {
+    // One frame of touch is a landing: a push on the next frame arms.
     RestWheel w = wheel();
-    feed(w, frame(true, false, kCentre, kCentre), 3);
-    feed(w, frame(false, false, kCentre, kCentre), 10);
-    CHECK(feed(w, frame(false, false, kCentre, kUp), 20).events.empty());
+    w.update(frame(true, false, kCentre, kCentre), kFrame);
+    CHECK(w.update(frame(true, false, kCentre, kUp), kFrame).event == RestWheelEvent::Armed);
 
     RestWheel held = wheel();
     landLeft(held);
@@ -246,16 +251,18 @@ TEST_CASE("the pointer keeps the last direction while the stick falls back towar
     CHECK(inside.pointer == kRight);
 }
 
-TEST_CASE("lifting the thumb closes the wheel") {
+TEST_CASE("the rest is needed only to start: a lifted thumb leaves the wheel open until the stick lets go") {
     RestWheel w = wheel();
     landLeft(w);
     feed(w, frame(true, false, kCentre, kUp), frames(0.4f));
-    const Run lifted = feed(w, frame(false, false, kCentre, kUp), frames(0.2f));
-    CHECK(lifted.saw(RestWheelEvent::Released));
-    CHECK_FALSE(lifted.last.wheelDown);
-    // The stick, still up, stays out of play until it comes back.
-    CHECK(lifted.last.taken[kRightHand]);
-    CHECK_FALSE(feed(w, frame(false, false, kCentre, kCentre), 1).last.taken[kRightHand]);
+    const Run lifted = feed(w, frame(false, false, kCentre, kUp), frames(0.5f));
+    CHECK_FALSE(lifted.saw(RestWheelEvent::Released));
+    CHECK(lifted.wheelFrames == frames(0.5f));
+    // Let go: the wheel is released with a tick, and the stick is free again.
+    const Run after = feed(w, frame(false, false, kCentre, kCentre), 3);
+    CHECK(after.saw(RestWheelEvent::Released));
+    CHECK(after.pickTicks == 1);
+    CHECK_FALSE(after.last.taken[kRightHand]);
 }
 
 TEST_CASE("weapon by direction presses the slot of the direction held, on letting go") {
@@ -279,11 +286,12 @@ TEST_CASE("weapon by direction presses the slot of the direction held, on lettin
     picks = feed(moved, frame(true, false, kCentre, kCentre), 2, picks);
     CHECK(picks.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
 
-    // Lifting the thumb picks too.
+    // Lifting the thumb picks nothing: letting go of the stick does.
     RestWheel lift = wheel(RestWheelMode::Edge, RestWheelPick::Slots);
     landLeft(lift);
     feed(lift, frame(true, false, kCentre, Axis2{-1.0f, 0.0f}), frames(0.2f));
-    CHECK(feed(lift, frame(false, false, kCentre, Axis2{-1.0f, 0.0f}), 10).slots ==
+    CHECK(feed(lift, frame(false, false, kCentre, Axis2{-1.0f, 0.0f}), frames(0.3f)).slots.empty());
+    CHECK(feed(lift, frame(false, false, kCentre, kCentre), 2).slots ==
           std::vector<GameAction>{GameAction::WeaponSlot4});
 }
 
@@ -400,9 +408,9 @@ TEST_CASE("while touched: the other stick is the wheel's for as long as the thum
     CHECK(run.last.wheelDown);
     run = feed(w, frame(true, false, kCentre, kCentre), frames(0.4f));
     CHECK(run.saw(RestWheelEvent::Released));
-    // Still resting: still taken. Lifted: the stick turns again.
+    // Still resting: still taken. Lifted (past the hold-over): the stick turns again.
     CHECK(run.last.taken[kRightHand]);
-    CHECK_FALSE(feed(w, frame(false, false, kCentre, kCentre), 8).last.taken[kRightHand]);
+    CHECK_FALSE(feed(w, frame(false, false, kCentre, kCentre), frames(0.2f)).last.taken[kRightHand]);
 }
 
 TEST_CASE("while touched: a stick already out when the thumb lands waits for the centre") {

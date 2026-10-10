@@ -3,6 +3,7 @@
 #include "features/input/interaction_profiles.hpp"
 
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -14,6 +15,8 @@ namespace evr::input {
 namespace {
 
 constexpr std::string_view kThumbRestLeaf = "/input/thumbrest/touch";
+constexpr std::string_view kStickTouchLeaf = "/input/thumbstick/touch";
+constexpr std::string_view kTrackpadTouchLeaf = "/input/trackpad/touch";
 constexpr std::string_view kFrameProfile = "/interaction_profiles/valve/frame_controller_valve";
 
 // The leaf a binding path of `hand` names, without the hand ("/input/a/click"), or nullopt.
@@ -69,7 +72,8 @@ bool tryAdd(ControllerData& data,
 
 bool isRestTouchAction(XrActionId action) {
     return action == XrActionId::ThumbRest || action == XrActionId::PrimaryTouch ||
-           action == XrActionId::SecondaryTouch;
+           action == XrActionId::SecondaryTouch || action == XrActionId::ThumbstickTouch ||
+           action == XrActionId::TrackpadTouch;
 }
 
 std::size_t addRestTouchBindings(ControllerData& data, RestTouchOptions options) {
@@ -77,22 +81,36 @@ std::size_t addRestTouchBindings(ControllerData& data, RestTouchOptions options)
     if (!profile) {
         return 0;
     }
+    // The Steam Frame's bumper holds the wheel: no rest of any kind there.
+    if (!options.thumbRest || data.profilePath == kFrameProfile) {
+        return 0;
+    }
+    constexpr std::array kFaceTouch{std::pair{XrActionId::PrimaryTouch, XrActionId::Primary},
+                                    std::pair{XrActionId::SecondaryTouch, XrActionId::Secondary}};
     std::size_t added = 0;
     for (const Hand hand : {Hand::Left, Hand::Right}) {
-        if (options.thumbRest &&
-            tryAdd(data, *profile, XrActionId::ThumbRest, hand, std::string(kThumbRestLeaf))) {
+        const bool thumbRest = profileHasPath(*profile, hand, kThumbRestLeaf);
+        if (thumbRest && tryAdd(data, *profile, XrActionId::ThumbRest, hand, std::string(kThumbRestLeaf))) {
             ++added;
         }
-        const bool faceTouch = options.thumbRest && options.faceTouch && data.profilePath != kFrameProfile &&
-                               !profileHasPath(*profile, hand, kThumbRestLeaf);
-        if (!faceTouch) {
-            continue;
-        }
-        for (const auto& [touch, button] : {std::pair{XrActionId::PrimaryTouch, XrActionId::Primary},
-                                            std::pair{XrActionId::SecondaryTouch, XrActionId::Secondary}}) {
-            if (tryAdd(data, *profile, touch, hand, touchLeafOf(data, button, hand))) {
-                ++added;
+        // The face buttons' touch: the rest itself on a controller without a thumb rest (face touch on), the
+        // thumb elsewhere beside a thumb rest.
+        const bool faceTouch = options.faceTouch && !thumbRest;
+        if (faceTouch || data.find(XrActionId::ThumbRest, hand) != nullptr) {
+            for (const auto& [touch, button] : kFaceTouch) {
+                if (tryAdd(data, *profile, touch, hand, touchLeafOf(data, button, hand))) {
+                    ++added;
+                }
             }
+        }
+        // The stick's touch, on a hand that has a rest to tell it from; beside face touch the trackpad's too.
+        if (handHasRest(data, hand, faceTouch) &&
+            tryAdd(data, *profile, XrActionId::ThumbstickTouch, hand, std::string(kStickTouchLeaf))) {
+            ++added;
+        }
+        if (faceTouch && handHasRest(data, hand, true) &&
+            tryAdd(data, *profile, XrActionId::TrackpadTouch, hand, std::string(kTrackpadTouchLeaf))) {
+            ++added;
         }
     }
     if (added > 0) {
@@ -114,6 +132,37 @@ ControllerData withoutRestTouch(ControllerData data) {
 bool hasRestTouchBindings(const ControllerData& data) {
     return std::ranges::any_of(data.suggested,
                                [](const SuggestedBinding& b) { return isRestTouchAction(b.action); });
+}
+
+namespace {
+
+// The bindings that only say the thumb is elsewhere: the stick's and the trackpad's touch, and the face
+// buttons' touch on a hand with a thumb rest. `thumbRests`: the hands with a thumb rest binding.
+bool isVetoTouch(const SuggestedBinding& b, const std::array<bool, 2>& thumbRests) {
+    if (b.action == XrActionId::ThumbstickTouch || b.action == XrActionId::TrackpadTouch) {
+        return true;
+    }
+    return (b.action == XrActionId::PrimaryTouch || b.action == XrActionId::SecondaryTouch) &&
+           thumbRests[static_cast<std::size_t>(b.hand)];
+}
+
+std::array<bool, 2> thumbRestHands(const ControllerData& data) {
+    return {data.find(XrActionId::ThumbRest, Hand::Left) != nullptr,
+            data.find(XrActionId::ThumbRest, Hand::Right) != nullptr};
+}
+
+} // namespace
+
+ControllerData withoutVetoTouch(ControllerData data) {
+    const std::array<bool, 2> thumbRests = thumbRestHands(data);
+    std::erase_if(data.suggested, [&](const SuggestedBinding& b) { return isVetoTouch(b, thumbRests); });
+    return data;
+}
+
+bool hasVetoTouchBindings(const ControllerData& data) {
+    const std::array<bool, 2> thumbRests = thumbRestHands(data);
+    return std::ranges::any_of(data.suggested,
+                               [&](const SuggestedBinding& b) { return isVetoTouch(b, thumbRests); });
 }
 
 bool handHasRest(const ControllerData& data, Hand hand, bool faceTouch) {

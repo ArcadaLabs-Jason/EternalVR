@@ -104,8 +104,9 @@ TEST_CASE("the turn stick is the wheel: resting the other thumb gives it back") 
     run = feed(w, frame(true, false, kCentre, kCentre), 2);
     CHECK_FALSE(run.last.taken[kRightHand]);
     CHECK(feed(w, frame(true, false, kCentre, kRight), 20).takenFrames[kRightHand] == 0);
-    // Lifted again: the turn stick is the wheel's once more (after coming back to the centre).
-    run = feed(w, frame(false, false, kCentre, kRight), 10);
+    // Lifted again (past the hold-over): the turn stick is the wheel's once more (after coming back to the
+    // centre).
+    run = feed(w, frame(false, false, kCentre, kRight), frames(0.25f));
     CHECK(run.last.taken[kRightHand]);
     CHECK_FALSE(run.saw(RestWheelEvent::Armed));
 }
@@ -127,7 +128,7 @@ TEST_CASE("the turn hand's thumb resting makes the other stick the picker, and i
     CHECK(run.saw(RestWheelEvent::Picked));
     REQUIRE(run.slots.size() == 1);
     // The right thumb lifted: the turn stick is the wheel's again, the left stick walks.
-    run = feed(w, frame(false, false, kCentre, kCentre), 8);
+    run = feed(w, frame(false, false, kCentre, kCentre), frames(0.2f));
     CHECK(run.last.taken[kRightHand]);
     CHECK_FALSE(run.last.taken[kLeft]);
 }

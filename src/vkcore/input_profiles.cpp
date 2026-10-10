@@ -113,11 +113,28 @@ XrResult suggestWithBumperNames(XrInput& xr, const input::ControllerData& data, 
     return r;
 }
 
-// A refused profile is suggested once more without the thumb-rest wheel's touch bindings
-// (rest_touch_bindings.hpp), which are then dropped from `data`: that family has no thumb rest this session.
+// A refused profile is suggested again without the thumb-rest wheel's touch bindings
+// (rest_touch_bindings.hpp), in two steps, and what was left out is dropped from `data`: first without the
+// sensors that only tell the thumb is elsewhere (the rests still count, a thumb on its stick or buttons is
+// seen only when pressed or pushed), then without any (that family has no thumb rest this session).
 bool suggestBindings(XrInput& xr, input::ControllerData& data) {
     const char* names = "";
     XrResult r = suggestWithBumperNames(xr, data, names);
+    if (XR_FAILED(r) && input::hasVetoTouchBindings(data)) {
+        char text[XR_MAX_RESULT_STRING_SIZE];
+        EVR_LOG("%s: %s: the runtime refuses the bindings (%s); trying again without the stick, trackpad and "
+                "face-button touch the thumb-rest wheel reads beside the rest",
+                kTag, data.profilePath.c_str(), xrText(r, text));
+        input::ControllerData without = input::withoutVetoTouch(data);
+        r = suggestWithBumperNames(xr, without, names);
+        if (XR_SUCCEEDED(r)) {
+            data = std::move(without);
+            EVR_LOG(
+                "%s: %s: suggested without the touch beside the rest; the thumb rest still counts, a thumb "
+                "on its stick or buttons only when it presses or pushes",
+                kTag, data.profilePath.c_str());
+        }
+    }
     if (XR_FAILED(r) && input::hasRestTouchBindings(data)) {
         char text[XR_MAX_RESULT_STRING_SIZE];
         EVR_LOG(

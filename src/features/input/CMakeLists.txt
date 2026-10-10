@@ -29,6 +29,7 @@ evr_add_module(evr_input
         punch_detector.cpp
         rest_touch_bindings.cpp
         rest_wheel.cpp
+        rest_wheel_touch.cpp
         stick_chord.cpp
         stick_response.cpp
         tap_hold.cpp

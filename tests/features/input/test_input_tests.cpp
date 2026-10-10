@@ -51,7 +51,8 @@ TEST_CASE("the extra face buttons and the bumper can be pressed") {
 
 TEST_CASE("the touch sensors can be touched and let go") {
     const auto input = parseTestInput(
-        "left.thumbrest = 1\nright.primary_touch = 1\nright.secondary_touch = 1\nright.thumbrest = 0\n");
+        "left.thumbrest = 1\nright.primary_touch = 1\nright.secondary_touch = 1\nright.thumbrest = 0\n"
+        "left.thumbstick_touch = 1\nright.trackpad_touch = 1\n");
     CHECK(input.issues.empty());
     InputFrame frame;
     frame.right.thumbRest = true;
@@ -61,6 +62,10 @@ TEST_CASE("the touch sensors can be touched and let go") {
     CHECK(frame.right.primaryTouch);
     CHECK(frame.right.secondaryTouch);
     CHECK_FALSE(frame.left.primaryTouch);
+    CHECK(frame.left.stickTouch);
+    CHECK_FALSE(frame.right.stickTouch);
+    CHECK(frame.right.trackpadTouch);
+    CHECK_FALSE(frame.left.trackpadTouch);
     CHECK(parseTestInput("left.thumbrest = 0, 1\n").issues.size() == 1);
 }
 

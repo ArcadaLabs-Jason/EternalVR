@@ -25,6 +25,7 @@
 #include "features/posture/posture_detector.hpp"
 
 #include <array>
+#include <cstddef>
 #include <string>
 
 namespace evr::input {
@@ -64,7 +65,15 @@ struct MapperSettings {
     RestWheelSettings restWheel;
     std::array<bool, 2> restSensors{};
     bool restFaceTouch = false;
+    // The hands whose rest is the thumb rest itself: there a face button's touch is never the rest, it says
+    // the thumb is elsewhere (as the stick's touch does everywhere).
+    std::array<bool, 2> restIsThumbRest{};
 };
+
+// Whether a face button's touch (not pressed) is `hand`'s rest: face touch on, and no thumb rest there.
+[[nodiscard]] inline bool faceTouchIsRest(const MapperSettings& settings, Hand hand) {
+    return settings.restFaceTouch && !settings.restIsThumbRest[static_cast<std::size_t>(hand)];
+}
 
 // Per-frame facts the mapper needs from outside the input system.
 struct MapperContext {

@@ -221,7 +221,7 @@ namespace EternalVR.Launcher.Core.Controls
                 issues.Add(new ControlIssue { Kind = ControlIssueKind.Syntax, Message = "the file has no [profile] section" });
         }
 
-        private static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "aim_pose", "grip_pose", "haptic", "thumbrest", "primary_touch", "secondary_touch" };
+        private static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "aim_pose", "grip_pose", "haptic", "thumbrest", "primary_touch", "secondary_touch", "thumbstick_touch", "trackpad_touch" };
 
         /// <summary>
         /// The shape of the <c>[profile]</c> entries. The layer also checks each path against the controller's inputs; the

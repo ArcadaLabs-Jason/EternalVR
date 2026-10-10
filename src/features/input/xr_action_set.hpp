@@ -53,10 +53,14 @@ enum class XrActionId : std::uint8_t {
     GripPose, // The weapon and arms are placed at this pose (T-054).
     Haptic,
     // Touch sensors for the thumb-rest weapon wheel (rest_wheel.hpp): the thumb rest itself (Touch
-    // controllers), and the two face buttons, which can stand in for it on controllers without one.
+    // controllers), and the two face buttons, which can stand in for it on controllers without one. The face
+    // buttons' touch beside a thumb rest, the stick's, and the trackpad's beside face touch (Index) say the
+    // thumb is elsewhere.
     ThumbRest,
     PrimaryTouch,
     SecondaryTouch,
+    ThumbstickTouch,
+    TrackpadTouch,
     Count,
 };
 

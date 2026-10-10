@@ -301,6 +301,8 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     h.thumbRest = readBool(xr, input::XrActionId::ThumbRest, path);
     h.primaryTouch = readBool(xr, input::XrActionId::PrimaryTouch, path);
     h.secondaryTouch = readBool(xr, input::XrActionId::SecondaryTouch, path);
+    h.stickTouch = readBool(xr, input::XrActionId::ThumbstickTouch, path);
+    h.trackpadTouch = readBool(xr, input::XrActionId::TrackpadTouch, path);
     const bool left = hand == input::Hand::Left;
     using pose_guards::Slot;
     h.poseValid = locate(xr, xr.aimSpaces[handIndex(hand)], time, h.aimPose, &h.linearVelocity,
@@ -397,7 +399,7 @@ bool attach(const XrContext& context) {
         "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
         "Dossier map panned by the %s stick, weapon wheel by the %s, throw gesture %s, overhead swing %s, "
         "hands-up jump %s, punch at %.1f m/s, button hold %.2f s, thumb-rest wheel %s (picks with %s, face "
-        "touch %s, slowdown %s)",
+        "touch %s, slowdown %s, hold-over %.2f s)",
         kTag, input::aimSourceName(cfg.aim), input::aimSourceName(input::demonAimSource(cfg)),
         !cfg.demonAim                       ? " (as aim)"
         : cfg.aim == input::AimSource::View ? " (ETERNALVR_DEMON_AIM has no effect under view aim)"
@@ -417,7 +419,7 @@ bool attach(const XrContext& context) {
         cfg.swing.enabled ? "on" : "off", cfg.handsJump.enabled ? "on" : "off", cfg.punchSpeed,
         cfg.holdSeconds, input::restWheelModeName(cfg.thumbRest.mode),
         input::restWheelPickName(cfg.thumbRest.pick), cfg.thumbRestFaceTouch ? "on" : "off",
-        cfg.thumbRestSlowdown ? "on" : "off");
+        cfg.thumbRestSlowdown ? "on" : "off", cfg.thumbRest.holdOverSeconds);
     return true;
 }
 

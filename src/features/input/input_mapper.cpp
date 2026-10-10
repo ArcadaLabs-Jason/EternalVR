@@ -147,9 +147,17 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     const Axis2 turnStick = profile_.turnStick ? frame.hand(*profile_.turnStick).stick : Axis2{};
     // The virtual gamepad's look reads it (no turn hook): nothing while the thumb-rest wheel holds the stick.
     turnStickRead_ = restTakesTurn ? Axis2{} : turnStick;
-    const TurnStickOutput gestures = turnStick_.update(turnStick, dt, wheelFromButton || restTakesTurn);
+    // A push the thumb-rest wheel holds while a rest's touch decides is still centred to the gestures and the
+    // turn: given back to the game it claims, turns or snaps as a fresh push.
+    // A held push short of its furthest point when the game gets it is played once from that point.
+    const bool restDefersTurn = profile_.turnStick && rest.deferred[handIndex(*profile_.turnStick)];
+    const std::optional<Axis2> replay =
+        profile_.turnStick ? rest.replay[handIndex(*profile_.turnStick)] : std::nullopt;
+    const Axis2 gestureStick = replay ? *replay : restDefersTurn ? Axis2{} : turnStick;
+    const TurnStickOutput gestures =
+        turnStick_.update(gestureStick, dt, wheelFromButton || (restTakesTurn && !restDefersTurn));
     addStickGestureActions(gestures, input.down);
-    input.turnDegrees = turn_.update(turnStick, dt, gestures.turnAllowed);
+    input.turnDegrees = turn_.update(gestureStick, dt, gestures.turnAllowed);
     input.wheelPointer = restTakesTurn && !wheelFromButton ? Axis2{} : gestures.wheelPointer;
     if (rest.wheelDown) {
         game::add(input.down, game::GameAction::WeaponWheel);
@@ -253,12 +261,20 @@ RestWheelOutput InputMapper::updateRestWheel(const InputFrame& frame,
     RestWheelFrame rest;
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         const HandState& h = frame.hand(hand);
+        const bool faceRest = faceTouchIsRest(settings_, hand);
+        const bool pressed = h.primaryButton || h.secondaryButton;
         // A face button counts while touched and not pressed: a thumb pressing jump is not resting.
-        const bool face = settings_.restFaceTouch &&
-                          ((h.primaryTouch && !h.primaryButton) || (h.secondaryTouch && !h.secondaryButton));
+        const bool face =
+            faceRest && ((h.primaryTouch && !h.primaryButton) || (h.secondaryTouch && !h.secondaryButton));
         rest.rest[handIndex(hand)] = h.thumbRest || face;
+        // A touch sensor says the thumb is on its own stick, face buttons or trackpad: a touch begun there is
+        // not a landing yet, and a touch lost after it went there lifts at once (rest_wheel.hpp; a press and
+        // the stick out of the centre count there too). Where a face button's touch is the rest, it is not
+        // one.
+        rest.thumbElsewhere[handIndex(hand)] =
+            h.stickTouch || h.trackpadTouch || (!faceRest && (h.primaryTouch || h.secondaryTouch));
         rest.sticks[handIndex(hand)] = h.stick;
-        rest.faceButtons[handIndex(hand)] = h.primaryButton || h.secondaryButton;
+        rest.faceButtons[handIndex(hand)] = pressed;
     }
     rest.minWheelHoldSeconds = context.restWheelHoldSeconds;
     // Another route holding the wheel (a button, or the turn stick's own down sweep) keeps it; a down sweep

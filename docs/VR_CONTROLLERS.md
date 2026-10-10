@@ -96,81 +96,126 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   launcher's Play tab, Controls, "Thumb-rest wheel"). A thumb resting on its controller's thumb rest turns the
   other hand's stick into a weapon picker, beside the turn stick's down hold and the slot bindings, which
   stay. The rest is the `thumbrest` action (`/input/thumbrest/touch`, Touch controllers only; Touch Pro and
-  Plus report as Touch), debounced 0.06 s each way; with `ETERNALVR_THUMBREST_FACE_TOUCH=1` the A/B or X/Y
-  touch (`primary_touch`, `secondary_touch`, while touched and not pressed) stands in on controllers without
-  one (Index, Pico 4; not the Steam Frame, whose right bumper already holds the wheel). A player's controls
-  file replaces the built-in file whole, so the layer adds these bindings to a family's data that lacks them
-  (`rest_touch_bindings.hpp`; logged as `N touch binding(s) for the thumb-rest wheel added`, nothing
-  rewritten), and a runtime that refuses the profile with them is asked again without them (the family then
-  has no rest for the session). Modes (off by default since 2026-10-09, after the first headset test; the launcher offers edge, full and,
-  since 2026-10-10, `extreme` as "Turn stick picks (standing)"): `edge`: a landing arms the other stick for 0.5 s
-  (`ETERNALVR_THUMBREST_WINDOW`, 0.2 to 1); it counts only with both sticks within 0.25 at that moment, so a
-  thumb that lands while the other stick moves or turns does nothing, and pushing the other stick past 0.25 in
-  the window starts picking; a thumb left resting never stops that stick. A thumb that comes straight from its
-  own controls opens no window either: a landing within 0.4 s of that hand's primary or secondary button going
-  up (`kOwnButtonVoidSeconds`: jump or dash, then the thumb on the rest) or of its own stick being out of the
-  centre (`kOwnStickVoidSeconds`: turn, rest, walk; walk, rest, turn). After a pick (never after a cancel, so
-  snap flicks with a resting thumb are not taken one after another) the window opens again once the stick has
-  been back in the centre for 0.05 s. `full`: while the thumb rests the other stick is the wheel's (it neither
-  moves nor turns; a stick out when the thumb lands waits for the centre, except one that left the centre
-  after the touch was sensed or at most 0.05 s before (`kHeldLeadSeconds`): it is held from the game while the
-  touch registers and then picks, so a flick begun with the touch is not a turn or a quick switch, the turn
-  stick's own down sweep included; a touch that never registers gives it back, a turn stick then turning again
-  once it has been back in the centre). `extreme` (for standing players who turn
-  with their body, the owner's spec of 2026-10-09/10): the turn stick is the wheel's while neither thumb rests;
-  the rest on the other hand (the move stick's) gives it back its turning, chainsaw and quick switch and cancels
-  a pick in progress (an open wheel still closes on its highlight); the turn hand's rest alone makes the other
-  stick the wheel's instead, and it does not walk meanwhile (`extremeStick`); both rests: both sticks are the
-  game's. Blocked (piloting a demon, a cutscene, a forced view) gives a stick the wheel holds back to the game
-  once it has been back in the centre, under `full` too; the virtual gamepad's look (no turn hook) never reads
-  the turn stick while the wheel holds it. `off`. Picking: nothing is pressed until the stick has stayed 0.1 s in
-  one of the eight directions at 0.5 or more (once the stick stops going further out, a direction is kept until
-  the stick is 7.5 degrees past the edge of its eighth; while it still goes further out, by more than 0.02, it
-  points at the eighth it is in, so a stick that curves on its way out takes the eighth it reaches,
-  `kOutwardStep`), so a flick presses nothing; with `slots` a stick past 0.85 (`kFlickThreshold`) counts at
-  once, at the eighth of its furthest point, so a flick picks. Then with `ETERNALVR_THUMBREST_PICK=wheel` (default)
-  `weapon_wheel` goes down and the stick points as under the stick's own hold (`wheelPointer`; below 0.5 the
-  last direction, so the highlight stays); the stick back in the centre, the thumb lifted (or in `extreme` the
-  rest that ends the route) closes it, held at least the game's open delay plus 0.12 s from the press, never under
-  0.3 s (`wheelHoldSeconds`; the delay is `weaponWheel_HoldTimeForOpeningWheel`, the game's Weapon Wheel Open
-  Delay, 180 ms by default, read every mapper run; 0.3 s when the cvar is not found), so a quick pick is never
-  a quick switch. There is no cancel once it is open. With `slots` the wheel stays closed and the direction
-  held last is remembered; letting go presses its `weapon_slot_N` once (held by `ActionHold`), from
-  `ETERNALVR_WEAPON_DIRECTIONS` (`up=1,up_right=5,...`, `weapon_directions.hpp`; the default is the game's own
-  wheel, from a rig screenshot: each direction picks the weapon the wheel shows there). The mapper runs the
-  wheel before the turn stick's arbiter and the turn: the stick it takes goes to the arbiter as a held wheel
-  from the frame it leaves 0.25, so a snap (0.70) or a smooth turn (0.35) never fires first; the move stick is
-  zeroed. After a pick or a cancel that stick stays out of play until it is back within 0.25. Blocked (no
-  arming, picking cancelled, an open wheel closed): a menu's hold, the game suppressing buttons (r14b, kept
-  from the user command before the mapper runs), a forced view (`forcedView()`), a skippable cutscene, a
-  piloted demon, and another route holding the wheel (a button bound to `weapon_wheel`, the turn stick's down
-  sweep). With both thumbs resting the first to start picking wins. Under `ETERNALVR_WHEEL_SELECT=hand` this
-  wheel still points with its stick. Vibration (`HapticSource::Wheel`): a tick on the picking stick's hand
-  when picking starts (0.25, 0.02 s) and a firmer one on the pick (0.5, 0.035 s), times the strength. The
-  slowdown (`features/input/wheel_slowdown.hpp`, `src/vkcore/rest_wheel.cpp`): the game slows time while its
-  wheel is open (`weaponWheel_slowTimeScale`, 0.14); with `ETERNALVR_THUMBREST_SLOWDOWN=0` the layer holds
-  that cvar at 1 from this wheel's press until 0.3 s after it lets go, through the cvar book, and writes the
-  game's own value (read just before each hold) back; at once when the stick's wheel or a button takes over
-  (they always slow time), when the controllers go stale, on a multiplayer guard trip (the book's restore) and
-  when the layer shuts down. With the slowdown on (default) the cvar is never looked up. Log: the
-  `controllers: on:` line ends `thumb-rest wheel edge (picks with wheel, face touch off, slowdown on)`; the
+  Plus report as Touch); with `ETERNALVR_THUMBREST_FACE_TOUCH=1` the A/B or X/Y touch (`primary_touch`,
+  `secondary_touch`, while touched and not pressed) stands in on controllers without one (Index, Pico 4; not
+  the Steam Frame, whose right bumper already holds the wheel). The touch (T-120; some sensors flicker on and
+  off very fast): it registers on its first frame, unless the thumb is elsewhere on that controller then: hard
+  evidence (a face button pressed, or the hand's own stick past 0.25, which also covers a runtime that reports
+  no stick touch) or a touch sensor beside the rest (the stick's, `thumbstick_touch`; beside a thumb rest the
+  face buttons', the same `primary_touch` and `secondary_touch`; beside face touch the trackpad's,
+  `trackpad_touch`, Index). Then it registers once the thumb leaves, or once the contact (the touch with gaps
+  shorter than the hold-over bridged) has lasted 0.06 s (`kRestDebounceSeconds`), so a sensor that also sees a
+  resting thumb works as before; a touch sensor on for 1.5 s without a break while the rest keeps coming and
+  going no longer holds a landing back (`kStuckVetoSeconds`). A touch lost for less than the hold-over is a
+  forgiven gap, neither a lift nor a new landing. The hold-over is `ETERNALVR_THUMBREST_HOLDOVER` (0.15 s by
+  default, 0.1 to 0.3), but never longer than the touch has been on since its landing and never under 0.05 s
+  (`kRestHoldOverFloorSeconds`), so a brush lifts soon. A longer loss lifts; at once when the thumb went
+  elsewhere after the landing (to jump or turn): on hard evidence at once, on a touch sensor once it has been
+  on 0.04 s (`kVetoTouchSteadySeconds`), so a sensor that flickers in step with the rest cuts nothing. The
+  thumb going elsewhere while the touch is still sensed changes nothing. A stick that leaves the centre during
+  a hold-over, where the lift would change whose it is, waits for the touch to decide: held from the game
+  meanwhile, it starts the pick when the touch comes back (counted with the held pushes), and otherwise goes
+  to the game at once, not kept for the centre; to the turn stick's gestures and turn it was centred all
+  along, so it claims, turns or snaps as a fresh push (`RestWheelOutput::deferred`), up to a hold-over late. A
+  push short of its furthest point when the touch decides (on its way back, or back in the centre) is not
+  lost: that point is played for one frame (`RestWheelOutput::replay`, to the turn stick's gestures and turn,
+  so a snap or a quick switch still fires; a short movement of the move stick is dropped), or to the wheel
+  when the touch comes back, so a flick by direction caught on its way back still commits. A snap pushed
+  during a hold-over so waits for the touch, at most the hold-over: a flick by direction begun in a dropout
+  picks. A stick that leaves the centre on the frame a route starts or ends is not kept out of play: it is a
+  fresh push for the game, or for the wheel where the mode now gives it the stick. With the wheel on, a hand
+  with a thumb rest also gets its face buttons' and stick's touch, a face-touch hand its stick's and
+  trackpad's touch. A player's controls file replaces the built-in file whole, so the layer adds these
+  bindings to a family's data that lacks them (`rest_touch_bindings.hpp`; logged as `N touch binding(s) for
+  the thumb-rest wheel added`, nothing rewritten). A runtime that refuses the profile with them is asked again
+  first without the sensors beside the rest (`withoutVetoTouch`: the rests still count, a thumb on its stick
+  or buttons only when it presses or pushes), then without any of them (the family then has no rest for the
+  session); the log says which was taken. Modes (off by default since 2026-10-09, after the first headset
+  test; the launcher offers edge, full and, since 2026-10-10, `extreme` as "Turn stick picks (standing)"):
+  `edge`: a landing arms the other stick for 0.5 s (`ETERNALVR_THUMBREST_WINDOW`, 0.2 to 1); it counts only
+  with both sticks within 0.25 at that moment, so a thumb that lands while the other stick moves or turns does
+  nothing, and pushing the other stick past 0.25 in the window starts picking; a thumb left resting never
+  stops that stick. A thumb that comes straight from its own controls opens no window either: a landing within
+  0.4 s of that hand's primary or secondary button going up (`kOwnButtonVoidSeconds`: jump or dash, then the
+  thumb on the rest) or of its own stick being out of the centre (`kOwnStickVoidSeconds`: turn, rest, walk;
+  walk, rest, turn). After a pick (never after a cancel, so snap flicks with a resting thumb are not taken one
+  after another) the window opens again once the stick has been back in the centre for 0.05 s. A forgiven gap
+  of 0.06 s or more is a fresh landing (the window opens again, its voids checked again) when nothing is being
+  picked, the other stick has been centred for 0.4 s and nothing was cancelled since the landing. `full`:
+  while the thumb rests the other stick is the wheel's (it neither moves nor turns; a stick out when the thumb
+  lands stays the game's until the touch has been on 0.06 s (gaps not counted), so a brush while turning
+  leaves the turn alone, and then waits for the centre, except one that left the centre after the contact
+  began or at most 0.1 s before (`kHeldLeadSeconds`): it picks once the touch registers, held from the game
+  until then (a touch held back by the thumb elsewhere, gaps in the contact included, or a frame while the
+  turn stick's own down sweep lets go), so a flick begun with the touch is not a turn or a quick switch; a
+  touch that never registers gives it back once the contact lapses, a turn stick then turning again once it
+  has been back in the centre). `extreme` (for standing players who turn with their body, the owner's spec of
+  2026-10-09/10): the turn stick is the wheel's while neither thumb rests; the rest on the other hand (the
+  move stick's) gives it back its turning, chainsaw and quick switch and cancels a pick in progress once its
+  touch has been on 0.06 s, gaps not counted (a brush does not; an open wheel still closes on its highlight);
+  the turn hand's rest alone makes the other stick the wheel's instead, and it does not walk meanwhile
+  (`extremeStick`); both rests: both sticks are the game's. During a hold-over the push waits the other way
+  round where the lift gives the stick to the wheel: a turn-stick push during the other rest's hold-over turns
+  if the touch comes back and picks if it lapses. Blocked (piloting a demon, a cutscene, a forced view) gives
+  a stick the wheel holds back to the game once it has been back in the centre, under `full` too; the virtual
+  gamepad's look (no turn hook) never reads the turn stick while the wheel holds it. `off`. Picking: under
+  `edge` and `full` the rest is needed only to start a pick; one under way ends on the stick (or blocked), not
+  on a lift, except that a lift on hard evidence (a press, its own stick out) cancels a pick still pointing
+  with nothing committed: a push begun at most 0.05 s before the touch first went (`kTurnBeforeLiftSeconds`; a
+  flicker back does not restart that) was a turn and goes to the game as a fresh push; an older one (a pick
+  under way, then a jump) stays out of play until it is back in the centre, so it neither snaps nor
+  quick-switches. Nothing is pressed until the stick
+  has stayed 0.1 s in one of the eight directions at 0.5 or more (once the stick stops going further out, a
+  direction is kept until the stick is 7.5 degrees past the edge of its eighth; while it still goes further
+  out, by more than 0.02, it points at the eighth it is in, so a stick that curves on its way out takes the
+  eighth it reaches, `kOutwardStep`), so a flick presses nothing; with `slots` a stick past 0.85
+  (`kFlickThreshold`) counts at once, at the eighth of its furthest point, so a flick picks. Then with
+  `ETERNALVR_THUMBREST_PICK=wheel` (default) `weapon_wheel` goes down and the stick points as under the
+  stick's own hold (`wheelPointer`; below 0.5 the last direction, so the highlight stays); the stick back in
+  the centre (or in `extreme` the rest that ends the route) closes it, held at least the game's open delay
+  plus 0.12 s from the press, never under 0.3 s (`wheelHoldSeconds`; the delay is
+  `weaponWheel_HoldTimeForOpeningWheel`, the game's Weapon Wheel Open Delay, 180 ms by default, read every
+  mapper run; 0.3 s when the cvar is not found), so a quick pick is never a quick switch. There is no cancel
+  once it is open. With `slots` the wheel stays closed and the direction held last is remembered; letting go
+  presses its `weapon_slot_N` once (held by `ActionHold`), from `ETERNALVR_WEAPON_DIRECTIONS`
+  (`up=1,up_right=5,...`, `weapon_directions.hpp`; the default is the game's own wheel, from a rig screenshot:
+  each direction picks the weapon the wheel shows there). The mapper runs the wheel before the turn stick's
+  arbiter and the turn: the stick it takes goes to the arbiter as a held wheel from the frame it leaves 0.25,
+  so a snap (0.70) or a smooth turn (0.35) never fires first; the move stick is zeroed. After a pick or a
+  cancel that stick stays out of play until it is back within 0.25. Blocked (no arming, picking cancelled, an
+  open wheel closed): a menu's hold, the game suppressing buttons (r14b, kept from the user command before the
+  mapper runs), a forced view (`forcedView()`), a skippable cutscene, a piloted demon, and another route
+  holding the wheel (a button bound to `weapon_wheel`, the turn stick's down sweep). With both thumbs resting
+  the first to start picking wins. Under `ETERNALVR_WHEEL_SELECT=hand` this wheel still points with its stick.
+  Vibration (`HapticSource::Wheel`): a tick on the picking stick's hand when picking starts (0.25, 0.02 s) and
+  a firmer one on the pick (0.5, 0.035 s), times the strength. The slowdown
+  (`features/input/wheel_slowdown.hpp`, `src/vkcore/rest_wheel.cpp`): the game slows time while its wheel is
+  open (`weaponWheel_slowTimeScale`, 0.14); with `ETERNALVR_THUMBREST_SLOWDOWN=0` the layer holds that cvar at
+  1 from this wheel's press until 0.3 s after it lets go, through the cvar book, and writes the game's own
+  value (read just before each hold) back; at once when the stick's wheel or a button takes over (they always
+  slow time), when the controllers go stale, on a multiplayer guard trip (the book's restore) and when the
+  layer shuts down. With the slowdown on (default) the cvar is never looked up. Log: the `controllers: on:`
+  line ends `thumb-rest wheel edge (picks with wheel, face touch off, slowdown on, hold-over 0.15 s)`; the
   control map line is followed by `thumb-rest wheel edge: rest sensors on both hands, picks with the game's
   wheel, window 0.50 s` (or `off for these controllers (no thumb-rest sensor)`); `thumb-rest wheel: the left
   controller reports a resting thumb` at each hand's first touch, and one line when none has after a minute of
   play; `the game opens its wheel 180 ms after the press (weaponWheel_HoldTimeForOpeningWheel): held at least
   0.30 s` when the delay is read or changes; then per use `armed: the right stick picks (left thumb rest,
   edge, 0.21 s after the touch)` (under `extreme`: `armed: the right (turn) stick picks weapons; the left
-  thumb rest gives turning back (extreme)`, or with the right thumb resting `armed: the left stick picks (right
-  thumb rest, extreme)`), `the game's wheel is held, pointing up`, `the game's wheel let go pointing right`,
-  `weapon_slot_3 picked by the right stick pointing right (out to 0.93)`, `cancelled, nothing pressed (...; out
-  to 0.41)`, and `the left thumb landed with a stick out of the centre; no window` (or `straight from its own
-  stick`, `straight from its own face button`; capped like the action lines). Every 10 s in which a rest's
-  sensor reported a touch, one line for that rest: `left rest, last 10 s: 14 touch(es) from the sensor, 2 gone
-  within 0.06 s (not registered), 1 gap(s) under 0.06 s bridged; 11 landing(s), 3 back within 0.25 s of letting
-  go, 4 with the right stick already out (3 of it out 0.20 s or less), 2 push(es) held while the touch
-  registered`: touches too short to count, a sensor that flickers, flicks begun before the rest registered, and
-  (under `full`) the flicks held while the touch registered, which then picked, show there. Scripted input
-  counts as a rest on both hands.
+  thumb rest gives turning back (extreme)`, or with the right thumb resting `armed: the left stick picks
+  (right thumb rest, extreme)`), `the game's wheel is held, pointing up`, `the game's wheel let go pointing
+  right`, `weapon_slot_3 picked by the right stick pointing right (out to 0.93)`, `cancelled, nothing pressed
+  (...; out to 0.41)`, and `the left thumb landed with a stick out of the centre; no window` (or `straight
+  from its own stick`, `straight from its own face button`; capped like the action lines). Every 10 s in which
+  a rest's sensor reported a touch, one line for that rest: `left rest, last 10 s: 14 touch(es) from the
+  sensor, 2 gone within 0.06 s, 1 begun with the thumb elsewhere, 3 gap(s) under 0.15 s forgiven; 11
+  landing(s), 3 back within 0.25 s of letting go, 4 with the right stick already out (3 of it out 0.20 s or
+  less), 2 push(es) held until the touch registered or came back, 1 lift(s) at once with the thumb elsewhere,
+  0 veto(es) ignored as stuck`: a sensor that flickers (short touches, forgiven gaps), touches the thumb
+  elsewhere held back, flicks begun before the rest registered, pushes held while the touch registered (under
+  `full`) or during a hold-over, which then picked, lifts cut short, and touch sensors that see the resting
+  thumb show there. Back within counts from when the touch went, not from the end of the hold-over. Scripted
+  input counts as a rest on both hands.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
   Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
   off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along
@@ -411,6 +456,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_THUMBREST_FACE_TOUCH` | `1`: a thumb on A/B or X/Y counts as resting, on Index and Pico 4 controllers (their touch bindings are added for the session) | `0` |
 | `ETERNALVR_THUMBREST_SLOWDOWN` | `0`: no slowdown while the thumb-rest wheel holds the game's wheel open (`weaponWheel_slowTimeScale` held at 1); `1` writes nothing | `1` |
 | `ETERNALVR_THUMBREST_WINDOW` | `edge`: seconds from the thumb's landing to the push, 0.2 to 1 (tuning) | 0.5 |
+| `ETERNALVR_THUMBREST_HOLDOVER` | the thumb-rest wheel: seconds a lost touch of the rest is forgiven before it lifts, 0.1 to 0.3 (tuning; never longer than the touch was on, never under 0.05 s) | 0.15 |
 | `ETERNALVR_THROW` | `1`: the off hand's overhand throw presses the equipment launcher (above) | `0` |
 | `ETERNALVR_THROW_SPEED` | the throw's forward speed, 1 to 5 metres per second | 2 |
 | `ETERNALVR_SWING` | `1`: the weapon hand's overhead swing presses the Crucible (above) | `0` |
@@ -726,7 +772,8 @@ it. When the XR worker's snapshot is stale the mapper builds its frame from the 
 right.trigger = 1          # 0..1 (also grip)
 left.stick = 0, 1          # x, y
 right.primary = 1          # primary, secondary, face3, face4, shoulder, click (stick click), menu
-left.thumbrest = 1         # touch sensors: thumbrest, primary_touch, secondary_touch
+left.thumbrest = 1         # touch sensors: thumbrest, primary_touch, secondary_touch, thumbstick_touch,
+                           # trackpad_touch
 right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOCAL)
 left.aim = 0, 0, 90        # an optional roll, counter-clockwise as the user sees it: the left palm up
 right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)

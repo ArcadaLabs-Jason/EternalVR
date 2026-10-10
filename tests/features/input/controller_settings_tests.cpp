@@ -267,6 +267,7 @@ TEST_CASE("the thumb-rest wheel: off and the game's wheel by default, face touch
     CHECK(defaults.settings.thumbRest.mode == RestWheelMode::Off);
     CHECK(defaults.settings.thumbRest.pick == RestWheelPick::Wheel);
     CHECK(defaults.settings.thumbRest.windowSeconds == evr::input::kEdgeWindowSeconds);
+    CHECK(defaults.settings.thumbRest.holdOverSeconds == evr::input::kRestHoldOverSeconds);
     CHECK(defaults.settings.thumbRest.directions == evr::input::kDefaultWeaponDirections);
     CHECK_FALSE(defaults.settings.thumbRestFaceTouch);
     CHECK(defaults.settings.thumbRestSlowdown);
@@ -276,6 +277,7 @@ TEST_CASE("the thumb-rest wheel: off and the game's wheel by default, face touch
                             {"ETERNALVR_THUMBREST_FACE_TOUCH", "1"},
                             {"ETERNALVR_THUMBREST_SLOWDOWN", "0"},
                             {"ETERNALVR_THUMBREST_WINDOW", "0.8"},
+                            {"ETERNALVR_THUMBREST_HOLDOVER", "0.25"},
                             {"ETERNALVR_WEAPON_DIRECTIONS", "up=4"}});
     CHECK(set.issues.empty());
     CHECK(set.settings.thumbRest.mode == RestWheelMode::Extreme);
@@ -283,14 +285,21 @@ TEST_CASE("the thumb-rest wheel: off and the game's wheel by default, face touch
     CHECK(set.settings.thumbRestFaceTouch);
     CHECK_FALSE(set.settings.thumbRestSlowdown);
     CHECK(set.settings.thumbRest.windowSeconds == 0.8f);
+    CHECK(set.settings.thumbRest.holdOverSeconds == 0.25f);
     CHECK(set.settings.thumbRest.directions[static_cast<std::size_t>(WheelDirection::Up)] == 4);
     CHECK(parse({{"ETERNALVR_THUMBREST_WHEEL", "full"}}).settings.thumbRest.mode == RestWheelMode::Full);
     CHECK(parse({{"ETERNALVR_THUMBREST_WHEEL", "off"}}).settings.thumbRest.mode == RestWheelMode::Off);
 
     const auto bad = parse({{"ETERNALVR_THUMBREST_WHEEL", "always"},
                             {"ETERNALVR_THUMBREST_WINDOW", "2"},
+                            {"ETERNALVR_THUMBREST_HOLDOVER", "0.5"},
                             {"ETERNALVR_WEAPON_DIRECTIONS", "up=9,down=2"}});
-    CHECK(bad.issues.size() == 3);
+    CHECK(bad.issues.size() == 4);
+    CHECK(bad.settings.thumbRest.holdOverSeconds == evr::input::kRestHoldOverSeconds);
+    CHECK(parse({{"ETERNALVR_THUMBREST_HOLDOVER", "0.05"}}).issues.size() == 1);
+    CHECK(parse({{"ETERNALVR_THUMBREST_HOLDOVER", "nan"}}).settings.thumbRest.holdOverSeconds ==
+          evr::input::kRestHoldOverSeconds);
+    CHECK(parse({{"ETERNALVR_THUMBREST_HOLDOVER", "0.1"}}).settings.thumbRest.holdOverSeconds == 0.1f);
     CHECK(bad.settings.thumbRest.mode == RestWheelMode::Off);
     CHECK(parse({{"ETERNALVR_THUMBREST_WHEEL", "edge"}}).settings.thumbRest.mode == RestWheelMode::Edge);
     CHECK(bad.settings.thumbRest.windowSeconds == evr::input::kEdgeWindowSeconds);

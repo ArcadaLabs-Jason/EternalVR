@@ -127,11 +127,12 @@ TEST_CASE("the move stick picks while the right thumb rests, and moves nothing u
     CHECK(run.moved == 0.0f);
     CHECK(contains(run.last.down, GameAction::WeaponWheel));
     CHECK(run.last.wheelPointer == kUp);
-    // The thumb lifts with the stick still up: the wheel closes, and the stick stays out of play.
+    // The thumb lifts with the stick still up: the rest was needed only to start, so the wheel stays open
+    // and the stick moves nothing.
     run = feed(mapper, frame(false, false, kUp, kCentre), 40);
     CHECK(run.moved == 0.0f);
-    CHECK_FALSE(contains(run.last.down, GameAction::WeaponWheel));
-    // Back in the centre, then pushed: it moves.
+    CHECK(contains(run.last.down, GameAction::WeaponWheel));
+    // Back in the centre the wheel closes; pushed again, the stick moves.
     feed(mapper, frame(false, false, kCentre, kCentre), 2);
     CHECK(feed(mapper, frame(false, false, kUp, kCentre), 5).moved > 0.0f);
 }
@@ -279,10 +280,240 @@ TEST_CASE("a face button counts as the rest only with face touch on, and not whi
     CHECK(feed(off, face, 30).wheelFrames == 0);
 }
 
+TEST_CASE("Touch: a rest's touch begun with the thumb on its face buttons or stick waits") {
+    MapperSettings settings = restSettings();
+    settings.restIsThumbRest = {true, true};
+    // The left thumb still on X, or on its stick, when the rest's touch begins: a push three frames later
+    // turns (the touch has not registered yet), and the wheel never opens.
+    for (const bool stick : {false, true}) {
+        CAPTURE(stick);
+        InputMapper mapper(questTouchProfile(), settings);
+        feed(mapper, frame(false, false, kCentre, kCentre), 45);
+        InputFrame elsewhere = frame(true, false, kCentre, kCentre);
+        (stick ? elsewhere.left.stickTouch : elsewhere.left.primaryTouch) = true;
+        feed(mapper, elsewhere, 3);
+        elsewhere.right.stick = kRight;
+        const Run run = feed(mapper, elsewhere, 30);
+        CHECK(run.wheelFrames == 0);
+        CHECK(run.turned > 0.0f);
+    }
+    // The thumb only on the rest: the touch registers on its first frame, and the same push picks.
+    InputMapper mapper(questTouchProfile(), settings);
+    feed(mapper, frame(false, false, kCentre, kCentre), 45);
+    feed(mapper, frame(true, false, kCentre, kCentre), 3);
+    const Run run = feed(mapper, frame(true, false, kCentre, kRight), 30);
+    CHECK(run.wheelFrames > 0);
+    CHECK(run.turned == 0.0f);
+}
+
+TEST_CASE("Touch with face touch on: the face buttons' touch is the thumb elsewhere, not the rest") {
+    MapperSettings settings = restSettings();
+    settings.restFaceTouch = true;
+    settings.restIsThumbRest = {true, true};
+    InputMapper mapper(questTouchProfile(), settings);
+    InputFrame touching = frame(false, false, kCentre, kCentre);
+    touching.left.primaryTouch = true;
+    feed(mapper, touching, 8);
+    touching.right.stick = kRight;
+    CHECK(feed(mapper, touching, 30).wheelFrames == 0);
+}
+
+TEST_CASE("face touch as the rest: the stick's touch holds it back, and a press lifts it at once") {
+    MapperSettings settings = restSettings();
+    settings.restFaceTouch = true;
+    // X touched with the stick touched too: not registered three frames on.
+    InputMapper held(questTouchProfile(), settings);
+    InputFrame both = frame(false, false, kCentre, kCentre);
+    both.left.primaryTouch = true;
+    both.left.stickTouch = true;
+    feed(held, both, 3);
+    CHECK(held.restWheel().stats().landings[0] == 0);
+    CHECK(held.restWheel().stats().vetoedLandings[0] == 1);
+
+    // X touched alone is the rest at once; pressing it (a jump) lifts it on that frame, with no hold-over.
+    InputMapper mapper(questTouchProfile(), settings);
+    InputFrame touching = frame(false, false, kCentre, kCentre);
+    touching.left.primaryTouch = true;
+    feed(mapper, touching, 10);
+    CHECK(mapper.restWheel().stats().landings[0] == 1);
+    touching.left.primaryButton = true;
+    feed(mapper, touching, 1);
+    CHECK(mapper.restWheel().stats().cutLifts[0] == 1);
+
+    // Index: X touched with the trackpad touched is no landing yet either.
+    InputMapper trackpad(questTouchProfile(), settings);
+    InputFrame pad = frame(false, false, kCentre, kCentre);
+    pad.left.primaryTouch = true;
+    pad.left.trackpadTouch = true;
+    feed(trackpad, pad, 3);
+    CHECK(trackpad.restWheel().stats().landings[0] == 0);
+    CHECK(trackpad.restWheel().stats().vetoedLandings[0] == 1);
+}
+
+TEST_CASE(
+    "Touch: a jump from the rest lifts it at once, and the thumb back on it while still touching A waits") {
+    MapperSettings settings = restSettings();
+    settings.restIsThumbRest = {true, true};
+    InputMapper mapper(questTouchProfile(), settings);
+    feed(mapper, frame(false, false, kCentre, kCentre), 45);
+    feed(mapper, frame(false, true, kCentre, kCentre), 20);
+    REQUIRE(mapper.restWheel().stats().landings[1] == 1);
+    // A touched and pressed: the jump goes out and the rest lifts on that frame.
+    InputFrame jump = frame(false, false, kCentre, kCentre);
+    jump.right.primaryTouch = true;
+    jump.right.primaryButton = true;
+    CHECK(contains(feed(mapper, jump, 1).everDown, GameAction::Jump));
+    CHECK(mapper.restWheel().stats().cutLifts[1] == 1);
+    // Back on the rest with A still touched: no landing until A is let go.
+    InputFrame back = frame(false, true, kCentre, kCentre);
+    back.right.primaryTouch = true;
+    feed(mapper, back, 3);
+    CHECK(mapper.restWheel().stats().landings[1] == 1);
+    CHECK(mapper.restWheel().stats().vetoedLandings[1] == 1);
+    feed(mapper, frame(false, true, kCentre, kCentre), 1);
+    CHECK(mapper.restWheel().stats().landings[1] == 2);
+}
+
+namespace {
+
+// Frames in which the snap turn fired.
+int snaps(InputMapper& mapper, const InputFrame& f, int frames) {
+    int count = 0;
+    for (int i = 0; i < frames; ++i) {
+        count += mapper.update(f, {}, kFrame).turnDegrees != 0.0f ? 1 : 0;
+    }
+    return count;
+}
+
+// Frames in which `action` was pressed (went down).
+int presses(InputMapper& mapper, const InputFrame& f, int frames, GameAction action) {
+    int count = 0;
+    for (int i = 0; i < frames; ++i) {
+        count += contains(mapper.update(f, {}, kFrame).pressed, action) ? 1 : 0;
+    }
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("a turn-stick push during the rest's hold-over snaps exactly once, held out or back at once") {
+    // Held out: held through the hold-over, then the game has it as a fresh push.
+    InputMapper out(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+    feed(out, frame(true, false, kCentre, kCentre), 30);
+    feed(out, frame(false, false, kCentre, kCentre), 3);
+    CHECK(snaps(out, frame(false, false, kCentre, kRight), 8) == 0);
+    CHECK(snaps(out, frame(false, false, kCentre, kRight), 22) == 1);
+
+    // A one-frame flick back in the centre before the hold-over lapses: played once when it does.
+    InputMapper flick(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+    feed(flick, frame(true, false, kCentre, kCentre), 30);
+    feed(flick, frame(false, false, kCentre, kCentre), 3);
+    int count = snaps(flick, frame(false, false, kCentre, kRight), 1);
+    count += snaps(flick, frame(false, false, kCentre, kCentre), 30);
+    CHECK(count == 1);
+    CHECK(flick.restWheel().stats().landings[0] == 1);
+}
+
+TEST_CASE("while touched: turning just before the thumb leaves for its own stick turns, and opens no wheel") {
+    InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Smooth, RestWheelMode::Full));
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
+    Run run = feed(mapper, frame(true, false, kCentre, kRight), 2);
+    // The left thumb from its rest to its own stick: the pick just started is cancelled, the turn goes on.
+    run = feed(mapper, frame(false, false, kUp, kRight), 30, run);
+    CHECK(run.turned > 0.0f);
+    CHECK(run.wheelFrames == 0);
+}
+
+TEST_CASE("while touched: a flicker as the thumb leaves for its own stick does not make a turn a pick") {
+    InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Smooth, RestWheelMode::Full));
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
+    Run run = feed(mapper, frame(true, false, kCentre, kRight), 2);
+    // The touch goes, flickers back for a frame, goes again, and the left thumb pushes its own stick: the
+    // loss is timed from when the touch first went, so the push still counts as begun just before it.
+    run = feed(mapper, frame(false, false, kCentre, kRight), 1, run);
+    run = feed(mapper, frame(true, false, kCentre, kRight), 1, run);
+    run = feed(mapper, frame(false, false, kCentre, kRight), 1, run);
+    run = feed(mapper, frame(false, false, kUp, kRight), 30, run);
+    CHECK(run.turned > 0.0f);
+    CHECK(run.wheelFrames == 0);
+}
+
+TEST_CASE("a held push that slides round the rim plays where it is, not its peak") {
+    // Right at full, then down at 0.99 when the hold-over lapses: down, so a quick switch and no snap.
+    const Axis2 rimDown{0.0f, -0.99f};
+    InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
+    feed(mapper, frame(false, false, kCentre, kCentre), 3);
+    int quick = presses(mapper, frame(false, false, kCentre, kRight), 6, GameAction::QuickSwitch);
+    quick += presses(mapper, frame(false, false, kCentre, rimDown), 10, GameAction::QuickSwitch);
+    quick += presses(mapper, frame(false, false, kCentre, kCentre), 10, GameAction::QuickSwitch);
+    CHECK(quick == 1);
+}
+
+TEST_CASE("a held push on its way back when the hold-over lapses still snaps, or quick-switches, once") {
+    // Full out, then half way back on the frame the hold-over lapses (0.15 s after the loss), then centred.
+    const Axis2 half{0.5f, 0.0f};
+    InputMapper snap(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+    feed(snap, frame(true, false, kCentre, kCentre), 30);
+    feed(snap, frame(false, false, kCentre, kCentre), 3);
+    int count = snaps(snap, frame(false, false, kCentre, kRight), 6);
+    count += snaps(snap, frame(false, false, kCentre, half), 10);
+    count += snaps(snap, frame(false, false, kCentre, kCentre), 10);
+    CHECK(count == 1);
+
+    // A down flick at 0.5 (short of the down claim) when it lapses: one quick switch.
+    const Axis2 halfDown{0.0f, -0.5f};
+    InputMapper down(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+    feed(down, frame(true, false, kCentre, kCentre), 30);
+    feed(down, frame(false, false, kCentre, kCentre), 3);
+    int quick = presses(down, frame(false, false, kCentre, kDown), 6, GameAction::QuickSwitch);
+    quick += presses(down, frame(false, false, kCentre, halfDown), 10, GameAction::QuickSwitch);
+    quick += presses(down, frame(false, false, kCentre, kCentre), 10, GameAction::QuickSwitch);
+    CHECK(quick == 1);
+}
+
+TEST_CASE(
+    "while touched: a pick under way, then a jump with the other thumb: cancelled, the stick out of play") {
+    // Right, then down: neither snaps nor quick-switches when the pick is cancelled, and the stick is the
+    // game's again once it has been back in the centre.
+    for (const Axis2 push : {kRight, kDown}) {
+        CAPTURE(push.y);
+        InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+        feed(mapper, frame(true, false, kCentre, kCentre), 30);
+        // Picking for 0.05 s (the tick felt), then X pressed with the thumb off its rest.
+        Run run = feed(mapper, frame(true, false, kCentre, push), 5);
+        REQUIRE(run.last.restWheel.taken[1]);
+        InputFrame jump = frame(false, false, kCentre, push);
+        jump.left.primaryTouch = true;
+        jump.left.primaryButton = true;
+        run = feed(mapper, jump, 1, run);
+        CHECK(run.last.restWheel.event == evr::input::RestWheelEvent::Cancelled);
+        CHECK(run.last.restWheel.taken[1]);
+        run = feed(mapper, frame(false, false, kCentre, push), 20, run);
+        CHECK(run.last.restWheel.taken[1]);
+        run = feed(mapper, frame(false, false, kCentre, kCentre), 5, run);
+        CHECK(run.turned == 0.0f);
+        CHECK_FALSE(contains(run.everDown, GameAction::QuickSwitch));
+        CHECK(run.wheelFrames == 0);
+        CHECK_FALSE(run.last.restWheel.taken[1]);
+    }
+}
+
+TEST_CASE("a quick switch flicked during the rest's hold-over and back is played once") {
+    InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Snap, RestWheelMode::Full));
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
+    feed(mapper, frame(false, false, kCentre, kCentre), 3);
+    Run run = feed(mapper, frame(false, false, kCentre, kDown), 2);
+    run = feed(mapper, frame(false, false, kCentre, kCentre), 30, run);
+    CHECK(contains(run.everDown, GameAction::QuickSwitch));
+    CHECK_FALSE(contains(run.everDown, GameAction::WeaponWheel));
+}
+
 TEST_CASE("a thumb that lands straight from a jump leaves the move stick moving") {
     InputMapper mapper(questTouchProfile(), restSettings());
     feed(mapper, frame(false, false, kCentre, kCentre), 45);
-    // A (jump) pressed and let go, then the right thumb on its rest at once, and walking within the window.
+    // A (jump) pressed and let go, then the right thumb on its rest at once, and walking within the
+    // window.
     InputFrame jump = frame(false, false, kCentre, kCentre);
     jump.right.primaryButton = true;
     feed(mapper, jump, 10);

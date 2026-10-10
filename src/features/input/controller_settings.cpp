@@ -126,6 +126,14 @@ void readThumbRest(Reader& r, ControllerSettings& s) {
             r.report("ETERNALVR_THUMBREST_WINDOW", "expected seconds from 0.2 to 1; the default is kept");
         }
     }
+    if (const auto v = r.get("ETERNALVR_THUMBREST_HOLDOVER")) {
+        const auto n = number(*v);
+        if (n && *n >= kMinRestHoldOverSeconds && *n <= kMaxRestHoldOverSeconds) {
+            s.thumbRest.holdOverSeconds = *n;
+        } else {
+            r.report("ETERNALVR_THUMBREST_HOLDOVER", "expected seconds from 0.1 to 0.3; the default is kept");
+        }
+    }
     if (r.get("ETERNALVR_WEAPON_DIRECTIONS")) {
         WeaponDirectionsResult directions = parseWeaponDirections(r.raw());
         s.thumbRest.directions = directions.table;
