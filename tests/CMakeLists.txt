@@ -231,14 +231,24 @@ evr_add_test(evr_key_injection_tests
 if(TARGET evr_device_features)
     evr_add_test(evr_vkcore_tests
         SOURCES
+            vkcore/clone_census_tests.cpp
+            vkcore/clone_names_tests.cpp
             vkcore/debug_script_tests.cpp
             vkcore/device_features_tests.cpp
             vkcore/dump_format_tests.cpp
+            vkcore/frame_repeat_tests.cpp
             vkcore/game_settings_line_tests.cpp
             vkcore/job_nodes_tests.cpp
             vkcore/log_cap_tests.cpp
             vkcore/parallel_eyes_settings_tests.cpp
+            vkcore/snapshot_pairs_tests.cpp
+            vkcore/snapshot_ring_tests.cpp
+            vkcore/submit_order_tests.cpp
+            vkcore/swap_images_tests.cpp
+            vkcore/update_lists_tests.cpp
+            vkcore/view_dlss_plan_tests.cpp
             vkcore/view_frames_tests.cpp
+            vkcore/view_water_start_tests.cpp
         DEPENDS evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
             evr_parallel_eyes_settings evr_mp_policy)
 endif()

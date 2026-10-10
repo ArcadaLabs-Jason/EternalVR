@@ -1,2 +1,4 @@
 # The controller maps are compared line by line in the launcher tests and ship as they are: LF on every checkout.
 *.toml text eol=lf
+# Batch files run in cmd.exe, which wants CRLF: the tester launch script ships as it is checked out.
+*.cmd text eol=crlf

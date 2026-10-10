@@ -8,8 +8,9 @@
 // nvngx_dlss.dll elsewhere, the Init export is detoured to pass a FeatureCommonInfo whose PathListInfo
 // holds that DLL's folder (and an NGX log callback into the layer log). If NGX refuses it, the game's own
 // Init is called again unchanged. ETERNALVR_DLSS_PRESET (a letter such as K) is set as the render preset
-// hint of every DLSS quality on the parameter block of each DLSS feature create (the game's and eye R's
-// twin, taa_ngx.cpp, both go through the detoured NVSDK_NGX_VULKAN_CreateFeature export).
+// hint of every DLSS quality on the parameter block of each DLSS feature create (the game's, eye R's twin,
+// taa_ngx.cpp, and Parallel Eye Rendering's view 1 feature, view_dlss.hpp, all go through the detoured
+// NVSDK_NGX_VULKAN_CreateFeature export).
 //
 // Unset (the default): nothing is hooked and NGX loads the game's DLL as before.
 

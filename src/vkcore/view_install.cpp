@@ -3,18 +3,25 @@
 
 #include "vkcore/bin_tile_hooks.hpp"
 #include "vkcore/code_ranges.hpp"
+#include "vkcore/dlss_menu_hooks.hpp"
+#include "vkcore/exposure_hooks.hpp"
+#include "vkcore/game_build.hpp"
 #include "vkcore/game_code.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
-#include "vkcore/runtime_cvars.hpp"
+#include "vkcore/runtime_cvars_pe.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/view_async.hpp"
 #include "vkcore/view_block.hpp"
 #include "vkcore/view_clones.hpp"
 #include "vkcore/view_contexts.hpp"
+#include "vkcore/view_dlss.hpp"
 #include "vkcore/view_redirects.hpp"
 #include "vkcore/view_slots.hpp"
 #include "vkcore/view_slots_storage.hpp"
+#include "vkcore/view_swap_guard.hpp"
+#include "vkcore/view_updates.hpp"
+#include "vkcore/view_water.hpp"
 
 #include <cstdint>
 #include <mutex>
@@ -34,13 +41,17 @@ std::once_flag g_once;
 
 // Every check of the install and the memory it takes, before anything of the game is written:
 // r_maxRenderViews, the view slot sites, the async compute read, the per-view block and its references, the
-// context tables, the code bytes and the clones' sites. Adds the ranges the changes write to `writes`.
+// context tables, the code bytes, the clones' sites and, with DLSS, its sites. Adds the ranges the changes
+// write to `writes`.
 bool checkAndPrepare(const GameText& text, std::vector<CodeRange>& writes) {
     if (!view_slots::prepareStorage(text.base) || !checkAsyncComputeRead(text.base) ||
         !preparePerViewBlock(text, 2, writes) || !prepareViewContexts(text.base, writes) ||
-        !prepareViewRedirectPatches(text.base, writes) || !prepareViewClones(text.base)) {
+        !prepareViewRedirectPatches(text.base, writes) || !prepareViewClones(text.base) ||
+        !prepareViewDlss(text.base)) {
         return false;
     }
+    prepareViewSwapGuard(text.base); // a miss logs and leaves the swapchain guard out (installChanges)
+    prepareViewWater(text.base);     // the same for view 1's water
     if (parallelEyesSettings().testFail == parallel_eyes::TestFail::Check) {
         EVR_LOG("%s: a check fails here (ETERNALVR_TEST_INSTALL_FAIL=check)", kTag);
         return false;
@@ -68,6 +79,10 @@ bool installChanges(const std::byte* base) {
         return false;
     }
     installBinTileHook(); // each view's lights binned in its own (asymmetric) frustum; a missing piece logs
+    installViewUpdates(base);   // models only view 1 sees prepared and updated; a missing piece logs
+    installViewSwapGuard(base); // view 0's screen pass left out after a swapchain recreate; a miss logs
+    installViewDlss();          // with DLSS: each view's feature; a failed hook logs and holds TAA
+    installViewWater(base);     // view 1's water from view 0's starting state; a miss logs
     return true;
 }
 
@@ -102,8 +117,10 @@ bool parallelEyesRequested() {
         }
         GameText text;
         if (!findGameText(text) || text.timestamp != kKnownTimestamp) {
-            EVR_LOG("%s: not available for this game version (timestamp 0x%X); the standard renderer", kTag,
-                    text.timestamp);
+            // Named when EternalVR knows the build (Game Pass), so a report says which.
+            const GameBuild* build = findGameBuild(text.timestamp);
+            EVR_LOG("%s: not available for this game version (%s, timestamp 0x%X); the standard renderer",
+                    kTag, build ? build->name : "a build EternalVR does not know", text.timestamp);
             return false;
         }
         return true;
@@ -140,8 +157,12 @@ void installViewSlotsEarly() {
             return;
         }
         view_slots::markChanged();
-        runtime_cvars::setParallelEyes(parallelEyesSettings().antiAliasingOff,
-                                       parallelEyesSettings().antiAliasingHeld);
+        runtime_cvars::ParallelEyesHolds holds;
+        holds.antiAliasingOff = parallelEyesSettings().antiAliasingOff;
+        holds.antiAliasingHeld = parallelEyesSettings().antiAliasingHeld;
+        holds.dlss = parallelEyesSettings().dlss;
+        holds.rtUpscaleHeld = parallelEyesSettings().rtUpscaleHold;
+        runtime_cvars::setParallelEyes(holds);
         if (parallelEyesSettings().alternateEyes) {
             EVR_LOG("%s: ETERNALVR_ALTERNATE_EYES is ignored (alternate eyes are a mode of the standard "
                     "renderer); "
@@ -161,13 +182,28 @@ void installViewSlotsEarly() {
         // from here on.
         view_slots::activate();
         const parallel_eyes::Settings& s = parallelEyesSettings();
-        EVR_LOG("%s: on: both eyes as two views of one render (%zu slot sites, %zu occlusion sites); async "
-                "compute off; view 1's clones %s; eye copy %s; parts off (ETERNALVR_TEST_VIEW_OFF): %s",
-                kTag, view_slots::slotSites(), view_slots::occlusionSites(), s.clones ? "on" : "off",
-                s.eyeCopy == parallel_eyes::EyeCopy::Screen  ? "each view's screen pass"
-                : s.eyeCopy == parallel_eyes::EyeCopy::Final ? "each view's final image (test)"
-                                                             : "off (test)",
-                parallel_eyes::partsText(s.off).c_str());
+        // One auto exposure for both eyes: view 1 reads the image view 0 writes (exposure_hooks.hpp).
+        installParallelEyesExposureHook(s.exposure);
+        if (s.antiAliasingHeld) {
+            installDlssMenuHooks(); // the game's video menu shows the anti-aliasing the layer holds
+        }
+        EVR_LOG(
+            "%s: on: both eyes as two views of one render (%zu slot sites, %zu occlusion sites); async "
+            "compute off; view 1's clones %s; eye copy %s; parts off (ETERNALVR_TEST_VIEW_OFF): %s; a "
+            "present carries %s; %s",
+            kTag, view_slots::slotSites(), view_slots::occlusionSites(), s.clones ? "on" : "off",
+            s.eyeCopy == parallel_eyes::EyeCopy::Screen  ? "each view's screen pass"
+            : s.eyeCopy == parallel_eyes::EyeCopy::Final ? "each view's final image (test)"
+                                                         : "off (test)",
+            parallel_eyes::partsText(s.off).c_str(),
+            s.latestPose ? "the newest view (ETERNALVR_TEST_PE_POSE=latest)"
+                         : "the view of the frame it shows",
+            !s.guessPairs ? "the eyes are a pair of one frame"
+            : s.showRepeats
+                ? "eye 1 guessed (ETERNALVR_TEST_PE_PAIRING=guess); a present whose eye 1 would repeat its "
+                  "last copy is shown (ETERNALVR_TEST_PE_REPEATS=show)"
+                : "eye 1 guessed (ETERNALVR_TEST_PE_PAIRING=guess); a present whose eye 1 would repeat its "
+                  "last copy is not shown (the last pair stays)");
     });
 }
 

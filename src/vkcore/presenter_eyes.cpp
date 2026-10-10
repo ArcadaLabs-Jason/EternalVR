@@ -238,6 +238,53 @@ bool copyViewImage(
     return true;
 }
 
+// Eye `eye` can be the copy of its view's image made in its own frame (view_snapshot.hpp): its size is the
+// eye's, and its format the ring's or one `family` can blit; else false (logged).
+bool snapshotUsable(DeviceData& dev, std::uint32_t family, int eye, const EyeCopyTarget& t) {
+    const view_snapshot::Copy& copy = t.snapshots[static_cast<std::size_t>(eye)];
+    const std::string what = "view " + std::to_string(eye) + " copy";
+    if (copy.extent.width != t.eyeExtent.width || copy.extent.height != t.eyeExtent.height) {
+        fail(eye, what + " " + std::to_string(copy.extent.width) + "x" + std::to_string(copy.extent.height) +
+                      ", eye " + std::to_string(t.eyeExtent.width) + "x" +
+                      std::to_string(t.eyeExtent.height));
+        return false;
+    }
+    if (copy.format != t.format) {
+        if (const char* why = blitUnsupported(dev, family, copy.format, t.format)) {
+            fail(eye, what + ": " + why);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Records eye `eye` from that copy (snapshotUsable), in TRANSFER_SRC.
+void recordSnapshot(DeviceData& dev, VkCommandBuffer cb, int eye, const EyeCopyTarget& t) {
+    const view_snapshot::Copy& copy = t.snapshots[static_cast<std::size_t>(eye)];
+    const bool blit = copy.format != t.format;
+    const auto x = eye * static_cast<std::int32_t>(t.eyeExtent.width);
+    const auto w = static_cast<std::int32_t>(t.eyeExtent.width);
+    const auto h = static_cast<std::int32_t>(t.eyeExtent.height);
+    if (blit) {
+        VkImageBlit region{};
+        region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.srcOffsets[1] = {w, h, 1};
+        region.dstOffsets[0] = {x, 0, 0};
+        region.dstOffsets[1] = {x + w, h, 1};
+        dev.vk.CmdBlitImage(cb, copy.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, t.slot,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
+    } else {
+        VkImageCopy region{};
+        region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.dstOffset = {x, 0, 0};
+        region.extent = {t.eyeExtent.width, t.eyeExtent.height, 1};
+        dev.vk.CmdCopyImage(cb, copy.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, t.slot,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    }
+}
+
 } // namespace
 
 bool eyeCopyRequested() {
@@ -254,6 +301,12 @@ void recordEyeCopies(DeviceData& dev,
     // The eyes that take the presented image: all of them, less the ones the eye copy filled (with the screen
     // pass's eye copy, eye 0 is the presented image). Nothing of the game is read after a guard trip.
     const bool viewImages = t.viewImages && mp_guard::allowsGameTouch();
+    // A pair (view_snapshot.hpp): each eye from its frame's copy of its own view's image, both or neither.
+    // When either copy cannot be used, the eyes are as without a pair (eye 0 the presented image, eye 1 view
+    // 1's), never one eye from the pair and the other from another frame.
+    const bool paired = t.snapshots[0].image && t.snapshots[1].image;
+    const bool pair =
+        viewImages && paired && snapshotUsable(dev, family, 0, t) && snapshotUsable(dev, family, 1, t);
     std::array<std::uint32_t, 2> eyes{};
     std::uint32_t count = 0;
     for (std::uint32_t i = 0; i < std::min<std::uint32_t>(t.eyeCount, 2); ++i) {
@@ -263,14 +316,22 @@ void recordEyeCopies(DeviceData& dev,
         // before the clones were last made it holds an older frame's or nothing, so eye 1 takes the
         // presented image, as eye 0.
         const bool viewImage = viewImages && eye < 2 && !(eye == 0 && eyeCopyScreen());
+        if (pair && eye < 2) {
+            recordSnapshot(dev, cb, static_cast<int>(eye), t);
+            continue;
+        }
         if (viewImage && eye == 1 && !viewSlotsView1Rendered()) {
             fail(1, "view 1 was not rendered for this frame");
+        } else if (viewImage && eye == 1 && !paired && t.snapshots[1].image &&
+                   snapshotUsable(dev, family, 1, t)) {
+            recordSnapshot(dev, cb, 1, t); // the guess (ETERNALVR_TEST_PE_PAIRING=guess): eye 1 alone
+            continue;
         } else if (viewImage && copyViewImage(dev, cb, family, static_cast<int>(eye), t)) {
             continue;
         }
         eyes[count++] = eye;
     }
-    if (viewImages && count == (eyeCopyScreen() ? 1u : 0u) && g_copies.fetch_add(1) % 50000 == 0) {
+    if (viewImages && count == (eyeCopyScreen() && !pair ? 1u : 0u) && g_copies.fetch_add(1) % 50000 == 0) {
         EVR_LOG("%s: %llu present(s) with each eye from its own view", kTag,
                 static_cast<unsigned long long>(g_copies.load()));
     }

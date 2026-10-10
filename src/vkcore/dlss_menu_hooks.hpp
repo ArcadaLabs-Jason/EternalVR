@@ -1,7 +1,7 @@
 #pragma once
 
-// The game's own DLSS entry in its video menu during a Route S session (stereo_seq/dlss_menu.hpp,
-// docs/VR_STEREO.md "The game's video menu"; Steam build 25216728).
+// The game's own DLSS entry in its video menu during a Route S or Parallel Eye Rendering session
+// (stereo_seq/dlss_menu.hpp, docs/VR_STEREO.md "The game's video menu"; Steam build 25216728).
 //
 // The video settings page fills its DLSS list from the profile's index (settings + 0x122A0, read by a
 // getter at RVA 0x1415E90 from the page refresh at RVA 0x15E8F30) and, when it is applied, writes the
@@ -19,9 +19,10 @@
 
 namespace evr::vkcore {
 
-// Route S start, after the per-eye TAA hooks. Locates the three sites (each signature once in .text, the
-// getter and setter call targets checked, the setter's r_antialiasing operand checked against the cvar)
-// and hooks them; logs and does nothing when any check fails.
+// Route S start, after the per-eye TAA hooks, or Parallel Eye Rendering's install (view_install.cpp: it holds
+// TAA or each view's DLSS, view_dlss.hpp). Locates the three sites (each signature once in .text, the getter
+// and setter call targets checked, the setter's r_antialiasing operand checked against the cvar) and hooks
+// them; logs and does nothing when any check fails.
 void installDlssMenuHooks();
 
 } // namespace evr::vkcore

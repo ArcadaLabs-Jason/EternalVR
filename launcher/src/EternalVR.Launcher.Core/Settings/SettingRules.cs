@@ -47,17 +47,22 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NeedsImmersive = "Only with cutscenes around you (Cutscene view).";
         public const string NeedsShownArms = "Only with Show arms on (Play tab): otherwise the arms are hidden in cutscenes too.";
         public const string NeedsDlss = "Only with DLSS (Anti-aliasing).";
-        public const string NotWithDlss = "Not with DLSS (Anti-aliasing).";
         public const string NotWithAntiAliasingOff = "Not with Anti-aliasing Off: screen-space reflections are off then.";
         public const string NotWithParallelEyes = "Not with Parallel Eye Rendering (Play tab).";
+        public const string NeedsParallelEyesBuild = "Not on this game version yet.";
         public const string NeedsNewerDlss = "Only with a newer DLSS than the game's (Version).";
         public const string NotWithAutoEyes =
             "Not with Alternate eyes on Auto (Advanced tab): Auto decides by how fast the game runs, which this holds to the headset's rate.";
 
-        /// <summary>Null when <paramref name="setting"/> applies, else why not (one sentence).</summary>
-        public static string WhyNot(Setting setting, LauncherSettings s)
+        /// <summary>
+        /// Null when <paramref name="setting"/> applies, else why not (one sentence). <paramref name="parallelEyesGame"/>: the
+        /// game is the build Parallel Eye Rendering runs on (<see cref="Game.BuildCheck.RunsParallelEyes"/>; true until the
+        /// launcher has checked it).
+        /// </summary>
+        public static string WhyNot(Setting setting, LauncherSettings s, bool parallelEyesGame = true)
         {
             bool stereo = s.Mode == VrMode.Stereo;
+            bool parallel = s.ParallelEyesOn(parallelEyesGame);
             bool handAim = s.Controllers && s.Aim == AimMode.Hand;
             switch (setting)
             {
@@ -137,17 +142,19 @@ namespace EternalVR.Launcher.Core.Settings
                     // Its passes take their eye from the standard renderer's eye tags; the layer turns it off with
                     // Parallel Eye Rendering (docs/VR_STEREO.md).
                     if (!stereo) return NeedsStereo;
-                    return s.ParallelEyesOn ? NotWithParallelEyes : null;
+                    return parallel ? NotWithParallelEyes : null;
                 case Setting.ParallelEyes:
+                    // The layer runs it on one Steam build only (Game Pass, another Steam build: the standard renderer).
+                    // With DLSS each view runs its own DLSS feature (src/vkcore/view_dlss.hpp).
                     if (!stereo) return NeedsStereo;
-                    return s.AntiAliasing == AntiAliasingMode.Dlss ? NotWithDlss : null;
+                    return parallelEyesGame ? null : NeedsParallelEyesBuild;
                 case Setting.AlternateEyes:
                     // Alternate eyes is a mode of the standard renderer; the layer ignores it with Parallel Eye Rendering.
                     if (!stereo) return NeedsStereo;
-                    return s.ParallelEyesOn ? NotWithParallelEyes : null;
+                    return parallel ? NotWithParallelEyes : null;
                 case Setting.FramePacing:
                     if (!stereo) return NeedsStereo;
-                    return s.AlternateEyes == AlternateEyesMode.Auto && !s.ParallelEyesOn ? NotWithAutoEyes : null;
+                    return s.AlternateEyes == AlternateEyesMode.Auto && !parallel ? NotWithAutoEyes : null;
                 case Setting.CutsceneShape:
                     if (!stereo) return NeedsStereo;
                     return s.Cutscenes == CutsceneView.Cinema ? null : NeedsCinema;
@@ -160,13 +167,13 @@ namespace EternalVR.Launcher.Core.Settings
             }
         }
 
-        /// <summary>Every setting that does not apply, with the reason.</summary>
-        public static IReadOnlyDictionary<Setting, string> Inapplicable(LauncherSettings s)
+        /// <summary>Every setting that does not apply, with the reason (<see cref="WhyNot"/>).</summary>
+        public static IReadOnlyDictionary<Setting, string> Inapplicable(LauncherSettings s, bool parallelEyesGame = true)
         {
             var map = new Dictionary<Setting, string>();
             foreach (Setting setting in Enum.GetValues(typeof(Setting)))
             {
-                var why = WhyNot(setting, s);
+                var why = WhyNot(setting, s, parallelEyesGame);
                 if (why != null) map[setting] = why;
             }
             return map;

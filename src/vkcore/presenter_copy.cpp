@@ -12,6 +12,7 @@
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/view_slots.hpp"
+#include "vkcore/view_snapshot.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/window_timing.hpp"
@@ -222,13 +223,16 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     // presenter_eyes).
     recordEyeCopies(dev, cb, family, source, sc.extent, sameShape,
                     EyeCopyTarget{slot.image, carry, ringFormat, eyeExtent, target.firstEye, target.eyeCount,
-                                  ringEyes == 2 && !settings.stereo.sequential && target.eyeCount == 2});
+                                  ringEyes == 2 && !settings.stereo.sequential && target.eyeCount == 2,
+                                  target.snapshots});
     if (target.kind != stereo_seq::PresentKind::Mono) { // ETERNALVR_VRS_TINT: the eye's reduced-rate areas
         vrs_nv::recordMarks(dev, cb, family, {slot.image, carry}, ringFormat,
                             target.kind == stereo_seq::PresentKind::EyeR ? 1 : 0,
                             {static_cast<std::int32_t>(target.firstEye * eyeExtent.width), 0}, eyeExtent);
     }
-    if (captureBuffer) {
+    if (captureBuffer && target.captureEyeR) { // Parallel Eye Rendering: both eyes, as the headset gets them
+        EyeCapture::recordRingEyes(dev, cb, slot.image, eyeExtent, {captureBuffer, target.captureEyeR});
+    } else if (captureBuffer) {
         EyeCapture::record(dev, cb, source, sc.extent, captureBuffer);
     }
     // A menu over a head-tracked frame leaves the GUI out of the eye: the window shows the panel's image.
@@ -306,6 +310,13 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
         waits.push_back(timeline);
         waitStages.push_back(VK_PIPELINE_STAGE_TRANSFER_BIT);
         waitValues.push_back(timelineValue);
+    }
+    for (const view_snapshot::Copy& c : target.snapshots) {
+        if (c.semaphore) { // the eye snapshots' copies it reads (view_snapshot.hpp)
+            waits.push_back(c.semaphore);
+            waitStages.push_back(VK_PIPELINE_STAGE_TRANSFER_BIT);
+            waitValues.push_back(c.wait);
+        }
     }
     // A present handed back never waits on its semaphore: the copy leaves it unsignalled.
     const std::array<VkSemaphore, 2> signals{sc.presentSemaphores[imageIndex], timeline};
@@ -427,8 +438,12 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     handBackImages(completed);
 
     if (seq) {
+        const std::uint64_t dropped = framesDropped;
         const VkSemaphore semaphore =
             seqCopyForPresent(queue, family, sc, imageIndex, info, *fc, completed, match);
+        if (framesDropped != dropped) { // no slot free, the copy not submitted or the pair's record missing
+            frameLogEyes.lastPresent.store(FrameRepeat::NotHanded);
+        }
         if (semaphore != VK_NULL_HANDLE) {
             logCopyStats(sc, family);
             copiedSwapchain = gameSwapchain;
@@ -439,35 +454,65 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     const std::uint32_t slotIndex = acquireFreeSlot(*fc, completed);
     if (slotIndex == kRingSize) {
         ++framesDropped;
+        frameLogEyes.lastPresent.store(FrameRepeat::NotHanded);
+        return VK_NULL_HANDLE;
+    }
+    // Parallel Eye Rendering's eye copy (presenter_stereo.cpp): a two-eye ring outside Route S.
+    const bool eyeCopy = ringEyes == 2 && !settings.stereo.sequential;
+    const std::optional<view_snapshot::Pick> snapshot =
+        eyeCopy && mp_guard::allowsGameTouch()
+            ? view_snapshot::forPresent(info->pWaitSemaphores, info->waitSemaphoreCount,
+                                        sc.images[imageIndex])
+            : std::nullopt;
+    if (snapshot && snapshot->drop) { // no new pair (or the guess's pair a frame apart): the headset keeps
+        view_snapshot::notRead(*snapshot); // the last one
+        frameLogEyes.lastPresent.store(snapshot->dropWhy);
+        ring[slotIndex].state.store(kSlotFree);
         return VK_NULL_HANDLE;
     }
     const bool toWindow = decideWindow(info, stereo_seq::PresentKind::Mono);
-    // Parallel Eye Rendering's eye copy (presenter_stereo.cpp): a two-eye ring outside Route S.
-    const bool eyeCopy = ringEyes == 2 && !settings.stereo.sequential;
-    const VkBuffer buffer = monoCaptureBuffer(sc, completed); // the in-headset capture (bug_capture.hpp)
-    const std::uint64_t value = submitCopy(
-        queue, family, info, sc, imageIndex, *fc, slotIndex,
-        CopyTarget{0, eyeCopy ? 2u : 1u, false, settings.ui.enabled, stereo_seq::MirrorStep::None, toWindow},
-        buffer);
-    captureCopied(buffer, value, true);
+    // The in-headset capture (bug_capture.hpp): with the eye copy, both halves of the slot.
+    const std::array<VkBuffer, 2> buffers =
+        eyeCopy && ring[slotIndex].copySource
+            ? ringCaptureBuffers(sc, completed, snapshot ? snapshot->view : 0)
+            : std::array<VkBuffer, 2>{monoCaptureBuffer(sc, completed)};
+    CopyTarget target{0, eyeCopy ? 2u : 1u, false, settings.ui.enabled};
+    target.toWindow = toWindow;
+    target.captureEyeR = buffers[1];
+    if (OneShot* shot = buffers[0] ? capture.once() : nullptr; shot && shot->frames > 1 && eyeCopy) {
+        shot->sidecar += view_snapshot::describe(snapshot); // which copy eye 1 of this burst frame shows
+    }
+    if (snapshot) {
+        target.snapshots = snapshot->eyes;
+    }
+    const std::uint64_t value =
+        submitCopy(queue, family, info, sc, imageIndex, *fc, slotIndex, target, buffers[0]);
+    if (snapshot && value != 0) {
+        view_snapshot::read(*snapshot, timeline, value);
+    } else if (snapshot) {
+        view_snapshot::notRead(*snapshot);
+    }
+    captureCopied(buffers[0], value, true);
     if (value == 0) {
         ring[slotIndex].state.store(kSlotFree);
         ++framesDropped;
+        frameLogEyes.lastPresent.store(FrameRepeat::NotHanded);
         return VK_NULL_HANDLE;
     }
     RingSlot& slot = ring[slotIndex];
+    slot.eyes = eyeFramesOf(snapshot);
     slot.hasView = false;
     if (settings.mode == Mode::HeadTracked && mp_guard::allowsGameTouch()) {
         std::uint64_t gap = 0;
-        slot.hasView = latestView(slot.view, gap);
+        slot.hasView = viewForPresent(snapshot ? snapshot->view : 0, slot.view, gap);
         if (eyeCopy) {
             slot.view.showEyes = slot.hasView && slot.view.stereo; // the eye copy's two-eye ring
         }
         if (slot.hasView) {
-            ++presentsWithView;
-            presentSeqGapSum += gap;
+            ++presentViews.withView;
+            presentViews.seqGapSum += gap;
         } else {
-            ++presentsWithoutView;
+            ++presentViews.withoutView;
         }
         if (loggedPresents < 12) {
             ++loggedPresents;

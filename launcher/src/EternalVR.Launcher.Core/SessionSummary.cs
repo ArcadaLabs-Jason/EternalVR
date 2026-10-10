@@ -23,7 +23,7 @@ namespace EternalVR.Launcher.Core
     /// Also the mod's controller actions the runtime bound (<c>controllers: 0 of 12 action(s) bound</c>) and whether the layer
     /// warned that no hand pose arrived in play (<see cref="UnboundControls"/>), and how often the game's video memory was over
     /// the budget Windows gives it, or near it (<c>vram: the process uses U MB ..., budget B MB ...; ... N of M reading(s) over
-    /// the budget</c>, also every 10 s).
+    /// the budget</c>, also every 10 s), and whether Parallel Eye Rendering ran or fell back and why (<see cref="ParallelEyesRun"/>).
     /// </summary>
     public sealed class SessionSummary
     {
@@ -113,6 +113,8 @@ namespace EternalVR.Launcher.Core
         /// <summary>The share (0 to 1) of <see cref="VramWindows"/> whose last reading used <see cref="VramNearBudget"/> of the
         /// budget or more (over-budget windows included).</summary>
         public double VramNearShare { get; private set; }
+        /// <summary>Whether Parallel Eye Rendering ran, or fell back and why; <see cref="ParallelEyesState.NotAsked"/> without its lines.</summary>
+        public ParallelEyesRun ParallelEyes { get; private set; } = new ParallelEyesRun();
 
         /// <summary>The summary of a layer log's lines; null when it holds no display period (no VR session).</summary>
         public static SessionSummary FromLines(IEnumerable<string> lines)
@@ -127,6 +129,7 @@ namespace EternalVR.Launcher.Core
             foreach (var line in lines ?? Enumerable.Empty<string>())
             {
                 if (line == null) continue;
+                s.ParallelEyes.Read(line);
                 var v = VramLine.Match(line);
                 if (v.Success)
                 {
@@ -297,6 +300,9 @@ namespace EternalVR.Launcher.Core
         public string Describe()
         {
             var parts = new List<string>();
+            // First what ran: a tester's report starts from whether the eyes were rendered in parallel.
+            var parallel = ParallelEyes.Sentence();
+            if (parallel.Length > 0) parts.Add(parallel);
             if (OtherRates.Count > 0)
                 parts.Add(string.Format(CultureInfo.InvariantCulture, "The headset ran at {0} Hz, and at {1}.", RefreshHz,
                     string.Join(" and at ", OtherRates.Select(kv => kv.Key.ToString(CultureInfo.InvariantCulture) + " Hz for " + Duration(kv.Value)))));
@@ -359,13 +365,14 @@ namespace EternalVR.Launcher.Core
 
         /// <summary>The numbers for the launcher log.</summary>
         public string LogText() => string.Format(CultureInfo.InvariantCulture,
-            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%{13}; other rates {5}; new stereo pairs/s at the refresh rate {6}; headset frames/s at the refresh rate {14}; runtime '{7}', system '{8}'; video memory over the budget in {10} of {11} window(s), at 95% of it or more in {12}; controls {9}",
+            "session refresh: {0} Hz over {1} window(s) of 10 s{2}; held to {3} Hz in {4:0.0}%{13}; other rates {5}; new stereo pairs/s at the refresh rate {6}; headset frames/s at the refresh rate {14}; runtime '{7}', system '{8}'; parallel eyes {15}; video memory over the budget in {10} of {11} window(s), at 95% of it or more in {12}; controls {9}",
             RefreshHz, Windows, InPlay ? " in play" : " (not enough play: the whole session)", HeldHz, HeldShare * 100,
             OtherRates.Count == 0 ? "none" : string.Join(", ", OtherRates.Select(kv => kv.Key + " Hz x" + kv.Value)),
             GameRate.HasValue ? GameRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown", RuntimeName, SystemName, ControlsText(),
             (int)Math.Round(VramOverShare * VramWindows, MidpointRounding.AwayFromZero), VramWindows,
             (int)Math.Round(VramNearShare * VramWindows, MidpointRounding.AwayFromZero), HeldByTime ? " of the time (the layer's refresh summary)" : " of the windows",
-            HeadsetRate.HasValue ? HeadsetRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown");
+            HeadsetRate.HasValue ? HeadsetRate.Value.ToString("0.0", CultureInfo.InvariantCulture) : "unknown",
+            ParallelEyes.Text() ?? "not asked");
 
         private static double Median(List<double> sorted)
         {

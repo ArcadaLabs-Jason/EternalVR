@@ -114,6 +114,9 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     // (ETERNALVR_CAMERA_ANIMATIONS=1) back on top of the head below.
     const camera_anim::Frame anim = camera_anim::frame(player, gameAxis, cutscene, controllers::forcedView());
     ViewRecord record;
+    record.gameOriginValid = true;
+    record.gameOrigin = {origin[0], origin[1], origin[2]};
+    record.gameYawDegrees = std::atan2(gameAxis.forward.y, gameAxis.forward.x) * 57.29578f;
     bool positionValid = false;
     std::optional<float> headAboveFloor;
     {

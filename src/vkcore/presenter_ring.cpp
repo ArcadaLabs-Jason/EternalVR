@@ -25,15 +25,30 @@ bool XrPresenter::Impl::importRing(const std::array<HANDLE, kRingSize>& imageHan
     formatInfo.format = ringFormat;
     formatInfo.type = VK_IMAGE_TYPE_2D;
     formatInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    formatInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkExternalImageFormatProperties externalProps{VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES};
     VkImageFormatProperties2 formatProps{VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2, &externalProps};
-    VkResult r = ivk.GetPhysicalDeviceImageFormatProperties2(dev.physicalDevice, &formatInfo, &formatProps);
+    // Also a copy source when the import allows it (the in-headset capture of both eyes reads the slot).
+    VkResult r = VK_ERROR_FORMAT_NOT_SUPPORTED;
+    VkImageUsageFlags usage = 0;
+    const VkImageUsageFlags usages[] = {VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    for (const VkImageUsageFlags u : usages) {
+        formatInfo.usage = u;
+        r = ivk.GetPhysicalDeviceImageFormatProperties2(dev.physicalDevice, &formatInfo, &formatProps);
+        if (r == VK_SUCCESS && (externalProps.externalMemoryProperties.externalMemoryFeatures &
+                                VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT)) {
+            usage = u;
+            break;
+        }
+    }
     const VkExternalMemoryFeatureFlags memFeatures =
         externalProps.externalMemoryProperties.externalMemoryFeatures;
-    EVR_LOG("presenter: D3D12 resource import for format %d: result %d, features 0x%x", ringFormat, r,
-            memFeatures);
-    if (r != VK_SUCCESS || !(memFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT)) {
+    EVR_LOG("presenter: D3D12 resource import for format %d: result %d, features 0x%x%s", ringFormat, r,
+            memFeatures,
+            usage == 0                                  ? ""
+            : (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? " (copy source too)"
+                                                        : " (not as a copy source: no capture of both eyes)");
+    if (usage == 0) {
         return false;
     }
 
@@ -52,7 +67,8 @@ bool XrPresenter::Impl::importRing(const std::array<HANDLE, kRingSize>& imageHan
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        imageInfo.usage = usage;
+        slot.copySource = (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         r = dev.vk.CreateImage(dev.device, &imageInfo, nullptr, &slot.image);
@@ -367,6 +383,7 @@ std::uint32_t XrPresenter::Impl::acquireFreeSlot(const FamilyCommands& fc, std::
             slot.state.store(kSlotFree);
             continue;
         }
+        slot.eyes = {}; // Parallel Eye Rendering's eye copy sets them; other copies show none
         nextSlot = (candidate + 1) % kRingSize;
         return candidate;
     }
@@ -378,6 +395,7 @@ void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value
     slot.value.store(value);
     slot.published.store(value);
     slot.state.store(kSlotFree);
+    frameLogEyes.lastPresent.store(FrameRepeat::NoPresent); // until a present hands over none
     latest.store((value << 2) | slotIndex);
     ++framesCopied;
     frame_pacing::onHandOver(); // the present hook waits for the headset's next frame under ETERNALVR_PACE

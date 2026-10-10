@@ -320,6 +320,7 @@ namespace EternalVR.Launcher
                 NewestDlss = NewestDlss(verify: true),
                 PlayerSsdo = GameLayout.PlayerCvar(g.Locations, "r_SSDO"),
                 PlayerSsr = GameLayout.PlayerCvar(g.Locations, "r_SSR"),
+                ParallelEyesGame = g.Facts.Build?.RunsParallelEyes == true,
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);

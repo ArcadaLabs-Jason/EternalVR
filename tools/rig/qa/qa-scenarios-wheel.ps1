@@ -207,7 +207,7 @@ $wheelScenarios = @(
     },
     @{
         Name = 'thumbrest-slots'; Kind = 'game'
-        Proves = 'Weapon by direction: the turn stick held right picks weapon slot 3 on letting go, and the game''s wheel never opens'
+        Proves = 'Weapon by direction: the turn stick held right picks weapon slot 2 (the heavy cannon, as on the game''s wheel) on letting go, and the game''s wheel never opens'
         Env = @($script:QaWheelOn, $script:QaWheelWindow, 'ETERNALVR_THUMBREST_PICK=slots')
         Input = @()
         Timeline = {
@@ -221,9 +221,9 @@ $wheelScenarios = @(
         }
         Asserts = {
             param($c)
-            Test-QaPresent $c 'thumb-rest wheel edge: rest sensors on both hands, picks with weapon by direction (up=1,'
-            Test-QaPresent $c 'thumb-rest wheel: weapon_slot_3 picked by the right stick pointing right'
-            Test-QaPresent $c 'controllers: action weapon_slot_3'
+            Test-QaPresent $c 'thumb-rest wheel edge: rest sensors on both hands, picks with weapon by direction (up=1,up_right=5,'
+            Test-QaPresent $c 'thumb-rest wheel: weapon_slot_2 picked by the right stick pointing right'
+            Test-QaPresent $c 'controllers: action weapon_slot_2'
             Test-QaAbsent $c 'controllers: action weapon_wheel'
         }
     },

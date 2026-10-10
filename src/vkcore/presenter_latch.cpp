@@ -3,6 +3,9 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "vkcore/view_slots.hpp"
+
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -73,6 +76,21 @@ bool XrPresenter::Impl::latestView(ViewRecord& out, std::uint64_t& gap) {
     }
     out = record;
     gap = latestSeq - seq;
+    return true;
+}
+
+bool XrPresenter::Impl::viewForPresent(std::uint64_t pick, ViewRecord& out, std::uint64_t& gap) {
+    if (!latestView(out, gap)) {
+        return false;
+    }
+    // Parallel Eye: the view of the frame shown (eye 1's copy), not the newest, a frame off on many
+    // presents (judder on head turns); ETERNALVR_TEST_PE_POSE=latest: the newest.
+    if (pick != 0 && !parallelEyesSettings().latestPose) {
+        const std::uint64_t newest = out.seq + gap;
+        if (viewBySeq(pick, out)) {
+            gap = newest - std::min(newest, out.seq);
+        }
+    }
     return true;
 }
 

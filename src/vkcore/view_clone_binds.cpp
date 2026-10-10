@@ -1,6 +1,7 @@
 // Parallel Eye Rendering: view 1's passes store and bind its clones instead of the engine's shared targets
 // (view_clone_map.hpp). Every hook here changes only view 1's work, and only while parallelEyesTouch() allows
-// it (view_slots.hpp).
+// it (view_slots.hpp). They also count each clone's uses for the census (view_clone_census.cpp), including
+// clones that turn up on other command contexts than view 1's.
 
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -64,6 +65,24 @@ std::uintptr_t context1() {
     return reinterpret_cast<std::uintptr_t>(viewSlotsContext1());
 }
 
+// The transparency pass's own parameter block, render context +0x706DD0 (constructed at 0x1C59729): job
+// 0x1C575F0 copies the view's main block into it (0x1C579CC) and binds the scene mips sceneMip0..4 (global
+// slots 0x66E3210..0x66E3270) and viewRefractionMask on it (0x1C63A80, called at 0x1C579DA). The refraction
+// update points the command context's material parameters at it (ctx +0x110, 0x1C65650 via 0x1C6434C), so the
+// transparent draws after it (glass) resolve their scene mips there. It is not a command context's block, so
+// view 1's glass refracted view 0's scene mips: eye L's picture in eye R's glass (rig 2026-10-09, Urdak).
+constexpr std::size_t kTransparencyBlock = 0x706DD0;
+constexpr std::uint32_t kTransparencyBlockBind = 0x1C579D3; // lea rcx, [r13 + 0x706DD0]; call 0x1C63A80
+// Set by checkBinds() before the hooks install, never changed after: the bytes checked out and the block is
+// not left out (ETERNALVR_TEST_VIEW_CLONE_SKIP=tblock).
+bool g_transparencyBlock = false;
+std::atomic<std::uint64_t> g_transparencyBinds{0};
+
+bool isView1TransparencyBlock(std::uintptr_t block) {
+    const std::uintptr_t c1 = context1();
+    return g_transparencyBlock && c1 && block == c1 + kTransparencyBlock;
+}
+
 // ---- The store hooks ----
 
 template <std::size_t I>
@@ -79,8 +98,12 @@ void onStore(HookRegisters& r) {
     if (const std::uintptr_t c = map ? lookup(*map, value) : 0) {
         value = c;
         g_stored[0].fetch_add(1, std::memory_order_relaxed);
+        countUse(*map, c, clone_census::kStored);
     } else {
         g_stored[1].fetch_add(1, std::memory_order_relaxed);
+        if (map) {
+            countMiss(*map, value, clone_census::kStored);
+        }
     }
 }
 
@@ -133,6 +156,7 @@ void onPyramidBind(HookRegisters& r) {
     if (const std::uintptr_t c = lookup(*map, r.r8)) {
         r.r8 = c;
         g_pyramidBinds.fetch_add(1, std::memory_order_relaxed);
+        countUse(*map, c, clone_census::kImageBinds);
     }
 }
 
@@ -142,14 +166,21 @@ void onTargetBind(HookRegisters& r) {
     if (!map || !parallelEyesTouch()) {
         return;
     }
+    const bool view1 = isView1Context(r.rcx, false);
+    if (!view1) {
+        countUse(*map, r.rdx, clone_census::kOtherContexts); // before the screen pass's own swap
+    }
     notePassTargetBind(r, map); // view 1's screen pass (its own command contexts are not view 1's)
-    if (!isView1Context(r.rcx, false)) {
+    if (!view1) {
         return;
     }
     const std::uintptr_t c = lookup(*map, r.rdx);
     g_targetBinds[c ? 0 : 1].fetch_add(1, std::memory_order_relaxed);
     if (c) {
         r.rdx = c;
+        countUse(*map, c, clone_census::kTargetBinds);
+    } else {
+        countMiss(*map, r.rdx, clone_census::kTargetBinds);
     }
 }
 
@@ -158,28 +189,51 @@ void onImageBind(HookRegisters& r) {
         return;
     }
     const Map* map = currentMap();
+    const bool image = map && r.r8 >= kImageHandle;
+    const bool transparency = image && isView1TransparencyBlock(r.rcx);
+    const bool view1 = image && (isView1Context(r.rcx, true) || transparency);
+    if (transparency) {
+        g_transparencyBinds.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (image && !view1) {
+        // View 1's screen pass binds its own output on the engine's context.
+        countUse(*map, r.r8 - kImageHandle,
+                 screenPassOutputBind(r) ? clone_census::kImageBinds : clone_census::kOtherContexts);
+    }
     if (swapPassImageBind(r, map)) {
         return;
     }
-    if (!map || r.r8 < kImageHandle || !isView1Context(r.rcx, true)) {
+    if (!view1) {
         return;
     }
     const std::uintptr_t c = lookup(*map, r.r8 - kImageHandle);
     g_imageBinds[c ? 0 : 1].fetch_add(1, std::memory_order_relaxed);
     if (c) {
         r.r8 = c + kImageHandle;
+        countUse(*map, c, clone_census::kImageBinds);
+    } else {
+        countMiss(*map, r.r8 - kImageHandle, clone_census::kImageBinds);
     }
 }
 
 void onMarkWritten(HookRegisters& r) {
     const Map* map = currentMap();
-    if (!map || !isView1Context(r.rdx, false) || !parallelEyesTouch()) {
+    if (!map || !parallelEyesTouch()) {
+        return;
+    }
+    if (!isView1Context(r.rdx, false)) {
+        // View 1's screen pass marks its own output on the engine's context.
+        countUse(*map, r.rcx,
+                 r.rcx == map->screenImage ? clone_census::kMarks : clone_census::kOtherContexts);
         return;
     }
     const std::uintptr_t c = lookup(*map, r.rcx);
     g_marks[c ? 0 : 1].fetch_add(1, std::memory_order_relaxed);
     if (c) {
         r.rcx = c;
+        countUse(*map, c, clone_census::kMarks);
+    } else {
+        countMiss(*map, r.rcx, clone_census::kMarks);
     }
 }
 
@@ -198,6 +252,26 @@ bool checkBinds() {
     if (std::memcmp(game + kPyramidBindSite, kBindBytes, sizeof(kBindBytes)) != 0) {
         EVR_LOG("%s: RVA 0x%X is not the depth pyramid's bind", kTag, kPyramidBindSite);
         return false;
+    }
+    // `lea rcx, [r13 + 0x706DD0]; call 0x1C63A80`: without it view 1's glass keeps view 0's scene mips.
+    constexpr std::byte kBlockBytes[] = {std::byte{0x49}, std::byte{0x8D}, std::byte{0x8D}, std::byte{0xD0},
+                                         std::byte{0x6D}, std::byte{0x70}, std::byte{0x00}, std::byte{0xE8}};
+    const std::byte* call = game + kTransparencyBlockBind + 7;
+    std::int32_t rel = 0;
+    std::memcpy(&rel, call + 1, sizeof(rel));
+    const bool left = (parallelEyesSettings().cloneSkip.groups & parallel_eyes::kSkipTransparencyBlock) != 0;
+    if (std::memcmp(game + kTransparencyBlockBind, kBlockBytes, sizeof(kBlockBytes)) != 0 ||
+        call + 5 + rel != game + 0x1C63A80) {
+        EVR_LOG("%s: RVA 0x%X is not the transparency pass's block bind; view 1's glass keeps view 0's scene "
+                "mips",
+                kTag, kTransparencyBlockBind);
+    } else if (left) {
+        EVR_LOG(
+            "%s: the transparency pass's block keeps the engine's scene mips (ETERNALVR_TEST_VIEW_CLONE_SKIP="
+            "tblock): view 1's glass refracts view 0's picture",
+            kTag);
+    } else {
+        g_transparencyBlock = true;
     }
     return true;
 }
@@ -222,7 +296,9 @@ bool installBinds() {
 
 void reportBinds() {
     EVR_LOG("%s: view 1's stores cloned %llu / not %llu; pyramid binds %llu; target binds cloned %llu / not "
-            "%llu, image binds cloned %llu / not %llu; write marks cloned %llu / not %llu",
+            "%llu, image binds cloned %llu / not %llu, binds on the transparency block %llu; write marks "
+            "cloned %llu "
+            "/ not %llu",
             kTag, static_cast<unsigned long long>(g_stored[0].load()),
             static_cast<unsigned long long>(g_stored[1].load()),
             static_cast<unsigned long long>(g_pyramidBinds.load()),
@@ -230,6 +306,7 @@ void reportBinds() {
             static_cast<unsigned long long>(g_targetBinds[1].load()),
             static_cast<unsigned long long>(g_imageBinds[0].load()),
             static_cast<unsigned long long>(g_imageBinds[1].load()),
+            static_cast<unsigned long long>(g_transparencyBinds.load()),
             static_cast<unsigned long long>(g_marks[0].load()),
             static_cast<unsigned long long>(g_marks[1].load()));
 }

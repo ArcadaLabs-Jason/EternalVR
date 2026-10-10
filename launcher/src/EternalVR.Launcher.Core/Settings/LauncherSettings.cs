@@ -137,9 +137,14 @@ namespace EternalVR.Launcher.Core.Settings
         /// (<c>ETERNALVR_PARALLEL_EYES=1</c>: the layer's two-view renderer on the game version it knows, docs/VR_STEREO.md
         /// "Parallel Eye Rendering"). Experimental, off by default.</summary>
         public bool ParallelEyes { get; set; } = false;
-        /// <summary>Parallel Eye Rendering in this launch: on, in stereo and not with DLSS (the layer keeps the standard
-        /// renderer with DLSS, which runs DLSS per eye).</summary>
-        public bool ParallelEyesOn => ParallelEyes && Mode == VrMode.Stereo && AntiAliasing != AntiAliasingMode.Dlss;
+        /// <summary>Parallel Eye Rendering asked of the layer in this launch: on and in stereo (with DLSS each view runs its
+        /// own DLSS feature, src/vkcore/view_dlss.hpp).</summary>
+        public bool ParallelEyesAsked => ParallelEyes && Mode == VrMode.Stereo;
+        /// <summary>Parallel Eye Rendering runs in this launch: asked (<see cref="ParallelEyesAsked"/>) on a game build it
+        /// runs on (<paramref name="gameRuns"/>, <see cref="Game.BuildCheck.RunsParallelEyes"/>). On any other build the layer
+        /// would refuse it and keep the standard renderer: the launch does not ask for it, and Alternate eyes and Foveation
+        /// apply as without it.</summary>
+        public bool ParallelEyesOn(bool gameRuns) => gameRuns && ParallelEyesAsked;
         /// <summary>Motion controllers drive the game (docs/VR_CONTROLLERS.md); off leaves keyboard, mouse and pad only.</summary>
         public bool Controllers { get; set; } = true;
         public AimMode Aim { get; set; } = AimMode.Hand;

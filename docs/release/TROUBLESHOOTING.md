@@ -295,6 +295,7 @@ game at half its refresh rate or less (`throttled_share=`, 0 to 1). The usual re
 | No headset found yet | Connect the headset and start its runtime (Virtual Desktop, SteamVR, Link) |
 | The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics) |
 | The headset disconnected or its runtime stopped | Quit the game and start again from the launcher |
+| The headset runtime would not start VR for the game | Restart the headset runtime (Virtual Desktop, SteamVR, Link), then the game |
 | An online mode or a multiplayer invite switched VR off | By design; restart from the launcher |
 
 No `eternalvr-status.txt` and no `LAYER_LOADED` in the session folder means the mod was not loaded at all:

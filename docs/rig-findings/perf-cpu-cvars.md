@@ -22,8 +22,12 @@ counts twice, and the critical path is each eye's command recording and submissi
 - `profile_skipRenderingDefaults` ("skip setting rendering cvar values based on menu quality settings") is
   registered and never read: it does nothing in this build.
 - **Flags** (registration 0x375C70): 0x1 bool, 0x2 int, 0x4 float, 0x8 cheat (added unless 0x10 "no cheat",
-  0x10000 or 0x20000 is given), 0x4000 command line only, 0x8000 read-only. A change without force to a cvar
-  without 0x10 is refused with "Not allowed" when the game's cheat check says so; the menu's setters and the
+  0x10000 or 0x20000 is given), 0x4000 command line only, 0x8000 read-only, 0x10000 saved to
+  `DOOMEternalConfig.cfg`, 0x20000 saved to `DOOMEternalConfig.local` (the two config writers, 0x4363A7 and
+  0x4365EA, write `configVersion 9` and then pass that one bit to the cvar system's flagged write, vtable +0xC0;
+  for example `r_swapInterval` 0x10012 is in the .cfg, `r_SSR` 0x20012 and `r_hdrBloom` 0x20001 in the .local).
+  A cvar with neither bit is never saved. A change without force to a cvar without 0x10 is refused with
+  "Not allowed" when the game's cheat check says so; the menu's setters and the
   layer (force true) are not. "Resetting cheat cvar: %s" (0x179B270) can put cheat cvars back to their defaults,
   which the layer's hold then undoes at the next present.
 - **The value block** a cvar object points to: +0x00 the string, +0x08 the integer, +0x0C the float (the renderer

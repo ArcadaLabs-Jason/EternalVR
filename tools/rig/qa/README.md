@@ -60,7 +60,7 @@ restores the save, then checks the layer log (the stage's logs, else the run fol
 | thumbrest-cancel-then-flick | Window 1 s: a push to 0.4 is cancelled, then a flick with the thumb still resting turns; exactly one `armed` line, no `weapon_wheel` |
 | thumbrest-quick-pick | The turn stick right for about 0.2 s, then let go: the wheel held pointing right, let go after the hold (`the game opens its wheel ... held at least`), no quick switch, the held item changes |
 | thumbrest-extreme | `ETERNALVR_THUMBREST_WHEEL=extreme`: the turn stick opens the wheel with no thumb resting (`armed: the turn stick picks weapons; the left thumb rest gives turning back`), and turns with the left thumb on its rest |
-| thumbrest-slots | `ETERNALVR_THUMBREST_PICK=slots`: the turn stick held right picks `weapon_slot_3` on letting go; no `weapon_wheel` |
+| thumbrest-slots | `ETERNALVR_THUMBREST_PICK=slots`: the turn stick held right picks `weapon_slot_2` on letting go (the game's wheel layout); no `weapon_wheel` |
 | thumbrest-menu | The pause menu up (`action pause`, then `gameplay input back on`): a resting thumb and a pushed stick arm nothing |
 | thumbrest-slowdown | `ETERNALVR_THUMBREST_SLOWDOWN=0`: `weaponWheel_slowTimeScale <value> -> 1 while the wheel is open`, then `back to <value>, the game's own value (the wheel closed)` with the same value |
 | launcher-e2e | `launcher\tests\e2e.ps1 -Root <Out>\e2e -Runtime <simulator json>` prints `E2E OK` (skipped without a Release build) |

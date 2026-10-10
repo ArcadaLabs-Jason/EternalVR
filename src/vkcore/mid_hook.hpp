@@ -35,9 +35,9 @@ using MidHookEditCallback = void (*)(HookRegisters& registers);
 // Installs a hook at `target` that calls `callback`. Hooks stay installed for the life of the process
 // (the layer DLL is pinned first). At most kMaxMidHooks hooks exist. On failure `error` says why and
 // the game's code is left untouched. Sized at about twice the most a session can use: 48 measured with
-// bHaptics and the free off hand (debug commands add more), plus Parallel Eye Rendering's 168 (its view
-// slots, redirects, binning edges and view 1's clones), so a new feature does not quietly push an older one
-// out.
+// bHaptics and the free off hand (debug commands add more), plus Parallel Eye Rendering's 176 (its view
+// slots, redirects, binning edges, shared state and view 1's clones), so a new feature does not quietly push
+// an older one out.
 inline constexpr int kMaxMidHooks = 448;
 bool installMidHook(void* target, MidHookCallback callback, std::string& error);
 bool installMidHookEdit(void* target, MidHookEditCallback callback, std::string& error);
@@ -45,8 +45,8 @@ bool installMidHookEdit(void* target, MidHookEditCallback callback, std::string&
 // Detours the function at `target` to `destination`, which has the same signature; `original` receives a
 // trampoline that runs the game's own function. Installed for the life of the process like the mid hooks;
 // at most kMaxInlineHooks (about twice the 13 measured with the launcher's newer DLSS DLL plus Parallel Eye
-// Rendering's 9). On failure `error` says why and the game's code is left untouched.
-inline constexpr int kMaxInlineHooks = 48;
+// Rendering's 17). On failure `error` says why and the game's code is left untouched.
+inline constexpr int kMaxInlineHooks = 64;
 bool installInlineHook(void* target, void* destination, void** original, std::string& error);
 
 // How many hooks of each kind are installed, for the log.

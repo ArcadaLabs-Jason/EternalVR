@@ -48,6 +48,9 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>Its controls (<see cref="SessionSummary.ControlsText"/>) and, when none was bound, the cause the launcher named
         /// (<see cref="UnboundControls"/>), such as "0 of 12 bound; cause: SteamVR binding for DOOM Eternal".</summary>
         public string SessionControls { get; set; }
+        /// <summary>Whether Parallel Eye Rendering ran in it, or fell back and why (<see cref="ParallelEyesRun.Text"/>), such as
+        /// "off: not with DLSS"; null when the launch did not ask for it.</summary>
+        public string SessionParallelEyes { get; set; }
 
         public HeadsetFacts Clone() => (HeadsetFacts)MemberwiseClone();
     }
@@ -113,6 +116,7 @@ namespace EternalVR.Launcher.Core.Launch
                     case "session_refresh": facts.SessionRefresh = NullIfEmpty(value); break;
                     case "session_summary": facts.SessionText = NullIfEmpty(value); break;
                     case "session_controls": facts.SessionControls = NullIfEmpty(value); break;
+                    case "session_parallel_eyes": facts.SessionParallelEyes = NullIfEmpty(value); break;
                 }
             }
             facts.Limits = limits.Recommended.IsEmpty ? null : limits;
@@ -154,6 +158,7 @@ namespace EternalVR.Launcher.Core.Launch
             Add("session_refresh", facts.SessionRefresh);
             Add("session_summary", facts.SessionText);
             Add("session_controls", facts.SessionControls);
+            Add("session_parallel_eyes", facts.SessionParallelEyes);
             return sb.ToString();
         }
 
@@ -175,6 +180,7 @@ namespace EternalVR.Launcher.Core.Launch
             facts.SessionText = text.Length == 0 ? null : text;
             var cause = UnboundControls.ReportText(unbound);
             facts.SessionControls = summary.ControlsText() + (cause == null ? string.Empty : "; cause: " + cause);
+            facts.SessionParallelEyes = summary.ParallelEyes.Text();
             return facts;
         }
 

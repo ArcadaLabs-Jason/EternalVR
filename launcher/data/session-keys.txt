@@ -35,3 +35,9 @@ r_waterPostProcess
 # config is not known; if a save ever caught the held 1, the restore puts the flat value back. Harmless when the
 # game never saves it.
 weaponWheel_slowTimeScale
+# Parallel Eye Rendering turns async compute off at device setup; the Settings page then saves
+# r_presentFromAsync 0 (archived, 0x15E0E2F) because the async queue cannot present.
+r_presentFromAsync
+# The rest of its held set needs no entry: r_useNewDepthDownscale and r_skipFlares (registered with flags 0x1)
+# and r_maxRenderViews (0x4002) have neither save flag (0x10000 .cfg, 0x20000 .local;
+# docs/rig-findings/perf-cpu-cvars.md section 1), so the game never writes them to its config.

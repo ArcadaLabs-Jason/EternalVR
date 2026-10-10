@@ -173,7 +173,8 @@ namespace EternalVR.Launcher
             // Texture streaming and the CPU Saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).
             if (StreamingRow() is SettingRow streaming) pictureRows.Add(streaming);
             // Both eyes' rendering work at the same time, for processor-limited systems (experimental, off by default).
-            // Shown only with ETERNALVR_SHOW_PARALLEL_EYES=1 (test builds) until it works in a headset; hidden, it stays off.
+            // Shown only with ETERNALVR_SHOW_PARALLEL_EYES=1 (the release zip's Launch-Parallel-Eye-Test.cmd) while it is
+            // experimental; hidden, it stays off.
             if (ParallelEyesOffered)
                 pictureRows.Add(Row(Setting.ParallelEyes, parallelEyes, s => parallelEyes.Checked = s.ParallelEyes, s => s.ParallelEyes = parallelEyes.Checked));
             var picture = Group("Picture", pictureRows.ToArray());

@@ -4,12 +4,14 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/test_cpu_load.hpp"
 #include "vkcore/view_async.hpp"
 #include "vkcore/view_binning.hpp"
 #include "vkcore/view_clones.hpp"
 #include "vkcore/view_frames.hpp"
 #include "vkcore/view_redirects.hpp"
 #include "vkcore/view_slots_storage.hpp"
+#include "vkcore/view_swap_guard.hpp"
 
 #include <windows.h>
 
@@ -124,6 +126,7 @@ std::atomic<std::intptr_t> g_slotDelta{0};   // slot 1 - (dc + slot 0 + stride)
 std::byte* g_occlusion1 = nullptr;           // view 1's occlusion-query state
 std::byte* g_occlusionCell = nullptr;        // holds g_occlusion1, 8-aligned
 std::atomic<std::byte*> g_context1{nullptr}; // view 1's render context
+std::atomic<std::byte*> g_context0{nullptr}; // the engine's own render context (view 0's)
 std::mutex g_contextMutex;
 std::array<std::byte*, 2> g_holder{};
 std::byte** g_contextCell = nullptr; // holds view 1's render context, 8-aligned
@@ -241,6 +244,7 @@ std::byte* context1() {
 std::byte** holderOf(std::byte* renderThread) {
     g_holder[0] = *reinterpret_cast<std::byte**>(renderThread + kHolder);
     g_holder[1] = context1();
+    g_context0.store(g_holder[0], std::memory_order_release);
     return g_holder.data();
 }
 
@@ -290,9 +294,11 @@ void logCounts() {
             static_cast<unsigned long long>(g_slotRedirects.load()),
             static_cast<unsigned long long>(g_occlusionRedirects.load()));
     viewRedirectsLogCounts();
+    viewSwapGuardLogCounts();
 }
 
 void dispatcher(void* holder, std::byte* descriptor) {
+    test_cpu_load::atViewDispatch(); // ETERNALVR_TEST_CPU_LOAD_MS, a test knob (Route S: its frame end)
     std::byte* thread = static_cast<std::byte*>(holder) - kHolder;
     std::int32_t count = 0;
     std::memcpy(&count, thread + kRenderCount, sizeof(count));
@@ -344,7 +350,6 @@ void dispatcher(void* holder, std::byte* descriptor) {
         return;
     }
     std::byte** holders = holderOf(thread);
-    viewRedirectsDispatchStart();
     // ETERNALVR_TEST_VIEW_ONLY=0 or 1 renders that view alone (test only). Async compute on after all: view 0
     // alone (view_async.hpp). View 1's clones are made only for a frame that renders it; once they are off
     // for the process, view 1 would draw into the engine's own targets with view 0: view 0 alone too.
@@ -354,6 +359,7 @@ void dispatcher(void* holder, std::byte* descriptor) {
         g_view1Frames.restart(); // new clones: eye 1 waits for a run of frames that wrote them
     }
     const int only = async || viewClonesStopped() ? 0 : test;
+    viewRedirectsDispatchStart(only != 1);
     g_view1Frames.frame(only != 0);
     const std::int32_t dispatched = only >= 0 ? 1 : count;
     for (std::int32_t k = 0; k < dispatched; ++k) {
@@ -462,7 +468,8 @@ bool installRenderThreadHooks() {
     return true;
 }
 
-// r_maxRenderViews' data: checked before anything changes, written last.
+// r_maxRenderViews' data: checked before anything changes, written last. The cvar is registered with flags
+// 0x4002 (int, command line only), no save flag, so the 2 never reaches the game's config.
 std::byte* maxRenderViewsCvar() {
     const std::byte* load = g_base + kMaxRenderViewsLoad;
     if (std::to_integer<std::uint8_t>(load[0]) != 0x48 || std::to_integer<std::uint8_t>(load[1]) != 0x8B) {
@@ -535,6 +542,10 @@ bool parallelEyesTouch() {
 
 std::byte* viewSlotsContext1() {
     return g_context1.load(std::memory_order_acquire);
+}
+
+std::byte* viewSlotsContext0() {
+    return g_context0.load(std::memory_order_acquire);
 }
 
 } // namespace evr::vkcore

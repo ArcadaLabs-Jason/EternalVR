@@ -277,14 +277,14 @@ TEST_CASE("weapon by direction presses the slot of the direction held, on lettin
     picks = feed(moved, frame(true, false, kCentre, kRight), frames(0.2f), picks);
     picks = feed(moved, frame(true, false, kCentre, Axis2{0.0f, -1.0f}), 3, picks);
     picks = feed(moved, frame(true, false, kCentre, kCentre), 2, picks);
-    CHECK(picks.slots == std::vector<GameAction>{GameAction::WeaponSlot3});
+    CHECK(picks.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
 
     // Lifting the thumb picks too.
     RestWheel lift = wheel(RestWheelMode::Edge, RestWheelPick::Slots);
     landLeft(lift);
     feed(lift, frame(true, false, kCentre, Axis2{-1.0f, 0.0f}), frames(0.2f));
     CHECK(feed(lift, frame(false, false, kCentre, Axis2{-1.0f, 0.0f}), 10).slots ==
-          std::vector<GameAction>{GameAction::WeaponSlot7});
+          std::vector<GameAction>{GameAction::WeaponSlot4});
 }
 
 TEST_CASE("weapon by direction: a flick far out picks at once; a half push still needs the dwell") {
@@ -293,7 +293,7 @@ TEST_CASE("weapon by direction: a flick far out picks at once; a half push still
     landLeft(flick);
     Run run = feed(flick, frame(true, false, kCentre, kRight), 2);
     run = feed(flick, frame(true, false, kCentre, kCentre), 3, run);
-    CHECK(run.slots == std::vector<GameAction>{GameAction::WeaponSlot3});
+    CHECK(run.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
     CHECK(run.pickTicks == 1);
 
     // The same two frames only half way out press nothing.
@@ -309,6 +309,35 @@ TEST_CASE("weapon by direction: a flick far out picks at once; a half push still
     Run wheelRun = feed(wheelFlick, frame(true, false, kCentre, kRight), 2);
     wheelRun = feed(wheelFlick, frame(true, false, kCentre, kCentre), 3, wheelRun);
     CHECK(wheelRun.wheelFrames == 0);
+}
+
+TEST_CASE("weapon by direction: a flick that curves on its way out picks the eighth it reaches") {
+    // Crosses the select threshold up-right (34 degrees), then goes out to the right (21 and 11 degrees): the
+    // hysteresis alone would have kept up-right.
+    RestWheel flick = wheel(RestWheelMode::Edge, RestWheelPick::Slots);
+    landLeft(flick);
+    Run run = feed(flick, frame(true, false, kCentre, Axis2{0.45f, 0.3f}), 1);
+    run = feed(flick, frame(true, false, kCentre, Axis2{0.8f, 0.3f}), 1, run);
+    run = feed(flick, frame(true, false, kCentre, Axis2{0.98f, 0.2f}), 1, run);
+    run = feed(flick, frame(true, false, kCentre, kCentre), 3, run);
+    CHECK(run.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
+
+    // The same path held at the rim: the dwell takes the eighth the stick ended in.
+    RestWheel held = wheel(RestWheelMode::Edge, RestWheelPick::Slots);
+    landLeft(held);
+    Run heldRun = feed(held, frame(true, false, kCentre, Axis2{0.45f, 0.3f}), 1);
+    heldRun = feed(held, frame(true, false, kCentre, Axis2{0.98f, 0.2f}), frames(0.3f), heldRun);
+    heldRun = feed(held, frame(true, false, kCentre, kCentre), 3, heldRun);
+    CHECK(heldRun.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
+
+    // At the rim, sliding a little along it (within the hysteresis) keeps the direction.
+    const float a = 27.0f * 3.14159265f / 180.0f;
+    RestWheel slide = wheel(RestWheelMode::Edge, RestWheelPick::Slots);
+    landLeft(slide);
+    Run slideRun = feed(slide, frame(true, false, kCentre, kRight), 2);
+    slideRun = feed(slide, frame(true, false, kCentre, Axis2{std::cos(a), std::sin(a)}), 2, slideRun);
+    slideRun = feed(slide, frame(true, false, kCentre, kCentre), 3, slideRun);
+    CHECK(slideRun.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
 }
 
 TEST_CASE("a direction set to none picks nothing") {

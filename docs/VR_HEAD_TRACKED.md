@@ -286,6 +286,17 @@ It starts the game with `+logFile 1 +com_skipKeyPressOnLoadScreens 1 +com_skipIn
 The log directory also receives `eternalvr-frames-<pid>.csv`: one line per XR frame with the view it
 showed, its pose age and the prediction horizon (T-111), the pose lead, the view's head orientation and,
 under hand aim, the weapon hand's aim orientation as used (smoothed) and as tracked (zeros without one).
+Its last four columns: `eye0_frame` and `eye1_frame`, the frames (view 0 screen passes counted) of the eye
+images the frame shows under Parallel Eye Rendering (`eye0_frame` 0 with `ETERNALVR_TEST_PE_PAIRING=guess`,
+both 0 without copies or outside it), `eye1_view`, the view record eye 1 was rendered with (`view` is the
+one submitted), and `repeat`, why the frame shows no new image: `new` (it does), `no_present` (the game's
+last present is shown already), `kept` (its last present had no new pair: the headset keeps the last one;
+with `ETERNALVR_TEST_PE_PAIRING=guess`, no new eye 1 copy), `dropped` (a new pair left out by
+`ETERNALVR_TEST_PE_DROP`), `held` (a new swapchain image nothing drew yet, after a recreate), `not_handed` (its
+last present's image was not handed over: no ring slot free, no copy or, under Route S, no view record for the
+pair) and `waiting` (a newer image was handed over, its frame not rendered yet, or the runtime's image not
+ready). Frames the runtime asks not to render get no line. `kept`, `dropped` and `held` come from Parallel Eye
+Rendering's presents only; under Route S a repeat is `no_present`, `not_handed` or `waiting`.
 `tools/frames/aim_jitter.py` summarises it (`docs/rig-findings/aim-jitter.md`). `ETERNALVR_POSE_LEAD=1`
 predicts the head and hands for when frames are measured to be shown instead of one display period ahead
 (`xr_math/display_lead.hpp`, off by default; on by default under `ETERNALVR_PACE=headset`, docs/VR_STEREO.md

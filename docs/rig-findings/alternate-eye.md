@@ -347,7 +347,8 @@ auto stays alternating; nothing sets such a limit today (the rig's alternating t
 
 `<ms>[,<seconds on>,<seconds off>]` busy-waits at every render's frame end (eye R's nested one included), so
 the rig's fast processor behaves like a slower one; with the two periods the load goes on and off, so one run
-shows both switches. Never set by the launcher; logged at start-up as `test: CPU load ...`.
+shows both switches. Never set by the launcher; logged at start-up as `test: CPU load ...`. Under Parallel Eye
+Rendering, which has no frame-end wrapper, the load runs once a render frame at its view dispatch instead.
 
 ### 10.5 Rig recipe (not run yet)
 

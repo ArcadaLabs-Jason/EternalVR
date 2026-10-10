@@ -101,6 +101,9 @@ void setStereoHookSink(StereoHookSink* sink);
 // Asks for the two-view layout (true) or the game's own (false) from the next frame on.
 void requestTwoViews(bool enabled);
 
+// The world's second render view (view 1 with Parallel Eye Rendering), or null. Lock-free, any thread.
+std::byte* stereoSecondRenderView(const std::byte* world);
+
 // Engine counters for live experiment E7: the render frame counter (renderSystem + 0x10) and the
 // backend frame counter (renderBackend + 0xB0); 0 when unknown.
 struct EngineFrameCounters {

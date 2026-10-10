@@ -58,6 +58,17 @@ namespace EternalVR.Launcher.Core.Game
         public KnownBuild Build { get; }
         /// <summary>The installed package version (Game Pass); null for Steam.</summary>
         public string Version { get; }
+
+        /// <summary>
+        /// The Steam build Parallel Eye Rendering runs on: the one the layer knows by its exe's timestamp
+        /// (src/vkcore/view_install.cpp). On any other build, Game Pass among them, the layer would refuse it ("not available
+        /// for this game version") and run the standard renderer, so the launcher does not ask for it there.
+        /// </summary>
+        public const string ParallelEyesSteamBuild = "25216728";
+
+        /// <summary>The game is the build Parallel Eye Rendering runs on (<see cref="ParallelEyesSteamBuild"/>).</summary>
+        public bool RunsParallelEyes =>
+            Status == BuildStatus.Known && Build != null && Build.Platform == GamePlatform.Steam && Build.BuildId == ParallelEyesSteamBuild;
     }
 
     /// <summary>

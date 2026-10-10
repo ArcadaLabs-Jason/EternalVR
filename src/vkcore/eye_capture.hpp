@@ -19,6 +19,7 @@
 
 #include <windows.h>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -91,6 +92,13 @@ public:
     // Records the copy of `source` (in TRANSFER_SRC_OPTIMAL) into `buffer` and makes it visible to the host.
     static void
     record(DeviceData& dev, VkCommandBuffer cb, VkImage source, VkExtent2D extent, VkBuffer buffer);
+    // Records the copy of both halves of a two-eye ring image (in TRANSFER_DST_OPTIMAL, just written by the
+    // eye copies; left there afterwards) into `left` and `right`, `eye` wide each.
+    static void recordRingEyes(DeviceData& dev,
+                               VkCommandBuffer cb,
+                               VkImage ring,
+                               VkExtent2D eye,
+                               const std::array<VkBuffer, 2>& buffers);
 
 private:
     enum class State { Idle, Left, Between, Submitted };

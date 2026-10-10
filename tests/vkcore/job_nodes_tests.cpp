@@ -88,6 +88,24 @@ TEST_CASE("the bounded wait stops after the streak of waits that ran out, and a 
     CHECK(run(wait, there) == Result::Ready); // a mark already there is still seen
 }
 
+TEST_CASE("a mark there at once breaks the streak too, but does not bring back a wait that stopped") {
+    nodes::BoundedWait wait(20, 3);
+    Fake never;
+    Fake there;
+    there.readyAfter = 0;
+    CHECK(run(wait, never) == Result::TimedOut);
+    CHECK(run(wait, never) == Result::TimedOut);
+    CHECK(run(wait, there) == Result::Ready); // resets the streak
+    CHECK(run(wait, never) == Result::TimedOut);
+    CHECK(run(wait, never) == Result::TimedOut);
+    CHECK_FALSE(wait.off()); // two in a row since, not four
+    CHECK(run(wait, never) == Result::TimedOut);
+    CHECK(wait.off());
+    CHECK(run(wait, there) == Result::Ready);
+    CHECK(wait.off()); // stopped for the session
+    CHECK(run(wait, never) == Result::Off);
+}
+
 TEST_CASE("a compute-only queue family is the async compute one") {
     CHECK(evr::vkcore::computeOnlyFamily(VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT));
     CHECK_FALSE(

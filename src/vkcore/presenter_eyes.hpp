@@ -13,9 +13,11 @@
 // did not render view 1 (view_slots.hpp viewSlotsView1Rendered).
 
 #include "vkcore/dispatch.hpp"
+#include "vkcore/view_snapshot.hpp"
 
 #include <vulkan/vulkan.h>
 
+#include <array>
 #include <cstdint>
 
 namespace evr::vkcore {
@@ -31,6 +33,9 @@ struct EyeCopyTarget {
     std::uint32_t firstEye = 0;
     std::uint32_t eyeCount = 1;
     bool viewImages = false; // the eye copy: each eye from its own view's final image when it can
+    // Eye 1 from its copy when set (TRANSFER_SRC; view_snapshot.hpp); both set, a pair: each eye from its
+    // own.
+    std::array<view_snapshot::Copy, 2> snapshots{};
 };
 
 // Records the copies (same shape) or blits (another size or format, graphics queue only) of `source`, in

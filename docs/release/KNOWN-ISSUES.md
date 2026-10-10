@@ -176,15 +176,30 @@ them is worse for you than described here.
   on TAA, fast-moving demons can smear a little more than without it; Off avoids that. "Auto" does this only
   while your processor cannot keep up with the headset and draws both eyes again once it can (the switch
   takes a second or a few). Turn it off if it does not help.
-- **Parallel Eye Rendering is not in the launcher yet.** It renders both eyes as two views of one game frame
-  instead of one eye after the other. In a headset it still breaks the picture (stretched, shattered geometry and
-  broken effects), so the launcher hides its checkbox until that is fixed; it appears only with the environment
-  variable `ETERNALVR_SHOW_PARALLEL_EYES=1` (for testing). It runs only on the
-  Steam version this release supports; other versions use the standard renderer. The game's async
-  compute is off while it is on. It does not run with DLSS (it is greyed out then), and Alternate eyes is
-  greyed out while it is on. Not yet tried in cutscenes or in long sessions. After the resolution changes
-  several times in one session, both eyes show the same image until the next start. If it cannot finish
-  starting, both eyes show the same image for that session; the log says `parallel eyes: FAILED`.
+- **Parallel Eye Rendering is experimental and for testing.** It renders both eyes as two views of one game
+  frame instead of one eye after the other. Its checkbox shows only when you start the launcher with
+  `Launch-Parallel-Eye-Test.cmd` (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Steam version only
+  (greyed out on Game Pass), tried on NVIDIA only. It works with Anti-aliasing TAA, DLSS or Off; Foveated
+  rendering and Alternate eyes are greyed out while it is on. What is still wrong with it:
+  - **It needs more video memory.** On a 12 GB card the game can run at about 95% of its video memory and
+    turn into a slideshow, which is hard on comfort. Set the game's Texture Pool Size one step lower before
+    you try it.
+  - **After 31 resolution changes in one session** (the game's resolution or resolution scale, or ray
+    tracing turned on or off), both eyes show the same image, without depth, until the next start.
+  - **Stutter and eyes out of step.** Now and then the headset shows the same picture twice. Both eyes
+    normally show the same game frame, but right after a load, or when no new pair of eye images comes for a
+    few frames, the headset can briefly show eyes from different frames.
+  - **Some effects differ between the eyes.** Some reflections show in one eye only, and glass and the
+    underwater view can look different in each eye. Lens flares are off while it runs. Close demons can show
+    a wrong pose in the left eye for a single frame. Menus can flash. The muzzle flash may look wrong; it is
+    not known yet whether that comes from Parallel Eye Rendering.
+  - **Smaller ones:** after the game rebuilds its swapchain the headset can keep the last picture for a few
+    frames; things can pop in or out for a frame; sprites face the left eye's position; faint blocky patches
+    were seen low in the right eye.
+  - **Not tried yet:** long sessions, cutscenes, and AMD or Intel graphics cards.
+  - If it cannot finish starting, both eyes show the same image for that session (the log says
+    `parallel eyes: FAILED`). After a session the launcher's status line usually says whether it ran, or why
+    not; the logs in the exported report always say.
 
 ## Controllers and aiming
 
@@ -211,10 +226,10 @@ them is worse for you than described here.
 - **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new
   and has not been tried in a headset yet.
 - **The weapon wheel from the thumb rest** (Quest and Rift controllers; Thumb-rest wheel on the Play tab, off
-  by default) is new and has had one headset test. Touch, then push is hard to get right and picking with the
-  game's wheel is slow to open; While touched with Weapon by direction works best so far. Weapon by direction
-  uses up = slot 1, then clockwise to slot 8, which may not match the game's own wheel: `weapon_directions` in
-  launcher.ini changes it. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
+  by default) is new and has had a few headset tests. Touch, then push is hard to get right and picking with
+  the game's wheel is slow to open; While touched with Weapon by direction works best so far. Weapon by
+  direction follows the game's own wheel (the rocket launcher left, the heavy cannon right, and so on):
+  `weapon_directions` in launcher.ini changes it. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
   rest. Once the game's wheel is open it cannot be cancelled.
 - **Edit controls... can take several seconds to open** (the window shows "Not Responding" first). It does
   open; a fix is coming.

@@ -11,6 +11,7 @@
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/stereo_present.hpp"
+#include "vkcore/view_snapshot.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/window_timing.hpp"
@@ -21,6 +22,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 namespace evr::vkcore {
 
@@ -73,6 +75,15 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device,
     }
     if (result == VK_SUCCESS) {
         vrs_nv::noteSwapchain(device, pCreateInfo->imageExtent); // foveation's eye image size
+    }
+    if (result == VK_SUCCESS && view_snapshot::enabled()) {
+        std::uint32_t count = 0;
+        data->vk.GetSwapchainImagesKHR(device, *pSwapchain, &count, nullptr);
+        std::vector<VkImage> images(count);
+        data->vk.GetSwapchainImagesKHR(device, *pSwapchain, &count, images.data());
+        // Parallel Eye Rendering's eye snapshots: view 0's copies are of these images.
+        view_snapshot::noteSwapchain(images.data(), count, pCreateInfo->imageFormat,
+                                     pCreateInfo->imageExtent);
     }
     if (result != VK_SUCCESS || !data->interopEnabled) {
         return result;

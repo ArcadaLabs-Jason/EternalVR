@@ -189,7 +189,7 @@ namespace EternalVR.Launcher
         {
             foreach (var r in rows)
             {
-                var why = SettingRules.WhyNot(r.Id, ctx.Settings);
+                var why = SettingRules.WhyNot(r.Id, ctx.Settings, parallelEyesGame);
                 var tip = Wrap((r.Text ?? SettingTexts.For(r.Id)).Tooltip);
                 r.Control.Enabled = why == null;
                 r.Label.ForeColor = why == null ? SystemColors.ControlText : SystemColors.GrayText;

@@ -540,6 +540,10 @@ void requestTwoViews(bool enabled) {
     g_wantTwoViews.store(enabled && g_status.twoViews);
 }
 
+std::byte* stereoSecondRenderView(const std::byte* world) {
+    return world ? secondViewOf(world) : nullptr;
+}
+
 EngineFrameCounters readEngineFrameCounters() {
     EngineFrameCounters counters;
     if (g_renderSystem) {

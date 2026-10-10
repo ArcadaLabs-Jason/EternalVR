@@ -190,6 +190,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t xrProjectionFrames = 0, xrQuadFrames = 0;
     ViewRecord shownView; // the view of the image in the XR swapchain
     bool shownHasView = false;
+    FrameLogEyes frameLogEyes;   // the frames table's eye and repeat columns (presenter_types.hpp)
     tracking::FovWatch fovWatch; // the headset's FOV, read again during the session (presenter_fov.cpp)
     bool loggedFirstProjection = false;
     bool loggedGuardCinema = false; // XR worker only
@@ -264,9 +265,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     bool loggedBadAxis = false;
     bool loggedGuardOff = false;
     int loggedPresents = 0;
-    std::uint64_t presentsWithView = 0;
-    std::uint64_t presentsWithoutView = 0;
-    std::uint64_t presentSeqGapSum = 0;
+    PresentViews presentViews; // presenter_types.hpp
 
     void onGameView(std::byte* renderView, std::byte* player) override; // ViewHookSink
     // presenter_cutscene.cpp: logs cutscene changes and, with ETERNALVR_SKIP_CINEMATICS, holds the skip key
@@ -281,6 +280,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     aimWithHead(std::byte* player, const xr_math::IdViewAxis& gameAxis, Quat headInIdTech);
     void onRenderLatch(const std::byte* renderView, const float* previousProjection) override;
     bool latestView(ViewRecord& out, std::uint64_t& gap);
+    // The view a present shows: latestView's, or under Parallel Eye game frame `pick` (eye 1's; 0: none).
+    bool viewForPresent(std::uint64_t pick, ViewRecord& out, std::uint64_t& gap);
 
     // ---- Stereo (presenter_stereo.cpp) -------------------------------------------------------------
 
@@ -357,14 +358,13 @@ struct XrPresenter::Impl final : ViewHookSink,
     // A mono frame's: the in-headset capture's when one is wanted (under Route S once no pair came for
     // bug_capture::kMonoAfterSeconds), else none.
     VkBuffer monoCaptureBuffer(const SwapchainState& sc, std::uint64_t completed);
+    // Parallel Eye Rendering's (the eye copy): eye L's and eye R's, both halves of the ring slot, or none;
+    // the text file describes the view viewForPresent(`pick`) gives the slot.
+    std::array<VkBuffer, 2>
+    ringCaptureBuffers(const SwapchainState& sc, std::uint64_t completed, std::uint64_t pick);
     // After the copy into `buffer` from above was submitted (timeline `value`; 0: it was not): notes whether
-    // the GUI target came along; a mono frame's capture is complete with it. Nothing without a buffer.
-    void captureCopied(VkBuffer buffer, std::uint64_t value, bool mono);
-    // Arms the eye and UI captures for the in-headset capture (names, the text file); false when it has to
-    // wait for a later frame.
-    bool armCapture(const SwapchainState& sc, std::uint64_t pairIndex, std::uint64_t tick, bool mono);
-    // The armed capture was taken into `buffer`, or disarmed when there is none.
-    VkBuffer takeArmedCapture(VkBuffer buffer);
+    // the GUI target came along; with `complete` (a mono frame, both ring eyes) the capture is done with it.
+    void captureCopied(VkBuffer buffer, std::uint64_t value, bool complete);
 
     // ---- UI layer (presenter_ui.cpp) --------------------------------------------------------------
 

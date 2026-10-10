@@ -13,7 +13,10 @@
 //   bytes changed: the jobs' fan-out). The engine's loads of the table and its per-view Begin Frame resets
 //   are redirected by the view they work for.
 // - Jobs that work in the renderer's one scratch take turns, or run for view 0 only (skinning, ray tracing
-//   structures); view 1's light binning waits for view 0's (view_binning.cpp).
+//   structures); view 1's light binning waits for view 0's (view_binning.cpp); view 1 takes its compute
+//   skinning output room from view 0's counter (view_skin_alloc.hpp) and view 0's shadow cache entries
+//   (view_shadow_cache.hpp), and the occlusion queries' results are copied without waiting for them
+//   (view_query_copy.hpp); the three in view_shared_state.hpp.
 // Build 25216728 only; installed from the game's vkCreateInstance by view_install.cpp.
 
 namespace evr::vkcore {
@@ -30,8 +33,9 @@ bool installViewRedirects(const std::byte* base);
 bool prepareViewRedirectPatches(const std::byte* base, std::vector<CodeRange>& writes);
 void applyViewRedirectPatches(const std::byte* base);
 
-// At the start of each two-view dispatch (the job graph's node handles of the last one are stale).
-void viewRedirectsDispatchStart();
+// At the start of each two-view dispatch (the job graph's node handles of the last one are stale), with
+// whether view 0 is dispatched this frame (not with ETERNALVR_TEST_VIEW_ONLY=1).
+void viewRedirectsDispatchStart(bool view0Dispatched);
 
 // The counts for the dispatcher's periodic line.
 void viewRedirectsLogCounts();

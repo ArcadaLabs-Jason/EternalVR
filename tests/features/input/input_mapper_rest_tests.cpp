@@ -181,7 +181,7 @@ TEST_CASE("weapon by direction presses the slot once, and the game's wheel never
     Run run = feed(mapper, frame(true, false, kCentre, kRight), 20);
     run = feed(mapper, frame(true, false, kCentre, kCentre), 5, run);
     CHECK(run.wheelFrames == 0);
-    CHECK(contains(run.everPressed, GameAction::WeaponSlot3));
+    CHECK(contains(run.everPressed, GameAction::WeaponSlot2));
     CHECK(run.turned == 0.0f);
 }
 

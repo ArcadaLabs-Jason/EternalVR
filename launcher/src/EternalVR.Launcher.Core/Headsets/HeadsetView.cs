@@ -219,6 +219,7 @@ namespace EternalVR.Launcher.Core.Headsets
                     + (facts.SessionRefresh == null ? string.Empty : ": " + facts.SessionRefresh));
                 if (facts.SessionText != null) Add("last session summary", facts.SessionText);
                 Add("last session controls", facts.SessionControls ?? "not logged");
+                if (facts.SessionParallelEyes != null) Add("last session parallel eyes", facts.SessionParallelEyes);
             }
             return lines;
         }

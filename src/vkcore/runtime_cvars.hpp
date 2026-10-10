@@ -32,13 +32,9 @@
 //   player on a lower quality level keeps the game's value.
 // - swf_platformOverride 2: the game's prompts stay in their keyboard form, which the layer renames to the VR
 //   buttons (prompt_hooks.cpp). ETERNALVR_BUTTON_PROMPTS=0 leaves it alone.
-// - Parallel Eye Rendering (setParallelEyes): r_useNewDepthDownscale 0 (the old depth downsample; with
-//   the new one view 1's light binning got wrong tile depth bounds), the launcher's anti-aliasing (TAA, or
-//   with ETERNALVR_STEREO_TAA=0 r_TAASafeMode 1 and r_antialiasing 0, as the stereo set; neither with
-//   ETERNALVR_STEREO_RUNTIME_CVARS=0), Route S's window and present set (with its render size rule) and its
-//   comfort set; not Route S's scattering and SSDO filters (per-eye TAA is a Route S module). apply() runs
-//   from Parallel Eye Rendering's first present, on every present as under Route S (menus, loading screens
-//   and frames without a world included).
+// - Parallel Eye Rendering's set (runtime_cvars_pe.hpp, setParallelEyes). apply() runs from Parallel Eye
+//   Rendering's first present, on every present as under Route S (menus, loading screens and frames
+//   without a world included).
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
 //   replaces the CPU Saver's value for the same cvar.
 //
@@ -51,6 +47,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace evr::vkcore::runtime_cvars {
 
@@ -69,14 +66,13 @@ void apply(bool stereo);
 // Writes so far (the first write of each cvar included).
 std::uint64_t writes();
 
+// The layer holds `name` at exactly `value` (found in the game, not a cap): Parallel Eye Rendering's clones
+// leave out what that cvar turns off (view_clones.cpp). Never waits: false while apply() runs.
+bool holds(std::string_view name, std::string_view value);
+
 // The per-eye temporal module (per-eye TAA) reports that it is active: from then on the stereo set follows
 // stereo_seq::stereoRuntimeCvars(PerEye) and the layer stops holding the TAA cvars (that module writes its
 // own). The window set and ETERNALVR_DEBUG_CVARS entries stay.
 void setStereoTemporal(stereo_seq::StereoTemporal temporal);
-
-// Parallel Eye Rendering changed the engine (view_slots.hpp): also hold its set, with no anti-aliasing when
-// `antiAliasingOff` (ETERNALVR_STEREO_TAA=0), else TAA; without either when not `antiAliasingHeld`
-// (ETERNALVR_STEREO_RUNTIME_CVARS=0). From its install, before the first apply.
-void setParallelEyes(bool antiAliasingOff, bool antiAliasingHeld);
 
 } // namespace evr::vkcore::runtime_cvars

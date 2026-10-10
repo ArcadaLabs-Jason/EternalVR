@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using EternalVR.Launcher.Core.Game;
 using EternalVR.Launcher.Core.Launch;
 using EternalVR.Launcher.Core.Settings;
 using Xunit;
@@ -9,17 +12,18 @@ namespace EternalVR.Launcher.Core.Tests
     /// <summary>The Play tab's "Parallel Eye Rendering" option: its key, its variables, its rule and its words.</summary>
     public class ParallelEyesSettingsTests
     {
-        private static LaunchPlan Plan(LauncherSettings s) =>
+        private static LaunchPlan Plan(LauncherSettings s, bool parallelEyesGame = true) =>
             LaunchPlanBuilder.Build(new LaunchInputs
             {
                 GameRoot = @"E:\SteamLibrary\steamapps\common\DOOMEternal",
                 LayerDir = @"E:\EternalVR\layer",
                 Settings = s,
                 ForcedCvars = ForcedCvars.Parse(TestData.Read("forced-cvars.txt")),
+                ParallelEyesGame = parallelEyesGame,
             });
 
-        private static Dictionary<string, string> Env(LauncherSettings s) =>
-            Plan(s).Environment.ToDictionary(e => e.Key, e => e.Value);
+        private static Dictionary<string, string> Env(LauncherSettings s, bool parallelEyesGame = true) =>
+            Plan(s, parallelEyesGame).Environment.ToDictionary(e => e.Key, e => e.Value);
 
         [Fact]
         public void TheLayerTurnsAsyncComputeOffNotTheCommandLine()
@@ -53,26 +57,31 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void NotWithDlssButWithTaaOrOff()
+        public void WithDlssTaaOrOff()
         {
-            // DLSS runs per eye in the standard renderer: the layer refuses Parallel Eye Rendering with it, so the launch
-            // does not ask for it and the option is greyed out.
-            var dlss = new LauncherSettings { ParallelEyes = true, AntiAliasing = AntiAliasingMode.Dlss };
-            Assert.False(dlss.ParallelEyesOn);
-            Assert.False(Env(dlss).ContainsKey("ETERNALVR_PARALLEL_EYES"));
-            Assert.Equal("1", Env(dlss)["ETERNALVR_STEREO_DLSS"]);
-            Assert.Equal(SettingRules.NotWithDlss, SettingRules.WhyNot(Setting.ParallelEyes, dlss));
-            // The value is kept: back on TAA it is on again.
-            dlss.AntiAliasing = AntiAliasingMode.Taa;
-            Assert.True(dlss.ParallelEyesOn);
+            // DLSS: each view runs its own DLSS feature, at the launcher's quality, as the standard renderer runs it per eye.
+            var dlss = new LauncherSettings { ParallelEyes = true, AntiAliasing = AntiAliasingMode.Dlss, Dlss = DlssQuality.Balanced };
+            Assert.True(dlss.ParallelEyesAsked);
+            Assert.True(dlss.ParallelEyesOn(true));
             Assert.Null(SettingRules.WhyNot(Setting.ParallelEyes, dlss));
+            var env = Env(dlss);
+            Assert.Equal("1", env["ETERNALVR_PARALLEL_EYES"]);
+            Assert.Equal("1", env["ETERNALVR_STEREO_DLSS"]);
+            Assert.Equal(LauncherSettings.DlssQualityName(DlssQuality.Balanced), env["ETERNALVR_STEREO_DLSS_QUALITY"]);
+            // The layer's fallback switch is the layer's own: the launch does not set it.
+            Assert.False(env.ContainsKey("ETERNALVR_PE_DLSS"));
+            // Its DLSS rows apply as without Parallel Eye Rendering.
+            Assert.Null(SettingRules.WhyNot(Setting.DlssQuality, dlss));
+            dlss.AntiAliasing = AntiAliasingMode.Taa;
+            Assert.True(dlss.ParallelEyesAsked);
+            Assert.True(dlss.ParallelEyesOn(true));
+            Assert.Null(SettingRules.WhyNot(Setting.ParallelEyes, dlss));
+            Assert.False(Env(dlss).ContainsKey("ETERNALVR_STEREO_DLSS"));
             // Off: the layer holds r_antialiasing 0 from ETERNALVR_STEREO_TAA=0, as for the standard renderer.
             var off = Env(new LauncherSettings { ParallelEyes = true, AntiAliasing = AntiAliasingMode.Off });
             Assert.Equal("1", off["ETERNALVR_PARALLEL_EYES"]);
             Assert.Equal("0", off["ETERNALVR_STEREO_TAA"]);
             Assert.Null(SettingRules.WhyNot(Setting.ParallelEyes, new LauncherSettings { AntiAliasing = AntiAliasingMode.Off }));
-            // The reason is one terse sentence.
-            Assert.Equal("Not with DLSS (Anti-aliasing).", SettingRules.NotWithDlss);
         }
 
         [Fact]
@@ -89,14 +98,21 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal(SettingRules.NotWithParallelEyes, SettingRules.WhyNot(Setting.AlternateEyes, s));
                 Assert.Null(SettingRules.WhyNot(Setting.FramePacing, s));
             }
-            // Without Parallel Eye Rendering (or with DLSS, where it does not run) alternate eyes is as before.
+            // With DLSS too.
+            var dlss = new LauncherSettings
+            {
+                ParallelEyes = true, AntiAliasing = AntiAliasingMode.Dlss, AlternateEyes = AlternateEyesMode.Auto,
+                Pacing = FramePacing.Headset,
+            };
+            Assert.Equal("0", Env(dlss)["ETERNALVR_ALTERNATE_EYES"]);
+            Assert.Equal(SettingRules.NotWithParallelEyes, SettingRules.WhyNot(Setting.AlternateEyes, dlss));
+            // Without Parallel Eye Rendering alternate eyes is as before.
             foreach (var s in new[]
             {
                 new LauncherSettings { AlternateEyes = AlternateEyesMode.Auto, Pacing = FramePacing.Headset },
                 new LauncherSettings
                 {
-                    ParallelEyes = true, AntiAliasing = AntiAliasingMode.Dlss, AlternateEyes = AlternateEyesMode.Auto,
-                    Pacing = FramePacing.Headset,
+                    AntiAliasing = AntiAliasingMode.Dlss, AlternateEyes = AlternateEyesMode.Auto, Pacing = FramePacing.Headset,
                 },
             })
             {
@@ -107,6 +123,78 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal(SettingRules.NotWithAutoEyes, SettingRules.WhyNot(Setting.FramePacing, s));
             }
             Assert.Equal("Not with Parallel Eye Rendering (Play tab).", SettingRules.NotWithParallelEyes);
+        }
+
+        [Fact]
+        public void OnAnotherBuildAlternateEyesAndFoveationApplyAsWithoutIt()
+        {
+            // Game Pass (or any build but the Steam one the layer knows): the layer refuses Parallel Eye Rendering and runs
+            // the standard renderer, so the launch keeps the player's Alternate eyes and Foveation.
+            var s = new LauncherSettings
+            {
+                ParallelEyes = true, AlternateEyes = AlternateEyesMode.Auto, Foveation = FoveationMode.Balanced, Pacing = FramePacing.Headset,
+            };
+            Assert.True(s.ParallelEyesAsked);
+            Assert.False(s.ParallelEyesOn(false));
+            var env = Env(s, parallelEyesGame: false);
+            Assert.Equal("auto", env["ETERNALVR_ALTERNATE_EYES"]);
+            Assert.Equal(LauncherSettings.FoveationName(FoveationMode.Balanced), env["ETERNALVR_FOVEATION"]);
+            Assert.Equal(LauncherSettings.PacingName(FramePacing.Off), env["ETERNALVR_PACE"]);
+            // Not asked of the layer, which would refuse it there.
+            Assert.False(env.ContainsKey("ETERNALVR_PARALLEL_EYES"));
+            // The rows: Parallel Eye Rendering greyed out with the reason, Alternate eyes and Foveation open.
+            Assert.Equal(SettingRules.NeedsParallelEyesBuild, SettingRules.WhyNot(Setting.ParallelEyes, s, false));
+            Assert.Null(SettingRules.WhyNot(Setting.AlternateEyes, s, false));
+            Assert.Null(SettingRules.WhyNot(Setting.Foveation, s, false));
+            Assert.Equal(SettingRules.NotWithAutoEyes, SettingRules.WhyNot(Setting.FramePacing, s, false));
+            Assert.False(SettingRules.Inapplicable(s, false).ContainsKey(Setting.Foveation));
+            // On the build it runs on, as before.
+            var on = Env(s);
+            Assert.Equal("0", on["ETERNALVR_ALTERNATE_EYES"]);
+            Assert.False(on.ContainsKey("ETERNALVR_FOVEATION"));
+            Assert.Equal(SettingRules.NotWithParallelEyes, SettingRules.WhyNot(Setting.Foveation, s, true));
+            Assert.Equal(SettingRules.NotWithParallelEyes, SettingRules.Inapplicable(s, true)[Setting.Foveation]);
+            Assert.Equal("1", on["ETERNALVR_PARALLEL_EYES"]);
+            // One reason for Game Pass and for a later Steam build alike.
+            Assert.Equal("Not on this game version yet.", SettingRules.NeedsParallelEyesBuild);
+            // Mono stays the first reason.
+            Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(Setting.ParallelEyes, new LauncherSettings { Mode = VrMode.Mono }, false));
+        }
+
+        [Fact]
+        public void OnlyTheSteamBuildTheLayerKnowsRunsIt()
+        {
+            var builds = KnownBuilds.Parse(TestData.Read("known-builds.txt"));
+            var steam = builds.All.Single(b => b.Platform == GamePlatform.Steam && b.BuildId == BuildCheck.ParallelEyesSteamBuild);
+            Assert.True(new BuildCheck(BuildStatus.Known, steam.Sha256, steam).RunsParallelEyes);
+            // Game Pass: a supported build, but not one Parallel Eye Rendering runs on.
+            var gamePass = builds.All.First(b => b.Platform == GamePlatform.GamePass);
+            var store = builds.CheckStore(new StoreIdentity(gamePass.StoreName, null, gamePass.BuildId));
+            Assert.Equal(BuildStatus.Known, store.Status);
+            Assert.False(store.RunsParallelEyes);
+            // Another Steam build, an unknown exe or none.
+            var other = new KnownBuild(new string('0', 64), "99999999", "Steam, some other build");
+            Assert.False(new BuildCheck(BuildStatus.Known, other.Sha256, other).RunsParallelEyes);
+            Assert.False(new BuildCheck(BuildStatus.Unknown, new string('1', 64), null).RunsParallelEyes);
+            Assert.False(new BuildCheck(BuildStatus.Missing, null, null).RunsParallelEyes);
+        }
+
+        [Fact]
+        public void ItsSteamBuildIsTheLayers()
+        {
+            // The layer checks the exe's timestamp (view_install.cpp); its comment names the Steam build.
+            var install = File.ReadAllText(RepoFile("src", "vkcore", "view_install.cpp"));
+            Assert.Contains("kKnownTimestamp = 0x6A7B9B8C; // Steam build " + BuildCheck.ParallelEyesSteamBuild, install);
+        }
+
+        private static string RepoFile(params string[] parts)
+        {
+            for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+            {
+                var path = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+                if (File.Exists(path)) return path;
+            }
+            throw new FileNotFoundException("not found above the test folder: " + string.Join("/", parts));
         }
 
         [Fact]

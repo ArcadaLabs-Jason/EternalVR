@@ -45,6 +45,9 @@ public:
     template <typename Ready, typename Now, typename Pause>
     Result wait(Ready ready, Now now, Pause pause) {
         if (ready()) {
+            if (!off()) {
+                streak_ = 0; // a mark there at once breaks a run of waits that ran out too
+            }
             return Result::Ready;
         }
         if (off()) {

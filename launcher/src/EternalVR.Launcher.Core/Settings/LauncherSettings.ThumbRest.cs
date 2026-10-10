@@ -26,7 +26,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Time slows while the thumb-rest wheel holds the game's wheel open, as for the game's own; on by default.</summary>
         public bool ThumbRestSlowdown { get; set; } = true;
         /// <summary>The slot of each stick direction under Weapon by direction (the layer's <c>ETERNALVR_WEAPON_DIRECTIONS</c>,
-        /// <c>up=1,up_right=2,...</c>); set in the file by hand, empty for the layer's own table.</summary>
+        /// <c>up=1,up_right=5,...</c>); set in the file by hand, empty for the layer's own table.</summary>
         public string WeaponDirections { get; set; } = string.Empty;
 
         /// <summary>The settings file's and the layer's <c>ETERNALVR_THUMBREST_WHEEL</c> value.</summary>

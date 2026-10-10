@@ -4,12 +4,15 @@
 // passes store and bind the clones) and view_one_passes.cpp (view 1's own screen pass, environment, light
 // scattering wait, shadow atlas skip and tile list pool) share. Build 25216728 (RVAs).
 
+#include "vkcore/clone_census.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/parallel_eyes_settings.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,13 +40,27 @@ inline constexpr int kTableCategories = 13;
 inline constexpr int kTableSlots = 4;
 inline constexpr std::size_t kContextBlock = 0x100;
 
-// A clone the map hands out, as made.
+// Where the engine keeps a clone's object (the build log's summary groups).
+enum class Group : std::uint8_t { GlobalImages, GlobalTargets, ContextFields, View1Context };
+
+// A clone the map hands out, as made: an image, or a render target (`target`) that holds image clones.
 struct Clone {
-    std::uintptr_t image;
-    std::string name;
-    std::int32_t width;
-    std::int32_t height;
-    bool states; // had its state block when made
+    std::uintptr_t image = 0; // the clone
+    std::string name;         // an image's name as the engine keeps it
+    std::int32_t width = 0;
+    std::int32_t height = 0;
+    bool states = false; // had its state block when made
+    bool target = false;
+    Group group = Group::GlobalImages;
+    std::string source;     // where the engine keeps its object: "0x66E31F8.c0", "dc+0x568", "dc1+0x2F8"
+    std::string engineName; // the engine image's name (a target: its first image's)
+    std::uint32_t format = 0;
+    std::int32_t depth = 1;
+    std::int32_t mips = 1;
+    std::int32_t layers = 1;
+    std::uint64_t bytes = 0;          // from its options (clone_census::imageBytes)
+    std::uint64_t vkBytes = 0;        // vkGetImageMemoryRequirements; 0 when not read
+    std::vector<std::uint32_t> parts; // a target's images (indices into the map's clones)
 };
 
 // The clone map: engine object or address -> view 1's, published once built (old maps leak: frames in
@@ -54,6 +71,15 @@ struct Map {
     std::vector<Clone> clones;
     std::vector<std::pair<std::size_t, std::uintptr_t>> dcFields; // view 1's device context: offset, value
     std::uintptr_t screenImage = 0;                               // view 1's screen-pass output
+    // The census (view_clone_census.cpp): clone -> its index in `clones`, sorted, and the counts,
+    // clone_census:: kUses per clone.
+    std::vector<std::pair<std::uintptr_t, std::uint32_t>> byClone;
+    std::unique_ptr<std::atomic<std::uint64_t>[]> uses;
+    // The engine objects the build left out (ETERNALVR_TEST_VIEW_CLONE_SKIP; a target's images follow it,
+    // in its parts), by object and with their counts, as the clones'.
+    std::vector<Clone> leftOut;
+    std::vector<std::pair<std::uintptr_t, std::uint32_t>> byLeftOut;
+    std::unique_ptr<std::atomic<std::uint64_t>[]> leftUses;
 };
 
 template <typename T>
@@ -98,6 +124,22 @@ bool prepareViewOnePasses();
 bool installViewOnePasses();
 void notePassTargetBind(HookRegisters& r, const Map* map); // the target bind: view 1's screen pass output
 bool swapPassImageBind(HookRegisters& r, const Map* map);  // the image bind: pool and screen pass source
+bool screenPassOutputBind(const HookRegisters& r);         // the image bind: view 1's screen pass output
 void reportPasses();
+
+// view_clone_census.cpp: each clone's description and log line after a build, and the census of what view 1
+// does with them (on unless ETERNALVR_TEST_VIEW_CLONE_LOG=0), reported once 120 s after a build.
+void describeImage(Clone& clone, std::uintptr_t engineImage); // name, format, size and bytes of the clone
+std::string engineImageName(std::uintptr_t image);
+std::uint64_t engineImageBytes(std::uintptr_t image); // from its options (clone_census::imageBytes)
+void indexClones(Map& map);                           // byClone, byLeftOut and the counts
+void logBuild(const Map& map, int build);
+bool censusOn();
+// The clone's index in the map, or -1 (not a clone of this map).
+int cloneIndex(const Map& map, std::uintptr_t clone);
+void countUse(const Map& map, std::uintptr_t clone, clone_census::Use use);
+// A view 1 store, bind or mark the map had no clone for: the clone itself (kAsClone) or a left-out object.
+void countMiss(const Map& map, std::uintptr_t object, clone_census::Use use);
+void reportCensus(const Map& map, int build);
 
 } // namespace evr::vkcore::view_clone

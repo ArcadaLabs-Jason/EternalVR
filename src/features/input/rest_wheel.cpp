@@ -323,6 +323,8 @@ void RestWheel::arm(RestWheelOutput& out) {
     octant_ = WheelDirection::None;
     dwellSeconds_ = 0.0f;
     committed_ = WheelDirection::None;
+    flickCommitted_ = false;
+    peak_ = 0.0f;
     out.tick[index(stickHand_)] = WheelTick::Arm;
     note(out, RestWheelEvent::Armed);
     out.restHand = restHand_;
@@ -331,16 +333,23 @@ void RestWheel::arm(RestWheelOutput& out) {
 
 void RestWheel::point(float dt, RestWheelOutput& out) {
     const Axis2 stick = sticks_[index(stickHand_)];
-    const WheelDirection direction = octantOf(stick, octant_);
+    const float length = magnitude(stick);
+    const bool outward = length > peak_ + kOutwardStep;
+    if (outward) {
+        peak_ = length;
+    }
+    const WheelDirection direction =
+        outward ? wheelDirection(stick, kSelectThreshold) : octantOf(stick, octant_);
     if (direction != octant_) {
         octant_ = direction;
         dwellSeconds_ = 0.0f;
     } else if (direction != WheelDirection::None) {
         dwellSeconds_ += dt;
     }
-    if (settings_.pick == RestWheelPick::Slots && committed_ == WheelDirection::None &&
-        octant_ != WheelDirection::None && magnitude(stick) >= kFlickThreshold) {
+    if (settings_.pick == RestWheelPick::Slots && (committed_ == WheelDirection::None || flickCommitted_) &&
+        outward && octant_ != WheelDirection::None && length >= kFlickThreshold) {
         committed_ = octant_;
+        flickCommitted_ = true;
         return;
     }
     if (octant_ == WheelDirection::None || dwellSeconds_ < kDwellSeconds) {
@@ -348,6 +357,7 @@ void RestWheel::point(float dt, RestWheelOutput& out) {
     }
     if (settings_.pick == RestWheelPick::Slots) {
         committed_ = octant_;
+        flickCommitted_ = false;
         return;
     }
     route_ = Route::Open;
@@ -388,6 +398,8 @@ void RestWheel::finishRoute(bool picked) {
     octant_ = WheelDirection::None;
     dwellSeconds_ = 0.0f;
     committed_ = WheelDirection::None;
+    flickCommitted_ = false;
+    peak_ = 0.0f;
     pressSeconds_ = 0.0f;
 }
 

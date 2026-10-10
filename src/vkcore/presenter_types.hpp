@@ -13,9 +13,11 @@
 #include "features/pacing/restart_budget.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "ui_layer/ui_settings.hpp"
+#include "vkcore/frame_repeat.hpp"
 #include "vkcore/glory_view.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/presenter_stereo.hpp"
+#include "vkcore/view_snapshot.hpp"
 #include "vkcore/wait_stats.hpp"
 #include "vkcore/xr_presenter.hpp"
 
@@ -31,6 +33,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -142,6 +145,12 @@ struct ViewRecord {
     bool cutscene = false;
     bool cutsceneArms = false;
     std::array<EyeRecord, 2> eyes{};
+    // The game's own view origin (renderView_t, in the units `where` and `setviewpos` use) and the yaw of its
+    // forward axis in degrees, as the game gave them before the head is written: where the player stands, for
+    // bug captures.
+    bool gameOriginValid = false;
+    std::array<float, 3> gameOrigin{};
+    float gameYawDegrees = 0.0f;
     // Route S: the ring image holds this frame's two eyes, each shown with its own pose and FOV (false:
     // both halves show the head's).
     bool showEyes = false;
@@ -196,6 +205,20 @@ struct CopyTarget {
     // Alternate eyes: the image also goes into its half of this slot (held for the next present); kRingSize:
     // none.
     std::uint32_t carrySlot = kRingSize;
+    // Parallel Eye Rendering's in-headset capture: with a capture buffer, both halves of the slot are
+    // captured after the eye copies (eye L into that buffer, eye R into this one), as the headset gets them.
+    VkBuffer captureEyeR = VK_NULL_HANDLE;
+    // Parallel Eye Rendering (view_snapshot.hpp): eye 1 from its copy of view 1's image of the same frame,
+    // or with both, each eye from its frame's copy of its own view's image (null: from the image itself);
+    // the copy waits for each.
+    std::array<view_snapshot::Copy, 2> snapshots{};
+};
+
+// What an in-headset capture holds (the text file's kind line).
+enum class CaptureKind {
+    Mono,     // one image for both eyes: a menu, a loading screen, a frame without eye views
+    Pair,     // Route S: eye L and eye R of one game tick, from their own presents
+    RingEyes, // Parallel Eye Rendering: both eyes of one render, from the ring slot the headset gets
 };
 
 // A ring slot's copy of the game's GUI target (UI layer): shared like the slot's image.
@@ -204,6 +227,33 @@ struct UiImage {
     VkDeviceMemory memory = VK_NULL_HANDLE;
     ComPtr<ID3D12Resource> resource;
     bool written = false; // this slot's image came with a GUI copy (kSlotWriting / kSlotReading owner)
+};
+
+// Parallel Eye Rendering: the frames a ring slot's eyes are of, for the frames table
+// (presenter_frame_log.cpp): eye 0's and eye 1's frame (view 0 screen passes counted, view_snapshot.hpp; eye
+// 0's 0 with the guess) and the view record eye 1 was rendered with; all 0 when the present showed no copies.
+struct EyeFrames {
+    std::uint64_t eye0 = 0;
+    std::uint64_t eye1 = 0;
+    std::uint64_t eye1View = 0;
+};
+
+inline EyeFrames eyeFramesOf(const std::optional<view_snapshot::Pick>& pick) {
+    if (!pick || !pick->eyes[1].image) {
+        return {};
+    }
+    if (!pick->paired) {
+        return {0, pick->frame, pick->view};
+    }
+    return {pick->frame, pick->eye1Frame, pick->eye1View};
+}
+
+// The frames table's eye and repeat columns.
+struct FrameLogEyes {
+    // Present hook: why its last present handed the worker no image; NoPresent once one did (publishSlot).
+    std::atomic<FrameRepeat> lastPresent{FrameRepeat::NoPresent};
+    EyeFrames shown;                           // worker: the eyes of the image in the XR swapchain
+    FrameRepeat repeat = FrameRepeat::Waiting; // worker: this frame's (updateImage; New: a new image)
 };
 
 struct RingSlot {
@@ -217,7 +267,10 @@ struct RingSlot {
     // hook while the slot is kSlotWriting, read by the worker while it is kSlotReading.
     ViewRecord view;
     bool hasView = false;
+    EyeFrames eyes; // written and read as `view` is
     UiImage ui;
+    bool copySource =
+        false; // made with TRANSFER_SRC: the eye capture may copy out of it (import supports it)
 };
 
 Settings readSettings();
@@ -276,6 +329,15 @@ struct RateMarks {
     std::uint64_t xrFrames = 0;
     std::uint64_t xrCopies = 0;
     LONGLONG qpc = 0;
+};
+
+// The present hook's head-tracked views (presenter_copy.cpp) for the presenter's statistics line
+// (presenter_frame_log.cpp): presents whose slot has a view and how many frames behind the newest those views
+// were in all, and presents without one.
+struct PresentViews {
+    std::uint64_t withView = 0;
+    std::uint64_t seqGapSum = 0;
+    std::uint64_t withoutView = 0;
 };
 
 // A game swapchain image whose present was handed back instead of reaching the window (presenter_window.cpp).

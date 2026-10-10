@@ -20,9 +20,10 @@ struct CaptureSetting {
 std::optional<CaptureSetting> parseCaptureSetting(std::wstring_view text);
 
 // ETERNALVR_CAPTURE_BURST=<n>: an in-headset capture saves n consecutive frames instead of one, Route S pairs
-// (both eyes each) or mono frames. 1 to kMaxCaptureBurst: each frame holds a host copy of each of its images
-// (about 18 MB per image at 2056x2216, so 36 MB per pair) until the burst is written, and the background
-// writer compresses them one after another (about 0.35 s per image). nullopt for anything else.
+// or Parallel Eye Rendering frames (both eyes each) or mono frames. 1 to kMaxCaptureBurst: each frame holds a
+// host copy of each of its images (about 18 MB per image at 2056x2216, so 36 MB per pair) until the burst is
+// written, and the background writer compresses them one after another (about 0.35 s per image). nullopt for
+// anything else.
 inline constexpr std::uint32_t kMaxCaptureBurst = 16;
 std::optional<std::uint32_t> parseCaptureBurst(std::wstring_view text);
 

@@ -33,6 +33,8 @@
 namespace evr::vkcore {
 
 void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
+    // The frames table's reason until a new image is taken or nothing newer is found handed over.
+    frameLogEyes.repeat = FrameRepeat::Waiting;
     if (heldCopy.stalled) {
         if (copyFence->GetCompletedValue() < copyFenceValue) {
             ++xrRepeats;
@@ -59,6 +61,7 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     const std::uint64_t newest = packed >> 2;
     if (newest <= lastConsumed) {
         ++xrRepeats;
+        frameLogEyes.repeat = frameLogEyes.lastPresent.load(); // why the game's last present handed none
         return;
     }
     // OpenXR swapchain rules (T-081): after a timeout the image stays acquired and is waited on again
@@ -181,6 +184,8 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
                                      std::uint64_t value,
                                      const ViewRecord& view,
                                      bool hasView) {
+    frameLogEyes.shown = ring[slotIndex].eyes; // read before the slot is free again
+    frameLogEyes.repeat = FrameRepeat::New;
     ring[slotIndex].state.store(kSlotFree);
     lastConsumed = value;
 

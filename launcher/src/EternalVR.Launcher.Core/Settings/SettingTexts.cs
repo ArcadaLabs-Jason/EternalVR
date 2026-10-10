@@ -128,7 +128,7 @@ namespace EternalVR.Launcher.Core.Settings
                 "Touch, then push", "While touched", "Off (default)"),
             [Setting.ThumbRestPicks] = new Text("Thumb-rest picks",
                 "Weapon wheel: the game's wheel opens and the stick points at a weapon; letting go picks it. Weapon by "
-                + "direction: each of the eight stick directions is one weapon slot, picked on letting go; the wheel stays "
+                + "direction: push toward a weapon where the game's wheel shows it and let go; the wheel stays "
                 + "closed.",
                 "Weapon wheel (default)", "Weapon by direction"),
             [Setting.ThumbRestFaceTouch] = new Text("Face buttons as thumb rest",
@@ -173,14 +173,14 @@ namespace EternalVR.Launcher.Core.Settings
                 "The size each eye renders at, per side against what the runtime asks for and the native panel; with DLSS, about "
                 + "the size DLSS draws. After a session held to the window's size (AMD Radeon RX 5000 and 6000), that size first."),
             [Setting.AntiAliasing] = new Text("Anti-aliasing",
-                "How edges are smoothed in each eye. TAA (recommended) is the game's own: smooth edges, with each eye "
+                "How edges are smoothed in each eye. TAA (the default) is the game's own: smooth edges, with each eye "
                 + "keeping its own history. DLSS needs an NVIDIA RTX card: it renders a smaller image and scales it up, which "
                 + "helps only when the graphics card is what limits the frame rate; when the processor is, it can be slower "
                 + "than TAA. Its quality, version and preset are in the DLSS group. Off turns anti-aliasing and the game's "
                 + "other temporal effects off: sharp, with some shimmer on edges and shiny surfaces, and a little lighter on "
                 + "the graphics card. The game's own DLSS setting in its video menu is not used in VR with DLSS or Off (it "
                 + "shows what runs, and your flat game keeps its setting); with TAA it is used: if it is on, DLSS runs in VR.",
-                "TAA (recommended)", "DLSS (RTX cards)", "Off"),
+                "TAA", "DLSS (RTX cards)", "Off"),
             [Setting.Sharpening] = new Text("Sharpening",
                 "The game's sharpening filter, applied to each eye's finished picture, with any anti-aliasing. The game's "
                 + "setting is the one from its own video menu (Advanced, Sharpening); the others hold it at a fixed strength "

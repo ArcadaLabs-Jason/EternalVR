@@ -115,9 +115,11 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   moves nor turns; a stick out when the thumb lands waits for the centre). `extreme`: the turn stick is always
   the wheel's; the rest on the other hand (the move stick's) gives it back its turning, chainsaw and quick
   switch, and ends a pick in progress. `off`. Picking: nothing is pressed until the stick has stayed 0.1 s in
-  one of the eight directions at 0.5 or more (a direction is kept until the stick is 7.5 degrees past the edge
-  of its eighth), so a flick presses nothing; with `slots` the first direction a stick reaches past 0.85
-  (`kFlickThreshold`) counts at once, so a flick picks. Then with `ETERNALVR_THUMBREST_PICK=wheel` (default)
+  one of the eight directions at 0.5 or more (once the stick stops going further out, a direction is kept until
+  the stick is 7.5 degrees past the edge of its eighth; while it still goes further out, by more than 0.02, it
+  points at the eighth it is in, so a stick that curves on its way out takes the eighth it reaches,
+  `kOutwardStep`), so a flick presses nothing; with `slots` a stick past 0.85 (`kFlickThreshold`) counts at
+  once, at the eighth of its furthest point, so a flick picks. Then with `ETERNALVR_THUMBREST_PICK=wheel` (default)
   `weapon_wheel` goes down and the stick points as under the stick's own hold (`wheelPointer`; below 0.5 the
   last direction, so the highlight stays); the stick back in the centre, the thumb lifted (or in `extreme` the
   other thumb resting) closes it, held at least the game's open delay plus 0.12 s from the press, never under
@@ -125,8 +127,8 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   Delay, 180 ms by default, read every mapper run; 0.3 s when the cvar is not found), so a quick pick is never
   a quick switch. There is no cancel once it is open. With `slots` the wheel stays closed and the direction
   held last is remembered; letting go presses its `weapon_slot_N` once (held by `ActionHold`), from
-  `ETERNALVR_WEAPON_DIRECTIONS` (`up=1,up_right=2,...`, `weapon_directions.hpp`; the default, clockwise slots
-  1 to 8 from up, is to be matched to the game's wheel layout from a rig screenshot). The mapper runs the
+  `ETERNALVR_WEAPON_DIRECTIONS` (`up=1,up_right=5,...`, `weapon_directions.hpp`; the default is the game's own
+  wheel, from a rig screenshot: each direction picks the weapon the wheel shows there). The mapper runs the
   wheel before the turn stick's arbiter and the turn: the stick it takes goes to the arbiter as a held wheel
   from the frame it leaves 0.25, so a snap (0.70) or a smooth turn (0.35) never fires first; the move stick is
   zeroed. After a pick or a cancel that stick stays out of play until it is back within 0.25. Blocked (no
@@ -389,7 +391,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_WHEEL_HAND_DEGREES` | the hand's turn that reaches the wheel's rim, 5 to 45 degrees (half of it highlights a weapon) | 20 |
 | `ETERNALVR_THUMBREST_WHEEL` | the thumb-rest wheel (above): `edge` (a thumb on its rest, then the other stick pushed within the window), `full` (the other stick picks while the thumb rests), `extreme` (the turn stick always picks; the other thumb's rest turns), `off` | `off` |
 | `ETERNALVR_THUMBREST_PICK` | `wheel`: the game's wheel opens and the stick points; `slots`: each direction presses a weapon slot on letting go | `wheel` |
-| `ETERNALVR_WEAPON_DIRECTIONS` | under `slots`, the slot (1 to 8, or `none`) of each direction: `up=1,up_right=2,right=3,down_right=4,down=5,down_left=6,left=7,up_left=8`; a direction left out keeps its default | that table |
+| `ETERNALVR_WEAPON_DIRECTIONS` | under `slots`, the slot (1 to 8, or `none`) of each direction: `up=1,up_right=5,right=2,down_right=7,down=3,down_left=6,left=4,up_left=8` (the game's wheel: combat shotgun, super shotgun, heavy cannon, chaingun, plasma rifle, ballista, rocket launcher, BFG); a direction left out keeps its default | that table |
 | `ETERNALVR_THUMBREST_FACE_TOUCH` | `1`: a thumb on A/B or X/Y counts as resting, on Index and Pico 4 controllers (their touch bindings are added for the session) | `0` |
 | `ETERNALVR_THUMBREST_SLOWDOWN` | `0`: no slowdown while the thumb-rest wheel holds the game's wheel open (`weaponWheel_slowTimeScale` held at 1); `1` writes nothing | `1` |
 | `ETERNALVR_THUMBREST_WINDOW` | `edge`: seconds from the thumb's landing to the push, 0.2 to 1 (tuning) | 0.5 |
@@ -508,26 +510,29 @@ it (it switches to the desktop view), so it is not used.
 
 The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`, `presenter_snapshot.cpp`):
 `capture-<date>-<time>-p<pair>-t<tick>-L.png` and `-R.png` (the two eye images as presented), `-UI.png` (the
-game's GUI target, what the HUD quad shows, with its alpha) and `.txt` (the head and eye poses and FOVs, the
-render size, the TAA / DLSS state, the tick). In a menu or loading screen there is no stereo pair: after
-0.3 s the next mono frame is saved as `-mono.png` instead. With `ETERNALVR_CAPTURE_BURST=<n>`
-(docs/VR_STEREO.md) a capture is n consecutive pairs (or mono frames), saved as `-f00-L.png`, `-f00-R.png`,
-`-f01-L.png` ... (`-f00-mono.png` ...) with one text file and one GUI image (frame 00's); a frame of the
-other kind ends a burst early. The copies are the periodic capture's (`ETERNALVR_CAPTURE_EYES`,
-`ETERNALVR_CAPTURE_UI`), the PNG files are written on a background thread straight from the host buffers and
-the log says `capture: saved eye L/R + UI to ...` with the number of frames and the time since the trigger
-pull. At most 50 frames per session (`bug_capture::kMaxFramesPerSession`): a capture of one frame counts
-one, a burst each of its frames, and a burst takes no more than are left. The PNG files are compressed
-(unlike the periodic eye pairs; `stereo_seq/deflate.hpp`, each row with the PNG filter that suits it): at a
-2056x2216 render size an eye image is 6 to 7.5 MB (about half its raw size) and the UI image well under
-1 MB, so a capture is about 13 MB and a session's captures at most about 650 MB; the background thread
-takes about 0.35 s per eye image and 0.1 s for the UI image. A burst is a little under n times that (about
-12 MB per pair, 0.7 s of writing), and until it is written it holds n pairs of host buffers (about 36 MB
-per pair at that size; freed once it is written). The launcher's Export report takes the newest captures, up
-to 20 MB (`ReportManifest.CapturesCapBytes`: one capture at that render size, and the zip stays under
-GitHub's 25 MB attachment limit); of a burst, its text file, its GUI image and as many of its frames, in
-order, as fit (the first at that size), and the report's list of left-out files says how many frames stayed
-out.
+game's GUI target, what the HUD quad shows, with its alpha) and `.txt` (the head and eye poses and FOVs, where
+the player stands in the map (the game's view origin and yaw, as `where` and `setviewpos` use them), the
+render size, the TAA / DLSS state, the tick). In a menu or loading screen there is no stereo pair: after 0.3 s
+the next mono frame is saved as `-mono.png` instead. Under Parallel Eye Rendering a capture's `-L.png` and
+`-R.png` are both halves of the ring slot the headset gets (eye R from view 1; the same image in both without
+eye views), at the headset's eye image size, and the text file names the game frame record. With
+`ETERNALVR_CAPTURE_BURST=<n>` (docs/VR_STEREO.md) a capture is n consecutive pairs (Route S or Parallel Eye
+Rendering frames, or mono frames), saved as `-f00-L.png`, `-f00-R.png`, `-f01-L.png` ... (`-f00-mono.png` ...)
+with one text file and one GUI image (frame 00's); a frame of the other kind ends a burst early. The copies
+are the periodic capture's (`ETERNALVR_CAPTURE_EYES`, `ETERNALVR_CAPTURE_UI`), the PNG files are written on a
+background thread straight from the host buffers and the log says `capture: saved eye L/R + UI to ...` with
+the number of frames and the time since the trigger pull. At most 50 frames per session
+(`bug_capture::kMaxFramesPerSession`): a capture of one frame counts one, a burst each of its frames, and a
+burst takes no more than are left. The PNG files are compressed (unlike the periodic eye pairs;
+`stereo_seq/deflate.hpp`, each row with the PNG filter that suits it): at a 2056x2216 render size an eye image
+is 6 to 7.5 MB (about half its raw size) and the UI image well under 1 MB, so a capture is about 13 MB and a
+session's captures at most about 650 MB; the background thread takes about 0.35 s per eye image and 0.1 s for
+the UI image. A burst is a little under n times that (about 12 MB per pair, 0.7 s of writing), and until it is
+written it holds n pairs of host buffers (about 36 MB per pair at that size; freed once it is written). The
+launcher's Export report takes the newest captures, up to 20 MB (`ReportManifest.CapturesCapBytes`: one
+capture at that render size, and the zip stays under GitHub's 25 MB attachment limit); of a burst, its text
+file, its GUI image and as many of its frames, in order, as fit (the first at that size), and the report's
+list of left-out files says how many frames stayed out.
 
 **Skipping a cutscene by hand.** With the automatic skip off (`ETERNALVR_SKIP_CINEMATICS=0`, the
 launcher's "Skip cutscenes automatically" unticked), holding the dash action (B on the weapon hand; the

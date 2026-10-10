@@ -45,6 +45,8 @@ namespace EternalVR.Launcher
         private readonly Button exportReport = new Button { Text = "Export report...", Width = 120, Height = BarButtonHeight };
         /// <summary>The status line's "Launch VR is off" reason now shown (<see cref="ShowLaunchBlock"/>); null when none is.</summary>
         private string shownBlock;
+        /// <summary>The last check's game build runs Parallel Eye Rendering (<see cref="BuildCheck.RunsParallelEyes"/>).</summary>
+        private bool parallelEyesGame = true;
 
         public MainForm(LauncherContext ctx)
         {
@@ -314,6 +316,14 @@ namespace EternalVR.Launcher
             gameFolder.Text = g.Game == null ? "Not found: choose the DOOM Eternal folder." : g.Game.GameRoot;
             tips.SetToolTip(gameFolder, g.Game == null ? gameFolder.Text : g.Game.GameRoot + Environment.NewLine + $"(found from {g.Game.Source})");
             var build = g.Facts.Build;
+            // Parallel Eye Rendering runs on one Steam build: on any other (Game Pass, an unknown or missing exe, no game
+            // found) its row is greyed out and Alternate eyes and Foveation apply again, as the launch then passes them.
+            bool runsParallelEyes = build?.RunsParallelEyes == true;
+            if (runsParallelEyes != parallelEyesGame)
+            {
+                parallelEyesGame = runsParallelEyes;
+                UpdateRules();
+            }
             header.SetText(
                 g.Game == null ? "DOOM Eternal not found" : "DOOM Eternal",
                 build == null ? "Choose the game folder (Advanced)"

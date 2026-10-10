@@ -47,6 +47,11 @@ namespace EternalVR.Launcher.Core.Launch
         public string PlayerSsdo { get; set; }
         /// <summary>The player's own <c>r_SSR</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
         public string PlayerSsr { get; set; }
+        /// <summary>
+        /// The game is the build Parallel Eye Rendering runs on (<see cref="BuildCheck.RunsParallelEyes"/>). On another the
+        /// layer would refuse it: it is not asked for, and Alternate eyes and Foveation are passed as without it.
+        /// </summary>
+        public bool ParallelEyesGame { get; set; } = true;
     }
 
     /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
@@ -137,6 +142,8 @@ namespace EternalVR.Launcher.Core.Launch
             if (string.IsNullOrEmpty(inputs.LayerDir)) throw new ArgumentException("layer folder is not set");
             var s = inputs.Settings;
             bool stereo = s.Mode == VrMode.Stereo;
+            // Parallel Eye Rendering asked and on a build it runs on; elsewhere the layer refuses it and keeps the standard renderer.
+            bool parallel = s.ParallelEyesOn(inputs.ParallelEyesGame);
             // With the render size (the default) the eyes do not depend on the window: it is only the desktop mirror.
             var renderSize = LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto;
             bool mirror = stereo && renderSize != LauncherSettings.RenderSizeOff;
@@ -178,12 +185,12 @@ namespace EternalVR.Launcher.Core.Launch
             if (stereo) Set("ETERNALVR_MODE", "stereo");
             // One eye per game tick for slower processors, always or only while the processor cannot keep up
             // (docs/rig-findings/alternate-eye.md); explicit either way. Not with Parallel Eye Rendering, which ignores it.
-            Set("ETERNALVR_ALTERNATE_EYES", stereo && !s.ParallelEyesOn ? LauncherSettings.AlternateEyesValue(s.AlternateEyes) : "0");
+            Set("ETERNALVR_ALTERNATE_EYES", stereo && !parallel ? LauncherSettings.AlternateEyesValue(s.AlternateEyes) : "0");
             // Parallel Eye Rendering: both eyes as two views of one render, their work at the same time (docs/VR_STEREO.md
             // "Parallel Eye Rendering"). The layer turns it on only for the game version it knows, and holds what it needs
-            // (async compute off among them) itself. Stereo only and not with DLSS (the layer would keep the standard
-            // renderer); absent when off.
-            if (s.ParallelEyesOn) Set("ETERNALVR_PARALLEL_EYES", "1");
+            // (async compute off among them) itself, DLSS in both views with the launcher's DLSS. Stereo only; absent
+            // when off, and on any build but the one it runs on (Game Pass: the standard renderer).
+            if (parallel) Set("ETERNALVR_PARALLEL_EYES", "1");
             // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md), in
             // mono too: a menu over the game (pause, the Dossier, a tutorial popup) gets its panel and pointer from it.
             Set("ETERNALVR_UI_LAYER", "1");
@@ -293,12 +300,12 @@ namespace EternalVR.Launcher.Core.Launch
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
             // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, not with Parallel Eye
             // Rendering (the layer turns it off there), absent when off.
-            if (stereo && !s.ParallelEyesOn && s.Foveation != FoveationMode.Off)
+            if (stereo && !parallel && s.Foveation != FoveationMode.Off)
                 Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
             // Frame pacing (docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset.
             // Stereo only and not with adaptive alternate eyes (which Parallel Eye Rendering ignores); explicit either way
             // (the layer's default may change).
-            var paced = stereo && (s.AlternateEyes != AlternateEyesMode.Auto || s.ParallelEyesOn) ? s.Pacing : FramePacing.Off;
+            var paced = stereo && (s.AlternateEyes != AlternateEyesMode.Auto || parallel) ? s.Pacing : FramePacing.Off;
             Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
             // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
             // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could

@@ -6,6 +6,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/taa_hooks.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <windows.h>
 
@@ -370,8 +371,10 @@ void installDlaa(const GameImage& image) {
 }
 
 void install() {
-    // DLAA (ETERNALVR_STEREO_DLSS_QUALITY=dlaa) applies where the quality does: DLSS per eye under Route S.
-    const bool dlaa = taaRequested() && taaDlssRequested() && taaDlssDlaa();
+    // DLAA (ETERNALVR_STEREO_DLSS_QUALITY=dlaa) applies where the quality does: DLSS per eye under Route S,
+    // DLSS in both views under Parallel Eye Rendering (installed from vkCreateInstance, before this).
+    const bool perEye = taaRequested() || (parallelEyesChangedEngine() && parallelEyesSettings().dlss);
+    const bool dlaa = perEye && taaDlssRequested() && taaDlssDlaa();
     std::wstring value;
     if (!readEnv(L"ETERNALVR_DLSS_DLL", value) || value.empty()) {
         if (dlaa) {

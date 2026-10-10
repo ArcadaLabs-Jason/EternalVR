@@ -19,7 +19,8 @@ std::atomic<bool> g_on{false};
 stereo_seq::CpuLoadSpec g_spec;
 std::uint64_t g_startMicros = 0;
 
-void read() {
+// `where`: the place the load runs, for the line.
+void read(const char* where) {
     std::wstring value;
     if (!readEnv(L"ETERNALVR_TEST_CPU_LOAD_MS", value) || value.empty()) {
         return;
@@ -37,8 +38,8 @@ void read() {
     g_spec = *spec;
     g_startMicros = window_timing::nowMicros();
     g_on.store(true, std::memory_order_release);
-    EVR_LOG("test: CPU load %.2f ms at every render's frame end%s (ETERNALVR_TEST_CPU_LOAD_MS, a test knob)",
-            g_spec.ms,
+    EVR_LOG("test: CPU load %.2f ms at every render's %s%s (ETERNALVR_TEST_CPU_LOAD_MS, a test knob)",
+            g_spec.ms, where,
             g_spec.onSeconds > 0.0 && g_spec.offSeconds > 0.0
                 ? (", on for " + std::to_string(g_spec.onSeconds) + " s, off for " +
                    std::to_string(g_spec.offSeconds) + " s, repeating")
@@ -46,10 +47,8 @@ void read() {
                 : "");
 }
 
-} // namespace
-
-void atFrameEnd() {
-    std::call_once(g_once, read);
+void load(const char* where) {
+    std::call_once(g_once, read, where);
     if (!g_on.load(std::memory_order_acquire)) {
         return;
     }
@@ -59,6 +58,16 @@ void atFrameEnd() {
     while (window_timing::nowMicros() < until) {
         // Busy: a processor that is slower, not one that sleeps.
     }
+}
+
+} // namespace
+
+void atFrameEnd() {
+    load("frame end");
+}
+
+void atViewDispatch() {
+    load("view dispatch (Parallel Eye Rendering)");
 }
 
 } // namespace evr::vkcore::test_cpu_load

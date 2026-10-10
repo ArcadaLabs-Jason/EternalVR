@@ -9,6 +9,8 @@
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/taa_locate.hpp"
 #include "vkcore/taa_ngx.hpp"
+#include "vkcore/view_dlss.hpp"
+#include "vkcore/view_slots.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -64,10 +66,18 @@ std::atomic<int> g_refreshes{0};
 
 stereo_seq::DlssMenuHold currentHold() {
     stereo_seq::DlssMenuHold hold;
-    hold.perEyeTaa = taaRequested() && !taaFailedClosed();
-    hold.dlssOption = taaDlssRequested();
-    hold.dlssPerEye = taaDlssPerEyeReady();
-    hold.dlssRetry = ngxTwinFailed();
+    if (parallelEyesChangedEngine()) {
+        // Parallel Eye Rendering holds TAA or the launcher's DLSS (each view's own feature, view_dlss.hpp).
+        hold.perEyeTaa = !parallelEyesSettings().antiAliasingOff;
+        hold.dlssOption = parallelEyesSettings().dlss;
+        hold.dlssPerEye = viewDlssRunning();
+        hold.dlssRetry = viewDlssFallback();
+    } else {
+        hold.perEyeTaa = taaRequested() && !taaFailedClosed();
+        hold.dlssOption = taaDlssRequested();
+        hold.dlssPerEye = taaDlssPerEyeReady();
+        hold.dlssRetry = ngxTwinFailed();
+    }
     const int quality = taaDlssQuality();
     hold.dlssQuality = quality >= 0 ? quality : (g_dlssQuality ? cvarInt(g_dlssQuality) : -1);
     return hold;
@@ -117,7 +127,11 @@ void onSetter(void* settings, int index) {
         g_setterOriginal(settings, index);
     }
     if (apply == stereo_seq::DlssMenuApply::Retry || apply == stereo_seq::DlssMenuApply::ApplyRetry) {
-        retryNgxTwins();
+        if (parallelEyesChangedEngine()) {
+            viewDlssRetry();
+        } else {
+            retryNgxTwins();
+        }
     }
 }
 

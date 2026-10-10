@@ -15,6 +15,7 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/queue_entry.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
 #include "vkcore/stall_watch.hpp"
@@ -27,6 +28,7 @@
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/view_async.hpp"
 #include "vkcore/view_slots.hpp"
+#include "vkcore/view_snapshot.hpp"
 #include "vkcore/virtual_client.hpp"
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/xr_presenter.hpp"
@@ -397,6 +399,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
         data->presenter->shutdown();
         data->presenter.reset();
     }
+    view_snapshot::onDeviceDestroyed(*data);
     shader_dump::onDeviceDestroyed(device);
     ui_vulkan::onDeviceDestroyed(device);
     gpu_timing::onDeviceDestroyed(device);
@@ -409,32 +412,6 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     g_devices.erase(keyOf(device));
 }
 
-void recordQueue(DeviceData& data, VkQueue queue, std::uint32_t family) {
-    std::lock_guard lock(data.queueMutex);
-    data.queueFamilies[queue] = family;
-}
-
-VKAPI_ATTR void VKAPI_CALL GetDeviceQueue(VkDevice device,
-                                          std::uint32_t family,
-                                          std::uint32_t index,
-                                          VkQueue* pQueue) {
-    DeviceData* data = findDevice(device);
-    data->vk.GetDeviceQueue(device, family, index, pQueue);
-    if (*pQueue) {
-        recordQueue(*data, *pQueue, family);
-    }
-}
-
-VKAPI_ATTR void VKAPI_CALL GetDeviceQueue2(VkDevice device,
-                                           const VkDeviceQueueInfo2* pInfo,
-                                           VkQueue* pQueue) {
-    DeviceData* data = findDevice(device);
-    data->vk.GetDeviceQueue2(device, pInfo, pQueue);
-    if (*pQueue) {
-        recordQueue(*data, *pQueue, pInfo->queueFamilyIndex);
-    }
-}
-
 // ---------------------------------------------------------------------------------------------------
 // Proc address lookups
 
@@ -444,9 +421,10 @@ PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name) {
         return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
     }
     EVR_HOOK(DestroyDevice)
-    EVR_HOOK(GetDeviceQueue)
-    EVR_HOOK(GetDeviceQueue2)
 #undef EVR_HOOK
+    if (const PFN_vkVoidFunction queue = findQueueHook(name)) {
+        return queue;
+    }
     if (const PFN_vkVoidFunction swapchain = findSwapchainHook(name)) {
         return swapchain;
     }

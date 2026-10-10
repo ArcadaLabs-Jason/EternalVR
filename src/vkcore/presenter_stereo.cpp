@@ -11,6 +11,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/presenter_eyes.hpp"
 #include "vkcore/view_slots.hpp"
+#include "vkcore/view_snapshot.hpp"
 #include "vkcore/vrs_nv.hpp"
 
 #include <cmath>
@@ -312,6 +313,13 @@ void XrPresenter::Impl::onEyeView(std::byte* renderView, int viewIndex, const st
     // A cutscene with its arms hidden keeps the game's own model FOV scale (controllers::cutsceneArmsHidden).
     renderView[stereo_view_fields::kInhibitModelFovScale] =
         std::byte{settings.stereo.inhibitModelFov && !record.cutsceneArms ? 1u : 0u};
+    // One auto exposure for both eyes, adapted to eye L's image, as under Route S: view 1 skips its update
+    // and reads the shared exposure view 0 wrote this frame (its exposure targets are not cloned,
+    // view_clones.cpp). Each view adapting to its own image left eye R up to a sixth darker wherever it saw
+    // more light than eye L.
+    if (viewIndex == 1) {
+        renderView[stereo_view_fields::kSkipAutoExposureUpdate] = std::byte{1};
+    }
     if (settings.stereo.copyJitter && xr_math::copiesFirstViewJitter(viewIndex) && firstViewG != renderView) {
         const std::byte first = firstViewG[stereo_view_fields::kSubSampleIndex];
         if (renderView[stereo_view_fields::kSubSampleIndex] != first) {
@@ -325,6 +333,7 @@ void XrPresenter::Impl::onEyeView(std::byte* renderView, int viewIndex, const st
     noteWritten(viewIndex, *projection);
     if (viewIndex == 0) {
         latchedSeq.store(record.seq, std::memory_order_release);
+        view_snapshot::noteFrameView(record.seq); // the pose the copy of this frame's view 1 carries
     }
     ++stereoStats.eyeViews[viewIndex];
     if (stereoStats.loggedEyes.fetch_add(1) < 6) {

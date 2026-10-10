@@ -12,6 +12,7 @@
 #include "vkcore/seh_filter.hpp"
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/ui_engine.hpp"
+#include "vkcore/view_slots.hpp"
 #include "vkcore/window_timing.hpp"
 
 #include <windows.h>
@@ -360,6 +361,12 @@ bool hook(void* target, void* destination, void** original, const char* name) {
 
 bool installNgxTwins() {
     std::call_once(g_installOnce, [] {
+        // Parallel Eye Rendering's view 1 has a feature of its own (view_dlss.hpp): a twin would mix the
+        // views.
+        if (parallelEyesChangedEngine()) {
+            EVR_LOG("%s: no per-eye DLSS twins on the engine Parallel Eye Rendering changed", kTag);
+            return;
+        }
         GameImage image;
         if (!locateGameImage(image, kTag)) {
             return;

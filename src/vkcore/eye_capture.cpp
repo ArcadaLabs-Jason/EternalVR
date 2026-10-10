@@ -492,4 +492,47 @@ void EyeCapture::record(
                               1, &toHost, 0, nullptr);
 }
 
+void EyeCapture::recordRingEyes(DeviceData& dev,
+                                VkCommandBuffer cb,
+                                VkImage ring,
+                                VkExtent2D eye,
+                                const std::array<VkBuffer, 2>& buffers) {
+    VkImageMemoryBarrier toRead{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    toRead.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toRead.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    toRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toRead.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    toRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toRead.image = ring;
+    toRead.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                              nullptr, 0, nullptr, 1, &toRead);
+    std::array<VkBufferMemoryBarrier, 2> toHost{};
+    for (std::uint32_t i = 0; i < 2; ++i) {
+        VkBufferImageCopy region{};
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageOffset = {static_cast<std::int32_t>(i * eye.width), 0, 0};
+        region.imageExtent = {eye.width, eye.height, 1};
+        dev.vk.CmdCopyImageToBuffer(cb, ring, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffers[i], 1, &region);
+        toHost[i] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        toHost[i].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toHost[i].dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        toHost[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toHost[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toHost[i].buffer = buffers[i];
+        toHost[i].size = VK_WHOLE_SIZE;
+    }
+    dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr,
+                              2, toHost.data(), 0, nullptr);
+    // Back to TRANSFER_DST for the slot's own release barrier (recordCopy).
+    VkImageMemoryBarrier back = toRead;
+    back.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    back.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    back.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    back.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                              nullptr, 0, nullptr, 1, &back);
+}
+
 } // namespace evr::vkcore

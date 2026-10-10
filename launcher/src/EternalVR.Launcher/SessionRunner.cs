@@ -307,6 +307,14 @@ namespace EternalVR.Launcher
             var controlsText = UnboundControls.StatusText(unbound);
             var summaryText = summary?.Describe();
             var ratesText = !string.IsNullOrEmpty(summaryText) ? " " + summaryText : rates != null ? " " + rates.Describe() : string.Empty;
+            // Whether Parallel Eye Rendering ran, or fell back and why: in the summary's sentences, else (no headset frame
+            // logged) said here.
+            var parallel = summary?.ParallelEyes ?? ParallelEyesRun.FromLines(layerLines);
+            if (summary == null && parallel.State != ParallelEyesState.NotAsked)
+            {
+                Log.Info("session parallel eyes: " + parallel.Text());
+                ratesText = " " + parallel.Sentence() + ratesText;
+            }
             // Each eye below the planned size: the graphics driver held it at the window's size (RenderCap).
             var cap = ReadRenderCap(logDir);
             ctx.RememberRenderCap(cap);
@@ -318,7 +326,7 @@ namespace EternalVR.Launcher
             }
             // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended.
             if (lastStatus == null || lastStatus.Kind != StatusKind.Problem)
-                Report(restored && exitText.Length == 0 && !capped && controlsText.Length == 0 ? StatusKind.Good : StatusKind.Warning, exitText + (restored
+                Report(restored && exitText.Length == 0 && !capped && controlsText.Length == 0 && !parallel.FellBack ? StatusKind.Good : StatusKind.Warning, exitText + (restored
                     ? "The game has exited and your settings were restored."
                     : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).")
                     + (controlsText.Length == 0 ? string.Empty : " " + controlsText) + ratesText);

@@ -9,9 +9,11 @@
 // into the same images).
 //
 // The clone set is made on the first two-view frame and again when the engine's targets change (a resize, or
-// a map load that frees unreferenced scratch images: up to 64 remakes); the 8th change of the targets
-// themselves (the first set counts as one of 8 builds) turns the clones off for the process (logged), and
-// view 1 is then not rendered.
+// a map load that frees unreferenced scratch images: up to 64 remakes). A rebuild keeps each image clone by
+// its name; the engine's resize purges them all after its device idle and the next build allocates them
+// again under their names (view_clone_make.hpp). The 32nd change of the targets themselves (the first set
+// counts as one of 32 builds; 8 with ETERNALVR_TEST_VIEW_CLONE_NAMES=build) turns the clones off for the
+// process (logged), and view 1 is then not rendered. Each build logs every clone (view_clone_census.cpp).
 
 #include <cstddef>
 

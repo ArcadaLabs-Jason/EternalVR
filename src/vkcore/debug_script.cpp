@@ -51,9 +51,10 @@ constexpr std::string_view kAllowedCommands[] = {
     "ai_Show", "ai_Hide", "nextActiveAI", "nextAI", "prevAI", "ai_teleportToPlayer", "moveToFacingPlayer",
     "ai_forceIdle", "ai_forceFreeze", "ai_forceAnim", "killAI", "removeAI", "healAI", "encounter_clearWait",
     "gibalicious",
-    // Cvars set in the map (rig scripts, tools/rig/cpu-cvar-ab.ps1).
+    // Cvars set in the map (rig scripts, tools/rig/cpu-cvar-ab.ps1); a change of r_hdrDisplay makes the next
+    // frame recreate the swapchain.
     "g_dumpSpawnedEntities", "g_setting_hud_auto_dismiss_tutorials", "g_setting_tutorials",
-    "p_debugAnimatedCamera", "r_sharpening", "is_update", "is_defrag", "r_skipGPUParticles"};
+    "p_debugAnimatedCamera", "r_sharpening", "is_update", "is_defrag", "r_skipGPUParticles", "r_hdrDisplay"};
 
 char lower(char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;

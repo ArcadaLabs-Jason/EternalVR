@@ -103,6 +103,7 @@ add_library(evr_layer SHARED
     ring_trace.cpp
     window_timing.cpp
     runtime_cvars.cpp
+    runtime_cvars_pe.cpp
     presenter_eyes.cpp
     fence_wait.cpp
     presenter_frame.cpp
@@ -123,6 +124,7 @@ add_library(evr_layer SHARED
     presenter_refresh.cpp
     presenter_xr.cpp
     presenter_xr_events.cpp
+    queue_entry.cpp
     room_follow.cpp
     room_posture.cpp
     reticle_depth.cpp
@@ -162,13 +164,32 @@ add_library(evr_layer SHARED
     view_binning.cpp
     view_block.cpp
     view_clone_binds.cpp
+    view_clone_census.cpp
+    view_clone_make.cpp
+    view_clone_map.cpp
     view_clones.cpp
     view_contexts.cpp
+    view_dlss.cpp
     view_redirects.cpp
     view_hook.cpp
     view_install.cpp
+    view_jobs.cpp
     view_one_passes.cpp
+    view_query_copy.cpp
+    view_shadow_cache.cpp
+    view_shared_state.cpp
+    view_skin_alloc.cpp
     view_slots.cpp
+    view_snapshot.cpp
+    view_snapshot_frames.cpp
+    view_snapshot_pairs.cpp
+    view_snapshot_ring.cpp
+    view_snapshot_stats.cpp
+    view_swap_guard.cpp
+    view_swap_watch.cpp
+    view_updates.cpp
+    view_water.cpp
+    view_water_sites.cpp
     virtual_client.cpp
     vram_watch.cpp
     window_cap.cpp

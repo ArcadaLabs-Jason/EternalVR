@@ -8,6 +8,8 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/view_clone_map.hpp"
 #include "vkcore/view_slots.hpp"
+#include "vkcore/view_snapshot.hpp"
+#include "vkcore/view_swap_guard.hpp"
 
 #include <windows.h>
 
@@ -37,8 +39,9 @@ std::uintptr_t context1() {
 // image the eye copy gives eye 1 (presenter_eyes.hpp). On with the screen-pass eye copy (the default).
 constexpr std::uint32_t kScreenPassBindReturn = 0x1CDF843;
 constexpr std::uint32_t kScreenPassSourceReturn = 0x1CDFC2D;
-constexpr std::size_t kScreenPassOutput = 0x60; // the caller's stack: the output image
-constexpr std::size_t kScreenPassEntry = 0x38;  // the caller's stack: the render-list entry
+constexpr std::uint32_t kScreenPassOutputReturn = 0x1CDFC4F; // its output's bind ([rsp + 0x60] + 0xC8)
+constexpr std::size_t kScreenPassOutput = 0x60;              // the caller's stack: the output image
+constexpr std::size_t kScreenPassEntry = 0x38;               // the caller's stack: the render-list entry
 constexpr std::size_t kEntryViewIndex = 0x20;
 constexpr std::size_t kEntryWorld = 0x30; // null on loading frames, when a map load may free the clones
 bool g_screenPass = false;
@@ -241,10 +244,31 @@ bool installPool() {
     return true;
 }
 
+// The Vulkan command buffer the screen pass records into: rcx at the target bind is the engine's command
+// context (table cell [12, 0]; its current command buffer at [[context + 0x118]]), or null.
+VkCommandBuffer screenPassCommandBuffer(const HookRegisters& r) {
+    constexpr std::size_t kContextCommandBuffer = 0x118;
+    const auto* table = reinterpret_cast<const std::uintptr_t*>(base() + kCommandTable);
+    for (int c = 0; c < kTableCategories * kTableSlots; ++c) {
+        if (table[c] && table[c] == r.rcx) {
+            const auto holder = read<std::uintptr_t>(r.rcx + kContextCommandBuffer);
+            return holder ? read<VkCommandBuffer>(holder) : VK_NULL_HANDLE;
+        }
+    }
+    return VK_NULL_HANDLE;
+}
+
 } // namespace
 
 void notePassTargetBind(HookRegisters& r, const Map* map) {
-    if (!g_screenPass || !calledFrom(r, kScreenPassBindReturn) || !view1WithWorld(r.r12)) {
+    if (!g_screenPass || !calledFrom(r, kScreenPassBindReturn)) {
+        return;
+    }
+    if (!view1WithWorld(r.r12)) {
+        // View 0's screen pass: its command buffer moves the swapchain image it draws to PRESENT_SRC.
+        if (r.r12 && read<std::int32_t>(r.r12 + kEntryViewIndex) == 0 && r.r14 == r.rdx) {
+            view_snapshot::noteView0Pass(screenPassCommandBuffer(r));
+        }
         return;
     }
     const std::uintptr_t clone = lookup(*map, r.rdx);
@@ -257,9 +281,19 @@ void notePassTargetBind(HookRegisters& r, const Map* map) {
         return;
     }
     std::memcpy(reinterpret_cast<void*>(callerStack(r, kScreenPassOutput)), &image, sizeof(image));
+    // View 0's pass of this frame was left out after a swapchain recreate (view_swap_guard.hpp): no eye 0
+    // image of this frame is ever presented, so view 1's is not copied; its presents keep the last pair.
+    if (!viewSwapGuardTakeView0LeftOut()) {
+        view_snapshot::arm(image, screenPassCommandBuffer(r));
+    }
     r.rdx = clone;
     r.r14 = clone;
     g_screenPassSwaps[0].fetch_add(1, std::memory_order_relaxed);
+    countUse(*map, clone, clone_census::kTargetBinds);
+}
+
+bool screenPassOutputBind(const HookRegisters& r) {
+    return g_screenPass && calledFrom(r, kScreenPassOutputReturn);
 }
 
 bool swapPassImageBind(HookRegisters& r, const Map* map) {
@@ -279,6 +313,7 @@ bool swapPassImageBind(HookRegisters& r, const Map* map) {
     }
     r.r8 = map->finalImage + kImageHandle;
     g_screenPassSwaps[1].fetch_add(1, std::memory_order_relaxed);
+    countUse(*map, map->finalImage, clone_census::kImageBinds);
     return true;
 }
 

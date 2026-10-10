@@ -107,15 +107,15 @@ namespace EternalVR.Launcher.Core.Tests
             // Mono comes first.
             Assert.Equal(SettingRules.NeedsStereo,
                 SettingRules.WhyNot(Setting.Foveation, new LauncherSettings { Mode = VrMode.Mono, ParallelEyes = true }));
-            // With DLSS, Parallel Eye Rendering does not run: foveation applies and is passed.
+            // With DLSS Parallel Eye Rendering runs too (each view's own DLSS feature): foveation is not passed.
             var dlss = new LauncherSettings
             {
                 ParallelEyes = true, AntiAliasing = AntiAliasingMode.Dlss, Foveation = FoveationMode.Balanced,
             };
-            Assert.Null(SettingRules.WhyNot(Setting.Foveation, dlss));
+            Assert.Equal(SettingRules.NotWithParallelEyes, SettingRules.WhyNot(Setting.Foveation, dlss));
             var env = Env(LaunchPlanBuilder.Build(Inputs(dlss)));
-            Assert.Equal("balanced", env["ETERNALVR_FOVEATION"]);
-            Assert.False(env.ContainsKey("ETERNALVR_PARALLEL_EYES"));
+            Assert.False(env.ContainsKey("ETERNALVR_FOVEATION"));
+            Assert.Equal("1", env["ETERNALVR_PARALLEL_EYES"]);
             // Parallel Eye Rendering off again: passed as before.
             var off = new LauncherSettings { ParallelEyes = false, Foveation = FoveationMode.Subtle };
             Assert.Null(SettingRules.WhyNot(Setting.Foveation, off));

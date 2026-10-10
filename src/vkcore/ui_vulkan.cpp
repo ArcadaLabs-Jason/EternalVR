@@ -7,8 +7,10 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/presenter_eyes.hpp"
 #include "vkcore/shader_dump.hpp"
+#include "vkcore/view_snapshot.hpp"
 #include "vkcore/vrs_nv.hpp"
 
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <mutex>
@@ -177,9 +179,14 @@ VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier(VkCommandBuffer commandBuffer,
                                               const VkBufferMemoryBarrier* pBufferMemoryBarriers,
                                               std::uint32_t imageMemoryBarrierCount,
                                               const VkImageMemoryBarrier* pImageMemoryBarriers) {
+    // The eye snapshots follow barriers with Parallel Eye Rendering only: Route S pays one cached check.
+    const bool snapshots = view_snapshot::enabled();
     for (std::uint32_t i = 0; i < imageMemoryBarrierCount; ++i) {
         g_tracker.onBarrier(handleValue(commandBuffer), handleValue(pImageMemoryBarriers[i].image),
                             pImageMemoryBarriers[i].newLayout);
+        if (snapshots) {
+            view_snapshot::noteBarrier(commandBuffer, pImageMemoryBarriers[i]);
+        }
     }
     deviceOf(keyOf(commandBuffer))
         ->cmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount,
@@ -190,6 +197,9 @@ VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier(VkCommandBuffer commandBuffer,
 VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer commandBuffer,
                                                   const VkCommandBufferBeginInfo* pBeginInfo) {
     g_tracker.onBegin(handleValue(commandBuffer));
+    if (view_snapshot::enabled()) {
+        view_snapshot::noteBegin(commandBuffer);
+    }
     return deviceOf(keyOf(commandBuffer))->beginCommandBuffer(commandBuffer, pBeginInfo);
 }
 
@@ -209,7 +219,57 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            const VkSubmitInfo* pSubmits,
                                            VkFence fence) {
     const UiDevice* d = deviceOf(keyOf(queue));
-    const VkResult result = d->queueSubmit(queue, submitCount, pSubmits, fence);
+    // With a frame's view 0 or view 1 screen pass in one of the batches, a batch after them copies its
+    // image (view_snapshot.hpp).
+    std::optional<view_snapshot::Append> copy = d->isGame && view_snapshot::enabled()
+                                                    ? view_snapshot::submitted(queue, submitCount, pSubmits)
+                                                    : std::nullopt;
+    VkResult result = VK_SUCCESS;
+    if (copy) {
+        const std::array<VkPipelineStageFlags, 3> stages{
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT};
+        std::vector<VkSubmitInfo> batches(pSubmits, pSubmits + submitCount);
+        std::vector<VkSemaphore> signals(copy->signals.begin(), copy->signals.begin() + copy->signalCount);
+        std::vector<std::uint64_t> values(copy->signalValues.begin(),
+                                          copy->signalValues.begin() + copy->signalCount);
+        // With an eye 0 copy the game's signals from `moveFrom` on go after it (view_snapshot.hpp): each such
+        // batch keeps its waits and command buffers, and its timeline info (if any) its wait values.
+        std::vector<VkTimelineSemaphoreSubmitInfo> kept(submitCount);
+        for (std::uint32_t s = copy->moveFrom; s < submitCount; ++s) {
+            const auto* own = static_cast<const VkTimelineSemaphoreSubmitInfo*>(batches[s].pNext);
+            for (std::uint32_t i = 0; i < batches[s].signalSemaphoreCount; ++i) {
+                signals.push_back(batches[s].pSignalSemaphores[i]);
+                values.push_back(own && i < own->signalSemaphoreValueCount ? own->pSignalSemaphoreValues[i]
+                                                                           : 0);
+            }
+            batches[s].signalSemaphoreCount = 0;
+            batches[s].pSignalSemaphores = nullptr;
+            if (own) {
+                kept[s] = *own;
+                kept[s].signalSemaphoreValueCount = 0;
+                kept[s].pSignalSemaphoreValues = nullptr;
+                batches[s].pNext = &kept[s];
+            }
+        }
+        VkTimelineSemaphoreSubmitInfo timeline{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+        timeline.waitSemaphoreValueCount = copy->waitCount;
+        timeline.pWaitSemaphoreValues = copy->waitValues.data();
+        timeline.signalSemaphoreValueCount = static_cast<std::uint32_t>(values.size());
+        timeline.pSignalSemaphoreValues = values.data();
+        VkSubmitInfo& after = batches.emplace_back(VkSubmitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO, &timeline});
+        after.waitSemaphoreCount = copy->waitCount;
+        after.pWaitSemaphores = copy->waits.data();
+        after.pWaitDstStageMask = stages.data();
+        after.commandBufferCount = copy->cbCount;
+        after.pCommandBuffers = copy->cbs.data();
+        after.signalSemaphoreCount = static_cast<std::uint32_t>(signals.size());
+        after.pSignalSemaphores = signals.data();
+        result = d->queueSubmit(queue, static_cast<std::uint32_t>(batches.size()), batches.data(), fence);
+        view_snapshot::copiesSubmitted(*copy, result == VK_SUCCESS);
+        copy.reset(); // the next copies may take their timeline values now
+    } else {
+        result = d->queueSubmit(queue, submitCount, pSubmits, fence);
+    }
     if (result == VK_SUCCESS) {
         std::vector<ui_layer::LayoutTracker::Handle> cbs;
         for (std::uint32_t s = 0; s < submitCount; ++s) {

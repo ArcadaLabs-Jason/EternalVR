@@ -67,4 +67,8 @@ bool viewSlotsView1Rendered();
 // View 1's render context once built (null before): the per-view redirects tell view 1's work by it.
 std::byte* viewSlotsContext1();
 
+// View 0's render context (the engine's own), as the render thread last handed it to the dispatcher (null
+// before the first two-view frame).
+std::byte* viewSlotsContext0();
+
 } // namespace evr::vkcore

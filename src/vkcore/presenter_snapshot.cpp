@@ -7,6 +7,7 @@
 
 #include "vkcore/bug_capture.hpp"
 #include "vkcore/taa_hooks.hpp"
+#include "vkcore/view_snapshot.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -65,13 +66,17 @@ void appendBurstFrame(
            static_cast<unsigned long long>(p.gameTicks.load()));
 }
 
-} // namespace
-
-bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
-                                   std::uint64_t pairIndex,
-                                   std::uint64_t tick,
-                                   bool mono) {
-    if (!capture.readyForOnce()) {
+// Arms the eye and UI captures for the in-headset capture (names, the text file); false when it has to wait
+// for a later frame. The text file describes game tick `tick`'s view for a Route S pair, else the view
+// viewForPresent(`pick`) gives the slot.
+bool armCapture(XrPresenter::Impl& p,
+                const SwapchainState& sc,
+                std::uint64_t pairIndex,
+                std::uint64_t tick,
+                CaptureKind kind,
+                std::uint64_t pick = 0) {
+    const bool mono = kind == CaptureKind::Mono;
+    if (!p.capture.readyForOnce()) {
         return false; // a pair in flight or the writer busy: the next frame
     }
     const std::wstring dir = bug_capture::directory();
@@ -103,17 +108,30 @@ bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
     append(t, "kind: %s\n",
            mono
                ? "mono frame (a menu, loading screen or a frame without eye views: both eyes show this image)"
-               : "stereo pair (eye L and eye R of one game tick)");
+           : kind == CaptureKind::Pair ? "stereo pair (eye L and eye R of one game tick)"
+                                       : "Parallel Eye Rendering frame (both halves of the ring slot the "
+                                         "headset gets: eye L from view 0, "
+                                         "eye R from view 1, or the same image in both without eye views)");
     append(t, "stereo pair: %llu, game tick: %llu, head-tracked game frames so far: %llu\n",
            static_cast<unsigned long long>(pairIndex), static_cast<unsigned long long>(tick),
-           static_cast<unsigned long long>(gameTicks.load()));
+           static_cast<unsigned long long>(p.gameTicks.load()));
     append(t, "render size: %ux%u per eye image (swapchain format %d); headset image %ux%u per eye\n",
-           sc.extent.width, sc.extent.height, static_cast<int>(sc.format), eyeExtent.width, eyeExtent.height);
+           sc.extent.width, sc.extent.height, static_cast<int>(sc.format), p.eyeExtent.width,
+           p.eyeExtent.height);
     ViewRecord view;
     std::uint64_t gap = 0;
-    const bool hasView = mono ? latestView(view, gap) : viewBySeq(tick, view);
+    const bool hasView =
+        kind == CaptureKind::Pair ? p.viewBySeq(tick, view) : p.viewForPresent(pick, view, gap);
     if (hasView) {
+        append(t, "game frame record: %llu (%s)\n", static_cast<unsigned long long>(view.seq),
+               view.stereo ? "eye views" : "one view");
         appendPose(t, "head pose (OpenXR LOCAL)", view.pose);
+        if (view.gameOriginValid) {
+            append(t,
+                   "game position (the game's view origin, as where and setviewpos use it): %.2f %.2f %.2f, "
+                   "yaw %.1f deg\n",
+                   view.gameOrigin[0], view.gameOrigin[1], view.gameOrigin[2], view.gameYawDegrees);
+        }
         // The game's FOV setting is one symmetric FOV covering both eyes; each eye renders its own.
         const char* setting = "game FOV setting (the game's own, symmetric, both eyes)";
         if (!view.stereo) {
@@ -152,29 +170,32 @@ bool XrPresenter::Impl::armCapture(const SwapchainState& sc,
            static_cast<unsigned long long>(taa.ngx.twinCreates),
            static_cast<unsigned long long>(taa.ngx.twinFailures), taa.sizeA[0], taa.sizeA[1], taa.sizeB[0],
            taa.sizeB[1]);
-    append(t, "route S: %s; menu up: %s; UI layer: %s\n", seqActive.load() ? "on" : "off",
-           menuUp.load() ? "yes" : "no", settings.ui.enabled ? "on" : "off");
-    if (settings.ui.enabled) {
-        uiCapture.armOnce(shot.base + L"-UI.png");
+    append(t, "route S: %s; menu up: %s; UI layer: %s\n", p.seqActive.load() ? "on" : "off",
+           p.menuUp.load() ? "yes" : "no", p.settings.ui.enabled ? "on" : "off");
+    if (p.settings.ui.enabled) {
+        p.uiCapture.armOnce(shot.base + L"-UI.png");
     }
-    if (motionCapture.enabled() && !mono) {
-        motionCapture.armOnce(shot.base);
+    if (p.motionCapture.enabled() && kind == CaptureKind::Pair) { // it takes Route S's eye R only
+        p.motionCapture.armOnce(shot.base);
     }
-    capture.armOnce(std::move(shot));
+    p.capture.armOnce(std::move(shot));
     return true;
 }
 
-VkBuffer XrPresenter::Impl::takeArmedCapture(VkBuffer buffer) {
+// The armed capture was taken into `buffer`, or disarmed when there is none.
+VkBuffer takeArmedCapture(XrPresenter::Impl& p, VkBuffer buffer) {
     if (!buffer) {
-        capture.disarmOnce(); // the next frame tries again
-        uiCapture.disarmOnce();
+        p.capture.disarmOnce(); // the next frame tries again
+        p.uiCapture.disarmOnce();
         return buffer;
     }
-    OneShot* shot = capture.once();
+    OneShot* shot = p.capture.once();
     shot->reserved = shot->frames; // a burst that ends early gives back the rest (EyeCapture::writeOnce)
     shot->number = bug_capture::take(shot->frames);
     return buffer;
 }
+
+} // namespace
 
 VkBuffer XrPresenter::Impl::pairCaptureBuffer(const SwapchainState& sc,
                                               std::uint64_t completed,
@@ -184,10 +205,11 @@ VkBuffer XrPresenter::Impl::pairCaptureBuffer(const SwapchainState& sc,
         capture.endBurst(); // a burst of mono frames goes on with mono frames only
     }
     const bool goesOn = capture.between(); // a burst's next pair (ETERNALVR_CAPTURE_BURST)
-    const bool armed = !goesOn && bug_capture::wanted() && armCapture(sc, pairIndex, tick, false);
+    const bool armed =
+        !goesOn && bug_capture::wanted() && armCapture(*this, sc, pairIndex, tick, CaptureKind::Pair);
     VkBuffer buffer = capture.bufferFor(dev, 0, pairIndex, sc.format, sc.extent, completed);
     if (armed) {
-        buffer = takeArmedCapture(buffer);
+        buffer = takeArmedCapture(*this, buffer);
     }
     appendBurstFrame(*this, buffer, false, pairIndex, tick);
     return buffer;
@@ -208,15 +230,46 @@ VkBuffer XrPresenter::Impl::monoCaptureBuffer(const SwapchainState& sc, std::uin
     // Under Route S a pair normally comes within a frame or two; a menu or loading screen has none.
     if (!bug_capture::wanted() ||
         (seqActive.load() && bug_capture::secondsWaiting() < bug_capture::kMonoAfterSeconds) ||
-        !armCapture(sc, pairing.stats().pairsStarted, gameTicks.load(), true)) {
+        !armCapture(*this, sc, pairing.stats().pairsStarted, gameTicks.load(), CaptureKind::Mono)) {
         return VK_NULL_HANDLE;
     }
-    const VkBuffer buffer = takeArmedCapture(capture.bufferFor(dev, 0, 0, sc.format, sc.extent, completed));
+    const VkBuffer buffer =
+        takeArmedCapture(*this, capture.bufferFor(dev, 0, 0, sc.format, sc.extent, completed));
     appendBurstFrame(*this, buffer, true, 0, 0);
     return buffer;
 }
 
-void XrPresenter::Impl::captureCopied(VkBuffer buffer, std::uint64_t value, bool mono) {
+std::array<VkBuffer, 2>
+XrPresenter::Impl::ringCaptureBuffers(const SwapchainState& sc, std::uint64_t completed, std::uint64_t pick) {
+    capture.poll(dev, completed); // without Route S nothing else polls it
+    if (const OneShot* shot = capture.once(); capture.between() && shot && shot->mono) {
+        capture.endBurst(); // a burst of mono frames goes on with mono frames only
+    }
+    const bool goesOn = capture.between(); // a burst's next frame (ETERNALVR_CAPTURE_BURST)
+    if (!goesOn && (!bug_capture::wanted() ||
+                    !armCapture(*this, sc, framesCopied, gameTicks.load(), CaptureKind::RingEyes, pick))) {
+        return {};
+    }
+    // The ring's format and eye size: the images are taken from the slot, not the game's swapchain.
+    const std::uint32_t frame = goesOn ? capture.frame() : 0;
+    VkBuffer left = capture.bufferFor(dev, 0, 0, ringFormat, eyeExtent, completed);
+    if (!goesOn) {
+        left = takeArmedCapture(*this, left);
+        if (left) { // the eye snapshots' trace of the last presents, the burst's with them
+            view_snapshot::captureFired(capture.once() ? capture.once()->frames : 1);
+        }
+    }
+    OneShot* shot = capture.once();
+    if (left && shot && shot->frames > 1) { // which game frame each of the burst's frames shows
+        ViewRecord view;
+        std::uint64_t gap = 0;
+        append(shot->sidecar, "burst frame %02u: game frame record %llu\n", frame,
+               viewForPresent(pick, view, gap) ? static_cast<unsigned long long>(view.seq) : 0ull);
+    }
+    return {left, left ? capture.bufferFor(dev, 1, 0, ringFormat, eyeExtent, completed) : VK_NULL_HANDLE};
+}
+
+void XrPresenter::Impl::captureCopied(VkBuffer buffer, std::uint64_t value, bool complete) {
     if (!buffer) {
         return;
     }
@@ -236,8 +289,8 @@ void XrPresenter::Impl::captureCopied(VkBuffer buffer, std::uint64_t value, bool
                            ui_layer::toString(uiLastCheck);
         }
     }
-    if (mono) {
-        capture.submitted(value, gameTicks.load()); // one image: complete with eye L's copy
+    if (complete) {
+        capture.submitted(value, gameTicks.load()); // one present held all of it
     }
 }
 

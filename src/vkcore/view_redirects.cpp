@@ -3,6 +3,8 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/view_binning.hpp"
+#include "vkcore/view_jobs.hpp"
+#include "vkcore/view_shared_state.hpp"
 #include "vkcore/view_slots.hpp"
 
 #include <windows.h>
@@ -361,62 +363,6 @@ void onViewCellByRax(HookRegisters& r) {
     }
 }
 
-// ---- Jobs for both views at once: view 0 only ----
-
-// Skinning (0x1C58C40, 0x1C59130 -> 0x1BF2680 on the skinning manager 0x5BF1F10): both views draw the same
-// tick, so view 0's skinning serves both (view 1's consumers do not wait for it). Ray
-// tracing: 0x1C58D30 builds the blended BLASes in the engine's one static pool (0x5D63F20, no lock) into
-// the shared async GPU Particles context; two views at once freed the same geometry lists, destroyed the same
-// structures twice and recorded one command buffer from two threads. Its TLAS jobs 0x1C58EC0 and 0x1C59160
-// build into the render world, which both views trace. View 1's jobs return at once.
-struct View0Job {
-    std::uint32_t rva;
-    std::size_t block; // the job's parameter: render context + block
-};
-constexpr View0Job kView0Jobs[] = {
-    {0x1C58C40, 0x6FC858}, {0x1C59130, 0x6FC858}, // skinning
-    {0x1C58D30, 0x701898},                        // blended BLAS
-    {0x1C58EC0, 0x7038E0}, {0x1C59160, 0x7038C0}, // blended and opaque TLAS
-};
-using JobFn = void (*)(void* param);
-JobFn g_view0Jobs[std::size(kView0Jobs)] = {};
-std::atomic<std::uint64_t> g_view1Skips[std::size(kView0Jobs)] = {};
-
-template <std::size_t I>
-void view0Job(void* param) {
-    const auto* context1 = viewSlotsContext1();
-    if (context1 && param == context1 + kView0Jobs[I].block && parallelEyesTouch()) {
-        g_view1Skips[I].fetch_add(1, std::memory_order_relaxed);
-        return;
-    }
-    g_view0Jobs[I](param);
-}
-constexpr JobFn kView0Wrappers[] = {&view0Job<0>, &view0Job<1>, &view0Job<2>, &view0Job<3>, &view0Job<4>};
-static_assert(std::size(kView0Wrappers) == std::size(kView0Jobs));
-
-// ---- Jobs with the renderer's scratch: one view at a time ----
-
-// Job 0x1C58050 (queued by the render-view job with the record at 0x39A1D50) builds its surfaces in a static
-// list (RVA 0x39A3640..0x39A3658). Job 0x1D2D3B0 copies the view's parameters into one global object whose
-// list at +0x178 it reassigns (0x6031D0): two views at once freed its old buffer twice when a new world's
-// first frames resized it (heap failure 'block not busy', run fh10). The two views' jobs take turns.
-// Installed means locked (uncontended with one view).
-constexpr std::uint32_t kSerialJobs[] = {0x1C58050, 0x1D2D3B0};
-JobFn g_serialJobs[std::size(kSerialJobs)] = {};
-std::mutex g_serialJobMutex[std::size(kSerialJobs)];
-
-template <std::size_t I>
-void serialJob(void* param) {
-    if (!viewSlotsActive()) {
-        g_serialJobs[I](param);
-        return;
-    }
-    std::lock_guard lock(g_serialJobMutex[I]);
-    g_serialJobs[I](param);
-}
-constexpr JobFn kSerialWrappers[] = {&serialJob<0>, &serialJob<1>};
-static_assert(std::size(kSerialWrappers) == std::size(kSerialJobs));
-
 // ---- The frame parity counter (RVA 0x66E2EA4) ----
 
 // 0x1C54650 (r12 = render context) reads it (`mov eax, [counter]; and eax, 1` at 0x1C570E0, the view's
@@ -506,22 +452,11 @@ bool installViewRedirects(const std::byte* base) {
         !hook(base, 0x1C570F7, &onParityIncrement) || !installViewBinning(base) ||
         !hook(base, 0x1CFC536, &onFloatTableWriter) || !hook(base, 0x1CFF709, &onFloatTableReaderA) ||
         !hook(base, 0x1CFF718, &onFloatTableReaderB) || !hook(base, 0x1D00E44, &onFloatTableReaderC) ||
-        !hook(base, kNoWorldResetLoop, &onNoWorldResetLoop)) {
+        !hook(base, kNoWorldResetLoop, &onNoWorldResetLoop) || !installViewSharedState(base)) {
         return false;
     }
-    // The job wrappers: serial jobs first, then view 0's.
-    for (std::size_t i = 0; i < std::size(kSerialJobs) + std::size(kView0Jobs); ++i) {
-        const bool serial = i < std::size(kSerialJobs);
-        const std::size_t j = serial ? i : i - std::size(kSerialJobs);
-        const std::uint32_t rva = serial ? kSerialJobs[j] : kView0Jobs[j].rva;
-        std::string error;
-        if (!installInlineHook(const_cast<std::byte*>(base + rva),
-                               reinterpret_cast<void*>(serial ? kSerialWrappers[j] : kView0Wrappers[j]),
-                               reinterpret_cast<void**>(serial ? &g_serialJobs[j] : &g_view0Jobs[j]),
-                               error)) {
-            EVR_LOG("%s: job hook at RVA 0x%X failed: %s", kTag, rva, error.c_str());
-            return false;
-        }
+    if (!installViewJobs(base, reinterpret_cast<void* const*>(cellAddress(kMvpCulling, 1)))) {
+        return false;
     }
     if (parallelEyesSettings().testFail == parallel_eyes::TestFail::Redirects) {
         // As a failed redirect hook would: the block moved, view 1's contexts in with their counts raised,
@@ -529,12 +464,17 @@ bool installViewRedirects(const std::byte* base) {
         EVR_LOG("%s: a hook fails here, before the code bytes (ETERNALVR_TEST_INSTALL_FAIL=redirects)", kTag);
         return false;
     }
-    EVR_LOG("%s: %zu one-context loads, %zu split sites, Begin Frame per view, view 0's jobs, binning edges",
+    EVR_LOG("%s: %zu one-context loads, %zu split sites, Begin Frame per view, view 0's jobs, binning edges, "
+            "one compute skinning counter, occlusion query copies without the wait, view 1's shadow setup on "
+            "view 0's shadow cache entries",
             kTag, std::size(kSingleSites), std::size(kCustomSites));
     return true;
 }
 
 bool prepareViewRedirectPatches(const std::byte* base, std::vector<CodeRange>& writes) {
+    if (!prepareViewSharedState(base)) {
+        return false;
+    }
     for (const BytePatch& b : kBytePatches) {
         if (std::to_integer<std::uint8_t>(base[b.rva]) != b.from) {
             EVR_LOG("%s: RVA 0x%X is not the expected byte; not changed", kTag, b.rva);
@@ -556,19 +496,15 @@ void applyViewRedirectPatches(const std::byte* base) {
             std::size(kBytePatches));
 }
 
-void viewRedirectsDispatchStart() {
+void viewRedirectsDispatchStart(bool view0Dispatched) {
     viewBinningFrameStart();
+    viewSharedStateFrameStart(view0Dispatched);
 }
 
 void viewRedirectsLogCounts() {
     viewBinningLogCounts();
-    EVR_LOG(
-        "%s: view 1 skipped: skinning %llu + %llu, blended BLAS %llu, blended TLAS %llu, opaque TLAS %llu",
-        kTag, static_cast<unsigned long long>(g_view1Skips[0].load()),
-        static_cast<unsigned long long>(g_view1Skips[1].load()),
-        static_cast<unsigned long long>(g_view1Skips[2].load()),
-        static_cast<unsigned long long>(g_view1Skips[3].load()),
-        static_cast<unsigned long long>(g_view1Skips[4].load()));
+    viewSharedStateLogCounts();
+    viewJobsLogCounts();
 }
 
 } // namespace evr::vkcore

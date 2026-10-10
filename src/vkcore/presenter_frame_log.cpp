@@ -28,10 +28,12 @@ void XrPresenter::Impl::openFrameLog() {
     frameLog = _wfsopen((dir + name).c_str(), L"w", _SH_DENYWR);
     if (frameLog) {
         // The shown view's head (LOCAL) and, under hand aim, the weapon hand's aim ray as used and as
-        // tracked (all zero without one), for measuring aim jitter (docs/rig-findings/aim-jitter.md).
+        // tracked (all zero without one), for measuring aim jitter (docs/rig-findings/aim-jitter.md). Then
+        // the frames of the eye images shown (Parallel Eye Rendering) and why the frame shows no new image.
         std::fputs("xr_frame,display_time_ns,period_ms,view,pose_age_ms,display_minus_pose_time_ms,lead_ms,"
                    "head_qx,head_qy,head_qz,head_qw,aim_qx,aim_qy,aim_qz,aim_qw,"
-                   "aim_tracked_qx,aim_tracked_qy,aim_tracked_qz,aim_tracked_qw\n",
+                   "aim_tracked_qx,aim_tracked_qy,aim_tracked_qz,aim_tracked_qw,"
+                   "eye0_frame,eye1_frame,eye1_view,repeat\n",
                    frameLog);
     }
 }
@@ -59,14 +61,18 @@ void XrPresenter::Impl::logFrame(const XrFrameState& state) {
     const XrQuaternionf head = shownHasView ? shownView.pose.orientation : none;
     const XrQuaternionf used = aim ? shownView.weaponAim.orientation : none;
     const XrQuaternionf tracked = aim ? shownView.weaponAimTracked : none;
-    std::fprintf(
-        frameLog,
-        "%llu,%lld,%.3f,%llu,%.3f,%.3f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
-        static_cast<unsigned long long>(xrFrames), static_cast<long long>(state.predictedDisplayTime),
-        static_cast<double>(state.predictedDisplayPeriod) / 1e6,
-        static_cast<unsigned long long>(shownHasView ? shownView.seq : 0), age, poseAhead,
-        static_cast<double>(displayLead.leadNs()) / 1e6, head.x, head.y, head.z, head.w, used.x, used.y,
-        used.z, used.w, tracked.x, tracked.y, tracked.z, tracked.w);
+    const EyeFrames& eyes = frameLogEyes.shown;
+    std::fprintf(frameLog,
+                 "%llu,%lld,%.3f,%llu,%.3f,%.3f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
+                 "%.6f,%llu,%llu,%llu,%s\n",
+                 static_cast<unsigned long long>(xrFrames),
+                 static_cast<long long>(state.predictedDisplayTime),
+                 static_cast<double>(state.predictedDisplayPeriod) / 1e6,
+                 static_cast<unsigned long long>(shownHasView ? shownView.seq : 0), age, poseAhead,
+                 static_cast<double>(displayLead.leadNs()) / 1e6, head.x, head.y, head.z, head.w, used.x,
+                 used.y, used.z, used.w, tracked.x, tracked.y, tracked.z, tracked.w,
+                 static_cast<unsigned long long>(eyes.eye0), static_cast<unsigned long long>(eyes.eye1),
+                 static_cast<unsigned long long>(eyes.eye1View), repeatName(frameLogEyes.repeat));
     if (shownHasView) {
         gpu_timing::notePoseAge(age);
         poseAgeSum += age;
@@ -169,10 +175,11 @@ void XrPresenter::Impl::logCopyStats(const SwapchainState& sc, std::uint32_t fam
             "without",
             static_cast<unsigned long long>(framesCopied), static_cast<unsigned long long>(framesDropped),
             static_cast<unsigned long long>(framesShapeMismatch),
-            static_cast<unsigned long long>(presentsWithView),
-            presentsWithView ? static_cast<double>(presentSeqGapSum) / static_cast<double>(presentsWithView)
-                             : 0.0,
-            static_cast<unsigned long long>(presentsWithoutView));
+            static_cast<unsigned long long>(presentViews.withView),
+            presentViews.withView
+                ? static_cast<double>(presentViews.seqGapSum) / static_cast<double>(presentViews.withView)
+                : 0.0,
+            static_cast<unsigned long long>(presentViews.withoutView));
     }
 }
 

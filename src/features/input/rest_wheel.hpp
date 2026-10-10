@@ -7,8 +7,8 @@
 // (Touch controllers), or with ETERNALVR_THUMBREST_FACE_TOUCH a face button's touch
 // (rest_touch_bindings.hpp).
 //
-// Modes (ETERNALVR_THUMBREST_WHEEL):
-// - edge (default): touch, then push. A thumb landing on a rest arms the other stick for kEdgeWindowSeconds
+// Modes (ETERNALVR_THUMBREST_WHEEL; off when unset, ControllerSettings):
+// - edge: touch, then push. A thumb landing on a rest arms the other stick for kEdgeWindowSeconds
 //   (ETERNALVR_THUMBREST_WINDOW): pushing that stick out of the centre in that time starts picking. A landing
 //   counts only when both sticks are centred at that moment, so a thumb that lands while the other stick
 //   moves or turns does nothing, and a thumb left resting does not stop the other stick turning or moving.
@@ -20,10 +20,11 @@
 //   turns.
 // - extreme: the turn stick is the wheel. It always picks weapons; resting the other thumb on its rest gives
 //   it back its turning, chainsaw and quick switch.
-// - off.
+// - off (default).
 //
 // Picking (ETERNALVR_THUMBREST_PICK): the stick has to stay kDwellSeconds in one of the eight directions,
-// at least kSelectThreshold out, before anything happens: a shorter flick presses nothing. Then
+// at least kSelectThreshold out, before anything happens: under wheel a shorter flick presses nothing (under
+// slots a flick past kFlickThreshold picks at once). Then
 // - wheel (default): the game's wheel is held (WeaponWheel) and the stick points at it as under the stick's
 //   own hold; letting go of the stick (or lifting the thumb) closes it and the game picks the highlighted
 //   weapon. Once the wheel is open there is no cancel (the game keeps its highlight). The wheel is held at
@@ -63,11 +64,18 @@ inline constexpr float kArmDeadzone = 0.25f;
 // A direction counts from this deflection (the wheel pointer's own threshold, wheel_mouse.hpp).
 inline constexpr float kSelectThreshold = 0.5f;
 inline constexpr float kDwellSeconds = 0.10f;
-// Weapon by direction: the first direction the stick reaches this far out counts at once, without the dwell,
-// so a flick from the thumb rest picks (Jason's headset test, 2026-10-09: "thumb rest + flick").
+// Weapon by direction: a stick this far out counts at once, without the dwell, so a flick from the thumb rest
+// picks (Jason's headset test, 2026-10-09: "thumb rest + flick"); the direction is where the flick ends up
+// (kOutwardStep).
 inline constexpr float kFlickThreshold = 0.85f;
-// A direction is kept until the stick is this far past the edge of its eighth.
+// A direction is kept until the stick is this far past the edge of its eighth, once the stick stops going
+// further out.
 inline constexpr float kOctantHysteresisDegrees = 7.5f;
+// While the stick goes further out than it has been in this pick (by more than this), it points at the eighth
+// it is in now, without the hysteresis: a flick that curves on its way out picks the eighth it reaches, not
+// the one it crossed kSelectThreshold in (HansGruber45's report, 2026-10-09: picks decided by the first
+// movement).
+inline constexpr float kOutwardStep = 0.02f;
 // The game opens the wheel 0.18 s after the press by default and the wheel pointer moves from 0.25 s.
 inline constexpr float kMinWheelHoldSeconds = 0.30f;
 // The wheel is held this long past the game's own open delay (weaponWheel_HoldTimeForOpeningWheel).
@@ -194,6 +202,8 @@ private:
     WheelDirection octant_ = WheelDirection::None;
     float dwellSeconds_ = 0.0f;
     WheelDirection committed_ = WheelDirection::None;
+    bool flickCommitted_ = false; // committed_ came from a flick (not the dwell): it follows the stick out
+    float peak_ = 0.0f;           // the furthest the stick has been out in this pick
     Axis2 lastUnit_;
     float pressSeconds_ = 0.0f;
 };
