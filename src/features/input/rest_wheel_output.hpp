@@ -53,6 +53,7 @@ struct RestWheelOutput {
     Hand stickHand = Hand::Right;
     WheelDirection direction = WheelDirection::None;
     float sinceTouch = 0.0f; // Armed under edge: seconds from the thumb's landing
+    float peak = 0.0f;       // Picked or Cancelled: the furthest the stick was out in that pick
 };
 
 } // namespace evr::input

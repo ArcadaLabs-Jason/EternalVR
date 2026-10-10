@@ -73,7 +73,7 @@ inline constexpr float kFlickThreshold = 0.85f;
 inline constexpr float kOctantHysteresisDegrees = 7.5f;
 // While the stick goes further out than it has been in this pick (by more than this), it points at the eighth
 // it is in now, without the hysteresis: a flick that curves on its way out picks the eighth it reaches, not
-// the one it crossed kSelectThreshold in (HansGruber45's report, 2026-10-09: picks decided by the first
+// the one it crossed kSelectThreshold in (a player report, 2026-10-09: picks decided by the first
 // movement).
 inline constexpr float kOutwardStep = 0.02f;
 // The game opens the wheel 0.18 s after the press by default and the wheel pointer moves from 0.25 s.
@@ -87,6 +87,10 @@ inline constexpr float kOwnButtonVoidSeconds = 0.4f;
 inline constexpr float kOwnStickVoidSeconds = 0.4f;
 // Picks in a row: the stick stays centred this long before the window opens again.
 inline constexpr float kRearmGapSeconds = 0.05f;
+// Counted for the log (RestWheelStats): a thumb back on its rest this soon after the rest let go, and a stick
+// out of the centre no longer than this when the rest registered (the flick began with the touch).
+inline constexpr float kQuickReturnSeconds = 0.25f;
+inline constexpr float kRecentStickSeconds = 0.2f;
 
 enum class RestWheelMode : std::uint8_t {
     Off,
@@ -132,6 +136,21 @@ struct RestWheelFrame {
     float minWheelHoldSeconds = kMinWheelHoldSeconds;
 };
 
+// What each rest's touch sensor did, counted from the start for the log (vkcore/rest_wheel.cpp prints the
+// change every 10 s), so a player's log shows whether touches go missing: indexed by the rest's hand.
+struct RestWheelStats {
+    std::array<std::uint32_t, 2> rawTouches{}; // the sensor reported a touch
+    std::array<std::uint32_t, 2>
+        shortTouches{}; // ... gone again within kRestDebounceSeconds: never registered
+    std::array<std::uint32_t, 2> bridgedGaps{};  // a registered touch lost for less than kRestDebounceSeconds
+    std::array<std::uint32_t, 2> landings{};     // touches that registered
+    std::array<std::uint32_t, 2> quickReturns{}; // ... within kQuickReturnSeconds of the rest letting go
+    // Landings with the other stick out of the centre (under while touched it then waits for the centre), and
+    // of those, the ones whose stick had been out no longer than kRecentStickSeconds.
+    std::array<std::uint32_t, 2> stickOut{};
+    std::array<std::uint32_t, 2> stickOutRecent{};
+};
+
 class RestWheel {
 public:
     // A window outside kMinEdgeWindowSeconds..kMaxEdgeWindowSeconds (or not finite) falls back to the
@@ -150,6 +169,7 @@ public:
     [[nodiscard]] bool usable() const { return usable_; }
     [[nodiscard]] const RestWheelSettings& settings() const { return settings_; }
     [[nodiscard]] const RestWheelHands& hands() const { return hands_; }
+    [[nodiscard]] const RestWheelStats& stats() const { return stats_; }
 
 private:
     static constexpr float kLongAgoSeconds = 1000.0f;
@@ -167,6 +187,7 @@ private:
         bool touched = false; // debounced
         float rawSeconds = 0.0f;
         float sinceLanding = 0.0f;
+        float sinceLift = kLongAgoSeconds; // debounced
         bool landingValid = false;
         bool chainPending = false; // a pick ended with the thumb still resting (edge)
     };
@@ -196,6 +217,8 @@ private:
     // start).
     std::array<float, 2> centredSeconds_{kLongAgoSeconds, kLongAgoSeconds};
     std::array<float, 2> sinceFaceButton_{kLongAgoSeconds, kLongAgoSeconds};
+    std::array<float, 2> outSeconds_{}; // seconds each stick has been out of the centre
+    RestWheelStats stats_;
     Route route_ = Route::Idle;
     Hand restHand_ = Hand::Left;
     Hand stickHand_ = Hand::Right;

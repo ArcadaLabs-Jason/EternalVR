@@ -7,7 +7,9 @@
 // Every arming is logged (capped like the action lines), so a rig run or a player's log shows how often it
 // starts and from which rest, and so does the first touch each rest reports: a runtime that never reports the
 // thumb rest (a Touch emulation that leaves the sensor out) shows as no such line, and one line says so after
-// a minute of play.
+// a minute of play. Every 10 s with any touch, one line per rest counts what its sensor did (RestWheelStats):
+// touches too short to register, gaps bridged, quick returns, and landings with the other stick already out,
+// so a player's log shows whether touches go missing.
 //
 // The slowdown (features/input/wheel_slowdown.hpp): with ETERNALVR_THUMBREST_SLOWDOWN=0, weaponWheel_
 // slowTimeScale is held at 1 while this wheel holds the game's wheel open, written through the cvar book
@@ -46,6 +48,7 @@ namespace {
 constexpr const char* kTag = "controllers";
 // Play time with the wheel usable and no rest touched before the one line saying so.
 constexpr float kNoTouchNoteSeconds = 60.0f;
+constexpr float kStatsSeconds = 10.0f;
 
 // Mapper only (mapperMutex).
 LogCap g_lines{300};
@@ -53,6 +56,9 @@ LogCap g_voided{20};
 std::array<bool, 2> g_touchSeen{};
 float g_untouchedSeconds = 0.0f;
 bool g_noTouchLogged = false;
+input::RestWheelStats g_loggedStats;
+float g_statsSeconds = 0.0f;
+LogCap g_statsLines{360}; // an hour of touch lines, then one a minute
 
 bool due(LogCap& cap, char (&note)[48]) {
     std::uint64_t skipped = 0;
@@ -194,6 +200,44 @@ void noteTouches(const input::InputFrame& frame, const input::RestWheel& rest, f
     }
 }
 
+// Every kStatsSeconds: what each rest's sensor did since the last line, for the rests that saw a touch.
+void noteTouchStats(const input::RestWheel& rest, float dt) {
+    if (!rest.usable()) {
+        return;
+    }
+    g_statsSeconds += dt;
+    if (g_statsSeconds < kStatsSeconds) {
+        return;
+    }
+    g_statsSeconds = 0.0f;
+    const input::RestWheelStats& now = rest.stats();
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        const std::size_t i = static_cast<std::size_t>(hand);
+        const auto since = [i](const std::array<std::uint32_t, 2>& a, const std::array<std::uint32_t, 2>& b) {
+            return static_cast<unsigned>(a[i] - b[i]);
+        };
+        const unsigned raw = since(now.rawTouches, g_loggedStats.rawTouches);
+        if (raw == 0) {
+            continue;
+        }
+        char note[48] = "";
+        if (due(g_statsLines, note)) {
+            EVR_LOG(
+                "%s: thumb-rest wheel: %s rest, last %.0f s: %u touch(es) from the sensor, %u gone within "
+                "%.2f s (not registered), %u gap(s) under %.2f s bridged; %u landing(s), %u back within %.2f "
+                "s "
+                "of letting go, %u with the %s stick already out (%u of it out %.2f s or less)%s",
+                kTag, side(hand), kStatsSeconds, raw, since(now.shortTouches, g_loggedStats.shortTouches),
+                input::kRestDebounceSeconds, since(now.bridgedGaps, g_loggedStats.bridgedGaps),
+                input::kRestDebounceSeconds, since(now.landings, g_loggedStats.landings),
+                since(now.quickReturns, g_loggedStats.quickReturns), input::kQuickReturnSeconds,
+                since(now.stickOut, g_loggedStats.stickOut), side(input::otherHand(hand)),
+                since(now.stickOutRecent, g_loggedStats.stickOutRecent), input::kRecentStickSeconds, note);
+        }
+    }
+    g_loggedStats = now;
+}
+
 } // namespace
 
 bool restWheelBlocked(const State& s) {
@@ -207,6 +251,7 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
         return;
     }
     noteTouches(frame, s.mapper->restWheel(), dt);
+    noteTouchStats(s.mapper->restWheel(), dt);
     const input::RestWheelOutput& w = input.restWheel;
     {
         std::lock_guard lock(g_slowMutex);
@@ -249,17 +294,17 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
         break;
     case input::RestWheelEvent::Picked:
         if (due(g_lines, note)) {
-            EVR_LOG("%s: thumb-rest wheel: %s picked by the %s stick pointing %s%s", kTag,
+            EVR_LOG("%s: thumb-rest wheel: %s picked by the %s stick pointing %s (out to %.2f)%s", kTag,
                     w.slot ? std::string(game::gameActionName(*w.slot)).c_str() : "nothing",
-                    side(w.stickHand), input::wheelDirectionName(w.direction), note);
+                    side(w.stickHand), input::wheelDirectionName(w.direction), w.peak, note);
         }
         break;
     case input::RestWheelEvent::Cancelled:
         if (due(g_lines, note)) {
             EVR_LOG(
                 "%s: thumb-rest wheel: cancelled, nothing pressed (the stick did not stay in one direction "
-                "long enough, or the game held it back)%s",
-                kTag, note);
+                "long enough, or the game held it back; out to %.2f)%s",
+                kTag, w.peak, note);
         }
         break;
     case input::RestWheelEvent::Released:

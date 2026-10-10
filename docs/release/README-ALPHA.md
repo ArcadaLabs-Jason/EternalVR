@@ -93,9 +93,10 @@ Rendering").
 - **12 GB of video memory or less:** set Texture Pool Size in the game's video settings one step lower
   before you try it. At the usual setting a 12 GB card can run out and the game turns into a slideshow.
 
-**Turning it on:** start `Launch-Parallel-Eye-Test.cmd` (in this folder) instead of
-`EternalVR.Launcher.exe`. On the Play tab, under Picture, tick **Parallel Eye Rendering (experimental)**, then
-Launch VR. It cannot be switched during a session: quit the game to change it.
+**Turning it on:** close the launcher if it is open (a second one does not start), then start
+`Launch-Parallel-Eye-Test.cmd` (in this folder) instead of `EternalVR.Launcher.exe`. On the Play tab, under
+Picture, tick **Parallel Eye Rendering (experimental)**, then Launch VR. It cannot be switched during a session:
+quit the game to change it.
 
 **Turning it off:** untick the box, or start `EternalVR.Launcher.exe` as usual (without the script the box
 is hidden and Parallel Eye Rendering stays off).

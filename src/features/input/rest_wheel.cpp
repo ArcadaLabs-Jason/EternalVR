@@ -135,6 +135,14 @@ void RestWheel::debounce(const RestWheelFrame& frame,
         Rest& r = rests_[index(hand)];
         const bool raw = frame.rest[index(hand)] && hands_.hasRest[index(hand)];
         if (raw != r.raw) {
+            if (raw) {
+                ++stats_.rawTouches[index(hand)];
+            }
+            // The state that ends now never lasted the debounce: a touch that never registered, or a gap in a
+            // registered touch, bridged.
+            if (r.rawSeconds < kRestDebounceSeconds && raw == r.touched) {
+                ++(raw ? stats_.bridgedGaps : stats_.shortTouches)[index(hand)];
+            }
             r.raw = raw;
             r.rawSeconds = 0.0f;
         } else {
@@ -162,6 +170,7 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
         }
         crossed[i] = out(hand) && !wasOut;
         centredSeconds_[i] = out(hand) ? 0.0f : centredSeconds_[i] + dt;
+        outSeconds_[i] = out(hand) ? outSeconds_[i] + dt : 0.0f;
         sinceFaceButton_[i] = frame.faceButtons[i] ? 0.0f : sinceFaceButton_[i] + dt;
         latched_[i] = latched_[i] && out(hand);
     }
@@ -173,6 +182,16 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
         Rest& r = rests_[index(hand)];
         const Hand stick = otherHand(hand);
         if (landed[index(hand)]) {
+            ++stats_.landings[index(hand)];
+            if (r.sinceLift <= kQuickReturnSeconds) {
+                ++stats_.quickReturns[index(hand)];
+            }
+            if (out(stick)) {
+                ++stats_.stickOut[index(hand)];
+                if (outSeconds_[index(stick)] <= kRecentStickSeconds) {
+                    ++stats_.stickOutRecent[index(hand)];
+                }
+            }
             r.sinceLanding = 0.0f;
             r.chainPending = false;
             RestWheelVoid why = RestWheelVoid::None;
@@ -197,6 +216,9 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
         if (lifted[index(hand)]) {
             r.landingValid = false;
             r.chainPending = false;
+            r.sinceLift = 0.0f;
+        } else if (!r.touched) {
+            r.sinceLift = std::fmin(r.sinceLift + dt, kLongAgoSeconds);
         }
         // Picks in a row: the window opens again once the stick has come back to the centre.
         if (r.touched && r.chainPending && route_ == Route::Idle &&
@@ -384,6 +406,7 @@ void RestWheel::endPointing(bool pick, RestWheelOutput& out) {
     }
     out.restHand = restHand_;
     out.stickHand = stickHand_;
+    out.peak = peak_;
     finishRoute(slot.has_value());
 }
 

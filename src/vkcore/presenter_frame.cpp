@@ -14,6 +14,7 @@
 #include "vkcore/head_sweep.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
+#include "vkcore/light_cull.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/stall_watch.hpp"
@@ -497,6 +498,8 @@ void XrPresenter::Impl::runWorker() {
             }
             controllers::installGameHooks();
             installDebugCommands(); // ETERNALVR_DEBUG_COMMANDS: console commands on a schedule (test rig)
+            // ETERNALVR_LIGHT_FRUSTUM=1 (experimental): lights culled by the view, not dropped by Umbra.
+            installLightFrustumCull();
             stall_watch::installCheckpointSaveHook(); // stall lines name the game's own checkpoint saves
             startMenu();
             if (roomScaleSettings().collision || settings.ui.reticle) { // the aim dot's depth uses it too

@@ -175,6 +175,9 @@ namespace EternalVR.Launcher
                 Console.Error.WriteLine(e.Message);
                 return 1;
             }
+            // As in the window (MainForm.Rows.cs): without ETERNALVR_SHOW_PARALLEL_EYES=1 a launcher.ini that asks for
+            // Parallel Eye Rendering does not turn it on.
+            if (Environment.GetEnvironmentVariable("ETERNALVR_SHOW_PARALLEL_EYES") != "1") ctx.Settings.ParallelEyes = false;
 
             log.Info($"EternalVR launcher {typeof(Program).Assembly.GetName().Version}, data folder {ctx.Paths.Root}");
             var runner = new SessionRunner(ctx);

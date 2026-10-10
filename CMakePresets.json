@@ -50,14 +50,14 @@
     {
       "name": "windows-msvc-release",
       "displayName": "Windows (MSVC, release with symbols, tests)",
-      "description": "The build that goes into release zips (tools/release/make-release.ps1): optimised as Release, plus a PDB for the symbols zip and no incremental linking. Run from a Visual Studio developer environment.",
+      "description": "The build that goes into release zips (tools/release/make-release.ps1): optimised as Release, plus a PDB for the symbols zip (the binary names it without the build folder, /PDBALTPATH) and no incremental linking. Run from a Visual Studio developer environment.",
       "inherits": "windows-msvc",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /O2 /Ob2 /DNDEBUG",
         "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "/Zi /O2 /Ob2 /DNDEBUG",
-        "CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO": "/DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF",
-        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "/DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF"
+        "CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO": "/DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB%",
+        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "/DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB%"
       }
     }
   ],

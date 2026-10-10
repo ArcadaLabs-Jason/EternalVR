@@ -167,6 +167,7 @@ evr_add_test(evr_input_tests
         features/input/punch_detector_tests.cpp
         features/input/rest_touch_bindings_tests.cpp
         features/input/rest_wheel_tests.cpp
+        features/input/rest_wheel_stats_tests.cpp
         features/input/stick_chord_tests.cpp
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp

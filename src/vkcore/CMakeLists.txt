@@ -79,6 +79,7 @@ add_library(evr_layer SHARED
     keep_active.cpp
     key_inject.cpp
     layer_entry.cpp
+    light_cull.cpp
     log.cpp
     mirror_place.cpp
     keep_prev_hooks.cpp

@@ -152,9 +152,14 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   0.30 s` when the delay is read or changes; then per use `armed: the right stick picks (left thumb rest,
   edge, 0.21 s after the touch)` (under `extreme`: `armed: the turn stick picks weapons; the left thumb rest
   gives turning back`), `the game's wheel is held, pointing up`, `the game's wheel let go pointing right`,
-  `weapon_slot_3 picked by the right stick pointing right`, `cancelled, nothing pressed`, and `the left thumb
-  landed with a stick out of the centre; no window` (or `straight from its own stick`, `straight from its own
-  face button`; capped like the action lines). Scripted input counts as a rest on both hands.
+  `weapon_slot_3 picked by the right stick pointing right (out to 0.93)`, `cancelled, nothing pressed (...; out
+  to 0.41)`, and `the left thumb landed with a stick out of the centre; no window` (or `straight from its own
+  stick`, `straight from its own face button`; capped like the action lines). Every 10 s in which a rest's
+  sensor reported a touch, one line for that rest: `left rest, last 10 s: 14 touch(es) from the sensor, 2 gone
+  within 0.06 s (not registered), 1 gap(s) under 0.06 s bridged; 11 landing(s), 3 back within 0.25 s of letting
+  go, 4 with the right stick already out (3 of it out 0.20 s or less)`: touches too short to count, a sensor
+  that flickers, and flicks begun before the rest registered (under `full` such a stick waits for the centre)
+  show there. Scripted input counts as a rest on both hands.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
   Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
   off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along

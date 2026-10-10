@@ -143,6 +143,10 @@ them is worse for you than described here.
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn.
 - **Shadows can pop in** on some walls as you turn your head.
+- **A lit spot can go dark from some places.** The game's own light culling can drop a light from
+  certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
+  Fortress of Doom are one place). An experimental fix is in, off by default; it will be switched on once
+  it has been tried in a headset.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
 - **Particles in ray-traced reflections.** With `ETERNALVR_STEREO_FX_SYNC=1` and the game's ray tracing on,

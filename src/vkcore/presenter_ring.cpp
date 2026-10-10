@@ -55,74 +55,112 @@ bool XrPresenter::Impl::importRing(const std::array<HANDLE, kRingSize>& imageHan
     VkPhysicalDeviceMemoryProperties memProps{};
     ivk.GetPhysicalDeviceMemoryProperties(dev.physicalDevice, &memProps);
 
-    for (std::uint32_t i = 0; i < kRingSize; ++i) {
-        RingSlot& slot = ring[i];
-        VkExternalMemoryImageCreateInfo externalCreate{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};
-        externalCreate.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT;
-        VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, &externalCreate};
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = ringFormat;
-        imageInfo.extent = {ringExtent.width, ringExtent.height, 1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = usage;
-        slot.copySource = (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        r = dev.vk.CreateImage(dev.device, &imageInfo, nullptr, &slot.image);
-        if (r != VK_SUCCESS) {
-            EVR_LOG("presenter: vkCreateImage for ring slot %u failed: %d", i, r);
-            return false;
-        }
-        VkMemoryRequirements req{};
-        dev.vk.GetImageMemoryRequirements(dev.device, slot.image, &req);
-        VkMemoryWin32HandlePropertiesKHR handleProps{VK_STRUCTURE_TYPE_MEMORY_WIN32_HANDLE_PROPERTIES_KHR};
-        r = dev.vk.GetMemoryWin32HandlePropertiesKHR(
-            dev.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT, imageHandles[i], &handleProps);
-        if (r != VK_SUCCESS) {
-            EVR_LOG("presenter: vkGetMemoryWin32HandlePropertiesKHR failed: %d", r);
-            return false;
-        }
-        const std::uint32_t bits = req.memoryTypeBits & handleProps.memoryTypeBits;
-        std::uint32_t typeIndex = UINT32_MAX;
-        for (std::uint32_t t = 0; t < memProps.memoryTypeCount; ++t) {
-            if (!(bits & (1u << t))) {
-                continue;
+    // What an import attempt made: released when it fails part way, before a retry or the failure.
+    const auto releaseSlots = [&] {
+        for (RingSlot& slot : ring) {
+            if (slot.image) {
+                dev.vk.DestroyImage(dev.device, slot.image, nullptr);
+                slot.image = VK_NULL_HANDLE;
             }
-            if (typeIndex == UINT32_MAX ||
-                (memProps.memoryTypes[t].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-                typeIndex = t;
-                if (memProps.memoryTypes[t].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-                    break;
+            if (slot.memory) {
+                dev.vk.FreeMemory(dev.device, slot.memory, nullptr);
+                slot.memory = VK_NULL_HANDLE;
+            }
+        }
+    };
+    // Each slot's image made with `usage`, its D3D12 memory imported and bound.
+    const auto importSlots = [&](VkImageUsageFlags slotUsage) -> bool {
+        for (std::uint32_t i = 0; i < kRingSize; ++i) {
+            RingSlot& slot = ring[i];
+            VkExternalMemoryImageCreateInfo externalCreate{
+                VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};
+            externalCreate.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT;
+            VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, &externalCreate};
+            imageInfo.imageType = VK_IMAGE_TYPE_2D;
+            imageInfo.format = ringFormat;
+            imageInfo.extent = {ringExtent.width, ringExtent.height, 1};
+            imageInfo.mipLevels = 1;
+            imageInfo.arrayLayers = 1;
+            imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+            imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+            imageInfo.usage = slotUsage;
+            slot.copySource = (slotUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
+            imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            r = dev.vk.CreateImage(dev.device, &imageInfo, nullptr, &slot.image);
+            if (r != VK_SUCCESS) {
+                EVR_LOG("presenter: vkCreateImage for ring slot %u failed: %d", i, r);
+                releaseSlots();
+                return false;
+            }
+            VkMemoryRequirements req{};
+            dev.vk.GetImageMemoryRequirements(dev.device, slot.image, &req);
+            VkMemoryWin32HandlePropertiesKHR handleProps{
+                VK_STRUCTURE_TYPE_MEMORY_WIN32_HANDLE_PROPERTIES_KHR};
+            r = dev.vk.GetMemoryWin32HandlePropertiesKHR(
+                dev.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT, imageHandles[i], &handleProps);
+            if (r != VK_SUCCESS) {
+                EVR_LOG("presenter: vkGetMemoryWin32HandlePropertiesKHR failed: %d", r);
+                releaseSlots();
+                return false;
+            }
+            const std::uint32_t bits = req.memoryTypeBits & handleProps.memoryTypeBits;
+            std::uint32_t typeIndex = UINT32_MAX;
+            for (std::uint32_t t = 0; t < memProps.memoryTypeCount; ++t) {
+                if (!(bits & (1u << t))) {
+                    continue;
+                }
+                if (typeIndex == UINT32_MAX ||
+                    (memProps.memoryTypes[t].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+                    typeIndex = t;
+                    if (memProps.memoryTypes[t].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+                        break;
+                    }
                 }
             }
+            if (typeIndex == UINT32_MAX) {
+                EVR_LOG("presenter: no memory type for the ring (image bits 0x%x, handle bits 0x%x)",
+                        req.memoryTypeBits, handleProps.memoryTypeBits);
+                releaseSlots();
+                return false;
+            }
+            VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
+            dedicated.image = slot.image;
+            VkImportMemoryWin32HandleInfoKHR import{VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
+                                                    &dedicated};
+            import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT;
+            import.handle = imageHandles[i];
+            VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &import};
+            allocInfo.allocationSize = req.size;
+            allocInfo.memoryTypeIndex = typeIndex;
+            r = dev.vk.AllocateMemory(dev.device, &allocInfo, nullptr, &slot.memory);
+            if (r != VK_SUCCESS) {
+                EVR_LOG("presenter: importing ring slot %u failed: %d", i, r);
+                releaseSlots();
+                return false;
+            }
+            r = dev.vk.BindImageMemory(dev.device, slot.image, slot.memory, 0);
+            if (r != VK_SUCCESS) {
+                EVR_LOG("presenter: binding ring slot %u failed: %d", i, r);
+                releaseSlots();
+                return false;
+            }
         }
-        if (typeIndex == UINT32_MAX) {
-            EVR_LOG("presenter: no memory type for the ring (image bits 0x%x, handle bits 0x%x)",
-                    req.memoryTypeBits, handleProps.memoryTypeBits);
-            return false;
-        }
-        VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
-        dedicated.image = slot.image;
-        VkImportMemoryWin32HandleInfoKHR import{VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR,
-                                                &dedicated};
-        import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT;
-        import.handle = imageHandles[i];
-        VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &import};
-        allocInfo.allocationSize = req.size;
-        allocInfo.memoryTypeIndex = typeIndex;
-        r = dev.vk.AllocateMemory(dev.device, &allocInfo, nullptr, &slot.memory);
-        if (r != VK_SUCCESS) {
-            EVR_LOG("presenter: importing ring slot %u failed: %d", i, r);
-            return false;
-        }
-        r = dev.vk.BindImageMemory(dev.device, slot.image, slot.memory, 0);
-        if (r != VK_SUCCESS) {
-            EVR_LOG("presenter: binding ring slot %u failed: %d", i, r);
-            return false;
-        }
+
+        return true;
+    };
+    bool imported = importSlots(usage);
+    if (!imported && (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
+        // The format query allowed a copy source, but making or importing a slot with it failed: again
+        // without it, as when the query refuses it.
+        usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        EVR_LOG(
+            "presenter: the ring did not import as a copy source too; again without it (no capture of both "
+            "eyes)");
+        imported = importSlots(usage);
+    }
+    if (!imported) {
+        return false;
     }
 
     if (!fenceHandle) {

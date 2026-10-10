@@ -162,7 +162,25 @@ void afterPresent() {
                          begun);
 }
 
+// ETERNALVR_TEST_UNFOCUSED_CAP=0 (a rig test): a runtime's menu does not hold the game. The OpenXR simulator
+// is VISIBLE whenever its window is not in front, so its rate measurements otherwise end at one image per
+// period.
+namespace {
+bool unfocusedCapOff() {
+    static const bool off = narrowEnv(L"ETERNALVR_TEST_UNFOCUSED_CAP") == "0";
+    return off;
+}
+} // namespace
+
 void setUnfocused(bool unfocused) {
+    if (unfocused && unfocusedCapOff()) {
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true, std::memory_order_relaxed)) {
+            EVR_LOG("pace: a runtime menu is over the game; not held (ETERNALVR_TEST_UNFOCUSED_CAP=0, a rig "
+                    "test)");
+        }
+        return;
+    }
     if (g_unfocused.exchange(unfocused, std::memory_order_acq_rel) == unfocused) {
         return;
     }
