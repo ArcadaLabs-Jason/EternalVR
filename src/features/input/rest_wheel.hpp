@@ -27,9 +27,9 @@
 //   touch to decide: held from the game meanwhile, it starts the pick when the touch comes back (under
 //   extreme, on the restore rest, when the hold-over lapses), and otherwise goes to the game at once, to the
 //   turn stick's gestures as a fresh push (RestWheelOutput::deferred). A push back in the centre before the
-//   touch decides, or on its way back, is not lost: its furthest point is played once, to the wheel or to the
-//   gestures (RestWheelOutput::replay). A snap pushed during a hold-over so waits for the touch, at most the
-//   hold-over: a flick by direction begun in a dropout picks.
+//   touch decides, or on its way back, is not lost: its furthest point is played once, to the wheel, to the
+//   gestures or to the movement (RestWheelOutput::replay). A snap pushed during a hold-over so waits for the
+//   touch, at most the hold-over: a flick by direction begun in a dropout picks.
 // - Edge and full need the rest only to start a pick: a pick under way, and an open wheel, end on the stick
 //   (or blocked), not on a lift, except that a lift cut by hard evidence (the thumb pressed a button or
 //   pushed its own stick) cancels a pick still pointing with nothing committed. A push begun at most
@@ -154,6 +154,10 @@ inline constexpr float kRecentStickSeconds = 0.2f;
 // While touched: a stick that left the centre no earlier than this before its rest's contact began is held
 // while the touch registers (the flick and the touch start together, in either order).
 inline constexpr float kHeldLeadSeconds = 0.10f;
+// Frame times summed in float land a rounding step either side of a limit they reach exactly: how long before
+// the touch a push began (kTurnBeforeLiftSeconds, kHeldLeadSeconds) is compared with this to spare, so a push
+// exactly at the limit is inside it. Far shorter than any frame.
+inline constexpr float kTimingSlackSeconds = 1e-4f;
 
 enum class RestWheelMode : std::uint8_t {
     Off,
@@ -347,7 +351,7 @@ private:
     // start).
     std::array<float, 2> centredSeconds_{kLongAgoSeconds, kLongAgoSeconds};
     std::array<float, 2> sinceFaceButton_{kLongAgoSeconds, kLongAgoSeconds};
-    std::array<float, 2> outSeconds_{}; // seconds each stick has been out of the centre
+    std::array<float, 2> outSeconds_{}; // seconds since each stick left the centre (0 on its first frame out)
     RestWheelStats stats_;
     Route route_ = Route::Idle;
     Hand restHand_ = Hand::Left;

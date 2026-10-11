@@ -50,6 +50,7 @@ public static class QaNative {
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr p);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, StringBuilder s, int n);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool MoveFileExW(string from, string to, uint flags);
     public static IntPtr FindByTitlePrefix(string prefix) {
         IntPtr found = IntPtr.Zero;
         EnumWindows((h, p) => {
@@ -119,11 +120,17 @@ function New-QaStage($Ctx, [string]$LayerSrc) {
     $Ctx.InputPath = "$stage-input.txt"
 }
 
-# Rewrites the scripted input file in one step (the layer re-reads it when its write time changes).
+# Rewrites the scripted input file in one step (the layer re-reads it when its write time changes). The rename
+# replaces the old file in place (MOVEFILE_REPLACE_EXISTING): Move-Item -Force deletes it first, and the layer
+# polling in that gap takes the file as gone and drops the scripted input for a check (a control-map rebuild and
+# a lost thumb-rest touch in merge QA r44c). The rename fails while the layer has the file open: tried again.
 function Write-QaInput($Ctx, [string[]]$Lines) {
     $tmp = "$($Ctx.InputPath).tmp"
     [IO.File]::WriteAllText($tmp, (@($Lines) -join "`n") + "`n")
-    Move-Item -LiteralPath $tmp -Destination $Ctx.InputPath -Force
+    for ($try = 0; -not [QaNative]::MoveFileExW($tmp, $Ctx.InputPath, 0x1 -bor 0x8); $try++) {
+        if ($try -ge 100) { throw "could not replace $($Ctx.InputPath): Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+        Start-Sleep -Milliseconds 5
+    }
 }
 
 # procdump waits for the game and writes a dump if it dies of an unhandled exception.

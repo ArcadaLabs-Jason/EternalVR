@@ -119,18 +119,19 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   along, so it claims, turns or snaps as a fresh push (`RestWheelOutput::deferred`), up to a hold-over late. A
   push short of its furthest point when the touch decides (on its way back, or back in the centre) is not
   lost: that point is played for one frame (`RestWheelOutput::replay`, to the turn stick's gestures and turn,
-  so a snap or a quick switch still fires; a short movement of the move stick is dropped), or to the wheel
-  when the touch comes back, so a flick by direction caught on its way back still commits. A snap pushed
-  during a hold-over so waits for the touch, at most the hold-over: a flick by direction begun in a dropout
-  picks. A stick that leaves the centre on the frame a route starts or ends is not kept out of play: it is a
-  fresh push for the game, or for the wheel where the mode now gives it the stick. With the wheel on, a hand
-  with a thumb rest also gets its face buttons' and stick's touch, a face-touch hand its stick's and
-  trackpad's touch. A player's controls file replaces the built-in file whole, so the layer adds these
-  bindings to a family's data that lacks them (`rest_touch_bindings.hpp`; logged as `N touch binding(s) for
-  the thumb-rest wheel added`, nothing rewritten). A runtime that refuses the profile with them is asked again
-  first without the sensors beside the rest (`withoutVetoTouch`: the rests still count, a thumb on its stick
-  or buttons only when it presses or pushes), then without any of them (the family then has no rest for the
-  session); the log says which was taken. Modes (off by default since 2026-10-09, after the first headset
+  so a snap or a quick switch still fires, or to the movement, where a tap of the move stick during the
+  hold-over is played as one frame of movement once the touch decides), or to the wheel when the touch comes
+  back, so a flick by direction caught on its way back still commits. A snap pushed during a hold-over so
+  waits for the touch, at most the hold-over: a flick by direction begun in a dropout picks. A stick that
+  leaves the centre on the frame a route starts or ends is not kept out of play: it is a fresh push for the
+  game, or for the wheel where the mode now gives it the stick. With the wheel on, a hand with a thumb rest
+  also gets its face buttons' and stick's touch, a face-touch hand its stick's and trackpad's touch. A
+  player's controls file replaces the built-in file whole, so the layer adds these bindings to a family's data
+  that lacks them (`rest_touch_bindings.hpp`; logged as `N touch binding(s) for the thumb-rest wheel added`,
+  nothing rewritten). A runtime that refuses the profile with them is asked again first without the sensors
+  beside the rest (`withoutVetoTouch`: the rests still count, a thumb on its stick or buttons only when it
+  presses or pushes), then without any of them (the family then has no rest for the session); the log says
+  which was taken. Modes (off by default since 2026-10-09, after the first headset
   test; the launcher offers edge, full and, since 2026-10-10, `extreme` as "Turn stick picks (standing)"):
   `edge`: a landing arms the other stick for 0.5 s (`ETERNALVR_THUMBREST_WINDOW`, 0.2 to 1); it counts only
   with both sticks within 0.25 at that moment, so a thumb that lands while the other stick moves or turns does
@@ -524,8 +525,9 @@ grips switch tabs, sticks scroll and switch tabs or move the Dossier map, a stic
 these actions are held back: `docs/VR_MENUS.md`. In a tutorial popup the game raised by itself, press the
 button for the mechanic it introduces (or A / X): each gameplay button also sends its action's default
 Slayer key (Flame Belch R, chainsaw C, equipment Left Ctrl, dash Left Shift, switch weapon mod F, switch
-equipment G, weapon switch Q, the Crucible V, the weapon slots 1 to 8; `menu::popupActionKey`), held while
-the button is. Fire, the weapon mod and the sticks' movement and turning send no keys.
+equipment G, weapon switch Q, the Crucible V, the weapon slots 1 to 8, and jump Space, which A / X send too,
+once per press; `menu::popupActionKey`), held while the button is. Fire, the weapon mod and the sticks'
+movement and turning send no keys.
 
 **Recenter: both sticks held.** Recenter: hold both sticks pressed for 2 s, or use the headset's own
 recenter (hold the Meta / Oculus button). Holding the left Menu button used to recenter, but Virtual Desktop

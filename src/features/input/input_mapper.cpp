@@ -174,8 +174,14 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     const float locomotionYaw =
         locomotion_.update(settings_.locomotionFrame, frame.head, frame.hand(steering));
     const bool restTakesMove = profile_.moveStick && rest.taken[handIndex(*profile_.moveStick)];
-    const Axis2 moveStick =
-        profile_.moveStick && !restTakesMove ? frame.hand(*profile_.moveStick).stick : Axis2{};
+    // A push held while a rest's touch decided and given to the game short of its furthest point moves from
+    // that point for one frame, as the turn stick's turns: a tap of the move stick during a hold-over is one
+    // game frame of movement once the touch decides, up to a hold-over late.
+    const std::optional<Axis2> moveReplay =
+        profile_.moveStick ? rest.replay[handIndex(*profile_.moveStick)] : std::nullopt;
+    const Axis2 moveStick = moveReplay                             ? *moveReplay
+                            : profile_.moveStick && !restTakesMove ? frame.hand(*profile_.moveStick).stick
+                                                                   : Axis2{};
     const Axis2 move = applyStickResponse(moveStick, settings_.move);
     input.move = rotateIntoViewFrame(move, locomotionYaw, context.viewYawRadians);
 

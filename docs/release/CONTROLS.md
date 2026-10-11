@@ -246,9 +246,11 @@ comes back in front of you. Sliders are set by clicking or dragging on them.
 **Tutorial and lore popups.** These come up on the panel too. In a tutorial popup, press the button for
 the mechanic it introduces (the Flame Belch popup closes with the Flame Belch button, the chainsaw's with
 the chainsaw's, and so on: each gameplay button sends the game's default key for its action), or press A
-or X to continue (the game's Space key). A stick click is the game's E key, and Y is for a popup that asks
-you to pull up the objectives (the game's Left Alt, held as long as Y is); hold X for a popup that asks for
-TAB (the Dossier); B backs out as usual.
+or X, or your jump button if you moved jump, to continue (the game's Space key). A stick click is the
+game's E key, and Y is for a popup that asks you to pull up the objectives (the game's Left Alt, held as
+long as Y is); hold X for a popup that asks for TAB (the Dossier); B backs out as usual. If a popup still
+does not close, bring the game's window to the front on your desktop (click its title bar or its taskbar button,
+or Alt+Tab to it) and press Space on the keyboard.
 
 **The Dossier.** Hold X to open it; it opens on the map. Tabs change with the grips (left: previous,
 right: next) or can be clicked. On the map the sticks move it, so your hand can stay still: the right

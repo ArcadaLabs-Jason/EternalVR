@@ -82,7 +82,8 @@ std::optional<std::uint8_t> popupActionKey(game::GameAction action) {
         return std::nullopt;
     }
     const std::optional<std::uint8_t> key = game::defaultKey(action);
-    if (!key || *key == kKeyContinue || *key == kKeyUse || *key == kKeyObjectives) {
+    if (!key || *key == kKeyUse || *key == kKeyObjectives ||
+        (*key == kKeyContinue && action != game::GameAction::Jump)) {
         return std::nullopt;
     }
     return key;
@@ -140,6 +141,8 @@ void MenuRouter::popupActions(const RouterInput& in,
                               RouterOutput& out) {
     if (!in.popup) {
         releaseActionKeys(out);
+        buttonSpace_.reset();
+        jumpSpace_.reset();
         return;
     }
     // A gameplay action pressed in the popup presses its default key and holds it while the action is held
@@ -159,17 +162,38 @@ void MenuRouter::popupActions(const RouterInput& in,
             }
             continue;
         }
-        if (!pressed.test(i) || keyHeld(*key)) {
+        if (!pressed.test(i)) {
             continue;
+        }
+        const bool jump = action == game::GameAction::Jump;
+        if ((jump && takeMatch(buttonSpace_, now)) || keyHeld(*key)) {
+            continue; // A / X sent this press's Space, or the key is down from another press
         }
         out.events.push_back(keyEvent(RouterEvent::Kind::KeyDown, *key));
         actionKeys_.set(i);
         actionKeyAt_[i] = now;
+        if (jump) {
+            jumpSpace_ = now;
+        }
         if (!actionsLogged_.test(i)) {
             actionsLogged_.set(i);
             out.popupKeys.push_back({action, *key});
         }
     }
+}
+
+void MenuRouter::continueFromButton(double now, RouterOutput& out) {
+    if (takeMatch(jumpSpace_, now)) {
+        return; // the jump action on this button sent Space first
+    }
+    tapKey(kKeyContinue, now, out);
+    buttonSpace_ = now;
+}
+
+bool MenuRouter::takeMatch(std::optional<double>& sent, double now) {
+    const bool match = sent && now >= *sent && now - *sent < tuning_.popupKeyWindow;
+    sent.reset();
+    return match;
 }
 
 void MenuRouter::releaseActionKeys(RouterOutput& out) {
@@ -226,6 +250,8 @@ void MenuRouter::releaseAll(double /*now*/, RouterOutput& out) {
     }
     releaseActionKeys(out);
     actionsLogged_.reset();
+    buttonSpace_.reset();
+    jumpSpace_.reset();
     movePending_ = false;
     landedAt_ = -1.0;
     scroll_ = {};
@@ -506,14 +532,14 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
 
     // A stick click, either hand: C, the Dossier map's centre key; in a popup E, its use key. A click while
     // the other stick is already pressed is the recenter chord (both sticks held), not a key. A / X, either
-    // hand, in a popup: Space, its continue key.
+    // hand, in a popup: Space, its continue key (the jump action sends it too: popupActions).
     for (std::size_t i = 0; i < 2; ++i) {
         if (stickClickEdge[i] && !in.hands[1 - i].stickClick) {
             tapKey(in.popup ? kKeyUse : kKeyCentre, now, out);
         }
     }
     if (in.popup && (primaryEdge[0] || primaryEdge[1])) {
-        tapKey(kKeyContinue, now, out);
+        continueFromButton(now, out);
     }
     // In a popup the gameplay actions press their keys too: a tutorial waits for the key of the mechanic it
     // introduces.

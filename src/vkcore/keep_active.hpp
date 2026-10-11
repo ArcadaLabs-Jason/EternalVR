@@ -8,10 +8,21 @@
 
 #include <windows.h>
 
+#include <string>
+
 namespace evr::vkcore {
 
 // The game's window as recorded by setGameWindow (xr_presenter.hpp), or nullptr.
 HWND gameWindow();
+
+// The foreground window, for the log. The desktop's keyboard reaches the game only while its window is in
+// front (key_inject.hpp): a prompt that no key closes may be one whose window lost the foreground.
+struct ForegroundWindow {
+    bool game = false; // the game's window, or a window it owns
+    std::string who;   // "the game's window", or the window's class and its process's file name (never its
+                       // title, which can carry a page's or a document's name)
+};
+ForegroundWindow foregroundWindow();
 
 // Subclasses the game's window (once) and starts swallowing deactivation; tells the game it is active
 // if it already saw a deactivation.

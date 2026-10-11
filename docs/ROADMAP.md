@@ -2,7 +2,7 @@
 
 ## At a glance
 
-Status as of 2026-10-01 (v0.1.11).
+Status as of 2026-10-10 (v0.1.43).
 
 | Milestone | What a player sees or plays | Needs a person? | Status |
 |---|---|---|---|
@@ -12,12 +12,12 @@ Status as of 2026-10-01 (v0.1.11).
 | M2 Skeleton in the game | The flat game; a debug key turns the view without turning the aim | No, if command-line cvars reach the game (a level is loaded by `+map`); otherwise one short [owner] run into a level | Done |
 | **M3 First head-tracked view** | **Looking around inside the game in the Quest 3 (mono, gamepad or mouse to play); optional debug stereo peek** | Wears the headset | Done |
 | M4 Stereo | The game in 3D in the headset, head position tracked | Wears the headset | Done (per-eye TAA and DLSS, room-scale) |
-| **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for seven controller families, `docs/VR_CONTROLLERS.md`) |
-| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (on a branch); the wrist and weapon HUDs are options, checked on the rig, waiting for a headset test |
-| M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head is on a branch |
+| **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for eight controller families, `docs/VR_CONTROLLERS.md`) |
+| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (v0.1.12); the wrist and weapon HUDs are options, checked on the rig, waiting for a headset test |
+| M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen, around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12) |
 | M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles, each with its own controls, the controls editor, preflight, update alerts with in-place updates, and an Export report for bug reports |
-| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL, downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default); frame pacing to the headset (on by default) |
-| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.11 |
+| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL, downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6); frame pacing to the headset (on by default); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.43 |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
 
 ## How to read this file
@@ -196,7 +196,8 @@ Required for v1
       the head yaw equals the player yaw within 0.1°; the player's aim is unchanged by head motion; a
       30° mouse pitch input changes the rendered pitch by less than 0.1° (REQ-03). [owner] In the
       headset a static object stays put while the head turns
-- [ ] Frame loop shape 1 in the present hook (T-022). Pose snapshots are generation-counted; the render
+- [ ] Frame loop on a dedicated XR worker thread (T-122, which superseded shape 1 in the present hook,
+      T-022). Pose snapshots are generation-counted; the render
       side never waits for a snapshot; at most one XR frame open and no more engine frames in GPU flight than the depth measured in M1
       (open question 17);
       no lock held across `xrWaitFrame` (T-023). Session states follow T-039: with `shouldRender` false
@@ -390,7 +391,11 @@ Status: the controller input, the user-command writer, turning, hand aim with th
 shot hook, the viewmodel at the grip with the per-weapon offset table, the weapon FOV and the virtual
 gamepad are implemented, unit-tested and checked live on the rig with OpenXR-Simulator and scripted input
 (`docs/VR_CONTROLLERS.md`, "Live checks"); controllers are on by default. Ticked below only what those
-runs showed in full.
+runs showed in full. Shipped since, in the alpha releases: room-scale walking with body follow, on by
+default (v0.1.1); vibration from the game's rumble and the layer's own events (v0.1.2); climbable walls
+that follow the head (v0.1.12); and a thumb-rest weapon wheel for Touch controllers, off by default (T-118,
+v0.1.37), with weapon by direction, its touch handling reworked in v0.1.41 (T-120) and a Weapon directions
+dialog in v0.1.43 (T-121).
 
 Required for v1
 - [ ] Usercmd injection drives movement, buttons and view-angle deltas: every default-map action
@@ -426,14 +431,21 @@ Required for v1
 
 v1 if time allows
 - [ ] Two-hand support grip and virtual stock
-- [ ] Per-hand haptics from game rumble
-- [ ] Room-scale body follow through usercmd movement (T-062), once the precision test passes; the head
-      offset, lean cap and fade still cover what the body cannot follow
+- [x] Per-hand haptics from game rumble: the low motor on both hands, the high one on the weapon hand,
+      beside the layer's own events (v0.1.2, `src/features/input/haptics_policy.hpp`,
+      `docs/rig-findings/haptics.md`; Vibration on the Play tab). Tried on Quest 3 controllers only
+- [x] Room-scale body follow through usercmd movement (T-062), once the precision test passes; the head
+      offset, lean cap and fade still cover what the body cannot follow. On by default since v0.1.1
+      (`src/features/roomscale/body_follow.hpp`, `docs/VR_ROOMSCALE.md`); tried in a headset, but little
+      against walls, on stairs or in heavy combat (`docs/release/KNOWN-ISSUES.md`)
 
 Experiments and targets
 - [ ] Usercmd movement precision (T-062): small scripted steps (2 to 20 cm) injected as movement, and the
       physics-origin displacement measured against the request; recorded in
-      `docs/rig-findings/usercmd-precision.md`
+      `docs/rig-findings/usercmd-precision.md`. Status: run on the rig with OpenXR-Simulator for 10, 20
+      and 40 cm steps (each closed to within 2 cm, no overshoot; 5 cm steps stay inside the deadzone by
+      design), recorded in `docs/VR_ROOMSCALE.md`, "Live results", not in a file of its own; steps under
+      5 cm not measured
 
 ## M6: VR UI
 
@@ -469,12 +481,15 @@ v1 if time allows
 
 ## M7: Game states and comfort
 
-Status: cutscenes play on a flat screen or are skipped, the game's camera shakes, blur and damage washes
-are off, and a comfort vignette is an option. Look-at triggers (the Doom Hunter Base ladder and others)
-test where the head looks (v0.1.4), and piloting the Cultist Base Revenant works with head or hand aim
-(v0.1.3, v0.1.5). A whole-game audit found the Revenant to be the only body swap. Glory kills have four
-presentations in the launcher (follow the camera, the default; a steady view, the rotation stripped; a
-fade; a flat screen), not yet tried in a headset; the default waits for the owner's playtest.
+Status: cutscenes play on a flat screen, around the player (an option) or are skipped, the game's camera
+shakes, blur and damage washes are off, and a comfort vignette is an option. Look-at triggers (the Doom
+Hunter Base ladder and others) test where the head looks (v0.1.4), and piloting the Cultist Base Revenant
+works with head or hand aim (v0.1.3, v0.1.5). A whole-game audit found the Revenant to be the only body
+swap. Glory kills have four presentations in the launcher (v0.1.6; follow the camera, the default; a
+steady view, the rotation stripped; a fade; a flat screen), engaged in real kills since v0.1.15. The steady
+view and the flat screen have been tried in a headset, and follow the camera stayed the default (v0.1.15;
+DECISIONS open question 5). Climbable walls follow the head, so the jump off a wall goes where the player
+looks (v0.1.12, `src/vkcore/climb_hook.cpp`); not yet tried in a headset.
 
 Required for v1
 - [ ] Full classifier (extends M4's minimal one) recognises every camera-takeover state in the R12
@@ -501,8 +516,8 @@ Experiments and targets
 Status: the launcher has Play, Advanced and "Checks and log" tabs, VR settings profiles with a Save button
 (each with its own controls), a controls editor that opens on the controllers of the last game, the Steam
 and Game Pass builds (T-117), and update alerts with in-place updates from the public releases (v0.1.5, at
-the owner's request). The profile criteria below (preset markers, reset per setting, `ApplyClass`) and the
-editor's conflict refusal are not checked yet.
+the owner's request; T-123). The profile criteria below (preset markers, reset per setting, `ApplyClass`)
+and the editor's conflict refusal are not checked yet.
 
 Required for v1
 - [ ] Named per-player profiles (REQ-10): base preset plus overrides, changed-from-preset markers, reset
@@ -539,15 +554,20 @@ v1 if time allows
 
 ## M9: Performance features
 
-Status: DLSS runs per eye (experimental). The launcher downloads NVIDIA's DLSS 310 DLL on request, after
-the player accepts NVIDIA's licence, and loads it from the EternalVR data folder; the route was checked on
-the rig (`docs/rig-findings/dlss-dll.md`). CPU Saver and Alternate eyes help slower processors. Fixed
-foveated rendering is on dev `main` as an experimental launcher setting (Off by default, Subtle, Balanced,
-Aggressive), NVIDIA RTX only through `VK_NV_shading_rate_image`: Balanced measured +15.8% frame rate on
-the rig at 2064 x 2100 per eye, GPU-bound. AMD and Intel need the KHR attachment path. Not released yet;
-the owner's headset check decides its default. Parallel eye rendering (both eyes' render work on separate
-cores) is an experiment: stable, but it draws a wrong picture, so it is not shippable and none of its
-speed figures count yet.
+Status: DLSS runs per eye (experimental). The launcher downloads NVIDIA's newest DLSS DLL on request,
+after the player accepts NVIDIA's licence, and loads it from the EternalVR data folder; the route was
+checked on the rig (`docs/rig-findings/dlss-dll.md`). CPU Saver, Texture streaming and Alternate eyes help
+slower processors. Fixed foveated rendering is released as an experimental Play-tab setting since v0.1.6
+(Off by default; Subtle, Balanced, Aggressive, and Maximum since v0.1.15), with the menus and HUD at full
+rate since v0.1.11; NVIDIA RTX only, through `VK_NV_shading_rate_image`: Balanced measured +15.8% frame
+rate on the rig at 2064 x 2100 per eye, GPU-bound. AMD and Intel need the KHR attachment path, which is
+not built. The owner's headset check decides its default. Parallel Eye Rendering (both eyes as two views
+of one game frame, their render work at the same time) ships as an opt-in, highly experimental option for
+testers, off by default: through `Launch-Parallel-Eye-Test.cmd` in v0.1.38 and v0.1.39, on the Play tab
+since v0.1.40; Steam build only, tried on NVIDIA only. It has not met its own bar (Stretch goals): the
+known issues list effects that still differ between the eyes, stutter and a higher video memory need, and
+on the test PC it drew about 12% more frames only when the processor was the limit, and none more at
+90 Hz with ray tracing on (`docs/release/README-ALPHA.md`).
 
 Required for v1
 - [ ] Per-eye DLSS 4.x from the game's NGX call, with a user-supplied 310.x DLL (the game's own 2.3.0
@@ -568,7 +588,8 @@ Required for v1
       tests passing and no AMD tester by the release candidate, the OptiScaler path ships marked
       untested (T-105)
 - [ ] Fixed foveation (VRS) with Off/Subtle/Balanced/Aggressive; foveation path chosen per session
-      (T-037)
+      (T-037). Status: the presets (and Maximum) ship on the NVIDIA path only (`src/vkcore/vrs_nv.cpp`);
+      the KHR path and the per-session choice are not built
 - [ ] Per-eye lens centring (REQ-14, T-106): `evr_foveation_tests` assert that each eye's foveation
       centre equals an independent head-forward projection into that eye's frustum within 1e-4 NDC, for
       symmetric, asymmetric and canted per-eye FOVs and for each FOV set in
@@ -598,11 +619,11 @@ v1 if time allows
 
 ## M10: Beta and public release
 
-Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.5 and players reporting through
-GitHub issues. The launcher checks the public releases and installs an update in place when the player
-agrees, each file checked against `SHA256SUMS.txt` (v0.1.5); the check can be turned off. That goes
-further than the update-check criterion below, which predates the owner's request for in-place updates;
-the criterion needs a decision entry before it is judged.
+Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.43 (2026-09-28 to 2026-10-10) and
+players reporting through GitHub issues. The launcher checks the public releases (at most once an hour;
+the check can be turned off) and installs an update in place when the player agrees, the zip checked
+against its published SHA-256 and each file against `SHA256SUMS.txt` (v0.1.5, at the owner's request).
+T-123 records this and supersedes T-093's update-check clause; the criterion below follows it.
 
 Required for v1
 - [ ] Release matrix passes. Owner on the RTX 4080 with the Quest 3: VDXR and Meta Link. Testers:
@@ -617,9 +638,11 @@ Required for v1
 - [ ] Uninstall (T-093): on a clean machine (T-105), after install, VR sessions and the launcher's uninstall
       action, the layer registry key and the game folder listing match a pre-install snapshot, and the
       flat settings equal the pre-VR snapshot
-- [ ] Update check (T-093, R09 section 10): disclosed in the launcher, daily at most, switchable off,
-      linking to the release rather than downloading it; the release notes list the supported exe
-      hashes and the pinned OptiScaler version with its hash (T-094)
+- [ ] Updates (T-123, which superseded T-093's update-check clause): the check disclosed in the launcher,
+      at most once an hour, switchable off; the download and in-place install only when the player
+      agrees, checked against the published SHA-256 and `SHA256SUMS.txt` (done since v0.1.5,
+      `launcher/src/EternalVR.Launcher.Core/Update/`); the release notes list the supported exe hashes and
+      the pinned OptiScaler version with its hash (T-094)
 - [ ] Windows builds on hosted runners; no self-hosted runner can run fork pull requests (T-060)
 - [ ] `SHA256SUMS.txt` published with the release zip and verified against the uploaded files by a CI
       job (T-105); Defender false-positive submissions done; the owner's code
@@ -662,8 +685,9 @@ Required for v1
 - Foveated upscaling (DLSS sub-rectangle)
 - PSVR2 adaptive triggers, Index finger curl (bHaptics vest and sleeves shipped as an experimental option in
   v0.1.5, `docs/BHAPTICS.md`)
-- Parallel eye rendering as a launcher option, off by default, once its picture matches the standard
-  renderer and it clears its speed bar
+- Parallel eye rendering out of its testing state. It ships as an opt-in, highly experimental Play-tab
+  option, off by default (v0.1.40, M9), but its picture does not match the standard renderer yet and it
+  has not cleared its speed bar
 - Tier C per-widget HUD placement
 - Small in-headset quick menu for live tunables
 - id Tech 8 (DOOM: The Dark Ages) adapter reusing the core

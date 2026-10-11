@@ -126,7 +126,8 @@ bool RestWheel::holds(Hand hand, bool blocked) const {
     const Hand other = otherHand(hand);
     return settings_.mode == RestWheelMode::Full && r.contact && hasRole(other) && route_ == Route::Idle &&
            !blocked && !latched_[index(other)] &&
-           (held_[index(other)] || outSeconds_[index(other)] <= r.contactSeconds + kHeldLeadSeconds);
+           (held_[index(other)] ||
+            outSeconds_[index(other)] <= r.contactSeconds + kHeldLeadSeconds + kTimingSlackSeconds);
 }
 
 bool RestWheel::pushWaits(Hand rest, Hand stick) const {
@@ -197,8 +198,8 @@ void RestWheel::holdOverPushes(const std::array<bool, 2>& crossed,
                 }
             } else {
                 givenBack_[s] = out(stick);
-                // The mapper reads this for the turn stick only: a short movement of the move stick inside a
-                // gap is dropped.
+                // The mapper plays it to the turn stick's gestures and turn, or to the movement: a tap of the
+                // move stick inside a gap is one frame of movement at its furthest point.
                 if (fallen) {
                     o.replay[s] = pushPeak_[s];
                 }

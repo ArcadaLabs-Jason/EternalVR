@@ -10,7 +10,8 @@
 // game raised by itself (a tutorial or lore popup, which waits for Space, E or Left Alt) A / X taps Space, a
 // stick click taps E and Y holds Left Alt instead. A tutorial popup waits for the key of the mechanic it
 // introduces ("[R]" for the Flame Belch), so there every gameplay action the controllers press also presses
-// that action's default key (popupActionKey) for as long as it is held.
+// that action's default key (popupActionKey) for as long as it is held. Jump presses Space too, from
+// whichever button carries it: the popup's "[A] TO DISMISS" names the jump button.
 //
 // The router is a pure state machine run once per XR frame. It decides; the layer carries its decisions
 // out through the game's raw input (relative mouse motion, mouse buttons, the wheel and key presses).
@@ -53,10 +54,11 @@ inline constexpr std::uint8_t kKeyUse = 'E';
 inline constexpr std::uint8_t kKeyObjectives = 0xA4; // VK_LMENU
 
 // The key a gameplay action presses in a popup: its default Slayer key (game::defaultKey). None for the
-// actions on the mouse (fire and aim are the pointer's), for the pause key, the Dossier and the automap
-// (they open a screen of their own; B, Y and the Menu button already go back or pause), and for an action
-// whose key is one the popup already has on a button (jump's Space on A / X, melee's E on a stick click,
-// mission information's Left Alt on Y), so one press does not send the key twice.
+// actions on the mouse (fire and aim are the pointer's), for the pause key, the automap (it opens a screen
+// of its own; B, Y and the Menu button already go back or pause), and for melee and mission information,
+// whose E and Left Alt a stick click and Y send in every popup. Jump keeps its Space although A / X sends
+// Space too: a jump on another button (the Vive wand's trackpad click, a changed map) is the button the
+// popup's prompt names, and the router lets one press send Space once (RouterTuning::popupKeyWindow).
 std::optional<std::uint8_t> popupActionKey(game::GameAction action);
 
 // The Dossier's pages in the order its tabs switch (Q / E), starting on the map.
@@ -77,6 +79,9 @@ struct RouterTuning {
     double moveTimeout = 0.15;      // a move the game has not shown after this long is sent again
     double clickTimeout = 0.25;     // a click waits at most this long for the cursor to settle
     double zoomInterval = 0.1;      // seconds between wheel notches while a stick zooms the map
+    // In a popup A / X's Space and the jump action's Space this close together are one press (the mapper
+    // publishes the action a game frame or two after the router sees the button): the second is not sent.
+    double popupKeyWindow = 0.3;
     MapDragTuning map;              // the map's pan and rotate from the sticks
     DragCursorHideTuning mapCursor; // the game's cursor hidden while the sticks drag the map
 };
@@ -195,6 +200,11 @@ private:
     void
     popupActions(const RouterInput& in, const game::GameActionSet& pressed, double now, RouterOutput& out);
     void releaseActionKeys(RouterOutput& out);
+    // A / X in a popup: Space, unless the jump action sent it for the same press.
+    void continueFromButton(double now, RouterOutput& out);
+    // True when `sent` (the other source's Space) came within popupKeyWindow: this press's Space is sent
+    // already. Either way `sent` is used up, so it answers for one press only.
+    bool takeMatch(std::optional<double>& sent, double now);
     // The key is down from a tap, Y's Left Alt or an action in a popup.
     [[nodiscard]] bool keyHeld(std::uint8_t key) const;
     [[nodiscard]] bool allReleased(const RouterInput& in) const;
@@ -230,6 +240,9 @@ private:
     game::GameActionSet actionKeys_;
     std::array<double, game::kGameActionCount> actionKeyAt_{};
     game::GameActionSet actionsLogged_;
+    // When A / X and when the jump action last sent Space in a popup, while the other has not matched it.
+    std::optional<double> buttonSpace_;
+    std::optional<double> jumpSpace_;
 
     // Cursor moves in flight.
     bool movePending_ = false;

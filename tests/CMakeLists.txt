@@ -172,6 +172,7 @@ evr_add_test(evr_input_tests
         features/input/rest_wheel_touch_tests.cpp
         features/input/rest_wheel_holdover_tests.cpp
         features/input/rest_wheel_replay_tests.cpp
+        features/input/rest_wheel_gap_tests.cpp
         features/input/stick_chord_tests.cpp
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp
@@ -320,13 +321,14 @@ evr_add_test(evr_menu_tests
         features/menu/menu_kind_tests.cpp
         features/menu/menu_router_map_tests.cpp
         features/menu/menu_router_popup_tests.cpp
+        features/menu/menu_router_prompt_tests.cpp
         features/menu/menu_router_tests.cpp
         features/menu/model_camera_tests.cpp
         features/menu/panel_follow_tests.cpp
         features/menu/panel_pointer_tests.cpp
         features/menu/panel_reanchor_tests.cpp
         features/menu/wheel_cursor_tests.cpp
-    DEPENDS evr_menu evr_roomscale)
+    DEPENDS evr_menu evr_roomscale evr_input)
 
 evr_add_test(evr_render_size_tests
     SOURCES

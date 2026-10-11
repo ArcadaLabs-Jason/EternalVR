@@ -259,6 +259,12 @@ them is worse for you than described here.
   comes back in front of you.
 - In the short pause menu of the very first mission (Load Checkpoint, Exit), neither B nor the Menu
   button closes it; the game does the same with Escape when played flat.
+- A prompt that comes up right after a cutscene or a load ("[A] TO DISMISS") sometimes could not be
+  closed from the controllers in earlier versions. A, X and the jump button now send the Space it waits
+  for there; this has not been tried in a headset yet. If one still won't close, bring the game's window
+  to the front on your desktop (click its title bar or its taskbar button, or Alt+Tab to it) and press
+  Space on the keyboard, then click **Export report...** after the session: the log now says which window
+  was in front when the prompt came up.
 
 ## Launcher and settings
 

@@ -2,8 +2,11 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <limits>
 
+using evr::menu::continuesMenu;
+using evr::menu::MenuChain;
 using evr::menu::MenuKind;
 using evr::menu::MenuKindInput;
 using evr::menu::menuKindOnCursor;
@@ -79,10 +82,139 @@ TEST_CASE("a clock going backwards or a bad time decides again") {
 
 TEST_CASE("a screen nobody asked for becomes a popup once it shows over the game") {
     // A checkpoint load: the popup kept the loading screen's kind (a screen) before any head-tracked frame.
-    CHECK(screenBecomesPopup(MenuKind::Screen, false, true));
-    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, false, false)); // still a full menu screen
+    CHECK(screenBecomesPopup(MenuKind::Screen, false, true, false));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, false, false, false)); // still a full menu screen
     // The pause menu's Settings shows over the game too: its chain was asked for.
-    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, true, true));
-    CHECK_FALSE(screenBecomesPopup(MenuKind::Dossier, false, true));
-    CHECK_FALSE(screenBecomesPopup(MenuKind::Popup, false, true));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, true, true, false));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Dossier, false, true, false));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Popup, false, true, false));
+}
+
+TEST_CASE("a cursor nobody asked for in a play map is a popup without a head-tracked frame behind it") {
+    // A prompt raised right after a cinematic or a load pauses the game before its first head-tracked frame
+    // (a player's log, 0.1.31: taken for a screen, A clicked for 58 s and never sent Space).
+    MenuKindInput in;
+    in.overGame = false;
+    in.playMap = true;
+    CHECK(menuKindOnCursor(in) == MenuKind::Popup);
+    // Asked for, it stays a screen (the pause menu over a cinematic's frame) or the Dossier.
+    in.menuRequested = true;
+    CHECK(menuKindOnCursor(in) == MenuKind::Screen);
+    in.dossierRequested = true;
+    CHECK(menuKindOnCursor(in) == MenuKind::Dossier);
+}
+
+TEST_CASE("outside a play map a full menu screen nobody asked for stays a screen") {
+    // The title screen and the main menu (the shell) show the game's whole frame and click with A.
+    MenuKindInput in;
+    in.overGame = false;
+    in.playMap = false;
+    CHECK(menuKindOnCursor(in) == MenuKind::Screen);
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, false, false, false));
+}
+
+TEST_CASE("a screen nobody asked for in a play map becomes a popup without showing over the game") {
+    // The cursor came back within moments of a screen's (a loading screen's) and kept its kind.
+    CHECK(screenBecomesPopup(MenuKind::Screen, false, false, true));
+    // A screen of a menu the controllers asked for stays one in a play map too.
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Screen, true, false, true));
+    CHECK_FALSE(screenBecomesPopup(MenuKind::Dossier, false, false, true));
+}
+
+TEST_CASE("a cursor back after a map load is a new menu") {
+    MenuKindInput in;
+    in.playMap = true;
+    in.hadMenu = true;
+    in.previous = MenuKind::Screen;
+    in.sinceCursorGone = 0.2;
+    CHECK(continuesMenu(in));
+    CHECK(menuKindOnCursor(in) == MenuKind::Screen);
+    // The load ended the menu before (the pause menu's Load Checkpoint): decided again, a popup.
+    in.mapLoadedSince = true;
+    CHECK_FALSE(continuesMenu(in));
+    CHECK(menuKindOnCursor(in) == MenuKind::Popup);
+}
+
+// The chain, fed in the order the game produces: the map-load hook fires while the menu that asked for the
+// load still shows its cursor; that cursor goes; the next one comes up after the load.
+namespace {
+
+MenuKindInput cursorUp(bool playMap, bool overGame, bool asked, MenuKind previous, double sinceGone) {
+    MenuKindInput in;
+    in.playMap = playMap;
+    in.overGame = overGame;
+    in.menuRequested = asked;
+    in.hadMenu = sinceGone >= 0.0;
+    in.previous = previous;
+    in.sinceCursorGone = sinceGone;
+    return in;
+}
+
+} // namespace
+
+TEST_CASE("chain: Pause, Exit to Main Menu, Continue: a prompt right after the load is a popup") {
+    MenuChain chain;
+    std::uint32_t loads = 3;
+    // The pause menu, asked for, over the game.
+    MenuChain::Step step = chain.onCursor(cursorUp(true, true, true, MenuKind::Screen, -1.0), false, loads);
+    CHECK(step.kind == MenuKind::Screen);
+    CHECK(chain.asked());
+    // Exit to Main Menu: the shell loads while the pause menu's cursor is up; the main menu's cursor comes
+    // back 0.4 s after it went, nobody asked for it.
+    ++loads;
+    step = chain.onCursor(cursorUp(false, false, false, MenuKind::Screen, 0.4), false, loads);
+    CHECK(step.afterLoad);
+    CHECK_FALSE(step.continues);
+    CHECK(step.kind == MenuKind::Screen); // the main menu clicks with A
+    CHECK_FALSE(chain.asked());
+    // Continue: the campaign map loads while the main menu's cursor is up; the main menu becomes a popup
+    // until its cursor goes.
+    ++loads;
+    CHECK(chain.becomesPopup(MenuKind::Screen, false, true, loads));
+    // A prompt 0.3 s after the cursor went, before any head-tracked frame.
+    step = chain.onCursor(cursorUp(true, false, false, MenuKind::Screen, 0.3), false, loads);
+    CHECK(step.afterLoad);
+    CHECK(step.kind == MenuKind::Popup);
+}
+
+TEST_CASE("chain: Load Checkpoint from the pause menu: a prompt right after the load is a popup") {
+    MenuChain chain;
+    std::uint32_t loads = 7;
+    chain.onCursor(cursorUp(true, true, true, MenuKind::Screen, -1.0), false, loads);
+    CHECK_FALSE(chain.becomesPopup(MenuKind::Screen, false, true, loads)); // asked for, before the load
+    ++loads; // the checkpoint's map load, the pause menu's cursor still up
+    CHECK(chain.becomesPopup(MenuKind::Screen, false, true, loads));
+    const MenuChain::Step step =
+        chain.onCursor(cursorUp(true, false, false, MenuKind::Screen, 0.3), false, loads);
+    CHECK(step.kind == MenuKind::Popup);
+}
+
+TEST_CASE("chain: the held panel keeps its menu, unless a map load came since the menu began") {
+    MenuChain chain;
+    std::uint32_t loads = 2;
+    // A pause menu opened from the keyboard: nobody's, over the game, a popup.
+    MenuChain::Step step = chain.onCursor(cursorUp(true, true, false, MenuKind::Screen, -1.0), false, loads);
+    REQUIRE(step.kind == MenuKind::Popup);
+    // Its cursor goes and comes back onto the held panel.
+    step = chain.onCursor(cursorUp(true, false, false, MenuKind::Popup, 0.5), true, loads);
+    CHECK(step.keepsPanel);
+    CHECK(step.kind == MenuKind::Popup);
+    // Exit to Main Menu: the shell loads while its cursor is up, then the main menu's comes back onto the
+    // held panel: a new menu, a screen.
+    ++loads;
+    step = chain.onCursor(cursorUp(false, false, false, MenuKind::Popup, 0.5), true, loads);
+    CHECK_FALSE(step.keepsPanel);
+    CHECK(step.afterLoad);
+    CHECK(step.kind == MenuKind::Screen);
+}
+
+TEST_CASE("chain: the pause menu's Settings stays the asked-for menu") {
+    MenuChain chain;
+    chain.onCursor(cursorUp(true, true, true, MenuKind::Screen, -1.0), false, 4);
+    const MenuChain::Step step =
+        chain.onCursor(cursorUp(true, true, false, MenuKind::Screen, 0.25), false, 4);
+    CHECK(step.continues);
+    CHECK(step.kind == MenuKind::Screen);
+    CHECK(chain.asked());
+    CHECK_FALSE(chain.becomesPopup(MenuKind::Screen, true, true, 4));
 }

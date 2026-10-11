@@ -113,7 +113,7 @@ XR worker, every XR frame                                     game (message pump
 | Either stick up / down | Scroll (the mouse wheel), repeating while held (the Dossier map: below) |
 | Either stick left / right | Previous / next tab (Q / E) (the Dossier map: below) |
 | Either stick click | C, the Dossier map's centre key (E in a popup, below); none for the second stick of the recenter chord |
-| A / X in a tutorial or lore popup | Space, the popup's continue key (below) |
+| A / X in a tutorial or lore popup | Space, the popup's continue key (below); so does the jump button, wherever it is |
 | Y in a tutorial or lore popup | Left Alt, held while Y is: the objectives key (below) |
 | A gameplay button in a tutorial or lore popup | Its action's default key, held while the button is (the Flame Belch button R, and so on; below) |
 | Left Menu (tap) | Pause / resume, as in gameplay |
@@ -150,6 +150,44 @@ screen, since its page is not known then. The earlier fix (jump sends Space and 
 suppresses the user command's buttons, `usercmd: popup key`) never fired on the headset: in menu mode the
 controllers' gameplay actions are held back before they reach it.
 
+**Popups without a head-tracked frame behind them.** A prompt the game raises right after a cinematic or a
+load pauses the game before its first head-tracked frame, so the frame behind the cursor is still the
+cinematic's or the loading screen's. Decided by the frame alone such a cursor was a menu screen: A clicked
+and Space was never sent (a player's 0.1.31 log: 58 s of clicks, Escapes, C, E, Q and wheel at a prompt in
+`e1m1_intro`, `menu: the game shows its cursor (a menu screen)`, never `key down 0x20`). Two more players
+reported a prompt no button closed, before the TAG1 boss and after Deag Ranak in the Doom Hunter Base;
+there are no logs of those sessions, so they are possibly the same class. In a play map (any single-player
+map but the main menu's shell, `mp_policy::isPlayMap`, from the map-load hook) a cursor nobody asked for is
+now a popup whatever is behind it, and a screen nobody asked for becomes one there (`menu: the screen is up
+in a play map and nobody asked for it: a popup ...`).
+
+The game loads a map while the menu that asked for the load still shows its cursor (156 of 157 loads in
+the players' logs on hand): the cursor goes only afterwards. So each chain of screens (`menu::MenuChain`)
+keeps the map loads counted when it began, and a cursor that comes up after a load begins a new chain,
+whether it comes back within 0.75 s or onto the panel held for the menu's backdrop (`menu: a map load came
+since the last menu began: this cursor begins a new one`). After Pause, Exit to Main Menu and Continue (or
+Load Checkpoint), a prompt right after the load is decided afresh, a popup, instead of keeping the asked-for
+pause menu's screen; a popup's chain carried into the main menu ends there, and the main menu is a screen.
+Once a load has come, the chain also stops counting as asked for while its cursor stays up.
+
+Outside a play map little changes: the title screen and the main menu click with A. One exception: a main
+menu nobody asked for becomes a popup when it loads a play map (Continue, a mission) and stays one until
+its cursor goes (A sends Space there during the load, which has nothing left to click). The clickable
+screens the game raises by itself in a play map (the Fortress's and Horde's among them) were popups already
+in the players' logs on hand: of 252 cursors nobody asked for in play maps and decided afresh, 250 were
+popups at once and one end-of-level screen turned popup 0.28 s later, closed with the trigger's clicks or
+with Space; the 252nd is the stuck prompt. The trigger still clicks in a popup. Sending a click as well as
+Space from A was not chosen: the layer cannot see whether a screen has a focused button, and the prompt
+hooks see a prompt's text when the game builds it (it is cached), not which prompt is on screen.
+
+Each cursor nobody asked for in a play map logs the foreground window, since the desktop's keyboard reaches
+the game only while its window is in front (`menu: nobody asked for this cursor (a play map, no
+head-tracked frame behind it); in front: the game's window`, or the window's class and process, never its
+title); a cursor that continues a menu does not log it. A cursor nobody asked for in a play map that stays a
+screen, because it continues a menu that was asked for (the pause menu's Settings), logs `menu: a cursor
+nobody asked for in a play map is taken for a screen of the menu asked for before (A / X clicks, no
+Space)`, at most 10 times.
+
 **The mechanic's own key.** A tutorial popup that introduces a mechanic waits for that mechanic's key: on
 the owner's Quest 3 (2026-09-27, 126.6 s into the session) one could not be closed with Space, Left Alt,
 Escape, Q, E or clicks, and he had to restart the checkpoint. In a popup every gameplay action the
@@ -164,12 +202,16 @@ as released when the user command has not been built for 0.25 s) and the router 
 popup closes. The first press of each action in a popup is logged (`menu: popup: flame_belch sends R
 (0x52)`), then the key as usual (`menu: key down 0x52`). No key is sent for fire, the weapon mod and next
 / previous weapon (on the mouse; the trigger stays the pointer's click), for movement and turning (the
-sticks are not actions), for pause, the Dossier and the automap (they open screens of their own), nor for
-jump, melee and mission information: their keys (Space, E, Left Alt) are the popup's own on A / X, a
-stick click and Y in every control map, and sending them from the action too would press them twice for
-one button. Buttons that are both keep both: B also sends Escape, the left grip also Q (its tab key), X
-Space before switch equipment's G. The player's own key binds are not read: a player who rebound the
-Flame Belch still has R sent.
+sticks are not actions), for pause and the automap (they open screens of their own), nor for melee and
+mission information: their keys (E, Left Alt) are the popup's own on a stick click and Y in every control
+map, and sending them from the action too would press them twice for one button. Jump is sent although A /
+X already sends Space: the popup's "[A] TO DISMISS" names the jump button, and on the Vive wand (the left
+trackpad click) or in a changed map that is not A / X. A / X's Space and the jump action's from one press,
+at most 0.3 s apart (the mapper publishes the action a game frame or two after the router sees the
+button), are one Space; the first press of jump from another button logs `menu: popup: jump sends Space
+(0x20)`. The hands-up jump gesture sends it too. Buttons that are both keep both: B also sends Escape, the
+left grip also Q (its tab key), X Space before switch equipment's G. The player's own key binds are not
+read: a player who rebound the Flame Belch still has R sent.
 
 ## The Dossier, its map and the upgrade screens
 

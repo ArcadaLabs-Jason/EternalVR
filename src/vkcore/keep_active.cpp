@@ -12,6 +12,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cwchar>
 #include <mutex>
@@ -122,6 +123,38 @@ LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
 
 HWND gameWindow() {
     return g_gameWindow.load();
+}
+
+ForegroundWindow foregroundWindow() {
+    ForegroundWindow f;
+    HWND front = GetForegroundWindow();
+    HWND game = g_gameWindow.load();
+    if (!front) {
+        f.who = "no window";
+        return f;
+    }
+    if (game && (front == game || GetAncestor(front, GA_ROOTOWNER) == GetAncestor(game, GA_ROOTOWNER))) {
+        f.game = true;
+        f.who = "the game's window";
+        return f;
+    }
+    char className[128] = {};
+    GetClassNameA(front, className, static_cast<int>(sizeof(className)));
+    DWORD processId = 0;
+    GetWindowThreadProcessId(front, &processId);
+    std::string process = "?";
+    if (HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
+        char path[MAX_PATH] = {};
+        DWORD size = MAX_PATH;
+        if (QueryFullProcessImageNameA(handle, 0, path, &size)) {
+            const std::string full(path, size);
+            const std::size_t slash = full.find_last_of("\\/");
+            process = slash == std::string::npos ? full : full.substr(slash + 1);
+        }
+        CloseHandle(handle);
+    }
+    f.who = "class '" + std::string(className) + "' of " + process;
+    return f;
 }
 
 void enableKeepActive() {

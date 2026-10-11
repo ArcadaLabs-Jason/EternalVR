@@ -65,6 +65,10 @@ inline bool mapTripsGuard(std::string_view path) {
 
 const char* toString(MapClass mapClass);
 
+// True for a single-player map the player plays in: not the shell (the main menu, game/shell/), and nothing
+// online or unknown. Normalised as classifyMap normalises.
+bool isPlayMap(std::string_view path);
+
 // ---------------------------------------------------------------------------------------------------
 // Start-up
 

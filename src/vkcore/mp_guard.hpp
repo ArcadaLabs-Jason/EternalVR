@@ -42,6 +42,10 @@ mp_policy::GuardState state();
 // hook. Any thread.
 std::uint32_t mapLoads();
 
+// The last map loaded is one the player plays in (mp_policy::isPlayMap: not the main menu's shell); false
+// before the first map load or without the hook. Any thread.
+bool inPlayMap();
+
 // Trip listeners: each is called once, on the thread that trips the guard, right after the latch closes, in
 // the order added; one added after a trip is called at once, on the adding thread. A fixed list of
 // mp_policy::TripListeners::kCapacity (8), lock-free (mp_policy/trip_listeners.hpp); false (not added) when

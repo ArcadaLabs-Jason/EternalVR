@@ -200,6 +200,12 @@ MapClass classifyMap(std::string_view path) {
     return MapClass::Unknown;
 }
 
+bool isPlayMap(std::string_view path) {
+    constexpr std::string_view kShell = "game/shell/";
+    return classifyMap(path) == MapClass::SinglePlayer &&
+           normaliseMapPath(path).compare(0, kShell.size(), kShell) != 0;
+}
+
 const char* toString(MapClass mapClass) {
     switch (mapClass) {
     case MapClass::SinglePlayer:

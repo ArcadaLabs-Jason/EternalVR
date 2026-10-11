@@ -49,6 +49,7 @@ bool g_commandLineAllowed = true;
 std::atomic<const std::byte* const*> g_mainMenuSlot{nullptr};
 std::atomic<ULONGLONG> g_testTripAt{0};
 std::atomic<std::uint32_t> g_mapLoads{0};
+std::atomic<bool> g_playMap{false}; // the last map loaded is one the player plays in
 
 // ---------------------------------------------------------------------------------------------------
 // Tripping
@@ -117,6 +118,7 @@ void onMapLoad(const HookRegisters& regs) {
     }
     name[sizeof(name) - 1] = '\0';
     g_startup.mapLoadStarted();
+    g_playMap.store(mp_policy::isPlayMap(name), std::memory_order_release); // before the count it goes with
     g_mapLoads.fetch_add(1, std::memory_order_release);
     const mp_policy::MapClass mapClass = mp_policy::classifyMap(name);
     EVR_LOG("%s: map load '%s' (%s)", kTag, name, mp_policy::toString(mapClass));
@@ -517,6 +519,10 @@ GuardState state() {
 
 std::uint32_t mapLoads() {
     return g_mapLoads.load(std::memory_order_acquire);
+}
+
+bool inPlayMap() {
+    return g_playMap.load(std::memory_order_acquire);
 }
 
 void poll() {

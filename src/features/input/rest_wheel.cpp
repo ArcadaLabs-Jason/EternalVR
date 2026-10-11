@@ -178,7 +178,9 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
         crossed[i] = out(hand) && !wasOut;
         crossedNow_[i] = crossed[i];
         centredSeconds_[i] = out(hand) ? 0.0f : centredSeconds_[i] + dt;
-        outSeconds_[i] = out(hand) ? outSeconds_[i] + dt : 0.0f;
+        // From the frame the stick is first out, as the touch's times count from the frame it changed: this
+        // frame's dt passed before the stick was out.
+        outSeconds_[i] = out(hand) && wasOut ? outSeconds_[i] + dt : 0.0f;
         sinceFaceButton_[i] = frame.faceButtons[i] ? 0.0f : sinceFaceButton_[i] + dt;
         latched_[i] = latched_[i] && out(hand);
     }
@@ -254,7 +256,7 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
     if (route_ == Route::Pointing && committed_ == WheelDirection::None && hardLift[index(restHand_)] &&
         (settings_.mode == RestWheelMode::Edge || settings_.mode == RestWheelMode::Full)) {
         const float before = outSeconds_[index(stickHand_)] - rests_[index(restHand_)].gapSeconds;
-        if (before <= kTurnBeforeLiftSeconds) {
+        if (before <= kTurnBeforeLiftSeconds + kTimingSlackSeconds) {
             givenBack_[index(stickHand_)] = true;
             handBack_[index(stickHand_)] = true;
         }

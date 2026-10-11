@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <ostream>
 #include <string_view>
 #include <utility>
@@ -181,19 +182,80 @@ TEST_CASE("router: popup: movement, fire, aim and the menu actions are not forwa
     CHECK(out.popupKeys.empty());
 }
 
-TEST_CASE("router: popup: jump and melee keep their buttons' keys, sent once") {
-    CHECK_FALSE(popupActionKey(GameAction::Jump).has_value());        // Space: A / X
+TEST_CASE("router: popup: melee and mission information keep their buttons' keys") {
     CHECK_FALSE(popupActionKey(GameAction::Melee).has_value());       // E: a stick click
     CHECK_FALSE(popupActionKey(GameAction::MissionInfo).has_value()); // Left Alt: Y
+}
 
-    // A pressed: its Space, and the jump action it maps to adds nothing.
+TEST_CASE("router: popup: jump on a button other than A / X sends Space") {
+    // The Vive wand's jump is a trackpad click; a changed map can put it anywhere. The popup's "[A] TO
+    // DISMISS" names the jump button.
+    REQUIRE(popupActionKey(GameAction::Jump) == std::optional<std::uint8_t>{kKeyContinue});
+    MenuRouter router;
+    router.update(popupFrame(1.0));
+    const RouterOutput down = router.update(popupFrame(1.1, {GameAction::Jump}));
+    CHECK(count(down, Kind::KeyDown, kKeyContinue) == 1);
+    REQUIRE(down.popupKeys.size() == 1);
+    CHECK(down.popupKeys[0].action == GameAction::Jump);
+    CHECK(down.popupKeys[0].key == kKeyContinue);
+    const RouterOutput up = router.update(popupFrame(1.3));
+    CHECK(count(up, Kind::KeyUp, kKeyContinue) == 1);
+}
+
+TEST_CASE("router: popup: jump moved to B sends Space, and B still goes back") {
     MenuRouter router;
     router.update(popupFrame(1.0));
     RouterInput in = popupFrame(1.1, {GameAction::Jump});
-    in.hands[kRight].primary = true;
+    in.hands[kRight].secondary = true;
     const RouterOutput out = router.update(in);
     CHECK(count(out, Kind::KeyDown, kKeyContinue) == 1);
-    CHECK(out.popupKeys.empty());
+    CHECK(count(out, Kind::KeyDown, 0x1B) == 1); // Escape
+}
+
+TEST_CASE("router: popup: A and the jump action it carries send one Space") {
+    // The mapper publishes the action a game frame or two after the router sees A, or before it; the A tap
+    // is up again after minHold (0.06 s), so the key being down is not enough to tell.
+    for (const double actionDelay : {0.0, 0.02, 0.1, 0.25, -0.02}) {
+        CAPTURE(actionDelay);
+        MenuRouter router;
+        router.update(popupFrame(1.0));
+        int spaces = 0;
+        for (double t = 1.1; t < 1.8; t += 0.01) {
+            const bool aDown = t >= 1.2 && t < 1.5;
+            const bool jumpHeld = t >= 1.2 + actionDelay && t < 1.5 + actionDelay;
+            RouterInput in = jumpHeld ? popupFrame(t, {GameAction::Jump}) : popupFrame(t);
+            in.hands[kRight].primary = aDown;
+            spaces += count(router.update(in), Kind::KeyDown, kKeyContinue);
+        }
+        CHECK(spaces == 1);
+    }
+}
+
+TEST_CASE("router: popup: two presses of A send two Spaces") {
+    MenuRouter router;
+    router.update(popupFrame(1.0));
+    int spaces = 0;
+    for (double t = 1.1; t < 1.8; t += 0.01) {
+        // Two short presses 0.2 s apart, each with its jump action a frame later.
+        const bool aDown = (t >= 1.2 && t < 1.28) || (t >= 1.4 && t < 1.48);
+        const bool jumpHeld = (t >= 1.21 && t < 1.29) || (t >= 1.41 && t < 1.49);
+        RouterInput in = jumpHeld ? popupFrame(t, {GameAction::Jump}) : popupFrame(t);
+        in.hands[kRight].primary = aDown;
+        spaces += count(router.update(in), Kind::KeyDown, kKeyContinue);
+    }
+    CHECK(spaces == 2);
+}
+
+TEST_CASE("router: popup: X without jump sends Space; jump outside a popup sends nothing") {
+    MenuRouter router;
+    router.update(popupFrame(1.0));
+    RouterInput x = popupFrame(1.1);
+    x.hands[kLeft].primary = true; // switch equipment and the Dossier on Touch, no jump
+    CHECK(count(router.update(x), Kind::KeyDown, kKeyContinue) == 1);
+
+    MenuRouter menu;
+    menu.update(popupFrame(1.0, {}, false));
+    CHECK_FALSE(anyKey(menu.update(popupFrame(1.1, {GameAction::Jump}, false))));
 }
 
 TEST_CASE("router: popup: a key already down is not pressed again") {

@@ -10,6 +10,7 @@
 #include "features/menu/menu_kind.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/menu_cursor.hpp"
 #include "vkcore/menu_cursor_hide.hpp"
@@ -27,9 +28,12 @@ namespace evr::vkcore {
 
 namespace {
 
-// Worker only: the controllers asked for the menu that began this chain of screens (one presenter per
-// process; kept here, not in PresenterImpl, which is at the file size limit).
-bool g_menuAsked = false;
+// Worker only: the chain of screens the menu up belongs to, whether the controllers asked for it and the map
+// loads since (menu_kind.hpp; one presenter per process; kept here, not in PresenterImpl, which is at the
+// file size limit). And the cursors nobody asked for in a play map taken for a screen, for the log.
+menu::MenuChain g_menuChain;
+int g_unaskedScreens = 0;
+constexpr int kUnaskedScreenLines = 10;
 
 // The pointer's drawing: the beam's thickness, its length when it misses the panel, the dot's angular size.
 constexpr float kBeamThicknessMetres = 0.005f;
@@ -209,15 +213,16 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
         EVR_LOG("menu: the panel is down (held %.2f s)", now - menuCursorGone);
     }
 
-    if (active && !menuOn && wasHeld) {
-        EVR_LOG("menu: the cursor is back; the panel stays where it was");
-    } else if (active && !menuOn) {
+    // A cursor nobody asked for in a play map came up this frame (for the log below).
+    bool unaskedInPlayMap = false;
+    if (active && !menuOn) {
         // Tutorial and lore popups show the cursor over the game unasked; they wait for Space or E. The
         // Dossier the controllers asked for opens on its map page (the router follows its tabs). A cursor
-        // back within moments of the last one going is the same menu changing screens and keeps its kind
-        // (menu_kind.hpp).
+        // back within moments of the last one going, or onto the held panel, is the same menu changing
+        // screens and keeps its kind, unless a map load came since that menu began (menu_kind.hpp).
         menu::MenuKindInput kindIn;
         kindIn.overGame = panelContent && shownHasView;
+        kindIn.playMap = mp_guard::inPlayMap();
         kindIn.menuRequested = controllers::menuRequestedWithin(kMenuRequestSeconds);
         kindIn.dossierRequested = controllers::dossierRequestedWithin(kMenuRequestSeconds);
         kindIn.hadMenu = menuCursorGone > 0.0;
@@ -225,33 +230,45 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                           : menuDossier ? menu::MenuKind::Dossier
                                         : menu::MenuKind::Screen;
         kindIn.sinceCursorGone = now - menuCursorGone;
-        const menu::MenuKind kind = menu::menuKindOnCursor(kindIn);
-        if (kindIn.hadMenu && kindIn.sinceCursorGone < menu::kMenuContinueSeconds) {
-            EVR_LOG("menu: the cursor is back after %.2f s: the same menu (%s) on another screen",
-                    kindIn.sinceCursorGone, menu::menuKindName(kind));
+        const menu::MenuChain::Step step = g_menuChain.onCursor(kindIn, wasHeld, mp_guard::mapLoads());
+        if (step.keepsPanel) {
+            EVR_LOG("menu: the cursor is back; the panel stays where it was");
         } else {
-            g_menuAsked = kindIn.menuRequested || kindIn.dossierRequested;
-        }
-        menuPopup = kind == menu::MenuKind::Popup;
-        menuDossier = kind == menu::MenuKind::Dossier;
-        // A menu came up: its panel goes in front of the head (yaw only) at the UI quad's height.
-        placeMenuPanel(time);
-        menuReplace.store(false, std::memory_order_relaxed);
-        menuRoom.reset();
-        const ui_layer::PixelRect content = menuContent();
-        if (const auto size =
-                ui_layer::panelSize(settings.ui.menuWidthMetres, content.width, content.height)) {
-            menuPanel.width = size->width;
-            menuPanel.height = size->height;
-        }
-        EVR_LOG("menu: the game shows its cursor (%s): panel %.2f x %.2f m at (%.2f, %.2f, %.2f)%s",
-                menuPopup     ? "a popup over the game, not asked for: A / X sends Space, a stick click E, Y "
+            if (step.continues) {
+                EVR_LOG("menu: the cursor is back after %.2f s: the same menu (%s) on another screen",
+                        kindIn.sinceCursorGone, menu::menuKindName(step.kind));
+            } else if (step.afterLoad) {
+                EVR_LOG("menu: a map load came since the last menu began: this cursor begins a new one");
+            }
+            menuPopup = step.kind == menu::MenuKind::Popup;
+            menuDossier = step.kind == menu::MenuKind::Dossier;
+            // A menu came up: its panel goes in front of the head (yaw only) at the UI quad's height.
+            placeMenuPanel(time);
+            menuReplace.store(false, std::memory_order_relaxed);
+            menuRoom.reset();
+            const ui_layer::PixelRect content = menuContent();
+            if (const auto size =
+                    ui_layer::panelSize(settings.ui.menuWidthMetres, content.width, content.height)) {
+                menuPanel.width = size->width;
+                menuPanel.height = size->height;
+            }
+            EVR_LOG("menu: the game shows its cursor (%s): panel %.2f x %.2f m at (%.2f, %.2f, %.2f)%s",
+                    menuPopup ? "a popup over the game, not asked for: A / X sends Space, a stick click E, Y "
                                 "Left Alt, the gameplay buttons their actions' keys"
-                : menuDossier ? "the Dossier, on its map: the sticks move the map"
-                : panelContent && shownHasView ? "a menu over the game"
-                                               : "a menu screen",
-                menuPanel.width, menuPanel.height, menuPanel.pose.position.x, menuPanel.pose.position.y,
-                menuPanel.pose.position.z, frame ? "" : "; no controllers");
+                    : menuDossier                  ? "the Dossier, on its map: the sticks move the map"
+                    : panelContent && shownHasView ? "a menu over the game"
+                                                   : "a menu screen",
+                    menuPanel.width, menuPanel.height, menuPanel.pose.position.x, menuPanel.pose.position.y,
+                    menuPanel.pose.position.z, frame ? "" : "; no controllers");
+            unaskedInPlayMap = kindIn.playMap && !kindIn.menuRequested && !kindIn.dossierRequested;
+            if (unaskedInPlayMap && !step.continues) {
+                // The desktop's keyboard reaches the game only while its window is in front (key_inject.hpp).
+                const ForegroundWindow front = foregroundWindow();
+                EVR_LOG("menu: nobody asked for this cursor (a play map%s); in front: %s%s",
+                        kindIn.overGame ? "" : ", no head-tracked frame behind it", front.who.c_str(),
+                        front.game ? "" : " (the desktop's keyboard and mouse do not reach the game)");
+            }
+        }
     } else if (!active && menuOn) {
         EVR_LOG("menu: the cursor is gone; %s",
                 menuHeld ? "the pointer is down, the panel stays while the menu's backdrop shows"
@@ -261,11 +278,18 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     const menu::MenuKind menuKind = menuDossier ? menu::MenuKind::Dossier
                                     : menuPopup ? menu::MenuKind::Popup
                                                 : menu::MenuKind::Screen;
-    if (menuOn && menu::screenBecomesPopup(menuKind, g_menuAsked, panelContent && shownHasView)) {
+    const bool overGame = panelContent && shownHasView;
+    if (menuOn && g_menuChain.becomesPopup(menuKind, overGame, mp_guard::inPlayMap(), mp_guard::mapLoads())) {
         menuPopup = true;
-        EVR_LOG(
-            "menu: the screen shows over the game now and nobody asked for it: a popup (A / X sends Space, a "
-            "stick click E, Y Left Alt, the gameplay buttons their actions' keys)");
+        EVR_LOG("menu: the screen %s and nobody asked for it: a popup (A / X sends Space, a stick click E, Y "
+                "Left Alt, the gameplay buttons their actions' keys)",
+                overGame ? "shows over the game now" : "is up in a play map");
+    } else if (menuOn && unaskedInPlayMap && !menuPopup && g_unaskedScreens < kUnaskedScreenLines) {
+        // It continues a menu the controllers asked for (the pause menu's Settings, a Dossier screen).
+        ++g_unaskedScreens;
+        EVR_LOG("menu: a cursor nobody asked for in a play map is taken for a screen of the menu asked for "
+                "before (A / X clicks, no Space)%s",
+                g_unaskedScreens == kUnaskedScreenLines ? " (the last such line)" : "");
     }
     menuHeld = menuHeld && menuPanelPlaced && menuPanel.width > 0.0f;
     menuUp.store(cursorActive || menuOn || menuHeld, std::memory_order_relaxed);

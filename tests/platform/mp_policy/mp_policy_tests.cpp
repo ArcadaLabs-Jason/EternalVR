@@ -12,6 +12,7 @@
 using evr::mp_policy::classifyMap;
 using evr::mp_policy::GuardState;
 using evr::mp_policy::isOnlineMenuScreen;
+using evr::mp_policy::isPlayMap;
 using evr::mp_policy::Latch;
 using evr::mp_policy::MapClass;
 using evr::mp_policy::mapTripsGuard;
@@ -163,6 +164,21 @@ TEST_CASE("unknown map paths fail closed") {
         CAPTURE(map);
         CHECK((classifyMap(map) != MapClass::SinglePlayer));
         CHECK(mapTripsGuard(map));
+    }
+}
+
+TEST_CASE("a play map is a single-player map other than the shell") {
+    // The menu router takes a cursor nobody asked for in a play map for a popup (menu_kind.hpp).
+    for (const char* map : {"game/sp/e1m1_intro/e1m1_intro", "game/dlc/e4m3_mcity/e4m3_mcity", "game/hub/hub",
+                            "game/horde/e6m1_cult_horde/e6m1_cult_horde", "game/tutorials/tutorial_sp",
+                            "GAME\\SP\\E1M4_BOSS\\e1m4_boss"}) {
+        CAPTURE(map);
+        CHECK(isPlayMap(map));
+    }
+    for (const char* map : {"game/shell/shell", "GAME\\SHELL\\SHELL", "/maps/game/shell/shell.map",
+                            "game/pvp/pvp_laser/pvp_laser", "game/unknown/x", ""}) {
+        CAPTURE(map);
+        CHECK_FALSE(isPlayMap(map));
     }
 }
 
