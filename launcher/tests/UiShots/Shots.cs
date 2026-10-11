@@ -126,6 +126,7 @@ namespace EternalVR.Launcher.UiShots
                 Reflect.Get<Button>(f, "accept").Text = "Try again";
             });
             yield return new Scenario { Name = "controls", Open = () => Reflect.Call(main, "EditControls") };
+            yield return Modal("weapon-directions", () => new WeaponDirectionsDialog("up_right=none,down_left=none"), null);
             yield return new Scenario
             {
                 Name = "restore-saves",

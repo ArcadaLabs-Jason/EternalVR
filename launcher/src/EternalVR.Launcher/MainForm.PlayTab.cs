@@ -38,6 +38,8 @@ namespace EternalVR.Launcher
         private readonly ComboBox wheel = Choices(Setting.WeaponWheel);
         private readonly ComboBox thumbRest = Choices(Setting.ThumbRestWheel);
         private readonly ComboBox thumbRestPicks = Choices(Setting.ThumbRestPicks);
+        /// <summary>Whether the weapon directions are the game's wheel (<see cref="ShowWeaponDirections"/>).</summary>
+        private readonly Label weaponDirectionsState = Caption(string.Empty);
         private readonly CheckBox thumbRestFaceTouch = new CheckBox { AutoSize = true };
         private readonly CheckBox thumbRestSlowdown = new CheckBox { AutoSize = true };
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
@@ -136,6 +138,8 @@ namespace EternalVR.Launcher
                 Row(Setting.ThumbRestPicks, thumbRestPicks,
                     s => thumbRestPicks.SelectedIndex = (int)s.ThumbRestPicks,
                     s => s.ThumbRestPicks = (ThumbRestPick)thumbRestPicks.SelectedIndex),
+                // Nothing to read: the dialog sets the table and saves it.
+                Row(Setting.WeaponDirections, WeaponDirectionsRow(), ShowWeaponDirections, s => { }),
                 Row(Setting.ThumbRestFaceTouch, thumbRestFaceTouch,
                     s => thumbRestFaceTouch.Checked = s.ThumbRestFaceTouch, s => s.ThumbRestFaceTouch = thumbRestFaceTouch.Checked),
                 Row(Setting.ThumbRestSlowdown, thumbRestSlowdown,
@@ -199,6 +203,39 @@ namespace EternalVR.Launcher
             var row = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false, FlowDirection = FlowDirection.TopDown };
             row.Controls.AddRange(new Control[] { buttons, controlsState });
             return row;
+        }
+
+        private FlowLayoutPanel WeaponDirectionsRow()
+        {
+            var edit = new Button { Text = "Weapon directions...", Width = 150, Height = ButtonHeight };
+            edit.Click += (s, e) => EditWeaponDirections();
+            var row = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+            row.Controls.AddRange(new Control[] { edit, weaponDirectionsState });
+            return row;
+        }
+
+        private void ShowWeaponDirections(LauncherSettings s)
+        {
+            weaponDirectionsState.Text = WeaponDirectionTable.Format(WeaponDirectionTable.Parse(s.WeaponDirections)).Length == 0
+                ? "Game's wheel" : "Your own";
+        }
+
+        /// <summary>The weapon directions dialog (<see cref="WeaponDirectionsDialog"/>) on the table in use; OK saves the new one.</summary>
+        private void EditWeaponDirections()
+        {
+            string value;
+            using (var dialog = new WeaponDirectionsDialog(ctx.Settings.WeaponDirections))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                value = dialog.Value;
+            }
+            if (WeaponDirectionTable.Format(WeaponDirectionTable.Parse(value)) ==
+                WeaponDirectionTable.Format(WeaponDirectionTable.Parse(ctx.Settings.WeaponDirections))) return;
+            ctx.Settings.WeaponDirections = value;
+            ctx.Log.Info("weapon directions: " + (value.Length == 0 ? "the game's wheel" : value));
+            SaveSettings();
+            MarkProfileChanged();
+            ShowWeaponDirections(ctx.Settings);
         }
 
         private void ShowControlsState()

@@ -22,7 +22,7 @@ every shot with its fault count. The faults are hints; look at every picture.
 
 The shots: the main window's tabs and its bar with "Update to x.y.z..."; the update dialog able to install, unable
 for each reason (game running, not a release, folder not writable), downloading, installing, failed, and failed
-after the files were replaced; the DLSS download (offer, downloading, failed); the controls editor; Restore saves;
+after the files were replaced; the DLSS download (offer, downloading, failed); the controls editor; the weapon directions; Restore saves;
 the new profile name.
 
 The DPI is the display's: WinForms scales by the DPI of the display a window is on, and a scale cannot be faked

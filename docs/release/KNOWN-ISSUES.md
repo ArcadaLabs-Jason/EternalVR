@@ -233,8 +233,8 @@ them is worse for you than described here.
   by default) is new and has had a few headset tests. Touch, then push is hard to get right and picking with
   the game's wheel is slow to open; While touched with Weapon by direction works best so far. Weapon by
   direction follows the game's own wheel (the rocket launcher left, the heavy cannon right, and so on):
-  `weapon_directions` in launcher.ini changes it. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
-  rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
+  **Weapon directions...** on the Play tab changes it. If nothing happens when you rest a thumb, your VR
+  runtime may not report the thumb rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
   in a headset yet, nor has the thumb rest's new touch handling (0.1.41: a touch counts at once, a short loss
   is forgiven).
 - **Edit controls...** should open much faster now (it used to take several seconds and show "Not

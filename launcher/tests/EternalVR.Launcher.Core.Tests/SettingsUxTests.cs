@@ -182,7 +182,7 @@ namespace EternalVR.Launcher.Core.Tests
         public void EverythingAppliesWithTheDefaultsExceptTheSnapAngleThumbRestDlssAndTheCutsceneArms()
         {
             var inapplicable = SettingRules.Inapplicable(new LauncherSettings());
-            Assert.Equal(new[] { Setting.SnapAngle, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown,
+            Assert.Equal(new[] { Setting.SnapAngle, Setting.ThumbRestPicks, Setting.WeaponDirections, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown,
                                  Setting.DlssQuality, Setting.DlssVersion, Setting.DlssPreset, Setting.DlssInHeadset, Setting.CutsceneArms },
                 inapplicable.Keys);
             // The thumb-rest wheel is off by default: its rows wait for it.

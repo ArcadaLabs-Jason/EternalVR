@@ -91,8 +91,11 @@ cancels it, unless the game's wheel is already open: then it takes the highlight
 stick's thumb to pick with the other stick instead (it does not walk meanwhile). **Thumb-rest picks: Weapon by
 direction** keeps the wheel closed: push the stick toward a weapon where the game's wheel shows it and let
 go (up combat shotgun, then clockwise super shotgun, heavy cannon, chaingun, plasma rifle, ballista, rocket
-launcher, BFG; a line such as `weapon_directions = up=1,right=2,left=4` in launcher.ini changes them, by
-weapon slot number). A quick flick all the way out counts at once, in the direction it ends up in; a smaller
+launcher, BFG). **Weapon directions...** under it sets the weapon of each direction (kept as
+`weapon_directions` in launcher.ini). A direction set to None has no part of its own: it goes to its
+nearest neighbours, so with weapons on up, right, down and left only, each takes a quarter of the circle;
+**Four directions** in that window sets exactly that. A quick flick all the way out counts at once, in the
+direction it ends up in; a smaller
 push has to stay in one direction for a moment. **Slow time on the thumb-rest wheel** off keeps the game at full speed while
 this wheel is open. **Face buttons as thumb rest** lets a thumb resting on A/B or X/Y count as the thumb
 rest on Index and Pico 4 controllers, which have none. Nothing happens in menus, during cutscenes, while

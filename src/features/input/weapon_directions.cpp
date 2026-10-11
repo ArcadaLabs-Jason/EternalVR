@@ -1,12 +1,16 @@
 #include "features/input/weapon_directions.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <utility>
 
 namespace evr::input {
 
 namespace {
+
+constexpr float kDegrees = std::numbers::pi_v<float> / 180.0f;
 
 // Clockwise from up, as the setting is written.
 constexpr std::array<std::pair<std::string_view, WheelDirection>, 8> kNames{{
@@ -57,6 +61,23 @@ std::optional<std::uint8_t> parseSlot(std::string_view text) {
     return std::nullopt;
 }
 
+// Directions are counted in eighths counter-clockwise from the right (WheelDirection), any number of turns.
+bool hasSlot(const WeaponDirections& table, int eighth) {
+    const std::uint8_t slot = table[static_cast<std::size_t>(((eighth % 8) + 8) % 8)];
+    return slot >= 1 && slot <= 8;
+}
+
+// Eighths from `eighth` to the next direction with a weapon, counter-clockwise (`step` 1) or clockwise (-1);
+// 8 when there is none other.
+int gapTo(const WeaponDirections& table, int eighth, int step) {
+    for (int k = 1; k < 8; ++k) {
+        if (hasSlot(table, eighth + step * k)) {
+            return k;
+        }
+    }
+    return 8;
+}
+
 } // namespace
 
 WeaponDirectionsResult parseWeaponDirections(std::string_view text) {
@@ -94,6 +115,48 @@ std::optional<game::GameAction> weaponSlotFor(const WeaponDirections& table, Whe
         return std::nullopt;
     }
     return static_cast<game::GameAction>(static_cast<int>(game::GameAction::WeaponSlot1) + slot - 1);
+}
+
+WheelDirection slotDirection(Axis2 stick,
+                             WheelDirection current,
+                             const WeaponDirections& table,
+                             float threshold,
+                             float hysteresisDegrees) {
+    const WheelDirection eighth = wheelDirection(stick, threshold);
+    if (eighth == WheelDirection::None) {
+        return WheelDirection::None;
+    }
+    const float angle = std::atan2(stick.y, stick.x);
+    // The stick's angle from a direction's centre, -pi to pi (counter-clockwise positive).
+    const auto off = [&](int direction) {
+        const float centre = static_cast<float>(direction) * 45.0f * kDegrees;
+        return std::remainder(angle - centre, 2.0f * std::numbers::pi_v<float>);
+    };
+    const int e = static_cast<int>(eighth);
+    WheelDirection nearest = eighth;
+    if (!hasSlot(table, e)) {
+        // The nearer of the closest directions with a weapon on either side of the stick's eighth.
+        const int ccw = gapTo(table, e, 1);
+        if (ccw == 8) {
+            return WheelDirection::None; // no direction has a weapon
+        }
+        const int cw = gapTo(table, e, -1);
+        const float o = off(e);
+        const bool counterClockwise =
+            static_cast<float>(ccw) * 45.0f * kDegrees - o <= static_cast<float>(cw) * 45.0f * kDegrees + o;
+        const int d = counterClockwise ? e + ccw : e - cw;
+        nearest = static_cast<WheelDirection>(((d % 8) + 8) % 8);
+    }
+    if (current == WheelDirection::None || current == nearest || !hasSlot(table, static_cast<int>(current))) {
+        return nearest;
+    }
+    // `current`'s part reaches halfway to the next direction with a weapon on the stick's side, then the
+    // hysteresis (as the wheel's eighths: 22.5 degrees and the hysteresis with all eight set).
+    const int c = static_cast<int>(current);
+    const float o = off(c);
+    const int gap = gapTo(table, c, o >= 0.0f ? 1 : -1);
+    return std::fabs(o) <= (static_cast<float>(gap) * 22.5f + hysteresisDegrees) * kDegrees ? current
+                                                                                            : nearest;
 }
 
 std::string weaponDirectionsText(const WeaponDirections& table) {

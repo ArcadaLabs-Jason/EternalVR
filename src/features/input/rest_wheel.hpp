@@ -73,7 +73,9 @@
 //   least the game's own open delay plus kWheelOpenMarginSeconds, never less than kMinWheelHoldSeconds
 //   (wheelHoldSeconds), so a quick pick is never taken for a quick switch;
 // - slots: the direction is remembered and the wheel stays closed; letting go presses that direction's
-//   weapon slot for one frame (weapon_directions.hpp).
+//   weapon slot for one frame (weapon_directions.hpp). A direction with no weapon is no direction of its own:
+//   its eighth goes to its nearest neighbours that have one (slotDirection), the dwell and the hysteresis
+//   included.
 //
 // The stick a route uses neither turns, moves nor fires its gestures from the frame it leaves the centre,
 // which comes before any turn: a snap fires at 0.70 and a smooth turn starts at 0.35, the arming at
@@ -126,8 +128,8 @@ inline constexpr float kDwellSeconds = 0.10f;
 // picks (Jason's headset test, 2026-10-09: "thumb rest + flick"); the direction is where the flick ends up
 // (kOutwardStep).
 inline constexpr float kFlickThreshold = 0.85f;
-// A direction is kept until the stick is this far past the edge of its eighth, once the stick stops going
-// further out.
+// A direction is kept until the stick is this far past the edge of its eighth (under slots, of its part of
+// the circle), once the stick stops going further out.
 inline constexpr float kOctantHysteresisDegrees = 7.5f;
 // While the stick goes further out than it has been in this pick (by more than this), it points at the eighth
 // it is in now, without the hysteresis: a flick that curves on its way out picks the eighth it reaches, not

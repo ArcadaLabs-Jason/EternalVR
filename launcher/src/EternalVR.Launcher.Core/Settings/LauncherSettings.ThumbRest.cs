@@ -15,7 +15,8 @@ namespace EternalVR.Launcher.Core.Settings
 
     /// <summary>The thumb-rest wheel in launcher.ini: <c>thumb_rest_wheel = edge|full|extreme|off</c>,
     /// <c>thumb_rest_pick = wheel|directions</c>, <c>thumb_rest_face_touch = 0|1</c> (off by default),
-    /// <c>thumb_rest_slowdown = 1|0</c> (on by default) and <c>weapon_directions</c>, written by hand only.</summary>
+    /// <c>thumb_rest_slowdown = 1|0</c> (on by default) and <c>weapon_directions</c> (<see cref="WeaponDirectionTable"/>, left
+    /// out for the game's wheel).</summary>
     public sealed partial class LauncherSettings
     {
         /// <summary>The thumb-rest wheel; off by default until more players have tried it.</summary>
@@ -27,7 +28,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Time slows while the thumb-rest wheel holds the game's wheel open, as for the game's own; on by default.</summary>
         public bool ThumbRestSlowdown { get; set; } = true;
         /// <summary>The slot of each stick direction under Weapon by direction (the layer's <c>ETERNALVR_WEAPON_DIRECTIONS</c>,
-        /// <c>up=1,up_right=5,...</c>); set in the file by hand, empty for the layer's own table.</summary>
+        /// <c>up=1,up_right=5,...</c>, <see cref="WeaponDirectionTable"/>); empty for the layer's own table, the game's wheel.</summary>
         public string WeaponDirections { get; set; } = string.Empty;
 
         /// <summary>The settings file's and the layer's <c>ETERNALVR_THUMBREST_WHEEL</c> value.</summary>

@@ -74,7 +74,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("up=2", back.WeaponDirections);
             Assert.Contains("thumb_rest_wheel = off", new LauncherSettings().Serialize());
             Assert.Contains("thumb_rest_pick = directions", set.Serialize());
-            // The direction table is written only when set by hand.
+            // The direction table is written only when it is not the game's wheel.
             Assert.DoesNotContain("weapon_directions", new LauncherSettings().Serialize());
             // A file from before the keys: the wheel off, as for a new player.
             var old = LauncherSettings.Parse("schema_version = 2\nwheel_select = hand\n");
@@ -90,8 +90,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(ThumbRestMode.Full, LauncherSettings.Parse("schema_version = 2\nthumb_rest_wheel = FULL\n").ThumbRest);
             Assert.Empty(LauncherSettings.Parse("schema_version = 2\nthumb_rest_wheel = off\nweapon_directions = up=1\n").UnknownKeys);
             Assert.Equal(ThumbRestMode.Off, new LauncherSettings { ThumbRest = ThumbRestMode.Full }.WithDefaults().ThumbRest);
-            // Reset to defaults keeps a table written by hand: the window cannot set it again.
-            Assert.Equal("up=2", new LauncherSettings { WeaponDirections = "up=2" }.WithDefaults().WeaponDirections);
+            // Reset to defaults puts the game's wheel back: the window sets the table (Weapon directions...).
+            Assert.Equal(string.Empty, new LauncherSettings { WeaponDirections = "up=2" }.WithDefaults().WeaponDirections);
         }
 
         [Fact]
@@ -109,6 +109,12 @@ namespace EternalVR.Launcher.Core.Tests
             var directions = new LauncherSettings { ThumbRest = ThumbRestMode.Full, ThumbRestPicks = ThumbRestPick.Directions };
             Assert.Equal(SettingRules.NeedsWheelPick, SettingRules.WhyNot(Setting.ThumbRestSlowdown, directions));
             Assert.Null(SettingRules.WhyNot(Setting.ThumbRestFaceTouch, directions));
+            // The weapon directions apply only when the thumb-rest wheel picks by direction.
+            Assert.Null(SettingRules.WhyNot(Setting.WeaponDirections, directions));
+            Assert.Equal(SettingRules.NeedsDirectionPick, SettingRules.WhyNot(Setting.WeaponDirections, new LauncherSettings { ThumbRest = ThumbRestMode.Full }));
+            Assert.Equal(SettingRules.NeedsThumbRest,
+                SettingRules.WhyNot(Setting.WeaponDirections, new LauncherSettings { ThumbRest = ThumbRestMode.Off, ThumbRestPicks = ThumbRestPick.Directions }));
+            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.WeaponDirections, new LauncherSettings { Controllers = false }));
         }
 
         [Fact]
@@ -119,7 +125,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(new[] { "Touch, then push", "While touched", "Turn stick picks (standing)", "Off (default)" }, wheel.Choices);
             Assert.Contains("Quest and Rift", wheel.Tooltip);
             Assert.Equal(new[] { "Weapon wheel (default)", "Weapon by direction" }, SettingTexts.For(Setting.ThumbRestPicks).Choices);
-            foreach (var setting in new[] { Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown })
+            Assert.Equal("Weapon directions", SettingTexts.For(Setting.WeaponDirections).Label);
+            foreach (var setting in new[] { Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.WeaponDirections, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown })
             {
                 var text = SettingTexts.For(setting);
                 Assert.DoesNotContain("\u2014", text.Tooltip);

@@ -132,6 +132,10 @@ namespace EternalVR.Launcher.Core.Settings
                 + "direction: push toward a weapon where the game's wheel shows it and let go; the wheel stays "
                 + "closed.",
                 "Weapon wheel (default)", "Weapon by direction"),
+            [Setting.WeaponDirections] = new Text("Weapon directions",
+                "Which weapon each stick direction picks under Weapon by direction. By default each direction picks the "
+                + "weapon the game's wheel shows there. A direction set to None picks nothing of its own: its part of the "
+                + "circle goes to its nearest neighbours, so four weapons on up, right, down and left get a quarter each."),
             [Setting.ThumbRestFaceTouch] = new Text("Face buttons as thumb rest",
                 "On controllers without a thumb rest (Index, Pico 4), a thumb resting on the A/B or X/Y buttons counts as "
                 + "one. Off by default: thumbs also brush them on the way to a press."),

@@ -12,6 +12,7 @@ using evr::game::GameAction;
 using evr::input::Axis2;
 using evr::input::Hand;
 using evr::input::kMinWheelHoldSeconds;
+using evr::input::parseWeaponDirections;
 using evr::input::RestWheel;
 using evr::input::RestWheelEvent;
 using evr::input::RestWheelFrame;
@@ -348,14 +349,36 @@ TEST_CASE("weapon by direction: a flick that curves on its way out picks the eig
     CHECK(slideRun.slots == std::vector<GameAction>{GameAction::WeaponSlot2});
 }
 
-TEST_CASE("a direction set to none picks nothing") {
+TEST_CASE("a direction set to none goes to its nearest neighbours; with none set nothing is picked") {
+    // Up, right, down and left only: 35 degrees right of up (up-right's eighth) picks up, held or flicked.
     RestWheelSettings settings;
     settings.pick = RestWheelPick::Slots;
-    settings.directions[static_cast<std::size_t>(WheelDirection::Up)] = 0;
-    RestWheel w(settings, touchHands());
-    landLeft(w);
-    Run run = feed(w, frame(true, false, kCentre, kUp), frames(0.3f));
-    run = feed(w, frame(true, false, kCentre, kCentre), 3, run);
+    settings.directions = parseWeaponDirections("up_right=0,down_right=0,down_left=0,up_left=0").table;
+    const auto at = [](float degrees, float length) {
+        const float a = degrees * 3.14159265f / 180.0f;
+        return Axis2{length * std::cos(a), length * std::sin(a)};
+    };
+    for (const int outFrames : {frames(0.3f), 2}) {
+        RestWheel w(settings, touchHands());
+        landLeft(w);
+        Run run = feed(w, frame(true, false, kCentre, at(55.0f, 1.0f)), outFrames);
+        run = feed(w, frame(true, false, kCentre, kCentre), 1, run);
+        CHECK(run.slots == std::vector<GameAction>{GameAction::WeaponSlot1});
+        CHECK(run.last.direction == WheelDirection::Up);
+    }
+    // A half push sliding from up's eighth into up-right's stays up: the dwell goes on.
+    RestWheel slide(settings, touchHands());
+    landLeft(slide);
+    Run slideRun = feed(slide, frame(true, false, kCentre, at(100.0f, 0.6f)), 6);
+    slideRun = feed(slide, frame(true, false, kCentre, at(55.0f, 0.6f)), 6, slideRun);
+    slideRun = feed(slide, frame(true, false, kCentre, kCentre), 3, slideRun);
+    CHECK(slideRun.slots == std::vector<GameAction>{GameAction::WeaponSlot1});
+
+    settings.directions = {};
+    RestWheel none(settings, touchHands());
+    landLeft(none);
+    Run run = feed(none, frame(true, false, kCentre, kUp), frames(0.3f));
+    run = feed(none, frame(true, false, kCentre, kCentre), 3, run);
     CHECK(run.slots.empty());
     CHECK(run.saw(RestWheelEvent::Cancelled));
 }

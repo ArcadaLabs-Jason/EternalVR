@@ -179,8 +179,11 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   once it is open. With `slots` the wheel stays closed and the direction held last is remembered; letting go
   presses its `weapon_slot_N` once (held by `ActionHold`), from `ETERNALVR_WEAPON_DIRECTIONS`
   (`up=1,up_right=5,...`, `weapon_directions.hpp`; the default is the game's own wheel, from a rig screenshot:
-  each direction picks the weapon the wheel shows there). The mapper runs the wheel before the turn stick's
-  arbiter and the turn: the stick it takes goes to the arbiter as a held wheel from the frame it leaves 0.25,
+  each direction picks the weapon the wheel shows there). A direction set to `none` has no part of its own:
+  the stick picks the nearest direction with a weapon by angle, each reaching halfway to the next one with a
+  weapon (`slotDirection`; with all eight set, the eighths), and the dwell, the flick and the hysteresis run on
+  that direction; the launcher's Weapon directions dialog writes the table. The mapper runs the wheel before
+  the turn stick's arbiter and the turn: the stick it takes goes to the arbiter as a held wheel from the frame it leaves 0.25,
   so a snap (0.70) or a smooth turn (0.35) never fires first; the move stick is zeroed. After a pick or a
   cancel that stick stays out of play until it is back within 0.25. Blocked (no arming, picking cancelled, an
   open wheel closed): a menu's hold, the game suppressing buttons (r14b, kept from the user command before the
@@ -452,7 +455,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_WHEEL_HAND_DEGREES` | the hand's turn that reaches the wheel's rim, 5 to 45 degrees (half of it highlights a weapon) | 20 |
 | `ETERNALVR_THUMBREST_WHEEL` | the thumb-rest wheel (above): `edge` (a thumb on its rest, then the other stick pushed within the window), `full` (the other stick picks while the thumb rests), `extreme` (the turn stick picks, for players who stand and turn with their body; the other thumb's rest turns, the turn hand's rest makes the other stick pick), `off` | `off` |
 | `ETERNALVR_THUMBREST_PICK` | `wheel`: the game's wheel opens and the stick points; `slots`: each direction presses a weapon slot on letting go | `wheel` |
-| `ETERNALVR_WEAPON_DIRECTIONS` | under `slots`, the slot (1 to 8, or `none`) of each direction: `up=1,up_right=5,right=2,down_right=7,down=3,down_left=6,left=4,up_left=8` (the game's wheel: combat shotgun, super shotgun, heavy cannon, chaingun, plasma rifle, ballista, rocket launcher, BFG); a direction left out keeps its default | that table |
+| `ETERNALVR_WEAPON_DIRECTIONS` | under `slots`, the slot (1 to 8, or `none`) of each direction: `up=1,up_right=5,right=2,down_right=7,down=3,down_left=6,left=4,up_left=8` (the game's wheel: combat shotgun, super shotgun, heavy cannon, chaingun, plasma rifle, ballista, rocket launcher, BFG); a direction left out keeps its default; a direction set to `none` goes to its nearest neighbours with a weapon | that table |
 | `ETERNALVR_THUMBREST_FACE_TOUCH` | `1`: a thumb on A/B or X/Y counts as resting, on Index and Pico 4 controllers (their touch bindings are added for the session) | `0` |
 | `ETERNALVR_THUMBREST_SLOWDOWN` | `0`: no slowdown while the thumb-rest wheel holds the game's wheel open (`weaponWheel_slowTimeScale` held at 1); `1` writes nothing | `1` |
 | `ETERNALVR_THUMBREST_WINDOW` | `edge`: seconds from the thumb's landing to the push, 0.2 to 1 (tuning) | 0.5 |

@@ -231,8 +231,6 @@ namespace EternalVR.Launcher.Core.Settings
         public LauncherSettings WithDefaults() => new LauncherSettings
         {
             GameDir = GameDir, LayerDir = LayerDir, Runtime = Runtime, UnknownKeys = UnknownKeys, Profile = Profile, DlssDllPath = DlssDllPath,
-            // Written by hand only, so the window has nothing to reset it to.
-            WeaponDirections = WeaponDirections,
         };
 
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

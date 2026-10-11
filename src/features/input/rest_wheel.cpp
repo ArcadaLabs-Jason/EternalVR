@@ -435,8 +435,14 @@ void RestWheel::point(float dt, RestWheelOutput& out) {
     if (outward) {
         peak_ = length;
     }
+    // Going further out, no hysteresis. Weapon by direction: a direction with no weapon leaves its eighth to
+    // its nearest neighbours with one, and the dwell runs on the direction picked. The game's wheel keeps its
+    // eight.
+    const WheelDirection current = outward ? WheelDirection::None : octant_;
     const WheelDirection direction =
-        outward ? wheelDirection(stick, kSelectThreshold) : octantOf(stick, octant_);
+        settings_.pick == RestWheelPick::Slots
+            ? slotDirection(stick, current, settings_.directions, kSelectThreshold, kOctantHysteresisDegrees)
+            : octantOf(stick, current);
     if (direction != octant_) {
         octant_ = direction;
         dwellSeconds_ = 0.0f;
