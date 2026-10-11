@@ -27,6 +27,9 @@ enum class ButtonInput : std::uint8_t {
     Face4,     // Y on the right, D-pad up on the left.
     Shoulder,  // The bumper above the trigger.
     Menu,
+    // The thumb rest's touch (Touch controllers), a touch and not a switch: read as the thumb-rest wheel
+    // reads it (touch_button.hpp).
+    ThumbRest,
     Count,
 };
 
@@ -78,6 +81,16 @@ struct BindingProfile {
 // no move stick falls back to the hand not holding the weapon.
 inline Hand locomotionHand(const BindingProfile& profile) {
     return profile.moveStick.value_or(otherHand(profile.weaponHand));
+}
+
+// Whether the profile binds `input` of `hand` to anything, in any press kind.
+inline bool bindsInput(const BindingProfile& profile, Hand hand, ButtonInput input) {
+    for (const ButtonBinding& binding : profile.buttons) {
+        if (binding.hand == hand && binding.input == input) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace evr::input

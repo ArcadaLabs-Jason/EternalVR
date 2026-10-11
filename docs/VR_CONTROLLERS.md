@@ -220,6 +220,40 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   `full`) or during a hold-over, which then picked, lifts cut short, and touch sensors that see the resting
   thumb show there. Back within counts from when the touch went, not from the end of the hold-over. Scripted
   input counts as a rest on both hands.
+- **A thumb rest as a button** (`"<hand>.thumbrest.<press>"` in a control map, `features/input/touch_button.hpp`,
+  T-125; the controls editor's Left and Right thumb rest rows, Touch only). The rest binds like any button
+  (`ButtonInput::ThumbRest`, after `menu`), but it is a touch sensor, so it is read through the wheel's own
+  touch filter (`features/input/rest_touch_filter.hpp`, the T-120 rules above, the same hold-over): a flicker
+  is one touch, a touch begun with the thumb on its stick or face buttons waits, a lift with the thumb gone to
+  them is at once. The thumb elsewhere is that hand's stick, face-button or trackpad touch, a face button
+  pressed or its own stick past 0.25. `press` is down from the landing to the lift, so after a plain lift up to
+  a hold-over late. `hold` fires once the touch has lasted the hold time on a frame the sensor reports it (it
+  waits through a gap) and lasts until the lift. `tap` fires on the lift of a touch that did not become a hold,
+  so every touch is one or the other (its length as sensed, from the landing to when it last went, was at
+  most about the hold time); the buttons' tap and hold detector is not used, since the hold-over would make
+  a 0.15 s touch last 0.30 s and every tap a hold. A lift cut short by the thumb going to its buttons or stick
+  after a touch sensed for less than the debounce (0.06 s) is no tap: the thumb passed over the rest on its
+  way (`passing over` in the log). A landing within 0.4 s
+  of that hand's face button going up or of its own stick being out (`kOwnButtonVoidSeconds`,
+  `kOwnStickVoidSeconds`, as the wheel's) is no press of any kind until the thumb lifts and lands again. A
+  touch still on when a menu lets go is used up (`TouchButton::cancel`): it fires only after a fresh landing;
+  the menu release latch leaves the rest alone, so the wheel reads it as before. One rest, one job: a rest
+  the map binds is no rest of the wheel's (the mapper clears its sensor), and the wheel works with the other
+  one where that one can work it (`restWheelLoss`), otherwise it is off: under `extreme` the rest of the
+  hand without the turn stick gives turning back, so binding it turns the wheel off; under `edge` and `full`
+  so does binding a rest when the other rest's picking stick has no role. With the wheel off, a family whose maps bind a rest still gets the touch sensors beside it
+  (`restTouchOptions`), and a file from before the thumb rest's line gets that line, as with the wheel on;
+  with no rest bound nothing is added, and the built-in maps bind none, so nothing changes for anyone who does
+  not bind one. A runtime refusing the rest's touch: `'left.thumbrest.tap' is bound (quick_switch) but the
+  runtime refused the thumb-rest touch; that binding does nothing this session`. Log: `the left thumb rest is
+  bound (tap = quick_switch); the thumb-rest wheel uses the right rest only` (or `thumb-rest wheel extreme:
+  off for these controllers (the left thumb rest, which gives the turn stick back its turning, is bound as a
+  button)`, `... (both thumb rests are bound as buttons)`), `thumb rest button: the left controller reports a
+  resting thumb`, a line when no rest has reported a touch after a minute of play, and every 10 s with a
+  touch (capped apart from the wheel's lines) `left rest button, last 10 s: 6 touch(es), 2 short, 1 begun
+  elsewhere, 3 gap(s) forgiven, 1 lift(s) at once (1 passing over: no tap), 2 tap(s), 0 hold(s), 1
+  landing(s) voided (own controls)`. Prompts name it `Left Thumb Rest`. An older layer does not
+  know the key and rejects the whole file (the built-in controls are used, logged).
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
   Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
   off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along
@@ -725,7 +759,7 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   family's data file (`/input/x/click` is X, `/input/squeeze/value` is Grip, `/input/thumbstick/click` is
   Stick Click), with the hand in front when the other controller has the same control. An optional
   `[labels]` section in the data file names inputs directly (`"left.primary" = "X"`; inputs trigger, grip,
-  stick_click, primary, secondary, menu, stick), for controllers whose buttons are named differently from
+  stick_click, primary, secondary, menu, thumbrest, stick), for controllers whose buttons are named differently from
   their paths.
 - **What a prompt says.** The first control the player's current map binds to the action: presses and taps
   first ("X"), then holds ("Hold X"), then turn-stick gestures ("Right Stick Up", "Hold Right Stick
@@ -883,6 +917,9 @@ for seconds (below).
   starts moving 0.25 s after the press, so with a Weapon Wheel Open Delay above about 0.25 s the first motion
   can turn the view, as with the stick's own wheel. Under the virtual gamepad (`ETERNALVR_XINPUT`) weapon by
   direction presses nothing: the pad has no weapon slot binds. No hint in the headset yet.
+- **A thumb rest as a button** is covered by unit tests only, not yet a headset. To confirm: a tap on a
+  Quest 3 quick-switches, how often a resting thumb fires a press or hold binding by mistake (the log's
+  10 s line), and that SteamVR's and Virtual Desktop's Touch emulation report the rest.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`) are covered by unit tests only. To confirm in a
   headset: the thresholds, false triggers in a real fight, and whether the grenade should fly along the
   throw rather than the view (`docs/VR_INTERACTIONS.md` section 5).

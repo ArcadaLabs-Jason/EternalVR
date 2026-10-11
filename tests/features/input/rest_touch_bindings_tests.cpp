@@ -13,6 +13,7 @@ using evr::game::builtinControllerData;
 using evr::game::Controller;
 using evr::game::kControllers;
 using evr::input::addRestTouchBindings;
+using evr::input::bindsThumbRest;
 using evr::input::ControllerData;
 using evr::input::Hand;
 using evr::input::handHasRest;
@@ -21,6 +22,7 @@ using evr::input::hasVetoTouchBindings;
 using evr::input::isRestTouchAction;
 using evr::input::parseControllerData;
 using evr::input::RestTouchOptions;
+using evr::input::restTouchOptions;
 using evr::input::withoutRestTouch;
 using evr::input::withoutVetoTouch;
 using evr::input::XrActionId;
@@ -112,6 +114,62 @@ TEST_CASE("nothing is added with the wheel off") {
     ControllerData data = withoutLines(Controller::OculusTouch, "thumbrest");
     CHECK(addRestTouchBindings(data, {false, true}) == 0);
     CHECK_FALSE(hasRestTouchBindings(data));
+}
+
+TEST_CASE("with the wheel off and no thumb rest bound, no family's data changes (the default)") {
+    for (const Controller controller : kControllers) {
+        CAPTURE(evr::game::controllerName(controller));
+        for (const bool faceTouch : {false, true}) {
+            ControllerData data = builtin(controller);
+            CHECK_FALSE(bindsThumbRest(data));
+            const RestTouchOptions options = restTouchOptions(data, false, faceTouch);
+            CHECK_FALSE(options.thumbRest);
+            CHECK(addRestTouchBindings(data, options) == 0);
+            CHECK(data.suggested == builtin(controller).suggested);
+        }
+    }
+    // A file from before the wheel keeps its missing thumb rests too.
+    ControllerData old = withoutLines(Controller::OculusTouch, "thumbrest");
+    CHECK(addRestTouchBindings(old, restTouchOptions(old, false, false)) == 0);
+    CHECK_FALSE(hasRestTouchBindings(old));
+}
+
+TEST_CASE("a control map binding a thumb rest gets the sensors beside it with the wheel off") {
+    ControllerData data = builtin(Controller::OculusTouch);
+    data.maps[evr::game::Handedness::LeftButtonSwap]["left.thumbrest.tap"] = "quick_switch";
+    CHECK(bindsThumbRest(data));
+    CHECK(addRestTouchBindings(data, restTouchOptions(data, false, false)) == 6);
+    CHECK(pathOf(data, XrActionId::ThumbstickTouch, Hand::Left) == "/user/hand/left/input/thumbstick/touch");
+    CHECK(pathOf(data, XrActionId::PrimaryTouch, Hand::Right) == "/user/hand/right/input/a/touch");
+
+    // A file from before the wheel gets its thumb rests back as well.
+    ControllerData old = withoutLines(Controller::OculusTouch, "thumbrest");
+    old.maps[evr::game::Handedness::Right]["right.thumbrest.hold"] = "automap";
+    CHECK(addRestTouchBindings(old, restTouchOptions(old, false, false)) == 8);
+    CHECK(pathOf(old, XrActionId::ThumbRest, Hand::Right) == "/user/hand/right/input/thumbrest/touch");
+
+    // "none" binds nothing.
+    ControllerData unbound = builtin(Controller::OculusTouch);
+    unbound.maps[evr::game::Handedness::Right]["left.thumbrest.press"] = "none";
+    CHECK_FALSE(bindsThumbRest(unbound));
+}
+
+TEST_CASE("face-button touch as the rest is the wheel's: a bound thumb rest with the wheel off adds none") {
+    // A map of a family without a thumb rest that binds one anyway (a file written by hand): with the wheel
+    // off, Face buttons as thumb rest has nothing to feed.
+    for (const Controller controller : {Controller::ValveIndex, Controller::Pico4}) {
+        CAPTURE(evr::game::controllerName(controller));
+        ControllerData data = builtin(controller);
+        data.maps[evr::game::Handedness::Right]["left.thumbrest.tap"] = "quick_switch";
+        REQUIRE(bindsThumbRest(data));
+        const RestTouchOptions off = restTouchOptions(data, false, true);
+        CHECK_FALSE(off.faceTouch);
+        CHECK(addRestTouchBindings(data, off) == 0);
+        CHECK(data.suggested == builtin(controller).suggested);
+        // With the wheel on, face touch is asked for as before.
+        CHECK(restTouchOptions(data, true, true).faceTouch);
+        CHECK(restTouchOptions(data, true, true).thumbRest);
+    }
 }
 
 TEST_CASE("face-button touch is added only when asked for, on the controllers without a thumb rest") {

@@ -113,6 +113,9 @@ void press(InputFrame& frame, Press p, bool down) {
     case ButtonInput::Menu:
         h.menuButton = down;
         break;
+    case ButtonInput::ThumbRest:
+        h.thumbRest = down;
+        break;
     case ButtonInput::Count:
         break;
     }

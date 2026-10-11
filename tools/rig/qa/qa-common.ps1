@@ -90,7 +90,7 @@ function New-QaContext($Scenario, [string]$Out) {
     New-Item -ItemType Directory -Force $dir | Out-Null
     return @{
         Name = $Scenario.Name; Label = "qa-$($Scenario.Name)"; Out = $Out; Dir = $dir; Since = Get-Date
-        Stage = $null; LogsDir = $null; RunDir = $null; InputPath = $null; Vdd = $null; DumpWatch = $null
+        Stage = $null; LogsDir = $null; RunDir = $null; InputPath = $null; Vdd = $null; DumpWatch = $null; Env = @()
         Shots = New-Object System.Collections.ArrayList; Results = New-Object System.Collections.ArrayList
         Notes = New-Object System.Collections.ArrayList; Stopped = $false; Abort = $false; Skipped = $false
     }
@@ -165,7 +165,7 @@ function Find-QaRunDir($Ctx) {
 # Starts the game through launch-ht.ps1: Route S stereo on the simulator, the game window and the mirror on the
 # virtual display (as armbisect.ps1 and rsrun.ps1 do). Returns once launch-ht.ps1 does (the game runs on).
 function Start-QaGame($Ctx, $Scenario) {
-    $gameEnv = @($Scenario.Env) + @($script:QaExtraEnv)
+    $gameEnv = @($Scenario.Env) + @($Ctx.Env) + @($script:QaExtraEnv)
     if ($null -ne $Scenario.Input) { $gameEnv += "ETERNALVR_TEST_INPUT=$($Ctx.InputPath)" }
     if ($Scenario.EyeCaptures) { $gameEnv += "ETERNALVR_CAPTURE_EYES=$($Ctx.Stage)-eyes,$($Scenario.EyeCaptures)" }
     $Ctx.Vdd = Get-QaVddRect

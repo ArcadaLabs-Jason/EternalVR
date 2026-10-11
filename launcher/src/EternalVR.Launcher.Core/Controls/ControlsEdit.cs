@@ -141,8 +141,68 @@ namespace EternalVR.Launcher.Core.Controls
                 .Select(g => (g, Get(hand, BindingKey.StickGestureOf(stick, g))))
                 .Where(g => g.Item2 != null);
 
-        /// <summary>True when the controller has the button (the <c>[profile]</c> section binds it).</summary>
-        public bool HasInput(ControlHand hand, ButtonInput input) => InputPath(hand, input) != null;
+        /// <summary>
+        /// True when the controller has the button (the <c>[profile]</c> section binds it). A thumb rest counts when the
+        /// built-in file binds it too: a file copied before the thumb rest's line existed gets it from the layer for the
+        /// session, when the wheel is on or a map binds the rest (the layer's rest_touch_bindings.hpp).
+        /// </summary>
+        public bool HasInput(ControlHand hand, ButtonInput input) =>
+            InputPath(hand, input) != null || (input == ButtonInput.ThumbRest && InputPath(Defaults, hand, input) != null);
+
+        /// <summary>The hands whose thumb rest the map for <paramref name="hand"/> binds to an action, in any press kind.</summary>
+        public IReadOnlyList<ControlHand> BoundRests(Handedness hand) =>
+            new[] { ControlHand.Left, ControlHand.Right }
+                .Where(h => Enum.GetValues(typeof(PressKind)).Cast<PressKind>().Any(p =>
+                {
+                    var action = Get(hand, BindingKey.Button(h, ButtonInput.ThumbRest, p));
+                    return action != null && action != ControlNames.Unbound;
+                }))
+                .ToList();
+
+        /// <summary>
+        /// A note for the editor when the thumb-rest wheel is on and the map binds a thumb rest: the bound rest is a button,
+        /// not the wheel's (one rest, one job), so the wheel uses the other rest, or is off when that one cannot work it
+        /// (the layer's restWheelLoss, rest_wheel.hpp). Null otherwise, and when the wheel could not work with these
+        /// controls anyway. Saving is not blocked.
+        /// </summary>
+        public string RestWheelNote(ThumbRestMode wheel, Handedness hand)
+        {
+            var bound = BoundRests(hand);
+            if (wheel == ThumbRestMode.Off || bound.Count == 0) return null;
+            bool Rest(ControlHand h) => HasInput(h, ButtonInput.ThumbRest);
+            bool Kept(ControlHand h) => Rest(h) && !bound.Contains(h);
+            if (!WheelWorks(wheel, hand, Rest(ControlHand.Left), Rest(ControlHand.Right))) return null;
+            const string on = "The thumb-rest wheel is on (Play tab)";
+            if (bound.Count == 2)
+                return on + ", and both thumb rests are buttons here: the wheel is off with these controls.";
+            var rest = ControlNames.HandName(bound[0]);
+            var other = ControlNames.HandName(Other(bound[0]));
+            if (WheelWorks(wheel, hand, Kept(ControlHand.Left), Kept(ControlHand.Right)))
+                return on + ": the " + rest + " thumb rest is a button here, so the wheel uses the " + other + " rest only.";
+            if (wheel == ThumbRestMode.Extreme)
+                return on + ": the " + rest + " thumb rest is a button here, and Turn stick picks needs that rest to give the "
+                    + "turn stick its turning back, so the wheel is off with these controls.";
+            return on + ": the " + rest + " thumb rest is a button here, and the " + other + " rest has no stick to pick with (the "
+                + rest + " stick's role is None), so the wheel is off with these controls.";
+        }
+
+        /// <summary>
+        /// Whether the thumb-rest wheel can work with these rests and the map's sticks, as the layer decides (its
+        /// RestWheel::usable): touch, then push and while touched need a rest whose other stick moves or turns, turn stick
+        /// picks a turn stick and the rest of the other hand.
+        /// </summary>
+        private bool WheelWorks(ThumbRestMode wheel, Handedness hand, bool leftRest, bool rightRest)
+        {
+            bool HasRest(ControlHand h) => h == ControlHand.Left ? leftRest : rightRest;
+            if (wheel == ThumbRestMode.Extreme)
+            {
+                var turn = TurnStick(hand);
+                return turn.HasValue && HasRest(Other(turn.Value));
+            }
+            return new[] { ControlHand.Left, ControlHand.Right }.Any(h => HasRest(h) && Role(hand, Other(h)) != StickRole.None);
+        }
+
+        private static ControlHand Other(ControlHand hand) => hand == ControlHand.Left ? ControlHand.Right : ControlHand.Left;
 
         /// <summary>
         /// The buttons to show for the map of <paramref name="hand"/>: the left hand's, then the right hand's, each one the
@@ -168,8 +228,10 @@ namespace EternalVR.Launcher.Core.Controls
         public string StickName(ControlHand hand) =>
             ControlNames.Capitalized(hand) + " " + (ControlNames.PhysicalName(File.Get(ControlNames.ProfileSection, "gameplay." + ControlNames.HandName(hand) + "." + ControlNames.StickAction)) ?? "stick");
 
-        private string InputPath(ControlHand hand, ButtonInput input) =>
-            File.Get(ControlNames.ProfileSection, "gameplay." + ControlNames.HandName(hand) + "." + ControlNames.InputActions[(int)input]);
+        private string InputPath(ControlHand hand, ButtonInput input) => InputPath(File, hand, input);
+
+        private static string InputPath(ControllerMapFile file, ControlHand hand, ButtonInput input) =>
+            file.Get(ControlNames.ProfileSection, "gameplay." + ControlNames.HandName(hand) + "." + ControlNames.InputActions[(int)input]);
 
         // ---- The file ----
 

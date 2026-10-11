@@ -1,6 +1,7 @@
 #pragma once
 
-// The touch bindings the thumb-rest weapon wheel reads (rest_wheel.hpp).
+// The touch bindings the thumb-rest weapon wheel reads (rest_wheel.hpp), and a thumb rest bound like a button
+// (touch_button.hpp), which reads its rest the same way.
 //
 // A player's controller file replaces the built-in data of its profile whole (player_controller_data.hpp),
 // so a file copied before the wheel existed has no thumb-rest binding. The layer adds the ones a family's
@@ -19,7 +20,8 @@
 //   (/input/trackpad/touch, Index); where the profile lists them. A touch of the rest begun with the thumb on
 //   these waits, and one lost after the thumb went to them lifts at once (rest_wheel.hpp). They are not rests
 //   themselves (handHasRest).
-// Nothing is added on the Steam Frame or with the wheel off.
+// Nothing is added on the Steam Frame, nor with the wheel off unless one of the family's control maps binds
+// a thumb rest (restTouchOptions): the built-in maps bind none.
 
 #include "features/input/controller_bindings.hpp"
 #include "features/input/controller_state.hpp"
@@ -30,9 +32,16 @@
 namespace evr::input {
 
 struct RestTouchOptions {
-    bool thumbRest = true; // the wheel is on
+    bool thumbRest = true; // the wheel is on, or a control map binds a thumb rest
     bool faceTouch = false;
 };
+
+// Whether one of `data`'s control maps binds a thumb rest to an action, in any press kind.
+[[nodiscard]] bool bindsThumbRest(const ControllerData& data);
+
+// The options for a family's data: its rests' bindings with the wheel on (`wheelOn`), or with a thumb rest
+// bound in one of its maps; face-button touch as the rest (`faceTouch`) only with the wheel on.
+RestTouchOptions restTouchOptions(const ControllerData& data, bool wheelOn, bool faceTouch);
 
 // True for the actions this file adds.
 bool isRestTouchAction(XrActionId action);

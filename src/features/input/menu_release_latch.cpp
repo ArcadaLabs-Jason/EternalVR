@@ -33,6 +33,9 @@ bool buttonHeld(const HandState& hand, ButtonInput input, const HeldThresholds& 
         return hand.shoulderButton;
     case ButtonInput::Menu:
         return hand.menuButton;
+    case ButtonInput::ThumbRest:
+        // A touch, not a switch: the mapper uses up a touch still on when the hold ends
+        // (TouchButton::cancel), and the thumb-rest wheel keeps reading the rest as it is.
     case ButtonInput::Count:
         break;
     }
@@ -68,6 +71,7 @@ void release(HandState& hand, ButtonInput input) {
     case ButtonInput::Menu:
         hand.menuButton = false;
         break;
+    case ButtonInput::ThumbRest:
     case ButtonInput::Count:
         break;
     }

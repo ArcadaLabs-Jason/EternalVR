@@ -37,12 +37,16 @@ TEST_CASE("keys parse into what they name") {
           BindingKey{ButtonKey{Hand::Right, ButtonInput::Shoulder, PressKind::Hold}});
     CHECK(parseBindingKey("right.stick.down_hold") ==
           BindingKey{GestureKey{Hand::Right, StickGesture::DownHold}});
+    CHECK(parseBindingKey("left.thumbrest.tap") ==
+          BindingKey{ButtonKey{Hand::Left, ButtonInput::ThumbRest, PressKind::Tap}});
+    CHECK(formatBindingKey(ButtonKey{Hand::Right, ButtonInput::ThumbRest, PressKind::Hold}) ==
+          "right.thumbrest.hold");
 }
 
 TEST_CASE("unknown keys are rejected") {
-    for (const char* key :
-         {"", "weapon", "middle.trigger.press", "left.trigger", "left.trigger.squeeze", "left.thumb.press",
-          "left.stick.sideways", "left.trigger.press.extra", "Left.trigger.press"}) {
+    for (const char* key : {"", "weapon", "middle.trigger.press", "left.trigger", "left.trigger.squeeze",
+                            "left.thumb.press", "left.stick.sideways", "left.trigger.press.extra",
+                            "Left.trigger.press", "left.thumb_rest.tap", "left.thumbrest"}) {
         CAPTURE(key);
         CHECK_FALSE(parseBindingKey(key).has_value());
     }

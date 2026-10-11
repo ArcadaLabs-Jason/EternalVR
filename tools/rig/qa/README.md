@@ -39,7 +39,9 @@ A game scenario stages the build into `tmp-vr\rs\qa-<name>` (layer log in `qa-<n
 scripted input file `qa-<name>-input.txt` (`ETERNALVR_TEST_INPUT`, docs/VR_CONTROLLERS.md), starts Route S
 stereo through `launch-ht.ps1` (simulator, 1280x720 window and mirror on the virtual display), waits up to
 200 s for `the schedule's clock starts` or `aim: head aim on` in the layer log, runs its timeline, stops,
-restores the save, then checks the layer log (the stage's logs, else the run folder's).
+restores the save, then checks the layer log (the stage's logs, else the run folder's). A scenario's `Prepare`
+step writes its own files into its folder before the launch (a player's controller data) and returns the
+`NAME=VALUE` pairs that point the run at them.
 
 ## Scenarios
 
@@ -63,6 +65,9 @@ restores the save, then checks the layer log (the stage's logs, else the run fol
 | thumbrest-slots | `ETERNALVR_THUMBREST_PICK=slots`: the turn stick held right picks `weapon_slot_2` on letting go (the game's wheel layout); no `weapon_wheel` |
 | thumbrest-menu | The pause menu up (`action pause`, then `gameplay input back on`): a resting thumb and a pushed stick arm nothing |
 | thumbrest-slowdown | `ETERNALVR_THUMBREST_SLOWDOWN=0`: `weaponWheel_slowTimeScale <value> -> 1 while the wheel is open`, then `back to <value>, the game's own value (the wheel closed)` with the same value |
+| restbutton-tap | `qa-scenarios-wheel.ps1`: the scenario writes the built-in Touch file with `"left.thumbrest.tap" = "weapon_slot_2"` into its folder (`ETERNALVR_CONTROLLER_DATA`), hold time 1 s, the wheel off; a 0.4 s touch of the left rest: `controller data '...' replaces the built-in data of its profile`, `the left thumb rest is bound (tap = weapon_slot_2)`, `thumb rest button: the left controller reports a resting thumb`, the only action line `action weapon_slot_2`, the rest button's 10 s line(s) 1 tap and 0 holds, and the heavy cannon the first held item after it |
+| restbutton-unbound | The control: built-in data (no rest bound), the wheel on (edge, window 1 s), the same touch: the wheel sees it (`thumb-rest wheel: the left controller reports a resting thumb`, its 10 s line), no `thumb rest is bound` or `thumb rest button` line, nothing armed, no action line, one held item all run |
+| restbutton-wheel | The bound file with the wheel on (edge, window 1 s): `the left thumb rest is bound (tap = weapon_slot_2); the thumb-rest wheel uses the right rest only`, `rest sensors on the right hand`; the 0.4 s touch presses `weapon_slot_2` once; the left rest then the turn stick within the window turns (`trace: mapper turn`) and does not arm (that 2 s touch is a hold, so still one press); the right rest then the left stick arms (`armed: the left stick picks (right thumb rest, edge`, `action weapon_wheel`); 1 tap and 1 hold counted |
 | launcher-e2e | `launcher\tests\e2e.ps1 -Root <Out>\e2e -Runtime <simulator json>` prints `E2E OK` (skipped without a Release build) |
 
 Every game scenario also checks: in the map, stopped and cleaned up, save restored, no crash dump.

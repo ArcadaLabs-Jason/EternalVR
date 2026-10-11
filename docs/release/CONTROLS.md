@@ -407,6 +407,19 @@ of the launcher.
 
    Pick an action in a list, or **(none)** to leave that press free. A button can have a tap and a hold,
    but not a press together with either: the press would also fire on every tap and hold.
+
+   On Quest and Rift controllers the list also has **Left thumb rest** and **Right thumb rest**: the flat
+   spot beside the buttons. A thumb rest is a touch, not a click. **Press** is on while your thumb rests
+   there, **Tap** is touch and lift, **Hold** is resting it a quarter of a second. Press and Hold also fire
+   when you rest your thumb there without thinking, so Tap is the easiest start. A thumb that comes straight
+   from its own buttons or stick (within 0.4 s) does not count, and neither does a thumb that only brushes
+   the rest on its way to them. A tap, or the end of a press, comes up to about 0.15 s after you lift (at
+   once when your thumb goes to a button or its stick). Neither thumb rest does anything until you give it
+   an action. With **Thumb-rest wheel** on (Play tab), a thumb rest you give an action works as a button
+   only: the wheel uses the other rest if it can, and the editor says so. It cannot under **Turn stick
+   picks**, which needs the rest of the hand without the turn stick (the left one, unless you swapped the
+   sticks) to give you turning back, nor when the other rest's partner stick has no role; then the wheel is
+   off with those controls.
 4. **Sticks** sets each stick's **Role**: Move, Turn or None. When you give a stick the role the other
    one has, the two swap. The turn stick's gestures (**Up**, **Down, tap**, **Down, hold**) follow it.
 5. Press **Save**. Your controls are saved for the VR settings profile in use (the editor's title names
@@ -463,7 +476,8 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
 ```
 
 - **Hand:** `left` or `right`.
-- **Button:** `trigger`, `grip`, `stick_click`, `primary` (A or X), `secondary` (B or Y), `menu`. Steam
+- **Button:** `trigger`, `grip`, `stick_click`, `primary` (A or X), `secondary` (B or Y), `menu`, and on
+  Quest and Rift controllers `thumbrest` (the thumb rest, a touch: see the controls editor above). Steam
   Frame controllers have three more: `face3` (X, or D-pad right), `face4` (Y, or D-pad up) and `shoulder`
   (the bumper); there `primary` is A or D-pad down, `secondary` B or D-pad left, and the left `menu` is
   View.
@@ -475,6 +489,10 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
   `flame_belch`, `equipment`, `switch_equipment`, `quick_switch`, `weapon_wheel`, `next_weapon`,
   `previous_weapon`, `weapon_slot_1` to `weapon_slot_8`, `crucible`, `pause`, `dossier`, `mission_info`,
   `automap`, `recenter`.
+
+A file with a `thumbrest` line needs this version of the mod or a newer one. An older version does not
+know the line, so it ignores the whole file and uses the built-in controls for those controllers (its log
+says so).
 
 To leave a button free, delete its line. Keep a `pause` line, or the pause menu has no button; on Touch
 controllers the left Menu button is the only Menu button the game can read. The editor opens your file

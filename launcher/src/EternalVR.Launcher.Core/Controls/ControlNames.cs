@@ -7,8 +7,11 @@ namespace EternalVR.Launcher.Core.Controls
 {
     public enum ControlHand { Left, Right }
 
-    /// <summary>The buttons of a control map (the layer's <c>ButtonInput</c>, features/input/binding_profile.hpp).</summary>
-    public enum ButtonInput { Trigger, Grip, StickClick, Primary, Secondary, Face3, Face4, Shoulder, Menu }
+    /// <summary>
+    /// The buttons of a control map (the layer's <c>ButtonInput</c>, features/input/binding_profile.hpp). The thumb rest is
+    /// a touch, not a click (the layer's touch_button.hpp).
+    /// </summary>
+    public enum ButtonInput { Trigger, Grip, StickClick, Primary, Secondary, Face3, Face4, Shoulder, Menu, ThumbRest }
 
     /// <summary>How a button is pressed: held down, a short tap, or held for a quarter of a second.</summary>
     public enum PressKind { Press, Tap, Hold }
@@ -137,7 +140,7 @@ namespace EternalVR.Launcher.Core.Controls
         /// <summary>Optional names for the buttons, for the game's prompts (the layer's button_labels.hpp).</summary>
         public const string LabelsSection = "labels";
 
-        internal static readonly string[] InputNames = { "trigger", "grip", "stick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu" };
+        internal static readonly string[] InputNames = { "trigger", "grip", "stick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "thumbrest" };
         internal static readonly string[] PressNames = { "press", "tap", "hold" };
         /// <summary>The inputs a <c>[labels]</c> key names: every button input, and a whole stick.</summary>
         internal static readonly string[] LabelInputNames = InputNames.Append("stick").ToArray();
@@ -145,7 +148,7 @@ namespace EternalVR.Launcher.Core.Controls
         internal static readonly string[] RoleNames = { "none", "move", "turn" };
 
         /// <summary>The OpenXR action of each button in a <c>[profile]</c> section (<c>gameplay.&lt;hand&gt;.&lt;action&gt;</c>).</summary>
-        internal static readonly string[] InputActions = { "trigger", "grip", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu" };
+        internal static readonly string[] InputActions = { "trigger", "grip", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "thumbrest" };
         internal const string StickAction = "thumbstick";
 
         /// <summary>Every action, in the order of the layer's <c>GameAction</c> (features/input, game/eternal/game_action.cpp).</summary>
@@ -267,6 +270,7 @@ namespace EternalVR.Launcher.Core.Controls
                 case ButtonInput.Face3: return "third face button";
                 case ButtonInput.Face4: return "fourth face button";
                 case ButtonInput.Shoulder: return "bumper";
+                case ButtonInput.ThumbRest: return "thumb rest";
                 default: return "Menu button";
             }
         }

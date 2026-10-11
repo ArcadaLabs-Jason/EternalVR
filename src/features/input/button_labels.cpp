@@ -24,6 +24,7 @@ constexpr std::array<std::pair<LabelInput, std::string_view>, kLabelInputCount> 
     {LabelInput::Face4, "face4"},
     {LabelInput::Shoulder, "shoulder"},
     {LabelInput::Menu, "menu"},
+    {LabelInput::ThumbRest, "thumbrest"},
     {LabelInput::Stick, "stick"},
 }};
 
@@ -58,6 +59,8 @@ XrActionId gameplayAction(LabelInput input) {
         return XrActionId::Shoulder;
     case LabelInput::Menu:
         return XrActionId::Menu;
+    case LabelInput::ThumbRest:
+        return XrActionId::ThumbRest;
     case LabelInput::Stick:
     case LabelInput::Count:
         break;
@@ -83,6 +86,8 @@ LabelInput labelInput(ButtonInput input) {
         return LabelInput::Face4;
     case ButtonInput::Shoulder:
         return LabelInput::Shoulder;
+    case ButtonInput::ThumbRest:
+        return LabelInput::ThumbRest;
     case ButtonInput::Menu:
     case ButtonInput::Count:
         break;
@@ -101,8 +106,9 @@ std::string capitalized(std::string_view word) {
 constexpr std::string_view kInput = "/input/";
 
 // Controls whose name is not their identifier in title case.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 8> kControlNames{{
+constexpr std::array<std::pair<std::string_view, std::string_view>, 9> kControlNames{{
     {"squeeze", "Grip"},
+    {"thumbrest", "Thumb Rest"},
     {"thumbstick", "Stick"},
     {"shoulder", "Bumper"},
     {"bumper", "Bumper"},

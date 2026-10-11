@@ -17,6 +17,7 @@
 #include "vkcore/room_scale.hpp"
 #include "vkcore/xr_runtime.hpp"
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -65,18 +66,96 @@ std::optional<input::BindingProfile> controlMap(const State& s, game::Controller
     return built.profile;
 }
 
-// The thumb-rest wheel's line for the log (features/input/rest_wheel.hpp).
-void logRestWheel(const input::RestWheel& rest, bool faceTouch) {
+// What `hand`'s thumb rest is bound to, "tap = quick_switch, hold = automap", or empty when it is not bound
+// (features/input/touch_button.hpp).
+std::string restBindings(const input::BindingProfile& profile, input::Hand hand) {
+    std::string text;
+    for (const input::ButtonBinding& b : profile.buttons) {
+        if (b.hand != hand || b.input != input::ButtonInput::ThumbRest) {
+            continue;
+        }
+        const char* kind = b.kind == input::PressKind::Tap    ? "tap"
+                           : b.kind == input::PressKind::Hold ? "hold"
+                                                              : "press";
+        text += text.empty() ? "" : ", ";
+        text += std::string(kind) + " = " + std::string(game::gameActionName(b.action));
+    }
+    return text;
+}
+
+const char* side(input::Hand hand) {
+    return hand == input::Hand::Left ? "left" : "right";
+}
+
+// What the bound thumb rests do to the wheel (one rest, one job): `wheelSensors` are its rests before the
+// mapper left the bound ones out.
+input::RestWheelLoss boundRestLoss(const input::InputMapper& mapper,
+                                   const std::array<bool, 2>& wheelSensors) {
+    const input::BindingProfile& profile = mapper.profile();
+    return input::restWheelLoss(
+        mapper.restWheel().settings().mode, {wheelSensors, profile.moveStick, profile.turnStick},
+        {input::bindsInput(profile, input::Hand::Left, input::ButtonInput::ThumbRest),
+         input::bindsInput(profile, input::Hand::Right, input::ButtonInput::ThumbRest)});
+}
+
+// Why the bound rests turn the wheel off (input::RestWheelLoss::Off).
+std::string restWheelOffReason(const input::RestWheel& rest, const std::array<bool, 2>& wheelSensors) {
+    const auto& left = rest.hands().hasRest;
+    if (!left[0] && !left[1]) {
+        return wheelSensors[0] && wheelSensors[1] ? "both thumb rests are bound as buttons"
+                                                  : "its thumb rest is bound as a button";
+    }
+    const input::Hand kept = left[0] ? input::Hand::Left : input::Hand::Right;
+    const input::Hand bound = input::otherHand(kept);
+    if (rest.settings().mode == input::RestWheelMode::Extreme) {
+        return std::string("the ") + side(bound) +
+               " thumb rest, which gives the turn stick back its turning, is bound as a button";
+    }
+    return std::string("the ") + side(bound) + " thumb rest is bound as a button, and the " + side(kept) +
+           " rest has no stick to pick with (the " + side(bound) + " stick has no role)";
+}
+
+// The thumb rests bound like buttons, for the log; with the wheel on, a bound rest is not the wheel's (the
+// mapper leaves it out of the wheel's sensors).
+void logRestButtons(const input::InputMapper& mapper, const std::array<bool, 2>& wheelSensors) {
+    const input::RestWheel& rest = mapper.restWheel();
+    const input::RestWheelLoss loss = boundRestLoss(mapper, wheelSensors);
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        const std::string bound = restBindings(mapper.profile(), hand);
+        if (bound.empty()) {
+            continue;
+        }
+        if (loss == input::RestWheelLoss::OtherRest && wheelSensors[static_cast<std::size_t>(hand)]) {
+            EVR_LOG("%s: the %s thumb rest is bound (%s); the thumb-rest wheel uses the %s rest only", kTag,
+                    side(hand), bound.c_str(), side(input::otherHand(hand)));
+            continue;
+        }
+        EVR_LOG("%s: the %s thumb rest is bound (%s)", kTag, side(hand), bound.c_str());
+    }
+    if (loss == input::RestWheelLoss::Off) {
+        EVR_LOG("%s: thumb-rest wheel %s: off for these controllers (%s)", kTag,
+                input::restWheelModeName(rest.settings().mode),
+                restWheelOffReason(rest, wheelSensors).c_str());
+    }
+}
+
+// The thumb-rest wheel's line for the log (features/input/rest_wheel.hpp). `wheelSensors`: its rests before
+// the mapper left the ones bound like buttons out.
+void logRestWheel(const input::InputMapper& mapper, bool faceTouch, const std::array<bool, 2>& wheelSensors) {
+    const input::RestWheel& rest = mapper.restWheel();
     const input::RestWheelSettings& w = rest.settings();
     if (w.mode == input::RestWheelMode::Off) {
         EVR_LOG("%s: thumb-rest wheel off", kTag);
         return;
     }
+    if (boundRestLoss(mapper, wheelSensors) == input::RestWheelLoss::Off) {
+        return; // the rests bound as buttons turned it off (logRestButtons says why)
+    }
     const auto& sensors = rest.hands().hasRest;
     if (!rest.usable()) {
         EVR_LOG("%s: thumb-rest wheel %s: off for these controllers (%s)", kTag,
                 input::restWheelModeName(w.mode),
-                sensors[0] || sensors[1] ? "no stick to pick with" : "no thumb-rest sensor");
+                wheelSensors[0] || wheelSensors[1] ? "no stick to pick with" : "no thumb-rest sensor");
         return;
     }
     const char* rests = "both hands";
@@ -131,6 +210,7 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     // in for any).
     mapperSettings.restWheel = cfg.thumbRest;
     mapperSettings.restFaceTouch = cfg.thumbRestFaceTouch;
+    // A thumb rest the map binds like a button is not the wheel's: the mapper leaves it out.
     const input::ControllerData& data = s.controllerData[static_cast<std::size_t>(controller)];
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         mapperSettings.restSensors[static_cast<std::size_t>(hand)] =
@@ -144,7 +224,8 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     publishPromptLabels(s.mapper->profile(), controller);
     EVR_LOG("%s: control map for %s controllers%s, %s", kTag,
             std::string(game::controllerName(controller)).c_str(), when, s.mapper->summary().c_str());
-    logRestWheel(s.mapper->restWheel(), cfg.thumbRestFaceTouch);
+    logRestButtons(*s.mapper, mapperSettings.restSensors);
+    logRestWheel(*s.mapper, cfg.thumbRestFaceTouch, mapperSettings.restSensors);
     return true;
 }
 

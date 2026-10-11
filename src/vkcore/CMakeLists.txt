@@ -126,6 +126,8 @@ add_library(evr_layer SHARED
     presenter_xr.cpp
     presenter_xr_events.cpp
     queue_entry.cpp
+    refraction_hooks.cpp
+    refraction_locate.cpp
     room_follow.cpp
     room_posture.cpp
     reticle_depth.cpp
@@ -199,6 +201,7 @@ add_library(evr_layer SHARED
 target_sources(evr_layer PRIVATE
     action_aim_hook.cpp
     aim_hooks.cpp
+    bhaptics_ammo.cpp
     bhaptics_game.cpp
     bhaptics_launch.cpp
     bhaptics_link.cpp

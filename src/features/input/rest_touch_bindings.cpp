@@ -1,5 +1,7 @@
 #include "features/input/rest_touch_bindings.hpp"
 
+#include "features/input/binding_compiler.hpp"
+#include "features/input/binding_keys.hpp"
 #include "features/input/interaction_profiles.hpp"
 
 #include <algorithm>
@@ -9,6 +11,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 
 namespace evr::input {
 
@@ -69,6 +72,24 @@ bool tryAdd(ControllerData& data,
 }
 
 } // namespace
+
+bool bindsThumbRest(const ControllerData& data) {
+    for (const auto& [handedness, map] : data.maps) {
+        for (const auto& [key, value] : map) {
+            const auto parsed = parseBindingKey(key);
+            const auto* button = parsed ? std::get_if<ButtonKey>(&*parsed) : nullptr;
+            if (button != nullptr && button->input == ButtonInput::ThumbRest && value != kUnboundValue) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+RestTouchOptions restTouchOptions(const ControllerData& data, bool wheelOn, bool faceTouch) {
+    // A face button's touch is a rest only for the wheel: a bound rest is the thumb rest itself.
+    return {wheelOn || bindsThumbRest(data), faceTouch && wheelOn};
+}
 
 bool isRestTouchAction(XrActionId action) {
     return action == XrActionId::ThumbRest || action == XrActionId::PrimaryTouch ||

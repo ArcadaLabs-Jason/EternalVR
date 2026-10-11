@@ -33,14 +33,17 @@
 // - landing: coming down from a fall of kLandingDrop or more (the layer's LandingDetector, run on every game
 //   frame) pulses the bottom row of the vest, front and back, harder for a longer fall (a tester's idea,
 //   public issue #1);
-// - portal: going through a teleporter, a portal or a level exit (the layer's hooks, teleportKindOf) sweeps a
-//   crackle down the vest from the top row to the bottom, front and back, with the sleeves buzzing, over
-//   kPortalSeconds (a tester's idea, public issue #1);
+// - portal: going through a teleporter, a portal or a level exit, or a fast travel (the layer's hooks,
+//   teleportKindOf) sweeps a crackle down the vest from the top row to the bottom, front and back, with the
+//   sleeves buzzing, over kPortalSeconds (a tester's idea, public issue #1);
 // - pickups: health going up (the layer's PickupDetector, run on every game frame) sends a wave up the vest
 //   from the bottom row to the top, front and back; armor the same wave down from the top. Harder for a
 //   bigger gain; a Mega Health at full strength and slower (PickupWave). A row is left out while a hit,
 //   a glory kill, death, a landing, the crystal or a portal plays on the vest (a tester's idea, public
 //   issue #1);
+// - ammo: an ammo pickup (the layer's hooks, isAmmoPickup) sends a lighter, quicker wave down the back of the
+//   vest from the top row, one for pickups less than kAmmoMergeSeconds apart; left out while a stronger
+//   effect or a health or armor wave plays (AmmoWave; a tester's idea, public issue #12);
 // - launch: a jump pad or a booster launching the player (the layer's hooks, LaunchFilter) shoves the bottom
 //   row of the vest, front and back, strong and then fading while the row above joins in, over
 //   kLaunchSeconds (a player's idea, public issue #1).
@@ -50,6 +53,7 @@
 // strength (ETERNALVR_BHAPTICS_INTENSITY). Pure: the layer feeds it from its own thread and sends what it
 // returns. No Windows or network here.
 
+#include "features/bhaptics/ammo.hpp"
 #include "features/bhaptics/crystal.hpp"
 #include "features/bhaptics/landing.hpp"
 #include "features/bhaptics/launch.hpp"
@@ -113,6 +117,7 @@ enum class Effect : std::uint8_t {
     Armor,
     LargeArmor,
     Launch,
+    Ammo,
     Count,
 };
 
@@ -171,11 +176,16 @@ double crystalEffectSeconds(SyncKind kind);
 
 // What a trigger teleport of the player is (idTrigger_Teleporter, and its _Fade kind that fades out first):
 // a portal or pad, or one of the same classes the maps use to put the player back after a fall (a hazard
-// with a damage decl, or out of bounds with the falling stinger for its fade sound). The hub's secret
-// teleporter plays the falling stinger too; an entity named '...secret...' counts as a portal.
+// with a damage decl, or out of bounds with the falling stinger for its fade sound, as e3m1's
+// game_trigger_teleport_fade_power on the rig). The Fortress of Doom's teleporters (`fortress`: the map is
+// isFortressMap) fade out to the falling stinger too, with no damage decl, the Ripatorium's way back among
+// them (rig, public issue #13): there they are portals, as is an entity named '...secret...' anywhere.
 enum class TeleportKind : std::uint8_t { Portal, Hazard, OutOfBounds };
 
-TeleportKind teleportKindOf(bool fade, bool damage, std::string_view fadeSound, std::string_view entityName);
+TeleportKind teleportKindOf(
+    bool fade, bool damage, std::string_view fadeSound, std::string_view entityName, bool fortress);
+// The Fortress of Doom's map ("game/hub/hub", as a map load names it).
+bool isFortressMap(std::string_view mapName);
 const char* teleportKindName(TeleportKind kind);
 
 // The portal's sweep: its length, and a step every kPortalStepSeconds.
@@ -203,12 +213,18 @@ struct BodySignals {
     std::optional<float> hitYawDegrees;
     // The largest landing seen since the last update (LandingDetector on the game's frames), if any.
     std::optional<Landing> landing;
-    std::uint32_t portals = 0;  // portals, pads and level exits gone through since the last update
+    std::uint32_t portals = 0;  // portals, pads, level exits and fast travels since the last update
     std::uint32_t launches = 0; // jump pad and booster launches since the last update (LaunchFilter's)
     // The health and armor gains to feel that the layer's PickupDetector found since the last update.
     std::optional<Pickup> healthGain;
     std::optional<Pickup> armorGain;
+    std::uint32_t ammo = 0; // ammo pickups since the last update (the layer's hooks)
 };
+
+// What became of the latest ammo pickup, for the layer's log.
+enum class AmmoFelt : std::uint8_t { Wave, Merged, NotFelt };
+
+const char* ammoFeltName(AmmoFelt felt);
 
 class BodyHaptics {
 public:
@@ -226,6 +242,9 @@ public:
     // Landings seen (felt or not) and the newest one, for the layer's log.
     [[nodiscard]] std::uint64_t landings() const { return landings_; }
     [[nodiscard]] std::optional<Landing> lastLanding() const { return lastLanding_; }
+    // Ammo pickups seen in gameplay and what became of the latest, for the layer's log.
+    [[nodiscard]] std::uint64_t ammoPickups() const { return ammoPickups_; }
+    [[nodiscard]] AmmoFelt lastAmmo() const { return lastAmmo_; }
 
 private:
     void add(std::vector<Frame>& out, Effect effect, Device device, int millis, std::vector<Dot> dots);
@@ -281,6 +300,9 @@ private:
     double launchUntil_ = -1.0;      // no step from here on
     PickupWave healthWave_{kVestRows};
     PickupWave armorWave_{kVestRows};
+    AmmoWave ammoWave_{kVestRows};
+    std::uint64_t ammoPickups_ = 0;
+    AmmoFelt lastAmmo_ = AmmoFelt::NotFelt;
     double vestHeldUntil_ = -1.0; // a stronger effect plays on the vest until then
     std::uint32_t random_ = 0x2545F491u;
     std::optional<Landing> lastLanding_;

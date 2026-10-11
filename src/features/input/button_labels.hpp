@@ -13,7 +13,7 @@
 //   [labels]
 //   "<hand>.<input>" = "<name>"      e.g. "left.primary" = "X", "right.stick" = "Right Thumbstick"
 //
-//   <input>   trigger, grip, stick_click, primary, secondary, face3, face4, shoulder, menu, stick
+//   <input>   trigger, grip, stick_click, primary, secondary, face3, face4, shoulder, menu, thumbrest, stick
 //
 // A name given there is used as written. An input without one is named from the path its gameplay
 // action is bound to ("/input/x/click" is "X", "/input/squeeze/value" is "Grip"), with the hand in
@@ -48,6 +48,7 @@ enum class LabelInput : std::uint8_t {
     Face4,
     Shoulder,
     Menu,
+    ThumbRest,
     Stick,
     Count,
 };

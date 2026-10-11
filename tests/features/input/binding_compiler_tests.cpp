@@ -181,6 +181,30 @@ left.trigger.hold = "flame_belch"
     }
 }
 
+TEST_CASE("a thumb rest binds like a button, and a press on it rules out a tap or a hold") {
+    BindingBuildResult result = build(R"(left.thumbrest.tap = "quick_switch"
+right.thumbrest.hold = "automap"
+)");
+    CHECK(result.ok());
+    CHECK(result.profile.buttons ==
+          std::vector<ButtonBinding>{
+              {Hand::Left, ButtonInput::ThumbRest, PressKind::Tap, GameAction::QuickSwitch},
+              {Hand::Right, ButtonInput::ThumbRest, PressKind::Hold, GameAction::Automap}});
+    // Back to the same entries.
+    CHECK(buildBindingProfile(toBindingMap(result.profile)).profile.buttons == result.profile.buttons);
+    CHECK(toBindingMap(result.profile).at("left.thumbrest.tap") == "quick_switch");
+
+    result = build(R"(left.thumbrest.press = "fire"
+left.thumbrest.tap = "quick_switch"
+)");
+    const BindingIssue* issue = conflictOn(result, "left.thumbrest.tap");
+    REQUIRE(issue != nullptr);
+    CHECK(issue->conflict == BindingConflict::PressWithTapOrHold);
+    CHECK(issue->otherKey == "left.thumbrest.press");
+    CHECK(result.profile.buttons == std::vector<ButtonBinding>{{Hand::Left, ButtonInput::ThumbRest,
+                                                                PressKind::WhileDown, GameAction::Fire}});
+}
+
 TEST_CASE("conflict: a shared stick role names both stick keys and the role") {
     const BindingBuildResult result = build(R"(left.stick.role = "turn"
 right.stick.role = "turn"

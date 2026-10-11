@@ -1,9 +1,8 @@
-// The thumb-rest wheel's touch handling (rest_wheel.hpp): the landing and the lift of each rest, its contact
-// and hold-over, and the other stick held while a touch decides.
+// The thumb-rest wheel's touch handling (rest_wheel.hpp): each rest's landing and lift through its filter
+// (rest_touch_filter.hpp), a rest tapped again under edge, and the other stick held while a touch decides.
 
 #include "features/input/rest_wheel.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -26,108 +25,42 @@ void RestWheel::debounce(const RestWheelFrame& frame,
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         const std::size_t i = index(hand);
         Rest& r = rests_[i];
-        const bool raw = frame.rest[i] && hands_.hasRest[i];
-        // The thumb elsewhere: hard evidence (a face button pressed, or its own stick out of the centre, the
-        // thumb on it, on a runtime that reports no stick touch too), or a touch sensor beside the rest.
-        const bool hard = frame.faceButtons[i] || out(hand);
-        const bool vetoTouch = frame.thumbElsewhere[i];
-        r.vetoSeconds = vetoTouch && r.vetoTouch ? r.vetoSeconds + dt : 0.0f;
-        r.vetoToggled = vetoTouch && r.vetoToggled;
-        r.vetoTouch = vetoTouch;
-        // A touch sensor on all along while the rest comes and goes sees the resting thumb itself.
-        const bool stuck = vetoTouch && r.vetoToggled && r.vetoSeconds > kStuckVetoSeconds;
-        const bool veto = hard || (vetoTouch && !stuck);
-        // A touch sensor cuts a hold-over only once steady (one flickering with the rest cuts nothing), and
-        // not when stuck (a press then still cuts).
-        const bool elsewhere = hard || (vetoTouch && !stuck && r.vetoSeconds >= kVetoTouchSteadySeconds);
-        const bool wentElsewhere = elsewhere && !r.elsewhere;
-        r.elsewhere = elsewhere;
-        // The thumb moved to a button or the stick: a lost touch lifts at once.
-        bool cut = false;
+        // Hard evidence of the thumb elsewhere: a face button pressed, or its own stick out of the centre
+        // (the thumb on it, on a runtime that reports no stick touch too).
+        RestTouchStep step = r.touch.update(
+            {frame.rest[i] && hands_.hasRest[i], frame.thumbElsewhere[i], frame.faceButtons[i] || out(hand)},
+            dt);
         // Edge: a gap past the debounce, the other stick centred a while and nothing picked or cancelled, is
         // the thumb tapping the rest again.
-        bool retap = false;
-        if (raw != r.raw) {
-            if (raw) {
-                ++stats_.rawTouches[i];
-                r.vetoToggled = vetoTouch;
-                if (r.touched) {
-                    ++stats_.bridgedGaps[i]; // back within the hold-over: forgiven
-                    retap = settings_.mode == RestWheelMode::Edge && r.rawSeconds >= kRestDebounceSeconds &&
-                            !veto && route_ == Route::Idle && !r.cancelled &&
-                            centredSeconds_[index(otherHand(hand))] >= kOwnStickVoidSeconds;
-                } else if (!r.contact && veto) {
-                    ++stats_.vetoedLandings[i];
-                }
-            } else {
-                if (r.rawSeconds < kRestDebounceSeconds) {
-                    ++stats_.shortTouches[i];
-                }
-                cut = r.touched && elsewhere && r.wentElsewhere;
-            }
-            r.raw = raw;
-            r.rawSeconds = 0.0f;
-            if (!raw && r.touched && !r.gap) {
-                r.gap = true;
-                r.gapSeconds = 0.0f;
-            } else if (r.gap) {
-                r.gapSeconds += dt;
-            }
-        } else {
-            r.rawSeconds += dt;
-            if (r.gap) {
-                r.gapSeconds += dt;
-                r.gap = !(r.raw && r.rawSeconds >= kRestDebounceSeconds);
-            }
+        if (step.bridged && settings_.mode == RestWheelMode::Edge &&
+            step.lostSeconds >= kRestDebounceSeconds && !step.veto && route_ == Route::Idle && !r.cancelled &&
+            centredSeconds_[index(otherHand(hand))] >= kOwnStickVoidSeconds) {
+            r.touch.land();
+            step.landed = true;
         }
-        if (r.raw) {
-            r.contactSeconds = r.contact ? r.contactSeconds + dt : 0.0f;
-            r.contact = true;
-        } else if (r.contact) {
-            r.contactSeconds += dt;
-            r.contact = r.rawSeconds < settings_.holdOverSeconds;
-        }
-        if (r.touched && wentElsewhere) {
-            r.wentElsewhere = true;
-            cut = cut || !r.raw;
-        }
-        const float holdOver = std::clamp(r.onSeconds, kRestHoldOverFloorSeconds, settings_.holdOverSeconds);
-        if ((!r.touched && r.raw && (!veto || r.contactSeconds >= kRestDebounceSeconds)) || retap) {
-            if (!r.touched && !hard && stuck && r.contactSeconds < kRestDebounceSeconds) {
-                ++stats_.stuckVetoes[i];
-            }
-            r.touched = true;
-            r.wentElsewhere = false;
-            r.onSeconds = 0.0f;
+        stats_.rawTouches[i] += step.rawTouch ? 1 : 0;
+        stats_.shortTouches[i] += step.shortTouch ? 1 : 0;
+        stats_.vetoedLandings[i] += step.vetoedLanding ? 1 : 0;
+        stats_.bridgedGaps[i] += step.bridged ? 1 : 0;
+        stats_.stuckVetoes[i] += step.stuckVeto ? 1 : 0;
+        stats_.cutLifts[i] += step.cutLift ? 1 : 0;
+        if (step.landed) {
             r.cancelled = false;
-            r.gap = false;
-            landed[i] = true;
-        } else if (r.touched && !r.raw && (cut || r.rawSeconds >= holdOver)) {
-            r.touched = false;
-            r.wentElsewhere = false;
-            r.contact = false;
-            r.gap = false; // gapSeconds stays: the cancel in update() reads it
-            lifted[i] = true;
-            hardLift[i] = cut && hard;
-            // Quick returns count from when the touch went, not from the end of the hold-over.
-            r.sinceLift = cut ? 0.0f : r.rawSeconds;
-            if (cut) {
-                ++stats_.cutLifts[i];
-            }
-        } else if (r.touched && r.raw) {
-            r.onSeconds += dt;
         }
+        landed[i] = step.landed;
+        lifted[i] = step.lifted;
+        hardLift[i] = step.hardLift;
     }
 }
 
 bool RestWheel::holds(Hand hand, bool blocked) const {
     // The contact, not the sensor: a frame without the touch while it registers does not drop the stick.
-    const Rest& r = rests_[index(hand)];
+    const RestTouchFilter& r = rests_[index(hand)].touch;
     const Hand other = otherHand(hand);
-    return settings_.mode == RestWheelMode::Full && r.contact && hasRole(other) && route_ == Route::Idle &&
+    return settings_.mode == RestWheelMode::Full && r.contact() && hasRole(other) && route_ == Route::Idle &&
            !blocked && !latched_[index(other)] &&
            (held_[index(other)] ||
-            outSeconds_[index(other)] <= r.contactSeconds + kHeldLeadSeconds + kTimingSlackSeconds);
+            outSeconds_[index(other)] <= r.contactSeconds() + kHeldLeadSeconds + kTimingSlackSeconds);
 }
 
 bool RestWheel::pushWaits(Hand rest, Hand stick) const {
@@ -157,9 +90,9 @@ bool RestWheel::wheelTakes(Hand rest, Hand stick) const {
     case RestWheelMode::Off:
         return false;
     case RestWheelMode::Edge:
-        return r.touched && pushWaits(rest, stick);
+        return r.touch.touched() && pushWaits(rest, stick);
     case RestWheelMode::Full:
-        return r.touched && route_ == Route::Taken && stickHand_ == stick;
+        return r.touch.touched() && route_ == Route::Taken && stickHand_ == stick;
     case RestWheelMode::Extreme:
         return extremeStick() == stick;
     }
@@ -174,8 +107,8 @@ void RestWheel::holdOverPushes(const std::array<bool, 2>& crossed,
     for (const Hand stick : {Hand::Left, Hand::Right}) {
         const std::size_t s = index(stick);
         const Hand rest = otherHand(stick);
-        const Rest& r = rests_[index(rest)];
-        const bool deciding = r.touched && !r.raw;
+        const RestTouchFilter& r = rests_[index(rest)].touch;
+        const bool deciding = r.touched() && !r.raw();
         if (holdOver_[s]) {
             if (magnitude(sticks_[s]) > magnitude(pushPeak_[s])) {
                 pushPeak_[s] = sticks_[s];

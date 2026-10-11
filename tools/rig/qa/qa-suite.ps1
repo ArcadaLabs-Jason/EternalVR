@@ -90,6 +90,8 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
     try {
         New-QaStage $Ctx $LayerSrc
         if ($null -ne $Scenario.Input) { Write-QaInput $Ctx @($Scenario.Input) }
+        # A scenario's own files (a player's controller data) into its folder: NAME=VALUE pairs for this run.
+        if ($Scenario.Prepare) { $Ctx.Env = @(& $Scenario.Prepare $Ctx) }
         Start-QaDumpWatch $Ctx
         $launched = $true
         Start-QaGame $Ctx $Scenario

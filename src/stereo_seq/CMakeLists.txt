@@ -26,6 +26,7 @@ evr_add_module(evr_stereo_seq
         png_writer.cpp
         present_watch.cpp
         prev_matrices.cpp
+        refraction_history.cpp
         render_idle.cpp
         scatter_history.cpp
         seq_settings.cpp

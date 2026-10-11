@@ -153,6 +153,8 @@ const char* effectName(Effect effect) {
         return "largearmor";
     case Effect::Launch:
         return "launch";
+    case Effect::Ammo:
+        return "ammo";
     case Effect::Count:
         break;
     }
@@ -189,18 +191,23 @@ const char* syncKindName(SyncKind kind) {
     return "glory kill";
 }
 
-TeleportKind teleportKindOf(bool fade, bool damage, std::string_view fadeSound, std::string_view entityName) {
+TeleportKind teleportKindOf(
+    bool fade, bool damage, std::string_view fadeSound, std::string_view entityName, bool fortress) {
     if (!fade) {
         return TeleportKind::Portal;
     }
     if (damage) {
         return TeleportKind::Hazard;
     }
-    if (fadeSound.find("stinger_falling_damage") != std::string_view::npos &&
+    if (!fortress && fadeSound.find("stinger_falling_damage") != std::string_view::npos &&
         entityName.find("secret") == std::string_view::npos) {
         return TeleportKind::OutOfBounds;
     }
     return TeleportKind::Portal;
+}
+
+bool isFortressMap(std::string_view mapName) {
+    return mapName.starts_with("game/hub/");
 }
 
 const char* teleportKindName(TeleportKind kind) {
@@ -285,6 +292,7 @@ void BodyHaptics::reset() {
     nextBeat_ = 0.0;
     healthWave_.stop();
     armorWave_.stop();
+    ammoWave_.stop();
     vestHeldUntil_ = -1.0;
 }
 

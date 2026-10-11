@@ -20,6 +20,7 @@
 #include "features/input/stick_chord.hpp"
 #include "features/input/stick_response.hpp"
 #include "features/input/tap_hold.hpp"
+#include "features/input/touch_button.hpp"
 #include "features/input/turn_policy.hpp"
 #include "features/input/turn_stick_arbiter.hpp"
 #include "features/posture/posture_detector.hpp"
@@ -61,7 +62,9 @@ struct MapperSettings {
     ThrowSettings throwGesture;
     SwingSettings swing;
     // The thumb-rest weapon wheel (rest_wheel.hpp), which hands can sense a resting thumb (the control map's
-    // controllers), and whether a face button's touch counts as the rest where there is no thumb rest.
+    // controllers), and whether a face button's touch counts as the rest where there is no thumb rest. A hand
+    // whose thumb rest the profile binds like a button is no rest of the wheel's (one rest, one job): the
+    // mapper clears its sensor here.
     RestWheelSettings restWheel;
     std::array<bool, 2> restSensors{};
     bool restFaceTouch = false;
@@ -116,6 +119,10 @@ public:
     // wheel holds it, or with no turn stick.
     [[nodiscard]] Axis2 turnStick() const { return turnStickRead_; }
     [[nodiscard]] const RestWheel& restWheel() const { return restWheel_; }
+    // The thumb rest of `hand` read like a button (counted for the log whether bound or not).
+    [[nodiscard]] const TouchButton& restButton(Hand hand) const {
+        return hands_[static_cast<std::size_t>(hand)].thumbRest;
+    }
     // For the log: the weapon hand, the move stick's hand and what forward on it follows, as in
     // "left-handed, move stick left, moving where the left hand points".
     [[nodiscard]] std::string summary() const;
@@ -126,7 +133,8 @@ private:
     struct HandButtons {
         AnalogButton trigger;
         AnalogButton grip;
-        std::array<TapHoldDetector, kButtonInputCount> tapHold;
+        std::array<TapHoldDetector, kButtonInputCount> tapHold; // the thumb rest's unused
+        TouchButton thumbRest;
         // Set while this hand steadies the weapon, and kept until its grip has been released once,
         // so a grip squeezed for support never turns into its bound action when support ends.
         bool gripHeldForSupport = false;

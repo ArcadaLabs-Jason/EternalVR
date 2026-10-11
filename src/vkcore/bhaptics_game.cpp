@@ -13,10 +13,7 @@
 //   health then armor, each one's `cur` float at +0x34; isDead (bool) at +0x1B0.
 // - idPlayer::damageFeedbackComponent (idDamageFeedbackComponent) at +0x26CD8: damageFeedback, 10 items
 //   of 0x80 bytes from +0x88, each with damage (float, +0x0), selfDamage (+0x28), impactDir (idVec3,
-//   +0x38) and addedTimeStamp (+0x70); damageFeedbackBufferPos (int) at +0x588. Its pickUpBuffer (8
-//   idSoundEvent pointers, the pickup sounds, from +0x7E8), pickUpBufferIndex (int, +0x828, serialized)
-//   and lastPickUpBufferIndex (int, +0x82C, the local one) are only logged as they change, to learn which
-//   pickups write them (public issue #25: telling the pickups apart).
+//   +0x38) and addedTimeStamp (+0x70); damageFeedbackBufferPos (int) at +0x588.
 // - idPlayer::savedSyncEntity's object (+0x8428): the sync entity of the animation the player is in, from its
 //   start to its end. Traced in headset sessions (2026-09-30): a glory kill sets it to syncmelee/<demon>
 //   (syncmelee/imp, syncmelee/zombie_tier1, ...) for about 1.6 s, a Sentinel Crystal's upgrade to
@@ -26,8 +23,8 @@
 //   idPlayer::syncMaster's object (+0x7DB0) never changed in those sessions and is only a fallback. The sync
 //   entity's idEntity::entityDef at +0xA8 names which kind it is.
 // Health and armor pickups are found here too (features/bhaptics/pickups.hpp), on every game frame.
-// Portals come from two hooks of their own (bhaptics_portal.cpp), jump pads and boosters from two more
-// (bhaptics_launch.cpp), installed with the thread.
+// Portals and fast travel come from hooks of their own (bhaptics_portal.cpp), jump pads and boosters from two
+// more (bhaptics_launch.cpp), ammo pickups from two more (bhaptics_ammo.cpp), installed with the thread.
 // - idHavokPhysics_Player::viewAngles (+0x8A50 + 0x3F10), the yaw in degrees at +4 (as viewmodel_hook.cpp).
 // Which hit is the newest, and that impactDir points from the attacker to the player, are read from the
 // names; the log's first hits show the raw values so a rig session can confirm them.
@@ -75,10 +72,6 @@ constexpr std::size_t kItemDamage = 0x0;
 constexpr std::size_t kItemSelfDamage = 0x28;
 constexpr std::size_t kItemImpactDir = 0x38;
 constexpr std::size_t kItemAddedTime = 0x70;
-constexpr std::size_t kFeedbackPickUps = 0x7E8;
-constexpr std::size_t kFeedbackPickUpCount = 8;
-constexpr std::size_t kFeedbackPickUpIndex = 0x828;
-constexpr std::size_t kFeedbackLastPickUpIndex = 0x82C;
 constexpr std::size_t kPlayerViewYaw = 0x8A50 + 0x3F10 + 4;
 
 // Readings outside this are not health.
@@ -93,7 +86,7 @@ constexpr int kLoggedLandings = 30;
 constexpr int kLoggedSyncs = 40;
 constexpr int kLoggedPickups = 60;
 constexpr int kLoggedSkippedPickups = 20;
-constexpr int kLoggedPickUpSounds = 60;
+constexpr int kLoggedAmmo = 60;
 constexpr float kMinImpactDir = 1e-3f;
 
 // What the game threads noted, under g_mutex.
@@ -123,6 +116,7 @@ std::atomic<std::uint32_t> g_shots{0};
 std::atomic<std::uint32_t> g_belches{0};
 std::atomic<std::uint32_t> g_portals{0};
 std::atomic<std::uint32_t> g_launches{0};
+std::atomic<std::uint32_t> g_ammo{0};
 std::atomic<std::uint8_t> g_weapon{static_cast<std::uint8_t>(bhaptics::WeaponClass::Medium)};
 std::atomic<bool> g_running{false};
 std::once_flag g_startOnce;
@@ -149,12 +143,6 @@ std::optional<bhaptics::Pickup> g_healthGain;
 std::optional<bhaptics::Pickup> g_armorGain;
 int g_loggedPickups = 0;
 int g_loggedSkippedPickups = 0;
-// The damage feedback's pickup sounds, for the log only (camera hook).
-bool g_pickUpPrimed = false;
-std::int32_t g_pickUpIndex = 0;
-std::int32_t g_lastPickUpIndex = 0;
-LONGLONG g_pickUpQpc = 0;
-int g_loggedPickUpSounds = 0;
 
 double qpcSeconds(LONGLONG qpc) {
     static const double frequency = [] {
@@ -261,47 +249,6 @@ bool readPlayer(const std::byte* player, Noted& n) {
     return true;
 }
 
-// The pickup sound in one slot of the damage feedback's pickUpBuffer, or empty.
-std::string pickUpSound(const std::byte* feedback, std::int32_t index) {
-    const auto count = static_cast<std::int32_t>(kFeedbackPickUpCount);
-    const auto slot = static_cast<std::size_t>((index % count + count) % count);
-    const std::byte* sound = nullptr;
-    return safeRead(feedback + kFeedbackPickUps + slot * sizeof(sound), sound) && sound ? itemDeclName(sound)
-                                                                                        : std::string{};
-}
-
-// A change of pickUpBufferIndex or lastPickUpBufferIndex: which one moves in a single-player game, and
-// whether it names the slot just written or the next one, is not known yet, so both and every slot are
-// logged. A gap in the camera hook's readings (a load) starts over, so a new level's values are no change.
-void logPickUpSounds(const std::byte* player, LONGLONG qpc) {
-    const std::byte* feedback = player + kPlayerDamageFeedback;
-    std::int32_t index = 0;
-    std::int32_t last = 0;
-    if (g_loggedPickUpSounds >= kLoggedPickUpSounds || !safeRead(feedback + kFeedbackPickUpIndex, index) ||
-        !safeRead(feedback + kFeedbackLastPickUpIndex, last)) {
-        g_pickUpPrimed = false;
-        return;
-    }
-    const bool primed = g_pickUpPrimed && qpcSeconds(qpc) - qpcSeconds(g_pickUpQpc) <= kFrameStaleSeconds;
-    const std::int32_t indexBefore = g_pickUpIndex;
-    const std::int32_t lastBefore = g_lastPickUpIndex;
-    g_pickUpPrimed = true;
-    g_pickUpQpc = qpc;
-    g_pickUpIndex = index;
-    g_lastPickUpIndex = last;
-    if (!primed || (index == indexBefore && last == lastBefore)) {
-        return;
-    }
-    ++g_loggedPickUpSounds;
-    EVR_LOG(
-        "%s: pickup sounds: buffer index %d to %d, last index %d to %d; slots 0 to 7: '%s' '%s' '%s' '%s' "
-        "'%s' '%s' '%s' '%s'",
-        kTag, indexBefore, index, lastBefore, last, pickUpSound(feedback, 0).c_str(),
-        pickUpSound(feedback, 1).c_str(), pickUpSound(feedback, 2).c_str(), pickUpSound(feedback, 3).c_str(),
-        pickUpSound(feedback, 4).c_str(), pickUpSound(feedback, 5).c_str(), pickUpSound(feedback, 6).c_str(),
-        pickUpSound(feedback, 7).c_str());
-}
-
 void logPickup(const bhaptics::Pickup& p) {
     const bool felt = p.skip == bhaptics::PickupSkip::None;
     if (felt ? g_loggedPickups++ >= kLoggedPickups : g_loggedSkippedPickups++ >= kLoggedSkippedPickups) {
@@ -347,7 +294,7 @@ void logSummary(const bhaptics::BodyHaptics& body,
     EVR_LOG(
         "%s: %llu frames (shot %llu, damage %llu, heartbeat %llu, glory kill %llu, death %llu, belch %llu, "
         "equipment %llu, landing %llu, crystal %llu, portal %llu, health %llu, mega health %llu, "
-        "armor %llu, large armor %llu, launch %llu), %llu messages sent, %llu failed",
+        "armor %llu, large armor %llu, launch %llu, ammo %llu), %llu messages sent, %llu failed",
         kTag, static_cast<unsigned long long>(total), static_cast<unsigned long long>(c[0]),
         static_cast<unsigned long long>(c[1]), static_cast<unsigned long long>(c[2]),
         static_cast<unsigned long long>(c[3]), static_cast<unsigned long long>(c[4]),
@@ -356,7 +303,8 @@ void logSummary(const bhaptics::BodyHaptics& body,
         static_cast<unsigned long long>(c[9]), static_cast<unsigned long long>(c[10]),
         static_cast<unsigned long long>(c[11]), static_cast<unsigned long long>(c[12]),
         static_cast<unsigned long long>(c[13]), static_cast<unsigned long long>(c[14]),
-        static_cast<unsigned long long>(sent), static_cast<unsigned long long>(failed));
+        static_cast<unsigned long long>(c[15]), static_cast<unsigned long long>(sent),
+        static_cast<unsigned long long>(failed));
 }
 
 void linkMain(float intensity) {
@@ -373,6 +321,8 @@ void linkMain(float intensity) {
     std::uint64_t loggedTotal = 0;
     std::uint64_t landingsSeen = 0;
     int loggedLandings = 0;
+    std::uint64_t ammoSeen = 0;
+    int loggedAmmo = 0;
     for (;;) {
         Sleep(kTickMs);
         const double now = seconds();
@@ -424,6 +374,7 @@ void linkMain(float intensity) {
         signals.belches = g_belches.exchange(0);
         signals.portals = g_portals.exchange(0);
         signals.launches = g_launches.exchange(0);
+        signals.ammo = g_ammo.exchange(0);
         // The equipment launcher: its button going down (the fire hook does not see it).
         const bool equipmentHeld = game::contains(heldActions(), game::GameAction::Equipment);
         signals.equipment = equipmentHeld && !equipmentWasHeld ? 1 : 0;
@@ -439,6 +390,12 @@ void linkMain(float intensity) {
                 EVR_LOG("%s: landing: dropped %.2f units, fastest fall %.1f units/s (%s from %.1f)", kTag,
                         l->drop, l->fallSpeed, l->drop >= bhaptics::kLandingDrop ? "felt" : "not felt, felt",
                         bhaptics::kLandingDrop);
+            }
+        }
+        if (body.ammoPickups() != ammoSeen) {
+            ammoSeen = body.ammoPickups();
+            if (loggedAmmo++ < kLoggedAmmo) {
+                EVR_LOG("%s: ammo picked up: %s", kTag, bhaptics::ammoFeltName(body.lastAmmo()));
             }
         }
         if (frames.empty() || !link.isOpen()) {
@@ -476,10 +433,11 @@ void startBhaptics() {
             EVR_LOG("%s: off: unknown game build, nothing to read", kTag);
             return;
         }
-        EVR_LOG("%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment, "
-                "landing, crystal, rune, portal, health and armor pickups, launch); looking for the bHaptics "
-                "Player on port %d",
-                kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
+        EVR_LOG(
+            "%s: on, intensity %.2f (shot, damage, heartbeat, glory kill, death, belch, equipment, "
+            "landing, crystal, rune, portal, fast travel, health and armor pickups, launch, ammo); looking "
+            "for the bHaptics Player on port %d",
+            kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
         g_running.store(true);
         std::thread(linkMain, cfg.bhapticsIntensity).detach();
         if (!installBhapticsPortalHooks()) {
@@ -487,6 +445,9 @@ void startBhaptics() {
         }
         if (!installBhapticsLaunchHooks()) {
             EVR_LOG("%s: no launch hooks: jump pads and boosters play nothing", kTag);
+        }
+        if (!installBhapticsAmmoHooks()) {
+            EVR_LOG("%s: no ammo hooks: ammo pickups play nothing", kTag);
         }
     });
 }
@@ -525,6 +486,12 @@ void noteBhapticsLaunch() {
     }
 }
 
+void noteBhapticsAmmo() {
+    if (g_running.load(std::memory_order_relaxed)) {
+        g_ammo.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 void noteBhapticsFrame(const std::byte* player) {
     if (!g_running.load(std::memory_order_relaxed)) {
         return;
@@ -545,11 +512,6 @@ void noteBhapticsFrame(const std::byte* player) {
         g_pickups.update({qpcSeconds(n.qpc), n.valid && n.gameplay, n.health, n.armor, n.dead});
     for (const bhaptics::Pickup& p : pickups) {
         logPickup(p);
-    }
-    if (n.valid) {
-        logPickUpSounds(player, n.qpc);
-    } else {
-        g_pickUpPrimed = false;
     }
     if (n.valid && !g_loggedFirstRead) {
         g_loggedFirstRead = true;

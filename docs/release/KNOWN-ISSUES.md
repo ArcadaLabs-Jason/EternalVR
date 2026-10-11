@@ -110,8 +110,8 @@ them is worse for you than described here.
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
   overlays are off too: the red edges at low health, double vision and screen shakes, and the wobble of
   the whole picture under water (the water's tint and fog stay). A few effects lose the smoothing they get
-  over several frames, because the two eyes would share it: water reflections and refraction still show,
-  only that smoothing is off. The picture looks slightly different from the flat game.
+  over several frames, because the two eyes would share it: water reflections still show, only that
+  smoothing is off. The picture looks slightly different from the flat game.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
   for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
   banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before
@@ -141,7 +141,8 @@ them is worse for you than described here.
   "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
   why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
-  may smear briefly while you turn.
+  may smear briefly while you turn. An experimental fix is in, off by default; it will be switched on once
+  it has been tried in a headset.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
@@ -220,7 +221,8 @@ them is worse for you than described here.
   strength and feel may change.
 - **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. On a real suit a player has felt
   the shots, the landing from a fall and glory kills; the other effects (portals, the Sentinel Crystal, the
-  pickup waves, jump pads and the rest) have only been checked against a stand-in for the bHaptics Player.
+  pickup waves including the new ammo wave, jump pads and the rest) have only been checked against a
+  stand-in for the bHaptics Player. The portal on a fast travel from the map has not been tried at all yet.
   Which side of the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms
   them.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
@@ -237,6 +239,9 @@ them is worse for you than described here.
   runtime may not report the thumb rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
   in a headset yet, nor has the thumb rest's new touch handling (0.1.41: a touch counts at once, a short loss
   is forgiven).
+- **A thumb rest as a button** (Quest and Rift controllers, in the controls editor) is new and has not been
+  tried in a headset yet. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
+  rest. A controls file with a thumb rest in it makes an older version of the mod use the built-in controls.
 - **Edit controls...** should open much faster now (it used to take several seconds and show "Not
   Responding" first). If it still takes several seconds, tell me.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and

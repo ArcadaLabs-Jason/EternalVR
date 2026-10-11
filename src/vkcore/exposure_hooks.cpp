@@ -5,6 +5,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/motion_capture.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/refraction_hooks.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/ssdo_hooks.hpp"
@@ -316,7 +317,7 @@ void logStereoTemporalMode() {
     const bool exposureOnce = g_exposureOnce.load(std::memory_order_acquire);
     EVR_LOG(
         "%s: per-eye TAA %s; auto-exposure index per eye %s, eye R %s; scattering history per eye %s; SSDO "
-        "history per eye %s",
+        "history per eye %s; refraction history %s",
         kTag,
         taaRequested() ? "requested (the exposure index is held from its first stereo tick)"
                        : "off (ETERNALVR_STEREO_TAA=0)",
@@ -326,7 +327,8 @@ void logStereoTemporalMode() {
         !exposureOnce ? "updates its own exposure (ETERNALVR_STEREO_EXPOSURE_ONCE=0)"
         : hooked      ? "takes eye L's exposure"
                       : "updates its own exposure (one chain with eye L)",
-        scatterHooksInstalled() ? "hooked" : "off", ssdoHooksInstalled() ? "hooked" : "off");
+        scatterHooksInstalled() ? "hooked" : "off", ssdoHooksInstalled() ? "hooked" : "off",
+        refractionHooksText());
 }
 
 ExposureCounters exposureCounters() {

@@ -2,6 +2,7 @@
 # here; the layer owns the connection.
 evr_add_module(evr_bhaptics
     SOURCES
+        ammo.cpp
         bhaptics_message.cpp
         body_haptics.cpp
         crystal.cpp

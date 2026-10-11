@@ -148,6 +148,8 @@ XrActionId gameplayAction(ButtonInput input) {
         return XrActionId::Face4;
     case ButtonInput::Shoulder:
         return XrActionId::Shoulder;
+    case ButtonInput::ThumbRest:
+        return XrActionId::ThumbRest;
     case ButtonInput::Menu:
     case ButtonInput::Count:
         break;

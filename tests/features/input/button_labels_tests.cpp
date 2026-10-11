@@ -110,6 +110,21 @@ TEST_CASE("Touch controllers: the hand is named only where both controllers have
     CHECK(labels.name(Hand::Right, LabelInput::Menu).empty());
 }
 
+TEST_CASE("Touch controllers: a thumb rest bound like a button is named and prompted") {
+    const ControllerData data = builtin(Controller::OculusTouch);
+    const ButtonLabels labels = buttonLabelsFor(data);
+    CHECK(labels.name(Hand::Left, LabelInput::ThumbRest) == "Left Thumb Rest");
+    CHECK(labels.name(Hand::Right, LabelInput::ThumbRest) == "Right Thumb Rest");
+    CHECK(nameFromInputPath("/input/thumbrest/touch") == "Thumb Rest");
+    CHECK(parseLabelKey("left.thumbrest") == LabelKey{Hand::Left, LabelInput::ThumbRest});
+    // A tap on the rest is pressed like a button and comes before the stick's down tap.
+    BindingProfile profile = buildBindingProfile(data.maps.at(Handedness::Right)).profile;
+    profile.buttons.push_back({Hand::Left, ButtonInput::ThumbRest, PressKind::Tap, GameAction::QuickSwitch});
+    CHECK(actionPromptText(GameAction::QuickSwitch, profile, labels) == "Left Thumb Rest");
+    // Other controllers have no thumb rest to name.
+    CHECK(buttonLabelsFor(builtin(Controller::ValveIndex)).name(Hand::Left, LabelInput::ThumbRest).empty());
+}
+
 TEST_CASE("Index controllers: an A on both hands is named with its hand") {
     const ButtonLabels labels = buttonLabelsFor(builtin(Controller::ValveIndex));
     CHECK(labels.name(Hand::Left, LabelInput::Primary) == "Left A");

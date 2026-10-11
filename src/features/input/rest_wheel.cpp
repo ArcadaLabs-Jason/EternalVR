@@ -83,11 +83,29 @@ const char* restWheelEventName(RestWheelEvent event) {
     return "none";
 }
 
+RestWheelLoss restWheelLoss(RestWheelMode mode, const RestWheelHands& hands, std::array<bool, 2> bound) {
+    RestWheelSettings settings;
+    settings.mode = mode;
+    RestWheelHands left = hands;
+    bool taken = false;
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        taken = taken || (hands.hasRest[index(hand)] && bound[index(hand)]);
+        left.hasRest[index(hand)] = hands.hasRest[index(hand)] && !bound[index(hand)];
+    }
+    if (!taken || !RestWheel(settings, hands).usable()) {
+        return RestWheelLoss::None;
+    }
+    return RestWheel(settings, left).usable() ? RestWheelLoss::OtherRest : RestWheelLoss::Off;
+}
+
 RestWheel::RestWheel(RestWheelSettings settings, RestWheelHands hands) : settings_(settings), hands_(hands) {
     settings_.windowSeconds = finiteInRangeOr(settings_.windowSeconds, kMinEdgeWindowSeconds,
                                               kMaxEdgeWindowSeconds, kEdgeWindowSeconds);
     settings_.holdOverSeconds = finiteInRangeOr(settings_.holdOverSeconds, kMinRestHoldOverSeconds,
                                                 kMaxRestHoldOverSeconds, kRestHoldOverSeconds);
+    for (Rest& r : rests_) {
+        r.touch = RestTouchFilter(settings_.holdOverSeconds);
+    }
     switch (settings_.mode) {
     case RestWheelMode::Off:
         usable_ = false;
@@ -129,23 +147,23 @@ bool RestWheel::restGone() const {
         // The other rest ends a pick under way only once its touch has lasted the debounce: a brush does not
         // close an open wheel on its highlight.
         const Hand restore = restoreHand();
-        const bool brush = picking && rests_[index(restore)].onSeconds < kRestDebounceSeconds;
+        const bool brush = picking && rests_[index(restore)].touch.onSeconds() < kRestDebounceSeconds;
         return (brush ? extremeStickIf(restore, false) : extremeStick()) != stickHand_;
     }
     // Edge and full need the rest only to start a pick: one under way ends on the stick.
-    return !picking && !rests_[index(restHand_)].touched;
+    return !picking && !rests_[index(restHand_)].touch.touched();
 }
 
 std::optional<Hand> RestWheel::extremeStick() const {
     const Hand turn = hands_.turnStick.value_or(Hand::Right);
-    return extremeStickIf(turn, rests_[index(turn)].touched);
+    return extremeStickIf(turn, rests_[index(turn)].touch.touched());
 }
 
 std::optional<Hand> RestWheel::extremeStickIf(Hand hand, bool touched) const {
     const Hand turn = hands_.turnStick.value_or(Hand::Right);
     const Hand restore = restoreHand();
     const auto rests = [&](Hand h) {
-        return h == hand ? touched : rests_[index(h)].touched;
+        return h == hand ? touched : rests_[index(h)].touch.touched();
     };
     if (rests(restore)) {
         return std::nullopt;
@@ -157,9 +175,9 @@ std::optional<Hand> RestWheel::extremeStickIf(Hand hand, bool touched) const {
 }
 
 bool RestWheel::restCancels() const {
-    const Rest& restore = rests_[index(restoreHand())];
-    return settings_.mode == RestWheelMode::Extreme && restore.touched &&
-           restore.onSeconds >= kRestDebounceSeconds;
+    const RestTouchFilter& restore = rests_[index(restoreHand())].touch;
+    return settings_.mode == RestWheelMode::Extreme && restore.touched() &&
+           restore.onSeconds() >= kRestDebounceSeconds;
 }
 
 RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) {
@@ -194,7 +212,7 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
         const Hand stick = otherHand(hand);
         if (landed[index(hand)]) {
             ++stats_.landings[index(hand)];
-            if (r.sinceLift <= kQuickReturnSeconds) {
+            if (r.touch.sinceLift() <= kQuickReturnSeconds) {
                 ++stats_.quickReturns[index(hand)];
             }
             if (out(stick)) {
@@ -224,17 +242,15 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
                 o.restHand = hand;
                 o.stickHand = stick;
             }
-        } else if (r.touched) {
+        } else if (r.touch.touched()) {
             r.sinceLanding += dt;
         }
         if (lifted[index(hand)]) {
             r.landingValid = false;
             r.chainPending = false;
-        } else if (!r.touched) {
-            r.sinceLift = std::fmin(r.sinceLift + dt, kLongAgoSeconds);
         }
         // Picks in a row: the window opens again once the stick has come back to the centre.
-        if (r.touched && r.chainPending && route_ == Route::Idle &&
+        if (r.touch.touched() && r.chainPending && route_ == Route::Idle &&
             centredSeconds_[index(stick)] >= kRearmGapSeconds) {
             r.chainPending = false;
             r.sinceLanding = 0.0f;
@@ -255,7 +271,7 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
     // the stick stays out of play until it is back in the centre (no snap or quick switch from it).
     if (route_ == Route::Pointing && committed_ == WheelDirection::None && hardLift[index(restHand_)] &&
         (settings_.mode == RestWheelMode::Edge || settings_.mode == RestWheelMode::Full)) {
-        const float before = outSeconds_[index(stickHand_)] - rests_[index(restHand_)].gapSeconds;
+        const float before = outSeconds_[index(stickHand_)] - rests_[index(restHand_)].touch.gapSeconds();
         if (before <= kTurnBeforeLiftSeconds + kTimingSlackSeconds) {
             givenBack_[index(stickHand_)] = true;
             handBack_[index(stickHand_)] = true;
@@ -289,7 +305,7 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
     // While touched: a stick that left the centre after its rest's contact began (or kHeldLeadSeconds
     // before) is held until the touch registers and a route takes it, or the contact lapses.
     for (const Hand hand : {Hand::Left, Hand::Right}) {
-        const bool pending = !rests_[index(hand)].touched || landed[index(hand)];
+        const bool pending = !rests_[index(hand)].touch.touched() || landed[index(hand)];
         held_[index(otherHand(hand))] = pending && holds(hand, frame.blocked);
     }
 
@@ -364,8 +380,8 @@ void RestWheel::startRoute(const std::array<bool, 2>& crossed,
             Rest& r = rests_[index(hand)];
             const Hand stick = otherHand(hand);
             // A push held during the hold-over (fresh) picks once the touch is back.
-            if (r.touched && r.landingValid && r.sinceLanding <= settings_.windowSeconds && hasRole(stick) &&
-                (crossed[index(stick)] || fresh[index(stick)]) && !latched_[index(stick)] &&
+            if (r.touch.touched() && r.landingValid && r.sinceLanding <= settings_.windowSeconds &&
+                hasRole(stick) && (crossed[index(stick)] || fresh[index(stick)]) && !latched_[index(stick)] &&
                 !holdOver_[index(stick)]) {
                 r.landingValid = false;
                 restHand_ = hand;
@@ -382,8 +398,9 @@ void RestWheel::startRoute(const std::array<bool, 2>& crossed,
             const Rest& r = rests_[index(hand)];
             // A brush while the stick turns or moves leaves it alone: a stick already out (not held with the
             // touch) is taken only once the touch has been on the debounce (gaps not counted).
-            const bool brush = this->out(stick) && !held_[index(stick)] && r.onSeconds < kRestDebounceSeconds;
-            if (r.touched && hasRole(stick) && !brush) {
+            const bool brush =
+                this->out(stick) && !held_[index(stick)] && r.touch.onSeconds() < kRestDebounceSeconds;
+            if (r.touch.touched() && hasRole(stick) && !brush) {
                 restHand_ = hand;
                 stickHand_ = stick;
                 route_ = Route::Taken;
@@ -501,7 +518,7 @@ void RestWheel::finishRoute(bool picked) {
         (out(stickHand_) && !givenBack_[index(stickHand_)] && !crossedNow_[index(stickHand_)]);
     // Only a pick opens the window again: after a cancel a resting thumb has to land again, so flicks that
     // never settle (snap turns) are never taken over one after another.
-    if (picked && settings_.mode == RestWheelMode::Edge && rests_[index(restHand_)].touched) {
+    if (picked && settings_.mode == RestWheelMode::Edge && rests_[index(restHand_)].touch.touched()) {
         rests_[index(restHand_)].chainPending = true;
     }
     if (!picked) {

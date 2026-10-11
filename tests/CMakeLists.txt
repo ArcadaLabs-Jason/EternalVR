@@ -158,6 +158,7 @@ evr_add_test(evr_input_tests
         features/input/input_mapper_tests.cpp
         features/input/input_mapper_menu_tests.cpp
         features/input/input_mapper_rest_tests.cpp
+        features/input/input_mapper_rest_button_tests.cpp
         features/input/input_mapper_wheel_tests.cpp
         features/input/input_mapper_locomotion_tests.cpp
         features/input/locomotion_direction_tests.cpp
@@ -177,6 +178,7 @@ evr_add_test(evr_input_tests
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp
         features/input/test_input_tests.cpp
+        features/input/touch_button_tests.cpp
         features/input/turn_policy_tests.cpp
         features/input/turn_stick_arbiter_tests.cpp
         features/input/usercmd_injection_tests.cpp
@@ -191,6 +193,7 @@ evr_add_test(evr_input_tests
 
 evr_add_test(evr_bhaptics_tests
     SOURCES
+        features/bhaptics/ammo_tests.cpp
         features/bhaptics/bhaptics_message_tests.cpp
         features/bhaptics/body_haptics_tests.cpp
         features/bhaptics/crystal_tests.cpp
@@ -302,6 +305,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/png_writer_tests.cpp
         stereo_seq/present_watch_tests.cpp
         stereo_seq/prev_matrices_tests.cpp
+        stereo_seq/refraction_history_tests.cpp
         stereo_seq/render_idle_tests.cpp
         stereo_seq/scatter_history_tests.cpp
         stereo_seq/seq_settings_tests.cpp

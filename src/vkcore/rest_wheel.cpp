@@ -12,6 +12,11 @@
 // returns, landings with the other stick already out, pushes held, lifts made at once with the thumb
 // elsewhere, and touch sensors ignored as stuck, so a player's log shows whether touches go missing.
 //
+// A thumb rest bound like a button (features/input/touch_button.hpp) is watched the same way: its first
+// touch, the minute without one, and every 10 s with any touch a line counting its touches, lifts cut short
+// (and of those, a thumb passing over the rest: no tap), taps, holds and landings voided straight off the
+// hand's own controls, capped apart from the wheel's lines.
+//
 // The slowdown (features/input/wheel_slowdown.hpp): with ETERNALVR_THUMBREST_SLOWDOWN=0, weaponWheel_
 // slowTimeScale is held at 1 while this wheel holds the game's wheel open, written through the cvar book
 // (cvar_book.hpp: the value before the layer's first write goes back on a multiplayer guard trip) from the
@@ -58,8 +63,10 @@ std::array<bool, 2> g_touchSeen{};
 float g_untouchedSeconds = 0.0f;
 bool g_noTouchLogged = false;
 input::RestWheelStats g_loggedStats;
+std::array<input::TouchButtonStats, 2> g_loggedButtons{};
 float g_statsSeconds = 0.0f;
-LogCap g_statsLines{360}; // shared by both rests: up to an hour of touch lines, then one a minute
+LogCap g_statsLines{360};  // the wheel's rests: up to an hour of touch lines, then one a minute
+LogCap g_buttonLines{360}; // the rests bound like buttons, the same
 
 bool due(LogCap& cap, char (&note)[48]) {
     std::uint64_t skipped = 0;
@@ -175,9 +182,28 @@ std::optional<int> openDelayMilliseconds() {
     return milliseconds;
 }
 
-void noteTouches(const input::InputFrame& frame, const input::InputMapper& mapper, float dt) {
+// The rests the log watches: the wheel's while it can work, and those bound like buttons.
+struct Watched {
+    std::array<bool, 2> wheel{};
+    std::array<bool, 2> button{};
+};
+
+Watched watched(const input::InputMapper& mapper) {
+    Watched w;
     const input::RestWheel& rest = mapper.restWheel();
-    if (!rest.usable()) {
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        const std::size_t i = static_cast<std::size_t>(hand);
+        w.wheel[i] = rest.usable() && rest.hands().hasRest[i];
+        w.button[i] = input::bindsInput(mapper.profile(), hand, input::ButtonInput::ThumbRest);
+    }
+    return w;
+}
+
+void noteTouches(const input::InputFrame& frame, const input::InputMapper& mapper, float dt) {
+    const Watched w = watched(mapper);
+    const bool wheel = w.wheel[0] || w.wheel[1];
+    const bool button = w.button[0] || w.button[1];
+    if (!wheel && !button) {
         return;
     }
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
@@ -186,9 +212,11 @@ void noteTouches(const input::InputFrame& frame, const input::InputMapper& mappe
         // The face buttons' touch only where it is the rest (beside a thumb rest it is the thumb elsewhere).
         const bool face =
             input::faceTouchIsRest(mapper.settings(), hand) && (h.primaryTouch || h.secondaryTouch);
-        if (!g_touchSeen[i] && rest.hands().hasRest[i] && (h.thumbRest || face)) {
+        const bool wheelTouch = w.wheel[i] && (h.thumbRest || face);
+        if (!g_touchSeen[i] && (wheelTouch || (w.button[i] && h.thumbRest))) {
             g_touchSeen[i] = true;
-            EVR_LOG("%s: thumb-rest wheel: the %s controller reports a resting thumb", kTag, side(hand));
+            EVR_LOG("%s: %s: the %s controller reports a resting thumb", kTag,
+                    wheelTouch ? "thumb-rest wheel" : "thumb rest button", side(hand));
         }
     }
     if (g_touchSeen[0] || g_touchSeen[1] || g_noTouchLogged) {
@@ -197,16 +225,43 @@ void noteTouches(const input::InputFrame& frame, const input::InputMapper& mappe
     g_untouchedSeconds += dt;
     if (g_untouchedSeconds >= kNoTouchNoteSeconds) {
         g_noTouchLogged = true;
+        const char* then = !button ? "the wheel then never starts"
+                           : !wheel
+                               ? "a thumb rest bound as a button then never presses"
+                               : "the wheel then never starts, nor does a thumb rest bound as a button press";
         EVR_LOG(
-            "%s: thumb-rest wheel: no resting thumb reported in %.0f s of play; the runtime may not report "
-            "the thumb rests (the wheel then never starts)",
-            kTag, kNoTouchNoteSeconds);
+            "%s: %s: no resting thumb reported in %.0f s of play; the runtime may not report the thumb rests "
+            "(%s)",
+            kTag, wheel ? "thumb-rest wheel" : "thumb rest button", kNoTouchNoteSeconds, then);
+    }
+}
+
+// What each bound rest did since the last line, for those that saw a touch.
+void noteButtonStats(const input::InputMapper& mapper, const Watched& w) {
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        const std::size_t i = static_cast<std::size_t>(hand);
+        const input::TouchButtonStats& now = mapper.restButton(hand).stats();
+        const input::TouchButtonStats& was = g_loggedButtons[i];
+        const unsigned touches = now.touches - was.touches;
+        char note[48] = "";
+        if (w.button[i] && touches != 0 && due(g_buttonLines, note)) {
+            EVR_LOG("%s: %s rest button, last %.0f s: %u touch(es), %u short, %u begun elsewhere, %u gap(s) "
+                    "forgiven, %u lift(s) at once (%u passing over: no tap), %u tap(s), %u hold(s), %u "
+                    "landing(s) voided (own controls)%s",
+                    kTag, side(hand), kStatsSeconds, touches, now.shortTouches - was.shortTouches,
+                    now.begunElsewhere - was.begunElsewhere, now.gapsForgiven - was.gapsForgiven,
+                    now.cutLifts - was.cutLifts, now.passedOver - was.passedOver, now.taps - was.taps,
+                    now.holds - was.holds, now.voided - was.voided, note);
+        }
+        g_loggedButtons[i] = now;
     }
 }
 
 // Every kStatsSeconds: what each rest's sensor did since the last line, for the rests that saw a touch.
-void noteTouchStats(const input::RestWheel& rest, float dt) {
-    if (!rest.usable()) {
+void noteTouchStats(const input::InputMapper& mapper, float dt) {
+    const input::RestWheel& rest = mapper.restWheel();
+    const Watched w = watched(mapper);
+    if (!rest.usable() && !w.button[0] && !w.button[1]) {
         return;
     }
     g_statsSeconds += dt;
@@ -214,6 +269,10 @@ void noteTouchStats(const input::RestWheel& rest, float dt) {
         return;
     }
     g_statsSeconds = 0.0f;
+    noteButtonStats(mapper, w);
+    if (!rest.usable()) {
+        return;
+    }
     const input::RestWheelStats& now = rest.stats();
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         const std::size_t i = static_cast<std::size_t>(hand);
@@ -250,6 +309,7 @@ void noteTouchStats(const input::RestWheel& rest, float dt) {
 
 void restartRestWheelStats() {
     g_loggedStats = {};
+    g_loggedButtons = {};
 }
 
 bool restWheelBlocked(const State& s) {
@@ -263,7 +323,7 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
         return;
     }
     noteTouches(frame, *s.mapper, dt);
-    noteTouchStats(s.mapper->restWheel(), dt);
+    noteTouchStats(*s.mapper, dt);
     const input::RestWheelOutput& w = input.restWheel;
     {
         std::lock_guard lock(g_slowMutex);

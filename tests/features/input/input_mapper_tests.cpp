@@ -76,6 +76,9 @@ void press(InputFrame& frame, Hand hand, ButtonInput input) {
     case ButtonInput::Menu:
         state.menuButton = true;
         break;
+    case ButtonInput::ThumbRest:
+        state.thumbRest = true;
+        break;
     case ButtonInput::Count:
         break;
     }

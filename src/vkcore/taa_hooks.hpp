@@ -18,15 +18,17 @@
 // - DLSS: eye R evaluates a twin NGX feature (taa_ngx.cpp).
 // - The temporal effects whose history is still shared (anti-ghosting mask, SSDO, light scattering, depth
 //   of field, water, refraction, ray-traced reflection upscale) are switched off through the engine's cvar
-//   setter; the light scattering's and SSDO's filters stay on while their history is per eye.
+//   setter; the light scattering's, SSDO's and refraction's filters stay on while their history is per eye
+//   (r_refractionTAA counts only without the refraction mask: with it, the default, the refraction pass
+//   blends its history whatever r_refractionTAA says, refraction_hooks.hpp).
 // - Screen-space reflections are held at the player's r_SSR (ETERNALVR_STEREO_SSR): they read the last
 //   frame's colour through the history selector, so each eye reads its own. The hold follows the game's
 //   Reflections setting whenever it runs (profile load, video menu), told apart from the TAA safe mode
 //   knock-on by the ray-traced upscale quality it writes too; the launcher's Off holds 0 throughout. Without
 //   per-eye TAA the game writes r_SSR 0 itself (r_TAASafeMode 1), and they stay off.
-// - The auto-exposure index (exposure_hooks.hpp), the light scattering's history (scatter_hooks.hpp) and
-//   SSDO's (ssdo_hooks.hpp) are kept per eye by hooks of their own, which need the eye tags only: they work
-//   with per-eye TAA off or failed closed as well.
+// - The auto-exposure index (exposure_hooks.hpp), the light scattering's history (scatter_hooks.hpp),
+//   SSDO's (ssdo_hooks.hpp) and the refraction's (refraction_hooks.hpp) are kept per eye by hooks of their
+//   own, which need the eye tags only: they work with per-eye TAA off or failed closed as well.
 //
 // Fail closed: when any piece is missing, the first stereo tick writes the v1 set instead (r_antialiasing
 // 0, r_TAASafeMode 1: no temporal accumulation at all). Every game write and every redirect asks the
@@ -42,8 +44,8 @@ namespace evr::vkcore {
 
 // ETERNALVR_MODE=stereo, no stereo experiment and no engine changed by Parallel Eye Rendering
 // (view_slots.hpp: installed, or failed after a change): Route S. The per-eye exposure index
-// (exposure_hooks.hpp), scattering history (scatter_hooks.hpp) and SSDO history (ssdo_hooks.hpp) need only
-// this, not per-eye TAA.
+// (exposure_hooks.hpp), scattering history (scatter_hooks.hpp), SSDO history (ssdo_hooks.hpp) and
+// refraction history (refraction_hooks.hpp) need only this, not per-eye TAA.
 bool routeSRequested();
 // ETERNALVR_STEREO_TAA=1 (the default) under Route S.
 bool taaRequested();
@@ -59,10 +61,10 @@ bool taaDlssDlaa();
 // "off"): stereo_seq::stereoSsrCvar decides whether r_SSR is held while per-eye TAA runs.
 const std::string& taaSsrSetting();
 
-// From vkCreateInstance, after the multiplayer guard: under Route S installs the scattering and SSDO history
-// hooks (whatever the TAA mode), then, with per-eye TAA requested, hooks the device context's slot loop so
-// that eye R's images are built with the renderer. Nothing touches the game unless the guard allows game
-// writes.
+// From vkCreateInstance, after the multiplayer guard: under Route S installs the scattering, SSDO and
+// refraction history hooks (whatever the TAA mode), then, with per-eye TAA requested, hooks the device
+// context's slot loop so that eye R's images are built with the renderer. Nothing touches the game unless the
+// guard allows game writes.
 void installTaaEarly();
 
 // Route S start (after its own hooks and the exposure index hook): the selectors, the cvars and the NGX

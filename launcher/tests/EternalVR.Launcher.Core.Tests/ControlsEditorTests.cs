@@ -271,7 +271,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(names, ControlNames.Actions.Select(a => a.Name));
 
             var keys = File.ReadAllText(RepoFile("src", "features", "input", "binding_keys.cpp"));
-            foreach (var word in new[] { "trigger", "grip", "stick_click", "primary", "secondary", "menu", "press", "tap", "hold", "up", "down_tap", "down_hold", "none", "move", "turn" })
+            foreach (var word in new[] { "trigger", "grip", "stick_click", "primary", "secondary", "menu", "thumbrest", "press", "tap", "hold", "up", "down_tap", "down_hold", "none", "move", "turn" })
                 Assert.Contains("\"" + word + "\"", keys);
             var sections = File.ReadAllText(RepoFile("src", "features", "input", "controller_bindings.cpp"));
             foreach (var section in ControlNames.MapSections)
@@ -429,7 +429,7 @@ namespace EternalVR.Launcher.Core.Tests
                 var controls = Prepared(t);
                 var touch = Open(controls, "oculus_touch.toml");
                 var inputs = touch.Inputs(Handedness.Right);
-                Assert.Equal(11, inputs.Count); // the right Menu button belongs to the system
+                Assert.Equal(13, inputs.Count); // the right Menu button belongs to the system; both thumb rests
                 Assert.DoesNotContain((ControlHand.Right, ButtonInput.Menu), inputs);
                 Assert.Equal("Right A", touch.InputName(ControlHand.Right, ButtonInput.Primary));
                 Assert.Equal("Left Y", touch.InputName(ControlHand.Left, ButtonInput.Secondary));
@@ -458,7 +458,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Contains((ControlHand.Right, ButtonInput.Menu), touch.Inputs(Handedness.Right));
                 Assert.Equal("Right Menu button", touch.InputName(ControlHand.Right, ButtonInput.Menu));
                 touch.SetAction(Handedness.Right, BindingKey.Button(ControlHand.Right, ButtonInput.Menu, PressKind.Press), null);
-                Assert.Equal(11, touch.Inputs(Handedness.Right).Count);
+                Assert.Equal(13, touch.Inputs(Handedness.Right).Count);
             }
         }
 

@@ -48,11 +48,12 @@ status messages are read and dropped on a second thread (the first one is logged
 | Flame Belch | a shot from the fire hook while the controllers hold the Flame Belch's button (it fires through the same hook with the held weapon's decl; that shot is not a weapon shot) | the Slayer's left shoulder, where the Belch sits: the top two rows of the wearer's left two columns, front and back, at 70 for 300 ms; at most one every 250 ms |
 | Equipment | the controllers' equipment launcher button going down (the launcher does not go through the fire hook) | the same left shoulder at 45 for 150 ms. A press with no charge left plays it too |
 | Landing | the feet coming to rest after falling (features/bhaptics/landing.hpp, on every game frame from the player's physics origin), from 3.5 units or more above: on the rig a jump drops about 1.4 units and a double jump 3.2 to 3.3, so both are left out; teleports (faster than 60 units a second) and rises onto a ledge or a lift are not landings, and a dash in the air is not taken for one | the bottom row, front and back, from 35 at 3.5 units up to 70 for a long fall, for 120 ms (a tester's idea, public issue #1) |
-| Portal | a trigger teleport of the player (`idTrigger_Teleporter::TriggerStuff_Impl`: pads, in-map portals, Slayer Gates, the Fortress's portals) or a level exit (`idTarget_LevelTransition`'s activate, first call), both hooked in `bhaptics_portal.cpp`; not the same classes' volumes that put the player back after a fall (a damage decl, or the falling stinger as the fade sound, except the Fortress's secret teleporter) | a crackle sweeping down the vest over 0.6 s, a step every 60 ms: the row under way at 55 to 85, about half the row above at 20 to 40, a fifth of the rest at 15 to 30, and half of each sleeve at 25 to 55, all at random, for 80 ms each (a tester's idea, public issue #1) |
+| Portal | a trigger teleport of the player (`idTrigger_Teleporter::TriggerStuff_Impl`: pads, in-map portals, Slayer Gates, the Fortress's teleporters, the Ripatorium's way back among them), a level exit (`idTarget_LevelTransition`'s activate, first call) or a fast travel from the Dossier's map (the player's teleport while `idPlayer::fastTravelDestinationWarpPointName` is set; from the code only, not tried in the game yet), all hooked in `bhaptics_portal.cpp`; not the same classes' volumes that put the player back after a fall (a damage decl, or the falling stinger as the fade sound). The Fortress's teleporters all fade out to the falling stinger with no damage decl (rig), so in the Fortress (the map `game/hub/hub`) that sound is no sign of a fall: 0.1.43 and earlier played nothing for them (public issue #13). The secret teleporter there is named `...secret...`, a portal anywhere | a crackle sweeping down the vest over 0.6 s, a step every 60 ms: the row under way at 55 to 85, about half the row above at 20 to 40, a fifth of the rest at 15 to 30, and half of each sleeve at 25 to 55, all at random, for 80 ms each (a tester's idea, public issue #1) |
 | Health | health going up (`idPlayer::playerHealth`; features/bhaptics/pickups.hpp, on every game frame): a health pickup, a glory kill's drops. Rises less than 0.1 s apart are one gain (at most 0.4 s long); not felt: the first 0.5 s of readings (the start, after a load, a menu or a respawn), rises while dead or from 0 or below (a respawn), gains under 1 point. A rise from just above 0 is felt: a player's log has health going from 1.4 to 125 in one step, felt as a Mega Health | a wave up the vest, front and back together: the bottom row first, a row every 50 ms, each for 70 ms, the row just left at 40 %; 20 plus 2.4 per point, up to 80 at about 25 points; about 0.27 s in all. Left out while a hit, a glory kill, death, a landing, the crystal or a portal plays on the vest, and during a Sentinel Crystal's upgrade. No sleeves (a tester's idea, public issue #1) |
 | Mega Health | a health gain of 100 or more (the maximum grows with the Sentinel Crystals' upgrades, so health above 100 alone is no sign of one) | the health wave at 100, a row every 75 ms, each for 95 ms: about 0.4 s |
 | Armor | armor going up, as health (armor pickups, the Flame Belch's shards), also from 0: armor runs out in most fights (0.1.33 and earlier left every armor pickup from 0 out, public issue #25). Armor from 0 is left out only with health coming back from 0 (a respawn, an extra life) | the health wave reversed: down the vest from the top row, front and back, with the same timing and strength |
 | Large armor | an armor gain with a single step (one reading to the next) of more than 26: the large armor (`pickup/armor/large`) and the Mega Armor, taken to give 50 or more in one step (not in a player's log yet: those show armor pickups of 25 and 5, one step each, and the Flame Belch's shards 2 at a time, about 25 at most in one gain). By the step, not the gain's total: a medium armor merged with a burst of shards is no large armor, and a large one capped by the maximum still is while it gives more than 26 | the armor wave at 100, a row every 75 ms, each for 95 ms, as a Mega Health (a tester's ask, public issue #25) |
+| Ammo | a prop the player picks up that gives ammo (`features/bhaptics/ammo.hpp`, two hooks in `bhaptics_ammo.cpp` on the prop's picked-up path: its use, which a pickup walked over and the end of a drop's flight to the player both go through, or an explicit interact): an item pickup of an `idDeclAmmo` (the shells, bullets, cells, rockets and the rest lying about; on the rig `propitem/ammo/shotgun_10`, giving `ammo/sharedammopool/shells`) or a universal ammo pickup. Pickups less than 0.3 s after a wave started are part of it (a chainsaw's shower of drops, a row of boxes). A weapon switch, an upgrade, a respawn or a load picks nothing up, so none of them plays it. Left out while dead and during a Sentinel Crystal's upgrade | a band down the back of the vest only, from the top row, a row every 40 ms, each for 60 ms, at 45 with the row just left at 40 %: about 0.2 s, lighter and quicker than the armor's wave, since ammo is picked up all the time. A row is left out while a hit, a glory kill, death, a landing, the crystal, a portal or a launch plays on the vest, or a health or armor wave runs (a tester's idea, public issue #12: "putting ammo in a backpack") |
 | Launch | a jump pad or a booster launching the player, from two hooks in `bhaptics_launch.cpp`: idPlayer's handler of the `touchedBouncePad` event, which only `idTrigger_BouncePad` posts, right after it gave the player the launch velocity, and `idTrigger_SonicBoom`'s trigger (the boosters that blast the player to a destination; not its landing pads). A pad's trigger may run on several frames while the player is in it: touches less than 0.5 s apart are one launch, and a chain of pads a flight apart is a launch each. Jumps, double jumps, dashes and landings do not go through either path | the bottom row, front and back, a step every 50 ms, each for 70 ms: 85; 65 with the row above at 40; 45 and 30; 30 and 20: about 0.22 s, the push from the legs (a player's idea, public issue #1). A pickup's wave waits for it |
 
 Nothing plays while a menu holds gameplay back or while the camera hook is not running (loads); coming
@@ -74,9 +75,10 @@ the log says `bhaptics: off: unknown game build`):
   `selfDamage` +0x28, `impactDir` +0x38, `addedTimeStamp` +0x70) and `damageFeedbackBufferPos` +0x588.
   The newest item is the one with the latest time (or the one before the position when none has a time).
   The hit is taken to come from `-impactDir`; its yaw from the view's yaw
-  (`idHavokPhysics_Player::viewAngles`) gives the side. Its `pickUpBuffer` (8 `idSoundEvent` pointers, a
-  pickup's sound, from +0x7E8), `pickUpBufferIndex` (+0x828, serialized) and `lastPickUpBufferIndex`
-  (+0x82C, the local one) are only logged for now (below).
+  (`idHavokPhysics_Player::viewAngles`) gives the side. Its `pickUpBuffer` (8 pickup sounds from +0x7E8,
+  index +0x828) is no use for pickups: its `AddPickUp` (RVA 0x1269020) plays the sound at once for the
+  local player and fills the buffer only for the other players of a match (0.1.36 to 0.1.43 logged its
+  changes: none in single-player rig runs with health, armor and ammo picked up).
 - `idPlayer::savedSyncEntity`'s object at +0x8428: the sync entity of the animation the player is in, for
   its whole length (traced in headset sessions: `syncmelee/<demon>` for a glory kill, about 1.6 s;
   `interact/argent_cell/use_sync` for a Sentinel Crystal, about 3.3 s;
@@ -88,7 +90,24 @@ the log says `bhaptics: off: unknown game build`):
   rdx the activator, which must be the player), the class from its vtable's RTTI name, and for
   `idTrigger_Teleporter_Fade` its `damageDecl` (+0xE20) and `fadeOut.fadeSound` (+0xDD0 + 0x18, name at
   +0x8); the entity name (idStr at +0x40, text at +0x8). `idTarget_LevelTransition`'s activate (RVA
-  0xD720D0), counted only while its `activated` (+0xC28) is still clear.
+  0xD720D0), counted only while its `activated` (+0xC28) is still clear. The map from the multiplayer
+  guard's map-load hook (`mp_guard::lastMapLoaded`) for the Fortress.
+- Fast travel: the player's teleport (RVA 0x13F1AB0, under `idPlayer::Teleport`, vtable slot 284; found by
+  signature, hooked at its entry: rcx the player) with `idPlayer::fastTravelDestinationWarpPointName` (idStr
+  at +0x4D098: text +0x8, length +0x10) set. The map's choice starts the fast travel (an event handler, RVA
+  0x13E2E30), which sets the name and posts the `teleport` event 0.5 s later; the game's own teleport tests
+  the name (to play the warp's loop sound and post `postFastTravel`), and `endFastTravel` (RVA 0x13E2780)
+  clears it. From the code only: no fast travel has been made on the rig (the Dossier's map needs a
+  campaign save and its menus' controls), but every other teleport of the player there (map starts, pads,
+  the Fortress's teleporters, the `teleport` console command, a death) found the name empty.
+- Ammo pickups: the two functions that play a picked-up prop's sounds (RVA 0xD08C10, from the prop's use,
+  RVA 0xD06950, which the touch handlers RVA 0xD05B90 and 0xD06020 and the end of its magnetization, 0xD059BF
+  in RVA 0xD055E0, call; RVA 0xD08D80, from `idProp2` vtable slots 279 and 289, which player code calls: an
+  explicit interact),
+  hooked at their entry (rcx the prop, rdx the user, which must be the player); the prop's
+  `useableComponentDecl` (+0x1BE8) and, for an `idDeclProp_ItemPickupComponent`, its `inventoryDecl`
+  (+0x130), told by their RTTI class names. Health and armor props are `idDeclProp_HealthComponent`
+  (rig).
 - Launches (docs/rig-findings/bhaptics-launch.md): idPlayer's `touchedBouncePad` handler (RVA 0x13E5650,
   found by signature, hooked at +0x36 just after its cast to `idTrigger_BouncePad`: rbx the player, rsi the
   pad), with the pad's `launchSpeed` (+0xCB4), `useFlightTime` (+0xCB8) and `flightTime` (+0xCBC) and
@@ -120,24 +139,28 @@ Every item below is checked from the layer's log (`bhaptics:` lines), most witho
    logs `sync starts: '<entityDef>' (glory kill|pickup|Sentinel Crystal|Praetor token|rune)` and `sync
    ends after N s`.
 6. **Portals**: each trigger teleport of the player logs `teleport '<entity>' (fade|plain, fade sound
-   '...', damage 0|1): portal|hazard|out of bounds`, and each level exit `level exit '<entity>': portal`.
-   A pad or portal must read `portal`; falling into a pit `hazard` or `out of bounds`.
+   '...', damage 0|1[, the Fortress]): portal|hazard|out of bounds`, each level exit `level exit
+   '<entity>': portal`, and each fast travel `fast travel to '<warp point>': portal`. A pad or portal must
+   read `portal`, the Fortress's teleporters too (`prison_arena_trigger_teleport_fade_1` is the
+   Ripatorium's way back); falling into a pit `hazard` or `out of bounds`. A fast travel must give one line
+   and the sweep as the screen flashes on arrival; one has not been made yet.
 7. **Weapons**: `firing '<decl>': <class> kick` for each weapon; names that land on medium but should not
    go in `weaponClassOf`.
 8. **Pickups**: the first 60 gains felt log `pickup: health +25 (mega no), 50.0 to 75.0 in 1 step over
    0.00 s` (armor with `(large yes|no, biggest step +N)`), and the first 20 rises not felt `rise not felt (<why>): health
    +100, 0.0 to 100.0 in ...`. The steps and the time tell how the game moves a value for one pickup; a
-   respawn or a level load must read as not felt, or not show at all. The first 60 changes of the damage
-   feedback's pickup sound indices log `pickup sounds: buffer index A to B, last index C to D; slots 0 to
-   7: '<sound>' ...` (a load starts over): next to the `pickup:` lines they tell which pickups write it, and by which sound (the large
-   armor's and the Mega Armor's amounts, ammo, power-ups, weapons, extra lives).
+   respawn or a level load must read as not felt, or not show at all. The first 60 props the player picks
+   up log `picked up (used|used (interact)) '<entity>': <use component class> '<decl>', gives <class> '<decl>':
+   ammo|not ammo`, and the first 60 ammo pickups `ammo picked up: a wave down the back|merged into the last
+   wave|not felt (...)`. A chainsaw's drops should come `used`, as ammo (not seen yet), and the
+   other pickups (power-ups, weapons, extra lives) name their decls for later effects.
 9. **Launches**: each launch logs `launch: jump pad '<entity>' (launch speed S, during a pad's flight 0|1)`
    (`flight time T s` for a pad timed by its flight) or `launch: booster '<entity>' (speed S)`; the first 20
    touches within 0.5 s of the last log `same launch: ... again T s after the last touch`. A pad must give
    one `launch:` line per throw, jumps, double jumps and dashes none (rig recipe in
    docs/rig-findings/bhaptics-launch.md).
 10. **Summary**: every 30 s with something new, `N frames (shot a, damage b, heartbeat c, glory kill d,
-    death e, ..., launch l), m messages sent, f failed`. `crystal` counts a rune's sparks too (about 190
+    death e, ..., launch l, ammo m), n messages sent, f failed`. `crystal` counts a rune's sparks too (about 190
     frames for one rune, against about 60 for a crystal's wave).
 
 To see the messages without a suit, run any WebSocket server on 127.0.0.1:15881 that prints what it
@@ -148,8 +171,8 @@ receives (quit the bHaptics Player first, it holds the port).
 - Dash and double jump (the mapper's actions, `usercmd_hook.cpp`).
 - The chainsaw (the hands' `destHandsState` 10 and 11, read by the off-hand hook), the Blood Punch and
   melee (the punch detector, `haptics_policy.hpp`).
-- Ammo pickups, power-ups and the other pickups health and armor do not show, from the damage feedback's
-  `pickUpBuffer` once its log lines (above) show what writes it; armor breaking (armor reaching 0).
+- Power-ups and the other pickups health, armor and ammo do not cover, from the `picked up` lines' decls
+  (the same hooks); armor breaking (armor reaching 0).
 - The game's own low-health flag (`idDamageFeedbackComponent::isShowingLowHealthWarning`) in place of a
   fixed 30, since maximum health grows with upgrades.
 - The hit's height (`impactPoint`) for the row, head hits on a TactVisor or Tactal (`Head`), gloves.

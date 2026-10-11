@@ -22,6 +22,7 @@
 #include "platform/mp_policy/trip_listeners.hpp"
 
 #include <cstdint>
+#include <string>
 
 namespace evr::vkcore::mp_guard {
 
@@ -41,6 +42,9 @@ mp_policy::GuardState state();
 // The map loads the map-load hook has seen so far (the main menu is one); 0 before the first or without the
 // hook. Any thread.
 std::uint32_t mapLoads();
+
+// The map of the latest map load ("game/hub/hub"), or empty before the first or without the hook. Any thread.
+std::string lastMapLoaded();
 
 // The last map loaded is one the player plays in (mp_policy::isPlayMap: not the main menu's shell); false
 // before the first map load or without the hook. Any thread.

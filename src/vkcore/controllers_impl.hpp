@@ -481,16 +481,19 @@ std::string itemDeclName(const std::byte* decl);
 // bHaptics (bhaptics_game.cpp, docs/BHAPTICS.md). With the game hooks: starts its thread once when
 // ETERNALVR_BHAPTICS=1. The fire hook: a shot of the local player's `hands`. The camera hook, once a game
 // frame: the player's health, armor, hits and sync kill. The portal hooks (bhaptics_portal.cpp, installed by
-// startBhaptics): the player went through a portal, a pad or a level exit. The launch hooks
-// (bhaptics_launch.cpp, the same): a jump pad or a booster launched the player (once per launch, already
-// filtered). All only note; nothing waits on the network.
+// startBhaptics): the player went through a portal, a pad or a level exit, or fast travelled. The launch
+// hooks (bhaptics_launch.cpp, the same): a jump pad or a booster launched the player (once per launch,
+// already filtered). The ammo hooks (bhaptics_ammo.cpp, the same): the player picked up ammo. All only note;
+// nothing waits on the network.
 void startBhaptics();
 void noteBhapticsShot(const std::byte* hands);
 void noteBhapticsFrame(const std::byte* player);
 void noteBhapticsPortal();
 void noteBhapticsLaunch();
+void noteBhapticsAmmo();
 bool installBhapticsPortalHooks();
 bool installBhapticsLaunchHooks();
+bool installBhapticsAmmoHooks();
 
 // Installers (each logs what it did); `image` checks were made by the caller.
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);

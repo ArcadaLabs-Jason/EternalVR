@@ -28,12 +28,14 @@ evr_add_module(evr_input
         player_controller_data.cpp
         punch_detector.cpp
         rest_touch_bindings.cpp
+        rest_touch_filter.cpp
         rest_wheel.cpp
         rest_wheel_touch.cpp
         stick_chord.cpp
         stick_response.cpp
         tap_hold.cpp
         test_input.cpp
+        touch_button.cpp
         turn_policy.cpp
         turn_stick_arbiter.cpp
         usercmd_injection.cpp

@@ -33,6 +33,8 @@ namespace EternalVR.Launcher
         private readonly ComboBox hand = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
         private readonly Label fileState = new Label { AutoSize = true, Margin = new Padding(3, 6, 3, 6) };
         private readonly Label problems = new Label { AutoSize = true, ForeColor = Color.Firebrick, Margin = new Padding(3, 6, 3, 6) };
+        /// <summary>The thumb-rest wheel on and a thumb rest bound here (<see cref="ControlsEdit.RestWheelNote"/>).</summary>
+        private readonly Label restNote = new Label { AutoSize = true, Margin = new Padding(3, 0, 3, 6) };
         private readonly Button save = new Button { Text = "Save", Width = 90, Height = 30 };
         private readonly Button close = new Button { Text = "Close", Width = 90, Height = 30, DialogResult = DialogResult.Cancel };
         private readonly Button reset = new Button { Text = "Reset to defaults", Width = 130, Height = 30 };
@@ -53,12 +55,15 @@ namespace EternalVR.Launcher
         private ControlsEdit edit;
         private int familyIndex = -1;
         private bool filling;
+        private readonly ThumbRestMode thumbRestWheel;
 
         /// <param name="lastProfile">The interaction profile of the controllers the last game reported, or null.</param>
-        public ControlsDialog(ControlsFolder folder, Handedness weaponHand, string lastProfile, Log log)
+        /// <param name="thumbRestWheel">The Play tab's Thumb-rest wheel, for the note on a bound thumb rest.</param>
+        public ControlsDialog(ControlsFolder folder, Handedness weaponHand, string lastProfile, ThumbRestMode thumbRestWheel, Log log)
         {
             this.folder = folder;
             this.log = log;
+            this.thumbRestWheel = thumbRestWheel;
             Text = "Edit controls: " + (folder.Profile == null ? "no VR settings profile" : "VR settings profile " + folder.Profile);
             SuspendLayout();
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -112,6 +117,7 @@ namespace EternalVR.Launcher
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -146,6 +152,7 @@ namespace EternalVR.Launcher
 
             root.Controls.Add(pickers);
             root.Controls.Add(fileState);
+            root.Controls.Add(restNote);
             root.Controls.Add(scroll);
             root.Controls.Add(problems);
             root.Controls.Add(bottom);
@@ -163,6 +170,8 @@ namespace EternalVR.Launcher
                 foreach (var input in AllInputs)
                 {
                     var name = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
+                    if (input == ButtonInput.ThumbRest)
+                        tips.SetToolTip(name, "A touch, not a click. Press: on while your thumb rests. Tap: touch and lift. Hold: rest a quarter second.");
                     var cells = AllPresses.Select(press =>
                     {
                         var box = ActionList();
@@ -415,6 +424,9 @@ namespace EternalVR.Launcher
         {
             var file = edit.PlayerFile == null ? "Built-in controls" : "Your file: " + Path.GetFileName(edit.PlayerFile);
             fileState.Text = file + (edit.IsModified ? " (changed, not saved yet)" : string.Empty);
+            var note = edit.RestWheelNote(thumbRestWheel, WeaponHand);
+            restNote.Text = note ?? string.Empty;
+            restNote.Visible = note != null;
 
             var issues = edit.Check();
             errors.Clear();
@@ -466,7 +478,7 @@ namespace EternalVR.Launcher
         private void WrapProblems()
         {
             int width = ClientSize.Width - Padding.Horizontal - 32;
-            if (width > 100) problems.MaximumSize = new Size(width, 0);
+            if (width > 100) problems.MaximumSize = restNote.MaximumSize = new Size(width, 0);
         }
 
         // ---- Changing and saving ----

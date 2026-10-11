@@ -8,9 +8,10 @@
 //   <hand>.stick.<gesture>         = <action>      (only on the turn stick)
 //
 //   <hand>    left, right
-//   <input>   trigger, grip, stick_click, primary (A/X), secondary (B/Y), face3, face4, shoulder, menu
+//   <input>   trigger, grip, stick_click, primary (A/X), secondary (B/Y), face3, face4, shoulder, menu,
+//             thumbrest
 //             (face3 and face4: X and Y on the Steam Frame's right controller, D-pad right and up
-//             on its left; shoulder: the bumper)
+//             on its left; shoulder: the bumper; thumbrest: the thumb rest's touch, touch_button.hpp)
 //   <press>   press (while down), tap, hold
 //   <gesture> up, down_tap, down_hold
 //   <action>  a game::gameActionName(), e.g. "fire", "weapon_wheel"

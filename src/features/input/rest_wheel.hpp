@@ -7,19 +7,7 @@
 // (Touch controllers), or with ETERNALVR_THUMBREST_FACE_TOUCH a face button's touch
 // (rest_touch_bindings.hpp).
 //
-// The touch (DECISIONS T-120; some sensors flicker on and off very fast):
-// - Landing: a touch registers on its first frame, unless the thumb is elsewhere on that controller then: a
-//   face button pressed or its own stick out of the centre (hard evidence), or a touch sensor beside the rest
-//   (the stick's, the face buttons' where they are not the rest, the trackpad's; the mapper reads them). Then
-//   it registers once the thumb is no longer elsewhere, or once the contact (the touch with gaps shorter than
-//   the hold-over bridged) has lasted kRestDebounceSeconds. A touch sensor on for kStuckVetoSeconds while the
-//   rest keeps coming and going sees the resting thumb itself: it no longer holds a landing back.
-// - Lift: a touch lost for less than the hold-over is a forgiven gap. The hold-over is
-//   ETERNALVR_THUMBREST_HOLDOVER (kRestHoldOverSeconds by default), but never longer than the touch has been
-//   on since its landing, nor shorter than kRestHoldOverFloorSeconds, so a brush lifts soon. A longer loss
-//   lifts the thumb; at once when the thumb went elsewhere after the landing: hard evidence at once, a touch
-//   sensor once it has been on kVetoTouchSteadySeconds (one flickering with the rest cuts nothing). The thumb
-//   going elsewhere while the touch is still sensed changes nothing.
+// The touch (DECISIONS T-120): each rest's landing and lift as rest_touch_filter.hpp filters them.
 // - Under edge, a forgiven gap of at least kRestDebounceSeconds is a fresh landing (the window opens again)
 //   when the other stick has been centred kOwnStickVoidSeconds, nothing is being picked and nothing was
 //   cancelled since the landing.
@@ -89,6 +77,7 @@
 
 #include "features/input/axis2.hpp"
 #include "features/input/controller_state.hpp"
+#include "features/input/rest_touch_filter.hpp"
 #include "features/input/rest_wheel_output.hpp"
 #include "features/input/weapon_directions.hpp"
 #include "features/input/wheel_mouse.hpp"
@@ -100,18 +89,6 @@
 
 namespace evr::input {
 
-// A touch begun with the thumb elsewhere registers once it has lasted this long.
-inline constexpr float kRestDebounceSeconds = 0.06f;
-// A touch lost for less than this is a gap, not a lift (the default of ETERNALVR_THUMBREST_HOLDOVER).
-inline constexpr float kRestHoldOverSeconds = 0.15f;
-inline constexpr float kMinRestHoldOverSeconds = 0.10f;
-inline constexpr float kMaxRestHoldOverSeconds = 0.30f;
-// The hold-over is never shorter than this, however briefly the touch was on.
-inline constexpr float kRestHoldOverFloorSeconds = 0.05f;
-// A touch sensor beside the rest cuts a hold-over short only once it has been on this long.
-inline constexpr float kVetoTouchSteadySeconds = 0.04f;
-// A touch sensor on this long while the rest comes and goes no longer holds a landing back.
-inline constexpr float kStuckVetoSeconds = 1.5f;
 // A pick still pointing when the thumb leaves for its own controls, its push begun at most this long before
 // the rest's touch first went (a flicker back does not restart it), was a turn (the push and the thumb
 // leaving together): the stick goes to the game.
@@ -141,10 +118,6 @@ inline constexpr float kMinWheelHoldSeconds = 0.30f;
 // The wheel is held this long past the game's own open delay (weaponWheel_HoldTimeForOpeningWheel).
 inline constexpr float kWheelOpenMarginSeconds = 0.12f;
 inline constexpr float kMaxWheelHoldSeconds = 2.5f;
-// Edge: a landing this soon after the hand's own face button went up, or its own stick was out of the
-// centre, comes from the player's own controls and opens no window.
-inline constexpr float kOwnButtonVoidSeconds = 0.4f;
-inline constexpr float kOwnStickVoidSeconds = 0.4f;
 // Picks in a row: the stick stays centred this long before the window opens again.
 inline constexpr float kRearmGapSeconds = 0.05f;
 // Counted for the log (RestWheelStats): a thumb back on its rest this soon after the rest let go, and a stick
@@ -194,6 +167,19 @@ struct RestWheelHands {
     std::optional<Hand> moveStick;
     std::optional<Hand> turnStick;
 };
+
+// What thumb rests bound like buttons (touch_button.hpp) do to the wheel: a bound rest is not the wheel's
+// (one rest, one job).
+enum class RestWheelLoss : std::uint8_t {
+    None,      // no rest of the wheel's is bound, or the wheel is off or cannot work with these hands anyway
+    OtherRest, // it works with the rests left
+    Off,       // it no longer works: no rest left, under extreme the restore rest bound, or under edge and
+               // full the rest left has no stick to pick with (the other stick has no role)
+};
+
+// `hands`: the wheel's hands before the bound rests are taken out; `bound`: the rests bound like buttons.
+[[nodiscard]] RestWheelLoss
+restWheelLoss(RestWheelMode mode, const RestWheelHands& hands, std::array<bool, 2> bound);
 
 struct RestWheelFrame {
     std::array<bool, 2> rest{}; // a thumb on the hand's rest now (debounced here)
@@ -263,27 +249,9 @@ private:
     };
 
     struct Rest {
-        bool raw = false;
-        bool touched = false;       // debounced
-        bool elsewhere = false;     // evidence that cuts a hold-over short, last frame
-        bool wentElsewhere = false; // ... and that began after the landing
-        bool vetoTouch = false;     // a touch sensor beside the rest, last frame
-        bool vetoToggled = false;   // ... and the rest came on again while it was
-        float vetoSeconds = 0.0f;   // ... on without a break
-        float rawSeconds = 0.0f;    // since the sensor last changed
-        // Since the touch first went in this loss: a flicker back that is forgiven does not restart it (the
-        // loss is over once the touch is back for the debounce, or the rest lands or lifts).
-        bool gap = false;
-        float gapSeconds = 0.0f;
-        // The contact: the touch with gaps shorter than the hold-over bridged, and since its first frame.
-        bool contact = false;
-        float contactSeconds = 0.0f;
-        // The sensor on since the landing (gaps not counted): the hold-over is never longer, and the brush
-        // guards count this.
-        float onSeconds = 0.0f;
+        RestTouchFilter touch;
         bool cancelled = false; // a pick from this rest was cancelled since the landing (edge)
         float sinceLanding = 0.0f;
-        float sinceLift = kLongAgoSeconds; // debounced
         bool landingValid = false;
         bool chainPending = false; // a pick ended with the thumb still resting (edge)
     };

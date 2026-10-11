@@ -410,18 +410,39 @@ TEST_CASE("a trigger teleport is a portal unless it is one of the fall's hazard 
     using evr::bhaptics::TeleportKind;
     using evr::bhaptics::teleportKindOf;
     constexpr const char* kStinger = "play_stinger_falling_damage";
-    CHECK(teleportKindOf(false, false, "", "trenches_trigger_teleporter_1") == TeleportKind::Portal);
-    CHECK(teleportKindOf(true, false, "play_util_classic_teleport", "trigger_teleport_fade_slayergate_1") ==
-          TeleportKind::Portal);
-    CHECK(teleportKindOf(true, false, "play_hub_portal_enter", "portal_trigger_teleport_fade_to_citadel") ==
-          TeleportKind::Portal);
-    CHECK(teleportKindOf(true, true, "", "trigger_teleport_fade_pit_3") == TeleportKind::Hazard);
-    CHECK(teleportKindOf(true, true, kStinger, "trigger_teleport_fade_pit_3") == TeleportKind::Hazard);
-    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_void_12") ==
+    CHECK(teleportKindOf(false, false, "", "trenches_trigger_teleporter_1", false) == TeleportKind::Portal);
+    CHECK(teleportKindOf(true, false, "play_util_classic_teleport", "trigger_teleport_fade_slayergate_1",
+                         false) == TeleportKind::Portal);
+    CHECK(teleportKindOf(true, false, "play_hub_portal_enter", "portal_trigger_teleport_fade_to_citadel",
+                         false) == TeleportKind::Portal);
+    CHECK(teleportKindOf(true, true, "", "trigger_teleport_fade_pit_3", false) == TeleportKind::Hazard);
+    CHECK(teleportKindOf(true, true, kStinger, "teleport_triggers_trigger_teleport_fade_13", false) ==
+          TeleportKind::Hazard);
+    CHECK(teleportKindOf(true, false, kStinger, "game_trigger_teleport_fade_power", false) ==
           TeleportKind::OutOfBounds);
-    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_secret") == TeleportKind::Portal);
+    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_secret", false) ==
+          TeleportKind::Portal);
     // A plain pad's fields are not read: a portal.
-    CHECK(teleportKindOf(false, true, kStinger, "") == TeleportKind::Portal);
+    CHECK(teleportKindOf(false, true, kStinger, "", false) == TeleportKind::Portal);
+}
+
+TEST_CASE("the Fortress's teleporters are portals, the Ripatorium's way back among them") {
+    using evr::bhaptics::isFortressMap;
+    using evr::bhaptics::TeleportKind;
+    using evr::bhaptics::teleportKindOf;
+    constexpr const char* kStinger = "play_stinger_falling_damage";
+    // As logged on the rig in the Fortress: the falling stinger, no damage decl.
+    CHECK(teleportKindOf(true, false, kStinger, "prison_arena_trigger_teleport_fade_1", true) ==
+          TeleportKind::Portal);
+    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_5", true) == TeleportKind::Portal);
+    // The same volume outside the Fortress is still out of bounds, and damage still a hazard inside it.
+    CHECK(teleportKindOf(true, false, kStinger, "trigger_teleport_fade_5", false) ==
+          TeleportKind::OutOfBounds);
+    CHECK(teleportKindOf(true, true, kStinger, "trigger_teleport_fade_5", true) == TeleportKind::Hazard);
+    CHECK(isFortressMap("game/hub/hub"));
+    CHECK_FALSE(isFortressMap("game/sp/e3m1_slayer/e3m1_slayer"));
+    CHECK_FALSE(isFortressMap("game/shell/shell"));
+    CHECK_FALSE(isFortressMap(""));
 }
 
 TEST_CASE("a portal sweeps down the vest front and back with the sleeves buzzing, once for its length") {

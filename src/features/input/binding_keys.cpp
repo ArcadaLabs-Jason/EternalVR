@@ -23,6 +23,7 @@ constexpr std::array<std::pair<ButtonInput, std::string_view>, kButtonInputCount
     {ButtonInput::Face4, "face4"},
     {ButtonInput::Shoulder, "shoulder"},
     {ButtonInput::Menu, "menu"},
+    {ButtonInput::ThumbRest, "thumbrest"},
 }};
 
 constexpr std::array<std::pair<PressKind, std::string_view>, 3> kPressNames{{

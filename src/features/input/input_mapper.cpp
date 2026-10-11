@@ -30,7 +30,7 @@ float sanitizedDt(float dtSeconds) {
 
 // Policies that take their settings as a whole sanitise them in their own constructors; these are
 // the parts the mapper owns or combines.
-MapperSettings sanitized(MapperSettings settings) {
+MapperSettings sanitized(MapperSettings settings, const BindingProfile& profile) {
     settings.trigger = sanitizedThresholds(settings.trigger, kTriggerThresholds);
     settings.grip = sanitizedThresholds(settings.grip, kGripThresholds);
     settings.move = sanitizedResponse(settings.move, kMoveStickResponse);
@@ -45,7 +45,25 @@ MapperSettings sanitized(MapperSettings settings) {
     const ArmGestures arms(settings.throwGesture, settings.swing);
     settings.throwGesture = arms.throwSettings();
     settings.swing = arms.swingSettings();
+    // One rest, one job: a thumb rest bound like a button is not the wheel's.
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        if (bindsInput(profile, hand, ButtonInput::ThumbRest)) {
+            settings.restSensors[handIndex(hand)] = false;
+        }
+    }
     return settings;
+}
+
+// The thumb rest's touch, and what tells the thumb is elsewhere on that controller (touch_button.hpp): a
+// touch sensor beside the rest (its stick's, face buttons' or trackpad's), a face button pressed, its own
+// stick out.
+TouchButtonSample restSample(const HandState& hand) {
+    TouchButtonSample sample;
+    sample.raw = hand.thumbRest;
+    sample.vetoTouch = hand.stickTouch || hand.trackpadTouch || hand.primaryTouch || hand.secondaryTouch;
+    sample.faceButton = hand.primaryButton || hand.secondaryButton;
+    sample.stickOut = magnitude(hand.stick) > kArmDeadzone;
+    return sample;
 }
 
 bool bindingActive(PressKind kind, bool down, bool tap, bool hold) {
@@ -75,7 +93,7 @@ bool gestureActive(StickGesture gesture, const TurnStickOutput& output) {
 } // namespace
 
 InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
-    : profile_(std::move(profile)), settings_(sanitized(settings)), turnStick_(settings_.turnStick),
+    : profile_(std::move(profile)), settings_(sanitized(settings, profile_)), turnStick_(settings_.turnStick),
       turn_(settings_.turn), handsJump_(settings_.handsJump),
       armGestures_(settings_.throwGesture, settings_.swing), punch_(settings_.punch),
       captureChord_(settings_.trigger, settings_.captureButtons, settings_.buttonHoldSeconds),
@@ -88,6 +106,7 @@ InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
         hand.tapHold.fill(TapHoldDetector(settings_.buttonHoldSeconds));
         hand.tapHold[buttonIndex(ButtonInput::Menu)] =
             TapHoldDetector(settings_.buttonHoldSeconds, settings_.menuTapSeconds);
+        hand.thumbRest = TouchButton(settings_.buttonHoldSeconds, restWheel_.settings().holdOverSeconds);
     }
 }
 
@@ -237,6 +256,12 @@ InputMapper::sampleButtons(HandButtons& buttons, const HandState& hand, float dt
         levels.tap[i] = tapHold.tap;
         levels.hold[i] = tapHold.hold;
     }
+    // The thumb rest is a touch: its own filter, tap and hold (touch_button.hpp).
+    const TouchButtonOutput rest = buttons.thumbRest.update(restSample(hand), dtSeconds);
+    const std::size_t r = buttonIndex(ButtonInput::ThumbRest);
+    levels.down[r] = rest.down;
+    levels.tap[r] = rest.tap;
+    levels.hold[r] = rest.hold;
     return levels;
 }
 
@@ -298,6 +323,7 @@ void InputMapper::consumeHeld() {
                 button.cancel();
             }
         }
+        hand.thumbRest.cancel();
     }
     turnStick_.cancelSweep();
     restWheel_.cancel();

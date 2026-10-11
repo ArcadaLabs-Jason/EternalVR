@@ -6,6 +6,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/refraction_hooks.hpp"
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/seq_hooks.hpp"
@@ -320,10 +321,11 @@ void applySet(const std::vector<stereo_seq::CvarExpectation>& set, std::string_v
         if (c.name == skip) {
             continue;
         }
-        // With the scattering or SSDO history per eye (scatter_hooks.hpp, ssdo_hooks.hpp) its temporal filter
-        // stays on.
+        // With the scattering, SSDO or refraction history per eye (scatter_hooks.hpp, ssdo_hooks.hpp,
+        // refraction_hooks.hpp) its temporal filter stays on.
         if ((c.name == "r_lightScatteringTAA" && scatterPerEyeReady()) ||
-            (c.name == "r_SSDOTemporalAA" && ssdoPerEyeReady())) {
+            (c.name == "r_SSDOTemporalAA" && ssdoPerEyeReady()) ||
+            (c.name == "r_refractionTAA" && refractionPerEyeReady())) {
             setCvar(c.name, "1");
             continue;
         }
@@ -373,10 +375,11 @@ void installTaaEarly() {
         if (!routeSRequested()) {
             return;
         }
-        // Eye R's scattering volumes and SSDO targets are made with the device context too; they need only
-        // the eye tags.
+        // Eye R's scattering volumes, SSDO targets and refraction images are made with the device context
+        // too; they need only the eye tags.
         installScatterHooksEarly();
         installSsdoHooksEarly();
+        installRefractionHooksEarly();
         if (!taaRequested()) {
             return;
         }
