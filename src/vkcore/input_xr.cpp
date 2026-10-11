@@ -303,6 +303,7 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     h.secondaryTouch = readBool(xr, input::XrActionId::SecondaryTouch, path);
     h.stickTouch = readBool(xr, input::XrActionId::ThumbstickTouch, path);
     h.trackpadTouch = readBool(xr, input::XrActionId::TrackpadTouch, path);
+    h.triggerTouch = readBool(xr, input::XrActionId::TriggerTouch, path);
     const bool left = hand == input::Hand::Left;
     using pose_guards::Slot;
     h.poseValid = locate(xr, xr.aimSpaces[handIndex(hand)], time, h.aimPose, &h.linearVelocity,

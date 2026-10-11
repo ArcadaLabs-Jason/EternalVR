@@ -38,6 +38,7 @@ struct Held {
     bool parallel = false;   // Parallel Eye Rendering's own set: an ETERNALVR_DEBUG_CVARS entry replaces it
     bool menuSsdo = false;   // r_SSDO: follows the game's Directional Occlusion setting (followSsdoSetting)
     bool viewDlss = false;   // Parallel Eye Rendering's DLSS set: held as viewDlssHolds says (view_dlss.hpp)
+    bool flares = false;     // r_skipFlares 1: held only while Parallel Eye Rendering's flares are off
 };
 
 // The lock apply() and the setters take, and under it whether the first apply() has run: the held list is

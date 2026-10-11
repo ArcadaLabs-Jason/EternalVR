@@ -16,10 +16,11 @@
 // for each of them with the eye's latched render view: the same block, the intensity put back first, and the
 // two occlusion query slots it would allocate replaced by the ones the engine's call took this render, so the
 // queries the render issues still match the vertices. Nothing is allocated; the engine's call stays as it is.
+// The record and slot hooks and the rebuild are flare_core.hpp's, which Parallel Eye Rendering's flares
+// (pe_flares.hpp) share; here is Route S's use of them.
 //
-// Route S only: with Parallel Eye Rendering active nothing is recorded or rebuilt. Every hook asks the
-// multiplayer guard first. The sites are located and checked byte by byte; a miss leaves the game untouched
-// and logs why.
+// Route S only: with Parallel Eye Rendering active this rebuilds nothing. Every hook asks the multiplayer
+// guard first. The sites are located and checked byte by byte; a miss leaves the game untouched and logs why.
 
 #include <cstddef>
 

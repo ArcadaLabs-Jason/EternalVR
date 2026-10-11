@@ -55,12 +55,14 @@ enum class XrActionId : std::uint8_t {
     // Touch sensors for the thumb-rest weapon wheel (rest_wheel.hpp): the thumb rest itself (Touch
     // controllers), and the two face buttons, which can stand in for it on controllers without one. The face
     // buttons' touch beside a thumb rest, the stick's, and the trackpad's beside face touch (Index) say the
-    // thumb is elsewhere.
+    // thumb is elsewhere. Any of them, and the trigger's touch, can also be bound like a button
+    // (touch_inputs.hpp); no built-in data suggests a binding for the trigger's.
     ThumbRest,
     PrimaryTouch,
     SecondaryTouch,
     ThumbstickTouch,
     TrackpadTouch,
+    TriggerTouch,
     Count,
 };
 

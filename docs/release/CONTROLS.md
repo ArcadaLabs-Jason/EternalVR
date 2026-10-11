@@ -412,14 +412,34 @@ of the launcher.
    spot beside the buttons. A thumb rest is a touch, not a click. **Press** is on while your thumb rests
    there, **Tap** is touch and lift, **Hold** is resting it a quarter of a second. Press and Hold also fire
    when you rest your thumb there without thinking, so Tap is the easiest start. A thumb that comes straight
-   from its own buttons or stick (within 0.4 s) does not count, and neither does a thumb that only brushes
-   the rest on its way to them. A tap, or the end of a press, comes up to about 0.15 s after you lift (at
-   once when your thumb goes to a button or its stick). Neither thumb rest does anything until you give it
-   an action. With **Thumb-rest wheel** on (Play tab), a thumb rest you give an action works as a button
-   only: the wheel uses the other rest if it can, and the editor says so. It cannot under **Turn stick
-   picks**, which needs the rest of the hand without the turn stick (the left one, unless you swapped the
-   sticks) to give you turning back, nor when the other rest's partner stick has no role; then the wheel is
-   off with those controls.
+   from its own buttons or stick (within 0.4 s) does not count, and a thumb that only brushes the rest on
+   its way to them is not a tap. A tap, or the end of a press, comes up to about 0.15 s after you lift (at
+   once when your thumb goes to a button or its stick). Back from a menu or the headset's dashboard, a
+   thumb already resting does nothing until you lift it and rest again. Neither thumb rest does anything
+   until you give it an action. With **Thumb-rest wheel** on (Play tab), a thumb rest you give an action
+   works as a button only: the wheel uses the other rest if it can, and the editor says so. It cannot under
+   **Turn stick picks**, which needs the rest of the hand without the turn stick (the left one, unless you
+   swapped the sticks) to give you turning back, nor when the other rest's partner stick has no role; then
+   the wheel is off with those controls.
+
+   Controllers that can feel a thumb or finger resting on a control also list those touches, for example
+   **Right A touch**, **Left stick touch**, **Right trigger touch** or, on Index and Vive controllers,
+   **Right trackpad touch**. Each is a touch, not a click: your thumb or finger on the control without
+   pressing it. **Press**, **Tap** and **Hold** work as for a thumb rest. Using a control with that thumb
+   (pressing any button under it, pushing or clicking the stick) ends a thumb's touch, and pulling the
+   trigger ends the trigger's: a tap or hold you had started does not fire, and nothing fires again until
+   you let go and touch again. So a jump never counts as a tap of A touched, nor of B touched when your
+   thumb lies across both. A touch straight after pressing that same button (within 0.4 s) does not count;
+   one just after another control, such as letting go of the stick and touching X, does. A touch that only
+   brushes the control on the way past is no tap either, but a **Press** is on for as long as the brush
+   lasts. On Vive wands the trackpad is also the stick: a touch more than a quarter of the way out from
+   its centre counts as using the stick, so the trackpad's touch works only near the centre. Only the
+   touches your controllers have are listed (Quest and Rift and Pico 4: A/B, X/Y, the sticks and the
+   triggers; Index: those and the trackpads; Windows Mixed Reality and Vive wands: the trackpads; Vive
+   Cosmos: the sticks; Steam Frame: A, B, the sticks and the triggers; Reverb G2: none), and none does
+   anything until you give it an action. With **Thumb-rest wheel** and **Face buttons as thumb rest** on
+   (Index, Pico 4), A or B touched is that hand's rest for the wheel: give that touch an action and the
+   wheel uses the other hand's rest, as with a thumb rest above, and the editor says so.
 4. **Sticks** sets each stick's **Role**: Move, Turn or None. When you give a stick the role the other
    one has, the two swap. The turn stick's gestures (**Up**, **Down, tap**, **Down, hold**) follow it.
 5. Press **Save**. Your controls are saved for the VR settings profile in use (the editor's title names
@@ -477,7 +497,10 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
 
 - **Hand:** `left` or `right`.
 - **Button:** `trigger`, `grip`, `stick_click`, `primary` (A or X), `secondary` (B or Y), `menu`, and on
-  Quest and Rift controllers `thumbrest` (the thumb rest, a touch: see the controls editor above). Steam
+  Quest and Rift controllers `thumbrest` (the thumb rest, a touch: see the controls editor above). The
+  touches on controls, where your controllers have them: `primary_touch`, `secondary_touch`,
+  `stick_touch`, `trackpad_touch` and `trigger_touch` (A/X, B/Y, the stick, the trackpad or the trigger
+  touched, not pressed: see the controls editor above). Steam
   Frame controllers have three more: `face3` (X, or D-pad right), `face4` (Y, or D-pad up) and `shoulder`
   (the bumper); there `primary` is A or D-pad down, `secondary` B or D-pad left, and the left `menu` is
   View.
@@ -490,9 +513,10 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
   `previous_weapon`, `weapon_slot_1` to `weapon_slot_8`, `crucible`, `pause`, `dossier`, `mission_info`,
   `automap`, `recenter`.
 
-A file with a `thumbrest` line needs this version of the mod or a newer one. An older version does not
-know the line, so it ignores the whole file and uses the built-in controls for those controllers (its log
-says so).
+A file with a `thumbrest` line needs version 0.1.45 of the mod or a newer one, and a file with a touch line
+(`primary_touch`, `secondary_touch`, `stick_touch`, `trackpad_touch`, `trigger_touch`) needs this version
+or a newer one. An older version does not know the line, so it ignores the whole file and uses the built-in
+controls for those controllers (its log says so).
 
 To leave a button free, delete its line. Keep a `pause` line, or the pause menu has no button; on Touch
 controllers the left Menu button is the only Menu button the game can read. The editor opens your file

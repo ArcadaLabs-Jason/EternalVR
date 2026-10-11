@@ -7,6 +7,7 @@
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/pe_flares.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
@@ -340,6 +341,9 @@ void start(bool stereo) {
                      : h.ssdo ? " 1 while the SSDO history is per eye, else 0"
                               : " 1 while the scattering history is per eye, else 0") +
                     (taaRequested() ? " (if per-eye TAA fails closed)" : "");
+        } else if (h.object && h.flares) {
+            list += (list.empty() ? "" : ", ") + h.name + " " + h.value +
+                    " while lens flares per view are off (" + (parallelEyeFlaresLive() ? "on" : "off") + ")";
         } else if (h.object && !windowSizeLeft(h)) {
             list += (list.empty() ? "" : ", ") + h.name + (h.cap ? " at most " : " ") + h.value;
         }
@@ -416,7 +420,7 @@ void apply(bool stereo) {
     for (Held& h : g_held) {
         if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off) ||
             ((h.scatter || h.ssdo) && !historyFilterHold(h)) ||
-            (h.viewDlss && !viewDlssHolds(h.name, h.value))) {
+            (h.viewDlss && !viewDlssHolds(h.name, h.value)) || (h.flares && parallelEyeFlaresLive())) {
             continue;
         }
         holdPlacedWindow(h);

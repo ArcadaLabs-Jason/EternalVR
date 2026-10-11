@@ -30,6 +30,14 @@ enum class ButtonInput : std::uint8_t {
     // The thumb rest's touch (Touch controllers), a touch and not a switch: read as the thumb-rest wheel
     // reads it (touch_button.hpp).
     ThumbRest,
+    // The touch sensors on controls (touch_inputs.hpp), for controllers that report them: the primary and
+    // secondary buttons' (A/X, B/Y), the stick's, the trackpad's and the trigger's. A touch, not a switch,
+    // read as touch_button.hpp says: a touch that goes on to use its own control is no press.
+    PrimaryTouch,
+    SecondaryTouch,
+    StickTouch,
+    TrackpadTouch,
+    TriggerTouch,
     Count,
 };
 

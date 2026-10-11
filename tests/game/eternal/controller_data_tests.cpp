@@ -95,13 +95,15 @@ std::string_view expectedProfile(Controller controller) {
 
 // The gameplay actions a family leaves unbound on a hand, because the controller has no input for them.
 bool expectedUnbound(Controller controller, XrActionId action, Hand hand) {
-    // Only Touch controllers have a thumb rest. The face buttons' and the stick's touch are added by the
-    // layer, and only with the wheel on (rest_touch_bindings.hpp).
+    // Only Touch controllers have a thumb rest. The face buttons', the stick's, the trackpad's and the
+    // trigger's touch are added by the layer, only with the wheel on or a map binding them
+    // (rest_touch_bindings.hpp).
     if (action == XrActionId::ThumbRest) {
         return controller != Controller::OculusTouch;
     }
     if (action == XrActionId::PrimaryTouch || action == XrActionId::SecondaryTouch ||
-        action == XrActionId::ThumbstickTouch || action == XrActionId::TrackpadTouch) {
+        action == XrActionId::ThumbstickTouch || action == XrActionId::TrackpadTouch ||
+        action == XrActionId::TriggerTouch) {
         return true;
     }
     // The Frame has every button on both hands: four face buttons, a bumper and a Menu or View button.
@@ -150,6 +152,16 @@ XrActionId gameplayAction(ButtonInput input) {
         return XrActionId::Shoulder;
     case ButtonInput::ThumbRest:
         return XrActionId::ThumbRest;
+    case ButtonInput::PrimaryTouch:
+        return XrActionId::PrimaryTouch;
+    case ButtonInput::SecondaryTouch:
+        return XrActionId::SecondaryTouch;
+    case ButtonInput::StickTouch:
+        return XrActionId::ThumbstickTouch;
+    case ButtonInput::TrackpadTouch:
+        return XrActionId::TrackpadTouch;
+    case ButtonInput::TriggerTouch:
+        return XrActionId::TriggerTouch;
     case ButtonInput::Menu:
     case ButtonInput::Count:
         break;

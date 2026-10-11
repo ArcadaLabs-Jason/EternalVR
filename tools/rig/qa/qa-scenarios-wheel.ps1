@@ -1,5 +1,5 @@
 # The thumb rests' scenarios: the weapon wheel (docs/VR_CONTROLLERS.md, "The thumb-rest wheel") and, at the
-# end, a rest bound like a button. Dot-sourced by
+# end, a rest bound like a button and a touch on a control bound like a button. Dot-sourced by
 # qa-suite.ps1 after qa-scenarios.ps1: added to $script:QaScenarios before the launcher's end-to-end suite.
 # Scripted input stands in for the thumb rests (left.thumbrest = 1; with ETERNALVR_TEST_INPUT both hands
 # count as having one). The window is 1 s here (ETERNALVR_THUMBREST_WINDOW) so the file's timing cannot miss
@@ -422,6 +422,166 @@ $restButtonScenarios = @(
     }
 )
 
+# A touch on a control bound like a button (docs/VR_CONTROLLERS.md, "Touch sensors as buttons"): the player's
+# Touch file binds "right.primary_touch.tap" (A touched, not pressed) to weapon_slot_2, as the rest button's
+# scenarios bind the rest, with the same 1 s hold time and 0.4 s touch. A press of A while touched is a jump and
+# ends the touch: no slot 2. So is a press of A with the thumb also on B when B's touch is the one bound.
+$script:QaTouchTap = '"right.primary_touch.tap" = "weapon_slot_2"'
+$script:QaTouchTapB = '"right.secondary_touch.tap" = "weapon_slot_2"'
+$script:QaTouchA = @('right.primary_touch = 1')
+$script:QaTouchB = @('right.secondary_touch = 1')
+$script:QaTouchLine = 'controllers: touches bound as buttons (using a control under that thumb or finger ends one): '
+# The scripted touch reaching the layer (ETERNALVR_CONTROLLERS_TRACE), bound or not.
+$script:QaTouchTraceA = 'controllers: trace: touch sensors: right primary_touch'
+
+# The taps and holds summed over the 10 s lines of a touch bound like a button ('primary_touch', on the right
+# hand unless $Hand says), the touches its own controls (a button under that thumb pressed) ended, and the
+# landings voided straight after the control under the touch.
+function Get-QaTouchButtonCounts($Ctx, [string]$Touch = 'primary_touch', [string]$Hand = 'right') {
+    $n = [pscustomobject]@{ Taps = 0; Holds = 0; Ended = 0; Voided = 0 }
+    foreach ($l in @(Get-QaMatches $Ctx "$Hand $Touch button, last 10 s:")) {
+        if ($l -match ' (\d+) tap\(s\), (\d+) hold\(s\), (\d+) ended by its own control') {
+            $n.Taps += [int]$Matches[1]; $n.Holds += [int]$Matches[2]; $n.Ended += [int]$Matches[3]
+        }
+        if ($l -match ' (\d+) landing\(s\) voided') { $n.Voided += [int]$Matches[1] }
+    }
+    return $n
+}
+
+$touchButtonScenarios = @(
+    @{
+        Name = 'touchbtn-tap'; Kind = 'game'
+        Proves = 'A touch on a control bound like a button reaches the game: the player''s Touch file binds right.primary_touch.tap to weapon_slot_2, A touched (not pressed) for 0.4 s presses weapon_slot_2 once and the heavy cannon comes up'
+        Env = @($script:QaRestHold, 'ETERNALVR_CONTROLLERS_TRACE=1')
+        Prepare = { param($c) New-QaRestControls $c $script:QaTouchTap }
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 12
+            Write-QaInput $c $script:QaTouchA; Wait-QaSeconds $c 0.4
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
+            Save-QaShot $c 'after'
+            [void](Wait-QaLog $c 'right primary_touch button, last 10 s:' 20)
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c "controller data '$($c.ControlsFile)' replaces the built-in data of its profile"
+            Test-QaPresent $c 'controllers: 1 touch binding(s) for touches bound as buttons added to the /interaction_profiles/oculus/touch_controller data'
+            Test-QaPresent $c ($script:QaTouchLine + 'right.primary_touch.tap = weapon_slot_2')
+            Test-QaPresent $c $script:QaTouchTraceA
+            Test-QaPresent $c 'touch button: the right controller reports primary_touch'
+            Test-QaActionLines $c @('weapon_slot_2')
+            $n = Get-QaTouchButtonCounts $c
+            Add-QaResult $c 'the touch button counted 1 tap, 0 holds' ($n.Taps -eq 1 -and $n.Holds -eq 0) "$($n.Taps) tap(s), $($n.Holds) hold(s)"
+            $held = Get-QaHeldItems $c 'controllers: action weapon_slot_2'
+            $first = @($held.After)[0]
+            Add-QaResult $c 'the heavy cannon came up after the tap' ($first -match 'heavy_cannon' -and $held.Before -ne $first) "before '$($held.Before)', after: $($held.After -join ', ')"
+        }
+    },
+    @{
+        Name = 'touchbtn-unbound'; Kind = 'game'
+        Proves = 'The control for touchbtn-tap: the built-in Touch data (no touch bound), the same 0.4 s touch of A reaches the layer (its trace line): no touch binding is added, nothing is pressed and the held item stays'
+        Env = @($script:QaRestHold, 'ETERNALVR_CONTROLLERS_TRACE=1')
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 12
+            Write-QaInput $c $script:QaTouchA; Wait-QaSeconds $c 0.4
+            Write-QaInput $c @(); Wait-QaSeconds $c 12
+        }
+        Asserts = {
+            param($c)
+            Test-QaAbsent $c 'for touches bound as buttons added'
+            Test-QaAbsent $c 'touches bound as buttons'
+            # 'touch button:' (not 'touch button': the prompts line names 'oculus_touch buttons').
+            Test-QaAbsent $c 'touch button:'
+            Test-QaAbsent $c 'primary_touch button'
+            Test-QaPresent $c $script:QaTouchTraceA
+            Test-QaActionLines $c @()
+            $items = @(Get-QaMatches $c "held item '[^']*'" -Regex | ForEach-Object { if ($_ -match "held item '([^']*)'") { $Matches[1] } } | Select-Object -Unique)
+            Add-QaResult $c 'the held item never changed' ($items.Count -eq 1) "held: $($items -join ', ')"
+        }
+    },
+    @{
+        Name = 'touchbtn-press'; Kind = 'game'
+        Proves = 'A touch that goes on to press its own control is no tap: with right.primary_touch.tap bound, A touched 0.2 s, pressed 0.3 s (a jump), let go with the thumb still on it 0.3 s, then lifted: jump is pressed once and weapon_slot_2 never; then a plain 0.4 s touch still taps it once'
+        Env = @($script:QaRestHold, 'ETERNALVR_CONTROLLERS_TRACE=1')
+        Prepare = { param($c) New-QaRestControls $c $script:QaTouchTap }
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 12
+            Write-QaInput $c $script:QaTouchA; Wait-QaSeconds $c 0.2
+            Write-QaInput $c ($script:QaTouchA + 'right.primary = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $script:QaTouchA; Wait-QaSeconds $c 0.3
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
+            Write-QaInput $c $script:QaTouchA; Wait-QaSeconds $c 0.4
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
+            [void](Wait-QaLog $c 'right primary_touch button, last 10 s:' 20)
+            Wait-QaSeconds $c 10
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c ($script:QaTouchLine + 'right.primary_touch.tap = weapon_slot_2')
+            Test-QaActionLines $c @('jump', 'weapon_slot_2')
+            $n = Get-QaTouchButtonCounts $c
+            Add-QaResult $c 'the touch button counted 1 tap, 0 holds, 1 ended by A' ($n.Taps -eq 1 -and $n.Holds -eq 0 -and $n.Ended -eq 1) "$($n.Taps) tap(s), $($n.Holds) hold(s), $($n.Ended) ended by its own control"
+        }
+    },
+    @{
+        Name = 'touchbtn-face'; Kind = 'game'
+        Proves = 'One thumb works every button under it: with right.secondary_touch.tap bound (B touched), the thumb on A and B 0.2 s, A pressed 0.3 s (a jump), let go with the thumb still on both 0.3 s, then lifted: jump is pressed once and weapon_slot_2 never; then a plain 0.4 s touch of B still taps it once'
+        Env = @($script:QaRestHold, 'ETERNALVR_CONTROLLERS_TRACE=1')
+        Prepare = { param($c) New-QaRestControls $c $script:QaTouchTapB }
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 12
+            $both = $script:QaTouchA + $script:QaTouchB
+            Write-QaInput $c $both; Wait-QaSeconds $c 0.2
+            Write-QaInput $c ($both + 'right.primary = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $both; Wait-QaSeconds $c 0.3
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
+            Write-QaInput $c $script:QaTouchB; Wait-QaSeconds $c 0.4
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
+            [void](Wait-QaLog $c 'right secondary_touch button, last 10 s:' 20)
+            Wait-QaSeconds $c 10
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c ($script:QaTouchLine + 'right.secondary_touch.tap = weapon_slot_2')
+            Test-QaPresent $c 'controllers: trace: touch sensors: right primary_touch, right secondary_touch'
+            Test-QaActionLines $c @('jump', 'weapon_slot_2')
+            $n = Get-QaTouchButtonCounts $c 'secondary_touch'
+            Add-QaResult $c 'the B touch button counted 1 tap, 0 holds, 1 ended by A' ($n.Taps -eq 1 -and $n.Holds -eq 0 -and $n.Ended -eq 1) "$($n.Taps) tap(s), $($n.Holds) hold(s), $($n.Ended) ended by its own control"
+        }
+    },
+    @{
+        Name = 'touchbtn-stick'; Kind = 'game'
+        Proves = 'Only the control under a touch voids its landing: with left.primary_touch.tap bound (X touched), the left stick pushed 0.5 s and let go, X touched 0.15 s later for 0.2 s: weapon_slot_2 is pressed once, no landing voided'
+        Env = @($script:QaRestHold, 'ETERNALVR_CONTROLLERS_TRACE=1')
+        Prepare = { param($c) New-QaRestControls $c '"left.primary_touch.tap" = "weapon_slot_2"' }
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 12
+            Write-QaInput $c @('left.stick = 0, 1'); Wait-QaSeconds $c 0.5
+            Write-QaInput $c @(); Wait-QaSeconds $c 0.15
+            Write-QaInput $c @('left.primary_touch = 1'); Wait-QaSeconds $c 0.2
+            Write-QaInput $c @(); Wait-QaSeconds $c 2
+            [void](Wait-QaLog $c 'left primary_touch button, last 10 s:' 20)
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c ($script:QaTouchLine + 'left.primary_touch.tap = weapon_slot_2')
+            Test-QaPresent $c 'controllers: trace: touch sensors: left primary_touch'
+            Test-QaActionLines $c @('weapon_slot_2')
+            $n = Get-QaTouchButtonCounts $c 'primary_touch' 'left'
+            Add-QaResult $c 'the X touch button counted 1 tap, 0 holds, 0 landings voided' ($n.Taps -eq 1 -and $n.Holds -eq 0 -and $n.Voided -eq 0) "$($n.Taps) tap(s), $($n.Holds) hold(s), $($n.Voided) landing(s) voided"
+        }
+    }
+)
+
 # Before the launcher's end-to-end suite, which stays last.
 $e2e = @($script:QaScenarios | Where-Object { $_.Kind -eq 'e2e' })
-$script:QaScenarios = @($script:QaScenarios | Where-Object { $_.Kind -ne 'e2e' }) + $wheelScenarios + $restButtonScenarios + $e2e
+$script:QaScenarios = @($script:QaScenarios | Where-Object { $_.Kind -ne 'e2e' }) + $wheelScenarios + $restButtonScenarios + $touchButtonScenarios + $e2e

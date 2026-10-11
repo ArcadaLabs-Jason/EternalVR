@@ -56,14 +56,18 @@ namespace EternalVR.Launcher
         private int familyIndex = -1;
         private bool filling;
         private readonly ThumbRestMode thumbRestWheel;
+        private readonly bool thumbRestFaceTouch;
 
         /// <param name="lastProfile">The interaction profile of the controllers the last game reported, or null.</param>
         /// <param name="thumbRestWheel">The Play tab's Thumb-rest wheel, for the note on a bound thumb rest.</param>
-        public ControlsDialog(ControlsFolder folder, Handedness weaponHand, string lastProfile, ThumbRestMode thumbRestWheel, Log log)
+        /// <param name="thumbRestFaceTouch">The Play tab's Face buttons as thumb rest, for the same note on a bound A/B or X/Y touch.</param>
+        public ControlsDialog(ControlsFolder folder, Handedness weaponHand, string lastProfile, ThumbRestMode thumbRestWheel,
+            bool thumbRestFaceTouch, Log log)
         {
             this.folder = folder;
             this.log = log;
             this.thumbRestWheel = thumbRestWheel;
+            this.thumbRestFaceTouch = thumbRestFaceTouch;
             Text = "Edit controls: " + (folder.Profile == null ? "no VR settings profile" : "VR settings profile " + folder.Profile);
             SuspendLayout();
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -172,6 +176,11 @@ namespace EternalVR.Launcher
                     var name = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
                     if (input == ButtonInput.ThumbRest)
                         tips.SetToolTip(name, "A touch, not a click. Press: on while your thumb rests. Tap: touch and lift. Hold: rest a quarter second.");
+                    else if (TouchSensors.IsControlTouch(input))
+                        tips.SetToolTip(name, "A touch, not a click: your thumb or finger on it without pressing. Press: on while you touch it, "
+                            + "even brushing past. Tap: touch and lift (a brush is no tap). Hold: touch it a quarter second. Using any button "
+                            + "or stick under that thumb (for the trigger's touch, pulling the trigger) ends the touch and fires nothing more "
+                            + "until you let go and touch again.");
                     var cells = AllPresses.Select(press =>
                     {
                         var box = ActionList();
@@ -424,7 +433,7 @@ namespace EternalVR.Launcher
         {
             var file = edit.PlayerFile == null ? "Built-in controls" : "Your file: " + Path.GetFileName(edit.PlayerFile);
             fileState.Text = file + (edit.IsModified ? " (changed, not saved yet)" : string.Empty);
-            var note = edit.RestWheelNote(thumbRestWheel, WeaponHand);
+            var note = edit.RestWheelNote(thumbRestWheel, WeaponHand, thumbRestFaceTouch);
             restNote.Text = note ?? string.Empty;
             restNote.Visible = note != null;
 

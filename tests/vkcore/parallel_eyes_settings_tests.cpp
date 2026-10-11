@@ -261,6 +261,12 @@ TEST_CASE("ETERNALVR_TEST_VIEW_CLONE_SKIP: slot0 by default; set, exactly the it
     CHECK(tblock.warnings.empty());
     CHECK(tblock.cloneSkip.groups == (pe::kSkipSlot0 | pe::kSkipTransparencyBlock));
     CHECK(pe::cloneSkipText(tblock.cloneSkip) == "slot0,tblock");
+    // View 1 binds its own stencil view by default; stencil leaves the engine's.
+    CHECK((byDefault.groups & pe::kSkipStencil) == 0);
+    const pe::Settings stencil = read(onWith(L"ETERNALVR_TEST_VIEW_CLONE_SKIP", L"slot0, Stencil"));
+    CHECK(stencil.warnings.empty());
+    CHECK(stencil.cloneSkip.groups == (pe::kSkipSlot0 | pe::kSkipStencil));
+    CHECK(pe::cloneSkipText(stencil.cloneSkip) == "slot0,stencil");
 }
 
 TEST_CASE("ETERNALVR_TEST_VIEW_CLONE_SKIP: an item that does not parse is a warning") {

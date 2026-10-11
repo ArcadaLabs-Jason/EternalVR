@@ -320,6 +320,7 @@ int queueOrphans(const Builder& b) {
 }
 
 int releaseClones(const Map* map, std::string& waiting) {
+    releaseStencilViews();
     std::lock_guard lock(g_namesMutex);
     int purged = 0;
     auto purge = [&purged](const std::string& name) {

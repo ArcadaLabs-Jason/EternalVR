@@ -45,9 +45,9 @@ MapperSettings sanitized(MapperSettings settings, const BindingProfile& profile)
     const ArmGestures arms(settings.throwGesture, settings.swing);
     settings.throwGesture = arms.throwSettings();
     settings.swing = arms.swingSettings();
-    // One rest, one job: a thumb rest bound like a button is not the wheel's.
+    // One rest, one job: a rest of the wheel's bound like a button is not the wheel's.
     for (const Hand hand : {Hand::Left, Hand::Right}) {
-        if (bindsInput(profile, hand, ButtonInput::ThumbRest)) {
+        if (bindsWheelRest(profile, settings, hand)) {
             settings.restSensors[handIndex(hand)] = false;
         }
     }
@@ -92,6 +92,28 @@ bool gestureActive(StickGesture gesture, const TurnStickOutput& output) {
 
 } // namespace
 
+std::array<std::array<OwnControls, kControlTouchCount>, 2> MapperSettings::defaultTouchOwnControls() {
+    std::array<OwnControls, kControlTouchCount> hand;
+    for (std::size_t i = 0; i < kControlTouchCount; ++i) {
+        hand[i] = defaultOwnControls(kControlTouches[i]);
+    }
+    return {hand, hand};
+}
+
+std::array<std::array<OwnControls, kControlTouchCount>, 2> MapperSettings::defaultTouchLandingControls() {
+    std::array<OwnControls, kControlTouchCount> hand;
+    for (std::size_t i = 0; i < kControlTouchCount; ++i) {
+        hand[i] = defaultLandingControls(kControlTouches[i]);
+    }
+    return {hand, hand};
+}
+
+bool bindsWheelRest(const BindingProfile& profile, const MapperSettings& settings, Hand hand) {
+    return bindsInput(profile, hand, ButtonInput::ThumbRest) ||
+           (faceTouchIsRest(settings, hand) && (bindsInput(profile, hand, ButtonInput::PrimaryTouch) ||
+                                                bindsInput(profile, hand, ButtonInput::SecondaryTouch)));
+}
+
 InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
     : profile_(std::move(profile)), settings_(sanitized(settings, profile_)), turnStick_(settings_.turnStick),
       turn_(settings_.turn), handsJump_(settings_.handsJump),
@@ -107,6 +129,15 @@ InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
         hand.tapHold[buttonIndex(ButtonInput::Menu)] =
             TapHoldDetector(settings_.buttonHoldSeconds, settings_.menuTapSeconds);
         hand.thumbRest = TouchButton(settings_.buttonHoldSeconds, restWheel_.settings().holdOverSeconds);
+        hand.touches.fill(TouchButton(settings_.buttonHoldSeconds, restWheel_.settings().holdOverSeconds,
+                                      TouchKind::Control));
+        // A mapper built in play (after the headset's dashboard, a gap in controller input, or another
+        // family's controllers) may find a thumb or finger already on a sensor: that touch was not begun for
+        // this mapper, so it presses nothing until it lifts and lands again.
+        hand.thumbRest.startCancelled();
+        for (TouchButton& touch : hand.touches) {
+            touch.startCancelled();
+        }
     }
 }
 
@@ -142,7 +173,9 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
 
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         HandButtons& buttons = hands_[handIndex(hand)];
-        const ButtonLevels levels = sampleButtons(buttons, frame.hand(hand), dt);
+        const ButtonLevels levels =
+            sampleButtons(buttons, frame.hand(hand), settings_.touchOwnControls[handIndex(hand)],
+                          settings_.touchLandingControls[handIndex(hand)], dt);
         // A grip steadying the weapon is holding it, not asking for an action. The suppression
         // outlasts the support until the grip is released, and covers the release frame itself so
         // that a tap binding does not fire on it.
@@ -240,7 +273,11 @@ std::string InputMapper::summary() const {
 }
 
 InputMapper::ButtonLevels
-InputMapper::sampleButtons(HandButtons& buttons, const HandState& hand, float dtSeconds) {
+InputMapper::sampleButtons(HandButtons& buttons,
+                           const HandState& hand,
+                           const std::array<OwnControls, kControlTouchCount>& own,
+                           const std::array<OwnControls, kControlTouchCount>& landing,
+                           float dtSeconds) {
     ButtonLevels levels;
     levels.down[buttonIndex(ButtonInput::Trigger)] = buttons.trigger.update(hand.trigger).down;
     levels.down[buttonIndex(ButtonInput::Grip)] = buttons.grip.update(hand.grip).down;
@@ -262,6 +299,21 @@ InputMapper::sampleButtons(HandButtons& buttons, const HandState& hand, float dt
     levels.down[r] = rest.down;
     levels.tap[r] = rest.tap;
     levels.hold[r] = rest.hold;
+    // A touch on a control: its own filter too, and its own control in use ends it (touch_button.hpp).
+    const OwnControlLevels analog{levels.down[buttonIndex(ButtonInput::Trigger)],
+                                  levels.down[buttonIndex(ButtonInput::Grip)]};
+    for (std::size_t t = 0; t < kControlTouchCount; ++t) {
+        const ButtonInput input = kControlTouches[t];
+        TouchButtonSample sample;
+        sample.raw = touchSensed(hand, input);
+        sample.ownControl = ownControlUsed(hand, own[t], analog);
+        sample.ownLanding = ownControlUsed(hand, landing[t], analog);
+        const TouchButtonOutput touch = buttons.touches[t].update(sample, dtSeconds);
+        const std::size_t i = buttonIndex(input);
+        levels.down[i] = touch.down;
+        levels.tap[i] = touch.tap;
+        levels.hold[i] = touch.hold;
+    }
     return levels;
 }
 
@@ -324,6 +376,9 @@ void InputMapper::consumeHeld() {
             }
         }
         hand.thumbRest.cancel();
+        for (TouchButton& touch : hand.touches) {
+            touch.cancel();
+        }
     }
     turnStick_.cancelSweep();
     restWheel_.cancel();

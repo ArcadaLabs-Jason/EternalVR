@@ -10,6 +10,7 @@
 #include "features/input/interaction_profiles.hpp"
 #include "features/input/player_controller_data.hpp"
 #include "features/input/rest_touch_bindings.hpp"
+#include "features/input/touch_inputs.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
 
@@ -116,62 +117,85 @@ XrResult suggestWithBumperNames(XrInput& xr, const input::ControllerData& data, 
     return r;
 }
 
-// A thumb rest bound like a button (features/input/touch_button.hpp) in the map for the handedness, when the
-// runtime refused the rests' touch: each binding does nothing this session.
-void logRefusedRestButtons(const input::ControllerData& data) {
-    const auto map = data.maps.find(settings().handedness);
-    if (map == data.maps.end()) {
+// The touch sensors bound like buttons (a thumb rest, features/input/touch_button.hpp, or a touch on a
+// control, touch_inputs.hpp) in the map for the handedness whose binding the runtime refused: one line per
+// binding `before` suggested and `after` leaves out (a key whose sensor the family lacks had none to lose).
+void logRefusedTouchButtons(const input::ControllerData& before, const input::ControllerData& after) {
+    const auto map = before.maps.find(settings().handedness);
+    if (map == before.maps.end()) {
         return;
     }
     for (const auto& [key, value] : map->second) {
         const auto parsed = input::parseBindingKey(key);
         const auto* button = parsed ? std::get_if<input::ButtonKey>(&*parsed) : nullptr;
-        if (button != nullptr && button->input == input::ButtonInput::ThumbRest &&
-            value != input::kUnboundValue) {
-            EVR_LOG(
-                "%s: %s: '%s' is bound (%s) but the runtime refused the thumb-rest touch; that binding does "
-                "nothing this session",
-                kTag, data.profilePath.c_str(), key.c_str(), value.c_str());
+        const auto action = button != nullptr ? input::touchAction(button->input) : std::nullopt;
+        if (!action || value == input::kUnboundValue) {
+            continue;
+        }
+        const input::SuggestedBinding* had = before.find(*action, button->hand);
+        if (had != nullptr && after.find(*action, button->hand) == nullptr) {
+            EVR_LOG("%s: %s: '%s' is bound (%s) but the runtime refused its touch binding (%s); that binding "
+                    "does nothing this session",
+                    kTag, before.profilePath.c_str(), key.c_str(), value.c_str(), had->path.c_str());
         }
     }
 }
 
-// A refused profile is suggested again without the thumb-rest wheel's touch bindings
-// (rest_touch_bindings.hpp), in two steps, and what was left out is dropped from `data`: first without the
-// sensors that only tell the thumb is elsewhere (the rests still count, a thumb on its stick or buttons is
-// seen only when pressed or pushed), then without any (that family has no thumb rest this session).
+// What a retry of a refused profile leaves out, for the log.
+std::string retryText(const input::ControllerData& data, const input::TouchRetryStep& step) {
+    switch (step.retry) {
+    case input::TouchRetry::WithoutVeto:
+        return "the stick, trackpad and face-button touch read as the thumb elsewhere";
+    case input::TouchRetry::WithoutTouchButtons:
+        return std::string("the touches bound as buttons") +
+               (input::hasVetoTouchBindings(data) ? " and the touch read as the thumb elsewhere" : "") +
+               (input::hasRestTouchBindings(step.data) ? ", keeping the rests' touch" : "");
+    case input::TouchRetry::WithoutRestTouch:
+        break;
+    }
+    return "the thumb rests' touch bindings";
+}
+
+// What a retry that went through costs, for the log.
+std::string retryCost(const input::TouchRetryStep& step) {
+    switch (step.retry) {
+    case input::TouchRetry::WithoutVeto:
+        return "suggested without the touch beside the rest; the thumb rest still counts, a thumb on its "
+               "stick or buttons only when it presses or pushes";
+    case input::TouchRetry::WithoutTouchButtons:
+        return std::string("suggested without the touches bound as buttons") +
+               (input::hasRestTouchBindings(step.data) ? "; the rests still count" : "");
+    case input::TouchRetry::WithoutRestTouch:
+        break;
+    }
+    // Only a rest's touch is left to drop here (the steps before took the rest): the wheel's rests, or with
+    // the wheel off a thumb rest bound like a button.
+    return std::string("suggested without the touch bindings; ") +
+           (settings().thumbRest.mode != input::RestWheelMode::Off
+                ? "the thumb-rest wheel is off for these controllers"
+                : "their thumb rests sense nothing this session");
+}
+
+// A refused profile is suggested again without the touch bindings the layer added
+// (rest_touch_bindings.hpp, input::touchRetries), in steps, and what was left out is dropped from `data`:
+// first without the sensors that only tell the thumb is elsewhere (the rests still count, a thumb on its
+// stick or buttons is seen only when pressed or pushed), then also without the touches bound like buttons
+// (each logged), then without any (that family has no thumb rest this session).
 bool suggestBindings(XrInput& xr, input::ControllerData& data) {
     const char* names = "";
     XrResult r = suggestWithBumperNames(xr, data, names);
-    if (XR_FAILED(r) && input::hasVetoTouchBindings(data)) {
-        char text[XR_MAX_RESULT_STRING_SIZE];
-        EVR_LOG("%s: %s: the runtime refuses the bindings (%s); trying again without the stick, trackpad and "
-                "face-button touch read beside the thumb rest",
-                kTag, data.profilePath.c_str(), xrText(r, text));
-        input::ControllerData without = input::withoutVetoTouch(data);
-        r = suggestWithBumperNames(xr, without, names);
-        if (XR_SUCCEEDED(r)) {
-            data = std::move(without);
-            EVR_LOG(
-                "%s: %s: suggested without the touch beside the rest; the thumb rest still counts, a thumb "
-                "on its stick or buttons only when it presses or pushes",
-                kTag, data.profilePath.c_str());
-        }
-    }
-    if (XR_FAILED(r) && input::hasRestTouchBindings(data)) {
-        char text[XR_MAX_RESULT_STRING_SIZE];
-        EVR_LOG("%s: %s: the runtime refuses the bindings (%s); trying again without the thumb rests' touch "
-                "bindings",
-                kTag, data.profilePath.c_str(), xrText(r, text));
-        input::ControllerData without = input::withoutRestTouch(data);
-        r = suggestWithBumperNames(xr, without, names);
-        if (XR_SUCCEEDED(r)) {
-            data = std::move(without);
-            EVR_LOG("%s: %s: suggested without the touch bindings; %s", kTag, data.profilePath.c_str(),
-                    settings().thumbRest.mode != input::RestWheelMode::Off
-                        ? "the thumb-rest wheel is off for these controllers"
-                        : "their thumb rests sense nothing this session");
-            logRefusedRestButtons(data);
+    if (XR_FAILED(r)) {
+        for (input::TouchRetryStep& step : input::touchRetries(data)) {
+            char text[XR_MAX_RESULT_STRING_SIZE];
+            EVR_LOG("%s: %s: the runtime refuses the bindings (%s); trying again without %s", kTag,
+                    data.profilePath.c_str(), xrText(r, text), retryText(data, step).c_str());
+            r = suggestWithBumperNames(xr, step.data, names);
+            if (XR_SUCCEEDED(r)) {
+                EVR_LOG("%s: %s: %s", kTag, data.profilePath.c_str(), retryCost(step).c_str());
+                logRefusedTouchButtons(data, step.data);
+                data = std::move(step.data);
+                break;
+            }
         }
     }
     if (XR_FAILED(r)) {
@@ -215,7 +239,8 @@ std::string currentProfile(const XrInput& xr, State& s, input::Hand hand) {
 
 // The touch bindings of the thumb-rest wheel a family's data lacks (a player's file from before it), added
 // for this session (rest_touch_bindings.hpp); with the wheel off, only to a family whose maps bind a thumb
-// rest like a button.
+// rest like a button. Then the touches on controls its maps bind like buttons (touch_inputs.hpp): none for
+// a family whose maps bind none, which the built-in maps do not.
 void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
     const bool wheelOn = settings.thumbRest.mode != input::RestWheelMode::Off;
     for (input::ControllerData& d : data) {
@@ -224,6 +249,10 @@ void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
         if (const std::size_t added = input::addRestTouchBindings(d, options); added > 0) {
             EVR_LOG("%s: %zu touch binding(s) for the %s added to the %s data", kTag, added,
                     wheelOn ? "thumb-rest wheel" : "thumb rest bound as a button", d.profilePath.c_str());
+        }
+        if (const std::size_t added = input::addBoundTouchBindings(d); added > 0) {
+            EVR_LOG("%s: %zu touch binding(s) for touches bound as buttons added to the %s data", kTag, added,
+                    d.profilePath.c_str());
         }
     }
 }

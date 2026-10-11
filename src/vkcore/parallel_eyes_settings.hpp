@@ -59,6 +59,9 @@ enum CloneSkipGroup : std::uint32_t {
     // tblock: the transparency pass's own parameter block keeps the engine's scene mips and refraction mask
     // (view 1's glass then refracts view 0's picture)
     kSkipTransparencyBlock = 1u << 6,
+    // stencil: view 1 binds the device context's stencil view (view 0's depth): its augment outline follows
+    // view 0's demons
+    kSkipStencil = 1u << 7,
 };
 
 struct CloneSkip {

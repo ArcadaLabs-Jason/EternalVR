@@ -24,6 +24,11 @@ constexpr std::array<std::pair<ButtonInput, std::string_view>, kButtonInputCount
     {ButtonInput::Shoulder, "shoulder"},
     {ButtonInput::Menu, "menu"},
     {ButtonInput::ThumbRest, "thumbrest"},
+    {ButtonInput::PrimaryTouch, "primary_touch"},
+    {ButtonInput::SecondaryTouch, "secondary_touch"},
+    {ButtonInput::StickTouch, "stick_touch"},
+    {ButtonInput::TrackpadTouch, "trackpad_touch"},
+    {ButtonInput::TriggerTouch, "trigger_touch"},
 }};
 
 constexpr std::array<std::pair<PressKind, std::string_view>, 3> kPressNames{{

@@ -458,6 +458,11 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
 // ensureMapper, under mapperMutex, once it built a new mapper: its wheel counts from zero again, and so do
 // the 10 s touch lines (their clock runs on).
 void restartRestWheelStats();
+// The touches on controls bound like buttons (touch_buttons_log.cpp, features/input/touch_inputs.hpp). The
+// mapper, under mapperMutex, after it ran (from noteRestWheel): their log lines; and from
+// restartRestWheelStats, their counts from zero again.
+void noteTouchButtons(const input::InputFrame& frame, const input::InputMapper& mapper, float dt);
+void restartTouchButtonStats();
 // installGameHooks, with the thumb-rest wheel on: finds the game's wheel open delay
 // (weaponWheel_HoldTimeForOpeningWheel) and, when the player turned the wheel's slowdown off,
 // weaponWheel_slowTimeScale (each logged when not found).

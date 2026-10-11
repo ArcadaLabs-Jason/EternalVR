@@ -31,7 +31,8 @@ constexpr SkipName kSkipGroups[] = {{L"slot0", kSkipSlot0},
                                     {L"flares", kSkipFlares},
                                     {L"mblur", kSkipMotionBlur},
                                     {L"refract", kSkipRefraction},
-                                    {L"tblock", kSkipTransparencyBlock}};
+                                    {L"tblock", kSkipTransparencyBlock},
+                                    {L"stencil", kSkipStencil}};
 constexpr std::uint32_t kFieldLimit = 0x1000; // a device context offset is below it, an RVA at or above it
 
 std::wstring trim(std::wstring_view text) {
@@ -387,10 +388,9 @@ CloneSkip readCloneSkip(std::wstring_view list, std::vector<std::string>& warnin
             }
         }
         if (!known) {
-            warnings.push_back(
-                "ETERNALVR_TEST_VIEW_CLONE_SKIP: '" + narrow(item) +
-                "' is not slot0, dof, gui, flares, mblur, refract, tblock, none, a slot's RVA (0x66E3180) or "
-                "dc+<offset> (dc+0x5E0); ignored");
+            warnings.push_back("ETERNALVR_TEST_VIEW_CLONE_SKIP: '" + narrow(item) +
+                               "' is not slot0, dof, gui, flares, mblur, refract, tblock, stencil, none, a "
+                               "slot's RVA (0x66E3180) or dc+<offset> (dc+0x5E0); ignored");
         }
         any = any || known;
     });

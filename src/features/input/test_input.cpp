@@ -59,6 +59,7 @@ std::optional<bool>* buttonOf(TestHand& h, std::string_view key) {
         {"secondary_touch", &h.secondaryTouch},
         {"thumbstick_touch", &h.stickTouch},
         {"trackpad_touch", &h.trackpadTouch},
+        {"trigger_touch", &h.triggerTouch},
     };
     for (const auto& [name, button] : buttons) {
         if (name == key) {
@@ -142,8 +143,8 @@ TestInput parseTestInput(std::string_view text) {
             h.velocity = Vec3{v[0], v[1], v[2]};
         } else {
             issue("unknown input (trigger, grip, stick, primary, secondary, face3, face4, shoulder, click, "
-                  "menu, thumbrest, primary_touch, secondary_touch, thumbstick_touch, trackpad_touch, aim, "
-                  "position, velocity)");
+                  "menu, thumbrest, primary_touch, secondary_touch, thumbstick_touch, trackpad_touch, "
+                  "trigger_touch, aim, position, velocity)");
         }
     }
     return input;
@@ -179,6 +180,7 @@ void applyTestInput(const TestInput& input, InputFrame& frame) {
         h.secondaryTouch = t.secondaryTouch.value_or(h.secondaryTouch);
         h.stickTouch = t.stickTouch.value_or(h.stickTouch);
         h.trackpadTouch = t.trackpadTouch.value_or(h.trackpadTouch);
+        h.triggerTouch = t.triggerTouch.value_or(h.triggerTouch);
         const Vec3 head = frame.head.poseValid ? frame.head.pose.position : Vec3{};
         if (const auto pose = testHandPose(input, which, head)) {
             h.poseValid = true;

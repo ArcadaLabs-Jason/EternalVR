@@ -1,5 +1,6 @@
 #include "vkcore/view_clones.hpp"
 
+#include "vkcore/clone_limits.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/view_clone_make.hpp"
@@ -140,13 +141,10 @@ struct Source {
 };
 std::vector<Source> g_sources; // render thread only
 int g_builds = 0;
-// Changes of the engine's targets before the clones turn off (the first set counts as one). With stable names
-// a rebuild leaves only its render target objects behind (about 40 KB of CPU memory); with a new set of names
-// each build (ETERNALVR_TEST_VIEW_CLONE_NAMES=build) it left the whole old set allocated until a map load.
-constexpr int kMaxBuilds = 32;
-constexpr int kMaxBuildsNewNames = 8;
-int g_remakes = 0; // builds after the engine freed a clone
-constexpr int kMaxRemakes = 64;
+using clone_limits::kMaxBuilds; // the build limits (clone_limits.hpp)
+using clone_limits::kMaxBuildsNewNames;
+using clone_limits::kMaxRemakes;
+int g_remakes = 0;           // builds after the engine freed a clone
 int g_forced = 0;            // builds ETERNALVR_TEST_VIEW_CLONE_REBUILD asked for
 bool g_stableNames = false;  // stable names, with the resize hook that purges (prepareViewClones)
 std::uint64_t g_builtAt = 0; // GetTickCount64 at the last build
@@ -174,7 +172,7 @@ void refreshDc1(const Map& map) {
     }
 }
 
-// ---- What a build leaves out ----
+// ---- What a build leaves out, and the build ----
 
 template <typename List, typename T>
 bool contains(const List& list, T value) {
@@ -238,8 +236,6 @@ Skips skipsNow() {
     }
     return s;
 }
-
-// ---- Building ----
 
 // The object at `slotAddress` (a global slot or a device context field), watched for changes; left shared
 // with `leaveOut`.
@@ -408,6 +404,7 @@ bool build() {
     }
     map->entries.insert(map->entries.end(), b.entries.begin(), b.entries.end());
     std::sort(map->entries.begin(), map->entries.end());
+    makeStencilView(*map, dc, g_builds);
     map->clones = std::move(b.clones);
     map->leftOut = std::move(b.leftOut);
     const auto finalTarget = read<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(g_base + kFinalTarget));

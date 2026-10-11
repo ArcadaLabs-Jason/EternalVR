@@ -310,6 +310,7 @@ void noteTouchStats(const input::InputMapper& mapper, float dt) {
 void restartRestWheelStats() {
     g_loggedStats = {};
     g_loggedButtons = {};
+    restartTouchButtonStats();
 }
 
 bool restWheelBlocked(const State& s) {
@@ -324,6 +325,7 @@ void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input
     }
     noteTouches(frame, *s.mapper, dt);
     noteTouchStats(*s.mapper, dt);
+    noteTouchButtons(frame, *s.mapper, dt);
     const input::RestWheelOutput& w = input.restWheel;
     {
         std::lock_guard lock(g_slowMutex);

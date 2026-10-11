@@ -9,6 +9,7 @@
 
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/pe_flares.hpp"
 #include "vkcore/presenter_eyes.hpp"
 #include "vkcore/view_slots.hpp"
 #include "vkcore/view_snapshot.hpp"
@@ -359,6 +360,13 @@ void XrPresenter::Impl::onEyeLatched(std::byte* renderView, int screenView) {
     // the render frame's).
     const int viewIndex =
         seqActive.load(std::memory_order_acquire) ? stereo_seq::eyeIndex(seqRenderEye()) : screenView;
+    if (viewSlotsActive()) {
+        // Lens flares from this view's own eye (pe_flares.hpp; view 0's latch starts the frame's), before
+        // onSeqEyeLatched takes the pose flag. Route S rebuilds its eye's in onSeqEyeLatched.
+        parallelEyeFlaresLatched(renderView, viewIndex,
+                                 eyePoseWritten[static_cast<std::size_t>(viewIndex)] &&
+                                     mp_guard::allowsGameTouch());
+    }
     if (seqActive.load(std::memory_order_acquire) || viewSlotsActive()) {
         onSeqEyeLatched(renderView, viewIndex); // the centred depth row and the weapon matrices
     }

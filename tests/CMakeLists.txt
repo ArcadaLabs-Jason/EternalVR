@@ -119,6 +119,8 @@ evr_add_test(evr_tracking_tests
 evr_add_test(evr_flares_tests
     SOURCES
         features/flares/flare_book_tests.cpp
+        features/flares/flare_draws_tests.cpp
+        features/flares/flare_pending_tests.cpp
     DEPENDS evr_flares)
 
 evr_add_test(evr_foveation_tests
@@ -159,6 +161,7 @@ evr_add_test(evr_input_tests
         features/input/input_mapper_menu_tests.cpp
         features/input/input_mapper_rest_tests.cpp
         features/input/input_mapper_rest_button_tests.cpp
+        features/input/input_mapper_touch_button_tests.cpp
         features/input/input_mapper_wheel_tests.cpp
         features/input/input_mapper_locomotion_tests.cpp
         features/input/locomotion_direction_tests.cpp
@@ -179,6 +182,9 @@ evr_add_test(evr_input_tests
         features/input/tap_hold_tests.cpp
         features/input/test_input_tests.cpp
         features/input/touch_button_tests.cpp
+        features/input/touch_control_button_tests.cpp
+        features/input/touch_inputs_tests.cpp
+        features/input/touch_keys_tests.cpp
         features/input/turn_policy_tests.cpp
         features/input/turn_stick_arbiter_tests.cpp
         features/input/usercmd_injection_tests.cpp
@@ -242,6 +248,7 @@ if(TARGET evr_device_features)
         SOURCES
             vkcore/clone_census_tests.cpp
             vkcore/clone_names_tests.cpp
+            vkcore/clone_stencil_tests.cpp
             vkcore/debug_script_tests.cpp
             vkcore/device_features_tests.cpp
             vkcore/dump_format_tests.cpp

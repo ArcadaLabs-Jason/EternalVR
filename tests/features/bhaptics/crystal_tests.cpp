@@ -468,8 +468,9 @@ TEST_CASE("a rune's pickup shocks the whole suit at random after its menu, timed
         }
     }
     // About a step every kCrystalStepSeconds for kRuneShockSeconds, from the delay on.
-    REQUIRE(times.size() >= 40);
-    CHECK(times.size() <= 52);
+    const auto steps = static_cast<std::size_t>(kRuneShockSeconds / evr::bhaptics::kCrystalStepSeconds);
+    REQUIRE(times.size() >= steps * 4 / 5);
+    CHECK(times.size() <= steps + 2);
     CHECK(times.front() >= start - 1e-9);
     CHECK(times.front() < start + 0.03);
     CHECK(times.back() > start + kRuneShockSeconds - 0.2);

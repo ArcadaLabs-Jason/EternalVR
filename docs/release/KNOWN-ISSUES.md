@@ -141,8 +141,9 @@ them is worse for you than described here.
   "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
   why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
-  may smear briefly while you turn. An experimental fix is in, off by default; it will be switched on once
-  it has been tried in a headset.
+  may smear briefly while you turn. An experimental fix is in, off by default
+  (`ETERNALVR_STEREO_REFRACTION_TAA=1` turns it on; the normal renderer only); it will be switched on once it
+  has been tried in a headset.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
@@ -195,13 +196,14 @@ them is worse for you than described here.
     normally show the same game frame, but right after a load, or when no new pair of eye images comes for a
     few frames, the headset can briefly show eyes from different frames.
   - **Some effects differ between the eyes.** Some reflections show in one eye only, and glass and the
-    underwater view can look different in each eye. Lens flares are off while it runs. Close demons can show
-    a wrong pose in the left eye for a single frame. Menus can flash. The muzzle flash may look wrong; it is
-    not known yet whether that comes from Parallel Eye Rendering.
+    underwater view can look different in each eye. Close demons can show a wrong pose in the left eye for a
+    single frame. Menus can flash. The muzzle flash may look wrong; it is not known yet whether that comes
+    from Parallel Eye Rendering.
   - **Smaller ones:** after the game rebuilds its swapchain the headset can keep the last picture for a few
     frames; things can pop in or out for a frame; sprites face the left eye's position; faint blocky patches
     were seen low in the right eye.
   - **Not tried yet:** long sessions, cutscenes, and AMD or Intel graphics cards.
+  - **Lens flares** are now drawn for each eye from its own view; that has not been checked in a headset yet.
   - If it cannot finish starting, both eyes show the same image for that session (the log says
     `parallel eyes: FAILED`). After a session the launcher's status line usually says whether it ran, or why
     not; the logs in the exported report always say.
@@ -242,6 +244,11 @@ them is worse for you than described here.
 - **A thumb rest as a button** (Quest and Rift controllers, in the controls editor) is new and has not been
   tried in a headset yet. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
   rest. A controls file with a thumb rest in it makes an older version of the mod use the built-in controls.
+- **Touches as buttons** (A, B, X, Y, a stick, a trackpad or a trigger touched without pressing it, in the
+  controls editor) are new and have not been tried in a headset yet. If nothing happens when you touch one,
+  your VR runtime may not report that touch. A press or hold on a touch can fire when you rest a finger
+  there without thinking, and a press is on even while your thumb only brushes past, so Tap is the easiest
+  start. A controls file with a touch in it makes an older version of the mod use the built-in controls.
 - **Edit controls...** should open much faster now (it used to take several seconds and show "Not
   Responding" first). If it still takes several seconds, tell me.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and

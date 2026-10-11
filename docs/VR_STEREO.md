@@ -96,8 +96,9 @@ each flare the job updated (its vertex block, quad count and the intensity the p
 0x18E1704 and 0x18E1716, `src/vkcore/flare_views.cpp`) and after each eye's latch runs the update again with
 the eye's render view, over the same block, with the intensity put back and with the two occlusion query
 slots the engine's call took in that render (hook at RVA 0x1936731), so nothing is allocated and the queries
-the render issues still go with the vertices. Mono renders keep the engine's quads; Parallel Eye Rendering is
-left alone (both of its views draw one set of quads). The log has the hooks at start-up (`seq-flares:`), the
+the render issues still go with the vertices. Mono renders keep the engine's quads; Parallel Eye Rendering
+gives each of its views its own half of the quads (Parallel Eye Rendering, Lens flares per view; the record
+and slot hooks are shared, `src/vkcore/flare_core.cpp`). The log has the hooks at start-up (`seq-flares:`), the
 first eye with its own flares and every 10 s the flares rebuilt and anything left as the engine wrote it.
 `ETERNALVR_FLARES_PER_EYE=0` turns it off.
 
@@ -282,8 +283,8 @@ coefficient 0.029 / 0.029 against a control of 0.014, the same as v1 and against
 TAA; DLSS per eye 0.030 / 0.030; TAA costs about 0.09 ms per eye at 1280x740
 (`docs/rig-findings/stereo-temporal.md` section 7).
 
-Auto exposure, the light scattering, SSDO and the refraction are kept per eye by hooks of their own, which
-need the eye tags only. They run whenever Route S runs: with per-eye history on, off (`ETERNALVR_STEREO_TAA=0`,
+Auto exposure, the light scattering, SSDO and (opt-in, `ETERNALVR_STEREO_REFRACTION_TAA=1`) the refraction
+are kept per eye by hooks of their own, which need the eye tags only. They run whenever Route S runs: with per-eye history on, off (`ETERNALVR_STEREO_TAA=0`,
 the launcher's Anti-aliasing Off, `-StereoV1`) or failed closed. The start-up line `seq-exposure: per-eye TAA
 ...; auto-exposure index per eye hooked, eye R takes eye L's exposure; scattering history per eye hooked;
 SSDO history per eye hooked; refraction history per eye` names the mode (`... held off in stereo`, `off` or
@@ -545,7 +546,9 @@ renders view 0 alone for the session, as after a guard trip, shown as mono (one 
   frame it may be another object's result: an object can be culled or kept by a stale result for a frame (a
   pop at an occlusion edge). Keeping the wait for the queries pending from this frame only would need the
   frame and the issuing view of each bit (set with plain read-modify-writes by both views' setups) and proof
-  that every one was issued before the copy; not done. Checked in the headset.
+  that every one was issued before the copy; not done. Checked in the headset. Flares are the pool's only users
+  (the slot allocator 0x1C343C0 has one caller, the flare update): while they are drawn per view (below) each
+  view issues, copies and reads its own queries, and its copies keep the wait.
 - **View 1's shadow setup on view 0's shadow cache entries** (`view_shadow_cache.cpp`): each view's shadow setup
   job (0x1CF0240) reads back its visible-light bits, picks each shadowed light's shadow map level and finds or
   makes the light's entry in the shadow atlas cache, releasing the light's entries at the other levels. The cache
@@ -584,10 +587,10 @@ renders view 0 alone for the session, as after a guard trip, shown as mono (one 
   (0x1C79FC0, RVA 0x1C7A8F5) records the view and world frame each render context's gather ended for, waited
   for at most 0.5 ms (16 waits in a row that run out stop the waiting for the session; such frames are left
   out, counted per view).
-  Lens flares stay off (`r_skipFlares 1`). Log: `view-updates: hook at RVA 0x18E51DC ...` at start-up, and every
-  10 s `view-updates: last 10 s: N frame(s) with view 1's lists added to view 0's ...` with the entries added,
-  already on view 0's and over the cap per list, and the frames left out. `ETERNALVR_TEST_PE_UPDATE_UNION=0`
-  leaves it out.
+  A flare only eye R sees is so prepared and updated too (Lens flares per view, below). Log: `view-updates:
+  hook at RVA 0x18E51DC ...` at start-up, and every 10 s `view-updates: last 10 s: N frame(s) with view 1's
+  lists added to view 0's ...` with the entries added, already on view 0's and over the cap per list, and the
+  frames left out. `ETERNALVR_TEST_PE_UPDATE_UNION=0` leaves it out.
 - **The water from view 0's starting state** (`view_water.*`): each view's render-view job 0x1C575F0 calls the
   water setup (0x1CE3A90) with its water context (render context + 0x705B78), holding the world's one water
   state (render world + 0xB4550, 0xC90 bytes) at +0xE0. The setup decides from the state which parts of the
@@ -655,6 +658,89 @@ renders view 0 alone for the session, as after a guard trip, shown as mono (one 
   flag)`: they ran their own update into the shared images); `its last own update changed` (the engine's index
   for view 1 with its skip flag set is the parity of view 1's last own update) stays 0 unless the engine mode let
   an update run; `other` frame counts stay 0 (`same` then reads the image view 0 writes in the same frame).
+- **Lens flares per view** (`pe_flares.cpp`, `src/features/flares/`): a flare's update (0x1936650) projects its
+  quads on the CPU once a frame, from the world-views latch of the game's head-centred view, into one vertex
+  block that both views drew: the same screen spot in both eyes, right in neither (they were held off with
+  `r_skipFlares 1` until this). Each view now draws its own half of the flare's quads:
+  - The prepare (0x19361E0) takes room for two halves: its call to the quad allocator (RVA 0x1936415) asks
+    for twice the element count, so view 0's quads come first and view 1's after them. Its surfaces and
+    geometry records stay the engine's (element i's record at [model + 0x4E8] + i * 0x188, 6 indices at
+    (first index + 6 i) * 4 of the quad index buffer, which holds 4q, 4q+2, 4q+3, 4q, 4q+3, 4q+1 for every
+    quad q of the ring).
+  - After each view's latch the update runs again with that view's render view over its half: the flare
+    job's records and the query slot hook of Route S's lens flares (`flare_core.cpp`), the intensity the
+    prepare left put back first, the write pointer left where the engine's update left it.
+  - View 1's binds of a flare's geometry records get its half's index offset, 24 bytes per quad further on.
+    All four index-buffer binds of geometry records are hooked, after the offset's load (RVAs 0x1C2DFA3 in
+    the draw 0x1C2D9B0, 0x1C2CA52 in 0x1C2C470, 0x1C2D1CB and 0x1C2D89B in the two indirect draws; the four
+    are every caller of `vkCmdBindIndexBuffer`). The scene's surface table holds the model's own records
+    (copied from its surfaces at 0x18DB89A), and the draws read them from there (0x1C61F76). A bind is
+    shifted only in one of view 1's command contexts, for a record registered at this frame's latches, at
+    the offset it had then, and not when the draw binds another index buffer. The occlusion pass draws the
+    flare through the same binds, so view 1's occlusion test uses its own quads.
+  - Each flare's two occlusion queries: view 1 issues its own, the slots' twins in the pool's upper half (the
+    pool holds 0x400 queries, reset whole every frame, with 0x2000 bytes of results; the engine's slots
+    restart at 0 every frame and stay in the lower half up to 256 flares). Its surface setup marks them
+    (RVA 0x1C7CFC7, in its render context's block), its occlusion pass begins and ends them (RVAs 0x1C90B06
+    and 0x1C90B87, in its category 7 contexts), its vertices carry them, and its copy (RVA 0x1C32F79, in its
+    category 10 contexts) scans only the upper half's bits. View 0's queries and copy are the engine's: the
+    update stores the slots it took in the render entity (0x193674D, 0x1936759), which view 0's setup and
+    occlusion pass read, so view 1's rebuild never stores its twins there: its slot hook resumes after the
+    two stores (at 0x1936760, with the registers they would leave) and the entity keeps the engine's slots
+    (when view 1's rebuild stored its twins, view 0 issued them and eye L lost its flares, rig run
+    pf2-d-pon2). View 1's render view is the world's second (`stereo_hooks.hpp`), not in the world's own list
+    of render views, which holds view 0 alone (rig run pf2-c-pdiag). Each view so copies what its own setup
+    marked and its own occlusion pass issued before its copy, as one view does, and the copies wait for the
+    results again, so a flare should not take another flare's result from a slot an unfinished query left
+    (the full-brightness flash of issue #18). In a frame with more than 256 flares the engine's own slots
+    reach the upper half: those are copied by both views, without the wait.
+  - A copy that waits on a query nobody issued since the pool's reset stalls the queue until Windows resets the
+    GPU (the stall above). A bit can outlive its frame: a view whose copy did not run after its setup (a
+    swapchain recreate, a map change, a view left out), a copy loop skipped when the engine took no slot (`jle`
+    at 0x1C32F67, before the hook), or, with more than 256 flares, the copy loop's plain reload and store
+    (0x1C32FF1, 0x1C33007) putting back a bit the other view's copy cleared. So view 0's latch clears the 32
+    words of pending bits with atomic stores (in a frame split by view, and in the first frame after one), and
+    the surface setup's hook notes which queries each view marked since then; a copy waits only when every bit it
+    scans is one its own view marked in this frame, else it is copied without the wait. Each copy uses up its
+    view's marks, so a frame whose view 0 latch did not run (no clear) cannot wait on the frame before's, unless
+    that frame's copy loop was skipped (`jle` at 0x1C32F67, before the hook). A mark is not an issue, but the
+    issue cannot decide the wait: each view's copy (category 10) is recorded before its occlusion pass (category
+    7) on the processor in all but 1 of about 14,000 copies, though the pass runs first on the GPU (rig runs
+    pf4-a-stale and pf4-a-pon, a build that waited only on queries its view's pass had begun: one copy waited).
+    So the occlusion pass's hooks note which queries each view began, and view 0's next latch checks every query
+    a view's copies waited on against them; one the pass did not begin is counted and logged, and the copies stop
+    waiting for the session (`src/features/flares/flare_pending.hpp`, `pe_flare_guard.cpp`). The check comes
+    after that frame's copies were recorded: it does not keep that frame from stalling, it shows whether marks
+    and issues agree and keeps a mismatch from coming back (`ETERNALVR_TEST_PE_FLARES_STALE=2` makes one, rig run
+    pf4c-c-trip). Why a marked query is issued, from the code (not proven at run time): both views latch in one
+    loop (0x1C753C0 to 0x1C75948 in 0x1C75290, view 0 then view 1, on one thread; the hook after the latch is at
+    0x1C75772) and the render list reaches the dispatcher (0x1C5CD00, called at 0x1CDCF66) after it, while the
+    surface setup (0x1C7A920, through 0x1C763A0, 0x1C76C80 and 0x1C7939B) runs in each view's job chain. So view
+    0's rebuild and the render entity's slot stores are done before any setup or occlusion pass of either view,
+    and a view's pass begins the slots its setup read from the same entity, as with one view. On the rig the
+    latches the log shows (the first three frames) ran view 0 then view 1 back to back on one thread, and no copy
+    of pf4b-b-stale or pf4b-b-pon (27,869 waited) waited on a query its view's pass did not begin.
+  Every site's bytes are checked at the install (`pe_flare_sites.hpp`); a mismatch or a hook that fails leaves
+  flares off (`r_skipFlares 1`, one line). A rebuild that faults, a view's command context in the game's table
+  (categories 1 to 4, 6 to 11) no longer the one read at the install (checked at every view 0 latch), or view 1's
+  halves rebuilt 600 times in a 10 s period while the views' surface setups set flares up to be drawn and no bind
+  of their records seen at the hooked binds, turns them off for the session the same way (a flare the update
+  builds every frame but neither view sets up is out of sight, not drawn elsewhere: before the setups were
+  counted, the watch turned the flares off in a walking run, rig run pf3-f-wdef). Log: `pe-flares: on: ...` with
+  the RVAs at start-up, `pe-flares: first frame with view 1's own flares: N of N rebuilt ...`, `pe-flares: view 1
+  drew its half of a flare first at RVA ...`, every 10 s `pe-flares: last 10 s: N frame(s) (N with each view's
+  own queries), room for both views N, flares rebuilt N in view 0 and N in view 1 (N left as the engine wrote
+  them); binds: view 1 on its half N (N not), view 0 N; set up N, view 1's queries N marked, N issued; copies N
+  (N waited, N of them with no query pending, N not for a query its view did not mark; N view frame(s) waited on
+  a query its view did not issue, then `; waits off this session` once they are off); pending words left set at
+  view 0's latch N (in N frame(s)); recorded N (...)`, for the first 5 latches that find bits set `pe-flares:
+  view 0's latch found N pending word(s) left set (word W, bits 0x...); cleared`, for the first 5 copies that
+  find a bit their view did not mark `pe-flares: view V's copy found pending queries its surface setup did not
+  mark this frame (word W, bits 0x...); copied without the wait`, for the first 5 frames a copy waited on a query
+  its view's pass did not begin `pe-flares: view V's copy waited on queries its occlusion pass did not issue in
+  that frame (word W, bits 0x...)` and once `pe-flares: the occlusion copies no longer wait (this session)`, and
+  in the dispatcher's line `view-redirects: occlusion query results copied without waiting N time(s), with it
+  (each view's own, lens flares per view) N time(s)`. `ETERNALVR_PE_FLARES=0` keeps flares off as before.
 - **View 0's screen pass after a swapchain recreate** (`view_swap_guard.cpp`): the last view of a frame runs
   its screen pass (0x1CDF6E0) in the finish job right after the acquire; view 0, which the dispatcher sends
   with "more views follow", runs it earlier, as a job (0x1C58030) or inline (0x1C57572), into the swapchain
@@ -713,6 +799,12 @@ renders view 0 alone for the session, as after a guard trip, shown as mono (one 
   too (`view-clones: ... image binds cloned ..., binds on the transparency block N`); before, eye R's glass showed eye L's
   picture of the same frame (eye L's gun through the Urdak ring-hub glass, rig 2026-10-09). `tblock` in
   `ETERNALVR_TEST_VIEW_CLONE_SKIP` leaves that block to the engine (as before).
+  The empowered demons' yellow augment outline reads the stencil through the device context's own stencil view
+  of its depth (dc+0x438, bound as `viewStencilImage` at 0x1C21C56, a handle and not an image the clone binds
+  map), so each build also makes view 1 a stencil view of its depth clone with the engine's maker (0x1C49B50,
+  `view_clone_stencil.cpp`) and view 1's binds of the engine's take it; the engine's resize releases them.
+  Before, eye R drew eye L's outline at eye L's coordinates (91% of eye L's outline pixels, rig run ol-b1; 3%
+  after, ol-a4). `stencil` in `ETERNALVR_TEST_VIEW_CLONE_SKIP` leaves view 1 on the engine's.
 - The eye copy: each eye is its own view's screen pass output (eye 0 view 0's swapchain image, eye 1 view 1's
   image), in a two-eye ring (`presenter_eyes.*`), paired by frame (`view_snapshot.*`, `snapshot_ring.hpp`).
   Each eye is copied into a small ring by a batch after the game's submit of the command buffer its view's
@@ -739,10 +831,12 @@ renders view 0 alone for the session, as after a guard trip, shown as mono (one 
 - Its cvars, held as Route S holds its own, from the first present on every present (menus and loading
   screens included): `r_useNewDepthDownscale 0` (with the new downsample view 1 drew tile-shaped black holes
   in e1m3), the launcher's anti-aliasing (`r_antialiasing 1`, with DLSS `r_antialiasing 2` and the launcher's
-  `r_dlssQuality` (above), or with Off `r_TAASafeMode 1` and `r_antialiasing 0`; `ETERNALVR_STEREO_RUNTIME_CVARS=0` leaves it as the game has it), Route S's window and
-  present set (`r_fullscreen 0`, `r_swapInterval 0`, the launch size, left to the game once the render size is
-  off) and its comfort set; the launcher's sharpening, CPU Saver and button prompts as under Route S, and
-  `r_SSR 0` with the launcher's Screen-space reflections Off (`runtime_cvars_pe.hpp`). Also
+  `r_dlssQuality` (above), or with Off `r_TAASafeMode 1` and `r_antialiasing 0`;
+  `ETERNALVR_STEREO_RUNTIME_CVARS=0` leaves it as the game has it), Route S's window and present set
+  (`r_fullscreen 0`, `r_swapInterval 0`, the launch size, left to the game once the render size is off), its
+  comfort set, and `r_skipFlares 1` only while lens flares per view are off; the launcher's sharpening, CPU
+  Saver and button prompts as under Route S, and `r_SSR 0` with the launcher's Screen-space reflections Off
+  (`runtime_cvars_pe.hpp`). Also
   `r_raytracedReflectionsTemporalUpscaleQuality 0`, the launcher's command line value, which the game's
   Reflections setting writes over at the profile's load (Jason's 10-07 session read 1 from its first
   `game settings:` line on): the ray-traced reflections then traced a quarter of their rays and blended in a
@@ -785,7 +879,7 @@ set, and none is set by the launcher:
 | Variable | Effect |
 |---|---|
 | `ETERNALVR_TEST_VIEW_CLONES=0` | no clones: view 1 draws into the engine's targets (the eye copy is then off) |
-| `ETERNALVR_TEST_VIEW_CLONE_SKIP=<items>` | the clones view 1 leaves to the engine, comma-separated; replaces the default `slot0` (slot 0's TAA targets, device context +0x60..+0x78; its view colour +0x80 stays cloned): `slot0`, `dof` (the depth of field targets, only while the layer holds `r_dof 0`), `gui` (the GUI target's colour; its depth stays view 1's), `flares` (`_cineLensflares`), `mblur` (`_velocityTileMax0/1`), `refract` (the refraction's images and targets: its history pairs and the mask chain, glass then blends with the other view's last frame), `tblock` (the transparency pass's own block keeps the engine's scene mips and refraction mask: view 1's glass refracts view 0's picture), a global slot's RVA (`0x66E3180`), `dc+<offset>` (`dc+0x5E0`); `none` clones them all. View 1's final image, screen pass output and water simulation (0x66E30D8..0x66E30E8, dc+0x338..0x360) always stay |
+| `ETERNALVR_TEST_VIEW_CLONE_SKIP=<items>` | the clones view 1 leaves to the engine, comma-separated; replaces the default `slot0` (slot 0's TAA targets, device context +0x60..+0x78; its view colour +0x80 stays cloned): `slot0`, `dof` (the depth of field targets, only while the layer holds `r_dof 0`), `gui` (the GUI target's colour; its depth stays view 1's), `flares` (`_cineLensflares`), `mblur` (`_velocityTileMax0/1`), `refract` (the refraction's images and targets: its history pairs and the mask chain, glass then blends with the other view's last frame), `tblock` (the transparency pass's own block keeps the engine's scene mips and refraction mask: view 1's glass refracts view 0's picture), `stencil` (view 1 binds the device context's stencil view, `viewStencilImage` over view 0's depth, instead of its own over its depth clone: the augment outline of empowered demons in eye R then follows eye L's demons), a global slot's RVA (`0x66E3180`), `dc+<offset>` (`dc+0x5E0`); `none` clones them all. View 1's final image, screen pass output and water simulation (0x66E30D8..0x66E30E8, dc+0x338..0x360) always stay |
 | `ETERNALVR_TEST_VIEW_CLONE_LOG=0` | no census of what view 1 does with its clones (the line per clone after each build stays) |
 | `ETERNALVR_TEST_VIEW_CLONE_NAMES=build` | each build names its clones anew, as before: a rebuild leaves the old set allocated until a map load (the clones turn off at the 8th change of the engine's targets) |
 | `ETERNALVR_TEST_VIEW_CLONE_REBUILD=<seconds>` | makes the clones again that long after each build (1 to 3600 s, at most 5 times; with stable names each is kept), to measure video memory across rebuilds |
@@ -804,6 +898,9 @@ set, and none is set by the launcher:
 | `ETERNALVR_TEST_PE_RT_UPSCALE_HOLD=0` | `r_raytracedReflectionsTemporalUpscaleQuality` left as the game has it (1 to 3 after the profile's load), not held at 0: the ray-traced reflections' temporal upscale as before |
 | `ETERNALVR_TEST_CPU_LOAD_MS=<ms>[,<s on>,<s off>]` | as under Route S (below), a slower processor: Parallel Eye Rendering has no frame-end wrapper, so the load runs once a render frame at its view dispatch, before the views are dispatched. Log: `test: CPU load <ms> ms at every render's view dispatch (Parallel Eye Rendering) ...` |
 | `ETERNALVR_TEST_PE_ASYNC=keep` | async compute left as the game has it, to reproduce the hang |
+| `ETERNALVR_TEST_PE_FLARE_WAIT=0` | with lens flares per view, the occlusion copies stay without the wait (the frames' queries still split by view), for an A/B against a flare's flash or a stall |
+| `ETERNALVR_TEST_PE_FLARES_STALE=1` | with lens flares per view, one frame split by view in 64 gets the pool's last query (0x3FF) set pending after view 0's latch's clear, with no mark and no issue: view 1's copy must find it and copy without the wait (the guard's control). Log: `pe-flares: test: one frame split by view in 64 ...` once, `pe-flares: test: N pending bit(s) set ...` every 10 s |
+| `ETERNALVR_TEST_PE_FLARES_STALE=2` | with lens flares per view, view 1's 1000th copy that waits notes the pool's last query (0x3FF) as waited on, without waiting on it and with no pass issuing it: view 0's next latch must find it, and the copies stop waiting for the session (the check's control). Log: `pe-flares: test: view 1's copy number 1000 ...` once, `pe-flares: test: query 0x3FF noted ...` at that copy, then `pe-flares: view 1's copy waited on queries its occlusion pass did not issue ...` and `pe-flares: the occlusion copies no longer wait (this session)` |
 | `ETERNALVR_TEST_BINNING_DELAY=<ms>` | view 0's binning sleeps before its sinks (1 to 100 ms), so view 1 reaches its roots first |
 | `ETERNALVR_TEST_CB_CHECK=1` | the command buffer check (`cb_check.hpp`; roughly halves the frame rate); with it `ETERNALVR_TEST_VIEW1_GPU_SKIP` / `_VIEW0_GPU_SKIP=<categories>` drop a view's draws by category and `ETERNALVR_TEST_CALLERS=<category>` logs view 1's draw call stacks (`cb_view_skip.hpp`) |
 | `ETERNALVR_TEST_VIEW_LIFT=<view>,<metres>` | raises one view's camera, to tell which eye shows which view |
@@ -874,6 +971,40 @@ order, drawn by> i<image> c<presenter copy> v<view record> | ...`, four presents
   context's other screen target (+0x588, +0x590, picked at 0x1CDF73F when a renderer flag is set) while the
   swapchain image is stale: one frame without view 0 at such a recreate.
 - The two views' pictures can still differ in small ways (faint motion-vector blocks low in view 1 were seen).
+- Lens flares per view, rig-checked 2026-10-11 (simulator, 2048x2208, TAA): e1m1 barge facing the mod bot
+  from 6 and 9 m, the flare sits on its source in both eyes, at the pixels Route S puts it (eye L 634 / eye R
+  382 at 9 m in 1024-wide captures, Route S 635 / 382: a shift of 253 px, the scenery's); with
+  `ETERNALVR_PE_FLARES=0` no flare. Two walking runs in e1m1_intro (sway, strafing, firing, then the mod bot,
+  240 s), with the wait and with `ETERNALVR_TEST_PE_FLARE_WAIT=0`: no stall, no device loss, no crash dump,
+  68-90 game frames a second, the eye copy's longest wait under 13 ms; every copy of the first waited, view 1
+  bound its own half every time. Not yet in the headset. Their intensity and fades come from each view's own
+  position and axis (32.5 mm apart).
+  Rechecked after the pending bits' clear and the per-view marks (rig runs pf3-f-*, pf3-g-* to pf3-i-*): at 9 m
+  eye L 636 / eye R 384, Route S 635 / 383 on this build and 636 / 383 on dev main's layer; a 240 s walking run, a
+  run with two swapchain recreates (`r_hdrDisplay` 1 then 0), one with a death and the checkpoint's respawn, and
+  the Fortress of Doom with 2 flares in view: every copy of a view's own queries waited (18,610 in the walking
+  run), no view 0 latch found a pending bit left set, no copy found a bit its view did not mark, no stall, no
+  device loss, no crash dump. Every run's start loads the shell's map and then the level with the flares on. Issue
+  #18's spot (e1m2_battle's start, lightning, 150 s) updated no flare, so nothing there went through these
+  queries. Cost: e1m2_battle's fight (no flare in view, the hooks alone), three runs each, 79.6 / 84.8 / 88.8 game
+  frames a second with the flares against 84.2 / 83.8 / 82.9 with `ETERNALVR_PE_FLARES=0`; the Fortress with 2
+  flares in view, 87.9 / 87.8 against 88.8 (one run of each arm, the first at the spot, ran at 42 to 49). With two
+  halves the prepare asks the particle ring (0x18000 vertices) for twice a flare's quads, so when the ring is
+  nearly full a flare can miss its room where one half would have fitted (not seen on the rig).
+  Rechecked after each copy uses up its view's marks and the occlusion passes' issues are checked at the next
+  latch (rig runs pf4b-b-*, 9 m pose): eye L 636.5 / eye R 383.7, Route S 635.8 / 382.8; every copy of a view's
+  own queries waited (14,006), none on a query its view's pass did not begin, no pending bit left set in the
+  level. With `ETERNALVR_TEST_PE_FLARES_STALE=1` view 1's copy found each bit the test set (10 to 13 every 10 s)
+  and copied without the wait, the other copies waited; no stall, no crash dump. A build that waited only on
+  queries the view's pass had already begun waited on none (rig run pf4-a-stale, above). With
+  `ETERNALVR_TEST_PE_FLARES_STALE=2` (rig run pf4c-c-trip) view 0's next latch found query 0x3FF, logged it and
+  turned the waits off: 1,996 copies waited before, none of the 11,950 after; no stall, the game running at the
+  end, no crash dump. The final build at the same pose (pf4c-c-pon): eye L 636.2 / eye R 383.8, 14,104 copies
+  waited, none without, no crash dump.
+- Lens flares per view with more than 256 flares in a frame: the engine's own slots reach the pool's upper half,
+  so view 1's twin of a slot can be a slot the engine gave another flare, and both views then begin the same
+  query in one frame without a reset between, which Vulkan does not allow (from the code; not seen on the rig,
+  which never had more than a few flares).
 - The models only eye R sees are updated with view 0's render view, as all the others: billboards face view
   0's position (32.5 mm away), and with ray tracing on a particle system takes view 0's in-view bit (render
   view +0x20980, read at 0x1953F05), which is clear for it. Not checked in the headset yet.
@@ -1082,6 +1213,7 @@ axis).
 | `ETERNALVR_STEREO_OBJECT_PREV` | 1 | eye R's moving objects take their previous frame from eye R's own render of the tick before (`docs/rig-findings/stereo-object-motion.md`); 0: from eye L's render of the same frame (no motion, smeared by TAA) |
 | `ETERNALVR_STEREO_VIS_GATE` | 1 | models one eye sees are drawn: the first-visible gate takes either eye's last render for models; particles, flares, beams and ribbons keep the engine's test (`docs/rig-findings/stereo-visibility-counter.md`); 0: the engine's own test, so a pickup in one eye's outer strip only is not drawn |
 | `ETERNALVR_FLARES_PER_EYE` | 1 | lens flares built again from each eye's own view after its latch (How Route S works, Lens flares); 0: the engine's quads from the head-centred view, at the same place in both eyes (farther than infinity) |
+| `ETERNALVR_PE_FLARES` | 1 | under Parallel Eye Rendering, each view's lens flares from its own eye, with its own occlusion queries (Parallel Eye Rendering, Lens flares per view); 0: flares off there (`r_skipFlares 1`), as before |
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
 | `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced`, `aggressive` or `maximum` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within the region of 30, 24, 18 or 12 degrees around head-forward in each eye, half rate within the region of 16 degrees more (12 for `maximum`, so quarter rate from the region of 24 degrees), quarter rate outside (`src/vkcore/vrs_nv.cpp`). A region has the area of the cone of its angle on the eye's tangent plane and reaches the same fraction of the way from head-forward to every edge of the eye's image, so the reduced-rate band takes the same share of the way to the edge on the nasal side and the top as on the temporal side and the bottom (`src/features/foveation/foveation_region.cpp`); in a symmetric square FOV it is the cone's circle. Each eye's shape (its FOV and its orientation in the head) comes from stereo frames whose eyes pass the plausibility checks, the FOV check of `docs/VR_HEAD_TRACKED.md` among them (`ETERNALVR_FOV_CHECK`); a different shape that holds for 90 frames in a row replaces it and the rate images are made again, at most 8 times in a process (`src/features/foveation/eye_shape_latch.cpp`; `vrs: eye N's shape changed: ...`). Each render pass gets the pattern of the eye of the backend frame it is recorded for, and only where that frame is sure: the backend counter at the pass equals the counter the render-view job read for its render. Every other pass stays full rate. What its command buffer's recording since its `vkBeginCommandBuffer` or its parity (once two recordings in a row agreed two frames apart) would guess is counted, with the recordings a later agreement contradicts and the parity breaks, but not used: those guesses can name the other eye's frame (`src/stereo_seq/pass_frames.hpp`, `src/vkcore/vrs_command_buffers.cpp`; `vrs: render pass frames: ...` every 200,000 passes; on the rig every pass in the map agreed). A pass's eye so comes only from a frame its two counters agree on; with `ETERNALVR_TEST_VRS_PARITY=1` (a rig test) the guesses are used too. NVIDIA RTX only: other cards log it as unsupported and render normally. Off with Parallel Eye Rendering (one line; "Parallel Eye Rendering", Known limits). Only render targets in the eye's space are foveated: the eye image and any copy of it scaled by one factor down to 1/8 (DLSS's smaller render size, the half size buffers; `src/features/foveation/eye_targets.cpp`); shadow maps and other targets stay full rate. Mono frames (the cinema screen, menus) stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`); without the UI layer they are foveated like the eye image |
 | `ETERNALVR_TEST_DLSS_TWIN_FAIL` | unset | test knob: a count from 1 to 100; eye R's first tries at its own DLSS feature fail without a create (result 0xBAD00000), to exercise the fallback to TAA, the tries after it and the menu's try (`docs/rig-findings/stereo-temporal.md`, Fail closed) |
@@ -1542,8 +1674,9 @@ each run from its own call.
   quad (`ETERNALVR_UI_DISTANCE`, `_WIDTH`, `_OFFSET_Y`) and kept out of both eyes; under hand aim the game's
   crosshair is left out and a dot is drawn on the weapon hand's ray. `ETERNALVR_UI_LAYER=0` goes back to
   the HUD in eye L only.
-- Temporal effects other than TAA, DLSS, auto exposure, the light scattering, SSDO and the refraction (depth
-  of field, water, the anti-ghosting mask) still share their history between the eyes and stay off; the
+- Temporal effects other than TAA, DLSS, auto exposure, the light scattering, SSDO and (opt-in,
+  `ETERNALVR_STEREO_REFRACTION_TAA=1`) the refraction (depth of field, water, the anti-ghosting mask) still
+  share their history between the eyes and stay off; the
   headset check of per-eye TAA is open (`docs/rig-findings/stereo-temporal.md` section 8).
 - The eye tags rely on one backend frame per tagged frame. A frame the engine kicks but never renders,
   with no present in its place, would shift the pairing by one frame without a counter disagreement. Not

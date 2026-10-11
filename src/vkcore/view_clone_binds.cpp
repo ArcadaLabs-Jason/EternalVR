@@ -203,7 +203,7 @@ void onImageBind(HookRegisters& r) {
     if (swapPassImageBind(r, map)) {
         return;
     }
-    if (!view1) {
+    if (!view1 || swapStencilView(r, *map)) {
         return;
     }
     const std::uintptr_t c = lookup(*map, r.r8 - kImageHandle);
@@ -273,7 +273,7 @@ bool checkBinds() {
     } else {
         g_transparencyBlock = true;
     }
-    return true;
+    return checkStencilView();
 }
 
 bool installBinds() {
@@ -295,20 +295,21 @@ bool installBinds() {
 }
 
 void reportBinds() {
-    EVR_LOG("%s: view 1's stores cloned %llu / not %llu; pyramid binds %llu; target binds cloned %llu / not "
-            "%llu, image binds cloned %llu / not %llu, binds on the transparency block %llu; write marks "
-            "cloned %llu "
-            "/ not %llu",
-            kTag, static_cast<unsigned long long>(g_stored[0].load()),
-            static_cast<unsigned long long>(g_stored[1].load()),
-            static_cast<unsigned long long>(g_pyramidBinds.load()),
-            static_cast<unsigned long long>(g_targetBinds[0].load()),
-            static_cast<unsigned long long>(g_targetBinds[1].load()),
-            static_cast<unsigned long long>(g_imageBinds[0].load()),
-            static_cast<unsigned long long>(g_imageBinds[1].load()),
-            static_cast<unsigned long long>(g_transparencyBinds.load()),
-            static_cast<unsigned long long>(g_marks[0].load()),
-            static_cast<unsigned long long>(g_marks[1].load()));
+    EVR_LOG(
+        "%s: view 1's stores cloned %llu / not %llu; pyramid binds %llu; target binds cloned %llu / not "
+        "%llu, image binds cloned %llu / not %llu, binds on the transparency block %llu, stencil view %llu; "
+        "write marks cloned %llu / not %llu",
+        kTag, static_cast<unsigned long long>(g_stored[0].load()),
+        static_cast<unsigned long long>(g_stored[1].load()),
+        static_cast<unsigned long long>(g_pyramidBinds.load()),
+        static_cast<unsigned long long>(g_targetBinds[0].load()),
+        static_cast<unsigned long long>(g_targetBinds[1].load()),
+        static_cast<unsigned long long>(g_imageBinds[0].load()),
+        static_cast<unsigned long long>(g_imageBinds[1].load()),
+        static_cast<unsigned long long>(g_transparencyBinds.load()),
+        static_cast<unsigned long long>(stencilViewBinds()),
+        static_cast<unsigned long long>(g_marks[0].load()),
+        static_cast<unsigned long long>(g_marks[1].load()));
 }
 
 } // namespace evr::vkcore::view_clone

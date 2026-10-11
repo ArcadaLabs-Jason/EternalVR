@@ -17,6 +17,7 @@ evr_add_module(evr_input
         cutscene_skip.cpp
         dashboard_pause.cpp
         dossier_press.cpp
+        family_touch_settings.cpp
         forced_angles.cpp
         hands_jump.cpp
         haptics_policy.cpp
@@ -36,6 +37,7 @@ evr_add_module(evr_input
         tap_hold.cpp
         test_input.cpp
         touch_button.cpp
+        touch_inputs.cpp
         turn_policy.cpp
         turn_stick_arbiter.cpp
         usercmd_injection.cpp

@@ -254,6 +254,66 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   elsewhere, 3 gap(s) forgiven, 1 lift(s) at once (1 passing over: no tap), 2 tap(s), 0 hold(s), 1
   landing(s) voided (own controls)`. Prompts name it `Left Thumb Rest`. An older layer does not
   know the key and rejects the whole file (the built-in controls are used, logged).
+- **Touch sensors as buttons** (`"<hand>.<touch>.<press>"` in a control map, `<touch>` one of
+  `primary_touch` (A/X), `secondary_touch` (B/Y), `stick_touch`, `trackpad_touch`, `trigger_touch`;
+  `features/input/touch_inputs.hpp`, `touch_button.hpp` `TouchKind::Control`, T-126; the controls editor's
+  rows such as `Right A touch`, `Left trigger touch`). The second step of fully remappable controls after the
+  thumb rest: any touch sensor a controller reports binds like a button (`ButtonInput::PrimaryTouch` ..
+  `TriggerTouch`, after `thumbrest`), on the families whose profile has the sensor
+  (`interaction_profiles.cpp`): Touch and Pico 4 A/B/X/Y, stick and trigger; Index all five; Windows Mixed
+  Reality and the Vive wands the trackpad; Cosmos the stick; the Steam Frame A/B on the right (its left face
+  buttons are a D-pad), the stick and the trigger; the G2 none. The primary and secondary touch is that of the
+  A, B, X or Y button the family binds to primary and secondary (none where that is a trackpad or a D-pad).
+  The trigger's touch is a new OpenXR action, `trigger_touch`; no built-in data suggests a binding for it.
+  Semantics: a touch on a control is usually the start of using that control, so the thumb rest's elsewhere
+  rules (a touch begun with the thumb on the stick waits, a lift with the thumb gone to a button is at once)
+  do not apply. The same filter is used (`rest_touch_filter.hpp`: first-frame landing, gaps under the
+  hold-over forgiven, the same hold-over), with no sensor beside it, and the controls under the touch decide
+  instead (its own controls, `ownControlsOf`). For the thumb's touches (A/X, B/Y, the stick, the trackpad)
+  they are every gameplay binding of that hand on the controller's face in the family's data, the same for
+  all four, since one thumb works them all: A, B, X, Y, the stick out past 0.25 and its click, the trackpad,
+  the Steam Frame's D-pad, Menu and View (the Vive wands' stick is their trackpad, so a trackpad touch more
+  than 0.25 from its centre is the stick in use and only a touch near the centre counts; Index's left Menu is
+  its trackpad pressed). So a thumb lying on A and B that presses either taps neither, and one that slides
+  from A onto B and presses it within the hold-over is no tap of A. For the trigger's touch, the trigger past
+  its press threshold. By default (no data) the primary and secondary buttons and the stick, or the trigger.
+  Its own control used while the touch is registered (or in its hold-over) ends a press or hold at once, and
+  that touch is no tap; nothing more until the thumb or finger lifts and lands again. A landing within 0.4 s
+  of the control under the touch itself being used (`kOwnButtonVoidSeconds`; the narrow set,
+  `landingControlsOf`: the gameplay bindings sharing the touch's identifier, so A for A's touch, the stick
+  and its click for the stick's, the trigger for the trigger's) presses nothing (a thumb back on its button
+  between presses); a landing just after another control under that thumb counts (the left stick let go,
+  X touched 0.15 s later, taps). A touch sensed for less than the debounce (0.06 s) is no tap (a brush on
+  the way past); a press binding is down from its first frame like any button's, brush or not. Press, tap and hold
+  otherwise as the thumb rest's (every touch past the debounce is a tap or a hold, never both). A touch
+  still on when a menu lets go, or already on when the mapper is built (`TouchButton::startCancelled`: after
+  the headset's dashboard, a gap in controller input, or another family's controllers; the thumb rest bound
+  like a button too), fires only after a fresh landing (`TouchButton::cancel`). One input, one job: where
+  Face buttons as thumb rest makes A/B or X/Y touched the wheel's rest (a controller without a thumb rest,
+  never the Steam Frame, even where a map binds that touch and so has its binding: `faceTouchRests`, `wheelRestHands`, assembled for the mapper by
+  `applyFamilyTouchSettings`), binding either touch of
+  that hand takes the hand out of the wheel (`bindsWheelRest`, as a bound thumb rest; log and editor note as
+  for the thumb rest, the editor still saves); the stick's, the trackpad's and the face buttons' touch the
+  wheel reads only as the thumb elsewhere keep doing that when bound (the sensor is read twice). OpenXR: a
+  touch's binding is added for the session only when a map of that family binds it
+  (`addBoundTouchBindings`; on the Steam Frame too), so with no touch key in the player's file nothing is
+  suggested or changes. A refused profile is suggested again in steps (`touchRetries`): without the veto
+  sensors, keeping a bound touch (it is not only the thumb elsewhere); then without the bound touches too,
+  keeping the rests, so a touch the runtime will not bind costs the wheel nothing; then without the rests.
+  Each binding a step that went through dropped is logged: `'right.primary_touch.tap' is bound
+  (weapon_slot_2) but the runtime refused its touch binding (/user/hand/right/input/a/touch); that binding
+  does nothing this session` (none for a key whose sensor the family lacks). Log: `controllers: N touch
+  binding(s) for touches bound as buttons added to the ... data`, `touches bound as buttons (using a control
+  under that thumb or finger ends one): right.primary_touch.tap = weapon_slot_2`, `touch button: the right
+  controller reports primary_touch` (the first touch of each bound sensor), a line when none has reported a
+  touch after a minute of play, and every 10 s with a touch `right primary_touch button, last 10 s: 4
+  touch(es), 1 short, 0 gap(s) forgiven, 2 tap(s), 0 hold(s), 2 ended by its own control, 0 brush(es): no
+  tap, 1 landing(s) voided (own control)`. Under `ETERNALVR_CONTROLLERS_TRACE`, every change of the touch
+  sensors the frame reports, bound or not (the first 200, then one a minute): `trace: touch sensors: right
+  primary_touch` (or `none`). Prompts name them `A Touch`, `Right Trigger Touch`, `Left Stick Touch`.
+  Scripted input: `right.trigger_touch = 1` added beside the other touch sensors. An older layer does not
+  know the keys and rejects the whole file (the built-in controls are used, logged); maps that skip unknown
+  keys are the next step.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
   Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
   off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along
@@ -759,7 +819,8 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   family's data file (`/input/x/click` is X, `/input/squeeze/value` is Grip, `/input/thumbstick/click` is
   Stick Click), with the hand in front when the other controller has the same control. An optional
   `[labels]` section in the data file names inputs directly (`"left.primary" = "X"`; inputs trigger, grip,
-  stick_click, primary, secondary, menu, thumbrest, stick), for controllers whose buttons are named differently from
+  stick_click, primary, secondary, menu, thumbrest, primary_touch, secondary_touch, stick_touch,
+  trackpad_touch, trigger_touch, stick), for controllers whose buttons are named differently from
   their paths.
 - **What a prompt says.** The first control the player's current map binds to the action: presses and taps
   first ("X"), then holds ("Hold X"), then turn-stick gestures ("Right Stick Up", "Hold Right Stick
@@ -812,7 +873,7 @@ right.trigger = 1          # 0..1 (also grip)
 left.stick = 0, 1          # x, y
 right.primary = 1          # primary, secondary, face3, face4, shoulder, click (stick click), menu
 left.thumbrest = 1         # touch sensors: thumbrest, primary_touch, secondary_touch, thumbstick_touch,
-                           # trackpad_touch
+                           # trackpad_touch, trigger_touch
 right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOCAL)
 left.aim = 0, 0, 90        # an optional roll, counter-clockwise as the user sees it: the left palm up
 right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)
@@ -920,6 +981,15 @@ for seconds (below).
 - **A thumb rest as a button** is covered by unit tests only, not yet a headset. To confirm: a tap on a
   Quest 3 quick-switches, how often a resting thumb fires a press or hold binding by mistake (the log's
   10 s line), and that SteamVR's and Virtual Desktop's Touch emulation report the rest.
+- **Touch sensors as buttons** are covered by unit tests and scripted rig scenarios (`touchbtn-tap`,
+  `touchbtn-unbound`, `touchbtn-press`, `touchbtn-face`, `touchbtn-stick` in
+  `tools/rig/qa/qa-scenarios-wheel.ps1`: A touched taps weapon_slot_2 and the heavy cannon comes up, the touch
+  reaches the layer and nothing fires with no touch bound, A pressed while touched jumps and taps nothing, A
+  pressed with the thumb also on B whose tap is bound jumps and taps nothing, X touched 0.15 s after the left
+  stick is let go taps), not yet a headset. To confirm: a tap of A
+  touched on a Quest 3 fires its binding and a jump does not, how often a thumb or finger resting on a control
+  fires a press or hold by mistake (the log's 10 s line), the trigger's touch on Touch and Index, and that
+  SteamVR's and Virtual Desktop's emulation report each sensor.
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`) are covered by unit tests only. To confirm in a
   headset: the thresholds, false triggers in a real fight, and whether the grenade should fly along the
   throw rather than the view (`docs/VR_INTERACTIONS.md` section 5).

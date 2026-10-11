@@ -21,6 +21,7 @@
 #include "features/input/stick_response.hpp"
 #include "features/input/tap_hold.hpp"
 #include "features/input/touch_button.hpp"
+#include "features/input/touch_inputs.hpp"
 #include "features/input/turn_policy.hpp"
 #include "features/input/turn_stick_arbiter.hpp"
 #include "features/posture/posture_detector.hpp"
@@ -71,12 +72,27 @@ struct MapperSettings {
     // The hands whose rest is the thumb rest itself: there a face button's touch is never the rest, it says
     // the thumb is elsewhere (as the stick's touch does everywhere).
     std::array<bool, 2> restIsThumbRest{};
+    // Per hand, the controls under each touch on a control (touch_inputs.hpp, kControlTouches order): using
+    // one ends that touch's press (for a thumb's touch every control under that thumb). Using one of the
+    // narrower landing set (the control under the touch itself) also voids a landing soon after. The control
+    // map reads both from the family's data.
+    std::array<std::array<OwnControls, kControlTouchCount>, 2> touchOwnControls = defaultTouchOwnControls();
+    std::array<std::array<OwnControls, kControlTouchCount>, 2> touchLandingControls =
+        defaultTouchLandingControls();
+
+    static std::array<std::array<OwnControls, kControlTouchCount>, 2> defaultTouchOwnControls();
+    static std::array<std::array<OwnControls, kControlTouchCount>, 2> defaultTouchLandingControls();
 };
 
 // Whether a face button's touch (not pressed) is `hand`'s rest: face touch on, and no thumb rest there.
 [[nodiscard]] inline bool faceTouchIsRest(const MapperSettings& settings, Hand hand) {
     return settings.restFaceTouch && !settings.restIsThumbRest[static_cast<std::size_t>(hand)];
 }
+
+// Whether the profile binds what the thumb-rest wheel reads as `hand`'s rest like a button: its thumb rest,
+// or where a face button's touch is the rest (faceTouchIsRest), either face button's touch. One rest, one
+// job: such a hand is no rest of the wheel's.
+[[nodiscard]] bool bindsWheelRest(const BindingProfile& profile, const MapperSettings& settings, Hand hand);
 
 // Per-frame facts the mapper needs from outside the input system.
 struct MapperContext {
@@ -123,6 +139,10 @@ public:
     [[nodiscard]] const TouchButton& restButton(Hand hand) const {
         return hands_[static_cast<std::size_t>(hand)].thumbRest;
     }
+    // A touch on a control of `hand` read like a button (`touch`: isControlTouch), counted the same way.
+    [[nodiscard]] const TouchButton& touchButton(Hand hand, ButtonInput touch) const {
+        return hands_[static_cast<std::size_t>(hand)].touches[controlTouchIndex(touch)];
+    }
     // For the log: the weapon hand, the move stick's hand and what forward on it follows, as in
     // "left-handed, move stick left, moving where the left hand points".
     [[nodiscard]] std::string summary() const;
@@ -133,8 +153,9 @@ private:
     struct HandButtons {
         AnalogButton trigger;
         AnalogButton grip;
-        std::array<TapHoldDetector, kButtonInputCount> tapHold; // the thumb rest's unused
+        std::array<TapHoldDetector, kButtonInputCount> tapHold; // the touches' unused
         TouchButton thumbRest;
+        std::array<TouchButton, kControlTouchCount> touches; // kControlTouches order
         // Set while this hand steadies the weapon, and kept until its grip has been released once,
         // so a grip squeezed for support never turns into its bound action when support ends.
         bool gripHeldForSupport = false;
@@ -146,7 +167,11 @@ private:
         PerButton hold{};
     };
 
-    static ButtonLevels sampleButtons(HandButtons& buttons, const HandState& hand, float dtSeconds);
+    static ButtonLevels sampleButtons(HandButtons& buttons,
+                                      const HandState& hand,
+                                      const std::array<OwnControls, kControlTouchCount>& own,
+                                      const std::array<OwnControls, kControlTouchCount>& landing,
+                                      float dtSeconds);
     void addButtonActions(Hand hand,
                           const ButtonLevels& levels,
                           bool gripSuppressed,

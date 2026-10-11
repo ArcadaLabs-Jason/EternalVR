@@ -93,7 +93,8 @@ int queueOrphans(const Builder& b);
 
 // At the engine's resize only (view_clones.cpp): purges every image clone of `map` and every clone waiting
 // (queueOrphans, the ones a build made a clone beside), found alive by their name and only names of ours
-// (clone_names::ours). How many; `waiting` gets the names of the waiting ones purged.
+// (clone_names::ours), and releases view 1's stencil views (releaseStencilViews). How many; `waiting` gets
+// the names of the waiting ones purged.
 int releaseClones(const Map* map, std::string& waiting);
 
 } // namespace evr::vkcore::view_clone

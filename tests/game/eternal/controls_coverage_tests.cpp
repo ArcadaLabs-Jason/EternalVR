@@ -116,6 +116,21 @@ void press(InputFrame& frame, Press p, bool down) {
     case ButtonInput::ThumbRest:
         h.thumbRest = down;
         break;
+    case ButtonInput::PrimaryTouch:
+        h.primaryTouch = down;
+        break;
+    case ButtonInput::SecondaryTouch:
+        h.secondaryTouch = down;
+        break;
+    case ButtonInput::StickTouch:
+        h.stickTouch = down;
+        break;
+    case ButtonInput::TrackpadTouch:
+        h.trackpadTouch = down;
+        break;
+    case ButtonInput::TriggerTouch:
+        h.triggerTouch = down;
+        break;
     case ButtonInput::Count:
         break;
     }

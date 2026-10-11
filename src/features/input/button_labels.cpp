@@ -25,6 +25,11 @@ constexpr std::array<std::pair<LabelInput, std::string_view>, kLabelInputCount> 
     {LabelInput::Shoulder, "shoulder"},
     {LabelInput::Menu, "menu"},
     {LabelInput::ThumbRest, "thumbrest"},
+    {LabelInput::PrimaryTouch, "primary_touch"},
+    {LabelInput::SecondaryTouch, "secondary_touch"},
+    {LabelInput::StickTouch, "stick_touch"},
+    {LabelInput::TrackpadTouch, "trackpad_touch"},
+    {LabelInput::TriggerTouch, "trigger_touch"},
     {LabelInput::Stick, "stick"},
 }};
 
@@ -61,6 +66,16 @@ XrActionId gameplayAction(LabelInput input) {
         return XrActionId::Menu;
     case LabelInput::ThumbRest:
         return XrActionId::ThumbRest;
+    case LabelInput::PrimaryTouch:
+        return XrActionId::PrimaryTouch;
+    case LabelInput::SecondaryTouch:
+        return XrActionId::SecondaryTouch;
+    case LabelInput::StickTouch:
+        return XrActionId::ThumbstickTouch;
+    case LabelInput::TrackpadTouch:
+        return XrActionId::TrackpadTouch;
+    case LabelInput::TriggerTouch:
+        return XrActionId::TriggerTouch;
     case LabelInput::Stick:
     case LabelInput::Count:
         break;
@@ -88,6 +103,16 @@ LabelInput labelInput(ButtonInput input) {
         return LabelInput::Shoulder;
     case ButtonInput::ThumbRest:
         return LabelInput::ThumbRest;
+    case ButtonInput::PrimaryTouch:
+        return LabelInput::PrimaryTouch;
+    case ButtonInput::SecondaryTouch:
+        return LabelInput::SecondaryTouch;
+    case ButtonInput::StickTouch:
+        return LabelInput::StickTouch;
+    case ButtonInput::TrackpadTouch:
+        return LabelInput::TrackpadTouch;
+    case ButtonInput::TriggerTouch:
+        return LabelInput::TriggerTouch;
     case ButtonInput::Menu:
     case ButtonInput::Count:
         break;
@@ -229,6 +254,11 @@ std::string nameFromInputPath(std::string_view path) {
         } else if (component == "force") {
             name += " Press";
         }
+    }
+    // A touch sensor bound like a button (touch_inputs.hpp) is not its control pressed. The thumb rest is
+    // only ever touched.
+    if (component == "touch" && control != "thumbrest") {
+        name += " Touch";
     }
     return name;
 }

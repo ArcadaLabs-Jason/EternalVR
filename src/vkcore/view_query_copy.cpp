@@ -2,6 +2,7 @@
 
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
+#include "vkcore/pe_flares.hpp"
 #include "vkcore/view_slots.hpp"
 
 #include <atomic>
@@ -24,11 +25,17 @@ constexpr std::uint32_t kNoWait = 0x1; // VK_QUERY_RESULT_64_BIT
 
 std::uintptr_t g_base = 0;
 std::atomic<std::uint64_t> g_copies{0}; // copies made without the wait
+std::atomic<std::uint64_t> g_waited{0}; // copies of one view's own queries, with the wait (pe_flares.hpp)
 
-// The store is skipped and the flags written without the wait flag (rsp is the game's at the store).
+// The store is skipped and the flags written without the wait flag (rsp is the game's at the store), unless
+// the copy is one view's own queries under Parallel Eye Rendering's flares (pe_flares.hpp).
 template <std::size_t I>
 void onFlagsStore(HookRegisters& r) {
     if (!parallelEyesTouch()) {
+        return;
+    }
+    if (parallelEyeFlaresCopyWaits()) {
+        g_waited.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     std::memcpy(reinterpret_cast<void*>(r.rsp + kFlagsOffset), &kNoWait, sizeof(kNoWait));
@@ -63,8 +70,10 @@ bool installViewQueryCopy(const std::byte* base) {
 }
 
 void viewQueryCopyLogCounts() {
-    EVR_LOG("%s: occlusion query results copied without waiting %llu time(s)", kTag,
-            static_cast<unsigned long long>(g_copies.load()));
+    EVR_LOG("%s: occlusion query results copied without waiting %llu time(s), with it (each view's own, lens "
+            "flares per view) %llu time(s)",
+            kTag, static_cast<unsigned long long>(g_copies.load()),
+            static_cast<unsigned long long>(g_waited.load()));
 }
 
 } // namespace evr::vkcore

@@ -9,9 +9,10 @@
 //
 //   <hand>    left, right
 //   <input>   trigger, grip, stick_click, primary (A/X), secondary (B/Y), face3, face4, shoulder, menu,
-//             thumbrest
+//             thumbrest, primary_touch, secondary_touch, stick_touch, trackpad_touch, trigger_touch
 //             (face3 and face4: X and Y on the Steam Frame's right controller, D-pad right and up
-//             on its left; shoulder: the bumper; thumbrest: the thumb rest's touch, touch_button.hpp)
+//             on its left; shoulder: the bumper; thumbrest: the thumb rest's touch; the *_touch inputs:
+//             the touch sensors on those controls, touch_inputs.hpp; touches are read by touch_button.hpp)
 //   <press>   press (while down), tap, hold
 //   <gesture> up, down_tap, down_hold
 //   <action>  a game::gameActionName(), e.g. "fire", "weapon_wheel"

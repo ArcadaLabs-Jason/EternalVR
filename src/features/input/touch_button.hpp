@@ -20,6 +20,19 @@
 // of its own stick being out of the centre, is the thumb coming off its own controls (a jump, a turn): it is
 // no press of any kind until the thumb lifts and lands again.
 //
+// A touch on a control (TouchKind::Control: A/B, X/Y, the stick, the trackpad, the trigger; touch_inputs.hpp;
+// DECISIONS T-126) is usually the start of using that control, so the rest's elsewhere rules do not apply
+// and its own control decides instead: the same filter (first-frame landing, gaps under the hold-over
+// forgiven), with no sensor beside it and no hard evidence. Its own control used (for a thumb's touch any
+// control under that thumb: a face button pressed, the stick out past kOwnStickOut or clicked; for the
+// trigger's touch the trigger past its press threshold) while the touch is registered ends a press or hold at
+// once, and that touch is no tap; it presses nothing more until the thumb or finger lifts and lands again. A
+// landing within kOwnButtonVoidSeconds of the control under the touch itself being used (the narrow set: the
+// button touched, the stick and its click under the stick's touch, the trigger) is no press of any kind (a
+// thumb coming back to its button between presses); a landing just after another control under that thumb
+// (the stick let go, then X touched) counts. A touch sensed for less than kRestDebounceSeconds is no tap (a
+// brush on the way past), though a press binding is down from its first frame like any button's.
+//
 // Pure, no clock of its own: the mapper feeds it once per frame (input_mapper.hpp).
 
 #include "features/input/rest_touch_filter.hpp"
@@ -29,11 +42,19 @@
 
 namespace evr::input {
 
+// Which rules a touch is read by.
+enum class TouchKind : std::uint8_t {
+    Rest,    // the thumb rest: the thumb elsewhere holds a landing back and cuts a lift short
+    Control, // a touch on a control: its own control used ends it
+};
+
 struct TouchButtonSample {
-    bool raw = false;        // the thumb rest's touch
-    bool vetoTouch = false;  // a touch sensor beside the rest: the thumb on its stick or face buttons
-    bool faceButton = false; // the hand's primary or secondary button pressed
-    bool stickOut = false;   // the hand's own stick out of the centre
+    bool raw = false;        // the sensor: the thumb rest's touch, or the control's
+    bool vetoTouch = false;  // Rest: a touch sensor beside the rest, the thumb on its stick or face buttons
+    bool faceButton = false; // Rest: the hand's primary or secondary button pressed
+    bool stickOut = false;   // Rest: the hand's own stick out of the centre
+    bool ownControl = false; // Control: one of its own controls in use: ends the touch (touch_inputs.hpp)
+    bool ownLanding = false; // Control: the control under the touch itself in use: voids a landing soon after
 };
 
 struct TouchButtonOutput {
@@ -52,7 +73,9 @@ struct TouchButtonStats {
     std::uint32_t passedOver = 0;     // ... of those, a touch sensed under kRestDebounceSeconds: no tap
     std::uint32_t taps = 0;
     std::uint32_t holds = 0;
-    std::uint32_t voided = 0; // landings straight off the hand's own controls
+    std::uint32_t voided = 0;  // landings straight off the hand's own controls
+    std::uint32_t ownUse = 0;  // Control: registered touches ended by their own control in use
+    std::uint32_t brushes = 0; // Control: touches sensed under kRestDebounceSeconds: no tap
 };
 
 class TouchButton {
@@ -60,7 +83,7 @@ public:
     TouchButton() = default;
     // A hold time outside 0..kMaxHoldSeconds, or a hold-over outside the rest's range, falls back to its
     // default.
-    TouchButton(float holdSeconds, float holdOverSeconds);
+    TouchButton(float holdSeconds, float holdOverSeconds, TouchKind kind = TouchKind::Rest);
 
     // `dtSeconds`: the frame's seconds; non-finite or negative counts as zero.
     TouchButtonOutput update(const TouchButtonSample& sample, float dtSeconds);
@@ -69,15 +92,26 @@ public:
     // ended): it presses nothing until it lifts.
     void cancel();
 
+    // Before the first update, for a button made while its sensor may already be touched (a control map
+    // rebuilt in play): a contact going on at the first update presses nothing until it lifts; none, nothing
+    // changes.
+    void startCancelled() { cancelled_ = true; }
+
     // The touch is registered (down, unless it is used up).
     [[nodiscard]] bool isDown() const { return filter_.touched(); }
     [[nodiscard]] float holdSeconds() const { return holdSeconds_; }
+    [[nodiscard]] TouchKind kind() const { return kind_; }
     [[nodiscard]] const TouchButtonStats& stats() const { return stats_; }
 
 private:
     static constexpr float kLongAgoSeconds = 1000.0f;
 
+    // The landing's void, and whether a lift is a tap, by the kind's rules.
+    [[nodiscard]] bool landingVoid(const TouchButtonSample& sample) const;
+    [[nodiscard]] bool liftTaps(const RestTouchStep& step);
+
     RestTouchFilter filter_;
+    TouchKind kind_ = TouchKind::Rest;
     float holdSeconds_ = kDefaultHoldSeconds;
     bool voided_ = false;    // this landing presses nothing
     bool cancelled_ = false; // ... nor the one the contact going on makes
@@ -85,6 +119,7 @@ private:
     float sinceLanding_ = 0.0f;
     float sinceFaceButton_ = kLongAgoSeconds;
     float centredSeconds_ = kLongAgoSeconds;
+    float sinceOwnLanding_ = kLongAgoSeconds; // Control: since the control under it was last in use
     TouchButtonStats stats_;
 };
 

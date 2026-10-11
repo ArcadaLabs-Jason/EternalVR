@@ -45,7 +45,7 @@ TEST_CASE("a render's records are taken once, in the order they came") {
     CHECK(book.add(kRender, flare(0x100, 0x10000)) == AddResult::Added);
     CHECK(book.add(kRender, flare(0x200, 0x20000)) == AddResult::Added);
     std::array<FlareRecord, FlareBook::kCapacity> out{};
-    const TakeResult taken = book.take(kRender, out);
+    const TakeResult taken = book.take(kRender, 0, out);
     REQUIRE(taken.count == 2);
     CHECK_FALSE(taken.otherRender);
     CHECK(out[0].model == 0x100);
@@ -53,16 +53,16 @@ TEST_CASE("a render's records are taken once, in the order they came") {
     CHECK(out[0].intensity == 0.5f);
     CHECK(out[0].context == 0x7000);
     CHECK(out[1].model == 0x200);
-    CHECK(book.take(kRender, out).count == 0);
+    CHECK(book.take(kRender, 0, out).count == 0);
 }
 
 TEST_CASE("a record after its render was taken is late and not kept") {
     FlareBook book;
     book.add(kRender, flare(0x100));
     std::array<FlareRecord, 4> out{};
-    CHECK(book.take(kRender, out).count == 1);
+    CHECK(book.take(kRender, 0, out).count == 1);
     CHECK(book.add(kRender, flare(0x200)) == AddResult::Late);
-    CHECK(book.take(kRender, out).count == 0);
+    CHECK(book.take(kRender, 0, out).count == 0);
 }
 
 TEST_CASE("a new render drops the last one's records; one never taken is counted") {
@@ -71,8 +71,8 @@ TEST_CASE("a new render drops the last one's records; one never taken is counted
     CHECK(book.add(kNext, flare(0x200)) == AddResult::Added);
     CHECK(book.rendersNotTaken() == 1);
     std::array<FlareRecord, 4> out{};
-    CHECK(book.take(kRender, out).count == 0);
-    const TakeResult taken = book.take(kNext, out);
+    CHECK(book.take(kRender, 0, out).count == 0);
+    const TakeResult taken = book.take(kNext, 0, out);
     REQUIRE(taken.count == 1);
     CHECK(out[0].model == 0x200);
     // Taken, then a new render: nothing more counted.
@@ -85,7 +85,7 @@ TEST_CASE("an older render of the same view after a newer one started is late") 
     book.add(kNext, flare(0x100));
     CHECK(book.add(kRender, flare(0x200)) == AddResult::Late);
     std::array<FlareRecord, 4> out{};
-    CHECK(book.take(kNext, out).count == 1);
+    CHECK(book.take(kNext, 0, out).count == 1);
 }
 
 TEST_CASE("the frame number wraps: the render after 0xFFFFFFFF is newer") {
@@ -100,7 +100,7 @@ TEST_CASE("another view starts a new render whatever its frame") {
     book.add(kNext, flare(0x100));
     CHECK(book.add(RenderKey{0x6000, 3}, flare(0x200)) == AddResult::Added);
     std::array<FlareRecord, 4> out{};
-    CHECK(book.take(RenderKey{0x6000, 3}, out).count == 1);
+    CHECK(book.take(RenderKey{0x6000, 3}, 0, out).count == 1);
 }
 
 TEST_CASE("a model twice in one render keeps its first record") {
@@ -108,7 +108,7 @@ TEST_CASE("a model twice in one render keeps its first record") {
     CHECK(book.add(kRender, flare(0x100, 0x10000)) == AddResult::Added);
     CHECK(book.add(kRender, flare(0x100, 0x100C0)) == AddResult::Duplicate);
     std::array<FlareRecord, 4> out{};
-    REQUIRE(book.take(kRender, out).count == 1);
+    REQUIRE(book.take(kRender, 0, out).count == 1);
     CHECK(out[0].vertices == 0x10000);
 }
 
@@ -119,7 +119,7 @@ TEST_CASE("a full render keeps the first kCapacity records") {
     }
     CHECK(book.add(kRender, flare(0x1)) == AddResult::Full);
     std::array<FlareRecord, FlareBook::kCapacity> out{};
-    CHECK(book.take(kRender, out).count == FlareBook::kCapacity);
+    CHECK(book.take(kRender, 0, out).count == FlareBook::kCapacity);
 }
 
 TEST_CASE("take copies no more than the buffer holds") {
@@ -128,17 +128,61 @@ TEST_CASE("take copies no more than the buffer holds") {
     book.add(kRender, flare(0x200));
     book.add(kRender, flare(0x300));
     std::array<FlareRecord, 2> out{};
-    CHECK(book.take(kRender, out).count == 2);
+    CHECK(book.take(kRender, 0, out).count == 2);
 }
 
 TEST_CASE("taking another render's key says the book holds records nobody took") {
     FlareBook book;
     std::array<FlareRecord, 4> out{};
-    CHECK_FALSE(book.take(kRender, out).otherRender); // empty book
+    CHECK_FALSE(book.take(kRender, 0, out).otherRender); // empty book
     book.add(kRender, flare(0x100));
-    const TakeResult other = book.take(RenderKey{0x6000, 10}, out);
+    const TakeResult other = book.take(RenderKey{0x6000, 10}, 0, out);
     CHECK(other.count == 0);
     CHECK(other.otherRender);
-    CHECK(book.take(kRender, out).count == 1);
-    CHECK_FALSE(book.take(RenderKey{0x6000, 10}, out).otherRender); // taken: nothing waiting
+    CHECK(book.take(kRender, 0, out).count == 1);
+    CHECK_FALSE(book.take(RenderKey{0x6000, 10}, 0, out).otherRender); // taken: nothing waiting
+}
+
+TEST_CASE("a record with two halves needs room for both in the ring") {
+    FlareRecord two = flare(0x100, 0x10000, kMaxQuads / 2);
+    two.halves = 2;
+    CHECK(plausible(two));
+    two.quads = kMaxQuads / 2 + 1;
+    CHECK_FALSE(plausible(two));
+    FlareRecord three = flare(0x100);
+    three.halves = 3;
+    CHECK_FALSE(plausible(three));
+    three.halves = 0;
+    CHECK_FALSE(plausible(three));
+}
+
+TEST_CASE("half 1 starts where half 0's quads end") {
+    const FlareRecord f = flare(0x100, 0x10000, 3);
+    CHECK(halfStart(f, 0) == 0x10000);
+    CHECK(halfStart(f, 1) == 0x10240);
+    CHECK(halfStart(f, 1) == vertexEnd(f));
+}
+
+TEST_CASE("each half of a render is taken once, in either order") {
+    FlareBook book;
+    book.add(kRender, flare(0x100));
+    book.add(kRender, flare(0x200));
+    std::array<FlareRecord, 4> out{};
+    CHECK(book.take(kRender, 1, out).count == 2);
+    CHECK(book.take(kRender, 1, out).count == 0);
+    CHECK(book.take(kRender, 0, out).count == 2);
+    CHECK(book.take(kRender, 0, out).count == 0);
+    CHECK(book.add(kRender, flare(0x300)) == AddResult::Late);
+    CHECK(book.take(kRender, 2, out).count == 0);
+    CHECK(book.take(kRender, -1, out).count == 0);
+}
+
+TEST_CASE("a render only one half of took counts as taken") {
+    FlareBook book;
+    book.add(kRender, flare(0x100));
+    std::array<FlareRecord, 4> out{};
+    CHECK(book.take(kRender, 1, out).count == 1);
+    book.add(kNext, flare(0x200));
+    CHECK(book.rendersNotTaken() == 0);
+    CHECK(book.take(RenderKey{0x6000, 11}, 0, out).otherRender); // kNext's records wait for an eye
 }

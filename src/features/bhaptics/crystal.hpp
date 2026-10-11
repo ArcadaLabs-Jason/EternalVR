@@ -26,7 +26,7 @@ inline constexpr double kTokenDelaySeconds = 0.1;
 // kRuneSparkShare of the vest's and both sleeves' motors, each at a random level, kRuneShockSeconds in all,
 // rising at once and fading over the last kRuneShockFadeSeconds (BodyHaptics::runeShock).
 inline constexpr double kRuneDelaySeconds = 1.0;
-inline constexpr double kRuneShockSeconds = 4.0;
+inline constexpr double kRuneShockSeconds = 5.0; // 4 s up to 0.1.45; the tester asked for one more (#25)
 inline constexpr double kRuneShockRiseSeconds = 0.2;
 inline constexpr double kRuneShockFadeSeconds = 1.0;
 inline constexpr float kRuneSparkShare = 0.3f;

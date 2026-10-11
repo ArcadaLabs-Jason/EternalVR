@@ -49,6 +49,11 @@ enum class LabelInput : std::uint8_t {
     Shoulder,
     Menu,
     ThumbRest,
+    PrimaryTouch,
+    SecondaryTouch,
+    StickTouch,
+    TrackpadTouch,
+    TriggerTouch,
     Stick,
     Count,
 };

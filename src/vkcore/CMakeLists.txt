@@ -60,6 +60,7 @@ add_library(evr_layer SHARED
     demon_aim.cpp
     demon_view.cpp
     facing_hook.cpp
+    flare_core.cpp
     flare_views.cpp
     device_augment.cpp
     dlss_dll.cpp
@@ -105,6 +106,9 @@ add_library(evr_layer SHARED
     window_timing.cpp
     runtime_cvars.cpp
     runtime_cvars_pe.cpp
+    pe_flares.cpp
+    pe_flare_contexts.cpp
+    pe_flare_guard.cpp
     presenter_eyes.cpp
     fence_wait.cpp
     presenter_frame.cpp
@@ -170,6 +174,7 @@ add_library(evr_layer SHARED
     view_clone_census.cpp
     view_clone_make.cpp
     view_clone_map.cpp
+    view_clone_stencil.cpp
     view_clones.cpp
     view_contexts.cpp
     view_dlss.cpp
@@ -224,6 +229,7 @@ target_sources(evr_layer PRIVATE
     prompt_hooks.cpp
     rest_wheel.cpp
     rumble_hook.cpp
+    touch_buttons_log.cpp
     usercmd_hook.cpp
     viewmodel_hook.cpp
     vrs_command_buffers.cpp

@@ -39,6 +39,8 @@ constexpr std::array<XrActionDef, kXrActionCount> kActions{{
      XrActionKind::Boolean},
     {XrActionId::TrackpadTouch, XrActionSetId::Gameplay, "trackpad_touch", "Trackpad (touch)",
      XrActionKind::Boolean},
+    {XrActionId::TriggerTouch, XrActionSetId::Gameplay, "trigger_touch", "Trigger (touch)",
+     XrActionKind::Boolean},
 }};
 
 } // namespace

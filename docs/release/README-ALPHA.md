@@ -88,7 +88,7 @@ Rendering").
 - An NVIDIA card: it has not been tried on AMD or Intel.
 - Anti-aliasing **TAA**, **DLSS** or **Off** (Play tab). With DLSS each eye gets its own DLSS.
 - No Foveated rendering and no Alternate eyes: both are greyed out while it is on.
-- The mod turns the game's async compute off and the lens flares off while it runs; nothing to do there.
+- The mod turns the game's async compute off while it runs; nothing to do there.
 - **12 GB of video memory or less:** set Texture Pool Size in the game's video settings one step lower
   before you try it. At the usual setting a 12 GB card can run out and the game turns into a slideshow.
 

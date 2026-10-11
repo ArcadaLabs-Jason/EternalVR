@@ -16,7 +16,10 @@
 // Parallel Eye Rendering runs, both copies (0x1C32FAF, 0x1C33039) are made without the wait flag: queries the
 // GPU has not finished are not copied, and the buffer keeps their previous results. As the indices restart
 // every frame, such a slot may hold another object's result (0x1C32F20 clears the bits all the same, at
-// 0x1C33007): an object culled or kept by a stale result for a frame. Installed by view_shared_state.cpp.
+// 0x1C33007): an object culled or kept by a stale result for a frame. Flares are the only users of the pool;
+// while they are drawn per view (pe_flares.hpp) each view issues, copies and reads its own queries (view 1's
+// in the pool's upper half), so a copy of one view's own keeps the wait, as one view has it, when every bit
+// it scans was marked by its own view's setup in this frame. Installed by view_shared_state.cpp.
 
 #include <cstddef>
 

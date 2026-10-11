@@ -273,7 +273,8 @@ namespace EternalVR.Launcher
             if (!PrepareControls(controls)) return;
             var lastProfile = SessionLogs.LastControllerProfile(ctx.Paths.Logs);
             if (lastProfile != null) ctx.Log.Info("controls editor: the last game used " + lastProfile);
-            using (var dialog = new ControlsDialog(controls, ctx.Settings.Hand, lastProfile, ctx.Settings.ThumbRest, ctx.Log))
+            using (var dialog = new ControlsDialog(controls, ctx.Settings.Hand, lastProfile, ctx.Settings.ThumbRest,
+                ctx.Settings.ThumbRestFaceTouch, ctx.Log))
                 dialog.ShowDialog(this);
             ShowControlsState();
         }

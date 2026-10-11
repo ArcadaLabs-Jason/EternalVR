@@ -5,6 +5,7 @@
 // scattering wait, shadow atlas skip and tile list pool) share. Build 25216728 (RVAs).
 
 #include "vkcore/clone_census.hpp"
+#include "vkcore/clone_stencil.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/parallel_eyes_settings.hpp"
 
@@ -80,6 +81,7 @@ struct Map {
     std::vector<Clone> leftOut;
     std::vector<std::pair<std::uintptr_t, std::uint32_t>> byLeftOut;
     std::unique_ptr<std::atomic<std::uint64_t>[]> leftUses;
+    clone_stencil::Own stencil; // view 1's own stencil view of its depth clone (view_clone_stencil.cpp)
 };
 
 template <typename T>
@@ -117,6 +119,17 @@ bool watchAt(std::uint32_t rva, MidHookCallback callback, const char* what);
 bool checkBinds();
 bool installBinds();
 void reportBinds();
+
+// view_clone_stencil.cpp (clone_stencil.hpp): view 1's own stencil view of its depth clone. checkStencilView
+// from checkBinds (a site not as known, or ETERNALVR_TEST_VIEW_CLONE_SKIP=stencil, leaves view 1 on the
+// engine's, logged); makeStencilView from each build, once the map's entries are sorted (into map.stencil);
+// swapStencilView from the image bind hook for view 1's binds (true when it bound its own, no lock);
+// releaseStencilViews from releaseClones, at the engine's resize; how many binds took view 1's.
+bool checkStencilView();
+void makeStencilView(Map& map, std::uintptr_t dc, int build);
+bool swapStencilView(HookRegisters& r, const Map& map);
+void releaseStencilViews();
+std::uint64_t stencilViewBinds();
 
 // view_one_passes.cpp: view 1's own passes (prepareViewOnePasses first: every site checked and the tile list
 // pool's memory taken, nothing of the game changed), and the two bind hooks' parts for them.

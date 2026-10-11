@@ -429,7 +429,9 @@ namespace EternalVR.Launcher.Core.Tests
                 var controls = Prepared(t);
                 var touch = Open(controls, "oculus_touch.toml");
                 var inputs = touch.Inputs(Handedness.Right);
-                Assert.Equal(13, inputs.Count); // the right Menu button belongs to the system; both thumb rests
+                // The right Menu button belongs to the system; both thumb rests; on each hand A/X, B/Y, the stick and the
+                // trigger touched (TouchButtonsTests).
+                Assert.Equal(21, inputs.Count);
                 Assert.DoesNotContain((ControlHand.Right, ButtonInput.Menu), inputs);
                 Assert.Equal("Right A", touch.InputName(ControlHand.Right, ButtonInput.Primary));
                 Assert.Equal("Left Y", touch.InputName(ControlHand.Left, ButtonInput.Secondary));
@@ -443,7 +445,8 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal("Left trackpad", wands.StickName(ControlHand.Left));
 
                 var frame = Open(controls, "steam_frame.toml");
-                Assert.Equal(18, frame.Inputs(Handedness.Right).Count); // four face buttons, a bumper and Menu or View on each
+                // Four face buttons, a bumper and Menu or View on each; the stick and trigger touched on each, A and B on the right.
+                Assert.Equal(24, frame.Inputs(Handedness.Right).Count);
                 Assert.Equal("Right X", frame.InputName(ControlHand.Right, ButtonInput.Face3));
                 Assert.Equal("Left D-pad up", frame.InputName(ControlHand.Left, ButtonInput.Face4));
                 Assert.Equal("Left View button", frame.InputName(ControlHand.Left, ButtonInput.Menu));
@@ -458,7 +461,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Contains((ControlHand.Right, ButtonInput.Menu), touch.Inputs(Handedness.Right));
                 Assert.Equal("Right Menu button", touch.InputName(ControlHand.Right, ButtonInput.Menu));
                 touch.SetAction(Handedness.Right, BindingKey.Button(ControlHand.Right, ButtonInput.Menu, PressKind.Press), null);
-                Assert.Equal(13, touch.Inputs(Handedness.Right).Count);
+                Assert.Equal(21, touch.Inputs(Handedness.Right).Count);
             }
         }
 
