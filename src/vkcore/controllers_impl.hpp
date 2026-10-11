@@ -455,6 +455,9 @@ void noteClimbAim(bool headAims);
 // the rests report a touch at all.
 bool restWheelBlocked(const State& s);
 void noteRestWheel(const input::InputFrame& frame, const input::GameInput& input, float dt);
+// ensureMapper, under mapperMutex, once it built a new mapper: its wheel counts from zero again, and so do
+// the 10 s touch lines (their clock runs on).
+void restartRestWheelStats();
 // installGameHooks, with the thumb-rest wheel on: finds the game's wheel open delay
 // (weaponWheel_HoldTimeForOpeningWheel) and, when the player turned the wheel's slowdown off,
 // weaponWheel_slowTimeScale (each logged when not found).

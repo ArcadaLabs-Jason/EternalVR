@@ -126,9 +126,45 @@ TEST_CASE("the write back takes the setup's own fields from the copy and leaves 
     CHECK(at(world, 0xC20) == 1); // the last-step frames: the jobs write those
     CHECK(at(world, 0xC2F) == 1);
     CHECK(at(world, 0xC3C) == 1);
-    CHECK(at(world, ws::kGridMatrix.at) == 1); // view 0's grid matrix stays
+    CHECK(at(world, ws::kGridMatrix.at) == 1);    // view 0's grid matrix stays
+    CHECK(at(world, ws::kGridMeshField.at) == 1); // ... and so does the world's grid mesh
+    CHECK(at(world, ws::kGridMeshField.at + ws::kGridMeshField.size - 1) == 1);
     std::array<std::byte, 16> small{};
     CHECK_FALSE(ws::writeBack(small, copy));
+}
+
+TEST_CASE("a world with no grid mesh takes the one view 1's setup made into its copy") {
+    State world = filled(1);
+    std::memset(world.data() + ws::kGridMeshField.at, 0, ws::kGridMeshField.size);
+    const State copy = filled(2);
+    CHECK(ws::noGridMesh(world));
+    CHECK_FALSE(ws::noGridMesh(copy));
+    REQUIRE(ws::writeBack(world, copy));
+    CHECK_FALSE(ws::noGridMesh(world));
+    CHECK(at(world, ws::kGridMeshField.at) == 2);
+    CHECK(at(world, ws::kGridMeshField.at + ws::kGridMeshField.size - 1) == 2);
+    CHECK(at(world, ws::kGridMeshField.at - 1) == 1); // the neighbours stay the world's
+    CHECK(at(world, ws::kGridMeshField.at + ws::kGridMeshField.size) == 1);
+    CHECK(at(world, ws::kSetupWrites[0].at) == 2);
+}
+
+TEST_CASE("a world with a grid mesh keeps it when the copy has none") {
+    State world = filled(1);
+    State copy = filled(2);
+    std::memset(copy.data() + ws::kGridMeshField.at, 0, ws::kGridMeshField.size);
+    REQUIRE(ws::writeBack(world, copy));
+    CHECK(at(world, ws::kGridMeshField.at) == 1);
+    CHECK(at(world, ws::kSetupWrites[0].at) == 2);
+}
+
+TEST_CASE("with no grid mesh in the world nor the copy the write back writes nothing") {
+    State world = filled(1);
+    std::memset(world.data() + ws::kGridMeshField.at, 0, ws::kGridMeshField.size);
+    State copy = filled(2);
+    std::memset(copy.data() + ws::kGridMeshField.at, 0, ws::kGridMeshField.size);
+    const State before = world;
+    CHECK_FALSE(ws::writeBack(world, copy));
+    CHECK(world == before);
 }
 
 TEST_CASE("view 1's own grid matrix is used only from the frame just before, for the same world") {

@@ -39,10 +39,10 @@ constexpr std::size_t kContextWaves = 0x1125;
 constexpr std::size_t kContextRipples = 0x1126;
 constexpr std::size_t kContextCaustics = 0x1127;
 static_assert(kContextWaves == kContextSpectrum + 1 && kContextRipples == kContextSpectrum + 2 &&
-              kContextCaustics == kContextSpectrum + 3); // the four flags Decided reads at once
-constexpr std::size_t kStateGridMesh = 0xC18; // the grid mesh object (0x188 bytes, remade by the setup)
-constexpr std::size_t kStateIndices = 0xC30;  // displacement, caustics, ripples
-constexpr std::size_t kCvarFlags = 0x40;      // in the cvar's values block
+              kContextCaustics == kContextSpectrum + 3);      // the four flags Decided reads at once
+constexpr std::size_t kStateGridMesh = ws::kGridMeshField.at; // the grid mesh object (0x188 bytes)
+constexpr std::size_t kStateIndices = 0xC30;                  // displacement, caustics, ripples
+constexpr std::size_t kCvarFlags = 0x40;                      // in the cvar's values block
 constexpr std::uint32_t kCvarModified = 1u << 18;
 
 constexpr const char* const kNotInstalled =
@@ -138,7 +138,8 @@ struct Counters {
     std::atomic<std::uint64_t> differs{0};              // ... or not
     std::atomic<std::uint64_t> meshes{0};               // view 1's job took the world's new grid mesh
     std::atomic<std::uint64_t> alone{0};                // view 1 stepped the world's water: view 0 saw none
-    std::atomic<std::uint64_t> late{0};      // ... but view 0's setup ended after view 1's job began
+    std::atomic<std::uint64_t> carried{0}; // of those, the world took the grid mesh view 1 made (it had none)
+    std::atomic<std::uint64_t> late{0};    // ... view 0 saw none but its setup ended after view 1's job began
     std::atomic<std::uint64_t> meshLeft{0};  // view 1's setup left the grid mesh's remake to view 0
     std::atomic<std::uint64_t> meshOwn{0};   // ... or made one into its copy (the world had none)
     std::atomic<std::uint64_t> spectrum0{0}; // view 1's spectrum rebuild given to view 0
@@ -234,13 +235,13 @@ void report() {
         "%llu); view 1's ripple / caustics steps left out %llu / %llu, spectrum rebuilds given to it "
         "%llu, to view 0 %llu; decided as view 0 %llu, otherwise %llu; view 1 stepped the world's water %llu "
         "(view 0 saw "
-        "none; %llu more not, its setup ended after view 1's job began); grid mesh taken at the job "
-        "%llu; odd %llu",
+        "none; %llu more not, its setup ended after view 1's job began; view 1's grid mesh carried into the "
+        "world %llu); grid mesh taken at the job %llu; odd %llu",
         kTag, starts(S::BeforeView0), starts(S::AfterView0), starts(S::DuringView0), left(L::NotDispatched),
         left(L::OtherWorld), left(L::Later), take(c.meshLeft), take(c.meshOwn), waits(R::Waited),
         waits(R::TimedOut), waits(R::Off), take(c.ripplesCleared), take(c.causticsCleared), take(c.spectrum),
-        take(c.spectrum0), take(c.same), take(c.differs), take(c.alone), take(c.late), take(c.meshes),
-        take(c.odd));
+        take(c.spectrum0), take(c.same), take(c.differs), take(c.alone), take(c.late), take(c.carried),
+        take(c.meshes), take(c.odd));
 }
 
 std::byte* waterContextOf(std::byte* renderContext) {
@@ -378,12 +379,14 @@ void onView1Entry(std::byte* context) {
 // Under g_mutex, at view 1's setup end and at its job's state read: when view 0's setup ended this frame with
 // no water in view (ws::view1StepsWorld), view 1 steps the world's water. Its ripple and caustics flags come
 // back, the fields its setup wrote into the copy go into the world's state, and its job reads the world's.
-// True once that is so for this render.
+// Eye R seeing a map's water first leaves the world with no grid mesh: it takes the one view 1's setup made
+// into the copy (ws::writeBack). True once that is so for this render.
 bool takeWorld(std::byte* context) {
     if (g_view1.onWorld) {
         return true;
     }
     const bool view0 = g_view0.ended && g_view0.counter == g_view1.counter && g_view0.state == g_view1.world;
+    const bool carried = g_view1.world && read<std::uintptr_t>(g_view1.world + kStateGridMesh) == 0;
     if (!g_view1.ended || !view0 || !ws::view1StepsWorld(g_view0.end, g_view1.surfaces) ||
         !ws::writeBack(std::span<std::byte>(g_view1.world, ws::kStateSize),
                        std::span<const std::byte>(g_view1.copy, ws::kStateSize))) {
@@ -394,6 +397,7 @@ bool takeWorld(std::byte* context) {
     std::memcpy(context + kContextState, &g_view1.world, sizeof(g_view1.world));
     g_view1.onWorld = true;
     add(g_counters.alone);
+    g_counters.carried.fetch_add(carried ? 1 : 0, std::memory_order_relaxed);
     return true;
 }
 
@@ -465,8 +469,8 @@ void onJobState(const HookRegisters& r) {
 // when the state has none or r_waterGridResolution is "modified" (and clears the flag). On view 1's copy the
 // mesh is the world's: view 1 never remakes it, so view 0's setup cannot free a mesh view 1's copy holds, nor
 // both free it. View 1 waits for view 0's setup to end (at most 30 ms, once a render) and takes the world's
-// mesh; the make then runs only when nothing is left to remake, or when the world has no mesh at all (view 1
-// then makes one into its copy).
+// mesh; the make then runs only when the world has no mesh at all (view 1 then makes one into its copy, which
+// the world takes when view 1 steps the world's water: takeWorld).
 using GridMeshFn = void (*)(std::byte* state);
 GridMeshFn g_gridMeshOriginal = nullptr;
 
@@ -490,17 +494,14 @@ void gridMesh(std::byte* state) {
     std::lock_guard lock(g_mutex);
     const auto mesh = g_view1.world ? read<std::uintptr_t>(g_view1.world + kStateGridMesh) : 0;
     if (mesh != 0) {
+        // Never the make on the world's mesh from the copy: with the cvar "modified" since, it would free it.
         std::memcpy(state + kStateGridMesh, &mesh, sizeof(mesh));
-    }
-    if (mesh != 0 && modified(g_gridResolution)) {
-        add(g_counters.meshLeft); // view 0's setup remakes it; view 1's job takes the new one
+        if (pending || modified(g_gridResolution)) {
+            add(g_counters.meshLeft);
+        }
         return;
     }
-    if (mesh == 0) {
-        add(g_counters.meshOwn);
-    } else if (pending) {
-        add(g_counters.meshLeft);
-    }
+    add(g_counters.meshOwn);
     g_gridMeshOriginal(state);
 }
 

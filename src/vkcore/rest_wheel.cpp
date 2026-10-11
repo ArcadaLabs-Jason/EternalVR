@@ -248,6 +248,10 @@ void noteTouchStats(const input::RestWheel& rest, float dt) {
 
 } // namespace
 
+void restartRestWheelStats() {
+    g_loggedStats = {};
+}
+
 bool restWheelBlocked(const State& s) {
     return s.gameSuppressing.load(std::memory_order_relaxed) || forcedView() ||
            s.skippableCutscene.load(std::memory_order_relaxed) || pilotingDemon();

@@ -140,6 +140,7 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
             data.find(input::XrActionId::ThumbRest, hand) != nullptr;
     }
     s.mapper = std::make_unique<input::InputMapper>(std::move(*profile), mapperSettings);
+    restartRestWheelStats();
     publishPromptLabels(s.mapper->profile(), controller);
     EVR_LOG("%s: control map for %s controllers%s, %s", kTag,
             std::string(game::controllerName(controller)).c_str(), when, s.mapper->summary().c_str());

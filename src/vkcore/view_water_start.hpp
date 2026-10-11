@@ -123,6 +123,8 @@ inline constexpr bool ownGridUsable(bool sameWorld, std::uint32_t gridCounter, s
 // The fields the setup itself writes into the state (the wave parameters, the indices, the ripple camera);
 // the jobs write the last-step frames.
 inline constexpr Range kSetupWrites[] = {{0x0, 0x14}, {0xC30, 0xC}, {0xC88, 0x8}};
+// The grid mesh object's pointer (made by the setup when the state has none; the job reads it).
+inline constexpr Range kGridMeshField = {0xC18, 0x8};
 
 // View 0's setup as it ended this frame.
 struct View0End {
@@ -142,14 +144,34 @@ inline constexpr bool view1StepsWorld(const View0End& v0, std::int32_t view1Surf
     return v0.ended && v0.surfaces == 0 && !v0.stepped && !v0.moved && view1Surfaces > 0;
 }
 
-// The fields view 1's setup wrote into `copy`, back into `world`. False (nothing written) for spans of other
-// sizes than kStateSize.
+// Whether the state's grid mesh pointer is null. False for a span of another size than kStateSize.
+inline bool noGridMesh(std::span<const std::byte> state) {
+    if (state.size() != kStateSize) {
+        return false;
+    }
+    std::uint64_t mesh = 0;
+    std::memcpy(&mesh, state.data() + kGridMeshField.at, kGridMeshField.size);
+    return mesh == 0;
+}
+
+// The fields view 1's setup wrote into `copy`, back into `world`. A world with no grid mesh (view 0's setup
+// never made one: eye R saw this map's water first) takes the one view 1's setup made into the copy, as if
+// view 0's had made it: the job then runs on the world's state and reads it. False (nothing written) when
+// neither has a grid mesh (defensive: view 1's setup saw water, so it made one into the copy), and for spans
+// of other sizes than kStateSize.
 inline bool writeBack(std::span<std::byte> world, std::span<const std::byte> copy) {
     if (world.size() != kStateSize || copy.size() != kStateSize) {
         return false;
     }
+    const bool carry = noGridMesh(world);
+    if (carry && noGridMesh(copy)) {
+        return false;
+    }
     for (const Range& r : kSetupWrites) {
         std::memcpy(world.data() + r.at, copy.data() + r.at, r.size);
+    }
+    if (carry) {
+        std::memcpy(world.data() + kGridMeshField.at, copy.data() + kGridMeshField.at, kGridMeshField.size);
     }
     return true;
 }
