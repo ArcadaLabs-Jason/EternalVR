@@ -147,8 +147,11 @@ them is worse for you than described here.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
-  Fortress of Doom are one place). An experimental fix is in, off by default; it will be switched on once
-  it has been tried in a headset.
+  Fortress of Doom are one place). A fix is on by default on the Steam version of the game; on other
+  versions (Game Pass) the game keeps its own light culling and the log says why (lines starting with
+  `light-cull:`). `ETERNALVR_LIGHT_FRUSTUM=0` turns the fix off. To set it, search Start for "Edit environment
+  variables for your account", add a user variable named `ETERNALVR_LIGHT_FRUSTUM` with the value `0`, then
+  restart the launcher (the launch plan in its log lists it).
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
 - **Particles in ray-traced reflections.** With `ETERNALVR_STEREO_FX_SYNC=1` and the game's ray tracing on,
@@ -204,6 +207,9 @@ them is worse for you than described here.
     were seen low in the right eye.
   - **Not tried yet:** long sessions, cutscenes, and AMD or Intel graphics cards.
   - **Lens flares** are now drawn for each eye from its own view; that has not been checked in a headset yet.
+    If the game freezes or the headset goes black with Parallel Eye Rendering on, a Windows user environment
+    variable `ETERNALVR_PE_FLARES` with the value `0` turns the lens flares off again (Start menu, search
+    "environment variables", then "Edit environment variables for your account"; restart the launcher after).
   - If it cannot finish starting, both eyes show the same image for that session (the log says
     `parallel eyes: FAILED`). After a session the launcher's status line usually says whether it ran, or why
     not; the logs in the exported report always say.
@@ -211,6 +217,9 @@ them is worse for you than described here.
 ## Controllers and aiming
 
 - **Weapon placement** in your hand is one estimate for all weapons; some guns may sit a little off.
+- **Sights are not lined up yet.** Shots go along your controller's aim, and the Aim dot sits exactly on
+  that line at any distance. A gun's own sights can point a little off it, since the placement above is not
+  tuned per weapon. Aim with the dot for now.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
   weapon in your left hand the game still draws its right arm, reaching across to the gun. Turning off Show
   arms (Play tab) hides both arms. Arms that mirror properly for the left hand are planned.
@@ -243,12 +252,19 @@ them is worse for you than described here.
   is forgiven).
 - **A thumb rest as a button** (Quest and Rift controllers, in the controls editor) is new and has not been
   tried in a headset yet. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
-  rest. A controls file with a thumb rest in it makes an older version of the mod use the built-in controls.
+  rest. A controls file with a thumb rest in it makes a version of the mod older than 0.1.45 use the built-in
+  controls.
 - **Touches as buttons** (A, B, X, Y, a stick, a trackpad or a trigger touched without pressing it, in the
   controls editor) are new and have not been tried in a headset yet. If nothing happens when you touch one,
   your VR runtime may not report that touch. A press or hold on a touch can fire when you rest a finger
   there without thinking, and a press is on even while your thumb only brushes past, so Tap is the easiest
-  start. A controls file with a touch in it makes an older version of the mod use the built-in controls.
+  start. A controls file with a touch in it makes a version of the mod older than 0.1.46 use the built-in
+  controls.
+- **Controls files from a newer version.** From 0.1.47 on, a button line a newer version wrote that this one
+  does not know is skipped and the rest of your controls are kept (the log names each skipped line; the
+  controls editor lists them as not used and keeps them). Versions before 0.1.47 still use the built-in
+  controls for such a file. An action a version does not know, on a button it does know, still makes it use
+  the built-in controls.
 - **Edit controls...** should open much faster now (it used to take several seconds and show "Not
   Responding" first). If it still takes several seconds, tell me.
 - **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and

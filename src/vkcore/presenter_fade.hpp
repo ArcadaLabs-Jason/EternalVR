@@ -37,6 +37,9 @@ public:
     void destroy(const XrFunctions& xr);
 
     [[nodiscard]] bool ready() const { return swapchain_ != XR_NULL_HANDLE; }
+    // Its swapchain and images, for the record of the swapchains in use (presenter_swapchains.hpp).
+    [[nodiscard]] XrSwapchain swapchain() const { return swapchain_; }
+    [[nodiscard]] const std::vector<ID3D12Resource*>& images() const { return images_; }
 
 private:
     XrSwapchain swapchain_ = XR_NULL_HANDLE;

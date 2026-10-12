@@ -32,30 +32,34 @@ namespace {
 constexpr const char* kTag = "controllers";
 
 // A player's controller data file, or nullopt (logged) when it cannot be read or has issues (in the file,
-// or in compiling one of its control maps).
+// or in compiling one of its control maps). Entries a later version may write that this one does not know
+// are left out and do not count as issues; a used file logs one line for each (T-127,
+// input::usablePlayerData).
 std::optional<input::ControllerData> readPlayerData(const std::string& path) {
     const auto text = readTextFile(path);
     if (!text) {
         EVR_LOG("%s: cannot read the controller data '%s'; the built-in data is used", kTag, path.c_str());
         return std::nullopt;
     }
-    input::ControllerData data = input::parseControllerData(*text);
-    if (!data.ok()) {
-        for (const auto& issue : data.issues) {
-            EVR_LOG("%s: %s line %d: %s", kTag, path.c_str(), issue.line, issue.message.c_str());
+    input::UsablePlayerData read = input::usablePlayerData(*text);
+    const auto log = [&path](const input::BindingIssue& issue, const char* tail) {
+        if (issue.line > 0) {
+            EVR_LOG("%s: %s line %d: %s%s", kTag, path.c_str(), issue.line, issue.message.c_str(), tail);
+        } else {
+            EVR_LOG("%s: %s: %s%s", kTag, path.c_str(), issue.message.c_str(), tail);
+        }
+    };
+    if (!read.usable()) {
+        for (const auto& issue : read.problems) {
+            log(issue, "");
         }
         EVR_LOG("%s: '%s' has issues; the built-in data is used", kTag, path.c_str());
         return std::nullopt;
     }
-    const std::vector<input::BindingIssue> mapIssues = input::controlMapIssues(data);
-    if (!mapIssues.empty()) {
-        for (const auto& issue : mapIssues) {
-            EVR_LOG("%s: %s: %s", kTag, path.c_str(), issue.message.c_str());
-        }
-        EVR_LOG("%s: '%s' has issues; the built-in data is used", kTag, path.c_str());
-        return std::nullopt;
+    for (const input::BindingIssue& skipped : read.skipped) {
+        log(skipped, "; this entry is skipped");
     }
-    return data;
+    return std::move(read.data);
 }
 
 // True when the instance has the profile of `data`: a profile of OpenXR 1.0, or one whose extension is

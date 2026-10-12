@@ -32,6 +32,7 @@
 #include "vkcore/presenter_mirror.hpp"
 #include "vkcore/presenter_refresh.hpp"
 #include "vkcore/presenter_stereo.hpp"
+#include "vkcore/presenter_swapchains.hpp"
 #include "vkcore/presenter_types.hpp"
 #include "vkcore/presenter_vignette.hpp"
 #include "vkcore/presenter_wrist.hpp"
@@ -98,9 +99,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t timelineValue = 0;
     std::uint64_t framesCopied = 0;
     std::uint64_t framesDropped = 0;
-    bool loggedFirstCopy = false;
-    bool loggedFirstPresent = false;
-    bool loggedBlitUnsupported = false;
+    bool loggedFirstCopy = false, loggedFirstPresent = false, loggedBlitUnsupported = false;
     std::uint32_t lastPresentFamily = UINT32_MAX;
     ULONGLONG lastStatsTicks = 0;
     ULONGLONG lastXrStatsTicks = 0;
@@ -161,11 +160,12 @@ struct XrPresenter::Impl final : ViewHookSink,
     XrSpace localSpace = XR_NULL_HANDLE;
     XrSpace viewSpace = XR_NULL_HANDLE;
     XrSpace floorSpace = XR_NULL_HANDLE; // LOCAL_FLOOR or STAGE when the runtime has one (posture, height)
+    XrSwapchainSet xrSwapchains; // every XR swapchain made, checked before use (presenter_swapchains.hpp)
     XrSwapchain xrSwapchain = XR_NULL_HANDLE;
     std::int64_t xrSwapchainFormat = 0;
     FadeLayer fadeLayer;
     VignetteLayer vignette; // ETERNALVR_VIGNETTE (presenter_vignette.hpp)
-    std::vector<ID3D12Resource*> xrImages;
+    XrSwapchainSet::Images xrImages;
     XrSessionState sessionState = XR_SESSION_STATE_UNKNOWN;
     bool sessionRunning = false;
     ClockWatchState clock; // presenter_types.hpp
@@ -380,13 +380,11 @@ struct XrPresenter::Impl final : ViewHookSink,
     ULONGLONG lastUiStatsTicks = 0;
     // Worker only:
     XrSwapchain uiSwapchain = XR_NULL_HANDLE;
-    std::vector<ID3D12Resource*> uiXrImages;
+    XrSwapchainSet::Images uiXrImages;
     std::int64_t uiAcquired = -1;
-    bool uiAcquiredWaited = false;
+    bool uiAcquiredWaited = false, uiHasImage = false, uiFailed = false;
     bool uiCopyPending = false; // a D3D12 copy into the acquired UI image is recorded
-    bool uiHasImage = false;
-    bool uiFailed = false;
-    LONGLONG uiShownQpc = 0; // when the newest GUI image reached the UI swapchain
+    LONGLONG uiShownQpc = 0;    // when the newest GUI image reached the UI swapchain
     std::uint64_t uiXrCopies = 0;
     UiWash uiWash; // ETERNALVR_UI_WASH: the additive wash taken out before the copy (off in menus)
     bool uiWashLogged = false;
@@ -421,6 +419,7 @@ struct XrPresenter::Impl final : ViewHookSink,
                            std::uint32_t height,
                            const char* what);
     void destroyUiXrObjects();
+    XrSwapchain detachUiSwapchain(); // the UI swapchain's state reset; its handle returned, not destroyed
     // True while the UI quad has a GUI image fresh enough to show.
     [[nodiscard]] bool uiFresh() const;
 

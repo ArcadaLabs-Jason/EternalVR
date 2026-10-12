@@ -258,8 +258,12 @@ TEST_CASE("[labels] reports unknown keys and empty names and leaves them out") {
     CHECK(data.issues[0].kind == BindingIssueKind::UnknownKey);
     CHECK(data.issues[0].key == "left.thumb");
     CHECK(data.issues[0].line == 6);
+    // A name for an input this version does not know may be a later version's: left out of a player's file
+    // (T-127). An empty name is not.
+    CHECK(data.issues[0].skipped);
     CHECK(data.issues[1].kind == BindingIssueKind::UnknownValue);
     CHECK(data.issues[1].key == "right.primary");
+    CHECK_FALSE(data.issues[1].skipped);
     CHECK(data.labels.empty());
     CHECK(buttonLabelsFor(data).name(Hand::Right, LabelInput::Primary) == "A");
 }

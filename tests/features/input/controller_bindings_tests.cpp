@@ -121,6 +121,12 @@ TEST_CASE("unknown keys, sections and profiles are reported") {
     CHECK(issueOn(data, BindingIssueKind::UnknownKey, "gameplay.middle.trigger") != nullptr);
     CHECK(issueOn(data, BindingIssueKind::UnknownKey, "gameplay.left.fire") != nullptr);
     CHECK(issueOn(data, BindingIssueKind::UnknownKey, "map.ambidextrous") != nullptr);
+    // An input this version has no action for may be a later version's, so a player's file leaves it out
+    // (T-127); an unknown hand, section or profile is not.
+    for (const BindingIssue& issue : data.issues) {
+        CAPTURE(issue.key);
+        CHECK(issue.skipped == (issue.key == "gameplay.left.fire"));
+    }
     // An unknown profile's paths cannot be checked, but its bindings are kept.
     CHECK(data.find(XrActionId::Grip, Hand::Left) != nullptr);
 }

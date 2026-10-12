@@ -216,6 +216,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(ControlIssueKind.UnknownValue, issues.Single(i => i.Key == "left.stick.role").Kind);
             Assert.Equal(ControlIssueKind.UnknownValue, issues.Single(i => i.Key == "right.stick.up").Kind);
             Assert.Equal(6, issues.Count);
+            // The two unknown keys have a later version's shape: the game leaves them out and uses the rest (T-127).
+            Assert.Equal(new[] { "right.thumb.press", "right.trigger.pres" }, issues.Where(i => i.Skipped).Select(i => i.Key).OrderBy(k => k, StringComparer.Ordinal));
         }
 
         [Fact]
@@ -313,8 +315,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("Right Thumbstick", good.Get(ControlNames.LabelsSection, "right.stick"));
             var bad = ControllerMapFile.Parse(header + "\"left.thumb\" = \"Thumb\"\n\"right.primary\" = \" \"\n");
             Assert.Equal(2, bad.FileIssues.Count);
-            Assert.Contains(bad.FileIssues, i => i.Kind == ControlIssueKind.UnknownKey && i.Key == "left.thumb" && i.Line == 4);
-            Assert.Contains(bad.FileIssues, i => i.Kind == ControlIssueKind.UnknownValue && i.Key == "right.primary");
+            Assert.Contains(bad.FileIssues, i => i.Kind == ControlIssueKind.UnknownKey && i.Key == "left.thumb" && i.Line == 4 && i.Skipped);
+            Assert.Contains(bad.FileIssues, i => i.Kind == ControlIssueKind.UnknownValue && i.Key == "right.primary" && !i.Skipped);
         }
 
         [Fact]
@@ -386,7 +388,8 @@ namespace EternalVR.Launcher.Core.Tests
                 + "\"menu.right.back\" = \"/input/b/click\"\n\"menu.left.pointer_pose\" = \"/input/aim/pose\"\n");
             Assert.Equal(3, noPath.FileIssues.Count);
             Assert.Contains(noPath.FileIssues, i => i.Key == "path");
-            Assert.Contains(noPath.FileIssues, i => i.Key == "gameplay.left.wing");
+            Assert.Contains(noPath.FileIssues, i => i.Key == "gameplay.left.wing" && i.Skipped);
+            Assert.Single(noPath.FileIssues, i => i.Skipped);
             Assert.Contains(noPath.FileIssues, i => i.Key == "gameplay.right.secondary" && i.Kind == ControlIssueKind.UnknownValue);
             // The retired menu set's keys, in files copied from earlier versions, are skipped as the layer skips them.
             Assert.DoesNotContain(noPath.FileIssues, i => i.Key.StartsWith("menu.", StringComparison.Ordinal));

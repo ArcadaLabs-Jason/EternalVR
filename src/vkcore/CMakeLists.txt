@@ -100,6 +100,7 @@ add_library(evr_layer SHARED
     presenter_mirror.cpp
     presenter_reticle.cpp
     presenter_result.cpp
+    presenter_swapchains.cpp
     presenter_vignette.cpp
     presenter_window.cpp
     ring_trace.cpp

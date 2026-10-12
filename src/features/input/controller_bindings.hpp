@@ -21,6 +21,10 @@
 // and against each other: two actions of one set on one physical input is a conflict, reported with
 // both action keys and both input paths (BindingConflict::SharedInput), and the later one is left out.
 // The control maps are returned as entries; buildBindingProfile compiles and checks them.
+// A [profile] key "gameplay.<hand>.<name>" naming an action this version does not have and a [labels]
+// "<hand>.<name>" naming an input it does not know are left out with an issue marked skipped
+// (BindingIssue::skipped, T-127): a later version's built-in file copied into a player's may have them. A
+// path this version does not list for the controller is still an ordinary issue.
 //
 // There is no file IO here: the caller passes the text (the built-in copy in game/eternal, or a file
 // from the player's profile folder).

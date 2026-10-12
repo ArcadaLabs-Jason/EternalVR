@@ -1,5 +1,6 @@
 #include "features/input/binding_keys.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <utility>
@@ -116,6 +117,18 @@ std::optional<BindingKey> parseBindingKey(std::string_view text) {
         return std::nullopt;
     }
     return ButtonKey{*hand, *input, *press};
+}
+
+bool isKeyName(std::string_view text) {
+    return !text.empty() && std::ranges::all_of(text, [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+    });
+}
+
+bool isLaterBindingKey(std::string_view text) {
+    const std::vector<std::string_view> parts = splitDots(text);
+    return parts.size() >= 3 && parseHand(parts[0]).has_value() &&
+           std::ranges::all_of(parts.begin() + 1, parts.end(), isKeyName);
 }
 
 std::string formatBindingKey(const BindingKey& key) {

@@ -156,8 +156,9 @@ public:
     }
 
 private:
-    void issue(BindingIssueKind kind, const std::string& key, int line, std::string message) {
-        data_.issues.push_back(issueOf(kind, key, line, std::move(message)));
+    void issue(
+        BindingIssueKind kind, const std::string& key, int line, std::string message, bool skipped = false) {
+        data_.issues.push_back(issueOf(kind, key, line, std::move(message), skipped));
     }
 
     void appendIssues(std::vector<BindingIssue> issues) {
@@ -189,11 +190,19 @@ private:
         std::optional<XrActionSetId> set;
         std::optional<Hand> hand;
         std::optional<XrActionId> action;
+        std::string_view actionName;
         if (second != std::string::npos) {
             const std::string_view view(key);
             set = findXrActionSet(view.substr(0, first));
             hand = parseHand(view.substr(first + 1, second - first - 1));
-            action = set ? findXrAction(*set, view.substr(second + 1)) : std::nullopt;
+            actionName = view.substr(second + 1);
+            action = set ? findXrAction(*set, actionName) : std::nullopt;
+        }
+        if (set && hand && !action && isKeyName(actionName)) {
+            // An input a later version added (its built-in file, copied into the player's, has the line).
+            issue(BindingIssueKind::UnknownKey, key, line,
+                  "[profile] " + quoted(key) + " is not an input this version has", true);
+            return std::nullopt;
         }
         if (!hand || !action) {
             issue(BindingIssueKind::UnknownKey, key, line,
@@ -274,9 +283,15 @@ void readLabels(ControllerData& data, const std::string& sectionText) {
         const auto lineIt = text.lineOf.find(key);
         const int line = lineIt == text.lineOf.end() ? 0 : lineIt->second;
         if (!parseLabelKey(key)) {
-            data.issues.push_back(issueOf(BindingIssueKind::UnknownKey, key, line,
-                                          quoted(key) + " is not a label key; use <hand>.<input>, e.g. "
-                                                        "\"left.primary\""));
+            // A name for an input a later version added is left out; any other key is a mistake.
+            const std::size_t dot = key.find('.');
+            const bool later = dot != std::string::npos && parseHand(std::string_view(key).substr(0, dot)) &&
+                               isKeyName(std::string_view(key).substr(dot + 1));
+            data.issues.push_back(issueOf(
+                BindingIssueKind::UnknownKey, key, line,
+                later ? "[labels] " + quoted(key) + " is not an input this version has"
+                      : quoted(key) + " is not a label key; use <hand>.<input>, e.g. \"left.primary\"",
+                later));
             continue;
         }
         if (trim(value).empty()) {

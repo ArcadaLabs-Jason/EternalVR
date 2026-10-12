@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: gestures
         ThrowGesture, SwingGesture, HandsJump, PunchSpeed,
         // Play: controls
-        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, Vibration, Bhaptics, ButtonLayout,
+        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
         Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
@@ -23,7 +23,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Advanced
         VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms,
         HudDistance, HudSize, HudHeight, HudPlace,
-        MotionControllers, ShotsFrom, AimDotSize, MenuLaser, GameFolder, Runtime, ExtraArguments,
+        MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, ExtraArguments,
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.AimDotSize:
                     if (!s.Controllers) return NeedsControllers;
                     if (!handAim) return NeedsHandAim;
-                    return setting == Setting.AimDotSize && !s.AimDot ? "Only with the aim dot on (Play tab)." : null;
+                    return setting == Setting.AimDotSize && !s.AimDot ? "Only with the aim dot on." : null;
                 case Setting.MenuLaser:
                 case Setting.HudPlace:
                     return s.Controllers ? null : NeedsControllers;

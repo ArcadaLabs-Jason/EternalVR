@@ -48,6 +48,11 @@ public:
         for (const auto& [key, value] : entries) {
             collect(key, value);
         }
+        // Every key a later version's: left out, they would leave no controls at all.
+        const auto skipped = std::ranges::count_if(issues_, &BindingIssue::skipped);
+        if (!entries.empty() && static_cast<std::size_t>(skipped) == entries.size()) {
+            report(BindingIssueKind::UnknownKey, {}, "no key in this map is a binding this version knows");
+        }
         BindingBuildResult result;
         result.profile.weaponHand = collected_.weaponHand.value_or(Hand::Right);
         assignSticks(result.profile);
@@ -58,8 +63,8 @@ public:
     }
 
 private:
-    void report(BindingIssueKind kind, const std::string& key, std::string message) {
-        issues_.push_back(issueOf(kind, key, 0, std::move(message)));
+    void report(BindingIssueKind kind, const std::string& key, std::string message, bool skipped = false) {
+        issues_.push_back(issueOf(kind, key, 0, std::move(message), skipped));
     }
 
     // A conflict between `side` (left out of the profile) and `kept`. The message names both keys and
@@ -85,7 +90,8 @@ private:
     void collect(const std::string& key, const std::string& value) {
         const auto parsed = parseBindingKey(key);
         if (!parsed) {
-            report(BindingIssueKind::UnknownKey, key, quoted(key) + " is not a binding key");
+            report(BindingIssueKind::UnknownKey, key, quoted(key) + " is not a binding key",
+                   isLaterBindingKey(key));
             return;
         }
         if (std::holds_alternative<WeaponHandKey>(*parsed)) {

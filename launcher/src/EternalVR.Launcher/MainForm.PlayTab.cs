@@ -44,6 +44,7 @@ namespace EternalVR.Launcher
         private readonly CheckBox thumbRestSlowdown = new CheckBox { AutoSize = true };
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
+        private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
         private readonly CheckBox showArms = new CheckBox { AutoSize = true };
         private readonly ComboBox vibration = Choices(Setting.Vibration);
         private readonly ComboBox punchSpeed = Choices(Setting.PunchSpeed);
@@ -147,6 +148,10 @@ namespace EternalVR.Launcher
                 Row(Setting.HoldTime, holdTime, LoadHoldTime, ReadHoldTime),
                 Row(Setting.AimSteadiness, steadiness, LoadSteadiness, ReadSteadiness),
                 Row(Setting.AimDot, aimDot, s => aimDot.Checked = s.AimDot, s => s.AimDot = aimDot.Checked),
+                // Under the aim dot it sizes (greyed out with the dot off, SettingRules).
+                Row(Setting.AimDotSize, WithUnit(dotSize, "°"),
+                    s => dotSize.Value = Clamped(s.AimDotSize, dotSize, LauncherSettings.DefaultAimDotSize),
+                    s => s.AimDotSize = (double)dotSize.Value),
                 Row(Setting.Vibration, vibration, LoadVibration, ReadVibration),
                 Row(Setting.Bhaptics, bhaptics, s => bhaptics.Checked = s.Bhaptics, s => s.Bhaptics = bhaptics.Checked),
                 // Nothing to save: the buttons open the controls editor and the folder, the caption says what it holds.

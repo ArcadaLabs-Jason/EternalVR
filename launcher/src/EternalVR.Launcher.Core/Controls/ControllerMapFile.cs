@@ -126,7 +126,8 @@ namespace EternalVR.Launcher.Core.Controls
         /// <summary>
         /// The problems the layer would find reading the file (controller_bindings.cpp), before it compiles the maps: lines
         /// that are not <c>"key" = "value"</c>, repeated keys and sections, unknown sections, and a missing <c>[profile]</c> or
-        /// profile path. The maps' own rules are <see cref="ControlMapRules"/>.
+        /// profile path; and, marked <see cref="ControlIssue.Skipped"/>, a later version's <c>[profile]</c> input or
+        /// <c>[labels]</c> name, which the game leaves out. The maps' own rules are <see cref="ControlMapRules"/>.
         /// </summary>
         public IReadOnlyList<ControlIssue> FileIssues => issues;
 
@@ -241,7 +242,14 @@ namespace EternalVR.Launcher.Core.Controls
                 if (e.Key.StartsWith("menu.", StringComparison.Ordinal)) continue;
                 var parts = e.Key.Split('.');
                 bool known = parts.Length == 3 && ControlNames.TryParseHand(parts[1], out _) && parts[0] == "gameplay" && GameplayActions.Contains(parts[2]);
-                if (!known)
+                // An input a later version added (its built-in file, copied into the player's, has the line): left out.
+                if (!known && parts.Length == 3 && parts[0] == "gameplay" && ControlNames.TryParseHand(parts[1], out _) && ControlNames.IsKeyName(parts[2]))
+                    issues.Add(new ControlIssue
+                    {
+                        Kind = ControlIssueKind.UnknownKey, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1, Skipped = true,
+                        Message = "line " + (e.Line + 1) + ": '" + e.Key + "' is not an input this version of the mod has; the game leaves it out",
+                    });
+                else if (!known)
                     issues.Add(new ControlIssue
                     {
                         Kind = ControlIssueKind.UnknownKey, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1,
@@ -264,7 +272,14 @@ namespace EternalVR.Launcher.Core.Controls
             {
                 var parts = e.Key.Split('.');
                 bool known = parts.Length == 2 && ControlNames.TryParseHand(parts[0], out _) && ControlNames.LabelInputNames.Contains(parts[1]);
-                if (!known)
+                // A name for an input a later version added: left out.
+                if (!known && parts.Length == 2 && ControlNames.TryParseHand(parts[0], out _) && ControlNames.IsKeyName(parts[1]))
+                    issues.Add(new ControlIssue
+                    {
+                        Kind = ControlIssueKind.UnknownKey, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1, Skipped = true,
+                        Message = "line " + (e.Line + 1) + ": '" + e.Key + "' is not an input this version of the mod has; the game leaves it out",
+                    });
+                else if (!known)
                     issues.Add(new ControlIssue
                     {
                         Kind = ControlIssueKind.UnknownKey, Section = section, Key = e.Key, Value = e.Value, Line = e.Line + 1,

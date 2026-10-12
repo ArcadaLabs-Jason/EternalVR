@@ -73,6 +73,7 @@ step writes its own files into its folder before the launch (a player's controll
 | touchbtn-press | The bound file: A touched 0.2 s, pressed 0.3 s (a jump), let go with the thumb still on it, lifted; then a plain 0.4 s touch: actions `jump` then `weapon_slot_2` only, the 10 s lines count 1 tap, 0 holds, 1 ended by its own control |
 | touchbtn-face | The file binds `"right.secondary_touch.tap" = "weapon_slot_2"` (B touched): the thumb on A and B 0.2 s, A pressed 0.3 s (a jump), let go with the thumb still on both, lifted; then a plain 0.4 s touch of B: actions `jump` then `weapon_slot_2` only, the B button's 10 s lines count 1 tap, 0 holds, 1 ended by its own control (A is under the same thumb) |
 | touchbtn-stick | The file binds `"left.primary_touch.tap" = "weapon_slot_2"` (X touched): the left stick pushed 0.5 s and let go, X touched 0.15 s later for 0.2 s: `action weapon_slot_2` the only action line, the X button's 10 s lines count 1 tap, 0 holds, 0 landings voided (only the control under a touch voids its landing) |
+| fwdmaps-skip | `qa-scenarios-controls.ps1` (T-127): the built-in Touch file with a made-up `"left.futurebutton.tap" = "weapon_slot_3"` and `"left.thumbrest.tap" = "weapon_slot_2"`, hold time 1 s, the wheel off; a 0.4 s touch of the left rest: `controllers: <file>: [map.right] 'left.futurebutton.tap' (= 'weapon_slot_3') is not a binding this version knows; this entry is skipped` once, `controller data '...' replaces the built-in data of its profile`, no `has issues; the built-in data is used`, `the left thumb rest is bound (tap = weapon_slot_2)`, the only action line `action weapon_slot_2`, and the heavy cannon the first held item after it |
 | launcher-e2e | `launcher\tests\e2e.ps1 -Root <Out>\e2e -Runtime <simulator json>` prints `E2E OK` (skipped without a Release build) |
 
 Every game scenario also checks: in the map, stopped and cleaned up, save restored, no crash dump.
@@ -100,7 +101,7 @@ by where the half starts against the blocks.
 ## Adding a scenario
 
 Add a hashtable to `$script:QaScenarios` in `qa-scenarios.ps1` (the thumb-rest wheel's are in
-`qa-scenarios-wheel.ps1`, dot-sourced after it): `Name`, `Kind = 'game'`, `Proves`,
+`qa-scenarios-wheel.ps1` and the control map's in `qa-scenarios-controls.ps1`, dot-sourced after it in that order): `Name`, `Kind = 'game'`, `Proves`,
 `Env`, optional `Map`, `Args` (game command-line arguments), `EyeCaptures` (every how many pairs eye captures go to
 `<stage>-eyes`) and `Input` (initial input lines), `Timeline = { param($c) ... }` and
 `Asserts = { param($c) ... }`. Helpers (`qa-common.ps1`): `Wait-QaSeconds $c <s>`, `Wait-QaLog $c <regex>

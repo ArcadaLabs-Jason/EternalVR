@@ -79,11 +79,6 @@ struct Counters {
     std::atomic<std::uint64_t> lastReport{0};
 } g_counters;
 
-bool asked() {
-    std::wstring value;
-    return readEnv(L"ETERNALVR_LIGHT_FRUSTUM", value) && value == L"1";
-}
-
 void report() {
     const std::uint64_t now = GetTickCount64();
     std::uint64_t last = g_counters.lastReport.load(std::memory_order_relaxed);
@@ -148,7 +143,10 @@ void onVerdict(HookRegisters& r) {
 }
 
 void install() {
-    if (!asked()) {
+    std::wstring value;
+    const bool set = readEnv(L"ETERNALVR_LIGHT_FRUSTUM", value);
+    if (!lightFrustumWanted(set, value)) {
+        EVR_LOG("%s: off (ETERNALVR_LIGHT_FRUSTUM=0); lights keep Umbra's culling", kTag);
         return;
     }
     if (!mp_guard::allowsGameTouch()) {
@@ -205,9 +203,16 @@ void install() {
     }
     g_installed = true;
     g_live.store(true, std::memory_order_release);
-    EVR_LOG("%s: a light Umbra hides is dropped only when the view frustum drops it too (gates at RVA 0x%X, "
-            "0x%X, 0x%X)",
-            kTag, rvaOf(text, at + kGateA), rvaOf(text, at + kGateB), rvaOf(text, at + kSphere));
+    if (set) {
+        EVR_LOG("%s: on (ETERNALVR_LIGHT_FRUSTUM=\"%ls\"; only 0 turns it off): a light Umbra hides is "
+                "dropped only when the view frustum drops it too (gates at RVA 0x%X, 0x%X, 0x%X)",
+                kTag, value.c_str(), rvaOf(text, at + kGateA), rvaOf(text, at + kGateB),
+                rvaOf(text, at + kSphere));
+    } else {
+        EVR_LOG("%s: on by default (ETERNALVR_LIGHT_FRUSTUM=0 turns it off): a light Umbra hides is dropped "
+                "only when the view frustum drops it too (gates at RVA 0x%X, 0x%X, 0x%X)",
+                kTag, rvaOf(text, at + kGateA), rvaOf(text, at + kGateB), rvaOf(text, at + kSphere));
+    }
 }
 
 } // namespace

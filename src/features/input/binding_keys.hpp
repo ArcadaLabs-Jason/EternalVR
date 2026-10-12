@@ -63,6 +63,16 @@ using BindingKey = std::variant<WeaponHandKey, StickRoleKey, ButtonKey, GestureK
 std::optional<BindingKey> parseBindingKey(std::string_view text);
 std::string formatBindingKey(const BindingKey& key);
 
+// A name in a key: one or more lowercase letters, digits and underscores ("trigger_touch").
+bool isKeyName(std::string_view text);
+
+// The shape every binding key of this and later versions keeps to (T-127): a hand, then two or more names,
+// dot-separated ("left.trigger.press", "left.futurebutton.tap", "right.stick.up_left"). A map entry with a
+// key of this shape that this version does not know (an input, press kind or stick gesture added later) is
+// one input's binding, so a player's file leaves it out and keeps the rest; a key of any other shape
+// ("weapon_hands", "Left.trigger.press", "left.trigger") still makes the file unusable.
+bool isLaterBindingKey(std::string_view text);
+
 std::string_view handName(Hand hand);
 std::optional<Hand> parseHand(std::string_view name);
 

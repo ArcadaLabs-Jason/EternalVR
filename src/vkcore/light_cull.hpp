@@ -18,13 +18,21 @@
 // Umbra's verdict away and gave every light the frustum test alone, so a light Umbra kept could be dropped by
 // the frustum.) Geometry, decals and areas keep Umbra.
 //
-// ETERNALVR_LIGHT_FRUSTUM=1 turns it on (experimental, off by default). Only while the multiplayer guard is
-// armed (checked at install and on every hidden light) and only on the build it was read on (signature, the
-// code at every offset used, and PE timestamp); otherwise it logs why and leaves the game untouched.
+// On by default; ETERNALVR_LIGHT_FRUSTUM=0 turns it off. Only while the multiplayer guard is armed
+// (checked at install and on every hidden light) and only on the build it was read on (signature, the code
+// at every offset used, and PE timestamp); otherwise it logs why and leaves the game untouched.
+
+#include <string_view>
 
 namespace evr::vkcore {
 
-// Hooks the light gather once per process when asked; later calls return the first result.
+// Whether ETERNALVR_LIGHT_FRUSTUM asks for the fix: only the value "0" turns it off; unset, empty and any
+// other value leave it on. `set` is false when the variable is not set.
+constexpr bool lightFrustumWanted(bool set, std::wstring_view value) {
+    return !(set && value == L"0");
+}
+
+// Hooks the light gather once per process unless turned off; later calls return the first result.
 bool installLightFrustumCull();
 
 } // namespace evr::vkcore

@@ -350,12 +350,14 @@ void XrPresenter::Impl::recreateRing() {
         gameFormat = format;
         setRingExtent(extent);
     }
-    // The new XR swapchain is made before the old one goes: a runtime may hand a new swapchain the images of
-    // one just destroyed (the OpenXR Simulator does), which createXrSwapchain refuses.
-    const XrSwapchain oldSwapchain = xrSwapchain;
+    // The new XR swapchains (the game image's, then the UI's) are made before the old ones go: after a
+    // destroy a runtime may hand a new swapchain one still in use (the OpenXR Simulator does:
+    // swapchain_book.hpp), which is then neither used nor destroyed. The reticle's and the menu beam's do not
+    // depend on the size and stay.
+    XrSwapchain oldSwapchain = xrSwapchain;
     xrSwapchain = XR_NULL_HANDLE;
     xrImages.clear();
-    destroyUiXrObjects();
+    XrSwapchain oldUi = detachUiSwapchain();
     acquiredIndex = -1;
     acquiredWaited = false;
     heldCopy.stalled = false;
@@ -365,11 +367,31 @@ void XrPresenter::Impl::recreateRing() {
     for (RingSlot& slot : ring) {
         slot.published.store(0);
     }
-    const bool made = createXrSwapchain();
-    if (oldSwapchain) {
-        xr.xrDestroySwapchain(oldSwapchain); // valid with an image still acquired
+    bool made = createXrSwapchain();
+    if (!made) {
+        // Once more after the old ones are gone: a runtime that handed back one in use may hand out a new one
+        // then (the simulator numbers them by how many it holds), and one short of memory for both sizes at
+        // once has theirs back.
+        xrSwapchains.destroy(xr, oldUi);
+        xrSwapchains.destroy(xr, oldSwapchain);
+        made = createXrSwapchain();
     }
-    if (!made || !createRing()) {
+    made = made && createRing();
+    if (made && uiReady && !createUiSwapchain()) {
+        uiFailed = true; // UI layer off until the next rebuild, as when acquireUiXrImage makes it
+    }
+    xrSwapchains.destroy(xr, oldUi);
+    xrSwapchains.destroy(xr, oldSwapchain); // valid with an image still acquired
+    // The reticle and the menu beam stay over a rebuild; one that failed is made again when next needed, as
+    // when the rebuild destroyed them.
+    if (reticleFailed) {
+        xrSwapchains.destroy(xr, reticleSwapchain);
+        reticleFailed = false;
+    }
+    if (menuPointerKept.beamFailed) {
+        destroyMenuXrObjects();
+    }
+    if (!made) {
         status::flat("the images for the headset could not be recreated after a size change");
         EVR_LOG("presenter: rebuilding the ring for %ux%u failed; the game runs flat", extent.width,
                 extent.height);

@@ -50,6 +50,8 @@ public:
     // Every 10 s with the XR statistics: what was shown since the last line (nothing while off).
     void logStats(ui_layer::VignetteMode mode);
     void destroy(const XrFunctions& xr);
+    // Its swapchains (null where none was made), for the record of the swapchains in use.
+    [[nodiscard]] const std::array<XrSwapchain, kLevels>& swapchains() const { return swapchains_; }
 
 private:
     bool create(ui_layer::VignetteMode mode, const MakeImage& make);

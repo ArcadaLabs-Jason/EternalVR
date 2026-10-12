@@ -43,18 +43,27 @@ bool XrPresenter::Impl::createStaticImage(XrSwapchain& swapchain,
     info.faceCount = 1;
     info.arraySize = 1;
     info.mipCount = 1;
-    EVR_XR_CHECK(xr.xrCreateSwapchain(session, &info, &swapchain));
-    std::uint32_t count = 0;
-    EVR_XR_CHECK(xr.xrEnumerateSwapchainImages(swapchain, 0, &count, nullptr));
-    std::vector<XrSwapchainImageD3D12KHR> images(count, {XR_TYPE_SWAPCHAIN_IMAGE_D3D12_KHR});
-    EVR_XR_CHECK(xr.xrEnumerateSwapchainImages(swapchain, count, &count,
-                                               reinterpret_cast<XrSwapchainImageBaseHeader*>(images.data())));
+    XrSwapchain made = XR_NULL_HANDLE;
+    EVR_XR_CHECK(xr.xrCreateSwapchain(session, &info, &made));
+    // Only a new swapchain of its own with an image of at least this size (presenter_swapchains.hpp; the
+    // pixels go into its top-left corner, which the quads show): they would otherwise go into another
+    // swapchain's image, and destroying it later could destroy that one.
+    XrSwapchainSet::Images images;
+    if (!xrSwapchains.admit(xr, made, width, height, what, images, swapchain_book::Fit::AtLeast)) {
+        EVR_LOG("ui: no %s", what);
+        return false;
+    }
+    swapchain = made;
     std::uint32_t index = 0;
     EVR_XR_CHECK(xr.xrAcquireSwapchainImage(swapchain, nullptr, &index));
     XrSwapchainImageWaitInfo wait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
     wait.timeout = kSwapchainWaitTimeout;
     EVR_XR_CHECK(xr.xrWaitSwapchainImage(swapchain, &wait));
-    ID3D12Resource* target = images[index].texture;
+    if (index >= images.size()) {
+        EVR_LOG("ui: the runtime acquired image %u of the %s's %zu; no %s", index, what, images.size(), what);
+        return false;
+    }
+    ID3D12Resource* target = images[index].Get();
 
     // The pixels go through an upload buffer (rows 256-byte aligned) on a list of its own, waited for once.
     const UINT pitch =

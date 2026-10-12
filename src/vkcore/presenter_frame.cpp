@@ -100,7 +100,9 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     const ViewRecord slotView = slot.view;
     const bool slotHasView = slot.hasView;
     const bool slotUi = slot.ui.written && acquireUiXrImage(); // UI layer: the GUI image goes along
-    ID3D12Resource* target = xrImages[static_cast<std::size_t>(acquiredIndex)];
+    // Our own reference since the swapchain was made (presenter_swapchains.hpp): valid even if the runtime
+    // lets go of the image early.
+    ID3D12Resource* target = xrImages[static_cast<std::size_t>(acquiredIndex)].Get();
 
     d3dAllocator->Reset();
     d3dList->Reset(d3dAllocator.Get(), nullptr);
@@ -434,14 +436,16 @@ void XrPresenter::Impl::destroyXrObjects() {
         xr.xrEndSession(session);
     }
     sessionRunning = false;
-    if (xrSwapchain) {
-        xr.xrDestroySwapchain(xrSwapchain);
-        xrSwapchain = XR_NULL_HANDLE;
-    }
+    xrSwapchains.destroy(xr, xrSwapchain);
     xrImages.clear();
     destroyUiXrObjects();
+    xrSwapchains.forget(fadeLayer.swapchain());
     fadeLayer.destroy(xr);
+    for (const XrSwapchain level : vignette.swapchains()) {
+        xrSwapchains.forget(level);
+    }
     vignette.destroy(xr);
+    xrSwapchains.endSession(xr); // the ones kept unused, then the record
     if (floorSpace) {
         xr.xrDestroySpace(floorSpace);
         floorSpace = XR_NULL_HANDLE;
@@ -498,7 +502,7 @@ void XrPresenter::Impl::runWorker() {
             }
             controllers::installGameHooks();
             installDebugCommands(); // ETERNALVR_DEBUG_COMMANDS: console commands on a schedule (test rig)
-            // ETERNALVR_LIGHT_FRUSTUM=1 (experimental): lights culled by the view, not dropped by Umbra.
+            // On unless ETERNALVR_LIGHT_FRUSTUM=0: a light Umbra hides is kept if the view frustum keeps it.
             installLightFrustumCull();
             stall_watch::installCheckpointSaveHook(); // stall lines name the game's own checkpoint saves
             startMenu();

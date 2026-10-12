@@ -33,7 +33,6 @@ namespace EternalVR.Launcher
         private readonly ComboBox hudPlace = Choices(Setting.HudPlace);
         private readonly CheckBox controllers = new CheckBox { AutoSize = true };
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
-        private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
         private readonly ComboBox runtime = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
         private readonly TextBox extraArgs = new TextBox { Width = 420 };
@@ -98,9 +97,6 @@ namespace EternalVR.Launcher
                 Row(Setting.ShotsFrom, shots,
                     s => shots.SelectedIndex = (int)s.Shots,
                     s => s.Shots = (ShotOrigin)shots.SelectedIndex),
-                Row(Setting.AimDotSize, WithUnit(dotSize, "°"),
-                    s => dotSize.Value = Clamped(s.AimDotSize, dotSize, LauncherSettings.DefaultAimDotSize),
-                    s => s.AimDotSize = (double)dotSize.Value),
                 Row(Setting.MenuLaser, menuBeam, s => menuBeam.Checked = s.MenuBeam, s => s.MenuBeam = menuBeam.Checked));
 
             var runtimeRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };

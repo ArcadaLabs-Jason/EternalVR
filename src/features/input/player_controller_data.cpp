@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <string>
 #include <utility>
 
 namespace evr::input {
@@ -61,6 +62,43 @@ std::vector<BindingIssue> controlMapIssues(const ControllerData& data) {
         }
     }
     return issues;
+}
+
+std::vector<BindingIssue> takeSkippedEntries(ControllerData& data) {
+    std::vector<BindingIssue> skipped;
+    std::vector<BindingIssue> kept;
+    for (BindingIssue& issue : data.issues) {
+        (issue.skipped ? skipped : kept).push_back(std::move(issue));
+    }
+    data.issues = std::move(kept);
+    for (auto& [handedness, map] : data.maps) {
+        const std::string section = "[map." + std::string(handednessName(handedness)) + "] ";
+        std::vector<BindingIssue> issues = buildBindingProfile(map).issues;
+        // A map of nothing but such keys keeps them: compiling it reports that it has no binding left
+        // (buildBindingProfile), and the file is not used.
+        if (static_cast<std::size_t>(std::ranges::count_if(issues, &BindingIssue::skipped)) == map.size()) {
+            continue;
+        }
+        for (BindingIssue& issue : issues) {
+            const auto entry = map.find(issue.key);
+            if (!issue.skipped || entry == map.end()) {
+                continue;
+            }
+            issue.message = section + "'" + entry->first + "' (= '" + entry->second +
+                            "') is not a binding this version knows (a later version's, or a typo)";
+            map.erase(entry);
+            skipped.push_back(std::move(issue));
+        }
+    }
+    return skipped;
+}
+
+UsablePlayerData usablePlayerData(std::string_view text) {
+    UsablePlayerData result;
+    result.data = parseControllerData(text);
+    result.skipped = takeSkippedEntries(result.data);
+    result.problems = result.data.ok() ? controlMapIssues(result.data) : result.data.issues;
+    return result;
 }
 
 PlayerDataPlacement placePlayerData(std::span<ControllerData> data,

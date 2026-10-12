@@ -324,6 +324,7 @@ values are old.
 | Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap | Medium |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
+| Aim dot size | 0.2 to 5 degrees. Only with the Aim dot on | 1.0 |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
 | bHaptics (experimental) | For bHaptics vests and arm sleeves, through the bHaptics Player running on the same PC: your shots on the weapon arm, hits on the vest from the side they came from, a heartbeat at low health, glory kills and death, the Flame Belch and equipment launcher on your left shoulder, landing from a fall, a shove from below when a jump pad or booster launches you, and health and armor pickups ([bHaptics](#bhaptics)). Tried on one tester's suit so far | Off |
 | Button layout | **Edit controls...** opens the controls editor, **Open folder** opens the controls folder of the VR settings profile in use ([Changing the controls](#changing-the-controls)) | Built-in controls |
@@ -357,7 +358,6 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Arms in cutscenes | On, Off: with cutscenes around you, Off keeps the game's own weapon view in them (it may keep the Slayer's arms out of sight; not checked in a headset yet), On keeps the VR one as before. Show arms off hides the arms anyway | Off |
 | Motion controllers | Play with the headset's controllers; off for keyboard, mouse or a gamepad | On |
 | Shots come from | Your weapon hand, Your eyes (stops shots through thin walls) | Your weapon hand |
-| Aim dot size | 0.2 to 5 degrees | 1.0 |
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
 | HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m) | 1.5 m, 2 m, 0 |
 | Health and ammo | On the HUD panel; On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you); or On your weapon (experimental: the ammo just above the back of the gun in your weapon hand, health and armour stay on the panel). The wrist and the weapon need Motion controllers | On the HUD panel |
@@ -514,9 +514,21 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
   `automap`, `recenter`.
 
 A file with a `thumbrest` line needs version 0.1.45 of the mod or a newer one, and a file with a touch line
-(`primary_touch`, `secondary_touch`, `stick_touch`, `trackpad_touch`, `trigger_touch`) needs this version
-or a newer one. An older version does not know the line, so it ignores the whole file and uses the built-in
-controls for those controllers (its log says so).
+(`primary_touch`, `secondary_touch`, `stick_touch`, `trackpad_touch`, `trigger_touch`) needs 0.1.46 or a
+newer one. Versions before 0.1.47 do not know such a line, so they ignore the whole file and use the
+built-in controls for those controllers (the log says so). From 0.1.47 on, a version that does not know a
+button line written by a newer one skips just that line and keeps the rest of your controls: a map line
+whose key is a hand followed by two or more lowercase names, such as `"left.futurebutton.tap"`, a
+`[profile]` line for a button it does not have, or a `[labels]` name for one. Its log has a `controllers:`
+line naming each skipped line (`... is not a binding this version knows (a later version's, or a typo);
+this entry is skipped`), and the editor lists them under **Not used by this version of the mod**, keeps
+them in your file as they are (**Reset to defaults** drops them), and still saves.
+
+Everything else that is wrong still makes the game use the built-in controls: a line that is not
+`"key" = "value"`, a key of another shape (such as `"left.trigger"` or `"weapon_hands"`), a section other
+than `[profile]`, `[labels]` and the three maps, a key set twice, an action, stick role or weapon hand the
+version does not know (on a button it does know), a map whose every line would be skipped (it would leave
+those controllers with nothing bound), and the clashes the editor shows.
 
 To leave a button free, delete its line. Keep a `pause` line, or the pause menu has no button; on Touch
 controllers the left Menu button is the only Menu button the game can read. The editor opens your file
@@ -528,6 +540,12 @@ log tab) then has a `controllers:` line naming your file and the problem (with i
 `[map...]` section it is in), followed by `controllers: '...' has issues; the built-in data is used`.
 When the file is read without problems the log says `controllers: controller data '...' replaces the
 built-in data of its profile`. Fix the line and start the game again.
+
+One kind of mistake does not do that: a misspelt button in a map line (`"left.triger.press"`) looks like
+a newer version's line, so only that line is skipped and the rest of your controls are used. The log then
+says `controllers: ... [map...] 'left.triger.press' (= '...') is not a binding this version knows (a later
+version's, or a typo); this entry is skipped`, and the editor lists the line under **Not used by this
+version of the mod**. If one binding does nothing, look for its line there.
 
 To go back to the built-in controls, delete your file from the profile's controls folder (or move it
 somewhere else), or use **Reset to defaults** and **Save** in the editor. Two files for the same

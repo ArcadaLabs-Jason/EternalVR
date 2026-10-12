@@ -389,27 +389,16 @@ bool XrPresenter::Impl::createUiSwapchain() {
     info.faceCount = 1;
     info.arraySize = 1;
     info.mipCount = 1;
-    EVR_XR_CHECK(xr.xrCreateSwapchain(session, &info, &uiSwapchain));
-    std::uint32_t count = 0;
-    EVR_XR_CHECK(xr.xrEnumerateSwapchainImages(uiSwapchain, 0, &count, nullptr));
-    std::vector<XrSwapchainImageD3D12KHR> images(count, {XR_TYPE_SWAPCHAIN_IMAGE_D3D12_KHR});
-    EVR_XR_CHECK(xr.xrEnumerateSwapchainImages(uiSwapchain, count, &count,
-                                               reinterpret_cast<XrSwapchainImageBaseHeader*>(images.data())));
-    uiXrImages.clear();
-    for (const auto& image : images) {
-        const D3D12_RESOURCE_DESC d = image.texture->GetDesc();
-        if (d.Width != uiExtent.width || d.Height != uiExtent.height) {
-            // A copy into it would fail and remove the device (presenter_xr.cpp, createXrSwapchain).
-            EVR_LOG("ui: the runtime's UI swapchain image is %llux%u, not %ux%u; UI layer off",
-                    static_cast<unsigned long long>(d.Width), d.Height, uiExtent.width, uiExtent.height);
-            xr.xrDestroySwapchain(uiSwapchain);
-            uiSwapchain = XR_NULL_HANDLE;
-            uiXrImages.clear();
-            return false;
-        }
-        uiXrImages.push_back(image.texture);
+    XrSwapchain made = XR_NULL_HANDLE;
+    EVR_XR_CHECK(xr.xrCreateSwapchain(session, &info, &made));
+    // Only a new swapchain of its own with images of the GUI's size (presenter_swapchains.hpp); a swapchain
+    // that is another one in use is neither used nor destroyed.
+    if (!xrSwapchains.admit(xr, made, uiExtent.width, uiExtent.height, "UI", uiXrImages)) {
+        EVR_LOG("ui: no UI swapchain of %ux%u; UI layer off", uiExtent.width, uiExtent.height);
+        return false;
     }
-    EVR_LOG("ui: UI swapchain %ux%u, %u image(s)", uiExtent.width, uiExtent.height, count);
+    uiSwapchain = made;
+    EVR_LOG("ui: UI swapchain %ux%u, %zu image(s)", uiExtent.width, uiExtent.height, uiXrImages.size());
     if (settings.ui.removeWash) {
         const char* why = "";
         if (uiWash.create(d3dDevice.Get(), why)) {
@@ -449,7 +438,7 @@ bool XrPresenter::Impl::acquireUiXrImage() {
 }
 
 void XrPresenter::Impl::recordUiXrCopy(RingSlot& slot) {
-    ID3D12Resource* target = uiXrImages[static_cast<std::size_t>(uiAcquired)];
+    ID3D12Resource* target = uiXrImages[static_cast<std::size_t>(uiAcquired)].Get();
     std::array<D3D12_RESOURCE_BARRIER, 2> barriers{};
     barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barriers[0].Transition.pResource = slot.ui.resource.Get();
@@ -541,23 +530,24 @@ bool XrPresenter::Impl::fillUiQuad(XrCompositionLayerQuad& quad) {
     return true;
 }
 
-void XrPresenter::Impl::destroyUiXrObjects() {
-    if (uiSwapchain) {
-        xr.xrDestroySwapchain(uiSwapchain); // valid with an image still acquired
-        uiSwapchain = XR_NULL_HANDLE;
-    }
+XrSwapchain XrPresenter::Impl::detachUiSwapchain() {
+    const XrSwapchain swapchain = uiSwapchain;
+    uiSwapchain = XR_NULL_HANDLE;
     uiXrImages.clear();
     uiAcquired = -1;
     uiAcquiredWaited = false;
     uiCopyPending = false;
     uiHasImage = false;
     uiFailed = false;
-    if (reticleSwapchain) {
-        xr.xrDestroySwapchain(reticleSwapchain);
-        reticleSwapchain = XR_NULL_HANDLE;
-    }
-    reticleFailed = false;
     uiWash.destroy();
+    return swapchain;
+}
+
+void XrPresenter::Impl::destroyUiXrObjects() {
+    XrSwapchain ui = detachUiSwapchain();
+    xrSwapchains.destroy(xr, ui);
+    xrSwapchains.destroy(xr, reticleSwapchain);
+    reticleFailed = false;
     destroyMenuXrObjects();
 }
 

@@ -11,6 +11,12 @@
 // Each conflict names both keys and what each binds (BindingIssue::conflict, value, otherKey and
 // otherValue, and the message), so the player sees which two actions on which two inputs clash (T-106).
 // Binding one action to several inputs is allowed and not reported.
+// An unknown key of the later-version shape (isLaterBindingKey) is reported with BindingIssue::skipped set:
+// a binding a later version may write, which a player's file leaves out while keeping the rest (T-127,
+// takeSkippedEntries). An unknown value of a known key (an action, a hand, a stick role) and a key of
+// another shape are not. A map whose every key is skipped has one more issue, not skipped (an UnknownKey
+// with no key): left out, they would leave it with no controls at all, so a player's file with it is not
+// used.
 
 #include "features/input/binding_issue.hpp"
 #include "features/input/binding_profile.hpp"

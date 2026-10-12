@@ -234,6 +234,22 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheAimDotSizeSitsUnderTheAimDotOnThePlayTab()
+        {
+            // Window order: right under the Aim dot in the Play tab's controls, before the picture rows.
+            Assert.Equal((int)Setting.AimDot + 1, (int)Setting.AimDotSize);
+            Assert.True(Setting.AimDotSize < Setting.Resolution);
+            Assert.Equal("Aim dot size", SettingTexts.For(Setting.AimDotSize).Label);
+            // Greyed out with the dot off; its value is kept and still passed, reset to 1.0 by Reset to defaults.
+            var off = new LauncherSettings { AimDot = false, AimDotSize = 2.5 };
+            Assert.Equal("Only with the aim dot on.", SettingRules.WhyNot(Setting.AimDotSize, off));
+            Assert.Equal("2.50", Env(off)["ETERNALVR_UI_RETICLE_SIZE"]);
+            Assert.Equal(2.5, LauncherSettings.Parse(off.Serialize()).AimDotSize, 3);
+            Assert.Equal(LauncherSettings.DefaultAimDotSize, off.WithDefaults().AimDotSize);
+            Assert.Equal(1.0, LauncherSettings.DefaultAimDotSize);
+        }
+
+        [Fact]
         public void WalkingDoesNotApplySitting()
         {
             Assert.Equal(SettingRules.NotSitting, SettingRules.WhyNot(Setting.WalkInRoom, new LauncherSettings { Posture = PostureMode.Seated }));

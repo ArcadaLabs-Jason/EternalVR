@@ -26,6 +26,32 @@ std::string joinFolderPath(std::string_view folder, std::string_view name);
 // controllers sending nothing, and the built-in data always compiles.
 std::vector<BindingIssue> controlMapIssues(const ControllerData& data);
 
+// Takes out of `data` the keys a later version may write and this one does not know (BindingIssue::skipped,
+// T-127): a control map's entry whose key has the later-version shape (isLaterBindingKey; erased from the
+// map), and a [profile] input or [labels] name it does not know (already left out by parseControllerData;
+// its issue is taken). Returns one issue per entry, its message naming the section and the entry. What is
+// left is checked as before (ok(), controlMapIssues): a file with no other issue is used without these
+// entries, one with any other issue is not used. A file with only known keys is unchanged. A map of
+// nothing but such keys is left as it is: compiling it reports that no binding is left, so the file is not
+// used.
+std::vector<BindingIssue> takeSkippedEntries(ControllerData& data);
+
+// A player's controller data file read the way the layer reads it (vkcore readPlayerData).
+struct UsablePlayerData {
+    // Without the skipped entries.
+    ControllerData data;
+    // The entries left out (takeSkippedEntries), worth a line each when the file is used.
+    std::vector<BindingIssue> skipped;
+    // What stops the file being used: the file's own issues, or, when it has none, its control maps'
+    // (controlMapIssues, line 0). Empty: the file is used.
+    std::vector<BindingIssue> problems;
+
+    [[nodiscard]] bool usable() const { return problems.empty(); }
+};
+
+// Parses `text`, takes out the entries a later version may write (takeSkippedEntries), and checks the rest.
+UsablePlayerData usablePlayerData(std::string_view text);
+
 // Where a player's file went.
 struct PlayerDataPlacement {
     bool placed = false;  // false: it names no profile of `data`, and nothing changed

@@ -56,6 +56,19 @@ namespace EternalVR.Launcher.Core.Controls
         public static BindingKey StickGestureOf(ControlHand hand, StickGesture gesture) =>
             new BindingKey(BindingKeyKind.Gesture, hand, default, default, gesture);
 
+        /// <summary>
+        /// The shape every binding key of this and later versions keeps to (the layer's <c>isLaterBindingKey</c>, T-127): a
+        /// hand, then two or more names of lowercase letters, digits and underscores, dot-separated
+        /// (<c>left.futurebutton.tap</c>). A map line with such a key the mod does not know is a later version's binding: the
+        /// game leaves it out and uses the rest of the file, and the editor keeps it as it is.
+        /// </summary>
+        public static bool IsLaterKey(string text)
+        {
+            if (text == null) return false;
+            var parts = text.Split('.');
+            return parts.Length >= 3 && ControlNames.TryParseHand(parts[0], out _) && parts.Skip(1).All(ControlNames.IsKeyName);
+        }
+
         /// <summary>Reads a key the way the layer does; false for anything it does not know.</summary>
         public static bool TryParse(string text, out BindingKey key)
         {
@@ -208,6 +221,10 @@ namespace EternalVR.Launcher.Core.Controls
         }
 
         public static string HandName(ControlHand hand) => hand == ControlHand.Left ? "left" : "right";
+
+        /// <summary>A name in a key: one or more lowercase letters, digits and underscores (the layer's <c>isKeyName</c>).</summary>
+        public static bool IsKeyName(string text) =>
+            !string.IsNullOrEmpty(text) && text.All(c => c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_');
 
         public static bool TryParseHand(string text, out ControlHand hand)
         {

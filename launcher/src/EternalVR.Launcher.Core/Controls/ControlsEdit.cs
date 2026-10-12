@@ -246,7 +246,10 @@ namespace EternalVR.Launcher.Core.Controls
 
         // ---- The file ----
 
-        /// <summary>Every problem the layer would find: the file's, then each map's (<see cref="ControlMapRules"/>).</summary>
+        /// <summary>
+        /// Every problem the layer would find: the file's, then each map's (<see cref="ControlMapRules"/>). Those marked
+        /// <see cref="ControlIssue.Skipped"/> are a later version's lines, which the game leaves out (<see cref="NotUsed"/>).
+        /// </summary>
         public IReadOnlyList<ControlIssue> Check()
         {
             var issues = new List<ControlIssue>(File.FileIssues);
@@ -255,18 +258,27 @@ namespace EternalVR.Launcher.Core.Controls
             return issues;
         }
 
+        /// <summary>The problems that make the game use the built-in controls, and stop a save.</summary>
+        public IReadOnlyList<ControlIssue> Problems() => Check().Where(i => !i.Skipped).ToList();
+
+        /// <summary>
+        /// The lines this version does not know but a later one may have written (T-127): the game leaves them out and uses the
+        /// rest, and the editor keeps them as they are when it saves.
+        /// </summary>
+        public IReadOnlyList<ControlIssue> NotUsed() => Check().Where(i => i.Skipped).ToList();
+
         /// <summary>Puts the built-in controls back, all three maps, in the editor only (<see cref="Save"/> keeps them).</summary>
         public void ResetToDefaults() => File = Defaults.Clone();
 
         /// <summary>
         /// Saves the controls to the player's controls folder. Built-in controls need no file of the player's: an existing one
         /// is deleted (unless another file of the player's names the same controller, which would then be used instead).
-        /// Throws an <see cref="InvalidOperationException"/> when <see cref="Check"/> finds problems, and an
-        /// <see cref="IOException"/> when the file cannot be written.
+        /// Throws an <see cref="InvalidOperationException"/> when <see cref="Problems"/> finds any, and an
+        /// <see cref="IOException"/> when the file cannot be written. Lines a later version wrote are kept as they are.
         /// </summary>
         public ControlsSaveResult Save()
         {
-            var issues = Check();
+            var issues = Problems();
             if (issues.Count > 0) throw new InvalidOperationException("the controls have problems: " + issues[0].Message);
             var target = Path.GetFullPath(SavePath);
             if (!string.Equals(Path.GetDirectoryName(target), folder.Dir, StringComparison.OrdinalIgnoreCase))

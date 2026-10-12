@@ -252,8 +252,9 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   resting thumb`, a line when no rest has reported a touch after a minute of play, and every 10 s with a
   touch (capped apart from the wheel's lines) `left rest button, last 10 s: 6 touch(es), 2 short, 1 begun
   elsewhere, 3 gap(s) forgiven, 1 lift(s) at once (1 passing over: no tap), 2 tap(s), 0 hold(s), 1
-  landing(s) voided (own controls)`. Prompts name it `Left Thumb Rest`. An older layer does not
-  know the key and rejects the whole file (the built-in controls are used, logged).
+  landing(s) voided (own controls)`. Prompts name it `Left Thumb Rest`. A layer before 0.1.47 does not
+  know the key and rejects the whole file (the built-in controls are used, logged); from 0.1.47 such keys
+  are skipped (below, "Forward-compatible control maps").
 - **Touch sensors as buttons** (`"<hand>.<touch>.<press>"` in a control map, `<touch>` one of
   `primary_touch` (A/X), `secondary_touch` (B/Y), `stick_touch`, `trackpad_touch`, `trigger_touch`;
   `features/input/touch_inputs.hpp`, `touch_button.hpp` `TouchKind::Control`, T-126; the controls editor's
@@ -311,9 +312,50 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   tap, 1 landing(s) voided (own control)`. Under `ETERNALVR_CONTROLLERS_TRACE`, every change of the touch
   sensors the frame reports, bound or not (the first 200, then one a minute): `trace: touch sensors: right
   primary_touch` (or `none`). Prompts name them `A Touch`, `Right Trigger Touch`, `Left Stick Touch`.
-  Scripted input: `right.trigger_touch = 1` added beside the other touch sensors. An older layer does not
-  know the keys and rejects the whole file (the built-in controls are used, logged); maps that skip unknown
-  keys are the next step.
+  Scripted input: `right.trigger_touch = 1` added beside the other touch sensors. A layer before 0.1.47
+  does not know the keys and rejects the whole file (the built-in controls are used, logged); from 0.1.47
+  such keys are skipped (below, "Forward-compatible control maps").
+- **Forward-compatible control maps** (T-127; `usablePlayerData` and `takeSkippedEntries` in
+  `features/input/player_controller_data.hpp`, `isLaterBindingKey` in `binding_keys.hpp`,
+  `BindingIssue::skipped`). The third step of fully remappable controls: a player's file written by a later
+  version (its editor, or its built-in file copied into the player's on the first save) keeps working.
+  **Skipped, the rest of the file used:** a map key of the later-version shape (a hand, then two or more
+  names of `a-z`, `0-9`, `_`, dot-separated: `left.futurebutton.tap`, `right.trigger.double_tap`,
+  `right.stick.up_left`, `left.trigger.hold.seconds`) that this version does not know, whatever its value; a
+  `[profile]` key `gameplay.<hand>.<name>` naming an action this version does not have (whatever its path;
+  nothing is suggested for it); a `[labels]` key `<hand>.<name>` naming an input it does not know. Each is
+  left out of the data, so the compiler and the mapper never see it, and logged once at load when the file
+  is used (`controllers: <file>: [map.right] 'left.futurebutton.tap' (= 'weapon_slot_3') is not a binding
+  this version knows (a later version's, or a typo); this entry is skipped`; `[profile]` and `[labels]`
+  lines with their line number). A misspelt input or press in a hand-edited key (`left.triger.press`) has
+  the same shape, so it too is skipped: that one binding does nothing, with the log line and the editor's
+  grey note, instead of the whole file falling back. **Still rejected (built-in
+  data, logged as before):** any key of another shape (`weapon_hands`, `left.trigger`, `Left.trigger.press`,
+  `wheel.mode`: it could be a map-wide setting that changes what the known keys mean); an unknown value of a
+  known key (an action on a button or stick gesture this version has, a stick role, a weapon hand, a
+  `[profile]` path this version does not list for the controller, a path that does not suit its action); a
+  section other than `[profile]`, `[labels]` and the three maps (a misspelt `[map.rigth]` would otherwise
+  leave that handedness with no map at all); malformed lines and headers, a key or section set twice, a
+  missing `[profile]` or path; the conflicts between known bindings; and a map whose every key would be
+  skipped (`buildBindingProfile` adds an issue with no key, `no key in this map is a binding this version
+  knows`: left out, the keys would leave that handedness with nothing bound). A file with only known keys
+  reads exactly as before. Why keys and not values: an unknown key binds an input, press kind or gesture this
+  version cannot read at all, so leaving it out loses nothing this version could have done and the player's
+  map is otherwise whole here; an unknown action or role on an input this version has would leave a control
+  the player relies on dead (a stick with no role cannot move or turn), where the built-in controls are at
+  least complete; and an unknown value on a known key is most often a typo in a hand edit, which the editor
+  shows in red. A later version that adds keys should keep them in the later-version shape (per-hand,
+  per-input) only when an older version can safely ignore them: a per-hand key is skipped whatever it
+  means, so a setting written that way (`left.trigger.hold.seconds`) must be one whose absence leaves the
+  known bindings right. Anything that changes what known keys mean must use another shape, which older
+  versions reject; one that adds actions, roles or sections makes files using them fall back on older
+  versions.
+  **Launcher:** `ControlMapRules` and `ControllerMapFile` mark the same entries `ControlIssue.Skipped`
+  (`BindingKey.IsLaterKey`); `ControlsEdit.Problems()` (the rest) stops a save, `NotUsed()` lists the
+  skipped ones, which the editor shows in grey under **Not used by this version of the mod** and keeps
+  untouched: the file is edited line by line, so an unknown line is written back byte for byte. Tests:
+  `tests/features/input/forward_maps_tests.cpp` (one case table, read by the launcher's `ForwardMapsTests`
+  to check `ControlMapRules` against the compiler), `ForwardMapsTests.cs` (round trip, LF and CRLF).
 - **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
   Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
   off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along

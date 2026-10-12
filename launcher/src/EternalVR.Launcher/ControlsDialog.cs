@@ -33,6 +33,8 @@ namespace EternalVR.Launcher
         private readonly ComboBox hand = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
         private readonly Label fileState = new Label { AutoSize = true, Margin = new Padding(3, 6, 3, 6) };
         private readonly Label problems = new Label { AutoSize = true, ForeColor = Color.Firebrick, Margin = new Padding(3, 6, 3, 6) };
+        /// <summary>Lines of a newer version that this one leaves out (<see cref="ControlsEdit.NotUsed"/>); they do not stop a save.</summary>
+        private readonly Label notUsed = new Label { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 3, 6) };
         /// <summary>The thumb-rest wheel on and a thumb rest bound here (<see cref="ControlsEdit.RestWheelNote"/>).</summary>
         private readonly Label restNote = new Label { AutoSize = true, Margin = new Padding(3, 0, 3, 6) };
         private readonly Button save = new Button { Text = "Save", Width = 90, Height = 30 };
@@ -125,6 +127,7 @@ namespace EternalVR.Launcher
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             var pickers = new TableLayoutPanel { AutoSize = true, ColumnCount = 4, Dock = DockStyle.Fill, Margin = Padding.Empty };
             for (int i = 0; i < 4; i++) pickers.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -159,6 +162,7 @@ namespace EternalVR.Launcher
             root.Controls.Add(restNote);
             root.Controls.Add(scroll);
             root.Controls.Add(problems);
+            root.Controls.Add(notUsed);
             root.Controls.Add(bottom);
             Controls.Add(root);
             CancelButton = close;
@@ -440,16 +444,26 @@ namespace EternalVR.Launcher
             var issues = edit.Check();
             errors.Clear();
             var lines = new List<string>();
+            var later = new List<string>();
             foreach (var issue in issues)
             {
                 bool here = issue.Section == Section;
+                var line = "- " + (issue.Section == null || here ? string.Empty : MapName(issue.Section) + ": ") + issue.Message;
+                if (issue.Skipped)
+                {
+                    later.Add(line);
+                    continue;
+                }
                 var box = here ? BoxOf(issue.Key) : null;
                 if (box != null && box.Visible && string.IsNullOrEmpty(errors.GetError(box))) errors.SetError(box, issue.Message);
-                lines.Add("- " + (issue.Section == null || here ? string.Empty : MapName(issue.Section) + ": ") + issue.Message);
+                lines.Add(line);
             }
             problems.Text = lines.Count == 0 ? string.Empty
                 : "The game would not use these controls. Fix " + (lines.Count == 1 ? "this" : "these") + " to save:\n" + string.Join("\n", lines);
             problems.Visible = lines.Count > 0;
+            notUsed.Text = later.Count == 0 ? string.Empty
+                : "Not used by this version of the mod, and kept in your file as " + (later.Count == 1 ? "it is" : "they are") + ":\n" + string.Join("\n", later);
+            notUsed.Visible = later.Count > 0;
             save.Enabled = lines.Count == 0;
             WrapProblems();
         }
@@ -487,7 +501,7 @@ namespace EternalVR.Launcher
         private void WrapProblems()
         {
             int width = ClientSize.Width - Padding.Horizontal - 32;
-            if (width > 100) problems.MaximumSize = restNote.MaximumSize = new Size(width, 0);
+            if (width > 100) problems.MaximumSize = restNote.MaximumSize = notUsed.MaximumSize = new Size(width, 0);
         }
 
         // ---- Changing and saving ----
@@ -503,7 +517,7 @@ namespace EternalVR.Launcher
         private bool Save()
         {
             if (edit == null) return true;
-            var issues = edit.Check();
+            var issues = edit.Problems();
             if (issues.Count > 0)
             {
                 MessageBox.Show(this, "These controls cannot be saved yet: the game would not use them.\n\n" + issues[0].Message, Text,

@@ -82,7 +82,8 @@ gather drops it. `r_skipLightGPUCulling` does nothing here because Umbra forces 
 
 ## 4. The fix
 
-`ETERNALVR_LIGHT_FRUSTUM=1` (`src/vkcore/light_cull.cpp`) gives the lights Umbra hides a second opinion from
+`src/vkcore/light_cull.cpp` (on by default, `ETERNALVR_LIGHT_FRUSTUM=0` turns it off; until it had been tried
+in a headset it was off unless the variable was 1, through 0.1.46) gives the lights Umbra hides a second opinion from
 the frustum test the game uses with Umbra off. Mid hooks at the three drops (0x1C78541, 0x1C787E7, 0x1C78950)
 send a light Umbra hides to the frustum test (0x1C78971, past its `r_skipLightCPUCulling` check, which the
 hook makes itself), and a hook at the frustum verdict (0x1C789C3) sends a light the frustum drops too to the
@@ -130,7 +131,9 @@ a light dropped by the gather; a shadow caster or occluder culled by Umbra is th
 
 ## 6. Open
 
-- The fix in the headset at the dais, and with Parallel Eye Rendering, before it is turned on by default.
+- Tried in a headset at the dais on 0.1.46 (with `ETERNALVR_LIGHT_FRUSTUM=1`): the steps no longer went dark,
+  so the fix is on by default since 0.1.47. Still to look at in a headset: the dais with Parallel Eye
+  Rendering on.
 - The e1m3 spot above.
 - Why `r_skipLightCPUCulling 1` brightens the dark spot by 10% with Umbra on (without the fix the gather reads
   that flag only on its Umbra-off path; with it, also for the lights Umbra hides).

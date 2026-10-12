@@ -77,6 +77,11 @@ right.grip.press = "weapon_mod"
     CHECK(hasIssue(result, BindingIssueKind::UnknownValue, "weapon_hand"));
     CHECK(hasIssue(result, BindingIssueKind::UnknownValue, "left.stick.role"));
     CHECK(result.issues.size() == 4);
+    // Only the unknown key of the later-version shape is one a player's file leaves out (T-127).
+    for (const BindingIssue& issue : result.issues) {
+        CAPTURE(issue.key);
+        CHECK(issue.skipped == (issue.key == "left.trigger.squeeze"));
+    }
     // The good entry survives, and a bad weapon hand falls back to the right.
     CHECK(result.profile.buttons ==
           std::vector<ButtonBinding>{

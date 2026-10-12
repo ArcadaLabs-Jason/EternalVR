@@ -310,8 +310,8 @@ void XrPresenter::Impl::reportViewLimits() {
 void XrPresenter::Impl::awaitRenderSize() {
     // The render size switches on (or changes) once the runtime's views are known: the game then makes a
     // swapchain of that size. Building the ring for the old one would only rebuild it a moment later, and
-    // every rebuild destroys XR swapchains (the OpenXR Simulator mixes up the images of the swapchains made
-    // after one is destroyed), so the ring waits a little for the new size.
+    // every rebuild destroys XR swapchains (after a destroy the OpenXR Simulator hands a new swapchain the
+    // handle of one in use: swapchain_book.hpp), so the ring waits a little for the new size.
     const std::optional<render_size::Extent> size = virtual_client::activeExtent();
     if (!size) {
         return;
@@ -508,7 +508,9 @@ void XrPresenter::Impl::createRoomObjects() {
                                     : floor == XR_REFERENCE_SPACE_TYPE_STAGE ? "STAGE"
                                                                              : "LOCAL_FLOOR");
     // Made with the head fade off too: a glory kill shown as a fade uses it.
-    fadeLayer.create(xr, session, d3dDevice.Get(), xrSwapchainFormat);
+    if (fadeLayer.create(xr, session, d3dDevice.Get(), xrSwapchainFormat)) {
+        xrSwapchains.hold(fadeLayer.swapchain(), fadeLayer.images(), "fade");
+    }
 }
 
 bool XrPresenter::Impl::createXrSwapchain() {
@@ -548,28 +550,14 @@ bool XrPresenter::Impl::createXrSwapchain() {
     scInfo.faceCount = 1;
     scInfo.arraySize = 1;
     scInfo.mipCount = 1;
-    EVR_XR_CHECK(xr.xrCreateSwapchain(session, &scInfo, &xrSwapchain));
-    EVR_XR_CHECK(xr.xrEnumerateSwapchainImages(xrSwapchain, 0, &count, nullptr));
-    std::vector<XrSwapchainImageD3D12KHR> images(count, {XR_TYPE_SWAPCHAIN_IMAGE_D3D12_KHR});
-    EVR_XR_CHECK(xr.xrEnumerateSwapchainImages(xrSwapchain, count, &count,
-                                               reinterpret_cast<XrSwapchainImageBaseHeader*>(images.data())));
-    for (const auto& image : images) {
-        xrImages.push_back(image.texture);
+    XrSwapchain made = XR_NULL_HANDLE;
+    EVR_XR_CHECK(xr.xrCreateSwapchain(session, &scInfo, &made));
+    // Only a new swapchain of its own with images of the ring's size (presenter_swapchains.hpp).
+    if (!xrSwapchains.admit(xr, made, ringExtent.width, ringExtent.height, "game image", xrImages)) {
+        return false;
     }
-    // A copy into an image of another size fails to record, and executing it would remove the device: a
-    // runtime that hands out such images (the OpenXR Simulator does for a swapchain made after one was
-    // destroyed) gets no swapchain from us.
-    for (std::size_t i = 0; i < xrImages.size(); ++i) {
-        const D3D12_RESOURCE_DESC d = xrImages[i]->GetDesc();
-        if (d.Width != ringExtent.width || d.Height != ringExtent.height) {
-            EVR_LOG("xr: the runtime's swapchain image %zu is %llux%u, not %ux%u; swapchain refused", i,
-                    static_cast<unsigned long long>(d.Width), d.Height, ringExtent.width, ringExtent.height);
-            xr.xrDestroySwapchain(xrSwapchain);
-            xrSwapchain = XR_NULL_HANDLE;
-            xrImages.clear();
-            return false;
-        }
-    }
+    xrSwapchain = made;
+    count = static_cast<std::uint32_t>(xrImages.size());
     if (const auto size = xr_math::cinemaQuadSize(eyeExtent.width, eyeExtent.height, kScreenWidthMetres)) {
         quadSize = {size->width, size->height};
     }

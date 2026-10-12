@@ -153,6 +153,7 @@ evr_add_test(evr_input_tests
         features/input/dashboard_pause_tests.cpp
         features/input/dossier_press_tests.cpp
         features/input/forced_angles_tests.cpp
+        features/input/forward_maps_tests.cpp
         features/input/hands_jump_tests.cpp
         features/input/haptics_policy_tests.cpp
         features/input/input_mapper_stick_tests.cpp
@@ -255,12 +256,14 @@ if(TARGET evr_device_features)
             vkcore/frame_repeat_tests.cpp
             vkcore/game_settings_line_tests.cpp
             vkcore/job_nodes_tests.cpp
+            vkcore/light_cull_tests.cpp
             vkcore/log_cap_tests.cpp
             vkcore/parallel_eyes_settings_tests.cpp
             vkcore/snapshot_pairs_tests.cpp
             vkcore/snapshot_ring_tests.cpp
             vkcore/submit_order_tests.cpp
             vkcore/swap_images_tests.cpp
+            vkcore/swapchain_book_tests.cpp
             vkcore/update_lists_tests.cpp
             vkcore/view_dlss_plan_tests.cpp
             vkcore/view_frames_tests.cpp

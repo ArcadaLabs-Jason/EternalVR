@@ -535,10 +535,7 @@ void XrPresenter::Impl::logMenuStats() {
 }
 
 void XrPresenter::Impl::destroyMenuXrObjects() {
-    if (menuPointerKept.beamSwapchain) {
-        xr.xrDestroySwapchain(menuPointerKept.beamSwapchain);
-        menuPointerKept.beamSwapchain = XR_NULL_HANDLE;
-    }
+    xrSwapchains.destroy(xr, menuPointerKept.beamSwapchain);
     menuPointerKept.beamFailed = false;
 }
 

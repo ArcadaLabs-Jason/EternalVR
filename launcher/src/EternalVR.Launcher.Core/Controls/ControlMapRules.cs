@@ -10,7 +10,10 @@ namespace EternalVR.Launcher.Core.Controls
     /// <summary>Which rule a conflict breaks (the layer's <c>BindingConflict</c>).</summary>
     public enum ControlConflict { None, PressWithTapOrHold, SharedStickRole, GestureOffTurnStick }
 
-    /// <summary>A problem the layer would find in a controller file, which makes it use the built-in controls instead.</summary>
+    /// <summary>
+    /// A problem the layer would find in a controller file, which makes it use the built-in controls instead; or, when
+    /// <see cref="Skipped"/>, a line it leaves out while using the rest.
+    /// </summary>
     public sealed class ControlIssue
     {
         public ControlIssueKind Kind { get; set; }
@@ -27,6 +30,13 @@ namespace EternalVR.Launcher.Core.Controls
         public int Line { get; set; }
         /// <summary>What is wrong, in plain words for the player.</summary>
         public string Message { get; set; }
+        /// <summary>
+        /// A key a later version of the mod may write that this one does not know (the layer's <c>BindingIssue::skipped</c>,
+        /// T-127): a map key of the later shape (<see cref="BindingKey.IsLaterKey"/>), a <c>[profile]</c> input or a
+        /// <c>[labels]</c> name. The game leaves the line out and uses the rest of the file, the editor keeps the line as it is
+        /// and still saves; any other issue makes the game use the built-in controls and stops a save.
+        /// </summary>
+        public bool Skipped { get; set; }
 
         public override string ToString() => Message;
     }
@@ -36,7 +46,9 @@ namespace EternalVR.Launcher.Core.Controls
     /// every value an action (or a hand, or a stick role), no <c>press</c> together with a <c>tap</c> or <c>hold</c> on one
     /// button, the two sticks not given one role, and stick gestures only on the turn stick. A tap and a hold on one button
     /// are fine, and so is one action on several buttons. The layer drops the faulty binding and, for a player's file, uses
-    /// the built-in controls instead; the editor refuses to save.
+    /// the built-in controls instead; the editor refuses to save. A key of a later version (<see cref="BindingKey.IsLaterKey"/>)
+    /// is reported as <see cref="ControlIssue.Skipped"/>: the game leaves it out and uses the rest, and the editor saves. A
+    /// map with nothing but such keys has one more issue, not skipped (the layer's own): left out, they would leave it empty.
     /// </summary>
     public static class ControlMapRules
     {
@@ -63,6 +75,15 @@ namespace EternalVR.Launcher.Core.Controls
                 var value = entry.Value;
                 if (!BindingKey.TryParse(key, out var parsed))
                 {
+                    if (BindingKey.IsLaterKey(key))
+                    {
+                        var later = Issue(ControlIssueKind.UnknownKey, section, key, value,
+                            "'" + key + "' is not a button, stick or gesture this version of the mod knows (a newer version's, or "
+                            + "mistyped); the game leaves it out and uses the rest");
+                        later.Skipped = true;
+                        issues.Add(later);
+                        continue;
+                    }
                     issues.Add(Issue(ControlIssueKind.UnknownKey, section, key, value,
                         "'" + key + "' is not a button, stick or gesture the mod knows"));
                     continue;
@@ -96,6 +117,11 @@ namespace EternalVR.Launcher.Core.Controls
                         break;
                 }
             }
+
+            // Every key a later version's: left out, they would leave the map with no controls, so the game does not use the file.
+            if (entries.Count > 0 && issues.Count(i => i.Skipped) == entries.Count)
+                issues.Add(Issue(ControlIssueKind.UnknownKey, section, null, null,
+                    "No binding here is one this version of the mod knows, so the game would use the built-in controls; bind at least one control"));
 
             // Both sticks with one role: the left one keeps it.
             var turnStick = (ControlHand?)null;

@@ -38,15 +38,24 @@ struct BindingIssue {
     std::string value;
     std::string otherKey;
     std::string otherValue;
+
+    // A key a later version may write that this one does not know (T-127): a control map's key of the
+    // later-version shape (isLaterBindingKey), a [profile] "gameplay.<hand>.<name>" naming an input this
+    // version has no action for, a [labels] "<hand>.<name>" naming an input it does not know. A player's
+    // file leaves such entries out and keeps the rest (takeSkippedEntries); any other issue, an unknown
+    // value of a known key included, still makes it use the built-in data.
+    bool skipped = false;
 };
 
 // An issue that is not a conflict (the conflict fields stay empty).
-inline BindingIssue issueOf(BindingIssueKind kind, std::string key, int line, std::string message) {
+inline BindingIssue
+issueOf(BindingIssueKind kind, std::string key, int line, std::string message, bool skipped = false) {
     BindingIssue issue;
     issue.kind = kind;
     issue.key = std::move(key);
     issue.line = line;
     issue.message = std::move(message);
+    issue.skipped = skipped;
     return issue;
 }
 
