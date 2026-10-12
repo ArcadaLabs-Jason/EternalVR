@@ -426,8 +426,9 @@ the block and its neighbours. HUD pieces smaller than a block keep their light; 
 the few levels it changes across a block. `vkcore::UiWash` runs the same rule in two D3D12 compute passes
 on the XR worker before the copy (not while a menu is up); on the three captures its output is byte for
 byte the reference's, and the capture without the vignette comes out unchanged. `ETERNALVR_UI_WASH=0`
-turns it off. Evidence: `<workspace>\tmp-vr\redfix` (before and after composites over the eye
-images, the plain clamp beside them).
+turns it off. Section 13 revises the rule (three passes now). Evidence:
+`<workspace>\tmp-vr\redfix` (before and after composites over the eye images, the plain clamp
+beside them).
 
 The eye images carry a second, separate red vignette at low health (scene side, in both eyes); that is a
 game view effect, not the GUI target, and needs a cvar. Static reading of this build (not yet run):
@@ -438,3 +439,56 @@ effects (RVA 0x147DB10), where it jumps past the double vision, the view shakes,
 screen overlay layers ("Overlay material, uses $overlayColorMap and $overlayFlowMap") and the 3D damage
 ring. The candidate is `g_skipViewEffects 1`, tried first with `ETERNALVR_DEBUG_CVARS`; the HUD's
 directional arcs are SWF (`idHUD_DirectionalFeedback`, `hud_showDamage`) and should stay.
+
+## 13. Squares on the HUD quad when hit: the wash rule, revised (2026-10-11)
+
+Owner's report (headset, 0.1.46, Route S and Parallel Eye Rendering): in The Ancient Gods parts 1 and 2,
+square, odd damage effects on the HUD panel when taking damage. Rig repro on the second test PC (OpenXR
+simulator, 2048x2208, GUI target captured raw every 2 s, no god mode, the player teleported into hazard
+volumes: `game_envhazard_volume_electrical_blue_1` in e5m2_earth, `destroyed_rig_envhazard_volume_electrical_blue_1`
+in e4m1_rig, `trenches_envhazard_volume_fire_3` in e1m2_battle as the base game control).
+
+What draws it [rig]: nothing DLC-specific. Every hit brings the HUD's full-screen damage feedback into
+the GUI target: the red vignette (alpha 0) and a translucent frame in the top-left corner (about 80 x 150
+pixels, coverage 3 to 54), on top of the directional wedge; at low health the vignette stays and the hex
+pattern behind the LOW HEALTH banner appears. `hud_showDamage 0` removes the hit vignette, the frame and
+the wedges together (the low-health vignette stays); `view_enableHelmetFX 0` changes nothing in the GUI
+target. The DLC's hazards and demons hit harder, and the hit vignette scales with the hit: about 42 of
+255 on average after an electrical hit in TAG1 and TAG2 against about 6 after the first fire hits in
+e1m2 (mean colour over the target), which is why it shows far more there. The DLC's screen particles
+(`fx/player/screen_damage` items such as `screen_effects/electric_damage`, `berserk_slash_1p`) use
+world-pass materials (`MATERIALPASS_BLEND`), so they render in the eye images, not the GUI target
+[static; the eye images were not checked for them].
+
+Why squares [rig, code]: the rule of section 12 took one level per 64x64 block. HUD pieces larger than a
+block (the hex pattern, the panels' glow) lift some blocks' floors, so the wash taken changed in steps at
+the block edges: rectangles around the banner and beside the panels. And the vignette lies behind the HUD
+(on captures the light a hit adds to a covered pixel is the vignette's times 1 - alpha, at every
+coverage), so where HUD covered a pixel partly the rule, which only took light above the coverage, left
+the tint: the corner frame and the panels' backgrounds lit as orange boxes (corner frame red 30 of 255
+after the 0.1.46 rule on a TAG2 hit).
+
+The revised rule (`additive_wash.hpp`): a block's floor is the least of `(colour + 1/2) / (1 - alpha)`
+(the most wash a pixel can hold behind its coverage; the half is the byte's rounding, which matters under
+high coverage, where a wash leaves a colour of only 0 to 2), read only from blocks with an uncovered pixel;
+a block's level is the largest floor of the known blocks around it, kept when those with light outnumber
+those without two to one (a glow filling a block or two without a vignette stays); the level is
+interpolated bilinearly between block centres; each pixel gives up `wash * (1 - alpha)`.
+
+Measured with the C++ reference on the captures (raw / 0.1.46 / revised). A TAG2 hit against the same view
+without damage: light above that view 186.2 M / 6.9 M / 3.9 M levels summed over the target, light below
+it 11.6 M / 13.6 M / 14.1 M (the raw figure is the two views' own difference, so the revised rule takes
+about 2.6 M levels more than it, mostly the vignette's share behind solid HUD, against 2.0 M for 0.1.46),
+pixels more than 16 levels above it 3.68 M / 68 k / 20 k (most of what is left is the wedge, kept by
+design), corner frame red 45 / 30 / 4. At low health: block seams (the mean step across block edges less
+the same inside blocks) 0.14 / 0.57 / 0.10 in TAG2 and 0.15 / 0.56 / 0.10 in e1m2, vignette left
+69 / 0.5 / 0.3 and 92 / 0.5 / 0.3 levels; solid HUD loses 6 to 7 levels of red (the vignette's share
+behind it). A capture carries no wash when the 0.1.46 rule leaves it byte for byte unchanged: 369 of the
+446 RGBA GUI captures (the runs above and earlier rig sessions; GUI sizes 2048x2208, 2056x2216, 2496x2688
+and 1664x1792), and the revised rule leaves all 369 byte for byte unchanged too. The D3D12 passes match
+the C++ reference byte for byte on all 446 (a scratch D3D12 harness running `vkcore::UiWash` on the
+captures). At 1664x1792 (runs `dd-s7a`, without damage, and `dd-s7b`, a TAG2 hit, the layer's own filter
+running): 45 captures without a wash unchanged; on a hit corner frame red 42 / 21 / 4 and seams
+0.21 / 0.08 (0.1.46 / revised), at low health seams 0.48 / 0.06. Evidence: `tmp-vr\research\dlc-damage`
+on the second test PC (`cmp-*.jpg`, `washlab.py`), runs `tmp-vr\rs\dd-*`. `ETERNALVR_UI_WASH=0` still turns the
+filter off.

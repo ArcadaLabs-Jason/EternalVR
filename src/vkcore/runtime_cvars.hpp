@@ -15,7 +15,7 @@
 //   S's first present (presenter_copy.cpp), before the runtime's session and the first map.
 // - Route S: r_SSDO at ETERNALVR_STEREO_SSDO's value (stereo_seq::stereoSsdoCvar), against the game's own
 //   r_SSDO 0 after r_TAASafeMode 1, then at what the game's Directional Occlusion setting writes whenever it
-//   runs (ssdo_menu_hook.hpp).
+//   runs (ssdo_menu_hook.hpp); with ETERNALVR_STEREO_SSDO=off at 0 whatever that setting.
 // - Route S, whatever the temporal mode: the window and present set (stereo_seq::stereoWindowCvars:
 //   r_fullscreen 0, r_swapInterval 0, the command line's r_windowWidth / r_windowHeight), so a load path
 //   that applies the player's video mode cannot take the eyes to the display's size. Once the render size is
@@ -36,7 +36,8 @@
 //   Rendering's first present, on every present as under Route S (menus, loading screens and frames
 //   without a world included).
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
-//   replaces the CPU Saver's value for the same cvar.
+//   wins over the layer's own holds: it replaces any of the sets above for the same cvar, and per-eye TAA
+//   (taa_hooks.cpp) leaves that cvar alone (stereo_seq/debug_cvars.hpp).
 //
 // A value the game puts back is written again; each cvar's first write and the value read back are logged,
 // then the first 12 later writes; the rest are counted. Only while the multiplayer guard allows touching the

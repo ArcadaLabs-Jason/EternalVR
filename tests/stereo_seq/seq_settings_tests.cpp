@@ -280,17 +280,24 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
     }
 }
 
-TEST_CASE("SSDO cvar: held on unless the setting is 0, never part of the other sets") {
+TEST_CASE("SSDO cvar: held on unless the setting is 0 or off, never part of the other sets") {
     for (const char* on : {"", "1"}) {
         const auto c = evr::stereo_seq::stereoSsdoCvar(on);
         REQUIRE(c.has_value());
         CHECK((c->name == "r_SSDO"));
         CHECK((c->value == "1"));
+        CHECK(evr::stereo_seq::stereoSsdoFollowsGame(on));
     }
-    const auto off = evr::stereo_seq::stereoSsdoCvar("0");
-    REQUIRE(off.has_value());
-    CHECK((off->value == "0"));
-    for (const char* none : {"2", "on", " 1", "off"}) {
+    for (const char* zero : {"0", "off"}) {
+        const auto off = evr::stereo_seq::stereoSsdoCvar(zero);
+        REQUIRE(off.has_value());
+        CHECK((off->name == "r_SSDO"));
+        CHECK((off->value == "0"));
+    }
+    // The player's 0 follows the game's Directional Occlusion setting; off (rig use) does not.
+    CHECK(evr::stereo_seq::stereoSsdoFollowsGame("0"));
+    CHECK_FALSE(evr::stereo_seq::stereoSsdoFollowsGame("off"));
+    for (const char* none : {"2", "on", " 1", "OFF"}) {
         CHECK_FALSE(evr::stereo_seq::stereoSsdoCvar(none).has_value());
     }
     // The game's Directional Occlusion setting (0x1420F20): off only at level 0.

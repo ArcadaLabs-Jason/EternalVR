@@ -970,9 +970,9 @@ documentation say so.
 
 **Foveation (R08).** As built: `VK_NV_shading_rate_image` (src/vkcore/vrs_nv.cpp), one rate image per
 eye bound for each render pass into a target in the eye's space, off by default and offered as an
-experimental launcher setting; `adjustForLens` is not called. Each region is anchored on head-forward, has
-the area of the cone of its preset angle and reaches the same fraction of the way to every edge of the eye's
-image (`foveation_region.hpp`). docs/VR_STEREO.md has the details. The
+experimental launcher setting; `adjustForLens` is not called. Each region is the cone of its preset angle
+around head-forward, so a direction gets the same rate in both eyes (`foveation_region.hpp`, T-128).
+docs/VR_STEREO.md has the details. The
 plan below (`VK_KHR_fragment_shading_rate`, a 2-layer shading-rate image selected by `ViewIndex`, on by
 default) was written for the multiview design and was not built.
 - **Fixed foveation is on by default for every headset.** Regions are defined in degrees and centred per

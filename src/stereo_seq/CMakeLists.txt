@@ -8,6 +8,7 @@ evr_add_module(evr_stereo_seq
         alternate_prev.cpp
         bin_tiles.cpp
         centered_matrix.cpp
+        debug_cvars.cpp
         deflate.cpp
         desktop_window.cpp
         dlss_menu.cpp

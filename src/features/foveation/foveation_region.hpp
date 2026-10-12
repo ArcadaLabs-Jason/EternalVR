@@ -2,51 +2,57 @@
 
 // Where the full-rate and half-rate regions sit in each eye's image (ARCHITECTURE section 11).
 //
-// Fixed foveation anchors the regions on head-forward, not on the middle of the eye's image. Headset eye
-// frusta are asymmetric (wider on the temporal side and at the bottom), so head-forward projects off-centre,
-// toward the nasal side and the top. A circle around head-forward reaches the nasal edge and the top long
-// before the temporal edge and the bottom: the reduced-rate band beyond it is a sliver on two sides and wide
-// on the other two. Each region here reaches the same fraction of the way from head-forward to every edge
-// of the image instead: four quarter ellipses that meet on the lines through head-forward, each side's
-// radius that fraction of that side's extent.
+// Fixed foveation centres the regions on head-forward, the direction the head faces, not on the middle of
+// the eye's image. A region is the cone of the preset's half-angle around head-forward: a point of the eye's
+// image is inside when its view ray, through the eye's own projection, is within that angle of head-forward.
+// Both eyes use the head's forward and the same angle, so a direction in the scene gets the same rate in both
+// eyes (a point at a finite distance nearly the same: the eyes see it from a few centimetres apart). With
+// parallel eyes the cone meets the eye's image plane in a circle around head-forward's projection; with a
+// canted display (the eye turned in the head) in an ellipse.
 //
-// A preset's angle sets the fraction. The region has the area, on the eye's tangent plane, of the cone of
-// that half-angle around the eye's axis (pi * tan^2 of the angle), so a preset shades about as much of the
-// image at each rate as the cone did; in a symmetric square FOV the region is that cone's circle. Where the
-// image's edge clipped the cone's circle, the region covers a little more: Quest 3 eye L (tangents 0.84
-// nasal, 1.38 temporal, 0.97 up, 1.43 down), Subtle's 46 degree half-rate region 63.5% of the image against
-// the clipped circle's 59.8%, so 36.5% at quarter rate instead of 40%; the other presets' circles fit.
+// Headset eye frusta are asymmetric (wider on the temporal side and at the bottom), so head-forward projects
+// toward the nasal side and the top, and the image reaches less far from it there. Quest 3 eye L (-54, 40,
+// 44, -54.3 degrees): Balanced's half-rate region of 40 degrees ends at the nasal edge, and the quarter-rate
+// band beyond it is on the temporal side and at the top and bottom; eye R is its mirror image. Until T-128
+// each region reached the same fraction of the way to every edge of its own eye's image instead: on that
+// FOV eye L's full-rate region reached about 28 degrees to the left and eye R's about 18, so the same
+// direction got different rates in the two eyes and each eye lost different detail.
 
 #include "common/quat.hpp"
+#include "common/vector.hpp"
 #include "xr_math/fov.hpp"
 
 #include <optional>
 
 namespace evr::foveation {
 
-// The region in Vulkan NDC (x right, y DOWN, both in [-1, 1] across the image): head-forward's projection
-// and the radius from it toward each edge of the image. A point is inside when (dx / rx)^2 + (dy / ry)^2 is
-// at most 1, rx the left or right radius by the side of the centre it is on, ry the top or bottom one.
+// One region in one eye's image. Vulkan NDC (x right, y DOWN, both in [-1, 1] across the image) maps
+// linearly onto the eye's tangent extents on the plane z = -1: x from `tangents.left` to `tangents.right`,
+// y from `tangents.up` to `tangents.down`.
 struct FoveationRegion {
+    // Head-forward in the eye's space (x right, y up, the eye looking down -z), unit length, z < 0.
+    Vec3 forward{0.0f, 0.0f, -1.0f};
+    // In radians, in (0, pi / 2); 0 holds nothing.
+    float halfAngle = 0.0f;
+    xr_math::FovTangents tangents;
+    // Head-forward's projection, in NDC (inside the image).
     float centerX = 0.0f;
     float centerY = 0.0f;
-    float radiusLeft = 0.0f;
-    float radiusRight = 0.0f;
-    float radiusTop = 0.0f; // toward y = -1
-    float radiusBottom = 0.0f;
 };
 
-// The same radius on every side (tests, the rate pattern's own cases).
-constexpr FoveationRegion ellipseRegion(float centerX, float centerY, float radiusX, float radiusY) {
-    return {centerX, centerY, radiusX, radiusX, radiusY, radiusY};
-}
-
 // The region of `halfAngleDegrees` for one eye. `eyeOrientationInHead` is the eye's rotation relative to the
-// head (identity unless the display is canted); head-forward is projected with the eye's own projection.
+// head (identity unless the display is canted); head-forward is the head's -z, expressed in the eye's space.
 //
 // Returns nullopt if the half-angle is not in (0, 90) degrees, if the eye FOV has no projection (see
 // makeProjection), or if head-forward is not inside the eye's image (only possible with extreme canting).
 std::optional<FoveationRegion>
 foveationRegion(const xr_math::Fov& eyeFov, const Quat& eyeOrientationInHead, float halfAngleDegrees);
+
+// The angle in radians between head-forward and the view ray through the NDC point (x, y).
+double angleFromForward(const FoveationRegion& region, float x, float y);
+
+// Whether the region holds the view ray of some point of the NDC rectangle [x0, x1] x [y0, y1], its edges
+// included (x0 <= x1, y0 <= y1). False for a region of no angle or no image.
+bool touches(const FoveationRegion& region, float x0, float x1, float y0, float y1);
 
 } // namespace evr::foveation

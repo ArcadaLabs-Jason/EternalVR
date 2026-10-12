@@ -240,11 +240,9 @@ void onDeviceCreated(DeviceData& data, bool enabled) {
                 : s.mode == Mode::EyeTest ? "eye test: eye L's left half and eye R's right half at 4x4"
                                           : "fixed foveation around head-forward");
         if (s.mode == Mode::Fovea) {
-            EVR_LOG(
-                "vrs: foveation: full rate within the region of %.0f deg, half rate within that of %.0f deg, "
-                "quarter outside (each region the area of that cone, reaching the same fraction of the way "
-                "to every edge of the eye's image)",
-                s.fullDegrees, s.halfDegrees);
+            EVR_LOG("vrs: foveation: full rate within %.0f deg of head-forward, half rate within %.0f deg, "
+                    "quarter outside (the same directions in both eyes)",
+                    s.fullDegrees, s.halfDegrees);
         }
         if (d->usesGuesses) {
             EVR_LOG("vrs: ETERNALVR_TEST_VRS_PARITY=1: render passes whose counters do not agree take the "

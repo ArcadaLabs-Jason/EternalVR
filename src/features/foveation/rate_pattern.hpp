@@ -2,8 +2,9 @@
 
 // A shading rate image's texels for fixed foveation (ARCHITECTURE section 11): each texel covers a block of
 // the render target's pixels and holds a palette index, 0 = full rate, 1 = one shade per 2x2 pixels, 2 = one
-// per 4x4. The full-rate region and the wider half-rate one are regions in Vulkan NDC (foveation_region.hpp);
-// a texel takes the finest rate any of its pixels needs, so the full-rate region is never coarsened.
+// per 4x4. The full-rate region and the wider half-rate one are cones around head-forward
+// (foveation_region.hpp); a texel takes the finest rate any of its pixels needs, so the full-rate region is
+// never coarsened.
 
 #include "features/foveation/foveation_region.hpp"
 
@@ -28,6 +29,15 @@ struct RatePatternSize {
 // size.
 [[nodiscard]] std::vector<std::uint8_t>
 foveatedPattern(const RatePatternSize& size, const FoveationRegion& full, const FoveationRegion& half);
+
+// The share of the target's pixels at each rate in `pattern` (foveatedPattern's texels for `size`); all zero
+// for a pattern of another size.
+struct RateShares {
+    double full = 0.0;
+    double half = 0.0;
+    double quarter = 0.0;
+};
+[[nodiscard]] RateShares rateShares(const RatePatternSize& size, const std::vector<std::uint8_t>& pattern);
 
 // A test pattern: kRateQuarter on the left half of the target for eye 0, on the right half for eye 1,
 // kRateFull elsewhere, to see in captures which eye each render used.

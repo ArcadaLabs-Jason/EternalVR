@@ -262,15 +262,15 @@ std::vector<std::uint8_t> patternFor(VkExtent2D texel, VkExtent2D extent, int ey
     if (!full || !half) {
         return {};
     }
+    std::vector<std::uint8_t> pattern = foveation::foveatedPattern(size, *full, *half);
     if (log) {
-        EVR_LOG("vrs: eye %d, %ux%u: centre %.2f %.2f; full rate within the %.0f deg region (radii left %.2f "
-                "right %.2f top %.2f bottom %.2f), half rate within the %.0f deg one (%.2f %.2f %.2f %.2f), "
-                "quarter rate outside",
-                eye, extent.width, extent.height, full->centerX, full->centerY, s.fullDegrees,
-                full->radiusLeft, full->radiusRight, full->radiusTop, full->radiusBottom, s.halfDegrees,
-                half->radiusLeft, half->radiusRight, half->radiusTop, half->radiusBottom);
+        const foveation::RateShares shares = foveation::rateShares(size, pattern);
+        EVR_LOG("vrs: eye %d, %ux%u: head-forward at %.2f %.2f; full rate within %.0f deg of it, half rate "
+                "within %.0f deg, quarter rate outside: %.1f%% / %.1f%% / %.1f%% of the target",
+                eye, extent.width, extent.height, full->centerX, full->centerY, s.fullDegrees, s.halfDegrees,
+                shares.full * 100.0, shares.half * 100.0, shares.quarter * 100.0);
     }
-    return foveation::foveatedPattern(size, *full, *half);
+    return pattern;
 }
 
 void noteOtherTarget(VrsDevice& d, VkExtent2D extent, foveation::TargetSize eye) {

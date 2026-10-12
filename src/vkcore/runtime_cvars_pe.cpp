@@ -46,18 +46,15 @@ void addParallelEyeSet(std::vector<Held>& held) {
         return;
     }
     held.push_back(Held{"r_useNewDepthDownscale", "0", true, false});
-    held.back().parallel = true;
     // Flare models are projected once a frame, with the game's own centred camera, into one vertex block both
     // views draw: the same screen spot in both eyes, right in neither (and the same occlusion queries issued
     // twice in a frame). Held off while each view's own flares are not on (pe_flares.hpp).
     held.push_back(Held{"r_skipFlares", "1", true, false});
-    held.back().parallel = true;
     held.back().flares = true;
     if (g_parallelHolds.antiAliasingHeld) {
         for (const auto& c : parallel_eyes::antiAliasingCvars(g_parallelHolds.antiAliasingOff,
                                                               g_parallelHolds.dlss, taaDlssQuality())) {
             held.push_back(Held{std::string(c.name), std::string(c.value), true, false});
-            held.back().parallel = true;
             held.back().viewDlss = g_parallelHolds.dlss;
         }
     } else {
@@ -65,19 +62,16 @@ void addParallelEyeSet(std::vector<Held>& held) {
                 "(ETERNALVR_STEREO_RUNTIME_CVARS=0)",
                 kTag);
     }
-    addWindowSet(held, true);
+    addWindowSet(held);
     for (const auto& c : stereo_seq::stereoComfortCvars()) {
         held.push_back(comfortHeld(c));
-        held.back().parallel = true;
     }
     const std::string ssr = narrowEnv(L"ETERNALVR_STEREO_SSR");
     if (stereo_seq::stereoSsrCvar(ssr) && !stereo_seq::stereoSsrFollowsGame(ssr)) {
         held.push_back(Held{"r_SSR", "0", true, false});
-        held.back().parallel = true;
     }
     if (g_parallelHolds.rtUpscaleHeld) {
         held.push_back(Held{"r_raytracedReflectionsTemporalUpscaleQuality", "0", true, false});
-        held.back().parallel = true;
     }
 }
 

@@ -35,7 +35,6 @@ struct Held {
                              // size off (windowSizeLeft)
     bool left = false;       // ... and that was logged
     bool placed = false;     // ... held at the window placed for a device without present scaling instead
-    bool parallel = false;   // Parallel Eye Rendering's own set: an ETERNALVR_DEBUG_CVARS entry replaces it
     bool menuSsdo = false;   // r_SSDO: follows the game's Directional Occlusion setting (followSsdoSetting)
     bool viewDlss = false;   // Parallel Eye Rendering's DLSS set: held as viewDlssHolds says (view_dlss.hpp)
     bool flares = false;     // r_skipFlares 1: held only while Parallel Eye Rendering's flares are off
@@ -53,9 +52,8 @@ std::string narrowEnv(const wchar_t* name);
 Held comfortHeld(const stereo_seq::CvarExpectation& c);
 
 // The window and present set (stereo_seq::stereoWindowCvars), as the command line and ETERNALVR_WINDOW size
-// it, added to `held`; r_windowWidth / r_windowHeight follow the render size (windowSizeLeft). `parallel`:
-// as part of Parallel Eye Rendering's set.
-void addWindowSet(std::vector<Held>& held, bool parallel);
+// it, added to `held`; r_windowWidth / r_windowHeight follow the render size (windowSizeLeft).
+void addWindowSet(std::vector<Held>& held);
 
 // runtime_cvars_pe.cpp: Parallel Eye Rendering's set added to `held` once setParallelEyes asked for it, else
 // nothing. From the first apply, under heldMutex().

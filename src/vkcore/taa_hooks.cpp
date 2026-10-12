@@ -12,6 +12,7 @@
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/stereo_hooks.hpp"
+#include "vkcore/taa_debug_cvars.hpp"
 #include "vkcore/taa_locate.hpp"
 #include "vkcore/taa_ngx.hpp"
 #include "vkcore/taa_resize.hpp"
@@ -297,13 +298,16 @@ void onDistortionBind(HookRegisters& regs) {
 // Writes `value` through the cvar book (a trip sets it back) unless the cvar already holds it (the launch
 // helper puts the same values on the command line, so a write is the exception). The engine itself sets
 // cvars from its render threads (r_jitter every backend frame, r_dlssForceReset's countdown, r_antialiasing
-// after a DLSS failure).
+// after a DLSS failure). A cvar ETERNALVR_DEBUG_CVARS holds is not written: true when it holds `value`.
 bool setCvar(std::string_view name, const char* value) {
     std::byte* cvar = cvarByName(name);
     if (!cvar || !g_setCvar || !mp_guard::allowsGameTouch()) {
         return false;
     }
     const int before = cvarInt(cvar);
+    if (taaLeftToDebugCvars(name)) {
+        return before == std::atoi(value);
+    }
     if (before == std::atoi(value) || !cvar_book::write(name, cvar, g_setCvar, value)) {
         return before == std::atoi(value);
     }
@@ -413,6 +417,7 @@ void installTaaEarly() {
 
 bool installTaaHooks() {
     std::call_once(g_installOnce, [] {
+        logTaaDebugCvars();
         GameImage image;
         TaaEngine engine;
         if (!locateGameImage(image, kTag) || !locateTaaEngine(image, engine)) {
@@ -480,7 +485,7 @@ void taaOnStereoTick() {
                                             : "eye R updates its own exposure (no exposure index hook)");
             applySet(stereo_seq::stereoTaaFailClosedCvars());
             g_failedClosed.store(true);
-            ssrDecide(false, cvarByName("r_SSR") != nullptr);
+            ssrDecide(false, cvarByName("r_SSR") != nullptr, taaSsrLeftToDebugCvars());
             const bool closed =
                 g_antialiasing && g_safeMode && cvarInt(g_antialiasing) == 0 && cvarInt(g_safeMode) == 1;
             if (!closed) {
@@ -495,7 +500,7 @@ void taaOnStereoTick() {
         setNgxTwinsActive(g_ngxHooked);
         EVR_LOG("%s: per-eye TAA on: r_antialiasing %d, r_TAASafeMode %d, r_TAANumSubSamples %d", kTag,
                 cvarInt(g_antialiasing), cvarInt(g_safeMode), taaNumSubSamples());
-        ssrDecide(true, cvarByName("r_SSR") != nullptr);
+        ssrDecide(true, cvarByName("r_SSR") != nullptr, taaSsrLeftToDebugCvars());
     }
     // Every stereo tick: the game applies the player's profile at run time as well (it can bring back
     // r_TAASafeMode, r_antialiasing and the effects), so the set is checked each tick and written only

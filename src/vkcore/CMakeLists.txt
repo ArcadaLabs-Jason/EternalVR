@@ -157,6 +157,7 @@ add_library(evr_layer SHARED
     surface_entry.cpp
     swapchain_entry.cpp
     taa_env.cpp
+    taa_debug_cvars.cpp
     taa_hooks.cpp
     taa_ssr.cpp
     taa_locate.cpp

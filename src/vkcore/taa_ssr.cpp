@@ -20,9 +20,13 @@ std::atomic<int> g_followed{-1};
 
 } // namespace
 
-void ssrDecide(bool perEye, bool located) {
+void ssrDecide(bool perEye, bool located, bool debugListed) {
     const std::string& setting = taaSsrSetting();
-    if (!g_hold.start(setting)) {
+    if (debugListed) {
+        EVR_LOG("%s: r_SSR is not held and does not follow the game's Reflections setting "
+                "(ETERNALVR_DEBUG_CVARS holds it)",
+                kTag);
+    } else if (!g_hold.start(setting)) {
         EVR_LOG("%s: r_SSR is left as the game has it (ETERNALVR_STEREO_SSR=%s)", kTag, setting.c_str());
     } else if (!perEye) {
         g_hold.release();

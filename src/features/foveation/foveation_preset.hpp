@@ -3,10 +3,9 @@
 // Fixed foveation presets (ARCHITECTURE section 11).
 //
 // A preset sets the angle of the full-rate region around head-forward and how many degrees more the
-// half-rate region has. Each region has the area of the cone of its angle and reaches the same fraction of
-// the way to every edge of the eye's image (foveation_region.hpp). Outside the half-rate region shading is
-// at quarter rate. Angles are in degrees because that is how they are tuned and discussed; conversion
-// happens at the point of use.
+// half-rate region has. Each region is the cone of its angle around head-forward, the same directions in
+// both eyes (foveation_region.hpp). Outside the half-rate region shading is at quarter rate. Angles are in
+// degrees because that is how they are tuned and discussed; conversion happens at the point of use.
 
 #include <cstdint>
 #include <optional>

@@ -296,6 +296,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/alternate_prev_tests.cpp
         stereo_seq/bin_tiles_tests.cpp
         stereo_seq/centered_matrix_tests.cpp
+        stereo_seq/debug_cvars_tests.cpp
         stereo_seq/deflate_tests.cpp
         stereo_seq/desktop_window_tests.cpp
         stereo_seq/dlss_menu_tests.cpp

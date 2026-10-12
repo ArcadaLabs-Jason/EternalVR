@@ -81,8 +81,12 @@ const std::vector<CvarExpectation>& stereoComfortCvars();
 // SSDO's own temporal filter runs only while its history is per eye (stereoSsdoFilterCvar), so it reads no
 // other eye's history. Unset or "1": held at 1, the game's default; "0": held at 0 (the launcher passes the
 // player's own 0 from their config). Both follow the game's Directional Occlusion setting once it runs
-// (directionalOcclusionSsdoCvar, vkcore/ssdo_menu_hook.hpp). Nothing for any other value.
+// (directionalOcclusionSsdoCvar, vkcore/ssdo_menu_hook.hpp). "off": held at 0 whatever the game's setting
+// (rig use; the launcher passes only 0 or 1). Nothing for any other value.
 std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting);
+
+// Whether the r_SSDO hold follows the game's Directional Occlusion setting: every setting but "off".
+bool stereoSsdoFollowsGame(std::string_view setting);
 
 // The r_SSDO the game's Directional Occlusion setting writes for a profile level (0x1420F20): 0 at level 0,
 // 1 at levels 1 to 6 (Low to Ultra Nightmare; r_SSDOQuality 0, 1, 2 from Low). Nothing for any other level.
@@ -141,6 +145,9 @@ std::vector<CvarHold> parseCvarList(std::string_view text);
 // it (the CPU Saver's cap on a value the game's menu sets per quality level, where a fixed value would
 // raise the cost for a player on a lower level). The cap N; nullopt for any other value or a bad number.
 std::optional<float> parseCvarCap(std::string_view value);
+
+// Whether two names are the same cvar (compared case-insensitively, as the game does).
+bool sameCvarName(std::string_view a, std::string_view b);
 
 struct SwapchainSize {
     std::uint32_t width = 0;

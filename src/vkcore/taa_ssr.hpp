@@ -20,8 +20,10 @@
 namespace evr::vkcore {
 
 // The first stereo tick: whether r_SSR is held (logged). `perEye`: per-eye TAA is on, not failed closed;
-// `located`: the r_SSR cvar object was found.
-void ssrDecide(bool perEye, bool located);
+// `located`: the r_SSR cvar object was found; `debugListed`: ETERNALVR_DEBUG_CVARS holds r_SSR or the upscale
+// quality (stereo_seq::debugCvarsTakeSsr), so r_SSR is not held and the hold never follows the game's
+// setting (ssrFollowedValue stays -1).
+void ssrDecide(bool perEye, bool located, bool debugListed);
 
 // Each stereo tick with per-eye TAA on, with the upscale quality as read before it was written back to 0 (-1
 // when not located): the r_SSR value to hold, nullptr when it is not held.

@@ -177,10 +177,14 @@ std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting) {
     if (setting.empty() || setting == "1") {
         return CvarExpectation{"r_SSDO", "1"};
     }
-    if (setting == "0") {
+    if (setting == "0" || setting == "off") {
         return CvarExpectation{"r_SSDO", "0"};
     }
     return std::nullopt;
+}
+
+bool stereoSsdoFollowsGame(std::string_view setting) {
+    return setting != "off";
 }
 
 std::optional<CvarExpectation> directionalOcclusionSsdoCvar(int level) {
@@ -326,6 +330,10 @@ std::optional<float> parseCvarCap(std::string_view value) {
         return std::nullopt;
     }
     return cap;
+}
+
+bool sameCvarName(std::string_view a, std::string_view b) {
+    return sameName(a, b);
 }
 
 std::optional<double> LaunchSizeWatch::onSwapchain(SwapchainSize size,

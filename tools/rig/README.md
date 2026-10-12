@@ -48,6 +48,12 @@ A run folder `<runs>\<yyyyMMdd-HHmmss>-<label>\` holds `CLEANUP_PENDING` (until 
 `run.json`, `config-before\`, `config-after\`, `config-replaced\`, `cleanup.json`, `stop.json`, `rig.log`,
 `screenshots\` and `logs\`. Run folders are never moved or deleted by the scripts.
 
+## Cvars in rig runs
+
+`ETERNALVR_DEBUG_CVARS` entries win over the layer's own holds (`docs/VR_STEREO.md`, Cvars). To force
+screen-space reflections off, use `ETERNALVR_STEREO_SSR=off`: `0` follows the game's Reflections setting once it
+runs. For SSDO, `ETERNALVR_STEREO_SSDO=off`.
+
 ## Steam Cloud
 
 Two classes of settings file (T-115). The Saved Games tree is local: text configs, `user\config.json` and

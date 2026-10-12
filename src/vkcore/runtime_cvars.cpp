@@ -1,6 +1,7 @@
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/runtime_cvars_impl.hpp"
 
+#include "stereo_seq/debug_cvars.hpp"
 #include "stereo_seq/seq_settings.hpp"
 #include "stereo_seq/setting_follow.hpp"
 #include "vkcore/cvar_book.hpp"
@@ -217,7 +218,10 @@ void addSharpening() {
     EVR_LOG("%s: Sharpening (ETERNALVR_SHARPENING) asks for r_sharpening %s", kTag, text.c_str());
 }
 
-// ETERNALVR_DEBUG_CVARS: rig experiments; an entry replaces the CPU Saver's value for the same cvar.
+// ETERNALVR_DEBUG_CVARS: rig experiments. An entry wins: it replaces any entry the sets above hold for the
+// same cvar (the stereo sets, Parallel Eye Rendering's, the CPU Saver's, Sharpening's), so one value is
+// written, and per-eye TAA leaves the cvar alone (taa_hooks.cpp). A "name=?" entry only logs: it replaces
+// nothing.
 void addDebugList() {
     for (const stereo_seq::CvarHold& c : stereo_seq::parseCvarList(narrowEnv(L"ETERNALVR_DEBUG_CVARS"))) {
         Held h;
@@ -225,11 +229,10 @@ void addDebugList() {
             EVR_LOG("%s: %s=%s is not a usable value; left alone", kTag, c.name.c_str(), c.value.c_str());
             continue;
         }
-        Held* same = heldNamed(c.name);
-        if (same && (same->saver || same->scatter || same->ssdo || same->parallel)) {
-            *same = std::move(h);
-        } else {
+        if (h.value == "?") {
             g_held.push_back(std::move(h));
+        } else {
+            stereo_seq::replaceSameName(g_held, std::move(h));
         }
     }
 }
@@ -272,14 +275,19 @@ void start(bool stereo) {
         const stereo_seq::CvarExpectation ssdoFilter = stereo_seq::stereoSsdoFilterCvar(false);
         g_held.push_back(Held{std::string(ssdoFilter.name), std::string(ssdoFilter.value), true, false});
         g_held.back().ssdo = true;
-        addWindowSet(g_held, false);
+        addWindowSet(g_held);
         for (const auto& c : stereo_seq::stereoComfortCvars()) {
             g_held.push_back(comfortHeld(c));
         }
         const std::string ssdo = narrowEnv(L"ETERNALVR_STEREO_SSDO");
         if (const auto c = stereo_seq::stereoSsdoCvar(ssdo)) {
             g_held.push_back(Held{std::string(c->name), std::string(c->value), true, false});
-            g_held.back().menuSsdo = true;
+            g_held.back().menuSsdo = stereo_seq::stereoSsdoFollowsGame(ssdo);
+            if (!g_held.back().menuSsdo) {
+                EVR_LOG("%s: r_SSDO held at 0 whatever the game's Directional Occlusion setting "
+                        "(ETERNALVR_STEREO_SSDO=off)",
+                        kTag);
+            }
         } else {
             EVR_LOG("%s: r_SSDO is left as the game has it (ETERNALVR_STEREO_SSDO=%s)", kTag, ssdo.c_str());
         }
@@ -391,7 +399,7 @@ Held comfortHeld(const stereo_seq::CvarExpectation& c) {
     return h;
 }
 
-void addWindowSet(std::vector<Held>& held, bool parallel) {
+void addWindowSet(std::vector<Held>& held) {
     std::wstring window;
     readEnv(L"ETERNALVR_WINDOW", window);
     std::string narrowWindow;
@@ -401,7 +409,6 @@ void addWindowSet(std::vector<Held>& held, bool parallel) {
     for (const auto& c : stereo_seq::stereoWindowCvars(commandLine(), narrowWindow)) {
         held.push_back(Held{c.name, c.value, true, false});
         held.back().windowSize = stereo_seq::isWindowSizeCvar(c.name);
-        held.back().parallel = parallel;
     }
 }
 
