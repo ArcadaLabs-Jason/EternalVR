@@ -402,7 +402,8 @@ bool XrPresenter::Impl::createUiSwapchain() {
     if (settings.ui.removeWash) {
         const char* why = "";
         if (uiWash.create(d3dDevice.Get(), why)) {
-            EVR_LOG("ui: the full-screen additive wash (low-health vignette) is removed from the HUD quad");
+            EVR_LOG("ui: the full-screen additive wash (hit and low-health vignette) is removed from the HUD "
+                    "quad");
         } else {
             EVR_LOG("ui: wash filter off (%s); the GUI image is copied as the game drew it", why);
         }

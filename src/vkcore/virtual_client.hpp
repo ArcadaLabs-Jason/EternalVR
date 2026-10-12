@@ -47,8 +47,12 @@ void adjustCapabilities(VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR& caps);
 // chained in front of `info.pNext`). True when it did.
 bool addPresentScaling(VkSwapchainCreateInfoKHR& info, VkSwapchainPresentScalingCreateInfoKHR& scaling);
 // A failed create with present scaling turns the render size off (the game's next create is at its window's
-// size).
-void onSwapchainCreated(VkResult result, VkSwapchainKHR swapchain, bool scaled);
+// size). A swapchain on the game's surface made without it (before the size was known) is remembered, and so
+// is such a create until it returns: while either exists and no swapchain with present scaling does, a size
+// that switches on or changes first only makes the window read its client area again, and the window moves at
+// the first scaled create (or after 10 s), so the unscaled swapchain is never made out of date by the move
+// (render_size/window_steps.hpp).
+void onSwapchainCreated(VkResult result, VkSwapchainKHR swapchain, VkSurfaceKHR surface, bool scaled);
 void onSwapchainDestroyed(VkSwapchainKHR swapchain);
 
 // Acquire and present results for a scaled swapchain: VK_SUBOPTIMAL_KHR (the image differs from the window's
@@ -56,8 +60,13 @@ void onSwapchainDestroyed(VkSwapchainKHR swapchain);
 VkResult scaledResult(VkSwapchainKHR swapchain, VkResult result);
 void scaledResults(const VkPresentInfoKHR& info, VkResult& result);
 
-// Every present: the render size goes off once the multiplayer guard does not allow touching the game.
+// Every present: the render size goes off once the multiplayer guard does not allow touching the game; a
+// window move that waited too long for a scaled swapchain is made.
 void poll();
+
+// Tells the game's window (`window`, else the render size's) to read its client area again, as at a size
+// change, without moving it; only while the multiplayer guard allows touching the game. `why` is logged.
+void askClientArea(HWND window, const char* why);
 
 // The render size the game's window reports now, if any.
 std::optional<render_size::Extent> activeExtent();

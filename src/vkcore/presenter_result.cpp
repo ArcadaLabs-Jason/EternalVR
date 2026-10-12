@@ -3,13 +3,17 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "stereo_seq/present_watch.hpp"
+#include "vkcore/keep_active.hpp"
 #include "vkcore/presenter_result.hpp"
+#include "vkcore/status_file.hpp"
+#include "vkcore/virtual_client.hpp"
 #include "vkcore/window_timing.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cwchar>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -35,8 +39,14 @@ std::atomic<bool> g_knobArmed{false};
 std::mutex g_knobMutex;
 std::optional<stereo_seq::OneShotAfter> g_knob;
 
+static_assert(stereo_seq::kResultOutOfDate == VK_ERROR_OUT_OF_DATE_KHR);
+static_assert(stereo_seq::kResultSurfaceLost == VK_ERROR_SURFACE_LOST_KHR);
+
 // XR worker only.
 stereo_seq::PresentWatch g_watch(kStoppedSeconds);
+stereo_seq::StopRecovery g_recovery;
+bool g_recovered = false;   // the stop was reported (the status file says the game stopped)
+double g_firstCheck = -1.0; // the first checkGamePresents
 
 double nowSeconds() {
     return static_cast<double>(window_timing::nowMicros()) / 1e6;
@@ -122,6 +132,54 @@ void handBackHeld(XrPresenter::Impl& p, VkResult result) {
     }
 }
 
+// The input desktop is not the user's own: the lock screen or a UAC prompt (the secure desktop, which this
+// process cannot open), or no input desktop at all.
+bool inputOnOtherDesktop() {
+    HDESK desktop = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (!desktop) {
+        return true;
+    }
+    wchar_t name[64] = {};
+    DWORD needed = 0;
+    const BOOL named = GetUserObjectInformationW(desktop, UOI_NAME, name, sizeof(name), &needed);
+    CloseDesktop(desktop);
+    return !named || _wcsicmp(name, L"Default") != 0;
+}
+
+// The game's window and the desktop now (the stop report's guard, stereo_seq::StopRecovery).
+stereo_seq::StopScene stopScene() {
+    const HWND window = gameWindow();
+    return {window && IsIconic(window) != FALSE, inputOnOtherDesktop()};
+}
+
+std::string sceneText(stereo_seq::StopScene scene) {
+    std::string text;
+    if (scene.minimised) {
+        text += "; the game's window is minimised";
+    }
+    if (scene.otherDesktop) {
+        text += "; the input is on another desktop (the lock screen or a UAC prompt)";
+    }
+    return text;
+}
+
+// The game stopped presenting right after an out of date (or lost surface) present: it was to recreate its
+// swapchain and has not presented since (a start-up stall seen once on the rig after the render size switched
+// on late, run pr-d1). This reports the stop: the status file tells the launcher, which asks the player to
+// restart the game. The window is also told once to read its client area again; that is untested as a cure:
+// in pr-d1 the swapchain already had the answered size, so the game's size check had nothing to recreate, and
+// nothing shows that the message frees a present thread stuck in the driver.
+void reportStop(bool atStart, double quiet) {
+    EVR_LOG(
+        "present: the game stopped presenting right after an out of date present%s (no present for %.0f s); "
+        "the status file asks for a restart of the game, and the window is told once to read its client "
+        "area again",
+        atStart ? " at its start" : "", quiet);
+    virtual_client::askClientArea(gameWindow(), "after the game stopped presenting");
+    status::field("presents", atStart ? "stopped_at_start" : "stopped");
+    g_recovered = true;
+}
+
 } // namespace
 
 VkResult windowPresented(XrPresenter::Impl& p,
@@ -158,16 +216,10 @@ VkResult windowPresented(XrPresenter::Impl& p,
     return result;
 }
 
-void checkGamePresents(XrPresenter::Impl& p) {
-    const std::uint64_t presents = p.gamePresents.load(std::memory_order_relaxed);
-    const stereo_seq::PresentWatch::Event event = g_watch.check(presents, nowSeconds());
-    if (event == stereo_seq::PresentWatch::Event::Resumed) {
-        EVR_LOG("present: the game presents again after %.0f s without a present", g_watch.quiet());
-        return;
-    }
-    if (event != stereo_seq::PresentWatch::Event::Stopped) {
-        return;
-    }
+namespace {
+
+// The stop line (checkGamePresents), with the scene of this check.
+void logStop(XrPresenter::Impl& p, std::uint64_t presents, stereo_seq::StopScene scene) {
     // The presenter's lock is only tried: a game thread stuck while holding it is itself worth the line.
     std::string held = "the presenter's lock is busy (a present or a swapchain call is stuck inside it)";
     std::unique_lock lock(p.mutex, std::try_to_lock);
@@ -179,11 +231,41 @@ void checkGamePresents(XrPresenter::Impl& p) {
     const std::uint64_t at = g_lastFailurePresents.load(std::memory_order_relaxed);
     EVR_LOG("present: the game has stopped presenting: no game present for %.0f s while the headset runs (it "
             "repeats the last image); %llu present(s) in all, the newest failed result %d%s; %s; %llu out of "
-            "date or lost surface result(s)",
+            "date or lost surface result(s)%s",
             g_watch.quiet(), static_cast<unsigned long long>(presents), failure,
             failure == VK_SUCCESS ? " (none)"
                                   : (at == presents ? " (the last present)" : " (an earlier present)"),
-            held.c_str(), static_cast<unsigned long long>(g_losses.load(std::memory_order_relaxed)));
+            held.c_str(), static_cast<unsigned long long>(g_losses.load(std::memory_order_relaxed)),
+            sceneText(scene).c_str());
+}
+
+} // namespace
+
+void checkGamePresents(XrPresenter::Impl& p) {
+    const std::uint64_t presents = p.gamePresents.load(std::memory_order_relaxed);
+    const double now = nowSeconds();
+    if (g_firstCheck < 0.0) {
+        g_firstCheck = now;
+    }
+    const stereo_seq::PresentWatch::Event event = g_watch.check(presents, now);
+    if (event == stereo_seq::PresentWatch::Event::Resumed) {
+        EVR_LOG("present: the game presents again after %.0f s without a present", g_watch.quiet());
+        if (g_recovered) {
+            status::field("presents", "resumed");
+        }
+    }
+    // The scene is read at every check (the guard needs the one of the check before) and just before the
+    // report would be made.
+    const stereo_seq::StopScene scene = stopScene();
+    if (event == stereo_seq::PresentWatch::Event::Stopped) {
+        logStop(p, presents, scene);
+    }
+    const stereo_seq::StopCause cause =
+        stereo_seq::stopCause(g_lastFailure.load(std::memory_order_relaxed),
+                              g_lastFailurePresents.load(std::memory_order_relaxed), presents);
+    if (g_recovery.due(g_watch.stopped(), cause, scene)) {
+        reportStop(stereo_seq::stopAtStart(g_watch.lastMoved(), g_firstCheck), now - g_watch.lastMoved());
+    }
 }
 
 } // namespace evr::vkcore

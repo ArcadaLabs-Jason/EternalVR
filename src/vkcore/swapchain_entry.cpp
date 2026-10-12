@@ -62,7 +62,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device,
     const bool scaled = virtual_client::addPresentScaling(info, scaling);
     pCreateInfo = &info;
     const VkResult result = data->vk.CreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
-    virtual_client::onSwapchainCreated(result, result == VK_SUCCESS ? *pSwapchain : VK_NULL_HANDLE, scaled);
+    virtual_client::onSwapchainCreated(result, result == VK_SUCCESS ? *pSwapchain : VK_NULL_HANDLE,
+                                       info.surface, scaled);
     EVR_LOG("vkCreateSwapchainKHR %ux%u format %d colour space %d, %u min image(s), usage 0x%x, present mode "
             "%d: %d",
             pCreateInfo->imageExtent.width, pCreateInfo->imageExtent.height, pCreateInfo->imageFormat,

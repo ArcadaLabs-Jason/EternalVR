@@ -47,6 +47,16 @@ unsigned bindStages(std::uintptr_t model, bool call);
 // does not check out. Installed only after the particle sync's hooks are in.
 bool installStepReadout(const GameImage& image, const char* tag);
 
+// The RVAs in this image for the install line, 0 until locate() / installStepReadout() found them: the GPU
+// stage's bind, the particle bind's call of it and the GPU particle step (on Steam 0x1C2B670, 0x1955949 and
+// 0x1C28DD0).
+struct FoundRvas {
+    unsigned stageBind = 0;
+    unsigned stageCall = 0;
+    unsigned step = 0;
+};
+FoundRvas foundRvas();
+
 // "; GPU particle manager per render (emitter records / draw list / light atlas): eye L r / d / a, eye R
 // r / d / a (n / m GPU steps)", the averages since the last call; empty when the readout is not installed.
 std::string takeStepReadout();

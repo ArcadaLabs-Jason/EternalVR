@@ -36,6 +36,11 @@ VkResult windowPresented(XrPresenter::Impl& p,
 // XR worker, with the 10 s rates line: a `present:` line once no game present has come for a few seconds
 // while the headset runs ("the game has stopped presenting": the headset repeats the last image), with the
 // newest failed present result and the images the window gate holds, and another when presents come again.
+// When the last present before the stop was out of date or lost its surface (the game was to recreate its
+// swapchain), once per process and only while the game's window is shown on the user's desktop (not
+// minimised, no lock screen or UAC prompt, at this check and the one before): the status file's `presents`
+// key says the game stopped (status_file.hpp), so the launcher asks for a restart, and the game's window is
+// told to read its client area again (untested as a cure).
 void checkGamePresents(XrPresenter::Impl& p);
 
 } // namespace evr::vkcore

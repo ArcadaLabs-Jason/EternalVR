@@ -3,6 +3,7 @@
 #include "vkcore/light_cull.hpp"
 
 #include "vkcore/game_code.hpp"
+#include "vkcore/light_cull_builds.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -20,41 +21,10 @@ namespace evr::vkcore {
 namespace {
 
 constexpr const char* kTag = "light-cull";
-constexpr std::uint32_t kKnownTimestamp = 0x6A7B9B8C; // Steam build 25216728
-// The anchor (RVA 0x1C7851E): mov rax, [rdi+18h]; cmp byte [rax+24h], 0 (useUmbra); je +0x43F (the Umbra-off
-// frustum path); mov edx, [rbx+54h] (the light's Umbra object); test edx, edx; je ...
-constexpr const char* kSignature = "48 8B 47 18 80 78 24 00 0F 84 3F 04 00 00 8B 53 54 85 D2 0F 84";
-
-// The rest of the gather, by offset from the anchor, each checked byte for byte before anything is hooked.
-struct Expected {
-    std::size_t offset;
-    const char* what;
-    std::size_t size;
-    std::uint8_t bytes[8];
-};
-constexpr std::size_t kGateA = 0x23;      // test al, al; jne keep (after the visible-light-set lookup)
-constexpr std::size_t kGateB = 0x2C9;     // test eax, eax; je drop (after the occlusion-buffer test)
-constexpr std::size_t kSphere = 0x432;    // test al, al; je drop (after the sphere test of a kept light)
-constexpr std::size_t kGateBDrop = 0x43C; // gate B's drop: rbx back, the light's done bit cleared
-constexpr std::size_t kSkipCheck = 0x44D; // cmp byte [rax+2Bh], 0: the frustum path's r_skipLightCPUCulling
-constexpr std::size_t kFrustum = 0x453;   // the frustum test, past that check
-constexpr std::size_t kVerdict = 0x4A5;   // test al, al; jne drop (the frustum test's verdict)
-constexpr std::size_t kKeep = 0x4AD;      // mov r10, [rsp+38h]: the light goes on into the view's list
-// The drop the frustum test jumps to: 0x1C78549 (rbx back, the light's done bit left set).
-constexpr std::size_t kFrustumDrop = 0x2B;
-constexpr Expected kExpected[] = {
-    {kGateA, "gate A", 8, {0x84, 0xC0, 0x0F, 0x85, 0xA6, 0x02, 0x00, 0x00}},
-    {kGateB, "gate B", 8, {0x85, 0xC0, 0x0F, 0x84, 0x6B, 0x01, 0x00, 0x00}},
-    {kSphere, "sphere test", 8, {0x84, 0xC0, 0x0F, 0x84, 0xF1, 0xFB, 0xFF, 0xFF}},
-    {kGateBDrop, "gate B drop", 8, {0x48, 0x8B, 0x5C, 0x24, 0x30, 0x40, 0xF6, 0xD6}},
-    {kSkipCheck, "frustum skip check", 4, {0x80, 0x78, 0x2B, 0x00}},
-    {kFrustum, "frustum test", 8, {0x48, 0x8B, 0x4F, 0x20, 0x4C, 0x8D, 0x83, 0xF0}},
-    {kVerdict, "frustum verdict", 8, {0x84, 0xC0, 0x0F, 0x85, 0x7E, 0xFB, 0xFF, 0xFF}},
-    {kKeep, "keep", 5, {0x4C, 0x8B, 0x54, 0x24, 0x38}},
-    {kFrustumDrop, "frustum drop", 5, {0x48, 0x8B, 0x5C, 0x24, 0x30}},
-};
 constexpr std::size_t kSettings = 0x18;     // rdi: the gather's context; [rdi+18h] its settings
 constexpr std::size_t kSkipLightCpu = 0x2B; // settings: r_skipLightCPUCulling
+static_assert(light_cull::everyRowChecked(), "every offset a build row uses has a byte check");
+static_assert(light_cull::timestampsUnique(), "no two build rows share a PE timestamp");
 
 enum Gate { NoGate = 0, GateA, GateB, GateSphere, Gates };
 
@@ -104,7 +74,7 @@ void onGate(HookRegisters& r, Gate gate, bool hidden) {
     }
     std::uintptr_t settings = 0;
     std::memcpy(&settings, reinterpret_cast<const void*>(r.rdi + kSettings), sizeof(settings));
-    r.rax = settings; // as on the game's own way in (0x1C7851E): the settings block
+    r.rax = settings; // as on the game's own way in (the anchor, 0x1C7851E on Steam): the settings block
     if (*reinterpret_cast<const std::uint8_t*>(settings + kSkipLightCpu) != 0) {
         r.resumeAt = g_keep; // r_skipLightCPUCulling: the frustum test is off, so every light is kept
         return;
@@ -158,32 +128,43 @@ void install() {
         EVR_LOG("%s: the game's code cannot be read", kTag);
         return;
     }
-    if (text.timestamp != kKnownTimestamp) {
-        EVR_LOG("%s: game build 0x%08X is not the one this was read on; lights keep Umbra's culling", kTag,
-                text.timestamp);
+    const light_cull::Build* build = light_cull::findBuild(text.timestamp);
+    if (!build) {
+        EVR_LOG(
+            "%s: game build 0x%08X is not one this was read on (Steam build 25216728, Game Pass 1.0.56.0); "
+            "lights keep Umbra's culling",
+            kTag, text.timestamp);
         return;
     }
-    const std::byte* at = findUniqueInText(text, kTag, "the light gather's Umbra test", kSignature);
+    const std::byte* at = findUniqueInText(text, kTag, "the light gather's Umbra test", build->signature);
     if (!at) {
-        EVR_LOG("%s: the light gather's Umbra test is not in this build; lights keep Umbra's culling", kTag);
+        EVR_LOG("%s: the light gather's Umbra test is not in this build (%s); lights keep Umbra's culling",
+                kTag, build->name);
+        return;
+    }
+    if (rvaOf(text, at) != build->anchorRva) {
+        EVR_LOG("%s: the light gather's Umbra test is at RVA 0x%X, not 0x%X as on %s; lights keep Umbra's "
+                "culling",
+                kTag, rvaOf(text, at), build->anchorRva, build->name);
         return;
     }
     const std::byte* end = text.bytes.data() + text.bytes.size();
-    for (const Expected& e : kExpected) {
+    for (const light_cull::ByteCheck& e : build->checks) {
         if (at + e.offset + e.size > end || std::memcmp(at + e.offset, e.bytes, e.size) != 0) {
-            EVR_LOG("%s: unexpected code for the %s at RVA 0x%X; lights keep Umbra's culling", kTag, e.what,
-                    rvaOf(text, at + e.offset));
+            EVR_LOG("%s: unexpected code for the %s at RVA 0x%X (%s); lights keep Umbra's culling", kTag,
+                    e.what, rvaOf(text, at + e.offset), build->name);
             return;
         }
     }
+    const light_cull::GatherOffsets& o = build->at;
     const auto address = [&](std::size_t offset) {
         return reinterpret_cast<std::uintptr_t>(at + offset);
     };
-    g_frustum = address(kFrustum);
-    g_keep = address(kKeep);
-    g_drop[GateA] = address(kFrustumDrop);
-    g_drop[GateB] = address(kGateBDrop);
-    g_drop[GateSphere] = address(kFrustumDrop);
+    g_frustum = address(o.frustum);
+    g_keep = address(o.keep);
+    g_drop[GateA] = address(o.frustumDrop);
+    g_drop[GateB] = address(o.gateBDrop);
+    g_drop[GateSphere] = address(o.frustumDrop);
     // The verdict's hook first: a gate can only send a light there once it is in (and all stay inert until
     // g_live anyway).
     struct Hook {
@@ -191,7 +172,7 @@ void install() {
         MidHookEditCallback callback;
     };
     const Hook hooks[] = {
-        {kVerdict, &onVerdict}, {kGateA, &onGateA}, {kGateB, &onGateB}, {kSphere, &onSphere}};
+        {o.verdict, &onVerdict}, {o.gateA, &onGateA}, {o.gateB, &onGateB}, {o.sphere, &onSphere}};
     std::string error;
     for (const Hook& h : hooks) {
         if (!installMidHookEdit(const_cast<std::byte*>(at + h.offset), h.callback, error)) {
@@ -204,14 +185,15 @@ void install() {
     g_installed = true;
     g_live.store(true, std::memory_order_release);
     if (set) {
-        EVR_LOG("%s: on (ETERNALVR_LIGHT_FRUSTUM=\"%ls\"; only 0 turns it off): a light Umbra hides is "
+        EVR_LOG("%s: on (ETERNALVR_LIGHT_FRUSTUM=\"%ls\"; only 0 turns it off) on %s: a light Umbra hides is "
                 "dropped only when the view frustum drops it too (gates at RVA 0x%X, 0x%X, 0x%X)",
-                kTag, value.c_str(), rvaOf(text, at + kGateA), rvaOf(text, at + kGateB),
-                rvaOf(text, at + kSphere));
+                kTag, value.c_str(), build->name, rvaOf(text, at + o.gateA), rvaOf(text, at + o.gateB),
+                rvaOf(text, at + o.sphere));
     } else {
-        EVR_LOG("%s: on by default (ETERNALVR_LIGHT_FRUSTUM=0 turns it off): a light Umbra hides is dropped "
-                "only when the view frustum drops it too (gates at RVA 0x%X, 0x%X, 0x%X)",
-                kTag, rvaOf(text, at + kGateA), rvaOf(text, at + kGateB), rvaOf(text, at + kSphere));
+        EVR_LOG("%s: on by default (ETERNALVR_LIGHT_FRUSTUM=0 turns it off) on %s: a light Umbra hides is "
+                "dropped only when the view frustum drops it too (gates at RVA 0x%X, 0x%X, 0x%X)",
+                kTag, build->name, rvaOf(text, at + o.gateA), rvaOf(text, at + o.gateB),
+                rvaOf(text, at + o.sphere));
     }
 }
 

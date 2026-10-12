@@ -137,6 +137,7 @@ using BindStageFn = void (*)(std::uintptr_t runtime,
                              std::uint32_t indexAgain);
 BindStageFn g_bindStage = nullptr;
 bool g_stepReadout = false;
+FoundRvas g_rvas; // set once, before the install line reads it (fx_sync_hooks.cpp's call_once)
 
 struct StepSums {
     std::atomic<std::uint64_t> steps{0};
@@ -180,7 +181,7 @@ bool locate(const GameImage& image, const std::byte* bind, const std::byte* gene
         !matchesAt(image, bind + kBindLoop, kBindLoopCode) ||
         !matchesAt(image, bind + kBindGpu, kBindGpuCode) ||
         !matchesAt(image, bind + kBindStep, kBindStepCode)) {
-        return fail(tag, "the particle bind's GPU stage loop (0x1955860..0x1955A9B)");
+        return fail(tag, "the particle bind's GPU stage loop (0x1955860..0x1955A9B on Steam)");
     }
     const std::byte* step = bind + kBindStep;
     if (branchTarget(image, bind + kBindGpu + kBindGpuSkip) != step ||
@@ -191,7 +192,7 @@ bool locate(const GameImage& image, const std::byte* bind, const std::byte* gene
     const std::byte* stage = branchTarget(image, bind + kBindGpu + kBindGpuCall);
     if (!matchesAt(image, stage, kStageCode) ||
         !matchesAt(image, branchTarget(image, stage + kStageAppendCall), kAppendCode)) {
-        return fail(tag, "the GPU stage's bind (0x1C2B670) and its append (0x1C295F0)");
+        return fail(tag, "the GPU stage's bind (0x1C2B670 on Steam) and its append (0x1C295F0 on Steam)");
     }
     const std::byte* emit = nullptr;
     if (image.inText(generate, kGenerateRuntime + 0x20) &&
@@ -200,9 +201,11 @@ bool locate(const GameImage& image, const std::byte* bind, const std::byte* gene
     }
     if (!emit || !matchesAt(image, emit + kEmitEntries, kEmitEntriesCode) ||
         !matchesAt(image, emit + kEmitWalk, kEmitWalkCode)) {
-        return fail(tag, "the GPU runtime's entries (0x1C2B6C0 from the generation)");
+        return fail(tag, "the GPU runtime's entries (0x1C2B6C0 on Steam, from the generation)");
     }
     g_bindStage = reinterpret_cast<BindStageFn>(const_cast<std::byte*>(stage));
+    g_rvas.stageBind = image.rva(stage);
+    g_rvas.stageCall = image.rva(bind + kBindGpu + kBindGpuCall);
     return true;
 }
 
@@ -260,8 +263,10 @@ bool installStepReadout(const GameImage& image, const char* tag) {
     const std::byte* step = findUnique(image, tag, "GPU particle step", kStepCode);
     const std::byte* reset = findUnique(image, tag, "GPU particle manager's reset", kResetCode);
     if (!step || !reset) {
-        return fail(tag,
-                    "the GPU particle step (0x1C28DD0) or the manager's reset (0x1C28320); no GPU readout");
+        return fail(
+            tag,
+            "the GPU particle step (0x1C28DD0 on Steam) or the manager's reset (0x1C28320 on Steam); no GPU "
+            "readout");
     }
     std::string error;
     if (!installMidHook(const_cast<std::byte*>(step), &onStep, error)) {
@@ -270,7 +275,12 @@ bool installStepReadout(const GameImage& image, const char* tag) {
         return false;
     }
     g_stepReadout = true;
+    g_rvas.step = image.rva(step);
     return true;
+}
+
+FoundRvas foundRvas() {
+    return g_rvas;
 }
 
 std::string takeStepReadout() {

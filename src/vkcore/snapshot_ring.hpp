@@ -256,6 +256,87 @@ inline void claim(PairSlot& s, std::uint64_t frame, std::uint64_t view) {
     s.view = view;
 }
 
+// No copy writes a pair's images or reads them any more (`done`: each eye's timeline's completed value,
+// `readDone`: the presenter's): the rings may be remade.
+inline bool
+pairsIdle(const PairSlots& slots, const std::array<std::uint64_t, 2>& done, std::uint64_t readDone) {
+    for (const PairSlot& s : slots) {
+        for (std::size_t e = 0; e < 2; ++e) {
+            if ((s.seq[e] != 0 && (!s.submitted[e] || s.seq[e] > done[e])) || s.prior[e] > done[e]) {
+                return false;
+            }
+        }
+        if (s.readValue == kPairReading || s.readValue > readDone || s.priorRead > readDone) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// What an eye's copy does with its ring this submit.
+enum class RingStep : std::uint8_t {
+    Copy,   // the ring is as the copy needs it: copy
+    Remake, // the ring is remade first (another size, format or queue family; the rings are idle)
+    Wait,   // no copy: this ring, or the other eye's, waits for the rings to be idle to be remade
+};
+
+// Each eye's ring is made for its view's image (eye 0: the swapchain's size and format, eye 1: view 1's
+// image's) and one queue family, and is remade only once no copy writes or reads either ring (pairsIdle; the
+// pairs start again). While one ring waits for that, neither eye copies, so the copies in flight finish and
+// it is remade a frame or two later (an eye remade just before the other began to wait may already have
+// copied once into its new ring: about one frame of copies no pair uses). Measured without this: after a
+// swapchain remade at another size, eye 0's copy of each frame was recorded just before eye 1's ring
+// checked, so eye 1's ring never found the rings idle and stayed at the old size for the rest of the
+// session, every present without a pair.
+// The first ring to wait is remade first: a ring that must be remade again on each frame (the render size
+// following a window being dragged, T-031) waits behind the other one instead of being remade ahead of it on
+// every frame. Of two waiting rings one is always first, so one of them is always remade once the rings are
+// idle, and nothing copies until then.
+class RingResize {
+public:
+    // Eye `eye`'s copy: `differs`, its ring is not as the copy needs it (or not made yet); `idle`, the rings
+    // are idle (true too when nothing waits: a first ring).
+    RingStep step(int eye, bool differs, bool idle) {
+        const auto e = static_cast<std::size_t>(eye & 1);
+        const std::uint64_t other = since_[1 - e];
+        if (!differs) {
+            since_[e] = 0;
+            return other != 0 ? RingStep::Wait : RingStep::Copy;
+        }
+        if (since_[e] == 0) {
+            since_[e] = ++turns_;
+        }
+        if (!idle || (other != 0 && other < since_[e])) {
+            return RingStep::Wait;
+        }
+        since_[e] = 0;
+        return RingStep::Remake;
+    }
+
+    bool waiting(int eye) const { return since_[static_cast<std::size_t>(eye & 1)] != 0; }
+    void reset() { since_ = {}; }
+
+private:
+    std::array<std::uint64_t, 2> since_{}; // each ring's turn in the wait (0: not waiting), first come first
+    std::uint64_t turns_ = 0;
+};
+
+// A copy's size (VkExtent2D's fields, kept free of Vulkan here).
+struct Extent {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+// A pair can be shown: both eyes' copies are of one size. On every size change one eye's ring is remade
+// before the other's (the first to find its ring the wrong size, usually eye 0, checked first; the other
+// once no copy or read uses the rings, a frame or a few later; longer if view 1's image is remade later
+// than the swapchain, or the other way round): for those frames the two rings differ in size and their
+// copies are never shown as a pair. A ring not made yet (`count` 0) has no copies, so no pair is complete
+// anyway.
+inline bool pairSizesMatch(std::size_t count0, Extent extent0, std::size_t count1, Extent extent1) {
+    return count0 == 0 || count1 == 0 || (extent0.width == extent1.width && extent0.height == extent1.height);
+}
+
 enum class PairShow : std::uint8_t {
     New,    // a complete pair newer than the last one shown
     Kept,   // none: the headset keeps the last pair (the present is not handed over)
@@ -272,18 +353,20 @@ struct PairPick {
 // (`lastShown`, a frame; 0: none yet), skipping older complete ones. Without one, the headset keeps the last
 // pair while fewer than `keepLimit` presents in a row (`kept`) have; after that, or with no pair shown yet,
 // NoPair. NoPair too when the frames sent did not render view 1 (`view1Rendered`, view_frames.hpp: a
-// loading screen, new clones), as the eye copy has it.
+// loading screen, new clones), as the eye copy has it. While the two eyes' copies differ in size (`sameSizes`
+// false, pairSizesMatch) no new pair is shown: the headset keeps the last one as above.
 inline PairPick pickPair(const PairSlots& slots,
                          std::size_t count,
                          std::uint64_t lastShown,
                          bool view1Rendered,
                          std::uint32_t kept,
-                         std::uint32_t keepLimit) {
+                         std::uint32_t keepLimit,
+                         bool sameSizes = true) {
     PairPick p;
     if (!view1Rendered) {
         return p;
     }
-    count = std::min(count, kPairSlots);
+    count = sameSizes ? std::min(count, kPairSlots) : 0;
     for (std::size_t i = 0; i < count; ++i) {
         const PairSlot& s = slots[i];
         if (complete(s) && s.frame > lastShown && s.readValue != kPairReading &&

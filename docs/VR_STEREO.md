@@ -946,7 +946,18 @@ The eye copies: `eye-snapshot: on: each eye from a copy of its view's image made
 present shows the newest pair of one frame (2 kept)`, at the first copies `eye-snapshot: pairs: eye N's copies
 2 images WxH format F, S MB`, when the game's submits move to another queue family (its command buffers are
 made again for it once no copy is pending) `eye-snapshot: pairs: eye N's copies move from queue family A to
-B`, and every 10 s (as the change since the last line; at vkDestroyDevice the same
+B`, when one eye's copies must be remade (another size or format, as after a swapchain remade at another size,
+or another queue family) and copies still use them, neither eye copies until none does (the first eye to wait
+is remade first; an eye remade just before the other began to wait may already have copied once into its new
+ring, about one frame of copies no pair uses; the frames waited count as `no slot free` for both eyes in the
+10 s lines, except that an eye whose copies move to another queue family counts its own as `another queue
+family`, only the other eye's as `no slot free`): `eye-snapshot: pairs: eye N's copies wait to be remade (WxH
+format F, queue family A -> WxH format F, family B): neither eye copies until no copy uses the copies`, while
+one eye's copies are remade before the other's (on every size change, for a frame or a few: usually eye 0's
+first, eye 1's once no copy or read uses the rings; longer if view 1's image is remade later than the
+swapchain) the two eyes' copies differ in size, no new pair is shown and the headset keeps the last one for up
+to 8 presents: `eye-snapshot: pairs: eye 0's copies WxH, eye 1's WxH: no new pair until both are one size`, and
+every 10 s (as the change since the last line; at vkDestroyDevice the same
 lines for the session) `eye-snapshot: last 10 s: N present(s): a new pair N (P%), the last pair kept N (P%), no
 pair ...`, `eye-snapshot: last 10 s: eye 0 copies N (no slot free N, ...), ... eye 1 copies N (...)` and
 `eye-snapshot: last 10 s: frames with view 0's command buffer submitted before view 1's N, in the same submit
@@ -1227,7 +1238,7 @@ axis).
 | `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
 | `ETERNALVR_STEREO_REFRACTION_TAA` | 0 | 1: the refraction's history (glass and other refractive surfaces) per eye under Route S (section "Per-eye temporal history", Refraction); `hold`: held off in stereo (every stereo render blends with no history); 0 (the default until it has been tried in a headset): the engine's, shared between the eyes (`seq-refract: off (the default; ETERNALVR_STEREO_REFRACTION_TAA=1 turns it on); ...`) |
-| `ETERNALVR_LIGHT_FRUSTUM` | 1 | a light Umbra's culling hides is kept when the view frustum keeps it (the Fortress of Doom's dais steps going dark; `docs/rig-findings/umbra-lights.md`), Steam build 25216728 only, head tracking only (not Cinema), and only while the multiplayer guard is armed; on any other build it logs why and leaves the game's culling alone (`light-cull: ...`); only `0` turns it off (`light-cull: off (ETERNALVR_LIGHT_FRUSTUM=0); ...`), any other value or unset leaves it on |
+| `ETERNALVR_LIGHT_FRUSTUM` | 1 | a light Umbra's culling hides is kept when the view frustum keeps it (the Fortress of Doom's dais steps going dark; `docs/rig-findings/umbra-lights.md`), Steam build 25216728 and Game Pass 1.0.56.0 only (`light_cull_builds.hpp`; the log's `light-cull: on ...` line names the build), head tracking only (not Cinema), and only while the multiplayer guard is armed; on any other build it logs why and leaves the game's culling alone (`light-cull: ...`); only `0` turns it off (`light-cull: off (ETERNALVR_LIGHT_FRUSTUM=0); ...`), any other value or unset leaves it on |
 | `ETERNALVR_STEREO_SSDO_TAA` | 1 | SSDO's temporal filter (`r_SSDOTemporalAA`) per eye under Route S (section "Per-eye temporal history", SSDO); 0: the filter held off in stereo (`seq-ssdo: off (ETERNALVR_STEREO_SSDO_TAA=0); ...`) |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S (Parallel Eye Rendering stays off with either) |
 | `ETERNALVR_PARALLEL_EYES` | unset | `1` in stereo: Parallel Eye Rendering, both eyes as two views of one frame (section "Parallel Eye Rendering"), on Steam build 25216728 only; any other build, the UI layer off or DLSS with `ETERNALVR_PE_DLSS=0` keep Route S, and with a stereo experiment the experiment runs (logged). Async compute off, view 1's clones and the eye copy come with it. The launcher's "Parallel Eye Rendering (highly experimental)", off by default |
@@ -1311,7 +1322,16 @@ waits; Frame pacing); `xr: refresh summary:` every 60 s and `xr: display period 
 change (Headset refresh rate); and `cvars:` for every run-time cvar write. Once no game present has come for 5 s or
 more while the headset runs (checked with the rates line), `present: the game has stopped presenting: no game
 present for N s ...` gives the newest failed present result and the images the window gate holds (or that
-the presenter's lock is busy), and `present: the game presents again after N s ...` follows if they return. The eye capture logs each
+the presenter's lock is busy), and `present: the game presents again after N s ...` follows if they return. When
+the last present before such a stop returned out of date or a lost surface (the game was to recreate its
+swapchain), the layer reports the stop, once per process: `present: the game stopped presenting right after an
+out of date present ...`, and the status file gets `presents=stopped_at_start` (in the first 2 minutes, else
+`presents=stopped`; `presents=resumed` if presents come back), for which the launcher's status line asks the
+player to close the game, launch it again and send a report. Not while the game's window is minimised or the
+input is on another desktop (the lock screen, a UAC prompt), nor at the first check after that: a game waits
+there with its last present out of date, and the stop line names that instead. The game's window is also told
+once to read its client area again (`SWP_FRAMECHANGED`, no move); that is untested as a cure (in the one rig
+stall, run pr-d1, the swapchain already had the answered size). The eye capture logs each
 eye L image's alpha (`eye L alpha min, mean, % below 255`): the projection layer is layer 0, which some
 runtimes blend by its alpha.
 

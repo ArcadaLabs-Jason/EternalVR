@@ -109,7 +109,9 @@ them is worse for you than described here.
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
   overlays are off too: the red edges at low health, double vision and screen shakes, and the wobble of
-  the whole picture under water (the water's tint and fog stay). A few effects lose the smoothing they get
+  the whole picture under water (the water's tint and fog stay). The HUD draws its own copy of the red
+  damage and low-health tint; the mod filters that off the floating HUD panel (see "Squares on the HUD
+  when you get hit" below). A few effects lose the smoothing they get
   over several frames, because the two eyes would share it: water reflections still show, only that
   smoothing is off. The picture looks slightly different from the flat game.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
@@ -147,11 +149,11 @@ them is worse for you than described here.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
-  Fortress of Doom are one place). A fix is on by default on the Steam version of the game; on other
-  versions (Game Pass) the game keeps its own light culling and the log says why (lines starting with
-  `light-cull:`). `ETERNALVR_LIGHT_FRUSTUM=0` turns the fix off. To set it, search Start for "Edit environment
-  variables for your account", add a user variable named `ETERNALVR_LIGHT_FRUSTUM` with the value `0`, then
-  restart the launcher (the launch plan in its log lists it).
+  Fortress of Doom are one place). A fix is on by default on the Steam and Game Pass (1.0.56.0) versions of
+  the game; on any other version the game keeps its own light culling and the log says why (lines starting
+  with `light-cull:`). `ETERNALVR_LIGHT_FRUSTUM=0` turns the fix off. To set it, search Start for "Edit
+  environment variables for your account", add a user variable named `ETERNALVR_LIGHT_FRUSTUM` with the value
+  `0`, then restart the launcher (the launch plan in its log lists it).
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
 - **Particles in ray-traced reflections.** With `ETERNALVR_STEREO_FX_SYNC=1` and the game's ray tracing on,
@@ -160,10 +162,25 @@ them is worse for you than described here.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.
+- **Squares on the HUD when you get hit.** In 0.1.46 and 0.1.47 hard hits (most of all in The Ancient
+  Gods) and low health could leave blocky edges and orange boxes around the HUD's health and ammo panels.
+  They came from the mod's filter that takes the game's red damage tint off the floating HUD panel. 0.1.48
+  replaced that filter, and on my test PC's captures the boxes are gone, but it hasn't been tried in a
+  headset yet. If the HUD still looks wrong (squares, a red tint that stays, or anything else that wasn't
+  there before), add a Windows user environment variable `ETERNALVR_UI_WASH` with the value `0` (Start
+  menu, search "environment variables", then "Edit environment variables for your account") and restart
+  the launcher. That turns the filter off, so the HUD shows exactly what the game draws, red tint included.
+  Then please tell me where it happened.
 - **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
   player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
   `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
   experimental and off by default.
+- **Foveated rendering (experimental) is less sharp toward the edges, by design.** Since 0.1.48 the sharp
+  area is measured as an angle from where your head points, so a spot in the scene gets the same detail in
+  both eyes (before, some detail off to the side could be sharp in one eye and blurry in the other). On
+  headsets whose eye images aren't symmetric (Quest 3 for one) the blurrier band toward your nose and at
+  the top is narrower than in 0.1.47 and more of it sits on the outer side. It is off by default, NVIDIA
+  RTX only, and off with Parallel Eye Rendering. If you use it, tell me how it looks to you.
 - **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
   picture can stop for about half a second. That is the game's own checkpoint autosave, not the mod: the
   game holds everything while it writes the save. It happens in the flat game too, but in the headset a

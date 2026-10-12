@@ -108,8 +108,9 @@ struct UiSettings {
     // screens are laid out in (wideContentRect), not the empty rows above and below it on a near-square eye
     // image (T-031).
     bool wideCrop = true;
-    // ETERNALVR_UI_WASH: the full-screen additive wash (the red low-health vignette) is taken out of the
-    // GUI image before it goes on the HUD quad (additive_wash.hpp); 0 shows the image as the game drew it.
+    // ETERNALVR_UI_WASH: the full-screen additive wash (the red hit and low-health vignette) is taken out of
+    // the GUI image before it goes on the HUD quad (additive_wash.hpp); 0 shows the image as the game drew
+    // it.
     bool removeWash = true;
     // ETERNALVR_HUD=panel|wrist|weapon (panel by default). The wrist and the weapon need the controllers:
     // without them the whole HUD stays on the head-locked quad.

@@ -25,6 +25,34 @@ PresentWatch::Event PresentWatch::check(std::uint64_t presents, double seconds) 
     return Event::Stopped;
 }
 
+StopCause stopCause(int result, std::uint64_t resultAt, std::uint64_t presents) {
+    if (result == 0) {
+        return {};
+    }
+    const bool outOfDate = result == kResultOutOfDate || result == kResultSurfaceLost;
+    return {outOfDate ? PresentFailure::OutOfDate : PresentFailure::Other, resultAt == presents};
+}
+
+bool stopAtStart(double lastMoved, double firstCheck) {
+    return lastMoved - firstCheck <= kStopAtStartSeconds;
+}
+
+bool shown(StopScene scene) {
+    return !scene.minimised && !scene.otherDesktop;
+}
+
+bool StopRecovery::due(bool stopped, StopCause cause, StopScene scene) {
+    const bool shownNow = shown(scene);
+    const bool shownBefore = shownBefore_;
+    shownBefore_ = shownNow;
+    if (done_ || !stopped || cause.failure != PresentFailure::OutOfDate || !cause.lastPresent || !shownNow ||
+        !shownBefore) {
+        return false;
+    }
+    done_ = true;
+    return true;
+}
+
 std::optional<double> parseTestSeconds(std::wstring_view text) {
     while (!text.empty() && std::iswspace(text.front())) {
         text.remove_prefix(1);

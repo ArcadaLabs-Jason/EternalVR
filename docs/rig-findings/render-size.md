@@ -79,8 +79,8 @@ All read the `GetClientRect` import slot 0x2A1C048 (`call [rip + disp]`, FF 15).
 
 ## 3. What the layer does
 
-`src/vkcore/client_rect.*`, `virtual_client.*`, `surface_entry.cpp`, `swapchain_entry.cpp`; the pure rules
-in `src/features/render_size/` (tested in `tests/features/render_size/`).
+`src/vkcore/client_rect.*`, `virtual_client.*`, `present_scaling.*`, `surface_entry.cpp`, `swapchain_entry.cpp`;
+the pure rules in `src/features/render_size/` (tested in `tests/features/render_size/`).
 
 1. **Client area.** At the game's first window surface, while the multiplayer guard is armed, the four call
    sites are located (each signature once in `.text`, all reading one import slot), and the game's
@@ -103,7 +103,23 @@ in `src/features/render_size/` (tested in `tests/features/render_size/`).
    `ETERNALVR_MIRROR_WINDOW` with `SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS`. Windows then sends
    `WM_WINDOWPOSCHANGED` (even when nothing moves [offline-verified]), the game reads its client area again
    (0x1DC3B00) and sets its output size, and its per-frame check recreates the swapchain at the new size. The
-   presenter rebuilds its ring for the new swapchain as for any resize.
+   presenter rebuilds its ring for the new swapchain as for any resize. **A late size** (`auto` learns it only
+   once the headset is found, after the game's first swapchain, made at the window's own size without present
+   scaling): moving that window would make the unscaled swapchain's next present `VK_ERROR_OUT_OF_DATE_KHR`
+   (the game then recreates from the error; in one rig run its present thread never returned after that, run
+   pr-d1). So while the game has a swapchain without present scaling and none with it, the window is first
+   only told to read its client area again (`SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE`, logged `render size
+   on, the game's swapchain is not scaled yet: the window is told to read its client area again`): the game
+   recreates through its own size check while the old swapchain stays valid, and the window moves once the
+   swapchain with present scaling exists (`render size on, the game's swapchain is scaled: window client area
+   to ...`; only `VK_SUBOPTIMAL_KHR` follows, taken as success), or after 10 s without one (`... the game made no
+   scaled swapchain within 10 s`; `render size changed, ...` when the size changed rather than switched on). A
+   create without present scaling that is still running when the size arrives counts as such a swapchain (the
+   game's first create took 578 ms in pr-d1). A size known before the first swapchain moves the window at once,
+   as before (`features/render_size/window_steps.hpp`). Not covered: a size that arrives after the game read
+   its client area for a create and before that create reaches the layer. If the game still stops presenting
+   right after an out of date present, the layer reports the stop once and the launcher asks for a restart
+   (VR_STEREO.md, the `present:` lines); nothing there is known to free a stuck game.
 5. **Instance and device.** `VK_KHR_get_surface_capabilities2` and `VK_KHR_surface_maintenance1` on the
    instance and `VK_KHR_swapchain_maintenance1` on the device are added when the render size is wanted, as they
    already are for the Route S window gate (with the same retry without them).

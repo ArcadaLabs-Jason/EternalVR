@@ -107,6 +107,27 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void AGameThatStoppedPresentingAsksForARestart()
+        {
+            // What the layer writes after the game stopped presenting right after an out of date present (presenter_result.cpp).
+            var start = LayerWatch.Decide(true, File("state=vr\nstereo=on\npresents=stopped_at_start"), 30);
+            Assert.Equal(new SessionStatus(StatusKind.Problem, LayerWatch.StoppedMessage), start);
+            Assert.True(LayerWatch.NeedsDialog(start));
+            Assert.Contains("launch it again", start.Text);
+            // It asks for a report, which also marks the Export report button.
+            Assert.True(Report.ReportHint.In(start.Text));
+            Assert.Equal(LayerWatch.StoppedMessage, LayerWatch.Decide(true, File("state=waiting\npresents=stopped"), 900).Text);
+            // Presents that came back, an unknown value (only the two exact values count) or no key: the state's own message.
+            Assert.Equal(StatusKind.Good, LayerWatch.Decide(true, File("state=vr\nstereo=on\npresents=resumed"), 60).Kind);
+            Assert.Equal(StatusKind.Good, LayerWatch.Decide(true, File("state=vr\nstereo=on\npresents=sideways"), 60).Kind);
+            Assert.Equal(StatusKind.Good, LayerWatch.Decide(true, File("state=vr\nstereo=on\npresents=stopped_later"), 60).Kind);
+            Assert.True(File("state=vr\npresents=stopped").PresentsStopped);
+            Assert.False(File("state=vr").PresentsStopped);
+            // Flat keeps its reason.
+            Assert.Contains("not supported", LayerWatch.Decide(true, File("state=flat\nreason=not supported\npresents=stopped"), 60).Text);
+        }
+
+        [Fact]
         public void StatusesCompareByKindAndText()
         {
             Assert.Equal(new SessionStatus(StatusKind.Info, "a"), new SessionStatus(StatusKind.Info, "a"));

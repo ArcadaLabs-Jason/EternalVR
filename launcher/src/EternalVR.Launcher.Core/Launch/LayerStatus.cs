@@ -11,7 +11,8 @@ namespace EternalVR.Launcher.Core.Launch
     /// <c>state=starting|waiting|vr|flat</c>, <c>reason=</c> (a sentence for the player), <c>stereo=on|off: reason</c> (empty until
     /// decided), <c>version=</c>, <c>pid=</c>. <c>flat</c> is final for the session. Also <c>ssr_follow=0|1</c> and
     /// <c>ssdo_follow=0|1</c>: 1 while the layer held r_SSR or r_SSDO at the player's own game setting, at <c>ssr_value=</c>
-    /// and <c>ssdo_value=</c> (<see cref="Followed"/>).
+    /// and <c>ssdo_value=</c> (<see cref="Followed"/>). <c>presents=stopped_at_start|stopped|resumed</c>: the game stopped presenting
+    /// right after an out of date present (<see cref="PresentsStopped"/>).
     /// </summary>
     public sealed class LayerStatusFile
     {
@@ -26,6 +27,11 @@ namespace EternalVR.Launcher.Core.Launch
         public string StereoReason { get; private set; } = string.Empty;
         public string Version { get; private set; } = string.Empty;
         public string Pid { get; private set; } = string.Empty;
+        /// <summary>
+        /// The game stopped presenting right after an out of date present and has not presented since (<c>presents=stopped</c> or
+        /// <c>presents=stopped_at_start</c>).
+        /// </summary>
+        public bool PresentsStopped { get; private set; }
         /// <summary>
         /// The cvars the layer last reported as held at the player's own game setting with per-eye TAA on, with the value held
         /// (<c>r_SSR</c> for <c>ssr_follow=1</c> and <c>ssr_value=</c>, <c>r_SSDO</c> for <c>ssdo_follow=1</c> and <c>ssdo_value=</c>):
@@ -53,6 +59,10 @@ namespace EternalVR.Launcher.Core.Launch
                     case "reason": s.Reason = value; break;
                     case "version": s.Version = value; break;
                     case "pid": s.Pid = value; break;
+                    case "presents":
+                        s.PresentsStopped = string.Equals(value, "stopped", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(value, "stopped_at_start", StringComparison.OrdinalIgnoreCase);
+                        break;
                     case "ssr_follow": s.follows["r_SSR"] = value == "1"; break;
                     case "ssdo_follow": s.follows["r_SSDO"] = value == "1"; break;
                     case "ssr_value": s.values["r_SSR"] = value; break;
@@ -147,6 +157,10 @@ namespace EternalVR.Launcher.Core.Launch
         public const string StartingMessage = "The mod loaded; VR is starting.";
         public const string NotStartedMessage = "VR has not started after 2 minutes; the game runs flat until it does.";
 
+        public const string StoppedMessage =
+            "The game stopped drawing frames (the headset shows its last image). Close the game (with Task Manager if it does not "
+            + "respond) and launch it again. " + Report.ReportHint.Ask;
+
         public const string NotLoadedMessage =
             "The mod did not load, so the game runs without VR. Check that the whole EternalVR zip was extracted (the layer folder "
             + "next to the launcher), and that your antivirus did not block or remove EternalVR.dll; then quit the game and launch again.";
@@ -159,6 +173,9 @@ namespace EternalVR.Launcher.Core.Launch
         {
             if (status != null && status.State != LayerState.Unknown)
             {
+                // Flat keeps its own reason (final for the session); in any other state a stopped game needs a restart.
+                if (status.PresentsStopped && status.State != LayerState.Flat)
+                    return new SessionStatus(StatusKind.Problem, StoppedMessage);
                 switch (status.State)
                 {
                     case LayerState.Starting:

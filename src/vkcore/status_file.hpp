@@ -23,6 +23,12 @@
 //   refresh_hz=144.0                the base refresh rate (presenter_refresh.hpp)
 //   throttled_share=0.181           the share of time at 2x the base or more (with each refresh summary)
 //
+// And once the game stops presenting right after an out of date present (presenter_result.hpp):
+//
+//   presents=stopped_at_start       within the first 2 minutes of the headset's session (`stopped` later);
+//                                   the launcher asks the player to restart the game
+//   presents=resumed                ... the game presented again after that
+//
 // And in Route S, written when they change (runtime_cvars.cpp):
 //
 //   ssr_follow=1                    r_SSR is held at the game's own Reflections setting with per-eye TAA on

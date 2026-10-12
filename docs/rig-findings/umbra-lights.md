@@ -4,7 +4,7 @@ In the headset, the short curved steps up to the Fortress of Doom's command dais
 ARC and Mission Select screens, the planet window behind) switched between dark and lit as the player moved,
 with Parallel Eye Rendering on or off and ray tracing on or off. This page records how it was reproduced and
 isolated on the test PC (RTX 3080 Ti, OpenXR-Simulator, Steam build 25216728) and the fix. RVAs are in that
-build.
+build; section 4 maps them to Game Pass 1.0.56.0.
 
 ## 1. Reproduction
 
@@ -93,6 +93,41 @@ signature, the code at every hooked offset and the PE timestamp are checked firs
 multiplayer guard is armed (checked at install and for every light Umbra hides). Every 10 s the log counts the
 lights Umbra hid that the frustum kept, per gate.
 
+On Game Pass 1.0.56.0 (PE timestamp 0x69BC663D) the gather is at RVA 0x1D04850, 0x8C590 after Steam's.
+Compared against an image of the Game Pass exe read from memory, its 0xA81 bytes (four `.pdata` chunks,
+0x1C782C0 to 0x1C78D41 on Steam) are the same instruction for instruction once the rel32 of calls to other
+functions and RIP-relative displacements are masked; every jump inside it is byte-identical. So are the
+functions it calls (gate A's visible-set lookup 0x1D17E50 / 0x1DA43B0, gate B's occlusion-buffer test
+0x2272270 / 0x230EDE0, the sphere test 0x1D18A80 / 0x1DA4FE0, the frustum test 0x1C88920 / 0x1D14EB0, and
+seven more), its caller 0x1C7FFD0 / 0x1D0C560 and the cull settings' filler 0x1C5DFD0 / 0x1CEA560. The
+signature is unique in both `.text` sections, and every checked offset has the same bytes on both:
+
+| Site | Offset | Steam RVA | Game Pass RVA | Bytes checked |
+|---|---|---|---|---|
+| anchor (signature) | 0 | 0x1C7851E | 0x1D04AAE | `48 8B 47 18 80 78 24 00 0F 84 3F 04 00 00 8B 53 54 85 D2 0F 84` |
+| frustum drop | 0x2B | 0x1C78549 | 0x1D04AD9 | `48 8B 5C 24 30` |
+| gate A (hook) | 0x23 | 0x1C78541 | 0x1D04AD1 | `84 C0 0F 85 A6 02 00 00` |
+| gate B (hook) | 0x2C9 | 0x1C787E7 | 0x1D04D77 | `85 C0 0F 84 6B 01 00 00` |
+| sphere test (hook) | 0x432 | 0x1C78950 | 0x1D04EE0 | `84 C0 0F 84 F1 FB FF FF` |
+| gate B drop | 0x43C | 0x1C7895A | 0x1D04EEA | `48 8B 5C 24 30 40 F6 D6` |
+| frustum skip check | 0x44D | 0x1C7896B | 0x1D04EFB | `80 78 2B 00` |
+| frustum test | 0x453 | 0x1C78971 | 0x1D04F01 | `48 8B 4F 20 4C 8D 83 F0` |
+| frustum verdict (hook) | 0x4A5 | 0x1C789C3 | 0x1D04F53 | `84 C0 0F 85 7E FB FF FF` |
+| keep | 0x4AD | 0x1C789CB | 0x1D04F5B | `4C 8B 54 24 38` |
+
+The settings offsets the hooks read (+0x18 in the gather's context, +0x2B r_skipLightCPUCulling) are inside
+the checked bytes. `src/vkcore/light_cull_builds.hpp` holds one row per build (PE timestamp, the anchor's
+RVA, signature, offsets, byte checks); the PE timestamp picks the row, the signature must be unique and at
+that row's RVA, and every check must match before anything is hooked. Any other build logs why and keeps
+the game's culling. The `light-cull: on ...` line names the build.
+
+Tried on the test PC with Game Pass 1.0.56.0 (2026-10-11, the launcher's package start, OpenXR-Simulator,
+stereo): `light-cull: on by default ... on Game Pass 1.0.56.0` at the main menu (gates at RVA 0x1D04AD1,
+0x1D04D77, 0x1D04EE0); after Continue (a checkpoint in e1m1_intro) the frustum kept about 54,900 lights per
+10 s that the visible-light set hid and 11,700 that the occlusion buffer hid (20,700 hidden by both; the sphere
+test 0). With `ETERNALVR_LIGHT_FRUSTUM=0` the same launch logs `light-cull: off`. Not yet looked at in a
+headset on Game Pass.
+
 The first version changed one byte (the `je` at 0x1C78526 to `jae`): every light took the frustum test alone
 and Umbra's verdict was dropped. It fixed the dais the same way, but it could drop a light Umbra kept, so it
 was replaced.
@@ -134,6 +169,8 @@ a light dropped by the gather; a shadow caster or occluder culled by Umbra is th
 - Tried in a headset at the dais on 0.1.46 (with `ETERNALVR_LIGHT_FRUSTUM=1`): the steps no longer went dark,
   so the fix is on by default since 0.1.47. Still to look at in a headset: the dais with Parallel Eye
   Rendering on.
+- Game Pass 1.0.56.0: not looked at in a headset, and the dais not visited (the rig pass is the static match
+  plus the counters in e1m1_intro).
 - The e1m3 spot above.
 - Why `r_skipLightCPUCulling 1` brightens the dark spot by 10% with Umbra on (without the fix the gather reads
   that flag only on its Umbra-off path; with it, also for the lights Umbra hides).

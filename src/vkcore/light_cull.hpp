@@ -1,13 +1,14 @@
 #pragma once
 
-// A second opinion from the view frustum for the lights Umbra hides (Steam build 25216728).
+// A second opinion from the view frustum for the lights Umbra hides (Steam build 25216728 and Game Pass
+// 1.0.56.0).
 //
-// With Umbra culling on, the game's per-view light gather (RVA 0x1C782C0) never tests a light against the
-// view frustum: a light is drawn only when Umbra reported its light object visible (gate A), or, for a light
-// with no Umbra object, when its box passed Umbra's occlusion buffer (gate B), and then, for some kept
-// lights, when a sphere around them passed Umbra's test too. From some camera positions Umbra hides a light
-// whose light falls on what the camera sees, and the light is dropped: at the steps up to the Fortress of
-// Doom's command dais the steps, the floor and the weapon go dark one step down and bright one step up
+// With Umbra culling on, the game's per-view light gather (RVA 0x1C782C0 on Steam) never tests a light
+// against the view frustum: a light is drawn only when Umbra reported its light object visible (gate A), or,
+// for a light with no Umbra object, when its box passed Umbra's occlusion buffer (gate B), and then, for some
+// kept lights, when a sphere around them passed Umbra's test too. From some camera positions Umbra hides a
+// light whose light falls on what the camera sees, and the light is dropped: at the steps up to the Fortress
+// of Doom's command dais the steps, the floor and the weapon go dark one step down and bright one step up
 // (docs/rig-findings/umbra-lights.md). With r_useUmbraCulling 0 the gather takes a frustum test instead and
 // the lighting is right, but the whole frame loses Umbra's culling (about half the frame rate on the test
 // PC).
@@ -19,8 +20,9 @@
 // the frustum.) Geometry, decals and areas keep Umbra.
 //
 // On by default; ETERNALVR_LIGHT_FRUSTUM=0 turns it off. Only while the multiplayer guard is armed
-// (checked at install and on every hidden light) and only on the build it was read on (signature, the code
-// at every offset used, and PE timestamp); otherwise it logs why and leaves the game untouched.
+// (checked at install and on every hidden light) and only on a build it was read on (light_cull_builds.hpp:
+// PE timestamp, signature at that build's RVA, and the code at every offset used); otherwise it logs why and
+// leaves the game untouched.
 
 #include <string_view>
 

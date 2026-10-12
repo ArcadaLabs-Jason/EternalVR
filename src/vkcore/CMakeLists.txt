@@ -200,7 +200,9 @@ add_library(evr_layer SHARED
     view_updates.cpp
     view_water.cpp
     view_water_sites.cpp
+    present_scaling.cpp
     virtual_client.cpp
+    virtual_client_settings.cpp
     vram_watch.cpp
     window_cap.cpp
     xr_presenter.cpp)

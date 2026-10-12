@@ -2,17 +2,19 @@
 
 #include "vkcore/virtual_client.hpp"
 
+#include "features/render_size/window_steps.hpp"
 #include "vkcore/client_rect.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/present_scaling.hpp"
+#include "vkcore/virtual_client_settings.hpp"
 #include "vkcore/window_cap.hpp"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
-#include <cstdio>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -28,13 +30,13 @@ std::atomic<bool> g_off{false}; // State::off, read without the mutex (sizeOff)
 // The band the window shows (ETERNALVR_MIRROR_CROP) while the game's swapchain is stretched into it; 0: none.
 std::atomic<double> g_cropAspect{0.0};
 
-// What the surface allows for present scaling, over every present mode the game may use.
-struct Scaling {
-    VkPresentScalingFlagsKHR behavior = 0;
-    VkPresentGravityFlagsKHR gravity = 0;
-    Extent minScaled{0, 0};
-    Extent maxScaled{UINT32_MAX, UINT32_MAX};
-};
+// A mirror placement waits for a swapchain with present scaling (State::steps); read without the mutex
+// (poll).
+std::atomic<bool> g_moveWaits{false};
+
+using present_scaling::chooseBehavior;
+using present_scaling::chooseGravity;
+using present_scaling::Scaling;
 
 struct State {
     std::mutex mutex;
@@ -50,8 +52,13 @@ struct State {
     std::optional<render_size::ViewLimits> limits;
     bool off = false; // for the rest of the process (reason logged)
     std::vector<VkSwapchainKHR> scaledSwapchains;
-    int failedScaledCreates = 0; // in a row; the game retries a failed create at once
-    bool cropScaling = false;    // the last scaled create stretches for ETERNALVR_MIRROR_CROP or _SIZE=fill
+    std::vector<VkSwapchainKHR> unscaledSwapchains; // the game's, on its window's surface
+    // The surfaces of the game's creates without present scaling that have not returned yet (one per create).
+    std::vector<VkSurfaceKHR> unscaledCreates;
+    render_size::WindowSteps steps;  // the mirror placement after a late answer
+    bool stepsWaitForChange = false; // the waiting placement is for a size change (logged)
+    int failedScaledCreates = 0;     // in a row; the game retries a failed create at once
+    bool cropScaling = false; // the last scaled create stretches for ETERNALVR_MIRROR_CROP or _SIZE=fill
     // A window placement decided under the mutex, carried out after it is released.
     struct Placement {
         std::optional<render_size::WindowRect> rect;
@@ -67,74 +74,8 @@ State& state() {
     return s;
 }
 
-struct Settings {
-    render_size::Request request;
-    std::optional<render_size::WindowRect> mirror;
-    std::optional<render_size::WindowRect> fallback;
-    double crop = 0.0;    // ETERNALVR_MIRROR_CROP (mirror_place.hpp)
-    bool fill = false;    // ETERNALVR_MIRROR_SIZE=fill
-    bool centred = false; // `mirror` is centred on the display ETERNALVR_MIRROR_DISPLAY chose
-};
-
-const Settings& settings() {
-    static const Settings s = [] {
-        Settings out;
-        std::wstring size;
-        std::wstring scale;
-        std::wstring mirror;
-        std::wstring window;
-        readEnv(L"ETERNALVR_RENDER_SIZE", size);
-        const auto request = render_size::parseRenderSize(size);
-        if (!request) {
-            EVR_LOG("size: ETERNALVR_RENDER_SIZE '%ls' is not auto, WxH or off; off", size.c_str());
-            return out;
-        }
-        out.request = *request;
-        if (readEnv(L"ETERNALVR_RENDER_SCALE", scale)) {
-            if (const auto parsed = render_size::parseRenderScale(scale)) {
-                out.request.scale = *parsed;
-            } else {
-                EVR_LOG("size: ETERNALVR_RENDER_SCALE '%ls' is not auto or 0.5 to 2; 1.0", scale.c_str());
-            }
-        }
-        if (readEnv(L"ETERNALVR_MIRROR_WINDOW", mirror) && !mirror.empty()) {
-            out.mirror = render_size::parseWindowRect(mirror);
-            if (!out.mirror) {
-                EVR_LOG(
-                    "size: ETERNALVR_MIRROR_WINDOW '%ls' is not x,y,width,height; the window keeps its place",
-                    mirror.c_str());
-            }
-        }
-        if (readEnv(L"ETERNALVR_WINDOW", window) && !window.empty()) {
-            out.fallback = render_size::parseWindowRect(window);
-        }
-        if (out.request.mode != render_size::Mode::Off) {
-            const mirror_place::Options options = mirror_place::read(out.mirror);
-            out.mirror = options.rect;
-            out.crop = options.crop;
-            out.fill = options.fill;
-            out.centred = options.centred;
-            char mirrorText[64] = "where it is";
-            if (out.mirror) {
-                std::snprintf(mirrorText, sizeof(mirrorText), "at %d,%d %dx%d", out.mirror->x, out.mirror->y,
-                              out.mirror->width, out.mirror->height);
-            }
-            EVR_LOG("size: render size %s (T-031); the desktop window shows it scaled, %s",
-                    render_size::describe(out.request).c_str(), mirrorText);
-        }
-        return out;
-    }();
-    return s;
-}
-
-bool wantedSize() {
-    return settings().request.mode != render_size::Mode::Off;
-}
-
-// The mirror window for an eye image of `eye`: with crop `full` it takes the eye's shape (mirror_place.hpp).
-std::optional<render_size::WindowRect> shapedMirror(const std::optional<Extent>& eye) {
-    const Settings& set = settings();
-    return mirror_place::shapeToEye(mirror_place::Options{set.mirror, set.crop, set.fill, set.centred}, eye);
+double nowSeconds() {
+    return static_cast<double>(GetTickCount64()) / 1000.0;
 }
 
 // Places the game's window: its client area at `rect`, or where it is. SWP_FRAMECHANGED makes Windows send
@@ -170,76 +111,6 @@ void placeWindow(HWND window, const std::optional<render_size::WindowRect>& rect
     }
 }
 
-// The surface's present scaling over the present modes the game may use (FIFO, immediate, mailbox).
-std::optional<Scaling>
-queryScaling(const InstanceData& inst, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
-    if (!inst.surfaceMaintenance1 || !inst.nextSurfaceCapabilities2 ||
-        !inst.vk.GetPhysicalDeviceSurfacePresentModesKHR) {
-        return std::nullopt;
-    }
-    std::uint32_t count = 0;
-    inst.vk.GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &count, nullptr);
-    std::vector<VkPresentModeKHR> modes(count);
-    inst.vk.GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &count, modes.data());
-    Scaling all;
-    all.behavior = ~0u;
-    all.gravity = ~0u;
-    bool any = false;
-    for (const VkPresentModeKHR mode :
-         {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR}) {
-        if (std::find(modes.begin(), modes.end(), mode) == modes.end()) {
-            continue;
-        }
-        VkSurfacePresentModeKHR presentMode{VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR};
-        presentMode.presentMode = mode;
-        VkPhysicalDeviceSurfaceInfo2KHR info{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
-                                             &presentMode};
-        info.surface = surface;
-        VkSurfacePresentScalingCapabilitiesKHR scaling{
-            VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_KHR};
-        VkSurfaceCapabilities2KHR caps{VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR, &scaling};
-        if (inst.nextSurfaceCapabilities2(physicalDevice, &info, &caps) != VK_SUCCESS) {
-            return std::nullopt;
-        }
-        window_cap::logPresentMode(mode, scaling, caps.surfaceCapabilities);
-        any = true;
-        all.behavior &= scaling.supportedPresentScaling;
-        all.gravity &= scaling.supportedPresentGravityX & scaling.supportedPresentGravityY;
-        all.minScaled.width = std::max(all.minScaled.width, scaling.minScaledImageExtent.width);
-        all.minScaled.height = std::max(all.minScaled.height, scaling.minScaledImageExtent.height);
-        all.maxScaled.width = std::min(all.maxScaled.width, scaling.maxScaledImageExtent.width);
-        all.maxScaled.height = std::min(all.maxScaled.height, scaling.maxScaledImageExtent.height);
-    }
-    if (!any) {
-        return std::nullopt;
-    }
-    return all;
-}
-
-// The scaling the swapchain is created with: the whole image letterboxed into the window (aspect kept),
-// else stretched, else one to one (a crop). 0 when none is offered. With the whole image the window has the
-// eye's shape (shapedMirror), so no bars show, and a driver that stretches the first presents regardless (the
-// rig's NVIDIA driver did until the window was minimised and restored) shows the same image.
-VkPresentScalingFlagsKHR chooseBehavior(const Scaling& s) {
-    if ((s.behavior & VK_PRESENT_SCALING_ASPECT_RATIO_STRETCH_BIT_KHR) && s.gravity) {
-        return VK_PRESENT_SCALING_ASPECT_RATIO_STRETCH_BIT_KHR;
-    }
-    if (s.behavior & VK_PRESENT_SCALING_STRETCH_BIT_KHR) {
-        return VK_PRESENT_SCALING_STRETCH_BIT_KHR;
-    }
-    if (s.behavior & VK_PRESENT_SCALING_ONE_TO_ONE_BIT_KHR) {
-        return VK_PRESENT_SCALING_ONE_TO_ONE_BIT_KHR;
-    }
-    return 0;
-}
-
-VkPresentGravityFlagsKHR chooseGravity(const Scaling& s) {
-    if (s.gravity & VK_PRESENT_GRAVITY_CENTERED_BIT_KHR) {
-        return VK_PRESENT_GRAVITY_CENTERED_BIT_KHR;
-    }
-    return s.gravity & VK_PRESENT_GRAVITY_MIN_BIT_KHR ? VK_PRESENT_GRAVITY_MIN_BIT_KHR : 0;
-}
-
 // `driverLimit`: what the driver lacks, when that is why (logged with the eye's real size).
 void turnOff(State& s, const char* why, const char* driverLimit = nullptr) {
     if (s.off) {
@@ -248,6 +119,8 @@ void turnOff(State& s, const char* why, const char* driverLimit = nullptr) {
     s.off = true;
     g_off.store(true, std::memory_order_release);
     g_cropAspect.store(0.0);
+    s.steps.cancel();
+    g_moveWaits.store(false, std::memory_order_relaxed);
     const bool wasActive = client_rect::answer().has_value();
     client_rect::setAnswer(std::nullopt);
     EVR_LOG("size: render size off: %s%s%s", why,
@@ -306,7 +179,7 @@ void update(State& s) {
         if (s.surfaces.empty() || !s.instance) {
             return; // checked on the next surface
         }
-        s.scaling = queryScaling(*s.instance, s.physicalDevice, s.surfaces.back());
+        s.scaling = present_scaling::query(*s.instance, s.physicalDevice, s.surfaces.back());
         if (!s.scaling || chooseBehavior(*s.scaling) == 0) {
             turnOff(s, "the window's surface offers no present scaling");
             return;
@@ -332,7 +205,38 @@ void update(State& s) {
     client_rect::setAnswer(size);
     EVR_LOG("size: the game's window reports a %ux%u client area%s", size->width, size->height,
             previous ? " (changed)" : "; each eye renders at this size");
-    s.placement = State::Placement{shapedMirror(size), previous ? "render size changed" : "render size on"};
+    // A swapchain the game made (or is making) without present scaling would go out of date if the window
+    // moved now: the window first only reads its client area again, and moves once a scaled swapchain exists
+    // (window_steps.hpp).
+    const render_size::WindowStep step =
+        s.steps.onAnswer(render_size::GameSwapchains{!s.unscaledSwapchains.empty(),
+                                                     !s.unscaledCreates.empty(), !s.scaledSwapchains.empty()},
+                         nowSeconds());
+    g_moveWaits.store(s.steps.waiting(), std::memory_order_relaxed);
+    s.stepsWaitForChange = previous.has_value();
+    if (step == render_size::WindowStep::Move) {
+        s.placement =
+            State::Placement{shapedMirror(size), previous ? "render size changed" : "render size on"};
+        return;
+    }
+    s.placement = State::Placement{std::nullopt,
+                                   previous ? "render size changed, the game's swapchain is not scaled yet"
+                                            : "render size on, the game's swapchain is not scaled yet"};
+}
+
+// The mirror placement that waited for a scaled swapchain (`scaled`: one was made, else the wait ran out).
+// Under the mutex.
+void placeAfterWait(State& s, bool scaled) {
+    g_moveWaits.store(false, std::memory_order_relaxed);
+    const char* why = nullptr;
+    if (s.stepsWaitForChange) {
+        why = scaled ? "render size changed, the game's swapchain is scaled"
+                     : "render size changed, the game made no scaled swapchain within 10 s";
+    } else {
+        why = scaled ? "render size on, the game's swapchain is scaled"
+                     : "render size on, the game made no scaled swapchain within 10 s";
+    }
+    s.placement = State::Placement{shapedMirror(client_rect::answer()), why};
 }
 
 } // namespace
@@ -430,13 +334,18 @@ void adjustCapabilities(VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR& caps) {
 }
 
 bool addPresentScaling(VkSwapchainCreateInfoKHR& info, VkSwapchainPresentScalingCreateInfoKHR& scaling) {
-    const std::optional<Extent> active = client_rect::answer();
-    if (!active || *active != Extent{info.imageExtent.width, info.imageExtent.height}) {
+    if (!wanted()) {
         return false;
     }
     State& s = state();
     std::lock_guard lock(s.mutex);
-    if (!s.scaling || std::find(s.surfaces.begin(), s.surfaces.end(), info.surface) == s.surfaces.end()) {
+    if (std::find(s.surfaces.begin(), s.surfaces.end(), info.surface) == s.surfaces.end()) {
+        return false;
+    }
+    // Under the mutex, so an answer that arrives during this create sees it (update, onSwapchainCreated).
+    const std::optional<Extent> active = client_rect::answer();
+    if (!s.scaling || !active || *active != Extent{info.imageExtent.width, info.imageExtent.height}) {
+        s.unscaledCreates.push_back(info.surface);
         return false;
     }
     scaling = {VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_SCALING_CREATE_INFO_KHR};
@@ -457,8 +366,21 @@ bool addPresentScaling(VkSwapchainCreateInfoKHR& info, VkSwapchainPresentScaling
     return true;
 }
 
-void onSwapchainCreated(VkResult result, VkSwapchainKHR swapchain, bool scaled) {
+void onSwapchainCreated(VkResult result, VkSwapchainKHR swapchain, VkSurfaceKHR surface, bool scaled) {
     if (!scaled) {
+        if (!wanted()) {
+            return;
+        }
+        State& s = state();
+        std::lock_guard lock(s.mutex);
+        const auto creating = std::find(s.unscaledCreates.begin(), s.unscaledCreates.end(), surface);
+        if (creating != s.unscaledCreates.end()) {
+            s.unscaledCreates.erase(creating);
+        }
+        if (result == VK_SUCCESS &&
+            std::find(s.surfaces.begin(), s.surfaces.end(), surface) != s.surfaces.end()) {
+            s.unscaledSwapchains.push_back(swapchain);
+        }
         return;
     }
     State& s = state();
@@ -468,16 +390,22 @@ void onSwapchainCreated(VkResult result, VkSwapchainKHR swapchain, bool scaled) 
             s.failedScaledCreates = 0;
             s.scaledSwapchains.push_back(swapchain);
             g_cropAspect.store(s.cropScaling ? settings().crop : 0.0);
-            return;
-        }
-        // The game's first create on a new surface can fail once and succeed when the game retries it, with
-        // or without present scaling (rig run rs-r23), so only a second failure in a row turns the size off.
-        if (++s.failedScaledCreates < kScaledCreateAttempts) {
-            EVR_LOG("size: vkCreateSwapchainKHR with present scaling failed (%d); the game's retry keeps it",
+            if (!s.steps.onScaledSwapchain()) {
+                return;
+            }
+            placeAfterWait(s, true);
+        } else {
+            // The game's first create on a new surface can fail once and succeed when the game retries it,
+            // with or without present scaling (rig run rs-r23), so only a second failure in a row turns the
+            // size off.
+            if (++s.failedScaledCreates < kScaledCreateAttempts) {
+                EVR_LOG(
+                    "size: vkCreateSwapchainKHR with present scaling failed (%d); the game's retry keeps it",
                     result);
-            return;
+                return;
+            }
+            turnOff(s, "vkCreateSwapchainKHR with present scaling failed twice");
         }
-        turnOff(s, "vkCreateSwapchainKHR with present scaling failed twice");
     }
     placePending(s);
 }
@@ -490,6 +418,9 @@ void onSwapchainDestroyed(VkSwapchainKHR swapchain) {
     std::lock_guard lock(s.mutex);
     s.scaledSwapchains.erase(std::remove(s.scaledSwapchains.begin(), s.scaledSwapchains.end(), swapchain),
                              s.scaledSwapchains.end());
+    s.unscaledSwapchains.erase(
+        std::remove(s.unscaledSwapchains.begin(), s.unscaledSwapchains.end(), swapchain),
+        s.unscaledSwapchains.end());
 }
 
 namespace {
@@ -545,6 +476,16 @@ void scaledResults(const VkPresentInfoKHR& info, VkResult& result) {
 }
 
 void poll() {
+    if (g_moveWaits.load(std::memory_order_relaxed)) {
+        State& s = state();
+        {
+            std::lock_guard lock(s.mutex);
+            if (s.steps.overdue(nowSeconds())) {
+                placeAfterWait(s, false);
+            }
+        }
+        placePending(s);
+    }
     if (!client_rect::answer() || mp_guard::allowsGameTouch()) {
         return;
     }
@@ -554,6 +495,18 @@ void poll() {
         turnOff(s, "the multiplayer guard no longer allows touching the game");
     }
     placePending(s);
+}
+
+void askClientArea(HWND window, const char* why) {
+    if (!mp_guard::allowsGameTouch()) {
+        return;
+    }
+    if (!window) {
+        State& s = state();
+        std::lock_guard lock(s.mutex);
+        window = s.window;
+    }
+    placeWindow(window, std::nullopt, why);
 }
 
 std::optional<Extent> activeExtent() {

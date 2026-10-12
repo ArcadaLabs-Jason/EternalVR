@@ -350,6 +350,7 @@ evr_add_test(evr_render_size_tests
         features/render_size/mirror_window_tests.cpp
         features/render_size/render_cap_tests.cpp
         features/render_size/render_size_tests.cpp
+        features/render_size/window_steps_tests.cpp
     DEPENDS evr_render_size)
 
 evr_add_test(evr_dlss_dll_tests

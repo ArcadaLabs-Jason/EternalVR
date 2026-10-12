@@ -42,6 +42,11 @@ std::uint32_t g_kept = 0;      // presents in a row that kept the last pair
 std::uint64_t g_newPairs = 0;  // presents that had a new pair (ETERNALVR_TEST_PE_DROP)
 LogCap g_familyMoves{8};
 std::uint64_t g_skippedMoves = 0;
+snapshot_ring::RingResize g_resize; // which ring waits to be remade
+std::array<bool, 2> g_waitLogged{}; // each eye's wait to be remade logged (once a wait)
+LogCap g_waitLogs{8};               // ... and at most these, then one a minute
+std::uint64_t g_skippedWaits = 0;
+std::array<VkExtent2D, 2> g_sizesLogged{}; // the eyes' sizes when pairs were last left out for them
 
 std::size_t slots() {
     return parallelEyesSettings().pairSlots;
@@ -57,26 +62,17 @@ std::uint64_t completed(DeviceData& dev, VkSemaphore semaphore) {
 
 // No copy writes a pair's images or reads them any more: the rings may be remade.
 bool idle(DeviceData& dev) {
-    const std::array<std::uint64_t, 2> done{completed(dev, g_rings[0].semaphore),
-                                            completed(dev, g_rings[1].semaphore)};
-    const std::uint64_t read = completed(dev, shared().presenterTimeline);
-    for (const PairSlot& s : g_pairs) {
-        for (std::size_t e = 0; e < 2; ++e) {
-            if ((s.seq[e] != 0 && (!s.submitted[e] || s.seq[e] > done[e])) || s.prior[e] > done[e]) {
-                return false;
-            }
-        }
-        if (s.readValue == kPairReading || s.readValue > read || s.priorRead > read) {
-            return false;
-        }
-    }
-    return true;
+    return snapshot_ring::pairsIdle(
+        g_pairs, {completed(dev, g_rings[0].semaphore), completed(dev, g_rings[1].semaphore)},
+        completed(dev, shared().presenterTimeline));
 }
 
 // Eye `eye`'s ring for copies of `format` and `extent` on queue family `family`: made (or remade once no
-// copy uses it, which starts the pairs again); false while it cannot be. Its command buffers are one queue
-// family's: when the game's submits move to another (a menu on one, a level on another), they are made
-// again for it once no copy is pending (its images serve every family).
+// copy uses either ring, which starts the pairs again); false while it cannot be. Its command buffers are one
+// queue family's: when the game's submits move to another (a menu on one, a level on another), they are made
+// again for it the same way (its images serve every family). While one ring waits to be remade neither eye
+// copies (snapshot_ring::RingResize), so the other eye's copies cannot keep the rings busy; an eye remade
+// just before the other began to wait may already have copied once into its new ring (a copy no pair uses).
 bool ensure(DeviceData& dev, int eye, std::uint32_t family, VkFormat format, VkExtent2D extent) {
     const auto e = static_cast<std::size_t>(eye);
     Ring& ring = g_rings[e];
@@ -88,11 +84,40 @@ bool ensure(DeviceData& dev, int eye, std::uint32_t family, VkFormat format, VkE
         ++c[eye == 0 ? Count::OtherFamily0 : Count::OtherFamily];
         return false;
     }
-    if (ring.pool && ring.family != family) {
-        if (!idle(dev)) {
+    const bool moves = ring.pool && ring.family != family;
+    const bool reshape = ring.count != slots() || ring.format != format ||
+                         ring.extent.width != extent.width || ring.extent.height != extent.height;
+    // A first ring (no images yet) waits for nothing; a remade one for every copy and read of both rings.
+    const bool waits = moves || (reshape && ring.count != 0);
+    const snapshot_ring::RingStep step = g_resize.step(eye, moves || reshape, !waits || idle(dev));
+    if (!moves && !reshape) {
+        g_waitLogged[e] = false; // its own ring is as needed: a later wait of its own is logged again
+    }
+    if (step == snapshot_ring::RingStep::Wait && !moves && !reshape) {
+        ++c[eye == 0 ? Count::Busy0 : Count::Busy]; // the other eye's ring waits to be remade
+        return false;
+    }
+    if (step == snapshot_ring::RingStep::Wait) {
+        // Its own waits count as `another queue family` when its copies move, `no slot free` otherwise; the
+        // other eye's frames meanwhile count as `no slot free` (above).
+        if (moves) {
             ++c[eye == 0 ? Count::OtherFamily0 : Count::OtherFamily]; // until its copies are done
-            return false;
+        } else {
+            ++c[eye == 0 ? Count::Busy0 : Count::Busy];
         }
+        // From here on neither eye copies; an eye remade just before (usually eye 0 on a size change) may
+        // already have copied once into its new ring, a copy no pair uses.
+        if (!g_waitLogged[e] && g_waitLogs.due(GetTickCount64(), g_skippedWaits)) {
+            g_waitLogged[e] = true;
+            EVR_LOG("%s: pairs: eye %d's copies wait to be remade (%ux%u format %d, queue family %u -> %ux%u "
+                    "format %d, family %u): neither eye copies until no copy uses the copies",
+                    kTag, eye, ring.extent.width, ring.extent.height, ring.format, ring.family, extent.width,
+                    extent.height, format, family);
+        }
+        return false;
+    }
+    g_waitLogged[e] = false;
+    if (moves) {
         if (g_familyMoves.due(GetTickCount64(), g_skippedMoves)) {
             EVR_LOG("%s: pairs: eye %d's copies move from queue family %u to %u", kTag, eye, ring.family,
                     family);
@@ -105,13 +130,8 @@ bool ensure(DeviceData& dev, int eye, std::uint32_t family, VkFormat format, VkE
         EVR_LOG("%s: %s for eye %d's copies; the eyes are the presented image and view 1's", kTag, why, eye);
         return false;
     }
-    if (ring.count == slots() && ring.format == format && ring.extent.width == extent.width &&
-        ring.extent.height == extent.height) {
+    if (!reshape) {
         return true;
-    }
-    if (ring.count != 0 && !idle(dev)) {
-        ++c[eye == 0 ? Count::Busy0 : Count::Busy];
-        return false;
     }
     if (ring.count != 0) {
         g_pairs = {}; // remade (no copy uses either ring): the other ring's copies pair with nothing now
@@ -318,10 +338,33 @@ void pairsSubmitted(const Append& append, bool ok) {
     }
 }
 
+// Both eyes' copies are of one size (snapshot_ring::pairSizesMatch). On every size change one eye's copies
+// are remade before the other's (usually eye 0's, checked first; eye 1's a frame or a few later, longer if
+// view 1's image is remade later than the swapchain): for those frames the two differ in size and no pair is
+// shown (logged once a size).
+bool sameSizes() {
+    const VkExtent2D a = g_rings[0].extent;
+    const VkExtent2D b = g_rings[1].extent;
+    if (snapshot_ring::pairSizesMatch(g_rings[0].count, {a.width, a.height}, g_rings[1].count,
+                                      {b.width, b.height})) {
+        return true;
+    }
+    VkExtent2D& la = g_sizesLogged[0];
+    VkExtent2D& lb = g_sizesLogged[1];
+    if (la.width != a.width || la.height != a.height || lb.width != b.width || lb.height != b.height) {
+        la = a;
+        lb = b;
+        EVR_LOG("%s: pairs: eye 0's copies %ux%u, eye 1's %ux%u: no new pair until both are one size", kTag,
+                a.width, a.height, b.width, b.height);
+    }
+    return false;
+}
+
 std::optional<Pick> pairForPresent(VkImage presented, TraceEntry& trace) {
     Shared& sh = shared();
-    const snapshot_ring::PairPick p =
-        snapshot_ring::pickPair(g_pairs, slots(), g_lastShown, viewSlotsView1Rendered(), g_kept, kKeepLimit);
+    // Copies of two sizes: no new pair; the headset keeps the last one for a while, as with no new pair.
+    const snapshot_ring::PairPick p = snapshot_ring::pickPair(
+        g_pairs, slots(), g_lastShown, viewSlotsView1Rendered(), g_kept, kKeepLimit, sameSizes());
     Pick pick;
     pick.paired = true; // read() and notRead() tell the pairs' picks from the guess's by it
     pick.slot = kPairSlots;
@@ -432,6 +475,9 @@ void destroyPairs(DeviceData& dev) {
     g_lastShown = 0;
     g_kept = 0;
     g_newPairs = 0;
+    g_resize.reset();
+    g_waitLogged = {};
+    g_sizesLogged = {};
 }
 
 } // namespace evr::vkcore::view_snapshot
