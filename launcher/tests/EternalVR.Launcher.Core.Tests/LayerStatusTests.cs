@@ -55,16 +55,11 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void StartingThatNeverEndsIsNotShownAsStartingForever()
+        public void StartingIsStartingAtAnyTimeTheWatchdogTellsTheLongOnes()
         {
-            var early = LayerWatch.Decide(true, File("state=starting"), LayerWatch.StartTimeoutSeconds - 1);
-            Assert.Equal(new SessionStatus(StatusKind.Info, LayerWatch.StartingMessage), early);
+            // How long a start takes, and where it stalls, is StartupWatchdog's (StartupWatchdogTests).
             foreach (var status in new[] { File("state=starting"), null })
-            {
-                var late = LayerWatch.Decide(true, status, LayerWatch.StartTimeoutSeconds);
-                Assert.Equal(new SessionStatus(StatusKind.Warning, LayerWatch.NotStartedMessage), late);
-                Assert.False(LayerWatch.NeedsDialog(late));
-            }
+                Assert.Equal(new SessionStatus(StatusKind.Info, LayerWatch.StartingMessage), LayerWatch.Decide(true, status, 600));
             // VR coming up late replaces it.
             Assert.Equal(StatusKind.Good, LayerWatch.Decide(true, File("state=vr\nstereo=on"), 600).Kind);
         }

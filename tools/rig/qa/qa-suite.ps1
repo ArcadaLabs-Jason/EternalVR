@@ -56,6 +56,7 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-wheel.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-controls.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-guard.ps1')
 
 if (-not $LayerSrc) { $LayerSrc = Join-Path $script:QaRepo 'build\windows-msvc\src\vkcore' }
 if (-not $Out) { $Out = "E:\Code\resources\Testing\QA-$((Get-Date).ToString('yyyyMMdd-HHmm'))" }
@@ -69,13 +70,16 @@ $names = @($script:QaScenarios | ForEach-Object { $_.Name })
 foreach ($n in $Only) { if ($names -notcontains $n) { throw "unknown scenario '$n' (scenarios: $($names -join ', '))" } }
 $selected = @($script:QaScenarios | Where-Object { $Only.Count -eq 0 -or $Only -contains $_.Name })
 
-$needsGame = @($selected | Where-Object { $_.Kind -eq 'game' }).Count -gt 0
+# The stand-in scenario loads the layer build too, without the game.
+$needsGame = @($selected | Where-Object { $_.Kind -eq 'game' -or $_.Kind -eq 'standin' }).Count -gt 0
 if ($needsGame) {
     foreach ($f in 'EternalVR.dll', 'VK_LAYER_ETERNALVR.json', 'openxr_loader.dll') {
         if (-not (Test-Path -LiteralPath (Join-Path $LayerSrc $f))) { throw "no $f in $LayerSrc (-LayerSrc)" }
     }
     $LayerSrc = (Resolve-Path -LiteralPath $LayerSrc).Path
-    if (-not (Test-Path -LiteralPath $script:QaSimJson)) { throw "no simulator runtime manifest at $script:QaSimJson" }
+    # The stand-in needs no headset runtime.
+    $needsSim = @($selected | Where-Object { $_.Kind -eq 'game' }).Count -gt 0
+    if ($needsSim -and -not (Test-Path -LiteralPath $script:QaSimJson)) { throw "no simulator runtime manifest at $script:QaSimJson" }
     if ($DlssDll) {
         if (-not (Test-Path -LiteralPath $DlssDll)) { throw "no $DlssDll (-DlssDll)" }
         $DlssDll = (Resolve-Path -LiteralPath $DlssDll).Path
@@ -122,6 +126,11 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
         & $Scenario.Asserts $Ctx
         # Every scenario: a full hook pool turns a feature off with only this line to show for it.
         Test-QaAbsent $Ctx 'no free (inline )?hook slot' -Regex
+        # Every scenario: the multiplayer guard armed, the map loaded as single-player, and (but for the
+        # scenario that trips it on purpose) never tripped or refused in the campaign (REQ-16).
+        Test-QaPresent $Ctx 'mp guard: armed'
+        Test-QaPresent $Ctx "mp guard: map load '[^']+' \(single-player\)" -Regex
+        if (-not $Scenario.GuardTrips) { Test-QaAbsent $Ctx 'mp guard: (TRIPPED|REFUSED)' -Regex -CaseSensitive }
     } else {
         Add-QaResult $Ctx 'layer log found' $false "no eternalvr-2*.log in $($Ctx.LogsDir) or the run folder"
     }
@@ -203,7 +212,9 @@ $records = New-Object System.Collections.ArrayList
 $exitCode = 0
 for ($i = 0; $i -lt $selected.Count; ++$i) {
     $sc = $selected[$i]
-    if ($sc.Kind -eq 'game') {
+    # The stand-in is a process named DOOMEternalx64vk.exe: it waits like a game run (and, run from the rig's package QA,
+    # under C:\Code\RIG-LOCK), so no other rig user sees a game process during it.
+    if ($sc.Kind -eq 'game' -or $sc.Kind -eq 'standin') {
         try { Assert-QaCanStart } catch {
             Write-QaLine "suite ends before '$($sc.Name)': $($_.Exception.Message)"
             $exitCode = 2
@@ -217,7 +228,9 @@ for ($i = 0; $i -lt $selected.Count; ++$i) {
     Write-QaLine "scenario $($sc.Name)"
     $ctx = New-QaContext $sc $Out
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    if ($sc.Kind -eq 'game') { Invoke-QaGameScenario $sc $ctx } else { Invoke-QaE2eScenario $ctx }
+    if ($sc.Kind -eq 'game') { Invoke-QaGameScenario $sc $ctx }
+    elseif ($sc.Kind -eq 'standin') { Invoke-QaStandInScenario $sc $ctx $LayerSrc }
+    else { Invoke-QaE2eScenario $ctx }
     $pass = -not $ctx.Skipped -and $ctx.Results.Count -gt 0 -and @($ctx.Results | Where-Object { -not $_.Ok }).Count -eq 0
     [void]$records.Add([pscustomobject]@{ Ctx = $ctx; Pass = $pass; Skipped = $ctx.Skipped; Seconds = $watch.Elapsed.TotalSeconds; Proves = $sc.Proves })
     Write-QaLine ("scenario {0}: {1} in {2:N0} s" -f $sc.Name, $(if ($ctx.Skipped) { 'SKIP' } elseif ($pass) { 'PASS' } else { 'FAIL' }), $watch.Elapsed.TotalSeconds)

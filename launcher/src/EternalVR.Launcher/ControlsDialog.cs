@@ -138,10 +138,19 @@ namespace EternalVR.Launcher
                 + "for the Weapon hand chosen on the Play tab.");
 
             var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-            var groups = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
+            // Not docked: a docked panel is never wider than the scrolling one, so a window narrower than the grid cut off its
+            // right columns with no scroll bar. As wide as the grid or the scrolling panel, whichever is wider.
+            var groups = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, Location = Point.Empty };
+            groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             groups.Controls.Add(ButtonsGroup());
             groups.Controls.Add(SticksGroup());
             scroll.Controls.Add(groups);
+            // Set on the panel's layout, after a scale change has scaled both: a width set earlier is scaled again with the
+            // grid and left it wider than the panel (a sideways scroll bar with nothing to scroll).
+            scroll.Layout += (s, e) =>
+            {
+                if (groups.MinimumSize.Width != scroll.ClientSize.Width) groups.MinimumSize = new Size(scroll.ClientSize.Width, 0);
+            };
 
             var left = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
             left.Controls.AddRange(new Control[] { openFolder, reset });
@@ -157,13 +166,12 @@ namespace EternalVR.Launcher
                 + "until you press Save.");
             tips.SetToolTip(save, "Saves these controls to your controls folder. The game reads them the next time it starts.");
 
-            root.Controls.Add(pickers);
-            root.Controls.Add(fileState);
-            root.Controls.Add(restNote);
-            root.Controls.Add(scroll);
-            root.Controls.Add(problems);
-            root.Controls.Add(notUsed);
-            root.Controls.Add(bottom);
+            // Each in a row of its own: a table gives the controls added without a cell the next cells in turn, skipping the
+            // hidden ones, so a hidden note above the list would move the list onto an auto-sized row (a strip of it shown)
+            // and the buttons onto the stretching one (the window's lower part left empty).
+            var rows = new Control[] { pickers, fileState, restNote, scroll, problems, notUsed, bottom };
+            root.RowCount = rows.Length;
+            for (int i = 0; i < rows.Length; i++) root.Controls.Add(rows[i], 0, i);
             Controls.Add(root);
             CancelButton = close;
         }
@@ -257,6 +265,9 @@ namespace EternalVR.Launcher
         {
             var box = new GroupBox { Text = title, Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(6, 4, 6, 4) };
             box.Controls.Add(content);
+            // A box's own size leaves out the width of what is docked in it: kept as wide as its grid, so that the list scrolls
+            // sideways in a narrow window instead of cutting off the grid's right columns.
+            box.Layout += (s, e) => box.MinimumSize = new Size(content.GetPreferredSize(Size.Empty).Width + box.Width - box.DisplayRectangle.Width, 0);
             return box;
         }
 

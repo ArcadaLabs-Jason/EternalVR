@@ -2,6 +2,7 @@
 
 #include "vkcore/offhand_mods.hpp"
 
+#include "features/arm/mod_mix.hpp"
 #include "features/arm/mod_room.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/log.hpp"
@@ -12,7 +13,6 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
-#include <string_view>
 
 namespace evr::vkcore::controllers::offhand_mods {
 
@@ -76,36 +76,41 @@ constexpr Expect kSetNumExpected[] = {
     {0x1AF, "48 83 C3 18"},   // the next list
 };
 
+// The node's weight (offhand_mods.hpp): InitJointMods loads it into the create's parameters and hands the
+// create idHands+0x2878, whose +0x10 is the owner (idHands+0x2888); the create copies the weight to the
+// owner's current and target weight, GetWeight returns the current one.
+constexpr std::size_t kOwnerWeight = 0x3C;
+constexpr std::size_t kOwnerTargetWeight = 0x40;
+constexpr std::size_t kInitCreateCall = 0x10A;
+constexpr Expect kWeightInitExpected[] = {
+    {0xB0, "F3 0F 10 05"},           // movss xmm0, [the constant]
+    {0xBA, "F3 0F 11 44 24 4C"},     // movss [rsp+0x4C], xmm0: the parameters' +0x2C
+    {0x103, "48 8D 8B 78 28 00 00"}, // lea rcx, [rbx+0x2878]: the create's object
+};
+constexpr Expect kWeightCreateExpected[] = {
+    {0xF, "48 8B D9"},                             // mov rbx, rcx
+    {0x5F, "48 8B 4B 10"},                         // mov rcx, [rbx+0x10]: the owner
+    {0x76, "8B 47 2C 89 41 3C 8B 47 2C 89 41 40"}, // the weight to the owner's +0x3C and +0x40
+};
+constexpr std::ptrdiff_t kGetWeightFromCreate = -0x20;
+constexpr const char* kGetWeightBytes = "48 8B 41 10 F3 0F 10 40 3C C3";
+bool g_weightChecked = false;                 // install, then read-only
+const std::byte* g_weightRefusedOn = nullptr; // the hands a refused weight was last logged for
+bool g_weightUsedLogged = false;
+
 using SetNumFn = void(__fastcall*)(void* node, std::int32_t num);
 SetNumFn g_setNum = nullptr;
 std::int32_t g_room = 0; // the modifiers made room for: six per arm (install, then read-only)
+bool g_wrist = false;    // the off hand has the wrist's change too (install, then read-only)
 std::atomic<std::uint32_t> g_roomLines{0};
-
-// `hex` at `at`; "??" matches any byte.
-bool bytesMatch(const std::byte* at, std::string_view hex) {
-    std::size_t i = 0;
-    for (std::size_t p = 0; p + 1 < hex.size(); p += 3, ++i) {
-        if (hex[p] == '?') {
-            continue;
-        }
-        const auto nibble = [](char c) {
-            return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
-        };
-        if (static_cast<std::uint8_t>(at[i]) !=
-            static_cast<std::uint8_t>(nibble(hex[p]) * 16 + nibble(hex[p + 1]))) {
-            return false;
-        }
-    }
-    return true;
-}
 
 // The weapon arm's attach joint: the joint InitJointMods stores at idHands+0x28E6 is the one named
 // "righthandattach" (offhand_mods.hpp). False (logged) leaves the weapon arm the game's.
 bool rightAttachChecks(const GameImage& image, const std::byte* init) {
     const std::byte* lookup = init + kRightNameLookup;
-    bool ok = bytesMatch(lookup, kRightNameLookupBytes);
+    bool ok = matchesAt(image, lookup, kRightNameLookupBytes);
     for (const Expect& e : kRightAttachExpected) {
-        ok = ok && bytesMatch(init + e.at, e.bytes);
+        ok = ok && matchesAt(image, init + e.at, e.bytes);
     }
     const std::byte* nameSlot = ok ? ripTarget(image, lookup + 18, lookup + 22) : nullptr;
     const std::byte* name = nullptr;
@@ -162,7 +167,7 @@ bool roomLineDue() {
     return g_roomLines.fetch_add(1, std::memory_order_relaxed) < 64;
 }
 
-// InitJointMods, right after its third AddJointMod: room for the layer's six in the new lists.
+// InitJointMods, right after its third AddJointMod: room for the layer's modifiers in the new lists.
 void onJointModsBuilt(const HookRegisters& regs) {
     if (!mp_guard::allowsGameTouch() || g_setNumFaulted.load(std::memory_order_relaxed)) {
         return;
@@ -216,6 +221,29 @@ void onJointModsBuilt(const HookRegisters& regs) {
     }
 }
 
+// Where the node's weight comes from (offhand_mods.hpp); false (logged) leaves the layer writing as before.
+bool weightChecks(const GameImage& image, const std::byte* init) {
+    bool ok = true;
+    for (const Expect& e : kWeightInitExpected) {
+        ok = ok && matchesAt(image, init + e.at, e.bytes);
+    }
+    const std::byte* create = ok ? callTarget(image, init + kInitCreateCall) : nullptr;
+    ok = create && matchesAt(image, create + kGetWeightFromCreate, kGetWeightBytes);
+    for (const Expect& e : kWeightCreateExpected) {
+        ok = ok && matchesAt(image, create + e.at, e.bytes);
+    }
+    if (ok) {
+        EVR_LOG("%s: arm: the hands' modifier weight is the owner's +0x%zX (InitJointMods +0x%zX, the node's "
+                "create at RVA 0x%X)",
+                kTag, kOwnerWeight, kWeightInitExpected[0].at, image.rva(create));
+    } else {
+        EVR_LOG("%s: arm: where the hands' modifier weight comes from is not as expected; the arms are "
+                "written without allowing for it",
+                kTag);
+    }
+    return ok;
+}
+
 } // namespace
 
 ArmSet install(const GameImage& image, ArmSet wanted) {
@@ -229,13 +257,13 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
         return {};
     }
     for (const Expect& e : kInitExpected) {
-        if (!bytesMatch(init + e.at, e.bytes)) {
+        if (!matchesAt(image, init + e.at, e.bytes)) {
             EVR_LOG("%s: arm: InitJointMods differs at +0x%zX; %s", kTag, e.at, stays);
             return {};
         }
     }
     for (const Expect& e : kSetNumExpected) {
-        if (!bytesMatch(setNum + e.at, e.bytes)) {
+        if (!matchesAt(image, setNum + e.at, e.bytes)) {
             EVR_LOG("%s: arm: SetNum differs at +0x%zX; %s", kTag, e.at, stays);
             return {};
         }
@@ -243,7 +271,7 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     const std::byte* add = callTarget(image, init + kAddJointModCalls[0]);
     bool calls = add && callTarget(image, init + kInitSetNumCall) == setNum &&
                  image.inText(add, kAddSetNumCall + 5) &&
-                 bytesMatch(add + kAddSetNumBytesAt, kAddSetNumBytes) &&
+                 matchesAt(image, add + kAddSetNumBytesAt, kAddSetNumBytes) &&
                  callTarget(image, add + kAddSetNumCall) == setNum;
     for (const std::size_t at : kAddJointModCalls) {
         calls = calls && callTarget(image, init + at) == add;
@@ -259,7 +287,11 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     if (arms == 0) {
         return {};
     }
-    g_room = arm::modsForArms(arms);
+    // The wrist's change and the weight only for the bind solve, which writes past its targets: the default
+    // leaves the lists and the log as they were.
+    g_wrist = ready.offHand && settings().armSolve == input::ArmSolve::Bind;
+    g_room = arm::modsForArms(arms) + (g_wrist ? 1 : 0);
+    g_weightChecked = settings().armSolve == input::ArmSolve::Bind && weightChecks(image, init);
     g_setNum = reinterpret_cast<SetNumFn>(const_cast<std::byte*>(setNum));
     std::string error;
     std::byte* site = const_cast<std::byte*>(init + kHookSite);
@@ -268,12 +300,21 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
         return {};
     }
     EVR_LOG("%s: arm: InitJointMods at RVA 0x%X (AddJointMod 0x%X, SetNum 0x%X), hooked at RVA 0x%X to make "
-            "room for the layer's joint modifiers (%d: %s)",
+            "room for the layer's joint modifiers (%d: %s%s)",
             kTag, image.rva(init), image.rva(add), image.rva(setNum), image.rva(site), g_room,
             ready.offHand && ready.weapon ? "the off hand and the weapon arm"
             : ready.weapon                ? "the weapon arm"
-                                          : "the off hand");
+                                          : "the off hand",
+            g_wrist ? ", the off hand's wrist too" : "");
     return ready;
+}
+
+std::int32_t layerCount(arm::ArmSide side) {
+    return arm::layerModCount(side == arm::ArmSide::Left && g_wrist);
+}
+
+arm::ArmJoint layerJoint(arm::ArmSide side, std::int32_t k) {
+    return arm::layerModJoint(side == arm::ArmSide::Left && g_wrist, k);
 }
 
 const std::byte* modNode(const std::byte* hands) {
@@ -286,18 +327,50 @@ const std::byte* modNode(const std::byte* hands) {
     return node;
 }
 
-bool layerModsInPlace(const std::byte* node, std::int32_t base, const arm::ArmJointIndices& joints) {
+std::optional<float> modWeight(const std::byte* hands) {
+    const std::byte* owner = nullptr;
+    float weight = -1.0f;
+    float target = -1.0f;
+    if (!g_weightChecked || !hands || !safeRead(hands + kHandsJointMods, owner) || !owner ||
+        !safeRead(owner + kOwnerWeight, weight) || !safeRead(owner + kOwnerTargetWeight, target)) {
+        return std::nullopt;
+    }
+    if (!arm::usableModWeight(weight) || !arm::usableModWeight(target)) {
+        if (g_weightRefusedOn != hands) {
+            g_weightRefusedOn = hands;
+            EVR_LOG(
+                "%s: arm: the hands' modifier weight reads %.3f (target %.3f), outside (0.5, 1]; the arms "
+                "are written without allowing for it while it is",
+                kTag, static_cast<double>(weight), static_cast<double>(target));
+        }
+        return std::nullopt;
+    }
+    if (!g_weightUsedLogged) {
+        g_weightUsedLogged = true;
+        EVR_LOG(
+            "%s: arm: the hands' modifier weight %.3f (target %.3f): the arms' joints are written past their "
+            "targets by it (ETERNALVR_ARM_SOLVE=bind)",
+            kTag, static_cast<double>(weight), static_cast<double>(target));
+    }
+    return weight;
+}
+
+bool layerModsInPlace(const std::byte* node,
+                      std::int32_t base,
+                      const arm::ArmJointIndices& joints,
+                      arm::ArmSide side) {
     if (!node || base < 0) {
         return false;
     }
+    const std::int32_t count = layerCount(side);
     for (std::size_t which = 0; which < 2; ++which) {
         ModList list;
-        if (!readList(node, which, list) || list.num < base + kLayerCount || list.num > list.size ||
+        if (!readList(node, which, list) || list.num < base + count || list.num > list.size ||
             list.size > arm::kMaxJointMods) {
             return false;
         }
-        for (std::int32_t k = 0; k < kLayerCount; ++k) {
-            if (jointAt(list, base + k) != joints[arm::index(kLayerJoints[static_cast<std::size_t>(k)])]) {
+        for (std::int32_t k = 0; k < count; ++k) {
+            if (jointAt(list, base + k) != joints[arm::index(layerJoint(side, k))]) {
                 return false;
             }
         }
@@ -314,18 +387,21 @@ addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndice
         return -1;
     }
     const std::int32_t base = lists[0].num;
-    if (!arm::roomFor(counts(lists[0]), counts(lists[1]), kLayerCount)) {
+    const std::int32_t count = layerCount(side);
+    if (!arm::roomFor(counts(lists[0]), counts(lists[1]), count)) {
         char message[160];
-        std::snprintf(message, sizeof(message),
-                      "no room for 6 more joint modifiers (%d in use, room for %d and %d; none was made when "
-                      "the game built the lists)",
-                      base, lists[0].size, lists[1].size);
+        std::snprintf(
+            message, sizeof(message),
+            "no room for %d more joint modifiers (%d in use, room for %d and %d; none was made when "
+            "the game built the lists)",
+            count, base, lists[0].size, lists[1].size);
         error = {Problem::NoRoom, message};
         return -1;
     }
     for (const ModList& list : lists) {
         for (std::int32_t m = 0; m < base; ++m) {
-            for (const arm::ArmJoint j : kLayerJoints) {
+            for (std::int32_t k = 0; k < count; ++k) {
+                const arm::ArmJoint j = layerJoint(side, k);
                 if (jointAt(list, m) == joints[arm::index(j)]) {
                     error = {Problem::Taken, std::string("the game already modifies ") +
                                                  arm::armJointNames(side)[arm::index(j)]};
@@ -335,11 +411,11 @@ addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndice
         }
     }
     for (ModList& list : lists) {
-        for (std::int32_t k = 0; k < kLayerCount; ++k) {
+        for (std::int32_t k = 0; k < count; ++k) {
             std::byte entry[kModSize] = {};
             const float identity[12] = {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
                                         0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
-            const std::int16_t joint = joints[arm::index(kLayerJoints[static_cast<std::size_t>(k)])];
+            const std::int16_t joint = joints[arm::index(layerJoint(side, k))];
             const std::int16_t noParent = -1;
             std::memcpy(entry, identity, sizeof(identity));
             std::memcpy(entry + kModJoint, &joint, sizeof(joint));
@@ -352,15 +428,15 @@ addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndice
         }
     }
     // The counts last, as SetNum does, so a reader never sees an entry before it is filled in.
-    const std::int32_t num = base + kLayerCount;
+    const std::int32_t num = base + count;
     auto* first = const_cast<std::byte*>(node + kNodeLists + kListNum);
     auto* second = const_cast<std::byte*>(node + kNodeLists + kListStride + kListNum);
     if (!safeCopy(first, &num, sizeof(num)) || !safeCopy(second, &num, sizeof(num))) {
         error = {Problem::List, "the joint modifier count could not be written"};
         return -1;
     }
-    EVR_LOG("%s: 6 joint modifiers added at %d..%d (the hands' list now holds %d, room for %d)",
-            side == arm::ArmSide::Right ? "weapon arm" : "offhand: arm", base, base + kLayerCount - 1, num,
+    EVR_LOG("%s: %d joint modifiers added at %d..%d (the hands' list now holds %d, room for %d)",
+            side == arm::ArmSide::Right ? "weapon arm" : "offhand: arm", count, base, base + count - 1, num,
             lists[0].size);
     return base;
 }

@@ -241,6 +241,11 @@ void logStop(XrPresenter::Impl& p, std::uint64_t presents, stereo_seq::StopScene
 
 } // namespace
 
+void firstGamePresent() {
+    EVR_LOG("presenter: first game present");
+    status::reached("first_present");
+}
+
 void checkGamePresents(XrPresenter::Impl& p) {
     const std::uint64_t presents = p.gamePresents.load(std::memory_order_relaxed);
     const double now = nowSeconds();

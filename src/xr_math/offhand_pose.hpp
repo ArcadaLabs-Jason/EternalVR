@@ -8,12 +8,15 @@
 // placement's forward / left / up axes. idHands::UpdateWeaponLagJointMods hands SetJointMod a translation
 // and a rotation matrix for the joint as changes to its animated pose [static-verified: the translation is
 // computed as the lagged position minus the animated one]: the position becomes animated + translation,
-// and the joint's axis (rows, id Tech's idMat3) becomes animated * rotation [static: the blend's
-// model-space pass 0x19E2A60 multiplies the modifier's quaternion on the left, and SetJointMod turns the
-// matrix into the quaternion of its transpose; it matches the lag's row-vector convention]. The blend
-// applies it after the joint's parent, so for a joint whose parent is also modified the change is on top
-// of the parent's result (the arm's other joints use whole-pose overrides instead, vkcore/game_arm.hpp).
-// So the modifier that reaches a target pose is
+// and the joint's axis (rows, id Tech's idMat3) becomes animated * rotation [static: the modifier's
+// quaternion is multiplied on the left in model space, and SetJointMod turns the matrix into the quaternion
+// of its transpose; it matches the lag's row-vector convention. The pass that applies the hands' modifiers is
+// 0x19E1040 (q_local' = conj(q_parent) q_mod q_parent q_local at 0x19E1615..0x19E1636, the same left
+// multiplication in model space) [static, Steam, one pass, round 4]; the earlier citation of 0x19E2A60 is
+// superseded: that pass skips them (it filters on flag 0x400)]. The blend applies it after the joint's
+// parent, so for a joint whose parent is also modified the change is on top of the parent's result (the arm's
+// other joints use whole-pose overrides instead, vkcore/game_arm.hpp). So the modifier that reaches a target
+// pose is
 //     translation = target.position - animated.position
 //     rotation    = transpose(animated.axis) * target.axis
 // All positions in game units, axes as rows (forward, left, up) like IdViewAxis.
@@ -53,9 +56,10 @@ struct JointMod {
 JointMod jointModToward(const ModelPose& animated, const ModelPose& target);
 
 // The pose a modifier gives a joint animated at `animated` (a joint whose parent is not modified): the
-// inverse of jointModToward, applyJointMod(a, jointModToward(a, t)) == t. The blend's model-space pass
-// multiplies the modifier's quaternion on the left of the joint's [static: 0x19E2A60], which with
-// SetJointMod's matrix-to-quaternion conversion (0x138CF10) is animated.axis * rotation in rows.
+// inverse of jointModToward, applyJointMod(a, jointModToward(a, t)) == t. The blend's modifier pass
+// multiplies the modifier's quaternion on the left of the joint's [static: 0x19E1040, Steam, one pass, round
+// 4; formerly cited as 0x19E2A60, superseded], which with SetJointMod's matrix-to-quaternion conversion
+// (0x138CF10) is animated.axis * rotation in rows.
 ModelPose applyJointMod(const ModelPose& animated, const JointMod& mod);
 
 // The game's modifier and ours mixed: `weight` 0 gives the game's, 1 ours; the translation is

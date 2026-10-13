@@ -9,7 +9,10 @@
 //   state=vr        the headset shows the game
 //   state=flat      VR is off for this session; reason says why
 //
-// Without ETERNALVR_LOG_DIR nothing is written. A state is written only when it or its reason changes.
+// Without ETERNALVR_LOG_DIR nothing is written. A state is written only when it or its reason changes. The
+// file is a temporary one moved over it; while the launcher reads it the move fails, so it is tried again a
+// few times, and a write still lost is made again within a second (flush(), from the game's presents and the
+// XR worker's loops).
 //
 // After those five keys, facts about the headset once XR is up, each written when it changes (readers skip
 // keys they do not know):
@@ -22,6 +25,13 @@
 //   render_capped=1                 ... 1 when `render` is below it on either side (no present scaling)
 //   refresh_hz=144.0                the base refresh rate (presenter_refresh.hpp)
 //   throttled_share=0.181           the share of time at 2x the base or more (with each refresh summary)
+//
+// The start's steps, each written once per process (a later presenter or ring keeps the first time), in
+// seconds on the log's clock (since the layer loaded); the launcher's start watch tells a slow start from one
+// that stalls by them (StartupWatchdog.cs):
+//
+//   first_present=10.1              the game's first present (its window shows a picture)
+//   first_headset_frame=14.3        the first game image the headset got
 //
 // And once the game stops presenting right after an out of date present (presenter_result.hpp):
 //
@@ -39,12 +49,21 @@
 // 0 otherwise. The launcher's settings restore keeps the r_SSR or r_SSDO the game saved only after 1, and
 // only when the game saved the value held (a config last saved before the follow, as after a crash, is put
 // back).
+//
+// And once per session in Route S or Parallel Eye Rendering (profile_hooks.hpp):
+//
+//   profile_repair=done             the one-time repair set view_skipShakes 1 to 0, a save wrote it
+//   profile_repair=not_needed       ... asked for, the profile did not hold 1
+//   profile_repair=off              ... not asked for
+//
+// The launcher sets its repair marker once it reads one of them.
 
 #include <string>
 
 namespace evr::vkcore::status {
 
-void starting();
+// `reason` null: the layer is loaded and waits for the game's graphics device.
+void starting(const char* reason = nullptr);
 void waiting(const char* reason);
 void vr(const char* what);
 void flat(const char* reason);
@@ -52,5 +71,24 @@ void flat(const char* reason);
 void stereo(bool on, const char* reason);
 // Sets `key` (one of the keys above) to `value`; the file is rewritten only when it changed.
 void field(const char* key, const std::string& value);
+// Sets `key` (a start step above) to the log's clock now, once: a later call keeps the first time.
+void reached(const char* key);
+// Writes the file again when its last save was lost: at most once a second, one move with no sleep, and
+// never waiting for the lock; only an atomic load otherwise (called on every present and XR frame).
+void flush();
+
+// Calls `move` up to `tries` times until it returns true, with `pause` between tries; true once it did.
+template <class Move, class Pause>
+bool retried(int tries, Move move, Pause pause) {
+    for (int i = 0; i < tries; ++i) {
+        if (i > 0) {
+            pause();
+        }
+        if (move()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 } // namespace evr::vkcore::status

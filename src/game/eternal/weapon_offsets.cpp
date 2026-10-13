@@ -13,6 +13,8 @@ namespace {
 
 constexpr float kMaxTranslation = 2.0f;
 constexpr float kMaxAngle = 180.0f;
+// A sight line further off the model's forward than this is a mistake in the table.
+constexpr float kMaxSightAngle = 45.0f;
 
 std::string_view trim(std::string_view s) {
     while (!s.empty() && (s.front() == ' ' || s.front() == '\t' || s.front() == '\r')) {
@@ -41,26 +43,31 @@ std::optional<float> parseNumber(std::string_view text) {
     return parseFloat(trim(text));
 }
 
-// Comma-separated numbers: exactly 3 or 6 of them.
-bool parseNumbers(std::string_view text, WeaponOffset& out) {
-    std::array<float, 6> v{};
+// Comma-separated finite numbers, at most six of them; their count, or 0 for anything else.
+std::size_t parseList(std::string_view text, std::array<float, 6>& v) {
     std::size_t count = 0;
     while (true) {
         const std::size_t comma = text.find(',');
         const std::string_view item = text.substr(0, comma);
         if (count == v.size()) {
-            return false;
+            return 0;
         }
         const auto number = parseNumber(item);
         if (!number) {
-            return false;
+            return 0;
         }
         v[count++] = *number;
         if (comma == std::string_view::npos) {
-            break;
+            return count;
         }
         text.remove_prefix(comma + 1);
     }
+}
+
+// An offset: exactly 3 or 6 numbers.
+bool parseNumbers(std::string_view text, WeaponOffset& out) {
+    std::array<float, 6> v{};
+    const std::size_t count = parseList(text, v);
     if (count != 3 && count != 6) {
         return false;
     }
@@ -78,24 +85,35 @@ bool parseNumbers(std::string_view text, WeaponOffset& out) {
     return true;
 }
 
-using OffsetMap = std::map<std::string, WeaponOffset, std::less<>>;
+// A sight line: exactly 2 angles.
+bool parseSight(std::string_view text, WeaponSight& out) {
+    std::array<float, 6> v{};
+    if (parseList(text, v) != 2 || std::fabs(v[0]) > kMaxSightAngle || std::fabs(v[1]) > kMaxSightAngle) {
+        return false;
+    }
+    out = {v[0], v[1]};
+    return true;
+}
 
 // The entry for `name` itself or for the longest key it starts with followed by '_'; never "default".
-const WeaponOffset* specific(const OffsetMap& entries, std::string_view name) {
+template <typename Entry>
+const Entry* specific(const std::map<std::string, Entry, std::less<>>& entries, std::string_view name) {
     if (const auto it = entries.find(name); it != entries.end()) {
         return &it->second;
     }
-    const WeaponOffset* best = nullptr;
+    const Entry* best = nullptr;
     std::size_t bestLength = 0;
-    for (const auto& [key, offset] : entries) {
+    for (const auto& [key, entry] : entries) {
         if (key.size() < name.size() && name.starts_with(key) && name[key.size()] == '_' &&
             key.size() > bestLength) {
-            best = &offset;
+            best = &entry;
             bestLength = key.size();
         }
     }
     return best;
 }
+
+using OffsetMap = std::map<std::string, WeaponOffset, std::less<>>;
 
 const WeaponOffset* fallback(const OffsetMap& entries) {
     const auto it = entries.find("default");
@@ -121,12 +139,18 @@ WeaponOffset WeaponOffsetTable::lookup(std::string_view declName, OffsetPosture 
     return match ? *match : WeaponOffset{};
 }
 
+std::optional<WeaponSight> WeaponOffsetTable::lookupSight(std::string_view declName) const {
+    const WeaponSight* match = specific(sights, declName);
+    return match ? std::optional<WeaponSight>(*match) : std::nullopt;
+}
+
 WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     WeaponOffsetTable table;
     if (text.starts_with("\xEF\xBB\xBF")) {
         text.remove_prefix(3);
     }
-    auto* section = &table.standing;
+    OffsetMap* section = &table.standing;
+    bool inSights = false;
     int lineNumber = 0;
     while (!text.empty()) {
         const std::size_t newline = text.find('\n');
@@ -141,17 +165,21 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
             table.issues.push_back("line " + std::to_string(lineNumber) + ": " + what);
         };
         if (line.front() == '[') {
+            inSights = false;
             if (line == "[standing]") {
                 section = &table.standing;
             } else if (line == "[seated]") {
                 section = &table.seated;
+            } else if (line == "[sights]") {
+                section = nullptr;
+                inSights = true;
             } else {
-                issue("unknown section (expected [standing] or [seated])");
+                issue("unknown section (expected [standing], [seated] or [sights])");
                 section = nullptr;
             }
             continue;
         }
-        if (!section) {
+        if (!section && !inSights) {
             continue; // entries of an unknown section were reported with its header
         }
         const std::size_t equals = line.find('=');
@@ -168,6 +196,20 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
         key = key.substr(1, key.size() - 2);
         if (key.empty()) {
             issue("empty name");
+            continue;
+        }
+        if (inSights) {
+            WeaponSight sight;
+            if (key == "default") {
+                issue("[sights] has no \"default\": a weapon without a row is not turned");
+            } else if (value.size() < 2 || value.front() != '[' || value.back() != ']' ||
+                       !parseSight(value.substr(1, value.size() - 2), sight)) {
+                issue("expected [pitch, yaw]: two finite angles within 45 degrees");
+            } else if (table.sights.contains(key)) {
+                issue("duplicate name; the first one is kept");
+            } else {
+                table.sights.emplace(std::string(key), sight);
+            }
             continue;
         }
         if (value.size() < 2 || value.front() != '[' || value.back() != ']') {

@@ -1,11 +1,15 @@
 evr_add_module(evr_arm
     SOURCES
+        arm_dump_line.cpp
         arm_frames.cpp
         arm_skeleton.cpp
         arm_solve.cpp
         arm_surfaces.cpp
+        arm_twist.cpp
         hand_offset.cpp
+        mod_mix.cpp
         mod_room.cpp
+        twist_fault.cpp
         two_bone_ik.cpp
     DEPENDS
         evr_common

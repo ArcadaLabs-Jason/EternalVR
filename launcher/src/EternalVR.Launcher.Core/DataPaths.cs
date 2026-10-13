@@ -39,6 +39,8 @@ namespace EternalVR.Launcher.Core
         public string SessionMarker => Path.Combine(Root, "SESSION_PENDING");
         /// <summary>Present while an HKCU layer registration may exist (flag-gated route only).</summary>
         public string RegistrationMarker => Path.Combine(Root, "REGISTRATION_PENDING");
+        /// <summary>Present once the one-time camera shake repair is settled (<see cref="Safety.ProfileRepair"/>).</summary>
+        public string ProfileRepairMarker => Path.Combine(Root, "profile-repair.txt");
         public string LauncherLog => Path.Combine(Logs, "launcher.log");
 
         public string SessionLogDir(string sessionId) => Path.Combine(Logs, sessionId);

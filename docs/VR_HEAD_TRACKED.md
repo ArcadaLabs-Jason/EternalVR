@@ -212,6 +212,8 @@ yet).
 | `ETERNALVR_GLORY_KILLS` | follow | how glory kills are shown: `follow`, `steady`, `fade` or `screen` (Glory kills, above) |
 | `ETERNALVR_TEST_GLORY` | unset | `start,duration` (seconds on the `ETERNALVR_DEBUG_COMMANDS` clock): a glory kill is taken to run then, whatever the game does, to check each option on the rig without a staggered demon |
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
+| `ETERNALVR_ADAPTER_STEER` | 0 | `1` (or `on`): on a PC with two or more GPUs the game is steered to the headset's GPU where the order of its Vulkan devices decides (ARCHITECTURE section 6, Adapter match); experimental, not yet tried with a headset on a two-GPU PC; the runtime is asked at most once, at the game's first device enumeration, and not when exactly one discrete GPU is listed |
+| `ETERNALVR_TEST_STEER` | unset | rig tests: `mismatch` steers the game to a device without the headset's LUID (the positive control for the LUID refusal); `off` is `ETERNALVR_ADAPTER_STEER=0` |
 | `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
 | `ETERNALVR_TEST_XR_LOSS` | unset | seconds: once the session has run this long, it is taken as lost (as if the headset had gone away) and the worker reconnects (ARCHITECTURE section 6, session state) |
 | `ETERNALVR_TEST_XR_LOSS_REMOVE` | unset | `1`: that test loss also removes the presenter's D3D12 device, as a graphics card reset would; the worker then stops reconnecting and the status says the graphics card was reset |

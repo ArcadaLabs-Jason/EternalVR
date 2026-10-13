@@ -99,13 +99,17 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     const input::HandState& hand = left ? frame->left : frame->right;
     ui_layer::WristSettings ws =
         weapon ? ui_layer::weaponShowSettings(settings.weapon, settings.wrist) : settings.wrist;
-    // Under hand aim the UI copy leaves the centre of the target out (the game's crosshair and the ability
-    // rings around it, presenter_ui.cpp), so an abilities quad would be empty: it is left out then.
+    // Under hand aim there is no abilities quad: with ETERNALVR_UI_CROSSHAIR=mask, or until the crosshair
+    // hold is confirmed, the UI copy leaves the centre of the target out (the game's crosshair and the
+    // ability rings around it, presenter_ui.cpp), so the quad could be empty. With the hold the rings stay on
+    // the head-locked quad; moving them to the wrist under hand aim is a separate decision.
     if (!weapon && ws.abilities && controllers::weaponAimSpace() != XR_NULL_HANDLE) {
         ws.abilities = false;
         if (!loggedNoAbilities_) {
             loggedNoAbilities_ = true;
-            EVR_LOG("ui: wrist HUD: hand aim masks the crosshair and the ability rings; no abilities quad");
+            EVR_LOG(
+                "ui: wrist HUD: under hand aim no abilities quad (the ability rings stay on the head-locked "
+                "quad, or the crosshair mask takes them)");
         }
     }
     // Hidden while a glory kill / cutscene owns the arms (the gun leaves the hand).

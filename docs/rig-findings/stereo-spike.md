@@ -43,5 +43,5 @@ The view-constant rule is the structural upper bound (any matrix counts), but th
 here: all semantic modules are counted for the `gl_FragCoord` bin lookup, not for view constants.
 
 By that criterion **Route S stays the product route and Route M is dropped** (stereo-routes.md section 1,
-step 3); recorded here for the owner's decision. Route S v1 runs on the rig (docs/VR_STEREO.md, "Live
+step 3); recorded here for the owner's decision (decided: T-131). Route S v1 runs on the rig (docs/VR_STEREO.md, "Live
 results").

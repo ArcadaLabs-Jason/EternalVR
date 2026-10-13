@@ -4,6 +4,7 @@
 // captured every frame and shown on its own OpenXR quad instead of inside the eye images.
 
 #include "common/vector.hpp"
+#include "ui_layer/crosshair.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -88,11 +89,14 @@ struct UiSettings {
     // ETERNALVR_UI_OFFSET_Y: the quad's height offset (negative: lower).
     float offsetYMetres = 0.0f;
     // Under hand aim, a dot on the weapon hand's ray (the game's own crosshair marks the head's ray, so the
-    // launcher hides it with +g_reticleMode 2): ETERNALVR_UI_RETICLE, its distance along the ray
+    // layer takes it out: `crosshair` below): ETERNALVR_UI_RETICLE, its distance along the ray
     // (ETERNALVR_UI_RETICLE_DISTANCE) and angular diameter (ETERNALVR_UI_RETICLE_SIZE, degrees).
     bool reticle = true;
     float reticleDistanceMetres = 10.0f;
     float reticleDegrees = 1.0f;
+    // ETERNALVR_UI_CROSSHAIR=hold|mask: how the game's own crosshair is taken out under hand aim
+    // (crosshair.hpp).
+    CrosshairMode crosshair = CrosshairMode::Hold;
     // Menus (docs/VR_MENUS.md): while the game shows its menu cursor, the menu is on a world-locked panel
     // placed in front of the head, and the controllers point at it with a laser (ETERNALVR_MENU_POINTER).
     // The panel's distance and width (ETERNALVR_MENU_DISTANCE, ETERNALVR_MENU_WIDTH) default to the UI

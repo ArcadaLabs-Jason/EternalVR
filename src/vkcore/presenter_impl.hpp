@@ -376,6 +376,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     BackdropProbe uiBackdrop;        // the crosshair mask's backdrop test (present hook)
     std::uint64_t uiUnmaskedBackdrop = 0; // present hook: hand-aim copies not masked for a backdrop
     std::uint64_t uiUnmaskedMenu = 0;     // ... for a menu
+    ui_layer::HoldTally uiHold; // ... for the crosshair hold, and its changes (ui_layer/crosshair.hpp)
     ui_layer::TargetCheck uiLastCheck = ui_layer::TargetCheck::Ok;
     ULONGLONG lastUiStatsTicks = 0;
     // Worker only:

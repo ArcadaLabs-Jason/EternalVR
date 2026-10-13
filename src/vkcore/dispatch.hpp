@@ -23,6 +23,8 @@ class XrPresenter;
 #define EVR_INSTANCE_FUNCTIONS(X)                                                                            \
     X(DestroyInstance)                                                                                       \
     X(EnumerateDeviceExtensionProperties)                                                                    \
+    X(EnumeratePhysicalDevices)                                                                              \
+    X(EnumeratePhysicalDeviceGroups)                                                                         \
     X(GetPhysicalDeviceProperties)                                                                           \
     X(GetPhysicalDeviceProperties2)                                                                          \
     X(GetPhysicalDeviceFeatures2)                                                                            \

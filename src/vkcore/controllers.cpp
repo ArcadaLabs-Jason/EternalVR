@@ -2,6 +2,7 @@
 
 #include "vkcore/controllers.hpp"
 
+#include "vkcore/arm_model.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/key_inject.hpp"
@@ -79,6 +80,10 @@ void install() {
             bool weaponArm = false;
             s.offhandHook = installOffhandHook(weaponArm);
             s.weaponArmHook = s.offhandHook && weaponArm;
+        }
+        // Rig tests: the hands' model (ETERNALVR_ARM_MODEL); nothing is installed for the game's.
+        if (cfg.armModel != input::ArmModel::Game) {
+            arm_model::install();
         }
         if (cfg.armsHidden && !s.offhandHook) {
             EVR_LOG("%s: the arms stay shown (ETERNALVR_ARMS=hidden needs the viewmodel and hands hooks)",

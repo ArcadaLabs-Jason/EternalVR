@@ -212,12 +212,17 @@ evr_add_test(evr_bhaptics_tests
 
 evr_add_test(evr_arm_tests
     SOURCES
+        features/arm/arm_dump_line_tests.cpp
         features/arm/arm_frames_tests.cpp
         features/arm/arm_skeleton_tests.cpp
+        features/arm/arm_solve_limits_tests.cpp
         features/arm/arm_solve_tests.cpp
         features/arm/arm_surfaces_tests.cpp
+        features/arm/arm_twist_tests.cpp
         features/arm/hand_offset_tests.cpp
+        features/arm/mod_mix_tests.cpp
         features/arm/mod_room_tests.cpp
+        features/arm/twist_fault_tests.cpp
         features/arm/two_bone_ik_tests.cpp
     DEPENDS evr_arm)
 
@@ -230,6 +235,7 @@ evr_add_test(evr_mp_policy_tests
     SOURCES
         platform/mp_policy/argument_cases_tests.cpp
         platform/mp_policy/mp_policy_tests.cpp
+        platform/mp_policy/profile_cvars_tests.cpp
         platform/mp_policy/saved_cvars_tests.cpp
         platform/mp_policy/trip_listeners_tests.cpp
     DEPENDS evr_mp_policy)
@@ -247,6 +253,7 @@ evr_add_test(evr_key_injection_tests
 if(TARGET evr_device_features)
     evr_add_test(evr_vkcore_tests
         SOURCES
+            vkcore/adapter_order_tests.cpp
             vkcore/clone_census_tests.cpp
             vkcore/clone_names_tests.cpp
             vkcore/clone_stencil_tests.cpp
@@ -261,6 +268,7 @@ if(TARGET evr_device_features)
             vkcore/parallel_eyes_settings_tests.cpp
             vkcore/snapshot_pairs_tests.cpp
             vkcore/snapshot_ring_tests.cpp
+            vkcore/status_file_tests.cpp
             vkcore/submit_order_tests.cpp
             vkcore/swap_images_tests.cpp
             vkcore/swapchain_book_tests.cpp
@@ -268,7 +276,7 @@ if(TARGET evr_device_features)
             vkcore/view_dlss_plan_tests.cpp
             vkcore/view_frames_tests.cpp
             vkcore/view_water_start_tests.cpp
-        DEPENDS evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
+        DEPENDS evr_adapter_order evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
             evr_parallel_eyes_settings evr_mp_policy)
 endif()
 
@@ -362,6 +370,7 @@ evr_add_test(evr_ui_layer_tests
     SOURCES
         ui_layer/additive_wash_tests.cpp
         ui_layer/backdrop_tests.cpp
+        ui_layer/crosshair_tests.cpp
         ui_layer/gui_target_tests.cpp
         ui_layer/hud_regions_tests.cpp
         ui_layer/layout_tracker_tests.cpp

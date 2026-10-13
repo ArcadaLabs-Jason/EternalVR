@@ -18,6 +18,13 @@ target_compile_features(evr_device_features PUBLIC cxx_std_20)
 target_compile_definitions(evr_device_features PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(evr_device_features PRIVATE evr_warnings PUBLIC Vulkan::Headers)
 
+# Adapter steering's device order (adapter_order.hpp), tested without a device.
+add_library(evr_adapter_order STATIC adapter_order.cpp)
+target_include_directories(evr_adapter_order PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_adapter_order PUBLIC cxx_std_20)
+target_compile_definitions(evr_adapter_order PUBLIC VK_NO_PROTOTYPES)
+target_link_libraries(evr_adapter_order PRIVATE evr_warnings PUBLIC Vulkan::Headers)
+
 # The debug command schedule (debug_commands.cpp), tested without the game.
 add_library(evr_debug_script STATIC debug_script.cpp)
 target_include_directories(evr_debug_script PUBLIC "${PROJECT_SOURCE_DIR}/src")
@@ -44,6 +51,7 @@ target_compile_features(evr_parallel_eyes_settings PUBLIC cxx_std_20)
 target_link_libraries(evr_parallel_eyes_settings PUBLIC evr_stereo_seq PRIVATE evr_warnings)
 
 add_library(evr_layer SHARED
+    adapter_steer.cpp
     backdrop_probe.cpp
     bin_tile_hooks.cpp
     body_follow.cpp
@@ -107,6 +115,8 @@ add_library(evr_layer SHARED
     window_timing.cpp
     runtime_cvars.cpp
     runtime_cvars_pe.cpp
+    runtime_cvars_reticle.cpp
+    profile_hooks.cpp
     pe_flares.cpp
     pe_flare_contexts.cpp
     pe_flare_guard.cpp
@@ -224,6 +234,8 @@ target_sources(evr_layer PRIVATE
     input_profiles.cpp
     input_watch.cpp
     input_xr.cpp
+    arm_dump.cpp
+    arm_model.cpp
     game_arm.cpp
     game_arm_joints.cpp
     hands_surfaces.cpp
@@ -263,6 +275,7 @@ target_compile_definitions(evr_layer PRIVATE
     NOMINMAX)
 target_link_libraries(evr_layer PRIVATE
     evr_warnings
+    evr_adapter_order
     evr_debug_script
     evr_device_features
     evr_dlss_dll

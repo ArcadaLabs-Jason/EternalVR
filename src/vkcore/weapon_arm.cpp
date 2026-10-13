@@ -5,6 +5,9 @@
 #include "features/arm/arm_frames.hpp"
 #include "features/arm/arm_solve.hpp"
 #include "features/arm/arm_surfaces.hpp"
+#include "features/arm/mod_mix.hpp"
+#include "features/arm/twist_fault.hpp"
+#include "vkcore/arm_dump.hpp"
 #include "vkcore/game_arm.hpp"
 #include "vkcore/hands_surfaces.hpp"
 #include "vkcore/log.hpp"
@@ -44,9 +47,12 @@ std::atomic<std::uint64_t> g_rejected{0};
 // The hands the arm was last posed on, and whether the one give-back after a multiplayer guard trip ran.
 const std::byte* g_posedHands = nullptr;
 bool g_tripReleased = false;
+// The arm's twist of the last tick it was solved (arm_solve.hpp), until the arm is given back.
+std::optional<float> g_lastTwist;
 
 // The arm back to the game: the layer's modifiers to no change, the arm's surface as the weapon's kit has it.
 void giveBack(const std::byte* hands) {
+    g_lastTwist.reset();
     game_arm::releaseArm(kSide, hands);
     hands_surfaces::update(kSide, hands, false);
 }
@@ -98,14 +104,22 @@ bool poseArm(const std::byte* hands,
     // The shoulder and the elbow's bend in the arms model's space; the wrist stays the game's.
     const Vec3 shoulder = xr_math::inModelSpace(model.pose, {world.weaponShoulder, model.pose.axis}).position;
     const Vec3 pole = arm::toLocal(model.pose.axis, world.weaponElbow);
-    const auto ours = arm::solveArmToWrist(animated, shoulder, pole);
+    auto ours = arm::solveArmToWrist(animated, shoulder, pole, g_lastTwist,
+                                     cfg.armSolve == input::ArmSolve::Bind ? arm::TwistFrom::Bind
+                                                                           : arm::TwistFrom::Animated);
     if (!ours) {
         return false;
+    }
+    g_lastTwist = ours->twist;
+    if (cfg.testArmTwistFault) {
+        arm::plantTwistFault(*ours, animated);
     }
     arm::ArmPoses mixed;
     for (std::size_t i = 0; i < arm::kArmJointCount; ++i) {
         mixed[i] = arm::blendPose(animated[i], ours->joints[i], weight);
     }
+    const arm::HandsOnlyArm handsOnly = arm::handsOnly(mixed, game_arm::cuffOf(cfg.handsCuff));
+    mixed = cfg.armsHandsOnly ? handsOnly.joints : mixed;
     const Vec3 wrist = animated[index(ArmJoint::Hand)].position;
     // How far the layer moves the arm from the game's pose: near 0 where the game's arm already reaches a
     // shoulder at the head (a flat-screen-like grip), which looks the same as ETERNALVR_WEAPON_ARM=game.
@@ -116,12 +130,21 @@ bool poseArm(const std::byte* hands,
         }
         moved = std::max(moved, length(mixed[index(j)].position - animated[index(j)].position));
     }
-    if (!mp_guard::allowsGameTouch() || !game_arm::writeArm(kSide, hands, mixed, read->scale, read->origin)) {
+    // The bind solve writes past the targets by the blend's mix (features/arm/mod_mix.hpp), from the wrist
+    // the game reads (its attach joint's change is the game's, mixed in already).
+    const std::optional<float> mix =
+        cfg.armSolve == input::ArmSolve::Bind ? offhand_mods::modWeight(hands) : std::nullopt;
+    const arm::ArmPoses written =
+        mix ? arm::modifiedFor(animated, mixed, *mix, &animated[index(ArmJoint::Hand)]) : mixed;
+    if (!mp_guard::allowsGameTouch() ||
+        !game_arm::writeArm(kSide, hands, written, read->scale, read->origin,
+                            cfg.armsHandsOnly ? handsOnly.zeroScale : 0u, &mixed)) {
         return false;
     }
     g_posedHands = hands;
     // The weapon's mesh kit usually hides this arm (hands_surfaces.hpp): shown while the layer poses it.
     hands_surfaces::update(kSide, hands, true);
+    arm_dump::noteLayerArm(kSide, weight, ours->twist, *read, mixed, nullptr);
 
     const Vec3 solvedShoulder = ours->joints[index(ArmJoint::UpperArm)].position;
     if (!g_loggedBones) {
@@ -164,6 +187,11 @@ void logSettings() {
                                                   : "",
         cfg.offhandTrace ? ", trace on" : "",
         cfg.weaponArmTestShoulder ? ", TEST shoulder (ETERNALVR_WEAPON_ARM_TEST_SHOULDER)" : "");
+    if (cfg.testArmTwistFault) {
+        EVR_LOG("%s: planted twist fault ON (ETERNALVR_TEST_ARM_FAULT): the whole twist on the wrist, both "
+                "arms (rig test)",
+                kTag);
+    }
 }
 
 void tick(const std::byte* hands,
@@ -180,6 +208,7 @@ void tick(const std::byte* hands,
     if (cfg.offhandTrace) {
         trace(decision, weight);
     }
+    arm_dump::noteGameArm(kSide, weight);
     if (weight <= 0.0f) {
         giveBack(hands);
         return;

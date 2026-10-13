@@ -17,6 +17,11 @@ Vec3 inFrame(const IdViewAxis& axis, Vec3 local) {
     return axis.forward * local.x + axis.left * local.y + axis.up * local.z;
 }
 
+// `world`'s components along `axis`'s rows (the inverse of inFrame for an orthonormal axis).
+Vec3 ofFrame(const IdViewAxis& axis, Vec3 world) {
+    return {dot(axis.forward, world), dot(axis.left, world), dot(axis.up, world)};
+}
+
 } // namespace
 
 EyeRelativePose controllerRelativeToEye(const IdViewAxis& body,
@@ -54,6 +59,30 @@ EyeRelativePose applyLocalOffset(const EyeRelativePose& pose,
     out.offset = pose.offset + inFrame(pose.axis, translation * unitsPerMetre);
     // The rotation's rows are directions in the pose's own frame.
     const IdViewAxis local = axisFromAngles(rotation);
+    out.axis = {inFrame(pose.axis, local.forward), inFrame(pose.axis, local.left),
+                inFrame(pose.axis, local.up)};
+    return out;
+}
+
+EyeRelativePose applyLocalOffsetWithSight(const EyeRelativePose& pose,
+                                          Vec3 translation,
+                                          const IdAngles& rotation,
+                                          const IdAngles& sight,
+                                          float unitsPerMetre) {
+    // In the pose's frame: the offset's rotation L (rows), the model's grip point -L t in the model's frame,
+    // and the sight line s in the model's frame. K, whose first row is s, takes s onto the model's forward.
+    // The model's axis L' = K^T L puts s along L's forward; its origin t' = L^T K L t keeps the grip point at
+    // the pose: origin' + L'^T (-L t) = 0 in the pose's frame.
+    const IdViewAxis rotated = axisFromAngles(rotation);
+    const IdViewAxis turn = axisFromAngles({sight.pitch, sight.yaw, 0.0f});
+    const Vec3 columns[3] = {{turn.forward.x, turn.left.x, turn.up.x},
+                             {turn.forward.y, turn.left.y, turn.up.y},
+                             {turn.forward.z, turn.left.z, turn.up.z}};
+    const IdViewAxis local{inFrame(rotated, columns[0]), inFrame(rotated, columns[1]),
+                           inFrame(rotated, columns[2])};
+    const Vec3 gripOffset = inFrame(rotated, ofFrame(turn, ofFrame(rotated, translation)));
+    EyeRelativePose out;
+    out.offset = pose.offset + inFrame(pose.axis, gripOffset * unitsPerMetre);
     out.axis = {inFrame(pose.axis, local.forward), inFrame(pose.axis, local.left),
                 inFrame(pose.axis, local.up)};
     return out;

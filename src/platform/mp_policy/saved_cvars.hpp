@@ -5,6 +5,7 @@
 // rules can be tested without the game.
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,6 +36,7 @@ public:
         std::string name;
         std::string value; // before the layer's first write (cvarValueText)
         Target target{};
+        std::optional<std::string> trip; // what a trip gives back instead of `value` (setTripValue)
     };
 
     // Before the layer writes over `name`: keeps `value`, its value now, unless a value is kept already (a
@@ -48,9 +50,25 @@ public:
         return true;
     }
 
-    [[nodiscard]] bool saved(std::string_view name) const {
+    [[nodiscard]] bool saved(std::string_view name) const { return find(name) != nullptr; }
+
+    // The kept entry of `name`, or nullptr (none kept, or the values were taken).
+    [[nodiscard]] const Entry* find(std::string_view name) const {
         for (const Entry& e : entries_) {
             if (sameCvarName(e.name, name)) {
+                return &e;
+            }
+        }
+        return nullptr;
+    }
+
+    // A trip gives `value` back for `name` instead of its value before the layer's first write: a cvar the
+    // game's profile load set to the player's own value after the layer wrote it (vkcore/profile_hooks.hpp).
+    // False when no value is kept for `name`.
+    bool setTripValue(std::string_view name, std::string value) {
+        for (Entry& e : entries_) {
+            if (sameCvarName(e.name, name)) {
+                e.trip = std::move(value);
                 return true;
             }
         }

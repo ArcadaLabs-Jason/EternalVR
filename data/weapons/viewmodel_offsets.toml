@@ -5,8 +5,9 @@
 # each viewmodel relative to the eye, so the offset moves the model's origin (the eye) back from the hand
 # by the distance the gun is drawn ahead, right and below the eye.
 #
-# Keys are the held item's inventory decl name. Variants ("weapon/player/shotgun_secondary_full_auto")
-# use the entry of the longest key they start with followed by '_', then "default".
+# Keys are the held item's inventory decl name: the base weapon's, which a weapon mod does not change, so one
+# row covers every mod of a weapon. A name without its own entry uses the entry of the longest key it starts
+# with followed by '_' ("weapon/player/fists_doom5melee" uses "weapon/player/fists"), then "default".
 #
 # The values below are starting estimates and are tuned on the rig with ETERNALVR_VIEWMODEL_OFFSET
 # (docs/VR_CONTROLLERS.md); per-weapon rows are added as each weapon is checked.
@@ -17,3 +18,25 @@
 # Desk-safe placement while seated (T-074): the same shape, pulled 5 cm back toward the body.
 [seated]
 "default" = [-0.30, 0.18, 0.22, 0, 0, 0]
+
+# Weapon sights (ETERNALVR_WEAPON_SIGHTS=1, rig tests for now): [pitch, yaw] in degrees (pitch positive down,
+# yaw counter-clockwise) is the direction of the weapon's sight line in the arms model's frame as the game
+# animates it at idle. The model is turned about the grip so that line runs parallel to the aim ray: the
+# sights then point where the shots go, offset from the ray by the sights' fixed height and side above the
+# hand. Same key rules, but no "default": a weapon without a row is not turned (plasma rifle, rocket
+# launcher, BFG, Unmaykr, fists, chainsaw, Crucible, hammer). Each row is the sight line in the weapon's own
+# frame (noted per row) turned by the idle pose the hands rig measured: the centre of its spread over five
+# held controller poses (docs/rig-findings/hands-rig.md, section 6), which keeps the idle sway's worst case
+# smallest: about 0.15 to 0.2 degrees either side.
+[sights]
+# Receiver top to the bead; the idle pose toes the gun in about 2.2 degrees.
+"weapon/player/shotgun" = [0.21, 2.17]
+# The iron sights, 3.5 degrees above the bore. The precision bolt's scope sits about 3.3 degrees off this
+# line (0.2 degrees above the bore); the held decl does not name the active mod, so one row serves both.
+"weapon/player/heavy_cannon" = [-3.45, 0.19]
+# The zoom pose's eye axis.
+"weapon/player/chaingun" = [0.32, -0.01]
+# Rear sight top to the muzzle top (mesh fit, low confidence).
+"weapon/player/double_barrel" = [0.69, 0.16]
+# The bore (no sight parts); the idle pose tilts the gun up and in.
+"weapon/player/gauss_rifle" = [-0.83, 1.08]

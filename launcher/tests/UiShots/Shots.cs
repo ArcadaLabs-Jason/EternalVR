@@ -45,6 +45,9 @@ namespace EternalVR.Launcher.UiShots
             this.only = only;
         }
 
+        /// <summary>The shots with a layout fault (<see cref="Capture.Faults"/>).</summary>
+        public int Faulted { get; private set; }
+
         /// <summary>With <c>--live-update</c>: the folder to update for real (<see cref="LiveUpdate"/>) instead of the shots.</summary>
         public string LiveFolder { get; set; }
 
@@ -73,6 +76,18 @@ namespace EternalVR.Launcher.UiShots
             tabs.SelectedIndex = 0;
             Reflect.Call(main, "ShowUpdateButton", new Version(0, 1, 14));
             Shoot(main, "main-update-button", () => Pump(300));
+            // The start watchdog's two longest warnings on the status line, both asking for a report (the button is marked): no
+            // picture from the game in 5 minutes, and none in the headset.
+            Shoot(main, "main-start-stuck", () =>
+            {
+                Reflect.Call(main, "ShowStatus", new SessionStatus(StatusKind.Warning, StartupWatchdog.StuckLoadMessage));
+                Pump(300);
+            });
+            Shoot(main, "main-start-stall", () =>
+            {
+                Reflect.Call(main, "ShowStatus", new SessionStatus(StatusKind.Warning, StartupWatchdog.NoFrameMessage));
+                Pump(300);
+            });
             // After a crash the status line asks for a report and the Export report button it names is marked (ReportHint).
             Reflect.Call(main, "ShowStatus", new SessionStatus(StatusKind.Warning,
                 GameExit.StatusPrefix(unchecked((int)0xC0000005)) + "The game has exited and your settings were restored."));
@@ -84,6 +99,8 @@ namespace EternalVR.Launcher.UiShots
                 ShootModal(s, null);
                 foreach (var m in moves) ShootModal(s, m);
             }
+            // Last: its scale changes round the main window's control sizes, which the shots above compare with earlier runs.
+            ShootSteps(main, "main-layout");
             File.WriteAllLines(Path.Combine(output, $"{dpi}-summary.txt"), summary);
             main.Close();
             return 0;
@@ -126,13 +143,42 @@ namespace EternalVR.Launcher.UiShots
                 Reflect.Get<Button>(f, "accept").Text = "Try again";
             });
             yield return new Scenario { Name = "controls", Open = () => Reflect.Call(main, "EditControls") };
+            yield return new Scenario { Name = "controls-layout", Open = () => Reflect.Call(main, "EditControls"), Steps = f => LayoutSteps.For(f, true) };
+            yield return new Scenario { Name = "controls-layout-profile", Open = () => EditControlsOf("Layout check"), Steps = f => LayoutSteps.For(f, true) };
             yield return Modal("weapon-directions", () => new WeaponDirectionsDialog("up_right=none,down_left=none"), null);
-            yield return new Scenario
-            {
-                Name = "restore-saves",
-                Open = () => Reflect.Call(main, "ChooseBackup", (IReadOnlyList<string>)Directory.GetDirectories(ctx.Paths.SaveBackups).OrderByDescending(d => d).ToList()),
-            };
+            foreach (var name in new[] { "restore-saves", "restore-saves-layout" })
+                yield return new Scenario
+                {
+                    Name = name,
+                    Open = () => Reflect.Call(main, "ChooseBackup", (IReadOnlyList<string>)Directory.GetDirectories(ctx.Paths.SaveBackups).OrderByDescending(d => d).ToList()),
+                    Steps = name.EndsWith("-layout") ? f => LayoutSteps.For(f, false) : (Func<Form, IReadOnlyList<Step>>)null,
+                };
             yield return new Scenario { Name = "new-profile", Open = () => Reflect.Call(main, "AskProfileName") };
+        }
+
+        /// <summary>The main window through <see cref="LayoutSteps"/>, shot after each, then back at its own scale and size.</summary>
+        private void ShootSteps(Form f, string name)
+        {
+            if (only != null && name.IndexOf(only, StringComparison.OrdinalIgnoreCase) < 0) return;
+            var bounds = f.Bounds;
+            foreach (var step in LayoutSteps.For(f, false))
+            {
+                step.Apply(f);
+                Pump(1200);
+                Save(f, Name(f, name + "-" + step.Name, null));
+            }
+            f.WindowState = FormWindowState.Normal;
+            f.Bounds = bounds;
+            Pump(1200);
+        }
+
+        /// <summary>The controls editor with the VR settings profile <paramref name="profile"/> in use (made from the current settings).</summary>
+        private void EditControlsOf(string profile)
+        {
+            new ProfileStore(ctx.Paths.Profiles).Save(profile, ctx.Settings);
+            ctx.Settings.Profile = profile;
+            try { Reflect.Call(main, "EditControls"); }
+            finally { ctx.Settings.Profile = string.Empty; }
         }
 
         private Scenario Update(string name, AvailableRelease release, string programDir, string updates, InstallBlock why, Action<Form> prepare) =>
@@ -155,11 +201,15 @@ namespace EternalVR.Launcher.UiShots
             "# EternalVR v0.1.14 (alpha)\n\nA launcher fix: the launcher now reads your headset from a separate, short-lived helper, so your "
             + "headset's runtime\nno longer stays loaded inside the launcher.\n\n## Download\n");
 
-        /// <summary>Opens the scenario's window modal over the main window; a timer sets it up, shoots it and closes it.</summary>
+        /// <summary>
+        /// Opens the scenario's window modal over the main window; a timer sets it up, shoots it, takes each of its
+        /// <see cref="Scenario.Steps"/> and shoots it again, and closes it.
+        /// </summary>
         private void ShootModal(Scenario s, Move move)
         {
             int step = 0;
             Form seen = null;
+            IReadOnlyList<Step> steps = null;
             using (var timer = new System.Windows.Forms.Timer { Interval = 250 })
             {
                 timer.Tick += (o, e) =>
@@ -175,8 +225,16 @@ namespace EternalVR.Launcher.UiShots
                     }
                     else if (step == 4)
                     {
-                        timer.Stop();
                         Save(f, Name(f, s.Name, move));
+                        steps = s.Steps?.Invoke(f) ?? new Step[0];
+                    }
+                    // Each step two ticks after the last shot, shot two ticks later (the layout settles in between).
+                    else if (step > 4 && (step - 4) % 4 == 2 && (step - 4) / 4 < steps.Count) steps[(step - 4) / 4].Apply(f);
+                    else if (step > 4 && (step - 4) % 4 == 0 && (step - 4) / 4 <= steps.Count) Save(f, Name(f, s.Name + "-" + steps[(step - 4) / 4 - 1].Name, move));
+                    if (step >= 4 && (step - 4) / 4 >= steps.Count)
+                    {
+                        timer.Stop();
+                        if (f.WindowState != FormWindowState.Normal) f.WindowState = FormWindowState.Normal;
                         f.DialogResult = DialogResult.Cancel;
                         f.Close();
                     }
@@ -208,6 +266,7 @@ namespace EternalVR.Launcher.UiShots
         {
             using (var bmp = Capture.Window(f)) ImageSave.Png(bmp, Path.Combine(output, name + ".png"));
             var faults = Capture.Faults(f);
+            if (faults.Count > 0) Faulted++;
             File.WriteAllText(Path.Combine(output, name + ".txt"), Capture.Describe(f)
                 + (faults.Count == 0 ? "no layout faults found\n" : "FAULTS:\n  " + string.Join("\n  ", faults) + "\n"));
             summary.Add($"{name}: {(faults.Count == 0 ? "ok" : faults.Count + " fault(s)")}");

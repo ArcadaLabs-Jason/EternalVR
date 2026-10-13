@@ -15,12 +15,13 @@ namespace EternalVR.Launcher.UiShots
     /// </summary>
     internal static class Program
     {
-        private const string Usage = "evr-ui-shots --out <dir> --work <dir> [--screen <n>] [--drag <n>] [--only <text>] [--live-update <folder>]";
+        private const string Usage = "evr-ui-shots --out <dir> --work <dir> [--screen <n>] [--drag <n>] [--only <text>] [--check] [--live-update <folder>]";
 
         [STAThread]
         private static int Main(string[] args)
         {
             string output = null, work = null, only = null, live = null;
+            bool check = false;
             int screen = 0;
             var moves = new List<Move>();
             for (int i = 0; i < args.Length; i++)
@@ -33,6 +34,7 @@ namespace EternalVR.Launcher.UiShots
                     case "--screen": screen = int.Parse(Value()); break;
                     case "--drag": moves.Add(new Move { Screen = Screen.AllScreens[int.Parse(Value())] }); break;
                     case "--only": only = Value(); break;
+                    case "--check": check = true; break;
                     case "--live-update": live = Path.GetFullPath(Value()); break;
                     default: Console.Error.WriteLine(Usage); return 64;
                 }
@@ -46,7 +48,9 @@ namespace EternalVR.Launcher.UiShots
             Application.SetCompatibleTextRenderingDefault(false);
             Directory.CreateDirectory(output);
             var shots = new Shots(output, work, Screen.AllScreens[Math.Min(screen, Screen.AllScreens.Length - 1)], moves, only) { LiveFolder = live };
-            return shots.Run();
+            int result = shots.Run();
+            // With --check, a shot with a layout fault fails the run.
+            return result == 0 && check && shots.Faulted > 0 ? 1 : result;
         }
     }
 
@@ -93,6 +97,8 @@ namespace EternalVR.Launcher.UiShots
         public string Name;
         public Action Open;
         public Action<Form> Prepare;
+        /// <summary>What is done to the open window after its first shot, each shot in turn (<see cref="LayoutSteps"/>); null: nothing.</summary>
+        public Func<Form, IReadOnlyList<Step>> Steps;
     }
 
     internal static class ImageSave

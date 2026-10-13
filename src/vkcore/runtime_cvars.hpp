@@ -35,6 +35,9 @@
 // - Parallel Eye Rendering's set (runtime_cvars_pe.hpp, setParallelEyes). apply() runs from Parallel Eye
 //   Rendering's first present, on every present as under Route S (menus, loading screens and frames
 //   without a world included).
+// - Hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold, the default; runtime_cvars_reticle.hpp):
+//   hud_reticle_styleOverride 0 only while the presenter asks for it (hand aim), the earlier value written
+//   back when it stops asking, and each present's reading reported to the presenter's centre mask.
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
 //   wins over the layer's own holds: it replaces any of the sets above for the same cvar, and per-eye TAA
 //   (taa_hooks.cpp) leaves that cvar alone (stereo_seq/debug_cvars.hpp).
@@ -42,12 +45,15 @@
 // A value the game puts back is written again; each cvar's first write and the value read back are logged,
 // then the first 12 later writes; the rest are counted. Only while the multiplayer guard allows touching the
 // game. Every write goes through the cvar book (cvar_book.hpp): a trip sets each cvar written back to its
-// value before the layer's first write, except the window set and r_hdrDisplay, which stay (logged).
+// value before the layer's first write, except the window set and r_hdrDisplay, which stay (logged). The game
+// saves view_skipShakes and r_sharpening into the player's profile: profile_hooks.hpp puts the player's own
+// value into each profile save.
 
 #include "stereo_seq/seq_settings.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string_view>
 
 namespace evr::vkcore::runtime_cvars {
@@ -75,5 +81,14 @@ bool holds(std::string_view name, std::string_view value);
 // stereo_seq::stereoRuntimeCvars(PerEye) and the layer stops holding the TAA cvars (that module writes its
 // own). The window set and ETERNALVR_DEBUG_CVARS entries stay.
 void setStereoTemporal(stereo_seq::StereoTemporal temporal);
+
+// The lock apply() and the setters hold while they write.
+std::mutex& heldMutex();
+
+// A profile load or save starts (true) or ends (false), with heldMutex() held by the caller
+// (profile_hooks.hpp): while one is under way apply() leaves the cvars the profile stores
+// (mp_policy::profileStoredCvar) alone, so no present writes a held value into the middle of it. Counted, so
+// overlapping calls nest.
+void setProfileIo(bool busy);
 
 } // namespace evr::vkcore::runtime_cvars

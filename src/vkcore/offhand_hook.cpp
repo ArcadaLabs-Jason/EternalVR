@@ -37,7 +37,10 @@
 #include "features/arm/arm_solve.hpp"
 #include "features/arm/arm_surfaces.hpp"
 #include "features/arm/hand_offset.hpp"
+#include "features/arm/mod_mix.hpp"
+#include "features/arm/twist_fault.hpp"
 #include "features/input/offhand_policy.hpp"
+#include "vkcore/arm_dump.hpp"
 #include "vkcore/game_arm.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
@@ -55,7 +58,6 @@
 #include <numbers>
 #include <optional>
 #include <string>
-#include <string_view>
 
 namespace evr::vkcore::controllers {
 
@@ -132,20 +134,11 @@ ULONGLONG g_lastPoseTrace = 0;
 bool g_loggedBones = false;
 bool g_tripReleased = false;
 std::atomic<std::uint64_t> g_rejected{0};
-
-bool bytesMatch(const std::byte* at, std::string_view hex) {
-    std::size_t i = 0;
-    for (std::size_t p = 0; p + 1 < hex.size(); p += 3, ++i) {
-        const auto nibble = [](char c) {
-            return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
-        };
-        const auto expected = static_cast<std::uint8_t>(nibble(hex[p]) * 16 + nibble(hex[p + 1]));
-        if (static_cast<std::uint8_t>(at[i]) != expected) {
-            return false;
-        }
-    }
-    return true;
-}
+// The left arm's twist of the last tick it was solved (arm_solve.hpp), until the arm is given back.
+std::optional<float> g_lastTwist;
+// The attach joint's change the game was handed last tick, the layer's or its own (internal units), and the
+// hands it was handed for, whose read of this tick has mixed it in (ETERNALVR_ARM_SOLVE=bind, mod_mix.hpp).
+std::optional<arm::HandedMod> g_lastMod;
 
 const std::byte* callTarget(const std::byte* call) {
     return call + 5 + readI32(call + 1);
@@ -232,6 +225,16 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
     }
     const arm::ArmPoses& animated = read->animated;
     const float upm = world.unitsPerMetre;
+    // The bind solve allows for the blend's mix: the read holds last tick's change of the attach joint, mixed
+    // in, so the arm without modifiers is taken back from it, and everything is written past its target.
+    const std::optional<float> mix =
+        cfg.armSolve == input::ArmSolve::Bind ? offhand_mods::modWeight(hands) : std::nullopt;
+    // Other hands' (a new level's) read has not mixed it in: dropped.
+    const std::optional<xr_math::JointMod> handed = arm::handedTo(g_lastMod, hands);
+    g_lastMod = handed ? g_lastMod : std::nullopt;
+    xr_math::JointMod last = handed.value_or(xr_math::JointMod{});
+    last.translation = scaled(last.translation, read->scale);
+    const arm::ArmPoses pre = mix && handed ? arm::preModifierArm(animated, last, *mix) : animated;
 
     // The targets in the arms model's space.
     const game::WeaponOffset o = input::offhandOffsetFor(cfg.offhandOffset, cfg.handedness);
@@ -243,9 +246,17 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
             ? animated[index(ArmJoint::UpperArm)].position
             : xr_math::inModelSpace(model.pose, {world.offShoulder, model.pose.axis}).position;
     targets.pole = arm::toLocal(model.pose.axis, world.offElbow);
-    const auto ours = arm::solveArm(animated, targets);
+    targets.lastTwist = g_lastTwist;
+    targets.twistFrom =
+        cfg.armSolve == input::ArmSolve::Bind ? arm::TwistFrom::Bind : arm::TwistFrom::Animated;
+    targets.limitSwing = targets.twistFrom == arm::TwistFrom::Bind;
+    auto ours = arm::solveArm(animated, targets);
     if (!ours) {
         return std::nullopt;
+    }
+    g_lastTwist = ours->twist;
+    if (cfg.testArmTwistFault) {
+        arm::plantTwistFault(*ours, animated);
     }
 
     // The game's arm: its modifier moves the attach joint and the rest follow. Mixed at the wrist, and the
@@ -253,7 +264,9 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
     xr_math::JointMod gameInUnits = game;
     gameInUnits.translation = scaled(game.translation, read->scale);
     const arm::ArmPoses gameArm =
-        arm::followAttach(animated, xr_math::applyJointMod(animated[index(ArmJoint::Attach)], gameInUnits));
+        mix ? arm::gameArmMixed(pre, gameInUnits, *mix)
+            : arm::followAttach(animated,
+                                xr_math::applyJointMod(animated[index(ArmJoint::Attach)], gameInUnits));
     arm::ArmPoses mixed;
     for (std::size_t i = 0; i < arm::kArmJointCount; ++i) {
         mixed[i] = arm::blendPose(gameArm[i], ours->joints[i], weight);
@@ -261,20 +274,32 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
     mixed[index(ArmJoint::Attach)] =
         arm::parentFor(mixed[index(ArmJoint::Hand)],
                        arm::relative(animated[index(ArmJoint::Attach)], animated[index(ArmJoint::Hand)]));
+    const arm::HandsOnlyArm gloves = arm::handsOnly(mixed, game_arm::cuffOf(cfg.handsCuff));
+    mixed = cfg.armsHandsOnly ? gloves.joints : mixed;
 
+    // With the bind solve the wrist takes the rest of a turn the attach joint cannot make (mod_mix.hpp).
+    const arm::WristArm out = mix ? arm::modifiedWithWrist(pre, mixed, *mix) : arm::WristArm{mixed, false};
+    const arm::ArmPoses& written = out.modified;
+    xr_math::JointMod wrist = arm::wristChange(pre, out);
+    wrist.translation = unscaled(wrist.translation, read->scale);
     xr_math::JointMod mod =
-        xr_math::jointModToward(animated[index(ArmJoint::Attach)], mixed[index(ArmJoint::Attach)]);
+        xr_math::jointModToward(pre[index(ArmJoint::Attach)], written[index(ArmJoint::Attach)]);
     mod.translation = unscaled(mod.translation, read->scale);
     const float wristMove =
         length(mixed[index(ArmJoint::Hand)].position - animated[index(ArmJoint::Hand)].position);
     if (!(wristMove <= kMaxReachMetres * upm) || !xr_math::plausibleJointMod(mod, kMaxAttachMetres * upm) ||
-        !mp_guard::allowsGameTouch() ||
-        !game_arm::writeArm(arm::ArmSide::Left, hands, mixed, read->scale, read->origin)) {
+        !xr_math::plausibleJointMod(wrist, kMaxReachMetres * upm) || !mp_guard::allowsGameTouch() ||
+        !game_arm::writeArm(arm::ArmSide::Left, hands, written, read->scale, read->origin,
+                            cfg.armsHandsOnly ? gloves.zeroScale : 0u, &mixed, &wrist)) {
         return std::nullopt;
     }
 
+    if (cfg.testArmModWeight) {
+        game_arm::holdModWeight(hands, *cfg.testArmModWeight);
+    }
     // The weapon's mesh kit may hide this arm (HideAll weapons): shown while the layer poses it.
     hands_surfaces::update(arm::ArmSide::Left, hands, true);
+    arm_dump::noteLayerArm(arm::ArmSide::Left, weight, ours->twist, *read, mixed, &targets.hand);
 
     if (!g_loggedBones) {
         g_loggedBones = true;
@@ -291,9 +316,12 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
         const Vec3 s = mixed[index(ArmJoint::UpperArm)].position;
         EVR_LOG(
             "%s: ik: wrist (%.2f %.2f %.2f) target (%.2f %.2f %.2f), reach %.2f%s, elbow (%.2f %.2f %.2f), "
-            "shoulder (%.2f %.2f %.2f), twist %.0f deg, weight %.2f; %llu rejected; left arm surface %s",
+            "shoulder (%.2f %.2f %.2f), twist %.0f deg (forearm %.0f, upper arm %.0f), swing %.0f/%.0f "
+            "deg%s, weight %.2f; %llu rejected; left arm surface %s",
             kTag, w.x, w.y, w.z, t.x, t.y, t.z, ours->ik.reach, ours->ik.clamped ? " (clamped)" : "", e.x,
-            e.y, e.z, s.x, s.y, s.z, ours->twist * kDegreesPerRadian, weight,
+            e.y, e.z, s.x, s.y, s.z, ours->twist * kDegreesPerRadian, ours->split.forearm * kDegreesPerRadian,
+            ours->split.upper * kDegreesPerRadian, ours->swing.flex * kDegreesPerRadian,
+            ours->swing.deviation * kDegreesPerRadian, ours->swing.clamped ? " (limited)" : "", weight,
             static_cast<unsigned long long>(g_rejected.load()),
             arm::surfaceStateName(hands_surfaces::state(arm::ArmSide::Left)));
     }
@@ -303,23 +331,31 @@ std::optional<xr_math::JointMod> freeArm(const std::byte* hands,
 // The left arm back to the game: the layer's modifiers to no change, its surfaces as the weapon's kit has
 // them.
 void giveBackLeft(const std::byte* hands) {
+    g_lastTwist.reset();
+    if (settings().testArmModWeight) {
+        game_arm::releaseModWeight(hands);
+    }
     game_arm::releaseArm(arm::ArmSide::Left, hands);
     hands_surfaces::update(arm::ArmSide::Left, hands, false);
 }
 
 // After a multiplayer guard trip, once per arm: the weapon arm given back (its modifiers and its surface),
 // the left arm's modifiers back to no change, so it is the game's again instead of frozen in the last pose
-// written, and its surfaces hidden again if the layer showed them. The one write after a trip: it undoes the
-// layer's own change, like the cvar restore. Done here, not from a trip listener: the modifier lists and the
-// arms' caches belong to this hook's game thread, and the hands pointer is only known here; a listener could
-// run on any thread while the blend reads the lists. Each arm waits for the hands its modifiers were added to
-// (another hands' tick passes); nothing to do when no hands have them.
+// written, and its surfaces hidden again if the layer showed them, and a test weight put back (development
+// only). The only writes after a trip: they undo the layer's own changes, like the cvar restore. Done here,
+// not from a trip listener: the modifier lists and the arms' caches belong to this hook's game thread, and
+// the hands pointer is only known here; a listener could run on any thread while the blend reads the lists.
+// Each arm waits for the hands its modifiers were added to (another hands' tick passes); nothing to do when
+// no hands have them.
 void releaseOnTrip(const std::byte* hands) {
     if (mp_guard::state() != mp_policy::GuardState::Tripped) {
         return;
     }
     if (g_weaponArm) {
         weapon_arm::releaseOnTrip(hands);
+    }
+    if (settings().testArmModWeight) {
+        game_arm::releaseModWeight(hands); // the test weight back, on the hands that held it
     }
     // Whatever the weapon arm did: hidden arms stop hiding (logged, nothing written), and what a cutscene hid
     // on the right arm is shown again (the weapon arm's own give-back skips an arm it never posed).
@@ -339,7 +375,7 @@ void releaseOnTrip(const std::byte* hands) {
                      : "no arm modifiers of the layer's in place; the left arm is the game's");
 }
 
-void onLeftHandMod(const HookRegisters& regs) {
+void poseLeftHand(const HookRegisters& regs) {
     const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
     if (!mp_guard::allowsGameTouch()) {
         releaseOnTrip(hands);
@@ -372,6 +408,7 @@ void onLeftHandMod(const HookRegisters& regs) {
         world = s.world;
         model = s.model;
     }
+    arm_dump::noteView(world, model);
     input::ArmSignals sig = readSignals(hands, owner);
     sig.forcedView = s.yielding.load();
     sig.modelPlaced = model.valid && secondsSince(model.qpc) <= kWorldStaleSeconds;
@@ -388,6 +425,7 @@ void onLeftHandMod(const HookRegisters& regs) {
     if (cfg.offhandTrace) {
         trace(sig, decision, weight);
     }
+    arm_dump::noteGameArm(arm::ArmSide::Left, weight);
     if (weight <= 0.0f || cfg.offhand != input::OffhandMode::Free) {
         giveBackLeft(hands);
     }
@@ -453,6 +491,31 @@ void onLeftHandMod(const HookRegisters& regs) {
     }
 }
 
+// The change SetJointMod is about to be handed for the left attach joint, whoever made it (bind solve only).
+void noteAttachMod(const HookRegisters& regs) {
+    bool ok = true;
+    const auto* rsp = reinterpret_cast<const std::byte*>(regs.rsp);
+    const float* rotation = nullptr;
+    xr_math::JointMod mod;
+    mod.translation = readVec3(rsp + kTranslationFromRsp, ok);
+    ok = ok && safeRead(rsp + kRotationArgFromRsp, rotation) && rotation;
+    if (ok) {
+        mod.rotation = readMat3(reinterpret_cast<const std::byte*>(rotation), ok);
+    }
+    g_lastMod =
+        ok ? std::optional(arm::HandedMod{reinterpret_cast<const void*>(regs.rdi), mod}) : std::nullopt;
+}
+
+void onLeftHandMod(const HookRegisters& regs) {
+    poseLeftHand(regs);
+    if (settings().armSolve == input::ArmSolve::Bind) {
+        noteAttachMod(regs);
+    }
+    if (arm_dump::on()) {
+        arm_dump::tick(reinterpret_cast<const std::byte*>(regs.rdi));
+    }
+}
+
 } // namespace
 
 bool installOffhandHook(bool& weaponArmInstalled) {
@@ -469,7 +532,7 @@ bool installOffhandHook(bool& weaponArmInstalled) {
         return false;
     }
     for (const Expect& e : kExpected) {
-        if (!bytesMatch(start + e.at, e.bytes)) {
+        if (!matchesAt(image, start + e.at, e.bytes)) {
             EVR_LOG("%s: UpdateWeaponLagJointMods differs at +0x%zX; off hand stays the game's", kTag, e.at);
             return false;
         }

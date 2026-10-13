@@ -22,6 +22,19 @@ ModelPose& at(ArmPoses& poses, ArmJoint joint) {
     return poses[index(joint)];
 }
 
+// The attach joint placed to carry the wrist as animated, and every joint checked.
+std::optional<ArmSolution> finish(ArmSolution& out, const ArmPoses& animated) {
+    at(out.joints, ArmJoint::Attach) =
+        parentFor(at(out.joints, ArmJoint::Hand),
+                  relative(at(animated, ArmJoint::Attach), at(animated, ArmJoint::Hand)));
+    for (const ModelPose& pose : out.joints) {
+        if (!plausiblePose(pose)) {
+            return std::nullopt;
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 float twistShare(Vec3 position, Vec3 elbow, Vec3 wrist) {
@@ -34,7 +47,8 @@ float twistShare(Vec3 position, Vec3 elbow, Vec3 wrist) {
     return std::isfinite(share) ? std::clamp(share, 0.0f, 1.0f) : 0.0f;
 }
 
-std::optional<ArmSolution> solveArm(const ArmPoses& animated, const ArmTargets& targets) {
+std::optional<ArmSolution>
+solveArm(const ArmPoses& animated, const ArmTargets& targets, const TwistLimits& limits) {
     for (const ModelPose& pose : animated) {
         if (!plausiblePose(pose)) {
             return std::nullopt;
@@ -80,38 +94,70 @@ std::optional<ArmSolution> solveArm(const ArmPoses& animated, const ArmTargets& 
         return std::nullopt;
     }
 
-    // The wrist, and its twist about the forearm relative to the hand carried rigidly by the forearm.
     ModelPose& hand = at(out.joints, ArmJoint::Hand);
-    hand = {wrist, targets.hand.axis};
-    const ModelPose carried = compose(forearm, relative(forearmA, at(animated, ArmJoint::Hand)));
-    const Vec3 along = forearm.axis.forward;
-    const float twist = twistAbout(carried.axis, hand.axis, along);
-    out.twist = twist;
+    out.twistFrom = targets.twistFrom;
+    if (targets.twistFrom == TwistFrom::Animated) {
+        // The solve as it was (ETERNALVR_ARM_SOLVE=animated): the twist relative to the animated hand
+        // carried by the forearm, wrapped to half a turn each tick; the joints keep their animated relation
+        // to their bone; the wrist takes the target as it is.
+        hand = {wrist, targets.hand.axis};
+        const ModelPose carriedHand = compose(forearm, relative(forearmA, at(animated, ArmJoint::Hand)));
+        const Vec3 along = forearm.axis.forward;
+        out.twist = twistAbout(carriedHand.axis, hand.axis, along);
+        out.split = {out.twist, 0.0f, 0.0f};
+        out.swing = {hand.axis, 0.0f, 0.0f, false};
+        for (const ArmJoint joint : kForearmJoints) {
+            const ModelPose base = compose(forearm, relative(forearmA, at(animated, joint)));
+            const float angle = out.twist * twistShare(at(animated, joint).position, elbowA, wristA);
+            at(out.joints, joint) = {elbow + rotateAbout(base.position - elbow, along, angle),
+                                     rotateAbout(base.axis, along, angle)};
+        }
+        at(out.joints, ArmJoint::UpperArm) =
+            compose(upper, relative(upperA, at(animated, ArmJoint::UpperArm)));
+        return finish(out, animated);
+    }
+
+    // The bones' neutral frames (arm_twist.hpp): the roll joints' y runs along the forearm, toward the
+    // wrist on one side of the mirrored rig and toward the elbow on the other.
+    const float side = dot(at(animated, ArmJoint::Roll3).axis.left, wristA - elbowA) >= 0.0f ? 1.0f : -1.0f;
+    IdViewAxis forearmNeutral;
+    IdViewAxis upperNeutral;
+    if (!neutralFrame(wrist - elbow, normal, side, forearmNeutral) ||
+        !neutralFrame(elbow - shoulder, normal, side, upperNeutral)) {
+        return std::nullopt;
+    }
+
+    // The wrist: its swing limited, its twist from the forearm's neutral frame unwrapped against the last.
+    out.swing = targets.limitSwing ? limitSwing(forearmNeutral, targets.hand.axis, limits)
+                                   : SwingResult{targets.hand.axis, 0.0f, 0.0f, false};
+    hand = {wrist, out.swing.hand};
+    const Vec3 along = forearmNeutral.left;
+    out.twist = unwrapTwist(twistAbout(forearmNeutral, hand.axis, along), targets.lastTwist, limits);
+    out.split = splitTwist(out.twist, limits);
 
     for (const ArmJoint joint : kForearmJoints) {
         const ModelPose base = compose(forearm, relative(forearmA, at(animated, joint)));
-        const float angle = twist * twistShare(at(animated, joint).position, elbowA, wristA);
+        const float angle =
+            out.split.upper + out.split.forearm * twistShare(at(animated, joint).position, elbowA, wristA);
         at(out.joints, joint) = {elbow + rotateAbout(base.position - elbow, along, angle),
-                                 rotateAbout(base.axis, along, angle)};
+                                 rotateAbout(forearmNeutral, along, angle)};
     }
-    at(out.joints, ArmJoint::UpperArm) = compose(upper, relative(upperA, at(animated, ArmJoint::UpperArm)));
-    at(out.joints, ArmJoint::Attach) =
-        parentFor(hand, relative(at(animated, ArmJoint::Attach), at(animated, ArmJoint::Hand)));
-
-    for (const ModelPose& pose : out.joints) {
-        if (!plausiblePose(pose)) {
-            return std::nullopt;
-        }
-    }
-    return out;
+    // The upper arm carries the elbow's turn as far as its axis lines up with the forearm's.
+    const float carried = out.split.upper * std::clamp(dot(upperNeutral.left, along), 0.0f, 1.0f);
+    at(out.joints,
+       ArmJoint::UpperArm) = {compose(upper, relative(upperA, at(animated, ArmJoint::UpperArm))).position,
+                              rotateAbout(upperNeutral, upperNeutral.left, carried)};
+    return finish(out, animated);
 }
 
-std::optional<ArmSolution> solveArmToWrist(const ArmPoses& animated, Vec3 shoulder, Vec3 pole) {
+std::optional<ArmSolution> solveArmToWrist(
+    const ArmPoses& animated, Vec3 shoulder, Vec3 pole, std::optional<float> lastTwist, TwistFrom twistFrom) {
     const ModelPose& hand = at(animated, ArmJoint::Hand);
     const float upper =
         length(at(animated, ArmJoint::ForeArm).position - at(animated, ArmJoint::UpperArm).position);
     const float lower = length(hand.position - at(animated, ArmJoint::ForeArm).position);
-    const ArmTargets targets{hand, rootWithinReach(shoulder, hand.position, upper, lower), pole};
+    const ArmTargets targets{
+        hand, rootWithinReach(shoulder, hand.position, upper, lower), pole, lastTwist, false, twistFrom};
     auto out = solveArm(animated, targets);
     if (!out || out->ik.clamped) {
         return std::nullopt;
@@ -119,6 +165,24 @@ std::optional<ArmSolution> solveArmToWrist(const ArmPoses& animated, Vec3 should
     // The IK lands on the wrist to rounding; the wrist is the game's, exactly.
     at(out->joints, ArmJoint::Hand) = hand;
     at(out->joints, ArmJoint::Attach) = at(animated, ArmJoint::Attach);
+    return out;
+}
+
+HandsOnlyArm handsOnly(const ArmPoses& joints, Cuff cuff) {
+    constexpr ArmJoint kFolded[] = {ArmJoint::Roll3,       ArmJoint::Roll2,   ArmJoint::Roll1,
+                                    ArmJoint::ForeArmRoll, ArmJoint::ForeArm, ArmJoint::UpperArm};
+    HandsOnlyArm out{joints, 0};
+    const ModelPose onto = cuff == Cuff::Stub ? at(joints, ArmJoint::Roll3) : at(joints, ArmJoint::Hand);
+    for (const ArmJoint joint : kFolded) {
+        if (cuff == Cuff::Stub && joint == ArmJoint::Roll3) {
+            continue;
+        }
+        at(out.joints, joint) = onto;
+        const bool roll = joint != ArmJoint::ForeArm && joint != ArmJoint::UpperArm;
+        if (cuff != Cuff::Ring || !roll) {
+            out.zeroScale |= 1u << index(joint);
+        }
+    }
     return out;
 }
 

@@ -1,6 +1,7 @@
 #include "vkcore/runtime_cvars.hpp"
 #include "vkcore/runtime_cvars_impl.hpp"
 
+#include "platform/mp_policy/profile_cvars.hpp"
 #include "stereo_seq/debug_cvars.hpp"
 #include "stereo_seq/seq_settings.hpp"
 #include "stereo_seq/setting_follow.hpp"
@@ -52,6 +53,7 @@ SetStringFn g_setString = nullptr;
 std::vector<Held> g_held;
 int g_loggedWrites = 0;
 std::atomic<std::uint64_t> g_writes{0};
+int g_profileIo = 0; // profile loads and saves under way (setProfileIo), under g_mutex
 stereo_seq::StereoTemporal g_temporal = stereo_seq::StereoTemporal::Off;
 
 // The window set's size is left to the game once the render size is off: the game then renders at its
@@ -125,17 +127,6 @@ void reportFollows() {
     }
     ssrReported = ssr;
     ssdoReported = ssdo;
-}
-
-// The cvar's integer value as the engine keeps it (the values block, +0x08).
-int readValue(const std::byte* object) {
-    const std::byte* values = nullptr;
-    std::memcpy(&values, object, sizeof(values));
-    int number = 0;
-    if (values) {
-        std::memcpy(&number, values + 8, sizeof(number));
-    }
-    return number;
 }
 
 // The cvar's float value (the values block, +0x0C; the renderer reads it there, e.g. 0x1CFC7C3).
@@ -297,6 +288,7 @@ void start(bool stereo) {
     addParallelEyeSet(g_held); // before the CPU Saver, as the stereo sets
     addCpuSaver();
     addSharpening();
+    addReticleHold(g_held); // before the debug list, whose value entry for the cvar replaces it
     addDebugList();
     addPromptPlatform();
     GameImage image;
@@ -340,6 +332,7 @@ void start(bool stereo) {
     bool anySaver = false;
     for (Held& h : g_held) {
         holdPlacedWindow(h);
+        h.profile = mp_policy::profileStoredCvar(h.name);
         if (h.object && (h.scatter || h.ssdo)) {
             // Held only without per-eye TAA (historyFilterHold); 0 throughout when the history's hooks are
             // not in.
@@ -349,6 +342,10 @@ void start(bool stereo) {
                      : h.ssdo ? " 1 while the SSDO history is per eye, else 0"
                               : " 1 while the scattering history is per eye, else 0") +
                     (taaRequested() ? " (if per-eye TAA fails closed)" : "");
+        } else if (h.object && h.reticle) {
+            list +=
+                (list.empty() ? "" : ", ") + h.name + " " + h.value +
+                " while hand aim is on (ETERNALVR_UI_CROSSHAIR=hold; the centre mask until it reads back)";
         } else if (h.object && h.flares) {
             list += (list.empty() ? "" : ", ") + h.name + " " + h.value +
                     " while lens flares per view are off (" + (parallelEyeFlaresLive() ? "on" : "off") + ")";
@@ -372,6 +369,17 @@ void start(bool stereo) {
 
 std::mutex& heldMutex() {
     return g_mutex;
+}
+
+// The cvar's integer value as the engine keeps it (the values block, +0x08).
+int readValue(const std::byte* object) {
+    const std::byte* values = nullptr;
+    std::memcpy(&values, object, sizeof(values));
+    int number = 0;
+    if (values) {
+        std::memcpy(&number, values + 8, sizeof(number));
+    }
+    return number;
 }
 
 bool applied() {
@@ -422,12 +430,20 @@ void apply(bool stereo) {
         reportFollows();
     }
     if (!g_setString || !mp_guard::allowsGameTouch()) {
+        reticleUnchecked();
         return;
     }
     for (Held& h : g_held) {
         if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off) ||
             ((h.scatter || h.ssdo) && !historyFilterHold(h)) ||
-            (h.viewDlss && !viewDlssHolds(h.name, h.value)) || (h.flares && parallelEyeFlaresLive())) {
+            (h.viewDlss && !viewDlssHolds(h.name, h.value)) || (h.flares && parallelEyeFlaresLive()) ||
+            (h.profile && g_profileIo > 0)) {
+            continue;
+        }
+        if (h.reticle) {
+            if (applyReticle(h, g_setString)) {
+                g_writes.fetch_add(1, std::memory_order_relaxed);
+            }
             continue;
         }
         holdPlacedWindow(h);
@@ -515,6 +531,10 @@ void setStereoTemporal(stereo_seq::StereoTemporal temporal) {
                 temporal == stereo_seq::StereoTemporal::PerEye ? "left to the per-eye module" : "held off");
     }
     g_temporal = temporal;
+}
+
+void setProfileIo(bool busy) {
+    g_profileIo += busy ? 1 : -1;
 }
 
 std::uint64_t writes() {

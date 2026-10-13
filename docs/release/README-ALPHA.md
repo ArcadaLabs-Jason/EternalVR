@@ -5,8 +5,8 @@ and lets your motion controllers drive the game: you aim with your hand, move an
 and use the menus with a laser pointer. It is not a port and it changes no game files; a small launcher
 starts the game with the mod for one session and puts your settings back afterwards.
 
-This is an alpha for a few trusted testers. It works on my PC, but it is rough, it has been tested on
-exactly one PC, and some things you will expect from a VR game are not done yet. Please read
+This is an alpha. It works on my PCs, but it is rough, it has been tested on two PCs here, and some
+things you will expect from a VR game are not done yet. Please read
 `docs\KNOWN-ISSUES.md` before you start, and expect to send me logs.
 
 The exact version and commit are in `BUILD-INFO.txt`. Please quote them in every report.
@@ -14,11 +14,11 @@ The exact version and commit are in `BUILD-INFO.txt`. Please quote them in every
 ## What you need
 
 - **Windows 10 or 11**, 64-bit.
-- **An NVIDIA RTX graphics card.** Tested: an RTX 4080, and an RTX 3080 Ti (12 GB). AMD and Intel cards
-  have not been tried at all.
+- **A graphics card, ideally an NVIDIA RTX.** Tested: an RTX 4080, and an RTX 3080 Ti (12 GB). AMD and
+  Intel cards have not been tried here; players with AMD cards have run it (`docs\KNOWN-ISSUES.md`).
 - **A headset with an OpenXR runtime.** Tested: Meta Quest 3 through Virtual Desktop, with Virtual
-  Desktop's own OpenXR runtime (VDXR). SteamVR, Meta Horizon Link and every other runtime or headset are
-  untested; they may work, and I would like to hear either way.
+  Desktop's own OpenXR runtime (VDXR), and once through SteamVR. Meta Horizon Link and every other runtime
+  or headset have not been tested here; they may work, and I would like to hear either way.
 - **Motion controllers:** Meta Touch controllers (Quest). Valve Index, HP Reverb G2, Windows Mixed
   Reality, HTC Vive Cosmos, HTC Vive wands, Pico 4 and Steam Frame controllers have bindings but are
   untested. Other
@@ -110,11 +110,6 @@ why it did not. It may not when another problem is shown there; the logs in the 
   button and pull a trigger; other controllers: `docs\TROUBLESHOOTING.md`). It saves both eyes.
 - The time it happened, the map, your graphics card, and what was wrong: a slideshow, stutter, the eyes out
   of step, an effect in one eye only, or anything else.
-
-## Please do not share this build
-
-It is for the testers I sent it to. Please don't pass it on or post it anywhere; a public release will
-come when it is ready.
 
 ## Reporting
 

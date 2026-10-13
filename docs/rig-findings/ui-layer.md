@@ -221,6 +221,76 @@ wins), and `+g_showHud 0` left the HUD on (U3). Under head aim the game's crossh
 (direction right, depth d). Not yet: the hit distance (depth at the ray) for the dot, per-weapon cues
 (lock-on, charge) on a weapon panel.
 
+**The crosshair hold (`ETERNALVR_UI_CROSSHAIR`, 2026-10-12).** The mask took everything else the game draws
+in that square with the crosshair: an objective marker straight ahead, the chainsaw's `NO TARGET` and the
+low ammo texts, the ability indicators (players' report: "the invisible rectangle that blocks HUD objects at
+the center of your view"). What the game draws there and what controls it [static: the HUD decls and SWFs in
+the game's resources, the exe]:
+
+- `idHUD_Reticle` (`swf/hud/hud_reticle.swf`): every weapon's reticle with its cues (lock-on, charge and heat
+  bars, BFG kill count, chainsaw pips, the hit marker, scope overlays). Its update (vtable slot 7, 0xEFD230)
+  picks a style every update: the weapon decl's, style 1 (dot) for `g_reticleMode 1`, **style 0, no reticle,
+  for `g_reticleMode 2` and for the player's `hideReticle`**, and then `hud_reticle_styleOverride` when it is
+  0 or more (clamped to 36), which replaces all of them; `hud_reticle_scaleOverride` above 0 scales it.
+- `idHUD_AbilityIndicators` (`hud_abilityindicators_singlestack.swf`), its own element:
+  `g_setting_hud_ability_indicator_type` 0 hides it, 1 to 4 show the SWF frames `version1` to `version4`
+  (large, small, lower large, lower small; the registration's default is 3), per icon
+  `g_setting_hud_ability_indicator_*` (0xED21B0). No reticle cvar touches it.
+- `hud_lowwarning.swf` (`helmetTag reticle_display`, centre plane): LOW AMMO, OUT OF AMMO, LOW HEALTH and the
+  chainsaw's NO TARGET, OUT OF RANGE, INVALID TARGET and OUT OF FUEL; no cvar of its own.
+- `idHUD_POI` (`hud_poi.swf`, full screen, world-projected): objective markers (`g_setting_objectiveMarkers`),
+  lock-on brackets on enemies, mortar markers. `idHUD_FocusInfo` sits at the centre anchor.
+
+Why `g_reticleMode` cannot be held: it is a profile field. The profile's load runs
+`idGameSettings::SetCVarsFromFields()` (0x6AB320), which wrote over U6's command line, and **every profile
+save runs `idGameSettings::SetFieldsFromCVars()` (0x6ABA90, called from the `profile.bin` writer 0x14978E0)**,
+which copies the live cvar into the profile, so a held 2 would hide the crosshair in the player's flat game
+(the same function copies `g_setting_objectiveMarkers`, `g_setting_interact_prompt`, `g_setting_hud_show`
+and the compass; the ability indicator settings go through the profile serializer 0x141D040). So no
+`g_setting_*` or other profile field is held. `hud_reticle_styleOverride` is none of those: registration flags
+0x2 (no save flag), not among idGameSettings' fields, no menu, and its registration and the reticle's update
+are its only two references in the exe [static].
+
+So by default (`ETERNALVR_UI_CROSSHAIR=hold`, `src/ui_layer/crosshair.hpp`, `src/vkcore/runtime_cvars_reticle.*`)
+the layer holds `hud_reticle_styleOverride 0` with the other run-time cvars (Route S and Parallel Eye
+Rendering) while the UI layer is on, only while the presenter asks for it on its GUI copies, that is under hand
+aim; when hand aim ends (head aim, a demon piloted under head aim) or the last request is over 0.5 s old and 4
+presents have read it (the copies stopped: VR off for the game, a failed target check; a single long frame is
+one or two presents and does not end the hold), the value from before that hold's first write goes back. A
+value set while no hold runs (a console style under head aim) is the player's: not written back.
+The GUI copy keeps its centre once the cvar has read 0 for 8 presents in a row; until then, and again as soon
+as a reading is not 0, the guard stops the writes, no present has read it for 0.5 s (a mono session with the UI
+layer never reads it), or an `ETERNALVR_DEBUG_CVARS` value entry for the cvar (`name=value`; a `name=?` entry
+only logs beside the hold) replaces the hold, the mask clears the square as before. Menus and
+backdrops keep their exceptions. `ETERNALVR_UI_CROSSHAIR=mask` is the earlier behaviour unchanged. The cvar
+is found by name like every held cvar: in the Game Pass image dump the layer's registration pattern finds it
+once (default -1) and the reticle update's mode and override code matches byte for byte (0xF08DB2,
+0xF08DFD) [static]. Log: the `ui: UI layer ...` line names the mode (`the game's crosshair under hand aim:
+hold (...)` or `mask (...)`), `cvars: held at run time: ... hud_reticle_styleOverride 0 while hand aim is on
+...`, each write `cvars: hud_reticle_styleOverride -1 -> 0 (reads 0); hand aim: the game's crosshair hidden`
+(the first 13; the give-back ends `the hold's request ended (no hand aim) ...` or `the hold's request lapsed (no
+GUI copy for 0.5 s and 4 presents) ...`), `ui: crosshair hold confirmed ...` / `not confirmed ...` on each
+change, and the 10 s line's
+`N for the crosshair hold (confirmed | not confirmed now, N change(s))`.
+
+Rig (the RTX 3080 Ti test PC, OpenXR-Simulator, 2026-10-12; QA scenarios `crosshair-hold`, `crosshair-mask`,
+`crosshair-hold-head` with the GUI target at 1280x1400; shots of the simulator's composed frame,
+`<workspace>\QA-ch5\`, side by side in `compare\`):
+
+- The hold reaches the game: `hud_reticle_styleOverride -1 -> 0 (reads 0)` at the first hand-aim copy,
+  `crosshair hold confirmed` 63 ms later, and no game crosshair in any shot under hand aim. Under head aim nothing is
+  written and the game's crosshair shows. The fallback stayed rare: 5032 of 5041 copies kept their centre (the 9
+  before the confirmation), one change in the run, none through a pause, a death and the death screen.
+- The chainsaw's NO TARGET with nothing in reach: `mask` cuts the middle of the banner out (the players' "OUT OF
+  RANGE" cut at the square's edge), `hold` shows it whole, as head aim does. The Praetor Suit token's name and the
+  ability indicators (the default lower layout sits below the square) show in all three. The map markers near the
+  middle of the view at the token checkpoint sat just outside the square.
+- Style 0 also takes out the reticle's own overlays: with the Heavy Cannon's Precision Bolt scoped, head aim shows
+  the scope's arcs and RELOADING, `mask` leaves the arcs outside the square, `hold` shows none. The hit marker was
+  not seen (no demon in the scene).
+- The pause menu and the death screen show whole in every mode (no see-through square). At the suite's 1280x720
+  window the square is half the angle a headset gets, so the scenarios run with `ETERNALVR_RENDER_SIZE=auto`.
+
 **The mask and full-screen backdrops (bug B3).** Menus and cinematics draw a full-screen opaque layer into
 `_gui` (the pause and settings backdrop, a cinematic's fade: alpha 255, colour 0 to 3). Masked, the square
 showed as a see-through hole in a head-locked black rectangle. The mask is therefore off while a menu is up
@@ -295,6 +365,7 @@ handed out and nothing changes.
 | Presenter: shared UI images, copy, UI swapchain, quad, skip policy, 10 s statistics | `src/vkcore/presenter_ui.cpp` (+ small calls in `presenter_copy/ring/seq/frame.cpp`, `xr_presenter.cpp`, `layer_entry.cpp`) | |
 | `ETERNALVR_CAPTURE_UI=<dir>[,N]`: every Nth capture as an RGBA PNG | `src/vkcore/ui_capture.*`, `stereo_seq::encodePngRgba8` | `png_writer_tests.cpp` |
 | Hand-aim reticle (settings, dot image, angular size, centre mask regions; the quad in the weapon hand's aim space) | `src/ui_layer/ui_settings.*`, `presenter_ui.cpp`, `controllers::weaponAimSpace` | `ui_settings_tests.cpp` |
+| The game's crosshair under hand aim: the hold, its confirmation, the mask fallback (`ETERNALVR_UI_CROSSHAIR`) | `src/ui_layer/crosshair.*`, `src/vkcore/runtime_cvars_reticle.*`, `presenter_ui.cpp` | `crosshair_tests.cpp` |
 | The mask's backdrop test (probe points, reading, hysteresis; the readback) | `src/ui_layer/backdrop.*`, `src/vkcore/backdrop_probe.*` | `backdrop_tests.cpp` |
 
 **Fail closed**: any signature that does not match once, a GUI target slot that is not render system +

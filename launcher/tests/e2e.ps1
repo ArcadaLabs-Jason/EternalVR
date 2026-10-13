@@ -406,5 +406,24 @@ Set-Settings $t @('extra_args = +com_showFPS 1 +map game/sp/e1m1_intro/e1m1_intr
 $record = Invoke-Session $t 'single-player'
 Check (Has-Line $record 'cmdline=*+com_showFPS 1 +map game/sp/e1m1_intro/e1m1_intro*') 'single-player arguments passed after the forced cvars'
 
+Write-Host "12. start watchdog: a session the runtime starts only after the limit"
+$t = New-Tree (Join-Path $Root 'watchdog')
+Set-FakeGame $t 23000
+# The layer's start as its status file shows it: loaded, the game's first present at 1 s, the OpenXR session at 2 s, and
+# the runtime starting VR (with the first headset frame) only at 21 s, past the 15 s limit.
+$base = 'state=starting\nreason=the mod is loaded\nversion=e2e\npid=1'
+Add-Content -LiteralPath "$($t.Game)\fake-game.ini" -Value @(
+    'layer_loaded=1', "layer_status_0=$base", "layer_status_1000=$base\nfirst_present=1.0",
+    "layer_status_2000=$base\nfirst_present=1.0\nruntime=EvrTestXR",
+    'layer_status_21000=state=vr\nreason=the headset shows the game\nstereo=on\nfirst_present=1.0\nruntime=EvrTestXR\nfirst_headset_frame=21.0')
+$code = Invoke-Launcher $t @('--launch') "$($t.Dir)\launcher.out"
+Check ($code -eq 0) "launcher exit code 0 (got $code)"
+$out = "$($t.Dir)\launcher.out"
+Check (Test-Output $out 'start: the game shows its first frame; VR connects to the headset runtime') 'the first present is logged as a start step'
+Check (Test-Output $out 'start: the OpenXR session exists; the runtime has not started it yet') 'the session is logged as a start step'
+Check (Test-Output $out 'status: The headset runtime (EvrTestXR) has not started VR in 15 s.') 'the idle session is named on the status line after its limit'
+Check (Test-Output $out "start: the game's first picture reached the headset") 'the first headset frame is logged as a start step'
+Check (Test-Output $out 'status: VR is running in stereo.') 'VR coming up replaces the warning'
+
 if ($script:failures -gt 0) { Write-Host "E2E FAILED: $script:failures check(s)"; exit 1 }
 Write-Host 'E2E OK'

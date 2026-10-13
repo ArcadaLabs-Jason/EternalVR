@@ -8,6 +8,7 @@
 
 #include "vkcore/controllers.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/runtime_cvars_reticle.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/ui_vulkan.hpp"
@@ -28,9 +29,6 @@ namespace {
 constexpr VkFormat kUiVkFormat = VK_FORMAT_R8G8B8A8_UNORM;
 constexpr DXGI_FORMAT kUiDxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 constexpr DXGI_FORMAT kUiSwapchainFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-// The centred square left out of the GUI copy under hand aim, as a fraction of the target's height: the
-// game's crosshair and the ability indicators around it.
-constexpr float kCrosshairMask = 0.12f;
 
 } // namespace
 
@@ -39,10 +37,13 @@ constexpr float kCrosshairMask = 0.12f;
 void XrPresenter::Impl::startUi() {
     const bool located = ui_engine::install(settings.ui.skipComposite);
     EVR_LOG("ui: UI layer %s; quad %.2f m wide, %.2f m ahead, %.2f m up, head-locked; GUI composite in the "
-            "eyes %s",
+            "eyes %s; the game's crosshair under hand aim: %s (ETERNALVR_UI_CROSSHAIR)",
             located ? "on" : "OFF (reason above)", settings.ui.widthMetres, settings.ui.distanceMetres,
             settings.ui.offsetYMetres,
-            ui_engine::skipHookInstalled() ? "skipped while the quad shows" : "kept");
+            ui_engine::skipHookInstalled() ? "skipped while the quad shows" : "kept",
+            settings.ui.crosshair == ui_layer::CrosshairMode::Mask
+                ? "mask (the centre of the GUI copy cleared)"
+                : "hold (hud_reticle_styleOverride 0; the centre mask until the hold reads back)");
     const ui_layer::WristSettings& w = settings.ui.wrist;
     EVR_LOG("ui: HUD %s%s; wrist: %s (facing %.0f/%.0f deg, gaze %.0f/%.0f deg), %.2f m row at (%.3f, %.3f, "
             "%.3f), fade %.2f s %s, abilities %s",
@@ -284,21 +285,34 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                               nullptr, 0, nullptr, static_cast<std::uint32_t>(before.size()), before.data());
     // Under hand aim the game's crosshair (the centre of the target) marks the head's ray, not the gun's:
-    // it is left out (cleared) and the reticle quad marks the hand's ray instead. Not while a menu is up,
-    // nor while the target holds a full-screen backdrop (a menu's, a cinematic's fade): the square would
-    // be a see-through hole in it. The backdrop test reads the pixels around the square of earlier copies.
-    // The crosshair stays out with the reticle off (ETERNALVR_UI_RETICLE=0): it would still mark the head.
+    // it is taken out and the reticle quad marks the hand's ray instead (ui_layer/crosshair.hpp). `hold`:
+    // the layer holds the game's "no reticle" style, and the centre is left out (cleared) only until that
+    // reads back; `mask`: always left out. Not while a menu is up, nor while the target holds a full-screen
+    // backdrop (a menu's, a cinematic's fade): the square would be a see-through hole in it. The backdrop
+    // test reads the pixels around the square of earlier copies. The crosshair stays out with the reticle
+    // off (ETERNALVR_UI_RETICLE=0): it would still mark the head.
     const bool handAim = controllers::weaponAimSpace() != XR_NULL_HANDLE;
     const bool menu = menuUp.load(std::memory_order_relaxed);
     const bool backdrop = uiBackdrop.backdrop();
-    const bool mask = handAim && !menu && !backdrop;
+    const ui_layer::CrosshairMode crosshair = settings.ui.crosshair;
+    runtime_cvars::wantReticleHidden(ui_layer::wantsReticleHold(crosshair, handAim));
+    const bool held = crosshair == ui_layer::CrosshairMode::Hold && runtime_cvars::reticleHiddenConfirmed();
+    const bool mask = ui_layer::centreMasked(
+        {.mode = crosshair, .handAim = handAim, .menu = menu, .backdrop = backdrop, .holdConfirmed = held});
+    if (uiHold.note(handAim && crosshair == ui_layer::CrosshairMode::Hold, held, !menu && !backdrop) &&
+        uiHold.changes <= ui_layer::kLoggedHoldChanges) {
+        EVR_LOG("ui: crosshair hold %s",
+                held ? "confirmed (hud_reticle_styleOverride reads 0): the GUI copy keeps its centre"
+                     : "not confirmed: the mask is back (the centre of the GUI copy is cleared outside menus "
+                       "and full-screen backdrops)");
+    }
     if (handAim && menu) {
         ++uiUnmaskedMenu;
     } else if (handAim && backdrop) {
         ++uiUnmaskedBackdrop;
     }
-    const std::vector<ui_layer::PixelRect> rects =
-        ui_layer::copyRegionsWithoutCentre(uiExtent.width, uiExtent.height, mask ? kCrosshairMask : 0.0f);
+    const std::vector<ui_layer::PixelRect> rects = ui_layer::copyRegionsWithoutCentre(
+        uiExtent.width, uiExtent.height, mask ? ui_layer::kCrosshairMask : 0.0f);
     if (rects.size() > 1) {
         const VkClearColorValue clear{};
         dev.vk.CmdClearColorImage(cb, slot.ui.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
@@ -325,7 +339,7 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
         // A menu is up: the desktop window shows what the panel shows (presenter_mirror.hpp).
         mirror.keepPanel(dev, cb, family, image, uiExtent, panel->format, panel->extent);
     }
-    uiBackdrop.record(dev, cb, image, uiExtent, kCrosshairMask);
+    uiBackdrop.record(dev, cb, image, uiExtent, ui_layer::kCrosshairMask);
     if (const VkBuffer buffer = uiCapture.bufferFor(dev, uiCaptures, uiExtent)) {
         EyeCapture::record(dev, cb, image, uiExtent, buffer);
     }
@@ -360,7 +374,7 @@ void XrPresenter::Impl::logUiStats() {
         "ui: %llu GUI capture(s), %llu not captured (last reason: %s); %llu image(s) prepared, GUI target "
         "changed %llu time(s) (%llu not followed); composites %llu, %llu without the GUI; %llu target read "
         "failure(s); skip %s; backdrop test: %llu reading(s), %llu backdrop(s) (%s now), hand-aim copies not "
-        "masked: %llu for a backdrop, %llu for a menu",
+        "masked: %llu for a backdrop, %llu for a menu, %llu for the crosshair hold (%s now, %llu change(s))",
         static_cast<unsigned long long>(uiCaptures), static_cast<unsigned long long>(uiNotCaptured),
         ui_layer::toString(uiLastCheck), static_cast<unsigned long long>(v.candidates),
         static_cast<unsigned long long>(v.watchChanges),
@@ -369,7 +383,9 @@ void XrPresenter::Impl::logUiStats() {
         static_cast<unsigned long long>(e.readFailures), ui_engine::skipComposite() ? "on" : "off",
         static_cast<unsigned long long>(uiBackdrop.readings()),
         static_cast<unsigned long long>(uiBackdrop.backdropsSeen()), uiBackdrop.backdrop() ? "up" : "none",
-        static_cast<unsigned long long>(uiUnmaskedBackdrop), static_cast<unsigned long long>(uiUnmaskedMenu));
+        static_cast<unsigned long long>(uiUnmaskedBackdrop), static_cast<unsigned long long>(uiUnmaskedMenu),
+        static_cast<unsigned long long>(uiHold.kept), uiHold.confirmed ? "confirmed" : "not confirmed",
+        static_cast<unsigned long long>(uiHold.changes));
 }
 
 // ---- Worker: the UI swapchain, its copy and the quad ------------------------------------------------

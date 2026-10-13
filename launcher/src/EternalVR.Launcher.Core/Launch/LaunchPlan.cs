@@ -52,6 +52,11 @@ namespace EternalVR.Launcher.Core.Launch
         /// layer would refuse it: it is not asked for, and Alternate eyes and Foveation are passed as without it.
         /// </summary>
         public bool ParallelEyesGame { get; set; } = true;
+        /// <summary>
+        /// Ask the layer for the one-time camera shake repair in the player's profile (<see cref="Safety.ProfileRepair"/>);
+        /// stereo only.
+        /// </summary>
+        public bool ProfileRepair { get; set; }
     }
 
     /// <summary>Exactly what will be started: the game's exe, folder, command line and added environment.</summary>
@@ -183,6 +188,8 @@ namespace EternalVR.Launcher.Core.Launch
             if (!string.IsNullOrEmpty(inputs.LogDir)) Set("ETERNALVR_LOG_DIR", inputs.LogDir);
             Set("ETERNALVR_WORLD_SCALE", LauncherSettings.ClampWorldScale(s.WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
             if (stereo) Set("ETERNALVR_MODE", "stereo");
+            // The layer's profile hooks run in stereo only, so the repair is asked for only there.
+            if (stereo && inputs.ProfileRepair) Set(Safety.ProfileRepair.Variable, "1");
             // One eye per game tick for slower processors, always or only while the processor cannot keep up
             // (docs/rig-findings/alternate-eye.md); explicit either way. Not with Parallel Eye Rendering, which ignores it.
             Set("ETERNALVR_ALTERNATE_EYES", stereo && !parallel ? LauncherSettings.AlternateEyesValue(s.AlternateEyes) : "0");

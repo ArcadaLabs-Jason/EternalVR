@@ -234,8 +234,14 @@ runtime's session and the first map), and a multiplayer guard trip gives the pla
 (`cvar_book.hpp`). Only `r_hdrDisplay 0` stays on the command line, since the game picks the swapchain's format at
 start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these, so mono launches
 keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`), all but the underwater warp (one
-picture for both eyes, so it stays as the game has it). The launcher's session restore puts
-the player's values back in the game's configs either way.
+picture for both eyes, so it stays as the game has it). The launcher's session restore puts the player's values
+back in the game's text configs either way. Two held cvars are saved into the player's profile (`profile.bin`)
+instead, which no restore covers: `view_skipShakes` and `r_sharpening` (the launcher's Sharpening). The profile
+hooks (`vkcore/profile_hooks.hpp`) put the player's own value into every profile save and the held one back after
+it; before them every stereo session left `view_skipShakes 1` (no camera shake) in the flat game, which the
+launcher's one-time repair puts back (`docs/rig-findings/profile-leak.md`). A change to either setting in the
+game's menu during a VR session is not saved: the hold overrides it, and the save writes the value the profile's
+load gave.
 
 `ETERNALVR_DEBUG_CVARS="name=value;name=value"` writes more cvars the same way for rig experiments;
 `name=?` only logs the value the game runs with. An entry wins over the layer's own holds of the same cvar:
@@ -1166,7 +1172,18 @@ The status file (`eternalvr-status.txt`, `src/vkcore/status_file.hpp`) carries t
 launcher, after its first five keys, each rewritten when it changes: `runtime=` and `system=` (the names the
 runtime reports), `recommended=WxH` (the runtime's size per eye), `render=WxH` (each eye's image the headset
 gets), `refresh_hz=` (the base, for example `144.0`) and `throttled_share=` (the share at 2x the base or more,
-for example `0.181`, with each summary).
+for example `0.181`, with each summary). Two start steps are written once per process (a recreated ring or a
+reconnected session keeps the first time), in seconds on the log's clock: `first_present=` at the game's first
+present (`presenter: first game present`) and `first_headset_frame=` at the first game image copied for the headset
+(`xr: first game frame on the screen`). With `runtime=` (the session exists) and `state=vr` (the runtime started it)
+they are what the launcher's start watchdog (`launcher/src/EternalVR.Launcher.Core/Launch/StartupWatchdog.cs`) reads
+to tell a slow start from one that stalls. Once its session exists the layer writes `state=starting` again (replacing
+a "no headset found yet" from before the headset came), so a session the runtime does not start is told as such; a
+game device or instance the layer could not set up for the headset (no presenter, so no first present) is
+`state=flat`, not a stuck load. The file is a temporary one moved over it; the move fails while the launcher reads
+the file, so it is tried up to 10 times with `Sleep(1)` between, and a write still lost is made again within a second
+(`status::flush()`, one move at most once a second, from the game's presents and the XR worker, so a lost
+`state=flat` is retried too; logged once per loss and once per recovery).
 
 ## Render size (T-031)
 
@@ -1204,6 +1221,7 @@ axis).
 | `ETERNALVR_MIRROR_FRONT` | 1 | 0: the game window is not brought to the front once when its surface is made (never activated either way) |
 | `ETERNALVR_UI_CROP` | 1 | 0: the UI quad and the menu panel show the whole GUI target instead of its 16:9 band |
 | `ETERNALVR_UI_WASH` | 1 | 0: the HUD quad shows the GUI target's full-screen additive wash (the red hit and low-health vignette) as the game drew it (docs/rig-findings/ui-layer.md, sections 12 and 13) |
+| `ETERNALVR_UI_CROSSHAIR` | hold | how the game's crosshair (which marks the head's ray) is taken out under hand aim: `hold` holds `hud_reticle_styleOverride 0` at run time (the game's own "no reticle" style; no profile or config field) and clears the centre square of the GUI copy only until it reads back; `mask` clears that square always, which also hides whatever else the game draws there (objective markers, the chainsaw's NO TARGET); head aim keeps the game's crosshair either way (docs/rig-findings/ui-layer.md, "The crosshair hold") |
 | `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time; with Parallel Eye Rendering its anti-aliasing (`r_antialiasing 1`, or the Off set) is not held either (one `cvars: Parallel Eye Rendering's anti-aliasing is left as the game has it` line) |
 | `ETERNALVR_PACE` | off | `headset`: one image per headset frame, the game's render thread waiting after each pair for the headset's next frame (at most two display periods); the pose lead then defaults on (Frame pacing) |
 | `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and CPU Saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
@@ -1687,13 +1705,13 @@ each run from its own call.
 
 ## Known gaps (v1)
 
-- **TAA is held off** (Cvars): the ghost is gone, but surfaces the game dithers for TAA to resolve look
-  stippled (the owner saw it). Per-eye TAA (the stereo-taa branch) brings TAA back; it owns the TAA cvars
-  through `runtime_cvars::setStereoTemporal(PerEye)` once it is active.
-- **Render size follows the window** (T-031): the launcher sized the window to fit the 1440-pixel TV, so the
-  owner's eyes rendered at 1415x1415 while the headset recommends 2496x2688 (Virtual Desktop showed "render
-  resolution 57%"). The launcher also puts the window on the primary display; the rig's virtual display
-  would keep it off the owner's screen.
+- **TAA** (closed): TAA was held off in the first Route S builds, which left the surfaces the game dithers
+  for TAA stippled. Per-eye TAA is the default now (section "Per-eye temporal history") and owns the TAA
+  cvars through `runtime_cvars::setStereoTemporal(PerEye)`.
+- **Render size** (closed on most drivers): each eye renders at the size the launcher asks the runtime
+  for, not the window's (T-031, `docs/rig-findings/render-size.md`). Drivers that cannot scale the game's
+  image into a smaller window (AMD Radeon RX 5000 and 6000 among them) still render each eye at the
+  window's size (`docs/release/KNOWN-ISSUES.md`).
 
 - **HUD and 2D overlays** (S1: eye L only). Solved by the UI layer, on by default in Route S
   (`docs/rig-findings/ui-layer.md`): the game's GUI target is captured each tick, shown on a head-locked
@@ -1712,8 +1730,7 @@ each run from its own call.
   that window) and the drain then fails, that one frame, drawn with eye L's projection, is shown mono.
 - The camera-cut counter (idRenderView + 0x29944, decremented by the previous-matrix store) counts down
   twice per tick.
-- Per-eye render size follows the window (T-031). Latency grows by one eye render (pose age +5 ms at
-  2048x2100).
+- Latency grows by one eye render (pose age +5 ms at 2048x2100).
 - One unexplained silent exit (S2, first run, about 20 s into gameplay, capture on). It did not recur in
   the re-test (4 min of play with capture). The job thread measured there has an 8 MiB stack and eye R's
   chain goes 51 KiB deep, so a stack overflow on that thread is unlikely; the cause stays unknown and the

@@ -132,27 +132,13 @@ const char* prefix(arm::ArmSide side) {
     return side == arm::ArmSide::Right ? "weapon arm" : "offhand: arm";
 }
 
-bool bytesMatch(const std::byte* at, std::string_view hex) {
-    std::size_t i = 0;
-    for (std::size_t p = 0; p + 1 < hex.size(); p += 3, ++i) {
-        const auto nibble = [](char c) {
-            return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
-        };
-        if (static_cast<std::uint8_t>(at[i]) !=
-            static_cast<std::uint8_t>(nibble(hex[p]) * 16 + nibble(hex[p + 1]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 const std::byte* callTarget(const GameImage& image, const std::byte* call) {
     return image.inText(call, 5) && static_cast<std::uint8_t>(call[0]) == 0xE8 ? call + 5 + readI32(call + 1)
                                                                                : nullptr;
 }
 
 bool checked(const GameImage& image, const std::byte* at, const char* bytes) {
-    return at && image.inText(at, 16) && bytesMatch(at, bytes);
+    return matchesAt(image, at, bytes);
 }
 
 int accessViolationOnly(unsigned long code) {

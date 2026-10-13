@@ -272,6 +272,7 @@ bool XrPresenter::Impl::waitForSystem() {
             EVR_LOG("xr: headset not available (XR_ERROR_FORM_FACTOR_UNAVAILABLE); retrying every second");
         }
         Sleep(1000);
+        status::flush();
     }
     return false;
 }

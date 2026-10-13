@@ -12,7 +12,8 @@ namespace EternalVR.Launcher.Core.Launch
     /// decided), <c>version=</c>, <c>pid=</c>. <c>flat</c> is final for the session. Also <c>ssr_follow=0|1</c> and
     /// <c>ssdo_follow=0|1</c>: 1 while the layer held r_SSR or r_SSDO at the player's own game setting, at <c>ssr_value=</c>
     /// and <c>ssdo_value=</c> (<see cref="Followed"/>). <c>presents=stopped_at_start|stopped|resumed</c>: the game stopped presenting
-    /// right after an out of date present (<see cref="PresentsStopped"/>).
+    /// right after an out of date present (<see cref="PresentsStopped"/>). <c>runtime=</c> once the OpenXR session exists, and the
+    /// start's steps <c>first_present=</c> and <c>first_headset_frame=</c> (<see cref="StartupWatchdog"/>).
     /// </summary>
     public sealed class LayerStatusFile
     {
@@ -27,6 +28,12 @@ namespace EternalVR.Launcher.Core.Launch
         public string StereoReason { get; private set; } = string.Empty;
         public string Version { get; private set; } = string.Empty;
         public string Pid { get; private set; } = string.Empty;
+        /// <summary>The OpenXR runtime's name, written once the layer's OpenXR session exists; empty before.</summary>
+        public string Runtime { get; private set; } = string.Empty;
+        /// <summary><c>first_present=</c>: the game has presented a frame (its window shows a picture).</summary>
+        public bool FirstPresent { get; private set; }
+        /// <summary><c>first_headset_frame=</c>: a game image has reached the headset.</summary>
+        public bool FirstHeadsetFrame { get; private set; }
         /// <summary>
         /// The game stopped presenting right after an out of date present and has not presented since (<c>presents=stopped</c> or
         /// <c>presents=stopped_at_start</c>).
@@ -59,6 +66,9 @@ namespace EternalVR.Launcher.Core.Launch
                     case "reason": s.Reason = value; break;
                     case "version": s.Version = value; break;
                     case "pid": s.Pid = value; break;
+                    case "runtime": s.Runtime = value; break;
+                    case "first_present": s.FirstPresent = value.Length > 0; break;
+                    case "first_headset_frame": s.FirstHeadsetFrame = value.Length > 0; break;
                     case "presents":
                         s.PresentsStopped = string.Equals(value, "stopped", StringComparison.OrdinalIgnoreCase)
                             || string.Equals(value, "stopped_at_start", StringComparison.OrdinalIgnoreCase);
@@ -148,14 +158,8 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>No loaded marker this long after the game started: the layer did not load.</summary>
         public const double LoadTimeoutSeconds = 45;
 
-        /// <summary>
-        /// Still "starting" this long after the game started: VR has not come up. A layer that refuses the session writes
-        /// <c>flat</c> with its reason; this covers a layer that stopped without saying why.
-        /// </summary>
-        public const double StartTimeoutSeconds = 120;
-
+        /// <summary>While the layer says "starting"; a start that takes long is told by <see cref="StartupWatchdog"/>.</summary>
         public const string StartingMessage = "The mod loaded; VR is starting.";
-        public const string NotStartedMessage = "VR has not started after 2 minutes; the game runs flat until it does.";
 
         public const string StoppedMessage =
             "The game stopped drawing frames (the headset shows its last image). Close the game (with Task Manager if it does not "
@@ -179,7 +183,7 @@ namespace EternalVR.Launcher.Core.Launch
                 switch (status.State)
                 {
                     case LayerState.Starting:
-                        return Starting(secondsSinceStart);
+                        return Starting;
                     case LayerState.Waiting:
                         return new SessionStatus(StatusKind.Warning, "Waiting for the headset: " + Or(status.Reason, "no headset session yet") + " (retried every second).");
                     case LayerState.Flat:
@@ -190,14 +194,12 @@ namespace EternalVR.Launcher.Core.Launch
                         return new SessionStatus(StatusKind.Good, "VR is running" + (status.Stereo == true ? " in stereo." : "."));
                 }
             }
-            if (loaded) return Starting(secondsSinceStart);
+            if (loaded) return Starting;
             if (secondsSinceStart >= LoadTimeoutSeconds) return new SessionStatus(StatusKind.Problem, NotLoadedMessage);
             return null;
         }
 
-        private static SessionStatus Starting(double secondsSinceStart) => secondsSinceStart >= StartTimeoutSeconds
-            ? new SessionStatus(StatusKind.Warning, NotStartedMessage)
-            : new SessionStatus(StatusKind.Info, StartingMessage);
+        private static SessionStatus Starting => new SessionStatus(StatusKind.Info, StartingMessage);
 
         private static string Or(string text, string fallback) => string.IsNullOrWhiteSpace(text) ? fallback : text.TrimEnd('.');
 

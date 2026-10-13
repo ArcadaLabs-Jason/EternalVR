@@ -11,6 +11,7 @@ using evr::game::parseOffsetList;
 using evr::game::parseWeaponOffsets;
 using evr::game::WeaponOffset;
 using evr::game::WeaponOffsetTable;
+using evr::game::WeaponSight;
 
 namespace {
 
@@ -44,6 +45,64 @@ TEST_CASE("the built-in table reads without issues and has a default for both po
     // The seated placement is pulled back toward the body (T-074).
     CHECK(table.lookup("weapon/player/shotgun", OffsetPosture::Seated).forward <
           table.lookup("weapon/player/shotgun", OffsetPosture::Standing).forward);
+}
+
+TEST_CASE("the built-in sights cover the weapons with a sight line and no others") {
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    for (const char* weapon :
+         {"weapon/player/shotgun", "weapon/player/heavy_cannon", "weapon/player/chaingun",
+          "weapon/player/double_barrel", "weapon/player/gauss_rifle"}) {
+        INFO(weapon);
+        CHECK(table.lookupSight(weapon).has_value());
+    }
+    for (const char* other :
+         {"weapon/player/plasma_rifle", "weapon/player/rocket_launcher", "weapon/player/bfg",
+          "weapon/player/unmaykr", "weapon/player/fists", "weapon/player/fists_doom5melee",
+          "weapon/player/chainsaw", "weapon/player/crucible", "weapon/player/hammer", ""}) {
+        INFO(other);
+        CHECK_FALSE(table.lookupSight(other).has_value());
+    }
+}
+
+TEST_CASE("sight rows follow the name rules, with no default") {
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([standing]
+"default" = [-0.25, 0.18, 0.22]
+[sights]
+"weapon/player/shotgun" = [0.2, 2.17]
+"weapon/player/shotgun_full_auto" = [0.1, 1.0]
+)");
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    CHECK(table.lookupSight("weapon/player/shotgun") == WeaponSight{0.2f, 2.17f});
+    CHECK(table.lookupSight("weapon/player/shotgun_full_auto") == WeaponSight{0.1f, 1.0f});
+    CHECK(table.lookupSight("weapon/player/shotgun_sticky") == WeaponSight{0.2f, 2.17f});
+    CHECK_FALSE(table.lookupSight("weapon/player/shotgunner").has_value());
+    CHECK_FALSE(table.lookupSight("weapon/player/plasma_rifle").has_value());
+    // The sections around it read as before.
+    CHECK(table.lookup("weapon/player/shotgun", OffsetPosture::Standing).forward == -0.25f);
+}
+
+TEST_CASE("bad sight rows are reported and skipped") {
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([sights]
+"default" = [0, 0]
+"a" = [1]
+"b" = [1, 2, 3]
+"c" = [0, 50]
+"d" = [nan, 0]
+"e" = 1, 2
+"f" = [1, 2]
+"f" = [3, 4]
+[standing]
+"g" = [1, 2]
+)");
+    INFO(describe(table));
+    CHECK(table.issues.size() == 8);
+    CHECK(table.issues.front().starts_with("line 2:"));
+    CHECK(table.sights.size() == 1);
+    CHECK(table.lookupSight("f") == WeaponSight{1.0f, 2.0f});
+    CHECK(table.standing.empty());
 }
 
 TEST_CASE("an exact name wins, then the longest key the name extends, then the default") {

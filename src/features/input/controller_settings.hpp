@@ -69,10 +69,22 @@
 //   ETERNALVR_WEAPON_FOV     1 / 0              the weapon drawn with the headset's FOV
 //   ETERNALVR_VIEWMODEL_OFFSET  f,l,u[,pitch,yaw,roll]  one offset for every weapon (tuning)
 //   ETERNALVR_SEATED         1 / 0              the seated viewmodel offsets (T-074)
+//   ETERNALVR_WEAPON_SIGHTS  1 / 0              rig tests: weapons with a [sights] row turned so their sight
+//                                               line runs parallel to the aim ray (weapon_offsets.hpp)
 //   ETERNALVR_CONTROLLER_DATA   path            a player's controller data file, or a folder of them (every
 //                                               *.toml in it), instead of the built-in
 //                                               (player_controller_data.hpp)
 //   ETERNALVR_TEST_INPUT        path            scripted controller input for rig tests (test_input.hpp)
+//   ETERNALVR_TEST_ARM_DUMP     path            rig tests: both arms' poses, one JSON line every 0.25 s
+//                                               (docs/rig-findings/hands-rig.md)
+//   ETERNALVR_TEST_ARM_MOD_WEIGHT  0..1         rig tests, development only: the hands' joint-modifier
+//                                               weight held while the free off hand is posed, put back
+//                                               when the arm goes back to the game or the multiplayer
+//                                               guard trips (new hands start at the game's own)
+//   ETERNALVR_TEST_HANDS_CUFF   fold / stub / ring  rig tests: how ETERNALVR_ARMS=hands closes the sleeve at
+//                                               the glove (arm::Cuff)
+//   ETERNALVR_TEST_ARM_FAULT    none / twist    rig tests, development only: the whole wrist twist on the
+//                                               wrist joint, the hands rig's positive control
 //   ETERNALVR_CONTROLLERS_TRACE 1 / 0           log the player's eye, view angles and the hand 4 times a
 //   second
 //   ETERNALVR_OFFHAND        game / free / probe   who drives the game's left arm (offhand_policy.hpp)
@@ -92,7 +104,16 @@
 //   ETERNALVR_WEAPON_ARM_TEST_SHOULDER  f,l,u   rig tests: the weapon arm's shoulder at this point (metres
 //                                               from the eyes, the head's yaw frame), not mirrored
 //   ETERNALVR_ARMS           shown / hidden      the first-person arms drawn (default) or hidden, the weapon
-//                                               alone (hands_surfaces.hpp)
+//                                               alone (hands_surfaces.hpp); `hands` (rig tests): the
+//                                               forearms and upper arms the layer poses folded into the
+//                                               wrists, the gloves alone (docs/VR_HANDS_HUD.md)
+//   ETERNALVR_ARM_SOLVE      animated / bind     the arm solve's wrist twist measured from the game's
+//                                               animated hand (default, as before) or from the bind pose,
+//                                               kept continuous, the off hand's swing limited
+//                                               (features/arm/arm_solve.hpp)
+//   ETERNALVR_ARM_MODEL      game / base / skin[:N]  rig tests: the hands' model (vkcore/arm_model.hpp): the
+//                                               game's (default), the base arms mesh, or Slayer skin set N
+//                                               (3 by default)
 //   ETERNALVR_CUTSCENE_ARMS  shown / hidden      in cutscenes shown around the player the first-person arms
 //                                               hidden (default) or drawn as in play (hands_surfaces.hpp)
 
@@ -167,6 +188,27 @@ inline constexpr game::WeaponOffset kDefaultOffhandOffset{-0.08f, 0.035f, 0.0f, 
 inline constexpr game::WeaponOffset kDefaultOffhandShoulder{-0.08f, 0.18f, -0.24f, 0.0f, 0.0f, 0.0f};
 inline constexpr game::WeaponOffset kDefaultOffhandElbow{-0.2f, 0.6f, -1.0f, 0.0f, 0.0f, 0.0f};
 
+// What the arm solve measures the wrist's twist from (ETERNALVR_ARM_SOLVE, features/arm/arm_solve.hpp).
+enum class ArmSolve : std::uint8_t {
+    Animated, // the game's animated hand, as before (default)
+    Bind,     // the bind pose: continuous twist, shared to the upper arm, the off hand's swing limited
+};
+
+// How hands only closes the sleeve at the glove, rig tests (ETERNALVR_TEST_HANDS_CUFF,
+// features/arm/arm_solve.hpp, arm::Cuff).
+enum class HandsCuff : std::uint8_t {
+    Fold, // everything from the last roll joint to the shoulder scaled to nothing on the wrist (default)
+    Stub, // a stub of forearm left (the last roll joint), the rest scaled to nothing on it
+    Ring, // the roll joints on the wrist at full size, the elbow and shoulder scaled to nothing
+};
+
+// The hands' model for rig tests (ETERNALVR_ARM_MODEL, vkcore/arm_model.hpp).
+enum class ArmModel : std::uint8_t {
+    Game, // the game's own (no change)
+    Base, // the base hands model (fp_hands.md6, arms.md6mesh)
+    Skin, // a Slayer skin's first-person model (praetor_setN.md6)
+};
+
 struct ControllerSettings {
     bool enabled = true;
     AimSource aim = AimSource::Head;
@@ -198,8 +240,18 @@ struct ControllerSettings {
     bool weaponFov = true;
     bool seated = false;
     std::optional<game::WeaponOffset> viewmodelOffset;
+    bool weaponSights = false;
     std::string controllerDataPath;
     std::string testInputPath;
+    // Rig tests (docs/rig-findings/hands-rig.md): the arms dump's file, and the planted twist fault
+    // (development use only, features/arm/twist_fault.hpp).
+    std::string testArmDumpPath;
+    bool testArmTwistFault = false;
+    // Development only (ETERNALVR_TEST_ARM_MOD_WEIGHT, 0 to 1): the weight the hands' joint-modifier node is
+    // mixed in with, held while the free off hand is posed and put back when it goes back to the game or the
+    // multiplayer guard trips; new hands start at the game's own (vkcore/game_arm.hpp); unset leaves the
+    // game's.
+    std::optional<float> testArmModWeight;
     bool trace = false;
     // The off hand and the game's left arm (docs/VR_HANDS_HUD.md).
     OffhandMode offhand = OffhandMode::Game;
@@ -219,6 +271,15 @@ struct ControllerSettings {
     std::optional<game::WeaponOffset> weaponArmTestShoulder;
     // Both first-person arms hidden, the weapon alone (ETERNALVR_ARMS=hidden).
     bool armsHidden = false;
+    // Rig tests: the forearms and upper arms the layer poses folded into the wrists (ETERNALVR_ARMS=hands),
+    // the cuff closed as ETERNALVR_TEST_HANDS_CUFF says.
+    bool armsHandsOnly = false;
+    HandsCuff handsCuff = HandsCuff::Fold;
+    // The arm solve's twist reference (ETERNALVR_ARM_SOLVE), both arms.
+    ArmSolve armSolve = ArmSolve::Animated;
+    // Rig tests: the hands' model (ETERNALVR_ARM_MODEL) and the skin set for ArmModel::Skin.
+    ArmModel armModel = ArmModel::Game;
+    int armModelSkin = 3;
     // The arms hidden while a cutscene plays around the player (ETERNALVR_CUTSCENE_ARMS, hidden by default),
     // with the game's own weapon FOV kept for its hands model.
     bool cutsceneArmsHidden = true;
@@ -241,6 +302,7 @@ using SettingLookup = std::function<std::optional<std::string>(std::string_view 
 ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup);
 
 const char* aimSourceName(AimSource aim);
+const char* armModelName(ArmModel model);
 
 // What aims a piloted demon: ETERNALVR_DEMON_AIM, or the main aim when it is unset. Under view aim nothing
 // is written for the Slayer or the demon, so the demon keeps the game's own aim whatever ETERNALVR_DEMON_AIM

@@ -46,6 +46,17 @@ EyeRelativePose applyLocalOffset(const EyeRelativePose& pose,
                                  const IdAngles& rotation,
                                  float unitsPerMetre);
 
+// As applyLocalOffset, then the model turned about the grip so that its sight line runs along the offset's
+// forward: parallel to the aim ray when `rotation` is zero, else off it by that rotation on purpose.
+// `sight` is the sight line's direction in the model's own frame (pitch positive down, yaw counter-clockwise,
+// degrees; roll is ignored). The model's point that applyLocalOffset puts at `pose` (the grip) stays there,
+// so the hand stays on the controller; the turn is the one taking the sight line onto the model's forward.
+EyeRelativePose applyLocalOffsetWithSight(const EyeRelativePose& pose,
+                                          Vec3 translation,
+                                          const IdAngles& rotation,
+                                          const IdAngles& sight,
+                                          float unitsPerMetre);
+
 // A shot's start and axis (idFireParms start and fireAxis; forward is the direction of fire).
 struct Shot {
     Vec3 origin;

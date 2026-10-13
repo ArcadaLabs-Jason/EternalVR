@@ -30,7 +30,7 @@ namespace EternalVR.Launcher
 
         private Log Log => ctx.Log;
         private SessionStatus lastStatus;
-        private ProblemHold problemHold = new ProblemHold();
+        private LayerMonitor monitor = new LayerMonitor();
         /// <summary>The game's start with its marker and <see cref="GameStarted"/>; closed by <see cref="StopLaunching"/>.</summary>
         private readonly StartGate gate = new StartGate();
         /// <summary>The session's game is the Game Pass or Microsoft Store build: the Xbox processes are logged at its start.</summary>
@@ -167,7 +167,8 @@ namespace EternalVR.Launcher
         public bool Run(CancellationToken cancel)
         {
             lastStatus = null;
-            problemHold = new ProblemHold();
+            monitor = new LayerMonitor();
+            monitor.Watchdog.StepChanged += (step, at) => Log.Info($"start: {StartupWatchdog.Describe(step)} ({at:0.0} s after the game started)");
             gameLaunched = false;
             if (!Recover())
             {
@@ -318,6 +319,7 @@ namespace EternalVR.Launcher
             // Each eye below the planned size: the graphics driver held it at the window's size (RenderCap).
             var cap = ReadRenderCap(logDir);
             ctx.RememberRenderCap(cap);
+            SettleProfileRepair(logDir, id);
             bool capped = cap != null && cap.Capped;
             if (capped)
             {
@@ -347,6 +349,35 @@ namespace EternalVR.Launcher
             catch (UnauthorizedAccessException) { return none; }
         }
 
+        /// <summary>
+        /// The one-time camera shake repair (<see cref="ProfileRepair"/>): its marker is written once the layer's status file
+        /// says the repair was done, not needed or not asked for; without that answer (mono, a session that ended before the
+        /// profile load, an older layer) it is asked for again next time.
+        /// </summary>
+        private void SettleProfileRepair(string logDir, string sessionId)
+        {
+            var marker = ctx.Paths.ProfileRepairMarker;
+            if (File.Exists(marker)) return;
+            string value = null;
+            var file = Path.Combine(logDir, LayerStatusFile.FileName);
+            try { if (File.Exists(file)) value = ProfileRepair.StatusValue(File.ReadAllText(file)); }
+            catch (IOException) { return; }
+            catch (UnauthorizedAccessException) { return; }
+            if (value == null) return;
+            if (!ProfileRepair.Settles(value))
+            {
+                Log.Warn("camera shake repair: the layer reported profile_repair=" + value + "; asked again next time");
+                return;
+            }
+            try
+            {
+                File.WriteAllText(marker, ProfileRepair.MarkerText(DateTime.Now, sessionId, value));
+                Log.Info("camera shake repair settled (profile_repair=" + value + "); not asked for again");
+            }
+            catch (IOException e) { Log.Warn("camera shake repair marker not written: " + e.Message); }
+            catch (UnauthorizedAccessException e) { Log.Warn("camera shake repair marker not written: " + e.Message); }
+        }
+
         /// <summary>The session's eye size against the plan from the layer's status file; null when it is not there.</summary>
         private static RenderCap ReadRenderCap(string logDir)
         {
@@ -356,7 +387,7 @@ namespace EternalVR.Launcher
             catch (UnauthorizedAccessException) { return null; }
         }
 
-        /// <summary>Reads the layer's loaded marker and status file and reports what changed.</summary>
+        /// <summary>Reads the layer's loaded marker and status file and reports what changed (the start's watchdog included).</summary>
         private void WatchLayer(string logDir, DateTime startedUtc)
         {
             bool loaded = File.Exists(Path.Combine(logDir, LayerStatusFile.LoadedMarker));
@@ -366,13 +397,13 @@ namespace EternalVR.Launcher
             catch (IOException) { } // mid-replace; read again next time
             catch (UnauthorizedAccessException) { }
             var seconds = (DateTime.UtcNow - startedUtc).TotalSeconds;
-            Report(problemHold.Offer(LayerWatch.Decide(loaded, status, seconds), seconds));
+            Report(monitor.Poll(loaded, status, seconds));
         }
 
         /// <summary>The game has exited: a problem still held was the layer's own shutdown, not something to show.</summary>
         private void DropHeldProblem()
         {
-            if (problemHold.Pending != null) Log.Info("the layer reported this as the game exited (not shown): " + problemHold.Pending.Text);
+            if (monitor.Held != null) Log.Info("the layer reported this as the game exited (not shown): " + monitor.Held.Text);
         }
 
         private void BackUpSaves(string id, LauncherContext.Gathered g)

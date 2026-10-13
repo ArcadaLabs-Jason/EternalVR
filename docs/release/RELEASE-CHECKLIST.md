@@ -4,7 +4,8 @@ What I do before a zip goes to a tester, and where the M4.5 release track (`docs
 it. Not shipped in the zip.
 
 Status as of the `alpha-package` branch (2026-09-27), read from the code, the docs and the rig findings;
-nothing here was re-run for this list. **Done** has evidence in the repo, **not done** is missing or
+nothing here was re-run for this list. The M4.5 table below is kept as it was then; `docs/ROADMAP.md` (M4.5 and
+"Plan from v0.1.49") has the current state, and the repository and its releases are public. **Done** has evidence in the repo, **not done** is missing or
 known to be incomplete, **unverified** may be fine but nothing records it.
 
 ## Before sharing a zip
@@ -13,7 +14,8 @@ known to be incomplete, **unverified** may be fine but nothing records it.
 2. [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\make-release.ps1`
        builds the layer (preset `windows-msvc-release`) and the launcher, runs both test suites, and
        writes `EternalVR-alpha-<version>-<sha>.zip`, a `-symbols.zip` and a `.sha256` for each into
-       `<workspace>\tmp-release\`. It refuses a dirty checkout.
+       the folder `-OutDir` names, else `EVR_RELEASE_OUT`, else the script's default. It refuses a dirty
+       checkout.
        The launcher's updater (`launcher/src/EternalVR.Launcher.Core/Update/`) relies on this shape: a tag
        `vX.Y.Z` on the public repo, the zip uploaded as `EternalVR-*.zip` (the symbols zip is never uploaded)
        with its `.sha256` next to it, one top folder holding `SHA256SUMS.txt` for every other file, and the
@@ -34,9 +36,9 @@ known to be incomplete, **unverified** may be fine but nothing records it.
 8. [ ] Once per release, on a clean PC or VM (no developer tools, no Visual C++ Redistributable, the game
        started once through Steam): extract the zip, start the launcher, reach the headset. This is the
        check for missing runtime files and for the first-run messages.
-9. [ ] Publish it as a GitHub Release on the private repository (tag `v<version>`; release notes with
-       what changed, the known issues' headline and the supported game build), with the zip and its
-       `.sha256` attached. Ask testers not to pass it on.
+9. [ ] Publish it as a prerelease on the public repository (tag `v<version>`; release notes with what
+       changed, the known issues' headline and the supported game build), with the zip and its `.sha256`
+       attached.
 
 ## M4.5 release track
 

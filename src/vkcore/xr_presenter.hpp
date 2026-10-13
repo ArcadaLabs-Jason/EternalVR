@@ -19,7 +19,10 @@
 // Deviation from T-082 and section 6.1: the OpenXR instance, system and session live on a worker thread
 // started at the game's first vkCreateSwapchainKHR, and the XR frame loop runs on that thread,
 // decoupled from the game's frames. Nothing OpenXR runs inside vkCreateInstance or the present hook,
-// so a slow or absent runtime can never stall the game. The camera hook only calls xrLocateSpace.
+// so a slow or absent runtime can never stall the game. The camera hook only calls xrLocateSpace. One
+// exception, only when asked for (ETERNALVR_ADAPTER_STEER=1, off by default): adapter steering asks the
+// runtime for the headset's adapter once, from the game's first vkEnumeratePhysicalDevices on a machine where
+// the order of its Vulkan devices can change the game's pick (adapter_steer.hpp).
 
 #include "vkcore/dispatch.hpp"
 

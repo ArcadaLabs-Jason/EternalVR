@@ -126,6 +126,135 @@ $script:QaTokenSchedule ='3:god;g_setting_hud_auto_dismiss_tutorials 1;g_setting
     '5:setviewpos -34.98 -250.31 33.2 45|6:where|7:selectDebugEntity'
 $script:QaInputRead = "test input '.*' read \(0 issue\(s\)\)"
 
+# The game's crosshair under hand aim (ui_layer/crosshair.hpp, ETERNALVR_UI_CROSSHAIR), at the Praetor Suit token's
+# checkpoint with both hands pointing ahead. Shots: yaw 225 (map markers next to the middle of the view), yaw 45 (the
+# token's name above it), the ability indicators after a Flame Belch and a frag, the chainsaw's NO TARGET, the Heavy
+# Cannon with each of its mods held and firing, the pause menu, back in play, and the death screen and the reload's
+# fade after the schedule's kill. Compare the -xr-both.png shots (the simulator's composed frame: the HUD quad as
+# the headset gets it) between `hold` and `mask`.
+$script:QaCrosshairSpot = 'setviewpos -34.98 -250.31 33.2'
+$script:QaCrosshairSchedule = '3:g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0|4:where|' +
+    "5:$script:QaCrosshairSpot 225|11:$script:QaCrosshairSpot 45|50:kill"
+$script:QaCrosshairRest = @('right.aim = 0, 0', 'left.aim = 0, 0')
+# The layer log's lines from the first one matching $From (all lines when $From is empty; none when nothing matches)
+# up to, not including, the first one after it matching $Until (to the end when none does).
+function Get-QaLogSpan($Ctx, [string]$From, [string]$Until) {
+    $lines = @((Get-QaLogText $Ctx) -split "`r?`n")
+    $start = 0
+    if ($From) {
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $From) { $start = $i; break } }
+        if ($start -lt 0) { return @() }
+    }
+    $end = $lines.Count
+    for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $Until) { $end = $i; break } }
+    if ($end -le $start) { return @() }
+    return @($lines[$start..($end - 1)])
+}
+
+# The hold stays confirmed until the schedule's kill (the death screen and the checkpoint reload after it may stop the
+# GUI copies, and a request then lapses as intended): one confirmation, no loss after it, and every 10 s line from the
+# first confirmed one on says `confirmed now` (a `not confirmed now` only before it, at the start).
+function Test-QaHoldStays($Ctx) {
+    $span = @(Get-QaLogSpan $Ctx '' 'debug-commands: [\d.]+ s: kill')
+    $confirmed = @($span | Where-Object { $_.Contains('ui: crosshair hold confirmed') }).Count
+    Add-QaResult $Ctx 'before the kill: exactly 1x ui: crosshair hold confirmed' ($confirmed -eq 1) "$confirmed line(s)"
+    $lost = @($span | Where-Object { $_.Contains('ui: crosshair hold not confirmed') })
+    Add-QaResult $Ctx 'before the kill: absent: ui: crosshair hold not confirmed' ($lost.Count -eq 0) "$($lost.Count) line(s)"
+    $states = @($span | ForEach-Object {
+        if ($_ -match 'for the crosshair hold \((not confirmed|confirmed) now') { $Matches[1] } })
+    $first = [Array]::IndexOf($states, 'confirmed')
+    $after = if ($first -ge 0) { @($states[$first..($states.Count - 1)] | Where-Object { $_ -ne 'confirmed' }).Count } else { -1 }
+    Add-QaResult $Ctx 'before the kill: the 10 s lines say confirmed from the first confirmed one on' `
+        ($first -ge 0 -and $after -eq 0) "$($states.Count) line(s) of $($span.Count): $($states -join ', ')"
+}
+
+function New-QaCrosshairScenario([string]$Mode, [string]$Aim) {
+    $name = if ($Aim -eq 'head') { "crosshair-$Mode-head" } else { "crosshair-$Mode" }
+    $proves = switch ($name) {
+        'crosshair-hold' { 'ETERNALVR_UI_CROSSHAIR=hold: hud_reticle_styleOverride 0 reaches the game under hand aim, the hold is confirmed and the GUI copy keeps its centre (map markers, the ability indicators and the chainsaw text visible; the game''s crosshair not)' }
+        'crosshair-mask' { 'ETERNALVR_UI_CROSSHAIR=mask (the earlier behaviour, the positive control): the centre square of the GUI copy is cleared under hand aim and no cvar is held for it' }
+        default { 'ETERNALVR_UI_CROSSHAIR=hold under head aim: nothing is held and the game''s crosshair stays' }
+    }
+    return @{
+        Name = $name; Kind = 'game'; Proves = $proves
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        # The render size makes the GUI target the eye's near-square size, as in a headset (1280x1400 on the
+        # simulator): at the suite's 1280x720 window the masked square is half the angle players see.
+        Env = @("ETERNALVR_AIM=$Aim", "ETERNALVR_UI_CROSSHAIR=$Mode", 'ETERNALVR_RENDER_SIZE=auto',
+                "ETERNALVR_DEBUG_COMMANDS=$script:QaCrosshairSchedule")
+        Input = $script:QaCrosshairRest
+        Timeline = {
+            param($c)
+            $rest = $script:QaCrosshairRest
+            foreach ($yaw in 225, 45) {
+                if (Wait-QaLog $c "debug-commands: [\d.]+ s: $script:QaCrosshairSpot $yaw" 40) {
+                    Wait-QaSeconds $c 2.5; Save-QaShot $c "yaw$yaw"; Save-QaXrShot $c "yaw$yaw"
+                } else { Add-QaNote $c "the schedule's setviewpos to yaw $yaw was not logged" }
+            }
+            Write-QaInput $c ($rest + 'left.grip = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $rest; Wait-QaSeconds $c 1.5
+            Write-QaInput $c ($rest + 'left.trigger = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $rest; Wait-QaSeconds $c 1
+            Save-QaShot $c 'abilities'; Save-QaXrShot $c 'abilities'
+            Write-QaInput $c ($rest + 'right.stick = 0, 1'); Wait-QaSeconds $c 0.4
+            Save-QaShot $c 'chainsaw'; Save-QaXrShot $c 'chainsaw'
+            Write-QaInput $c $rest; Wait-QaSeconds $c 2
+            # The Heavy Cannon (quick switch from the Combat Shotgun) with its mod held and firing, then with its other
+            # mod (one of them is the Precision Bolt's scope).
+            Write-QaInput $c ($rest + 'right.stick = 0, -1'); Wait-QaSeconds $c 0.15
+            Write-QaInput $c $rest; Wait-QaSeconds $c 2
+            foreach ($mod in 'a', 'b') {
+                Write-QaInput $c ($rest + 'right.grip = 1'); Wait-QaSeconds $c 1.5
+                Save-QaShot $c "mod-$mod"; Save-QaXrShot $c "mod-$mod"
+                Write-QaInput $c ($rest + @('right.grip = 1', 'right.trigger = 1')); Wait-QaSeconds $c 0.15
+                Save-QaShot $c "mod-$mod-fire"; Save-QaXrShot $c "mod-$mod-fire"
+                Write-QaInput $c ($rest + 'right.grip = 1'); Wait-QaSeconds $c 1
+                Write-QaInput $c $rest; Wait-QaSeconds $c 1.5
+                if ($mod -eq 'a') {
+                    Write-QaInput $c ($rest + 'left.secondary = 1'); Wait-QaSeconds $c 0.15
+                    Write-QaInput $c $rest; Wait-QaSeconds $c 2
+                }
+            }
+            Write-QaInput $c ($rest + 'left.menu = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $rest; Wait-QaSeconds $c 2.5
+            Save-QaShot $c 'pause'; Save-QaXrShot $c 'pause'
+            Write-QaInput $c ($rest + 'left.menu = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $rest; Wait-QaSeconds $c 3
+            Save-QaShot $c 'resumed'; Save-QaXrShot $c 'resumed'
+            # The death screen and the checkpoint reload's fade, last (full-screen layers: the mask must be off for them).
+            if (Wait-QaLog $c 'debug-commands: [\d.]+ s: kill' 40) {
+                $at = 0.0
+                foreach ($t in 0.5, 1.5, 4, 8, 12) {
+                    Wait-QaSeconds $c ($t - $at); $at = $t
+                    Save-QaShot $c "death-$($t)s"; Save-QaXrShot $c "death-$($t)s"
+                }
+            } else { Add-QaNote $c 'the schedule''s kill was not logged' }
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c $script:QaInputRead -Regex
+            switch ($c.Name) {
+                'crosshair-hold' {
+                    Test-QaPresent $c "the game's crosshair under hand aim: hold"
+                    Test-QaPresent $c 'held at run time: .*hud_reticle_styleOverride 0 while hand aim is on' -Regex
+                    Test-QaPresent $c 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\); hand aim' -Regex
+                    Test-QaHoldStays $c
+                }
+                'crosshair-mask' {
+                    Test-QaPresent $c "the game's crosshair under hand aim: mask"
+                    Test-QaAbsent $c 'hud_reticle_styleOverride'
+                }
+                'crosshair-hold-head' {
+                    Test-QaPresent $c "the game's crosshair under hand aim: hold"
+                    Test-QaAbsent $c 'hud_reticle_styleOverride -?\d+ -> 0' -Regex
+                    Test-QaAbsent $c 'ui: crosshair hold confirmed'
+                }
+            }
+        }
+    }
+}
+
 $script:QaScenarios = @(
     @{
         Name = 'baseline'; Kind = 'game'
@@ -317,6 +446,50 @@ $script:QaScenarios = @(
             Test-QaPresent $c 'ui: the aim dot at'
         }
     },
+    @{
+        Name = 'crosshair-hold-demon'; Kind = 'game'
+        Proves = 'ETERNALVR_UI_CROSSHAIR=hold, hand aim with ETERNALVR_DEMON_AIM=head: the hold hides the game''s crosshair, then piloting the Revenant (head aim for the demon) gives hud_reticle_styleOverride its earlier value back and the game''s crosshair shows'
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_12_possession'
+        Env = @('ETERNALVR_AIM=hand', 'ETERNALVR_DEMON_AIM=head', 'ETERNALVR_UI_CROSSHAIR=hold', 'ETERNALVR_RENDER_SIZE=auto',
+                'ETERNALVR_DEBUG_COMMANDS=3:god|3.5:g_debugTriggers 1|4:trigger cinematic_trigger_trigger_1|6:setviewpos 160.5 20.8 -5.0 90|7:where|8:selectDebugEntity')
+        Input = $script:QaCrosshairRest
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 9
+            Save-QaShot $c 'hand'; Save-QaXrShot $c 'hand'
+            # Into the Revenant's pod: the weapon hand on the use proxy, then Use (the stick click).
+            $aim = @('right.aim = 0, -40', 'left.aim = 0, 0')
+            Write-QaInput $c $aim; Wait-QaSeconds $c 1.2
+            Write-QaInput $c ($aim + 'right.click = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c $aim
+            if (Wait-QaLog $c 'controllers: piloting a demon' 30) {
+                Wait-QaSeconds $c 3; Save-QaShot $c 'demon'; Save-QaXrShot $c 'demon'
+            } else { Add-QaNote $c 'no piloting a demon line within 30 s of Use' }
+            Wait-QaSeconds $c 3
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c $script:QaInputRead -Regex
+            Test-QaPresent $c 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\); hand aim' -Regex
+            Test-QaPresent $c 'controllers: piloting a demon'
+            # Given back for the aim switch (not a lapsed request), and not hidden again while piloting.
+            Test-QaPresent $c 'hud_reticle_styleOverride 0 -> -1 \(reads -1\); the hold''s request ended \(no hand aim\)' -Regex
+            $piloting = @(Get-QaLogSpan $c 'controllers: piloting a demon' "controllers: back in the Slayer's body")
+            $hides = @($piloting | Where-Object { $_ -match 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\); hand aim' })
+            Add-QaResult $c 'while piloting: no hud_reticle_styleOverride -> 0 write' ($piloting.Count -gt 0 -and $hides.Count -eq 0) `
+                "$($hides.Count) of $($piloting.Count) line(s)"
+            # That check sees only logged writes: the first write and the next 12 are logged (kLoggedTurns = 12 in runtime_cvars_reticle.cpp),
+            # later ones only counted. A last logged count under 13 means every write was logged.
+            $counts = @([regex]::Matches((Get-QaLogText $c), 'hud_reticle_styleOverride -?\d+ -> [^\r\n]*\((\d+) write\(s\)\)') |
+                ForEach-Object { [int]$_.Groups[1].Value })
+            $last = if ($counts.Count) { ($counts | Measure-Object -Maximum).Maximum } else { 0 }
+            Add-QaResult $c 'every hud_reticle_styleOverride write logged (fewer than 13)' ($counts.Count -gt 0 -and $last -lt 13) `
+                "last logged count $last"
+        }
+    },
+    (New-QaCrosshairScenario 'hold' 'hand'),
+    (New-QaCrosshairScenario 'mask' 'hand'),
+    (New-QaCrosshairScenario 'hold' 'head'),
     @{
         Name = 'launcher-e2e'; Kind = 'e2e'
         Proves = "The launcher's end-to-end suite (launcher\tests\e2e.ps1, stand-in game) passes against a Release build"

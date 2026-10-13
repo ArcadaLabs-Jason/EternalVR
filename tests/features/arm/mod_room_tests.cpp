@@ -2,7 +2,10 @@
 
 #include <doctest/doctest.h>
 
+using evr::arm::ArmJoint;
 using evr::arm::kMaxJointMods;
+using evr::arm::layerModCount;
+using evr::arm::layerModJoint;
 using evr::arm::ModListCounts;
 using evr::arm::modListsAgree;
 using evr::arm::planRoom;
@@ -69,4 +72,24 @@ TEST_CASE("room is made for six modifiers per arm, both arms at once") {
     CHECK(roomFor({9, 15}, {9, 15}, 6));
     CHECK_FALSE(roomFor({15, 15}, {15, 15}, 6));
     CHECK_FALSE(roomFor({9, 9}, {9, 9}, 6)); // room for one arm only
+}
+
+TEST_CASE("an arm's modifiers: the six overrides, the wrist's change first when there is one") {
+    CHECK(layerModCount(false) == 6);
+    CHECK(layerModCount(true) == 7);
+    // Without the wrist's change: the forearm's roll joints from the wrist up, the elbow, the shoulder end.
+    constexpr ArmJoint six[] = {ArmJoint::Roll3,       ArmJoint::Roll2,   ArmJoint::Roll1,
+                                ArmJoint::ForeArmRoll, ArmJoint::ForeArm, ArmJoint::UpperArm};
+    for (int k = 0; k < 6; ++k) {
+        CAPTURE(k);
+        CHECK(layerModJoint(false, k) == six[k]);
+        // With it, the same six one place later.
+        CHECK(layerModJoint(true, k + 1) == six[k]);
+    }
+    // The wrist before every override (the blend applies the list in order, each against its parent as
+    // modified so far): listed last, it would carry the overrides below it off (rig r4-bind).
+    CHECK(layerModJoint(true, 0) == ArmJoint::Hand);
+    for (int k = 0; k < layerModCount(false); ++k) {
+        CHECK(layerModJoint(false, k) != ArmJoint::Hand);
+    }
 }

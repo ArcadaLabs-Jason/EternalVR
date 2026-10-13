@@ -29,10 +29,11 @@ XR worker, every XR frame (presenter_wrist.cpp)
 
 - **What moves to the wrist.** The HUD's bottom-left block (health, armor, extra lives), its bottom-right
   block (ammo, equipment, flame belch) and the ability rings around the crosshair (cooldowns;
-  `ETERNALVR_WRIST_ABILITIES=0` leaves them out). Under hand aim the UI copy clears the centre of the GUI
-  target (the game's crosshair marks the head's ray; `presenter_ui.cpp`), which takes the ability rings with
-  it, so there is no abilities quad then (logged once); in practice the rings show on the wrist only under
-  head aim. Everything else on the GUI target stays on the
+  `ETERNALVR_WRIST_ABILITIES=0` leaves them out). Under hand aim there is no abilities quad (logged once): with
+  `ETERNALVR_UI_CROSSHAIR=mask`, or until the crosshair hold is confirmed, the UI copy clears the centre of
+  the GUI target (the game's crosshair marks the head's ray; `presenter_ui.cpp`), which takes the ability
+  rings with it; with the hold (the default) the rings stay on the head-locked quad. In practice the rings
+  show on the wrist only under head aim. Everything else on the GUI target stays on the
   head-locked quad: subtitles, prompts, pop-ups, boss and encounter bars, markers, the damage direction.
   The corners are always cut from the head-locked quad in wrist mode, so they show only on the wrist.
 - **Where the crops come from** (`ui_layer/hud_regions.hpp`). The blocks are fixed rectangles in the HUD's
@@ -201,11 +202,46 @@ the weapon's grip point), so putting it at the controller did not put the hand t
   `model` uses the game's own animated shoulder instead, which travels with the arms model at the weapon
   hand (the arm then stays joined to the model's body, but the hand stops short whenever the two
   controllers are further apart than the gun pose allows).
-- **The forearm and upper arm** (`arm_solve.hpp`): each roll joint, the elbow and the shoulder joint keep
-  their animated offset and orientation relative to a frame along their bone (turned by the elbow's bend
-  plane), so the rig's own axis conventions carry over. The wrist's twist about the forearm (the palm
-  turning) is shared out by distance from the elbow: none at `LeftForeArm`, 20 % at `LeftForeArmRoll`, 39,
-  59 and 78 % at the three rolls, all of it at the wrist, so the sleeve twists instead of the wrist.
+- **The forearm and upper arm** (`arm_solve.hpp`, `arm_twist.hpp`). Two ways, by `ETERNALVR_ARM_SOLVE`:
+  `animated` (the default, as before: each roll joint, the elbow and the shoulder joint keep their animated
+  offset and orientation relative to a frame along their bone, turned by the elbow's bend plane; the wrist's
+  twist relative to the animated hand carried by the forearm, wrapped to half a turn every tick, shared out
+  as below; the wrist takes the controller's orientation as it is) or `bind`, the prototype of the arms
+  track's third step, for both arms, until it has been seen in a headset. With `bind` every joint is built
+  from the bind pose's relation to its bone, rebuilt on the solved bones (the "neutral" frame): in the bind pose the
+  wrist, the four roll joints and the elbow share one axis whose `y` runs along the forearm (elbow to wrist
+  on the left arm, the other way on the right) and whose `z` is the elbow's bend normal turned around, and
+  the shoulder joint has the same `z` with its `y` along the upper arm [static: arms.md6skl and
+  marine.md6skl; the game's animated elbow joint sat on that frame to 0.0 degrees in every hold of the
+  hands rig's baseline]. The roll joints keep their animated distance along the forearm.
+  - *Twist.* The wrist's turn about the forearm away from the forearm's neutral frame (swing-twist split),
+    measured from the bind pose, not from the game's animated hand: the shotgun's idle turns the left hand
+    by -132 degrees, and measured from it the twist wrapped at 48 degrees from the bind pose, inside the
+    range a palm reaches (the flashing forearm). The twist is kept continuous from tick to tick: each tick
+    takes the way round nearest to the last (`ArmTargets::lastTwist`, held per arm and dropped when the
+    arm goes back to the game), so it never jumps as it crosses half a turn; only more than half a turn
+    plus 30 degrees from the centre does it flip by a whole turn.
+  - *Shares.* The forearm takes the twist up to 90 degrees either way from a centre of -30 degrees (the
+    twist of a hand holding a controller level in the rig's neutral pose: -32 on both arms with the
+    default wrist offset; a real forearm turns 80 to 90 degrees either way from thumb up), shared out by
+    distance from the elbow: none at `LeftForeArm`, 20 % at `LeftForeArmRoll`, 39, 59 and 78 % at the
+    three rolls, all of it at the wrist. Twist past that goes to the upper arm, up to 90 degrees more (a
+    shoulder's rotation): the elbow joint and every roll joint turn further by it about the forearm, and
+    the shoulder joint turns about the upper arm by its part along the forearm (all of it for a straight
+    arm, none at a right angle, which keeps the elbow from twisting against a bent upper arm). Beyond both
+    the wrist takes the rest.
+  - *Swing.* The off hand's wrist bends away from its forearm no further than an ellipse of 70 degrees of
+    flexion and extension (about the hand's `x`, toward or away from the palm, which faces `z`) by 35
+    degrees of deviation (about `z`, toward the thumb or the little finger), its twist kept: a real wrist
+    flexes 70 to 80 and deviates 20 to 35 degrees, and skinned as the game skins it the base arms mesh
+    keeps 0.71 of its wrist ring at 90 degrees of swing and 0.50 at 120 [static, the arm design study].
+    The hand then turns less than the controller at the extreme. The weapon arm's wrist is the game's,
+    under the gun, and is never limited.
+  - Rig (OpenXR-Simulator, docs/rig-findings/hands-rig.md, section 7): against the bind pose the largest
+    twist between neighbouring forearm joints fell from 67.6 to 26.7 degrees (left) and 43.9 to 34.0
+    (right), the left wrist's swing from 92 to 52 degrees, the turn of a roll joint between two roll steps
+    30 degrees apart from 171 to 24 degrees, and the narrowest left wrist cross-section of the base mesh
+    proxy rose from 0.60 to 0.83 of the bind pose's.
 - **The attach joint** gets the pose that carries the wrist to its target with the animated
   attach-to-wrist offset, through the game's own modifier (the hook's rewrite, as before). The six other
   joints get modifiers of the layer's own: they are appended to the hands' joint-modifier list (both
@@ -245,12 +281,90 @@ the weapon's grip point), so putting it at the controller did not put the hand t
   are taken instead as the last read without overrides placed them relative to `LeftHand`, which the
   overrides do not move. An override read back more than 0.1 from where it was written for 30 ticks in a
   row stops the arm for the session (`offhand: arm: the layer's overrides do not land where written ...`).
+  **The mix** [static: InitJointMods 0x138B080 +0xB0 hands the modifier node's create (0x497E00) the
+  constant 0.95, which it copies to the owner's (idHands+0x2888) current weight +0x3C and target weight
+  +0x40; GetWeight (0x497DE0) returns +0x3C, SetWeight moves +0x40 and fades +0x3C toward it; the Game Pass
+  build has the same bytes; rig: ap-base0, ap-final, ap-w1]. The blend mixes the arm's pose without
+  modifiers and its pose with every modifier of the node applied whole (an override puts its joint at the
+  written pose, a change moves its joint from the pose without modifiers, the children follow) joint by
+  joint in each joint's parent's frame at the node's weight, offsets linearly and rotations by nlerp (the
+  quaternions mixed linearly the shortest way round, then normalised; not slerp: 90 degrees written lands
+  85.9 round, 150 lands 144.3), from the root down (`features/arm/mod_mix.hpp`) [static, round 4: the
+  blend command 0x19EAE50, (1 - t) qA + t qB with the sign of qA.qB taken and rsqrtps; the modifiers are
+  applied to a copy of the pose without them by 0x19E1040 in list order, each model-space one against its
+  parent as modified so far, so an override listed before a change on its parent is carried off by that
+  change (rig r4-bind: the wrist's change below listed after the six put the forearm 10 degrees off)]. The
+  weight covers every modifier of the node,
+  the game's attach joints' and the layer's: held at 1 (`ETERNALVR_TEST_ARM_MOD_WEIGHT=1`, run ap-w1) every
+  override of both arms read back exactly where it was written (0.000 mm in all 72 holds), and the gun
+  moved to the middle of the view and the weapon hand turned (its twist at rest from -32 to +23 degrees),
+  so the weight is the game's and is left alone. This model predicts the weapon arm's read-back to 1.5 mm
+  (median) and the left arm's to 0.9 mm once the attach joint below is allowed for; "lands as written" is
+  5.9 mm off on the weapon arm and 26 mm on the left (its wrist 200 mm).
+- **The off hand's attach joint never reached its target** [rig: every hands-rig run since the first,
+  hr-base1 to ap-final; captures]. `GetJointTransforms` reads the final pose of the last frame, the game's
+  modifiers mixed in, so the left attach joint's change, computed from that read as if it were the
+  animated pose, was applied by the game to its pose without modifiers instead: the joint settled about
+  half way (from a still start it swings about the target with a factor of -0.95 a frame), the left glove
+  stayed 0.2 m (median) from its target near the shotgun's pump, and the forearm the layer posed stretched
+  from it to the solved wrist. Implied by the dumps: the pose without modifiers taken back from each read
+  and the change written is the same in every hold of a run (2 mm and 0.8 degrees median spread) while the
+  read moves by 74 mm and 11 degrees.
+- **Written past the target** (`ETERNALVR_ARM_SOLVE=bind`; `features/arm/mod_mix.hpp`,
+  `offhand_mods::modWeight`). The layer reads the live weight every tick (the owner's +0x3C, and +0x40 as a
+  check; outside (0.5, 1] it writes as before and logs once per hands: `offhand: arm: the hands' modifier
+  weight reads ...`; the bytes it comes from, and the owner it is copied to (idHands+0x2878 handed to the
+  create, whose +0x10 it copies to), are checked at install on both builds: `offhand: arm: the hands' modifier
+  weight is the owner's +0x3C ...`). The left arm's pose without modifiers is taken back from the read and the
+  change the game was handed for the attach joint last tick (the hook notes it every tick, the layer's or the
+  game's, with the hands it was handed for: other hands' read, a new level's, has not mixed it in, so it is
+  dropped; the hands are told apart by address only, so a new level's hands at the old address would take that
+  change for one tick). Then each joint is written past its target: the attach joint's change from the pose
+  without modifiers, each of the layer's joints as an override whose offset from its parent's written pose is
+  the animated offset moved past the wanted one (the offset by 1/weight, the turn by the inverse of nlerp's:
+  a turn of g written as 2 (g/2 + asin((1 - w) / w sin(g/2)))). A turn is never written half a turn or more
+  from the animated pose (the mix would take it the other way): written 179 degrees, the attach joint lands
+  172.98 round, and the rest of a turn it cannot make the wrist takes with a change of its own (a seventh
+  modifier, `LeftHand`, listed before the six and no change otherwise), so every turn up to half a turn
+  lands; the joints after a joint that lands short are placed from where it lands. The wrist is read live while
+  its change has been no change for 3 ticks (only the attach joint carries it then, and its offset from the
+  attach joint is taken again from that read); after a change it is carried by the attach joint at that
+  offset. The offset held still in the shotgun holds of the rig (0.02 mm and 0.0007 degrees over a whole
+  sweep; other weapons and their animations not measured). The wrist's landing counts in `landed` but not
+  toward the landing guard, so a wrist offset of the game's own cannot stop the arm for the session. With the
+  wrist's change the offsets taken from a clean read are dropped when the hands, the modifier node or the
+  skeleton change (a new level, a skin), and a read counts as clean only 150 ms and 3 ticks after the last
+  write (the time rule alone took a read the overrides still showed in after a hitch); without `bind` both
+  stay as they were. The weapon arm's wrist and attach joint stay the game's: its wrist as read is taken as
+  the parent of the first roll joint, an approximation, since the read has the game's attach change (the
+  weapon lag) mixed in at the weight and the joints are mixed from the wrist with it whole, so they land off
+  by (1 - weight) of that change (1.4 mm median, 1.8 at most on the rig with nlerp, `r4-bind2`; the 1.5 and
+  4.4 of `ap2-comp2` included the slerp model's own error). The read-back is measured against the target
+  (`landed`).
+  Rig (`ap2-comp2`, 72 holds, against `ap-final`): the weapon arm's read-back from 5.9 mm median (45 at
+  most, 26 holds over 10 mm) to 1.5 (4.4 at most, none over 10); the left arm's from 26 mm median (106
+  at most, all 72 holds over 10 mm) to 2.3 (19 at most, 4 holds between 10 and 19 mm: the roll -90 lead-in
+  and sweep pose, whose attach joint lands 7 degrees short of its target (12 mm at the wrist; it needs
+  about 177 degrees, the mix reaches 170), the right roll +90 (5 degrees short, 10 mm) and the mirror-2
+  hold, the shoulder joint off by 19 mm); the left wrist on its target (0 mm
+  median, from 201). No new failing check against `ap-final`; the gun, the weapon wrist (146.4 mm from the
+  grip) and the sight line (2.29 degrees) as before, and the captures show the left glove at the wrist
+  with the forearm whole. Without `bind` nothing is read or written for it.
+  Round 4 (`r4-bind2` against `r4-ref-bind`, origin/main with `bind`; hands-rig.md section 9): with nlerp
+  and the wrist's change every left joint lands within 0.8 mm of its target in all 72 holds (the worst joint
+  of each hold from 2.2 mm median and 19.1 at most, 6 holds over 10 mm; `landed`, the layer's own measure,
+  from 2.3 and 19.5, 4 holds failing it), the wrist within 0.05 mm and 0.03 degrees (from 13.8 mm and
+  8 degrees in the roll -90 and two-hand holds), the first roll joint within 0.05 degrees (from 2.9); the
+  weapon arm's read-back 1.4 mm median and 1.8 at most (from 1.5 and 4.5). Twist, swing, wrap, flicker,
+  bones, the gun and the sight line as before; 0 regressions against the baseline.
 - **Hand-over.** The arm policy's weight mixes the game's arm (every joint carried by the game's own
   modifier) and the solved one joint by joint, the wrist first and the attach joint placed to carry the
   mixed wrist, so a punch, a throw or a glory kill blends out as before.
-- **How the modifiers work** [static: the blend's joint-modifier pass 0x19E2A60, SetJointMod 0x138CF10,
-  AddJointMod 0x138B360, idList::SetNum 0x19A61F0; not yet seen live]. A model-space modifier is applied
-  after the joint's parent: a change multiplies its quaternion on the left and adds its translation, an
+- **How the modifiers work** [static: SetJointMod 0x138CF10, AddJointMod 0x138B360, idList::SetNum
+  0x19A61F0; the pass that applies the hands' modifiers is 0x19E1040 (Steam, one pass, round 4), which
+  supersedes the 0x19E2A60 cited here before (that pass skips them: it filters on flag 0x400); the behaviour
+  below is seen live on the rig since ik5]. A model-space modifier is applied after the joint's parent: a
+  change multiplies its quaternion on the left and adds its translation, an
   override (0x20) replaces the joint's model-space pose. SetJointMod makes the quaternion from the matrix it
   is given as if the rows were the joint's rotated axes, so the joint's axis becomes animated x matrix,
   which is what `xr_math/offhand_pose.hpp` has always assumed. Positions go in divided by the animator's
@@ -419,6 +533,100 @@ the real fix and need an arm model of their own (the free-arm survey above).
   `weapon arm: right arm surface 1 hidden (arms hidden)` and `offhand: arm: left arm surface ... hidden
   (arms hidden)`. With `ETERNALVR_OFFHAND_TRACE=1` the pose line ends `hidden (arms hidden)`.
 
+## Arms model (ETERNALVR_ARM_MODEL, rig tests)
+
+Rig tests only, nothing changes without the variable (`vkcore/arm_model.hpp`). The first-person arms are one
+model owned by the hands (idHands, idPlayer+0xD2C8: render model +0x370, its md6 decl +0x4D0), set only by
+`idHands::SetModel(hands, decl)` (Steam RVA 0x1369450, Game Pass 0x136DA30) from two callers: idPlayer's
+InitHands (Steam 0x13EAB10, GP 0x13EF0F0; the player's hands decl at spawn and on a map load, then the
+hands' kit) and the cosmetic skin's apply (Steam 0x1355EA0, GP 0x135A480; the skin's first-person decl,
+then the skin's kit). Weapon switches only apply the weapon's kit to whatever model the hands have
+[static, build 25216728]. A mid hook on each of the two calls hands SetModel another decl, so the game's
+own code builds the model, its animator, its joint modifiers (the layer's room among them) and the kits
+at the moment it would anyway, and SetModel's own check (the model's decl is the one asked for) keeps a
+later InitHands from building it again.
+
+- `base`: the decl the game's inherits from whose name ends in `fp_hands.md6`, reached through the decl's
+  parent (+0xB8): on the rig `md6def/player/human/base/praetor.md6` has the parent
+  `md6def/player/human/base/fp_hands.md6` (the base arms mesh `arms.md6mesh`, 79 joints).
+- `skin` or `skin:<N>`: `md6def/customization/player/human/set<N>/base/praetor_set<N>.md6` (set 3 by
+  default, in `gameresources.resources`), found by name in the game's md6 decl list: the resource list of
+  the class `idDeclMD6` (the game's lookup of a resource list by class name) and the list's find by name
+  (the call `idDeclInfo::FindWithInheritance` makes before it loads anything). The decl names carry their
+  type's folder (`md6def/...`); the name without it is tried too.
+- A candidate is used only when it has the game's decl's vtable; otherwise the game's decl is kept and the
+  reason logged once (`arm model: the hands' model ... stays the game's: ...`). The two call sites,
+  SetModel and the two lookups are found by signature, each unique in both the Steam and the Game Pass
+  images [static], and checked at install (both calls must reach SetModel, the find's prologue must
+  match). Nothing is swapped while the multiplayer guard refuses.
+- Logs: `arm model: ETERNALVR_ARM_MODEL=... hooked`, then per decl `the hands' model <game> (decl ...,
+  parent ...) becomes <candidate>` and `SetModel N for hands ...: <candidate> instead of <game>`.
+
+Rig (OpenXR-Simulator; docs/rig-findings/hands-rig.md, section 7):
+
+- `base` swaps (the log names fp_hands.md6) but is not usable as it stands: its animated arm reads 2.5
+  times longer (upper arm 0.707 game units against 0.276 on the game's model) and far from where the
+  layer's targets are (the weapon wrist at (0.71, -1.21, 3.16)), the view looked up at the ceiling in
+  every capture, and the left arm's overrides read back 2.8 units from where they were written, so the
+  layer's landing guard gave the off hand back to the game after 30 ticks. What it is (round 4): the base
+  model is not animated at all, and it is drawn 2.5 times its size. Its arm reads back as the bind pose of
+  its skeleton (`arms.md6skl`, decoded from the skeleton's inverse bind matrices) multiplied by exactly 2.50
+  about the model's origin: both attach joints at the one point (0.585, 0, 1.268) x 2.50, the wrist at
+  (0.378, 0.484, 1.264) x 2.50 on all three axes, where the game's model has its arms in the weapon's idle
+  pose; the bind poses of `arms.md6skl` and the game's `marine.md6skl` agree to about 3 cm, so the skeleton's
+  own units are not it [rig: ap-base-model's dump lines before the layer posed the arm; static: the two
+  skeletons]. `fp_hands.md6` is the abstract parent of the player's hands decl (`praetor.md6`: `inherit
+  "md6def/player/human/base/fp_hands.md6"`, its own `mesh` `marine.md6mesh` and `offset ( -0.24003 0
+  -1.59067 )`; `fp_hands.md6` has `arms.md6mesh` and `offset ( -0.24003 0 0 )`) [static: the decls in
+  gameresources]; its 79-joint skeleton does not take the hands' animations, made for the 92-joint one
+  [inferred], so the camera joint stays at its bind pose too (the view at the ceiling). Where the 2.5 comes from
+  is not found (the animator's model scale at +0x500 reads 1). `base` is not a candidate: scaled back it
+  would still be an unanimated arm and camera. The switch still works for rig tests; whether to remove it is a
+  later decision. The bare arms mesh it was meant to try (`arms.md6mesh`) would need the mesh swapped inside
+  the game's own decl instead.
+- `skin` (set 3) swaps, keeps the 92-joint skeleton and gives the same joint-level results as the game's
+  model (the solve does not depend on the mesh), but its left arm's overrides read back 57 to 102 mm from
+  where they were written in the roll poses (19 to 24 mm on the game's model), and the captures show the
+  left glove away from the solved wrist (toward the shotgun's pump at roll 0, in front of the camera at
+  roll +90). The cause was the off hand's attach joint ("Where an override lands"): on the game's model
+  too the glove never reached the wrist, it stayed near the pump. With the mix allowed for (`bind`, run
+  ap2-skin3) the set 3 glove follows the solved wrist in every capture and the left arm reads back 2.3 mm
+  from its target (median; 19 at most, the same four holds as on the game's model), the weapon arm 1.5. Round 4
+  (r4-skin3, nlerp and the wrist's change): every left joint within 0.8 mm of its target in all 72 holds.
+- The weapon's kit: SetModel applies none; after InitHands the hands' kit and the next equip's weapon kit
+  are the game's own, as without the switch. The surfaces the layer shows and hides are found on the new
+  model by name or by kit (set 3: by kit); the base model has one `armsMesh` surface for both arms and
+  none per arm, so the layer leaves them to the weapon's kit.
+
+## Hands only (ETERNALVR_ARMS=hands, rig tests)
+
+`ETERNALVR_ARMS=hands` (rig tests only) leaves the gloves: while the layer poses an arm (the free off hand,
+the weapon arm in `ik`), its forearm roll joints, elbow and shoulder joint are put on the wrist with its
+orientation (`features/arm/arm_solve.hpp`, `handsOnly`, the `fold` cuff) and written with the modifier's scale
+flag (4) and the zero scale SetJointMod leaves in the entry, so the skin they carry shrinks into the wrist
+[static: SetJointMod 0x138CF10 zeroes the entry's +0x20..+0x2B; the modifier pass 0x19E1040 copies +0x20
+over the joint's scale under an override with flag 4 (0x19E1486; Steam, one pass, round 4); 0x19E2A60, cited
+here before, is superseded; rig: ap-hands2, ap2-hands-fold, r4-hands]. Those joints then read back scaled to nothing, so
+while the overrides show the layer checks only the attach joint and the wrist and does not count the landing
+(`vkcore/game_arm.cpp`). When the game has the arm (a glory kill, melee, a weapon switch) it draws whole, as
+before.
+
+Rig run ap-hands2: both arms posed in all 72 holds; the forearms and upper arms are gone from every capture;
+the cuff closed into a long cone with spikes. That cone was the off hand's attach joint ("Where an override
+lands"): the left glove stayed near the pump while the folded joints sat at the solved wrist about 0.2 m
+away, and the skin between them stretched. The checker's bone, swing and mesh checks fail by design in this
+mode.
+
+`ETERNALVR_TEST_HANDS_CUFF` (rig tests) closes the cuff three ways (`arm::handsOnly`): `fold` (the default,
+as above), `stub` (the last roll joint left where the arm has it, a stub of forearm about 6 cm long, the
+rest folded onto it) and `ring` (the forearm's roll joints on the wrist at full size, the elbow and the
+shoulder folded and scaled to nothing). With the mix allowed for (`ETERNALVR_ARM_SOLVE=bind`; runs
+ap2-hands-fold, ap2-hands-stub, ap2-hands-ring, both arms posed in all 72 holds each): `fold` looks best,
+the glove at the wrist with a short rounded cuff and no spikes, a little smearing on the back of the hand at
+roll +90; `stub` leaves a bulky stump of armoured forearm behind the glove; `ring` opens the gauntlet's
+ring, its inside and a flap of skin showing. Without `bind` the glove of the free off hand is not at the
+wrist and every way shows the stretch above.
+
 ## Arms in cutscenes (ETERNALVR_CUTSCENE_ARMS)
 
 In a cutscene shown around the player (`ETERNALVR_CUTSCENES=immersive`) the game draws its own hands model
@@ -469,7 +677,13 @@ cutscene around the player starts: the arms hidden, the weapon FOV the game's` /
 | `ETERNALVR_OFFHAND_TRACE` | 0 / 1 (0) | Log the left-arm signals when they change, the poses once a second (the weapon arm's too) |
 | `ETERNALVR_WEAPON_ARM` | `ik` / `game` (`ik`) | Who poses the weapon arm's forearm, elbow and upper arm; the wrist and gun stay the game's |
 | `ETERNALVR_WEAPON_ARM_TEST_SHOULDER` | f,l,u m (unset) | Rig tests: the weapon arm's shoulder at this point from the eyes (head's yaw frame), not mirrored |
-| `ETERNALVR_ARMS` | `shown` / `hidden` (`shown`) | Both first-person arms drawn, or hidden with the weapon alone ("Hidden arms" above; the launcher's "Show arms") |
+| `ETERNALVR_TEST_ARM_DUMP` | file (unset) | Rig tests: both arms' poses every 0.25 s as JSON lines for the hands rig ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) |
+| `ETERNALVR_TEST_ARM_FAULT` | `none` / `twist` (`none`) | Development only: the whole wrist twist on the wrist joint, the hands rig's positive control |
+| `ETERNALVR_ARMS` | `shown` / `hidden` / `hands` (`shown`) | Both first-person arms drawn, or hidden with the weapon alone ("Hidden arms" above; the launcher's "Show arms"); `hands`, rig tests: the gloves alone ("Hands only" above) |
+| `ETERNALVR_ARM_SOLVE` | `animated` / `bind` (`animated`) | The arm solve's wrist twist measured from the game's animated hand (as before) or from the bind pose, kept continuous and shared to the upper arm, the off hand's swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ("The whole arm" and "Where an override lands" above) |
+| `ETERNALVR_TEST_ARM_MOD_WEIGHT` | 0..1 (unset) | Development only: the hands' joint-modifier weight held while the free off hand is posed, the weights found put back when the arm goes back to the game or the multiplayer guard trips; new hands (a new level's) start at the game's own ("Where an override lands" above) |
+| `ETERNALVR_TEST_HANDS_CUFF` | `fold` / `stub` / `ring` (`fold`) | Rig tests: how `ETERNALVR_ARMS=hands` closes the sleeve at the glove ("Hands only" above) |
+| `ETERNALVR_ARM_MODEL` | `game` / `base` / `skin[:N]` (`game`) | Rig tests: the hands' model, the game's, the base arms mesh or Slayer skin set N, 3 by default ("Arms model" above) |
 | `ETERNALVR_CUTSCENE_ARMS` | `shown` / `hidden` (`hidden`) | In cutscenes shown around the player the arms hidden with the game's weapon FOV kept, or as before; nothing with `ETERNALVR_ARMS=hidden` ("Arms in cutscenes" above and in the launcher) |
 
 **The weapon in the left hand** (`ETERNALVR_HANDEDNESS=left` or `left_mirror`). The off hand is then the
@@ -501,7 +715,7 @@ Menu tap (under SteamVR with Touch controllers, a Y hold; B in the full mirror).
    (fades) or `(no colour scale: switched)`. `controllers: game hooks: ... off hand off (game), weapon arm on
    (ik)` by default (`off hand on (game)` with `ETERNALVR_OFFHAND_TRACE=1`: the hook then only logs for the
    off hand). Under hand aim (the default) also
-   `ui: wrist HUD: hand aim masks the crosshair and the ability rings; no abilities quad` once the wrist runs.
+   `ui: wrist HUD: under hand aim no abilities quad (the ability rings stay on the head-locked quad, or the crosshair mask takes them)` once the wrist runs.
 2. **Wrist glance.** In a level: the bottom corners are gone from the head-locked HUD; turn the left palm
    up across the chest and look at it. Expect `ui: wrist HUD shown for the first time (left hand, facing
    N deg, gaze M deg)`, health and armor on the image's left, ammo and equipment on its right (the abilities

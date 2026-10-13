@@ -21,6 +21,16 @@ TEST_CASE("the first value before the layer's writes is kept, and handed back on
     CHECK(saved.saved("r_antialiasing"));
     CHECK_FALSE(saved.saved("r_TAASafeMode"));
     CHECK(saved.size() == 2);
+    REQUIRE(saved.find("R_antialiasing") != nullptr);
+    CHECK(saved.find("R_antialiasing")->value == "1");
+    CHECK_FALSE(saved.find("R_antialiasing")->trip.has_value());
+    // A trip value (the player's from the profile's load) is given back instead; the kept value stays.
+    CHECK(saved.setTripValue("PM_NOBOB", "1"));
+    CHECK_FALSE(saved.setTripValue("r_dof", "1"));
+    REQUIRE(saved.find("pm_noBob")->trip.has_value());
+    CHECK(*saved.find("pm_noBob")->trip == "1");
+    CHECK(saved.find("pm_noBob")->value == "0");
+    CHECK(saved.find("r_TAASafeMode") == nullptr);
 
     const auto entries = saved.takeAll();
     REQUIRE(entries.size() == 2);
@@ -34,6 +44,7 @@ TEST_CASE("the first value before the layer's writes is kept, and handed back on
     // Once only, and nothing is kept after the values were taken.
     CHECK(saved.takeAll().empty());
     CHECK(saved.taken());
+    CHECK(saved.find("r_antialiasing") == nullptr);
     CHECK_FALSE(saved.beforeWrite("r_dof", "1", 30));
     CHECK(saved.takeAll().empty());
 }

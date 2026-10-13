@@ -156,7 +156,8 @@ command line), so two launchers never share `SESSION_PENDING`.
 
 A launch, in order (`SessionRunner`):
 
-1. Clean-up from an earlier run: a stale HKCU registration named by `REGISTRATION_PENDING` is removed,
+1. Clean-up from an earlier run: a stale HKCU registration named by `REGISTRATION_PENDING` is removed
+   (with the Khronos keys the registration created, once they are empty: `Safety/RegistrationMarker.cs`),
    and a pending settings restore is completed, or deferred while any game process runs.
 2. Preflight (below); any failure refuses the launch.
 3. `SESSION_PENDING` is written, then every settings location is snapshotted with SHA-256 sums
@@ -263,7 +264,9 @@ that folder is copied into each save backup (skipped when absent), and such a ba
 Cloud, so no cloud record check and no resync.
 
 The launcher reads the registry and never writes it, except with `--register-hkcu` (the HKCU
-implicit-layer route of ARCHITECTURE section 4, off by default and untested, T-113).
+implicit-layer route of ARCHITECTURE section 4, off by default and untested, T-113); that route's clean-up
+also deletes the keys it had to create, so an uninstall leaves the registry as it was
+(`docs/rig-findings/uninstall.md`).
 
 ## User data
 

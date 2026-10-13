@@ -4,6 +4,7 @@ evr_add_module(evr_ui_layer
     SOURCES
         additive_wash.cpp
         backdrop.cpp
+        crosshair.cpp
         gui_target.cpp
         hud_regions.cpp
         layout_tracker.cpp

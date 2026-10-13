@@ -26,9 +26,17 @@ namespace EternalVR.Launcher
         public static void Match(Form form, bool keepCentre)
         {
             if (!form.IsHandleCreated) return;
-            int dpi = (int)GetDpiForWindow(form.Handle);
+            Rescale(form, (int)GetDpiForWindow(form.Handle), keepCentre);
+        }
+
+        /// <summary>
+        /// <see cref="Match"/> for a display of <paramref name="dpi"/>: the scale change Windows gives a window dragged to it.
+        /// The visual QA (tests/UiShots) calls it with other scales than the displays it has.
+        /// </summary>
+        internal static void Rescale(Form form, int dpi, bool keepCentre)
+        {
             int from = form.DeviceDpi;
-            if (dpi <= 0 || dpi == from) return;
+            if (!form.IsHandleCreated || dpi <= 0 || dpi == from) return;
             var centre = new Point(form.Left + form.Width / 2, form.Top + form.Height / 2);
             var size = new Size(form.Width * dpi / from, form.Height * dpi / from);
             var at = keepCentre ? new Point(centre.X - size.Width / 2, centre.Y - size.Height / 2) : form.Location;

@@ -40,7 +40,7 @@ items and do not block v1.
 
 - BATTLEMODE and any online mode. VR refuses to start, or every VR feature turns off and the game carries on
   flat (section 4a).
-- Alternate-eye rendering as a player-facing mode. It may exist only as a bring-up and debug aid.
+- Alternate-eye rendering as the default. (It is a player option for slower processors, D-047.)
 - DLSS frame generation. It adds latency and uses a stale head pose.
 - Full-body avatar. Hands only.
 - In-headset settings menus, beyond an optional small quick menu much later.
@@ -198,8 +198,9 @@ decisions are T-109, T-114 and T-117; this section explains them.
   flat. What the layer itself changed is put back once, the only writes after a trip: every cvar it wrote
   at run time returns to its value before the layer's first write (except the window, present and HDR
   cvars, which would resize the window or change the swapchain), the wall-climb cvars to the game's, the
-  free off hand's joint modifiers to no change, and the button prompts to the game's key names. The cvars
-  the launcher puts on the command line keep their VR values where the layer never wrote them (their flat
+  free off hand's joint modifiers to no change, the hands' joint-modifier weight to the game's where a
+  development test held it (`ETERNALVR_TEST_ARM_MOD_WEIGHT`), and the button prompts to the game's key
+  names. The cvars the launcher puts on the command line keep their VR values where the layer never wrote them (their flat
   values are not known yet: in stereo HDR output, the per-eye temporal effects switched off, dynamic
   resolution and the window; the comfort set is the layer's alone in stereo), so multiplayer still needs a
   relaunch without VR
@@ -288,7 +289,7 @@ Estimated outcomes before testing, as a judgement:
 | Names only | about 37% |
 
 The architecture keeps **stereo production behind an interface**. `StereoSource` is one of three:
-- `MultiviewTransform` (section 7), the default.
+- `MultiviewTransform` (section 7), the planned default; dropped after the M1.5 census (T-131).
 - `EngineNativeStereo` drives the engine's own second view with OpenXR poses by hooking the dummy HMD's
   virtual functions, then copies the two eye targets. If the engine can render both views, multiview
   becomes an optimisation rather than the foundation.
@@ -401,18 +402,40 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       (T-091).
     - **Adapter match.** The D3D12 device must sit on the adapter the runtime names
       (`xrGetD3D12GraphicsRequirementsKHR::adapterLuid`), and DOOM's Vulkan device must be on the same
-      one. The layer steers DOOM's physical-device choice to that LUID where the game makes it: it
-      filters or reorders `vkEnumeratePhysicalDevices` and `vkEnumeratePhysicalDeviceGroups` by
-      `VkPhysicalDeviceIDProperties::deviceLUID` (T-057). That needs an OpenXR instance and system
-      before enumeration: the layer creates them in its `vkCreateInstance`, not inside
-      `vkEnumeratePhysicalDevices`, which runs under the loader's lock (T-082). A thread-local
-      re-entrancy guard is set around our OpenXR calls, so any `VkInstance` a runtime or an OpenXR API
-      layer creates from inside them (such as a nested SteamVR instance) passes straight through
-      our layer. The runtime must be running and the headset connected when the game starts. If they
-      are not, or steering fails, VR refuses to start with a clear message (R01 open question 2). The
-      rig has two GPUs (D-044): until steering lands in M4.5, the game's per-application GPU preference
-      puts it on the RTX 4080 and the LUID is checked at session creation, a mismatch refusing VR
-      (T-111). One OpenXR instance per process, reused if the game creates another `VkInstance`
+      one. The layer can steer DOOM's physical-device choice to that LUID where the game makes it, in its
+      `vkEnumeratePhysicalDevices` and `vkEnumeratePhysicalDeviceGroups` for the game's instance, by
+      `VkPhysicalDeviceIDProperties::deviceLUID` (T-057; `adapter_steer.hpp`, `adapter_order.hpp`).
+      As built, **off by default**: `ETERNALVR_ADAPTER_STEER=1` turns it on until a two-GPU machine has
+      been tried with a headset. Off, the first enumeration logs the devices and "steering off" ("nothing to
+      steer" with one device; listing them is one extra enumeration), the calls go straight down and no OpenXR work is done.
+      - **When the LUID is had.** The presenter's OpenXR instance is made on the XR worker, which starts
+        at the game's first `vkCreateSwapchainKHR` (T-122), after the device is chosen. So, with steering
+        on, the first enumeration of the game's instance asks the runtime once: a short-lived OpenXR
+        instance (the bundled loader, `XR_KHR_D3D12_enable` only), one `xrGetSystem`, the graphics
+        requirements, `xrDestroyInstance`. It runs on the game's thread with the thread-local
+        pass-through flag set, so any `VkInstance` a runtime or an OpenXR API layer creates from inside
+        it (such as a nested SteamVR instance) passes straight through our layer. The Vulkan loader
+        holds its lock around `vkCreateInstance` and `vkEnumeratePhysicalDevices` alike (loader
+        1.4.341, `trampoline.c`); the lock is recursive on its own thread. A slow runtime holds the
+        game's start-up as long; the launcher's own killable probe passing the LUID is the next step
+        (`docs/rig-findings/adapter-steer.md`).
+      - **Reorder only.** The game picks the first `DISCRETE_GPU` device of `apiVersion` 1.1 or later,
+        else the first device, unless `r_physicalDeviceIndex` (default -1) names an index; it never calls
+        `vkEnumeratePhysicalDeviceGroups` (static, the Steam exe; `docs/rig-findings/adapter-steer.md`).
+        The layer leaves the list alone when the game already picks a device with the headset's LUID,
+        and moves that device to the front when it then wins the game's rule; groups follow. When the
+        runtime names a device the game would not take even first (an integrated GPU next to a discrete
+        one), the list is left and the LUID check below refuses VR: cutting the list would put the
+        game on the integrated GPU.
+      - **When the runtime is not asked.** Steering off; one device; exactly one device the game's rule
+        takes (no order changes its pick: most laptops and desktops with the integrated GPU on); the
+        game's command line sets `r_physicalDeviceIndex` (the player chose). With no runtime, no headset
+        or a runtime without D3D12 at launch the list is unchanged too. The LUID is always checked at
+        session creation, a mismatch refusing VR with a message (T-111). The rig's
+        `ETERNALVR_TEST_STEER=mismatch` steers to a device without the headset's LUID and may cut the
+        list to it, the positive control for that refusal; `=off` is the switch at 0.
+      With steering on, a process makes two OpenXR instances one after the other: the short-lived query
+      and the presenter's for the session, which is reused if the game creates another `VkInstance`
       (T-110). No cross-adapter copies in v1.
   - **`VulkanPresenter` (v1.x, T-059).** `XR_KHR_vulkan_enable2`, with the runtime given the
     next-layer proc address so its calls bypass our hooks. Built only if M3 or M4.5 measurements show a
@@ -905,7 +928,7 @@ Comfort effects are event-driven:
 - landing-arc marker
 
 Four presets (Comfortable, Recommended, Advanced, Intense) seed profiles (section 12). A new profile
-starts from **Recommended**, with the vignette on. Glory-kill presentation is the key playtest decision
+starts from **Recommended**, with the vignette off (D-048). Glory-kill presentation is the key playtest decision
 (R06).
 
 **Health notice and flashes (T-096).** On first launch, and on each new profile, the launcher shows a
@@ -975,7 +998,7 @@ around head-forward, so a direction gets the same rate in both eyes (`foveation_
 docs/VR_STEREO.md has the details. The
 plan below (`VK_KHR_fragment_shading_rate`, a 2-layer shading-rate image selected by `ViewIndex`, on by
 default) was written for the multiview design and was not built.
-- **Fixed foveation is on by default for every headset.** Regions are defined in degrees and centred per
+- **Fixed foveation on every headset** (the plan; v1 covers NVIDIA RTX, T-130). Regions are defined in degrees and centred per
   eye on head-forward projected into that eye's frustum.
 - Presets: Off / Subtle / Balanced / Aggressive / Maximum. Pancake-lens headsets default one notch gentler.
 - **Eye-tracked foveation** from `XR_EXT_eye_gaze_interaction` where available (v1 if time allows;

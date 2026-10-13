@@ -17,6 +17,7 @@ using evr::test::approxEqual;
 using evr::xr_math::aimErrorDegrees;
 using evr::xr_math::anglesOfDirection;
 using evr::xr_math::applyLocalOffset;
+using evr::xr_math::applyLocalOffsetWithSight;
 using evr::xr_math::atEye;
 using evr::xr_math::axisFromAngles;
 using evr::xr_math::axisFromDirection;
@@ -35,6 +36,33 @@ constexpr float kPi = std::numbers::pi_v<float>;
 IdViewAxis bodyFacing(float yawDegrees) {
     return axisFromAngles({0.0f, yawDegrees, 0.0f});
 }
+
+// The angle between two directions in degrees, in double precision (acos loses it near 0).
+double degreesBetween(Vec3 a, Vec3 b) {
+    const double ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
+    const double cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;
+    return std::atan2(std::sqrt(cx * cx + cy * cy + cz * cz), ax * bx + ay * by + az * bz) * 180.0 /
+           std::numbers::pi;
+}
+
+// A direction in `axis`'s own frame, in the world.
+Vec3 worldOf(const IdViewAxis& axis, Vec3 local) {
+    return axis.forward * local.x + axis.left * local.y + axis.up * local.z;
+}
+
+// The weapon hand's grip with a rolled aim axis, and the shared table offset.
+EyeRelativePose rolledGrip(float roll) {
+    EyeRelativePose grip;
+    grip.offset = {0.3f, -0.2f, -0.4f};
+    grip.axis = axisFromAngles({10.0f, 30.0f, roll});
+    return grip;
+}
+constexpr Vec3 kOffset{-0.25f, 0.18f, 0.22f};
+constexpr float kUnitsPerMetre = 39.37f;
+
+// The sights the table names (pitch down, yaw left): the combat shotgun's idle toe-in, the Heavy Cannon's
+// iron sights above the bore, the ballista's idle tilt.
+constexpr IdAngles kSights[] = {{0.21f, 2.17f, 0.0f}, {-3.45f, 0.19f, 0.0f}, {-0.83f, 1.08f, 0.0f}};
 
 // A tracking pose at `position` pointing `yawRadians` counter-clockwise from -Z and `pitchRadians` up.
 Pose aimPose(Vec3 position, float yawRadians, float pitchRadians = 0.0f) {
@@ -153,4 +181,80 @@ TEST_CASE("unusable inputs give no shot") {
     CHECK_FALSE(shotFromHand({}, {}, {}, 1.0f, 0.0f).has_value());
     CHECK_FALSE(shotFromHand({nan, 0.0f, 0.0f}, {}, {1.0f, 0.0f, 0.0f}, 1.0f, 0.0f).has_value());
     CHECK_FALSE(shotFromHand({}, {}, {1.0f, 0.0f, 0.0f}, -1.0f, 0.0f).has_value());
+}
+
+TEST_CASE("with its sight row the gun's sight line runs parallel to the aim ray") {
+    const EyeRelativePose grip = rolledGrip(47.0f);
+    for (const IdAngles& sight : kSights) {
+        const Vec3 line = axisFromAngles(sight).forward; // in the model's frame
+        const EyeRelativePose placed = applyLocalOffsetWithSight(grip, kOffset, {}, sight, kUnitsPerMetre);
+        CHECK(isOrthonormal(placed.axis));
+        CHECK(degreesBetween(worldOf(placed.axis, line), grip.axis.forward) < 1e-4);
+    }
+}
+
+TEST_CASE("without the sight correction the sight line stays off the ray by its own angle") {
+    const EyeRelativePose grip = rolledGrip(47.0f);
+    for (const IdAngles& sight : kSights) {
+        const Vec3 line = axisFromAngles(sight).forward;
+        const EyeRelativePose placed = applyLocalOffset(grip, kOffset, {}, kUnitsPerMetre);
+        const double expected = degreesBetween(line, {1.0f, 0.0f, 0.0f});
+        CHECK(expected > 0.7);
+        CHECK(degreesBetween(worldOf(placed.axis, line), grip.axis.forward) ==
+              doctest::Approx(expected).epsilon(1e-3));
+    }
+}
+
+TEST_CASE("the sight correction turns the gun about the grip, which stays on the controller") {
+    const EyeRelativePose grip = rolledGrip(47.0f);
+    const IdAngles rotations[] = {{}, {2.0f, -3.0f, 5.0f}};
+    for (const IdAngles& rotation : rotations) {
+        // The model's point at the grip: -L t in the model's frame (game units).
+        const IdViewAxis l = axisFromAngles(rotation);
+        const Vec3 gripPoint =
+            Vec3{dot(l.forward, kOffset), dot(l.left, kOffset), dot(l.up, kOffset)} * -kUnitsPerMetre;
+        const EyeRelativePose plain = applyLocalOffset(grip, kOffset, rotation, kUnitsPerMetre);
+        CHECK(approxEqual(plain.offset + worldOf(plain.axis, gripPoint), grip.offset, 1e-3f));
+        for (const IdAngles& sight : kSights) {
+            const EyeRelativePose placed =
+                applyLocalOffsetWithSight(grip, kOffset, rotation, sight, kUnitsPerMetre);
+            CHECK(approxEqual(placed.offset + worldOf(placed.axis, gripPoint), grip.offset, 1e-3f));
+            // The origin itself moves (5 mm or more here): the turn is not about the model's origin.
+            CHECK(length(placed.offset - plain.offset) > 0.005f * kUnitsPerMetre);
+        }
+    }
+}
+
+TEST_CASE("the sight correction holds at any controller roll") {
+    const IdAngles sight = kSights[1];
+    const Vec3 line = axisFromAngles(sight).forward;
+    for (const float roll : {-180.0f, -90.0f, 0.0f, 33.0f, 90.0f}) {
+        const EyeRelativePose grip = rolledGrip(roll);
+        const EyeRelativePose placed = applyLocalOffsetWithSight(grip, kOffset, {}, sight, kUnitsPerMetre);
+        CHECK(degreesBetween(worldOf(placed.axis, line), grip.axis.forward) < 1e-4);
+    }
+}
+
+TEST_CASE("with a row rotation the sight line follows the rotated forward, a deliberate offset") {
+    const EyeRelativePose grip = rolledGrip(-20.0f);
+    const IdAngles rotation{2.0f, -3.0f, 5.0f};
+    const Vec3 wanted = worldOf(grip.axis, axisFromAngles(rotation).forward);
+    for (const IdAngles& sight : kSights) {
+        const Vec3 line = axisFromAngles(sight).forward;
+        const EyeRelativePose placed =
+            applyLocalOffsetWithSight(grip, kOffset, rotation, sight, kUnitsPerMetre);
+        CHECK(isOrthonormal(placed.axis));
+        CHECK(degreesBetween(worldOf(placed.axis, line), wanted) < 1e-4);
+    }
+}
+
+TEST_CASE("a sight on the model's forward changes nothing") {
+    const EyeRelativePose grip = rolledGrip(47.0f);
+    const IdAngles rotation{2.0f, -3.0f, 5.0f};
+    const EyeRelativePose plain = applyLocalOffset(grip, kOffset, rotation, kUnitsPerMetre);
+    const EyeRelativePose placed = applyLocalOffsetWithSight(grip, kOffset, rotation, {}, kUnitsPerMetre);
+    CHECK(approxEqual(placed.offset, plain.offset, 1e-4f));
+    CHECK(approxEqual(placed.axis.forward, plain.axis.forward));
+    CHECK(approxEqual(placed.axis.left, plain.axis.left));
+    CHECK(approxEqual(placed.axis.up, plain.axis.up));
 }

@@ -142,6 +142,7 @@ bool XrPresenter::Impl::reconnect() {
         for (std::uint32_t waited = 0; waited < xr_recovery::retryDelayMs(attempt) && !stop.load();
              waited += 100) {
             Sleep(100);
+            status::flush();
         }
         if (stop.load()) {
             break;

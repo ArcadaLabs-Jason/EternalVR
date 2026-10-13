@@ -20,6 +20,9 @@
 // first list could not grow but the second did, lowering the count again leaves the second list's alone;
 // restoreCount says so. Pure: the counts come in, the decisions go out.
 
+#include "features/arm/arm_joints.hpp"
+
+#include <array>
 #include <cstdint>
 
 namespace evr::arm {
@@ -35,6 +38,26 @@ inline constexpr std::int32_t kMaxJointMods = 256;
 
 // The layer's modifiers for one arm: the forearm's four roll joints, the elbow and the shoulder end.
 inline constexpr std::int32_t kModsPerArm = 6;
+
+// Their joints, in this order in the list.
+inline constexpr std::array<ArmJoint, kModsPerArm> kLayerModJoints{ArmJoint::Roll3,   ArmJoint::Roll2,
+                                                                   ArmJoint::Roll1,   ArmJoint::ForeArmRoll,
+                                                                   ArmJoint::ForeArm, ArmJoint::UpperArm};
+
+// The modifiers of an arm with or without the wrist's change (the off hand with ETERNALVR_ARM_SOLVE=bind,
+// features/arm/mod_mix.hpp, modifiedWithWrist).
+constexpr std::int32_t layerModCount(bool wristChange) {
+    return wristChange ? kModsPerArm + 1 : kModsPerArm;
+}
+
+// The joint of modifier `k` (0 to layerModCount - 1). The wrist's change comes first: the blend applies the
+// modifiers in list order, each against its parent as modified so far, so an override listed before a
+// change on its parent would be carried off by that change [static: the modifier pass 0x19E1040, Steam,
+// one pass; rig r4-bind, the change listed last: the forearm 10 degrees off].
+constexpr ArmJoint layerModJoint(bool wristChange, std::int32_t k) {
+    const std::int32_t first = wristChange ? 1 : 0;
+    return k < first ? ArmJoint::Hand : kLayerModJoints[static_cast<std::size_t>(k - first)];
+}
 
 // The room to make for `arms` arms (0, 1 or 2; anything else counts as none).
 constexpr std::int32_t modsForArms(std::int32_t arms) {

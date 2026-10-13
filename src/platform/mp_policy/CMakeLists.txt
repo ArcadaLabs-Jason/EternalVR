@@ -43,6 +43,7 @@ configure_file(refused_arguments.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/refused_arg
 evr_add_module(evr_mp_policy
     SOURCES
         mp_policy.cpp
+        profile_cvars.cpp
         saved_cvars.cpp
         trip_listeners.cpp
         "${CMAKE_CURRENT_BINARY_DIR}/refused_arguments.cpp")

@@ -402,6 +402,80 @@ TEST_CASE("the arms are shown unless ETERNALVR_ARMS says hidden") {
     REQUIRE(bad.issues.size() == 1);
     CHECK(bad.issues[0].name == "ETERNALVR_ARMS");
     CHECK_FALSE(bad.settings.armsHidden);
+    // The rig-only value is taken but not offered to players.
+    CHECK(bad.issues[0].message.find("hands") == std::string::npos);
+    CHECK(bad.issues[0].message.find("shown, hidden") != std::string::npos);
+}
+
+TEST_CASE("the weapon sights are off unless ETERNALVR_WEAPON_SIGHTS says 1 or on") {
+    CHECK_FALSE(parse({}).settings.weaponSights);
+    CHECK(parse({{"ETERNALVR_WEAPON_SIGHTS", "1"}}).settings.weaponSights);
+    CHECK(parse({{"ETERNALVR_WEAPON_SIGHTS", "on"}}).settings.weaponSights);
+    CHECK_FALSE(parse({{"ETERNALVR_WEAPON_SIGHTS", "0"}}).settings.weaponSights);
+    CHECK_FALSE(parse({{"ETERNALVR_WEAPON_SIGHTS", "off"}}).settings.weaponSights);
+    const auto bad = parse({{"ETERNALVR_WEAPON_SIGHTS", "maybe"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_WEAPON_SIGHTS");
+    CHECK_FALSE(bad.settings.weaponSights);
+}
+
+TEST_CASE("the hands rig's dump and planted fault are off unless their test variables are set") {
+    CHECK(parse({}).settings.testArmDumpPath.empty());
+    CHECK_FALSE(parse({}).settings.testArmTwistFault);
+    const auto on =
+        parse({{"ETERNALVR_TEST_ARM_DUMP", "C:/runs/arms.ndjson"}, {"ETERNALVR_TEST_ARM_FAULT", "twist"}});
+    CHECK(on.issues.empty());
+    CHECK(on.settings.testArmDumpPath == "C:/runs/arms.ndjson");
+    CHECK(on.settings.testArmTwistFault);
+    CHECK_FALSE(parse({{"ETERNALVR_TEST_ARM_FAULT", "none"}}).settings.testArmTwistFault);
+    const auto bad = parse({{"ETERNALVR_TEST_ARM_FAULT", "wrap"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_TEST_ARM_FAULT");
+    CHECK_FALSE(bad.settings.testArmTwistFault);
+}
+
+TEST_CASE("the arm solve measures the twist from the animated hand unless ETERNALVR_ARM_SOLVE says bind") {
+    using evr::input::ArmSolve;
+    CHECK(parse({}).settings.armSolve == ArmSolve::Animated);
+    CHECK(parse({{"ETERNALVR_ARM_SOLVE", "bind"}}).settings.armSolve == ArmSolve::Bind);
+    CHECK(parse({{"ETERNALVR_ARM_SOLVE", "animated"}}).settings.armSolve == ArmSolve::Animated);
+    const auto bad = parse({{"ETERNALVR_ARM_SOLVE", "rest"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_ARM_SOLVE");
+    CHECK(bad.settings.armSolve == ArmSolve::Animated);
+}
+
+TEST_CASE("the rig's arms model and hands-only arms are off unless their variables are set") {
+    using evr::input::ArmModel;
+    const auto none = parse({});
+    CHECK(none.settings.armModel == ArmModel::Game);
+    CHECK_FALSE(none.settings.armsHandsOnly);
+    CHECK(parse({{"ETERNALVR_ARM_MODEL", "base"}}).settings.armModel == ArmModel::Base);
+    const auto skin = parse({{"ETERNALVR_ARM_MODEL", "skin"}});
+    CHECK(skin.issues.empty());
+    CHECK(skin.settings.armModel == ArmModel::Skin);
+    CHECK(skin.settings.armModelSkin == 3);
+    const auto set38 = parse({{"ETERNALVR_ARM_MODEL", "Skin:38"}});
+    CHECK(set38.issues.empty());
+    CHECK(set38.settings.armModel == ArmModel::Skin);
+    CHECK(set38.settings.armModelSkin == 38);
+    for (const char* bad : {"skin:", "skin:0", "skin:x", "skin38", "arms"}) {
+        CAPTURE(bad);
+        const auto r = parse({{"ETERNALVR_ARM_MODEL", bad}});
+        REQUIRE(r.issues.size() == 1);
+        CHECK(r.issues[0].name == "ETERNALVR_ARM_MODEL");
+        CHECK(r.settings.armModel == ArmModel::Game);
+    }
+    CHECK(parse({}).settings.handsCuff == evr::input::HandsCuff::Fold);
+    CHECK(parse({{"ETERNALVR_TEST_HANDS_CUFF", "stub"}}).settings.handsCuff == evr::input::HandsCuff::Stub);
+    CHECK(parse({{"ETERNALVR_TEST_HANDS_CUFF", "ring"}}).settings.handsCuff == evr::input::HandsCuff::Ring);
+    CHECK(parse({{"ETERNALVR_TEST_HANDS_CUFF", "cap"}}).issues.size() == 1);
+    const auto hands = parse({{"ETERNALVR_ARMS", "hands"}});
+    CHECK(hands.issues.empty());
+    CHECK(hands.settings.armsHandsOnly);
+    CHECK_FALSE(hands.settings.armsHidden);
+    CHECK(parse({{"ETERNALVR_ARMS", "hidden"}}).settings.armsHidden);
+    CHECK_FALSE(parse({{"ETERNALVR_ARMS", "hidden"}}).settings.armsHandsOnly);
 }
 
 TEST_CASE("the arms are hidden in cutscenes around the player unless ETERNALVR_CUTSCENE_ARMS says shown") {

@@ -90,7 +90,8 @@ TEST_CASE("blending poses") {
 }
 
 TEST_CASE("the blend's modifier composition is applyJointMod's") {
-    // The blend's model-space pass (0x19E2A60) sets the joint's quaternion to mod * joint (Hamilton), and
+    // The hands' modifier pass (0x19E1040; 0x19E2A60 in earlier notes, superseded) sets the joint's
+    // quaternion to mod * joint in model space (Hamilton), and
     // SetJointMod (0x138CF10) makes the modifier's quaternion from the matrix it is given as if the rows
     // were the rotated axes. The joint's axis rows are its quaternion's rotated axes (GetJointTransforms).
     const ModelPose animated{{0.5f, 0.1f, 1.2f}, axisFromAngles({-30.0f, 100.0f, 25.0f})};

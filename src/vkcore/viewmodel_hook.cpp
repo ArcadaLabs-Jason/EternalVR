@@ -6,8 +6,10 @@
 //   so the arms and weapon are drawn with the world's projection.
 // - A mid-hook in idHands::UpdatePosition just before the render model's stores (RVA 0x13807EA): the final
 //   origin [rsp+0x48] and axis [rbp-0x30] are replaced with the controller's grip, turned to its aim ray,
-//   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). The game's own
-//   stores then carry it into both the deferred and the current render-model pose.
+//   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). With
+//   ETERNALVR_WEAPON_SIGHTS=1 a weapon with a [sights] row is then turned about the grip so its sight line
+//   runs parallel to the aim ray; the shot ray and the aim dot do not change. The game's own stores then
+//   carry it into both the deferred and the current render-model pose.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -25,9 +27,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <numbers>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -79,11 +83,12 @@ constexpr std::string_view kFistsPrefix = "weapon/player/fists";
 // view.
 constexpr std::string_view kSwimFists = "weapon/player/fists_swim";
 
-// The held item's decl and its offset (viewmodel hook thread only).
+// The held item's decl, its offset and its sight row (viewmodel hook thread only).
 const std::byte* g_cachedDecl = nullptr;
 bool g_cachedSeated = false;
 game::WeaponOffset g_cachedOffset;
-bool g_cachedFists = false; // the held item is the fists of a melee or a Blood Punch
+std::optional<game::WeaponSight> g_cachedSight; // only with ETERNALVR_WEAPON_SIGHTS=1
+bool g_cachedFists = false;                     // the held item is the fists of a melee or a Blood Punch
 // The held item's decl the swim check last saw (viewmodel hook thread only), and its answer (read by the
 // camera hook on any thread).
 const std::byte* g_swimDecl = nullptr;
@@ -94,6 +99,12 @@ std::atomic<std::uint64_t> g_loggedPlacements{0};
 std::atomic<bool> g_loggedEyeMismatch{false};
 // A cutscene shown around the player with the arms hidden (noteImmersiveCutscene; camera hook writes).
 std::atomic<bool> g_cutsceneArms{false};
+
+// How far a sight row turns the model: the sight line's angle from the model's forward.
+float sightTurnDegrees(const game::WeaponSight& sight) {
+    const float c = std::cos(sight.pitch * kRadiansPerDegree) * std::cos(sight.yaw * kRadiansPerDegree);
+    return std::acos(std::fmin(1.0f, std::fmax(-1.0f, c))) / kRadiansPerDegree;
+}
 
 // The decl name of the item in the right hand, or empty.
 std::string declName(const std::byte* decl) {
@@ -128,9 +139,6 @@ game::WeaponOffset offsetFor(const std::byte* hands) {
         g_swimDecl = decl;
         g_swimFists.store(decl && declName(decl).starts_with(kSwimFists), std::memory_order_relaxed);
     }
-    if (cfg.viewmodelOffset) {
-        return *cfg.viewmodelOffset;
-    }
     // Seated offsets when ETERNALVR_SEATED says so or the room's posture is seated (T-074).
     const bool seated = cfg.seated || roomPosture() == posture::Posture::Seated;
     if (decl != g_cachedDecl || seated != g_cachedSeated) {
@@ -138,12 +146,27 @@ game::WeaponOffset offsetFor(const std::byte* hands) {
         g_cachedSeated = seated;
         const std::string name = decl ? declName(decl) : std::string{};
         g_cachedFists = name.starts_with(kFistsPrefix);
-        g_cachedOffset = state().offsets.lookup(name, seated ? game::OffsetPosture::Seated
-                                                             : game::OffsetPosture::Standing);
+        // ETERNALVR_VIEWMODEL_OFFSET replaces the table's offset; a sight row still applies on top of it.
+        g_cachedOffset = cfg.viewmodelOffset
+                             ? *cfg.viewmodelOffset
+                             : state().offsets.lookup(name, seated ? game::OffsetPosture::Seated
+                                                                   : game::OffsetPosture::Standing);
+        g_cachedSight = cfg.weaponSights ? state().offsets.lookupSight(name) : std::nullopt;
         if (g_loggedWeapons.fetch_add(1) < 40) {
-            EVR_LOG("%s: held item '%s': viewmodel offset (%.2f %.2f %.2f) m, (%.1f %.1f %.1f) deg", kTag,
-                    name.c_str(), g_cachedOffset.forward, g_cachedOffset.left, g_cachedOffset.up,
-                    g_cachedOffset.pitch, g_cachedOffset.yaw, g_cachedOffset.roll);
+            char sight[96] = "off";
+            if (cfg.weaponSights) {
+                if (g_cachedSight) {
+                    std::snprintf(sight, sizeof(sight), "row (%.2f %.2f) deg: the model turned %.2f deg",
+                                  g_cachedSight->pitch, g_cachedSight->yaw, sightTurnDegrees(*g_cachedSight));
+                } else {
+                    std::snprintf(sight, sizeof(sight), "no row: not turned");
+                }
+            }
+            EVR_LOG(
+                "%s: held item '%s': viewmodel offset (%.2f %.2f %.2f) m, (%.1f %.1f %.1f) deg%s; sights %s",
+                kTag, name.c_str(), g_cachedOffset.forward, g_cachedOffset.left, g_cachedOffset.up,
+                g_cachedOffset.pitch, g_cachedOffset.yaw, g_cachedOffset.roll,
+                cfg.viewmodelOffset ? " (ETERNALVR_VIEWMODEL_OFFSET)" : "", sight);
         }
     }
     return g_cachedOffset;
@@ -183,9 +206,13 @@ void onViewmodel(const HookRegisters& regs) {
         }
         return;
     }
+    const Vec3 translation{offset.forward, offset.left, offset.up};
+    const xr_math::IdAngles rotation{offset.pitch, offset.yaw, offset.roll};
     const xr_math::EyeRelativePose placed =
-        xr_math::applyLocalOffset(world.grip, {offset.forward, offset.left, offset.up},
-                                  {offset.pitch, offset.yaw, offset.roll}, world.unitsPerMetre);
+        g_cachedSight ? xr_math::applyLocalOffsetWithSight(world.grip, translation, rotation,
+                                                           {g_cachedSight->pitch, g_cachedSight->yaw, 0.0f},
+                                                           world.unitsPerMetre)
+                      : xr_math::applyLocalOffset(world.grip, translation, rotation, world.unitsPerMetre);
     const Vec3 origin = xr_math::atEye({eye[0], eye[1], eye[2]}, placed);
     const float newOrigin[3] = {origin.x, origin.y, origin.z};
     const float newAxis[9] = {placed.axis.forward.x, placed.axis.forward.y, placed.axis.forward.z,

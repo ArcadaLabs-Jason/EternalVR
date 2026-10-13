@@ -612,14 +612,21 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_BHAPTICS_INTENSITY` | the bHaptics effects' strength, `0` to `1` | `1` |
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
 | `ETERNALVR_WEAPON_ARM` | `ik`: the weapon arm's forearm, elbow and upper arm reach the gun from a shoulder fixed to the head, the gun and wrist where the game puts them; `game`: the game's pose, which points back out of view ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The weapon arm"). Most weapons tell the game not to draw the right arm at all (their mesh kit); with `ik` the layer draws it while it poses it and hides it again when the game takes the arm back ("The weapon's mesh kit"). Needs `ETERNALVR_VIEWMODEL=1`; works with either `ETERNALVR_OFFHAND` | `ik` |
-| `ETERNALVR_ARMS` | `shown`: the first-person arms drawn; `hidden`: both hidden, the weapon alone, whatever the weapon's mesh kit or the layer's posing ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hidden arms") | `shown` |
+| `ETERNALVR_ARMS` | `shown`: the first-person arms drawn; `hidden`: both hidden, the weapon alone, whatever the weapon's mesh kit or the layer's posing ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hidden arms"); `hands`: rig tests, the forearms and upper arms the layer poses shrunk into the wrists, the gloves alone ("Hands only") | `shown` |
+| `ETERNALVR_ARM_SOLVE` | `animated`: the arm solve measures the wrist's twist from the game's animated hand, as before; `bind`: from the bind pose, kept continuous from tick to tick, the forearm's share limited and the rest passed to the upper arm, the off hand's wrist swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The whole arm", "Where an override lands") | `animated` |
+| `ETERNALVR_TEST_ARM_MOD_WEIGHT` | development use only: the hands' joint-modifier weight (0 to 1) held while the free off hand is posed, to test where the overrides land, the weights found put back when the arm goes back to the game or the multiplayer guard trips, new hands starting at the game's own ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Where an override lands") | unset |
+| `ETERNALVR_TEST_HANDS_CUFF` | rig tests: how `ETERNALVR_ARMS=hands` closes the sleeve at the glove: `fold` (every joint from the last roll joint to the shoulder scaled to nothing on the wrist), `stub` (a stub of forearm left), `ring` (the roll joints on the wrist at full size) ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hands only") | `fold` |
+| `ETERNALVR_ARM_MODEL` | rig tests: the hands' model: `game`, `base` (the base arms mesh, fp_hands.md6) or `skin[:N]` (Slayer skin set N, 3 by default), through the game's own SetModel ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms model") | `game` |
 | `ETERNALVR_CUTSCENE_ARMS` | `hidden`: in cutscenes around the player (`ETERNALVR_CUTSCENES=immersive`) both arms hidden, the game's weapon FOV kept; `shown`: as in play. Nothing with `ETERNALVR_ARMS=hidden` ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms in cutscenes"; the launcher's "Arms in cutscenes") | `hidden` |
 | `ETERNALVR_BUTTON_PROMPTS` | `0`: the game's prompts keep naming keyboard keys (below) | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
-| `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning) | the table |
+| `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning); a `[sights]` row still turns the model on top of it, and the fists of a melee or a Blood Punch still follow the game's view under hand aim with `ETERNALVR_MELEE_AIM` at `head` or `offhand`, as without it | the table |
+| `ETERNALVR_WEAPON_SIGHTS` | `1` (or `on`): rig tests for now: each weapon with a `[sights]` row in the offsets table is turned about the grip so its sight line runs parallel to the aim ray (below); the shot ray and the aim dot do not change | `0` |
 | `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
+| `ETERNALVR_TEST_ARM_DUMP` | rig tests: a file the layer appends one JSON line to every 0.25 s with both arms' poses as written and read back, the scripted input as read, the arms model's placement, the held item, the weapon's root joint and the ray shots take; read by the hands rig's checker ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) | none |
+| `ETERNALVR_TEST_ARM_FAULT` | `twist`: development use only, the hands rig's positive control: the forearm's roll joints take none of the forearm's share of the wrist's twist, so it sits on the wrist joint (a candy wrapper the checker must fail) | `none` |
 | `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Touch controllers' dashboard pause and stick capture) | none |
 | `ETERNALVR_LOOK_TRIGGERS` | `0`: look-at triggers test the game's view (the gun under hand aim) instead of the head, and the tests are only logged (above) | `1` |
 | `ETERNALVR_CLIMB_LOOK` | `0` (or `off`): on a climbable wall the game's wall-climb mechanic keeps the view and the jump follows the stick, as in the flat game (above) | `1` |
@@ -937,7 +944,19 @@ eye, so the offset moves the model's origin back from the hand by how far the gu
 and below the eye. The built-in values are one starting estimate for all weapons; per-weapon rows are
 added as each weapon is checked. To tune: run with `ETERNALVR_VIEWMODEL_OFFSET=f,l,u` and the test input
 holding a hand still, change the value between runs until the gun's grip sits on the controller, and write
-the row. The held item's name and offset are logged on each change.
+the row. The held item's name and offset are logged on each change. The key is the base weapon's decl: a
+weapon mod does not change the held item's decl, so one row covers every mod of a weapon.
+
+Weapon sights (`ETERNALVR_WEAPON_SIGHTS=1`, rig tests for now): the table's `[sights]` section gives, per
+weapon, the direction of its sight line in the arms model's frame as the game animates it at idle
+(`[pitch, yaw]`, degrees, pitch positive down, yaw positive to the left: counter-clockwise seen from
+above). After the offset the model is turned about the grip, so the hand stays on the controller, until
+that line runs parallel to the aim ray; a rotation in the offset (or in `ETERNALVR_VIEWMODEL_OFFSET`) is
+then a deliberate turn away from parallel. The shots and the aim dot keep the controller's ray: the sights
+point where the shots go, a fixed distance beside the ray (the sights' height and side above the hand). A
+weapon without a row (there is no default) is not turned. The held-item line logs the row and how far it
+turns the model. The rows are measured on the hands rig
+([rig-findings/hands-rig.md](rig-findings/hands-rig.md)).
 
 ## Verified
 

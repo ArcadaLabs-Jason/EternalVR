@@ -244,6 +244,7 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                      "expected forward,left,up[,pitch,yaw,roll] (metres, degrees); the table is used");
         }
     }
+    r.flag("ETERNALVR_WEAPON_SIGHTS", s.weaponSights);
     static constexpr std::pair<const char*, OffhandMode> kOffhand[] = {
         {"game", OffhandMode::Game}, {"free", OffhandMode::Free}, {"probe", OffhandMode::Probe}};
     r.choice("ETERNALVR_OFFHAND", kOffhand, s.offhand);
@@ -299,15 +300,69 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
         }
     }
     static constexpr std::pair<const char*, bool> kArms[] = {{"shown", false}, {"hidden", true}};
-    r.choice("ETERNALVR_ARMS", kArms, s.armsHidden);
+    // `hands` is for rig tests: taken, but not named in the message players may see for a mistyped value.
+    if (const auto v = r.get("ETERNALVR_ARMS"); v && *v == "hands") {
+        s.armsHidden = false;
+        s.armsHandsOnly = true;
+    } else {
+        r.choice("ETERNALVR_ARMS", kArms, s.armsHidden);
+    }
     r.choice("ETERNALVR_CUTSCENE_ARMS", kArms, s.cutsceneArmsHidden);
+    static constexpr std::pair<const char*, ArmSolve> kArmSolve[] = {{"animated", ArmSolve::Animated},
+                                                                     {"bind", ArmSolve::Bind}};
+    r.choice("ETERNALVR_ARM_SOLVE", kArmSolve, s.armSolve);
+    if (const auto v = r.get("ETERNALVR_ARM_MODEL")) {
+        if (*v == "game") {
+            s.armModel = ArmModel::Game;
+        } else if (*v == "base") {
+            s.armModel = ArmModel::Base;
+        } else if (v->rfind("skin", 0) == 0) {
+            const std::string set = v->size() > 5 && (*v)[4] == ':' ? v->substr(5) : std::string{};
+            const auto n = set.empty() ? std::optional<float>(3.0f) : number(set);
+            if ((v->size() == 4 || !set.empty()) && n && *n >= 1.0f && *n <= 99.0f && std::floor(*n) == *n) {
+                s.armModel = ArmModel::Skin;
+                s.armModelSkin = static_cast<int>(*n);
+            } else {
+                r.report("ETERNALVR_ARM_MODEL", "expected skin or skin:<set 1 to 99>; the default is kept");
+            }
+        } else {
+            r.report("ETERNALVR_ARM_MODEL", "expected one of game, base, skin[:N]; the default is kept");
+        }
+    }
     if (const auto path = lookup("ETERNALVR_CONTROLLER_DATA"); path && !path->empty()) {
         s.controllerDataPath = *path;
     }
     if (const auto path = lookup("ETERNALVR_TEST_INPUT"); path && !path->empty()) {
         s.testInputPath = *path;
     }
+    if (const auto path = lookup("ETERNALVR_TEST_ARM_DUMP"); path && !path->empty()) {
+        s.testArmDumpPath = *path;
+    }
+    static constexpr std::pair<const char*, HandsCuff> kCuff[] = {
+        {"fold", HandsCuff::Fold}, {"stub", HandsCuff::Stub}, {"ring", HandsCuff::Ring}};
+    r.choice("ETERNALVR_TEST_HANDS_CUFF", kCuff, s.handsCuff);
+    static constexpr std::pair<const char*, bool> kArmFault[] = {{"none", false}, {"twist", true}};
+    r.choice("ETERNALVR_TEST_ARM_FAULT", kArmFault, s.testArmTwistFault);
+    if (r.get("ETERNALVR_TEST_ARM_MOD_WEIGHT")) {
+        float weight = -1.0f;
+        r.range("ETERNALVR_TEST_ARM_MOD_WEIGHT", 0.0f, 1.0f, weight);
+        if (weight >= 0.0f) {
+            s.testArmModWeight = weight;
+        }
+    }
     return result;
+}
+
+const char* armModelName(ArmModel model) {
+    switch (model) {
+    case ArmModel::Game:
+        return "game";
+    case ArmModel::Base:
+        return "base";
+    case ArmModel::Skin:
+        return "skin";
+    }
+    return "game";
 }
 
 const char* aimSourceName(AimSource aim) {

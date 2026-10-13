@@ -266,6 +266,37 @@ function Save-QaShot($Ctx, [string]$Checkpoint) {
     Write-QaLine "  shot: $Checkpoint"
 }
 
+# The simulator's own screenshot of the frame it composes for the headset, both eyes with the quad layers over the
+# projection (its file request: screenshot_request.json in %LOCALAPPDATA%\OpenXR-Simulator, answered in
+# screenshot_status.json and screenshot.bmp), as <Out>\<scenario>-<checkpoint>-xr-both.png. Unlike the preview window
+# grab (-sim.png, PrintWindow) it reads the composed frame itself; the window grab came back black for about half the
+# shots on the RTX 3080 Ti test PC.
+function Save-QaXrShot($Ctx, [string]$Checkpoint) {
+    $dir = Join-Path $env:LOCALAPPDATA 'OpenXR-Simulator'
+    $status = Join-Path $dir 'screenshot_status.json'
+    $bmp = Join-Path $dir 'screenshot.bmp'
+    $before = if (Test-Path -LiteralPath $status) { (Get-Item -LiteralPath $status).LastWriteTimeUtc } else { [datetime]::MinValue }
+    $req = Join-Path $dir 'screenshot_request.json'
+    Set-Content -LiteralPath "$req.tmp" -Value "{`"layer`": `"both`", `"eye`": `"both`"}" -Encoding ascii
+    Move-Item -LiteralPath "$req.tmp" -Destination $req -Force
+    $end = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $end) {
+        if ((Test-Path -LiteralPath $status) -and (Get-Item -LiteralPath $status).LastWriteTimeUtc -gt $before) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    Start-Sleep -Milliseconds 300
+    if (-not ((Test-Path -LiteralPath $status) -and (Get-Item -LiteralPath $status).LastWriteTimeUtc -gt $before)) {
+        Add-QaNote $Ctx "simulator screenshot '$Checkpoint': no answer in 5 s"; return
+    }
+    $png = Join-Path $Ctx.Out "$($Ctx.Name)-$Checkpoint-xr-both.png"
+    try {
+        $img = [Drawing.Image]::FromFile($bmp)
+        try { $img.Save($png, [Drawing.Imaging.ImageFormat]::Png) } finally { $img.Dispose() }
+        [void]$Ctx.Shots.Add($png)
+        Write-QaLine "  xr shot: $Checkpoint ($((Get-Content -LiteralPath $status -Raw) -replace '\s+', ' '))"
+    } catch { Add-QaNote $Ctx "simulator screenshot '$Checkpoint' failed: $($_.Exception.Message)" }
+}
+
 # Ends the run through stop.ps1 (the only script that stops a live run) with the Steam-Cloud files restored.
 function Stop-QaGame($Ctx) {
     if (-not $Ctx.RunDir) { $Ctx.RunDir = Find-QaRunDir $Ctx }

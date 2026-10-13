@@ -105,6 +105,24 @@ warning does not.
 | Headset not detected; the render size is decided in-game | Warning only. The launcher could not ask the headset's runtime for its render size (the log says why), so the game starts small and switches size a few seconds in, at Resolution's Auto whatever base you chose. Connect the headset and start its software before launching. |
 | Resolution: the headset's native panel is not known | Warning only. Resolution is on your headset's native size, but your headset is not in the launcher's list (the Headset box on the Play tab says "not in our list"), so Auto is used. Please tell me your headset's model. |
 
+## While the game starts
+
+From **Launch VR** to the first picture in the headset, the launcher watches each step of the game's start: the
+mod loads, the game shows its first frame, the headset runtime opens a VR session and starts it, and the first
+picture reaches the headset (on my PC usually 15 to 20 s after the game's start, at most a minute). A start that is only
+slow is said in black; one that stalls is said in amber with what is missing, and the message goes once the start
+moves on. Each step is in the launcher's log as a `start:` line with its time.
+
+| Message | What to do |
+|---|---|
+| Still loading (no picture after 1 minute) | Nothing; wait. The game has not shown its first frame yet. A first start, or one after a graphics driver update, reads and prepares more and can take a few minutes. |
+| No picture from the game in 5 minutes | The game is probably stuck. If its window is black or frozen, close the game (with Task Manager if needed), launch it again and send an Export report. |
+| The game runs, but the headset runtime has not answered in 30 s | The game draws, but the headset's software has not answered the mod. Check that the headset is connected and its software is running and is the active OpenXR runtime (Virtual Desktop with VDXR, SteamVR, Meta Horizon Link). SteamVR started by the game can take a minute. VR starts by itself once the runtime answers. |
+| The headset runtime (...) has not started VR in 15 s | The runtime has the game's VR session but has not started it: a headset that is asleep, or that shows its own home or another VR app, does not hand VR to the game. Put the headset on to wake it and leave its home screen; with a Quest, check that Link or Virtual Desktop is streaming. VR starts by itself then. |
+| VR started, but no game picture reached the headset in 15 s | The game's frames are not getting to the headset. If the game's window is frozen, close the game (with Task Manager if it does not respond), launch it again and send an Export report. |
+| The game stopped drawing frames (the headset shows its last image) | The game stopped presenting right after its window had to be rebuilt. Close the game (with Task Manager if it does not respond), launch it again and send an Export report. |
+| The mod did not load, so the game runs without VR | 45 s after the start there was no sign of the mod. Check that the whole zip was extracted (the `layer` folder next to the launcher) and that your antivirus did not remove `layer\EternalVR.dll`, then quit the game and launch again. |
+
 ## Problems in the game
 
 **The game starts flat, nothing in the headset.** Look for the session's `eternalvr-*.log`:
@@ -286,14 +304,17 @@ VR is off for that session, with `reason=` saying why in one sentence. `stereo=o
 one image for both eyes. Once VR is up the file also names the headset runtime (`runtime=`), the headset as the
 runtime reports it (`system=`), the size per eye the runtime asks for (`recommended=`) and the size the game
 renders (`render=`), the headset's refresh rate (`refresh_hz=`) and the share of play the runtime held the
-game at half its refresh rate or less (`throttled_share=`, 0 to 1). The usual reasons:
+game at half its refresh rate or less (`throttled_share=`, 0 to 1). `first_present=` and `first_headset_frame=`
+are when the game showed its first frame and when the first one reached the headset, in seconds from the mod's
+load. The usual reasons:
 
 | Reason | What to do |
 |---|---|
 | This DOOM Eternal version is not the one this EternalVR supports | The game was updated; wait for an EternalVR update |
 | The graphics driver lacks a feature, or Direct3D 12 could not start | Update the graphics driver |
+| The game's graphics device (or its Vulkan instance) could not be set up for the headset | Turn off overlays and other Vulkan layers (recording, FPS counters, tuning tools), then update the graphics driver; if it stays, send an Export report |
 | No headset found yet | Connect the headset and start its runtime (Virtual Desktop, SteamVR, Link) |
-| The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics) |
+| The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics). On a PC with two dedicated graphics cards, send an Export report: a launcher option that steers the game to the headset's card is in testing. |
 | The headset disconnected or its runtime stopped | Quit the game and start again from the launcher |
 | The headset runtime would not start VR for the game | Restart the headset runtime (Virtual Desktop, SteamVR, Link), then the game |
 | An online mode or a multiplayer invite switched VR off | By design; restart from the launcher |

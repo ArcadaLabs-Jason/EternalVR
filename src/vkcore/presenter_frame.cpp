@@ -200,6 +200,7 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
     if (!hasImage) {
         EVR_LOG("xr: first game frame on the screen (timeline value %llu)",
                 static_cast<unsigned long long>(value));
+        status::reached("first_headset_frame");
     }
     hasImage = true;
     shownView = view;
@@ -541,6 +542,9 @@ void XrPresenter::Impl::runWorker() {
         }
         consumerAlive.store(true);
         EVR_LOG("xr: presenter ready; waiting for the session to start");
+        // Replaces a "no headset found yet" from before the headset came: the launcher's start watch tells a
+        // session the runtime does not start by this state with runtime= set.
+        status::starting("the headset runtime has the game's VR session; waiting for it to start VR");
         // A lost session leaves the inner loop; reconnect() returns once a new session exists (or at
         // shutdown).
         while (!stop.load()) {
@@ -551,6 +555,7 @@ void XrPresenter::Impl::runWorker() {
                 pollEvents();
                 refreshDisplayRate(); // between frames: xrWaitFrame has the slack
                 vram::poll();
+                status::flush(); // a status write lost while the launcher read the file
                 if (sessionRunning) {
                     frame();
                 } else {

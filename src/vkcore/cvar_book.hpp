@@ -25,6 +25,8 @@
 // itself sets cvars from its render threads (taa_hooks.cpp).
 
 #include <cstddef>
+#include <optional>
+#include <string>
 #include <string_view>
 
 namespace evr::vkcore::cvar_book {
@@ -41,5 +43,17 @@ void listen();
 // an argument is null, or the trip listener could not be registered (fail closed: no write the trip cannot
 // give back). Any thread; the caller may hold its own module's lock (taken before the book's).
 bool write(std::string_view name, std::byte* object, SetStringFn set, const char* value);
+
+// The value `name` had before the layer's first write (mp_policy::cvarValueText), or nothing: the layer has
+// not written it, or a trip gave the values back. Any thread; the caller may hold its own module's lock.
+std::optional<std::string> valueBefore(std::string_view name);
+
+// A trip gives `value` back for `name` instead of its value before the layer's first write (the player's
+// value from the profile's load, profile_hooks.hpp). Nothing when the layer has not written `name`. Any
+// thread.
+void setTripValue(std::string_view name, const std::string& value);
+
+// The cvar's value as text, from its integer and float (mp_policy::cvarValueText).
+std::string valueText(const std::byte* object);
 
 } // namespace evr::vkcore::cvar_book

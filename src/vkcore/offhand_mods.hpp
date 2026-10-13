@@ -11,11 +11,11 @@
 // that is too small to exactly `num` with idList Resize (0x4AAB80, the game's allocator), fills the new
 // entries with no change (joint -1, flags 0) and sets both counts; a smaller count only sets the counts.
 // So the lists end full, 3 in use and room for 3. A mid hook right after the third AddJointMod
-// (InitJointMods +0x20D, the hands in rbx) calls SetNum for six more per arm and then for the old count:
-// the game allocates and owns the room, and nothing the game reads changes. The node is new, so no blend
-// job has taken its lists yet (the tree build copies the current list's data pointer and count,
-// 0x19BEEF0); growing them later, from the tick, could free a block a blend job still reads, which is why
-// the layer never does.
+// (InitJointMods +0x20D, the hands in rbx) calls SetNum for six more per arm (seven for the off hand
+// with the bind solve: its wrist's change) and then for the old count: the game allocates and owns the room,
+// and nothing the game reads changes. The node is new, so no blend job has taken its lists yet (the tree
+// build copies the current list's data pointer and count, 0x19BEEF0); growing them later, from the tick,
+// could free a block a blend job still reads, which is why the layer never does.
 //
 // The attach joints. InitJointMods asks the global name table for "lefthandattach", "righthandattach" and
 // "worldpropattach" (into [rsp+0x88], +0x90, +0x98) and has AddJointMod store their joints at idHands
@@ -23,9 +23,19 @@
 // that the second lookup names "righthandattach" and that the second AddJointMod takes its handle and
 // stores at +0x28E6.
 //
-// Appending. At the tick each arm writes its six entries into that room in both lists and then raises
+// Appending. At the tick each arm writes its entries into that room in both lists and then raises
 // both counts, the way SetNum does (addLayerMods); when the game builds new lists (a new map, a respawn)
 // the hook makes room again and the entries are added again.
+//
+// The weight. InitJointMods hands the node's create (+0x10A, 0x497E00) the weight 0.95 (loaded at +0xB0 into
+// its parameters' +0x2C), which the create copies to the owner's (idHands+0x2888) current weight (+0x3C) and
+// target weight (+0x40); the owner's GetWeight (0x497DE0, just before the create) returns +0x3C, and
+// SetWeight moves +0x40 and fades +0x3C toward it [static, build 25216728 and the Game Pass build, the same
+// bytes]. The blend mixes every modifier of the node into the pose at that weight (features/arm/mod_mix.hpp;
+// rig run ap-w1). modWeight() reads it for the layer to write past its targets (ETERNALVR_ARM_SOLVE=bind).
+// Install checks the chain to the owner too: InitJointMods hands the create idHands+0x2878 (+0x103, lea rcx),
+// the create puts it in rbx at +0xF (mov rbx, rcx), and at +0x5F, before copying, takes the owner from its
+// +0x10.
 //
 // Fail closed: install() checks InitJointMods, AddJointMod and SetNum byte by byte; the hook does nothing
 // while the multiplayer guard refuses or the lists do not check out, and says so. Without the room the
@@ -33,20 +43,31 @@
 
 #include "features/arm/arm_joints.hpp"
 #include "features/arm/arm_skeleton.hpp"
+#include "features/arm/mod_room.hpp"
 #include "vkcore/game_text.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace evr::vkcore::controllers::offhand_mods {
 
 // The layer's modifiers of one arm, in this order.
-inline constexpr std::array<arm::ArmJoint, 6> kLayerJoints{arm::ArmJoint::Roll3,   arm::ArmJoint::Roll2,
-                                                           arm::ArmJoint::Roll1,   arm::ArmJoint::ForeArmRoll,
-                                                           arm::ArmJoint::ForeArm, arm::ArmJoint::UpperArm};
-inline constexpr auto kLayerCount = static_cast<std::int32_t>(kLayerJoints.size());
+inline constexpr const std::array<arm::ArmJoint, arm::kModsPerArm>& kLayerJoints = arm::kLayerModJoints;
+inline constexpr std::int32_t kLayerCount = arm::kModsPerArm;
+// With the bind solve (ETERNALVR_ARM_SOLVE=bind) the off hand has a seventh, first: a change on its wrist
+// (LeftHand) like the game's on the attach joint, which takes the rest of a turn the attach joint cannot make
+// (features/arm/mod_mix.hpp, modifiedWithWrist); no change otherwise. The order is arm::layerModJoint's
+// (features/arm/mod_room.hpp).
+
+// The layer's modifiers of the arm on `side`: six, seven for the off hand with the wrist's (install()).
+std::int32_t layerCount(arm::ArmSide side);
+
+// The joint of the arm's modifier `k` (0 to layerCount - 1): the wrist first when it has one, then
+// kLayerJoints.
+arm::ArmJoint layerJoint(arm::ArmSide side, std::int32_t k);
 
 // The arms the layer bends: the off hand's (the model's left arm, ETERNALVR_OFFHAND=free) and the weapon
 // arm (its right arm, ETERNALVR_WEAPON_ARM=ik).
@@ -56,20 +77,28 @@ struct ArmSet {
 };
 
 // Finds InitJointMods and SetNum, checks them and AddJointMod (and, for the weapon arm, its attach
-// joint), and hooks InitJointMods to make room for six modifiers per arm. The arms the room is made for;
-// none (logged) leaves both the game's.
+// joint), and hooks InitJointMods to make room for the modifiers of each arm (layerCount). The arms the room
+// is made for; none (logged) leaves both the game's.
 ArmSet install(const GameImage& image, ArmSet wanted);
 
 // The hands' modifier node (idHands+0x2888, then +0x18), or nullptr.
 const std::byte* modNode(const std::byte* hands);
 
-// Whether the layer's modifiers for `joints` are at `base` in both lists of `node`.
-bool layerModsInPlace(const std::byte* node, std::int32_t base, const arm::ArmJointIndices& joints);
+// The weight the blend mixes the hands' modifiers in with (the owner's current weight), when install()
+// found where it comes from and both it and the target weight are usable (above 0.5, at most 1); otherwise
+// nullopt, logged once. Game thread only.
+std::optional<float> modWeight(const std::byte* hands);
+
+// Whether the layer's modifiers of the arm on `side` for `joints` are at `base` in both lists of `node`.
+bool layerModsInPlace(const std::byte* node,
+                      std::int32_t base,
+                      const arm::ArmJointIndices& joints,
+                      arm::ArmSide side);
 
 enum class Problem : std::uint8_t {
     None,
     List,   // the lists do not check out, or a write failed
-    NoRoom, // no room for the layer's six in both lists
+    NoRoom, // no room for the layer's modifiers in both lists
     Taken,  // the game already modifies one of the layer's joints
 };
 struct AddError {

@@ -47,8 +47,9 @@ PixelRect toPixels(const BandRect& rect, std::uint32_t width, std::uint32_t heig
 
 // The part of the target taken away from the head-locked quad for a block shown on the wrist: its
 // rectangle grown to the band's edges it is anchored to (the corners reach its side and bottom edges). The
-// centre abilities are never cut: under head aim the crosshair stays on the head-locked quad, under hand aim
-// the crosshair mask already leaves it out.
+// centre abilities are never cut: under head aim the crosshair stays on the head-locked quad, and under hand
+// aim there is no abilities quad (the crosshair hold leaves the rings on the head-locked quad, the mask takes
+// them).
 PixelRect cutRect(WristBlock block, std::uint32_t width, std::uint32_t height);
 
 // `whole` minus every rectangle of `cuts`, as disjoint rectangles (row bands from top to bottom, left to

@@ -15,7 +15,8 @@ them is worse for you than described here.
   the Play tab's "Glory kills" setting keeps the view steady, shows the kill on a flat screen, or fades it
   out instead. Steady view and Flat screen have been tried in a headset; Fade out showed nothing with "Fade in
   walls" off before this build and has not been tried in a headset since. Cutscenes play on a flat 16:9 screen in front of you
-  with the game's own camera (`ETERNALVR_CUTSCENES=immersive` puts you in the cutscene's camera instead).
+  with the game's own camera (Cutscene view on the Advanced tab, "Around you", puts you in the cutscene's
+  camera instead).
   With cutscenes around you (Advanced tab, Cutscene view) and motion controllers on, cutscenes keep the game's
   own weapon view ("Arms in cutscenes" on keeps the VR one, as before). Whether that keeps the Slayer's arms out
   of sight has not been checked in a headset yet. A camera cut that turns the view more than 90 degrees puts
@@ -35,8 +36,8 @@ them is worse for you than described here.
   to Standing in the launcher. If you play lying down, set Play position to Sitting: the mod ignores
   a head that low. On a chair with wheels, set Play position to Sitting too: rolling more than a metre
   counts as walking and switches to standing.
-- **Only tested on NVIDIA:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have not
-  been tried.
+- **Only tested on NVIDIA here:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have
+  not been tried here; what players with AMD cards have reported is under "Image and performance".
 - **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands, Pico 4 and Steam
   Frame controllers are new and untested on real hardware.** Please report how they work. The Vive wands
   have a reduced layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. The
@@ -67,8 +68,8 @@ them is worse for you than described here.
 - **Places that open when you look at them** (a ladder, the tram exit and a door in Doom Hunter Base, and a
   few others) check where your head looks. That was fixed in v0.1.4; before it they waited for the gun.
   Please tell me anywhere you get stuck.
-- **Only tested with a Quest 3 through Virtual Desktop (VDXR).** SteamVR, Meta Horizon Link, other
-  runtimes and other headsets are untested. The launcher lets you pick a runtime; please tell me what
+- **Mostly tested with a Quest 3 through Virtual Desktop (VDXR)**, plus the one SteamVR test above. Meta
+  Horizon Link, other runtimes and other headsets have not been tested here. The launcher lets you pick a runtime; please tell me what
   happens.
 
 ## Image and performance
@@ -104,7 +105,7 @@ them is worse for you than described here.
   draws them as they were a frame earlier than the right eye; the scenery is not affected.
   0.1.34 fixed this, but the fix drew snow and some ice effects in the right eye as tiles in one mission, so
   0.1.35 turned it off. 0.1.36 fixes the cause of the tiles but keeps the fix off until it has had more
-  testing. `ETERNALVR_STEREO_FX_SYNC=1` turns it on.
+  testing; a launcher option to try it is coming.
 - **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
@@ -114,6 +115,13 @@ them is worse for you than described here.
   when you get hit" below). A few effects lose the smoothing they get
   over several frames, because the two eyes would share it: water reflections still show, only that
   smoothing is off. The picture looks slightly different from the flat game.
+- **Screen shake was left off in the flat game.** Before this version, playing in stereo turned DOOM's own
+  Screen Shake setting (Settings, Game) off in your profile, and it stayed off when you played without the
+  mod. VR sessions now leave the setting as you had it, and the first stereo session with this version turns
+  it back on once if a VR session had turned it off and one of the last 20 sessions was in stereo. This is
+  done once per PC: a second Steam account, or Steam and Game Pass on one PC, is not repaired after the first.
+  If you had turned screen shake off in DOOM's settings yourself, turn it off again. Changing that setting in
+  the game's menu during a VR session is not kept.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
   for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
   banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before
@@ -143,20 +151,18 @@ them is worse for you than described here.
   "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
   why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
-  may smear briefly while you turn. An experimental fix is in, off by default
-  (`ETERNALVR_STEREO_REFRACTION_TAA=1` turns it on; the normal renderer only); it will be switched on once it
-  has been tried in a headset.
+  may smear briefly while you turn. An experimental fix is in, off by default (the normal renderer only).
+  A first headset test showed no clear difference, so it stays off for now.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
   Fortress of Doom are one place). A fix is on by default on the Steam and Game Pass (1.0.56.0) versions of
   the game; on any other version the game keeps its own light culling and the log says why (lines starting
-  with `light-cull:`). `ETERNALVR_LIGHT_FRUSTUM=0` turns the fix off. To set it, search Start for "Edit
-  environment variables for your account", add a user variable named `ETERNALVR_LIGHT_FRUSTUM` with the value
-  `0`, then restart the launcher (the launch plan in its log lists it).
+  with `light-cull:`). If a spot looks wrongly lit since this fix, please tell me where; a launcher option to
+  turn the fix off is coming.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
-- **Particles in ray-traced reflections.** With `ETERNALVR_STEREO_FX_SYNC=1` and the game's ray tracing on,
+- **Particles in ray-traced reflections.** With the sprite effects fix above on and the game's ray tracing on,
   smoke, sparks and other particles may be missing from the right eye's reflections while the left eye shows
   them. This has not been checked yet.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
@@ -167,10 +173,8 @@ them is worse for you than described here.
   They came from the mod's filter that takes the game's red damage tint off the floating HUD panel. 0.1.48
   replaced that filter, and on my test PC's captures the boxes are gone, but it hasn't been tried in a
   headset yet. If the HUD still looks wrong (squares, a red tint that stays, or anything else that wasn't
-  there before), add a Windows user environment variable `ETERNALVR_UI_WASH` with the value `0` (Start
-  menu, search "environment variables", then "Edit environment variables for your account") and restart
-  the launcher. That turns the filter off, so the HUD shows exactly what the game draws, red tint included.
-  Then please tell me where it happened.
+  there before), please tell me where it happened. A launcher option to turn the filter off (the HUD then
+  shows exactly what the game draws, red tint included) is coming.
 - **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
   player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
   `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
@@ -224,9 +228,8 @@ them is worse for you than described here.
     were seen low in the right eye.
   - **Not tried yet:** long sessions, cutscenes, and AMD or Intel graphics cards.
   - **Lens flares** are now drawn for each eye from its own view; that has not been checked in a headset yet.
-    If the game freezes or the headset goes black with Parallel Eye Rendering on, a Windows user environment
-    variable `ETERNALVR_PE_FLARES` with the value `0` turns the lens flares off again (Start menu, search
-    "environment variables", then "Edit environment variables for your account"; restart the launcher after).
+    If the game freezes or the headset goes black with Parallel Eye Rendering on, turn Parallel Eye Rendering
+    off and please tell me; a launcher option to turn only the lens flares off is coming.
   - If it cannot finish starting, both eyes show the same image for that session (the log says
     `parallel eyes: FAILED`). After a session the launcher's status line usually says whether it ran, or why
     not; the logs in the exported report always say.
@@ -237,12 +240,16 @@ them is worse for you than described here.
 - **Sights are not lined up yet.** Shots go along your controller's aim, and the Aim dot sits exactly on
   that line at any distance. A gun's own sights can point a little off it, since the placement above is not
   tuned per weapon. Aim with the dot for now.
+- **The Heavy Cannon's Precision Bolt scope shows no scope picture with hand aim**, and in a first headset
+  try the gun disappeared while zoomed. The Aim dot still shows where shots go. Making the scope work in VR
+  is planned.
+- **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
+  hand can cover it.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
   weapon in your left hand the game still draws its right arm, reaching across to the gun. Turning off Show
   arms (Play tab) hides both arms. Arms that mirror properly for the left hand are planned.
-  `ETERNALVR_OFFHAND=free` lets the off arm reach for your off-hand controller instead. That is
-  experimental: it has not been tried in a headset, in glory kills or across a level change, and the
-  hand's angle and the shoulder are rough.
+  A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand
+  jitters when the gun arm moves, and the fist pose is odd); a launcher option to try it is coming.
 - **Shots can pass through thin walls** if you push the gun through one; the shot starts at your hand
   and there is no wall check yet.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
@@ -291,8 +298,8 @@ them is worse for you than described here.
 - **The meathook and glory kills with hand aim** have had little testing.
 - **Jumping off climbable walls where you look** is new; it works on a Quest 3, other headsets are untried.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
-  or down, and your gun follows your head there, not your hand. If it misbehaves, `ETERNALVR_CLIMB_LOOK=0` brings back the
-  game's own wall climbing (turn with the stick before you jump).
+  or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where; a
+  launcher option to bring back the game's own wall climbing is coming.
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
   your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
   pilot it, and at some angles you can see inside its shoulders.
@@ -345,6 +352,7 @@ them is worse for you than described here.
   account.
 - EternalVR does not modify any game file; it only changes the running game while it is started from the
   EternalVR launcher. I know of no bans for single-player mods in DOOM Eternal, and id's own mod support
-  only turns multiplayer and achievements off, but id has never said anything about Events, weekly
-  challenges or Slayer Points. To be safe, don't use EternalVR to earn Event or challenge progress, and
+  only turns multiplayer and achievements off. A signed-in check on Steam and Game Pass found no sign that
+  the game's online side (Events, challenges, the account link) reacts to the mod, but the server's side
+  can't be seen from the PC. To be safe, don't use EternalVR to earn Event or challenge progress, and
   never try to play online with it.

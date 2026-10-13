@@ -6,6 +6,7 @@
 // shared with its own D3D12 device and shows it in the headset (head-tracked or on a flat screen).
 
 #include "platform/layer_gate/layer_gate.hpp"
+#include "vkcore/adapter_steer.hpp"
 #include "vkcore/cb_check.hpp"
 #include "vkcore/cpu_timing.hpp"
 #include "vkcore/device_augment.hpp"
@@ -15,6 +16,7 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/profile_hooks.hpp"
 #include "vkcore/queue_entry.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
@@ -202,6 +204,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     data->nextGetInstanceProcAddr = nextGipa;
     data->apiVersion = apiVersion;
     data->isGame = isGame && (apiVersion >= VK_API_VERSION_1_1 || augmented);
+    if (isGame && !data->isGame) {
+        // The game's own instance, but one the mod cannot use: no presenter, so the game runs flat.
+        status::flat("the game's Vulkan instance could not be set up for the headset (details in the log)");
+    }
     data->surfaceMaintenance1 = data->isGame && surfaceMaintenance && result == VK_SUCCESS;
     data->surfaceMaintenance1Khr = data->surfaceMaintenance1 && surfaceKhr;
     data->surfaceMaintenance1Ext = data->surfaceMaintenance1 && surfaceExt;
@@ -237,6 +243,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
         installViewSlotsEarly(); // Parallel Eye Rendering: before the renderer sizes its views
         installTaaEarly();       // per-eye TAA: eye R's images are built with the device context, after this
         installSsdoMenuHook();   // Route S's r_SSDO hold follows the game's setting from the profile's load
+        installProfileHooks();   // held cvars stay out of the player's profile.bin, from the profile's load
     }
     std::unique_lock lock(g_mapMutex);
     g_instances[keyOf(*pInstance)] = std::move(data);
@@ -249,7 +256,11 @@ VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocati
         return;
     }
     const PFN_vkDestroyInstance destroy = data->vk.DestroyInstance;
+    const bool game = data->isGame;
     destroy(instance, pAllocator);
+    if (game) { // only the game's instances have a steering decision (never one made inside a runtime call)
+        adapter_steer::onInstanceDestroyed(instance);
+    }
     std::unique_lock lock(g_mapMutex);
     g_instances.erase(keyOf(instance));
 }
@@ -333,6 +344,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     data->nextGetDeviceProcAddr = nextGdpa;
     data->setDeviceLoaderData = loaderData ? loaderData->u.pfnSetDeviceLoaderData : nullptr;
     data->interopEnabled = interop && data->setDeviceLoaderData;
+    if (inst->isGame && !t_passThrough && !data->interopEnabled) {
+        // No presenter on this device: the game runs flat; the launcher must not wait for a first present.
+        status::flat("the game's graphics device could not be set up for the headset (details in the log)");
+    }
 #define EVR_LOAD_DEVICE_FN(name)                                                                             \
     data->vk.name = reinterpret_cast<PFN_vk##name>(nextGdpa(*pDevice, "vk" #name));
     EVR_DEVICE_FUNCTIONS(EVR_LOAD_DEVICE_FN)
@@ -463,6 +478,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance instance
     }
     if (std::strcmp(pName, "vkCreateDevice") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(&CreateDevice);
+    }
+    if (PFN_vkVoidFunction hook = adapter_steer::findHook(instance, pName)) { // two-GPU machines
+        return hook;
     }
     if (PFN_vkVoidFunction hook = findSurfaceHook(instance, pName)) {
         return hook;

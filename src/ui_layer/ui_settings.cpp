@@ -198,6 +198,13 @@ UiSettings readUiSettings(const EnvLookup& env, std::vector<std::string>& warnin
     readSwitch(env, L"ETERNALVR_UI_RETICLE", s.reticle, warnings);
     readNumber(env, L"ETERNALVR_UI_RETICLE_DISTANCE", 0.5f, 100.0f, s.reticleDistanceMetres, warnings);
     readNumber(env, L"ETERNALVR_UI_RETICLE_SIZE", 0.1f, 10.0f, s.reticleDegrees, warnings);
+    if (const std::optional<std::wstring> crosshair = env(L"ETERNALVR_UI_CROSSHAIR")) {
+        if (const std::optional<CrosshairMode> chosen = parseCrosshairMode(*crosshair)) {
+            s.crosshair = *chosen;
+        } else {
+            warnings.push_back("ETERNALVR_UI_CROSSHAIR is not hold or mask; the default (hold) is kept");
+        }
+    }
     readSwitch(env, L"ETERNALVR_MENU_POINTER", s.menuPointer, warnings);
     s.menuDistanceMetres = s.distanceMetres;
     s.menuWidthMetres = s.widthMetres;

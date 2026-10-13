@@ -22,7 +22,10 @@ namespace EternalVR.FakeGame
     /// on disk as the current version: it writes <c>remotecache.vdf</c> next to that folder. When it was
     /// given <c>ETERNALVR_WINDOW</c> it also saves that window into the config on exit
     /// (<c>r_windowPosX</c>, <c>r_windowPosY</c>, <c>r_windowWidth</c>, <c>r_windowHeight</c>,
-    /// <c>r_fullscreen</c>), as the game saves the window the layer placed.
+    /// <c>r_fullscreen</c>), as the game saves the window the layer placed. It plays the layer's start in
+    /// <c>ETERNALVR_LOG_DIR</c> with <c>layer_loaded=1</c> (the <c>LAYER_LOADED</c> marker at once) and
+    /// <c>layer_status_&lt;ms&gt;=&lt;text&gt;</c> (<c>eternalvr-status.txt</c> replaced whole with the text, <c>\n</c> for
+    /// line breaks, that many milliseconds after the start).
     /// </summary>
     internal static class Program
     {
@@ -61,12 +64,53 @@ namespace EternalVR.FakeGame
 
             // Plays Steam at the end of a short app session: the cloud files on disk become its record.
             if (ini.TryGetValue("cloud_accept", out var remote)) WriteCloudRecord(remote);
+            PlayLayer(ini);
 
             Thread.Sleep(int.Parse(ini.TryGetValue("sleep_ms", out var ms) ? ms : "500"));
             // Written at the end, as the game writes its config on exit.
             if (ini.TryGetValue("config", out var config))
                 File.WriteAllText(config, ini["config_text"].Replace("\\n", "\n") + WindowKeys());
             return 0;
+        }
+
+        /// <summary>The layer's start as the launcher sees it: its loaded marker and its status file at the times asked.</summary>
+        private static void PlayLayer(Dictionary<string, string> ini)
+        {
+            var dir = Environment.GetEnvironmentVariable("ETERNALVR_LOG_DIR");
+            if (string.IsNullOrEmpty(dir)) return;
+            Directory.CreateDirectory(dir);
+            if (ini.TryGetValue("layer_loaded", out var loaded) && loaded == "1")
+                File.WriteAllText(Path.Combine(dir, "LAYER_LOADED"), "pid " + Process.GetCurrentProcess().Id + "\n");
+            var steps = ini.Where(p => p.Key.StartsWith("layer_status_", StringComparison.OrdinalIgnoreCase))
+                .Select(p => (At: int.Parse(p.Key.Substring("layer_status_".Length)), Text: p.Value.Replace("\\n", "\n")))
+                .OrderBy(s => s.At).ToList();
+            if (steps.Count == 0) return;
+            var started = Stopwatch.StartNew();
+            new Thread(() =>
+            {
+                var file = Path.Combine(dir, "eternalvr-status.txt");
+                foreach (var s in steps)
+                {
+                    var wait = s.At - (int)started.ElapsedMilliseconds;
+                    if (wait > 0) Thread.Sleep(wait);
+                    // Replaced whole, as the layer does (a temporary file moved over it), and tried again while the
+                    // launcher has it open for a read, as the layer does too (status_file.cpp).
+                    File.WriteAllText(file + ".tmp", s.Text + "\n");
+                    for (int attempt = 1; ; attempt++)
+                    {
+                        try
+                        {
+                            if (File.Exists(file)) File.Replace(file + ".tmp", file, null);
+                            else File.Move(file + ".tmp", file);
+                            break;
+                        }
+                        catch (Exception e) when ((e is IOException || e is UnauthorizedAccessException) && attempt < 100)
+                        {
+                            Thread.Sleep(10);
+                        }
+                    }
+                }
+            }) { IsBackground = true }.Start();
         }
 
         /// <summary>The window keys the game saves on exit for the window <c>ETERNALVR_WINDOW</c> placed; empty without it.</summary>

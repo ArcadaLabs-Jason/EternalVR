@@ -26,7 +26,12 @@ r_blurRadialScale | 0 | mono
 r_dof | 0 | mono
 r_chromaticAberration | 0 | mono
 r_vignette | 0 | mono
-# Camera motion the head did not make (view bob, kicks, shakes; the last two are the game's defaults).
+# Camera motion the head did not make (view bob, kicks, shakes). view_skipKicks 1 is the game's default;
+# view_skipShakes is not (the game registers it at 0). The game saves view_skipShakes into profile.bin, which no
+# restore covers, and sets it from there at the profile's load, after the command line. In mono the profile's
+# value wins, so this line neither takes effect nor leaks (rig 2026-10-12: +view_skipShakes 1 over a profile
+# holding 0, and the game saved 0 after the load). In stereo the layer holds it and keeps the player's own value
+# in the profile (vkcore/profile_hooks.hpp).
 pm_noBob | 1 | mono
 view_skipKicks | 1 | mono
 view_skipShakes | 1 | mono

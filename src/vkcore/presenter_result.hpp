@@ -43,4 +43,8 @@ VkResult windowPresented(XrPresenter::Impl& p,
 // told to read its client area again (untested as a cure).
 void checkGamePresents(XrPresenter::Impl& p);
 
+// The game's first present that reached the presenter (under its lock): logged once per presenter; the status
+// file's `first_present` keeps the process's first (status::reached).
+void firstGamePresent();
+
 } // namespace evr::vkcore

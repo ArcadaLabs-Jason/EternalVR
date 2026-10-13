@@ -561,7 +561,7 @@ VkResult XrPresenter::Impl::present(VkQueue queue, std::uint32_t family, const V
         stall_watch::addLockWait(window_timing::nowMicros() - waitStart);
         if (!loggedFirstPresent) {
             loggedFirstPresent = true;
-            EVR_LOG("presenter: first game present");
+            firstGamePresent();
         }
         wait = copyForPresent(queue, family, info, copiedSwapchain, copiedImage);
         hold = wait != VK_NULL_HANDLE && windowHold;

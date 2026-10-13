@@ -229,6 +229,35 @@ Run folders are under `<workspace>\runs` (rig), layer logs next to the staged la
   multiplayer guard is tripped`. The head-tracked frame count stays where it was for the rest of the run
   and the cutscene is no longer skipped.
 
+## 4b. The guard in every package QA (2026-10-13)
+
+The rig QA suite (`tools/rig/qa`) now checks the guard on every run, so every package QA does:
+
+- **Negative, every game scenario:** `mp guard: armed`, a `mp guard: map load '...' (single-player)` line, and no
+  `mp guard: TRIPPED` or `REFUSED` line (`qa-suite.ps1`; only `mp-guard-trip` is exempt from the last).
+- **Positive in the game, `mp-guard-trip`:** experiment 9 as a scenario: `ETERNALVR_GUARD_TEST_TRIP_MS=45000`, the
+  trip after head aim is on and the only one, the cinema fallback and head lines, the cvar restore summary, the game
+  still running 25 s later, and from the presenter's 10 s summaries no new head-tracked headset frame after the trip
+  while the cinema screen's count grows.
+- **Positive without the game, `mp-guard-standin`:** experiments 6 and 8 on the layer build itself: a stand-in Vulkan
+  program named `DOOMEternalx64vk.exe` (one `vkCreateInstance`, compiled at run time) with `+connect_lobby 1` and with
+  `+map game/pvp/pvp_laser/pvp_laser` (refused on the command line, the layer does not load), as the game's instance
+  in an exe that is no known build (every point `MISSING`, `REFUSED`), as another app's instance (pass-through, no
+  guard), and under another file name (no layer log). Nothing reaches a network or a BATTLEMODE screen.
+
+Results on the test package `EternalVR-alpha-0.1.49-eee2bb2` (Release layer and launcher, Steam build 25216728, OpenXR
+Simulator; [rig]): baseline, crosshair-hold, baseline with parallel eyes and crosshair-mask each armed with the two
+map loads `game/shell/shell` and `game/sp/e1m2_battle/e1m2_battle` or `game/sp/e1m3_cult/e1m3_cult` single-player and
+no trip; `mp-guard-trip` (the run with the head-tracked check; an earlier run without it passed the rest): armed at
+0.4 s, head aim at 18.7 s, `TRIPPED by test` at 45.4 s, the 20 cvars the layer wrote set back, key injection off with
+0 held keys, the arm modifiers and wall-climb cvars given back, head-tracked headset frames 2553 in both summaries
+after the trip while the cinema screen's went 1050 to 1950; `mp-guard-standin`: every case as expected, the program's
+own instance made each time. The package QA's Game Pass launch (1.0.56.0, the same package) armed with the Xbox join
+points (`map load ok, Xbox joins ok, ...`), loaded `game/shell/shell` single-player and did not trip.
+
+Not covered by the package QA: S2 to S8 one by one (they need a debugger, a BATTLEMODE screen or a server), and the
+anti-cheat tripwire's negative test.
+
 ## 5. Open points
 
 - Whether S1 sees every map load (for example a server-directed load in a match) is [inferred]; S6 and

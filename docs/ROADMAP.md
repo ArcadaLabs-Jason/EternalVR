@@ -2,7 +2,7 @@
 
 ## At a glance
 
-Status as of 2026-10-10 (v0.1.43).
+Status as of 2026-10-12 (v0.1.49). The order of the work left is under "Plan from v0.1.49".
 
 | Milestone | What a player sees or plays | Needs a person? | Status |
 |---|---|---|---|
@@ -17,8 +17,12 @@ Status as of 2026-10-10 (v0.1.43).
 | M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen, around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12) |
 | M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles, each with its own controls, the controls editor, preflight, update alerts with in-place updates, and an Export report for bug reports |
 | M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL, downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6); frame pacing to the headset (on by default); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
-| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.43 |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.49 |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
+
+The Status column says what has shipped. The boxes in the milestones below are ticked only when a
+criterion's own check has been run as written, so a milestone marked Done can still show open boxes;
+working through them is the first foundation step of the plan below.
 
 ## How to read this file
 
@@ -54,6 +58,83 @@ M10. M1.5 runs alongside M2 and M3 and must finish before M4. M4.5, the release 
 parallel from M4 on and gates only builds that carry the in-game layer (T-112); it never blocks M5 to
 M9. No build with the in-game layer leaves the rig without passing M4.5.
 
+## Plan from v0.1.49
+
+The order of the work after the alpha releases (D-050). The foundation comes first, and one feature
+track runs beside it. This section is the list of record: a change of priority is made here, with its
+reason in the commit message.
+
+**The foundation is done when** every area's exit test passes and no known blocker or major fault
+remains on the default path, on both the Steam and the Game Pass build. Performance and the hardware
+matrix are continuous, time-boxed tracks, not gates.
+
+Foundation, in order:
+1. **The documents match the code.** SCOPE, ROADMAP and DECISIONS say what ships (D-047 to D-050,
+   T-129 to T-131). Each Required box in the milestones below has been checked against its own evidence
+   (2026-10-12): ticked where its check ran as written, reworded where it named a missing file or a
+   changed route, cut where a decision dropped it. Exit: no Required criterion names a file that does
+   not exist (other than one it asks to be written) or a route that was dropped. Game states are
+   handled per feature (T-132) and the stereo oracles run on live captures (T-133).
+2. **Multiplayer safety for release** (REQ-16): open question 6 answered by a code check and a signed-in
+   campaign mission (done 2026-10-12 on Steam and Game Pass: `docs/rig-findings/online-features.md`); the
+   guard checks run in every package QA (done 2026-10-13: the rig QA suite checks the guard in every game scenario
+   and has two offline positive controls, `docs/rig-findings/mp-guard.md` section 4b); uninstall checked on a clean
+   machine (the Windows Sandbox check is written, `tools/rig/uninstall`, and waits for the rig PC's restart; the
+   HKCU route's empty leftover keys fixed: `docs/rig-findings/uninstall.md`). Exit: the M10 multiplayer and
+   uninstall criteria pass.
+3. **Robustness** (M4.5, M8): a 30-minute simulator soak; a startup watchdog that tells "VR never
+   appeared" apart from a slow launch; adapter steering on two-GPU machines (built, off by default behind
+   `ETERNALVR_ADAPTER_STEER=1`, checked with a software Vulkan device; waiting for a two-GPU headset test:
+   `docs/rig-findings/adapter-steer.md`). Exit: those criteria pass.
+4. **Playthrough log** (REQ-01, M7): every campaign mission, both DLCs and the Fortress, each logged
+   with its build. Exit: the M7 playthrough criterion passes.
+5. **Legibility** (REQ-07, M6): the legibility protocol written and passed at default settings. Exit:
+   the M6 legibility criterion passes.
+6. **Profiles** (REQ-10, M8): a base preset with personal edits, changed-from-preset markers, rename.
+   Exit: the M8 profile criterion passes.
+7. **Comfort presets and the first-launch health notice** (REQ-15): only once the comfort options are
+   settled (D-048).
+8. **Release hygiene** (REQ-18, REQ-19, M10): the notices audit, a clang-tidy check and the
+   code-signing choice (open question 7).
+
+Continuous tracks: performance (the benchmark routes and the REQ-20 gates, M9), the hardware matrix
+(testers, T-076), and FSR once enough AMD players need it (D-049).
+
+Side item: opt-in session statistics from the launcher (D-051), after v0.1.50 and the first prototype
+of feature step 3. Exit: a first launch shows the dialog with No preselected and sends nothing on No;
+on Yes, one summary per session reaches the endpoint and matches what the dialog showed.
+
+Feature track, one step at a time. A new visual path ships off by default until it has been seen in a
+headset.
+1. **A hands-in-space test rig.** A scripted pose sweep on the rig with OpenXR-Simulator: wrist roll
+   from -180° to 180°, wrist flex, elbow reach, both hands and two-handed holds, both eyes captured at
+   each pose, with automatic checks for wrist and forearm width, missing or inside-out triangles,
+   left-right agreement and, with a weapon, its sights against the aim ray. Exit: one command runs the
+   sweep and reports pass or fail per pose; a planted fault (a collapsed wrist) fails it; it runs in
+   merge QA for every arms or sights change.
+2. **Weapon sights.** The controller's aim ray stays the master. Each weapon's model is
+   turned so that its sight line (rear sight to front sight, or the scope's axis) is parallel to the
+   ray: the hand stays at the controller and the sights sit a fixed few centimetres above the aim dot,
+   the sight's height. Placing the sight line on the ray itself, which draws the gun well below the
+   controller, is kept for a comparison in the headset. The sight lines come from the game's zoom poses where they
+   exist and from the weapon meshes otherwise, and go into per-weapon rows of
+   `data/weapons/viewmodel_offsets.toml`. Exit: on the rig, with the eye on the sight line, the sight
+   line stays parallel to the aim ray within 0.25° for every weapon; the owner's headset look on two or
+   three weapons; until then a player option, off by default. Scopes do not magnify (a
+   picture-in-picture scope is a separate feature).
+3. **Arm solve and model.** The arm solve fixed, with unit tests: the wrist's twist measured from the
+   bind pose and unwrapped, twist past the forearm's share passed to the upper arm, the wrist's swing
+   clamped. The arms model chosen by the layer and set through the game's own model call (tried with
+   the game's arms, the base arms mesh and a Slayer skin). A third arms setting, hands only, beside
+   shown and hidden. Exit: on the sweep, full wrist roll and elbow range with no collapse or flicker and
+   closed geometry from every view, for each model; the owner's headset look before any default changes.
+4. **Hand poses.** Fingers posed per weapon grip and from the controllers' touch and grip
+   sensors. Exit: on the sweep captures every weapon's grip closes on the gun with no finger through
+   it, and an open hand opens.
+5. **Two-handed grips and a virtual stock** (a Should item, M5). The off hand takes a per-weapon support
+   point and the gun aims along the line between the hands. Exit: the sweep's two-handed holds pass;
+   letting go returns to one-handed aim within one frame; the owner's headset look.
+
 ## M0: Research and design (done)
 
 DONE WHEN
@@ -68,9 +149,11 @@ DONE WHEN
 ## M1: Rig bring-up and reconnaissance
 
 Items marked *(later)* are needed only by M1.5, M4 or M5 and may finish in parallel with M2 and M3.
+The world-scene captures and replays and the pipeline corpus fed only the multiview route and were cut
+with it (T-131); the shading-rate feature query moved to M9 with the KHR foveation path (T-130).
 
 Required for v1
-- [ ] The project builds and its tests pass on the rig with the `windows-msvc` preset; the pre-commit
+- [x] The project builds and its tests pass on the rig with the `windows-msvc` preset; the pre-commit
       checks run there
 - [ ] Rig scripts (T-108): the suite in `tools/rig/tests/` passes on the rig, including a run killed at
       each contract step and recovered by the next run; `run.ps1` launches the
@@ -80,64 +163,59 @@ Required for v1
       work block and is silent; after the block the display is gone and the settings in both locations
       match their snapshots by SHA-256
 - [ ] Lab copy made and checked to run, or the fallback recorded (T-108)
-- [ ] Game builds recorded in `docs/rig-findings/builds.md` and the retail and sandbox exes archived
-      under the artifact root (never in the repository); the retail exe's direct launch recorded,
-      including any Steam hand-off. Older retail exes are v1.x (T-060)
-- [ ] Resolver dry run: the resolver CLI (PLAN 1.14) run against the archived exes, output in
-      `docs/rig-findings/resolver-dryrun.md` (string anchors and RTTI classes found per exe)
+- [ ] Game builds recorded: the supported builds in `src/vkcore/game_build.cpp` and
+      `launcher/data/known-builds.txt` (Steam build 25216728, Game Pass 1.0.56.0), each exe's SHA-256 in
+      the finding that first used it (`docs/rig-findings/engine-facts.md` for the Steam exe); the retail
+      and sandbox exes archived under the artifact root (never in the repository); the retail exe's direct
+      launch recorded, including any Steam hand-off (`docs/rig-findings/launch.md`). Older retail exes are
+      v1.x (T-060)
+- [ ] Resolver dry run (REQ-08, T-060): the layer's anchors, RTTI classes and signatures checked offline
+      against each supported exe, each resolving to exactly one address, recorded per exe in a new
+      `docs/rig-findings/resolver-dryrun.md` (to be written; the Steam exe's so far: `engine-facts.md`
+      section 5, `input-aim.md`, `mp-guard.md` section 2)
 - [ ] The engine's render-view build point located (the camera hook's target for M2), and its render
       entry point with the per-frame state it advances (T-069, open question 27); the build point's
       thread, the engine's pipeline depth, and that it precedes the render-world submit and every
       visibility input are recorded (PLAN 1.17)
-- [ ] *(later)* Dormant VR subsystem test run and written up in `docs/rig-findings/dormant-vr.md`, with
-      a go/no-go on `EngineNativeStereo`, including whether the `viewIndex` / `multiView_60Hz` scaffold
-      loops over views. (Raw dumps stay under the artifact root, never in the repository.)
-- [ ] *(later)* [owner] positioning: one capture per world capture scene, with TAA off and jitter
-      frozen (T-070), analysed in `docs/rig-findings/vulkan-recon.md` against the checklist of
-      ARCHITECTURE section 16 item 6
-- [ ] *(later)* `vulkaninfo` recorded, including the fragment-shading-rate features and
-      `layeredShadingRateAttachments`; which extension `r_VRSEnabled` enables (NV or KHR, T-037)
-- [ ] *(later)* Pipeline corpus built for patcher work (a Fossilize database, Steam's cache for 782330,
-      or our own capture tool, R02 section 10 item 10) over the 2 world capture scenes. Coverage is checked,
-      not assumed: every pipeline created during the 2 world-scene GFXReconstruct captures is present in the corpus,
-      and `docs/rig-findings/corpus.md` records the counts and any gap
+- [x] *(later)* Dormant VR subsystem tested and written up in `docs/rig-findings/stereo-reentry.md`
+      (sections 3 and 12; summary in `docs/VR_STEREO.md`, "EngineNativeStereo"): no-go on
+      `EngineNativeStereo` for build 25216728, since the two-view path renders one view per frame and a
+      second view crashes the renderer. (Raw dumps stay under the artifact root, never in the repository.)
 - [ ] *(later)* [owner] Flat baselines in two configurations (T-075): 1440p with RT off and DLSS off, and 4K
       with RT off and DLSS Quality. p50/p99 frame time, GPU busy and VRAM, with every setting, the
       display (resolution and refresh rate) and the current HAGS state recorded (T-085)
 - [ ] The frame-rate cap and dynamic-resolution cvars identified from type info and the cvar list,
       before M2 (T-047)
-- [ ] *(later)* [owner] Benchmark routes defined in `docs/rig-findings/bench-routes.md`: combat arena, outdoor,
-      and hub (Fortress); each starts from a named checkpoint and lasts 60 s
+- [ ] *(later)* [owner] Benchmark routes defined in a new `docs/rig-findings/bench-routes.md` (to be
+      written): combat arena, outdoor, and hub (Fortress); each starts from a named checkpoint and lasts
+      60 s
 - [ ] *(later)* [owner] Unit scale and eye height measured; usercmd layout and fire-axis fields located
-- [ ] *(later)* Collision trace searched for (R10 open question 6); result recorded either way
-- [ ] *(later, needed by M4.5)* Runtime-set cvars checked for persistence (T-100, in both settings locations, T-099):
-      `config-persistence.md` lists per cvar where its test value landed, including `s_volume`, and how
-      Steam Cloud behaves (open question 8); the settings are restored per T-108
+- [x] *(later)* Collision trace searched for (R10 open question 6); result recorded either way
+- [ ] *(later, needed by M4.5)* Runtime-set cvars checked for persistence (T-100, in both settings
+      locations, T-099) and listed per cvar, with where its test value landed and `s_volume` included, in a
+      new `docs/rig-findings/config-persistence.md` (to be written; first data in `launch.md`, "Settings
+      persistence"). How Steam Cloud treats a restored profile is answered by T-115 (`launcher-live.md`,
+      open question 8); the settings are restored per T-108
 - [ ] Menu-scene capture on the virtual display, before M2 (`RIG_BRINGUP.md` section 4 step 1): the
       game's instance and device parameters, the physical device it picks with both GPUs present, and
       its final eye image with its format and sRGB state recorded (T-080, T-081, T-082, T-111)
-- [ ] *(later)* [owner] positioning: GFXReconstruct capture of the world capture scenes replays on the rig (harness proof, and the
-      input of the stereo spike; the oracle set is re-taken in M4, T-043)
 
 ## M1.5: Offline stereo spike (T-049, T-070)
 
 On the M1 captures, with no game, presenter or launcher. Runs alongside M2 and M3; must finish before
 M4.
 
+Status: done. The census, run on one live scene (e1m2) rather than the two capture scenes, chose
+synchronized sequential stereo, Route S, and multiview (Route M) was dropped (T-131). The layer-core,
+view-constant and disparity criteria belonged to the multiview route and were cut with it; the census
+criterion below is reworded to what the census covered.
+
 Required for v1
-- [ ] Minimal Vulkan layer core (developed portable-first during M1, T-068): dispatch, shader-module
-      interception, the `gl_Position = C_e * gl_Position` SPIR-V patch and the uniform-buffer scan. It
-      loads under `gfxrecon-replay` (`replay.ps1`) with a hard-coded `C_e` (64 mm IPD, Quest 3 FOVs)
-- [ ] View constants located by structural matching in both world capture scenes (T-050, T-070):
-      buffer, offset and block member recorded
-- [ ] Left and right images for each world capture scene, each from its own replay. For 3 named
-      features per scene, the left-right disparity has the expected sign and a magnitude within 20% of
-      the value computed from depth, 64 mm IPD and the FOV
-- [ ] Census in `docs/rig-findings/stereo-spike.md`: vertex shaders patched; fragment and compute
-      modules that read the view constants; `gl_FragCoord` consumers split into bin lookups and
-      screen-texture fetches; previous-clip outputs; viewmodel projection; images and views that would
-      be promoted to arrays, and the shaders whose image declarations change (T-051, T-053, T-070)
-- [ ] Decision recorded in `DECISIONS.md`: multiview goes ahead, or, if the share of distinct SPIR-V
+- [x] Census in `docs/rig-findings/stereo-spike.md` (T-049, T-105), on one live scene (e1m2) rather than
+      the two world capture scenes: the share of distinct modules and of draws that need a semantic patch,
+      with counts and denominators, enough to choose the route (T-131). The rest of the census list fed
+      only multiview and was dropped with it
+- [x] Decision recorded in `DECISIONS.md` (T-131: Route S): multiview goes ahead, or, if the share of distinct SPIR-V
       modules bound by draws in the two world capture scenes that need a semantic patch (anything beyond
       the `gl_Position` rewrite and mechanical array promotion), or the share of those draws, exceeds
       15.0%, synchronized sequential stereo (D-032, D-037, T-066, T-069) is reweighed before M4; counts
@@ -149,7 +227,7 @@ A minimal layer, resolver and camera hook. Development launches come from the ri
 launcher arrives in the release track (T-068).
 
 Required for v1
-- [ ] `run.ps1` starts the game with the layer (per-process environment through
+- [x] `run.ps1` starts the game with the layer (per-process environment through
       `VK_ADD_IMPLICIT_LAYER_PATH`, never the registry, T-079; ARCHITECTURE section 15; and
       `XR_RUNTIME_JSON` when needed); the loader version the game loads is recorded. If M1 found that
       runtime-set cvars persist, the saved settings are restored after each run (T-108)
@@ -159,26 +237,29 @@ Required for v1
       code. Logs build, GPU, runtime and active layers. Honours kill switches. With Steam closed,
       `run.ps1` refuses to launch; the layer is inert in a non-DOOM Vulkan process with
       `ETERNALVR_ENABLE_LAYER=1`
-- [ ] Resolver finds the type-info tables and cvar system by anchors and prints a coverage report
-      (`evr_selftest`). With one resolver target forced to fail, only the feature that depends on it is
-      disabled, and the report names that feature (REQ-08). The resolver check script passes on the
-      current retail exe: every resolver target resolves to exactly one address (T-060)
+- [ ] Resolver (REQ-08): the layer finds the type-info tables and the cvar system by anchors, and each
+      feature logs its hooks with their RVAs, or why it stays off (ARCHITECTURE section 5; there is no
+      `evr_selftest`). With one resolver target forced to fail, only the feature that depends on it is
+      disabled, and the log names that feature. Every target resolves to exactly one address on each
+      supported build (T-060)
 - [ ] Camera hook: the point where the engine builds the render view is hooked; `P_c` and `V_c` are
       logged per frame; a debug yaw offset applied through the hook turns the rendered view without
       changing the player's aim, and at a 90° offset no geometry is missing compared with a flat view
       facing that way
-- [ ] Forced cvars applied at runtime from the authoritative list kept as data in `game/eternal`, with
-      a CI check that code sets no cvar outside it (T-092): bob, kicks, shakes, blur, aim assist,
+- [ ] Forced cvars applied from the lists kept as data: the launcher's command line
+      (`launcher/data/forced-cvars.txt`) and the layer's run-time holds (`src/stereo_seq/seq_settings.cpp`),
+      with a check that code sets no cvar outside them (T-092): bob, kicks, shakes, blur, aim assist,
       `hands_fovScale 1` (permanent, T-053), `g_setting_objectiveMarkers 0` (T-058), `r_hdrDisplay 0`
-      (T-080), the pacing cvars of T-047 (`r_swapInterval 0`, `rs_enable 0`, frame-rate cap off) and
-      GPU triangle culling off (T-073)
+      (T-080), the pacing cvars of T-047 (`r_swapInterval 0`, `rs_enable 0`, frame-rate cap off) and GPU
+      triangle culling off (T-073)
 - [ ] BATTLEMODE guard (REQ-16, T-109): each signal (the lobby-join and matchmaking entry, the Steam
       join callbacks the game registers, the BATTLEMODE screens, a `game/pvp/*` load) is injected through
       a development-build test hook; the log names the signal and every game-touching feature is latched
       off within one frame while the game keeps running, the headset falling back to the cinema quad
       (T-114); opening the BATTLEMODE menu with the layer on latches them off (one real-signal
       smoke check). With the detection points forced to fail, VR refuses to start. The anti-cheat
-      check refuses when a known module is loaded (tested with a stand-in module name) and does not trip
+      tripwire is the launcher's folder check (ARCHITECTURE section 4a; the layer has no module check): it
+      refuses when anti-cheat files are in the game folder (tested with stand-in files) and does not trip
       on the rig's system-wide Denuvo Anti-Cheat install or the `installscript.vdf` stanza. Until this
       passes, layer-on runs are [scripted] runs only
 
@@ -210,7 +291,7 @@ Required for v1
 - [ ] GPU choice on the two-GPU rig (D-044, T-111): the game runs on the RTX 4080 (per-application
       GPU preference set by the rig scripts and logged), the OpenXR system's LUID matches the game's device,
       and a forced mismatch, and a launch with the runtime or headset down, each give the refusal message
-- [ ] Game render size set independently of the desktop window (T-031), clamped to the runtime's
+- [x] Game render size set independently of the desktop window (T-031), clamped to the runtime's
       maximum sizes (T-110)
 - [ ] [owner] After each of a runtime restart, a session loss (headset sleep and wake; the T-110 state
       machine) and a game resize, the log
@@ -222,8 +303,9 @@ Required for v1
       swapchain-wait timeouts give no `XR_ERROR_CALL_ORDER_INVALID` (T-081)
 - [ ] No flicker (T-091, T-111): in the layer's frame log over a 5 s stall of the D3D12 side, no frame
       has zero layers while a good image exists
-- [ ] Recorded in `docs/rig-findings/presenter.md`, with the current HAGS state (T-085): Vulkan copy, D3D12
-      copy, fence waits, pose age (T-111), `xrWaitFrame` blocked time, and the interop
+- [ ] Recorded in a new `docs/rig-findings/presenter.md` (to be written; pose age so far in
+      `docs/VR_HEAD_TRACKED.md` and `docs/VR_STEREO.md`, "GPU timing"), with the current HAGS state
+      (T-085): Vulkan copy, D3D12 copy, fence waits, pose age (T-111), `xrWaitFrame` blocked time, and the interop
       copies against their 1.0 ms budget (T-040, T-075). p99 pose age as defined by T-111 (our added
       latency) is within (pipeline depth + 1) periods at the runtime's reported refresh rate; the runtime's own
       prediction horizon is logged beside it
@@ -231,56 +313,45 @@ Required for v1
 Experiments and targets
 - [ ] Debug stereo peek (T-068): alternate-eye rendering through the camera hook, or the M1.5 `C_e`
       patch applied live; each eye holds its last image (T-091). Debug only, never in a build that
-      leaves the rig
+      leaves the rig. (The launcher's Alternate eyes option is a separate player option, D-047.)
 
 ## M4: Stereo
 
+Status: Route S was chosen (T-131), so the synchronized sequential criteria at the end of the list
+replace the multiview criteria, which were cut: shader classification, image promotion, the viewmodel
+check, per-eye constants, the live view-constant match (T-050), the patcher, the `C_e` planted faults
+and the `EngineNativeStereo` alternative (a no-go, `docs/rig-findings/stereo-reentry.md`). Per-eye TAA and DLSS and room-scale tracking ship in the alpha releases.
+
 Required for v1
-- [ ] Minimal game-state classifier (gameplay / camera takeover / menu or loading) with a debug overlay.
-      Authored rotation is stripped in gameplay and camera takeover; menus and loading show on a
-      virtual screen
-- [ ] Engine camera replaced by the enclosing camera with headset rotation and position
+- [ ] Game states (T-132): gameplay, camera takeover, and menu or loading are each recognised by the
+      feature that handles them, which logs the state's entry and exit. Authored rotation is stripped in
+      gameplay and camera takeover; menus and loading show on a virtual screen
+- [x] Engine camera replaced, per eye, by the headset's eye pose and that eye's own asymmetric projection
+      (Route S, T-131; `docs/VR_STEREO.md`, "Live results", S2)
 - [ ] Positional tracking (REQ-03): a logged 10 cm sideways head move moves the rendered eyes 10 cm times
       world size, within 5 mm; [owner] in the headset a static object stays fixed in the world while
       the head moves
-- [ ] The camera hook's live view-constant match agrees with the spike's (T-050)
-- [ ] Oracle capture set re-taken (T-043): the 2 world capture scenes with the enclosing camera active,
-      the `P_c`/pose sidecar, TAA off, jitter frozen, HUD hidden, SSR and RT reflections off; plus a
-      short TAA-on sequence per scene for the motion-vector oracle
-- [ ] Shaders classified (T-027, T-051, T-053): world, sky, screen-space and UI per vertex shader;
-      bin-lookup and screen-fetch uses of `gl_FragCoord` per use; previous-clip outputs; viewmodel draws
-      as world draws (per-draw identification only if M1.5 showed a distinct projection). Every corpus
-      pipeline gets exactly one class
-- [ ] Image promotion per T-052: bindless views promoted to `2D_ARRAY`, the closure rule applied, and the
-      promotion log shows every promoted image in layer-owned memory
-- [ ] Viewmodel check (T-053): in a world capture scene with the weapon drawn, the stereo oracle
-      restricted to the pixels of viewmodel draws passes the T-043 threshold, and a planted
-      untransformed viewmodel draw fails it
-- [ ] Per-eye constants in a 3-slot ring in the reserved top set (T-041): zero `V_c` mismatches between
-      our slot and the engine's view constants in the 2 world capture scenes and a 10-minute simulator
-      run. If the data-patch fallback is used, the validation layer reports no synchronization hazard
-      on it (T-071)
-- [ ] Replay oracles (T-043) on the 2 world capture scenes: the no-harm check (each eye set to the
-      enclosing camera) passes at 1/255 on 99.9% of pixels; the depth-reprojection oracle passes at
-      64 mm IPD (99% of unmasked pixels within 4/255); each planted fault (unpatched world shader, wrong
-      eye transform) drops the score below 95%. Replay uses rebind mode
-- [ ] Motion-vector oracle (T-051): each eye's frame N-1 reprojected with that eye's motion vectors
-      matches frame N at the stereo oracle's thresholds; a planted fault (`C_e` in place of `C_e(prev)`)
-      fails it
-- [ ] Culling test (T-038, T-073): in each world capture scene at 64 mm IPD, each eye rendered with the
+- [ ] Live capture set (T-133): eye pairs captured by the layer (`ETERNALVR_CAPTURE_EYES`) in two world
+      scenes from scripted rig runs, with TAA off, HUD hidden, SSR and RT reflections off; plus a short
+      TAA-on sequence per scene with the motion capture (`ETERNALVR_CAPTURE_MOTION`)
+- [ ] Stereo oracles (T-043, on live captures by T-133): the depth-reprojection check passes at the
+      session's IPD (99% of unmasked pixels within 4/255; `tools/stereo/eye_diff.py`) and the per-eye
+      motion-vector check passes (`tools/stereo/motion_diff.py`); a planted fault (a wrong eye
+      transform) drops the score below 95%
+- [ ] Culling test (T-038, T-073): in each of the two world scenes of the live capture set (T-133), each
+      eye rendered with the
       chosen culling option is compared with a reference render of that eye with Umbra and GPU triangle
       culling off; at most 0.05% of pixels differ by more than 8/255, and no connected region of
       differing pixels is larger than 64 pixels. The chosen option's cost and runtime effect are
       recorded
-- [ ] SPIR-V patcher handles every pipeline in the M1 corpus without validation errors. Patched modules
-      are cached on disk
-- [ ] Each eye renders at the runtime's recommended size times render scale (near-square); the UI
-      target keeps its own 16:9 size (T-031)
+- [x] Each eye renders at the size the launcher's Resolution setting gives: the runtime's recommended size,
+      fitted within 2064 x 2208 pixels per eye under Auto, times the render scale (near-square); the UI
+      shows its centred 16:9 band (T-031; `docs/rig-findings/render-size.md` sections 5, 6 and 9)
 - [ ] Depth layer (T-057, T-080): depth crosses as `R32_FLOAT`, is submitted with `nearZ` and `farZ` in
       metres (game units divided by unit scale times world size), and is accepted by VDXR and Meta
       Link; [owner] a head-shake test shows no depth-induced warping at world size 0.85 and 1.2, after a
       planted fault (depth scaled by 2) was seen to warp in the same procedure; the depth copy is added
-      to `presenter.md`
+      to the presenter record (`docs/rig-findings/presenter.md`, M3)
 - [ ] [owner] Performance gates (T-075, measured as defined by T-105 and T-111: reprojection off, default settings pinned) in the headset at 72 Hz (Quest 3
       at Quest 3 size, RT off, HUD may still be in the eye buffers) on each benchmark route
 - [ ] Posture needs no setup (T-029, T-045, T-063, T-106): unit tests feed synthetic pose streams (a
@@ -289,10 +360,9 @@ Required for v1
       size in 10 of 10 seated and 10 of 10 standing fresh starts; a long-press recenter after standing
       up corrects height; a headset left on a desk for 60 s at launch shows no anchor in the log in 5 of
       5 trials. Seated is tested in every headset session
-- [ ] If R15 is a go: the same criteria met via `EngineNativeStereo`.
-- [ ] If M1.5 or the oracles chose synchronized sequential stereo (T-066, T-069), these replace the
-      shader-classification, image-promotion, viewmodel, per-eye-constants and patcher criteria above
-      (all other criteria still apply):
+- [ ] Synchronized sequential stereo, Route S (T-131), in place of the shader-classification,
+      image-promotion, viewmodel, per-eye-constants and patcher criteria (all other criteria still
+      apply):
   - both eyes come from the same game tick: the tick counter logged per eye matches in every frame of
     each benchmark route
   - no per-frame state advances twice per tick: frame index, command-pool and ring indices, particle and
@@ -314,7 +384,7 @@ Experiments and targets
 ## M4.5: Release track (parallel from M4, T-068)
 
 Everything a build that carries the in-game layer needs before it leaves the rig (T-112). It never
-blocks M5 to M9.
+blocks M5 to M9. The early AMD check with an offline shader patcher was cut with the patcher (T-131).
 
 Required for v1
 - [ ] Multiplayer safety re-verified on the exact build that leaves the rig (REQ-16, T-109): the
@@ -326,7 +396,8 @@ Required for v1
       runtime (default: the system's active runtime; SteamVR found through the Steam libraries and the
       other discovery paths of T-110, checked on the rig; the refusal names the runtime and how to
       switch), only with Steam already running and logged in, registers the layer manifest under HKCU
-      for the launch and removes it afterwards, checks that the runtime and headset are up, and restores
+      for the launch and removes it afterwards (the launcher's default route is the per-process
+      environment, `LaunchPlan.cs`; HKCU registration is the `--register-hkcu` flag of T-113), checks that the runtime and headset are up, and restores
       everything on exit; a hand-off to a Steam relaunch gives a named error, never a silent flat
       launch (T-109). The registration path is tested on a clean machine (T-105) or on the rig (a
       reversible registry value, D-045)
@@ -342,15 +413,19 @@ Required for v1
       works
 - [ ] Adapter steering (T-111): on a two-GPU machine the game's device is steered to the HMD adapter by
       LUID in `vkEnumeratePhysicalDevices` and `vkEnumeratePhysicalDeviceGroups`; tested on the rig
-      with the per-application GPU preference cleared
-- [ ] Launcher preflight v0: Steam running and logged in, elevation, an unwritable data folder (a
+      with the per-application GPU preference cleared. Built, off by default (`ETERNALVR_ADAPTER_STEER=1`
+      turns it on; no launcher option yet): the list is left alone or moved to the front by the game's own
+      pick rule, never cut (unit tests); on a one-GPU PC with a software device added the game's device
+      follows the steering, and runs with it off are unchanged; waiting for a two-GPU headset test, then
+      the refusal on a forced mismatch (`docs/rig-findings/adapter-steer.md`)
+- [x] Launcher preflight v0: Steam running and logged in, elevation, an unwritable data folder (a
       program folder under `Program Files` only warns, T-106), HAGS on (T-021), anti-cheat components
       in the game process or folder (T-109), conflicting layers (Virtual Desktop's OpenXR API layer disabled
       when another runtime is chosen, T-110)
 - [ ] Coexistence (T-095): one stereo session each with RTSS, OBS game capture and ReShade's Vulkan
       layer installed, each either working or named and disabled by preflight; the known-bad list is
       data
-- [ ] "Export report" (T-095): the zip matches its documented manifest, including the HAGS state
+- [x] "Export report" (T-095): the zip matches its documented manifest, including the HAGS state
       (T-085); a test report shows the user profile path and the Steam account ID redacted, no memory dump
       (v1 crash data is the logged faulting module and offset, exit code and log tail, T-112), and the
       file list and size shown before saving; the GitHub issue
@@ -363,8 +438,8 @@ Required for v1
 - [ ] CI (REQ-18): the clang-format check stays green; the rig-script suite runs on `windows-latest`
       (T-108); a clang-tidy job (clang-cl preset, changed files)
       passes with zero warnings under the checks configured in `.clang-tidy`; a check fails on any source
-      file over 600 lines and on engine internals or game data outside `engine/eternal` and
-      `game/eternal`
+      file over 600 lines and on engine internals or game data outside `src/vkcore`,
+      `src/engine/eternal` and `src/game/eternal`
 - [ ] No stall or deadlock (T-023): in a 30-minute simulator soak and an [owner] 30-minute headset
       session, the frame log shows no `xrEndFrame` gap over 1 s outside loading, and the run ends
       cleanly through `stop.ps1`
@@ -374,12 +449,7 @@ Required for v1
 - [ ] Tester channel (D-030, T-064): public releases, or trusted collaborators with `main` protected;
       recruitment started through the owner's Flat2VR Discord, aiming at two AMD testers (one RDNA 2,
       one RDNA 3 or 4)
-- [ ] Early AMD check (T-035): the tester-run offline patcher tool is built (as an offline tool it needs
-      only the notices, `SHA256SUMS.txt` and no game-derived data to leave the rig, T-112), also run on
-      the rig's integrated AMD GPU (D-044); the AMD testers who have
-      joined have run it and their reports are recorded and triaged (with none yet, the tool is ready
-      and the gap recorded, T-076)
-- [ ] No self-hosted GitHub runner is registered (T-060); if one ever is, it is removed or locked against
+- [x] No self-hosted GitHub runner is registered (T-060); if one ever is, it is removed or locked against
       fork pull requests before the repository goes public
 
 Experiments and targets
@@ -408,14 +478,15 @@ Required for v1
       meathook pull). With the Meathook and lock-on, the logged target is the one the hand ray points
       at, in 10 of 10 [owner] trials each
 - [ ] The game's own arms and weapon placed at the controller grip joint with per-weapon offsets (T-054);
-      `hands_fovScale` stays 1
+      `hands_fovScale` stays 1. Status: the table has only its `default` rows; per-weapon rows come with
+      the sights step of the arms track ("Plan from v0.1.49")
 - [x] Head-relative and hand-relative locomotion. Smooth and snap turn; a 360° seated turn by stick
       completes in both directions (rig, OpenXR-Simulator: `docs/VR_CONTROLLERS.md` live checks 3 and 4)
-- [ ] Default control map for Touch and Index, right- and left-handed, loaded from the profile's
+- [x] Default control map for Touch and Index, right- and left-handed, loaded from the profile's
       bindings data (REQ-11). Each binding conflict message names both bound actions and both input keys,
       with a unit test per conflict kind (T-106; the compiler side is done, `tests/features/input/binding_compiler_tests.cpp` and `controller_bindings_tests.cpp`)
-- [ ] [owner] Accidental-swap protocol (`docs/test-protocols/weapon-swap.md`, written as part of this
-      milestone): 10 minutes in the combat benchmark arena on the default right-handed Touch map; the
+- [ ] [owner] Accidental-swap protocol, written as part of this milestone in a new
+      `docs/test-protocols/weapon-swap.md`: 10 minutes in the combat benchmark arena on the default right-handed Touch map; the
       player presses a marker binding for each intended switch; the layer logs every weapon switch with
       the input that caused it; pass = every logged switch has a marker within 1 s
 - [ ] [owner] Seated reach (REQ-05, T-074): in a chair with armrests, with a desk edge 35 cm in front of
@@ -424,13 +495,13 @@ Required for v1
       performed 3 of 3 times; the logged weapon rest pose stays at least 5 cm from the desk plane. When
       seated, holster and gesture zones sit at shoulder height and any hands-jump gesture is off by
       default. If a seated punch threshold is needed, it has a unit test (T-106)
-- [ ] Room-scale head offset (T-062): a 0.8 m lean logs a clamp at 0.60 ±0.01 m; the head moved into a
+- [x] Room-scale head offset (T-062): a 0.8 m lean logs a clamp at 0.60 ±0.01 m; the head moved into a
       wall reaches full fade within 150 ms; shots come from the last valid head position
 - [ ] Audio listener follows the rendered head position and orientation (checked with `s_showPaths 1`
       while turning the head, R10 section 5)
 
 v1 if time allows
-- [ ] Two-hand support grip and virtual stock
+- [ ] Two-hand support grip and virtual stock (the last step of the arms track, "Plan from v0.1.49")
 - [x] Per-hand haptics from game rumble: the low motor on both hands, the high one on the weapon hand,
       beside the layer's own events (v0.1.2, `src/features/input/haptics_policy.hpp`,
       `docs/rig-findings/haptics.md`; Vibration on the Play tab). Tried on Quest 3 controllers only
@@ -464,11 +535,12 @@ Required for v1
       (`ETERNALVR_OFFHAND=free`) before it can become a default; both wait for a headset test, and glory
       kills, cutscenes and respawns with the wrist HUD are untested
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere
-- [ ] The UI image joins the presenter's shared-image slots, and its copy is added to `presenter.md`
+- [ ] The UI image joins the presenter's shared-image slots (`src/vkcore/presenter_copy.cpp`), and its
+      copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3)
 - [ ] Screen-projected markers (T-058): objective markers stay hidden; the interact prompt is checked in
       the combat and hub routes and hidden (`g_setting_interact_prompt 0`) if it misaligns
-- [ ] [owner] Legibility protocol (`docs/test-protocols/ui-legibility.md`, T-077) written; each of the
-      following passes it at default settings, read by the owner and one tester where available:
+- [ ] [owner] Legibility protocol written in a new `docs/test-protocols/ui-legibility.md` (T-077); each of
+      the following passes it at default settings, read by the owner and one tester where available:
   - wrist-glance HUD: health, armor and ammo read correctly on 10 of 10 prompted glances during the
     combat benchmark route
   - subtitles: 10 of 10 lines read completely
@@ -492,17 +564,18 @@ DECISIONS open question 5). Climbable walls follow the head, so the jump off a w
 looks (v0.1.12, `src/vkcore/climb_hook.cpp`); not yet tried in a headset.
 
 Required for v1
-- [ ] Full classifier (extends M4's minimal one) recognises every camera-takeover state in the R12
-      inventory, with the debug overlay showing the current state
-- [ ] Glory kills: for each of the immersive (rotation stripped), cinema window and blink options, 5
-      glory kills log the classifier's takeover state on entry and exit, and in immersive mode the
+- [ ] Every camera-takeover state in the R12 inventory has a feature that handles it and logs its entry
+      and exit (T-132); a state with none is listed in `docs/release/KNOWN-ISSUES.md`
+- [ ] Glory kills: for each of the four views (follow the camera, steady, fade out, flat screen), 5
+      glory kills log the takeover state on entry and exit (T-132), and with the steady view the
       logged render rotation change during the kill equals the head's alone. [owner] Default chosen by
-      playtest
+      playtest (follow the camera stayed the default after the v0.1.15 headset tries)
 - [ ] Cutscenes and videos presented per policy. Third-person cutscenes never move the player's view
       rotation
-- [ ] Vignette with event pulses; Comfortable, Recommended, Advanced and Intense presets
+- [ ] Vignette with event pulses, off by default (D-048); Comfortable, Recommended, Advanced and Intense
+      presets once the comfort options are settled (D-048)
 - [ ] [owner] Every campaign mission, both DLCs and the Fortress completed start to finish in VR without a
-      blocker (as defined above, T-105); each mission logged in
+      blocker (as defined above, T-105); each mission logged in a new
       `docs/test-protocols/playthrough-log.md` with build hash, date and issues, with a frame log to
       which the 250 ms gate applies (T-075); the campaign pass is played seated (REQ-05). Master Levels
       and Horde Mode played through, with any remaining issues documented as known issues (T-076)
@@ -516,29 +589,28 @@ Experiments and targets
 Status: the launcher has Play, Advanced and "Checks and log" tabs, VR settings profiles with a Save button
 (each with its own controls), a controls editor that opens on the controllers of the last game, the Steam
 and Game Pass builds (T-117), and update alerts with in-place updates from the public releases (v0.1.5, at
-the owner's request; T-123). The profile criteria below (preset markers, reset per setting, `ApplyClass`)
-and the editor's conflict refusal are not checked yet.
+the owner's request; T-123). The profile criteria below (preset markers, reset per setting) are not checked
+yet; `ApplyClass` moved after v1 (T-129).
 
 Required for v1
 - [ ] Named per-player profiles (REQ-10): base preset plus overrides, changed-from-preset markers, reset
       per setting or all, save/duplicate/rename/delete, last used remembered
-- [ ] Every setting has an `ApplyClass` (Live, NextLevelLoad or Restart), with a unit test that every
-      key has one, and the launcher shows it (T-106). Each Live edit from the launcher appears in the
-      layer log within 2 s without a level load; each NextLevelLoad edit only after the next load. Values tuned in game reach the active profile through the pending-edits file;
-      only the launcher writes the settings file (T-032, T-061)
-- [ ] Bindings editor (REQ-11): remap any action per profile; a profile with a conflicting binding
+- Moved after v1 (T-129): each setting's `ApplyClass`, live edits and the pending-edits file (T-032,
+  T-061, T-106). In v1 settings apply at launch.
+- [x] Bindings editor (REQ-11): remap any action per profile; a profile with a conflicting binding
       cannot be saved, and the message names both actions and both inputs (T-106); reset to the default
       map
 - [x] Preflight catches: Steam not running, elevation, unsupported build, missing runtime, conflicting
       layers and mods, **HAGS on** (REQ-17, T-021), anti-cheat components. Each has a clear message
       (`launcher/src/EternalVR.Launcher.Core/Preflight/`, shown on the "Checks and log" tab)
-- [ ] Game builds (T-094): against a patched or renamed exe, the launcher warns about the unknown hash
-      and runs the resolver; with a core feature forced unresolved (camera hook, present path,
-      BATTLEMODE guard) VR is refused with a message naming the feature
+- [ ] Game builds (REQ-08, T-094): on a build the layer does not know (a patched or renamed exe, an unknown
+      hash), the launcher keeps Launch VR off and names the supported builds (`Preflight.cs`); on a known
+      build with a core feature forced unresolved (camera hook, present path, BATTLEMODE guard) VR is
+      refused with a message naming the feature
 - [ ] "Untested on this hardware" notice (T-076, T-095): for each untested matrix entry the launcher can
       detect (GPU vendor and generation, OpenXR runtime), the notice appears
-- [ ] Health notice and comfort defaults (T-096): the first-launch health notice appears; a new profile
-      starts from Recommended with the vignette on; in the per-frame vignette alpha log, the change per
+- [ ] Health notice and comfort defaults (T-096, D-048; once the comfort options are settled): the
+      first-launch health notice appears; a new profile starts from Recommended with the vignette off; in the per-frame vignette alpha log, the change per
       frame is at most 0.05 at 90 Hz and there are at most 2 pulse onsets in any 1 s window
 - [ ] [owner] Posture override (REQ-06): in one headset session, each launcher option (Auto / Seated /
       Standing, Slayer height / Real height, explicit calibration) changes the posture and height the
@@ -570,35 +642,38 @@ on the test PC it drew about 12% more frames only when the processor was the lim
 90 Hz with ray tracing on (`docs/release/README-ALPHA.md`).
 
 Required for v1
-- [ ] Per-eye DLSS 4.x from the game's NGX call, with a user-supplied 310.x DLL (the game's own 2.3.0
-      gives DLSS 2, T-103); NGX's own work passes through our layer untouched
-      (T-033). History resets on the R07 event list. Launcher DLL version display; a newer DLL the
-      user picks is kept in the EternalVR data folder and loaded from there through our NGX
-      interposition during VR sessions only, never written into the game folder (T-094); the version
-      shown for both exes' DLLs; preset forcing
-- [ ] AMD and Intel through OptiScaler (D-031, T-065, T-072). With the user's consent, the launcher
+- [ ] Per-eye DLSS 4.x from the game's NGX call, with a 310.x DLL (the game's own 2.3.0 gives DLSS 2,
+      T-103) that the launcher downloads on the player's request into the EternalVR data folder and loads
+      from there through our NGX interposition during VR sessions only, never written into the game
+      folder (T-094, `docs/rig-findings/dlss-dll.md`); NGX's own work passes through our layer untouched
+      (T-033). History resets on the R07 event list. The launcher shows the DLL version in use; preset
+      forcing
+- [ ] AMD and Intel through OptiScaler (D-031, T-065, T-072; its priority follows the number of AMD and
+      Intel players, and v1 may ship the game's native TAA on them, D-049). With the user's consent, the launcher
       downloads the pinned OptiScaler release into the EternalVR data folder, verifies its SHA-256
-      against `build-info.json` and refuses a mismatch, and shows its version (T-094). Rig tests on the RTX 4080 with
+      against the hash pinned in the release's `BUILD-INFO.txt` and refuses a mismatch, and shows its version (T-094). Rig tests on the RTX 4080 with
       OptiScaler's FSR backend forced: it loads from our folder, not as a game-folder proxy; two feature
       instances evaluate per-eye views; and the gate proxy test passes (driver `_nvngx.dll` blocked, our
       gate patch active, the game offers DLSS and its NGX calls reach OptiScaler). An AMD tester's
       Export report shows OptiScaler as the NGX provider, two feature handles and evaluate calls tagged
       per eye (T-105); an Intel tester runs XeSS, or that gap is recorded (T-076). If a rig test fails,
-      the fallback is recorded instead: native TAA on AMD in v1, our own NGX shim in v1.1. With the rig
+      the fallback is recorded instead: native TAA on AMD in v1, our own NGX shim in v1.1. If the path
+      is not built for v1 (D-049), the release notes say that AMD and Intel players get the game's TAA. With the rig
       tests passing and no AMD tester by the release candidate, the OptiScaler path ships marked
       untested (T-105)
-- [ ] Fixed foveation (VRS) with Off/Subtle/Balanced/Aggressive; foveation path chosen per session
-      (T-037). Status: the presets (and Maximum) ship on the NVIDIA path only (`src/vkcore/vrs_nv.cpp`);
-      the KHR path and the per-session choice are not built
+- [x] Fixed foveation (VRS) with Off/Subtle/Balanced/Aggressive (and Maximum) on NVIDIA RTX through
+      `VK_NV_shading_rate_image` (T-130, `src/vkcore/vrs_nv.cpp`). The KHR path for AMD and Intel and the
+      per-session choice between paths (T-037) follow D-049's priority
 - [ ] Per-eye lens centring (REQ-14, T-106): `evr_foveation_tests` assert that each eye's foveation
       centre equals an independent head-forward projection into that eye's frustum within 1e-4 NDC, for
-      symmetric, asymmetric and canted per-eye FOVs and for each FOV set in
-      `tests/features/foveation/fixtures/runtime_fovs.txt` (the owner's and testers' logged runtimes);
+      symmetric, asymmetric and canted per-eye FOVs and for the logged
+      runtime FOV sets the tests carry (`tests/features/foveation/foveation_region_tests.cpp`, T-128);
       [owner] on the Quest 3 the rate-image debug overlay shows each centre within 1% of the image width of
       that point
-- [ ] Fixed foveation on by default on every headset (REQ-14): each headset and runtime in the release
-      matrix starts with foveation on at the default preset, confirmed by the log and an overlay
-      screenshot (for tester headsets, or the gap recorded, T-076)
+- [ ] Fixed foveation default (REQ-14, T-130: NVIDIA RTX only in v1): the owner's headset check decides
+      it; if it is on, each NVIDIA headset and runtime in the release matrix starts with
+      foveation on at the default preset, confirmed by the log and an overlay screenshot (for tester
+      headsets, or the gap recorded, T-076)
 - [ ] No ghosting on the weapon under DLSS Quality (T-054): on a capture sequence with fast hand motion
       in the combat route, the motion-vector oracle restricted to viewmodel pixels passes, and a
       planted fault (viewmodel motion vectors zeroed) fails it; [owner] a visual check in the headset
@@ -606,8 +681,8 @@ Required for v1
       at the default settings: no frame longer than 250 ms outside loading, and p99 frame time within
       two display periods (22.2 ms) on each benchmark route
 - [ ] Performance targets measured and recorded (T-075, T-105), separately with DLSS Quality alone and
-      with Balanced fixed foveation alone: p99 frame time against the 11.1 ms period and missed frames; stereo overhead against the mono reference for the active `StereoSource` (budgets
-      0.5 ms GPU and 0.5 ms CPU for multiview); the interop copies against their budget of 1.0 ms GPU per
+      with Balanced fixed foveation alone: p99 frame time against the 11.1 ms period and missed frames; Route S's stereo overhead against the mono reference (the multiview
+      budgets went with T-131); the interop copies against their budget of 1.0 ms GPU per
       frame at Quest 3 size (T-075); the longest shader-compile hitch after the first run (target 50 ms);
       each record carries the HAGS state (T-085)
 
@@ -615,11 +690,14 @@ v1 if time allows
 - [ ] 120 Hz at Quest 3 size with DLSS Quality, fixed foveation and about 0.85 render scale (R11
       section 5.2), same measurement against the 8.3 ms period
 - [ ] Eye-tracked foveation verified by a tester on a gaze-capable headset
+- [ ] The KHR foveation path for AMD and Intel (T-130, D-049): `vulkaninfo` recorded on such a GPU,
+      including the fragment-shading-rate features and `layeredShadingRateAttachments`, and which
+      extension `r_VRSEnabled` enables (NV or KHR, T-037)
 - [ ] FSR 4 through OptiScaler, verified by a tester with an RDNA 3 or RDNA 4 GPU (T-065)
 
 ## M10: Beta and public release
 
-Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.43 (2026-09-28 to 2026-10-10) and
+Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.49 (2026-09-28 to 2026-10-12) and
 players reporting through GitHub issues. The launcher checks the public releases (at most once an hour;
 the check can be turned off) and installs an update in place when the player agrees, the zip checked
 against its published SHA-256 and each file against `SHA256SUMS.txt` (v0.1.5, at the owner's request).
@@ -632,18 +710,27 @@ Required for v1
       the Meta runtime is optional.)
 - [ ] Multiplayer safety re-verified on the release build (REQ-16): BATTLEMODE refusal, fail-closed
       guard and anti-cheat tripwire; DECISIONS open question 6 (campaign online features) answered
+      (2026-10-12, Steam and Game Pass on 0.1.49: `docs/rig-findings/online-features.md`; re-run its check on the
+      release build). Every package QA checks the guard armed and never tripped in the campaign (2026-10-13 on the
+      `eee2bb2` test package: the Steam scenarios and the Game Pass launch), trips it with the test trip in play and
+      refuses multiplayer arguments and an unknown exe with a stand-in program (the positive controls: Steam build
+      only; `docs/rig-findings/mp-guard.md` section 4b); the anti-cheat tripwire's negative test is not part of it
 - [ ] `THIRD_PARTY_NOTICES.md` complete (REQ-19, T-095): every adapted file has an origin header and is
       listed, every redistributed library is listed with its full licence text and any required
       NOTICE, and the file is inside the release zip
 - [ ] Uninstall (T-093): on a clean machine (T-105), after install, VR sessions and the launcher's uninstall
       action, the layer registry key and the game folder listing match a pre-install snapshot, and the
-      flat settings equal the pre-VR snapshot
+      flat settings equal the pre-VR snapshot. 2026-10-13: the default route writes no registry value; the
+      clean-machine check without the game is `tools/rig/uninstall/start-sandbox.ps1` (Windows Sandbox), not yet run
+      (the feature needs a restart of the rig PC); the launcher has no uninstall action yet (INSTALL.md's three steps
+      stand in); the VR sessions and the game folder listing need the game (`docs/rig-findings/uninstall.md`)
 - [ ] Updates (T-123, which superseded T-093's update-check clause): the check disclosed in the launcher,
       at most once an hour, switchable off; the download and in-place install only when the player
       agrees, checked against the published SHA-256 and `SHA256SUMS.txt` (done since v0.1.5,
-      `launcher/src/EternalVR.Launcher.Core/Update/`); the release notes list the supported exe hashes and
-      the pinned OptiScaler version with its hash (T-094)
-- [ ] Windows builds on hosted runners; no self-hosted runner can run fork pull requests (T-060)
+      `launcher/src/EternalVR.Launcher.Core/Update/`); the release notes or the zip's
+      `BUILD-INFO.txt` list the supported game builds with their exe hashes, and, once the OptiScaler path
+      is built (D-049), its pinned version with its hash (T-094)
+- [x] Windows builds on hosted runners; no self-hosted runner can run fork pull requests (T-060)
 - [ ] `SHA256SUMS.txt` published with the release zip and verified against the uploaded files by a CI
       job (T-105); Defender false-positive submissions done; the owner's code
       signing choice (open question 7) applied or filed
@@ -671,7 +758,7 @@ Required for v1
 | One rig, also used for play | Development blocked while someone plays | The "not while playing" check and scripted runs on a virtual display with the game muted (D-041, T-108); capture replay and the pipeline corpus run without the game |
 | A development tool damages files outside the project (D-034, D-045) | Loss of user data on the rig | `C:` data is never deleted or damaged; work happens on the development drive; settings and saves are backed up before they are overwritten (D-045, T-108) |
 | RenderDoc crashed on DOOM Eternal in the past (R09 section 3.5) | M1 recon captures may fail | Nsight Graphics (R09 section 3.7); our own capture layer (R02 section 10 item 10); GFXReconstruct |
-| `r_VRSEnabled` may enable NVIDIA's shading-rate image, which excludes the KHR path (R08 section 6.2) | Foveation paths conflict | One path per session, KHR by default (T-037) |
+| `r_VRSEnabled` may enable NVIDIA's shading-rate image, which excludes the KHR path (R08 section 6.2) | Foveation paths conflict | One path per session (T-037); NVIDIA's path only in v1 (T-130) |
 | NGX ignores a layer view, or its calls re-enter our layer | Per-eye DLSS needs copies or a guard | Per-eye copy fallback; thread-local pass-through (T-033) |
 | Game update moves code | Features fail | Resolver by name, per-feature failure, resolver check script on the current exes (T-060); update procedure in `RIG_BRINGUP.md` section 9 |
 | Runtime-set cvars persist into the saved config | Flat play changed after a VR session, and synced by Steam Cloud | The adapter writes the player's own values at the profile-save point (T-092); the launcher's snapshot and restore as the backstop (T-036); on the rig, the verified whole-file restore of T-108 |

@@ -16,7 +16,7 @@
 // followed to it and hex dumps of its header, name-handle table and the file's name block.
 //
 // The modifier list [static: idHands::InitJointMods 0x138B080, AddJointMod 0x138B360, SetJointMod
-// 0x138CF10, idList::SetNum 0x19A61F0, the blend's joint-modifier pass 0x19E2A60; build 25216728]:
+// 0x138CF10, idList::SetNum 0x19A61F0; build 25216728; the modifier pass is 0x19E1040, below]:
 // idHands+0x2888 -> +0x18 is the list's node; +0x28 its generation, whose low bit picks one of two
 // idList<jointMod_t> at +0x30 and +0x48 (data, int num at +8, int size at +0xC). A jointMod_t is 0x40
 // bytes: quaternion, translation, scale, int16 joint at +0x30, int16 constraint parent at +0x32, uint16
@@ -25,7 +25,16 @@
 // pose. The layer's six are overrides while the layer has the arm and no change (identity, the game's own
 // flags) otherwise, so the game's animation runs untouched through them. The game's
 // UpdateWeaponLagJointMods steps the generation every tick and writes its modifiers into the new list
-// only, so the layer writes all of its own every tick too, as overrides or as no change.
+// only, so the layer writes all of its own every tick too, as overrides or as no change. The modifiers are
+// applied in list order, each against its parent as modified so far [static: 0x19E1040, which applies the
+// hands' modifiers, Steam, one pass, round 4; the pass at 0x19E2A60, cited here before, skips them: it
+// filters on flag 0x400], and the result mixed with the pose without them (features/arm/mod_mix.hpp). With
+// the bind solve the off hand has a seventh, listed before its six: a change on the wrist (LeftHand) that
+// takes the rest of a turn the attach joint cannot make, no change otherwise (offhand_mods.hpp). readArm
+// reads the wrist live while that change has been no change for a few ticks (only the attach joint carries it
+// then) and takes its offset from the attach joint again; after a change it carries the wrist by that offset
+// (it held still in the rig's shotgun holds: 0.02 mm and 0.0007 degrees over a whole sweep; other weapons not
+// measured).
 //
 // Two things the rig showed (runs ik5 and ik6, build 25216728). An override's translation is taken from
 // the skeleton's root (joint 0, `origin`, about 1.6 below and 0.24 behind the space GetJointTransforms
@@ -50,12 +59,17 @@
 // (the off-hand hook) only.
 
 #include "features/arm/arm_joints.hpp"
+#include "features/arm/arm_solve.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/offhand_mods.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+
+namespace evr::input {
+enum class HandsCuff : std::uint8_t; // features/input/controller_settings.hpp
+} // namespace evr::input
 
 namespace evr::vkcore::controllers::game_arm {
 
@@ -70,9 +84,11 @@ offhand_mods::ArmSet install(const GameImage& image,
                              offhand_mods::ArmSet wanted);
 
 struct ArmRead {
-    arm::ArmPoses animated; // this tick's animated model-space poses (GetJointTransforms, scaled)
-    Vec3 scale;             // the animator's model scale: game units per internal unit, per axis
-    Vec3 origin;            // the skeleton's root this tick, which overrides are placed from
+    arm::ArmPoses animated;  // this tick's animated model-space poses (GetJointTransforms, scaled)
+    arm::ArmPoses read;      // the same as GetJointTransforms gave them, the layer's overrides included
+    Vec3 scale;              // the animator's model scale: game units per internal unit, per axis
+    Vec3 origin;             // the skeleton's root this tick, which overrides are placed from
+    xr_math::ModelPose root; // the same with its axis (the rig dump's)
     // How far the read put the layer's joints from where they were last written (game units), or -1 when
     // no override of the last frames could show.
     float landed = -1.0f;
@@ -87,8 +103,41 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
                                const xr_math::ModelPose* attachAnimated);
 
 // Writes the layer's modifiers of that arm: the forearm, elbow and shoulder joints of `poses` (model space,
-// game units) as overrides. False when the modifiers are no longer in place or a write failed.
-bool writeArm(arm::ArmSide side, const std::byte* hands, const arm::ArmPoses& poses, Vec3 scale, Vec3 origin);
+// game units) as overrides. Each joint in `zeroScale` (bit n for arm::ArmJoint n, arm::handsOnly) also
+// scales to nothing (the modifier's scale
+// flag, 4, with the zero scale SetJointMod leaves in the entry [static: SetJointMod 0x138CF10 zeroes
+// +0x20..+0x2B; the modifier pass 0x19E1040 copies the entry's scale (+0x20) over the joint's under an
+// override with flag 4 (0x19E1486) and multiplies it in for a change (0x19E16D2), Steam, one pass, round 4,
+// where 0x19E2A60 was cited before; rig: ap-hands2, ap2-hands-fold, r4-hands]): the skin bound to them
+// shrinks into the joints (ETERNALVR_ARMS=hands). `landing`, when given, is where the poses written are meant
+// to land after the blend's mix (written past them, features/arm/mod_mix.hpp): the read-back is measured
+// against it instead of `poses`. An arm with the wrist's change (the off hand with the bind solve,
+// offhand_mods::layerCount) also gets `wrist` (internal units; nullptr for no change) as that change, and the
+// wrist's read-back counts in ArmRead::landed (not toward the landing guard). False when the modifiers are no
+// longer in place or a write failed.
+bool writeArm(arm::ArmSide side,
+              const std::byte* hands,
+              const arm::ArmPoses& poses,
+              Vec3 scale,
+              Vec3 origin,
+              std::uint32_t zeroScale = 0,
+              const arm::ArmPoses* landing = nullptr,
+              const xr_math::JointMod* wrist = nullptr);
+
+// Development only (ETERNALVR_TEST_ARM_MOD_WEIGHT): holds the hands' joint-modifier weight at `weight`
+// while the free off hand is posed. The modifier owner (idHands+0x2888) keeps its current weight at +0x3C and
+// its target weight at +0x40, both 0.95 (offhand_mods.hpp), and the blend mixes every modifier of the node in
+// at it (features/arm/mod_mix.hpp); both are written. The values found are kept and put back by
+// releaseModWeight (the arm given back, a multiplayer guard trip). On other hands (a new level's) the values
+// are found again and the old hands' are let go unwritten: those hands may be gone. False when nothing was
+// written.
+bool holdModWeight(const std::byte* hands, float weight);
+
+// Puts back the weights holdModWeight found, on the hands it held them on; nothing when none are held.
+void releaseModWeight(const std::byte* hands);
+
+// The cuff hands only closes (ETERNALVR_TEST_HANDS_CUFF).
+arm::Cuff cuffOf(input::HandsCuff cuff);
 
 // Sets the layer's modifiers of that arm of `hands`, if it has them, back to no change. True when it did.
 bool releaseArm(arm::ArmSide side, const std::byte* hands);

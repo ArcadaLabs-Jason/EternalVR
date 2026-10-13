@@ -10,6 +10,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/stall_watch.hpp"
+#include "vkcore/status_file.hpp"
 #include "vkcore/stereo_present.hpp"
 #include "vkcore/view_snapshot.hpp"
 #include "vkcore/virtual_client.hpp"
@@ -155,6 +156,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInf
     virtual_client::poll();
     shader_dump::onPresent(data->device);
     gpu_timing::onPresent(queue); // closes the frame (ETERNALVR_GPU_TIMING)
+    status::flush();              // a lost status write, also when VR is off
     VkResult result = [&] {
         cpu_timing::Scope timed(cpu_timing::Stage::Present); // ETERNALVR_CPU_TIMING
         return presentOnce(*data, queue, pPresentInfo);

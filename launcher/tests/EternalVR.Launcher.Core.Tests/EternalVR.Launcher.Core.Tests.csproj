@@ -13,6 +13,10 @@
     <ProjectReference Include="..\..\src\EternalVR.Launcher.Core\EternalVR.Launcher.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The launcher's HKCU registration itself (a net48 WinForms project otherwise), run against a scratch HKCU key. -->
+    <Compile Include="..\..\src\EternalVR.Launcher\Platform\HkcuLayerRegistration.cs" Link="Linked\HkcuLayerRegistration.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="..\..\data\*.txt" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\data\input\controllers\*.toml" Link="data\controllers\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- The multiplayer argument cases the layer's tests read as well (tests/platform/mp_policy). -->

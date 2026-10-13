@@ -321,6 +321,8 @@ namespace EternalVR.Launcher
                 PlayerSsdo = GameLayout.PlayerCvar(g.Locations, "r_SSDO"),
                 PlayerSsr = GameLayout.PlayerCvar(g.Locations, "r_SSR"),
                 ParallelEyesGame = g.Facts.Build?.RunsParallelEyes == true,
+                ProfileRepair = ProfileRepair.Wanted(Settings.Mode == VrMode.Stereo, File.Exists(Paths.ProfileRepairMarker),
+                    () => ProfileRepair.AnySessionLeftShakes(Paths.Logs, Paths.SessionLogDir(sessionId))),
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);

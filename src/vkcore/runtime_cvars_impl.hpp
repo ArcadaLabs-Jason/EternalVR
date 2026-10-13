@@ -1,13 +1,16 @@
 #pragma once
 
 // Internal state of the cvars the layer holds (runtime_cvars.hpp), shared by runtime_cvars.cpp (the held
-// list, the engine's setter, apply() and the Route S sets) and runtime_cvars_pe.cpp (Parallel Eye
-// Rendering's set, runtime_cvars_pe.hpp).
+// list, the engine's setter, apply() and the Route S sets), runtime_cvars_pe.cpp (Parallel Eye Rendering's
+// set, runtime_cvars_pe.hpp) and runtime_cvars_reticle.cpp (hand aim's crosshair hold,
+// runtime_cvars_reticle.hpp).
 
 #include "stereo_seq/seq_settings.hpp"
+#include "ui_layer/crosshair.hpp"
+#include "vkcore/cvar_book.hpp"
+#include "vkcore/runtime_cvars.hpp"
 
 #include <cstddef>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -38,11 +41,13 @@ struct Held {
     bool menuSsdo = false;   // r_SSDO: follows the game's Directional Occlusion setting (followSsdoSetting)
     bool viewDlss = false;   // Parallel Eye Rendering's DLSS set: held as viewDlssHolds says (view_dlss.hpp)
     bool flares = false;     // r_skipFlares 1: held only while Parallel Eye Rendering's flares are off
+    bool reticle = false;    // hud_reticle_styleOverride: 0 while hand aim asks for it (applyReticle)
+    ui_layer::ReticleKeep reticleKeep; // ... its value before the layer's first write (reticleWrite)
+    bool profile = false; // in profile.bin (mp_policy::profileStoredCvar): left alone in profile I/O
 };
 
-// The lock apply() and the setters take, and under it whether the first apply() has run: the held list is
-// built then and stays as it is.
-std::mutex& heldMutex();
+// Whether the first apply() has run (under heldMutex(), runtime_cvars.hpp): the held list is built then and
+// stays as it is.
 bool applied();
 
 // An environment variable as ASCII (cvar names and values are ASCII); empty when it is not set.
@@ -54,6 +59,26 @@ Held comfortHeld(const stereo_seq::CvarExpectation& c);
 // The window and present set (stereo_seq::stereoWindowCvars), as the command line and ETERNALVR_WINDOW size
 // it, added to `held`; r_windowWidth / r_windowHeight follow the render size (windowSizeLeft).
 void addWindowSet(std::vector<Held>& held);
+
+// The cvar's integer value as the engine keeps it (the values block, +0x08).
+int readValue(const std::byte* object);
+
+// runtime_cvars_reticle.cpp: hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold, ui_layer/crosshair.hpp)
+// added to `held` while the UI layer is on, else nothing. From the first apply, under heldMutex(), before the
+// ETERNALVR_DEBUG_CVARS list (whose value entry for the cvar replaces it: the hold is then never confirmed
+// and the mask stays).
+void addReticleHold(std::vector<Held>& held);
+
+// One present's turn of the hold `h` (h.reticle, h.object found): counts the present against the presenter's
+// request, writes 0 while the request stands (ui_layer::holdRequested), gives the kept value back once it no
+// longer does (ui_layer::reticleWrite; the log tells hand aim's end from a lapsed request), and records the
+// reading that confirms the hold. True when it wrote. Under heldMutex(), only while the multiplayer guard
+// allows game touches.
+bool applyReticle(Held& h, cvar_book::SetStringFn set);
+
+// A present on which the hold could not be checked (no setter, the guard does not allow touches): the run
+// that confirms it starts again.
+void reticleUnchecked();
 
 // runtime_cvars_pe.cpp: Parallel Eye Rendering's set added to `held` once setParallelEyes asked for it, else
 // nothing. From the first apply, under heldMutex().
