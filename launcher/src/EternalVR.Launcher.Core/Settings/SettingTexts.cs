@@ -65,7 +65,8 @@ namespace EternalVR.Launcher.Core.Settings
                 + "recenter works too, but keeps sitting or standing as it was."),
             [Setting.SkipCutscenes] = new Text("Skip cutscenes",
                 "Skips the game's cutscenes automatically. The first part of the very first cinematic cannot be skipped: "
-                + "the game makes you watch it."),
+                + "the game makes you watch it. Off (the default), the cutscenes play, and holding dash (B on the weapon "
+                + "hand) skips the one playing."),
             [Setting.PlayPosition] = new Text("Play position",
                 "Whether you play sitting or standing. Detect decides from your height when the game starts.",
                 "Detect", "Sitting", "Standing"),

@@ -37,7 +37,7 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.WalkInRoom] = new[] { "body_follow" },
             [Setting.HeadFade] = new[] { "head_fade" },
             [Setting.RecenterHold] = new[] { "recenter_hold" },
-            [Setting.SkipCutscenes] = new[] { "skip_cinematics" },
+            [Setting.SkipCutscenes] = new[] { "skip_cutscenes" },
             [Setting.PlayPosition] = new[] { "posture" },
             [Setting.EyeHeight] = new[] { "height" },
             [Setting.ThrowGesture] = new[] { "throw_gesture" },

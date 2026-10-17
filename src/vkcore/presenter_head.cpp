@@ -203,6 +203,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         const Quat& q = weapon->tracked.orientation;
         record.weaponAimTracked = {q.x, q.y, q.z, q.w};
     }
+    // The weapon wheel in this frame, from the forced-view gate beginGameView just updated.
+    record.weaponWheel = controllers::wheelView();
     rebaseAfterCutscene(headId); // the first frame after a cutscene shown around the player
     std::optional<xr_math::IdViewAxis> body;
     if (settings.headAim) {

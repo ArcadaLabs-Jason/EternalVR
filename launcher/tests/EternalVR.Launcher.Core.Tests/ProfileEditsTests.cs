@@ -29,7 +29,7 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.WalkInRoom] = s => s.BodyFollow = false,
             [Setting.HeadFade] = s => s.HeadFade = false,
             [Setting.RecenterHold] = s => s.RecenterLongPress = false,
-            [Setting.SkipCutscenes] = s => s.SkipCinematics = false,
+            [Setting.SkipCutscenes] = s => s.SkipCinematics = true,
             [Setting.PlayPosition] = s => s.Posture = PostureMode.Seated,
             [Setting.EyeHeight] = s => s.Height = HeightMode.Real,
             [Setting.ThrowGesture] = s => s.ThrowGesture = true,

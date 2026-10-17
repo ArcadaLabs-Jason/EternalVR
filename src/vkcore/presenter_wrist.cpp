@@ -8,6 +8,10 @@
 // with ETERNALVR_WEAPON_HUD_VITALS=1) on a small quad above the back of the gun, in the weapon hand's aim
 // space at the grip's position (the viewmodel's frame), shown while it faces the head, faded the same way.
 //
+// The weapon wheel (every HUD mode, ui_layer/weapon_wheel.hpp): while the GUI image on the quad is of a frame
+// with the game's wheel up, the wheel's part of it goes on a quad straight ahead at the HUD's distance, at
+// the size it has on the default HUD, and the head-locked quad is cut around it.
+//
 // Either way the rest of the 16:9 band the UI quad shows (subtitles, prompts, boss and encounter bars,
 // markers, damage) stays on the head-locked quad, cut into pieces around the blocks that moved. Every quad
 // shows a sub-rectangle of the same UI swapchain image, so there is no extra copy.
@@ -20,6 +24,7 @@
 #include "vkcore/presenter_types.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -48,20 +53,25 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
                              std::uint32_t width,
                              std::uint32_t height,
                              const XrCompositionLayerQuad& ui,
+                             bool wheelInImage,
                              XrCompositionLayerQuad* out) {
-    if (settings.hud == ui_layer::HudMode::Panel) {
-        return 0;
-    }
+    const ui_layer::WheelCentring::Step wheel = wheel_.update(wheelInImage, qpcSeconds(qpcNow()));
     const bool weapon = settings.hud == ui_layer::HudMode::Weapon;
     // Without controllers there is no hand: the whole HUD stays on the head-locked quad.
-    const std::optional<input::InputFrame> frame = controllers::latestFrame();
-    const XrSpace space = weapon ? controllers::weaponHandAimSpace() : controllers::offHandGripSpace();
-    if (!frame || space == XR_NULL_HANDLE) {
-        if (!loggedFallback_) {
+    std::optional<input::InputFrame> frame;
+    XrSpace space = XR_NULL_HANDLE;
+    if (settings.hud != ui_layer::HudMode::Panel) {
+        frame = controllers::latestFrame();
+        space = weapon ? controllers::weaponHandAimSpace() : controllers::offHandGripSpace();
+        if ((!frame || space == XR_NULL_HANDLE) && !loggedFallback_) {
             loggedFallback_ = true;
             EVR_LOG("ui: %s HUD: no controllers (or no %s space); the HUD stays on the panel",
                     ui_layer::hudModeName(settings.hud), weapon ? "weapon-hand aim" : "off-hand grip");
         }
+    }
+    const bool hands = frame && space != XR_NULL_HANDLE;
+    if (!hands && !wheel.centred) {
+        logWheel(wheel, settings, std::nullopt, 0);
         return 0;
     }
     // The part of the target the UI quad shows (the 16:9 band, ETERNALVR_UI_CROP), in pixels.
@@ -69,13 +79,18 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     const ui_layer::PixelRect shown{shownRect.offset.x, shownRect.offset.y,
                                     static_cast<std::uint32_t>(shownRect.extent.width),
                                     static_cast<std::uint32_t>(shownRect.extent.height)};
-    const std::vector<ui_layer::WristBlock> moved =
-        weapon
-            ? ui_layer::weaponMovedBlocks(settings.weapon)
-            : std::vector<ui_layer::WristBlock>{ui_layer::WristBlock::Vitals, ui_layer::WristBlock::Weapon};
+    std::vector<ui_layer::WristBlock> moved;
+    if (hands) {
+        moved = weapon ? ui_layer::weaponMovedBlocks(settings.weapon)
+                       : std::vector<ui_layer::WristBlock>{ui_layer::WristBlock::Vitals,
+                                                           ui_layer::WristBlock::Weapon};
+    }
+    const ui_layer::HeadLockedHud hud =
+        ui_layer::headLockedHud(shown, width, height, moved, wheel.centred, settings.distanceMetres);
     std::uint32_t n = 0;
-    for (const ui_layer::PixelRect& r : ui_layer::headLockedPieces(shown, width, height, moved)) {
-        if (n == kMaxQuads - 3) {
+    for (const ui_layer::PixelRect& r : hud.pieces) {
+        // Room for the hand quads and the wheel after the pieces.
+        if (n == kMaxQuads - 4) {
             break;
         }
         const ui_layer::PanelPiece piece = ui_layer::panelPiece(r, shown, ui.size.width);
@@ -86,17 +101,41 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
         q.size = {piece.width, piece.height};
         out[n++] = q;
     }
+    logWheel(wheel, settings, hud.wheel, n);
     if (n == 0) {
         return 0;
     }
+    if (hands) {
+        n = addHandQuads(settings, width, height, *frame, space, ui, n, out);
+    }
+    if (hud.wheel) {
+        // Over the hand quads: the wheel is what the player looks at while it is up.
+        XrCompositionLayerQuad q = ui;
+        q.next = nullptr;
+        q.subImage.imageRect = toXrRect(hud.wheel->rect);
+        q.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {hud.wheel->centreX, hud.wheel->centreY, -hud.wheel->distance}};
+        q.size = {hud.wheel->width, hud.wheel->height};
+        out[n++] = q;
+    }
+    return n;
+}
 
+std::uint32_t WristHud::addHandQuads(const ui_layer::UiSettings& settings,
+                                     std::uint32_t width,
+                                     std::uint32_t height,
+                                     const input::InputFrame& frame,
+                                     XrSpace space,
+                                     const XrCompositionLayerQuad& ui,
+                                     std::uint32_t n,
+                                     XrCompositionLayerQuad* out) {
+    const bool weapon = settings.hud == ui_layer::HudMode::Weapon;
     const LONGLONG now = qpcNow();
     const float dt = lastQpc_ ? std::min(kMaxFadeStep, static_cast<float>(qpcSeconds(now - lastQpc_))) : 0.0f;
     lastQpc_ = now;
     // The wrist is on the off hand, the gun in the weapon hand (the dominant hand).
     const bool rightWeapon = controllers::dominantHand() == input::Hand::Right;
     const bool left = weapon ? !rightWeapon : rightWeapon;
-    const input::HandState& hand = left ? frame->left : frame->right;
+    const input::HandState& hand = left ? frame.left : frame.right;
     ui_layer::WristSettings ws =
         weapon ? ui_layer::weaponShowSettings(settings.weapon, settings.wrist) : settings.wrist;
     // Under hand aim there is no abilities quad: with ETERNALVR_UI_CROSSHAIR=mask, or until the crosshair
@@ -114,7 +153,7 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     }
     // Hidden while a glory kill / cutscene owns the arms (the gun leaves the hand).
     const bool want = !controllers::forcedView() &&
-                      (weapon ? weaponWanted(*frame, settings, left) : wristWanted(*frame, ws, left));
+                      (weapon ? weaponWanted(frame, settings, left) : wristWanted(frame, ws, left));
     if (!want) {
         facing_.reset();
     }
@@ -152,6 +191,40 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     return addQuads(quads, space, alpha, ui, n, out);
 }
 
+void WristHud::logWheel(const ui_layer::WheelCentring::Step& step,
+                        const ui_layer::UiSettings& settings,
+                        const std::optional<ui_layer::CentredWheel>& wheel,
+                        std::uint32_t pieces) {
+    const double now = qpcSeconds(qpcNow());
+    if (step.started) {
+        wheelSince_ = now;
+        wheelFrames_ = 0;
+    }
+    if (step.centred) {
+        ++wheelFrames_;
+    }
+    if ((!step.started && !step.ended) || wheelChangesLogged_ >= kLoggedChanges) {
+        return;
+    }
+    ++wheelChangesLogged_;
+    if (step.ended) {
+        EVR_LOG("ui: weapon wheel back on the HUD after %.2f s (%llu headset frame(s) straight ahead)",
+                now - wheelSince_, static_cast<unsigned long long>(wheelFrames_));
+        return;
+    }
+    if (!wheel) {
+        EVR_LOG("ui: weapon wheel up, but no wheel quad for this GUI target (%s HUD)",
+                ui_layer::hudModeName(settings.hud));
+        return;
+    }
+    const ui_layer::PixelRect& r = wheel->rect;
+    EVR_LOG(
+        "ui: weapon wheel straight ahead (%s HUD): GUI rect (%d, %d) %u x %u on a %.3f x %.3f m quad %.2f "
+        "m ahead (%.1f deg wide); the head-locked HUD in %u piece(s) around it",
+        ui_layer::hudModeName(settings.hud), r.x, r.y, r.width, r.height, wheel->width, wheel->height,
+        wheel->distance, 2.0 * std::atan(wheel->width / 2.0 / wheel->distance) * 57.29577951, pieces);
+}
+
 bool WristHud::wristWanted(const input::InputFrame& frame, const ui_layer::WristSettings& ws, bool left) {
     const input::HandState& hand = left ? frame.left : frame.right;
     // The facing test in room space (hand and head both), the quads in the grip space.
@@ -187,7 +260,7 @@ std::uint32_t WristHud::addQuads(const std::vector<ui_layer::WristQuad>& quads,
                                  std::uint32_t n,
                                  XrCompositionLayerQuad* out) {
     for (const ui_layer::WristQuad& w : quads) {
-        if (n == kMaxQuads) {
+        if (n == kMaxQuads - 1) { // the last one is the wheel's
             break;
         }
         XrCompositionLayerQuad q = ui;

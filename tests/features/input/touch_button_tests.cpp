@@ -14,6 +14,7 @@ using evr::input::TapHoldDetector;
 using evr::input::TouchButton;
 using evr::input::TouchButtonOutput;
 using evr::input::TouchButtonSample;
+using evr::input::TouchButtonStats;
 
 namespace {
 
@@ -354,4 +355,23 @@ TEST_CASE("a thumb passing over the rest on its way to a button or its stick tap
         CHECK(b.stats().cutLifts == 0);
         CHECK(b.stats().passedOver == 0);
     }
+}
+
+TEST_CASE("a tap counted in the 10 s after its touch began still moves the stats") {
+    // The 10 s log lines (touch_buttons_log.cpp, rest_wheel.cpp) are written for a window in which a count
+    // moved: the touch counts when it begins and the tap when it ends, so the window with the lift has no new
+    // touch.
+    TouchButton b;
+    Run run;
+    feed(b, rest(true), frames(0.2f), run);
+    const TouchButtonStats began = b.stats();
+    CHECK(began.touches == 1);
+    CHECK(began.taps == 0);
+    feed(b, rest(false), frames(0.3f), run);
+    const TouchButtonStats lifted = b.stats();
+    CHECK(run.taps() == 1);
+    CHECK(lifted.touches == began.touches);
+    CHECK(lifted.taps == 1);
+    CHECK(evr::input::statsChanged(lifted, began));
+    CHECK_FALSE(evr::input::statsChanged(lifted, lifted));
 }

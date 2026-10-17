@@ -70,10 +70,12 @@ namespace EternalVR.Launcher.Core.Settings
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
     /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
     /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, preset, profile_unsaved, profile_check and adapter_steer
-    /// (dlss_version replaced dlss_dll, which is still read once).
+    /// (dlss_version replaced dlss_dll, which is still read once). skip_cutscenes (off by default) replaced skip_cinematics, which
+    /// was on by default and written into every file: an old skip_cinematics line is not read, so the skip starts off once
+    /// for everyone, and it is dropped on the next save.
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
-    /// scale, cutscene and argument choices and takes the new defaults for the rest (stereo, controllers on,
+    /// scale and argument choices and takes the new defaults for the rest (stereo, controllers on,
     /// hand aim); its <c>aim = view</c> is kept, its <c>aim = head</c> (schema 1's default) becomes hand aim.
     /// </summary>
     public sealed partial class LauncherSettings
@@ -160,7 +162,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Stereo per-eye size before it is fitted to the display (<c>StereoWindow</c>) when the render size is off.</summary>
         public int EyeWidth { get; set; } = DefaultEyeWidth;
         public int EyeHeight { get; set; } = DefaultEyeHeight;
-        public bool SkipCinematics { get; set; } = true;
+        public bool SkipCinematics { get; set; }
         public PostureMode Posture { get; set; } = PostureMode.Auto;
         public HeightMode Height { get; set; } = HeightMode.Slayer;
         /// <summary>The eye separation the game renders with, in millimetres; 0 = the runtime's.</summary>
@@ -242,7 +244,7 @@ namespace EternalVR.Launcher.Core.Settings
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "melee_aim", "equipment_aim", "render_size",
-            "render_scale", "eye_size", "skip_cinematics", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
+            "render_scale", "eye_size", "skip_cinematics", "skip_cutscenes", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
             "turn_rate", "handedness", "show_arms", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "screen_reflections", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
             "hud_width", "hud_height", "mirror", "cutscene_view", "cutscene_arms", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "thumb_rest_wheel", "thumb_rest_pick", "thumb_rest_face_touch", "thumb_rest_slowdown", "weapon_directions", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
             "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
@@ -360,7 +362,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("cpu_saver", out var cs)) s.CpuSaverAllOn = On(cs);
             s.CpuSaverChoices = order.Where(IsCpuSaverKey).Select(k => (Key: k.Substring(CpuSaverKeyPrefix.Length).ToLowerInvariant(), On: Switch(map[k])))
                 .Where(x => x.On.HasValue).Select(x => new KeyValuePair<string, bool>(x.Key, x.On.Value)).ToList();
-            if (map.TryGetValue("skip_cinematics", out var c)) s.SkipCinematics = c == "1" || string.Equals(c, "true", StringComparison.OrdinalIgnoreCase);
+            if (map.TryGetValue("skip_cutscenes", out var c)) s.SkipCinematics = c == "1" || string.Equals(c, "true", StringComparison.OrdinalIgnoreCase);
             s.ReadRoom(map);
             if (map.TryGetValue("aim_smoothing", out var sm)) s.AimSmoothing = Number(sm, 0.0, 1.0, DefaultAimSmoothing);
             if (map.TryGetValue("vibration", out var vb)) s.Vibration = Number(vb, 0.0, 1.0, DefaultVibration);
@@ -424,7 +426,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("render_size = " + (NormaliseRenderSize(RenderSize) ?? RenderSizeAuto));
             sb.AppendLine("render_scale = " + ClampRenderScale(RenderScale).ToString("0.00", CultureInfo.InvariantCulture));
             sb.AppendLine("eye_size = " + EyeWidth.ToString(CultureInfo.InvariantCulture) + "x" + EyeHeight.ToString(CultureInfo.InvariantCulture));
-            sb.AppendLine("skip_cinematics = " + (SkipCinematics ? "1" : "0"));
+            sb.AppendLine("skip_cutscenes = " + (SkipCinematics ? "1" : "0"));
             sb.AppendLine("posture = " + PostureName(Posture));
             sb.AppendLine("height = " + HeightName(Height));
             sb.AppendLine("ipd_mm = " + ClampIpd(IpdMm).ToString("0.0", CultureInfo.InvariantCulture));

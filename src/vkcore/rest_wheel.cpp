@@ -13,9 +13,9 @@
 // elsewhere, and touch sensors ignored as stuck, so a player's log shows whether touches go missing.
 //
 // A thumb rest bound like a button (features/input/touch_button.hpp) is watched the same way: its first
-// touch, the minute without one, and every 10 s with any touch a line counting its touches, lifts cut short
-// (and of those, a thumb passing over the rest: no tap), taps, holds and landings voided straight off the
-// hand's own controls, capped apart from the wheel's lines.
+// touch, the minute without one, and every 10 s in which any count moved a line counting its touches, lifts
+// cut short (and of those, a thumb passing over the rest: no tap), taps, holds and landings voided straight
+// off the hand's own controls, capped apart from the wheel's lines.
 //
 // The slowdown (features/input/wheel_slowdown.hpp): with ETERNALVR_THUMBREST_SLOWDOWN=0, weaponWheel_
 // slowTimeScale is held at 1 while this wheel holds the game's wheel open, written through the cvar book
@@ -244,7 +244,7 @@ void noteButtonStats(const input::InputMapper& mapper, const Watched& w) {
         const input::TouchButtonStats& was = g_loggedButtons[i];
         const unsigned touches = now.touches - was.touches;
         char note[48] = "";
-        if (w.button[i] && touches != 0 && due(g_buttonLines, note)) {
+        if (w.button[i] && input::statsChanged(now, was) && due(g_buttonLines, note)) {
             EVR_LOG("%s: %s rest button, last %.0f s: %u touch(es), %u short, %u begun elsewhere, %u gap(s) "
                     "forgiven, %u lift(s) at once (%u passing over: no tap), %u tap(s), %u hold(s), %u "
                     "landing(s) voided (own controls)%s",

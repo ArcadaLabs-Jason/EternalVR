@@ -335,6 +335,31 @@ the cursor is only the wheel's when it comes up during the hold, and the multipl
 every menu. Log: `menu: the weapon wheel is up: the game shows its cursor at x, y; ...` and `menu: the
 weapon wheel's cursor is gone`.
 
+**Where the wheel shows** (`ui_layer/weapon_wheel.hpp`, `vkcore/presenter_wrist.cpp`). The game draws the wheel
+right of the middle of the HUD: its centre at 79.7% of the 16:9 band's width and 48% of its height, 28% of
+the band's width across (the rig's GUI captures at 2048x2208, 1760x1400 and 1440x1600, the same band
+coordinates to 0.001). On the head-locked UI quad that is about 22 degrees right of straight ahead on the
+default HUD (2.0 m wide at 1.5 m) and about 40 degrees on a 2.5 m HUD at 0.9 m, at the edge of the view or
+past it (a player's report on a Pimax Dream Air). While the wheel is up, its rectangle of the GUI image (x
+0.64..0.95, y 0.20..0.75 of the band) goes on a quad of its own straight ahead at the HUD's distance, at the
+angle it spans on the default HUD (23 degrees for the rectangle, 21 for the wheel), in every HUD mode (panel,
+wrist, weapon) and at any HUD width or distance; the head-locked quad keeps the rest of the band, cut into
+rectangles around it as for the blocks the hand HUDs move, so the wheel is not shown twice and nothing else
+moves. A map marker the game draws inside that rectangle while the wheel is up moves with it. Selection is
+unchanged: the stick, the thumb rest or the hand move the game's cursor around the wheel's centre in the GUI
+image, wherever the quad shows it.
+
+"The wheel is up" is the forced-view gate's weapon wheel state (`features/input/forced_angles.hpp`: the
+game's view and button inhibit bits, 0x18, set while `weapon_wheel` is held), read at the camera hook after
+the gate's update and kept with that frame's view record (`ViewRecord::weaponWheel`). The quad follows the
+frame of the GUI image the headset shows, not the game's latest frame, and stays 0.1 s after the last image
+with the wheel up (`WheelCentring::kHoldSeconds`). The gate needs the controllers: with
+`ETERNALVR_CONTROLLERS=0` the wheel stays where the game draws it. The gate's inputs are the camera hook, the
+player's vtable (per build, `game_build.cpp`, both builds) and `idPlayer::inhibitFlags` (+0x87FC, the same
+type layout on the Game Pass build), so nothing here is Steam-only. A frame then has up to 13 layers with the
+wrist HUD (OpenXR guarantees 16). Rig QA: `wheel-centre` (`tools/rig/qa/README.md`) checks that the wheel the
+game drew lies in the logged rectangle.
+
 ## The menu's 3D model
 
 Some screens show a 3D model next to their menu: the weapon in the weapon mod screen ("Choose a weapon
@@ -425,7 +450,9 @@ down (held N s)`), every button, key and wheel event (the first 300, then one a 
 held back (menu)` / `back on`, and every 10 s the counts (panel frames, moves, clicks, wheels, keys, not
 delivered, the cursor, and the game's desktop cursor moves and clips kept off the desktop). `keys:` `the
 game read an injected mouse event`, `desktop cursor kept from the game while it is not in the
-foreground`. `menu model:` at start-up `idMenuWidget_3D_Stand::UpdatePosition view at RVA 0x15A6D84` and
+foreground`. `ui:` `weapon wheel straight ahead (panel HUD): GUI rect (x, y) w x h on a W x H m quad D m ahead
+(A deg wide); the head-locked HUD in N piece(s) around it` when the wheel goes ahead, `weapon wheel back on
+the HUD after S s (N headset frame(s) straight ahead)` when it goes back (the first 40 of these). `menu model:` at start-up `idMenuWidget_3D_Stand::UpdatePosition view at RVA 0x15A6D84` and
 `hooks at RVA 0x15A6D97 (the render view) and 0x15A7134 (the placed model); ...` (or `off
 (ETERNALVR_MENU_MODEL_PANEL=0); ...`, or why a check failed), then once `the first model placed from the
 panel camera: camera (...) fwd (...), fov 90.00 x ..., the panel N unit(s) ahead; the model at (...),

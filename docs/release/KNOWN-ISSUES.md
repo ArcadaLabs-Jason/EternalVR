@@ -268,8 +268,8 @@ them is worse for you than described here.
   stand-in for the bHaptics Player. The portal on a fast travel from the map has not been tried at all yet.
   Which side of the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms
   them.
-- **The weapon wheel** (hold the right stick down, then turn it) works in the headset; it may sit a little
-  right of centre.
+- **The weapon wheel** (hold the right stick down, then turn it) works in the headset; while it is open it is
+  shown straight ahead. With motion controllers off (gamepad) it stays where the game draws it, to the right.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
   new and has not been tried in a headset yet. How far you need to turn your hand may change.
 - **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new

@@ -5,6 +5,7 @@
 #   Map       the map argument (default e1m2_battle); Env: NAME=VALUE pairs for the game; Args: game
 #             command-line arguments after launch-ht.ps1's own (optional)
 #   EyeCaptures  every how many pairs ETERNALVR_CAPTURE_EYES captures into <stage>-eyes (optional)
+#   UiCaptures   every how many GUI captures ETERNALVR_CAPTURE_UI writes into <stage>-ui (optional)
 #   Input     the scripted input file's first contents (ETERNALVR_TEST_INPUT); $null for none
 #   Timeline  { param($c) ... } runs once the player is in the map; Wait-QaSeconds, Write-QaInput, Save-QaShot
 #   Asserts   { param($c) ... } runs on the layer log after the stop; Test-QaPresent/Absent/Count

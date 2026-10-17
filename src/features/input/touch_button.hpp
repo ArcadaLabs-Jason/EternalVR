@@ -78,6 +78,17 @@ struct TouchButtonStats {
     std::uint32_t brushes = 0; // Control: touches sensed under kRestDebounceSeconds: no tap
 };
 
+// Whether any count moved between two snapshots. A 10 s log line is written for a window with any change: a
+// touch counts when it begins and its tap or hold when it ends, so a window can hold the tap of a touch begun
+// in the window before.
+inline bool statsChanged(const TouchButtonStats& now, const TouchButtonStats& was) {
+    return now.touches != was.touches || now.shortTouches != was.shortTouches ||
+           now.begunElsewhere != was.begunElsewhere || now.gapsForgiven != was.gapsForgiven ||
+           now.cutLifts != was.cutLifts || now.passedOver != was.passedOver || now.taps != was.taps ||
+           now.holds != was.holds || now.voided != was.voided || now.ownUse != was.ownUse ||
+           now.brushes != was.brushes;
+}
+
 class TouchButton {
 public:
     TouchButton() = default;

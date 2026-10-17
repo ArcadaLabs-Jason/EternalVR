@@ -36,7 +36,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("1", env["ETERNALVR_ENABLE_LAYER"]);
             Assert.Equal(@"E:\data\logs\20260926-010203", env["ETERNALVR_LOG_DIR"]);
             Assert.Equal("1.00", env["ETERNALVR_WORLD_SCALE"]);
-            Assert.Equal("1", env["ETERNALVR_SKIP_CINEMATICS"]);
+            Assert.Equal("0", env["ETERNALVR_SKIP_CINEMATICS"]);
             Assert.False(env.ContainsKey("XR_RUNTIME_JSON"));
             // The comfort set is the layer's in stereo (ComfortCvarsTests).
             foreach (var arg in new[] { "+com_skipIntroVideo 1", "+com_skipSignInManager 1", "+r_hdrDisplay 0" })
@@ -351,7 +351,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void RoundTrip()
         {
-            var s = new LauncherSettings { GameDir = @"D:\Games\DOOMEternal", Runtime = @"C:\x.json", WorldScale = 0.9, Aim = AimMode.View, SkipCinematics = false, ExtraArguments = "+map x",
+            var s = new LauncherSettings { GameDir = @"D:\Games\DOOMEternal", Runtime = @"C:\x.json", WorldScale = 0.9, Aim = AimMode.View, SkipCinematics = true, ExtraArguments = "+map x",
                                            Mode = VrMode.Mono, Controllers = false, EyeWidth = 1440, EyeHeight = 1470 };
             var r = LauncherSettings.Parse(s.Serialize());
             Assert.Equal(VrMode.Mono, r.Mode);
@@ -363,7 +363,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(s.Runtime, r.Runtime);
             Assert.Equal(0.9, r.WorldScale, 3);
             Assert.Equal(AimMode.View, r.Aim);
-            Assert.False(r.SkipCinematics);
+            Assert.True(r.SkipCinematics);
             Assert.Equal("+map x", r.ExtraArguments);
         }
 
@@ -378,7 +378,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(2064, d.EyeWidth);
             Assert.Equal(2100, d.EyeHeight);
             Assert.Equal(2064, LauncherSettings.Parse("schema_version = 2\neye_size = 99x99").EyeWidth); // out of range: default
-            Assert.True(d.SkipCinematics);
+            Assert.False(d.SkipCinematics);
             Assert.Equal(LauncherSettings.SystemRuntime, d.Runtime);
             Assert.Equal(0.85, LauncherSettings.Parse("world_scale = 0.1").WorldScale);
             Assert.Equal(1.0, LauncherSettings.Parse("world_scale = abc").WorldScale);

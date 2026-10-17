@@ -104,10 +104,10 @@ function Add-QaResult($Ctx, [string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Add-QaNote($Ctx, [string]$Text) { [void]$Ctx.Notes.Add($Text); Write-QaLine "  note: $Text" }
 
 # Copies the layer build into a fresh stage folder (the game locks the DLL), as rsrun.ps1 does; the layer
-# log goes to <stage>-logs, a scenario's eye captures to <stage>-eyes.
+# log goes to <stage>-logs, a scenario's eye captures to <stage>-eyes, its GUI captures to <stage>-ui.
 function New-QaStage($Ctx, [string]$LayerSrc) {
     $stage = Join-Path $script:QaStageRoot $Ctx.Label
-    foreach ($d in @($stage, "$stage-logs", "$stage-dumps", "$stage-eyes")) {
+    foreach ($d in @($stage, "$stage-logs", "$stage-dumps", "$stage-eyes", "$stage-ui")) {
         if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force }
     }
     New-Item -ItemType Directory -Force $stage, "$stage-dumps" | Out-Null
@@ -168,6 +168,7 @@ function Start-QaGame($Ctx, $Scenario) {
     $gameEnv = @($Scenario.Env) + @($Ctx.Env) + @($script:QaExtraEnv)
     if ($null -ne $Scenario.Input) { $gameEnv += "ETERNALVR_TEST_INPUT=$($Ctx.InputPath)" }
     if ($Scenario.EyeCaptures) { $gameEnv += "ETERNALVR_CAPTURE_EYES=$($Ctx.Stage)-eyes,$($Scenario.EyeCaptures)" }
+    if ($Scenario.UiCaptures) { $gameEnv += "ETERNALVR_CAPTURE_UI=$($Ctx.Stage)-ui,$($Scenario.UiCaptures)" }
     $Ctx.Vdd = Get-QaVddRect
     if ($Ctx.Vdd) { $gameEnv += "ETERNALVR_MIRROR_WINDOW=$($Ctx.Vdd.x),$($Ctx.Vdd.y),1280,720" }
     $map = if ($Scenario.Map) { $Scenario.Map } else { $script:QaMap }

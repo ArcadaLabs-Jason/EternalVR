@@ -249,8 +249,9 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   bound (tap = quick_switch); the thumb-rest wheel uses the right rest only` (or `thumb-rest wheel extreme:
   off for these controllers (the left thumb rest, which gives the turn stick back its turning, is bound as a
   button)`, `... (both thumb rests are bound as buttons)`), `thumb rest button: the left controller reports a
-  resting thumb`, a line when no rest has reported a touch after a minute of play, and every 10 s with a
-  touch (capped apart from the wheel's lines) `left rest button, last 10 s: 6 touch(es), 2 short, 1 begun
+  resting thumb`, a line when no rest has reported a touch after a minute of play, and every 10 s in which a
+  count moved (a tap or hold is counted when the touch ends, so it can fall in the 10 s after its touch; capped
+  apart from the wheel's lines) `left rest button, last 10 s: 6 touch(es), 2 short, 1 begun
   elsewhere, 3 gap(s) forgiven, 1 lift(s) at once (1 passing over: no tap), 2 tap(s), 0 hold(s), 1
   landing(s) voided (own controls)`. Prompts name it `Left Thumb Rest`. A layer before 0.1.47 does not
   know the key and rejects the whole file (the built-in controls are used, logged); from 0.1.47 such keys
@@ -307,7 +308,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   binding(s) for touches bound as buttons added to the ... data`, `touches bound as buttons (using a control
   under that thumb or finger ends one): right.primary_touch.tap = weapon_slot_2`, `touch button: the right
   controller reports primary_touch` (the first touch of each bound sensor), a line when none has reported a
-  touch after a minute of play, and every 10 s with a touch `right primary_touch button, last 10 s: 4
+  touch after a minute of play, and every 10 s in which a count moved `right primary_touch button, last 10 s: 4
   touch(es), 1 short, 0 gap(s) forgiven, 2 tap(s), 0 hold(s), 2 ended by its own control, 0 brush(es): no
   tap, 1 landing(s) voided (own control)`. Under `ETERNALVR_CONTROLLERS_TRACE`, every change of the touch
   sensors the frame reports, bound or not (the first 200, then one a minute): `trace: touch sensors: right

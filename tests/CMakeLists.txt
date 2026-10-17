@@ -391,6 +391,7 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/motion_target_tests.cpp
         ui_layer/ui_settings_tests.cpp
         ui_layer/weapon_hud_tests.cpp
+        ui_layer/weapon_wheel_tests.cpp
         ui_layer/wrist_hud_tests.cpp
     DEPENDS evr_ui_layer)
 

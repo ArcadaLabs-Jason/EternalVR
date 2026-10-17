@@ -251,10 +251,10 @@ void XrPresenter::Impl::frame() {
     for (XrCompositionLayerQuad& q : pointerQuads) {
         q.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
     }
-    std::array<XrCompositionLayerQuad, WristHud::kMaxQuads> hudQuads{}; // wrist mode: pieces and wrist quads
-    // Back to front: the projection (or the cinema quad), the comfort vignette, the UI quad (or in wrist mode
-    // its head-locked pieces and the wrist quads), the reticle or the menu pointer (beam, dot), then the fade
-    // on top. Entries are written as layers are added.
+    std::array<XrCompositionLayerQuad, WristHud::kMaxQuads> hudQuads{}; // pieces, hand quads, the wheel
+    // Back to front: the projection (or the cinema quad), the comfort vignette, the UI quad (or its
+    // head-locked pieces, the hand quads and the centred weapon wheel), the reticle or the menu pointer
+    // (beam, dot), then the fade on top. Entries are written as layers are added.
     std::array<const XrCompositionLayerBaseHeader*, 5 + WristHud::kMaxQuads> layers{};
     layers[0] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
     std::uint32_t layerCount = 0;
@@ -322,12 +322,13 @@ void XrPresenter::Impl::frame() {
             // UI layer: the game's GUI on its own quad in front (only with a fresh GUI image).
             uiShown = settings.ui.enabled && fillUiQuad(uiQuad);
             if (uiShown) {
-                // Wrist mode (presenter_wrist.cpp): the UI quad's head-locked pieces and the wrist quads;
-                // not while the UI quad is the menu panel.
-                const std::uint32_t hud =
-                    menuOn || menuHeld
-                        ? 0
-                        : wrist.fill(settings.ui, uiExtent.width, uiExtent.height, uiQuad, hudQuads.data());
+                // The hand HUDs and the weapon wheel straight ahead (presenter_wrist.cpp): the UI quad's
+                // head-locked pieces, the hand quads and the wheel's quad; not while the UI quad is the menu
+                // panel.
+                const std::uint32_t hud = menuOn || menuHeld
+                                              ? 0
+                                              : wrist.fill(settings.ui, uiExtent.width, uiExtent.height,
+                                                           uiQuad, shownView.weaponWheel, hudQuads.data());
                 for (std::uint32_t i = 0; i < hud; ++i) {
                     layers[layerCount++] =
                         reinterpret_cast<const XrCompositionLayerBaseHeader*>(&hudQuads[i]);

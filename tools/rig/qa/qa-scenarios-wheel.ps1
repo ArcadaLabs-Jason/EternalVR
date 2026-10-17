@@ -35,6 +35,69 @@ function Invoke-QaRestPick($Ctx, [string[]]$First, [string[]]$Then) {
     Write-QaInput $Ctx @(); Wait-QaSeconds $Ctx 2
 }
 
+# The weapon wheel straight ahead (docs/VR_MENUS.md, "The weapon wheel"): two GUI captures (ETERNALVR_CAPTURE_UI into
+# <stage>-ui), the last one written before the stick went down and the first one written 1 s after (the wheel open),
+# differ inside the rectangle the layer logged when it put the wheel ahead: at least 99% of the changed pixels lie in
+# it and they span at least 70% of its width and height. A game that draws the wheel anywhere else fails; a few
+# pixels of HUD animation elsewhere (the vitals' icons changed 40 pixels in a rig run) do not.
+if (-not ('QaWheelAlpha' -as [type])) {
+    Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+public static class QaWheelAlpha {
+    // The alpha channel, row-major.
+    public static byte[] Alpha(string path, out int width, out int height) {
+        using (var bmp = new Bitmap(path)) {
+            width = bmp.Width; height = bmp.Height;
+            var data = bmp.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try {
+                var bytes = new byte[data.Stride * height];
+                Marshal.Copy(data.Scan0, bytes, 0, bytes.Length);
+                var a = new byte[width * height];
+                for (int y = 0; y < height; ++y)
+                    for (int x = 0; x < width; ++x) a[y * width + x] = bytes[y * data.Stride + x * 4 + 3];
+                return a;
+            } finally { bmp.UnlockBits(data); }
+        }
+    }
+    // The pixels whose alpha differs by more than 32, against the rectangle [x0, x1) x [y0, y1): the count inside,
+    // the count outside, and the box of those inside (x0, y0, x1, y1).
+    public static long[] DiffStats(byte[] a, byte[] b, int width, int height, int x0, int y0, int x1, int y1) {
+        long inside = 0, outside = 0, bx0 = width, by0 = height, bx1 = 0, by1 = 0;
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x) {
+                if (Math.Abs(a[y * width + x] - b[y * width + x]) <= 32) continue;
+                if (x < x0 || x >= x1 || y < y0 || y >= y1) { ++outside; continue; }
+                ++inside; bx0 = Math.Min(bx0, x); by0 = Math.Min(by0, y); bx1 = Math.Max(bx1, x + 1); by1 = Math.Max(by1, y + 1);
+            }
+        return new long[] { inside, outside, bx0, by0, bx1, by1 };
+    }
+}
+'@
+}
+function Test-QaWheelRect($Ctx) {
+    $name = 'the wheel lies in the logged rectangle'
+    $line = @(Get-QaMatches $Ctx 'ui: weapon wheel straight ahead \(\w+ HUD\): GUI rect \((\d+), (\d+)\) (\d+) x (\d+)' -Regex) | Select-Object -First 1
+    if (-not ($line -match 'GUI rect \((\d+), (\d+)\) (\d+) x (\d+)')) { Add-QaResult $Ctx $name $false 'no rectangle logged'; return }
+    $rx = [int]$Matches[1]; $ry = [int]$Matches[2]; $rw = [int]$Matches[3]; $rh = [int]$Matches[4]
+    if (-not $Ctx.WheelDown) { Add-QaResult $Ctx $name $false 'the timeline did not record the stick'; return }
+    $files = @(Get-ChildItem -LiteralPath "$($Ctx.Stage)-ui" -Filter 'ui-*.png' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
+    $before = @($files | Where-Object { $_.LastWriteTime -lt $Ctx.WheelDown }) | Select-Object -Last 1
+    $open = @($files | Where-Object { $_.LastWriteTime -gt $Ctx.WheelDown.AddSeconds(1) -and $_.LastWriteTime -lt $Ctx.WheelUp }) | Select-Object -First 1
+    if (-not $before -or -not $open) { Add-QaResult $Ctx $name $false "no GUI capture before the stick and with the wheel open among $($files.Count)"; return }
+    $w = 0; $h = 0; $w2 = 0; $h2 = 0
+    try {
+        $a = [QaWheelAlpha]::Alpha($before.FullName, [ref]$w, [ref]$h)
+        $b = [QaWheelAlpha]::Alpha($open.FullName, [ref]$w2, [ref]$h2)
+    } catch { Add-QaResult $Ctx $name $false "a capture did not load: $($_.Exception.Message)"; return }
+    if ($w -ne $w2 -or $h -ne $h2 -or $rx + $rw -gt $w -or $ry + $rh -gt $h) { Add-QaResult $Ctx $name $false "sizes $w x $h, $w2 x $h2, rectangle ($rx, $ry) $rw x $rh"; return }
+    $s = [QaWheelAlpha]::DiffStats($a, $b, $w, $h, $rx, $ry, $rx + $rw, $ry + $rh)
+    $share = if ($s[0] + $s[1] -gt 0) { $s[0] / [double]($s[0] + $s[1]) } else { 0.0 }
+    $fills = $s[0] -gt 0 -and ($s[4] - $s[2]) -ge 0.7 * $rw -and ($s[5] - $s[3]) -ge 0.7 * $rh
+    Add-QaResult $Ctx $name ($share -ge 0.99 -and $fills) ("$($before.Name) -> $($open.Name): $($s[0]) changed pixel(s) inside, $($s[1]) outside ({0:P1} inside), inside ($($s[2]), $($s[3]))..($($s[4]), $($s[5])); rectangle ($rx, $ry) $rw x $rh" -f $share)
+}
 $wheelScenarios = @(
     @{
         Name = 'thumbrest-pick'; Kind = 'game'
@@ -281,6 +344,31 @@ $wheelScenarios = @(
                 Add-QaResult $c 'the value written back is the one held over' ($Matches[1] -eq $before) "held over $before, written back $($Matches[1])"
             }
             Test-QaAbsent $c 'weaponWheel_slowTimeScale not found'
+        }
+    },
+    @{
+        Name = 'wheel-centre'; Kind = 'game'
+        Proves = 'The weapon wheel held open with the stick shows straight ahead: the layer logs the wheel quad and its rectangle, the wheel the game drew lies in that rectangle (GUI captures before the stick and with the wheel open), and it goes back when the wheel closes'
+        Env = @()
+        UiCaptures = 10
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 12
+            $c.WheelDown = Get-Date
+            Write-QaInput $c @('right.stick = 0, -1'); Wait-QaSeconds $c 2
+            Save-QaShot $c 'wheel'; Save-QaXrShot $c 'wheel'
+            $c.WheelUp = Get-Date
+            Write-QaInput $c @(); Wait-QaSeconds $c 1.5
+            Save-QaXrShot $c 'after'
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'controllers: forced view starts (weapon wheel'
+            Test-QaPresent $c 'ui: weapon wheel straight ahead (panel HUD): GUI rect'
+            Test-QaPresent $c 'ui: weapon wheel back on the HUD after'
+            Test-QaAbsent $c 'ui: weapon wheel up, but no wheel quad'
+            Test-QaWheelRect $c
         }
     }
 )

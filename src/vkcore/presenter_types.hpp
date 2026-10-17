@@ -161,6 +161,9 @@ struct ViewRecord {
     XrQuaternionf weaponAimTracked{0.0f, 0.0f, 0.0f, 1.0f};
     // How far along that ray the world is hit, in metres (reticle_depth.hpp); 0 when not known.
     float weaponAimHitMetres = 0.0f;
+    // The game's weapon wheel was up in this frame (controllers::wheelView after this frame's forced-view
+    // update): its GUI image shows the wheel, which then goes straight ahead (ui_layer/weapon_wheel.hpp).
+    bool weaponWheel = false;
 };
 
 // A D3D12 copy that did not finish within the frame's wait (XR worker only): its slot and swapchain image

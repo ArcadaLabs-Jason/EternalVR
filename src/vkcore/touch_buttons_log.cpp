@@ -3,13 +3,13 @@
 // has its own (rest_wheel.cpp).
 //
 // The first touch each bound sensor reports is logged, and one line says so when none has after a minute of
-// play: a runtime may not report a sensor (an emulation that leaves it out). Every 10 s with any touch, one
-// line per bound sensor counts what it did: touches, those shorter than the debounce, gaps forgiven, taps,
-// holds, touches ended by their own control in use, brushes (too short to tap) and landings voided straight
-// after their own control, so a player's log shows whether a binding fires by mistake or not at all. Nothing
-// is logged while no map binds a touch on a control. Under ETERNALVR_CONTROLLERS_TRACE every change of the
-// touch sensors the frame reports is logged whether bound or not (the first 200, then one a minute), so a
-// scripted touch can be seen reaching the layer.
+// play: a runtime may not report a sensor (an emulation that leaves it out). Every 10 s in which any count
+// moved, one line per bound sensor counts what it did: touches, those shorter than the debounce, gaps
+// forgiven, taps, holds, touches ended by their own control in use, brushes (too short to tap) and landings
+// voided straight after their own control, so a player's log shows whether a binding fires by mistake or not
+// at all. Nothing is logged while no map binds a touch on a control. Under ETERNALVR_CONTROLLERS_TRACE every
+// change of the touch sensors the frame reports is logged whether bound or not (the first 200, then one a
+// minute), so a scripted touch can be seen reaching the layer.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -133,7 +133,7 @@ void noteStats(const input::InputMapper& mapper, const PerTouch& bound) {
             const input::TouchButtonStats& was = g_logged[h][t];
             const unsigned touches = now.touches - was.touches;
             std::uint64_t skipped = 0;
-            if (bound[h][t] && touches != 0 && g_lines.due(GetTickCount64(), skipped)) {
+            if (bound[h][t] && input::statsChanged(now, was) && g_lines.due(GetTickCount64(), skipped)) {
                 char note[48] = "";
                 if (skipped != 0) {
                     std::snprintf(note, sizeof(note), " (%llu more not logged)",

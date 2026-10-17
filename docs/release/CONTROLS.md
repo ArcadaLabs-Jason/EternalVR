@@ -56,6 +56,8 @@ Let the stick spring back to the centre to pick the highlighted weapon and close
 down instead is the quick switch to your last weapon. The stick does not turn you while the wheel is held.
 Keep the game's "Weapon Wheel Open Delay" (controls settings) at its default or shorter, so the wheel is
 open before the stick starts moving its pointer; a shorter delay there opens the wheel sooner.
+While it is open the wheel shows straight ahead of you, at the same size whatever your HUD's size,
+distance or mode (panel, wrist or weapon); the rest of the HUD stays where it is.
 
 If you give the weapon wheel to a button in the controls editor (the right stick click, for example), hold
 that button to open the wheel and point with the turn stick (the right stick unless you swapped the
@@ -324,7 +326,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Room-scale | Walking around your room moves you in the game; off, you can lean about 60 cm before the view fades | On |
 | Fade in walls | The view fades to black when your head goes into a wall or too far from your body; after a second and a half of black you are moved back onto your body | On |
 | Recenter hold | Hold both sticks pressed for 2 seconds to recenter | On |
-| Skip cutscenes | Skip cutscenes automatically (the start of the very first one cannot be skipped; off: hold B to skip one) | On |
+| Skip cutscenes | Skip cutscenes automatically (the start of the very first one cannot be skipped; off: hold dash, B on the weapon hand, to skip one) | Off |
 | Play position | Detect (sitting or standing, from your height), Sitting, Standing | Detect |
 | Eye height | The game's (the Slayer's, whatever your own), Your real height (needs a runtime with a floor level) | The game's |
 | Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
