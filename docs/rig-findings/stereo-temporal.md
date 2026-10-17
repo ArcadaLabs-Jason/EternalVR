@@ -117,6 +117,44 @@ The render-frame job (0x1CB9EE0): `subSampleIndex = counter % r_TAANumSubSamples
 base-2 Halton coordinate of every other index lies in one half of [0, 1), so each eye's horizontal jitter
 covers half a pixel only. [static-verified]
 
+### 3.2a SSR noise index
+
+SSR's parameter setup (0x1C72480, called at 0x1C71A0E from the SSR/SSDO setup 0x1C71630, which the render-view
+job calls at 0x1C56AF7 with its block, render context + 0x6A7E20) sets `SSRParms.w` to the low four bits of the
+counter at block + 0xB0 reversed: 0, 8, 4, 12, 2, ... 15 over 16 renders. Block + 0xB0 is the backend frame
+counter the render-view job read for its render (0x1CBB2D0, stored at 0x1C56A19), the field the SSDO pick reads
+too (0x1C718C5). With two renders per tick one eye only gets the even counters and the other only the odd ones
+(which eye gets which depends on the counter's parity at the eye tags' base), so each eye accumulates half of
+the sequence and the halves never meet. [static-verified] `ssr_noise_hooks.cpp` hooks the read (0x1C7250A),
+looks the render's tag up by the stored counter (`seqTagForBackendFrame(counter + 1)`) and, for an eye's own
+view while per-eye TAA or DLSS runs (the jitter phase's condition), puts the tick's counter in its place
+(`ssrCounterFor`: the tick, or half the tick with alternate eyes, as the jitter phase), so both eyes of a tick
+get one index and each eye gets all 16 over 16 of its renders. Mono, untagged and other renders keep the
+engine's. `seq-ssr:` logs once per session, after 10,800 renders given the tick's counter (about 60 s of stereo
+play), the renders given it and those left with the engine's, per eye. Located by signature and checked by the
+parameter's name (`SSRParms`, the declaration 0x10 before the handle the setup's `mov rdx` reads); the same
+signature is unique in the Game Pass build's image (at 0x1CFEA93, also named `SSRParms`) [static-verified].
+Missing, each eye keeps the engine's index (logged).
+
+Rig, 2026-10-16 (Steam, OpenXR-Simulator, Route S, DLSS Balanced per eye, `r_useRayTracing 0`, `r_SSR 1`; e1m1
+at the blood pool, `setviewpos 151.05 -644.06 -187.62 -172.7`, and at a tile floor, `13.86 -282.08 -195.00 75`),
+with a rig build that also read the index at the hand-over (`movd xmm0, ecx`, 0x1C72548) and counted it per eye
+every 10 s (about 850 to 900 ticks each): without the replacement one eye got 8 of 16 values (0x00FF in some
+runs, 0xFF00 in others) and the other eye the other 8, and every tick's two indices differed: this is the
+evidence of the defect. With the replacement both eyes got 16 of 16 (0xFFFF) and no tick's indices differed,
+but that count keyed each render by the same tag the replacement used, so it holds by construction and is not
+independent evidence; that the lookup names the right render rests on the stored counter's provenance above
+(the lookup the SSDO, exposure and scattering hooks use). The cross-eye ghost (32 pairs, `ghost_coeff.py`)
+stayed at 0.001 / 0.001 without and 0.002 / 0.002 with the replacement at the pool (control -0.002), 0.007 /
+0.007 both at the tile floor (control -0.009). At these spots SSR adds little with ray tracing off (a mono run,
+SSR on against off: under 1 of 255 inside the floor masks, frame-to-frame noise about 2; that mono reference ran
+with TAA, as `r_antialiasing 2` did not hold in mono), and neither eye's mean, frame-to-frame change or
+band-passed grain inside the masks moved beyond the burst-to-burst spread. [rig]
+
+Open question: with one index in both eyes the SSR noise pattern is the same in screen space in both eyes, so it
+fuses at screen depth; eye R at (tick + 8) & 15 would keep each eye's full walk and decorrelate the eyes. Not
+measured either way; the index follows the jitter phase, which is shared too.
+
 ### 3.3 Auto exposure
 
 0x1C98D0E..0x1C98D40:
@@ -276,8 +314,9 @@ evaluation.
   increments. So the tag in flight, read in a job of the backend frame, is the tag of the counter the engine
   read, unless the swap came in between. Code that has the engine's own read at hand looks the tag up by it
   (`seqTagForBackendFrame(counter + 1)`): the object ring (the counter in rax), the exposure hook (the
-  post-process context + 0x148, stored at 0x1C570D2) and the scattering setup (its context + 0x10, stored
-  at 0x1C568FC). The last two count every 10 s the renders whose tag in flight names another eye
+  post-process context + 0x148, stored at 0x1C570D2), the scattering setup (its context + 0x10, stored
+  at 0x1C568FC), and the SSDO pick and the SSR noise index (the render-view job's block + 0xB0, stored at
+  0x1C56A19). The last two count every 10 s the renders whose tag in flight names another eye
   (`seq-taa: ... exposure renders whose tag in flight names another eye N`, `seq-scatter: ... N render(s)
   whose tag in flight names another eye`). The selectors (the engine's selector reads the same memory) and the
   world GUI check (backend draw jobs, no counter at hand) keep the tag in flight. The DLSS evaluation runs in
@@ -314,6 +353,7 @@ evaluation.
 | `src/stereo_seq/eye_tags.*` | `RenderTag::eyeSeq`, `EyeTagQueue::peek` (tests in `eye_tags_tests.cpp`) |
 | `src/vkcore/taa_locate.*` | signatures (below), cvar objects by their registration |
 | `src/vkcore/taa_hooks.*` | early slot hook, selectors, cvar enforcement and fail-closed, counters |
+| `src/stereo_seq/ssr_noise.*`, `src/vkcore/ssr_noise_hooks.*` | the SSR noise index per tick (section 3.2a); tests in `tests/stereo_seq/ssr_noise_tests.cpp` |
 | `src/vkcore/exposure_hooks.*` | the exposure hook (`ExposurePlanner`), installed whenever Route S runs, whatever the TAA mode |
 | `src/vkcore/taa_ngx.*` | DLSS twins |
 | `src/vkcore/mid_hook.*` | `installInlineHook` (safetyhook inline hook, created disabled, then enabled) |
@@ -339,6 +379,7 @@ resets at each rebase and skipped eye R.
 | Accumulation history selector | 0x1CBB6C0 | `40 53 48 83 EC 20 48 63 82 90 89 02 00 48 8B 11 48 69 D8 A8 00 00 00 48 03 99 58 0F 00 00 FF 52 70 25 01 00 00 80 7D 07 FF C8 83 C8 FE FF C0 48 98 48 8B 44 C3 60` |
 | Device context slot loop (hook + 0x29, builder call + 0x24) | 0x1C1A190 | `8B C3 49 8D 4E 08 48 69 F8 A8 00 00 00 8B D3 48 03 CF E8 ?? ?? ?? ?? 45 8B 06 49 8D 56 08 48 03 D7 49 8B CE E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? FF C3 3B 58 08 7C C9` |
 | Auto-exposure index (hook + 0x38) | 0x1C98D0E | `8B 8E 48 01 00 00 8B 54 1F 30 3B CA 74 0E 48 8B 46 38 80 78 21 01 74 04 B0 01 EB 02 32 C0 3C 01 0F 45 CA 81 E1 01 00 00 80 7D 07 FF C9 83 C9 FE FF C1 89 8E 40 01 00 00` |
+| SSR noise index (hook + 0x7; `SSRParms` at the disp32 + 0x3E) | 0x1C72503 | `0F B6 8F B0 00 00 00 80 E1 0F 0F B6 D1 0F B6 C1 D0 EA 02 C0 32 D0 02 C9 80 E2 55 32 D1 0F B6 C2 C0 EA 02 24 F3 C0 E0 02 0A C2 0F B6 C8 EB 02 8B CB 48 8B 05 ?? ?? ?? ?? 45 85 C9 48 8B 15 ?? ?? ?? ?? 0F 57 D2 66 0F 6E C1` |
 | idCVar::SetString | 0x376020 | `48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B D9 48 8B 09 41 0F B6 F0 48 8B FA 48 85 D2 75 04 48 8B 79 30 48 8B 09 48 8B D7 E8` |
 | Cvar registration (object by name) | many | `4C 8D 05 ?? ?? ?? ?? 48 8D 15 <name> 48 8D 0D <object> E8`: one match each for the 16 cvars used (for example `r_antialiasing` 0x6685CE0, `r_TAASafeMode` 0x66DE720, `r_jitter` 0x66E47A0, `r_TAANumSubSamples` 0x66DE880, `r_TAAAntiGhosting` 0x66DFA40, `r_dlssForceReset` 0x66E8E30) |
 | NGX entry points | exports | by name from the exe's export table |

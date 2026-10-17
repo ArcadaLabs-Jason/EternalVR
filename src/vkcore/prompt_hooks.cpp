@@ -24,21 +24,25 @@
 // "[<LocalizedKeyName>]" while the game is on keyboard prompts. Tutorial popups write "[K_SPACE] TO DISMISS";
 // the menus' hint bars (idSWFWidget_Button_CommandBar, 0x159F6B0) write each button's PC key that way
 // ("[ESC] BACK", "[ENTER] SELECT"). The LocalizedKeyName detour names the button that sends such a key
-// (kLayerKeys). The tab lists (idSWFWidget_TabList) write their Q / E as plain text from KeyNameText
-// (0x17E2680); a detour there answers only TabList's two calls (kTabKeys).
+// (input::kLayerKeyNames). The tab lists (idSWFWidget_TabList) write their Q / E as plain text from
+// KeyNameText (0x17E2680), and so do the hint bars for a hold button ("ENTER HOLD TO CONTINUE",
+// prompt_command_bar.hpp); a detour there answers only TabList's two calls (input::kTabKeyNames) and the
+// command bar's two (input::kLayerKeyNames).
 //
 // Everything is found by signature and checked at install; if any part is missing nothing is installed and
-// the prompts stay the game's. The tab lists' part is optional.
+// the prompts stay the game's. The tab lists' and the hold buttons' parts are each optional.
 
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/button_labels.hpp"
+#include "features/input/prompt_keys.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/prompt_command_bar.hpp"
 
 #include <windows.h>
 
@@ -106,52 +110,11 @@ constexpr std::size_t kCallerSpan = 0x1000;
 // The VR keys the helpers are handed: STEAMVR_PRIMARY_* 0x131..0x13D, STEAMVR_SECONDARY_* 0x141..0x14D.
 constexpr std::array<std::pair<int, int>, 2> kVirtualKeyRanges{{{0x131, 0x13D}, {0x141, 0x14D}}};
 
-// The text for a key the layer presses: the button that sends it.
-using KeyLabel = const std::string& (*)(const input::PromptLabelSet&);
-
-template <game::GameAction Action>
-const std::string& actionLabel(const input::PromptLabelSet& labels) {
-    return labels.text[static_cast<std::size_t>(Action)];
-}
-const std::string& menuBackLabel(const input::PromptLabelSet& labels) {
-    return labels.menuBack;
-}
-const std::string& menuSelectLabel(const input::PromptLabelSet& labels) {
-    return labels.menuSelect;
-}
-const std::string& menuPreviousTabLabel(const input::PromptLabelSet& labels) {
-    return labels.menuPreviousTab;
-}
-const std::string& menuNextTabLabel(const input::PromptLabelSet& labels) {
-    return labels.menuNextTab;
-}
-
-struct LayerKey {
-    std::string_view name; // the game's key name
-    KeyLabel label;
-};
-
-// Keys the layer presses where the game reads keys, not commands, named in text by a key token ("K_SPACE",
-// which the text pass turns into "[SPACE]" through LocalizedKeyName). Tutorial and lore popups take Space and
-// E for actions (usercmd_hook.cpp), the Dossier button presses Tab; the menus' hint bars (the command bar:
-// "[ESC] BACK", "[ENTER] SELECT") name Escape, which B sends in every menu (menu_router.hpp), and Enter,
-// whose select the trigger's click does.
-constexpr std::array<LayerKey, 5> kLayerKeys{{
-    {"SPACE", &actionLabel<game::GameAction::Jump>},
-    {"E", &actionLabel<game::GameAction::Melee>},
-    {"TAB", &actionLabel<game::GameAction::Dossier>},
-    {"ESCAPE", &menuBackLabel},
-    {"ENTER", &menuSelectLabel},
-}};
 constexpr int kLastKeyboardKey = 0xFF;
 
 // The tab lists (settings, the Dossier's pages) name their previous and next tab keys without a key token:
 // in keyboard mode TabList's update (0x1592670) asks KeyNameText (0x17E2680, a key number to its text in a
-// static buffer) once for each. The grips send them in every menu.
-constexpr std::array<LayerKey, 2> kTabKeys{{
-    {"Q", &menuPreviousTabLabel},
-    {"E", &menuNextTabLabel},
-}};
+// static buffer) once for each.
 constexpr const char* kKeyNameTextSignature =
     "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 8B F9 33 D2 "
     "48 8B 0D ?? ?? ?? ?? 48 8B 01 FF 50 58 65 48 8B 04 25 58 00 00 00";
@@ -190,11 +153,14 @@ StrAssignFn g_strAssign = nullptr;
 KeyNameTextFn g_keyNameText = nullptr;
 
 std::array<std::uintptr_t, kCallers.size()> g_callerReturns{};
-std::array<std::uintptr_t, kTabListCalls> g_tabListReturns{};
-std::vector<std::pair<std::string, int>> g_actionTable; // lower-case bind name, usercmd button index
-std::vector<std::pair<int, std::string>> g_virtualKeys; // key number and its name, in slot order
-std::vector<std::pair<int, std::size_t>> g_layerKeys;   // key number and its kLayerKeys index
-std::vector<std::pair<int, std::size_t>> g_tabKeys;     // key number and its kTabKeys index
+// The KeyNameText callers answered (input::keyNameAnswer): TabList's and the command bar's hold buttons'.
+input::KeyNameCallers g_keyNameCallers;
+static_assert(std::tuple_size_v<decltype(input::KeyNameCallers::tabList)> == kTabListCalls);
+std::vector<std::pair<std::string, int>> g_actionTable;   // lower-case bind name, usercmd button index
+std::vector<std::pair<int, std::string>> g_virtualKeys;   // key number and its name, in slot order
+std::vector<std::pair<int, std::size_t>> g_layerKeys;     // key number and its kLayerKeyNames index
+std::vector<std::pair<int, std::size_t>> g_tabKeys;       // key number and its kTabKeyNames index
+std::vector<std::pair<int, std::string_view>> g_keyNames; // key number and its name, for the keys of both
 std::uint64_t* g_bindHash = nullptr;
 std::atomic<bool> g_installed{false};
 
@@ -205,8 +171,9 @@ std::vector<std::shared_ptr<const input::PromptLabelSet>> g_retiredLabels;
 
 std::array<std::atomic<int>, kCallers.size()> g_logged{};
 constexpr int kLogPerCaller = 6;
-std::array<std::atomic<bool>, kLayerKeys.size()> g_layerKeyLogged{};
-std::array<std::atomic<bool>, kTabKeys.size()> g_tabKeyLogged{};
+std::array<std::atomic<bool>, input::kLayerKeyNames.size()> g_layerKeyLogged{};
+std::array<std::atomic<bool>, input::kTabKeyNames.size()> g_tabKeyLogged{};
+std::array<std::atomic<bool>, input::kLayerKeyNames.size()> g_holdKeyLogged{};
 
 bool equalsIgnoreCase(std::string_view a, std::string_view b) {
     return a.size() == b.size() &&
@@ -284,12 +251,12 @@ void onKeyText(int keyNum, void* out) {
             }
         }
         for (const auto& [key, index] : g_layerKeys) {
-            const std::string& text = kLayerKeys[index].label(*labels);
+            const std::string& text = input::layerKeyLabel(index, *labels);
             if (key == keyNum && !text.empty()) {
                 if (!g_layerKeyLogged[index].exchange(true, std::memory_order_relaxed)) {
                     EVR_LOG("%s: the game's text names %.*s: %s", kTag,
-                            static_cast<int>(kLayerKeys[index].name.size()), kLayerKeys[index].name.data(),
-                            text.c_str());
+                            static_cast<int>(input::kLayerKeyNames[index].size()),
+                            input::kLayerKeyNames[index].data(), text.c_str());
                 }
                 g_strAssign(out, text.c_str());
                 return;
@@ -299,22 +266,32 @@ void onKeyText(int keyNum, void* out) {
     g_keyText(keyNum, out);
 }
 
+// The first time a raw key text is answered: "prompts: a tab list names Q: LG", "prompts: a hold button names
+// ENTER: Right Trigger".
+void logKeyName(input::KeyNameAnswer answer, std::string_view name, const std::string& text) {
+    const bool tab = answer == input::KeyNameAnswer::TabKey;
+    const std::optional<std::size_t> index = tab ? input::tabKeyIndex(name) : input::layerKeyIndex(name);
+    std::atomic<bool>* logged = !index ? nullptr : tab ? &g_tabKeyLogged[*index] : &g_holdKeyLogged[*index];
+    if (logged != nullptr && !logged->exchange(true, std::memory_order_relaxed)) {
+        EVR_LOG("%s: %s names %.*s: %s", kTag, tab ? "a tab list" : "a hold button",
+                static_cast<int>(name.size()), name.data(), text.c_str());
+    }
+}
+
+// The set stays alive (g_retiredLabels) after it is replaced, so the text handed out outlives the call.
 const char* onKeyNameText(int keyNum) {
     const auto returnAddress = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    if (std::ranges::find(g_tabListReturns, returnAddress) != g_tabListReturns.end() &&
-        mp_guard::allowsGameTouch()) {
+    const input::KeyNameAnswer answer = mp_guard::allowsGameTouch()
+                                            ? input::keyNameAnswer(returnAddress, g_keyNameCallers)
+                                            : input::KeyNameAnswer::Game;
+    if (answer != input::KeyNameAnswer::Game) {
+        const auto key = std::ranges::find(g_keyNames, keyNum, &std::pair<int, std::string_view>::first);
         const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
-        for (const auto& [key, index] : g_tabKeys) {
-            // The set stays alive (g_retiredLabels) after it is replaced, so the text outlives this call.
-            const std::string* text = labels && key == keyNum ? &kTabKeys[index].label(*labels) : nullptr;
-            if (text != nullptr && !text->empty()) {
-                if (!g_tabKeyLogged[index].exchange(true, std::memory_order_relaxed)) {
-                    EVR_LOG("%s: a tab list names %.*s: %s", kTag,
-                            static_cast<int>(kTabKeys[index].name.size()), kTabKeys[index].name.data(),
-                            text->c_str());
-                }
-                return text->c_str();
-            }
+        const std::string* text =
+            key != g_keyNames.end() && labels ? input::keyNameLabel(answer, key->second, *labels) : nullptr;
+        if (text != nullptr && !text->empty()) {
+            logKeyName(answer, key->second, *text);
+            return text->c_str();
         }
     }
     return g_keyNameText(keyNum);
@@ -402,48 +379,68 @@ bool readVirtualKeys(const GameImage& image) {
     }
     for (int key = 1; key <= kLastKeyboardKey; ++key) {
         const char* name = keyName(key);
-        for (std::size_t i = 0; name != nullptr && i < kLayerKeys.size(); ++i) {
-            if (kLayerKeys[i].name == name) {
-                g_layerKeys.emplace_back(key, i);
-            }
+        if (const auto i = name != nullptr ? input::layerKeyIndex(name) : std::nullopt) {
+            g_layerKeys.emplace_back(key, *i);
+            g_keyNames.emplace_back(key, input::kLayerKeyNames[*i]);
+        } else if (const auto t = name != nullptr ? input::tabKeyIndex(name) : std::nullopt) {
+            g_keyNames.emplace_back(key, input::kTabKeyNames[*t]);
         }
-        for (std::size_t i = 0; name != nullptr && i < kTabKeys.size(); ++i) {
-            if (kTabKeys[i].name == name) {
-                g_tabKeys.emplace_back(key, i);
-            }
+        if (const auto i = name != nullptr ? input::tabKeyIndex(name) : std::nullopt) {
+            g_tabKeys.emplace_back(key, *i);
         }
     }
     EVR_LOG("%s: %zu of the %zu keys the layer presses found, %zu of the %zu tab keys", kTag,
-            g_layerKeys.size(), kLayerKeys.size(), g_tabKeys.size(), kTabKeys.size());
+            g_layerKeys.size(), input::kLayerKeyNames.size(), g_tabKeys.size(), input::kTabKeyNames.size());
     return true;
 }
 
-// The tab lists' key text (kTabKeys). Optional: without it the tab lists keep the game's keys.
-void installTabListHook(const GameImage& image) {
+// The key text of the tab lists (input::kTabKeyNames) and of the command bar's hold buttons
+// (prompt_command_bar.hpp), each optional: a part not found keeps the game's keys there.
+void installKeyNameTextHook(const GameImage& image) {
     const std::byte* keyNameText = findUnique(image, kTag, "KeyNameText", kKeyNameTextSignature);
-    const std::byte* tabList = findUnique(image, kTag, "TabList update", kTabListSignature);
-    if (keyNameText == nullptr || tabList == nullptr || g_tabKeys.empty()) {
-        EVR_LOG("%s: tab lists keep the game's keys (a part is missing above, or no Q / E key)", kTag);
+    if (keyNameText == nullptr) {
+        EVR_LOG("%s: tab lists and hold buttons keep the game's keys (no KeyNameText)", kTag);
         return;
     }
-    const std::vector<std::uintptr_t> returns = callReturns(image, tabList, keyNameText, kCallerSpan);
-    if (returns.size() != kTabListCalls) {
+    const std::byte* tabList = findUnique(image, kTag, "TabList update", kTabListSignature);
+    const std::vector<std::uintptr_t> returns = tabList != nullptr
+                                                    ? callReturns(image, tabList, keyNameText, kCallerSpan)
+                                                    : std::vector<std::uintptr_t>{};
+    if (tabList == nullptr) {
+        EVR_LOG("%s: no TabList update; tab lists keep the game's keys", kTag);
+    } else if (returns.size() != kTabListCalls) {
         EVR_LOG("%s: TabList update calls KeyNameText %zu times, not %zu; tab lists keep the game's keys",
                 kTag, returns.size(), kTabListCalls);
+    } else if (g_tabKeys.empty()) {
+        EVR_LOG("%s: the game has no Q / E key; tab lists keep the game's keys", kTag);
+    } else {
+        std::ranges::copy(returns, g_keyNameCallers.tabList.begin());
+    }
+    if (!g_layerKeys.empty()) {
+        const CommandBarCalls bar = findCommandBarKeyNameCalls(image, keyNameText, kTag);
+        g_keyNameCallers.getKeyString = bar.getKeyString;
+        g_keyNameCallers.commandBarUpdate = bar.update;
+    }
+    const auto rva = [&image](std::uintptr_t at) {
+        return at != 0 ? image.rva(reinterpret_cast<const std::byte*>(at)) : 0u;
+    };
+    if (g_keyNameCallers.tabList[0] == 0 && g_keyNameCallers.getKeyString == 0 &&
+        g_keyNameCallers.commandBarUpdate == 0) {
         return;
     }
-    std::ranges::copy(returns, g_tabListReturns.begin());
     std::string error;
     if (!installInlineHook(const_cast<std::byte*>(keyNameText), reinterpret_cast<void*>(&onKeyNameText),
                            reinterpret_cast<void**>(&g_keyNameText), error)) {
-        g_tabListReturns.fill(0);
-        EVR_LOG("%s: KeyNameText hook at RVA 0x%X failed: %s; tab lists keep the game's keys", kTag,
-                image.rva(keyNameText), error.c_str());
+        g_keyNameCallers = {};
+        EVR_LOG(
+            "%s: KeyNameText hook at RVA 0x%X failed: %s; tab lists and hold buttons keep the game's keys",
+            kTag, image.rva(keyNameText), error.c_str());
         return;
     }
-    EVR_LOG("%s: tab lists: KeyNameText hook at RVA 0x%X; TabList calls at 0x%X, 0x%X", kTag,
-            image.rva(keyNameText), image.rva(reinterpret_cast<const std::byte*>(returns[0])),
-            image.rva(reinterpret_cast<const std::byte*>(returns[1])));
+    EVR_LOG("%s: KeyNameText hook at RVA 0x%X; TabList calls at 0x%X, 0x%X; hold buttons' calls at 0x%X "
+            "(GetKeyString), 0x%X (the command bar's update); 0 keeps the game's keys",
+            kTag, image.rva(keyNameText), rva(g_keyNameCallers.tabList[0]), rva(g_keyNameCallers.tabList[1]),
+            rva(g_keyNameCallers.getKeyString), rva(g_keyNameCallers.commandBarUpdate));
 }
 
 bool findBindGeneration(const GameImage& image) {
@@ -527,7 +524,7 @@ bool installPromptHooks() {
         // The first detour still names buttons in the tooltip text; the HUD helpers show the VR key's name.
         EVR_LOG("%s: LocalizedKeyName hook at RVA 0x%X failed: %s", kTag, image.rva(keyText), error.c_str());
     }
-    installTabListHook(image);
+    installKeyNameTextHook(image);
     g_installed.store(true, std::memory_order_release);
     if (generation && !mp_guard::addTripListener(&bumpBindGenerationOnTrip)) {
         EVR_LOG("%s: no room in the multiplayer guard's trip listeners; cached prompts keep the VR buttons' "

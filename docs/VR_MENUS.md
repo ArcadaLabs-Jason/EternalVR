@@ -144,8 +144,9 @@ The game's menus do not move their focus with the arrow keys, so none are sent; 
 clicking or dragging on them.
 
 The menus' hint bars and tab lists name these controls instead of keys: "[B] BACK" for Escape, the
-weapon hand's trigger for Enter's select, the grips for the tabs' Q and E as LG and RG (the tab lists cut
-longer names; `docs/VR_CONTROLLERS.md`, Button prompts).
+weapon hand's trigger for Enter's select (also on a hold button: "Right Trigger HOLD TO CONTINUE" at
+the end of a mission, held with the pointer on it), the grips for the tabs' Q and E as LG and RG (the tab
+lists cut longer names; `docs/VR_CONTROLLERS.md`, Button prompts).
 
 **Tutorial and lore popups.** A tutorial or lore popup shows the game's cursor over the game, so it comes
 up in menu mode, but it waits for Space (continue) or E (use). On the owner's Quest 3 (2026-09-27,

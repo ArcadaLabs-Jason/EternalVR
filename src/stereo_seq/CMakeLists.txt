@@ -33,6 +33,7 @@ evr_add_module(evr_stereo_seq
         seq_settings.cpp
         setting_follow.cpp
         ssdo_history.cpp
+        ssr_noise.cpp
         stack_budget.cpp
         stereo_taa.cpp
         world_gui.cpp)

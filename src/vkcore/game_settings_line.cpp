@@ -10,9 +10,16 @@ namespace {
 using K = CvarKind;
 
 constexpr SettingCvar kCvars[] = {
-    // Ray tracing (Update 6): the switch, its reflections and their resolution (3 at Low to 1 from Ultra).
-    {"r_enableRayTracing", K::Bool},
-    {"r_raytracedReflections", K::Bool},
+    // Ray tracing (Update 6). r_useRayTracing is the Video menu's Raytracing switch: the only ray tracing
+    // cvar its Apply writes (0x1421BF0), read by the renderer every frame (0x1CB9EE0) and kept in
+    // profile.bin. The menu writes neither of the next two, so their values carry a note: r_enableRayTracing
+    // is the support the renderer reads at start-up (0x1CC2CF0), r_raytracedReflections a switch read per
+    // view (0x1C5DFD0); both default to 1 and stayed 1 as the menu turned ray tracing off
+    // (docs/rig-findings/perf-cpu-cvars.md section 2). Then the reflections' resolution, which the
+    // Reflections setting writes (3 at Low to 1 from Ultra).
+    {"r_useRayTracing", K::Bool},
+    {"r_enableRayTracing", K::Bool, "support"},
+    {"r_raytracedReflections", K::Bool, "not in the menu"},
     {"r_raytracedReflectionsTemporalUpscaleQuality", K::Int},
     // Anti-aliasing and DLSS: r_antialiasing 2 is DLSS, r_dlssQuality its mode (0 Ultra Performance to 3
     // Quality).
@@ -86,6 +93,11 @@ std::string formatLine(const std::vector<SettingValue>& values) {
         line += v.name;
         line += ' ';
         line += v.state == SettingValue::State::Read ? formatValue(v.kind, v.integer, v.number) : "?";
+        if (!v.note.empty()) {
+            line += " (";
+            line += v.note;
+            line += ')';
+        }
     }
     return line;
 }

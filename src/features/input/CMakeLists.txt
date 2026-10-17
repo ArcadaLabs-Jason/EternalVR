@@ -10,6 +10,7 @@ evr_add_module(evr_input
         binding_text.cpp
         binding_watch.cpp
         button_labels.cpp
+        prompt_keys.cpp
         capture_chord.cpp
         controller_bindings.cpp
         controller_family.cpp

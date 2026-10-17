@@ -3,8 +3,10 @@
 // The game's own video settings in the layer log, so a player's frame rate can be read against them (ray
 // tracing, DLSS, resolution scaling, the Advanced quality settings, field of view):
 //
-//   game settings: r_enableRayTracing 1, r_raytracedReflections 1, ..., g_fov 110
+//   game settings: r_useRayTracing 0, r_enableRayTracing 1 (support), ..., g_fov 110
 //
+// r_useRayTracing is the ray tracing the player chose in the Video menu; a cvar the menu does not set has a
+// note in brackets after its value (game_settings_line.cpp).
 // The cvars are the ones game_settings_line.hpp lists, read where the engine keeps their values (the values
 // block: +0x08 the integer, +0x0C the float; docs/rig-findings/perf-cpu-cvars.md) through a guarded copy. The
 // line is logged a few seconds after every map load (mp_guard::mapLoads) and again whenever a value changes

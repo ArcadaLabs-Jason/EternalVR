@@ -135,6 +135,7 @@ void poll() {
         SettingValue v;
         v.name = cvars[i].name;
         v.kind = cvars[i].kind;
+        v.note = cvars[i].note ? cvars[i].note : "";
         if (i >= g_objects.size() || !g_objects[i]) {
             v.state = SettingValue::State::NotFound;
         } else if (!readCvar(g_objects[i], v.integer, v.number)) {

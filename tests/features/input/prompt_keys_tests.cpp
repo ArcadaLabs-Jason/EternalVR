@@ -1,0 +1,177 @@
+#include "features/input/prompt_keys.hpp"
+
+#include "features/input/binding_compiler.hpp"
+#include "features/input/button_labels.hpp"
+#include "features/input/controller_bindings.hpp"
+#include "game/eternal/controller_data.hpp"
+
+#include <doctest/doctest.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+
+using evr::game::builtinControllerData;
+using evr::game::Controller;
+using evr::game::GameAction;
+using evr::game::Handedness;
+using evr::input::buildBindingProfile;
+using evr::input::buttonLabelsFor;
+using evr::input::ControllerData;
+using evr::input::keyNameAnswer;
+using evr::input::KeyNameAnswer;
+using evr::input::KeyNameCallers;
+using evr::input::keyNameLabel;
+using evr::input::kLayerKeyNames;
+using evr::input::kTabKeyNames;
+using evr::input::layerKeyIndex;
+using evr::input::layerKeyLabel;
+using evr::input::parseControllerData;
+using evr::input::PromptLabelSet;
+using evr::input::tabKeyIndex;
+using evr::input::tabKeyLabel;
+
+namespace {
+
+PromptLabelSet touchLabels(Handedness handedness = Handedness::Right) {
+    const ControllerData data = parseControllerData(builtinControllerData(Controller::OculusTouch));
+    return evr::input::promptLabelSet(buildBindingProfile(data.maps.at(handedness)).profile,
+                                      buttonLabelsFor(data));
+}
+
+// The text the layer gives for the game's key name, or "(the game's)" when it keeps the game's text.
+std::string layerText(std::string_view gameKeyName, const PromptLabelSet& labels) {
+    const std::optional<std::size_t> index = layerKeyIndex(gameKeyName);
+    return index ? layerKeyLabel(*index, labels) : std::string("(the game's)");
+}
+
+std::string tabText(std::string_view gameKeyName, const PromptLabelSet& labels) {
+    const std::optional<std::size_t> index = tabKeyIndex(gameKeyName);
+    return index ? tabKeyLabel(*index, labels) : std::string("(the game's)");
+}
+
+} // namespace
+
+TEST_CASE("ENTER names the trigger that selects; ESCAPE the button that goes back") {
+    const PromptLabelSet right = touchLabels();
+    // The mission-complete screen's "ENTER HOLD TO CONTINUE".
+    CHECK(layerText("ENTER", right) == "Right Trigger");
+    CHECK(layerText("ESCAPE", right) == "B");
+    CHECK(layerText("ENTER", touchLabels(Handedness::LeftButtonSwap)) == "Left Trigger");
+}
+
+TEST_CASE("the popups' keys name the buttons of their actions") {
+    const PromptLabelSet set = touchLabels();
+    const auto action = [&set](GameAction a) {
+        return set.text[static_cast<std::size_t>(a)];
+    };
+    CHECK(layerText("SPACE", set) == action(GameAction::Jump));
+    CHECK(layerText("E", set) == action(GameAction::Melee));
+    CHECK(layerText("TAB", set) == action(GameAction::Dossier));
+    CHECK(layerText("SPACE", set) == "A");
+}
+
+TEST_CASE("Q and E as tab keys name the grips") {
+    const PromptLabelSet set = touchLabels();
+    CHECK(tabText("Q", set) == "LG");
+    CHECK(tabText("E", set) == "RG");
+    // E is a popup key too, where it is melee's button: the two tables answer different callers.
+    CHECK(layerText("E", set) != tabText("E", set));
+}
+
+TEST_CASE("other keys keep the game's text") {
+    const PromptLabelSet set = touchLabels();
+    for (const std::string_view key : {"F", "R", "Q", "enter", "KP_ENTER", "MOUSE1", ""}) {
+        INFO(std::string(key));
+        CHECK(layerText(key, set) == "(the game's)");
+    }
+    CHECK(tabText("ENTER", set) == "(the game's)");
+    CHECK(layerKeyLabel(kLayerKeyNames.size(), set).empty());
+    CHECK(tabKeyLabel(kTabKeyNames.size(), set).empty());
+}
+
+TEST_CASE("a control the controller has no name for leaves the game's key") {
+    const PromptLabelSet none;
+    CHECK(layerText("ENTER", none).empty());
+    CHECK(tabText("Q", none).empty());
+}
+
+TEST_CASE("every layer key and tab key has its own text") {
+    const PromptLabelSet set = touchLabels();
+    for (std::size_t i = 0; i < kLayerKeyNames.size(); ++i) {
+        INFO(std::string(kLayerKeyNames[i]));
+        CHECK(layerKeyIndex(kLayerKeyNames[i]) == i);
+        CHECK_FALSE(layerKeyLabel(i, set).empty());
+    }
+    for (std::size_t i = 0; i < kTabKeyNames.size(); ++i) {
+        CHECK(tabKeyIndex(kTabKeyNames[i]) == i);
+        CHECK_FALSE(tabKeyLabel(i, set).empty());
+    }
+}
+
+namespace {
+
+// The return addresses found in build 25216728 (prompts: KeyNameText hook at RVA 0x17E2680; TabList calls at
+// 0x1592761, 0x159284B; hold buttons' calls at 0x159F095 (GetKeyString), 0x159FE8F (the command bar's
+// update)), at an image base.
+constexpr std::uintptr_t kBase = 0x7FF7ACDB0000;
+KeyNameCallers steamCallers() {
+    KeyNameCallers callers;
+    callers.tabList = {kBase + 0x1592761, kBase + 0x159284B};
+    callers.getKeyString = kBase + 0x159F095;
+    callers.commandBarUpdate = kBase + 0x159FE8F;
+    return callers;
+}
+
+// What the KeyNameText detour gives a caller for a key: the text, or "(the game's)".
+std::string rawKeyText(std::uintptr_t returnAddress,
+                       std::string_view key,
+                       const KeyNameCallers& callers,
+                       const PromptLabelSet& labels) {
+    const std::string* text = keyNameLabel(keyNameAnswer(returnAddress, callers), key, labels);
+    return text != nullptr && !text->empty() ? *text : std::string("(the game's)");
+}
+
+} // namespace
+
+TEST_CASE("the command bar's hold buttons get the controller button for their raw key text") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    // The mission-complete screen's "ENTER HOLD TO CONTINUE", from GetKeyString and from the bar's update.
+    CHECK(keyNameAnswer(callers.getKeyString, callers) == KeyNameAnswer::LayerKey);
+    CHECK(keyNameAnswer(callers.commandBarUpdate, callers) == KeyNameAnswer::LayerKey);
+    CHECK(rawKeyText(callers.getKeyString, "ENTER", callers, set) == "Right Trigger");
+    CHECK(rawKeyText(callers.commandBarUpdate, "ENTER", callers, set) == "Right Trigger");
+    CHECK(rawKeyText(callers.getKeyString, "ESCAPE", callers, set) == "B");
+    // A hold button's E is a layer key (melee's button), not the tab lists' next tab.
+    CHECK(rawKeyText(callers.getKeyString, "E", callers, set) == layerText("E", set));
+    CHECK(rawKeyText(callers.getKeyString, "F", callers, set) == "(the game's)");
+}
+
+TEST_CASE("the tab lists' raw key text names the grips") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    CHECK(keyNameAnswer(callers.tabList[0], callers) == KeyNameAnswer::TabKey);
+    CHECK(rawKeyText(callers.tabList[0], "Q", callers, set) == "LG");
+    CHECK(rawKeyText(callers.tabList[1], "E", callers, set) == "RG");
+    CHECK(rawKeyText(callers.tabList[0], "ENTER", callers, set) == "(the game's)");
+}
+
+TEST_CASE("every other caller of the raw key text keeps the game's text") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    // KeyNameText's own neighbours (0x17E265B) and a HUD caller (0xF13563) are not prompts the layer answers.
+    for (const std::uintptr_t other :
+         {kBase + 0x17E265B, kBase + 0xF13563, callers.getKeyString + 1, std::uintptr_t{0}}) {
+        CHECK(keyNameAnswer(other, callers) == KeyNameAnswer::Game);
+        CHECK(rawKeyText(other, "ENTER", callers, set) == "(the game's)");
+    }
+    // A part not found at install stays 0 and answers nothing.
+    KeyNameCallers missing = callers;
+    missing.commandBarUpdate = 0;
+    CHECK(keyNameAnswer(callers.commandBarUpdate, missing) == KeyNameAnswer::Game);
+    CHECK(keyNameAnswer(callers.getKeyString, missing) == KeyNameAnswer::LayerKey);
+    CHECK(keyNameAnswer(0, KeyNameCallers{}) == KeyNameAnswer::Game);
+}

@@ -52,12 +52,13 @@ counts twice, and the critical path is each eye's command recording and submissi
 | Water (0x1422650) | `r_waterInterleaveUpdates` 1,1,1,0,0,0; `r_waterLodViewDistance` 16..64; caustics, hit simulation, post process off at L/M; `r_waterGridResolution` 192/256; `r_rainQuality` |
 | Texture filtering (0x14221A0) | `r_materialAniso`, `r_materialAnisoCover` 1..16 |
 | Motion blur quality (0x1421600) | `r_motionBlurQuality`, `r_blurRadialQuality` |
-| Texture pool (0x14222D0) | `is_poolSize` 1024 to 4608 MiB, and the minimum mips |
+| Texture pool (0x14222D0) | `is_poolSize` 1024 to 4608 MiB, and the minimum mips; the size by `r_useRayTracing` (Ultra Nightmare: 4096 with ray tracing on, 4608 off) |
+| Raytracing (0x1421BF0) | `r_useRayTracing` 0 / 1, the only ray tracing cvar it writes (rig, 2026-10-16); applied at once (the render-frame job 0x1CB9EE0 reads it every frame into the byte 0x667EC51 that gates the ray traced passes) and saved in profile.bin |
 
 Never written by the menu (only read by the renderer): `r_particleQualityLevel` (stays 3), `decal_MaxDecalsInRadius`,
 the shadow triangle limits, `r_shadowMaxStaleFrames`, `r_shadowParallelMaxStaleFrames`,
 `r_shadowPlayerMaxStaleFrames`, `r_skipShadowThrottle`, `r_shadowFadeRangeScale`, `r_contactShadows`. No gore,
-ragdoll or particle-count cvar is touched by the menu. `r_umbraMaxShadowQueriesVisible` / `Invisible` have no code
+ragdoll or particle-count cvar is touched by the menu. Neither is `r_enableRayTracing` ("Enable raytracing support", read only at renderer start-up, 0x1CC2CF0) nor `r_raytracedReflections` (read per view, 0x1C5DFD0): both stay 1 whatever the Raytracing setting (rig, 2026-10-16). `r_umbraMaxShadowQueriesVisible` / `Invisible` have no code
 reference beyond their registration (no effect), and `r_decalFilteringQuality` is probably unused.
 
 ## 3. The shadow update rate, per render
@@ -95,7 +96,7 @@ menu or raise a lower setting, so it is held as a cap, `<=N`, written only while
 | 9 | `r_decalDistanceFadeMultiplier <=0.5` | 1 (0.25 to 8) | decals fade out nearer | CPU decal culling and binning per view, GPU | distant blood and scorch marks fade | yes, as a cap | yes / no |
 | 10 | `r_particleQualityLevel 1` | 3 (menu never changes it) | "current particle quality level" (read in 0x1952660, 0x1953D90); effect unknown | unknown; measure | unknown; look | yes | no / cheat |
 | 11 | `r_lodScale <=1.625` | 1.0 (1.0 to 3.5) | lower LODs sooner | mostly GPU (triangles); draw count unchanged | coarser models at distance | yes, as a cap | yes / cheat |
-| 12 | `r_raytracedReflections 0` | the player's ray tracing choice | no ray-traced reflections | CPU (acceleration structure updates) and GPU | large on shiny surfaces | a menu choice, better left to the player (advice, not the preset) | yes |
+| 12 | `r_raytracedReflections 0` | 1 (the player's ray tracing choice is `r_useRayTracing`, section 2) | no ray-traced reflections | CPU (acceleration structure updates) and GPU | large on shiny surfaces | not a menu setting; ray tracing is the player's choice (`r_useRayTracing`), better left to the player (advice, not the preset) | yes |
 | - | `r_skipFlares 1`, `r_skipBeams 1`, `r_skipRibbons 1` | 0 | diagnostic only: to name the stereo-only particle-model work (0x1C86BA0 / 0x1C8B930, about 100x mono) | | removes effects | no (diagnostic) | cheat |
 | - | `r_umbraMaxShadowQueries*`, Umbra and job cvars | | no reference / measured before without gain (`perf-stereo-cpu.md` section 5) | none | | | |
 

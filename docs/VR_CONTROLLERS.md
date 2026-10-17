@@ -901,10 +901,20 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   (the right secondary button, which goes back in every menu), "[ENTER] SELECT" names the weapon hand's
   trigger (it clicks what the pointer is on), and the tab lists' Q and E name the left and right grips in
   short (LG, RG: the tab lists show about two letters, so "Left Grip" read "LE...").
-  The hint bars write their keys as key tokens through the same text pass as the popups; the tab lists
-  ask for their two keys' text on their own, and the layer answers only those two calls. Hint keys the
+  The hint bars write their keys as key tokens through the same text pass as the popups. The tab lists ask
+  for their two keys' text on their own (`KeyNameText`, the game's raw key text), and so does a hold button
+  in a hint bar: the mission-complete screen's "ENTER HOLD TO CONTINUE" asks once in `GetKeyString()`
+  (found by its error string) and once in the command bar's update (its one caller), each call right after
+  the button's hold flag test. The layer answers only those four calls, by their return addresses
+  (`features/input/prompt_keys.hpp`, `vkcore/prompt_command_bar.hpp`): the tab lists with the grips, the
+  hold buttons with the same buttons as the tokens. The screen reads "Right Trigger HOLD TO CONTINUE" on
+  Touch, and holding the trigger with the pointer on the button holds it (rig, OpenXR-Simulator, e1m2's
+  level transition, 2026-10-16: the game left for the Fortress 3.8 s after the trigger went down; held 6 s
+  with the pointer just below the button, the screen stayed). Offline, both calls resolve the same way in
+  the Game Pass 1.0.56.0 image (returns 0x15A1415 and 0x15A220F; Steam 0x159F095 and 0x159FE8F); not run on
+  Game Pass. The game's key matching (the bar's `KeyNumToString` calls) is left alone. Hint keys the
   controllers have no button for (R restore defaults, F apply, T and X in the Arsenal) keep the game's
-  keys, as do the few hold buttons in hint bars (the game names their key without a token).
+  keys.
   Everything is found by signature at start; if a part is missing the prompts stay the game's and the log
   says which part.
 - **From the title screen on.** The names come with the control map, and the mapper that builds it runs
@@ -922,7 +932,10 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   each path answered (`prompts: ... asks for _altfire (bindset 0): Right Grip`), the menu hints' texts when
   the control map is set (`prompts: menu hints: back (ESC) B, select (ENTER) Right Trigger, tabs (Q / E)
   Left Grip / Right Grip`) and the first time each fixed key is named (`prompts: the game's text names
-  ESCAPE: B`, `prompts: a tab list names Q: Left Grip`).
+  ESCAPE: B`, `prompts: a tab list names Q: Left Grip`, `prompts: a hold button names ENTER: Right
+  Trigger`). At start the log says which raw key texts are answered (`prompts: KeyNameText hook at RVA
+  0x17E2680; TabList calls at ...; hold buttons' calls at 0x159F095 (GetKeyString), 0x159FE8F (the command
+  bar's update)`, 0 for a part not found, which keeps the game's key there).
 
 ## Scripted input for rig tests
 

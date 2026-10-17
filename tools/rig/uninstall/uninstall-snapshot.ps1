@@ -99,12 +99,20 @@ function Compare-EvrSnapshot([string]$A, [string]$B, [string]$OutFile) {
     foreach ($f in (Get-ChildItem -LiteralPath $A -File | Sort-Object Name)) {
         $other = Join-Path $B $f.Name
         if (-not (Test-Path -LiteralPath $other)) { $report.Add("== $($f.Name): missing in $B"); continue }
-        $enc = if ($f.Extension -eq '.reg') { 'Unicode' } else { 'UTF8' }
-        $left = @(Get-Content -LiteralPath $f.FullName -Encoding $enc)
-        $right = @(Get-Content -LiteralPath $other -Encoding $enc)
-        $d = @(Compare-Object -ReferenceObject $left -DifferenceObject $right)
-        $report.Add("== $($f.Name): $(@($d | Where-Object SideIndicator -eq '=>').Count) added, $(@($d | Where-Object SideIndicator -eq '<=').Count) removed")
-        foreach ($x in $d) { $report.Add("$(if ($x.SideIndicator -eq '=>') { '+ ' } else { '- ' })$($x.InputObject)") }
+        $enc = if ($f.Extension -eq '.reg') { [Text.Encoding]::Unicode } else { [Text.Encoding]::UTF8 }
+        # Lines counted as a multiset (as Compare-Object does), but in one pass: the HKLM export is ~190 MB, and
+        # Compare-Object took over an hour on it once Windows had rewritten its performance counter names.
+        $count = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+        foreach ($l in [IO.File]::ReadAllLines($f.FullName, $enc)) { $c = 0; [void]$count.TryGetValue($l, [ref]$c); $count[$l] = $c + 1 }
+        foreach ($l in [IO.File]::ReadAllLines($other, $enc)) { $c = 0; [void]$count.TryGetValue($l, [ref]$c); $count[$l] = $c - 1 }
+        $added = New-Object System.Collections.Generic.List[string]
+        $removed = New-Object System.Collections.Generic.List[string]
+        foreach ($e in $count.GetEnumerator()) {
+            for ($i = $e.Value; $i -lt 0; ++$i) { $added.Add("+ $($e.Key)") }
+            for ($i = $e.Value; $i -gt 0; --$i) { $removed.Add("- $($e.Key)") }
+        }
+        $report.Add("== $($f.Name): $($added.Count) added, $($removed.Count) removed")
+        $report.AddRange($added); $report.AddRange($removed)
     }
     Set-Content -LiteralPath $OutFile -Value $report -Encoding utf8
     return $report

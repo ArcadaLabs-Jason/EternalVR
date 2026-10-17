@@ -6,6 +6,7 @@
 #include "vkcore/keep_prev_hooks.hpp"
 #include "vkcore/moved_flag_hooks.hpp"
 #include "vkcore/object_prev_hooks.hpp"
+#include "vkcore/ssr_noise_hooks.hpp"
 #include "vkcore/vis_gate_hooks.hpp"
 #include "vkcore/world_gui_hooks.hpp"
 
@@ -20,6 +21,7 @@ void installSeqEyeFixes() {
     installKeepPrevHooks();   // and their previous model matrix from eye L
     installGeomCachePrevHooks(); // and geometry caches (banners, hanging bodies) their previous frame
     installFxSyncHooks();        // CPU particles and effects alike in both eyes
+    installSsrNoiseHooks();      // the screen-space reflections' noise index
 }
 
 } // namespace evr::vkcore

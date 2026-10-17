@@ -124,7 +124,8 @@ headset.
    line stays parallel to the aim ray within 0.25° for every weapon; the owner's headset look on two or
    three weapons. The owner decided after his headset look (2026-10-13): sights are on for everyone with
    no option, and the weapons without a row yet follow as their rows are measured (T-135). Scopes do not
-   magnify (a picture-in-picture scope is a separate feature).
+   magnify for now; the owner agreed on 2026-10-16 that they need to eventually, as a scope lens after or at the end of
+   the beta (a picture-in-picture scope is a separate feature, T-136).
 3. **Arm solve and model.** The arm solve fixed, with unit tests: the wrist's twist measured from the
    bind pose and unwrapped, twist past the forearm's share passed to the upper arm, the wrist's swing
    clamped. The arms model chosen by the layer and set through the game's own model call (tried with

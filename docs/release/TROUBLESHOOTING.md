@@ -193,11 +193,13 @@ turned to follow your head, so looking around stays smooth, but moving things on
 draws. Headset overlays count this differently: some count every frame handed over (then they always show the
 headset's rate), others only frames with a new image, which is close to the real rate. The real number is in the
 mod's log: every 10 s a `rates:` line says how many `stereo pair(s)/s` the game drew and how many `frame(s)/s` went
-to the headset; the `game settings:` line lists the game's video settings the frames were drawn at. After a
-session the launcher's status line sums it up ("The game kept up with your headset: about 90 new frames a second at
-90 Hz", or "The game drew about 72 new frames a second at 90 Hz"), and the Play tab's Headset box shows the refresh
-rate your headset ran at. If the game was well below your headset's rate, see the next entries, or lower
-"Resolution" on the Play tab if your graphics card is the limit.
+to the headset; the `game settings:` line lists the game's video settings the frames were drawn at. Ray tracing
+there is `r_useRayTracing` (the game's Raytracing setting: 1 on, 0 off); a value with a note in brackets, such as
+`r_enableRayTracing 1 (support)`, is not a setting of the game's menu. After a session the launcher's status line
+sums it up ("The game kept up with your headset: about 90 new frames a second at 90 Hz", or "The game drew about 72
+new frames a second at 90 Hz"), and the Play tab's Headset box shows the refresh rate your headset ran at. If the
+game was well below your headset's rate, see the next entries, or lower "Resolution" on the Play tab if your
+graphics card is the limit.
 
 **The launcher says the game was held to half the refresh rate.** When the game falls behind, Virtual Desktop's
 SSW, Meta's ASW, Pimax's Smart Smoothing and SteamVR's Motion Smoothing or throttling ask the game for only half

@@ -81,7 +81,7 @@ namespace EternalVR.Launcher.Core.Report
 
         /// <summary>
         /// The game's video settings as the layer last logged them in <paramref name="sessionDir"/> (its <c>eternalvr-*.log</c> files,
-        /// the last written last): the text of the last <c>game settings:</c> line (<c>r_enableRayTracing 1, ..., g_fov 110</c>), or
+        /// the last written last): the text of the last <c>game settings:</c> line (<c>r_useRayTracing 0, r_enableRayTracing 1 (support), ..., g_fov 110</c>), or
         /// null when there is none. A log still open for writing is read too.
         /// </summary>
         public static string LastGameSettings(string sessionDir)

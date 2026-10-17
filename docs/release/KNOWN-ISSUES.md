@@ -231,11 +231,16 @@ them is worse for you than described here.
 
 ## Controllers and aiming
 
+- **A sweep of the right stick down can swap weapons.** The weapon wheel opens sooner (0.15 s) when the stick is
+  pushed within 20 degrees of straight down, so a sweep that drifts out of that cone after 0.15 s counts as a
+  hold and can swap weapons when you let go.
 - **Weapon placement** in your hand is one estimate for all weapons; some guns may sit a little off.
 - **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
   and Ballista point their sights where the shots go. The other guns follow; until then their sights can
-  point a little off your aim. Shots always go along your controller's aim, and the Aim dot sits exactly on
-  that line at any distance.
+  point a little off your aim. The sights run parallel to the shot line, about 13 to 21 cm above it, so up
+  close they sit a bit above where the shots go. The Ballista and the Chaingun have no sight parts, so they
+  line up along the barrel's bore (Ballista) and the zoom axis (Chaingun). Shots always go along your
+  controller's aim, and the Aim dot sits exactly on that line at any distance.
 - **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
   Aim dot shows where shots go.
@@ -243,7 +248,8 @@ them is worse for you than described here.
   for its iron sights, so with the Bolt the scope on the gun sits a little off the shot line. Go by the Aim
   dot.
 - **With head aim there is no crosshair or aim mark while the Precision Bolt is zoomed in.** Shots go to the
-  middle of your view. On the Game Pass version, head aim shows the scope's ring instead.
+  middle of your view. On the Game Pass version, head aim may still show the scope's ring (the zoom
+  bit is unchecked there; I have not tested it).
 - **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
   hand can cover it.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the

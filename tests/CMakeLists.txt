@@ -174,6 +174,7 @@ evr_add_test(evr_input_tests
         features/input/menu_release_latch_tests.cpp
         features/input/offhand_policy_tests.cpp
         features/input/player_controller_data_tests.cpp
+        features/input/prompt_keys_tests.cpp
         features/input/punch_detector_tests.cpp
         features/input/rest_touch_bindings_tests.cpp
         features/input/rest_wheel_tests.cpp
@@ -340,6 +341,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/seq_settings_tests.cpp
         stereo_seq/setting_follow_tests.cpp
         stereo_seq/ssdo_history_tests.cpp
+        stereo_seq/ssr_noise_tests.cpp
         stereo_seq/stack_budget_tests.cpp
         stereo_seq/stereo_taa_tests.cpp
         stereo_seq/vis_gate_tests.cpp

@@ -44,10 +44,13 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | Swing your right hand down from above your head (Overhead swing on) | Crucible, or the Sentinel Hammer (below) |
 | Throw both hands up above your head (Jump with both hands on) | Jump (below) |
 
-**The weapon wheel.** Push the right stick down and keep it there: after about a third of a second (0.15 s
-on the stick pushed straight down, 0.3 s if it is off to one side, then the game's own Weapon Wheel Open
-Delay, 0.18 s by default) the wheel opens (the game slows
-time) with the bottom weapon highlighted. Without letting go, roll the stick round to
+**The weapon wheel.** Push the right stick down and keep it there: after about a third of a second the
+wheel opens (the game slows time) with the bottom weapon highlighted. With the standard controls and the
+default Hold time (Medium), when the stick held down opens just the wheel, a push within 20 degrees of
+straight down waits 0.15 s and then the game's own Weapon Wheel Open Delay (0.18 s by default), about 0.33 s
+in all; off to one side it waits 0.3 s plus the same delay, about 0.48 s. The catch: a sweep that drifts out
+of that 20 degree cone after the first 0.15 s now counts as a hold, so letting go can swap weapons. Without
+letting go, roll the stick round to
 the weapon you want; the highlight follows the direction the stick points, however far it is pushed.
 Let the stick spring back to the centre to pick the highlighted weapon and close the wheel. A short flick
 down instead is the quick switch to your last weapon. The stick does not turn you while the wheel is held.

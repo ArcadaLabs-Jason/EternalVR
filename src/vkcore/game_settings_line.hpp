@@ -17,6 +17,9 @@ enum class CvarKind { Bool, Int, Float };
 struct SettingCvar {
     const char* name;
     CvarKind kind;
+    // Written in brackets after the value for a cvar the Video menu does not set ("support"), so the line is
+    // not read as the player's choice; nullptr for none.
+    const char* note = nullptr;
 };
 
 // The cvars behind the game's Video menu, in its order (reference/content/eternal-settings-menu.md,
@@ -30,6 +33,7 @@ struct SettingValue {
     std::string_view name;
     CvarKind kind = CvarKind::Int;
     State state = State::Read;
+    std::string_view note; // SettingCvar::note, empty for none
     int integer = 0;
     float number = 0.0f;
 };
@@ -38,7 +42,8 @@ struct SettingValue {
 // ("2.5", "0.25", "16").
 std::string formatValue(CvarKind kind, int integer, float number);
 
-// "r_enableRayTracing 1, r_lodScale 3.5, ...": every cvar that was found, "?" for one that could not be read.
+// "r_useRayTracing 0, r_enableRayTracing 1 (support), r_lodScale 3.5, ...": every cvar that was found, "?"
+// for one that could not be read, then its note in brackets.
 std::string formatLine(const std::vector<SettingValue>& values);
 
 // "a, b": the cvars that were not found, or empty.

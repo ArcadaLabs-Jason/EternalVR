@@ -162,6 +162,7 @@ add_library(evr_layer SHARED
     shader_dump_record.cpp
     ssdo_hooks.cpp
     ssdo_menu_hook.cpp
+    ssr_noise_hooks.cpp
     stall_watch.cpp
     status_file.cpp
     stereo_hooks.cpp
@@ -244,6 +245,7 @@ target_sources(evr_layer PRIVATE
     offhand_hook.cpp
     offhand_mods.cpp
     weapon_arm.cpp
+    prompt_command_bar.cpp
     prompt_hooks.cpp
     rest_wheel.cpp
     rumble_hook.cpp
