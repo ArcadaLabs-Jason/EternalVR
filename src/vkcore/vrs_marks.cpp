@@ -13,6 +13,7 @@
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/vrs_nv_impl.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -136,9 +137,11 @@ const std::vector<VkImageCopy>& regionsFor(VkExtent2D texel, int eye, VkOffset2D
     }
     const std::uint32_t columns = (extent.width + texel.width - 1) / texel.width;
     const std::uint32_t rows = (extent.height + texel.height - 1) / texel.height;
+    const std::uint32_t strideX = std::max(kStride, 32u / std::max(texel.width, 1u));
+    const std::uint32_t strideY = std::max(kStride, 32u / std::max(texel.height, 1u));
     std::vector<VkImageCopy> copies;
-    for (std::uint32_t ty = 0; ty < rows; ty += kStride) {
-        for (std::uint32_t tx = 0; tx < columns; tx += kStride) {
+    for (std::uint32_t ty = 0; ty < rows; ty += strideY) {
+        for (std::uint32_t tx = 0; tx < columns; tx += strideX) {
             const std::uint8_t rate = pattern[static_cast<std::size_t>(ty) * columns + tx];
             const std::uint32_t x = tx * texel.width + texel.width / 2 - kDot / 2;
             const std::uint32_t y = ty * texel.height + texel.height / 2 - kDot / 2;

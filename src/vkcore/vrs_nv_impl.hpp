@@ -55,16 +55,27 @@ struct RateImage {
 };
 
 struct VrsDevice {
-    bool on = false; // the extension is enabled
+    bool on = false;  // the extension is enabled
+    bool khr = false; // VK_KHR_fragment_shading_rate (AMD/Intel/NVIDIA); false for VK_NV_shading_rate_image
+    bool khrAttachment = false; // KHR attachmentFragmentShadingRate is active
+    bool khr4x4 = false;        // KHR device supports 4x4 fragment shading rate (false on AMD RDNA2/3)
     DeviceData* data = nullptr;
     VkExtent2D texel{16, 16};
     PFN_vkCreateGraphicsPipelines createGraphicsPipelines = nullptr;
     PFN_vkCmdBeginRenderPass cmdBeginRenderPass = nullptr;
     PFN_vkCmdBindShadingRateImageNV cmdBindShadingRateImage = nullptr;
+    PFN_vkCmdSetFragmentShadingRateKHR cmdSetFragmentShadingRate = nullptr;
+    PFN_vkCreateRenderPass createRenderPass = nullptr;
+    PFN_vkCreateRenderPass2 createRenderPass2 = nullptr;
+    PFN_vkDestroyRenderPass destroyRenderPass = nullptr;
+    PFN_vkCreateFramebuffer createFramebuffer = nullptr;
+    PFN_vkDestroyFramebuffer destroyFramebuffer = nullptr;
     PFN_vkCreateImageView createImageView = nullptr;
+    PFN_vkDestroyImageView destroyImageView = nullptr;
     PFN_vkCmdCopyBufferToImage cmdCopyBufferToImage = nullptr;
     std::mutex imagesMutex;
     std::unordered_map<std::uint64_t, RateImage> images; // by eye shape generation, size and eye
+    std::unordered_map<std::uint64_t, RateImage> neutralImages; // KHR 1x1 full-rate images by texel extent
     std::uint32_t imagesGeneration = 0;                  // the generation made last, and its images
     std::size_t generationImages = 0;
     bool imagesFull = false;
@@ -105,6 +116,8 @@ struct VrsDevice {
 };
 
 VrsDevice* deviceOf(DispatchKey key);
+void registerDevice(DispatchKey key, VrsDevice* d);
+void noteFollowsFrames();
 
 double nowSeconds();
 
@@ -125,6 +138,10 @@ std::vector<std::uint8_t> patternFor(VkExtent2D texel, VkExtent2D extent, int ey
 // The rate image for a render target of `extent` drawn for `eye`, or VK_NULL_HANDLE (full rate) while it is
 // not ready. Made and uploaded in `commandBuffer` the first time.
 VkImageView viewFor(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D extent, int eye);
+
+// A synchronous 1x1 full-rate attachment view for KHR framebuffers before an eye's rate image is ready.
+VkImageView neutralViewFor(VrsDevice& d, VkExtent2D extent);
+void ensureNeutralLayout(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D extent);
 
 // A render target that is not the eye image or a scaled copy of it (a shadow map, a look-up table) keeps
 // full rate; each size is logged once.

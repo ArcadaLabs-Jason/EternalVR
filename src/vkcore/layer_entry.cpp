@@ -32,6 +32,7 @@
 #include "vkcore/view_slots.hpp"
 #include "vkcore/view_snapshot.hpp"
 #include "vkcore/virtual_client.hpp"
+#include "vkcore/vrs_khr.hpp"
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/xr_presenter.hpp"
 
@@ -388,6 +389,11 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
         virtual_client::onGameDevice(*inst, physicalDevice, interop && plan.releaseImages);
     }
 
+    // Foveated rendering (vrs_nv / vrs_khr) is innermost of the chain; initialize before outer hooks.
+    if (interop && plan.shadingRateKhr)
+        vrs_khr::onDeviceCreated(*data, true);
+    else
+        vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate);
     // The shader dump (a rig tool, ETERNALVR_DUMP_SHADERS) only observes Vulkan calls, no game memory, so it
     // is not gated on the multiplayer guard: it keeps recording after a trip.
     shader_dump::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);
@@ -395,7 +401,6 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
     cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
     stall_watch::onDeviceCreated(*data, inst->isGame && !t_passThrough); // always on, after the dump
-    vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate); // ETERNALVR_VRS_TEST, innermost of the chain
     // ETERNALVR_TEST_CB_CHECK, a Parallel Eye Rendering rig tool: last, it chains to every hook above.
     cb_check::onDeviceCreated(*data, inst->isGame && !t_passThrough, &findDeviceHookAfterCheck);
 
@@ -437,21 +442,15 @@ PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name) {
     }
     EVR_HOOK(DestroyDevice)
 #undef EVR_HOOK
-    if (const PFN_vkVoidFunction queue = findQueueHook(name)) {
-        return queue;
-    }
-    if (const PFN_vkVoidFunction swapchain = findSwapchainHook(name)) {
-        return swapchain;
-    }
-    if (const PFN_vkVoidFunction stall = stall_watch::findHook(name)) { // chains to the shader dump's
-        return stall;
-    }
-    const PFN_vkVoidFunction cpu = cpu_timing::findHook(name); // chains to the GPU timing's, UI's or dump's
-    const PFN_vkVoidFunction timing = gpu_timing::findHook(name); // chains to the UI layer's where both hook
-    const PFN_vkVoidFunction ui = ui_vulkan::findHook(name); // chains to the shader dump's where both hook
-    const PFN_vkVoidFunction dump =
-        shader_dump::findHook(name); // chains to the VRS experiment's where both hook
-    return cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : vrs_nv::findHook(name);
+    if (const PFN_vkVoidFunction queue = findQueueHook(name)) return queue;
+    if (const PFN_vkVoidFunction swapchain = findSwapchainHook(name)) return swapchain;
+    if (const PFN_vkVoidFunction stall = stall_watch::findHook(name)) return stall;
+    const PFN_vkVoidFunction cpu = cpu_timing::findHook(name);
+    const PFN_vkVoidFunction timing = gpu_timing::findHook(name);
+    const PFN_vkVoidFunction ui = ui_vulkan::findHook(name);
+    const PFN_vkVoidFunction dump = shader_dump::findHook(name);
+    const PFN_vkVoidFunction khr = vrs_khr::findHook(name);
+    return cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : khr ? khr : vrs_nv::findHook(name);
 }
 
 // The command buffer check (a Parallel Eye Rendering rig tool, off by default: then null) goes before every

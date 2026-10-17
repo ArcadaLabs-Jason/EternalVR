@@ -102,6 +102,22 @@ std::array<foveation::EyeShapeLatch, 2> g_eyes;
 std::array<bool, 2> g_loggedCapped{};
 std::atomic<std::uint32_t> g_shapeGeneration{0};
 
+// Converts palette indices (kRateFull=0, kRateHalf=1, kRateQuarter=2) to VK_KHR_fragment_shading_rate bytes:
+// (log2(w) << 2) | log2(h). 1x1 = 0x00, 2x2 = 0x05, 4x4 = 0x0A (clamped to 2x2 when 4x4 is unsupported).
+std::vector<std::uint8_t> encodeKhrPattern(const std::vector<std::uint8_t>& pattern, bool allow4x4) {
+    constexpr std::uint8_t kKhr1x1 = 0x00;
+    constexpr std::uint8_t kKhr2x2 = 0x05;
+    constexpr std::uint8_t kKhr4x4 = 0x0A;
+    const std::uint8_t quarter = allow4x4 ? kKhr4x4 : kKhr2x2;
+    std::vector<std::uint8_t> out(pattern.size());
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        out[i] = pattern[i] == foveation::kRateFull   ? kKhr1x1
+                 : pattern[i] == foveation::kRateHalf ? kKhr2x2
+                                                      : quarter;
+    }
+    return out;
+}
+
 // Creates the rate image for `pattern` and records its upload into `commandBuffer` (outside a render pass).
 bool createAndUpload(VrsDevice& d,
                      VkCommandBuffer commandBuffer,
@@ -109,6 +125,11 @@ bool createAndUpload(VrsDevice& d,
                      const std::vector<std::uint8_t>& pattern,
                      RateImage& out) {
     DeviceData& data = *d.data;
+    const VkImageUsageFlags usage = d.khr
+                                        ? (VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR |
+                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                                        : (VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV |
+                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     info.imageType = VK_IMAGE_TYPE_2D;
     info.format = VK_FORMAT_R8_UINT;
@@ -117,7 +138,7 @@ bool createAndUpload(VrsDevice& d,
     info.arrayLayers = 1;
     info.samples = VK_SAMPLE_COUNT_1_BIT;
     info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    info.usage = VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    info.usage = usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (data.vk.CreateImage(data.device, &info, nullptr, &out.image) != VK_SUCCESS) {
@@ -141,8 +162,9 @@ bool createAndUpload(VrsDevice& d,
     if (d.createImageView(data.device, &view, nullptr, &out.view) != VK_SUCCESS) {
         return false;
     }
+    const std::vector<std::uint8_t> encoded = d.khr ? encodeKhrPattern(pattern, d.khr4x4) : pattern;
     VkBufferCreateInfo buffer{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    buffer.size = pattern.size();
+    buffer.size = encoded.size();
     buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     if (data.vk.CreateBuffer(data.device, &buffer, nullptr, &out.staging) != VK_SUCCESS) {
@@ -159,7 +181,7 @@ bool createAndUpload(VrsDevice& d,
         data.vk.MapMemory(data.device, out.stagingMemory, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS) {
         return false;
     }
-    std::memcpy(mapped, pattern.data(), pattern.size());
+    std::memcpy(mapped, encoded.data(), encoded.size());
     data.vk.UnmapMemory(data.device, out.stagingMemory);
 
     VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
@@ -178,12 +200,15 @@ bool createAndUpload(VrsDevice& d,
     d.cmdCopyBufferToImage(commandBuffer, out.staging, out.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &copy);
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
+    barrier.newLayout = d.khr ? VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR
+                              : VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV;
-    data.vk.CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               VK_PIPELINE_STAGE_SHADING_RATE_IMAGE_BIT_NV, 0, 0, nullptr, 0, nullptr, 1,
-                               &barrier);
+    barrier.dstAccessMask = d.khr ? VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR
+                                  : VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV;
+    const VkPipelineStageFlags dstStage = d.khr ? VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR
+                                                : VK_PIPELINE_STAGE_SHADING_RATE_IMAGE_BIT_NV;
+    data.vk.CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage, 0, 0, nullptr, 0,
+                               nullptr, 1, &barrier);
     out.uploadedBy = commandBuffer;
     out.uploadedAt = nowSeconds();
     return true;
@@ -329,6 +354,116 @@ VkImageView viewFor(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D exte
     d.images[key] = image; // kept even when it failed, so it is not tried again
     ++d.generationImages;
     return image.view;
+}
+
+VkImageView neutralViewFor(VrsDevice& d, VkExtent2D extent) {
+    const VkExtent2D texels{(extent.width + d.texel.width - 1) / d.texel.width,
+                            (extent.height + d.texel.height - 1) / d.texel.height};
+    const std::uint64_t key = packed(texels);
+    std::lock_guard lock(d.imagesMutex);
+    if (const auto it = d.neutralImages.find(key); it != d.neutralImages.end()) {
+        return it->second.view;
+    }
+    RateImage& out = d.neutralImages[key];
+    DeviceData& data = *d.data;
+    VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    info.imageType = VK_IMAGE_TYPE_2D;
+    info.format = VK_FORMAT_R8_UINT;
+    info.extent = {texels.width, texels.height, 1};
+    info.mipLevels = 1;
+    info.arrayLayers = 1;
+    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.usage = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (data.vk.CreateImage(data.device, &info, nullptr, &out.image) != VK_SUCCESS) {
+        return VK_NULL_HANDLE;
+    }
+    VkMemoryRequirements req{};
+    data.vk.GetImageMemoryRequirements(data.device, out.image, &req);
+    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    alloc.allocationSize = req.size;
+    alloc.memoryTypeIndex = memoryType(data, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (alloc.memoryTypeIndex == UINT32_MAX ||
+        data.vk.AllocateMemory(data.device, &alloc, nullptr, &out.memory) != VK_SUCCESS ||
+        data.vk.BindImageMemory(data.device, out.image, out.memory, 0) != VK_SUCCESS) {
+        return VK_NULL_HANDLE;
+    }
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = out.image;
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = VK_FORMAT_R8_UINT;
+    view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    if (d.createImageView(data.device, &view, nullptr, &out.view) != VK_SUCCESS) {
+        out.view = VK_NULL_HANDLE;
+    }
+    return out.view;
+}
+
+void ensureNeutralLayout(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D extent) {
+    const VkExtent2D texels{(extent.width + d.texel.width - 1) / d.texel.width,
+                            (extent.height + d.texel.height - 1) / d.texel.height};
+    const std::uint64_t key = packed(texels);
+    {
+        std::lock_guard lock(d.imagesMutex);
+        const auto it = d.neutralImages.find(key);
+        if (it == d.neutralImages.end() || it->second.uploadedBy != VK_NULL_HANDLE ||
+            it->second.image == VK_NULL_HANDLE) {
+            return;
+        }
+        RateImage& img = it->second;
+        DeviceData& data = *d.data;
+        const std::size_t bytes = static_cast<std::size_t>(texels.width) * texels.height;
+        VkBufferCreateInfo buffer{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        buffer.size = bytes;
+        buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkMemoryRequirements req{};
+        VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        void* mapped = nullptr;
+        if (data.vk.CreateBuffer(data.device, &buffer, nullptr, &img.staging) == VK_SUCCESS) {
+            data.vk.GetBufferMemoryRequirements(data.device, img.staging, &req);
+            alloc.allocationSize = req.size;
+            alloc.memoryTypeIndex = memoryType(
+                data, req.memoryTypeBits,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            if (alloc.memoryTypeIndex != UINT32_MAX &&
+                data.vk.AllocateMemory(data.device, &alloc, nullptr, &img.stagingMemory) == VK_SUCCESS &&
+                data.vk.BindBufferMemory(data.device, img.staging, img.stagingMemory, 0) == VK_SUCCESS &&
+                data.vk.MapMemory(data.device, img.stagingMemory, 0, VK_WHOLE_SIZE, 0, &mapped) ==
+                    VK_SUCCESS) {
+                std::memset(mapped, 0, bytes); // 0x00 = 1x1 full shading rate everywhere
+                data.vk.UnmapMemory(data.device, img.stagingMemory);
+            }
+        }
+        VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = img.image;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        data.vk.CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   0, 0, nullptr, 0, nullptr, 1, &barrier);
+        if (mapped) {
+            VkBufferImageCopy copy{};
+            copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copy.imageExtent = {texels.width, texels.height, 1};
+            d.cmdCopyBufferToImage(commandBuffer, img.staging, img.image,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        }
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR;
+        data.vk.CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR, 0, 0, nullptr,
+                                   0, nullptr, 1, &barrier);
+        img.uploadedBy = commandBuffer;
+        img.uploadedAt = nowSeconds();
+    }
 }
 
 } // namespace evr::vkcore::vrs_nv

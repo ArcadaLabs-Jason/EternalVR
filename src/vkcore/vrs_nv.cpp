@@ -8,6 +8,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/vrs_gui.hpp"
+#include "vkcore/vrs_khr.hpp"
 #include "vkcore/vrs_nv_impl.hpp"
 
 #include <algorithm>
@@ -159,6 +160,15 @@ VrsDevice* deviceOf(DispatchKey key) {
     return it == g_devices.end() ? nullptr : it->second;
 }
 
+void registerDevice(DispatchKey key, VrsDevice* d) {
+    std::unique_lock lock(g_devicesMutex);
+    g_devices[key] = d;
+}
+
+void noteFollowsFrames() {
+    g_followsFrames.store(true, std::memory_order_relaxed);
+}
+
 bool wanted() {
     return settings().mode != Mode::Off;
 }
@@ -278,6 +288,9 @@ void noteSwapchain(VkDevice device, VkExtent2D extent) {
 PFN_vkVoidFunction findHook(const char* name) {
     if (!wanted()) {
         return nullptr;
+    }
+    if (const PFN_vkVoidFunction khr = vrs_khr::findHook(name)) {
+        return khr;
     }
     if (std::strcmp(name, "vkCreateGraphicsPipelines") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(&CreateGraphicsPipelines);

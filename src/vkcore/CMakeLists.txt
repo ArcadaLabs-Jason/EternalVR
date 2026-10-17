@@ -261,6 +261,7 @@ target_sources(evr_layer PRIVATE
     viewmodel_hook.cpp
     vrs_command_buffers.cpp
     vrs_gui.cpp
+    vrs_khr.cpp
     vrs_marks.cpp
     vrs_nv.cpp
     vrs_pass_eye.cpp

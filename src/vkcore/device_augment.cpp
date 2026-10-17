@@ -1,7 +1,9 @@
 #include "vkcore/device_augment.hpp"
 
+#include "vkcore/dump_format.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/status_file.hpp"
+#include "vkcore/vrs_khr.hpp"
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/window_cap.hpp"
 
@@ -99,6 +101,13 @@ void planDeviceAugment(DeviceAugment& plan,
     }
     plan.ok = true;
     plan.shadingRate = vrs_nv::planDevice(inst, physicalDevice, plan.extensions);
+    if (!plan.shadingRate) {
+        plan.shadingRateKhr = vrs_khr::planDevice(inst, physicalDevice, plan.extensions);
+        if (plan.shadingRateKhr &&
+            dump::findInChain(info.pNext, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR)) {
+            plan.shadingRateKhr = nullptr; // already in the game's create chain; avoid duplicate
+        }
+    }
     logDriver(inst, physicalDevice, supported(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME));
 
     // Optional: the window's presents (Route S). Leaves the interop plan as it is when unavailable.
