@@ -23,7 +23,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Advanced
         VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms,
         HudDistance, HudSize, HudHeight, HudPlace,
-        MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, ExtraArguments,
+        MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, AdapterSteer, ExtraArguments,
     }
 
     /// <summary>

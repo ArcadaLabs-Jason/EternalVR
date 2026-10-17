@@ -31,7 +31,8 @@ namespace EternalVR.Launcher.Core.Settings
             return sb.ToString().TrimEnd('\n') + "\n";
         }
 
-        private static Dictionary<string, string> ReadMap(string text)
+        /// <summary>The <c>key = value</c> lines of a settings file (comments and blank lines skipped; a later key wins), keys in any case.</summary>
+        internal static Dictionary<string, string> ReadMap(string text)
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in (text ?? string.Empty).Replace("\r\n", "\n").Split('\n'))
@@ -42,7 +43,8 @@ namespace EternalVR.Launcher.Core.Settings
             return map;
         }
 
-        private static string KeyOf(string raw)
+        /// <summary>The key of a settings line; null for a comment, a blank line or a line without one.</summary>
+        internal static string KeyOf(string raw)
         {
             var line = raw.Trim();
             if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal) || line.StartsWith(";", StringComparison.Ordinal)) return null;

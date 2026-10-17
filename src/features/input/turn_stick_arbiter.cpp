@@ -1,7 +1,9 @@
 #include "features/input/turn_stick_arbiter.hpp"
 
 #include "common/finite.hpp"
+#include "features/input/tap_hold.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -9,15 +11,15 @@ namespace evr::input {
 
 namespace {
 
-constexpr float kMaxHoldSeconds = 5.0f;
-
 TurnStickSettings sanitized(const TurnStickSettings& settings) {
     const bool usable = finiteInRange(settings.centreRadius, 0.0f, 0.9f) &&
                         finiteInRange(settings.turnClaim, settings.centreRadius, 0.9f) &&
                         finiteInRange(settings.gestureEngage, settings.centreRadius, 1.0f) &&
                         finiteInRange(settings.claimConeDegrees, 0.0f, 89.0f) &&
                         finiteInRange(settings.stayConeDegrees, settings.claimConeDegrees, 89.0f) &&
-                        finiteInRange(settings.holdSeconds, 0.0f, kMaxHoldSeconds);
+                        finiteInRange(settings.holdSeconds, 0.0f, kMaxHoldSeconds) &&
+                        finiteInRange(settings.earlyHoldSeconds, 0.0f, kMaxHoldSeconds) &&
+                        finiteInRange(settings.earlyConeDegrees, 0.0f, settings.stayConeDegrees);
     return usable ? settings : TurnStickSettings{};
 }
 
@@ -31,6 +33,14 @@ bool inVerticalCone(Axis2 stick, float sign, float coneDegrees) {
 }
 
 } // namespace
+
+float wheelStickHoldSeconds(float buttonHoldSeconds) {
+    if (!std::isfinite(buttonHoldSeconds)) {
+        return kWheelStickHoldSeconds;
+    }
+    return std::clamp(buttonHoldSeconds - (kDefaultHoldSeconds - kWheelStickHoldSeconds),
+                      kMinWheelStickHoldSeconds, kMaxHoldSeconds);
+}
 
 TurnStickArbiter::TurnStickArbiter(TurnStickSettings settings) : settings_(sanitized(settings)) {}
 
@@ -119,7 +129,9 @@ TurnStickOutput TurnStickArbiter::continueDown(Axis2 stick) {
             intent_ = SweepIntent::Cancelled;
             return {};
         }
-        holdReached_ = downSeconds_ >= settings_.holdSeconds;
+        holdReached_ = downSeconds_ >= settings_.holdSeconds ||
+                       (downSeconds_ >= settings_.earlyHoldSeconds &&
+                        inVerticalCone(stick, -1.0f, settings_.earlyConeDegrees));
     }
     TurnStickOutput output;
     if (holdReached_) {

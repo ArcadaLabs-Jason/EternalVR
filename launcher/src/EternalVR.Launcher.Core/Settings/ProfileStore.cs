@@ -6,11 +6,13 @@ using System.Linq;
 namespace EternalVR.Launcher.Core.Settings
 {
     /// <summary>
-    /// Player profiles: named copies of the Play and Advanced settings, one file per profile in
-    /// <c>&lt;data folder&gt;\profiles\&lt;name&gt;.ini</c> (launcher.ini's format). launcher.ini stays the settings in
-    /// use and names the active profile (<c>profile</c>); the window saves a change to both. A profile never
-    /// carries this machine's game folder, layer folder or OpenXR runtime: loading one keeps them, as Reset to
-    /// defaults does.
+    /// Player profiles: named sets of the Play and Advanced settings, one file per profile in
+    /// <c>&lt;data folder&gt;\profiles\&lt;name&gt;.ini</c> (launcher.ini's format). A profile is a preset plus the player's own
+    /// changes (REQ-10): its file names its preset (<c>preset</c>) and holds only the settings that differ from it
+    /// (<see cref="ProfileEdits"/>); a file from an older launcher holds every setting and reads the same. The first time
+    /// such a file is saved over, it is kept in <see cref="BackupDir"/>. launcher.ini stays the settings in use and names the
+    /// active profile (<c>profile</c>); the window saves a change to both. A profile never carries this machine's game
+    /// folder, layer folder or OpenXR runtime: loading one keeps them, as Reset to Recommended does.
     /// </summary>
     public sealed class ProfileStore
     {
@@ -34,6 +36,9 @@ namespace EternalVR.Launcher.Core.Settings
         }
 
         public string Dir { get; }
+
+        /// <summary>Each profile file as an older launcher wrote it (every setting, no <c>preset</c>), kept the first time it is saved over.</summary>
+        public string BackupDir => Path.Combine(Dir, "backup");
 
         /// <summary>
         /// A profile name as typed, trimmed; null when it cannot be a profile: empty, longer than
@@ -61,10 +66,14 @@ namespace EternalVR.Launcher.Core.Settings
                 .ToList();
         }
 
-        public bool Exists(string name) => NormaliseName(name) is string n && FileOf(n) != null;
+        public bool Exists(string name) => ExistingFile(name) != null;
 
-        /// <summary>Writes <paramref name="settings"/> as the profile <paramref name="name"/>, without this machine's folders, runtime and DLSS file.</summary>
-        public void Save(string name, LauncherSettings settings)
+        /// <summary>
+        /// Writes <paramref name="settings"/> as the profile <paramref name="name"/>: its preset and the settings that differ
+        /// from it (<see cref="ProfileEdits.ProfileText"/>, CPU Saver items compared by <paramref name="saver"/>'s), without this
+        /// machine's folders, runtime, DLSS file and graphics card choice.
+        /// </summary>
+        public void Save(string name, LauncherSettings settings, Launch.CpuSaver saver = null)
         {
             var n = NormaliseName(name) ?? throw new ArgumentException("not a profile name: " + name, nameof(name));
             var copy = LauncherSettings.Parse(settings.Serialize());
@@ -72,23 +81,40 @@ namespace EternalVR.Launcher.Core.Settings
             copy.LayerDir = string.Empty;
             copy.Runtime = LauncherSettings.SystemRuntime;
             copy.DlssDllPath = string.Empty;
+            copy.AdapterSteer = false;
             copy.Profile = string.Empty;
             Directory.CreateDirectory(Dir);
-            FileUtil.WriteAllTextAtomic(PathOf(n), copy.Serialize());
+            KeepOlderFile(n);
+            FileUtil.WriteAllTextAtomic(PathOf(n), ProfileEdits.ProfileText(copy, saver));
         }
 
         /// <summary>
-        /// The profile <paramref name="name"/>'s settings with <paramref name="current"/>'s folders and runtime, and
+        /// Copies the profile's file into <see cref="BackupDir"/> when an older launcher wrote it (no <c>preset</c> line) and no
+        /// copy is there yet: the file about to replace it holds only the changes from Recommended.
+        /// </summary>
+        private void KeepOlderFile(string name)
+        {
+            if (!(ExistingFile(name) is string file)) return;
+            if (LauncherSettings.ReadMap(File.ReadAllText(file)).ContainsKey("preset")) return;
+            var backup = Path.Combine(BackupDir, Path.GetFileName(file));
+            if (File.Exists(backup)) return;
+            Directory.CreateDirectory(BackupDir);
+            File.Copy(file, backup);
+        }
+
+        /// <summary>
+        /// The profile <paramref name="name"/>'s settings with <paramref name="current"/>'s folders, runtime, DLSS file and graphics card, and
         /// <see cref="LauncherSettings.Profile"/> set to it; null when there is no such profile.
         /// </summary>
         public LauncherSettings Load(string name, LauncherSettings current)
         {
-            if (!(NormaliseName(name) is string n) || !(FileOf(n) is string file)) return null;
-            var s = LauncherSettings.Parse(File.ReadAllText(file));
+            if (!(NormaliseName(name) is string n) || !(ExistingFile(n) is string file)) return null;
+            var s = ProfileEdits.FromProfileText(File.ReadAllText(file));
             s.GameDir = current.GameDir;
             s.LayerDir = current.LayerDir;
             s.Runtime = current.Runtime;
             s.DlssDllPath = current.DlssDllPath;
+            s.AdapterSteer = current.AdapterSteer;
             s.Profile = n;
             return s;
         }
@@ -96,18 +122,22 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>Removes the profile's file; nothing when there is none.</summary>
         public void Delete(string name)
         {
-            if (NormaliseName(name) is string n && FileOf(n) is string file) File.Delete(file);
+            if (ExistingFile(name) is string file) File.Delete(file);
         }
 
-        private string PathOf(string name) => Path.Combine(Dir, name + Extension);
+        /// <summary>The file profile <paramref name="name"/> has or would have (the name as given).</summary>
+        public string PathOf(string name) => Path.Combine(Dir, name + Extension);
 
         /// <summary>
-        /// The file of the profile <paramref name="name"/>, its case ignored as Windows does on every OS; null when there is none.
+        /// The file of the profile <paramref name="name"/>, its case ignored as Windows does on every OS; null when there is none
+        /// or the name cannot be a profile.
         /// </summary>
-        private string FileOf(string name)
+        public string ExistingFile(string name)
         {
+            if (!(NormaliseName(name) is string n)) return null;
+            name = n;
             if (File.Exists(PathOf(name))) return PathOf(name);
-            var found = Names().FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            var found = Names().FirstOrDefault(other => string.Equals(other, name, StringComparison.OrdinalIgnoreCase));
             return found == null ? null : PathOf(found);
         }
     }

@@ -12,7 +12,9 @@ launcher (Release), unless -NoBuild, then checks what it is about to ship:
   - the layer manifest names VK_LAYER_ETERNALVR and points at .\EternalVR.dll;
   - the launcher's data files are byte-identical to launcher/data, and its data\controllers\*.toml to
     data/input/controllers (the built-in controller maps the launcher's Edit controls copies out);
-  - every shipped binary is ours or is named in THIRD_PARTY_NOTICES.md, and no other binary slipped in.
+  - every shipped binary is ours or is named in THIRD_PARTY_NOTICES.md, and no other binary slipped in;
+  - THIRD_PARTY_NOTICES.md has a section for the version cmake/ pins of safetyhook, the OpenXR loader and
+    Vulkan-Headers.
 Then it assembles EternalVR-<channel>-<version>-<shortsha>\ in the output folder:
 
   EternalVR.Launcher.exe, EternalVR.Launcher.exe.config, EternalVR.Launcher.Core.dll, data\*.txt,
@@ -137,12 +139,32 @@ function Test-RelSources($state) {
     foreach ($name in $script:ThirdPartyBinaries) {
         if ($notices.IndexOf($name, [StringComparison]::OrdinalIgnoreCase) -lt 0) { Stop-Refused "THIRD_PARTY_NOTICES.md does not name $name" }
     }
+    foreach ($pin in (Get-RelPinnedDependencies $repo)) {
+        if ($notices.IndexOf("## $($pin.Name) $($pin.Version) ", [StringComparison]::Ordinal) -lt 0) {
+            Stop-Refused "THIRD_PARTY_NOTICES.md has no section for $($pin.Name) $($pin.Version), the version $($pin.File) pins"
+        }
+    }
     Write-RelLog "sources: version $($state.Version) (layer and launcher agree), $($builds.Count) supported game build(s), $($maps.Count) controller map(s), docs and notices present"
     return $builds
 }
 
 # Binaries we ship that are not ours; each must be named in THIRD_PARTY_NOTICES.md.
 $script:ThirdPartyBinaries = @('openxr_loader.dll')
+
+# The redistributed libraries whose version a cmake file pins. THIRD_PARTY_NOTICES.md must have a section
+# headed with each name and the pinned version, so a version bump without a notices update is refused.
+function Get-RelPinnedDependencies([string]$Repo) {
+    $pins = @(
+        @{ Name = 'safetyhook'; File = 'cmake\EvrSafetyHook.cmake'; Pattern = 'safetyhook/releases/download/v(\d+\.\d+\.\d+)/' }
+        @{ Name = 'OpenXR loader'; File = 'cmake\EvrOpenXr.cmake'; Pattern = 'EVR_OPENXR_VERSION "([^"]+)"' }
+        @{ Name = 'Vulkan-Headers'; File = 'cmake\EvrVulkanHeaders.cmake'; Pattern = 'EVR_VULKAN_HEADERS_VERSION "([^"]+)"' }
+    )
+    foreach ($p in $pins) {
+        $text = [IO.File]::ReadAllText((Join-Path $Repo $p.File))
+        if ($text -notmatch $p.Pattern) { Stop-Refused "No pinned $($p.Name) version found in $($p.File)" }
+        [pscustomobject]@{ Name = $p.Name; Version = $Matches[1]; File = $p.File }
+    }
+}
 
 function Get-RelDocs([string]$Repo) {
     $d = Join-Path $Repo 'docs\release'

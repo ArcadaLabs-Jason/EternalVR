@@ -1,5 +1,6 @@
 #include "vkcore/ui_capture.hpp"
 
+#include "common/finishes.hpp"
 #include "stereo_seq/png_writer.hpp"
 #include "vkcore/log.hpp"
 
@@ -7,7 +8,10 @@
 
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace evr::vkcore {
@@ -126,24 +130,39 @@ void UiCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
         range.size = VK_WHOLE_SIZE;
         dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
     }
-    auto pixels =
-        std::make_shared<std::vector<std::uint8_t>>(std::size_t{extent_.width} * extent_.height * 4);
-    std::memcpy(pixels->data(), mapped_, pixels->size());
-    state_ = State::Idle;
-    writerBusy_->store(true);
+    // An exception must not leave the present hook or the writer thread (it would end the game): without
+    // the memory or a thread for it, this capture is skipped, as the eye capture skips a pair. Everything
+    // that allocates here does so inside a `finishes` (the writer's captures are moved in, which cannot
+    // throw).
     wchar_t name[96];
     swprintf_s(name, L"\\ui-%lu-c%06llu.png", GetCurrentProcessId(), static_cast<unsigned long long>(index_));
     const bool once = !currentPath_.empty();
-    const std::wstring path = once ? currentPath_ : directory_ + name;
+    std::shared_ptr<std::vector<std::uint8_t>> pixels;
+    std::wstring path;
+    state_ = State::Idle;
+    const bool ready = finishes([&] {
+        pixels = std::make_shared<std::vector<std::uint8_t>>(std::size_t{extent_.width} * extent_.height * 4);
+        path = once ? std::move(currentPath_) : directory_ + name;
+    });
     currentPath_.clear();
+    if (!ready) {
+        EVR_LOG("ui: no memory for GUI target capture %llu; skipped",
+                static_cast<unsigned long long>(index_));
+        return;
+    }
+    std::memcpy(pixels->data(), mapped_, pixels->size());
+    writerBusy_->store(true);
     const VkExtent2D extent = extent_;
     const bool logIt = !once && ++written_ <= 10; // the eye capture logs a one-shot
     const std::uint64_t index = index_;
     // The DLL is pinned by the XR worker, so the thread's code outlives any unload of the layer.
-    std::thread([busy = writerBusy_, pixels, path, extent, logIt, index] {
-        const auto png = stereo_seq::encodePngRgba8(pixels->data(), extent.width, extent.height);
+    auto write = [busy = writerBusy_, pixels = std::move(pixels), path = std::move(path), extent, logIt,
+                  index] {
+        std::vector<std::uint8_t> png;
+        bool ok =
+            finishes([&] { png = stereo_seq::encodePngRgba8(pixels->data(), extent.width, extent.height); });
         std::FILE* f = nullptr;
-        bool ok = _wfopen_s(&f, path.c_str(), L"wb") == 0 && f;
+        ok = ok && _wfopen_s(&f, path.c_str(), L"wb") == 0 && f;
         if (ok) {
             ok = std::fwrite(png.data(), 1, png.size(), f) == png.size();
             ok = std::fclose(f) == 0 && ok;
@@ -153,7 +172,11 @@ void UiCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
                     ok ? "written" : "NOT written", extent.width, extent.height);
         }
         busy->store(false);
-    }).detach();
+    };
+    if (!finishes([&] { std::thread(std::move(write)).detach(); })) {
+        writerBusy_->store(false);
+        EVR_LOG("ui: no thread for GUI target capture %llu; skipped", static_cast<unsigned long long>(index));
+    }
 }
 
 void UiCapture::destroy(DeviceData& dev) {

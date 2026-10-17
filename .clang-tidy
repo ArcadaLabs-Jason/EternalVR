@@ -1,42 +1,54 @@
 ---
-# Checks that find real bugs or keep the code modern, minus the ones that mostly produce noise for
-# this codebase (math-heavy code with many small numeric literals and short variable names).
+# A conservative set: the checks that find bugs (bugprone-*), wasted work (performance-*), and a few
+# modernize, readability and misc checks that agree with the existing style. tools/run_clang_tidy.py runs
+# it over src/ and fails on findings not in its baseline (CONTRIBUTING.md).
+#
+# Left out, and why:
+# - bugprone-easily-swappable-parameters: math code takes several floats or vectors in a row by design.
+# - bugprone-signed-bitwise: flags and bit fields are built from int constants (Windows, Vulkan, the
+#   game's own fields); the operands are never negative.
+# - bugprone-multi-level-implicit-pointer-conversion, performance-no-int-to-ptr: the hooks read and patch
+#   the game's memory through addresses and void pointers on purpose.
+# - bugprone-throwing-static-initialization: file-scope containers in the layer; an allocation failure
+#   while the DLL loads is not something it could recover from anyway.
+# - misc-misplaced-const: Vulkan handles and function pointers are typedefs of pointers, so `const
+#   VkDevice` is the intended const pointer.
+# - performance-enum-size: the size of an enum is not where the layer's time or memory goes.
+# - bugprone-implicit-widening-of-multiplication-result: index and size arithmetic on small ints, kept
+#   readable.
+# - bugprone-invalid-enum-default-initialization: the OpenXR, Vulkan and Direct3D info structs are
+#   value-initialized (`{}`) and then filled; their C enums have no zero value.
+# Also not enabled: the clang-analyzer-* checks (the path-sensitive analyzer, a much slower pass not tried
+# on this code yet), the cppcoreguidelines-*, hicpp-* and other style sets, and the rest of modernize-* and
+# readability-* (style the code does not follow; clang-format handles layout).
 Checks: >
   -*,
   bugprone-*,
-  modernize-*,
   performance-*,
-  readability-*,
+  misc-redundant-expression,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-redundant-void-arg,
+  modernize-use-bool-literals,
+  modernize-deprecated-headers,
+  readability-misleading-indentation,
+  readability-duplicate-include,
+  readability-misplaced-array-index,
+  readability-redundant-string-cstr,
+  readability-delete-null-pointer,
+  readability-static-accessed-through-instance,
+  readability-string-compare,
+  readability-container-size-empty,
+  readability-redundant-smartptr-get,
+  readability-inconsistent-declaration-parameter-name,
   -bugprone-easily-swappable-parameters,
-  -modernize-use-trailing-return-type,
-  -modernize-use-nodiscard,
-  -modernize-use-designated-initializers,
-  -modernize-use-ranges,
-  -readability-magic-numbers,
-  -readability-identifier-length,
-  -readability-function-cognitive-complexity,
-  -readability-uppercase-literal-suffix,
-  -readability-braces-around-statements,
-  -readability-math-missing-parentheses,
-  -readability-avoid-unconditional-preprocessor-if
+  -bugprone-signed-bitwise,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-throwing-static-initialization,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-invalid-enum-default-initialization,
+  -performance-no-int-to-ptr,
+  -performance-enum-size
 WarningsAsErrors: ''
-HeaderFilterRegex: '(src|tests)/'
-FormatStyle: file
-CheckOptions:
-  - key: readability-identifier-naming.NamespaceCase
-    value: lower_case
-  - key: readability-identifier-naming.ClassCase
-    value: CamelCase
-  - key: readability-identifier-naming.StructCase
-    value: CamelCase
-  - key: readability-identifier-naming.EnumCase
-    value: CamelCase
-  - key: readability-identifier-naming.FunctionCase
-    value: camelBack
-  - key: readability-identifier-naming.PrivateMemberSuffix
-    value: _
-  - key: readability-identifier-naming.ConstexprVariablePrefix
-    value: k
-  - key: readability-identifier-naming.ConstexprVariableCase
-    value: CamelCase
+HeaderFilterRegex: '.*[/\\]src[/\\].*'
 ...

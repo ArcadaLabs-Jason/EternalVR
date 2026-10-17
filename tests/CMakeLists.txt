@@ -15,6 +15,7 @@ endif()
 
 evr_add_test(evr_common_tests
     SOURCES
+        common/finishes_tests.cpp
         common/mat4_tests.cpp
         common/parse_float_tests.cpp
         common/pose_tests.cpp
@@ -70,6 +71,8 @@ evr_add_test(evr_game_eternal_tests
         game/eternal/quest_touch_bindings_tests.cpp
         game/eternal/usercmd_buttons_tests.cpp
         game/eternal/weapon_offsets_tests.cpp
+        game/eternal/zoom_look_tests.cpp
+        game/eternal/zoom_look_book_tests.cpp
     DEPENDS evr_input)
 
 evr_add_test(evr_posture_tests
@@ -135,6 +138,7 @@ evr_add_test(evr_foveation_tests
 
 evr_add_test(evr_input_tests
     SOURCES
+        features/input/action_aim_punch_tests.cpp
         features/input/action_aim_tests.cpp
         features/input/aim_smoothing_tests.cpp
         features/input/analog_button_tests.cpp
@@ -163,6 +167,7 @@ evr_add_test(evr_input_tests
         features/input/input_mapper_rest_tests.cpp
         features/input/input_mapper_rest_button_tests.cpp
         features/input/input_mapper_touch_button_tests.cpp
+        features/input/input_mapper_wheel_hold_tests.cpp
         features/input/input_mapper_wheel_tests.cpp
         features/input/input_mapper_locomotion_tests.cpp
         features/input/locomotion_direction_tests.cpp
@@ -245,6 +250,7 @@ target_compile_definitions(evr_mp_policy_tests
 
 evr_add_test(evr_key_injection_tests
     SOURCES
+        platform/key_injection/cursor_hold_tests.cpp
         platform/key_injection/injected_keys_tests.cpp
         platform/key_injection/us_scan_codes_tests.cpp
     DEPENDS evr_key_injection)
@@ -294,6 +300,10 @@ if(Python3_Interpreter_FOUND)
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/tools/stereo")
     set_tests_properties(evr_eye_diff_tests PROPERTIES
         ENVIRONMENT "TMPDIR=${CMAKE_BINARY_DIR}/tmp;TEMP=${CMAKE_BINARY_DIR}/tmp;TMP=${CMAKE_BINARY_DIR}/tmp")
+    # The clang-tidy check's baseline comparison (tools/run_clang_tidy.py); needs no clang-tidy.
+    add_test(NAME evr_run_clang_tidy_tests
+        COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s tools/tests -v
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 endif()
 
 evr_add_test(evr_stereo_seq_tests

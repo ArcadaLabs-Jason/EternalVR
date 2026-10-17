@@ -24,11 +24,14 @@ added without a cell the next cells in turn, skipping hidden ones), and in a siz
 not fill it or an empty band below the last row. `<dpi>-summary.txt` lists every shot with its fault count. The faults
 are hints; look at every picture.
 
-The shots: the main window's tabs and its bar with "Update to x.y.z..."; its status line with the start watchdog's
+The shots: the main window's tabs (the Advanced tab also scrolled to its end) and its bar with "Update to x.y.z..."; its status line with the start watchdog's
 two longest warnings and after a crash; the update dialog able to install, unable for each reason (game running, not
 a release, folder not writable), downloading, installing, failed, and failed after the files were replaced; the DLSS
-download (offer, downloading, failed); the controls editor; the weapon directions; Restore saves; the new profile
-name. The `-layout` shots take the controls editor (with and without a VR settings profile), the main window and
+download (offer, downloading, failed); the controls editor; the weapon directions; the report saved (its links to GitHub and Discord and the capture hint); Restore saves; the profile name
+dialogs (new, rename, duplicate); the Play and Advanced tabs with a VR settings profile that changes five settings
+from Recommended (`main-profile-changes-*`). After those, `ProfileFlow` uses the profile strip as a player would (puts
+one setting back from its row, saves, duplicates, renames the copy, answering each name dialog) and writes
+`<dpi>-profile-flow.txt`, one `ok` or `FAIL` line per check; a failed check counts as a fault for `--check`. The `-layout` shots take the controls editor (with and without a VR settings profile), the main window and
 Restore saves through the scale changes of displays at 96, 120, 144 and 168 DPI (up and down, then back to the
 display's own), a resize smaller and larger, maximise and restore, and the controls editor's notes shown and hidden,
 one shot after each. A faked scale change leaves the frame Windows draws at the display's scale, so the window is

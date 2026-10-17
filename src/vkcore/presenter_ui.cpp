@@ -295,7 +295,8 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
     const bool menu = menuUp.load(std::memory_order_relaxed);
     const bool backdrop = uiBackdrop.backdrop();
     const ui_layer::CrosshairMode crosshair = settings.ui.crosshair;
-    runtime_cvars::wantReticleHidden(ui_layer::wantsReticleHold(crosshair, handAim));
+    runtime_cvars::wantReticleHidden(
+        ui_layer::wantsReticleHold(crosshair, handAim, controllers::scopeZoomed()));
     const bool held = crosshair == ui_layer::CrosshairMode::Hold && runtime_cvars::reticleHiddenConfirmed();
     const bool mask = ui_layer::centreMasked(
         {.mode = crosshair, .handAim = handAim, .menu = menu, .backdrop = backdrop, .holdConfirmed = held});

@@ -1,5 +1,7 @@
 #include "features/input/input_mapper.hpp"
 
+#include "common/finite.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -36,6 +38,11 @@ MapperSettings sanitized(MapperSettings settings, const BindingProfile& profile)
     settings.move = sanitizedResponse(settings.move, kMoveStickResponse);
     settings.buttonHoldSeconds = TapHoldDetector(settings.buttonHoldSeconds).holdSeconds();
     settings.turnStick = TurnStickArbiter(settings.turnStick).settings();
+    settings.wheelStickHoldSeconds =
+        finiteInRangeOr(settings.wheelStickHoldSeconds, 0.0f, kMaxHoldSeconds, kWheelStickHoldSeconds);
+    if (downHoldOnlyOpensWheel(profile)) {
+        settings.turnStick.earlyHoldSeconds = settings.wheelStickHoldSeconds;
+    }
     settings.turn = TurnPolicy(settings.turn).settings();
     // A sweep only starts turning once the arbiter has claimed it as a turn, so smooth turning ramps
     // up from zero at the claim deflection. Measured from the response deadzone instead, the rate
@@ -91,6 +98,19 @@ bool gestureActive(StickGesture gesture, const TurnStickOutput& output) {
 }
 
 } // namespace
+
+bool downHoldOnlyOpensWheel(const BindingProfile& profile) {
+    bool wheel = false;
+    for (const StickGestureBinding& binding : profile.stickGestures) {
+        if (binding.gesture == StickGesture::DownHold) {
+            if (binding.action != game::GameAction::WeaponWheel) {
+                return false;
+            }
+            wheel = true;
+        }
+    }
+    return wheel;
+}
 
 std::array<std::array<OwnControls, kControlTouchCount>, 2> MapperSettings::defaultTouchOwnControls() {
     std::array<OwnControls, kControlTouchCount> hand;
@@ -252,6 +272,8 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     input.thrown = arms.thrown;
     input.swung = arms.swung;
     if (punch_.update(frame, arms.heldBack)) {
+        input.meleeFromPunch = !game::contains(input.down, game::GameAction::Melee) &&
+                               !game::contains(previousDown_, game::GameAction::Melee);
         game::add(input.down, game::GameAction::Melee);
         input.punch = punch_.punched();
     }

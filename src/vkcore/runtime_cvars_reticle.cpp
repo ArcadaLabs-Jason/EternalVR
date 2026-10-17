@@ -88,14 +88,14 @@ bool applyReticle(Held& h, cvar_book::SetStringFn set) {
     switch (turn) {
     case ui_layer::ReticleWrite::Hide:
         value = h.value;
-        why = "hand aim: the game's crosshair hidden";
+        why = "hand aim or a scoped zoom: the game's crosshair hidden";
         break;
     case ui_layer::ReticleWrite::Restore:
         static_assert(ui_layer::kHoldStaleMs == 500 && ui_layer::kHoldStalePresents == 4, "named in the log");
         value = std::to_string(h.reticleKeep.before);
         why = asked ? "the hold's request lapsed (no GUI copy for 0.5 s and 4 presents): the game's "
                       "crosshair back"
-                    : "the hold's request ended (no hand aim): the game's crosshair back";
+                    : "the hold's request ended (no hand aim) and no scoped zoom: the game's crosshair back";
         break;
     case ui_layer::ReticleWrite::None:
         break;
@@ -113,6 +113,10 @@ bool applyReticle(Held& h, cvar_book::SetStringFn set) {
                 h.written = true;
                 EVR_LOG("%s: %s %d -> %s (reads %d); %s (%llu write(s))", kTag, h.name.c_str(), before,
                         value.c_str(), readValue(h.object), why, static_cast<unsigned long long>(g_turns));
+            } else if (g_loggedTurns == kLoggedTurns) {
+                ++g_loggedTurns; // once: a log that ends here is not the whole story
+                EVR_LOG("%s: later writes are counted, not logged (%llu write(s))", kTag,
+                        static_cast<unsigned long long>(g_turns));
             }
         }
     }

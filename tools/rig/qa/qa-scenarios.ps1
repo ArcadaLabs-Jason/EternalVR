@@ -169,12 +169,62 @@ function Test-QaHoldStays($Ctx) {
         ($first -ge 0 -and $after -eq 0) "$($states.Count) line(s) of $($span.Count): $($states -join ', ')"
 }
 
+# The Precision Bolt's zoom decl line (T-136): the gun stays, no scope GUI, and the zoomed scope reticle swapped for
+# the weapon's own (the swap is what keeps the HUD under the crosshair hold).
+$script:QaBoltLook = "zoom look: 'weapon/player/heavy_cannon_bolt_action[^']*': hands hidden on zoom [01] -> 0, after \d+ -> 0 ms, " +
+    "scope GUI [1-6] -> 0, zoomed reticle 'weaponreticle/[^']+_zoomed' -> 'weaponreticle/[^']+'"
+
+function Test-QaScopeLook($Ctx) {
+    Test-QaPresent $Ctx $script:QaBoltLook -Regex
+    Test-QaPresent $Ctx 'zoom look: scoped zoom starts'
+}
+
+# The layer logs the first 20 scoped zoom starts and ends together (vkcore/zoom_look.cpp kLoggedZooms) and the reticle
+# cvar's first write and 12 more (runtime_cvars_reticle.cpp kLoggedTurns, each line counting all writes so far).
+$script:QaLoggedZooms = 20
+
+# Under head aim the hold writes only for a scoped zoom, and each zoom ends with the game's crosshair back: every `-> 0`
+# write of hud_reticle_styleOverride comes after a `scoped zoom starts` with no `scoped zoom ends` between them, the
+# last start has an end after it and a write back (`0 -> ...`, `... and no scoped zoom`) after that end, and neither
+# log hit its cap (a capped log could hide a stuck hold).
+function Test-QaHoldOnlyScoped($Ctx) {
+    $lines = @((Get-QaLogText $Ctx) -split "`r?`n")
+    $scoped = $false
+    $writes = 0
+    $outside = 0
+    $zoomLines = 0
+    $lastStart = -1
+    $lastEnd = -1
+    $lastBack = -1
+    $capped = $false
+    for ($i = 0; $i -lt $lines.Count; ++$i) {
+        $line = $lines[$i]
+        if ($line.Contains('zoom look: scoped zoom starts')) { $scoped = $true; $zoomLines++; $lastStart = $i }
+        elseif ($line.Contains('zoom look: scoped zoom ends')) { $scoped = $false; $zoomLines++; $lastEnd = $i }
+        if ($line.Contains('cvars: later writes are counted, not logged')) { $capped = $true }
+        if ($line -match 'cvars: hud_reticle_styleOverride .*\(\d+ write\(s\)\)') {
+            if ($line -match 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\)') {
+                $writes++
+                if (-not $scoped) { $outside++ }
+            } elseif ($line -match 'hud_reticle_styleOverride 0 -> -?\d+ .*and no scoped zoom') {
+                $lastBack = $i
+            }
+        }
+    }
+    Add-QaResult $Ctx 'head aim: hud_reticle_styleOverride written to 0 only in a scoped zoom' ($writes -gt 0 -and $outside -eq 0) `
+        "$writes write(s), $outside outside a scoped zoom"
+    Add-QaResult $Ctx 'head aim: the last scoped zoom ended, and the crosshair was written back after it' `
+        ($lastStart -ge 0 -and $lastEnd -gt $lastStart -and $lastBack -gt $lastEnd) "start line $lastStart, end line $lastEnd, write back line $lastBack"
+    Add-QaResult $Ctx 'head aim: the zoom and cvar logs are complete (under their caps, every write logged)' `
+        ($zoomLines -lt $script:QaLoggedZooms -and -not $capped) "$zoomLines zoom line(s) of $script:QaLoggedZooms, cvar log capped: $capped"
+}
+
 function New-QaCrosshairScenario([string]$Mode, [string]$Aim) {
     $name = if ($Aim -eq 'head') { "crosshair-$Mode-head" } else { "crosshair-$Mode" }
     $proves = switch ($name) {
         'crosshair-hold' { 'ETERNALVR_UI_CROSSHAIR=hold: hud_reticle_styleOverride 0 reaches the game under hand aim, the hold is confirmed and the GUI copy keeps its centre (map markers, the ability indicators and the chainsaw text visible; the game''s crosshair not)' }
         'crosshair-mask' { 'ETERNALVR_UI_CROSSHAIR=mask (the earlier behaviour, the positive control): the centre square of the GUI copy is cleared under hand aim and no cvar is held for it' }
-        default { 'ETERNALVR_UI_CROSSHAIR=hold under head aim: nothing is held and the game''s crosshair stays' }
+        default { 'ETERNALVR_UI_CROSSHAIR=hold under head aim: the game''s crosshair stays, held at none only while the Precision Bolt is zoomed (no scope ring, T-136)' }
     }
     return @{
         Name = $name; Kind = 'game'; Proves = $proves
@@ -240,6 +290,7 @@ function New-QaCrosshairScenario([string]$Mode, [string]$Aim) {
                     Test-QaPresent $c 'held at run time: .*hud_reticle_styleOverride 0 while hand aim is on' -Regex
                     Test-QaPresent $c 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\); hand aim' -Regex
                     Test-QaHoldStays $c
+                    Test-QaScopeLook $c
                 }
                 'crosshair-mask' {
                     Test-QaPresent $c "the game's crosshair under hand aim: mask"
@@ -247,8 +298,9 @@ function New-QaCrosshairScenario([string]$Mode, [string]$Aim) {
                 }
                 'crosshair-hold-head' {
                     Test-QaPresent $c "the game's crosshair under hand aim: hold"
-                    Test-QaAbsent $c 'hud_reticle_styleOverride -?\d+ -> 0' -Regex
+                    Test-QaHoldOnlyScoped $c
                     Test-QaAbsent $c 'ui: crosshair hold confirmed'
+                    Test-QaScopeLook $c
                 }
             }
         }

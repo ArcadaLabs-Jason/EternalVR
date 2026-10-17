@@ -314,6 +314,11 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.Runtime] = new Text("OpenXR runtime",
                 "The program that connects the game to your headset. The system default is the one your headset's software "
                 + "set; choose another only if you use more than one."),
+            [Setting.AdapterSteer] = new Text("Use the headset's graphics card",
+                "For a PC with two or more graphics cards. On: the game renders on the card your headset's runtime uses, when "
+                + "it would otherwise pick another one and VR could not start. The mod changes only the order of the cards "
+                + "the game picks from. Off by default: the game picks its card as before. For this PC: kept when you switch "
+                + "VR settings profiles. Not yet tried on a two-GPU PC with a headset."),
             [Setting.ExtraArguments] = new Text("Extra game arguments",
                 "Extra command-line text for the game, for testing. Multiplayer arguments are refused."),
         };

@@ -17,7 +17,9 @@ After a problem, click **Export report...** in the launcher (or run
 `EternalVR.Launcher.exe --export-report <file.zip>`). It shows the files it will save and their total size,
 then asks where to save the zip (the Desktop, `EternalVR-report-v<version>-<date>-<ID>.zip`). The ID is six random letters and
 digits, also at the top of `system.txt`; it only tells reports apart and says nothing about you or your PC. Attach that zip to a GitHub
-issue (or your Discord message) and say what you were doing. If the game went wrong in an older session than the newest
+issue (or your Discord message) and say what you were doing: **Report on GitHub** and **EternalVR on Discord**, beside the
+button (in a narrow launcher window, their logos at the end of the status line) and in the window that says the zip
+was saved, open the issues page and the Discord bug report channel in your browser (Discord needs no GitHub account). If the game went wrong in an older session than the newest
 five, zip that `logs\<session>` folder by hand as well.
 
 **Something looks wrong in one eye, or only in the headset?** Hold the left Menu button and pull a trigger
@@ -25,6 +27,11 @@ while you see it (under SteamVR with Touch-type controllers: hold both sticks pr
 firm left trackpad press; Steam Frame: View). The mod saves a screenshot of each eye and of the HUD (the log says `capture: saved`),
 then carries on: the game does not pause, recenter or fire. Afterwards click **Export report...**: the newest captures go into the zip. Say
 which capture shows the problem (the file names hold the time).
+
+**Just want the screenshots?** They are PNG files in `%LOCALAPPDATA%\EternalVR\logs\<session>\captures\` (the
+**Open data folder** button gets you to `%LOCALAPPDATA%\EternalVR\`). Each capture's files start with
+`capture-<date>-<time>`; the one ending `-L.png` is the left eye, `-R.png` the right eye, `-UI.png` the HUD. They are the full per-eye picture, so they are also the cleanest way to
+take a screenshot of your game in VR.
 
 What the zip holds, in this order (the list lives in the launcher as `ReportManifest.cs`):
 
@@ -314,7 +321,7 @@ load. The usual reasons:
 | The graphics driver lacks a feature, or Direct3D 12 could not start | Update the graphics driver |
 | The game's graphics device (or its Vulkan instance) could not be set up for the headset | Turn off overlays and other Vulkan layers (recording, FPS counters, tuning tools), then update the graphics driver; if it stays, send an Export report |
 | No headset found yet | Connect the headset and start its runtime (Virtual Desktop, SteamVR, Link) |
-| The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics). On a PC with two dedicated graphics cards, send an Export report: a launcher option that steers the game to the headset's card is in testing. |
+| The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics). On a PC with two or more dedicated graphics cards, tick "Use the headset's graphics card" on the launcher's Advanced tab: the game then renders on the card the headset's runtime uses. It is new and not yet tried on a two-GPU PC with a headset; if VR still does not start, send an Export report. |
 | The headset disconnected or its runtime stopped | Quit the game and start again from the launcher |
 | The headset runtime would not start VR for the game | Restart the headset runtime (Virtual Desktop, SteamVR, Link), then the game |
 | An online mode or a multiplayer invite switched VR off | By design; restart from the launcher |

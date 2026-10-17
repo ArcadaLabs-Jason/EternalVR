@@ -201,7 +201,7 @@ checks the fault does not touch (bones, swing, reach, landed, mirror, sight) giv
 
 ## 6. Weapon sights, angle only (2026-10-12, OpenXR-Simulator)
 
-`ETERNALVR_WEAPON_SIGHTS=1` turns each weapon with a `[sights]` row in `data/weapons/viewmodel_offsets.toml` about
+`ETERNALVR_WEAPON_SIGHTS=1` (on by default since T-135) turns each weapon with a `[sights]` row in `data/weapons/viewmodel_offsets.toml` about
 the grip so its sight line runs parallel to the aim ray (docs/VR_CONTROLLERS.md, "Viewmodel offsets and tuning").
 The rig run for it (`tmp-vr\rs\hands\sights-sweep.ps1` on the rig PC) is the sweep above with `give all` in the
 debug schedule and a rig controls file that binds a touch per weapon slot (`right.primary_touch.tap` =

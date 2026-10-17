@@ -76,6 +76,26 @@ namespace EternalVR.Launcher.Core.Launch
                 .ToList();
         }
 
+        /// <summary>
+        /// The inherited variables of <see cref="LoggedPrefixes"/> that <paramref name="changes"/> sets to another value (or
+        /// removes), with their inherited values, sorted by name; for the launch plan's log, so a value set by hand that the
+        /// launch overrides is named.
+        /// </summary>
+        public static IReadOnlyList<KeyValuePair<string, string>> Replaced(IEnumerable<KeyValuePair<string, string>> inherited,
+                                                                           IEnumerable<KeyValuePair<string, string>> changes)
+        {
+            var env = Merge(inherited, null);
+            var replaced = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in changes ?? Enumerable.Empty<KeyValuePair<string, string>>())
+            {
+                if (env.TryGetValue(kv.Key, out var was) && was != kv.Value && LoggedPrefixes.Any(p => kv.Key.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                    replaced[kv.Key] = was;
+                else
+                    replaced.Remove(kv.Key);
+            }
+            return replaced.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
         /// <summary>The launcher's own environment as name and value pairs (both spellings of a name that differs only in case).</summary>
         public static IReadOnlyList<KeyValuePair<string, string>> Current()
         {

@@ -403,6 +403,18 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
     target, so neither change moves it, only the game's own angles turn. A press goes out at once where the
     camera hook writes nothing (a menu or popup is up, a scripted camera), and equipment and Belch presses
     are never held back (neither launch reads the view).
+  - A punch (`punch_detector.hpp`) is melee aimed with the head whatever `ETERNALVR_MELEE_AIM` says, held
+    back the same way: the mapper marks a melee press that comes from the punch alone
+    (`GameInput::meleeFromPunch`), and the policy runs under hand aim even with both settings on the weapon
+    hand. The punch is measured along the head's forward, and the fist (often the off hand's) says nothing
+    about where the weapon hand's ray points; with that ray the game took the glory kill's target and turn
+    from wherever the gun pointed (a player's three 0.1.50 sessions: all 6 kills whose view turned more than 100
+    degrees, up to 177, came in 10 s windows with a punch; no kill without a punch in its 10 s window turned
+    more than 92). A punch's head target that is not written within 0.1 s goes out anyway, as for the
+    setting. A
+    stick-click melee keeps the setting. The fists of a punch stay at the hand as before (the viewmodel
+    follows the game's view only with the setting at `head` or `offhand`). Log: `action aim: the view follows
+    the head for melee (a punch) (generation N)`, then the held-back press line as above.
   - Equipment: the launcher and the Belch do not aim with the view. Static RE (build 25216728): a frag
     grenade or ice bomb is queued by `UseEquipmentItem` (0x1466CE0) and launched about 0.15 s later (rig) by
     the launch animation's event through `idHandsItem::LaunchEquipmentLauncher` (0x1389470), which takes its
@@ -603,7 +615,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_SWING_SPEED` | the swing's downward speed, 1 to 5 metres per second | 2.5 |
 | `ETERNALVR_POSE_GUARD` | `1` / `0`: with `0` hand positions that jump further than a hand moves are used as they are, and so is any hand velocity (docs/VR_ROOMSCALE.md, Tracked positions that jump) | `1` |
 | `ETERNALVR_PUNCH_SPEED` | how fast a hand must move where the head looks to punch, 1 to 4 metres per second; the launcher's Punch speed: Light 1.6, Medium 2.2, Hard 2.8, Very hard 3.4 | 2.8 |
-| `ETERNALVR_HOLD_SECONDS` | how long a button is held before its hold action starts (a shorter press is a tap), 0.1 to 1 s; the stick held down for the weapon wheel waits 0.05 s longer; it also sets the both-sticks recenter and capture chords (the recenter hold still totals its own time); the launcher's Hold time: Short 0.15, Medium 0.25, Long 0.4, Very long 0.6 | 0.25 |
+| `ETERNALVR_HOLD_SECONDS` | how long a button is held before its hold action starts (a shorter press is a tap), 0.1 to 1 s; the stick held down waits 0.05 s longer (0.30 s at the default), and when the weapon wheel is all it opens a push within 20 degrees of straight down holds sooner, 0.10 s less than the buttons, at least 0.10 s (0.15 s at the default; up to 0.1.50 always 0.30 s, so 0.48 s with the game's 0.18 s open delay before the wheel opened, 0.33 s now): the wheel's key is also the quick switch's and the game tells a tap from a hold after its own delay, so a flick is still a quick switch (`features/input/turn_stick_arbiter.hpp`). The trade-off: a down push that rolls out of the 45-degree stay cone after 0.15 s is a hold and its release swaps the weapon, where up to 0.1.50 it was cancelled until 0.30 s (R14 failure mode 4); a roll already past 20 degrees at 0.15 s is still cancelled. A player's map that binds the down hold to anything else has no early hold. Logged `controllers: the turn stick's down hold (the weapon wheel's): 0.15 s within 20 deg of straight down, else 0.30 s; ...`; it also sets the both-sticks recenter and capture chords (the recenter hold still totals its own time); the launcher's Hold time: Short 0.15, Medium 0.25, Long 0.4, Very long 0.6 | 0.25 |
 | `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
 | `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
 | `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |
@@ -622,7 +634,8 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
 | `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
 | `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning); a `[sights]` row still turns the model on top of it, and the fists of a melee or a Blood Punch still follow the game's view under hand aim with `ETERNALVR_MELEE_AIM` at `head` or `offhand`, as without it | the table |
-| `ETERNALVR_WEAPON_SIGHTS` | `1` (or `on`): rig tests for now: each weapon with a `[sights]` row in the offsets table is turned about the grip so its sight line runs parallel to the aim ray (below); the shot ray and the aim dot do not change | `0` |
+| `ETERNALVR_WEAPON_SIGHTS` | `1` (or `on`): each weapon with a `[sights]` row in the offsets table is turned about the grip so its sight line runs parallel to the aim ray (below); the shot ray and the aim dot do not change. `0` (or `off`): rig and debug only, the model not turned; never offered to players, the launcher sends nothing for it (T-135) | `1` |
+| `ETERNALVR_ZOOM_LOOK` | rig and debug only: what the layer changes while a weapon is zoomed (below, "Zoomed weapons"): `all`, `off` (the game's own: the gun hidden, the scope drawn, and under the crosshair hold no HUD while scoped), or a list of `hands` (the gun stays) and `scope` (no scope GUI, the weapon's own reticle while zoomed, and the crosshair hold under head aim while a scoped weapon is zoomed) | `all` |
 | `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
 | `ETERNALVR_TEST_ARM_DUMP` | rig tests: a file the layer appends one JSON line to every 0.25 s with both arms' poses as written and read back, the scripted input as read, the arms model's placement, the held item, the weapon's root joint and the ray shots take; read by the hands rig's checker ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) | none |
@@ -947,16 +960,84 @@ holding a hand still, change the value between runs until the gun's grip sits on
 the row. The held item's name and offset are logged on each change. The key is the base weapon's decl: a
 weapon mod does not change the held item's decl, so one row covers every mod of a weapon.
 
-Weapon sights (`ETERNALVR_WEAPON_SIGHTS=1`, rig tests for now): the table's `[sights]` section gives, per
-weapon, the direction of its sight line in the arms model's frame as the game animates it at idle
-(`[pitch, yaw]`, degrees, pitch positive down, yaw positive to the left: counter-clockwise seen from
-above). After the offset the model is turned about the grip, so the hand stays on the controller, until
-that line runs parallel to the aim ray; a rotation in the offset (or in `ETERNALVR_VIEWMODEL_OFFSET`) is
-then a deliberate turn away from parallel. The shots and the aim dot keep the controller's ray: the sights
-point where the shots go, a fixed distance beside the ray (the sights' height and side above the hand). A
-weapon without a row (there is no default) is not turned. The held-item line logs the row and how far it
-turns the model. The rows are measured on the hands rig
+Weapon sights (on by default, T-135; `ETERNALVR_WEAPON_SIGHTS=0` turns them off on the rig): the table's
+`[sights]` section gives, per weapon, the direction of its sight line in the arms model's frame as the game
+animates it at idle (`[pitch, yaw]`, degrees, pitch positive down, yaw positive to the left:
+counter-clockwise seen from above). After the offset the model is turned about the grip, so the hand stays
+on the controller, until that line runs parallel to the aim ray; a rotation in the offset (or in
+`ETERNALVR_VIEWMODEL_OFFSET`) is then a deliberate turn away from parallel. The shots and the aim dot keep
+the controller's ray: the sights point where the shots go, a fixed distance beside the ray (the sights'
+height and side above the hand). A weapon without a row (there is no default) is not turned. The held-item
+line logs the row and how far it turns the model. The rows are measured on the hands rig
 ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)).
+
+Zoomed weapons (T-136; `src/game/eternal/zoom_look.hpp`, `zoom_look_book.hpp`, `src/vkcore/zoom_look.cpp`): a
+weapon's zoom (`ironSightZoom` in its decl) can hide the hands and the gun at the zoom's start
+(`hideHandsOnZoom`) or once zoomed for `hideHandsOnZoomDelay` (the Precision Bolt: 74 ms), draw a scope GUI
+(`scopeGuiNum`) and switch to a zoomed reticle (`reticleWhenZoomed`), for the Precision Bolt a full-screen scope
+(`zoomStyle` `RETICLE_ZOOM_STYLE_SCOPE`). In the headset the world is not magnified (the view keeps the
+headset's FOV), so in 0.1.50 the gun vanished from the hand, under head aim a ring and vignette covered the
+head-locked panel, and under hand aim the crosshair hold left the game drawing no screen GUI at all while
+scoped, the HUD included. Now:
+
+- With the controllers' viewmodel on, the viewmodel hook looks at the held weapon's decls: its own, its
+  `secondaryFireDecl`, and per fire mode `idWeapon::weaponModOverrides[].weaponDecl` and
+  `superchargeParms[].weaponDecl`, the decls the game takes the zoom from (the weapon is reached through
+  `idHandsItem::item`, whose second word is the object, and is used only when it names the held decl). It
+  writes only a decl whose own values hide the hands at the zoom's start or draw a scope GUI
+  (`zoomLookNeeded`): the hands are hidden neither at the start nor after the delay (`hideHandsOnZoom` false,
+  the delay's gameTime and milliseconds 0: the game adds hidden reason 2 when either asks), and where it draws
+  a scope, no scope GUI and the weapon's own reticle while zoomed (with the zoomed scope reticle and the
+  reticle style held at none the game drew no screen GUI; with its own, the HUD stays). A hide delay alone is
+  left as the game has it: the Heavy Cannon's own decl and `heavy_cannon_burst_detonate` carry 150 ms and kept
+  the gun on the rig with the look off. A decl is written only when its fields read as a weapon decl's and it
+  has a reticle whose decl name checks out (the layout anchor), and only while the multiplayer guard allows game
+  touches (asked again right before each write) and the zoom look's trip listener is in. Each written decl is
+  logged once (`zoom look: '<decl>': hands hidden on zoom 0 -> 0, after 74 -> 0 ms, scope GUI 2 -> 0, zoomed
+  reticle '<a>' -> '<b>'`); a write that fails part way is rolled back, or kept on record as partial and put
+  back by the restore. Which decls are written (rig `w2-sweep`: `e5m2_earth` after `give all`, each of the 8 weapon slots drawn
+  and zoomed with both its mods: the Combat Shotgun's pop rockets and full auto, the Heavy Cannon's Precision
+  Bolt and `burst_detonate_mastery`, the Plasma Rifle's microwave and AOE, the Rocket Launcher's detonate and
+  `lock_mod_mastery`, the Super Shotgun with its meat hook, the Ballista's two mods, the Chaingun's turret and
+  energy shell, the BFG 9000 and the Unmaykr): only `weapon/player/heavy_cannon_bolt_action`. No other decl
+  among them hides the gun at the zoom's start or draws a scope; the supercharge decls read none throughout,
+  and the Crucible (no slot on the rig's controls) was not drawn.
+- The scope's ring is not in the decls the layer can change after the HUD has loaded (head aim drew it with
+  the weapon's own reticle as the zoomed one, and with the zoomed reticle's `zoomStyle` and `showZoom` written
+  to none). So while the player is zoomed (`idPlayer` zoom flags byte 0x736E, bit 1) with a decl whose game
+  value has a scope GUI, `controllers::scopeZoomed` asks the presenter for the crosshair hold
+  (`hud_reticle_styleOverride 0`, `ui_layer/crosshair.hpp`) under head aim too; under hand aim it is held
+  anyway. Logged at each start and end (`zoom look: scoped zoom starts: the reticle style held at none (no
+  scope ring)` / `... ends ...`, the first 20 together). Under head aim the game's crosshair is therefore off
+  while scoped and there is no aim mark at all (the layer's reticle quad is for hand aim); the Precision Bolt's
+  shot still goes to the middle of the view. The zoom flag is read on the Steam build only: on Game Pass its
+  bit is not checked yet, so there the hold stays off for a scoped zoom (logged once) and head aim shows the
+  scope's ring as in 0.1.50; the decl writes should work there (the type info of every class read is the
+  Steam build's), but no Game Pass run has checked them yet.
+
+Only what is drawn changes: the zoom itself, its precision shot, speed and sensitivity are the game's. The
+game's decl values go back when the multiplayer guard trips (the zoom look's trip listener, at once: `zoom
+look: the game's values back in N of N weapon decl(s) (the multiplayer guard tripped)`), and when the layer
+shuts down; only into a decl that still has its name and the layer's values. A game that leaves VR without the
+layer shutting down keeps the look for the rest of that run (the gun stays, no scope GUI). Under
+`ETERNALVR_UI_CROSSHAIR=mask` and in a mono session there is no reticle hold, so head aim shows the ring there.
+`ETERNALVR_ZOOM_LOOK` (rig and debug only): `all` (the default), `off` for the game's own look, or a list of
+`hands` and `scope`.
+
+Rig check (the RTX 3080 Ti test PC, OpenXR-Simulator, Route S, scripted input, `e5m2_earth` whose start inventory has the
+Precision Bolt; a scripted run, its captures kept on the test PC):
+the fully zoomed GUI capture (about 4.8 s into the zoom) has the HUD and nothing else, 32828 non-transparent
+pixels, the same as unzoomed, under hand aim (`s16-hand`) and head aim (`s17-head`), also on a second zoom
+after switching weapons and mods; the gun stays in both eyes (the lower-right box differs from a gun-free
+frame by 30 %); the game's screen GUI draws stay at their normal count through the zoom. Positive controls:
+0.1.50 (`SCOPECHECK-20261013\a1c`, hand aim) and `ETERNALVR_ZOOM_LOOK=off` on this build (`s5-off`): 0 pixels
+and the gun gone (0 % in the box); 0.1.50 under head aim (`a3`): the ring, 1052643 pixels. The restore (QA `mp-guard-trip`): the Bolt's
+decl written at 39.2 s, the test trip at 55.86 s and in the same millisecond `zoom look: the game's values back
+in 1 of 1 weapon decl(s) (the multiplayer guard tripped)`.
+The QA scenarios `crosshair-hold` and `crosshair-hold-head` (e1m3, the Heavy Cannon with both mods) check the
+Bolt's decl line with its reticle swap, the scoped zoom and, under head aim, that the hold writes only during
+it, that the last zoom ends with the crosshair written back, and that neither log hit its cap; `mp-guard-trip`
+draws the Heavy Cannon with the Bolt before the trip and checks that every written decl is put back.
 
 ## Verified
 

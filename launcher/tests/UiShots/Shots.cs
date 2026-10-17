@@ -73,6 +73,16 @@ namespace EternalVR.Launcher.UiShots
                 int index = i;
                 Shoot(main, "main-" + Slug(tabs.TabPages[i].Text), () => { tabs.SelectedIndex = index; Pump(500); });
             }
+            // The Advanced tab scrolled to its end: the System group (the game folder, the runtime, the headset's graphics card).
+            var advanced = tabs.TabPages.Cast<TabPage>().First(p => p.Text == "Advanced");
+            Shoot(main, "main-advanced-end", () =>
+            {
+                tabs.SelectedTab = advanced;
+                Pump(300);
+                advanced.AutoScrollPosition = new Point(0, advanced.DisplayRectangle.Height);
+                Pump(300);
+            });
+            advanced.AutoScrollPosition = Point.Empty;
             tabs.SelectedIndex = 0;
             Reflect.Call(main, "ShowUpdateButton", new Version(0, 1, 14));
             Shoot(main, "main-update-button", () => Pump(300));
@@ -99,6 +109,7 @@ namespace EternalVR.Launcher.UiShots
                 ShootModal(s, null);
                 foreach (var m in moves) ShootModal(s, m);
             }
+            ShootProfileChanges(tabs);
             // Last: its scale changes round the main window's control sizes, which the shots above compare with earlier runs.
             ShootSteps(main, "main-layout");
             File.WriteAllLines(Path.Combine(output, $"{dpi}-summary.txt"), summary);
@@ -146,6 +157,8 @@ namespace EternalVR.Launcher.UiShots
             yield return new Scenario { Name = "controls-layout", Open = () => Reflect.Call(main, "EditControls"), Steps = f => LayoutSteps.For(f, true) };
             yield return new Scenario { Name = "controls-layout-profile", Open = () => EditControlsOf("Layout check"), Steps = f => LayoutSteps.For(f, true) };
             yield return Modal("weapon-directions", () => new WeaponDirectionsDialog("up_right=none,down_left=none"), null);
+            yield return Modal("report-saved", () => new ReportSavedDialog(
+                @"C:\Users\<user>\Desktop\EternalVR-report-v0.1.50-2026-10-13-A1B2C3.zip", _ => { }), null);
             foreach (var name in new[] { "restore-saves", "restore-saves-layout" })
                 yield return new Scenario
                 {
@@ -154,6 +167,47 @@ namespace EternalVR.Launcher.UiShots
                     Steps = name.EndsWith("-layout") ? f => LayoutSteps.For(f, false) : (Func<Form, IReadOnlyList<Step>>)null,
                 };
             yield return new Scenario { Name = "new-profile", Open = () => Reflect.Call(main, "AskProfileName") };
+            yield return new Scenario
+            {
+                Name = "rename-profile",
+                Open = () => Reflect.Call(main, "AskProfileName", "Rename VR settings profile", "Rename", "Riley", (Func<string, string>)(n => null)),
+            };
+            yield return new Scenario
+            {
+                Name = "duplicate-profile",
+                Open = () => Reflect.Call(main, "AskProfileName", "Duplicate VR settings profile", "Duplicate", "Riley copy", (Func<string, string>)(n => null)),
+            };
+        }
+
+        /// <summary>
+        /// A VR settings profile with changes from Recommended picked: the strip's count and the marked rows on both settings
+        /// tabs; then <see cref="ProfileFlow"/>, which ends back on (none).
+        /// </summary>
+        private void ShootProfileChanges(TabControl tabs)
+        {
+            if (only != null && "main-profile-changes".IndexOf(only, StringComparison.OrdinalIgnoreCase) < 0) return;
+            var riley = ctx.Settings.Clone();
+            riley.Turn = TurnMode.Snap;
+            riley.Vignette = VignetteMode.Light;
+            riley.ShowArms = false;
+            riley.Hud = HudMode.Wrist;
+            riley.WorldScale = 1.1;
+            new ProfileStore(ctx.Paths.Profiles).Save("Riley", riley);
+            var list = Reflect.Get<ComboBox>(main, "profile");
+            Reflect.Call(main, "FillProfiles");
+            list.SelectedItem = "Riley";
+            Pump(500);
+            for (int i = 0; i < 2; i++)
+            {
+                int index = i;
+                Shoot(main, "main-profile-changes-" + Slug(tabs.TabPages[i].Text), () => { tabs.SelectedIndex = index; Pump(500); });
+            }
+            tabs.SelectedIndex = 0;
+            // Then the strip's actions as a player uses them (ProfileFlow), which ends on (none).
+            var flow = new ProfileFlow(main, ctx, Pump);
+            File.WriteAllLines(Path.Combine(output, $"{main.DeviceDpi}-profile-flow.txt"), flow.Run());
+            if (flow.Failed) Faulted++;
+            summary.Add("profile flow: " + (flow.Failed ? "FAILED" : "ok"));
         }
 
         /// <summary>The main window through <see cref="LayoutSteps"/>, shot after each, then back at its own scale and size.</summary>

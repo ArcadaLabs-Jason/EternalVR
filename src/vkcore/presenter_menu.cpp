@@ -402,6 +402,25 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
         EVR_LOG("menu: popup: %.*s sends %.*s (0x%02x)", static_cast<int>(action.size()), action.data(),
                 static_cast<int>(key.size()), key.data(), k.key);
     }
+    static std::uint32_t endsKept = 0; // the XR worker's thread only
+    for (const menu::PageChange& c : out.pageChanges) {
+        if (c.why == menu::PageChange::Why::EndKept) {
+            if (++endsKept <= 20) {
+                EVR_LOG("menu: Dossier page %s: %c not sent at the %s tab", menu::dossierPageName(c.from),
+                        static_cast<char>(c.key), c.from == 0 ? "first" : "last");
+            }
+            continue;
+        }
+        using Why = menu::PageChange::Why;
+        const char key[2] = {static_cast<char>(c.key), '\0'};
+        EVR_LOG("menu: Dossier page %s -> %s (%s%s)", menu::dossierPageName(c.from),
+                menu::dossierPageName(c.to),
+                c.why == Why::Opened       ? "opened"
+                : c.why == Why::TabClicked ? "a tab clicked"
+                : c.why == Why::Closed     ? "closed"
+                                           : key,
+                c.why == Why::EndForced ? " asked again at the end: sent" : "");
+    }
     menu_input::send(out.events);
     // A stick dragging the map moves the game's cursor about: hidden meanwhile (drag_cursor_hide.hpp).
     menu_cursor_hide::setHidden(allowed && menuOn && out.hideCursor);

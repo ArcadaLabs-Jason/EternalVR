@@ -37,6 +37,13 @@ namespace EternalVR.Launcher
         public DataPaths Paths { get; }
         public LauncherData Data { get; private set; }
         public LauncherSettings Settings { get; set; }
+        /// <summary>
+        /// The active VR settings profile as its file holds it, read with this launcher's preset at start (T-134); null for none
+        /// or a file that cannot be read. The window keeps it up to date from then on.
+        /// </summary>
+        public LauncherSettings ActiveProfileSaved { get; private set; }
+        /// <summary>A profile rename is still not finished after this start's try (<see cref="ProfileRename"/>): the window holds the profile strip.</summary>
+        public bool RenameUnfinished { get; private set; }
         /// <summary>The headset as the last runtime probe that answered read it (<see cref="LastHeadset"/>); its limits are null before the first.</summary>
         public HeadsetFacts Headset { get; private set; } = new HeadsetFacts();
         /// <summary>The headset SteamVR last saw (steamvr.vrsettings), read at start, at each probe and after each session; null when none.</summary>
@@ -67,10 +74,53 @@ namespace EternalVR.Launcher
                     + "); started processes get the value Windows reads for each");
             ctx.Data = LauncherData.Load(Path.Combine(ctx.ProgramDir, "data"));
             ctx.Settings = LauncherSettings.Load(ctx.Paths.SettingsFile);
+            // The session finisher runs beside an open window: the profiles and launcher.ini's profile are the window's (and
+            // the next start's), and its restore does not read them.
+            if (!options.FinishSession)
+            {
+                ctx.FinishProfileRename();
+                ctx.TakeActiveProfile();
+            }
             ctx.Headset = LastHeadset.Read(ctx.Paths.HeadsetFile);
             ctx.ReadSteamVrSeen();
             ctx.LastRenderCap = RenderCap.Load(ctx.Paths.RenderCapFile);
             return ctx;
+        }
+
+        /// <summary>
+        /// A VR settings profile rename the last launcher left half-way (<see cref="ProfileRename.FinishAtStart"/>) is finished
+        /// before anything reads the profiles: its file and controls folder go to the new name and launcher.ini names it. A
+        /// failure is logged and tried again at the next start.
+        /// </summary>
+        private void FinishProfileRename()
+        {
+            var rename = new ProfileRename(new ProfileStore(Paths.Profiles), ControlSets);
+            RenameUnfinished = rename.FinishAtStart(Settings, () => Settings.Save(Paths.SettingsFile), Log.Info, Log.Warn);
+        }
+
+        /// <summary>
+        /// The active profile's settings at start, for the window and the headless modes alike: its file read now, so a setting
+        /// it does not change takes this launcher's Recommended value, with the changes launcher.ini lists as not saved into it
+        /// (<see cref="ProfileEdits.InUse"/>, T-134). launcher.ini as it is when it changed since that list was made, or when
+        /// the profile's file cannot be read.
+        /// </summary>
+        private void TakeActiveProfile()
+        {
+            if (Settings.Profile.Length == 0) return;
+            try { ActiveProfileSaved = new ProfileStore(Paths.Profiles).Load(Settings.Profile, Settings); }
+            catch (Exception e) when (e is SettingsException || e is IOException || e is UnauthorizedAccessException)
+            {
+                Log.Warn("VR settings profile '" + Settings.Profile + "' could not be read: " + e.Message);
+            }
+            if (ActiveProfileSaved == null || Settings.ProfileUnsaved == null) return;
+            if (!ProfileEdits.ListHolds(Settings))
+            {
+                Log.Info("launcher.ini changed after the launcher last wrote it (by hand or by another launcher version): its settings are used as they are");
+                return;
+            }
+            Settings = ProfileEdits.InUse(Settings, ActiveProfileSaved, Data.CpuSaver);
+            Log.Info("VR settings profile '" + Settings.Profile + "' read from its file; not saved into it yet: "
+                + (Settings.ProfileUnsaved.Count == 0 ? "nothing" : string.Join(", ", Settings.ProfileUnsaved)));
         }
 
         /// <summary>The processes that count as the game (in test mode: only the stand-in exe).</summary>
@@ -326,6 +376,7 @@ namespace EternalVR.Launcher
             });
             if (TestMode) plan.ExePath = Options.TestExe;
             plan.Inherited = ChildEnvironment.Inherited(ChildEnvironment.Current(), plan.Environment);
+            plan.Replaced = ChildEnvironment.Replaced(ChildEnvironment.Current(), plan.Environment);
             if (plan.RenderSize?.Note != null) Log.Warn(plan.RenderSize.Note + " (" + plan.RenderSize.Reason + ")");
             if (plan.RenderSize?.BaseNote != null) Log.Warn("Resolution: " + plan.RenderSize.BaseNote);
             // Other layers in the game hook every frame too (overlays, capture tools) and can slow the stream: one line each.

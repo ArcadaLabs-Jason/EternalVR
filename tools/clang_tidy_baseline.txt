@@ -1,0 +1,83 @@
+# Accepted clang-tidy findings (tools/run_clang_tidy.py): <count> <file> [<check>] <message>.
+# Regenerate with --update-baseline; fix new findings instead of adding them here.
+# Another clang-tidy version reports other findings: compare with the one below.
+# clang-tidy 23.1.2
+1 src/engine/eternal/resolver/pattern.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+5 src/features/bhaptics/body_haptics.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/features/bhaptics/crystal.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/features/comfort/glory_kill.cpp [bugprone-assignment-in-if-condition] an assignment within an 'if' condition is bug-prone
+1 src/features/input/binding_text.hpp [bugprone-exception-escape] an exception may be thrown in function 'BindingTextResult' which should not throw exceptions
+1 src/features/input/controller_bindings.hpp [bugprone-exception-escape] an exception may be thrown in function 'ControllerData' which should not throw exceptions
+1 src/features/input/input_mapper.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::input::InputMapper::update' has a definition with different parameter names
+1 src/features/input/player_controller_data.hpp [bugprone-exception-escape] an exception may be thrown in function 'UsablePlayerData' which should not throw exceptions
+1 src/features/input/rest_touch_bindings.hpp [bugprone-exception-escape] an exception may be thrown in function 'TouchRetryStep' which should not throw exceptions
+1 src/features/menu/map_drag.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/features/menu/menu_router.cpp [bugprone-branch-clone] repeated branch body in conditional chain
+1 src/features/posture/floor_check.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/features/roomscale/body_follow.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::roomscale::followRequest' has a definition with different parameter names
+1 src/features/roomscale/roomscale_settings.cpp [bugprone-branch-clone] repeated branch body in conditional chain
+1 src/game/eternal/weapon_offsets.hpp [bugprone-exception-escape] an exception may be thrown in function 'WeaponOffsetTable' which should not throw exceptions
+1 src/platform/settings/builtin.hpp [bugprone-exception-escape] an exception may be thrown in function 'BuiltinSettings' which should not throw exceptions
+1 src/platform/settings/preset.hpp [bugprone-exception-escape] an exception may be thrown in function 'Preset' which should not throw exceptions
+1 src/platform/settings/profile.hpp [bugprone-exception-escape] an exception may be thrown in function 'Profile' which should not throw exceptions
+1 src/platform/settings/schema.hpp [bugprone-exception-escape] an exception may be thrown in function 'Schema' which should not throw exceptions
+1 src/stereo_seq/centered_matrix.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::stereo_seq::centeredDepthOf' has a definition with different parameter names
+1 src/stereo_seq/centered_matrix.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::stereo_seq::retargetViewProjection' has a definition with different parameter names
+1 src/stereo_seq/centered_matrix.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::stereo_seq::setCenteredDepth' has a definition with different parameter names
+1 src/stereo_seq/debug_cvars.hpp [bugprone-use-after-move] 'entry' used after it was moved
+1 src/stereo_seq/refraction_history.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/stereo_seq/seq_settings.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/ui_layer/wrist_hud.cpp [bugprone-branch-clone] repeated branch body in conditional chain
+1 src/ui_layer/wrist_hud.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+2 src/vkcore/adapter_order.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/adapter_order.cpp [performance-use-std-move] 'order' could be moved here
+1 src/vkcore/bhaptics_link.cpp [bugprone-casting-through-void] do not cast 'FARPROC' (aka 'long long (*)()') to 'T' through 'void *'; use reinterpret_cast instead
+1 src/vkcore/bhaptics_link.cpp [bugprone-unused-return-value] the value returned by this function should not be disregarded; neglecting it may lead to errors
+1 src/vkcore/bug_capture.cpp [performance-no-automatic-move] constness of 'dir' prevents automatic move
+1 src/vkcore/cb_check.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+1 src/vkcore/climb_hook.cpp [bugprone-unchecked-string-to-number-conversion] 'atoi' used to convert a string to an integer value, but function will not report conversion errors; consider using 'strtol' instead
+1 src/vkcore/climb_hook.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/vkcore/controllers.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::vkcore::controllers::attach' has a definition with different parameter names
+1 src/vkcore/cpu_timing.cpp [bugprone-casting-through-void] do not cast 'FARPROC' (aka 'long long (*)()') to 'DescribeFn' (aka 'long (*)(void *, wchar_t **)') through 'void *'; use reinterpret_cast instead
+1 src/vkcore/cpu_timing.cpp [bugprone-casting-through-void] do not cast 'FARPROC' (aka 'long long (*)()') to 'SetDescriptionFn' (aka 'long (*)(void *, const wchar_t *)') through 'void *'; use reinterpret_cast instead
+1 src/vkcore/cpu_timing.cpp [bugprone-incorrect-roundings] casting (double + 0.5) to integer leads to incorrect rounding; consider using lround (#include <cmath>) instead
+1 src/vkcore/cpu_timing.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+3 src/vkcore/eye_capture.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/eye_capture.cpp [performance-unnecessary-value-param] the parameter 'shot' of type 'OneShot' is copied for each invocation but only used as a const reference; consider making it a const reference
+3 src/vkcore/gpu_timing.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/layer_entry.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+1 src/vkcore/menu_cursor_hide.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually
+1 src/vkcore/pe_flare_guard.cpp [bugprone-misplaced-widening-cast] either cast from 'std::int32_t' (aka 'int') to 'std::size_t' (aka 'unsigned long long') is ineffective, or there is loss of precision before the conversion
+3 src/vkcore/player_aim.cpp [bugprone-narrowing-conversions] narrowing conversion from 'int' to 'float'
+1 src/vkcore/presenter_frame.cpp [bugprone-inc-dec-in-conditions] incrementing and referencing a variable in a complex condition can cause unintended side-effects due to C++'s order of evaluation, consider moving the modification outside of the condition to avoid misunderstandings
+1 src/vkcore/presenter_impl.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::vkcore::XrPresenter::Impl::onEyeLatched' has a definition with different parameter names
+1 src/vkcore/presenter_latch.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually
+3 src/vkcore/presenter_menu.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/presenter_result.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/presenter_seq.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually
+1 src/vkcore/presenter_stereo.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually
+1 src/vkcore/presenter_swapchains.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/vkcore/presenter_ui.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/profile_hooks.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+1 src/vkcore/runtime_cvars.cpp [bugprone-unchecked-string-to-number-conversion] 'atoi' used to convert a string to an integer value, but function will not report conversion errors; consider using 'strtol' instead
+1 src/vkcore/runtime_cvars.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/vkcore/shader_dump.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+4 src/vkcore/shader_dump.cpp [performance-faster-string-find,performance-prefer-single-char-overloads] 'operator+=' called with a string literal consisting of a single character; consider using the more efficient overload accepting a character
+1 src/vkcore/shader_dump_record.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+2 src/vkcore/shader_dump_record.cpp [performance-unnecessary-value-param] the parameter 'fields' of type 'std::string' (aka 'basic_string<char, char_traits<char>, allocator<char>>') is copied for each invocation but only used as a const reference; consider making it a const reference
+1 src/vkcore/stall_watch.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+1 src/vkcore/stereo_hooks.cpp [bugprone-signed-char-misuse] 'signed char' to 'std::intptr_t' (aka 'long long') conversion; consider casting to 'unsigned char' first.
+1 src/vkcore/stereo_hooks.cpp [bugprone-sizeof-expression] suspicious usage of 'sizeof(...)' in pointer arithmetic; this scaled value will be scaled again by the '+' operator
+1 src/vkcore/swapchain_entry.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+4 src/vkcore/taa_hooks.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
+3 src/vkcore/taa_hooks.cpp [bugprone-unchecked-string-to-number-conversion] 'atoi' used to convert a string to an integer value, but function will not report conversion errors; consider using 'strtol' instead
+1 src/vkcore/taa_ssr.cpp [bugprone-unchecked-string-to-number-conversion] 'atoi' used to convert a string to an integer value, but function will not report conversion errors; consider using 'strtol' instead
+1 src/vkcore/ui_vulkan.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+1 src/vkcore/usercmd_hook.cpp [bugprone-inc-dec-in-conditions] incrementing and referencing a variable in a complex condition can cause unintended side-effects due to C++'s order of evaluation, consider moving the modification outside of the condition to avoid misunderstandings
+1 src/vkcore/view_clone_binds.cpp [bugprone-signed-char-misuse] 'signed char' to 'std::int32_t' (aka 'int') conversion; consider casting to 'unsigned char' first.
+1 src/vkcore/view_clone_census.cpp [performance-inefficient-vector-operation] 'emplace_back' is called inside a loop; consider pre-allocating the container capacity before the loop
+1 src/vkcore/view_clone_make.cpp [bugprone-assignment-in-if-condition] an assignment within an 'if' condition is bug-prone
+1 src/vkcore/view_clone_map.hpp [bugprone-sizeof-expression] suspicious usage of 'sizeof()' on an expression of pointer type
+1 src/vkcore/view_clones.cpp [bugprone-assignment-in-if-condition] an assignment within an 'if' condition is bug-prone
+1 src/vkcore/vrs_command_buffers.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses
+1 src/vkcore/vrs_gui.cpp [bugprone-macro-parentheses] macro argument should be enclosed in parentheses

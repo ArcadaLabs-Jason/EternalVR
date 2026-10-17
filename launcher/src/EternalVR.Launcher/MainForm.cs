@@ -63,6 +63,7 @@ namespace EternalVR.Launcher
             Height = 660;
             StartPosition = FormStartPosition.CenterScreen;
             Icon = Branding.WindowIcon() ?? Icon;
+            TakeProfileAtStart();
             BuildLayout();
             // Every container's layout held while the font, the list heights and the settings change (each change laid the
             // tabs out again, about a second in all), then each laid out once.
@@ -253,12 +254,23 @@ namespace EternalVR.Launcher
             tabs.TabPages.AddRange(new[] { playPage, advancedPage, ChecksTab() });
 
             var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
-            buttons.Controls.AddRange(new Control[] { launch, check, restoreSaves, exportReport, updateButton, discardRestore, statusLabel });
+            // Where to post a report, beside Export report (ReportLinks).
+            var github = ReportLinkButtons.GitHub(BarButtonHeight, tips, ctx.Log.Error);
+            var discord = ReportLinkButtons.Discord(BarButtonHeight, tips, ctx.Log.Error);
+            reportLinks = new[] { github, discord };
+            buttons.Controls.AddRange(new Control[] { launch, check, restoreSaves, exportReport, github, discord, updateButton, discardRestore, statusLabel, reportLinkPanel });
             buttons.SetFlowBreak(discardRestore, true);
+            // In a window too narrow for the bar's buttons with the links' words, the links move to the status line's right
+            // end and show their marks alone (FitReportLinks).
+            buttons.SizeChanged += (s, e) => QueueFitReportLinks(buttons);
+            updateButton.VisibleChanged += (s, e) => QueueFitReportLinks(buttons);
+            discardRestore.VisibleChanged += (s, e) => QueueFitReportLinks(buttons);
+            Shown += (s, e) => QueueFitReportLinks(buttons);
             tips.SetToolTip(launch, "Starts DOOM Eternal in VR with these settings. Your game settings are put back when it exits.");
             tips.SetToolTip(check, "Checks the game, the mod and the headset runtime again.");
             tips.SetToolTip(restoreSaves, "Puts back your save slots from a backup (one is made before every VR launch).");
-            tips.SetToolTip(exportReport, "Saves a zip of the logs and checks, personal info removed. Post it with your bug report on Discord or GitHub.");
+            tips.SetToolTip(exportReport, Wrap("Saves a zip of the logs and checks, personal info removed. Post it with your bug report on Discord or GitHub.")
+                + Environment.NewLine + Environment.NewLine + Wrap(Core.Report.ReportLinks.CaptureHint));
 
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));

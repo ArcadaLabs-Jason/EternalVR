@@ -405,8 +405,8 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       one. The layer can steer DOOM's physical-device choice to that LUID where the game makes it, in its
       `vkEnumeratePhysicalDevices` and `vkEnumeratePhysicalDeviceGroups` for the game's instance, by
       `VkPhysicalDeviceIDProperties::deviceLUID` (T-057; `adapter_steer.hpp`, `adapter_order.hpp`).
-      As built, **off by default**: `ETERNALVR_ADAPTER_STEER=1` turns it on until a two-GPU machine has
-      been tried with a headset. Off, the first enumeration logs the devices and "steering off" ("nothing to
+      As built, **off by default**: `ETERNALVR_ADAPTER_STEER=1` (the launcher's "Use the headset's graphics card") turns it on until a
+      two-GPU machine has been tried with a headset. Off, the first enumeration logs the devices and "steering off" ("nothing to
       steer" with one device; listing them is one extra enumeration), the calls go straight down and no OpenXR work is done.
       - **When the LUID is had.** The presenter's OpenXR instance is made on the XR worker, which starts
         at the game's first `vkCreateSwapchainKHR` (T-122), after the device is chosen. So, with steering
@@ -1047,8 +1047,11 @@ and is labelled with the real size if the two differ.
 **As built** (launcher/README.md, "User data" and "Updates"): there is no TOML settings file, hot reload,
 setting class or pending-edits file. The launcher keeps its settings in `launcher.ini` (keyed, with
 `schema_version`) and passes each one to the layer as its own `ETERNALVR_*` variable at launch, so a change
-applies at the next launch. VR settings profiles are `profiles\<name>.ini` files with the same keys (Save,
-Delete and a picker), not presets with overrides. The rest of this section is the design.
+applies at the next launch. VR settings profiles are presets with overrides (REQ-10, T-134): a
+`profiles\<name>.ini` file names its preset (Recommended, the launcher's defaults, is the only one so far) and
+holds only the settings the player changed from it, so the others follow the preset of the launcher that reads
+it; the window marks each changed setting and resets one or all of them, and the picker has Save, Duplicate,
+Rename and Delete, each profile with its own controls folder. The rest of this section is the design.
 
 - **One keyed TOML settings file,** written by the launcher and hot-reloaded by the layer. Hot reload
   while playing was accepted in principle by the owner (D-028, given alongside D-015); the details are
@@ -1192,8 +1195,9 @@ src/
                     input/, weapon/, ui_capture/, audio/, ngx/
 launcher/           EternalVR.sln: EternalVR.Launcher (WinForms), EternalVR.Launcher.Core
                     (netstandard2.0, tested on any OS)
-tools/              check_includes.py*, fetch_references.sh*, rig/ (local PowerShell scripts: run,
-                    stop, cleanup, display, collect, replay, lab copy; dev only, T-108), resolver-cli/,
+tools/              check_includes.py*, check_file_size.py*, run_clang_tidy.py*, fetch_references.sh*,
+                    rig/ (local PowerShell scripts: run, stop, cleanup, display, collect, replay,
+                    lab copy; dev only, T-108), resolver-cli/,
                     fossilize runner, offline patcher check
 tests/*             mirrors src/, plus support/ (shared test helpers); doctest
 ```
@@ -1214,8 +1218,9 @@ Environment variables (the complete set; everything else is a setting):
 
 Standards (the clean-code rule; `CONTRIBUTING.md` has the working details):
 - C++20, warnings as errors on every compiler. clang-format 18.1.8 is checked in CI (the portable job on
-  Linux). clang-tidy is configured (`.clang-tidy`) and runs locally as advisory until its CI job lands in
-  M4.5, the release track (ROADMAP).
+  Linux). clang-tidy is configured (`.clang-tidy`); `tools/run_clang_tidy.py` checks `src/` locally on
+  Windows and fails on any finding not in its baseline (`tools/clang_tidy_baseline.txt`). Its CI job is
+  still to come (ROADMAP M4.5).
 - One responsibility per file. Around 300 lines is the soft upper bound; a file past about 600 lines is
   split. A CI check enforces the 600-line limit from M4.5.
 - Engine internals (offsets, hooks, type names) only in `engine/eternal`; game-design data only in

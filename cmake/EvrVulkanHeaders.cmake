@@ -1,8 +1,7 @@
 # Vulkan headers for the layer. The layer only needs the headers (it is loaded by the Vulkan loader
-# and calls through dispatch tables), so a Vulkan SDK is optional: when none is installed (CI), the
-# Khronos Vulkan-Headers release matching the rig's SDK is downloaded, pinned to a checksum.
-
-find_package(Vulkan QUIET)
+# and calls through dispatch tables), so no Vulkan SDK is used: every build, release builds included,
+# compiles against the Khronos Vulkan-Headers release pinned here to a checksum, so the version named
+# in THIRD_PARTY_NOTICES.md is the one in the DLL whatever SDK the build PC has.
 
 if(NOT TARGET Vulkan::Headers)
     set(EVR_VULKAN_HEADERS_VERSION "1.4.357")
@@ -23,5 +22,5 @@ if(NOT TARGET Vulkan::Headers)
     add_library(Vulkan::Headers INTERFACE IMPORTED)
     set_target_properties(Vulkan::Headers PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
         "${evr_vk_root}/Vulkan-Headers-${EVR_VULKAN_HEADERS_VERSION}/include")
-    message(STATUS "Vulkan SDK not found; using Vulkan-Headers ${EVR_VULKAN_HEADERS_VERSION}")
+    message(STATUS "Using Vulkan-Headers ${EVR_VULKAN_HEADERS_VERSION}")
 endif()

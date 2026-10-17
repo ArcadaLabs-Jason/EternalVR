@@ -86,8 +86,8 @@ std::uint32_t nextRequestPresents(std::uint32_t presents) {
     return presents < kHoldStalePresents ? presents + 1 : presents;
 }
 
-bool wantsReticleHold(CrosshairMode mode, bool handAim) {
-    return mode == CrosshairMode::Hold && handAim;
+bool wantsReticleHold(CrosshairMode mode, bool handAim, bool scopeZoomed) {
+    return mode == CrosshairMode::Hold && (handAim || scopeZoomed);
 }
 
 bool centreMasked(const CrosshairState& state) {

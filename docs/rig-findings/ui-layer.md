@@ -273,6 +273,13 @@ GUI copy for 0.5 s and 4 presents) ...`), `ui: crosshair hold confirmed ...` / `
 change, and the 10 s line's
 `N for the crosshair hold (confirmed | not confirmed now, N change(s))`.
 
+Zoomed scopes (T-136, `docs/VR_CONTROLLERS.md`, "Zoomed weapons"): the presenter also asks for the hold under
+head aim while a weapon whose decl has a scope GUI is zoomed (`controllers::scopeZoomed`), since the scope
+reticle's ring and vignette (about a million pixels of the GUI target) cannot be taken out through the decls
+once the HUD has loaded them. The writes then read `hud_reticle_styleOverride -1 -> 0 (reads 0); hand aim or a
+scoped zoom: ...` and, at the zoom's end, `... the hold's request ended (no hand aim) and no scoped zoom: ...`.
+The mask never applies under head aim, and `ui: crosshair hold confirmed` is logged only for hand aim.
+
 Rig (the RTX 3080 Ti test PC, OpenXR-Simulator, 2026-10-12; QA scenarios `crosshair-hold`, `crosshair-mask`,
 `crosshair-hold-head` with the GUI target at 1280x1400; shots of the simulator's composed frame,
 `<workspace>\QA-ch5\`, side by side in `compare\`):

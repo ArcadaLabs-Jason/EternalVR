@@ -37,10 +37,37 @@ struct TurnStickSettings {
     float gestureEngage = 0.75f;
     float claimConeDegrees = 30.0f;
     float stayConeDegrees = 45.0f;
-    // Hold to open the wheel. This delay is ours, on the stick, before any action is sent; the game
-    // may wait a delay of its own on top.
+    // Hold before a down sweep is a hold (downHold). This delay is ours, on the stick, before any action is
+    // sent; the game may wait a delay of its own on top.
     float holdSeconds = 0.30f;
+    // A down sweep becomes a hold sooner, at earlyHoldSeconds, when the stick is then within earlyConeDegrees
+    // of straight down: a deliberate push, not one already rolling toward a turn. At or above holdSeconds
+    // (the default) there is no early hold. The mapper sets it when the down hold opens the weapon wheel and
+    // nothing else (kWheelStickHoldSeconds).
+    float earlyHoldSeconds = 0.30f;
+    float earlyConeDegrees = 20.0f;
 };
+
+// The down hold when it opens the weapon wheel and nothing else (the built-in maps). The wheel's key is also
+// the quick switch's (Q, game/eternal/usercmd_buttons.cpp), and the game tells a tap of it from a hold after
+// its own open delay (weaponWheel_HoldTimeForOpeningWheel, the game's Weapon Wheel Open Delay, 180 ms by
+// default): a down sweep let go within that delay of the down hold is still a quick switch, never the wheel.
+// So the stick's hold only has to tell a deliberate push down from a sweep that drifts down and leaves the
+// stay cone, not a flick from a hold: 0.15 s for a push within 20 degrees of straight down (the early hold;
+// it was 0.30 s, 0.48 s in all from the push to the wheel), the full hold (0.30 s) otherwise.
+//
+// The trade-off (R14 failure mode 4, unwanted weapon swaps): a down sweep that rolls out of the stay cone
+// after the early hold is a hold, no longer cancelled, and its release swaps the weapon (a quick switch while
+// the game's delay runs, the highlighted weapon after). Up to 0.1.50 that held for any roll within 0.30 s.
+// A roll already under way at 0.15 s (past 20 degrees) is still cancelled when it leaves the cone.
+inline constexpr float kWheelStickHoldSeconds = 0.15f;
+// The least of it, at the shortest Hold time.
+inline constexpr float kMinWheelStickHoldSeconds = 0.10f;
+
+// The wheel's down hold for the buttons' hold time (the launcher's Hold time): 0.10 s shorter, at least
+// kMinWheelStickHoldSeconds (Short 0.15 s -> 0.10, Medium 0.25 -> 0.15, Long 0.4 -> 0.30, Very long 0.6 ->
+// 0.50). A hold time that is not finite gives kWheelStickHoldSeconds.
+float wheelStickHoldSeconds(float buttonHoldSeconds);
 
 enum class SweepIntent : std::uint8_t {
     None, // Centred, or deflected without qualifying yet.

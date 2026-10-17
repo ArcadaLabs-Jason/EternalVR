@@ -25,10 +25,10 @@
 // "default", then no offset. Seated, the [seated] entry for the weapon wins, then the seated "default",
 // then the standing rules.
 //
-// [sights] (ETERNALVR_WEAPON_SIGHTS): the direction of the weapon's sight line in the arms model's frame
-// as the game animates it at idle (pitch positive down, yaw counter-clockwise, degrees). The layer turns the
-// model so that line runs parallel to the aim ray. Same key rules, but no "default": a weapon without a row
-// is not turned. There is no file IO here.
+// [sights] (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): the direction of
+// the weapon's sight line in the arms model's frame as the game animates it at idle (pitch positive down,
+// yaw counter-clockwise, degrees). The layer turns the model so that line runs parallel to the aim ray. Same
+// key rules, but no "default": a weapon without a row is not turned. There is no file IO here.
 
 #include <map>
 #include <optional>

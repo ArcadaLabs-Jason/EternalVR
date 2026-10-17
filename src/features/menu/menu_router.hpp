@@ -64,6 +64,29 @@ std::optional<std::uint8_t> popupActionKey(game::GameAction action);
 // The Dossier's pages in the order its tabs switch (Q / E), starting on the map.
 inline constexpr int kDossierPages = 4; // Map, Arsenal, Codex, Challenges
 
+// "map", "arsenal", "codex", "challenges", or "not known" for -1 (and anything else), for the log.
+const char* dossierPageName(int page);
+
+// A change of the Dossier page the router believes is up, for the log. At either end of the tabs the tab key
+// is not sent (the page stays): whether the game wraps there or stops is not known, and a key it might take
+// either way would leave the count wrong. The same key kept back twice in a short while is sent after all
+// (the count may be wrong: a key the game ignored, a Dossier opened elsewhere than its map), and the page is
+// then not known, so the end tab can always be reached.
+struct PageChange {
+    enum class Why : std::uint8_t {
+        Opened,     // the Dossier came up on its map (or a menu that is not it: not known)
+        TabKey,     // a tab key (`key`) was sent
+        EndKept,    // a tab key (`key`) at the first or the last tab: not sent, the page stays
+        EndForced,  // the same tab key kept back twice in RouterTuning::endRepeatWindow: sent, page not known
+        TabClicked, // a click on the tab strip: which tab it opens is not known
+        Closed,     // the menu closed
+    };
+    int from = -1;
+    int to = -1;
+    Why why = Why::Opened;
+    std::uint8_t key = 0;
+};
+
 // One notch of the mouse wheel (WHEEL_DELTA).
 inline constexpr std::int16_t kWheelNotch = 120;
 
@@ -79,6 +102,7 @@ struct RouterTuning {
     double moveTimeout = 0.15;      // a move the game has not shown after this long is sent again
     double clickTimeout = 0.25;     // a click waits at most this long for the cursor to settle
     double zoomInterval = 0.1;      // seconds between wheel notches while a stick zooms the map
+    double endRepeatWindow = 1.0;   // a tab key kept back at an end again within this is sent (PageChange)
     // In a popup A / X's Space and the jump action's Space this close together are one press (the mapper
     // publishes the action a game frame or two after the router sees the button): the second is not sent.
     double popupKeyWindow = 0.3;
@@ -159,6 +183,8 @@ struct RouterOutput {
     // How the map's pan stick pans now, and whether the other stick rotates (map_drag.hpp).
     MapPanBy mapPan = MapPanBy::None;
     bool mapRotate = false;
+    // Every change of the Dossier page this frame (and every tab key kept back at an end), in order.
+    std::vector<PageChange> pageChanges;
 };
 
 class MenuRouter {
@@ -191,7 +217,9 @@ private:
     bool repeat(Repeater& r, int direction, double now, double delay, double interval);
     void releaseAll(double now, RouterOutput& out);
     void tapKey(std::uint8_t key, double now, RouterOutput& out);
-    void notePage(std::uint8_t key);
+    // Sends a tab key, counting the Dossier's pages; at either end of them the key is kept back.
+    void tabKey(std::uint8_t key, double now, RouterOutput& out);
+    void setPage(int page, PageChange::Why why, std::uint8_t key, RouterOutput& out);
     void moveCursor(const RouterInput& in, std::optional<CursorPixel> target, double now, RouterOutput& out);
     void mapSticks(const RouterInput& in, double now, RouterOutput& out);
     void menuSticks(const RouterInput& in, double now, RouterOutput& out);
@@ -224,8 +252,12 @@ private:
     std::array<bool, 2> secondary_{};
     std::array<bool, 2> stickClick_{};
 
-    // The Dossier page (0 the map; -1 not the Dossier, or not known) and the map's drags.
+    // The Dossier page (0 the map; -1 not the Dossier, or not known), kept through releaseHeld (the headset
+    // stops showing frames with the menu still up), and the map's drags. The last tab key kept back at an
+    // end.
     int page_ = -1;
+    std::uint8_t keptKey_ = 0;
+    double keptAt_ = 0.0;
     MapDrag drag_;
     std::optional<CursorPixel> dragTarget_;
     DragCursorHide cursorHide_;

@@ -2,6 +2,7 @@
 
 #include "platform/key_injection/injected_keys.hpp"
 #include "platform/key_injection/us_scan_codes.hpp"
+#include "vkcore/cursor_guard.hpp"
 #include "vkcore/import_patch.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/log.hpp"
@@ -106,9 +107,6 @@ UINT answerMouse(
     return needed;
 }
 
-bool keepDesktopCursor();
-std::atomic<std::uint64_t> g_realInputDropped{0};
-
 UINT WINAPI hookedGetRawInputData(HRAWINPUT handle, UINT command, LPVOID data, PUINT size, UINT headerSize) {
     if (const auto mouse = g_mouseRing.take(reinterpret_cast<std::uintptr_t>(handle))) {
         return answerMouse(*mouse, command, data, size, headerSize);
@@ -143,7 +141,7 @@ UINT WINAPI hookedGetRawInputData(HRAWINPUT handle, UINT command, LPVOID data, P
                 k.Flags |= RI_KEY_BREAK;
                 k.Message = WM_KEYUP;
             }
-            if (changed && g_realInputDropped.fetch_add(1) == 0) {
+            if (changed && countRealInputDropped()) {
                 EVR_LOG(
                     "keys: the desktop's mouse or keyboard reached the game while it is not in the "
                     "foreground; "
@@ -295,103 +293,7 @@ void releaseHeldKeysOnTrip() {
             released.size());
 }
 
-// ---- The desktop cursor --------------------------------------------------------------------------
-//
-// While VR runs the layer keeps the game believing its window is active (keep_active.hpp), and a game that
-// believes it is active takes the mouse: it registers raw mouse input with RIDEV_CAPTUREMOUSE, clips the
-// cursor to its window and puts it back in the window's centre after every mouse movement (including the
-// menu pointer's injected motion). None of that may reach the desktop while the game's window is not really
-// in the foreground: the person at the PC keeps the mouse. With the window in front the game behaves as
-// it always does.
-
-using SetCursorPosFn = BOOL(WINAPI*)(int, int);
-using ClipCursorFn = BOOL(WINAPI*)(const RECT*);
-using RegisterRawInputDevicesFn = BOOL(WINAPI*)(PCRAWINPUTDEVICE, UINT, UINT);
-
-std::atomic<SetCursorPosFn> g_setCursorPos{nullptr};
-std::atomic<ClipCursorFn> g_clipCursor{nullptr};
-std::atomic<RegisterRawInputDevicesFn> g_registerRawInputDevices{nullptr};
-std::once_flag g_cursorOnce;
-std::atomic<std::uint64_t> g_cursorMovesKept{0};
-std::atomic<std::uint64_t> g_clipsKept{0};
-std::atomic<bool> g_loggedCapture{false};
-
-// True while the game must leave the desktop's cursor alone: the layer is keeping it active and its window
-// is not the foreground window.
-bool keepDesktopCursor() {
-    if (!mp_guard::allowsGameTouch()) {
-        return false; // the layer no longer changes anything about the game
-    }
-    HWND game = gameWindow();
-    if (!game) {
-        return false;
-    }
-    HWND front = GetForegroundWindow();
-    return front != game && GetAncestor(front, GA_ROOTOWNER) != GetAncestor(game, GA_ROOTOWNER);
-}
-
-BOOL WINAPI hookedSetCursorPos(int x, int y) {
-    if (keepDesktopCursor()) {
-        if (g_cursorMovesKept.fetch_add(1) == 0) {
-            EVR_LOG(
-                "keys: the game moved the desktop cursor while not in the foreground; its moves are dropped "
-                "(the desktop keeps its cursor)");
-        }
-        return TRUE;
-    }
-    return g_setCursorPos.load()(x, y);
-}
-
-BOOL WINAPI hookedClipCursor(const RECT* rect) {
-    if (rect && keepDesktopCursor()) {
-        if (g_clipsKept.fetch_add(1) == 0) {
-            EVR_LOG(
-                "keys: the game clipped the desktop cursor while not in the foreground; the clip is dropped");
-        }
-        return TRUE;
-    }
-    return g_clipCursor.load()(rect);
-}
-
-BOOL WINAPI hookedRegisterRawInputDevices(PCRAWINPUTDEVICE devices, UINT count, UINT size) {
-    if (!devices || count == 0 || count > 16 || size != sizeof(RAWINPUTDEVICE) || !keepDesktopCursor()) {
-        return g_registerRawInputDevices.load()(devices, count, size);
-    }
-    RAWINPUTDEVICE copy[16];
-    std::memcpy(copy, devices, sizeof(RAWINPUTDEVICE) * count);
-    for (UINT i = 0; i < count; ++i) {
-        if (copy[i].usUsagePage == 0x01 && copy[i].usUsage == 0x02 &&
-            (copy[i].dwFlags & RIDEV_CAPTUREMOUSE)) {
-            copy[i].dwFlags &= ~static_cast<DWORD>(RIDEV_CAPTUREMOUSE);
-            if (!g_loggedCapture.exchange(true)) {
-                EVR_LOG("keys: raw mouse registered without RIDEV_CAPTUREMOUSE (the game is not in the "
-                        "foreground)");
-            }
-        }
-    }
-    return g_registerRawInputDevices.load()(copy, count, size);
-}
-
 } // namespace
-
-DesktopCursorCounters desktopCursorCounters() {
-    return {g_cursorMovesKept.load(), g_clipsKept.load(), g_realInputDropped.load()};
-}
-
-void installCursorGuard() {
-    if (!mp_guard::allowsGameTouch()) {
-        return;
-    }
-    std::call_once(g_cursorOnce, [] {
-        const bool move = replaceImport("SetCursorPos", g_setCursorPos, &hookedSetCursorPos);
-        const bool clip = replaceImport("ClipCursor", g_clipCursor, &hookedClipCursor);
-        const bool raw = replaceImport("RegisterRawInputDevices", g_registerRawInputDevices,
-                                       &hookedRegisterRawInputDevices);
-        EVR_LOG("keys: desktop cursor kept from the game while it is not in the foreground: SetCursorPos %s, "
-                "ClipCursor %s, RegisterRawInputDevices %s",
-                move ? "yes" : "no", clip ? "yes" : "no", raw ? "yes" : "no");
-    });
-}
 
 bool installKeyInjection() {
     if (!mp_guard::allowsGameTouch()) {

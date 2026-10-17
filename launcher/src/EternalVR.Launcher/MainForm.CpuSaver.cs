@@ -38,7 +38,7 @@ namespace EternalVR.Launcher
             }
             // The label beside the first checkbox (FitGroup); the notes wrap in the column.
             return Row(Setting.TextureStreaming, panel, s => LoadSaver(items, boxes, s), s => ReadSaver(items, boxes, s),
-                fit: w => { foreach (var note in notes) WrapIn(note, w); });
+                fit: w => { foreach (var note in notes) WrapIn(note, w); }, keys: items.Select(i => i.Key).ToList());
         }
 
         /// <summary>The "CPU Saver" group: a row per item with its label on the left, as in the other groups; null
@@ -52,7 +52,7 @@ namespace EternalVR.Launcher
                 var one = new[] { item };
                 var boxes = new[] { new CheckBox { AutoSize = true } };
                 return Row(Setting.CpuSaver, boxes[0], s => LoadSaver(one, boxes, s), s => ReadSaver(one, boxes, s),
-                    text: new SettingTexts.Text(item.Label, SaverTip(item)));
+                    text: new SettingTexts.Text(item.Label, SaverTip(item)), keys: new[] { item.Key });
             }).ToArray();
             var text = SettingTexts.For(Setting.CpuSaver);
             var group = Group(text.Label, groupRows);

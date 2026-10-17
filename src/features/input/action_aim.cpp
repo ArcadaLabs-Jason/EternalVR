@@ -44,12 +44,12 @@ const char* aimedActionName(AimedAction action) {
     return "none";
 }
 
-ActionAim::ActionAim(ActionAimSettings settings) : settings_(settings) {}
+ActionAim::ActionAim(ActionAimSettings settings) : settings_(settings), meleeSource_(settings.melee) {}
 
 ActionAimSource ActionAim::sourceFor(AimedAction action) const {
     switch (action) {
     case AimedAction::Melee:
-        return settings_.melee;
+        return meleeSource_;
     case AimedAction::Equipment:
         return settings_.equipment;
     case AimedAction::None:
@@ -72,7 +72,9 @@ ActionAimOutput ActionAim::update(const ActionAimInput& input) {
     out.actions = input.actions;
     const game::GameActionSet pressed = input.actions & ~previous_;
     previous_ = input.actions;
-    if (!settings_.any()) {
+    const bool punch = input.meleeFromPunch && game::contains(pressed, game::GameAction::Melee);
+    if (!settings_.any() && !punch && target_ == ActionAimSource::Same && heldBack_.none()) {
+        out.generation = generation_;
         return out;
     }
 
@@ -84,6 +86,7 @@ ActionAimOutput ActionAim::update(const ActionAimInput& input) {
     }
     if (game::contains(pressed, game::GameAction::Melee)) {
         pressedAction = AimedAction::Melee;
+        meleeSource_ = punch ? ActionAimSource::Head : settings_.melee;
     }
     if (pressedAction != AimedAction::None) {
         const ActionAimSource want = sourceFor(pressedAction);
@@ -162,6 +165,7 @@ ActionAimOutput ActionAim::update(const ActionAimInput& input) {
 
 void ActionAim::reset() {
     setTarget(ActionAimSource::Same, AimedAction::None);
+    meleeSource_ = settings_.melee;
     previous_.reset();
     heldBack_.reset();
     heldAction_ = AimedAction::None;

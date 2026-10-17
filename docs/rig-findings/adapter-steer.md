@@ -4,7 +4,7 @@ On a machine with two Vulkan devices (a laptop's integrated and discrete GPUs, a
 on), the game's Vulkan device can land on a different adapter from the headset's. The presenter's LUID check then
 refuses VR at session creation (T-111). Adapter steering makes the game's own pick land on the headset's adapter
 instead. It is **off by default**: `ETERNALVR_ADAPTER_STEER=1` (or `on`) turns it on, until a two-GPU machine has
-been tried with a headset (section 5); there is no launcher option yet. Code: `src/vkcore/adapter_steer.cpp` (Vulkan and OpenXR side), `src/vkcore/adapter_order.cpp` (the order,
+been tried with a headset (section 5); the launcher's "Use the headset's graphics card" (Advanced tab, this machine's, never in a profile) sets it. Code: `src/vkcore/adapter_steer.cpp` (Vulkan and OpenXR side), `src/vkcore/adapter_order.cpp` (the order,
 unit-tested in `tests/vkcore/adapter_order_tests.cpp`).
 
 Evidence labels: [static] the game's disassembly or the Vulkan loader's source, [test] unit tests, [rig] seen on the

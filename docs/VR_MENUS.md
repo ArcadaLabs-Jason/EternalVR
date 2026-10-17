@@ -81,6 +81,25 @@ XR worker, every XR frame                                     game (message pump
   included. The layer replaces the exe's `SetCursorPos`, `ClipCursor` and `RegisterRawInputDevices` imports:
   while the game's window is not the foreground window those moves and clips are dropped and the capture
   flag is removed, so a person at the PC keeps the mouse. With the game in front nothing changes.
+- **What the game took in front is given back when it loses the front** (GitHub issue 30,
+  `platform/key_injection/cursor_hold.hpp`, `vkcore/cursor_guard.cpp`). A click into the game's window
+  brings it in front, and the game takes the mouse on activation (`docs/rig-findings/menus.md` section 1:
+  raw mouse 0x230, `ClipCursor` to the window). It never sees the deactivation that would make it let go,
+  so up to 0.1.50 the cursor stayed in its window until the game quit. The window procedure the layer
+  already puts in front of the game's (`keep_active.cpp`) sees that deactivation (`WM_ACTIVATEAPP` false,
+  or `WM_ACTIVATE` inactive for a window the game does not own) on the window's own thread, and there gives
+  back the clip (only while the clip in force is still the game's), the window's mouse capture
+  (`ReleaseCapture`, which only the capturing thread can do) and the raw mouse's `RIDEV_CAPTUREMOUSE`
+  (registered again with the game's other flags). No thread, hook or polling is added. The calls are made
+  with the book's lock released (`ReleaseCapture` sends `WM_CAPTURECHANGED` to the game's window procedure at
+  once, and a `ClipCursor` there comes back into the guard). When the window is
+  in front again (`WM_ACTIVATEAPP`, `WM_ACTIVATE`, `WM_SETFOCUS` or `WM_SIZE` restored, after the game
+  handled it; never while the window is minimized, whose client area is off the screen) whatever the
+  game did not take again itself goes back: the clip moved with the window, the raw mouse with its flags,
+  and also a clip or capture the guard kept off the desktop meanwhile. Logged per change (the first 20,
+  then every 50th): `keys: the game's window lost the foreground; given back: cursor clip yes, mouse
+  capture -, raw mouse capture yes (release 1)` and `keys: the game's window is in front again; put back:
+  ...`.
 - **The view while a menu is up.** Head aim writes nothing while a menu or popup is up over the game, and
   the body keeps the yaw it had when the menu came up (`aim: a menu is up: head aim holds the body yaw at
   ...`), so the world stays put while the head looks around. Before, the body was worked out every frame
@@ -267,10 +286,20 @@ map panned by the weapon hand's stick`, or `by the other stick`).
 **Which page is up.** The game does not say. The router takes a menu that comes up within 1.5 s of the
 controllers' Dossier (or automap) action to be the Dossier on its map page (`controllers::
 dossierRequestedWithin`; logged `the game shows its cursor (the Dossier, on its map: ...)`), then counts
-the tab keys it sends (Map, Arsenal, Codex, Challenges). A click on the tab strip (the top 8% of the
-panel) or a tab key past either end (the game may wrap or stop) makes the page unknown, which turns the
-map's sticks off until the Dossier is opened again; a popup never counts. Changes are logged (`menu: the
-Dossier's map page: ...` / `not the Dossier's map page (or not known): ...`).
+the tab keys it sends (Map, Arsenal, Codex, Challenges). A tab key past either end is not sent (a grip or a
+stick at the map going back, or at Challenges going on, does nothing): whether the game wraps there or stops
+is not known, and either way the count stays right. Up to 0.1.50 such a key made the page unknown, which
+turned the map's sticks off until the Dossier was opened again (Jason's 0.1.50 playtest: the sticks changed
+tabs on the map). The same key kept back again within 1 s is sent after all and makes the page unknown
+(the count can be wrong: a key the game ignored, a Dossier that opened elsewhere than its map), so the end
+tab is always reachable; logged `menu: Dossier page map -> not known (Q asked again at the end: sent)`. The
+page is kept while the headset stops showing frames with the menu up (`releaseHeld` lets go of held input
+only) and is dropped when the menu closes (`... -> not known (closed)`). A click on the tab strip (the top 8% of the panel) still makes the page unknown (which tab
+it opens is not known), and a popup never counts. Every page change is logged (`menu: Dossier page map ->
+arsenal (E)`, `... (opened)`, `... (a tab clicked)`; a key kept back: `menu: Dossier page map: Q not sent at
+the first tab`, the first 20), as is the sticks' mode (`menu: the Dossier's map page: ...` / `not the
+Dossier's map page (or not known): ...`). The game's automap object has an `isActive` flag
+(`docs/rig-findings/menus.md` section 6) that could tell the map page directly; it is not read yet.
 | Arsenal: weapon choice | Yes | click the weapon's icon (the A / D keys are not needed) |
 | Arsenal: a weapon's upgrade screen (Upgrades, Mastery) | Yes | click the mod; B returns to the Arsenal |
 | Arsenal: buy an upgrade | Clicks land on it; not seen bought (no weapon points in the save) | click |

@@ -56,7 +56,11 @@ struct MapperSettings {
     StickResponse move = kMoveStickResponse;
     LocomotionFrame locomotionFrame = LocomotionFrame::Head;
     TurnSettings turn;
+    // The turn stick. When the weapon wheel is all its down hold opens (the built-in maps) the early hold
+    // (turn_stick_arbiter.hpp) is wheelStickHoldSeconds (kWheelStickHoldSeconds; one that is not finite or
+    // outside 0 to kMaxHoldSeconds falls back to that); otherwise there is none.
     TurnStickSettings turnStick;
+    float wheelStickHoldSeconds = kWheelStickHoldSeconds;
     HandsJumpSettings handsJump;
     PunchSettings punch;
     // The throw and the overhead swing (arm_gestures.hpp), both off by default.
@@ -83,6 +87,10 @@ struct MapperSettings {
     static std::array<std::array<OwnControls, kControlTouchCount>, 2> defaultTouchOwnControls();
     static std::array<std::array<OwnControls, kControlTouchCount>, 2> defaultTouchLandingControls();
 };
+
+// Whether the stick's down hold opens the weapon wheel and nothing else (at least one down hold binding, each
+// of them weapon_wheel).
+[[nodiscard]] bool downHoldOnlyOpensWheel(const BindingProfile& profile);
 
 // Whether a face button's touch (not pressed) is `hand`'s rest: face touch on, and no thumb rest there.
 [[nodiscard]] inline bool faceTouchIsRest(const MapperSettings& settings, Hand hand) {

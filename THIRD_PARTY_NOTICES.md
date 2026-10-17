@@ -1,12 +1,17 @@
 # Third-party notices
 
 Every file copied or adapted from another project is listed here with its origin (repo + commit),
-license, and original copyright notice. None yet.
+license, and original copyright notice. None yet: no source file is copied or adapted from another
+project. (The published material under `reference/` is research input, never built or shipped; its
+sources and licences are in `reference/MANIFEST.md`.)
 
-Every library the release redistributes, statically linked or shipped as a file (for example the
-OpenXR loader, SPIRV-Tools, safetyhook, kananlib, spdlog and fmt, toml++, nlohmann/json, Dear ImGui and
-the launcher's own packages), is listed here too, with its version, its full licence text and any
-NOTICE file its licence requires. This file is included in every release zip.
+Every library the release redistributes, statically linked or shipped as a file, is listed here too,
+with its version, its full licence text and any NOTICE file its licence requires: safetyhook with
+Zydis and Zycore, the Vulkan headers and the OpenXR headers (compiled into `layer\EternalVR.dll`), the
+OpenXR loader with its JsonCpp (`layer\openxr_loader.dll`), the Microsoft C and C++ runtime (linked
+statically) and one image in the launcher. The launcher uses no NuGet package at run time. Of these
+projects only Microsoft's STL has a NOTICE file, and its licence exception waives carrying it with
+compiled code. This file is included in every release zip.
 
 ## safetyhook 0.7.0 (statically linked into EternalVR.dll)
 
@@ -41,10 +46,12 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-## Zydis 4.1.0 and Zycore (bundled in the safetyhook archive as `Zydis.c` / `Zydis.h`)
+## Zydis 4.0.0 and Zycore 1.4.1 (bundled in the safetyhook archive as `Zydis.c` / `Zydis.h`)
 
-- Origin: https://github.com/zyantific/zydis (v4.1.0, the version safetyhook 0.7.0 pins) and
-  https://github.com/zyantific/zycore-c; amalgamated by the safetyhook release; not modified.
+- Origin: https://github.com/zyantific/zydis and https://github.com/zyantific/zycore-c, amalgamated
+  by the safetyhook release; not modified. The archive's `Zydis.h` reads `ZYDIS_VERSION` 4.0.0 and has
+  none of 4.1.0's additions (safetyhook's own CMake build pins 4.1.0, its release archive does not);
+  Zycore 1.4.1 is the version Zydis 4.0.0 pins.
 - Licence: MIT (both).
 
 Zydis:
@@ -52,8 +59,8 @@ Zydis:
 ```
 The MIT License (MIT)
 
-Copyright (c) 2014-2024 Florian Bernd
-Copyright (c) 2014-2024 Joel Höner
+Copyright (c) 2014-2021 Florian Bernd
+Copyright (c) 2014-2021 Joel Höner
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -79,8 +86,8 @@ Zycore:
 ```
 The MIT License (MIT)
 
-Copyright (c) 2018-2024 Florian Bernd
-Copyright (c) 2018-2024 Joel Höner
+Copyright (c) 2018-2020 Florian Bernd
+Copyright (c) 2018-2020 Joel Höner
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -107,10 +114,17 @@ SOFTWARE.
   `OpenXR.Loader.1.1.63.nupkg` (SHA-256 4E5A50A8807EF66F25180FF224E7D8150B594AA8EE4B07590F9ADE55A8E98703),
   fetched at build time by `cmake/EvrOpenXr.cmake`; the x64 release DLL is shipped unmodified.
 - Licence: Apache-2.0 OR MIT (the package's licence expression). We distribute it under the MIT licence.
+  One loader source, the generated `xr_generated_loader.cpp`, also carries an Apache-2.0 licence line in
+  its body, so the Apache License 2.0 text is reproduced at the end of this file as well.
 - The OpenXR headers from the same package are compiled into EternalVR.dll under the same terms.
+- The copyright holders named in the loader's sources (`src/loader`, the `src/common` files it compiles,
+  `include/openxr`):
 
 ```
 Copyright (c) 2017-2026 The Khronos Group Inc.
+Copyright (c) 2017-2019 Valve Corporation
+Copyright (c) 2017-2019 LunarG, Inc.
+Copyright (c) 2019 Collabora, Ltd.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -134,11 +148,36 @@ SOFTWARE.
 ## JsonCpp (built into `openxr_loader.dll` by Khronos)
 
 - Origin: https://github.com/open-source-parsers/jsoncpp, the copy bundled in the OpenXR-SDK loader
-  sources; not modified by us.
-- Licence: public domain where recognised, otherwise MIT.
+  sources (`src/external/jsoncpp`); not modified by us.
+- Licence: public domain where recognised, otherwise MIT. Its licence file in full:
 
 ```
-Copyright (c) 2007-2010 by The JsonCpp Authors
+The JsonCpp library's source code, including accompanying documentation,
+tests and demonstration applications, are licensed under the following
+conditions...
+
+Baptiste Lepilleur and The JsonCpp Authors explicitly disclaim copyright in all
+jurisdictions which recognize such a disclaimer. In such jurisdictions,
+this software is released into the Public Domain.
+
+In jurisdictions which do not recognize Public Domain property (e.g. Germany as of
+2010), this software is Copyright (c) 2007-2010 by Baptiste Lepilleur and
+The JsonCpp Authors, and is released under the terms of the MIT License (see below).
+
+In jurisdictions which recognize Public Domain property, the user of this
+software may choose to accept it either as 1) Public Domain, 2) under the
+conditions of the MIT License (see below), or 3) under the terms of dual
+Public Domain/MIT License conditions described here, as they choose.
+
+The MIT License is about as close to Public Domain as a license can get, and is
+described in clear, concise terms at:
+
+   http://en.wikipedia.org/wiki/MIT_License
+
+The full text of the MIT License follows:
+
+========================================================================
+Copyright (c) 2007-2010 Baptiste Lepilleur and The JsonCpp Authors
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
@@ -159,15 +198,72 @@ BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
 ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+========================================================================
+(END LICENSE TEXT)
+
+The MIT license is compatible with both the GPL and commercial
+software, affording one all of the rights of Public Domain with the
+minor nuisance of being required to keep the above copyright notice
+and license text in the source code. Note also that by accepting the
+Public Domain "license" you can re-license your copy using whatever
+license you like.
 ```
 
 ## Vulkan-Headers 1.4.357 (compiled into EternalVR.dll)
 
-- Origin: https://github.com/KhronosGroup/Vulkan-Headers, tag v1.4.357: from the Vulkan SDK 1.4.357.0
-  when one is installed (as on the build PC), else fetched at build time by
-  `cmake/EvrVulkanHeaders.cmake`; not modified.
-- Licence: Apache-2.0 OR MIT. We use them under the MIT licence; the notice is the Khronos MIT text
-  above with `Copyright 2015-2026 The Khronos Group Inc.`
+- Origin: https://github.com/KhronosGroup/Vulkan-Headers, tag v1.4.357, fetched at build time by
+  `cmake/EvrVulkanHeaders.cmake` (pinned to a checksum; no Vulkan SDK is used); not modified.
+- Licence: Apache-2.0 OR MIT. We use them under the MIT licence; the notice is the MIT text in the
+  OpenXR loader section above with these copyright lines: `Copyright 2015-2026 The Khronos Group Inc.`
+  (the API headers; `vk_platform.h`: `Copyright 2014-2026 The Khronos Group Inc.`) and, for
+  `vk_layer.h`, `Copyright 2015-2023 The Khronos Group Inc.`, `Copyright 2015-2023 Valve Corporation`
+  and `Copyright 2015-2023 LunarG, Inc.`
+
+## Microsoft C and C++ runtime (statically linked into EternalVR.dll)
+
+- EternalVR.dll links the Microsoft Visual C++ runtime statically (`CMAKE_MSVC_RUNTIME_LIBRARY`
+  `MultiThreaded` in `CMakeLists.txt`, Visual Studio 2022 Build Tools), so it imports no
+  `MSVCP140.dll` or `VCRUNTIME140*.dll` and no Visual C++ Redistributable is needed. The Khronos build of
+  `openxr_loader.dll` links its runtime statically too.
+- The C++ standard library part is Microsoft's STL (https://github.com/microsoft/STL): Apache-2.0 WITH
+  LLVM-exception, its Ryu-derived parts Boost Software License 1.0; both let code compiled from it be
+  redistributed without its notices (the LLVM exception waives Apache-2.0 sections 4(a), 4(b) and
+  4(d)). The rest is Microsoft's runtime library code, linked as the Visual Studio licence allows.
+
+## Images in the launcher
+
+- `EternalVR.Launcher.exe` embeds Ko-fi's cup symbol beside its "Support EternalVR on Ko-fi" link
+  (`branding/kofi-symbol-64.png` in the source repository: Ko-fi's brand asset `kofi_symbol.png`, only
+  resized). It belongs to Ko-fi Labs Limited, is not covered by EternalVR's MIT licence, and is used only
+  to link to the Ko-fi page.
+- The launcher's icon and header strip are the EternalVR logo, which is not covered by the MIT licence
+  either (`branding/README.md` in the source repository).
+
+## Build and test only (not redistributed)
+
+Fetched at build time and never part of a release:
+
+- doctest 2.4.12 (the layer's unit tests), https://github.com/doctest/doctest, MIT, fetched by
+  `cmake/EvrDependencies.cmake`.
+- xUnit 2.9.2, xunit.runner.visualstudio 2.8.2 (Apache-2.0) and Microsoft.NET.Test.Sdk 17.11.1 (MIT),
+  the launcher's unit tests, from NuGet.
+- Microsoft.NETFramework.ReferenceAssemblies 1.0.3 (MIT), the .NET Framework 4.8 reference assemblies
+  the launcher compiles against; nothing from it is copied into the build output.
+
+## Brand marks in the launcher (embedded in EternalVR.Launcher.exe)
+
+- `branding/discord-symbol-blurple.png`: Discord's symbol in its colour, from https://discord.com/branding (fetched
+  2026-10-13, SHA-256 `f6c1a66250d366d213789faefab59a9ec6ac6334e6c4be0af254680c148810dc`), not modified. Discord and
+  the Discord logo are trademarks of Discord Inc. Shown only beside the launcher's "EternalVR on Discord" link to the
+  EternalVR Discord server, as Discord's brand guidelines allow.
+- `branding/github-invertocat-black.png`: GitHub's mark (the Invertocat) in black, from https://github.com/logos
+  (`GitHub_Logos.zip`, fetched 2026-10-13, SHA-256 `2a2f5cbcc74c7fa83c40127dd8b0e42c23f1157131aebe28492aa1ac27bbdc6d`),
+  not modified. GitHub and the Invertocat are trademarks of GitHub, Inc. Shown only beside the launcher's "Report on
+  GitHub" link to the EternalVR repository's issues, as GitHub's logo guidelines allow.
+- `branding/kofi-symbol-64.png`: Ko-fi's cup symbol (Ko-fi Labs Limited), resized only, beside the support link
+  (`branding/README.md`).
+
+Neither Discord, GitHub nor Ko-fi sponsors or endorses EternalVR. These files are not covered by the MIT licence.
 
 ## Build and test only (not redistributed)
 
@@ -180,8 +276,215 @@ Fetched at build time and never part of a release:
 
 ## Not redistributed
 
-- The Microsoft Visual C++ runtime (`MSVCP140.dll`, `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`) that
-  EternalVR.dll links against is not shipped; the user installs it (Microsoft's Visual C++ 2015-2022
-  redistributable, normally already present).
-- The launcher uses only .NET Framework 4.8, which is part of Windows. The
-  `Microsoft.NETFramework.ReferenceAssemblies` package is used at build time only.
+- The launcher uses only .NET Framework 4.8, which is part of Windows.
+- NVIDIA's DLSS DLL (`nvngx_dlss.dll`) is not shipped: on the player's request the launcher downloads it
+  from NVIDIA's GitHub repository after the player accepts NVIDIA's licence
+  (`launcher/data/dlss-downloads.txt` names each file, its SHA-256 and its licence).
+
+## Apache License 2.0
+
+The text referred to in the OpenXR loader section above.
+
+```
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+```

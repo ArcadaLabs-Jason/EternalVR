@@ -15,9 +15,9 @@ Status as of 2026-10-12 (v0.1.49). The order of the work left is under "Plan fro
 | **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for eight controller families, `docs/VR_CONTROLLERS.md`) |
 | M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (v0.1.12); the wrist and weapon HUDs are options, checked on the rig, waiting for a headset test |
 | M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen, around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12) |
-| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles, each with its own controls, the controls editor, preflight, update alerts with in-place updates, and an Export report for bug reports |
+| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles (Recommended plus the player's changes, marked in the window), each with its own controls, the controls editor, preflight, update alerts with in-place updates, and an Export report for bug reports |
 | M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL, downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6); frame pacing to the headset (on by default); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
-| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.49 |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.50; v0.2.0 is the first beta |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
 
 The Status column says what has shipped. The boxes in the milestones below are ticked only when a
@@ -91,9 +91,11 @@ Foundation, in order:
 5. **Legibility** (REQ-07, M6): the legibility protocol written and passed at default settings. Exit:
    the M6 legibility criterion passes.
 6. **Profiles** (REQ-10, M8): a base preset with personal edits, changed-from-preset markers, rename.
-   Exit: the M8 profile criterion passes.
+   Exit: the M8 profile criterion passes (built and checked by unit tests and a driven launcher window,
+   2026-10-13; see M8).
 7. **Comfort presets and the first-launch health notice** (REQ-15): only once the comfort options are
-   settled (D-048).
+   settled (D-048). A profile based on a new preset is written with every setting while older launchers do
+   not know the preset, so a downgrade does not read it against Recommended (T-134).
 8. **Release hygiene** (REQ-18, REQ-19, M10): the notices audit, a clang-tidy check and the
    code-signing choice (open question 7).
 
@@ -120,8 +122,9 @@ headset.
    exist and from the weapon meshes otherwise, and go into per-weapon rows of
    `data/weapons/viewmodel_offsets.toml`. Exit: on the rig, with the eye on the sight line, the sight
    line stays parallel to the aim ray within 0.25° for every weapon; the owner's headset look on two or
-   three weapons; until then a player option, off by default. Scopes do not magnify (a
-   picture-in-picture scope is a separate feature).
+   three weapons. The owner decided after his headset look (2026-10-13): sights are on for everyone with
+   no option, and the weapons without a row yet follow as their rows are measured (T-135). Scopes do not
+   magnify (a picture-in-picture scope is a separate feature).
 3. **Arm solve and model.** The arm solve fixed, with unit tests: the wrist's twist measured from the
    bind pose and unwrapped, twist past the forearm's share passed to the upper arm, the wrist's swing
    clamped. The arms model chosen by the layer and set through the game's own model call (tried with
@@ -414,7 +417,7 @@ Required for v1
 - [ ] Adapter steering (T-111): on a two-GPU machine the game's device is steered to the HMD adapter by
       LUID in `vkEnumeratePhysicalDevices` and `vkEnumeratePhysicalDeviceGroups`; tested on the rig
       with the per-application GPU preference cleared. Built, off by default (`ETERNALVR_ADAPTER_STEER=1`
-      turns it on; no launcher option yet): the list is left alone or moved to the front by the game's own
+      turns it on; the launcher's "Use the headset's graphics card", Advanced tab, System group): the list is left alone or moved to the front by the game's own
       pick rule, never cut (unit tests); on a one-GPU PC with a software device added the game's device
       follows the steering, and runs with it off are unchanged; waiting for a two-GPU headset test, then
       the refusal on a forced mismatch (`docs/rig-findings/adapter-steer.md`)
@@ -586,15 +589,31 @@ Experiments and targets
 
 ## M8: Profiles, bindings and launcher polish
 
-Status: the launcher has Play, Advanced and "Checks and log" tabs, VR settings profiles with a Save button
-(each with its own controls), a controls editor that opens on the controllers of the last game, the Steam
-and Game Pass builds (T-117), and update alerts with in-place updates from the public releases (v0.1.5, at
-the owner's request; T-123). The profile criteria below (preset markers, reset per setting) are not checked
-yet; `ApplyClass` moved after v1 (T-129).
+Status: the launcher has Play, Advanced and "Checks and log" tabs, VR settings profiles (Recommended plus the
+player's changes, with Save, Duplicate, Rename and Delete, each with its own controls), a controls editor that
+opens on the controllers of the last game, the Steam and Game Pass builds (T-117), and update alerts with
+in-place updates from the public releases (v0.1.5, at the owner's request; T-123). `ApplyClass` moved after v1
+(T-129).
 
 Required for v1
-- [ ] Named per-player profiles (REQ-10): base preset plus overrides, changed-from-preset markers, reset
-      per setting or all, save/duplicate/rename/delete, last used remembered
+- [x] Named per-player profiles (REQ-10): base preset plus overrides, changed-from-preset markers, reset
+      per setting or all, save/duplicate/rename/delete, last used remembered. Built 2026-10-13: the base
+      preset is Recommended, the launcher's defaults (`SettingsPresets`; the comfort presets join it with
+      foundation step 7, D-048); a profile file names its preset and holds only the settings that differ from
+      it (`ProfileEdits`), so the others follow the preset, in the profile in use too (T-134), and an older
+      launcher's full file reads the same and is copied to `profiles\backup` the first time it is saved over;
+      each setting that differs has a dot after its name, right-clicking the name resets it, Reset to
+      Recommended (Advanced tab) resets all of them; Duplicate and Rename sit beside Save and Delete, and a
+      rename moves the profile's file, its controls folder and launcher.ini's `profile` line, finished at the
+      next start if the launcher stops half-way or cannot put a failed rename back (`ProfileRename`; the
+      profile list is locked until then); launcher.ini keeps the profile in use. Checked by unit tests
+      (`ProfileEditsTests`: each of the 65 rows that hold a setting marks only itself, every change survives
+      the profile file, older files read the same; `ProfileFollowTests`: a changed default reaches the
+      profile in use, hand edits and an older launcher's change are kept; `ProfileRenameTests` and
+      `ProfileRenameUnfinishedTests`: a stop or a failure at each step is finished or put back, nothing made
+      meanwhile hides the controls; `ProfileRenameJournalTests`: a journal that names no rename locks
+      nothing) and by `evr-ui-shots`, which drives the window's strip (`ProfileFlow`:
+      reset one setting, save, duplicate, rename). Not yet used by a player
 - Moved after v1 (T-129): each setting's `ApplyClass`, live edits and the pending-edits file (T-032,
   T-061, T-106). In v1 settings apply at launch.
 - [x] Bindings editor (REQ-11): remap any action per profile; a profile with a conflicting binding
@@ -697,8 +716,27 @@ v1 if time allows
 
 ## M10: Beta and public release
 
-Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.49 (2026-09-28 to 2026-10-12) and
-players reporting through GitHub issues. The launcher checks the public releases (at most once an hour;
+Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.50 (2026-09-28 to 2026-10-13) and
+players reporting through GitHub issues.
+
+**Beta (owner's decision, 2026-10-13):** v0.2.0 is the first beta. It does not wait for every fault to be
+fixed: players have finished the base game and both DLCs on the alphas. The beta ships when:
+- the profiles step (foundation step 6) is merged;
+- weapon sights that line up with the aim are on by default (no option: a gun fires where its sights
+  point), and the Heavy Cannon's scope is either working in VR or listed in KNOWN-ISSUES;
+- the uninstall check has run on a clean machine (the Windows Sandbox check), and the uninstall criterion
+  below is met or reworded;
+- the notices audit and a clang-tidy check are done, and the code-signing choice (open question 7) is
+  made (an unsigned beta with the SmartScreen steps in INSTALL.md is acceptable);
+- the legibility protocol (foundation step 5) is written and passed at default settings;
+- the playthrough log (foundation step 4) is met by players' full runs of the base game and both DLCs;
+- the owner has looked at the beta build in a headset;
+- every known fault is fixed or listed in KNOWN-ISSUES.
+
+Comfort presets and the first-launch health notice (foundation step 7) come during the beta, once the
+features they cover have settled. A two-GPU combination without a headset test is listed as untested.
+
+The launcher checks the public releases (at most once an hour;
 the check can be turned off) and installs an update in place when the player agrees, the zip checked
 against its published SHA-256 and each file against `SHA256SUMS.txt` (v0.1.5, at the owner's request).
 T-123 records this and supersedes T-093's update-check clause; the criterion below follows it.

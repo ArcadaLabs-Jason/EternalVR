@@ -173,6 +173,7 @@ void XrPresenter::Impl::shutdown() {
     ui_engine::setSkipComposite(false);                     // the game composites its own GUI again
     requestTwoViews(false);                                 // the game goes back to its own single view
     controllers::restoreWheelSlowdown("the layer shuts down");
+    controllers::restoreZoomLook("the layer shuts down");
     if (cutsceneTrack.skipHolding) {
         injectKey(kSkipKey, false, gameWindow());
         cutsceneTrack.skipHolding = false;

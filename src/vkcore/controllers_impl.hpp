@@ -385,7 +385,8 @@ input::Hand weaponHand();
 // Melee and equipment aim (action_aim_hook.cpp, features/input/action_aim.hpp).
 // The mapper, under mapperMutex, before ActionHold: the actions with a press held back until the camera hook
 // has written its target; publishes the target. `menuHold`: a menu holds gameplay input back.
-game::GameActionSet aimActions(State& s, const game::GameActionSet& down, bool menuHold, float dt);
+game::GameActionSet
+aimActions(State& s, const game::GameActionSet& down, bool meleeFromPunch, bool menuHold, float dt);
 // The mapper, when its input goes stale: back to the weapon hand.
 void resetActionAim(State& s);
 // Camera hook, inside hand aim: what the view follows now, and notes that this frame writes it.
@@ -482,6 +483,9 @@ void updateHaptics(const XrInput& xr, bool focused);
 // decl's name ("weapon/player/shotgun"), or empty.
 const std::byte* heldItemDecl(const std::byte* hands);
 std::string itemDeclName(const std::byte* decl);
+// The viewmodel hook, each update with the controllers' viewmodel on (zoom_look.cpp): the held weapon's decls
+// get the VR zoom look (game/eternal/zoom_look.hpp) when they do not have it yet.
+void noteZoomLookHands(const std::byte* hands, const std::byte* player);
 
 // bHaptics (bhaptics_game.cpp, docs/BHAPTICS.md). With the game hooks: starts its thread once when
 // ETERNALVR_BHAPTICS=1. The fire hook: a shot of the local player's `hands`. The camera hook, once a game

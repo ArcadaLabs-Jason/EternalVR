@@ -286,3 +286,92 @@ TEST_CASE("a cancelled sweep does nothing more until the stick is back in the ce
     arbiter.update({0.0f, -1.0f}, kFrame);
     CHECK(arbiter.update({}, kFrame).downTap);
 }
+
+namespace {
+
+// The weapon wheel's down hold as the mapper sets it for the built-in maps: 0.15 s within 20 degrees of
+// straight down, 0.30 s otherwise.
+TurnStickArbiter wheelArbiter() {
+    evr::input::TurnStickSettings settings;
+    settings.earlyHoldSeconds = evr::input::kWheelStickHoldSeconds;
+    return TurnStickArbiter(settings);
+}
+
+} // namespace
+
+TEST_CASE("at the weapon wheel's 0.15 s hold a down flick is still a tap and a held push a hold") {
+    TurnStickArbiter arbiter = wheelArbiter();
+    // About 0.1 s down (claim frame plus 9 frames): a tap, the quick switch.
+    const std::vector<Axis2> flick(10, Axis2{0.0f, -1.0f});
+    SweepResult result = runSweep(arbiter, flick);
+    CHECK(result.taps == 1);
+    CHECK(result.holdFrames == 0);
+    // 0.2 s down: a hold from 0.15 s on (frame 14 after the claim), no tap.
+    const std::vector<Axis2> push(19, Axis2{0.0f, -1.0f});
+    result = runSweep(arbiter, push);
+    CHECK(result.taps == 0);
+    CHECK(result.holdFrames == 5);
+    // A push that leaves the stay cone before 0.15 s is still cancelled: no tap, no hold.
+    std::vector<Axis2> drift(8, Axis2{0.0f, -1.0f});
+    for (const Axis2 p : arc(180.0f, 120.0f, -10.0f, 10)) {
+        drift.push_back(p);
+    }
+    result = runSweep(arbiter, drift);
+    CHECK(result.taps == 0);
+    CHECK(result.holdFrames == 0);
+}
+
+TEST_CASE("a down push held 25 degrees off straight down waits for the full 0.30 s hold") {
+    TurnStickArbiter arbiter = wheelArbiter();
+    // 155 degrees clockwise from up: 25 degrees from straight down, inside the 30-degree claim cone.
+    const std::vector<Axis2> push(25, stickAt(155.0f));
+    SweepResult result = runSweep(arbiter, push);
+    CHECK(result.holdFrames == 0); // 0.27 s: not yet
+    const std::vector<Axis2> longer(30, stickAt(155.0f));
+    result = runSweep(arbiter, longer);
+    CHECK(result.holdFrames >= 2); // from about frame 27 (0.30 s) on
+    CHECK(result.holdFrames <= 3);
+}
+
+TEST_CASE("a down sweep already rolling toward a turn at 0.15 s is still cancelled when it leaves the cone") {
+    TurnStickArbiter arbiter = wheelArbiter();
+    // Straight down for 0.04 s, then rolling 4 degrees a frame toward the left: 40 degrees off at 0.15 s
+    // (outside the early hold's 20), out of the 45-degree stay cone at about 0.18 s.
+    std::vector<Axis2> roll(4, Axis2{0.0f, -1.0f});
+    for (const Axis2 p : arc(180.0f, 270.0f, 4.0f, 40)) {
+        roll.push_back(p);
+    }
+    const SweepResult result = runSweep(arbiter, roll);
+    CHECK(result.holdFrames == 0);
+    CHECK(result.taps == 0);
+    CHECK(result.turnFrames == 0);
+}
+
+TEST_CASE(
+    "the trade-off: a down push that rolls out of the cone after 0.15 s is a hold, no longer cancelled") {
+    // Up to 0.1.50 (a 0.30 s hold) this sweep was cancelled; now its release swaps the weapon (R14 failure
+    // mode 4). Pinned so the trade-off stays a choice.
+    std::vector<Axis2> roll(18, Axis2{0.0f, -1.0f}); // 0.2 s straight down
+    for (const Axis2 p : arc(180.0f, 270.0f, 10.0f, 12)) {
+        roll.push_back(p);
+    }
+    TurnStickArbiter now = wheelArbiter();
+    const SweepResult committed = runSweep(now, roll);
+    CHECK(committed.holdFrames > 0);
+    CHECK(committed.turnFrames == 0);
+    TurnStickArbiter before; // the 0.30 s hold, no early hold
+    const SweepResult cancelled = runSweep(before, roll);
+    CHECK(cancelled.holdFrames == 0);
+    CHECK(cancelled.taps == 0);
+}
+
+TEST_CASE("the weapon wheel's stick hold follows the buttons' hold time, 0.10 s shorter") {
+    using evr::input::wheelStickHoldSeconds;
+    CHECK(wheelStickHoldSeconds(0.25f) == doctest::Approx(0.15f));
+    CHECK(wheelStickHoldSeconds(0.15f) == doctest::Approx(0.10f));
+    CHECK(wheelStickHoldSeconds(0.4f) == doctest::Approx(0.30f));
+    CHECK(wheelStickHoldSeconds(0.6f) == doctest::Approx(0.50f));
+    CHECK(wheelStickHoldSeconds(0.1f) == doctest::Approx(0.10f));
+    CHECK(wheelStickHoldSeconds(std::numeric_limits<float>::quiet_NaN()) ==
+          doctest::Approx(evr::input::kWheelStickHoldSeconds));
+}

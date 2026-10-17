@@ -9,7 +9,7 @@
 
 # Milliseconds from the guard arming (the game's instance, before the main menu) to the test trip: past the map
 # load and head aim (about 19 s on the rig), so the trip lands in play.
-$script:QaGuardTripMs = 45000
+$script:QaGuardTripMs = 55000
 
 # The stand-in: creates one Vulkan instance, as the game's (app 'DOOMEternal', engine 'idTech', API 1.1) when
 # EVR_STANDIN_AS_GAME=1, else with no application info; prints the vkCreateInstance result. Compiled by Add-Type,
@@ -135,10 +135,24 @@ function Get-QaLineIndex($Ctx, [string]$Text) {
 $guardScenarios = @(
     @{
         Name = 'mp-guard-trip'; Kind = 'game'; GuardTrips = $true
-        Proves = "The guard's positive control in the game: armed, the campaign map loads as single-player, then ETERNALVR_GUARD_TEST_TRIP_MS trips it in play; the game keeps running 25 s on, the headset falls back to the flat cinema screen (no new head-tracked frame between the last two 10 s xr lines after the trip, more on the screen), the head stops being driven and the cvars the layer wrote are set back; the trip is the only one"
-        Env = @("ETERNALVR_GUARD_TEST_TRIP_MS=$script:QaGuardTripMs")
+        Proves = "The guard's positive control in the game: armed, the campaign map loads as single-player, then ETERNALVR_GUARD_TEST_TRIP_MS trips it in play; the game keeps running 25 s on, the headset falls back to the flat cinema screen (no new head-tracked frame between the last two 10 s xr lines after the trip, more on the screen), the head stops being driven and the cvars the layer wrote are set back; the trip is the only one. Before the trip the Heavy Cannon is drawn with its Precision Bolt, so the zoom look's decl writes are put back at the trip (T-136)"
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        Env = @("ETERNALVR_GUARD_TEST_TRIP_MS=$script:QaGuardTripMs",
+                'ETERNALVR_DEBUG_COMMANDS=3:g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0')
+        Input = @('right.aim = 0, 0', 'left.aim = 0, 0')
         Timeline = {
             param($c)
+            # The Heavy Cannon (quick switch from the Combat Shotgun), then its other mod if the Bolt's decl line is not
+            # there yet: the Bolt's decl is written before the trip.
+            $rest = @('right.aim = 0, 0', 'left.aim = 0, 0')
+            Wait-QaSeconds $c 2
+            Write-QaInput $c ($rest + 'right.stick = 0, -1'); Wait-QaSeconds $c 0.15
+            Write-QaInput $c $rest
+            if (-not (Wait-QaLog $c "zoom look: 'weapon/player/heavy_cannon_bolt_action" 6)) {
+                Write-QaInput $c ($rest + 'left.secondary = 1'); Wait-QaSeconds $c 0.15
+                Write-QaInput $c $rest
+                $null = Wait-QaLog $c "zoom look: 'weapon/player/heavy_cannon_bolt_action" 6
+            }
             $tripped = Wait-QaLog $c 'mp guard: TRIPPED by test' 90
             Add-QaResult $c 'the test trip landed within 90 s of being in the map' $tripped
             # 25 s: two of the presenter's 10 s summaries after the trip.
@@ -155,6 +169,10 @@ $guardScenarios = @(
             Test-QaPresent $c 'xr: multiplayer guard tripped: the game is shown on the flat cinema screen'
             Test-QaPresent $c "head: the multiplayer guard is tripped; the game's view and aim are no longer changed"
             Test-QaPresent $c 'cvar restore: the multiplayer guard tripped:'
+            # The zoom look's decls: the Bolt's written before the trip, every written decl put back at it.
+            $bolt = Get-QaLineIndex $c "zoom look: 'weapon/player/heavy_cannon_bolt_action"
+            Add-QaResult $c "the Bolt's decl was written before the trip" ($bolt -ge 0 -and $bolt -lt $trip) "line $bolt, trip line $trip"
+            Test-QaPresent $c "zoom look: the game's values back in (\d+) of \1 weapon decl\(s\) \(the multiplayer guard tripped\)" -Regex
             # The xr summary every 10 s counts headset frames since the start: after the trip the head-tracked count
             # stands still and the cinema screen's grows.
             $lines = @((Get-QaLogText $c) -split "`r?`n")

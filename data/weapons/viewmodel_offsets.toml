@@ -19,15 +19,15 @@
 [seated]
 "default" = [-0.30, 0.18, 0.22, 0, 0, 0]
 
-# Weapon sights (ETERNALVR_WEAPON_SIGHTS=1, rig tests for now): [pitch, yaw] in degrees (pitch positive down,
-# yaw counter-clockwise) is the direction of the weapon's sight line in the arms model's frame as the game
-# animates it at idle. The model is turned about the grip so that line runs parallel to the aim ray: the
-# sights then point where the shots go, offset from the ray by the sights' fixed height and side above the
-# hand. Same key rules, but no "default": a weapon without a row is not turned (plasma rifle, rocket
-# launcher, BFG, Unmaykr, fists, chainsaw, Crucible, hammer). Each row is the sight line in the weapon's own
-# frame (noted per row) turned by the idle pose the hands rig measured: the centre of its spread over five
-# held controller poses (docs/rig-findings/hands-rig.md, section 6), which keeps the idle sway's worst case
-# smallest: about 0.15 to 0.2 degrees either side.
+# Weapon sights (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): [pitch, yaw] in
+# degrees (pitch positive down, yaw counter-clockwise) is the direction of the weapon's sight line in the arms
+# model's frame as the game animates it at idle. The model is turned about the grip so that line runs parallel
+# to the aim ray: the sights then point where the shots go, offset from the ray by the sights' fixed height
+# and side above the hand. Same key rules, but no "default": a weapon without a row is not turned (plasma
+# rifle, rocket launcher, BFG, Unmaykr, fists, chainsaw, Crucible, hammer). Each row is the sight line in the
+# weapon's own frame (noted per row) turned by the idle pose the hands rig measured: the centre of its spread
+# over five held controller poses (docs/rig-findings/hands-rig.md, section 6), which keeps the idle sway's
+# worst case smallest: about 0.15 to 0.2 degrees either side.
 [sights]
 # Receiver top to the bead; the idle pose toes the gun in about 2.2 degrees.
 "weapon/player/shotgun" = [0.21, 2.17]

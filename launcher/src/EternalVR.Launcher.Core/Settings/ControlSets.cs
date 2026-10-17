@@ -47,26 +47,37 @@ namespace EternalVR.Launcher.Core.Settings
 
         /// <summary>
         /// Gives a profile without a controls folder of its own a copy of the no-profile set's maps, so from now on it keeps
-        /// its own. True when a folder was made; false for no profile, or one that already has its folder.
+        /// its own. True when a folder was made; false for no profile, one that already has its folder, or one whose folder is
+        /// still on its way to that name in an unfinished rename (<see cref="RenameUnderWay"/>).
         /// </summary>
         public bool Adopt(string profile)
         {
-            if (ProfileStore.NormaliseName(profile) == null || HasOwn(profile)) return false;
+            if (ProfileStore.NormaliseName(profile) == null || HasOwn(profile) || RenameUnderWay(profile)) return false;
             CopyInto(profile, Shared);
             return true;
         }
 
         /// <summary>
         /// A new profile's controls: its folder becomes a copy of the maps in <paramref name="from"/>'s set in use (the
-        /// no-profile set for none), replacing any folder of that name left behind.
+        /// no-profile set for none), replacing any folder of that name left behind. Refused (<see cref="IOException"/>) while a
+        /// folder is still on its way to that name in an unfinished rename (<see cref="RenameUnderWay"/>).
         /// </summary>
         public void StartFrom(string profile, string from)
         {
             var n = ProfileStore.NormaliseName(profile) ?? throw new ArgumentException("not a profile name: " + profile, nameof(profile));
+            if (RenameUnderWay(n))
+                throw new IOException("a rename of a VR settings profile to " + n + " is not finished; it finishes the next time the launcher starts");
             var source = InUse(from);
             if (string.Equals(source.Dir, Of(n).Dir, StringComparison.OrdinalIgnoreCase)) return;
             CopyInto(n, source);
         }
+
+        /// <summary>
+        /// True while a controls folder is on its way to <paramref name="profile"/>'s name in an unfinished rename (at
+        /// <c>.evr-rename-&lt;name&gt;</c>, <see cref="ProfileRename"/>): a folder made at that name now would stand in its way.
+        /// </summary>
+        public bool RenameUnderWay(string profile) =>
+            ProfileStore.NormaliseName(profile) is string n && Directory.Exists(Path.Combine(ProfilesDir, ProfileRename.TempPrefix + n));
 
         /// <summary>Removes the profile's controls folder and everything in it; nothing for no profile or no folder.</summary>
         public void Delete(string profile)

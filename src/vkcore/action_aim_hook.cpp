@@ -1,7 +1,8 @@
 // Melee and equipment aim under hand aim (features/input/action_aim.hpp, docs/VR_CONTROLLERS.md "Melee and
 // equipment aim").
 //
-// - The mapper (aimActions): runs the policy on its actions before ActionHold, so a press that aims with the
+// - The mapper (aimActions): runs the policy on its actions before ActionHold (under hand aim always: a
+//   punch's melee aims with the head whatever ETERNALVR_MELEE_AIM says), so a press that aims with the
 //   head or the off hand goes into the first command built after the camera hook wrote that target, and
 //   publishes the target with its generation (one atomic, packTarget).
 // - The camera hook (actionAimTarget in aimAngles, then noteAimWritten once head aim has added the
@@ -73,9 +74,11 @@ bool logDue(LogCap& cap) {
 
 } // namespace
 
-game::GameActionSet aimActions(State& s, const game::GameActionSet& down, bool menuHold, float dt) {
+game::GameActionSet
+aimActions(State& s, const game::GameActionSet& down, bool meleeFromPunch, bool menuHold, float dt) {
     const input::ControllerSettings& cfg = settings();
-    if (cfg.aim != input::AimSource::Hand || cfg.actionAim.melee == input::ActionAimSource::Same) {
+    // Under hand aim the policy runs whatever the melee setting: a punch's melee aims with the head.
+    if (cfg.aim != input::AimSource::Hand) {
         return down;
     }
     if (!s.actionAim) {
@@ -91,6 +94,7 @@ game::GameActionSet aimActions(State& s, const game::GameActionSet& down, bool m
     passThrough &= down;
     input::ActionAimInput in;
     in.actions = down & ~passThrough;
+    in.meleeFromPunch = meleeFromPunch;
     // Piloting a demon the camera hook aims the demon, not the Slayer's view (demon_aim.cpp).
     // Nor while the camera hook writes nothing (a menu or popup up, a scripted camera): the press goes out.
     in.retargetable = s.attached.load(std::memory_order_acquire) && !forced && !menuHold &&
@@ -102,10 +106,11 @@ game::GameActionSet aimActions(State& s, const game::GameActionSet& down, bool m
     const input::ActionAimOutput out = s.actionAim->update(in);
     s.actionTarget.store(packTarget(out.target, out.generation));
     if (out.generation != before && logDue(g_targetLines)) {
-        EVR_LOG("%s: action aim: the view follows the %s%s%s (generation %llu)", kTag,
+        const bool punched = in.meleeFromPunch && out.action == input::AimedAction::Melee;
+        EVR_LOG("%s: action aim: the view follows the %s%s%s%s (generation %llu)", kTag,
                 input::actionAimSourceName(out.target), out.action == input::AimedAction::None ? "" : " for ",
                 out.action == input::AimedAction::None ? "" : input::aimedActionName(out.action),
-                static_cast<unsigned long long>(out.generation));
+                punched ? " (a punch)" : "", static_cast<unsigned long long>(out.generation));
     }
     if (out.released) {
         s.actionPressAction.store(static_cast<std::uint8_t>(out.pressed));

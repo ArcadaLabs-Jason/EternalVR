@@ -83,6 +83,11 @@ namespace EternalVR.Launcher.Core.Launch
         /// </summary>
         public IReadOnlyList<KeyValuePair<string, string>> Inherited { get; set; } = new KeyValuePair<string, string>[0];
         /// <summary>
+        /// Variables of the launcher's own environment, with their inherited values, that the plan sets to another value
+        /// (<see cref="ChildEnvironment.Replaced"/>): a value set by hand that a setting overrides; logged with the plan.
+        /// </summary>
+        public IReadOnlyList<KeyValuePair<string, string>> Replaced { get; set; } = new KeyValuePair<string, string>[0];
+        /// <summary>
         /// Keys of the settings restore that this session may leave as the game saves them (recorded with the snapshot,
         /// <see cref="Safety.SettingsSnapshot.Take"/>): <c>r_SSDO</c> and <c>r_SSR</c> while the layer can hold them at the
         /// player's own Directional Occlusion and Reflections settings. The restore keeps one only when the layer's status file
@@ -101,6 +106,7 @@ namespace EternalVR.Launcher.Core.Launch
             sb.AppendLine("route:   " + (Route == LayerRoute.Environment ? "environment (VK_ADD_IMPLICIT_LAYER_PATH)" : "HKCU registration"));
             foreach (var kv in Environment) sb.AppendLine("env:     " + kv.Key + "=" + kv.Value);
             foreach (var kv in Inherited ?? new KeyValuePair<string, string>[0]) sb.AppendLine("inherit: " + kv.Key + "=" + kv.Value);
+            foreach (var kv in Replaced ?? new KeyValuePair<string, string>[0]) sb.AppendLine("replace: " + kv.Key + "=" + kv.Value + " (inherited, replaced by the env: line)");
             if (Window != null)
                 sb.AppendLine("window:  " + Window.Width + "x" + Window.Height + (Window.Mirror ? " desktop mirror (each eye at the render size)" : " per eye")
                     + (Window.Display == null ? " (no display known)" : " on " + Window.Display)
@@ -321,6 +327,9 @@ namespace EternalVR.Launcher.Core.Launch
             if (saver.Length > 0) Set(CpuSaver.EnvironmentName, saver);
             var ipd = LauncherSettings.ClampIpd(s.IpdMm);
             if (ipd > 0.0) Set("ETERNALVR_IPD", ipd.ToString("0.0", CultureInfo.InvariantCulture));
+            // The headset's graphics card on a PC with two or more (docs/rig-findings/adapter-steer.md). Not set while off, so a
+            // value the player set by hand reaches the game (logged as inherited).
+            if (s.AdapterSteer) Set("ETERNALVR_ADAPTER_STEER", "1");
             foreach (var kv in OpenXrEnvironment(s, inputs.LayerDecisions)) Set(kv.Key, kv.Value);
             foreach (var d in inputs.LayerDecisions)
                 if (d.Action == LayerAction.Disable && d.Environment.HasValue) Set(d.Environment.Value.Key, d.Environment.Value.Value);

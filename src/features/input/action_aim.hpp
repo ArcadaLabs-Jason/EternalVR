@@ -14,6 +14,14 @@
 //
 // Unset, the weapon hand aims them as before. Neither does anything under head or view aim.
 //
+// A melee press that comes from the physical punch (punch_detector.hpp) always aims with the head under hand
+// aim, whatever ETERNALVR_MELEE_AIM says: the punch is measured along the head's forward, and a fist going
+// where the player looks (often the off hand's) says nothing about where the weapon hand's ray points. With
+// the weapon hand's ray the game took a glory kill's target and turn from wherever that ray pointed: in
+// a player's three 0.1.50 sessions all 6 kills whose view turned 100 to 177 degrees came in a 10 s window
+// with a punch, and no kill without a punch in its 10 s window turned more than 92. A stick-click melee keeps
+// the setting.
+//
 // The equipment launcher and the Flame Belch aim from the shoulder launcher's muzzle joint, which follows the
 // weapon hand with the arms model, not from the view angles (static RE, vkcore/equipment_launch_hook.cpp):
 // the layer turns their launches and shots in its hooks and runs this policy for melee alone. The policy
@@ -32,7 +40,8 @@
 //   the other's target first, held back the same way. A press whose target is chosen but not yet written
 //   waits too; one still waiting when another press takes the target elsewhere goes out at once.
 //
-// Pure: no Windows, OpenXR or game memory. The mapper runs it on its command; the camera hook reads the
+// Pure: no Windows, OpenXR or game memory. The mapper runs it on its command (under hand aim, also with both
+// settings on the weapon hand, for the punch); the camera hook reads the
 // target and reports the generation it wrote.
 
 #include "game/eternal/game_action.hpp"
@@ -75,6 +84,8 @@ inline constexpr float kKeepSeconds = 0.5f;
 
 struct ActionAimInput {
     game::GameActionSet actions; // the mapper's actions this command
+    // The melee press on this command is a physical punch (GameInput::meleeFromPunch): it aims with the head.
+    bool meleeFromPunch = false;
     // The camera hook writes the game's view angles now (hand aim on, the controllers attached, no forced
     // view, no menu): a press is held back only then.
     bool retargetable = false;
@@ -115,6 +126,8 @@ private:
     void setTarget(ActionAimSource target, AimedAction action);
 
     ActionAimSettings settings_;
+    // What aims the latest melee press: the head for a punch, otherwise settings_.melee.
+    ActionAimSource meleeSource_;
     game::GameActionSet previous_;
     ActionAimSource target_ = ActionAimSource::Same;
     AimedAction action_ = AimedAction::None;

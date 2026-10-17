@@ -5,8 +5,9 @@ using System.IO;
 namespace EternalVR.Launcher
 {
     /// <summary>
-    /// The branding embedded in the exe: the window icon (all sizes), the header strip across the window's top and Ko-fi's
-    /// cup for the support link.
+    /// The branding embedded in the exe: the window icon (all sizes), the header strip across the window's top, Ko-fi's
+    /// cup for the support link, and Discord's and GitHub's marks for the report links (each brand's official file,
+    /// unaltered: branding/README.md).
     /// </summary>
     internal static class Branding
     {
@@ -32,6 +33,20 @@ namespace EternalVR.Launcher
         public static Image KofiCup()
         {
             var s = Resource("EternalVR.Launcher.kofi-symbol.png");
+            return s == null ? null : Image.FromStream(s);
+        }
+
+        /// <summary>Discord's symbol in its colour (branding/discord-symbol-blurple.png, 528x400); null if the resource is missing.</summary>
+        public static Image DiscordSymbol()
+        {
+            var s = Resource("EternalVR.Launcher.discord-symbol.png");
+            return s == null ? null : Image.FromStream(s);
+        }
+
+        /// <summary>GitHub's mark, the Invertocat in black (branding/github-invertocat-black.png, 294x288); null if the resource is missing.</summary>
+        public static Image GitHubMark()
+        {
+            var s = Resource("EternalVR.Launcher.github-mark.png");
             return s == null ? null : Image.FromStream(s);
         }
 

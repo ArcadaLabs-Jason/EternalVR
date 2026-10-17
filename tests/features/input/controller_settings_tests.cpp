@@ -407,16 +407,17 @@ TEST_CASE("the arms are shown unless ETERNALVR_ARMS says hidden") {
     CHECK(bad.issues[0].message.find("shown, hidden") != std::string::npos);
 }
 
-TEST_CASE("the weapon sights are off unless ETERNALVR_WEAPON_SIGHTS says 1 or on") {
-    CHECK_FALSE(parse({}).settings.weaponSights);
+TEST_CASE("the weapon sights are on by default; ETERNALVR_WEAPON_SIGHTS 0 or off turns them off") {
+    CHECK(parse({}).settings.weaponSights); // T-135: lined-up sights are the baseline
     CHECK(parse({{"ETERNALVR_WEAPON_SIGHTS", "1"}}).settings.weaponSights);
     CHECK(parse({{"ETERNALVR_WEAPON_SIGHTS", "on"}}).settings.weaponSights);
+    // The rig and debug way out.
     CHECK_FALSE(parse({{"ETERNALVR_WEAPON_SIGHTS", "0"}}).settings.weaponSights);
     CHECK_FALSE(parse({{"ETERNALVR_WEAPON_SIGHTS", "off"}}).settings.weaponSights);
     const auto bad = parse({{"ETERNALVR_WEAPON_SIGHTS", "maybe"}});
     REQUIRE(bad.issues.size() == 1);
     CHECK(bad.issues[0].name == "ETERNALVR_WEAPON_SIGHTS");
-    CHECK_FALSE(bad.settings.weaponSights);
+    CHECK(bad.settings.weaponSights); // the default kept
 }
 
 TEST_CASE("the hands rig's dump and planted fault are off unless their test variables are set") {

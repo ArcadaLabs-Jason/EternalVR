@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace EternalVR.Launcher
@@ -260,7 +261,81 @@ namespace EternalVR.Launcher
         /// <summary>The window placed on a display whose scale is not the sign-in one gets that display's (<see cref="DisplayScale"/>).</summary>
         private void MatchDisplayScale() => DisplayScale.Match(this, keepCentre: false);
 
-        /// <summary>The status line wraps at the window's width.</summary>
-        private void FitStatus() => WrapIn(statusLabel, ClientSize.Width - LogicalToDeviceUnits(24));
+        /// <summary>The report links (Report on GitHub, EternalVR on Discord), in the bar or in <see cref="reportLinkPanel"/>.</summary>
+        private MarkButton[] reportLinks = new MarkButton[0];
+        /// <summary>The report links' place at the status line's right end, in a window too narrow for them in the bar.</summary>
+        private readonly FlowLayoutPanel reportLinkPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+
+        private bool reportLinksFitQueued;
+
+        /// <summary>
+        /// <see cref="FitReportLinks"/> once the layout under way has finished (it runs from the bar's own size change, and a
+        /// move made inside that layout would leave the bar's row at its old height), at most one queued at a time.
+        /// </summary>
+        private void QueueFitReportLinks(FlowLayoutPanel bar)
+        {
+            if (reportLinksFitQueued || !IsHandleCreated || IsDisposed) return;
+            reportLinksFitQueued = true;
+            BeginInvoke(new Action(() =>
+            {
+                reportLinksFitQueued = false;
+                if (!IsDisposed) FitReportLinks(bar);
+            }));
+        }
+
+        /// <summary>
+        /// The report links (<see cref="MarkButton"/>) stay in <paramref name="bar"/> after Export report, with their words,
+        /// while the bar's buttons fit on one row with them (the row ends at the status line). Otherwise they move to the
+        /// status line's right end, marks alone, so they never cost the bar a row of its own.
+        /// </summary>
+        private void FitReportLinks(FlowLayoutPanel bar)
+        {
+            if (!bar.Visible || reportLinks.Length == 0) return;
+            int width = 0;
+            foreach (Control c in bar.Controls)
+            {
+                if (c == statusLabel) break;
+                if (c.Visible) width += (c is MarkButton m ? m.WidthWithWords : c.Width) + c.Margin.Horizontal;
+            }
+            bool moved = reportLinks[0].Parent == reportLinkPanel;
+            // In the bar the loop counted them with their words; at the status line they are added.
+            if (moved) width += reportLinks.Sum(l => l.WidthWithWords + l.Margin.Horizontal);
+            // Back to the bar only with some room to spare: the words' width is estimated while they are hidden, and a wrong
+            // guess must not move the links back and forth on every layout.
+            int room = bar.ClientSize.Width - bar.Padding.Horizontal - (moved ? LogicalToDeviceUnits(16) : 0);
+            bool move = width > room;
+            if (move != moved)
+            {
+                bar.SuspendLayout();
+                foreach (var link in reportLinks)
+                {
+                    link.Compact = move;
+                    if (move) reportLinkPanel.Controls.Add(link);
+                    else
+                    {
+                        bar.Controls.Add(link);
+                        bar.Controls.SetChildIndex(link, bar.Controls.GetChildIndex(exportReport) + 1 + Array.IndexOf(reportLinks, link));
+                    }
+                }
+                bar.ResumeLayout(true);
+            }
+            FitStatus();
+            // The bar's row takes its new height (the status line moved or rewrapped).
+            bar.Parent?.PerformLayout();
+        }
+
+        /// <summary>
+        /// The status line wraps at the window's width; with the report links at its right end (<see cref="FitReportLinks"/>)
+        /// it takes the width they leave, all of it, so they stay at the right edge.
+        /// </summary>
+        private void FitStatus()
+        {
+            int width = ClientSize.Width - LogicalToDeviceUnits(24);
+            bool links = reportLinkPanel.Controls.Count > 0;
+            if (links) width -= reportLinkPanel.PreferredSize.Width + reportLinkPanel.Margin.Horizontal;
+            WrapIn(statusLabel, width);
+            var min = links ? new Size(statusLabel.MaximumSize.Width, 0) : Size.Empty;
+            if (statusLabel.MinimumSize != min) statusLabel.MinimumSize = min;
+        }
     }
 }

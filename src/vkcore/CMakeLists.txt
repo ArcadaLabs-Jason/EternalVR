@@ -77,6 +77,7 @@ add_library(evr_layer SHARED
     exposure_hooks.cpp
     frame_pacing.cpp
     game_build.cpp
+    zoom_look.cpp
     game_code.cpp
     game_settings.cpp
     game_text.cpp
@@ -86,6 +87,7 @@ add_library(evr_layer SHARED
     head_sweep.cpp
     import_patch.cpp
     keep_active.cpp
+    cursor_guard.cpp
     key_inject.cpp
     layer_entry.cpp
     light_cull.cpp

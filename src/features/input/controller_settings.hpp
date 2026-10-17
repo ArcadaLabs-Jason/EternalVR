@@ -69,8 +69,9 @@
 //   ETERNALVR_WEAPON_FOV     1 / 0              the weapon drawn with the headset's FOV
 //   ETERNALVR_VIEWMODEL_OFFSET  f,l,u[,pitch,yaw,roll]  one offset for every weapon (tuning)
 //   ETERNALVR_SEATED         1 / 0              the seated viewmodel offsets (T-074)
-//   ETERNALVR_WEAPON_SIGHTS  1 / 0              rig tests: weapons with a [sights] row turned so their sight
-//                                               line runs parallel to the aim ray (weapon_offsets.hpp)
+//   ETERNALVR_WEAPON_SIGHTS  1 / 0              weapons with a [sights] row turned so their sight line runs
+//                                               parallel to the aim ray (on; weapon_offsets.hpp). 0: rig and
+//                                               debug only, not offered to players (T-135)
 //   ETERNALVR_CONTROLLER_DATA   path            a player's controller data file, or a folder of them (every
 //                                               *.toml in it), instead of the built-in
 //                                               (player_controller_data.hpp)
@@ -240,7 +241,7 @@ struct ControllerSettings {
     bool weaponFov = true;
     bool seated = false;
     std::optional<game::WeaponOffset> viewmodelOffset;
-    bool weaponSights = false;
+    bool weaponSights = true; // T-135
     std::string controllerDataPath;
     std::string testInputPath;
     // Rig tests (docs/rig-findings/hands-rig.md): the arms dump's file, and the planted twist fault

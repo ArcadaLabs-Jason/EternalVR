@@ -14,8 +14,15 @@ The exact version and commit are in `BUILD-INFO.txt`. Please quote them in every
 ## What you need
 
 - **Windows 10 or 11**, 64-bit.
-- **A graphics card, ideally an NVIDIA RTX.** Tested: an RTX 4080, and an RTX 3080 Ti (12 GB). AMD and
-  Intel cards have not been tried here; players with AMD cards have run it (`docs\KNOWN-ISSUES.md`).
+- **A graphics card, ideally an NVIDIA RTX.** It runs well on more than high-end cards. Players run it on
+  everything from an RTX 3070 Laptop GPU (8 GB) to an RTX 5090, and on an AMD Radeon RX 6750 XT. One
+  player's desktop RTX 3070 with a Ryzen 7 3800X holds 66 to 72 frames a second at 72 Hz, with full ray
+  tracing, DLSS Balanced and foveated rendering. Similar desktop cards (RTX 3060 Ti or RTX 2080 class)
+  should manage with DLSS on; that is an expectation, not something tested here. On 8 GB and lower-end cards,
+  turn ray tracing off, lower the game's settings and use DLSS and foveated rendering. After each session the
+  launcher says how many new frames a second the game drew: that is the number to compare. Tested here: an
+  RTX 4080, and an RTX 3080 Ti (12 GB). What players with AMD cards have reported is in
+  `docs\KNOWN-ISSUES.md`.
 - **A headset with an OpenXR runtime.** Tested: Meta Quest 3 through Virtual Desktop, with Virtual
   Desktop's own OpenXR runtime (VDXR), and once through SteamVR. Meta Horizon Link and every other runtime
   or headset have not been tested here; they may work, and I would like to hear either way.
@@ -114,7 +121,8 @@ why it did not. It may not when another problem is shown there; the logs in the 
 ## Reporting
 
 When something goes wrong, click **Export report...** in the launcher and attach the zip it saves to a
-GitHub issue (or your Discord message), with what you were doing. It holds the logs (the game's crash reports too), the versions, your PC's relevant
+GitHub issue (or your Discord message), with what you were doing; **Report on GitHub** and **EternalVR on Discord**
+next to the button open both places in your browser. It holds the logs (the game's crash reports too), the versions, your PC's relevant
 settings, the game's settings files and your own controls, with your user folder, user name, computer name, the
 name you play under and Steam account ID replaced by placeholders; `docs\TROUBLESHOOTING.md` lists
 exactly what is in it.

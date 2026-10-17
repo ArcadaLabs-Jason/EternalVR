@@ -168,15 +168,17 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 var marker = dir.Combine("still-running.txt");
                 var (exe, args) = Script(dir,
-                    AnswerLines + SleepCmd(6) + "echo late> \"" + marker + "\"\n",
-                    AnswerLines + SleepSh(6) + "echo late > \"" + marker + "\"\n");
+                    AnswerLines + SleepCmd(10) + "echo late> \"" + marker + "\"\n",
+                    AnswerLines + SleepSh(10) + "echo late > \"" + marker + "\"\n");
                 var watch = Stopwatch.StartNew();
-                var r = ProbeChild.Run(exe, args, null, timeoutMs: 10000, graceMs: 2000);
+                var r = ProbeChild.Run(exe, args, null, timeoutMs: 20000, graceMs: 2000);
                 watch.Stop();
                 Assert.True(r.Ok, r.Error);
                 Assert.Equal(new Extent(1832, 1920), r.Limits.Recommended);
-                Assert.True(watch.ElapsedMilliseconds < 5000, watch.ElapsedMilliseconds + " ms");
-                Thread.Sleep(7000);
+                // Well under the 10 s the copy sleeps after answering (waiting for its exit would take that long), with
+                // room for a slow start while the other tests run in parallel (5 s failed now and then).
+                Assert.True(watch.ElapsedMilliseconds < 8000, watch.ElapsedMilliseconds + " ms");
+                Thread.Sleep(11000);
                 Assert.False(File.Exists(marker));
             }
         }

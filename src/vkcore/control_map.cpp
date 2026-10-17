@@ -249,11 +249,14 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     mapperSettings.swing = cfg.swing;
     mapperSettings.handsJump = cfg.handsJump;
     mapperSettings.punch.thresholdMetresPerSecond = cfg.punchSpeed;
-    // The hold time (the launcher's Hold time) for the buttons, and for the stick held down to open the
-    // weapon wheel, which keeps its own margin over the buttons' (0.3 s against 0.25 s by default).
+    // The hold time (the launcher's Hold time) for the buttons, and for the stick held down: 0.05 s longer;
+    // when the weapon wheel is all the down hold opens, a push within 20 degrees of straight down holds
+    // sooner, 0.10 s shorter than the buttons (at least 0.10 s), since the game's own open delay comes on top
+    // (turn_stick_arbiter.hpp).
     mapperSettings.buttonHoldSeconds = cfg.holdSeconds;
     mapperSettings.turnStick.holdSeconds =
         cfg.holdSeconds + (input::TurnStickSettings{}.holdSeconds - input::kDefaultHoldSeconds);
+    mapperSettings.wheelStickHoldSeconds = input::wheelStickHoldSeconds(cfg.holdSeconds);
     // The thumb-rest wheel, on the hands whose controllers can sense a resting thumb (scripted input stands
     // in for any).
     mapperSettings.restWheel = cfg.thumbRest;
@@ -267,6 +270,16 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     publishPromptLabels(s.mapper->profile(), controller);
     EVR_LOG("%s: control map for %s controllers%s, %s", kTag,
             std::string(game::controllerName(controller)).c_str(), when, s.mapper->summary().c_str());
+    if (s.mapper->profile().turnStick) {
+        const input::TurnStickSettings& stick = s.mapper->settings().turnStick;
+        if (stick.earlyHoldSeconds < stick.holdSeconds) {
+            EVR_LOG("%s: the turn stick's down hold (the weapon wheel's): %.2f s within %.0f deg of straight "
+                    "down, else %.2f s; the game's open delay comes on top",
+                    kTag, stick.earlyHoldSeconds, stick.earlyConeDegrees, stick.holdSeconds);
+        } else {
+            EVR_LOG("%s: the turn stick's down hold: %.2f s", kTag, stick.holdSeconds);
+        }
+    }
     logRestButtons(*s.mapper, mapperSettings.restSensors);
     logTouchButtons(*s.mapper);
     logRestWheel(*s.mapper, mapperSettings.restFaceTouch, mapperSettings.restSensors);

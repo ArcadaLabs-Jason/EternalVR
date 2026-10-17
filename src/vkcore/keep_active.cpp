@@ -2,6 +2,7 @@
 
 #include "vkcore/keep_active.hpp"
 
+#include "vkcore/cursor_guard.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
@@ -39,6 +40,21 @@ std::array<Subclass, 4> g_subclasses;
 std::mutex g_subclassMutex; // installs only
 
 LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+// A deactivation that hands the foreground to another program (or another thread's window): WM_ACTIVATEAPP,
+// or WM_ACTIVATE for a window that is not one the game owns. Not WM_KILLFOCUS, which a focus change inside
+// the game's own windows sends too.
+bool leavesForeground(UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_ACTIVATEAPP) {
+        return wParam == FALSE;
+    }
+    if (message != WM_ACTIVATE || LOWORD(wParam) != WA_INACTIVE) {
+        return false;
+    }
+    HWND next = reinterpret_cast<HWND>(lParam);
+    HWND game = g_gameWindow.load(std::memory_order_relaxed);
+    return !next || !game || GetAncestor(next, GA_ROOTOWNER) != GetAncestor(game, GA_ROOTOWNER);
+}
 
 const Subclass* findSubclass(HWND hwnd) {
     for (const Subclass& s : g_subclasses) {
@@ -102,8 +118,9 @@ LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
         return unicode ? DefWindowProcW(hwnd, message, wParam, lParam)
                        : DefWindowProcA(hwnd, message, wParam, lParam);
     }
-    if (g_keepActive.load(std::memory_order_relaxed) &&
-        hwnd == g_gameWindow.load(std::memory_order_relaxed) && mp_guard::allowsGameTouch()) {
+    const bool kept = g_keepActive.load(std::memory_order_relaxed) &&
+                      hwnd == g_gameWindow.load(std::memory_order_relaxed) && mp_guard::allowsGameTouch();
+    if (kept) {
         const bool deactivate = (message == WM_ACTIVATEAPP && wParam == FALSE) ||
                                 (message == WM_ACTIVATE && LOWORD(wParam) == WA_INACTIVE) ||
                                 message == WM_KILLFOCUS;
@@ -112,11 +129,24 @@ LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
             if (n <= 5 || n % 100 == 0) {
                 EVR_LOG("window: kept the game active (message 0x%x, %u so far)", message, n);
             }
+            // The game never lets go of the mouse it took in front (it never sees this), so the layer
+            // gives it back here, on the window's own thread (the mouse capture is the thread's).
+            if (leavesForeground(message, wParam, lParam)) {
+                releaseGameCursor();
+            }
             return 0;
         }
     }
-    return unicode ? CallWindowProcW(original, hwnd, message, wParam, lParam)
-                   : CallWindowProcA(original, hwnd, message, wParam, lParam);
+    const LRESULT result = unicode ? CallWindowProcW(original, hwnd, message, wParam, lParam)
+                                   : CallWindowProcA(original, hwnd, message, wParam, lParam);
+    const bool activated = (message == WM_ACTIVATEAPP && wParam != FALSE) ||
+                           (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) ||
+                           message == WM_SETFOCUS ||
+                           (message == WM_SIZE && (wParam == SIZE_RESTORED || wParam == SIZE_MAXIMIZED));
+    if (kept && activated) {
+        restoreGameCursor(); // in front again: what was given back returns, unless the game took it itself
+    }
+    return result;
 }
 
 } // namespace

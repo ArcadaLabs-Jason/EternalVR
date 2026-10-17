@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core.Settings;
@@ -24,6 +25,10 @@ namespace EternalVR.Launcher
         private sealed class SettingRow
         {
             public Setting Id;
+            /// <summary>The row's name; its label adds a mark while the value differs from the preset (<see cref="ShowChanges"/>).</summary>
+            public string Name;
+            /// <summary>The settings file keys the row sets (<see cref="SettingKeys"/>); none for a row that only shows something.</summary>
+            public IReadOnlyList<string> Keys;
             public Label Label;
             public Control Control;
             public Action<LauncherSettings> Load;
@@ -41,7 +46,7 @@ namespace EternalVR.Launcher
         }
 
         private SettingRow Row(Setting id, Control control, Action<LauncherSettings> load, Action<LauncherSettings> read, bool preflight = false,
-            SettingTexts.Text text = null, bool wide = false, Action<int> fit = null)
+            SettingTexts.Text text = null, bool wide = false, Action<int> fit = null, IReadOnlyList<string> keys = null)
         {
             var label = (text ?? SettingTexts.For(id)).Label;
             control.AccessibleName = label;
@@ -52,13 +57,14 @@ namespace EternalVR.Launcher
             var row = new SettingRow
             {
                 Id = id, Control = control, Load = load, Read = read, Preflight = preflight, Text = text, Wide = wide, Check = check, Fit = fit,
-                Label = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left },
+                Label = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, Name = label, Keys = keys ?? SettingKeys.Of(id),
             };
             // A yes/no row's checkbox and label are placed by CheckLine; the others sit at the top of their row (FitGroup).
             control.Anchor = check ? AnchorStyles.Left : AnchorStyles.Top | AnchorStyles.Left;
             if (!check) row.Label.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             rows.Add(row);
             Watch(control, row);
+            OfferReset(row);
             return row;
         }
 
@@ -158,19 +164,21 @@ namespace EternalVR.Launcher
             try
             {
                 var disk = File.Exists(path) ? File.ReadAllText(path) : null;
-                if (settingsWritten != null && disk != null && disk != settingsWritten)
+                // The hand edits first, then the list of changes not saved into the profile, worked out from the result (T-134).
+                try
                 {
-                    try
+                    ctx.Settings = ProfileEdits.ForSave(ctx.Settings, settingsWritten, disk, profileSaved, ctx.Data.CpuSaver, out bool merged);
+                    if (merged)
                     {
-                        ctx.Settings = LauncherSettings.Parse(LauncherSettings.MergeHandEdits(settingsWritten, ctx.Settings.Serialize(), disk));
                         ctx.Log.Info("launcher.ini was edited outside the launcher; those edits are kept");
                         LoadSettingsIntoControls();
                     }
-                    catch (SettingsException e)
-                    {
-                        // A hand edit that does not parse would otherwise stop every later save.
-                        ctx.Log.Error("launcher.ini was edited outside the launcher but could not be read (" + e.Message + "); the launcher's settings are saved instead");
-                    }
+                }
+                catch (SettingsException e)
+                {
+                    // A hand edit that does not parse would otherwise stop every later save.
+                    ctx.Log.Error("launcher.ini was edited outside the launcher but could not be read (" + e.Message + "); the launcher's settings are saved instead");
+                    ProfileEdits.MarkUnsaved(ctx.Settings, profileSaved, ctx.Data.CpuSaver);
                 }
                 ctx.Settings.Save(path);
                 settingsWritten = File.ReadAllText(path);
@@ -181,16 +189,22 @@ namespace EternalVR.Launcher
             }
         }
 
-        /// <summary>Greys out the rows that do not apply and puts the reason first in their tooltip.</summary>
+        /// <summary>
+        /// Greys out the rows that do not apply and puts the reason first in their tooltip, then whether the value differs
+        /// from the preset (<see cref="ShowChanges"/>).
+        /// </summary>
         private void UpdateRules()
         {
+            var changes = ShowChanges();
             foreach (var r in rows)
             {
                 var why = SettingRules.WhyNot(r.Id, ctx.Settings, parallelEyesGame);
                 var tip = Wrap((r.Text ?? SettingTexts.For(r.Id)).Tooltip);
                 r.Control.Enabled = why == null;
                 r.Label.ForeColor = why == null ? SystemColors.ControlText : SystemColors.GrayText;
-                tips.SetToolTip(r.Label, why == null ? tip : Wrap(why) + Environment.NewLine + Environment.NewLine + tip);
+                var first = string.Join(Environment.NewLine + Environment.NewLine,
+                    new[] { why, changes.TryGetValue(r, out var note) ? note : null }.Where(t => t != null).Select(t => Wrap(t)));
+                tips.SetToolTip(r.Label, first.Length == 0 ? tip : first + Environment.NewLine + Environment.NewLine + tip);
                 SetTip(r.Control, tip);
             }
             UpdateRowParts();
@@ -223,20 +237,6 @@ namespace EternalVR.Launcher
                 line += word.Length;
             }
             return sb.ToString();
-        }
-
-        private void ResetToDefaults()
-        {
-            var answer = MessageBox.Show(this,
-                "Put every setting on the Play and Advanced tabs back to its default?\n\nThe game folder, the layer folder and the OpenXR runtime are kept.",
-                "Reset to defaults", MessageBoxButtons.OKCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
-            if (answer != DialogResult.OK) return;
-            ctx.Settings = ctx.Settings.WithDefaults();
-            LoadSettingsIntoControls();
-            SaveSettings();
-            MarkProfileChanged();
-            ctx.Log.Info("settings reset to the defaults (folders and runtime kept)");
-            RunPreflight();
         }
     }
 }

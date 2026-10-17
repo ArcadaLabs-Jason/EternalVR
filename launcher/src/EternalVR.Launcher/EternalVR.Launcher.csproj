@@ -36,5 +36,8 @@
     <EmbeddedResource Include="..\..\..\branding\launcher-header-1440x240.png" LogicalName="EternalVR.Launcher.launcher-header.png" Link="Resources\launcher-header.png" />
     <!-- Ko-fi's cup, beside the header's support link. -->
     <EmbeddedResource Include="..\..\..\branding\kofi-symbol-64.png" LogicalName="EternalVR.Launcher.kofi-symbol.png" Link="Resources\kofi-symbol.png" />
+    <!-- Discord's symbol and GitHub's mark, beside the report links (the brands' own files, unaltered). -->
+    <EmbeddedResource Include="..\..\..\branding\discord-symbol-blurple.png" LogicalName="EternalVR.Launcher.discord-symbol.png" Link="Resources\discord-symbol.png" />
+    <EmbeddedResource Include="..\..\..\branding\github-invertocat-black.png" LogicalName="EternalVR.Launcher.github-mark.png" Link="Resources\github-mark.png" />
   </ItemGroup>
 </Project>

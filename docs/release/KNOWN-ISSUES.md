@@ -105,7 +105,7 @@ them is worse for you than described here.
   draws them as they were a frame earlier than the right eye; the scenery is not affected.
   0.1.34 fixed this, but the fix drew snow and some ice effects in the right eye as tiles in one mission, so
   0.1.35 turned it off. 0.1.36 fixes the cause of the tiles but keeps the fix off until it has had more
-  testing; a launcher option to try it is coming.
+  testing.
 - **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
@@ -158,13 +158,9 @@ them is worse for you than described here.
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
   Fortress of Doom are one place). A fix is on by default on the Steam and Game Pass (1.0.56.0) versions of
   the game; on any other version the game keeps its own light culling and the log says why (lines starting
-  with `light-cull:`). If a spot looks wrongly lit since this fix, please tell me where; a launcher option to
-  turn the fix off is coming.
+  with `light-cull:`). If a spot looks wrongly lit since this fix, please tell me where.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
-- **Particles in ray-traced reflections.** With the sprite effects fix above on and the game's ray tracing on,
-  smoke, sparks and other particles may be missing from the right eye's reflections while the left eye shows
-  them. This has not been checked yet.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.
@@ -173,8 +169,7 @@ them is worse for you than described here.
   They came from the mod's filter that takes the game's red damage tint off the floating HUD panel. 0.1.48
   replaced that filter, and on my test PC's captures the boxes are gone, but it hasn't been tried in a
   headset yet. If the HUD still looks wrong (squares, a red tint that stays, or anything else that wasn't
-  there before), please tell me where it happened. A launcher option to turn the filter off (the HUD then
-  shows exactly what the game draws, red tint included) is coming.
+  there before), please tell me where it happened.
 - **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
   player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
   `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
@@ -229,7 +224,7 @@ them is worse for you than described here.
   - **Not tried yet:** long sessions, cutscenes, and AMD or Intel graphics cards.
   - **Lens flares** are now drawn for each eye from its own view; that has not been checked in a headset yet.
     If the game freezes or the headset goes black with Parallel Eye Rendering on, turn Parallel Eye Rendering
-    off and please tell me; a launcher option to turn only the lens flares off is coming.
+    off and please tell me.
   - If it cannot finish starting, both eyes show the same image for that session (the log says
     `parallel eyes: FAILED`). After a session the launcher's status line usually says whether it ran, or why
     not; the logs in the exported report always say.
@@ -237,19 +232,26 @@ them is worse for you than described here.
 ## Controllers and aiming
 
 - **Weapon placement** in your hand is one estimate for all weapons; some guns may sit a little off.
-- **Sights are not lined up yet.** Shots go along your controller's aim, and the Aim dot sits exactly on
-  that line at any distance. A gun's own sights can point a little off it, since the placement above is not
-  tuned per weapon. Aim with the dot for now.
-- **The Heavy Cannon's Precision Bolt scope shows no scope picture with hand aim**, and in a first headset
-  try the gun disappeared while zoomed. The Aim dot still shows where shots go. Making the scope work in VR
-  is planned.
+- **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
+  and Ballista point their sights where the shots go. The other guns follow; until then their sights can
+  point a little off your aim. Shots always go along your controller's aim, and the Aim dot sits exactly on
+  that line at any distance.
+- **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
+  the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
+  Aim dot shows where shots go.
+- **The Precision Bolt's scope points about 3 degrees off your aim.** The Heavy Cannon's sights are lined up
+  for its iron sights, so with the Bolt the scope on the gun sits a little off the shot line. Go by the Aim
+  dot.
+- **With head aim there is no crosshair or aim mark while the Precision Bolt is zoomed in.** Shots go to the
+  middle of your view. On the Game Pass version, head aim shows the scope's ring instead.
 - **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
   hand can cover it.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
   weapon in your left hand the game still draws its right arm, reaching across to the gun. Turning off Show
   arms (Play tab) hides both arms. Arms that mirror properly for the left hand are planned.
   A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand
-  jitters when the gun arm moves, and the fist pose is odd); a launcher option to try it is coming.
+  jitters when the gun arm moves, and the fist pose is odd); once those are fixed it becomes the standard,
+  with no option to turn it on or off.
 - **Shots can pass through thin walls** if you push the gun through one; the shot starts at your hand
   and there is no wall check yet.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
@@ -298,8 +300,7 @@ them is worse for you than described here.
 - **The meathook and glory kills with hand aim** have had little testing.
 - **Jumping off climbable walls where you look** is new; it works on a Quest 3, other headsets are untried.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
-  or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where; a
-  launcher option to bring back the game's own wall climbing is coming.
+  or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where.
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
   your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
   pilot it, and at some angles you can see inside its shoulders.
@@ -325,13 +326,14 @@ them is worse for you than described here.
 - **Steam Cloud warning.** If the launcher warns that "Steam's cloud record is stale", start DOOM Eternal
   once normally through Steam, let it reach the main menu, quit, then use the launcher again.
 - **A small game window sits on your desktop** during a VR session. That is normal. While the game is
-  not the focused window, your mouse stays yours.
-- **No rename for VR settings profiles.** The launcher can make and delete a profile but not rename it. To
-  rename one by hand, close the launcher and rename both its file in `profiles` and its controls folder in
-  `controls\profiles` (in `%LOCALAPPDATA%\EternalVR`); a profile whose controls folder is missing uses the
-  controls of (none) until it gets its own copy (CONTROLS.md, "Controls for each profile").
+  not the focused window, your mouse stays yours. Clicking into that window gives the mouse to the game,
+  as when you play flat; Alt+Tab or the Windows key gives it back (up to 0.1.50 it stayed trapped in the
+  game's window until the game quit, GitHub #30).
 - **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
   in a headset; its strength may change.
+- **Use the headset's graphics card** (Advanced tab) is for a PC with two or more graphics cards where VR
+  does not start because the game picked another card than the headset's. It is new, off by default, and
+  not yet tried on such a PC with a headset; please tell me if you need it and how it went.
 - **Not code-signed.** Windows SmartScreen may warn the first time (`INSTALL.md`).
 
 ## The DLC (The Ancient Gods, parts one and two)

@@ -30,6 +30,9 @@ struct GameInput {
     bool capture = false;
     // Per hand (indexed by Hand): a physical punch this frame (punch_detector.hpp), for its vibration.
     std::array<bool, 2> punch{};
+    // This frame's melee press is a punch's (no control held melee already): under hand aim it aims with the
+    // head (action_aim.hpp).
+    bool meleeFromPunch = false;
     // A throw of the off hand (the equipment launcher) or an overhead swing of the weapon hand (the Crucible)
     // this frame (arm_gestures.hpp), or a jump with both hands thrown up (hands_jump.hpp), for the log.
     bool thrown = false;

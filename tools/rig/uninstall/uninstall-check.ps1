@@ -85,7 +85,11 @@ function Invoke-Launcher([string[]]$LauncherArgs, [string]$Out) {
 
 # The window: wait, screenshot, list its windows (a dialog shows there), close it as a player would.
 function Invoke-Window([string]$Tag, [int]$Seconds = 20) {
-    $p = Start-Process -FilePath $exe -ArgumentList $dataArgs -PassThru
+    # Windows PowerShell refuses an empty -ArgumentList, which is what the sandbox run has: pass it only when set.
+    $start = @{ FilePath = $exe; PassThru = $true }
+    if ($dataArgs.Count) { $start.ArgumentList = $dataArgs }
+    $p = Start-Process @start
+    if (-not $p) { Say "FAIL $Tag window: the launcher did not start"; exit 1 }
     Start-Sleep -Seconds $Seconds
     Add-Type -AssemblyName System.Windows.Forms, System.Drawing
     $b = [Windows.Forms.SystemInformation]::VirtualScreen

@@ -37,20 +37,22 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | Left Menu button, press | Pause menu |
 | Y, hold (under SteamVR, Touch controllers only) | Pause menu: SteamVR opens its own dashboard on the left Menu button, so holding Y pauses instead of showing mission information. With **Left (buttons and sticks)** it is B, held |
 | Both sticks pressed, hold 2 s | Recenter (turn the game to where you face, and reset your height, e.g. after standing up or sitting down) |
-| Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (that press then does not pause, and the trigger does not fire). Index: the firm left trackpad press; Steam Frame: View |
+| Hold left Menu + pull a trigger | Save a screenshot of each eye and the HUD, for bug reports or just to keep (that press then does not pause, and the trigger does not fire; where the files go: TROUBLESHOOTING.md). Index: the firm left trackpad press; Steam Frame: View |
 | Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot, since SteamVR keeps the left Menu button. Pull the trigger after ¼ s; the trigger does not fire and the sticks do not recenter |
-| A real punch with your hand | Melee, Glory Kill, Blood Punch, use (punch a switch to press it) |
+| A real punch with your hand | Melee, Glory Kill, Blood Punch, use (punch a switch to press it); with Aim with: Weapon hand it aims where you look, not where the gun points |
 | Throw with your left hand (Throw grenades on) | Equipment launcher (below) |
 | Swing your right hand down from above your head (Overhead swing on) | Crucible, or the Sentinel Hammer (below) |
 | Throw both hands up above your head (Jump with both hands on) | Jump (below) |
 
-**The weapon wheel.** Push the right stick down and keep it there: after about half a second the wheel
-opens (the game slows time) with the bottom weapon highlighted. Without letting go, roll the stick round to
+**The weapon wheel.** Push the right stick down and keep it there: after about a third of a second (0.15 s
+on the stick pushed straight down, 0.3 s if it is off to one side, then the game's own Weapon Wheel Open
+Delay, 0.18 s by default) the wheel opens (the game slows
+time) with the bottom weapon highlighted. Without letting go, roll the stick round to
 the weapon you want; the highlight follows the direction the stick points, however far it is pushed.
 Let the stick spring back to the centre to pick the highlighted weapon and close the wheel. A short flick
 down instead is the quick switch to your last weapon. The stick does not turn you while the wheel is held.
 Keep the game's "Weapon Wheel Open Delay" (controls settings) at its default or shorter, so the wheel is
-open before the stick starts moving its pointer.
+open before the stick starts moving its pointer; a shorter delay there opens the wheel sooner.
 
 If you give the weapon wheel to a button in the controls editor (the right stick click, for example), hold
 that button to open the wheel and point with the turn stick (the right stick unless you swapped the
@@ -253,7 +255,8 @@ does not close, bring the game's window to the front on your desktop (click its 
 or Alt+Tab to it) and press Space on the keyboard.
 
 **The Dossier.** Hold X to open it; it opens on the map. Tabs change with the grips (left: previous,
-right: next) or can be clicked. On the map the sticks move it, so your hand can stay still: the right
+right: next) or can be clicked. The grips and sticks stop at the map and at Challenges; press the same way
+again within a second to send the key anyway. On the map the sticks move it, so your hand can stay still: the right
 stick pans (the left stick with the weapon in your left hand), the other stick zooms (up / down) and
 rotates (left / right), and a stick click centres it on you. To pan with the other hand instead, set
 **Dossier map sticks** on the launcher's Play tab to Other hand pans: then the other hand's stick pans and
@@ -266,19 +269,35 @@ the Dossier.
 ## Launcher settings
 
 The launcher saves each setting as you change it. Hover over a setting for what it does; a greyed-out one
-does not apply with your other choices, and its tooltip says why. **Reset to defaults** (Advanced tab)
-puts everything back except the game folder and the OpenXR runtime.
+does not apply with your other choices, and its tooltip says why.
+
+**Recommended and your changes.** Every setting starts from **Recommended**, the launcher's defaults (the
+Default column in the tables below). A setting you changed from it has a dot (•) after its name, its
+tooltip says so, and the line next to the profile list counts them ("Recommended with 3 changes").
+Right-click a marked setting's name for **Reset to Recommended**, which resets that one setting, or
+**Reset all to Recommended...**; the **Reset to Recommended...** button on the Advanced tab does the same.
+Resetting keeps the game folder, the layer folder, the OpenXR runtime, "Use the headset's graphics card" and your controls.
 
 **VR settings profiles.** The "VR settings profile" list above the tabs keeps more than one set of
-EternalVR settings, for example one per person. Picking a profile loads its Play and Advanced settings.
+EternalVR settings, for example one per person. A profile is Recommended plus that person's changes:
+picking it loads its Play and Advanced settings, and the dots show what it changed.
 **Save** stores the settings shown into the selected profile (the button shows **Save \*** while there are
-changes it does not hold yet); with **(none)** selected it asks for a name and makes a new profile, so to
-start a second profile from the current settings, pick (none) and press Save. Switching away from a profile
-with unsaved changes asks whether to save them first. Each profile also keeps its own controls (see
-[Controls for each profile](#controls-for-each-profile)); the game folder and the OpenXR runtime are shared by
-every profile. **Delete** removes a profile and its controls; the settings shown stay in use, with the
-controls of (none). These profiles hold EternalVR's settings only: DOOM Eternal's saves and its own settings
-are the same whichever profile is picked.
+changes it does not hold yet); with **(none)** selected it asks for a name and makes a new profile.
+**Duplicate...** makes a new profile with the settings shown and a copy of the selected profile's controls
+and picks it (with unsaved changes it asks first whether to save them into the selected profile).
+**Rename...** gives the selected profile another name; its settings and its controls go with it.
+Switching away from a profile with unsaved changes asks whether to save them first. Each profile also keeps
+its own controls (see [Controls for each profile](#controls-for-each-profile)); the game folder and the
+OpenXR runtime are shared by every profile. **Delete** removes a profile and its controls; the settings
+shown stay in use, with the controls of (none). The launcher remembers the profile in use and starts with
+it next time. These profiles hold EternalVR's settings only: DOOM Eternal's saves and its own settings are
+the same whichever profile is picked.
+
+A profile's file in `%LOCALAPPDATA%\EternalVR\profiles` holds only its changes from Recommended. A setting
+you never changed follows Recommended: when a new version of EternalVR changes a Recommended value (the
+release notes say so), every profile that did not change that setting gets the new value, and the CPU
+Saver's items follow their defaults the same way. A profile made by an older launcher holds every setting
+and reads the same; the first time this launcher saves it, the older file is kept in `profiles\backup`.
 
 ### Play tab
 
@@ -310,7 +329,7 @@ values are old.
 | Punch speed | Light, Medium, Hard, Very hard: how fast your hand must move toward where you look to punch | Hard |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
-| Melee aim with | Same as Aim with, Head, Off hand: what aims melee, Blood Punch, glory kills and use (and a real punch). Only when the weapon hand aims | Same as Aim with |
+| Melee aim with | Same as Aim with, Head, Off hand: what aims melee, Blood Punch, glory kills and use from the button. A real punch always aims where you look. Only when the weapon hand aims | Same as Aim with |
 | Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch (and a grenade throw), which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
 | Show arms | On, Off: Off hides the Slayer's arms and leaves the weapon alone, for example with the weapon in the left hand, where the game still draws its right arm reaching across to the gun | On |
@@ -321,7 +340,7 @@ values are old.
 | Thumb-rest picks | Weapon wheel, Weapon by direction: the game's wheel, or one weapon slot per stick direction | Weapon wheel |
 | Face buttons as thumb rest | A thumb resting on A/B or X/Y counts as the thumb rest, on Index and Pico 4 controllers | Off |
 | Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open; the stick's own wheel always slows time | On |
-| Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap | Medium |
+| Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap. The stick pushed straight down for the weapon wheel waits 0.1 s less (0.15 s at Medium, never under 0.1 s), since the game's own wheel delay comes on top | Medium |
 | Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
 | Aim dot size | 0.2 to 5 degrees. Only with the Aim dot on | 1.0 |
@@ -363,6 +382,7 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Health and ammo | On the HUD panel; On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you); or On your weapon (experimental: the ammo just above the back of the gun in your weapon hand, health and armour stay on the panel). The wrist and the weapon need Motion controllers | On the HUD panel |
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |
+| Use the headset's graphics card | For a PC with two or more graphics cards: the game renders on the card your headset's runtime uses, when it would otherwise pick another one and VR could not start. Kept for this PC whichever VR settings profile is picked. Not yet tried on a two-GPU PC with a headset | Off |
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |
 
 ### bHaptics
@@ -572,11 +592,14 @@ have their own buttons on one PC:
   (none). After that the two are apart: changing one does not change the other.
 - **Replacing a profile** (pick (none), press **Save** and give the name of a profile that exists) replaces
   its settings; its controls stay as they are.
+- **Duplicate...** gives the new profile a copy of the selected profile's controls.
+- **Rename...** renames the profile's controls folder with it. If the launcher is stopped half-way (a crash
+  or a power cut), it finishes the rename the next time it starts, so the controls stay with the profile.
+  If a file is in use and a rename can neither finish nor be undone, the launcher says so beside the profile
+  list and locks it until it starts again, which finishes the rename.
 - **Delete** removes the profile's controls folder with the profile.
 - **Profiles from an older launcher**, when every profile shared one set of controls: the first time this
   launcher starts, each of them gets a copy of those controls (the ones of (none)), so nothing changes
   until you change them. A profile whose folder is missing (for example a profile file copied in by hand)
   uses the controls of (none) until the launcher next starts, or until you pick it, press Edit controls or
   press Open folder, which give it its own copy.
-- To rename a profile by hand, close the launcher and rename both its file in `profiles` and its folder in
-  `controls\profiles`.

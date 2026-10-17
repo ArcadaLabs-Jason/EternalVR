@@ -45,9 +45,13 @@ variables the layer reads are listed in `docs/ARCHITECTURE.md` section 15.
 
 - C++20. Code is formatted with `clang-format` 18.1.8 (config in `.clang-format`; CI checks it
   with exactly that version on pushes to `main` and on pull requests, since other versions format
-  some constructs differently). `clang-tidy` is configured (`.clang-tidy`); run it locally. It is
-  advisory until its CI job lands in the release track (M4.5), where it must pass with zero
-  warnings. Compiler warnings are errors on every compiler.
+  some constructs differently). `clang-tidy` is configured (`.clang-tidy`: the bug-finding and
+  performance checks and a few modernize and readability ones; the file says why each check left out
+  is off). `tools/run_clang_tidy.py` runs it over `src/` with the windows-msvc preset's compile
+  commands and fails on any finding that is not in `tools/clang_tidy_baseline.txt`, the accepted ones
+  (no line numbers, so other edits do not disturb it). Fix a new finding rather than adding it there;
+  after fixing a baselined one, `--update-baseline` rewrites the file. It runs locally, not yet in CI
+  (it needs the MSVC build's compile commands). Compiler warnings are errors on every compiler.
 - One responsibility per file. Keep files small; around 300 lines is a good upper bound, and
   anything past about 600 should be split (a CI check enforces 600 from M4.5).
 - Namespaces are `evr::` plus the module's own name, the last meaningful part of its path; the game
@@ -77,7 +81,19 @@ pip install clang-format==18.1.8   # once, ideally in a virtual environment
 clang-format -i $(git ls-files '*.cpp' '*.hpp')
 clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.hpp')   # the check CI runs
 python3 tools/check_includes.py
+python3 tools/check_file_size.py
 cmake --build --preset dev && ctest --preset dev
+```
+
+On Windows, with LLVM installed (`winget install LLVM.LLVM --version 23.1.2`, the version the baseline
+`tools/clang_tidy_baseline.txt` was made with: another version reports other findings, and the script
+warns when they differ; the script also finds clang-tidy in LLVM's install folder) and the
+windows-msvc preset configured, also run the clang-tidy check
+(about two minutes for all of `src/`, four clang-tidy processes at a time; pass files or folders
+to check only those):
+
+```sh
+python tools/run_clang_tidy.py
 ```
 
 ## Game files and rig artifacts
@@ -107,3 +123,19 @@ summarised in our own words under `docs/notes/`.
 - The body says why the change is needed and anything a reviewer should know, such as rig
   measurements or spec references. Wrap at 72 columns.
 - The tree builds and all tests pass at every commit.
+
+## Pull requests
+
+Pull requests are welcome, from anyone. I review every one, and I am picky about quality, so here is
+what a change needs before it can go in:
+
+- It builds and every test passes on the `windows-msvc` preset, and the source checks above are clean.
+- New behaviour comes with tests, and at least one of them fails without your change.
+- Nothing changes for players who touch nothing, unless that is the point of the change; say so if it is.
+- It works on both the Steam and the Game Pass build, or it says clearly that it is Steam only.
+- A change to rendering, input or the game's memory says how you checked it in the game: the log lines
+  that show it ran, captures, or a headset test, and on which graphics card.
+- One topic per pull request, with a description of what it does and why.
+
+However you wrote it, by hand or with tools, the same bar applies. If you are not sure where to start,
+open an issue or ask on Discord first and I will point you to the right files.

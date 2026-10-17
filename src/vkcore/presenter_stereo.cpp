@@ -313,7 +313,7 @@ void XrPresenter::Impl::onEyeView(std::byte* renderView, int viewIndex, const st
     }
     // A cutscene with its arms hidden keeps the game's own model FOV scale (controllers::cutsceneArmsHidden).
     renderView[stereo_view_fields::kInhibitModelFovScale] =
-        std::byte{settings.stereo.inhibitModelFov && !record.cutsceneArms ? 1u : 0u};
+        settings.stereo.inhibitModelFov && !record.cutsceneArms ? std::byte{1} : std::byte{0};
     // One auto exposure for both eyes, adapted to eye L's image, as under Route S: view 1 skips its update
     // and reads the shared exposure view 0 wrote this frame (its exposure targets are not cloned,
     // view_clones.cpp). Each view adapting to its own image left eye R up to a sixth darker wherever it saw

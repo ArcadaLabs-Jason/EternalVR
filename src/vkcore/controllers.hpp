@@ -178,6 +178,15 @@ void restoreClimbCvars(const char* why);
 // turned off, rest_wheel.cpp); nothing otherwise. The same callers as restoreClimbCvars; `why` goes into the
 // log line.
 void restoreWheelSlowdown(const char* why);
+// Writes back the game's own zoom look in the weapon decls the layer changed (zoom_look.cpp: the hands kept,
+// no scope GUI, the weapon's own reticle while zoomed) and changes none after it. The same callers as
+// restoreClimbCvars; `why` goes into the log line.
+void restoreZoomLook(const char* why);
+// Any thread: a weapon whose decl draws a scope (scopeGuiNum set by the game) is zoomed now, with the zoom
+// look on and the viewmodel hook running (zoom_look.cpp). The presenter then holds the reticle style at none
+// under any aim: the scope reticle's ring, which the decls cannot take away once the HUD has loaded it, is
+// not drawn.
+bool scopeZoomed();
 
 // Any thread: the artificial motion of the last mapper run, for the comfort vignette: the turn rate (degrees
 // per second, smooth or snap, either direction) and the move stick's magnitude after its response (0 to 1).

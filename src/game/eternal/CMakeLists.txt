@@ -33,6 +33,8 @@ evr_add_module(evr_game_eternal
         quest_touch_bindings.cpp
         usercmd_buttons.cpp
         weapon_offsets.cpp
+        zoom_look.cpp
+        zoom_look_book.cpp
         controller_data.hpp
         "${CMAKE_CURRENT_BINARY_DIR}/controller_data.cpp"
         "${CMAKE_CURRENT_BINARY_DIR}/weapon_offsets_data.cpp")

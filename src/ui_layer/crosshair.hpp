@@ -99,8 +99,9 @@ enum class ReticleWrite : std::uint8_t { None, Hide, Restore };
 // value and any set later are the player's.
 ReticleWrite reticleWrite(bool requested, int reads, ReticleKeep& keep);
 
-// The layer asks for the hold: the mode is `hold` and hand aim is on.
-bool wantsReticleHold(CrosshairMode mode, bool handAim);
+// The layer asks for the hold: the mode is `hold` and hand aim is on, or (any aim) a scoped weapon is zoomed
+// (`scopeZoomed`, vkcore/zoom_look.cpp): the scope's reticle would draw its ring over the view (T-136).
+bool wantsReticleHold(CrosshairMode mode, bool handAim, bool scopeZoomed = false);
 
 struct CrosshairState {
     CrosshairMode mode = CrosshairMode::Hold;

@@ -11,7 +11,9 @@ using evr::input::Hand;
 using evr::input::MapSticks;
 using evr::menu::CursorPixel;
 using evr::menu::kKeyNextTab;
+using evr::menu::kKeyPreviousTab;
 using evr::menu::MenuRouter;
+using evr::menu::PageChange;
 using evr::menu::PanelHit;
 using evr::menu::RouterEvent;
 using evr::menu::RouterInput;
@@ -217,7 +219,7 @@ TEST_CASE("router: the map's sticks swap with MapSticks::OtherPans, for either w
     }
 }
 
-TEST_CASE("router: the map page ends with a tab key or a click on the tab strip, and after the last tab") {
+TEST_CASE("router: the map page ends with a tab key or a click on the tab strip") {
     MenuRouter router(Hand::Right);
     RouterInput in = mapFrame(0.0, {500, 250});
     CHECK(router.update(in).mapPage);
@@ -230,14 +232,6 @@ TEST_CASE("router: the map page ends with a tab key or a click on the tab strip,
     in.hands[kLeft].grip = 1.0f;
     in.seconds = 0.2;
     CHECK(router.update(in).mapPage);
-    // Past the first tab the page is no longer known (the game may wrap).
-    in.hands[kLeft].grip = 0.0f;
-    in.seconds = 0.3;
-    router.update(in);
-    in.hands[kLeft].grip = 1.0f;
-    in.seconds = 0.4;
-    CHECK_FALSE(router.update(in).mapPage);
-    CHECK(router.dossierPage() == -1);
 
     MenuRouter clicked(Hand::Right);
     in = mapFrame(0.0, {500, 250});
@@ -245,7 +239,129 @@ TEST_CASE("router: the map page ends with a tab key or a click on the tab strip,
     in.hands[kRight].trigger = 1.0f;
     in.hands[kRight].onTabStrip = true;
     in.seconds = 0.1;
-    CHECK_FALSE(clicked.update(in).mapPage);
+    const RouterOutput out = clicked.update(in);
+    CHECK_FALSE(out.mapPage);
+    REQUIRE(out.pageChanges.size() == 1);
+    CHECK(out.pageChanges[0].why == PageChange::Why::TabClicked);
+    CHECK(out.pageChanges[0].to == -1);
+}
+
+namespace {
+
+// One grip press and release (left: previous tab, right: next) from `t`; the tab keys sent and the changes.
+struct GripPress {
+    int keysDown = 0;
+    std::vector<PageChange> changes;
+};
+
+GripPress pressGrip(MenuRouter& router, RouterInput& in, std::size_t hand, double& t) {
+    GripPress press;
+    for (const float grip : {1.0f, 0.0f}) {
+        in.hands[hand].grip = grip;
+        in.seconds = t;
+        t += 0.1;
+        const RouterOutput out = router.update(in);
+        for (const RouterEvent& e : out.events) {
+            if (e.kind == Kind::KeyDown && (e.key == kKeyNextTab || e.key == kKeyPreviousTab)) {
+                ++press.keysDown;
+            }
+        }
+        press.changes.insert(press.changes.end(), out.pageChanges.begin(), out.pageChanges.end());
+    }
+    return press;
+}
+
+} // namespace
+
+TEST_CASE("router: the previous tab on the map is not sent and the sticks still pan") {
+    // Jason's 0.1.50 playtest: one previous-tab press on the map made the page unknown for the rest of the
+    // Dossier, so the sticks changed tabs instead of panning. Fails on the counting that gave up at the ends.
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    const RouterOutput opened = router.update(in);
+    REQUIRE(opened.pageChanges.size() == 1);
+    CHECK(opened.pageChanges[0].why == PageChange::Why::Opened);
+    CHECK(opened.pageChanges[0].to == 0);
+    double t = 0.1;
+    const GripPress left = pressGrip(router, in, kLeft, t);
+    CHECK(left.keysDown == 0);
+    REQUIRE(left.changes.size() == 1);
+    CHECK(left.changes[0].why == PageChange::Why::EndKept);
+    CHECK(left.changes[0].from == 0);
+    CHECK(left.changes[0].to == 0);
+    CHECK(left.changes[0].key == kKeyPreviousTab);
+    CHECK(router.dossierPage() == 0);
+    // The sticks pan: a left drag, no tab key.
+    in.hands[kRight].stick = {0.0f, 1.0f};
+    CursorPixel cursor{500, 250};
+    const std::vector<RouterEvent> events = runMap(router, in, t, t + 0.5, cursor);
+    CHECK(has(events, Kind::ButtonDown));
+    CHECK_FALSE(has(events, Kind::KeyDown, kKeyNextTab));
+    CHECK_FALSE(has(events, Kind::KeyDown, kKeyPreviousTab));
+}
+
+TEST_CASE("router: the next tab on the last page is not sent; back to the map the sticks pan") {
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    router.update(in);
+    double t = 0.1;
+    for (int page = 1; page < evr::menu::kDossierPages; ++page) {
+        const GripPress right = pressGrip(router, in, kRight, t);
+        CHECK(right.keysDown == 1);
+        REQUIRE(right.changes.size() == 1);
+        CHECK(right.changes[0].why == PageChange::Why::TabKey);
+        CHECK(right.changes[0].to == page);
+    }
+    CHECK(router.dossierPage() == 3);
+    const GripPress past = pressGrip(router, in, kRight, t);
+    CHECK(past.keysDown == 0);
+    REQUIRE(past.changes.size() == 1);
+    CHECK(past.changes[0].why == PageChange::Why::EndKept);
+    CHECK(past.changes[0].key == kKeyNextTab);
+    CHECK(router.dossierPage() == 3);
+    for (int page = 2; page >= 0; --page) {
+        CHECK(pressGrip(router, in, kLeft, t).keysDown == 1);
+        CHECK(router.dossierPage() == page);
+    }
+    in.seconds = t;
+    CHECK(router.update(in).mapPage);
+}
+
+TEST_CASE("router: the triage's sequence: previous tab on the map, next tab, then the sticks") {
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    router.update(in);
+    double t = 0.1;
+    CHECK(pressGrip(router, in, kLeft, t).keysDown == 0);
+    CHECK(pressGrip(router, in, kRight, t).keysDown == 1);
+    CHECK(router.dossierPage() == 1); // the Arsenal: the sticks change tabs there, as they should
+    // A stick left goes back to the map (one Q), and from there a stick left again sends nothing.
+    in.hands[kRight].stick = {-1.0f, 0.0f};
+    int previous = 0;
+    for (; t < 2.0; t += 1.0 / 90.0) {
+        in.seconds = t;
+        for (const RouterEvent& e : router.update(in).events) {
+            previous += e.kind == Kind::KeyDown && e.key == kKeyPreviousTab ? 1 : 0;
+        }
+    }
+    CHECK(previous == 1);
+    CHECK(router.dossierPage() == 0);
+    in.hands[kRight].stick = {};
+    in.seconds = t;
+    CHECK(router.update(in).mapPage);
+}
+
+TEST_CASE("router: tab keys outside the Dossier are always sent") {
+    MenuRouter router(Hand::Right);
+    RouterInput in = menuFrame(0.0, {500, 250});
+    router.update(in);
+    double t = 0.1;
+    for (int i = 0; i < 6; ++i) {
+        const GripPress press = pressGrip(router, in, i % 2 == 0 ? kLeft : kRight, t);
+        CHECK(press.keysDown == 1);
+        CHECK(press.changes.empty());
+    }
+    CHECK(router.dossierPage() == -1);
 }
 
 TEST_CASE("router: a menu that is not the Dossier, or a popup, keeps the sticks on scroll and tabs") {
@@ -299,11 +415,11 @@ TEST_CASE(
     }
     CHECK(shownAt > 1.0);
     CHECK(shownAt < 1.6);
-    // Off the map page (a tab key) the sticks do not drag and the cursor stays shown.
-    in.hands[kLeft].grip = 1.0f;
+    // Off the map page (the next tab) the sticks do not drag and the cursor stays shown.
+    in.hands[kRight].grip = 1.0f;
     in.seconds = 2.0;
     CHECK_FALSE(router.update(in).hideCursor);
-    in.hands[kLeft].grip = 0.0f;
+    in.hands[kRight].grip = 0.0f;
     in.hands[kRight].stick = {1.0f, 0.0f};
     for (double t = 2.01; t < 2.5; t += 1.0 / 90.0) {
         in.seconds = t;
@@ -371,4 +487,83 @@ TEST_CASE("router: B on the map lets go of the drag before Escape") {
     REQUIRE(up != out.events.end());
     REQUIRE(esc != out.events.end());
     CHECK(up < esc);
+}
+
+TEST_CASE("router: the same tab key kept back twice within a second is sent, and the page is not known") {
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    router.update(in);
+    double t = 0.1;
+    CHECK(pressGrip(router, in, kLeft, t).keysDown == 0);
+    // Again 0.2 s later: the count may be wrong (a key the game ignored), so the key goes out.
+    const GripPress again = pressGrip(router, in, kLeft, t);
+    CHECK(again.keysDown == 1);
+    REQUIRE(again.changes.size() == 1);
+    CHECK(again.changes[0].why == PageChange::Why::EndForced);
+    CHECK(again.changes[0].from == 0);
+    CHECK(again.changes[0].to == -1);
+    CHECK(router.dossierPage() == -1);
+    in.seconds = t;
+    CHECK_FALSE(router.update(in).mapPage);
+}
+
+TEST_CASE("router: a tab key kept back at an end more than a second after the last is kept back again") {
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    router.update(in);
+    double t = 0.1;
+    CHECK(pressGrip(router, in, kLeft, t).keysDown == 0);
+    t += 1.2;
+    const GripPress later = pressGrip(router, in, kLeft, t);
+    CHECK(later.keysDown == 0);
+    REQUIRE(later.changes.size() == 1);
+    CHECK(later.changes[0].why == PageChange::Why::EndKept);
+    CHECK(router.dossierPage() == 0);
+}
+
+TEST_CASE("router: a key kept at an end is not 'asked again' after the page has changed in between") {
+    // Kept on the map, then a tab away and back within the second: the next previous-tab is a first press at
+    // the end again. Fails when the kept key outlives the page change (it was sent and the page became
+    // unknown).
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    router.update(in);
+    double t = 0.1;
+    CHECK(pressGrip(router, in, kLeft, t).keysDown == 0);
+    CHECK(pressGrip(router, in, kRight, t).keysDown == 1);
+    CHECK(router.dossierPage() == 1);
+    CHECK(pressGrip(router, in, kLeft, t).keysDown == 1);
+    CHECK(router.dossierPage() == 0);
+    const GripPress atEnd = pressGrip(router, in, kLeft, t);
+    CHECK(atEnd.keysDown == 0);
+    REQUIRE(atEnd.changes.size() == 1);
+    CHECK(atEnd.changes[0].why == PageChange::Why::EndKept);
+    CHECK(router.dossierPage() == 0);
+}
+
+TEST_CASE("router: the Dossier page survives releaseHeld (the headset stopped showing frames)") {
+    MenuRouter router(Hand::Right);
+    RouterInput in = mapFrame(0.0, {500, 250});
+    CHECK(router.update(in).mapPage);
+    // The review's path: the headset stops showing frames with the Dossier up; held input is let go.
+    const RouterOutput released = router.releaseHeld(0.5);
+    CHECK(released.pageChanges.empty());
+    CHECK(router.dossierPage() == 0);
+    // The headset back, the Dossier still up: the sticks pan the map again.
+    in.seconds = 2.0;
+    CHECK(router.update(in).mapPage);
+    in.hands[kRight].stick = {0.0f, 1.0f};
+    CursorPixel cursor{500, 250};
+    const std::vector<RouterEvent> events = runMap(router, in, 2.01, 2.5, cursor);
+    CHECK(has(events, Kind::ButtonDown));
+    CHECK_FALSE(has(events, Kind::KeyDown, kKeyNextTab));
+    // The menu closes: the page drop is reported.
+    in.menuActive = false;
+    in.hands[kRight].stick = {};
+    in.seconds = 3.0;
+    const RouterOutput closed = router.update(in);
+    REQUIRE(closed.pageChanges.size() == 1);
+    CHECK(closed.pageChanges[0].why == PageChange::Why::Closed);
+    CHECK(closed.pageChanges[0].from == 0);
+    CHECK(router.dossierPage() == -1);
 }

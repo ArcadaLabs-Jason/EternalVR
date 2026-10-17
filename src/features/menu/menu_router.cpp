@@ -207,17 +207,45 @@ void MenuRouter::releaseActionKeys(RouterOutput& out) {
     actionKeys_.reset();
 }
 
-void MenuRouter::notePage(std::uint8_t key) {
-    // The Dossier does not say which page is up; the router counts the tab keys it sends. Past either end
-    // it no longer knows (the game may wrap or stop there), which only turns the map's sticks off.
-    if (page_ < 0) {
+const char* dossierPageName(int page) {
+    static constexpr const char* kNames[kDossierPages] = {"map", "arsenal", "codex", "challenges"};
+    return page >= 0 && page < kDossierPages ? kNames[page] : "not known";
+}
+
+void MenuRouter::setPage(int page, PageChange::Why why, std::uint8_t key, RouterOutput& out) {
+    if (page != page_ || why == PageChange::Why::EndKept) {
+        out.pageChanges.push_back({page_, page, why, key});
+    }
+    if (page != page_) {
+        keptKey_ = 0; // a key kept at an end counts as asked again only until the page changes
+    }
+    page_ = page;
+}
+
+void MenuRouter::tabKey(std::uint8_t key, double now, RouterOutput& out) {
+    // The Dossier does not say which page is up; the router counts the tab keys it sends. A key past either
+    // end is kept back, whether the game would wrap or stop there: the count stays right either way (it used
+    // to give up, which turned the map's sticks off until the Dossier was opened again).
+    if (page_ >= 0) {
+        const int next = key == kKeyNextTab ? page_ + 1 : page_ - 1;
+        if (next < 0 || next >= kDossierPages) {
+            if (keptKey_ == key && now - keptAt_ <= tuning_.endRepeatWindow) {
+                // Asked again: the count may be wrong. The key goes out and the page is no longer known.
+                keptKey_ = 0;
+                tapKey(key, now, out);
+                setPage(-1, PageChange::Why::EndForced, key, out);
+                return;
+            }
+            keptKey_ = key;
+            keptAt_ = now;
+            setPage(page_, PageChange::Why::EndKept, key, out);
+            return;
+        }
+        tapKey(key, now, out);
+        setPage(next, PageChange::Why::TabKey, key, out);
         return;
     }
-    if (key == kKeyNextTab) {
-        page_ = page_ + 1 < kDossierPages ? page_ + 1 : -1;
-    } else if (key == kKeyPreviousTab) {
-        page_ = page_ > 0 ? page_ - 1 : -1;
-    }
+    tapKey(key, now, out);
 }
 
 void MenuRouter::finishKeys(double now, RouterOutput& out) {
@@ -256,7 +284,6 @@ void MenuRouter::releaseAll(double /*now*/, RouterOutput& out) {
     landedAt_ = -1.0;
     scroll_ = {};
     tabs_ = {};
-    page_ = -1;
 }
 
 RouterOutput MenuRouter::releaseHeld(double now) {
@@ -358,9 +385,7 @@ void MenuRouter::menuSticks(const RouterInput& in, double now, RouterOutput& out
             out.events.push_back(wheel);
         }
         if (repeat(tabs_[i], horizontal, now, tuning_.repeatDelay, tuning_.repeatInterval)) {
-            const std::uint8_t key = horizontal > 0 ? kKeyNextTab : kKeyPreviousTab;
-            tapKey(key, now, out);
-            notePage(key);
+            tabKey(horizontal > 0 ? kKeyNextTab : kKeyPreviousTab, now, out);
         }
     }
 }
@@ -401,6 +426,7 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
             wasActive_ = false;
             latch_ = true;
             releaseAll(now, out);
+            setPage(-1, PageChange::Why::Closed, 0, out);
         }
         finishKeys(now, out);
         if (latch_ && allReleased(in)) {
@@ -416,7 +442,8 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
         pointer_ = dominant_;
         movePending_ = false;
         landedAt_ = -1.0;
-        page_ = in.dossier && !in.popup ? 0 : -1;
+        setPage(in.dossier && !in.popup ? 0 : -1, PageChange::Why::Opened, 0, out);
+        keptKey_ = 0;
         actionsLogged_.reset();
     }
     latch_ = true;
@@ -474,7 +501,7 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
         clickWanted_ = true;
         clickWantedAt_ = now;
         if (hand.onTabStrip) {
-            page_ = -1; // a tab clicked: which page it opens is not known
+            setPage(-1, PageChange::Why::TabClicked, 0, out); // which page it opens is not known
         }
     }
     if (clickWanted_) {
@@ -522,12 +549,10 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
 
     // Tabs: the left grip goes to the previous tab (Q), the right grip to the next (E).
     if (gripEdge[left]) {
-        tapKey(kKeyPreviousTab, now, out);
-        notePage(kKeyPreviousTab);
+        tabKey(kKeyPreviousTab, now, out);
     }
     if (gripEdge[right]) {
-        tapKey(kKeyNextTab, now, out);
-        notePage(kKeyNextTab);
+        tabKey(kKeyNextTab, now, out);
     }
 
     // A stick click, either hand: C, the Dossier map's centre key; in a popup E, its use key. A click while

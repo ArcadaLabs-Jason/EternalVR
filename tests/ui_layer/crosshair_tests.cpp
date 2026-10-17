@@ -112,6 +112,13 @@ TEST_CASE("crosshair: the hold is asked for only in hold mode under hand aim") {
     CHECK_FALSE(wantsReticleHold(CrosshairMode::Mask, false));
 }
 
+TEST_CASE("crosshair: a scoped zoom asks for the hold under head aim too, in hold mode only") {
+    CHECK(wantsReticleHold(CrosshairMode::Hold, false, true));
+    CHECK(wantsReticleHold(CrosshairMode::Hold, true, true));
+    CHECK_FALSE(wantsReticleHold(CrosshairMode::Hold, false, false));
+    CHECK_FALSE(wantsReticleHold(CrosshairMode::Mask, false, true));
+}
+
 TEST_CASE("crosshair: confirmed after a run of presents that read hidden") {
     const std::uint64_t now = 10'000;
     CHECK_FALSE(holdConfirmed(runOf(kHoldConfirmPresents - 1), now, now));

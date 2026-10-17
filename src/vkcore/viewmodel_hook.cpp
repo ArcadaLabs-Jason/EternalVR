@@ -6,10 +6,10 @@
 //   so the arms and weapon are drawn with the world's projection.
 // - A mid-hook in idHands::UpdatePosition just before the render model's stores (RVA 0x13807EA): the final
 //   origin [rsp+0x48] and axis [rbp-0x30] are replaced with the controller's grip, turned to its aim ray,
-//   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). With
-//   ETERNALVR_WEAPON_SIGHTS=1 a weapon with a [sights] row is then turned about the grip so its sight line
-//   runs parallel to the aim ray; the shot ray and the aim dot do not change. The game's own stores then
-//   carry it into both the deferred and the current render-model pose.
+//   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). A weapon with a
+//   [sights] row is then turned about the grip so its sight line runs parallel to the aim ray (on by default,
+//   T-135; ETERNALVR_WEAPON_SIGHTS=0 turns it off on the rig); the shot ray and the aim dot do not change.
+//   The game's own stores then carry it into both the deferred and the current render-model pose.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -87,7 +87,7 @@ constexpr std::string_view kSwimFists = "weapon/player/fists_swim";
 const std::byte* g_cachedDecl = nullptr;
 bool g_cachedSeated = false;
 game::WeaponOffset g_cachedOffset;
-std::optional<game::WeaponSight> g_cachedSight; // only with ETERNALVR_WEAPON_SIGHTS=1
+std::optional<game::WeaponSight> g_cachedSight; // not with ETERNALVR_WEAPON_SIGHTS=0
 bool g_cachedFists = false;                     // the held item is the fists of a melee or a Blood Punch
 // The held item's decl the swim check last saw (viewmodel hook thread only), and its answer (read by the
 // camera hook on any thread).
@@ -186,6 +186,7 @@ void onViewmodel(const HookRegisters& regs) {
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return;
     }
+    noteZoomLookHands(hands, owner); // the gun stays in the hand while zoomed (zoom_look.cpp)
     WorldHand world;
     {
         std::lock_guard lock(s.viewMutex);

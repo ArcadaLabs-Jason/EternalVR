@@ -432,7 +432,7 @@ MappedInput runMapper() {
     noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter), cfg.holdSeconds);
     out.turnStick = s.mapper->turnStick();
     // A melee or equipment press that aims with the head or the off hand waits for the view (action_aim.hpp).
-    out.actions = s.hold.update(aimActions(s, out.input.down, menuHold, dt), dt);
+    out.actions = s.hold.update(aimActions(s, out.input.down, out.input.meleeFromPunch, menuHold, dt), dt);
     out.live = true;
     if (cfg.wheelSelect == input::WheelSelect::Hand && !out.input.restWheel.wheelDown) {
         // The weapon hand points at the wheel; the stick or button only holds it (wheel_hand.hpp). The

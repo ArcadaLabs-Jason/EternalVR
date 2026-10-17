@@ -8,7 +8,10 @@ using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher
 {
-    /// <summary>The Advanced tab: the view, the HUD panel, the controllers, the runtime and the arguments, and Reset to defaults.</summary>
+    /// <summary>
+    /// The Advanced tab: the view, the HUD panel, the controllers, the game folder, the runtime, the headset's graphics card and
+    /// the arguments, and Reset to Recommended.
+    /// </summary>
     public sealed partial class MainForm
     {
         private readonly ComboBox mode = Choices(Setting.VrMode);
@@ -34,6 +37,7 @@ namespace EternalVR.Launcher
         private readonly CheckBox controllers = new CheckBox { AutoSize = true };
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
+        private readonly CheckBox adapterSteer = new CheckBox { AutoSize = true };
         private readonly ComboBox runtime = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
         private readonly TextBox extraArgs = new TextBox { Width = 420 };
         /// <summary>One line, cut with an ellipsis; the whole path and where it came from are in its tooltip.</summary>
@@ -115,13 +119,15 @@ namespace EternalVR.Launcher
                 // The runtime list is filled from the context (FillRuntimes); only the choice is read back here.
                 Row(Setting.Runtime, runtimeRow, s => { }, s => s.Runtime = (runtime.SelectedItem as RuntimeItem)?.Value ?? LauncherSettings.SystemRuntime,
                     preflight: true, fit: w => SetWidth(runtime, w - browse.Width - browse.Margin.Horizontal - runtime.Margin.Horizontal)),
+                Row(Setting.AdapterSteer, adapterSteer, s => adapterSteer.Checked = s.AdapterSteer, s => s.AdapterSteer = adapterSteer.Checked),
                 Row(Setting.ExtraArguments, extraArgs, s => extraArgs.Text = s.ExtraArguments, s => s.ExtraArguments = extraArgs.Text.Trim(), preflight: true));
 
-            var reset = new Button { Text = "Reset to defaults...", Width = 150, Height = ButtonHeight, Margin = new Padding(9, 6, 3, 6) };
+            var reset = new Button { Text = "Reset to " + SettingsPresets.Recommended.Name + "...", Width = 170, Height = ButtonHeight, Margin = new Padding(9, 6, 3, 6) };
             // The table would squeeze a fixed-size button to its text's first word.
             reset.MinimumSize = reset.Size;
-            reset.Click += (s, e) => ResetToDefaults();
-            tips.SetToolTip(reset, "Puts every setting on the Play and Advanced tabs back to its default.\nThe game folder, the layer folder and the runtime are kept.");
+            reset.Click += (s, e) => ResetToPreset();
+            tips.SetToolTip(reset, "Puts every setting on the Play and Advanced tabs back to " + SettingsPresets.Recommended.Name + ", the launcher's defaults.\n"
+                + "The game folder, the layer folder, the runtime, the graphics card choice and your controls are kept.");
             return Page("Advanced", null, new Control[] { view, reset }, new Control[] { hands, hud }, system);
         }
 

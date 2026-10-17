@@ -68,6 +68,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
                     mp_policy::toString(mp_guard::state()));
             controllers::restoreClimbCvars("the multiplayer guard stopped game touches");
             controllers::restoreWheelSlowdown("the multiplayer guard stopped game touches");
+            controllers::restoreZoomLook("the multiplayer guard stopped game touches");
             controllers::noteImmersiveCutscene(false); // the arms and the weapon FOV as in play
         }
         return;
