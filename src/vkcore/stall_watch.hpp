@@ -40,6 +40,9 @@ void addDrain(std::uint64_t micros);
 // away from play (loading screens, menus) told apart; without it every stall gets a line.
 void onGameTick();
 void trackGameTicks(bool on);
+// window_timing::nowMicros() of the last game tick, 0 before the first (the loading screen's tips bar tells
+// play from its loading screen by it: prompt_load_tips.cpp).
+std::uint64_t lastGameTickMicros();
 
 // The game began saving a checkpoint (save_hook.cpp, on the game's thread): named in the stall line of the
 // gap it falls in and counted in the 10 s summary. Only adds to atomics.

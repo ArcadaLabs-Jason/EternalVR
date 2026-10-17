@@ -67,7 +67,8 @@ KeyNameAnswer keyNameAnswer(std::uintptr_t returnAddress, const KeyNameCallers& 
     if (returnAddress == 0) {
         return KeyNameAnswer::Game;
     }
-    if (returnAddress == callers.tabList[0] || returnAddress == callers.tabList[1]) {
+    if (returnAddress == callers.tabList[0] || returnAddress == callers.tabList[1] ||
+        returnAddress == callers.loadTips[0] || returnAddress == callers.loadTips[1]) {
         return KeyNameAnswer::TabKey;
     }
     if (returnAddress == callers.getKeyString || returnAddress == callers.commandBarUpdate) {

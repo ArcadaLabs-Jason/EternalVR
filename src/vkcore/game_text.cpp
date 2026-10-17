@@ -188,36 +188,6 @@ const std::byte* findUniqueString(const GameImage& image, std::string_view text)
     return found;
 }
 
-std::vector<const std::byte*> findLeaReferences(const GameImage& image, const std::byte* target) {
-    std::vector<const std::byte*> hits;
-    const std::byte* text = image.text.data();
-    const std::size_t n = image.text.size();
-    const auto wanted = reinterpret_cast<std::intptr_t>(target);
-    for (std::size_t i = 0; i + 7 <= n; ++i) {
-        const auto rex = std::to_integer<unsigned>(text[i]);
-        if ((rex != 0x48 && rex != 0x4C) || text[i + 1] != std::byte{0x8D} ||
-            (std::to_integer<unsigned>(text[i + 2]) & 0xC7u) != 0x05u) {
-            continue;
-        }
-        if (reinterpret_cast<std::intptr_t>(text + i + 7) + readI32(text + i + 3) == wanted) {
-            hits.push_back(text + i);
-        }
-    }
-    return hits;
-}
-
-std::vector<std::uintptr_t>
-callReturns(const GameImage& image, const std::byte* function, const std::byte* target, std::size_t span) {
-    std::vector<std::uintptr_t> found;
-    for (std::size_t i = 0; i + 5 <= span && image.inText(function + i, 5); ++i) {
-        const std::byte* at = function + i;
-        if (at[0] == std::byte{0xE8} && at + 5 + readI32(at + 1) == target) {
-            found.push_back(reinterpret_cast<std::uintptr_t>(at + 5));
-        }
-    }
-    return found;
-}
-
 std::pair<const std::byte*, std::size_t> dataSection(const GameImage& image) {
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image.base);
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(image.base + dos->e_lfanew);

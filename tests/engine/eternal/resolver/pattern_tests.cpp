@@ -4,8 +4,11 @@
 
 #include <doctest/doctest.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <ostream>
+#include <utility>
 #include <vector>
 
 using evr::resolver::Pattern;
@@ -104,4 +107,67 @@ TEST_CASE("scanSection skips matches whose RVA would not fit in 32 bits") {
     REQUIRE(nops.ok());
     CHECK(evr::resolver::scanSection(*image, high, *nops) ==
           std::vector<std::uint32_t>{0xFFFFFFFEu, 0xFFFFFFFFu});
+}
+
+TEST_CASE("the anchor is the least common fixed byte in game code, the first of equals") {
+    // 48 (REX.W) is about 8% of the game's code and A2 well under 0.1%: findAll looks for the A2.
+    const auto rare = Pattern::parse("48 8B 05 ?? ?? ?? ?? A2");
+    REQUIRE(rare.ok());
+    CHECK(rare->anchor() == std::pair<std::size_t, std::byte>{7, std::byte{0xA2}});
+
+    const auto wildFirst = Pattern::parse("?? 48 ?? 48");
+    REQUIRE(wildFirst.ok());
+    CHECK(wildFirst->anchor() == std::pair<std::size_t, std::byte>{1, std::byte{0x48}});
+}
+
+TEST_CASE("findAll returns exactly the offsets where the pattern matches") {
+    // Bytes drawn from a few common values so partial matches are frequent, with copies of each
+    // pattern planted at the very start, at the very end and overlapping.
+    std::vector<std::byte> bytes(4096);
+    std::uint32_t state = 12345;
+    const std::uint8_t common[] = {0x48, 0x8B, 0x05, 0x00, 0xA2, 0xE8, 0x89, 0xC3};
+    for (std::byte& b : bytes) {
+        state = state * 1664525u + 1013904223u;
+        b = static_cast<std::byte>(common[(state >> 24) % 8]);
+    }
+    const auto plant = [&bytes](std::size_t at, std::initializer_list<std::uint8_t> values) {
+        for (const std::uint8_t v : values) {
+            bytes[at++] = static_cast<std::byte>(v);
+        }
+    };
+    plant(0, {0x48, 0x8B, 0x05, 0x11, 0x22, 0x33, 0x44, 0xA2});
+    plant(bytes.size() - 8, {0x48, 0x8B, 0x05, 0x55, 0x66, 0x77, 0x88, 0xA2});
+    plant(2000, {0xA2, 0x48, 0xA2, 0x48, 0xA2});
+
+    for (const char* text : {"48 8B 05 ?? ?? ?? ?? A2", "A2 48 A2", "?? 48 ?? A2", "05", "A2 ??", "?? ?? A2",
+                             "E8 ?? ?? ?? ?? 48 8B", "C3 00 00 89"}) {
+        const auto pattern = Pattern::parse(text);
+        REQUIRE(pattern.ok());
+        std::vector<std::size_t> expected;
+        for (std::size_t offset = 0; offset < bytes.size(); ++offset) {
+            if (pattern->matchesAt(bytes, offset)) {
+                expected.push_back(offset);
+            }
+        }
+        CAPTURE(text);
+        CHECK(evr::resolver::findAll(bytes, *pattern) == expected);
+    }
+    const auto planted = Pattern::parse("48 8B 05 ?? ?? ?? ?? A2");
+    REQUIRE(planted.ok());
+    const auto matches = evr::resolver::findAll(bytes, *planted);
+    REQUIRE(matches.size() >= 2);
+    CHECK(matches.front() == 0);
+    CHECK(matches.back() == bytes.size() - 8);
+}
+
+TEST_CASE("a match at the start whose anchor is not its first byte") {
+    // The anchor (A2) is at 1 in the pattern and at 0 in the bytes: a scan that starts its anchor search
+    // anywhere but the anchor's own position, or takes that 0 as a start, gets this wrong.
+    const auto pattern = Pattern::parse("48 A2");
+    REQUIRE(pattern.ok());
+    REQUIRE(pattern->anchor().first == 1);
+    const auto bytes = toBytes({0xA2, 0x48, 0xA2, 0x48, 0xA2});
+    CHECK(evr::resolver::findAll(bytes, *pattern) == std::vector<std::size_t>{1, 3});
+    const auto atZero = toBytes({0x48, 0xA2, 0xA2});
+    CHECK(evr::resolver::findAll(atZero, *pattern) == std::vector<std::size_t>{0});
 }

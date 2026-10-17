@@ -384,8 +384,10 @@ function Format-RigManifest($Table) {
 }
 
 # Copies every settings location into <run>\<Name>\ (written as <Name>.partial, renamed when complete),
-# with locations.json and SHA256SUMS. A folder named <Name> is therefore always complete.
-function New-SettingsSnapshot($cfg, [string]$RunDir, [string]$Name, $Locations) {
+# with locations.json and SHA256SUMS. A folder named <Name> is therefore always complete. $Sources
+# (location name -> Path, Existed) takes a location's files from another folder instead of its live path
+# (an earlier snapshot's copy); locations.json still names the live path.
+function New-SettingsSnapshot($cfg, [string]$RunDir, [string]$Name, $Locations, [hashtable]$Sources = @{}) {
     $final = Join-Path $RunDir $Name
     $partial = "$final.partial"
     Assert-RigWritable $cfg $partial
@@ -394,10 +396,12 @@ function New-SettingsSnapshot($cfg, [string]$RunDir, [string]$Name, $Locations) 
     $manifest = New-RigHashTable
     $locInfo = @()
     foreach ($loc in $Locations) {
+        $from = $loc.Path
         $exists = Test-Path -LiteralPath $loc.Path -PathType Container
+        if ($Sources.ContainsKey($loc.Name)) { $from = $Sources[$loc.Name].Path; $exists = [bool]$Sources[$loc.Name].Existed }
         $count = 0
         if ($exists) {
-            foreach ($f in (Get-TreeFiles $loc.Path)) {
+            foreach ($f in (Get-TreeFiles $from)) {
                 $dest = Join-Path (Join-Path $partial $loc.Name) $f.Rel
                 New-RigDirectory $cfg (Split-Path -Parent $dest)
                 $ok = $false
@@ -1730,6 +1734,14 @@ function Invoke-RigRunCleanup($cfg, [string]$RunDir, [switch]$Explicit, [switch]
     $name = Split-Path -Leaf $RunDir
     if (-not (Test-Path -LiteralPath $marker)) { return [pscustomobject]@{ Ok = $true; Skipped = $false; Reason = 'not pending' } }
     $markerInfo = $null; try { $markerInfo = Read-RigJson $marker } catch { }
+    # A cloud restore (New-RigCloudRestoreRun) is finished as one, also by an implicit cleanup; a held one only by
+    # its holder naming it, or by anyone once the holder is gone.
+    if (Get-RigProp $markerInfo 'restoreCloud' $false) { $RestoreCloud = [switch]$true }
+    $held = Get-RigProp $markerInfo 'heldBy'
+    if ($held -and (Test-RigProcessAlive $held.pid $held.startFileTimeUtc) -and ([int]$held.pid -ne $PID -or -not $Explicit)) {
+        return [pscustomobject]@{ Ok = $false; Skipped = $true; Held = $true
+            Reason = "cloud restore $name is held by $($held.by) (pid $($held.pid)) until its runs end: it finishes when that process names it, or with the next cleanup once it is gone" }
+    }
     $setupPid = Get-RigProp $markerInfo 'pid'
     if ($setupPid -and [int]$setupPid -ne $PID -and (Test-RigProcessAlive $setupPid (Get-RigProp $markerInfo 'startFileTimeUtc'))) {
         return [pscustomobject]@{ Ok = $false; Skipped = $true; Reason = "run.ps1 (pid $setupPid) is still setting up $name" }
@@ -1952,6 +1964,54 @@ function Invoke-RigRunCleanup($cfg, [string]$RunDir, [switch]$Explicit, [switch]
     }
 }
 
+# A cloud restore (cleanup.ps1 -RestoreCloudFrom): the Steam-Cloud files back as they were when an earlier,
+# finished run started, as a run folder of its own (<stamp>-cloud-restore) that Invoke-RigRunCleanup then
+# completes with -RestoreCloud: CLEANUP_PENDING first (with restoreCloud, so any later cleanup finishes it the
+# same way), then config-before\ = the live local files plus the baseline run's copy of every cloud location
+# it had. The cleanup restores the cloud files that differ, runs the resync launch, restores again a local
+# file that launch touched, and clears the marker once everything verifies and Steam's record matches; the
+# next run's baseline is this folder. A cloud file the baseline did not have is kept and listed. Several
+# runs in a row can so keep the game's cloud files (consistent with Steam's record) and be put back once.
+# -HeldBy without a baseline (cleanup.ps1 -HoldCloudRestore) makes the folder before such a series, its
+# config-before\ the settings as they are now: the marker names this process, and while it lives implicit
+# cleanups (run.ps1's among them) leave the folder pending and do not count it against a start; it finishes
+# when this process names it (cleanup.ps1 -Run <folder>), or with the next cleanup once this process is gone,
+# however it ended.
+function New-RigCloudRestoreRun($cfg, [string]$BaselineDir, [string]$Session, [string]$HeldBy) {
+    $sources = @{}
+    if ($BaselineDir) {
+        $before = Join-Path $BaselineDir 'config-before'
+        if (Test-RigPending $BaselineDir) { throw "the baseline run $(Split-Path -Leaf $BaselineDir) is still pending" }
+        if (-not (Test-Path -LiteralPath $before)) { throw "the baseline run $(Split-Path -Leaf $BaselineDir) has no config-before" }
+        $problems = @(Test-SettingsSnapshot $before)
+        if ($problems.Count -gt 0) { throw ('the baseline''s config-before failed verification: ' + ($problems -join '; ')) }
+        foreach ($loc in @(Get-SnapshotLocations $before | Where-Object { Test-RigCloudLocation $_ })) {
+            $sources[$loc.name] = [pscustomobject]@{ Path = (Join-Path $before $loc.name); Existed = [bool]$loc.existed }
+        }
+    }
+    $from = if ($BaselineDir) { "as $(Split-Path -Leaf $BaselineDir) started" } else { 'as they are now' }
+    $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+    $runDir = Join-Path $cfg.RunsRoot "$stamp-cloud-restore"
+    for ($n = 2; Test-Path -LiteralPath $runDir; $n++) { $runDir = Join-Path $cfg.RunsRoot "$stamp-cloud-restore-$n" }
+    New-RigDirectory $cfg $runDir
+    $me = [ordered]@{ pid = $PID; startFileTimeUtc = (Get-RigProcessStartFileTime (Get-Process -Id $PID)) }
+    $markerInfo = [ordered]@{ session = $Session; created = (Get-Date).ToString('o'); owner = $false; restoreCloud = $true }
+    if ($HeldBy) { $markerInfo.heldBy = [ordered]@{ pid = $me.pid; startFileTimeUtc = $me.startFileTimeUtc; by = $HeldBy } }
+    else { $markerInfo.pid = $me.pid; $markerInfo.startFileTimeUtc = $me.startFileTimeUtc }
+    Write-RigJson $cfg (Join-Path $runDir 'CLEANUP_PENDING') $markerInfo
+    $run = [ordered]@{ schema = 1; session = $Session; label = 'cloud-restore'; created = (Get-Date).ToString('o'); phase = 'created'; owner = $false
+        kind = 'cloud-restore'; baseline = $(if ($BaselineDir) { Split-Path -Leaf $BaselineDir } else { $null }); heldBy = $HeldBy; exe = $null; args = ''; processes = @(); launchTime = $null; launchFileTimeUtc = $null }
+    Write-RigJson $cfg (Join-Path $runDir 'run.json') $run
+    Write-RigLog "cloud restore $($runDir): the Steam-Cloud files $from$(if ($HeldBy) { ", held by $HeldBy (pid $PID)" }) (session $Session)"
+    $snap = New-SettingsSnapshot $cfg $runDir 'config-before' @(Get-SettingsLocations $cfg) $sources
+    $run.phase = 'snapshot'
+    $run.settingsLocations = @($snap.Locations)
+    Write-RigJson $cfg (Join-Path $runDir 'run.json') $run
+    Write-RigLog ("config-before: {0} file(s){1}" -f $snap.Manifest.Count, $(if ($sources.Count) { ', the cloud location(s) ' + (@($sources.Keys | Sort-Object) -join ', ') + ' from the baseline' } else { '' }))
+    Invoke-RigAbortPoint $cfg 'snapshot'
+    return $runDir
+}
+
 # Cleans the given runs (default: every pending run), then handles the display: DISPLAY_ADDED is
 # removed at the end of a work block (-EndBlock) or when it was written by an earlier session, and
 # only while no run has a live process. Returns Failed (a cleanup or the display removal failed) and
@@ -1962,6 +2022,13 @@ function Invoke-RigCleanup($cfg, [string[]]$RunDirs, [switch]$Explicit, [switch]
     foreach ($dir in $RunDirs) {
         $r = Invoke-RigRunCleanup $cfg $dir -Explicit:$Explicit -AllowStop:$AllowStop -Acknowledge:$Acknowledge -RestoreCloud:$RestoreCloud
         if ($r.Ok) { continue }
+        # A held cloud restore waits for its holder and does not stop a start (New-RigCloudRestoreRun -HeldBy).
+        # Named by another process while the holder lives, it is not done: that call fails.
+        if ($r.Skipped -and (Get-RigProp $r 'Held' $false)) {
+            Write-RigLog "left pending: $($r.Reason)" $(if ($Explicit) { 'ERROR' } else { 'INFO' })
+            if ($Explicit) { $result.Failed = $true }
+            continue
+        }
         $result.Pending += [pscustomobject]@{ Dir = $dir; Reason = $r.Reason; Skipped = $r.Skipped }
         if ($r.Skipped) {
             Write-RigLog "skipped: $($r.Reason)" 'WARN'

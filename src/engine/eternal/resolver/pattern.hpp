@@ -34,7 +34,8 @@ public:
     // True if the pattern matches `haystack` starting at `offset`. Out-of-range positions do not match.
     [[nodiscard]] bool matchesAt(ByteSpan haystack, std::size_t offset) const;
 
-    // The first byte that is not a wildcard and its position (parse rejects all-wildcard patterns).
+    // The fixed (not wildcard) byte findAll looks for and its position: the one least common in x86-64
+    // game code, the first of equals (parse rejects all-wildcard patterns).
     [[nodiscard]] std::pair<std::size_t, std::byte> anchor() const;
 
 private:

@@ -324,6 +324,9 @@ them is worse for you than described here.
   to the front on your desktop (click its title bar or its taskbar button, or Alt+Tab to it) and press
   Space on the keyboard, then click **Export report...** after the session: the log now says which window
   was in front when the prompt came up.
+- Some prompts still name a keyboard key instead of a controller button, for example the page arrows of
+  the mission-complete screen's Rewards tab ("A 1/2 D"): point at an arrow and pull the trigger instead.
+  The loading screen's tips now read "[LG] PREVIOUS | [RG] NEXT", and the grips change the tip.
 
 ## Launcher and settings
 

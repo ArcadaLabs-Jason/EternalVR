@@ -1105,6 +1105,393 @@ Test-Case 'restore-cloud-files-fails-while-steam-record-stays-stale' {
     foreach ($k in $t.Orig.Keys) { Check ($now[$k] -eq $t.Orig[$k]) "not restored: $k" }
 }
 
+Test-Case 'cloud-restore-from-a-run-puts-back-what-later-runs-kept' {
+    $t = New-TestEnv 'cloud-from'
+    Write-TestCloudRecord $t
+    $a = Start-TestRun $t
+    Check ($a.Code -eq 0) "first run exit code $($a.Code)"
+    # Two runs keep the game's cloud files (written through Steam, so its record matches them).
+    Simulate-GameWrites $t
+    Write-TestBytes $t.Profile 5000 51
+    Write-TestBytes $t.Save 700 52
+    Write-TestCloudRecord $t
+    Check ((Invoke-Rig 'stop.ps1').Code -eq 0) 'first stop failed'
+    Check ((Get-RigSha256 $t.Profile) -ne $t.Orig[$t.Profile]) 'the game''s profile.bin was not kept'
+    $b = Start-TestRun $t
+    Check ($b.Code -eq 0) "second run exit code $($b.Code): $($b.Output)"
+    Write-TestBytes $t.Profile 5100 53
+    $added = Join-Path $t.Remote 'GAME-MANUAL2\game.details'
+    Write-TestBytes $added 128 54
+    Write-TestCloudRecord $t
+    Check ((Invoke-Rig 'stop.ps1').Code -eq 0) 'second stop failed'
+
+    $helper = Set-TestResync $t -Accept
+    $c = Invoke-Rig 'cleanup.ps1' @('-RestoreCloudFrom', (Split-Path -Leaf $a.Dir))
+    foreach ($v in 'EVR_RIG_RESYNC_EXE', 'EVR_RIG_RESYNC_ARGS', 'EVR_RIG_RESYNC_KILL_MS') { Set-TestVar $v '' }
+    Check ($c.Code -eq 0) "cleanup -RestoreCloudFrom exit code $($c.Code)"
+    $now = Get-SettingsState $t
+    foreach ($k in $t.Orig.Keys) { Check ($now[$k] -eq $t.Orig[$k]) "not as before the first run: $k" }
+    Check (Test-Path -LiteralPath $added) 'a cloud file the baseline did not have was removed'
+    $dirs = @(Get-Runs $t | Where-Object { $_ -like '*-cloud-restore' })
+    Check ($dirs.Count -eq 1) "cloud restore folders: $($dirs.Count)"
+    if ($dirs.Count -ne 1) { return }
+    Check (-not (Test-Path -LiteralPath (Join-Path $dirs[0] 'CLEANUP_PENDING'))) 'marker not cleared'
+    $cj = Read-Json (Join-Path $dirs[0] 'cleanup.json')
+    Check ($cj.outcome -eq 'restored' -and $cj.verified -and $cj.cloudPolicy -eq 'restore-and-resync') "cleanup: $($cj.outcome) $($cj.cloudPolicy)"
+    Check (((@($cj.restored) | Sort-Object) -join ',') -eq 'steam-111\GAME-AUTOSAVE0\game_duration.dat,steam-111\PROFILE\profile.bin') "restored: $(@($cj.restored) -join ', ')"
+    Check (@($cj.cloudFiles | Where-Object { $_.key -eq 'steam-111\GAME-MANUAL2\game.details' -and $_.change -eq 'added' -and $_.action -eq 'kept' }).Count -eq 1) 'the added cloud file not listed as kept'
+    $rs = @(Read-Json (Join-Path $dirs[0] 'resync.json'))
+    Check ($rs.Count -eq 1 -and $rs[0].outcome -eq 'done') 'resync launch not recorded'
+    Check ((Get-TestResyncProcesses $helper).Count -eq 0) 'the resync launch was not killed'
+    Check ($c.Output -match 'again \(touched by the resync launch\)') 'local file touched by the resync launch not restored again'
+    Check (@((Test-RigCloudConsistency @(Get-SettingsLocations (Get-RigConfig))).Stale).Count -eq 0) 'Steam''s record does not match after the resync'
+
+    # The next run takes the restore as its baseline (the owner-settings guard is on in test mode).
+    $n = Start-TestRun $t
+    Check ($n.Code -eq 0) "run after the cloud restore exit code $($n.Code): $($n.Output)"
+    Check ($n.Run.baseline.source -match 'cloud-restore' -and @($n.Run.baseline.differences).Count -eq 0) "baseline: $($n.Run.baseline.source); differences: $(@($n.Run.baseline.differences) -join '; ')"
+    Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'stop after the cloud restore failed'
+}
+
+Test-Case 'cloud-restore-refuses-a-live-game-and-a-pending-baseline' {
+    $t = New-TestEnv 'cloud-from-refused'
+    Write-TestCloudRecord $t
+    $a = Start-TestRun $t
+    Check ($a.Code -eq 0) "run exit code $($a.Code)"
+    Write-TestBytes $t.Profile 5000 71
+    Write-TestCloudRecord $t
+    # The run is live: its process is the game here.
+    Set-TestVar 'EVR_RIG_GAME_PROCESSES' 'evr_rig_testapp'
+    $c = Invoke-Rig 'cleanup.ps1' @('-RestoreCloudFrom', (Split-Path -Leaf $a.Dir))
+    Check ($c.Code -eq 1 -and $c.Output -match 'REFUSED: cloud restore from .*a game process is running') "while the game runs: exit $($c.Code)"
+    Set-TestVar 'EVR_RIG_GAME_PROCESSES' 'evr_rig_test_game_only'
+    # The live run is pending and is not stopped by a cleanup: the restore is refused, nothing written.
+    $c = Invoke-Rig 'cleanup.ps1' @('-RestoreCloudFrom', (Split-Path -Leaf $a.Dir))
+    Check ($c.Code -eq 1 -and $c.Output -match 'REFUSED: a pending run could not be cleaned up') "with a pending live run: exit $($c.Code)"
+    Check (@(Get-Runs $t | Where-Object { $_ -like '*-cloud-restore' }).Count -eq 0) 'a cloud restore folder was made although refused'
+    Check ((Get-RigSha256 $t.Profile) -ne $t.Orig[$t.Profile]) 'profile.bin written although refused'
+    Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'stop failed'
+}
+
+Test-Case 'an-interrupted-cloud-restore-is-finished-by-the-next-cleanup' {
+    $t = New-TestEnv 'cloud-from-abort'
+    Write-TestCloudRecord $t
+    $a = Start-TestRun $t
+    Check ($a.Code -eq 0) "run exit code $($a.Code)"
+    Write-TestBytes $t.Profile 5000 61
+    Write-TestCloudRecord $t
+    Check ((Invoke-Rig 'stop.ps1').Code -eq 0) 'stop failed'
+    $helper = Set-TestResync $t -Accept
+    # Killed right after the profile was put back, before the resync launch: Steam's record is stale.
+    Set-TestVar 'EVR_RIG_TEST_ABORT_AT' 'cleanup-mid-restore'
+    $c = Invoke-Rig 'cleanup.ps1' @('-RestoreCloudFrom', (Split-Path -Leaf $a.Dir))
+    Set-TestVar 'EVR_RIG_TEST_ABORT_AT' ''
+    Check ($c.Code -ne 0) 'the cleanup was not killed at the abort point'
+    $dirs = @(Get-Runs $t | Where-Object { $_ -like '*-cloud-restore' })
+    Check ($dirs.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $dirs[0] 'CLEANUP_PENDING'))) 'no pending cloud restore after the kill'
+    Check (@((Test-RigCloudConsistency @(Get-SettingsLocations (Get-RigConfig))).Stale).Count -eq 1) 'Steam''s record not stale after the kill (the abort point moved)'
+    # A plain cleanup (no -RestoreCloudFiles) finishes it as a cloud restore: the resync launch, then verified.
+    $c2 = Invoke-Rig 'cleanup.ps1'
+    foreach ($v in 'EVR_RIG_RESYNC_EXE', 'EVR_RIG_RESYNC_ARGS', 'EVR_RIG_RESYNC_KILL_MS') { Set-TestVar $v '' }
+    Check ($c2.Code -eq 0) "cleanup exit code $($c2.Code)"
+    if ($dirs.Count -ne 1) { return }
+    Check (-not (Test-Path -LiteralPath (Join-Path $dirs[0] 'CLEANUP_PENDING'))) 'marker not cleared'
+    Check (@(Read-Json (Join-Path $dirs[0] 'resync.json')).Count -eq 1) 'the finishing cleanup did not resync'
+    Check ((Get-TestResyncProcesses $helper).Count -eq 0) 'the resync launch was not killed'
+    Check ((Get-RigSha256 $t.Profile) -eq $t.Orig[$t.Profile]) 'profile.bin not as before the run'
+    Check (@((Test-RigCloudConsistency @(Get-SettingsLocations (Get-RigConfig))).Stale).Count -eq 0) 'Steam''s record does not match after the finishing cleanup'
+}
+
+Test-Case 'a-held-cloud-restore-of-a-gone-holder-is-finished-by-the-next-start' {
+    $t = New-TestEnv 'cloud-held-gone'
+    Write-TestCloudRecord $t
+    # Held by a cleanup.ps1 that exits right away: the holder is gone, as after a killed suite.
+    $h = Invoke-Rig 'cleanup.ps1' @('-HoldCloudRestore', '-HeldBy', 'a killed suite')
+    Check ($h.Code -eq 0 -and $h.Output -match 'cloud restore held: ') "hold exit $($h.Code)"
+    $held = @(Get-Runs $t | Where-Object { $_ -like '*-cloud-restore' })
+    Check ($held.Count -eq 1) "held folders: $($held.Count)"
+    if ($held.Count -ne 1) { return }
+    Check ((Read-Json (Join-Path $held[0] 'CLEANUP_PENDING')).heldBy.by -eq 'a killed suite') 'the marker does not name its holder'
+    # The game's cloud files kept by a run in between (Steam's record matching them).
+    Write-TestBytes $t.Profile 5000 81
+    Write-TestCloudRecord $t
+    $helper = Set-TestResync $t -Accept
+    $s = Start-TestRun $t
+    foreach ($v in 'EVR_RIG_RESYNC_EXE', 'EVR_RIG_RESYNC_ARGS', 'EVR_RIG_RESYNC_KILL_MS') { Set-TestVar $v '' }
+    Check ($s.Code -eq 0) "run exit code $($s.Code): $($s.Output)"
+    Check (-not (Test-Path -LiteralPath (Join-Path $held[0] 'CLEANUP_PENDING'))) 'the next start did not finish the held restore'
+    Check (@(Read-Json (Join-Path $held[0] 'resync.json')).Count -eq 1) 'no resync launch for the held restore'
+    Check ((Get-TestResyncProcesses $helper).Count -eq 0) 'the resync launch was not killed'
+    if ($s.Dir) {
+        $p = Join-Path $s.Dir 'config-before\steam-111\PROFILE\profile.bin'
+        Check ((Get-RigSha256 $p) -eq $t.Orig[$t.Profile]) 'the run started from the kept profile, not the held one'
+    }
+    Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'stop failed'
+}
+
+Test-Case 'a-cloud-restore-hold-finishes-an-earlier-pending-one-first' {
+    $t = New-TestEnv 'cloud-held-twice'
+    Write-TestCloudRecord $t
+    Check ((Invoke-Rig 'cleanup.ps1' @('-HoldCloudRestore')).Code -eq 0) 'first hold failed'
+    Write-TestBytes $t.Profile 5000 82
+    Write-TestCloudRecord $t
+    # A game process blocks the hold (its snapshot would race the game's writes).
+    Set-TestVar 'EVR_RIG_GAME_PROCESSES' 'powershell'
+    $r = Invoke-Rig 'cleanup.ps1' @('-HoldCloudRestore')
+    Check ($r.Code -eq 1 -and $r.Output -match 'REFUSED: cloud restore not held: a game process is running') "hold with a game running: exit $($r.Code)"
+    Set-TestVar 'EVR_RIG_GAME_PROCESSES' 'evr_rig_test_game_only'
+    $helper = Set-TestResync $t -Accept
+    $h = Invoke-Rig 'cleanup.ps1' @('-HoldCloudRestore')
+    foreach ($v in 'EVR_RIG_RESYNC_EXE', 'EVR_RIG_RESYNC_ARGS', 'EVR_RIG_RESYNC_KILL_MS') { Set-TestVar $v '' }
+    Check ($h.Code -eq 0) "second hold exit $($h.Code)"
+    $held = @(Get-Runs $t | Where-Object { $_ -like '*-cloud-restore*' })
+    Check ($held.Count -eq 2) "held folders: $($held.Count)"
+    if ($held.Count -ne 2) { return }
+    Check (-not (Test-Path -LiteralPath (Join-Path $held[0] 'CLEANUP_PENDING'))) 'the earlier held restore was not finished first'
+    Check ((Get-RigSha256 (Join-Path $held[1] 'config-before\steam-111\PROFILE\profile.bin')) -eq $t.Orig[$t.Profile]) 'the new hold took the earlier series'' profile as its start'
+    Check ((Get-TestResyncProcesses $helper).Count -eq 0) 'the resync launch was not killed'
+}
+
+# --- The rig QA suite's cloud check and its held restore (tools/rig/qa/qa-cloud.ps1) -------------------
+# Synthetic profiles: the game's format (AES-128-GCM with the account's key, docs/rig-findings/profile-leak.md)
+# encrypted here with BCrypt, independently of the code under test.
+
+. (Join-Path $RigDir 'qa\qa-common.ps1')
+. (Join-Path $RigDir 'qa\qa-cloud.ps1')
+if (-not ('QaTestProfile' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+public static class QaTestProfile {
+    [StructLayout(LayoutKind.Sequential)]
+    struct AuthInfo {
+        public int cbSize; public int dwInfoVersion; public IntPtr pbNonce; public int cbNonce; public IntPtr pbAuthData;
+        public int cbAuthData; public IntPtr pbTag; public int cbTag; public IntPtr pbMacContext; public int cbMacContext;
+        public int cbAAD; public long cbData; public int dwFlags;
+    }
+    [DllImport("bcrypt.dll", CharSet = CharSet.Unicode)] static extern int BCryptOpenAlgorithmProvider(out IntPtr alg, string id, string impl, int flags);
+    [DllImport("bcrypt.dll", CharSet = CharSet.Unicode)] static extern int BCryptSetProperty(IntPtr obj, string prop, byte[] input, int size, int flags);
+    [DllImport("bcrypt.dll")] static extern int BCryptGenerateSymmetricKey(IntPtr alg, out IntPtr key, IntPtr keyObj, int keyObjSize, byte[] secret, int secretSize, int flags);
+    [DllImport("bcrypt.dll")] static extern int BCryptEncrypt(IntPtr key, byte[] input, int inputSize, ref AuthInfo info, byte[] iv, int ivSize, byte[] output, int outputSize, out int result, int flags);
+    [DllImport("bcrypt.dll")] static extern int BCryptDestroyKey(IntPtr key);
+    [DllImport("bcrypt.dll")] static extern int BCryptCloseAlgorithmProvider(IntPtr alg, int flags);
+    public static byte[] Encrypt(byte[] plain, ulong steamId64) {
+        byte[] aad = Encoding.ASCII.GetBytes(steamId64.ToString() + "MANCUBUSprofile.bin");
+        byte[] key = new byte[16];
+        using (var sha = SHA256.Create()) Array.Copy(sha.ComputeHash(aad), key, 16);
+        byte[] nonce = new byte[12], tag = new byte[16], cipher = new byte[plain.Length];
+        for (int i = 0; i < 12; ++i) nonce[i] = (byte)(i + 1);
+        IntPtr alg, hkey;
+        if (BCryptOpenAlgorithmProvider(out alg, "AES", null, 0) != 0) throw new Exception("BCryptOpenAlgorithmProvider");
+        GCHandle hn = GCHandle.Alloc(nonce, GCHandleType.Pinned), ha = GCHandle.Alloc(aad, GCHandleType.Pinned), ht = GCHandle.Alloc(tag, GCHandleType.Pinned);
+        try {
+            byte[] mode = Encoding.Unicode.GetBytes("ChainingModeGCM\0");
+            if (BCryptSetProperty(alg, "ChainingMode", mode, mode.Length, 0) != 0) throw new Exception("BCryptSetProperty");
+            if (BCryptGenerateSymmetricKey(alg, out hkey, IntPtr.Zero, 0, key, key.Length, 0) != 0) throw new Exception("BCryptGenerateSymmetricKey");
+            try {
+                var info = new AuthInfo();
+                info.cbSize = Marshal.SizeOf(typeof(AuthInfo)); info.dwInfoVersion = 1;
+                info.pbNonce = hn.AddrOfPinnedObject(); info.cbNonce = 12;
+                info.pbAuthData = ha.AddrOfPinnedObject(); info.cbAuthData = aad.Length;
+                info.pbTag = ht.AddrOfPinnedObject(); info.cbTag = 16;
+                int got;
+                if (BCryptEncrypt(hkey, plain, plain.Length, ref info, null, 0, cipher, cipher.Length, out got, 0) != 0) throw new Exception("BCryptEncrypt");
+            } finally { BCryptDestroyKey(hkey); }
+        } finally { hn.Free(); ha.Free(); ht.Free(); BCryptCloseAlgorithmProvider(alg, 0); }
+        byte[] outp = new byte[12 + cipher.Length + 16];
+        Array.Copy(nonce, 0, outp, 0, 12); Array.Copy(cipher, 0, outp, 12, cipher.Length); Array.Copy(tag, 0, outp, 12 + cipher.Length, 16);
+        return outp;
+    }
+}
+'@
+}
+
+# A profile's plain text: the header, then each field as <2 x name length><name><type><value>: a string value as
+# 0x0a <2 x length><text>, a number as <type> <one byte>.
+function New-TestProfilePlain($Fields) {
+    $b = New-Object System.Collections.Generic.List[byte]
+    $b.AddRange([byte[]](0xa9, 0x0d, 0x8d, 0xaa, 0, 0, 0, 2, 0, 0, 0, 0))
+    foreach ($f in $Fields) {
+        $b.Add([byte](2 * $f.Name.Length)); $b.AddRange([Text.Encoding]::ASCII.GetBytes($f.Name))
+        if ($f.Text -is [string]) { $b.Add(0x0a); $b.Add([byte](2 * $f.Text.Length)); $b.AddRange([Text.Encoding]::ASCII.GetBytes($f.Text)) }
+        else { $b.Add([byte]$f.Type); $b.Add([byte]$f.Value) }
+    }
+    return , $b.ToArray()
+}
+
+function Get-TestProfileFields([hashtable]$Change = @{}) {
+    $f = [ordered]@{
+        r_sharpening = @{ Name = 'r_sharpening'; Text = '2' }
+        view_skipShakes = @{ Name = 'view_skipShakes'; Text = '1' }
+        r_antialiasing = @{ Name = 'r_antialiasing'; Text = '1' }
+        STAT_TIME_IN_GAME = @{ Name = 'STAT_TIME_IN_GAME'; Type = 1; Value = 0x10 }
+        count = @{ Name = 'count'; Type = 1; Value = 0x13 }
+        start = @{ Name = 'start'; Text = '2026-10-10T22:36:51.352938Z' }
+        type = @{ Name = 'type'; Text = 't_ghost_launched' }
+        hasSeenTestTutorial = @{ Name = 'hasSeenTestTutorial'; Type = 0x0c; Value = 0x0b }
+    }
+    foreach ($k in $Change.Keys) { $f[$k] = $Change[$k] }
+    return @($f.Values)
+}
+
+# A finished run folder as the QA check reads it: config-before\ and config-after\ copies of the account 111's
+# profile.bin ('missing' leaves one out, 'corrupt' writes bytes no key opens), cleanup.json with Steam's record matching.
+function New-TestQaRun([string]$Name, $Before, $After) {
+    $dir = Join-Path $SuiteRoot "qa-$Name\20261017-000000-qa-$Name"
+    foreach ($side in @(@('config-before', $Before), @('config-after', $After))) {
+        $p = Join-Path $dir "$($side[0])\steam-111\PROFILE\profile.bin"
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $p))
+        if ($side[1] -is [string] -and $side[1] -eq 'missing') { continue }
+        if ($side[1] -is [string] -and $side[1] -eq 'corrupt') { Write-TestBytes $p 600 9; continue }
+        [IO.File]::WriteAllBytes($p, [QaTestProfile]::Encrypt((New-TestProfilePlain $side[1]), [uint64]76561197960265839))
+    }
+    Write-TestFile (Join-Path $dir 'config-before\locations.json') '[ { "name": "steam-111", "kind": "steam-remote", "path": "unused", "existed": true, "files": 1 } ]'
+    Write-TestFile (Join-Path $dir 'config-before\SHA256SUMS') ''
+    Write-TestFile (Join-Path $dir 'cleanup.json') '{ "outcome": "restored", "cloudStale": [ ] }'
+    $ctx = New-QaContext @{ Name = $Name } (Join-Path $SuiteRoot "qa-$Name")
+    $ctx.RunDir = $dir
+    return $ctx
+}
+
+function Get-TestQaResult($Ctx, [string]$Name) { return @($Ctx.Results | Where-Object { $_.Name -eq $Name })[0] }
+
+Test-Case 'qa-cloud-a-held-text-value-fails-as-a-leak' {
+    $c = New-TestQaRun 'leak' (Get-TestProfileFields) (Get-TestProfileFields @{ r_sharpening = @{ Name = 'r_sharpening'; Text = '3' } })
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and -not $r.Ok -and $r.Detail -match "r_sharpening '2' -> '3'") "leak result: $($r.Ok) $($r.Detail)"
+    Check ($c.CloudRestore) 'a leak does not send the cloud files back'
+}
+
+Test-Case 'qa-cloud-what-the-game-rewrites-every-run-carries-over' {
+    $c = New-TestQaRun 'carried' (Get-TestProfileFields) (Get-TestProfileFields @{
+            STAT_TIME_IN_GAME = @{ Name = 'STAT_TIME_IN_GAME'; Type = 1; Value = 0x22 }; count = @{ Name = 'count'; Type = 1; Value = 0x14 }
+            start = @{ Name = 'start'; Text = '2026-10-17T02:54:34.508127Z' }; type = @{ Name = 'type'; Text = 't_ghost_codex_unlocked' }
+            r_antialiasing = @{ Name = 'r_antialiasing'; Text = '0' } })
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and $r.Ok -and $r.Detail -match '1 profile\(s\) read, 5 field\(s\)') "result: $($r.Ok) $($r.Detail)"
+    Check (-not $c.CloudRestore -and $c.Notes.Count -eq 0) "carried fields send the cloud files back: $($c.Notes -join '; ')"
+}
+
+Test-Case 'qa-cloud-a-telemetry-type-next-to-number-values-carries-over' {
+    # As in the profiles of merge QA r62a: a type field holds a short number in other telemetry entries.
+    $number = @{ Name = 'type'; Type = 5; Value = 0 }
+    $before = @(Get-TestProfileFields) + @($number)
+    $after = @(Get-TestProfileFields @{ type = @{ Name = 'type'; Text = 't_ghost_codex_unlocked' } }) + @($number)
+    $c = New-TestQaRun 'type-numbers' $before $after
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and $r.Ok) "a telemetry type with number values fails: $($r.Detail)"
+    Check (-not $c.CloudRestore) "a telemetry type sends the cloud files back: $($c.Notes -join '; ')"
+}
+
+Test-Case 'qa-cloud-a-changed-text-field-not-named-like-a-cvar-is-no-leak' {
+    # As in merge QA r63a: the online item store rewrote its ItemInstanceId values (text) in a run.
+    $c = New-TestQaRun 'item-ids' (Get-TestProfileFields @{ ItemInstanceId = @{ Name = 'ItemInstanceId'; Text = 'DA2A3A732EA8659' } }) (Get-TestProfileFields @{ ItemInstanceId = @{ Name = 'ItemInstanceId'; Text = '2DF91721462806A0' } })
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and $r.Ok) "a non-cvar text field fails as a leak: $($r.Detail)"
+    Check ($c.CloudRestore -and ($c.Notes -join ' ') -match 'ItemInstanceId') 'a changed non-cvar field did not send the cloud files back'
+}
+
+Test-Case 'qa-cloud-a-plain-name-with-another-value-is-not-carried' {
+    $c = New-TestQaRun 'plain-name' (Get-TestProfileFields @{ start = @{ Name = 'start'; Text = '0' } }) (Get-TestProfileFields @{ start = @{ Name = 'start'; Text = '1' } })
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and $r.Ok) "a text field named start is not a cvar, so no leak: $($r.Ok) $($r.Detail)"
+    Check ($c.CloudRestore -and ($c.Notes -join ' ') -match "start '0' -> '1'") "a text field named start with no time stamp is carried: $($c.Notes -join '; ')"
+}
+
+Test-Case 'qa-cloud-another-field-sends-the-cloud-files-back' {
+    $c = New-TestQaRun 'other' (Get-TestProfileFields) (Get-TestProfileFields @{ hasSeenTestTutorial = @{ Name = 'hasSeenTestTutorial'; Type = 0x0c; Value = 0x0c } })
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and $r.Ok) "a number field is not a leak: $($r.Detail)"
+    Check ($c.CloudRestore -and ($c.Notes -join ' ') -match 'hasSeenTestTutorial') 'a changed field outside the list did not send the cloud files back'
+}
+
+Test-Case 'qa-cloud-an-unreadable-profile-fails-closed' {
+    $c = New-TestQaRun 'unreadable' (Get-TestProfileFields) 'corrupt'
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and -not $r.Ok -and $r.Detail -match 'profile.bin not read') "result: $($r.Ok) $($r.Detail)"
+    Check ($c.CloudRestore) 'an unreadable profile does not send the cloud files back'
+}
+
+Test-Case 'qa-cloud-a-profile-added-or-removed-fails-closed' {
+    foreach ($case in @(@('removed', (Get-TestProfileFields), 'missing'), @('added', 'missing', (Get-TestProfileFields)))) {
+        $c = New-TestQaRun "profile-$($case[0])" $case[1] $case[2]
+        Test-QaCloudState $c
+        $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+        Check ($r -and -not $r.Ok -and $r.Detail -match "profile.bin $($case[0]) by the run") "$($case[0]): $($r.Ok) $($r.Detail)"
+        Check ($c.CloudRestore) "$($case[0]): the cloud files not sent back"
+    }
+}
+
+Test-Case 'qa-suite-holds-the-cloud-restore-and-finishes-it-by-name' {
+    $t = New-TestEnv 'qa-held'
+    Write-TestCloudRecord $t
+    $save = Join-Path $t.Root 'save100'
+    [void][IO.Directory]::CreateDirectory($save)
+    Copy-Item -LiteralPath $t.Save -Destination $save
+    $script:QaSaveSource = $save; $script:QaSaveTarget = Split-Path -Parent $t.Save
+    $script:QaStopFile = Join-Path $t.Root 'STOP-RIG'
+    $script:QaCloudHeld = $null
+    $h = Start-QaCloudHold ''
+    Check ($h.Ok) "hold: $($h.Detail)"
+    if (-not $h.Ok) { return }
+    $held = $script:QaCloudHeld
+    Check (Test-Path -LiteralPath (Join-Path $held 'CLEANUP_PENDING')) 'the held restore is not pending'
+    # Runs while it is held: the start is not refused, a plain cleanup leaves it, the game's cloud files are kept.
+    $s = Start-TestRun $t
+    Check ($s.Code -eq 0 -and $s.Output -match 'left pending: cloud restore') "run with a held restore: exit $($s.Code): $($s.Output)"
+    Write-TestBytes $t.Profile 5000 91
+    Write-TestBytes $t.Save 700 92
+    Write-TestCloudRecord $t
+    Check ((Invoke-Rig 'stop.ps1').Code -eq 0) 'stop failed'
+    Check ((Invoke-Rig 'cleanup.ps1').Code -eq 0) 'plain cleanup failed'
+    Check (Test-Path -LiteralPath (Join-Path $held 'CLEANUP_PENDING')) 'a plain cleanup finished the restore while its holder lives'
+    # The suite's end finishes it by name: the cloud files as they were held, one resync launch, the save in place.
+    $helper = Set-TestResync $t -Accept
+    $results = New-Object System.Collections.ArrayList
+    Complete-QaCloud $results ''
+    foreach ($v in 'EVR_RIG_RESYNC_EXE', 'EVR_RIG_RESYNC_ARGS', 'EVR_RIG_RESYNC_KILL_MS') { Set-TestVar $v '' }
+    Check ($results.Count -eq 2 -and $results[0].Ok -and $results[1].Ok) "suite results: $(@($results | ForEach-Object { "$($_.Name)=$($_.Ok) $($_.Detail)" }) -join '; ')"
+    Check (-not (Test-Path -LiteralPath (Join-Path $held 'CLEANUP_PENDING'))) 'the held restore is still pending'
+    Check ((Get-RigSha256 $t.Profile) -eq $t.Orig[$t.Profile] -and (Get-RigSha256 $t.Save) -eq $t.Orig[$t.Save]) 'cloud files not as they were held'
+    Check ((Get-TestResyncProcesses $helper).Count -eq 0) 'the resync launch was not killed'
+    # The next start takes the finished restore as its baseline (the folder is older than the run it finished after).
+    $n = Start-TestRun $t
+    Check ($n.Code -eq 0 -and $n.Run.baseline.source -match [regex]::Escape((Split-Path -Leaf $held)) -and @($n.Run.baseline.differences).Count -eq 0) "next run: exit $($n.Code); baseline $($n.Run.baseline.source); differences $(@($n.Run.baseline.differences) -join '; ')"
+    Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'last stop failed'
+}
+
+Test-Case 'qa-suite-end-on-stop-rig-leaves-the-restore-pending' {
+    $t = New-TestEnv 'qa-held-stop'
+    Write-TestCloudRecord $t
+    $script:QaStopFile = Join-Path $t.Root 'STOP-RIG'
+    $script:QaCloudHeld = $null
+    $h = Start-QaCloudHold ''
+    Check ($h.Ok) "hold: $($h.Detail)"
+    if (-not $h.Ok) { return }
+    $held = $script:QaCloudHeld
+    Write-TestBytes $t.Profile 5000 93
+    Write-TestCloudRecord $t
+    Write-TestFile $script:QaStopFile 'owner'
+    $helper = Set-TestResync $t -Accept
+    $results = New-Object System.Collections.ArrayList
+    Complete-QaCloud $results ''
+    foreach ($v in 'EVR_RIG_RESYNC_EXE', 'EVR_RIG_RESYNC_ARGS', 'EVR_RIG_RESYNC_KILL_MS') { Set-TestVar $v '' }
+    $r = @($results)[0]
+    Check ($r -and -not $r.Ok -and $r.Detail -match [regex]::Escape("cleanup.ps1 -Run $(Split-Path -Leaf $held)")) "STOP-RIG result: $($r.Ok) $($r.Detail)"
+    Check (Test-Path -LiteralPath (Join-Path $held 'CLEANUP_PENDING')) 'the restore was finished under STOP-RIG'
+    Check (-not (Test-Path -LiteralPath (Join-Path $held 'resync.json')) -and (Get-TestResyncProcesses $helper).Count -eq 0) 'a resync launch started under STOP-RIG'
+    $script:QaStopFile = Join-Path $t.Root 'STOP-RIG-gone'
+}
+
 Test-Case 'test-seams-are-ignored-outside-test-mode' {
     $t = New-TestEnv 'seams'
     Set-TestVar 'EVR_RIG_TEST_ROOT' ''

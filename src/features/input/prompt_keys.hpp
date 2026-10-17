@@ -39,14 +39,17 @@ const std::string& tabKeyLabel(std::size_t index, const PromptLabelSet& labels);
 // The game's raw key text (KeyNameText, a key number to its name with no key token) is answered only for the
 // callers that show it as a prompt, told apart by their return address: TabList's two calls get the tab
 // keys' text, the command bar's two hold-button calls (GetKeyString's and the bar update's) the layer keys'
-// text, every other caller the game's own text.
+// text, every other caller the game's own text. The loading screen's tips bar, which writes its Q and E as
+// key tokens ("K_Q PREVIOUS"), is answered the same way at its two text formats: as tab keys, since the grips
+// send its keys (features/menu/load_tips_keys.hpp).
 enum class KeyNameAnswer { Game, TabKey, LayerKey };
 
 // The callers' return addresses, as found at install; 0 for one not found (no return address is 0).
 struct KeyNameCallers {
-    std::array<std::uintptr_t, 2> tabList{}; // the previous tab's key, then the next tab's
-    std::uintptr_t getKeyString = 0;         // idSWFWidget_Button_CommandBar::GetKeyString()
-    std::uintptr_t commandBarUpdate = 0;     // the command bar's update ("custom" layout)
+    std::array<std::uintptr_t, 2> tabList{};  // the previous tab's key, then the next tab's
+    std::uintptr_t getKeyString = 0;          // idSWFWidget_Button_CommandBar::GetKeyString()
+    std::uintptr_t commandBarUpdate = 0;      // the command bar's update ("custom" layout)
+    std::array<std::uintptr_t, 2> loadTips{}; // the tips bar's previous and next text formats
 };
 
 KeyNameAnswer keyNameAnswer(std::uintptr_t returnAddress, const KeyNameCallers& callers);

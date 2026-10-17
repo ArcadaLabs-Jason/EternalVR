@@ -17,6 +17,7 @@
 #include "vkcore/menu_input.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/prompt_load_tips.hpp"
 #include "xr_math/cinema_quad.hpp"
 
 #include <algorithm>
@@ -153,6 +154,7 @@ bool XrPresenter::Impl::placeMenuPanel(XrTime time) {
 }
 
 void releaseMenuInput(XrPresenter::Impl& p, const char* why) {
+    controllers::releaseLoadTipsKeys();
     if (!p.menuRouter || !p.menuRouter->holdsInput()) {
         return;
     }
@@ -293,6 +295,7 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     }
     menuHeld = menuHeld && menuPanelPlaced && menuPanel.width > 0.0f;
     menuUp.store(cursorActive || menuOn || menuHeld, std::memory_order_relaxed);
+    controllers::updateLoadTipsKeys(frame, now, cursorActive || menuOn || menuHeld, shownHasView);
 
     menu::RouterInput in;
     in.seconds = now;

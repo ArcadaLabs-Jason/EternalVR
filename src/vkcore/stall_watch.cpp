@@ -315,6 +315,10 @@ void onGameTick() {
     g_lastTick.store(window_timing::nowMicros(), std::memory_order_relaxed);
 }
 
+std::uint64_t lastGameTickMicros() {
+    return g_lastTick.load(std::memory_order_relaxed);
+}
+
 void trackGameTicks(bool on) {
     g_ticksKnown.store(on, std::memory_order_relaxed);
     g_ticksDecided.store(true, std::memory_order_relaxed);

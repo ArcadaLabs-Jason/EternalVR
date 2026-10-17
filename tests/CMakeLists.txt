@@ -264,6 +264,7 @@ if(TARGET evr_device_features)
             vkcore/clone_census_tests.cpp
             vkcore/clone_names_tests.cpp
             vkcore/clone_stencil_tests.cpp
+            vkcore/code_refs_tests.cpp
             vkcore/debug_script_tests.cpp
             vkcore/device_features_tests.cpp
             vkcore/dump_format_tests.cpp
@@ -283,7 +284,7 @@ if(TARGET evr_device_features)
             vkcore/view_dlss_plan_tests.cpp
             vkcore/view_frames_tests.cpp
             vkcore/view_water_start_tests.cpp
-        DEPENDS evr_adapter_order evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
+        DEPENDS evr_adapter_order evr_code_refs evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
             evr_parallel_eyes_settings evr_mp_policy)
 endif()
 
@@ -351,6 +352,7 @@ evr_add_test(evr_menu_tests
     SOURCES
         features/menu/drag_cursor_hide_tests.cpp
         features/menu/enter_tick_tests.cpp
+        features/menu/load_tips_keys_tests.cpp
         features/menu/map_drag_tests.cpp
         features/menu/map_pan_keys_tests.cpp
         features/menu/menu_kind_tests.cpp

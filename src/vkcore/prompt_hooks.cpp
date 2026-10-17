@@ -43,6 +43,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_command_bar.hpp"
+#include "vkcore/prompt_load_tips.hpp"
 
 #include <windows.h>
 
@@ -525,6 +526,7 @@ bool installPromptHooks() {
         EVR_LOG("%s: LocalizedKeyName hook at RVA 0x%X failed: %s", kTag, image.rva(keyText), error.c_str());
     }
     installKeyNameTextHook(image);
+    installLoadTipsHooks(image, kTag);
     g_installed.store(true, std::memory_order_release);
     if (generation && !mp_guard::addTripListener(&bumpBindGenerationOnTrip)) {
         EVR_LOG("%s: no room in the multiplayer guard's trip listeners; cached prompts keep the VR buttons' "
@@ -540,6 +542,10 @@ bool installPromptHooks() {
         image.rva(reinterpret_cast<const std::byte*>(g_callerReturns[3])), g_virtualKeys.size(),
         generation ? "found" : "not found (cached prompts keep their old text)");
     return true;
+}
+
+std::shared_ptr<const input::PromptLabelSet> currentPromptLabels() {
+    return g_labels.load(std::memory_order_acquire);
 }
 
 void publishPromptLabels(const input::BindingProfile& profile, game::Controller controller) {

@@ -142,10 +142,16 @@ if ($clean.Failed -or $clean.Pending.Count -gt 0) {
 # Settings must match the last verified restore (before the first one: the pre-development backups);
 # an unexplained difference is reported, never adopted.
 $baseline = $null
-$lastRestored = @(Get-RigRunDirs $cfg | Where-Object {
+# The last restore is the latest cleanup, not the latest folder: a held cloud restore (cleanup.ps1
+# -HoldCloudRestore) is made before the runs it is finished after.
+$lastRestored = @(Get-RigRunDirs $cfg | ForEach-Object {
         $c = Read-RigJson (Join-Path $_ 'cleanup.json')
-        $c -and (Get-RigProp $c 'outcome') -eq 'restored' -and (Test-Path -LiteralPath (Join-Path $_ 'config-before\SHA256SUMS'))
-    }) | Select-Object -Last 1
+        if ($c -and (Get-RigProp $c 'outcome') -eq 'restored' -and (Test-Path -LiteralPath (Join-Path $_ 'config-before\SHA256SUMS'))) {
+            $at = [DateTimeOffset]::MinValue
+            try { $at = [DateTimeOffset]::Parse([string](Get-RigProp $c 'time'), [Globalization.CultureInfo]::InvariantCulture) } catch { }
+            [pscustomobject]@{ Dir = $_; At = $at.UtcDateTime }
+        }
+    }) | Sort-Object At, Dir | Select-Object -Last 1 -ExpandProperty Dir
 $bName = $null; $bLocations = $null; $expected = $null
 if ($lastRestored) {
     # Expected state: config-before, plus the files the run added (kept, never deleted) as they were

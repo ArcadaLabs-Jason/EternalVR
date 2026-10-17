@@ -122,6 +122,8 @@ KeyNameCallers steamCallers() {
     callers.tabList = {kBase + 0x1592761, kBase + 0x159284B};
     callers.getKeyString = kBase + 0x159F095;
     callers.commandBarUpdate = kBase + 0x159FE8F;
+    // The loading screen tips bar's format calls (0x4587E1, 0x4589A5), each answered at its return address.
+    callers.loadTips = {kBase + 0x4587E6, kBase + 0x4589AA};
     return callers;
 }
 
@@ -157,6 +159,23 @@ TEST_CASE("the tab lists' raw key text names the grips") {
     CHECK(rawKeyText(callers.tabList[0], "Q", callers, set) == "LG");
     CHECK(rawKeyText(callers.tabList[1], "E", callers, set) == "RG");
     CHECK(rawKeyText(callers.tabList[0], "ENTER", callers, set) == "(the game's)");
+}
+
+TEST_CASE("the loading screen's tips bar names the grips that send its Q and E") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    // "[Q] PREVIOUS | [Right Stick Click] NEXT" before (rig 2026-10-16): Q kept, E named as melee's button,
+    // and neither the stick click nor anything else sent E there.
+    CHECK(keyNameAnswer(callers.loadTips[0], callers) == KeyNameAnswer::TabKey);
+    CHECK(keyNameAnswer(callers.loadTips[1], callers) == KeyNameAnswer::TabKey);
+    CHECK(rawKeyText(callers.loadTips[0], "Q", callers, set) == "LG");
+    CHECK(rawKeyText(callers.loadTips[1], "E", callers, set) == "RG");
+    CHECK(rawKeyText(callers.loadTips[1], "E", callers, set) != layerText("E", set));
+    CHECK(rawKeyText(callers.loadTips[0], "ENTER", callers, set) == "(the game's)");
+    // A half not found at install answers nothing.
+    KeyNameCallers missing = callers;
+    missing.loadTips[1] = 0;
+    CHECK(keyNameAnswer(callers.loadTips[1], missing) == KeyNameAnswer::Game);
 }
 
 TEST_CASE("every other caller of the raw key text keeps the game's text") {

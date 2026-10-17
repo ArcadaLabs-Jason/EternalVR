@@ -1,6 +1,6 @@
 # Shared helpers of the rig QA suite (qa-suite.ps1), dot-sourced: the rig paths, the STOP-RIG check,
 # staging a layer build, the launch through launch-ht.ps1, bounded waits on the layer log, screenshots of the
-# virtual display and the simulator window, the stop through stop.ps1 and the save restore after every run.
+# virtual display and the simulator window, the stop through stop.ps1 and the 100% save.
 
 $script:QaRig = Split-Path -Parent $PSScriptRoot
 $script:QaRepo = Split-Path -Parent (Split-Path -Parent $script:QaRig)
@@ -92,7 +92,7 @@ function New-QaContext($Scenario, [string]$Out) {
         Name = $Scenario.Name; Label = "qa-$($Scenario.Name)"; Out = $Out; Dir = $dir; Since = Get-Date
         Stage = $null; LogsDir = $null; RunDir = $null; InputPath = $null; Vdd = $null; DumpWatch = $null; Env = @()
         Shots = New-Object System.Collections.ArrayList; Results = New-Object System.Collections.ArrayList
-        Notes = New-Object System.Collections.ArrayList; Stopped = $false; Abort = $false; Skipped = $false
+        Notes = New-Object System.Collections.ArrayList; Stopped = $false; Abort = $false; Skipped = $false; CloudRestore = $false
     }
 }
 
@@ -297,12 +297,13 @@ function Save-QaXrShot($Ctx, [string]$Checkpoint) {
     } catch { Add-QaNote $Ctx "simulator screenshot '$Checkpoint' failed: $($_.Exception.Message)" }
 }
 
-# Ends the run through stop.ps1 (the only script that stops a live run) with the Steam-Cloud files restored.
+# Ends the run through stop.ps1 (the only script that stops a live run): the local settings restored, the
+# Steam-Cloud files kept as the game left them (qa-cloud.ps1 puts them back once for the suite).
 function Stop-QaGame($Ctx) {
     if (-not $Ctx.RunDir) { $Ctx.RunDir = Find-QaRunDir $Ctx }
     $run = if ($Ctx.RunDir) { Split-Path -Leaf $Ctx.RunDir } elseif (Test-QaGameRunning) { 'latest' } else { $null }
     if (-not $run) { return }
-    $out = & (Join-Path $script:QaRig 'stop.ps1') -Run $run -RestoreCloudFiles 2>&1 | ForEach-Object { "$_" }
+    $out = & (Join-Path $script:QaRig 'stop.ps1') -Run $run *>&1 | ForEach-Object { "$_" }
     $code = $LASTEXITCODE
     Set-Content -LiteralPath (Join-Path $Ctx.Dir 'stop.txt') -Value $out -Encoding utf8
     $end = (Get-Date).AddSeconds(30)
@@ -311,7 +312,8 @@ function Stop-QaGame($Ctx) {
     Add-QaResult $Ctx 'stopped and cleaned up' ((-not (Test-QaGameRunning)) -and $code -eq 0) "stop.ps1 exit $code$(if (-not $done) { ', no cleanup done line' })"
 }
 
-# The 100% save back into the autosave slot after every game run (armbisect.ps1), checked by size.
+# The 100% save into the autosave slot (armbisect.ps1), checked by size: before the suite's first game run when the
+# slot holds something else. The game's autosaves during the suite go back with the suite's cloud restore.
 function Restore-QaSave {
     try {
         Copy-Item -Path (Join-Path $script:QaSaveSource '*') -Destination $script:QaSaveTarget -Force -ErrorAction Stop

@@ -25,6 +25,12 @@ target_compile_features(evr_adapter_order PUBLIC cxx_std_20)
 target_compile_definitions(evr_adapter_order PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(evr_adapter_order PRIVATE evr_warnings PUBLIC Vulkan::Headers)
 
+# The lea and call scans over the game's code (code_refs.cpp), tested on a synthetic image.
+add_library(evr_code_refs STATIC code_refs.cpp)
+target_include_directories(evr_code_refs PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_code_refs PUBLIC cxx_std_20)
+target_link_libraries(evr_code_refs PRIVATE evr_warnings PUBLIC evr_resolver)
+
 # The debug command schedule (debug_commands.cpp), tested without the game.
 add_library(evr_debug_script STATIC debug_script.cpp)
 target_include_directories(evr_debug_script PUBLIC "${PROJECT_SOURCE_DIR}/src")
@@ -247,6 +253,7 @@ target_sources(evr_layer PRIVATE
     weapon_arm.cpp
     prompt_command_bar.cpp
     prompt_hooks.cpp
+    prompt_load_tips.cpp
     rest_wheel.cpp
     rumble_hook.cpp
     touch_buttons_log.cpp
@@ -280,6 +287,7 @@ target_compile_definitions(evr_layer PRIVATE
 target_link_libraries(evr_layer PRIVATE
     evr_warnings
     evr_adapter_order
+    evr_code_refs
     evr_debug_script
     evr_device_features
     evr_dlss_dll

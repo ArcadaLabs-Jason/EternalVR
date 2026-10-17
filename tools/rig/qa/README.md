@@ -26,12 +26,44 @@ account, so another PC's account needs its own re-signed copy). procdump (`tools
 ## Safety
 
 - `<workspace>\tmp-vr\STOP-RIG` ends the suite before the next scenario and during any wait
-  (the running game is stopped and the save restored first). It is not seen while `launch-ht.ps1` runs
-  (up to about two minutes).
+  (the running game is stopped; the Steam-Cloud files are left for the next cleanup, see below). It is not
+  seen while `launch-ht.ps1` runs (up to about two minutes).
 - A running `DOOMEternalx64vk.exe` refuses a game scenario.
-- After every game run, also on failure: `stop.ps1 -Run <run> -RestoreCloudFiles`, then the 100% save is
-  copied into `GAME-AUTOSAVE0`, touched and checked (`game_duration.dat` 958137 bytes). A failed restore
-  ends the suite.
+- After every game run, also on failure: `stop.ps1 -Run <run>`: the local settings restored, the Steam-Cloud
+  files (`PROFILE\profile.bin`, the save slot the map start autosaves into) kept as the game wrote them, so
+  Steam's record matches them. Before the first game run the suite holds a cloud restore of the settings
+  as they are then (`cleanup.ps1 -HoldCloudRestore`, `tools\rig\README.md`, Steam Cloud; one an earlier
+  suite left pending is finished first, so its runs are never taken as the start), and `qa.log` names the
+  folder and the command that finishes it. After the last game scenario the suite finishes it by name: the
+  cloud files back, the one resync launch for the suite; the report's Suite section says so, and that the
+  100% save is in `GAME-AUTOSAVE0` then. A slot that holds something else before the first game run gets
+  the 100% save copied in first (touched, `game_duration.dat` 958137 bytes). An error or Ctrl+C finishes it
+  too; a killed suite leaves it pending and the next cleanup or game start of anyone finishes it. On
+  STOP-RIG it is left pending (no resync launch while the owner uses the PC) and the Suite section names the
+  command (`tools\rig\cleanup.ps1 -Run <folder>`), as it does when the restore fails or is refused. A
+  failed or left restore makes the exit code 2. The hold belongs to the suite's PowerShell process, so run the
+  suite as its own process (`powershell -File`, as `tools/unelevated.sh` does), not dot-sourced into a shell
+  that stays open: until that process exits, only it can finish the folder. A second suite refuses to start
+  while another suite's hold is live.
+- What a run leaves for the next one is checked from its run folder's `config-before\` and `config-after\`
+  copies of `profile.bin` (`qa-cloud.ps1`: AES-GCM with the account's key, then field by field). The fields
+  the game rewrites in every run carry over: its lifetime statistics, the telemetry queue, the online
+  progression and item store, `r_antialiasing` (the per-eye TAA's held 0, which every stereo run saves) and
+  `r_raytracedReflectionsTemporalUpscaleQuality` (the game's own 1). With either entry carried the game
+  runs with the same values as from the rig profile's own (rig, 2026-10-17: `r_antialiasing` 1 until the
+  layer's hold writes `1 -> 0`, the reflections 1, in every scenario of both suites). A text field outside
+  them that changed is a held value saved into the player's profile: `profile.bin: no held value saved`
+  fails for that scenario (`docs/rig-findings/profile-leak.md`), and so does a profile that cannot be read
+  or that the run added or removed (nothing shows it holds no leak). The telemetry's `count`, `start`,
+  `end` and `type` carry only with the values the telemetry holds there (a number, a UTC time stamp, an
+  event name): the parse finds fields by their bytes, not by the profile's nesting, so their section is not
+  known. Any other field (a tutorial marked as seen: `token-pickup` and `action-aim` mark one), any of the
+  above or a stale Steam record sends the cloud files back before the next scenario (the held restore
+  finished, then held again), so it starts as the first one did. The save slot
+  carries the previous run's autosave: a `+map` run starts from the developer loadout at the map's own
+  difficulty whatever the slot holds, and only the main menu's save list reads it. A view_skipShakes leak
+  is only seen with a profile that does not already hold the held 1 (the rig's profile holds 1 from the
+  sessions before the profile hooks).
 
 ## What each run does
 
@@ -82,7 +114,8 @@ step writes its own files into its folder before the launch (a player's controll
 | mp-guard-standin | No game: a stand-in Vulkan program (compiled by `Add-Type`, one `vkCreateInstance`) named `DOOMEternalx64vk.exe` loads the layer build. `+connect_lobby 1`, then `+map game/pvp/pvp_laser/pvp_laser`: `TRIPPED by command line (argument "+connect" ...` / `"game/pvp/" ...`, `the layer does not load`, no `EternalVR layer loaded`; posing as the game's instance (app `DOOMEternal`, engine `idTech`) in an exe that is no known build: every detection point `MISSING`, `REFUSED` (fail closed), no `armed`; not the game's instance: `(not the game's; pass-through)`, no guard line; under another file name: no layer log at all. The program's own `vkCreateInstance` succeeds every time. Runs unelevated only (the loader ignores the layer path in an elevated process), needs no simulator, and starts only on an idle rig like a game scenario (its process is named like the game; run it under the rig lock) |
 | launcher-e2e | `launcher\tests\e2e.ps1 -Root <Out>\e2e -Runtime <simulator json>` prints `E2E OK` (skipped without a Release build) |
 
-Every game scenario also checks: in the map, stopped and cleaned up, save restored, no crash dump, and the multiplayer
+Every game scenario also checks: in the map, stopped and cleaned up, Steam's record matching the cloud files,
+no held value saved into `profile.bin`, no crash dump, and the multiplayer
 guard (REQ-16): `mp guard: armed`, a `mp guard: map load '...' (single-player)` line, and (but in `mp-guard-trip`) no
 `mp guard: TRIPPED` or `REFUSED` line.
 

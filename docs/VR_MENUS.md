@@ -148,6 +148,13 @@ weapon hand's trigger for Enter's select (also on a hold button: "Right Trigger 
 the end of a mission, held with the pointer on it), the grips for the tabs' Q and E as LG and RG (the tab
 lists cut longer names; `docs/VR_CONTROLLERS.md`, Button prompts).
 
+The loading screen's tips bar ("[Q] PREVIOUS | [E] NEXT") is not a menu: the game shows no cursor there
+and reads Q and E itself on every frame of the loading screen. While it does and no menu is up, the left
+grip sends Q (the previous tip) and the right grip E (the next), and the bar reads "[LG] PREVIOUS | [RG]
+NEXT". A grip already held when the loading screen comes up (a weapon mod held through the load) counts
+once it has been let go, and the grips stop at the game's first view of play
+(`features/menu/load_tips_keys.hpp`, `vkcore/prompt_load_tips.hpp`).
+
 **Tutorial and lore popups.** A tutorial or lore popup shows the game's cursor over the game, so it comes
 up in menu mode, but it waits for Space (continue) or E (use). On the owner's Quest 3 (2026-09-27,
 `e1m1_intro` from the Glory Kill tutorial checkpoint) four such screens came up unasked, for 2 to 28 s; the
@@ -402,6 +409,12 @@ that camera instead of on the panel (for comparing on the rig).
 | `ETERNALVR_MAP_CURSOR_HIDE` | `1` (the game's cursor is hidden while a stick drags the Dossier's map and until it is back on the ray; `features/menu/drag_cursor_hide.hpp`, `docs/rig-findings/menus.md` section 5) / `0` (shown) | `1` |
 
 ## Log lines
+
+`prompts:` for the tips bar, at start-up `loading screen tips: the bar's update at RVA 0x456BF0`, `key poll
+hooked at RVA 0x45824B`, `platform compare hooked at RVA 0x45869D (field +0x544)` and `format calls at RVA
+0x4587E1, 0x4589A5`, then once each `the loading screen's tips bar polls its keys: ...` and `the loading
+screen's tips bar names Q: LG`, each grip's key (`loading screen tips: Q down`, the first 20), and once a load
+`the game's first view N s after the bar's last poll; the grips send nothing from then on`.
 
 `menu:` the located cursor (`cursor event handler at RVA 0x18000E0, cursor pointer at RVA 0x47DDB88`),
 the map page (`the Dossier's map page ...`), a panel placed again after a re-anchor,
