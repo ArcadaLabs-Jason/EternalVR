@@ -28,7 +28,8 @@ namespace EternalVR.Launcher.Core.Headsets
         public string AsksLabel { get; private set; }
         /// <summary>"2496 x 2688 per eye (1.21x the panel)", then on a second line "read at Launch VR, today 09:12".</summary>
         public string AsksLine { get; private set; }
-        /// <summary>"90 Hz, steady (last session)", or "shown after your first session".</summary>
+        /// <summary>"game about 42 new frames a second; headset 90 Hz, steady (last session)", the last session with play when
+        /// the last one had none ("... (last session with play, today 09:51)"), or "shown after your first session".</summary>
         public string RefreshLine { get; private set; }
         public string PanelTip { get; private set; }
         public string AsksTip { get; private set; }
@@ -114,10 +115,13 @@ namespace EternalVR.Launcher.Core.Headsets
 
             if (facts.SessionRefresh != null)
             {
-                var sessionRoute = HeadsetIdentity.RouteOf(facts.SessionRuntime);
+                // A last session without play (started and quit in the menus) has no game rate: the last one with play has.
+                bool earlierPlay = facts.PlayRefresh != null && facts.PlayAt.HasValue && facts.PlayAt != facts.SessionAt;
+                var runtime = earlierPlay ? facts.PlayRuntime : facts.SessionRuntime;
+                var sessionRoute = HeadsetIdentity.RouteOf(runtime);
                 bool otherRoute = identity != null && sessionRoute != RouteKind.Unknown && identity.Route != RouteKind.Unknown && sessionRoute != identity.Route;
-                v.RefreshLine = facts.SessionRefresh + " (last session"
-                    + (otherRoute ? ", with " + HeadsetIdentity.RouteNameOf(sessionRoute, facts.SessionRuntime) : string.Empty) + ")";
+                v.RefreshLine = (earlierPlay ? facts.PlayRefresh + " (last session with play, " + When(facts.PlayAt.Value, now) : facts.SessionRefresh + " (last session")
+                    + (otherRoute ? ", with " + HeadsetIdentity.RouteNameOf(sessionRoute, runtime) : string.Empty) + ")";
             }
             else v.RefreshLine = "shown after your first session";
 
@@ -127,7 +131,9 @@ namespace EternalVR.Launcher.Core.Headsets
                 ? "Your headset's own screen per eye, from the launcher's list of headsets (no runtime reports it)."
                 : "This headset is not in the launcher's list of headsets (or not named), so Resolution has no headset native choice.";
             v.AsksTip = "The size " + asker + " asks the game to render each eye at, set in " + places.Size + places.Untested + ".";
-            v.RefreshTip = "Your headset's refresh rate in your last session, set in " + places.Refresh + places.Untested + ". When "
+            v.RefreshTip = "The new frames a second the game drew in your last session, then your headset's refresh rate, set in "
+                + places.Refresh + places.Untested + ". When the game falls behind, the mod shows its last frame again turned with "
+                + "your head, so the headset still gets its full rate and its own counter can show that rate. When "
                 + places.Smoothing + " takes over, the headset asks for half the frames (or a third).";
             return v;
         }
@@ -217,6 +223,9 @@ namespace EternalVR.Launcher.Core.Headsets
                 Add("last session", facts.Session + (facts.SessionAt.HasValue ? ", ended " + Time(facts.SessionAt) : string.Empty)
                     + (facts.SessionRuntime == null ? string.Empty : ", runtime '" + facts.SessionRuntime + "'")
                     + (facts.SessionRefresh == null ? string.Empty : ": " + facts.SessionRefresh));
+                if (facts.PlayRefresh != null && facts.PlayAt != facts.SessionAt)
+                    Add("last session with play", (Time(facts.PlayAt) ?? "unknown") + (facts.PlayRuntime == null ? string.Empty : ", runtime '" + facts.PlayRuntime + "'")
+                        + ": " + facts.PlayRefresh);
                 if (facts.SessionText != null) Add("last session summary", facts.SessionText);
                 Add("last session controls", facts.SessionControls ?? "not logged");
                 if (facts.SessionParallelEyes != null) Add("last session parallel eyes", facts.SessionParallelEyes);

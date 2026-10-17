@@ -10,7 +10,7 @@
 #        model (vr=, vr~) wins over it when that model is in the list.
 # Only identifiers seen in a real log, a vendor's source or a vendor's page are listed; a headset that matches none
 # shows as not in the list rather than as a guess. ALVR reports the headset it imitates, so it is never matched.
-# Panels and rates are the makers' figures (checked 2026-10-01). Order matters for the vr~ parts: a more specific
+# Panels and rates are the makers' figures (checked 2026-10-01; the Pimax Dream Air 2026-10-17). Order matters for the vr~ parts: a more specific
 # name (Crystal Super, Crystal Light) comes before the one it contains.
 Meta Quest 2 | xr=Oculus Quest2; vr=Oculus Quest2 | 1832x1920 | 72,80,90,120
 Meta Quest 3 | xr=Meta Quest 3; vr=Meta Quest 3 | 2064x2208 | 72,80,90,120
@@ -28,6 +28,7 @@ Bigscreen Beyond | vr=Bigscreen Beyond; vr=Beyond | 2560x2560 | 75,90
 Pimax Crystal Super | vr~crystal super | 3840x3840 | 72,90
 Pimax Crystal Light | vr~crystal light | 2880x2880 | 72,90,120
 Pimax Crystal | xr=Pimax Crystal; vr=Pimax Crystal | 2880x2880 | 72,90,120
+Pimax Dream Air | vr=Pimax Dream Air | 3840x3552 | 72,90
 Varjo XR-4 | xr=XR-4; vr~xr-4 | 3840x3744 | 90
 PlayStation VR2 | tk=playstation_vr2 | 2000x2040 | 90,120
 Samsung Odyssey+ | vr~800ZBA | 1440x1600 | 60,90

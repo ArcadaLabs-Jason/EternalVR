@@ -276,9 +276,30 @@ namespace EternalVR.Launcher.Core
         /// <summary>The held share as a whole percent, at least 1 when there was any.</summary>
         private string HeldPercent => Math.Max(1, (int)Math.Round(HeldShare * 100, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture) + "%";
 
-        /// <summary>The Play tab's Refresh value: "90 Hz, steady", "144 Hz, throttled to 72 for 18% of play", "varied 72-144 Hz,
-        /// mostly 144", "90 Hz, not steady: about 81 frames a second".</summary>
+        /// <summary>
+        /// The Play tab's Frame rate value: the game's new frames first, then the headset ("game about 42 new frames a second;
+        /// headset 90 Hz, steady", "game kept up; headset 144 Hz, throttled to 72 for 18% of play"), the headset alone without
+        /// enough play. The game's rate leads because the headset's alone reads as the game's: when the game falls behind, the
+        /// mod shows its last frame again turned with the head, so the headset takes its full rate (a player's "90 Hz, steady"
+        /// with the game at 42). The game's rate is of the stretches at the refresh rate, so it says "when not held" (or
+        /// "when not throttled" on SteamVR) after a held share and "at 144 Hz" after other refresh rates.
+        /// </summary>
         public string Compact()
+        {
+            var headset = HeadsetCompact();
+            if (!GameRate.HasValue) return headset;
+            var game = GameRate.Value >= KeptUpShare * RefreshHz
+                ? "game kept up"
+                : string.Format(CultureInfo.InvariantCulture, "game about {0:0} new frames a second", GameRate.Value);
+            // The game's rate is of the stretches at the refresh rate only: name that when the headset ran otherwise too.
+            if (OtherRates.Count > 0) game += " at " + RefreshHz.ToString(CultureInfo.InvariantCulture) + " Hz";
+            else if (HeldShare > 0) game += Route == RouteKind.SteamVr ? " when not throttled" : " when not held";
+            return game + "; headset " + headset;
+        }
+
+        /// <summary>The headset's part: "90 Hz, steady", "144 Hz, throttled to 72 for 18% of play", "varied 72-144 Hz, mostly
+        /// 144", "90 Hz, not steady: about 81 frames a second".</summary>
+        private string HeadsetCompact()
         {
             if (OtherRates.Count > 0)
             {

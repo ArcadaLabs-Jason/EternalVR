@@ -195,6 +195,30 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void ALastSessionWithoutPlayShowsTheLastOneWithPlay()
+        {
+            // A player's two sessions: 42 new frames a second at 90 Hz in play, then 30 s in the menus with nothing to measure.
+            var facts = Quest3;
+            facts.SessionRuntime = "VirtualDesktopXR";
+            facts.Session = "20261001-111700";
+            facts.SessionAt = Now.AddMinutes(-10);
+            facts.SessionRefresh = "90 Hz, steady";
+            facts.SessionRefreshHz = 90;
+            facts.PlayRefresh = "game about 42 new frames a second; headset 90 Hz, steady";
+            facts.PlayAt = Now.AddMinutes(-20);
+            facts.PlayRuntime = "VirtualDesktopXR";
+            var v = HeadsetView.For(facts, Id(facts), VdManifest, "VirtualDesktopXR (Bundled)", Now);
+            Assert.Equal("game about 42 new frames a second; headset 90 Hz, steady (last session with play, today 11:10)", v.RefreshLine);
+            var report = HeadsetView.ReportLines(facts, Id(facts));
+            Assert.Contains(report, l => l.Key == "last session with play" && l.Value.EndsWith("runtime 'VirtualDesktopXR': game about 42 new frames a second; headset 90 Hz, steady", StringComparison.Ordinal));
+            // The last session had play: it is shown as before.
+            facts.PlayAt = facts.SessionAt;
+            facts.PlayRefresh = facts.SessionRefresh = "game kept up; headset 90 Hz, steady";
+            Assert.Equal("game kept up; headset 90 Hz, steady (last session)", HeadsetView.For(facts, Id(facts), VdManifest, "VirtualDesktopXR (Bundled)", Now).RefreshLine);
+            Assert.DoesNotContain(HeadsetView.ReportLines(facts, Id(facts)), l => l.Key == "last session with play");
+        }
+
+        [Fact]
         public void ARuntimeChangedSinceOrAFailedTryMakesTheValuesOld()
         {
             var facts = Quest3;

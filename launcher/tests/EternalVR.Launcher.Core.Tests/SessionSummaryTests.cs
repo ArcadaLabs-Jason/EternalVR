@@ -59,7 +59,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.True(s.InPlay);
             Assert.Equal(10, s.Windows);
             Assert.Equal(0.0, s.HeldShare);
-            Assert.Equal("90 Hz, steady", s.Compact());
+            Assert.Equal("game kept up; headset 90 Hz, steady", s.Compact());
             Assert.Equal("The game kept up with your headset: about 90 new frames a second at 90 Hz.", s.Describe());
         }
 
@@ -82,7 +82,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(0.0, s.HeldShare);
             Assert.Equal(80.0, s.HeadsetRate.Value, 6);
             Assert.False(s.Steady);
-            Assert.Equal("90 Hz, not steady: about 80 frames a second", s.Compact());
+            Assert.Equal("game about 70 new frames a second; headset 90 Hz, not steady: about 80 frames a second", s.Compact());
             Assert.Equal("The headset took about 80 frames a second at 90 Hz (not steady). The game drew about 70 new frames a second at 90 Hz.", s.Describe());
             Assert.Contains("headset frames/s at the refresh rate 80.0", s.LogText());
 
@@ -90,13 +90,49 @@ namespace EternalVR.Launcher.Core.Tests
             var near = SessionSummary.FromLines(lines.Select(l => l.Contains("] rates: ") ? Regex.Replace(l, @"XR [0-9.]+ frame", "XR 86.0 frame") : l));
             Assert.Equal(86.0, near.HeadsetRate.Value, 6);
             Assert.True(near.Steady);
-            Assert.Equal("90 Hz, steady", near.Compact());
+            Assert.Equal("game about 70 new frames a second; headset 90 Hz, steady", near.Compact());
             Assert.Equal("The game drew about 70 new frames a second at 90 Hz.", near.Describe());
             // An older layer's rates line without the XR rate: the display period alone, as before.
             var older = SessionSummary.FromLines(lines.Select(l => l.Contains("] rates: ") ? l.Substring(0, l.IndexOf("; XR", StringComparison.Ordinal)) : l));
             Assert.Null(older.HeadsetRate);
-            Assert.Equal("90 Hz, steady", older.Compact());
+            Assert.Equal("game about 70 new frames a second; headset 90 Hz, steady", older.Compact());
             Assert.Contains("headset frames/s at the refresh rate unknown", older.LogText());
+        }
+
+        [Fact]
+        public void TheFrameRateLeadsWithTheGamesNewFrames()
+        {
+            // A player's Index session (2026-10-17): SteamVR took 88 to 90 frames a second at 90 Hz, so the headset alone read
+            // "90 Hz, steady", while the game drew 42 new frames a second (the mod showing its last frame again in between).
+            var s = SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : lighthouse", 11.11, Repeat(10, 11.11, 42)));
+            Assert.Equal(42.0, s.GameRate.Value, 6);
+            Assert.True(s.Steady);
+            Assert.Equal("game about 42 new frames a second; headset 90 Hz, steady", s.Compact());
+            // Kept up from 95% of the refresh rate (85.5 at 90 Hz).
+            Assert.Equal("game about 85 new frames a second; headset 90 Hz, steady",
+                SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : lighthouse", 11.11, Repeat(10, 11.11, 85.4))).Compact());
+            Assert.Equal("game kept up; headset 90 Hz, steady",
+                SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : lighthouse", 11.11, Repeat(10, 11.11, 85.6))).Compact());
+            // Without enough play (started and quit in the menus) there is no game rate: the headset alone.
+            var menus = SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : lighthouse", 11.11, Repeat(3, 11.11, 0)));
+            Assert.False(menus.InPlay);
+            Assert.Null(menus.GameRate);
+            Assert.Equal("90 Hz, steady", menus.Compact());
+
+            // headset.txt keeps the last session with play through a session without it.
+            var played = new DateTime(2026, 10, 17, 9, 51, 23);
+            var facts = LastHeadset.AfterSession(new HeadsetFacts(), s, "20261017-093836", played);
+            facts = LastHeadset.Parse(LastHeadset.Serialize(LastHeadset.AfterSession(facts, menus, "20261017-100205", played.AddMinutes(12))));
+            Assert.Equal("20261017-100205", facts.Session);
+            Assert.Equal("90 Hz, steady", facts.SessionRefresh);
+            Assert.Equal("game about 42 new frames a second; headset 90 Hz, steady", facts.PlayRefresh);
+            Assert.Equal(played, facts.PlayAt);
+            Assert.Equal(Steam, facts.PlayRuntime);
+            // A headset.txt from an older launcher has no last session with play: the last session alone, as it reads.
+            var old = LastHeadset.Parse("session = 20261016-200000\nsession_refresh = 90 Hz, steady\nsession_refresh_hz = 90\n");
+            Assert.Null(old.PlayRefresh);
+            Assert.Null(old.PlayAt);
+            Assert.Equal("90 Hz, steady", old.SessionRefresh);
         }
 
         [Fact]
@@ -121,7 +157,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(144, s.RefreshHz);
             Assert.Equal(0.3, s.HeldShare, 6);
             Assert.Equal(72, s.HeldHz);
-            Assert.Equal("144 Hz, throttled to 72 for 30% of a short session", s.Compact());
+            Assert.Equal("game about 110 new frames a second when not throttled; headset 144 Hz, throttled to 72 for 30% of a short session", s.Compact());
             Assert.Equal("SteamVR throttled the game to 72 of 144 Hz for 30% of a short session (Motion Smoothing or throttling). "
                 + "The game drew about 110 new frames a second at 144 Hz.", s.Describe());
             // A third of the rate counts too.
@@ -188,7 +224,7 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var windows = Repeat(6, 11.11, 89).Concat(Repeat(4, 22.22, 44)).ToArray();
             var vd = SessionSummary.FromLines(Session(Vd, Quest3, 11.11, windows));
-            Assert.Equal("90 Hz, held to 45 for 40% of a short session", vd.Compact());
+            Assert.Equal("game kept up when not held; headset 90 Hz, held to 45 for 40% of a short session", vd.Compact());
             Assert.StartsWith("Virtual Desktop's SSW held the game to 45 of 90 Hz for 40% of a short session. The game kept up with your headset", vd.Describe());
             var link = SessionSummary.FromLines(Session("Oculus", Quest3, 11.11, windows));
             Assert.StartsWith("Meta's ASW held the game to 45 of 90 Hz for 40% of a short session.", link.Describe());
@@ -206,7 +242,7 @@ namespace EternalVR.Launcher.Core.Tests
             var s = SessionSummary.FromLines(Session(Vd, Quest3, 11.11, windows));
             Assert.Equal(SessionSummary.ShortSessionWindows, s.Windows);
             Assert.False(s.HeldByTime);
-            Assert.Equal("90 Hz, held to 45 for 20% of play", s.Compact());
+            Assert.Equal("game kept up when not held; headset 90 Hz, held to 45 for 20% of play", s.Compact());
             Assert.Contains("held to 45 Hz in 20.0% of the windows", s.LogText());
             var shorter = SessionSummary.FromLines(Session(Vd, Quest3, 11.11, windows.Skip(1).ToArray()));
             Assert.EndsWith("of a short session", shorter.Compact());
@@ -226,19 +262,19 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.True(s.HeldByTime);
             Assert.Equal(0.094, s.HeldShare, 6);
             Assert.Equal(45, s.HeldHz);
-            Assert.Equal("90 Hz, held to 45 for 9% of the session", s.Compact());
+            Assert.Equal("game about 85 new frames a second when not held; headset 90 Hz, held to 45 for 9% of the session", s.Compact());
             Assert.StartsWith("The runtime held the game to 45 of 90 Hz for 9% of the session (its reprojection or throttling).", s.Describe());
             Assert.Contains("held to 45 Hz in 9.4% of the time (the layer's refresh summary)", s.LogText());
             // Next to no time held: steady, whatever the windows caught.
             var steady = Session(Vd, Quest3, 11.11, Repeat(8, 11.11, 89).Concat(Repeat(2, 22.22, 44)).ToArray());
             steady.Add(RefreshSummary(120, "1x 99.7%, 2x 0.3%", end: true));
-            Assert.Equal("90 Hz, steady", SessionSummary.FromLines(steady).Compact());
+            Assert.Equal("game kept up; headset 90 Hz, steady", SessionSummary.FromLines(steady).Compact());
             // A summary whose base is not the refresh rate found (a session that started throttled): the windows count.
             var other = Session(Vd, Quest3, 11.11, Repeat(6, 11.11, 89).Concat(Repeat(4, 22.22, 44)).ToArray());
             other.Add(RefreshSummary(120, "1x 100.0%", end: true).Replace("base 11.11 ms (90 Hz)", "base 22.22 ms (45 Hz)"));
             var windowsOnly = SessionSummary.FromLines(other);
             Assert.False(windowsOnly.HeldByTime);
-            Assert.Equal("90 Hz, held to 45 for 40% of a short session", windowsOnly.Compact());
+            Assert.Equal("game kept up when not held; headset 90 Hz, held to 45 for 40% of a short session", windowsOnly.Compact());
         }
 
         [Fact]
@@ -249,11 +285,11 @@ namespace EternalVR.Launcher.Core.Tests
             var s = SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : cv", 6.94, windows));
             Assert.Equal(144, s.RefreshHz);
             Assert.Equal(90, Assert.Single(s.OtherRates).Key);
-            Assert.Equal("varied 90-144 Hz, mostly 144", s.Compact());
+            Assert.Equal("game about 120 new frames a second at 144 Hz; headset varied 90-144 Hz, mostly 144", s.Compact());
             Assert.StartsWith("The headset ran at 144 Hz, and at 90 Hz for 40 seconds. SteamVR throttled the game to 72 of 144 Hz for 17% of a short session", s.Describe());
             // Mostly at the other rate, and long enough to say minutes.
             var mostly = SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : cv", 6.94, Repeat(3, 6.94, 140).Concat(Repeat(12, 11.11, 88)).ToArray()));
-            Assert.Equal("varied 90-144 Hz, mostly 90", mostly.Compact());
+            Assert.Equal("game kept up at 144 Hz; headset varied 90-144 Hz, mostly 90", mostly.Compact());
             Assert.StartsWith("The headset ran at 144 Hz, and at 90 Hz for about 2 minutes.", mostly.Describe());
         }
 
@@ -264,7 +300,7 @@ namespace EternalVR.Launcher.Core.Tests
             var s = SessionSummary.FromLines(Session(Vd, Quest3, 11.11, windows));
             Assert.Equal(90, s.RefreshHz);
             Assert.Empty(s.OtherRates);
-            Assert.Equal("90 Hz, steady", s.Compact());
+            Assert.Equal("game kept up; headset 90 Hz, steady", s.Compact());
         }
 
         [Fact]
@@ -315,7 +351,10 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal(ended, back.SessionAt);
                 Assert.Equal(Vd, back.SessionRuntime);
                 Assert.Equal(90, back.SessionRefreshHz);
-                Assert.Equal("90 Hz, steady", back.SessionRefresh);
+                Assert.Equal("game kept up; headset 90 Hz, steady", back.SessionRefresh);
+                Assert.Equal("game kept up; headset 90 Hz, steady", back.PlayRefresh);
+                Assert.Equal(ended, back.PlayAt);
+                Assert.Equal(Vd, back.PlayRuntime);
                 Assert.Equal("The game kept up with your headset: about 89 new frames a second at 90 Hz.", back.SessionText);
                 Assert.Equal(Quest3, back.SystemName);
                 // A session without a display period keeps the last one's.

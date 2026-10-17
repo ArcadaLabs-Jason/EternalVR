@@ -306,12 +306,13 @@ and reads the same; the first time this launcher saves it, the older file is kep
 
 The **Headset** box across the top shows what the launcher found, with nothing to set: your headset and the way the
 game reaches it (Virtual Desktop (VDXR), Meta Link, SteamVR...), its native panel per eye (from the launcher's list
-of headsets), the size the runtime asks for and when it was read, and the refresh rate of your last session (steady,
-held to half of it for part of play, or changing). SteamVR names only how it tracks the headset, so on SteamVR the
-model is the one SteamVR last saw. The launcher reads the headset when it opens if its runtime is already running
-(the Virtual Desktop Streamer, Meta's Link software, or SteamVR: it never starts SteamVR for that), and again when you
-press Launch VR; **Detect again** reads it now (with SteamVR as the runtime it starts SteamVR). The box says when the
-values are old.
+of headsets), the size the runtime asks for and when it was read, and the Frame rate of your last session: the new
+frames a second the game drew (or "game kept up"), then the headset's refresh rate (steady, held to half of it for
+part of play, or changing). A session without play, started and quit in the menus, leaves the last one with play
+shown. SteamVR names only how it tracks the headset, so on SteamVR the model is the one SteamVR last saw. The
+launcher reads the headset when it opens if its runtime is already running (the Virtual Desktop Streamer, Meta's Link
+software, or SteamVR: it never starts SteamVR for that), and again when you press Launch VR; **Detect again** reads
+it now (with SteamVR as the runtime it starts SteamVR). The box says when the values are old.
 
 | Setting | Choices | Default |
 |---|---|---|

@@ -344,6 +344,7 @@ $restButtonScenarios = @(
             Invoke-QaRestTap $c
             Save-QaShot $c 'after'
             [void](Wait-QaLog $c 'left rest button, last 10 s:' 20)
+            Wait-QaSeconds $c 10
         }
         Asserts = {
             param($c)
@@ -369,6 +370,7 @@ $restButtonScenarios = @(
             Wait-QaSeconds $c 12
             Invoke-QaRestTap $c
             [void](Wait-QaLog $c 'thumb-rest wheel: left rest, last 10 s:' 20)
+            Wait-QaSeconds $c 10
         }
         Asserts = {
             param($c)
@@ -462,6 +464,7 @@ $touchButtonScenarios = @(
             Write-QaInput $c @(); Wait-QaSeconds $c 2
             Save-QaShot $c 'after'
             [void](Wait-QaLog $c 'right primary_touch button, last 10 s:' 20)
+            Wait-QaSeconds $c 10
         }
         Asserts = {
             param($c)
@@ -570,6 +573,7 @@ $touchButtonScenarios = @(
             Write-QaInput $c @('left.primary_touch = 1'); Wait-QaSeconds $c 0.2
             Write-QaInput $c @(); Wait-QaSeconds $c 2
             [void](Wait-QaLog $c 'left primary_touch button, last 10 s:' 20)
+            Wait-QaSeconds $c 10
         }
         Asserts = {
             param($c)

@@ -28,9 +28,11 @@ namespace EternalVR.Launcher.Core.Settings
                 "Your headset's own screen per eye, from the launcher's list of headsets: no runtime tells it."),
             [Setting.HeadsetAsks] = new Text("Asks for",
                 "The size the runtime asks the game to render each eye at. It follows the runtime's quality setting, not the panel."),
-            [Setting.Refresh] = new Text("Refresh",
-                "Your headset's refresh rate in your last session, from the mod's log: steady, held to a half or a third of it "
-                + "for part of play (the runtime's smoothing or throttling), or changing."),
+            [Setting.Refresh] = new Text("Frame rate",
+                "Your last session, from the mod's log: the new frames a second the game drew (or that it kept up), then your "
+                + "headset's refresh rate: steady, held to a half or a third of it for part of play (the runtime's smoothing or "
+                + "throttling), or changing. The headset's own counter can show its full rate while the game draws fewer: the mod "
+                + "shows the game's last frame again, turned with your head, until a new one is ready."),
             [Setting.Turning] = new Text("Turning",
                 "How the right stick turns you. Smooth turns continuously; snap jumps by a fixed angle, which many people find "
                 + "more comfortable; off leaves turning to your body.",

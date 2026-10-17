@@ -83,6 +83,9 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("Pimax Crystal Light", table.BySteamVrModel("Pimax Crystal Light").Name);
             Assert.Equal("Pimax Crystal Super", table.BySteamVrModel("PIMAX CRYSTAL SUPER QLED").Name);
             Assert.Equal("Pimax Crystal", table.BySteamVrModel("Pimax Crystal").Name);
+            // A player's Dream Air on SteamVR (2026-10-17: "Pimax Inc." / "Pimax Dream Air"); the SE has another panel.
+            Assert.Equal(new Extent(3840, 3552), table.BySteamVrModel("Pimax Dream Air").Panel);
+            Assert.Null(table.BySteamVrModel("Pimax Dream Air SE"));
             // An exact SteamVR name is not a system name.
             Assert.Null(table.BySystemName("Index"));
             Assert.Null(table.BySteamVrModel("Some Headset 9000"));

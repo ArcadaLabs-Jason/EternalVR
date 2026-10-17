@@ -41,8 +41,16 @@ namespace EternalVR.Launcher.Core.Launch
         public string SessionRuntime { get; set; }
         /// <summary>Its refresh rate in Hz; null when not known.</summary>
         public int? SessionRefreshHz { get; set; }
-        /// <summary>The Play tab's Refresh value for it (<see cref="SessionSummary.Compact"/>), such as "90 Hz, steady".</summary>
+        /// <summary>The Play tab's Frame rate value for it (<see cref="SessionSummary.Compact"/>), such as "game about 42 new frames
+        /// a second; headset 90 Hz, steady".</summary>
         public string SessionRefresh { get; set; }
+        /// <summary>The Frame rate value of the last session with enough play to measure the game's frames (the last session
+        /// itself when it had); null before the first. A session without play (started and quit in the menus) does not hide it.</summary>
+        public string PlayRefresh { get; set; }
+        /// <summary>When that session ended (local time).</summary>
+        public DateTime? PlayAt { get; set; }
+        /// <summary>The runtime that session ran on, as the layer logged it.</summary>
+        public string PlayRuntime { get; set; }
         /// <summary>Its sentences for the status line and the report (<see cref="SessionSummary.Describe"/>).</summary>
         public string SessionText { get; set; }
         /// <summary>Its controls (<see cref="SessionSummary.ControlsText"/>) and, when none was bound, the cause the launcher named
@@ -114,6 +122,9 @@ namespace EternalVR.Launcher.Core.Launch
                         if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var hz) && hz > 0 && hz < 1000) facts.SessionRefreshHz = hz;
                         break;
                     case "session_refresh": facts.SessionRefresh = NullIfEmpty(value); break;
+                    case "play_refresh": facts.PlayRefresh = NullIfEmpty(value); break;
+                    case "play_at": facts.PlayAt = ParseTime(value); break;
+                    case "play_runtime": facts.PlayRuntime = NullIfEmpty(value); break;
                     case "session_summary": facts.SessionText = NullIfEmpty(value); break;
                     case "session_controls": facts.SessionControls = NullIfEmpty(value); break;
                     case "session_parallel_eyes": facts.SessionParallelEyes = NullIfEmpty(value); break;
@@ -156,6 +167,9 @@ namespace EternalVR.Launcher.Core.Launch
             Add("session_runtime", facts.SessionRuntime);
             Add("session_refresh_hz", facts.SessionRefreshHz?.ToString(CultureInfo.InvariantCulture));
             Add("session_refresh", facts.SessionRefresh);
+            Add("play_refresh", facts.PlayRefresh);
+            Add("play_at", Time(facts.PlayAt));
+            Add("play_runtime", facts.PlayRuntime);
             Add("session_summary", facts.SessionText);
             Add("session_controls", facts.SessionControls);
             Add("session_parallel_eyes", facts.SessionParallelEyes);
@@ -176,6 +190,12 @@ namespace EternalVR.Launcher.Core.Launch
             facts.SessionRuntime = summary.RuntimeName;
             facts.SessionRefreshHz = summary.RefreshHz;
             facts.SessionRefresh = summary.Compact();
+            if (summary.GameRate.HasValue)
+            {
+                facts.PlayRefresh = facts.SessionRefresh;
+                facts.PlayAt = endedAt;
+                facts.PlayRuntime = summary.RuntimeName;
+            }
             var text = summary.Describe();
             facts.SessionText = text.Length == 0 ? null : text;
             var cause = UnboundControls.ReportText(unbound);
