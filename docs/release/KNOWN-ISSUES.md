@@ -335,9 +335,12 @@ them is worse for you than described here.
   to the front on your desktop (click its title bar or its taskbar button, or Alt+Tab to it) and press
   Space on the keyboard, then click **Export report...** after the session: the log now says which window
   was in front when the prompt came up.
-- Some prompts still name a keyboard key instead of a controller button, for example the page arrows of
-  the mission-complete screen's Rewards tab ("A 1/2 D"): point at an arrow and pull the trigger instead.
-  The loading screen's tips now read "[LG] PREVIOUS | [RG] NEXT", and the grips change the tip.
+- A few screens still name a keyboard key instead of a controller button: the fast-travel notice (Tab;
+  hold X opens the Dossier, which sends it), the Fortress's collectible and music viewers (Q / E), the
+  Arsenal's hints for customizing (F, T, X), and tips whose text itself names a key ("pressing [M]"). The
+  mission-complete Rewards tab now reads "LS 1/2 RS" and the Dossier's weapon, Codex and challenge lists
+  "LS" / "RS": push either stick left or right, or click the stick named, to turn them. The loading
+  screen's tips read "[LG] PREVIOUS | [RG] NEXT" and the grips change the tip.
 - **In the weapon upgrade screen** the gun can ghost a little when you move your head.
 - **The Fortress of Doom** has a few rough spots: some outside surfaces look wrongly shaded, a canister can
   show black without its texture, the collectible viewer shows no models, the old computer is hard to use,

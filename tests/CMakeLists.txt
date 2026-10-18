@@ -363,6 +363,7 @@ evr_add_test(evr_menu_tests
         features/menu/menu_router_prompt_tests.cpp
         features/menu/menu_router_tests.cpp
         features/menu/model_camera_tests.cpp
+        features/menu/page_keys_tests.cpp
         features/menu/panel_follow_tests.cpp
         features/menu/panel_pointer_tests.cpp
         features/menu/panel_reanchor_tests.cpp

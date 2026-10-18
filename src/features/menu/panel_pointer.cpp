@@ -61,6 +61,11 @@ CursorPixel cursorPixel(float u, float v, std::uint32_t width, std::uint32_t hei
     return {toPixel(u, width), toPixel(v, height)};
 }
 
+CursorPixel nudged(CursorPixel at, std::uint32_t width) {
+    const bool right = static_cast<std::int64_t>(at.x) + 1 < static_cast<std::int64_t>(width);
+    return {right ? at.x + 1 : at.x - 1, at.y};
+}
+
 Pose dotPose(const Panel& panel, float u, float v, float offset) {
     const Vec3 local{(u - 0.5f) * panel.width, (0.5f - v) * panel.height, offset};
     Pose pose;

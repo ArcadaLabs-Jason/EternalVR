@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
 
@@ -17,6 +18,7 @@ using evr::game::builtinControllerData;
 using evr::game::Controller;
 using evr::game::GameAction;
 using evr::game::Handedness;
+using evr::input::answeredKeyName;
 using evr::input::buildBindingProfile;
 using evr::input::buttonLabelsFor;
 using evr::input::ControllerData;
@@ -25,9 +27,12 @@ using evr::input::KeyNameAnswer;
 using evr::input::KeyNameCallers;
 using evr::input::keyNameLabel;
 using evr::input::kLayerKeyNames;
+using evr::input::kPageKeyNames;
 using evr::input::kTabKeyNames;
 using evr::input::layerKeyIndex;
 using evr::input::layerKeyLabel;
+using evr::input::pageKeyIndex;
+using evr::input::pageKeyLabel;
 using evr::input::parseControllerData;
 using evr::input::PromptLabelSet;
 using evr::input::tabKeyIndex;
@@ -124,6 +129,9 @@ KeyNameCallers steamCallers() {
     callers.commandBarUpdate = kBase + 0x159FE8F;
     // The loading screen tips bar's format calls (0x4587E1, 0x4589A5), each answered at its return address.
     callers.loadTips = {kBase + 0x4587E6, kBase + 0x4589AA};
+    // The Rewards tab's paginator update calls KeyNameText for its arrows at 0xF5FEC4 (A) and 0xF5FFBE (D).
+    callers.rewards = {kBase + 0xF5FEC9, kBase + 0xF5FFC3};
+    callers.tabListPages = true;
     return callers;
 }
 
@@ -193,4 +201,69 @@ TEST_CASE("every other caller of the raw key text keeps the game's text") {
     CHECK(keyNameAnswer(callers.commandBarUpdate, missing) == KeyNameAnswer::Game);
     CHECK(keyNameAnswer(callers.getKeyString, missing) == KeyNameAnswer::LayerKey);
     CHECK(keyNameAnswer(0, KeyNameCallers{}) == KeyNameAnswer::Game);
+}
+
+TEST_CASE("the Rewards tab's page arrows name the stick that turns its pages") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    // "A 1/2 D" before: no controller input sent A or D there (rig 2026-10-17).
+    CHECK(keyNameAnswer(callers.rewards[0], callers) == KeyNameAnswer::PageKey);
+    CHECK(keyNameAnswer(callers.rewards[1], callers) == KeyNameAnswer::PageKey);
+    CHECK(rawKeyText(callers.rewards[0], "A", callers, set) == "LS");
+    CHECK(rawKeyText(callers.rewards[1], "D", callers, set) == "RS");
+    CHECK(rawKeyText(callers.rewards[0], "A", callers, touchLabels(Handedness::LeftButtonSwap)) == "LS");
+    // Only the page keys: a tab key or another key from these calls keeps the game's text.
+    CHECK(rawKeyText(callers.rewards[0], "Q", callers, set) == "(the game's)");
+    CHECK(rawKeyText(callers.rewards[1], "ENTER", callers, set) == "(the game's)");
+    // A and D from the hold buttons or the HUD keep the game's text.
+    CHECK(rawKeyText(callers.getKeyString, "D", callers, set) == "(the game's)");
+    CHECK(rawKeyText(kBase + 0xF13563, "A", callers, set) == "(the game's)");
+    // An arrow not found at install answers nothing.
+    KeyNameCallers missing = callers;
+    missing.rewards = {};
+    CHECK(keyNameAnswer(callers.rewards[0], missing) == KeyNameAnswer::Game);
+}
+
+TEST_CASE("the page keys have their own text, and every answered key name is known") {
+    const PromptLabelSet set = touchLabels();
+    for (std::size_t i = 0; i < kPageKeyNames.size(); ++i) {
+        INFO(std::string(kPageKeyNames[i]));
+        CHECK(pageKeyIndex(kPageKeyNames[i]) == i);
+        CHECK_FALSE(pageKeyLabel(i, set).empty());
+        CHECK(answeredKeyName(kPageKeyNames[i]) == kPageKeyNames[i]);
+    }
+    CHECK(pageKeyLabel(kPageKeyNames.size(), set).empty());
+    CHECK(answeredKeyName("Q") == std::string_view("Q"));
+    CHECK(answeredKeyName("ENTER") == std::string_view("ENTER"));
+    CHECK(answeredKeyName("E") == std::string_view("E"));
+    CHECK_FALSE(answeredKeyName("Z").has_value());
+    CHECK_FALSE(answeredKeyName("").has_value());
+}
+
+TEST_CASE("a tab list on A and D names the stick that switches its tabs; on Q and E the grips") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    // The Dossier's Arsenal, Codex and Challenges pages write their inner tab lists' keys through TabList's
+    // two calls, as the Dossier's own tab list writes Q and E.
+    CHECK(rawKeyText(callers.tabList[0], "A", callers, set) == "LS");
+    CHECK(rawKeyText(callers.tabList[1], "D", callers, set) == "RS");
+    CHECK(rawKeyText(callers.tabList[0], "Q", callers, set) == "LG");
+    CHECK(rawKeyText(callers.tabList[1], "E", callers, set) == "RG");
+    CHECK(rawKeyText(callers.tabList[0], "Z", callers, set) == "(the game's)");
+    // The loading screen's tips bar answers as a tab list too; it only ever writes Q and E.
+    CHECK(rawKeyText(callers.loadTips[0], "Q", callers, set) == "LG");
+}
+
+TEST_CASE("a tab list on A and D keeps the game's keys while no stick sends them") {
+    KeyNameCallers callers = steamCallers();
+    callers.tabListPages = false; // the tab lists' page-key hook is not in
+    const PromptLabelSet set = touchLabels();
+    CHECK(keyNameAnswer(callers.tabList[0], callers) == KeyNameAnswer::TabKeyOnly);
+    CHECK(rawKeyText(callers.tabList[0], "A", callers, set) == "(the game's)");
+    CHECK(rawKeyText(callers.tabList[1], "D", callers, set) == "(the game's)");
+    // The grips still send a tab list's Q and E, and the Rewards arrows have their own hook.
+    CHECK(rawKeyText(callers.tabList[0], "Q", callers, set) == "LG");
+    CHECK(rawKeyText(callers.tabList[1], "E", callers, set) == "RG");
+    CHECK(rawKeyText(callers.loadTips[0], "Q", callers, set) == "LG");
+    CHECK(rawKeyText(callers.rewards[0], "A", callers, set) == "LS");
 }

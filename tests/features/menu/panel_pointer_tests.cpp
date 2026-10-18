@@ -17,6 +17,7 @@ using evr::menu::cursorPixel;
 using evr::menu::CursorPixel;
 using evr::menu::dotPose;
 using evr::menu::intersectPanel;
+using evr::menu::nudged;
 using evr::menu::Panel;
 using evr::menu::quatFromAxes;
 using evr::test::approxEqual;
@@ -192,4 +193,11 @@ TEST_CASE("pointer: the beam image is premultiplied and fades to its far end") {
     CHECK(alpha(w / 2, h - 1) > alpha(w / 2, 0));
     CHECK(alpha(w / 2, h / 2) > alpha(0, h / 2));
     CHECK(beamImage(0, 4).empty());
+}
+
+TEST_CASE("a cursor pixel nudged: one to the right, one to the left at the right edge") {
+    CHECK(nudged(CursorPixel{500, 250}, 1000) == CursorPixel{501, 250});
+    CHECK(nudged(CursorPixel{998, 7}, 1000) == CursorPixel{999, 7});
+    CHECK(nudged(CursorPixel{999, 7}, 1000) == CursorPixel{998, 7});
+    CHECK(nudged(CursorPixel{0, 0}, 1) == CursorPixel{-1, 0}); // no room either side: still a move
 }

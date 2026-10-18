@@ -26,23 +26,39 @@ inline constexpr std::array<std::string_view, 5> kLayerKeyNames{"SPACE", "E", "T
 // menu.
 inline constexpr std::array<std::string_view, 2> kTabKeyNames{"Q", "E"};
 
-// The index of the game's key name in kLayerKeyNames / kTabKeyNames, or nothing.
+// The keys of a screen's own pages (features/menu/page_keys.hpp), previous then next: the mission-complete
+// Rewards tab's arrows and the Dossier pages' inner tab lists, A and D, which a stick pushed left or right
+// sends there.
+inline constexpr std::array<std::string_view, 2> kPageKeyNames{"A", "D"};
+
+// The index of the game's key name in kLayerKeyNames / kTabKeyNames / kPageKeyNames, or nothing.
 std::optional<std::size_t> layerKeyIndex(std::string_view gameKeyName);
 std::optional<std::size_t> tabKeyIndex(std::string_view gameKeyName);
+std::optional<std::size_t> pageKeyIndex(std::string_view gameKeyName);
+
+// The game's key name as the table that holds it spells it (any of the three), or nothing: the keys whose
+// text the layer may give.
+std::optional<std::string_view> answeredKeyName(std::string_view gameKeyName);
 
 // The text for kLayerKeyNames[index] / kTabKeyNames[index] under `labels`: Space the jump button, E melee's,
 // Tab the Dossier's, Escape the menus' back, Enter their select; Q and E the previous and next tab. A
 // reference into `labels`; empty when the controller has no name for it (the game's key then stays).
 const std::string& layerKeyLabel(std::size_t index, const PromptLabelSet& labels);
 const std::string& tabKeyLabel(std::size_t index, const PromptLabelSet& labels);
+// The text for kPageKeyNames[index]: the left stick (the previous page) or the right (the next), in short
+// ("LS", "RS").
+const std::string& pageKeyLabel(std::size_t index, const PromptLabelSet& labels);
 
 // The game's raw key text (KeyNameText, a key number to its name with no key token) is answered only for the
 // callers that show it as a prompt, told apart by their return address: TabList's two calls get the tab
 // keys' text, the command bar's two hold-button calls (GetKeyString's and the bar update's) the layer keys'
 // text, every other caller the game's own text. The loading screen's tips bar, which writes its Q and E as
 // key tokens ("K_Q PREVIOUS"), is answered the same way at its two text formats: as tab keys, since the grips
-// send its keys (features/menu/load_tips_keys.hpp).
-enum class KeyNameAnswer { Game, TabKey, LayerKey };
+// send its keys (features/menu/load_tips_keys.hpp). A tab list on A and D (the Dossier pages' inner tabs) and
+// the Rewards tab's page arrows ("A 1/2 D") get the page keys' text, the stick that sends them there
+// (features/menu/page_keys.hpp). TabKeyOnly: a tab list while no stick sends its A / D (the tab lists'
+// page-key hook is not in), so only its Q and E are answered.
+enum class KeyNameAnswer { Game, TabKey, TabKeyOnly, LayerKey, PageKey };
 
 // The callers' return addresses, as found at install; 0 for one not found (no return address is 0).
 struct KeyNameCallers {
@@ -50,6 +66,8 @@ struct KeyNameCallers {
     std::uintptr_t getKeyString = 0;          // idSWFWidget_Button_CommandBar::GetKeyString()
     std::uintptr_t commandBarUpdate = 0;      // the command bar's update ("custom" layout)
     std::array<std::uintptr_t, 2> loadTips{}; // the tips bar's previous and next text formats
+    std::array<std::uintptr_t, 2> rewards{};  // the Rewards tab's previous and next page arrows
+    bool tabListPages = false;                // a stick sends a tab list's A / D (its hook is in)
 };
 
 KeyNameAnswer keyNameAnswer(std::uintptr_t returnAddress, const KeyNameCallers& callers);

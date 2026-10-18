@@ -2,7 +2,8 @@
 
 // Controller input while a menu is up (docs/VR_MENUS.md): the laser pointer drives the game's own mouse
 // cursor, the trigger (or A / X) clicks, B / Y goes back, the left grip and the right grip change tabs
-// (previous, next), a stick pushed up or down scrolls and pushed left or right changes tabs, a stick click
+// (previous, next), a stick pushed up or down scrolls and pushed left or right changes tabs (on a screen with
+// page keys of its own it sends those, as do the stick clicks: page_keys.hpp), a stick click
 // taps C (the map's centre key), and the controllers' gameplay actions are held back until the menu is gone
 // and every control is let go. On the Dossier's map page the sticks move the map instead (map_drag.hpp):
 // the weapon hand's stick pans, the other stick zooms (up / down) and rotates (left / right), or the other
@@ -27,6 +28,7 @@
 #include "features/input/map_sticks.hpp"
 #include "features/menu/drag_cursor_hide.hpp"
 #include "features/menu/map_drag.hpp"
+#include "features/menu/page_keys.hpp"
 #include "features/menu/panel_pointer.hpp"
 #include "features/menu/wheel_cursor.hpp"
 #include "game/eternal/game_action.hpp"
@@ -136,6 +138,9 @@ struct RouterInput {
     // The gameplay actions the controllers hold now, as the control map maps them before a menu holds them
     // back. In a popup each one with a popupActionKey presses that key while it is held.
     game::GameActionSet actions;
+    // The keys of the screen's own pages (page_keys.hpp): a stick pushed left or right sends these instead of
+    // the tab keys. None: the tab keys.
+    PageKeys pageKeys;
     // The game's cursor now, if it could be read, and its range (the GUI's size in pixels).
     std::optional<CursorPixel> gameCursor;
     std::uint32_t width = 0;
@@ -275,6 +280,13 @@ private:
     // When A / X and when the jump action last sent Space in a popup, while the other has not matched it.
     std::optional<double> buttonSpace_;
     std::optional<double> jumpSpace_;
+
+    // A menu the game raised while it took the pad's input (the Dossier on its hold, a popup) ignores the
+    // first key or mouse input it gets, which only switches the game to the keyboard and mouse (rig: the
+    // Dossier's map page kept its tab on a first E, any length, and turned on a second). So a menu's first
+    // frame with the cursor known moves it, a pixel aside when the ray misses the panel (a ray on the panel
+    // moves it to the ray first anyway).
+    bool wakePending_ = false;
 
     // Cursor moves in flight.
     bool movePending_ = false;

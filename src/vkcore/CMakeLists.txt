@@ -261,7 +261,9 @@ target_sources(evr_layer PRIVATE
     weapon_arm.cpp
     prompt_command_bar.cpp
     prompt_hooks.cpp
+    prompt_key_log.cpp
     prompt_load_tips.cpp
+    prompt_page_keys.cpp
     prompt_weapon_info.cpp
     rest_wheel.cpp
     rumble_hook.cpp

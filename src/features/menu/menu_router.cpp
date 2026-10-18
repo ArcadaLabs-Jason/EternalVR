@@ -318,6 +318,7 @@ void MenuRouter::moveCursor(const RouterInput& in,
     move.dx = target->x - in.gameCursor->x;
     move.dy = target->y - in.gameCursor->y;
     out.events.push_back(move);
+    wakePending_ = false;
     expected_ = *target;
     movePending_ = true;
     movedAt_ = now;
@@ -368,8 +369,8 @@ void MenuRouter::mapSticks(const RouterInput& in, double now, RouterOutput& out)
 }
 
 void MenuRouter::menuSticks(const RouterInput& in, double now, RouterOutput& out) {
-    // Sticks, either hand: up and down scroll (the wheel), left and right change tabs. Only the stronger
-    // axis of a stick counts.
+    // Sticks, either hand: up and down scroll (the wheel), left and right change tabs, or turn the screen's
+    // own pages where it has page keys. Only the stronger axis of a stick counts.
     for (std::size_t i = 0; i < 2; ++i) {
         const input::Axis2 stick = in.hands[i].stick;
         int vertical = 0;
@@ -384,7 +385,12 @@ void MenuRouter::menuSticks(const RouterInput& in, double now, RouterOutput& out
             wheel.wheel = static_cast<std::int16_t>(vertical * kWheelNotch);
             out.events.push_back(wheel);
         }
-        if (repeat(tabs_[i], horizontal, now, tuning_.repeatDelay, tuning_.repeatInterval)) {
+        if (!repeat(tabs_[i], horizontal, now, tuning_.repeatDelay, tuning_.repeatInterval)) {
+            continue;
+        }
+        if (in.pageKeys.any()) {
+            tapKey(horizontal > 0 ? in.pageKeys.next : in.pageKeys.previous, now, out);
+        } else {
             tabKey(horizontal > 0 ? kKeyNextTab : kKeyPreviousTab, now, out);
         }
     }
@@ -441,6 +447,7 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
         wasActive_ = true;
         pointer_ = dominant_;
         movePending_ = false;
+        wakePending_ = true;
         landedAt_ = -1.0;
         setPage(in.dossier && !in.popup ? 0 : -1, PageChange::Why::Opened, 0, out);
         keptKey_ = 0;
@@ -485,6 +492,9 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
     std::optional<CursorPixel> target = dragTarget_;
     if (!dragging && hand.hit && in.width > 0 && in.height > 0) {
         target = cursorPixel(hand.hit->u, hand.hit->v, in.width, in.height);
+    }
+    if (wakePending_ && !target && in.gameCursor) {
+        target = nudged(*in.gameCursor, in.width);
     }
     moveCursor(in, target, now, out);
     DragCursorHideInput hide;
@@ -555,11 +565,18 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
         tabKey(kKeyNextTab, now, out);
     }
 
-    // A stick click, either hand: C, the Dossier map's centre key; in a popup E, its use key. A click while
-    // the other stick is already pressed is the recenter chord (both sticks held), not a key. A / X, either
-    // hand, in a popup: Space, its continue key (the jump action sends it too: popupActions).
+    // A stick click, either hand: C, the Dossier map's centre key; in a popup E, its use key; on a screen
+    // with page keys the left stick's the previous page, the right stick's the next (the screen names the
+    // sticks, page_keys.hpp). A click while the other stick is already pressed is the recenter chord (both
+    // sticks held), not a key. A / X, either hand, in a popup: Space, its continue key (the jump action sends
+    // it too: popupActions).
     for (std::size_t i = 0; i < 2; ++i) {
-        if (stickClickEdge[i] && !in.hands[1 - i].stickClick) {
+        if (!stickClickEdge[i] || in.hands[1 - i].stickClick) {
+            continue;
+        }
+        if (in.pageKeys.any()) {
+            tapKey(i == left ? in.pageKeys.previous : in.pageKeys.next, now, out);
+        } else {
             tapKey(in.popup ? kKeyUse : kKeyCentre, now, out);
         }
     }

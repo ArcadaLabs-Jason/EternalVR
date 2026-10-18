@@ -9,6 +9,7 @@ evr_add_module(evr_menu
         map_pan_keys.cpp
         menu_kind.cpp
         model_camera.cpp
+        page_keys.cpp
         panel_follow.cpp
         menu_router.cpp
         panel_pointer.cpp

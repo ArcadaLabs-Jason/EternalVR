@@ -1,6 +1,7 @@
 #include "features/input/binding_compiler.hpp"
 #include "features/input/button_labels.hpp"
 #include "features/input/controller_bindings.hpp"
+#include "features/input/controller_state.hpp"
 #include "features/input/prompt_keys.hpp"
 #include "game/eternal/controller_data.hpp"
 
@@ -8,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <ostream>
 #include <string>
 
@@ -18,15 +20,23 @@ using evr::game::GameAction;
 using evr::game::Handedness;
 using evr::game::kControllers;
 using evr::input::buildBindingProfile;
+using evr::input::ButtonLabels;
 using evr::input::buttonLabelsFor;
 using evr::input::ControllerData;
+using evr::input::Hand;
 using evr::input::HudKeyCallers;
 using evr::input::hudKeyForm;
 using evr::input::HudKeyForm;
 using evr::input::hudKeyText;
+using evr::input::kLabelInputCount;
+using evr::input::LabelInput;
 using evr::input::parseControllerData;
+using evr::input::PromptControl;
 using evr::input::PromptLabelSet;
 using evr::input::promptLabelSet;
+using evr::input::PromptPress;
+using evr::input::promptText;
+using evr::input::shortPromptText;
 
 // The HUD's weapon info row (equipment, Flame Belch, chainsaw above their icons) gets the short texts. In a
 // 2048x2208 GUI capture its three label boxes were each sized to "Left Grip", "Right Stick Up" and "Left
@@ -91,10 +101,12 @@ TEST_CASE("the weapon info row's short texts: initials, one-word names whole, th
     const PromptLabelSet swapped = labelSet(Controller::OculusTouch, Handedness::LeftButtonSwap);
     CHECK(shortText(swapped, GameAction::Equipment) == "RT");
     CHECK(shortText(swapped, GameAction::FlameBelch) == "RG");
-    // Vive wands carry Flame Belch on holding the trigger whose tap is the equipment.
+    // Vive wands carry Flame Belch on holding the trigger whose tap is the equipment, and the chainsaw on the
+    // trackpad, which is P so that it does not read as the trigger.
     const PromptLabelSet wand = labelSet(Controller::ViveWand);
     CHECK(shortText(wand, GameAction::Equipment) == "LT");
     CHECK(shortText(wand, GameAction::FlameBelch) == "Hold LT");
+    CHECK(shortText(wand, GameAction::Chainsaw) == "RP Up");
     // Index controllers have an A on each hand.
     CHECK(shortText(labelSet(Controller::ValveIndex), GameAction::SwitchEquipment) == "LA");
     CHECK(shortText(labelSet(Controller::WindowsMixedReality), GameAction::Crucible) == "Hold LSC");
@@ -111,6 +123,26 @@ TEST_CASE("every distinct text has its short text in the same slot") {
             for (std::size_t slot = 0; slot < set.distinct.size(); ++slot) {
                 CHECK_FALSE(set.distinctShort[slot].empty());
                 CHECK(set.distinctShort[slot].size() <= set.distinct[slot].size());
+            }
+        }
+    }
+}
+
+TEST_CASE("no two controls of a built-in controller share a short name") {
+    for (const Controller controller : kControllers) {
+        const ButtonLabels labels = buttonLabelsFor(parseControllerData(builtinControllerData(controller)));
+        std::map<std::string, std::string> seen; // short name -> the full name it came from
+        for (const Hand hand : {Hand::Left, Hand::Right}) {
+            for (std::size_t i = 0; i < kLabelInputCount; ++i) {
+                const PromptControl control{hand, static_cast<LabelInput>(i), PromptPress::Press};
+                const std::string full = promptText(control, labels);
+                if (full.empty()) {
+                    continue;
+                }
+                const std::string brief = shortPromptText(control, labels);
+                const auto [it, added] = seen.emplace(brief, full);
+                INFO(controllerName(controller), ": ", full, " and ", it->second, " are both ", brief);
+                CHECK(added);
             }
         }
     }

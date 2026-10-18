@@ -181,17 +181,20 @@ std::string printable(std::string text) {
 
 // A control's name in two or three letters for the tab lists, which have room for about that much where
 // the game writes Q and E: the first letter of each word ("Left Grip" is LG), or the first two letters of a
-// one-word name.
+// one-word name. A trackpad is P, not T: on a wand or an Index controller "Right Trackpad" and "Right
+// Trigger" would both be RT.
 std::string shortName(std::string_view name) {
     std::string out;
-    bool wordStart = true;
-    for (const char c : name) {
-        if (c == ' ') {
-            wordStart = true;
-        } else if (wordStart) {
-            out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
-            wordStart = false;
+    std::size_t start = 0;
+    while (start < name.size()) {
+        const std::size_t end = std::min(name.find(' ', start), name.size());
+        const std::string_view word = name.substr(start, end - start);
+        if (!word.empty()) {
+            out.push_back(word == "Trackpad"
+                              ? 'P'
+                              : static_cast<char>(std::toupper(static_cast<unsigned char>(word[0]))));
         }
+        start = end + 1;
     }
     if (out.size() == 1) {
         out = std::string(name.substr(0, 2));
@@ -202,8 +205,8 @@ std::string shortName(std::string_view name) {
     return out;
 }
 
-// A control's name for the weapon info row: the initials of a name of several words ("Left Trigger" is LT),
-// a one-word name as it is ("X", "Menu").
+// A control's name for the weapon info row: the initials of a name of several words ("Left Trigger" is LT,
+// "Right Trackpad" RP), a one-word name as it is ("X", "Menu").
 std::string compactName(std::string_view name) {
     return name.find(' ') == std::string_view::npos ? std::string(name) : shortName(name);
 }
@@ -405,6 +408,8 @@ PromptLabelSet promptLabelSet(const BindingProfile& profile, const ButtonLabels&
     set.menuSelect = printable(labels.name(profile.weaponHand, LabelInput::Trigger));
     set.menuPreviousTab = printable(shortName(labels.name(Hand::Left, LabelInput::Grip)));
     set.menuNextTab = printable(shortName(labels.name(Hand::Right, LabelInput::Grip)));
+    set.menuPreviousPage = printable(shortName(labels.name(Hand::Left, LabelInput::Stick)));
+    set.menuNextPage = printable(shortName(labels.name(Hand::Right, LabelInput::Stick)));
     return set;
 }
 

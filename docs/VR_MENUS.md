@@ -130,8 +130,8 @@ XR worker, every XR frame                                     game (message pump
 | B or Y, either hand | Back (Escape): closes dialogs and sub-screens; at the pause menu's root it resumes, at the main menu's root it asks to quit |
 | Left grip / right grip | Previous / next tab (Q / E) in tabbed screens (settings, the Dossier) |
 | Either stick up / down | Scroll (the mouse wheel), repeating while held (the Dossier map: below) |
-| Either stick left / right | Previous / next tab (Q / E) (the Dossier map: below) |
-| Either stick click | C, the Dossier map's centre key (E in a popup, below); none for the second stick of the recenter chord |
+| Either stick left / right | Previous / next tab (Q / E) (the Dossier map: below); on a screen with pages or tabs of its own inside a tab, its previous / next (A / D: below) |
+| Either stick click | C, the Dossier map's centre key (E in a popup, below); on a screen with pages or tabs inside a tab, the left stick's the previous (A), the right stick's the next (D); none for the second stick of the recenter chord |
 | A / X in a tutorial or lore popup | Space, the popup's continue key (below); so does the jump button, wherever it is |
 | Y in a tutorial or lore popup | Left Alt, held while Y is: the objectives key (below) |
 | A gameplay button in a tutorial or lore popup | Its action's default key, held while the button is (the Flame Belch button R, and so on; below) |
@@ -147,6 +147,34 @@ The menus' hint bars and tab lists name these controls instead of keys: "[B] BAC
 weapon hand's trigger for Enter's select (also on a hold button: "Right Trigger HOLD TO CONTINUE" at
 the end of a mission, held with the pointer on it), the grips for the tabs' Q and E as LG and RG (the tab
 lists cut longer names; `docs/VR_CONTROLLERS.md`, Button prompts).
+
+**Pages and tabs inside a tab.** Some screens have a second level of previous / next inside one of their
+tabs, on A and D: the mission-complete screen's Rewards tab turns its pages ("A 1/2 D" under the rewards),
+and the Dossier's Arsenal, Codex and Challenges pages switch their inner tabs (the weapons, the categories,
+the challenge lists). A pad does those with its triggers (`JOY_TRIGGER1` / `2`, keys 0x118 / 0x119) and the
+tabs with its shoulders. No controller input sent A or D there: on the Rewards tab only pointing at an arrow
+and pulling the trigger turned a page (rig, 2026-10-17). While such a screen is up, a stick pushed left or
+right (either hand) sends A and D instead of the tab keys, the left stick's click A and the right stick's D,
+and the grips keep changing the tabs, as the pad's shoulders do. The screens name the sticks, "LS 1/2 RS"
+under the rewards and "LS" / "RS" beside the inner tabs: they have room for about two letters where the
+game writes A and D ("RS Left" showed as "..."), and "LS" by the left arrow holds for a push to the left
+and a click alike; a wand's trackpads read "LP" / "RP", not "LT" / "RT", which are its triggers. When the
+tab lists' update cannot be hooked, their A and D keep the game's text, since no stick sends them then
+(`features/menu/page_keys.hpp`, `vkcore/prompt_page_keys.hpp`). A screen counts as up
+while the game runs its update: the Rewards tab's own update with its arrows up (with one page the game
+hides them, and the sticks keep the tabs), or the update of a visible tab list on A / D with two tabs or
+more, the last within 0.25 s. The Rewards tab's update runs only while that tab shows (rig: first run
+15 ms after the tab key that opened it, gone 0.27 s after the left grip left it). Pointing at an arrow and
+pulling the trigger still works.
+
+Rig, OpenXR simulator, e1m2's level exit (2026-10-17, a release build): the Rewards tab read "LS 1/2 RS";
+a right stick right went to page 2, the left stick's click back to 1, the right stick's click to 2 and the
+trigger on the left arrow back to 1; on the Summary tab a stick right still sent E (Combat), and after the
+left grip went to Exploration a stick right sent E back to Rewards. In the Dossier the Arsenal's and the
+Codex's inner tab lists read "LS" / "RS"; a stick right, a stick left and the right stick's click each
+changed the weapon, and a stick right the Codex category (`menu: page keys up (a tab list on A / D)`,
+`menu: key down 0x44`). The Challenges page sets the same keys (offline); it was not opened. Not tried in a
+headset.
 
 The loading screen's tips bar ("[Q] PREVIOUS | [E] NEXT") is not a menu: the game shows no cursor there
 and reads Q and E itself on every frame of the loading screen. While it does and no menu is up, the left
@@ -251,11 +279,22 @@ wheel zooms, C centres, Escape goes back; the game also has pad and keyboard pan
 
 | Screen | Works | How |
 |---|---|---|
-| Tabs (Map, Arsenal, Codex, Challenges) | Yes | click the tab, or the grips (left Q, right E); a stick left / right off the map |
+| Tabs (Map, Arsenal, Codex, Challenges) | Yes | click the tab, or the grips (left Q, right E); a stick left / right on a page without inner tabs |
 | Map: pan | Yes | the weapon hand's stick (a left drag held, or W A S D while the other stick rotates, below; the other hand's with `ETERNALVR_MAP_STICKS=other`), or the trigger held while the pointer moves |
 | Map: zoom | Yes | the other stick up / down (the wheel, a notch every 0.1 s) |
 | Map: rotate | Yes | the other stick left / right (a right drag held, below), at the same time as the pan |
 | Map: centre | Yes | a stick click (C) |
+
+**The first input after it opens.** The Dossier opens from the controllers' action (the game takes it as the
+pad's), and the game then ignores the first key or mouse input it gets, which only switches it to the
+keyboard and mouse. Rig, OpenXR simulator, e1m2 (2026-10-18): with the pointer still and its ray off the panel,
+the first tab key on the map page never turned the page, whether E or Q, 60 to 300 ms long and 1.5 to 6.6 s
+after opening; a second key did, at 60 ms; a key the Dossier does not use (K, UP), a map drag or three cursor
+moves first made the next E work. The menu router's page count then ran one ahead of the game. So a menu's
+first frame with the cursor known moves the cursor once, a pixel aside when the ray misses the panel (a ray on
+the panel moves it to the ray anyway; `features/menu/menu_router.hpp`, `wakePending_`). Rig, the same setup with
+that build: the right grip as the first input turned Map to Arsenal (`1 move(s)` in the menu line, the cursor
+from x 57 to 58), and so did a single 60 ms E.
 
 **The map from the sticks** (`features/menu/map_drag.hpp`). The owner found moving the map with the hand
 disorienting (2026-09-27). The game pans with a left drag and rotates with a right drag (its pad's sticks
@@ -308,7 +347,7 @@ arsenal (E)`, `... (opened)`, `... (a tab clicked)`; a key kept back: `menu: Dos
 the first tab`, the first 20), as is the sticks' mode (`menu: the Dossier's map page: ...` / `not the
 Dossier's map page (or not known): ...`). The game's automap object has an `isActive` flag
 (`docs/rig-findings/menus.md` section 6) that could tell the map page directly; it is not read yet.
-| Arsenal: weapon choice | Yes | click the weapon's icon (the A / D keys are not needed) |
+| Arsenal: weapon choice | Yes | click the weapon's icon, or a stick left / right or a stick click (A / D, the page's inner tabs: above) |
 | Arsenal: a weapon's upgrade screen (Upgrades, Mastery) | Yes | click the mod; B returns to the Arsenal |
 | Arsenal: buy an upgrade | Clicks land on it; not seen bought (no weapon points in the save) | click |
 | Arsenal: customize weapon wheel (T), equip / unequip mod (X) | No | key-only; the hint bar is not clickable |
@@ -441,6 +480,13 @@ hooked at RVA 0x45824B`, `platform compare hooked at RVA 0x45869D (field +0x544)
 screen's tips bar names Q: LG`, each grip's key (`loading screen tips: Q down`, the first 20), and once a load
 `the game's first view N s after the bar's last poll; the grips send nothing from then on`.
 
+`prompts:` for the pages and tabs inside a tab, at start-up `tab lists: update hooked at RVA 0x1591E8D (keys
++0x20C / +0x210, tab count +0xA8)` and `Rewards tab: update hooked at RVA 0xF5F170; paginator update at RVA
+0xF5FBB0 (arrows' flag +0x141), its key texts at 0xF5FEC4, 0xF5FFBE`, then the first time each tab list
+shows (`a tab list shows: keys 0x1E / 0x20, 2 tabs (a stick left / right sends A / D)`, the first 12), once
+`the Rewards tab is up (its arrows up | hidden)`, and `menu: page keys up (the Rewards tab's arrows | a tab
+list on A / D): a stick left / right sends A / D` / `menu: page keys gone: ...` (the first 20).
+
 `menu:` the located cursor (`cursor event handler at RVA 0x18000E0, cursor pointer at RVA 0x47DDB88`),
 the map page (`the Dossier's map page ...`), a panel placed again after a re-anchor,
 `pointer on; panel ...`, `right button down` / `up`,
@@ -474,8 +520,9 @@ magnified onto the panel by F`.
 - Unit tests: `tests/features/menu` (ray and panel: hits, corners, misses, turned panels, pixels, the dot,
   the beam quad and image; the router: closed-loop moves and the timeout, clicks after the cursor settles,
   quick taps, a trigger held into a menu, back, scroll and tabs with repeat, the grips as the tab keys Q
-  and E, the stick click's C, the Dossier map's sticks (pan, zoom and rotate, and a drag let go when the
-  menu closes), the pointer changing hands, release and the gameplay latch when the menu closes,
+  and E, the stick click's C, the page keys A and D from the sticks while the Rewards tab or a tab list on
+  A / D is up (`page_keys_tests.cpp`), the Dossier map's sticks (pan, zoom and rotate, and a drag let go
+  when the menu closes), the pointer changing hands, release and the gameplay latch when the menu closes,
   left-handed, NaN input) and the menu settings in `tests/ui_layer`. The inputs held through the close:
   `tests/features/input/menu_release_latch_tests.cpp` (B and a stick held through the close, a fresh press
   after it, a press let go in the menu, several inputs let go one by one, analog thresholds) and

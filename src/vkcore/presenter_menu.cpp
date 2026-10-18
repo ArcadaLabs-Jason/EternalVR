@@ -18,6 +18,7 @@
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_load_tips.hpp"
+#include "vkcore/prompt_page_keys.hpp"
 #include "xr_math/cinema_quad.hpp"
 
 #include <algorithm>
@@ -303,6 +304,7 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     in.popup = menuOn && menuPopup;
     in.dossier = menuOn && menuDossier;
     in.actions = controllers::heldActions();
+    in.pageKeys = controllers::currentPageKeys();
     in.width = gameExtent.width;
     in.height = gameExtent.height;
     if (cursor) {

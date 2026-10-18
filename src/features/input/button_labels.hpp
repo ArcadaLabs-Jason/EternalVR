@@ -135,11 +135,16 @@ struct PromptLabelSet {
     // the menus' hints name: back (Escape) is the right secondary button (B on Touch) in every menu, or the
     // left one where the right hand has none; select (Enter) is the weapon hand's trigger, which clicks what
     // the pointer is on; the previous and next tab (Q, E) are the left and right grips, in short (LG, RG),
-    // since the tab lists cut longer text. Empty when the controller has no name for the control.
+    // since the tab lists cut longer text; a screen's own previous and next page or inner tab (A, D:
+    // features/menu/page_keys.hpp) the left and right sticks, in short (LS, RS), since those screens show
+    // even less ("RS Left" read "..." on the rig); either stick pushed left or right, or the named stick's
+    // click, sends them. Empty when the controller has no name for the control.
     std::string menuBack;
     std::string menuSelect;
     std::string menuPreviousTab;
     std::string menuNextTab;
+    std::string menuPreviousPage;
+    std::string menuNextPage;
 
     friend bool operator==(const PromptLabelSet&, const PromptLabelSet&) = default;
 };

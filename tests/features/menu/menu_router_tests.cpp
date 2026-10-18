@@ -119,6 +119,10 @@ TEST_CASE("router: no ray on the panel, or no cursor to read, leaves the cursor 
     MenuRouter router;
     RouterInput in = menuFrame(0.0, {10, 10});
     in.hands[kRight].hit.reset();
+    // Past the menu's first move (a pixel aside, the tests at the end of this file).
+    REQUIRE(router.update(in).events.size() == 1);
+    in.seconds = 0.05;
+    in.gameCursor = CursorPixel{11, 10};
     CHECK(router.update(in).events.empty());
     in = menuFrame(0.1, {10, 10});
     in.gameCursor.reset();
@@ -469,4 +473,64 @@ TEST_CASE("router: Left Alt held in a popup is let go when the popup closes") {
     closed.seconds = 0.12;
     closed.hands[kLeft].secondary = true;
     CHECK(has(router.update(closed), Kind::KeyUp, kKeyObjectives));
+}
+
+// The game ignores the first key or mouse input after it raised a menu while it took the pad's input (the
+// Dossier on its hold, a popup): that input only switches it to the keyboard and mouse.
+TEST_CASE("router: a menu that comes up with the ray off the panel moves the cursor a pixel, once") {
+    MenuRouter router;
+    RouterInput in = menuFrame(0.0, {500, 250});
+    in.hands[kRight].hit.reset();
+    RouterOutput out = router.update(in);
+    REQUIRE(out.events.size() == 1);
+    CHECK(out.events[0].kind == Kind::Move);
+    CHECK(out.events[0].dx == 1);
+    CHECK(out.events[0].dy == 0);
+    // The game shows the cursor there: nothing more while the ray stays off the panel.
+    in.seconds = 0.02;
+    in.gameCursor = CursorPixel{501, 250};
+    CHECK(router.update(in).events.empty());
+    in.seconds = 0.5;
+    CHECK(router.update(in).events.empty());
+    // A grip then sends only its tab key.
+    in.seconds = 0.6;
+    in.hands[kRight].grip = 1.0f;
+    out = router.update(in);
+    CHECK(kinds(out) == std::vector<Kind>{Kind::KeyDown});
+    CHECK(has(out, Kind::KeyDown, kKeyNextTab));
+}
+
+TEST_CASE("router: the first move goes out before a key pressed in a menu's first frame") {
+    MenuRouter router;
+    RouterInput in = menuFrame(0.0, {500, 250});
+    in.hands[kRight].hit.reset();
+    in.hands[kLeft].grip = 1.0f;
+    const RouterOutput out = router.update(in);
+    REQUIRE(out.events.size() >= 2);
+    CHECK(out.events[0].kind == Kind::Move);
+    CHECK(has(out, Kind::KeyDown, kKeyPreviousTab));
+}
+
+TEST_CASE("router: the first move at the right edge goes a pixel left, and every menu that comes up moves") {
+    MenuRouter router;
+    RouterInput first = menuFrame(0.0, {500, 250});
+    first.hands[kRight].hit.reset();
+    RouterOutput out = router.update(first);
+    REQUIRE(out.events.size() == 1);
+    CHECK(out.events[0].dx == 1);
+    RouterInput closed;
+    closed.seconds = 0.1;
+    router.update(closed);
+    RouterInput in = menuFrame(0.2, {999, 250});
+    in.hands[kRight].hit.reset();
+    out = router.update(in);
+    REQUIRE(out.events.size() == 1);
+    CHECK(out.events[0].dx == -1);
+}
+
+TEST_CASE("router: a menu that comes up with the ray on the panel moves only toward the ray") {
+    MenuRouter router;
+    const RouterOutput out = router.update(menuFrame(0.0, {500, 250}, 0.25f, 0.5f));
+    REQUIRE(out.events.size() == 1);
+    CHECK(out.events[0].dx == -250);
 }

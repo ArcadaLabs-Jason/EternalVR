@@ -55,6 +55,9 @@ struct CursorPixel {
 // image: the game's cursor range is 0..width-1 by 0..height-1 here.
 CursorPixel cursorPixel(float u, float v, std::uint32_t width, std::uint32_t height);
 
+// A pixel next to `at` in a range `width` wide: one to the right, or one to the left at the right edge.
+CursorPixel nudged(CursorPixel at, std::uint32_t width);
+
 // The pose of a dot `offset` metres in front of the panel at (u, v), turned like the panel.
 Pose dotPose(const Panel& panel, float u, float v, float offset);
 

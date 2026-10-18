@@ -926,6 +926,14 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   Game Pass. The game's key matching (the bar's `KeyNumToString` calls) is left alone. Hint keys the
   controllers have no button for (R restore defaults, F apply, T and X in the Arsenal) keep the game's
   keys.
+  A screen's own previous / next inside a tab, A and D, names the left and right sticks in short (LS,
+  RS), since the sticks send A and D while such a screen is up (`docs/VR_MENUS.md`, Pages and tabs inside
+  a tab): the mission-complete Rewards tab's page arrows ("A 1/2 D" reads "LS 1/2 RS"), whose two
+  `KeyNameText` calls are answered by their return addresses (`vkcore/prompt_page_keys.hpp`; Steam
+  0xF5FEC9 and 0xF5FFC3, Game Pass 1.0.56.0 0xF6BA19 and 0xF6BB13, found the same way offline), and the
+  tab lists on A and D (the Dossier's Arsenal, Codex and Challenges pages), whose calls are the tab lists'
+  own and answer by the key's name. Those screens have room for about two letters where the game writes
+  A and D: "RS Left" showed as "..." (rig, 2026-10-17), "LS" and "RS" in full.
   Everything is found by signature at start; if a part is missing the prompts stay the game's and the log
   says which part.
 - **From the title screen on.** The names come with the control map, and the mapper that builds it runs
@@ -942,11 +950,12 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   keeps the game's text, since the game only replaces bound actions. The log shows the first few prompts
   each path answered (`prompts: ... asks for _altfire (bindset 0): Right Grip`), the menu hints' texts when
   the control map is set (`prompts: menu hints: back (ESC) B, select (ENTER) Right Trigger, tabs (Q / E)
-  Left Grip / Right Grip`) and the first time each fixed key is named (`prompts: the game's text names
-  ESCAPE: B`, `prompts: a tab list names Q: Left Grip`, `prompts: a hold button names ENTER: Right
-  Trigger`). At start the log says which raw key texts are answered (`prompts: KeyNameText hook at RVA
-  0x17E2680; TabList calls at ...; hold buttons' calls at 0x159F095 (GetKeyString), 0x159FE8F (the command
-  bar's update)`, 0 for a part not found, which keeps the game's key there).
+  LG / RG, pages (A / D) LS / RS`) and the first time each fixed key is named (`prompts: the game's text
+  names ESCAPE: B`, `prompts: a tab list names Q: LG`, `prompts: a hold button names ENTER: Right
+  Trigger`, `prompts: the Rewards tab's arrows name A: LS`). At start the log says which raw key texts are
+  answered (`prompts: KeyNameText hook at RVA 0x17E2680; TabList calls at ...; hold buttons' calls at
+  0x159F095 (GetKeyString), 0x159FE8F (the command bar's update)`, 0 for a part not found, which keeps the
+  game's key there).
 
 ## Scripted input for rig tests
 

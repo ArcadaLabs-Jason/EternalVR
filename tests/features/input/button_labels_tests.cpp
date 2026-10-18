@@ -375,3 +375,47 @@ TEST_CASE("every built-in family names the menus' back, select and tab controls"
         }
     }
 }
+
+TEST_CASE("a screen's own pages name the left and right sticks, in short") {
+    const ControllerData touch = builtin(Controller::OculusTouch);
+    const ButtonLabels labels = buttonLabelsFor(touch);
+    const PromptLabelSet right =
+        promptLabelSet(buildBindingProfile(touch.maps.at(Handedness::Right)).profile, labels);
+    CHECK(right.menuPreviousPage == "LS");
+    CHECK(right.menuNextPage == "RS");
+    // The router's page keys do not follow the handedness, as its tabs do not.
+    const PromptLabelSet left =
+        promptLabelSet(buildBindingProfile(touch.maps.at(Handedness::LeftButtonSwap)).profile, labels);
+    CHECK(left.menuPreviousPage == "LS");
+    CHECK(left.menuNextPage == "RS");
+    // A controller with no name for the stick leaves the game's keys.
+    const ControllerData bare = parseControllerData(kTouchHeader);
+    const PromptLabelSet none = promptLabelSet(BindingProfile{}, buttonLabelsFor(bare));
+    CHECK(none.menuPreviousPage.empty());
+    CHECK(none.menuNextPage.empty());
+}
+
+TEST_CASE("Vive wands: a screen's own pages name the trackpads as P, not as the triggers") {
+    const ControllerData wand = builtin(Controller::ViveWand);
+    const PromptLabelSet set =
+        promptLabelSet(buildBindingProfile(wand.maps.at(Handedness::Right)).profile, buttonLabelsFor(wand));
+    CHECK(set.menuPreviousPage == "LP");
+    CHECK(set.menuNextPage == "RP");
+}
+
+TEST_CASE("every built-in family names a screen's own pages") {
+    for (const Controller controller : kControllers) {
+        const ControllerData data = builtin(controller);
+        const ButtonLabels labels = buttonLabelsFor(data);
+        for (const auto& [handedness, entries] : data.maps) {
+            const PromptLabelSet set = promptLabelSet(buildBindingProfile(entries).profile, labels);
+            INFO(controllerName(controller));
+            CHECK_FALSE(set.menuPreviousPage.empty());
+            CHECK_FALSE(set.menuNextPage.empty());
+            // The Rewards tab's arrows and the Dossier's inner tab lists show about two letters.
+            CHECK(set.menuPreviousPage.size() <= 3);
+            CHECK(set.menuNextPage.size() <= 3);
+            CHECK(set.menuPreviousPage != set.menuNextPage);
+        }
+    }
+}
