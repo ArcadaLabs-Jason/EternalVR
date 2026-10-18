@@ -2,6 +2,9 @@
 
 #include "game/eternal/game_action.hpp"
 
+#include <algorithm>
+#include <vector>
+
 namespace evr::input {
 
 namespace {
@@ -88,6 +91,21 @@ keyNameLabel(KeyNameAnswer answer, std::string_view gameKeyName, const PromptLab
         return index ? &layerKeyLabel(*index, labels) : nullptr;
     }
     return nullptr;
+}
+
+HudKeyForm
+hudKeyForm(std::uintptr_t returnAddress, std::uintptr_t callerReturn, const HudKeyCallers& callers) {
+    if (returnAddress == 0 || callerReturn == 0 || returnAddress != callers.helperKeyText) {
+        return HudKeyForm::Full;
+    }
+    return std::ranges::find(callers.weaponInfo, callerReturn) != callers.weaponInfo.end() ? HudKeyForm::Short
+                                                                                           : HudKeyForm::Full;
+}
+
+const std::string* hudKeyText(std::size_t slot, HudKeyForm form, const PromptLabelSet& labels) {
+    const std::vector<std::string>& texts =
+        form == HudKeyForm::Short ? labels.distinctShort : labels.distinct;
+    return slot < texts.size() ? &texts[slot] : nullptr;
 }
 
 } // namespace evr::input

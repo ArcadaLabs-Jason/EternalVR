@@ -175,6 +175,7 @@ evr_add_test(evr_input_tests
         features/input/offhand_policy_tests.cpp
         features/input/player_controller_data_tests.cpp
         features/input/prompt_keys_tests.cpp
+        features/input/weapon_info_labels_tests.cpp
         features/input/punch_detector_tests.cpp
         features/input/rest_touch_bindings_tests.cpp
         features/input/rest_wheel_tests.cpp

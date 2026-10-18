@@ -171,6 +171,7 @@ function Start-QaGame($Ctx, $Scenario) {
     if ($Scenario.UiCaptures) { $gameEnv += "ETERNALVR_CAPTURE_UI=$($Ctx.Stage)-ui,$($Scenario.UiCaptures)" }
     $Ctx.Vdd = Get-QaVddRect
     if ($Ctx.Vdd) { $gameEnv += "ETERNALVR_MIRROR_WINDOW=$($Ctx.Vdd.x),$($Ctx.Vdd.y),1280,720" }
+    Set-QaSimWindow $Ctx
     $map = if ($Scenario.Map) { $Scenario.Map } else { $script:QaMap }
     $gameArgs = if ($Scenario.Args) { @($Scenario.Args) } else { @() }
     $p = @{ Layer = $Ctx.Stage; Label = $Ctx.Label; DisplayWidth = 2560; DisplayHeight = 1440; XrRuntimeJson = $script:QaSimJson
@@ -267,6 +268,24 @@ function Save-QaShot($Ctx, [string]$Checkpoint) {
     Write-QaLine "  shot: $Checkpoint"
 }
 
+# The simulator's preview at 1280 x 720 before each launch. The simulator opens its preview at the size it saved last
+# (window_width / window_height in %LOCALAPPDATA%\OpenXR-Simulator\settings.json), takes its screenshots at that size,
+# and saves a size about 49 pixels shorter than it opened with (720 in, 671 saved on the rig): run after run the
+# preview shrank to a strip (1427 x 12, then 1152 x 24 in every merge QA from r60a on), and so did every xr shot.
+function Set-QaSimWindow($Ctx) {
+    $path = Join-Path $env:LOCALAPPDATA 'OpenXR-Simulator\settings.json'
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    try {
+        $s = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        if ($s.window_width -eq 1280 -and $s.window_height -eq 720) { return }
+        $was = "$($s.window_width) x $($s.window_height)"
+        $s.window_width = 1280
+        $s.window_height = 720
+        Set-Content -LiteralPath $path -Value ($s | ConvertTo-Json) -Encoding ascii
+        Write-QaLine "  simulator preview set to 1280 x 720 (was $was)"
+    } catch { Add-QaNote $Ctx "simulator preview size not set: $($_.Exception.Message)" }
+}
+
 # The simulator's own screenshot of the frame it composes for the headset, both eyes with the quad layers over the
 # projection (its file request: screenshot_request.json in %LOCALAPPDATA%\OpenXR-Simulator, answered in
 # screenshot_status.json and screenshot.bmp), as <Out>\<scenario>-<checkpoint>-xr-both.png. Unlike the preview window
@@ -294,7 +313,12 @@ function Save-QaXrShot($Ctx, [string]$Checkpoint) {
         $img = [Drawing.Image]::FromFile($bmp)
         try { $img.Save($png, [Drawing.Imaging.ImageFormat]::Png) } finally { $img.Dispose() }
         [void]$Ctx.Shots.Add($png)
-        Write-QaLine "  xr shot: $Checkpoint ($((Get-Content -LiteralPath $status -Raw) -replace '\s+', ' '))"
+        $answer = Get-Content -LiteralPath $status -Raw
+        Write-QaLine "  xr shot: $Checkpoint ($($answer -replace '\s+', ' '))"
+        $size = $answer | ConvertFrom-Json
+        if ($size.width -lt 640 -or $size.height -lt 360) {
+            Add-QaNote $Ctx "simulator screenshot '$Checkpoint' is only $($size.width) x $($size.height)"
+        }
     } catch { Add-QaNote $Ctx "simulator screenshot '$Checkpoint' failed: $($_.Exception.Message)" }
 }
 

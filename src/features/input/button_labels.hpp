@@ -112,6 +112,12 @@ std::vector<PromptControl> promptControls(game::GameAction action, const Binding
 // controller has no name for the input.
 std::string promptText(const PromptControl& control, const ButtonLabels& labels);
 
+// The same in a few letters, for the HUD's weapon info row (vkcore/prompt_weapon_info.hpp), whose label boxes
+// sit over icons about 60 px apart where the game writes one key: a name of several words by its initials, as
+// the tab lists write the grips, a one-word name as it is, and the press in words. "LT", "X", "Hold LT",
+// "RS Up". Empty when the controller has no name for the input.
+std::string shortPromptText(const PromptControl& control, const ButtonLabels& labels);
+
 // The text for the first control bound to `action`, or empty when none has a name.
 std::string
 actionPromptText(game::GameAction action, const BindingProfile& profile, const ButtonLabels& labels);
@@ -122,6 +128,7 @@ actionPromptText(game::GameAction action, const BindingProfile& profile, const B
 struct PromptLabelSet {
     std::array<std::string, game::kGameActionCount> text; // empty when unbound or unnamed
     std::vector<std::string> distinct;                    // each text once, in action order
+    std::vector<std::string> distinctShort;               // each distinct text's shortPromptText
     std::array<int, game::kGameActionCount> slot{};       // index into `distinct`, -1 when there is no text
 
     // The menus' own controls (features/menu/menu_router.hpp), which no control map changes, for the keys

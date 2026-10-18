@@ -262,6 +262,7 @@ target_sources(evr_layer PRIVATE
     prompt_command_bar.cpp
     prompt_hooks.cpp
     prompt_load_tips.cpp
+    prompt_weapon_info.cpp
     rest_wheel.cpp
     rumble_hook.cpp
     touch_buttons_log.cpp

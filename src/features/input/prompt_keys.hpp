@@ -59,4 +59,26 @@ KeyNameAnswer keyNameAnswer(std::uintptr_t returnAddress, const KeyNameCallers& 
 const std::string*
 keyNameLabel(KeyNameAnswer answer, std::string_view gameKeyName, const PromptLabelSet& labels);
 
+// The HUD's key labels from the helper that the demon's ability list, the tutorial objectives and the weapon
+// info row share (0xF0BB50 in build 25216728): it asks LocalizedKeyName for the text of the VR key the
+// GetKeysForAction detour handed it (vkcore/prompt_hooks.cpp), one text per slot of PromptLabelSet::distinct.
+// The weapon info row (equipment, Flame Belch, chainsaw, the Crucible, switch equipment) sizes each label's
+// box to its text above icons about 60 px apart, so three full names overlap; its calls get the short form.
+// The call is told apart by two return addresses: the helper's LocalizedKeyName call's, and the one a frame
+// above it, which is one of the weapon info update's calls to the helper.
+enum class HudKeyForm { Full, Short };
+
+// The return addresses found at install; 0 for one not found (no return address is 0).
+struct HudKeyCallers {
+    std::uintptr_t helperKeyText = 0;           // the helper's LocalizedKeyName call
+    std::array<std::uintptr_t, 8> weaponInfo{}; // the weapon info update's calls to the helper
+};
+
+// `returnAddress` is LocalizedKeyName's, `callerReturn` the one a frame above it (0 when unknown).
+HudKeyForm
+hudKeyForm(std::uintptr_t returnAddress, std::uintptr_t callerReturn, const HudKeyCallers& callers);
+
+// The text of the VR key in `slot` in `form`, or nullptr for a slot with no text.
+const std::string* hudKeyText(std::size_t slot, HudKeyForm form, const PromptLabelSet& labels);
+
 } // namespace evr::input

@@ -153,6 +153,15 @@ them is worse for you than described here.
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn. An experimental fix is in, off by default (the normal renderer only).
   A first headset test showed no clear difference, so it stays off for now.
+- **Demons flying far off can leave a trail.** In a headset test in Exultia, distant flying demons smeared
+  the way anti-aliasing (TAA) can smear fast motion. Anti-aliasing Off on the Play tab avoids TAA's
+  smearing, at the cost of some shimmer on edges.
+- **The HUD's objective marker can sit a little off** the place it points to.
+- **The HUD's smallest text is hard to read.** The mission challenge names, the "PRESS [HOLD X] TO VIEW
+  CHALLENGE DETAILS" hint and the Demonic Corruption bar's title are small on the default HUD panel. A larger
+  HUD size (or a shorter HUD distance) on the Play tab makes them bigger, along with the rest of the HUD.
+- **The Plasma Rifle's Microwave Beam may not show its beam.** This is from one headset test and not
+  confirmed yet; if you see it, please tell me.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
@@ -256,7 +265,7 @@ them is worse for you than described here.
   hand can cover it.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
   weapon in your left hand the game still draws its right arm, reaching across to the gun. Turning off Show
-  arms (Play tab) hides both arms. Arms that mirror properly for the left hand are planned.
+  arms (Play tab) hides both arms.
   A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand
   jitters when the gun arm moves, and the fist pose is odd); once those are fixed it becomes the standard,
   with no option to turn it on or off.
@@ -329,6 +338,10 @@ them is worse for you than described here.
 - Some prompts still name a keyboard key instead of a controller button, for example the page arrows of
   the mission-complete screen's Rewards tab ("A 1/2 D"): point at an arrow and pull the trigger instead.
   The loading screen's tips now read "[LG] PREVIOUS | [RG] NEXT", and the grips change the tip.
+- **In the weapon upgrade screen** the gun can ghost a little when you move your head.
+- **The Fortress of Doom** has a few rough spots: some outside surfaces look wrongly shaded, a canister can
+  show black without its texture, the collectible viewer shows no models, the old computer is hard to use,
+  and the displays in the Slayer's office can ghost.
 
 ## Launcher and settings
 

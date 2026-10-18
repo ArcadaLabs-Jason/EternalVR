@@ -897,6 +897,16 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   button that sends that key: tutorial popups take Space for the jump button, E for melee and Tab for the
   Dossier, so "[SPACE] TO DISMISS" reads "[A] TO DISMISS" on Touch. The game is held on its keyboard
   prompts (`swf_platformOverride 2`), so a gamepad or Steam Input cannot switch them to pad glyphs.
+- **The weapon info row.** The HUD's labels above the Flame Belch, chainsaw and equipment icons (and the
+  Crucible's and switch equipment's) are sized to their text over icons about 60 px apart in a 2048 px wide
+  GUI, room for the game's one-letter keys: three full names overlapped into one bar ("Left Grip ght St...
+  ft Tr..."). The row gets short texts instead: a name of several words by its initials, a one-word name as
+  it is, the press in words ("LG", "RS Up", "LT", "X", "Hold LT"). Its labels come from the same HUD helper as
+  the demon's ability list and the tutorial objectives, which keep the full names: the layer tells the row's
+  calls apart by the helper's return address and the one a frame above it, one of the weapon info update's
+  calls to the helper (`vkcore/prompt_weapon_info.hpp`; the update is the one function that loads
+  "_quickuse" and calls the helper: Steam 0xF0BF60, Game Pass 1.0.56.0 0xF17A50). Rig, OpenXR-Simulator,
+  e1m3, 2026-10-17: "LG", "RS Up", "LT" in boxes 23, 48 and 22 px wide with 23 and 25 px between them.
 - **Menu hints.** The menus' hint bars (pause, settings, the Dossier, the main menu) name the menu
   controls (`docs/VR_MENUS.md`), which no control map changes: "[ESC] BACK" reads "[B] BACK" on Touch
   (the right secondary button, which goes back in every menu), "[ENTER] SELECT" names the weapon hand's

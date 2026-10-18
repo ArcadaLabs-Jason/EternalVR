@@ -13,7 +13,8 @@
 // The detour on GetKeysForAction runs the game's function and then, only when one of those four called it for
 // the local player, replaces the first name with our text: the label itself for the text pass, or for the
 // helpers the name of a VR key the game knows but nothing binds (STEAMVR_PRIMARY_*, STEAMVR_SECONDARY_*),
-// whose text the detour on LocalizedKeyName then gives as the label. Every other caller gets the game's
+// whose text the detour on LocalizedKeyName then gives as the label (in short for the weapon info row,
+// prompt_weapon_info.hpp). Every other caller gets the game's
 // result: the weapon wheel and tutorial dismissal match real key presses with it, and the bindings menu
 // lists the real binds. The action is found through the game's action table ("_altfire" is usercmd button
 // 2), then our action that presses that button, or while piloting a demon the action that presses the
@@ -44,6 +45,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_command_bar.hpp"
 #include "vkcore/prompt_load_tips.hpp"
+#include "vkcore/prompt_weapon_info.hpp"
 
 #include <windows.h>
 
@@ -105,6 +107,7 @@ constexpr std::array<Caller, 4> kCallers{{
                              "?? ?? ?? ?? 45 84 C9"},
 }};
 constexpr std::size_t kTextCaller = 0;
+constexpr std::size_t kHudHelperCaller = 2; // the helper the weapon info row's labels come from
 // How far into each caller its one call to GetKeysForAction may lie (the text pass has it at +0x654).
 constexpr std::size_t kCallerSpan = 0x1000;
 
@@ -156,6 +159,7 @@ KeyNameTextFn g_keyNameText = nullptr;
 std::array<std::uintptr_t, kCallers.size()> g_callerReturns{};
 // The KeyNameText callers answered (input::keyNameAnswer): TabList's and the command bar's hold buttons'.
 input::KeyNameCallers g_keyNameCallers;
+input::HudKeyCallers g_hudKeyCallers; // the weapon info row's labels (input::hudKeyForm)
 static_assert(std::tuple_size_v<decltype(input::KeyNameCallers::tabList)> == kTabListCalls);
 std::vector<std::pair<std::string, int>> g_actionTable;   // lower-case bind name, usercmd button index
 std::vector<std::pair<int, std::string>> g_virtualKeys;   // key number and its name, in slot order
@@ -247,7 +251,8 @@ void onKeyText(int keyNum, void* out) {
     if (labels && out != nullptr && mp_guard::allowsGameTouch()) {
         for (std::size_t slot = 0; slot < g_virtualKeys.size() && slot < labels->distinct.size(); ++slot) {
             if (g_virtualKeys[slot].first == keyNum) {
-                g_strAssign(out, labels->distinct[slot].c_str());
+                const auto at = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+                g_strAssign(out, hudKeyAnswer(slot, at, g_hudKeyCallers, *labels, kTag).c_str());
                 return;
             }
         }
@@ -501,9 +506,11 @@ bool installPromptHooks() {
     if (getKeys == nullptr || keyText == nullptr || g_strAssign == nullptr) {
         return false;
     }
+    const std::byte* hudHelper = nullptr;
     for (std::size_t i = 0; i < kCallers.size(); ++i) {
         const std::byte* caller = findUnique(image, kTag, kCallers[i].name, kCallers[i].signature);
         g_callerReturns[i] = caller != nullptr ? callReturn(image, caller, getKeys) : 0;
+        hudHelper = i == kHudHelperCaller ? caller : hudHelper;
         if (g_callerReturns[i] == 0) {
             EVR_LOG("%s: %s: no single call to GetKeysForAction; prompts left as the game's", kTag,
                     kCallers[i].name);
@@ -514,6 +521,7 @@ bool installPromptHooks() {
         return false;
     }
     const bool generation = findBindGeneration(image);
+    g_hudKeyCallers = findWeaponInfoKeyCalls(image, hudHelper, keyText, kTag);
     std::string error;
     if (!installInlineHook(const_cast<std::byte*>(getKeys), reinterpret_cast<void*>(&onGetKeys),
                            reinterpret_cast<void**>(&g_getKeys), error)) {

@@ -202,6 +202,40 @@ std::string shortName(std::string_view name) {
     return out;
 }
 
+// A control's name for the weapon info row: the initials of a name of several words ("Left Trigger" is LT),
+// a one-word name as it is ("X", "Menu").
+std::string compactName(std::string_view name) {
+    return name.find(' ') == std::string_view::npos ? std::string(name) : shortName(name);
+}
+
+// A prompt's text for a control under the press's words, given the control's name.
+std::string pressText(PromptPress press, const std::string& name) {
+    switch (press) {
+    case PromptPress::Press:
+        return name;
+    case PromptPress::Hold:
+        return "Hold " + name;
+    case PromptPress::StickUp:
+        return name + " Up";
+    case PromptPress::StickDown:
+        return name + " Down";
+    case PromptPress::StickDownHold:
+        return "Hold " + name + " Down";
+    }
+    return name;
+}
+
+// The first control bound to `action` that the controller has a name for.
+std::optional<PromptControl>
+namedControl(game::GameAction action, const BindingProfile& profile, const ButtonLabels& labels) {
+    for (const PromptControl& control : promptControls(action, profile)) {
+        if (!labels.name(control.hand, control.input).empty()) {
+            return control;
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 std::optional<LabelKey> parseLabelKey(std::string_view text) {
@@ -333,46 +367,34 @@ std::vector<PromptControl> promptControls(game::GameAction action, const Binding
 
 std::string promptText(const PromptControl& control, const ButtonLabels& labels) {
     const std::string& name = labels.name(control.hand, control.input);
-    if (name.empty()) {
-        return {};
-    }
-    switch (control.press) {
-    case PromptPress::Press:
-        return name;
-    case PromptPress::Hold:
-        return "Hold " + name;
-    case PromptPress::StickUp:
-        return name + " Up";
-    case PromptPress::StickDown:
-        return name + " Down";
-    case PromptPress::StickDownHold:
-        return "Hold " + name + " Down";
-    }
-    return name;
+    return name.empty() ? std::string{} : pressText(control.press, name);
+}
+
+std::string shortPromptText(const PromptControl& control, const ButtonLabels& labels) {
+    const std::string& name = labels.name(control.hand, control.input);
+    return name.empty() ? std::string{} : pressText(control.press, compactName(name));
 }
 
 std::string
 actionPromptText(game::GameAction action, const BindingProfile& profile, const ButtonLabels& labels) {
-    for (const PromptControl& control : promptControls(action, profile)) {
-        std::string text = promptText(control, labels);
-        if (!text.empty()) {
-            return text;
-        }
-    }
-    return {};
+    const std::optional<PromptControl> control = namedControl(action, profile, labels);
+    return control ? promptText(*control, labels) : std::string{};
 }
 
 PromptLabelSet promptLabelSet(const BindingProfile& profile, const ButtonLabels& labels) {
     PromptLabelSet set;
     set.slot.fill(-1);
     for (std::size_t i = 0; i < game::kGameActionCount; ++i) {
-        std::string text = printable(actionPromptText(static_cast<game::GameAction>(i), profile, labels));
-        if (text.empty()) {
+        const std::optional<PromptControl> control =
+            namedControl(static_cast<game::GameAction>(i), profile, labels);
+        if (!control) {
             continue;
         }
+        std::string text = printable(promptText(*control, labels));
         auto it = std::ranges::find(set.distinct, text);
         if (it == set.distinct.end()) {
             set.distinct.push_back(text);
+            set.distinctShort.push_back(printable(shortPromptText(*control, labels)));
             it = std::prev(set.distinct.end());
         }
         set.slot[i] = static_cast<int>(it - set.distinct.begin());
