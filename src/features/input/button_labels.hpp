@@ -145,6 +145,11 @@ struct PromptLabelSet {
     std::string menuNextTab;
     std::string menuPreviousPage;
     std::string menuNextPage;
+    // The hint bar's shortcuts the controllers send (features/menu/hint_keys.hpp), in its HintButton order:
+    // the left controller's primary and secondary buttons (X and Y on Touch) and the right stick's click, as
+    // the bar names its other buttons ("[B] BACK", "[Right Trigger] SELECT"). Empty when the controller has
+    // no such button; the bar's key then stays and nothing sends it.
+    std::array<std::string, 3> menuHints;
 
     friend bool operator==(const PromptLabelSet&, const PromptLabelSet&) = default;
 };

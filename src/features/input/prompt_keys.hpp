@@ -56,8 +56,9 @@ const std::string& pageKeyLabel(std::size_t index, const PromptLabelSet& labels)
 // key tokens ("K_Q PREVIOUS"), is answered the same way at its two text formats: as tab keys, since the grips
 // send its keys (features/menu/load_tips_keys.hpp). A tab list on A and D (the Dossier pages' inner tabs) and
 // the Rewards tab's page arrows ("A 1/2 D") get the page keys' text, the stick that sends them there
-// (features/menu/page_keys.hpp). TabKeyOnly: a tab list while no stick sends its A / D (the tab lists'
-// page-key hook is not in), so only its Q and E are answered.
+// (features/menu/page_keys.hpp). The Fortress's collectible and music viewers' Q and E are tab keys: the
+// grips send them there, as in every menu (vkcore/prompt_viewer_keys.hpp). TabKeyOnly: a tab list while no
+// stick sends its A / D (the tab lists' page-key hook is not in), so only its Q and E are answered.
 enum class KeyNameAnswer { Game, TabKey, TabKeyOnly, LayerKey, PageKey };
 
 // The callers' return addresses, as found at install; 0 for one not found (no return address is 0).
@@ -68,6 +69,7 @@ struct KeyNameCallers {
     std::array<std::uintptr_t, 2> loadTips{}; // the tips bar's previous and next text formats
     std::array<std::uintptr_t, 2> rewards{};  // the Rewards tab's previous and next page arrows
     bool tabListPages = false;                // a stick sends a tab list's A / D (its hook is in)
+    std::array<std::uintptr_t, 2> viewer{};   // the Fortress viewers' previous and next (Q, E)
 };
 
 KeyNameAnswer keyNameAnswer(std::uintptr_t returnAddress, const KeyNameCallers& callers);

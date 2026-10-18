@@ -419,3 +419,51 @@ TEST_CASE("every built-in family names a screen's own pages") {
         }
     }
 }
+
+TEST_CASE("the hint bar's shortcuts name the left primary and secondary and the right stick's click") {
+    const ControllerData touch = builtin(Controller::OculusTouch);
+    const ButtonLabels labels = buttonLabelsFor(touch);
+    const PromptLabelSet right =
+        promptLabelSet(buildBindingProfile(touch.maps.at(Handedness::Right)).profile, labels);
+    // The pad's X, Y and right stick click, where the Arsenal's F, X and T sit (features/menu/hint_keys.hpp).
+    CHECK(right.menuHints[0] == "X");
+    CHECK(right.menuHints[1] == "Y");
+    CHECK(right.menuHints[2] == "Right Stick Click");
+    // They do not follow the handedness: the pad's places are fixed.
+    const PromptLabelSet left =
+        promptLabelSet(buildBindingProfile(touch.maps.at(Handedness::LeftButtonSwap)).profile, labels);
+    CHECK(left.menuHints == right.menuHints);
+    // Index names both hands' A and B by hand.
+    const ControllerData index = builtin(Controller::ValveIndex);
+    const PromptLabelSet knuckles =
+        promptLabelSet(buildBindingProfile(index.maps.at(Handedness::Right)).profile, buttonLabelsFor(index));
+    CHECK(knuckles.menuHints[0] == "Left A");
+    CHECK(knuckles.menuHints[1] == "Left B");
+    // A wand has no primary or secondary button: those keys stay the game's (nothing sends them).
+    const ControllerData wand = builtin(Controller::ViveWand);
+    const PromptLabelSet wands =
+        promptLabelSet(buildBindingProfile(wand.maps.at(Handedness::Right)).profile, buttonLabelsFor(wand));
+    CHECK(wands.menuHints[0].empty());
+    CHECK(wands.menuHints[1].empty());
+    CHECK_FALSE(wands.menuHints[2].empty());
+    const ControllerData bare = parseControllerData(kTouchHeader);
+    const PromptLabelSet none = promptLabelSet(BindingProfile{}, buttonLabelsFor(bare));
+    CHECK(none.menuHints[2].empty());
+}
+
+TEST_CASE("every built-in family names the hint bar's buttons apart from its back and select") {
+    for (const Controller controller : kControllers) {
+        const ControllerData data = builtin(controller);
+        const PromptLabelSet set =
+            promptLabelSet(buildBindingProfile(data.maps.begin()->second).profile, buttonLabelsFor(data));
+        INFO(controllerName(controller));
+        for (const std::string& hint : set.menuHints) {
+            INFO(hint);
+            if (!hint.empty()) {
+                CHECK(hint != set.menuBack);
+                CHECK(hint != set.menuSelect);
+            }
+        }
+        CHECK_FALSE(set.menuHints[2].empty());
+    }
+}

@@ -243,6 +243,7 @@ backing out with B or Y does not switch the weapon mod.
 | Either stick up / down | Scroll (on the Dossier map: see below) |
 | Either stick left / right | Previous / next tab (on the Dossier map: see below) |
 | Either stick click | Centre the Dossier map on you (the game's C key) |
+| X, Y or right stick click named in the hint bar at the bottom | That shortcut (the Dossier's Arsenal: customize weapon, equip or unequip the mod, customize the weapon wheel) |
 | Left Menu button, tap | Pause / resume |
 | Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (no click) |
 | Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot (no click) |
@@ -267,9 +268,12 @@ rotates (left / right), and a stick click centres it on you. To pan with the oth
 **Dossier map sticks** on the launcher's Play tab to Other hand pans: then the other hand's stick pans and
 the weapon hand's stick zooms and rotates. Pointing and clicking still works for the
 map's buttons, and holding the trigger while you move the pointer still pans. In the
-Arsenal, click a weapon to select it and click a mod to open its upgrades. The Arsenal's key-only
-shortcuts (T customize weapon wheel, X equip or unequip a mod) have no controller button yet. B closes
-the Dossier.
+Arsenal, click a weapon to select it and click a mod to open its upgrades. Its shortcuts are on the
+buttons its hints name: X customizes the weapon, Y equips or unequips the mod and a right stick click
+customizes the weapon wheel (Index: left A and left B; on Vive wands customize weapon and the mod have no
+button yet). B closes the Dossier.
+
+**The Fortress's collectible viewer.** The grips show the previous and next item.
 
 ## Launcher settings
 

@@ -17,6 +17,7 @@
 #include "vkcore/menu_input.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/prompt_hint_keys.hpp"
 #include "vkcore/prompt_load_tips.hpp"
 #include "vkcore/prompt_page_keys.hpp"
 #include "xr_math/cinema_quad.hpp"
@@ -156,6 +157,7 @@ bool XrPresenter::Impl::placeMenuPanel(XrTime time) {
 
 void releaseMenuInput(XrPresenter::Impl& p, const char* why) {
     controllers::releaseLoadTipsKeys();
+    controllers::releaseHintKeys();
     if (!p.menuRouter || !p.menuRouter->holdsInput()) {
         return;
     }
@@ -362,6 +364,8 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
             }
         }
     }
+    // The hint bar's shortcuts: their buttons send its keys and the router does not see them (hint_keys.hpp).
+    controllers::updateHintKeys(in);
     // The panel shows the GUI's 16:9 band (menuContent): the router takes the hits on the whole image.
     menu::RouterInput routed = in;
     const ui_layer::PixelRect content = menuContent();

@@ -28,8 +28,9 @@
 // (input::kLayerKeyNames). The tab lists (idSWFWidget_TabList) write their Q / E as plain text from
 // KeyNameText (0x17E2680), and so do the hint bars for a hold button ("ENTER HOLD TO CONTINUE",
 // prompt_command_bar.hpp); a detour there answers only TabList's two calls (input::kTabKeyNames), the
-// command bar's two (input::kLayerKeyNames) and the two of the mission-complete Rewards tab's page arrows
-// (input::kPageKeyNames, prompt_page_keys.hpp).
+// command bar's two (input::kLayerKeyNames), the two of the mission-complete Rewards tab's page arrows
+// (input::kPageKeyNames, prompt_page_keys.hpp) and the Fortress viewers' two (prompt_viewer_keys.hpp). The
+// hint bar's shortcut keys the controllers send are named in prompt_hint_keys.hpp.
 //
 // Everything is found by signature and checked at install; if any part is missing nothing is installed and
 // the prompts stay the game's. The tab lists' and the hold buttons' parts are each optional.
@@ -45,9 +46,11 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_command_bar.hpp"
+#include "vkcore/prompt_hint_keys.hpp"
 #include "vkcore/prompt_key_log.hpp"
 #include "vkcore/prompt_load_tips.hpp"
 #include "vkcore/prompt_page_keys.hpp"
+#include "vkcore/prompt_viewer_keys.hpp"
 #include "vkcore/prompt_weapon_info.hpp"
 
 #include <windows.h>
@@ -411,11 +414,13 @@ void installKeyNameTextHook(const GameImage& image) {
     } else {
         std::ranges::copy(returns, g_keyNameCallers.tabList.begin());
     }
+    const CommandBarCalls bar = findCommandBarKeyNameCalls(image, keyNameText, kTag);
     if (!g_layerKeys.empty()) {
-        const CommandBarCalls bar = findCommandBarKeyNameCalls(image, keyNameText, kTag);
         g_keyNameCallers.getKeyString = bar.getKeyString;
         g_keyNameCallers.commandBarUpdate = bar.update;
     }
+    installHintKeyHooks(image, bar, g_strAssign, kTag);
+    g_keyNameCallers.viewer = installViewerKeyHooks(image, keyNameText, kTag);
     const PageKeyHooks pageKeys = installPageKeyHooks(image, keyNameText, tabList, kTag);
     g_keyNameCallers.rewards = pageKeys.rewards;
     g_keyNameCallers.tabListPages = pageKeys.tabLists;
@@ -423,7 +428,8 @@ void installKeyNameTextHook(const GameImage& image) {
         return at != 0 ? image.rva(reinterpret_cast<const std::byte*>(at)) : 0u;
     };
     if (g_keyNameCallers.tabList[0] == 0 && g_keyNameCallers.getKeyString == 0 &&
-        g_keyNameCallers.commandBarUpdate == 0 && g_keyNameCallers.rewards[0] == 0) {
+        g_keyNameCallers.commandBarUpdate == 0 && g_keyNameCallers.rewards[0] == 0 &&
+        g_keyNameCallers.viewer[0] == 0) {
         return;
     }
     std::string error;

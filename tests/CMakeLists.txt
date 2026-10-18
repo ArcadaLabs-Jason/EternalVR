@@ -354,6 +354,7 @@ evr_add_test(evr_menu_tests
     SOURCES
         features/menu/drag_cursor_hide_tests.cpp
         features/menu/enter_tick_tests.cpp
+        features/menu/hint_keys_tests.cpp
         features/menu/load_tips_keys_tests.cpp
         features/menu/map_drag_tests.cpp
         features/menu/map_pan_keys_tests.cpp

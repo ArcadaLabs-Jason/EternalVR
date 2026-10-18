@@ -41,6 +41,7 @@ HeadLockedHud headLockedHud(const PixelRect& shown,
         return hud;
     }
     std::vector<PixelRect> cuts;
+    cuts.reserve(moved.size() + 1);
     for (const WristBlock block : moved) {
         cuts.push_back(cutRect(block, width, height));
     }

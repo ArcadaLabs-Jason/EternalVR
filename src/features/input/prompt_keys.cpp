@@ -101,7 +101,8 @@ KeyNameAnswer keyNameAnswer(std::uintptr_t returnAddress, const KeyNameCallers& 
     if (returnAddress == callers.tabList[0] || returnAddress == callers.tabList[1]) {
         return callers.tabListPages ? KeyNameAnswer::TabKey : KeyNameAnswer::TabKeyOnly;
     }
-    if (returnAddress == callers.loadTips[0] || returnAddress == callers.loadTips[1]) {
+    if (returnAddress == callers.loadTips[0] || returnAddress == callers.loadTips[1] ||
+        returnAddress == callers.viewer[0] || returnAddress == callers.viewer[1]) {
         return KeyNameAnswer::TabKey;
     }
     if (returnAddress == callers.getKeyString || returnAddress == callers.commandBarUpdate) {

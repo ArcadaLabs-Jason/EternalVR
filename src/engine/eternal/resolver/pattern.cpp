@@ -120,12 +120,13 @@ std::pair<std::size_t, std::byte> Pattern::anchor() const {
     std::pair<std::size_t, std::byte> best{0, std::byte{0}};
     unsigned bestFrequency = UINT32_MAX;
     for (std::size_t i = 0; i < bytes_.size(); ++i) {
-        if (!bytes_[i]) {
+        const std::optional<std::byte>& value = bytes_[i];
+        if (!value.has_value()) {
             continue;
         }
-        const unsigned frequency = kCodeByteFrequency[std::to_integer<std::size_t>(*bytes_[i])];
+        const unsigned frequency = kCodeByteFrequency[std::to_integer<std::size_t>(*value)];
         if (frequency < bestFrequency) {
-            best = {i, *bytes_[i]};
+            best = {i, *value};
             bestFrequency = frequency;
         }
     }

@@ -136,6 +136,7 @@ XR worker, every XR frame                                     game (message pump
 | Y in a tutorial or lore popup | Left Alt, held while Y is: the objectives key (below) |
 | A gameplay button in a tutorial or lore popup | Its action's default key, held while the button is (the Flame Belch button R, and so on; below) |
 | Left Menu (tap) | Pause / resume, as in gameplay |
+| Left X / Y, right stick click, while the hint bar shows F, X or T | The hint's key (the Arsenal's customize weapon, equip / unequip mod, customize weapon wheel: below), instead of the click, Back or the stick click's key |
 
 The grips were Back (the pointing hand) and the right mouse button (the other hand) until the owner's Quest
 3 session of 2026-09-27 asked for the tabs on the grips; the Dossier map's rotation moved to a stick.
@@ -350,7 +351,7 @@ Dossier's map page (or not known): ...`). The game's automap object has an `isAc
 | Arsenal: weapon choice | Yes | click the weapon's icon, or a stick left / right or a stick click (A / D, the page's inner tabs: above) |
 | Arsenal: a weapon's upgrade screen (Upgrades, Mastery) | Yes | click the mod; B returns to the Arsenal |
 | Arsenal: buy an upgrade | Clicks land on it; not seen bought (no weapon points in the save) | click |
-| Arsenal: customize weapon wheel (T), equip / unequip mod (X) | No | key-only; the hint bar is not clickable |
+| Arsenal: customize weapon (F), equip / unequip mod (X), customize weapon wheel (T) | Yes | the hint bar names X, Y and Right Stick Click (on Touch) and those buttons send F, X and T while it shows them (below); the bar itself takes no clicks |
 | Codex: categories, entries | Yes | click the category icon or entry; a stick up / down scrolls |
 | Challenges: Mission / Weekly | Yes | click |
 | Close | Yes | B (Escape) at any tab |
@@ -359,6 +360,37 @@ The Praetor suit screen did not appear in the Arsenal of the rig's e1m2 save (on
 there), so it is untested. Holding Y (`_objectives`) sends the action (`controllers: action mission_info`)
 but showed no overlay in e1m2 and no cursor, so it needs no menu handling; what the game shows for it is
 still to be seen on a headset.
+
+**The hint bar's shortcuts** (`features/menu/hint_keys.hpp`, `vkcore/prompt_hint_keys.hpp`). The bar under a
+menu ("[B] BACK", "[F] CUSTOMIZE WEAPON") puts each shortcut in a slot that is also the pad button which
+presses it on a pad (the game's JOY number less one: 2 is X, 3 Y, 7 the right stick's click), and on the PC
+names its keyboard key. The bar takes no clicks, and the Arsenal's F (customize weapon, slot 2), X (equip or
+unequip the mod, slot 3) and T (customize weapon wheel, slot 7) had no controller button. While a visible bar
+button shows one of them (its per-frame update ran within 0.25 s) and a menu that is not a popup is up, the
+button in the pad's place sends the key: the left controller's primary (X on Touch) F, its secondary (Y) X,
+the right stick's click T, a key down on the press and up on the release; the router does not see those
+buttons meanwhile (the trigger still clicks, B still goes back, a stick pushed left or right or the left
+stick's click still turns the weapon row). The bar names the button as it names the others: `[X] CUSTOMIZE
+WEAPON`, `[Right Stick Click] CUSTOMIZE WEAPON WHEEL`, `[Y] EQUIP MOD` (Index `Left A` / `Left B`). The same
+keys in the same slots elsewhere get the same buttons: the weapon skins' `[X] CLEAR SKIN`, the weapon wheel
+screen's `[X] CHANGE SIZE` (its R, reset to default, stays a key). Vive wands have no left primary or
+secondary button, so customize weapon and the mod keep F and X there. On the rig (2026-10-18, e1m2 on the
+simulator): Y turned UNEQUIP MOD into EQUIP MOD, X opened the weapon skins, the right stick's click the
+custom weapon wheel, B came back from each; logged `prompts: the hint bar names F (slot 2): [X]` and `menu:
+hint bar: X down` / `up`, `... shown` / `gone`.
+
+**The Fortress's collectible viewer** (the toy tables; `vkcore/prompt_viewer_keys.hpp`) shows its cursor, so
+the router takes it for a popup; the grips send Q and E there as everywhere, which turn its items. Its
+previous / next keys read `LG` / `RG` (the game wrote Q / E). The album posters open the same viewer with one
+item and no previous / next. The log has the item shown each time it changes (`prompts: the Fortress viewer
+shows item 0x...`, its title's text id).
+
+**The fast-travel notice with a Tab key** (`idHUD_Notification_FastTravel`, its key text at 0xF1355E in
+build 25216728) is not the campaign's: a mission's fast travel unlock shows "FAST TRAVEL UNLOCKED / Use in the
+AutoMap" with no key (rig, e1m2, the unlock target fired), and the notice's update never ran there nor at the
+map's fast travel points. The only code found that raises it (its HUD event, 0x29, as a constant) is a
+demon card's fast travel payload (`idDemonCard::Use`), a demon player's; its Tab is left as the game writes
+it.
 
 ## The weapon wheel
 
@@ -592,7 +624,7 @@ the preview.
   launcher: the window and display keys (`launcher/data/session-keys.txt`) are now restored like the forced
   keys; not yet seen on the rig.
 - Menus the game navigates only with a pad (if any) would need the virtual gamepad's D-pad; none was found.
-- The Arsenal's key-only shortcuts (T customize weapon wheel, X equip / unequip mod) have no controller
-  input; the Praetor suit screen is untested.
+- On Vive wands the Arsenal's customize weapon (F) and equip / unequip mod (X) have no controller button;
+  the Praetor suit screen is untested.
 - The Dossier map's 3D view is the game's own head-tracked view, not on the panel: it sits around the
   player and does not follow the panel.

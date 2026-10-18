@@ -3,6 +3,7 @@
 evr_add_module(evr_menu
     SOURCES
         enter_tick.cpp
+        hint_keys.cpp
         load_tips_keys.cpp
         drag_cursor_hide.cpp
         map_drag.cpp

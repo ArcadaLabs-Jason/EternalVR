@@ -132,6 +132,8 @@ KeyNameCallers steamCallers() {
     // The Rewards tab's paginator update calls KeyNameText for its arrows at 0xF5FEC4 (A) and 0xF5FFBE (D).
     callers.rewards = {kBase + 0xF5FEC9, kBase + 0xF5FFC3};
     callers.tabListPages = true;
+    // The Fortress viewers' update calls KeyNameText for its Q at 0xF31ED8 and its E at 0xF31F0B.
+    callers.viewer = {kBase + 0xF31EDD, kBase + 0xF31F10};
     return callers;
 }
 
@@ -266,4 +268,23 @@ TEST_CASE("a tab list on A and D keeps the game's keys while no stick sends them
     CHECK(rawKeyText(callers.tabList[1], "E", callers, set) == "RG");
     CHECK(rawKeyText(callers.loadTips[0], "Q", callers, set) == "LG");
     CHECK(rawKeyText(callers.rewards[0], "A", callers, set) == "LS");
+}
+
+TEST_CASE("the Fortress viewers' raw key text names the grips that turn their items") {
+    const KeyNameCallers callers = steamCallers();
+    const PromptLabelSet set = touchLabels();
+    // "Q SLAYER E" before; the grips already sent Q and E there and turned the toy table (rig 2026-10-18).
+    CHECK(keyNameAnswer(callers.viewer[0], callers) == KeyNameAnswer::TabKey);
+    CHECK(keyNameAnswer(callers.viewer[1], callers) == KeyNameAnswer::TabKey);
+    CHECK(rawKeyText(callers.viewer[0], "Q", callers, set) == "LG");
+    CHECK(rawKeyText(callers.viewer[1], "E", callers, set) == "RG");
+    // The viewer's E is the next item, not melee's use.
+    CHECK(rawKeyText(callers.viewer[1], "E", callers, set) != layerText("E", set));
+    CHECK(rawKeyText(callers.viewer[0], "Q", callers, touchLabels(Handedness::LeftButtonSwap)) == "LG");
+    CHECK(rawKeyText(callers.viewer[0], "ENTER", callers, set) == "(the game's)");
+    // The same keys from the hold buttons keep their own answer; a viewer call not found answers nothing.
+    CHECK(rawKeyText(callers.getKeyString, "Q", callers, set) == "(the game's)");
+    KeyNameCallers missing = callers;
+    missing.viewer = {};
+    CHECK(keyNameAnswer(callers.viewer[1], missing) == KeyNameAnswer::Game);
 }

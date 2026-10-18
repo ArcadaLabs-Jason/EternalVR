@@ -82,6 +82,7 @@ findCommandBarKeyNameCalls(const GameImage& image, const std::byte* keyNameText,
     if (getKeyString == nullptr) {
         return calls;
     }
+    calls.getKeyStringFunction = getKeyString;
     std::size_t count = 0;
     calls.getKeyString = singleCallIn(image, getKeyString, keyNameText, count);
     if (calls.getKeyString == 0) {
@@ -102,6 +103,7 @@ findCommandBarKeyNameCalls(const GameImage& image, const std::byte* keyNameText,
             tag, callers.size());
         return calls;
     }
+    calls.updateFunction = update;
     calls.update = singleCallIn(image, update, keyNameText, count);
     if (calls.update == 0) {
         EVR_LOG("%s: command bar: its update (RVA 0x%X) calls KeyNameText %zu times, not once; its hold keys "

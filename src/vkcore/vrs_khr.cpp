@@ -239,7 +239,7 @@ PFN_vkVoidFunction findHook(const char* name) {
     }
 #define EVR_VRS_KHR_HOOK(name_, fn)                                                                          \
     if (std::strcmp(name, name_) == 0) {                                                                     \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_VRS_KHR_HOOK("vkCreateRenderPass", CreateRenderPass)
     EVR_VRS_KHR_HOOK("vkDestroyRenderPass", DestroyRenderPass)

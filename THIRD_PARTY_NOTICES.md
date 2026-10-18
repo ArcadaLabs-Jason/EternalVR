@@ -9,7 +9,7 @@ Every library the release redistributes, statically linked or shipped as a file,
 with its version, its full licence text and any NOTICE file its licence requires: safetyhook with
 Zydis and Zycore, the Vulkan headers and the OpenXR headers (compiled into `layer\EternalVR.dll`), the
 OpenXR loader with its JsonCpp (`layer\openxr_loader.dll`), the Microsoft C and C++ runtime (linked
-statically) and one image in the launcher. The launcher uses no NuGet package at run time. Of these
+statically) and three brand marks in the launcher. The launcher uses no NuGet package at run time. Of these
 projects only Microsoft's STL has a NOTICE file, and its licence exception waives carrying it with
 compiled code. This file is included in every release zip.
 
@@ -230,15 +230,6 @@ license you like.
   redistributed without its notices (the LLVM exception waives Apache-2.0 sections 4(a), 4(b) and
   4(d)). The rest is Microsoft's runtime library code, linked as the Visual Studio licence allows.
 
-## Images in the launcher
-
-- `EternalVR.Launcher.exe` embeds Ko-fi's cup symbol beside its "Support EternalVR on Ko-fi" link
-  (`branding/kofi-symbol-64.png` in the source repository: Ko-fi's brand asset `kofi_symbol.png`, only
-  resized). It belongs to Ko-fi Labs Limited, is not covered by EternalVR's MIT licence, and is used only
-  to link to the Ko-fi page.
-- The launcher's icon and header strip are the EternalVR logo, which is not covered by the MIT licence
-  either (`branding/README.md` in the source repository).
-
 ## Build and test only (not redistributed)
 
 Fetched at build time and never part of a release:
@@ -250,7 +241,7 @@ Fetched at build time and never part of a release:
 - Microsoft.NETFramework.ReferenceAssemblies 1.0.3 (MIT), the .NET Framework 4.8 reference assemblies
   the launcher compiles against; nothing from it is copied into the build output.
 
-## Brand marks in the launcher (embedded in EternalVR.Launcher.exe)
+## Images in the launcher (embedded in EternalVR.Launcher.exe)
 
 - `branding/discord-symbol-blurple.png`: Discord's symbol in its colour, from https://discord.com/branding (fetched
   2026-10-13, SHA-256 `f6c1a66250d366d213789faefab59a9ec6ac6334e6c4be0af254680c148810dc`), not modified. Discord and
@@ -260,19 +251,13 @@ Fetched at build time and never part of a release:
   (`GitHub_Logos.zip`, fetched 2026-10-13, SHA-256 `2a2f5cbcc74c7fa83c40127dd8b0e42c23f1157131aebe28492aa1ac27bbdc6d`),
   not modified. GitHub and the Invertocat are trademarks of GitHub, Inc. Shown only beside the launcher's "Report on
   GitHub" link to the EternalVR repository's issues, as GitHub's logo guidelines allow.
-- `branding/kofi-symbol-64.png`: Ko-fi's cup symbol (Ko-fi Labs Limited), resized only, beside the support link
-  (`branding/README.md`).
+- `branding/kofi-symbol-64.png`: Ko-fi's cup symbol (Ko-fi Labs Limited; Ko-fi's brand asset `kofi_symbol.png`), only
+  resized. Shown only beside the launcher's "Support EternalVR on Ko-fi" link to the Ko-fi page.
 
 Neither Discord, GitHub nor Ko-fi sponsors or endorses EternalVR. These files are not covered by the MIT licence.
 
-## Build and test only (not redistributed)
-
-Fetched at build time and never part of a release:
-
-- doctest 2.4.12 (the layer's unit tests), https://github.com/doctest/doctest, MIT, fetched by
-  `cmake/EvrDependencies.cmake`.
-- xUnit 2.9.2, xunit.runner.visualstudio 2.8.2 (Apache-2.0) and Microsoft.NET.Test.Sdk 17.11.1 (MIT),
-  the launcher's unit tests, from NuGet.
+The launcher's icon and header strip are the EternalVR logo, which is not covered by the MIT licence either
+(`branding/README.md` in the source repository).
 
 ## Not redistributed
 

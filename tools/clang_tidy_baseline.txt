@@ -2,7 +2,6 @@
 # Regenerate with --update-baseline; fix new findings instead of adding them here.
 # Another clang-tidy version reports other findings: compare with the one below.
 # clang-tidy 23.1.2
-1 src/engine/eternal/resolver/pattern.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
 5 src/features/bhaptics/body_haptics.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
 1 src/features/bhaptics/crystal.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
 1 src/features/comfort/glory_kill.cpp [bugprone-assignment-in-if-condition] an assignment within an 'if' condition is bug-prone
@@ -52,7 +51,6 @@
 1 src/vkcore/presenter_frame.cpp [bugprone-inc-dec-in-conditions] incrementing and referencing a variable in a complex condition can cause unintended side-effects due to C++'s order of evaluation, consider moving the modification outside of the condition to avoid misunderstandings
 1 src/vkcore/presenter_impl.hpp [readability-inconsistent-declaration-parameter-name] function 'evr::vkcore::XrPresenter::Impl::onEyeLatched' has a definition with different parameter names
 1 src/vkcore/presenter_latch.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually
-3 src/vkcore/presenter_menu.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
 1 src/vkcore/presenter_result.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
 1 src/vkcore/presenter_seq.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually
 1 src/vkcore/presenter_stereo.cpp [bugprone-suspicious-memory-comparison] comparing object representation of type 'float' which does not have a unique object representation; consider comparing the values manually

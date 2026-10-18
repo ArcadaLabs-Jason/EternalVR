@@ -410,6 +410,9 @@ PromptLabelSet promptLabelSet(const BindingProfile& profile, const ButtonLabels&
     set.menuNextTab = printable(shortName(labels.name(Hand::Right, LabelInput::Grip)));
     set.menuPreviousPage = printable(shortName(labels.name(Hand::Left, LabelInput::Stick)));
     set.menuNextPage = printable(shortName(labels.name(Hand::Right, LabelInput::Stick)));
+    set.menuHints = {printable(labels.name(Hand::Left, LabelInput::Primary)),
+                     printable(labels.name(Hand::Left, LabelInput::Secondary)),
+                     printable(labels.name(Hand::Right, LabelInput::StickClick))};
     return set;
 }
 

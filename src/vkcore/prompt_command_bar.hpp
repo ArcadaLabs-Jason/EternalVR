@@ -20,6 +20,8 @@ namespace evr::vkcore::controllers {
 struct CommandBarCalls {
     std::uintptr_t getKeyString = 0; // the return address of GetKeyString's KeyNameText call, 0 if not found
     std::uintptr_t update = 0;       // the update's, 0 if not found
+    const std::byte* getKeyStringFunction = nullptr; // GetKeyString itself, nullptr if not found
+    const std::byte* updateFunction = nullptr;       // the update itself (GetKeyString's one caller)
 };
 
 // Finds both calls to `keyNameText`, each on its own: a part that does not check out is logged under `tag`
