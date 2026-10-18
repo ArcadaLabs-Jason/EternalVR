@@ -496,7 +496,8 @@ Required for v1
 - [ ] [owner] Seated reach (REQ-05, T-074): in a chair with armrests, with a desk edge 35 cm in front of
       the chest at 75 cm high: 10 of 10 deliberate punches register and no false punch occurs in the
       seated run of the swap protocol; each combat input (equipment, weapon select and the rest) is
-      performed 3 of 3 times; the logged weapon rest pose stays at least 5 cm from the desk plane. When
+      performed 3 of 3 times; the glove stays on the real hand seated as standing (the same viewmodel rows;
+      a drawn gun cannot touch the real desk). When
       seated, holster and gesture zones sit at shoulder height and any hands-jump gesture is off by
       default. If a seated punch threshold is needed, it has a unit test (T-106)
 - [x] Room-scale head offset (T-062): a 0.8 m lean logs a clamp at 0.60 ±0.01 m; the head moved into a

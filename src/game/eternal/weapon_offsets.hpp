@@ -15,7 +15,7 @@
 //   "default" = [-0.25, 0.18, 0.22, 0, 0, 0]
 //   "weapon/player/shotgun" = [-0.24, 0.17, 0.21, 0, 0, 0]
 //   [seated]
-//   "default" = [...]          desk-safe entries (T-074)
+//   "default" = [...]          rows used while seated (the built-in table has none)
 //   [sights]
 //   "weapon/player/shotgun" = [0.21, 2.17]   the sight line in the model's frame (pitch, yaw; degrees)
 //
@@ -61,6 +61,12 @@ enum class OffsetPosture : unsigned char {
     Standing,
     Seated,
 };
+
+// The right glove's wrist that the built-in rows put at the controller (metres, the grip's forward, left,
+// up): the off hand's default wrist offset (input::kDefaultOffhandOffset) mirrored for the right hand, 8 cm
+// behind the grip's centre and 3.5 cm toward the back of the hand. The layer keeps it fixed in the grip's
+// frame.
+inline constexpr WeaponOffset kRowsWrist{-0.08f, -0.035f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 struct WeaponOffsetTable {
     std::map<std::string, WeaponOffset, std::less<>> standing;

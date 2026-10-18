@@ -633,7 +633,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_CUTSCENE_ARMS` | `hidden`: in cutscenes around the player (`ETERNALVR_CUTSCENES=immersive`) both arms hidden, the game's weapon FOV kept; `shown`: as in play. Nothing with `ETERNALVR_ARMS=hidden` ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms in cutscenes"; the launcher's "Arms in cutscenes") | `hidden` |
 | `ETERNALVR_BUTTON_PROMPTS` | `0`: the game's prompts keep naming keyboard keys (below) | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
-| `ETERNALVR_SEATED` | `1`: the `[seated]` viewmodel offsets (T-074) | `0` |
+| `ETERNALVR_SEATED` | `1`: seated posture for the input (T-074) and the `[seated]` viewmodel rows, if the table has any (the built-in one has none: the glove follows the real hand in either posture) | `0` |
 | `ETERNALVR_VIEWMODEL_OFFSET` | `f,l,u[,pitch,yaw,roll]`: one offset for every weapon (tuning); a `[sights]` row still turns the model on top of it, and the fists of a melee or a Blood Punch still follow the game's view under hand aim with `ETERNALVR_MELEE_AIM` at `head` or `offhand`, as without it | the table |
 | `ETERNALVR_WEAPON_SIGHTS` | `1` (or `on`): each weapon with a `[sights]` row in the offsets table is turned about the grip so its sight line runs parallel to the aim ray (below); the shot ray and the aim dot do not change. `0` (or `off`): rig and debug only, the model not turned; never offered to players, the launcher sends nothing for it (T-135) | `1` |
 | `ETERNALVR_ZOOM_LOOK` | rig and debug only: what the layer changes while a weapon is zoomed (below, "Zoomed weapons"): `all`, `off` (the game's own: the gun hidden, the scope drawn, and under the crosshair hold no HUD while scoped), or a list of `hands` (the gun stays) and `scope` (no scope GUI, the weapon's own reticle while zoomed, and the crosshair hold under head aim while a scoped weapon is zoomed) | `all` |
@@ -987,11 +987,30 @@ with `keys.ps1` during a test can press controller actions too.
 `data/weapons/viewmodel_offsets.toml` holds `[forward, left, up, pitch, yaw, roll]` per inventory decl
 name in the controller's aim frame (metres and degrees): the game draws each viewmodel relative to the
 eye, so the offset moves the model's origin back from the hand by how far the gun is drawn ahead, right
-and below the eye. The built-in values are one starting estimate for all weapons; per-weapon rows are
-added as each weapon is checked. To tune: run with `ETERNALVR_VIEWMODEL_OFFSET=f,l,u` and the test input
-holding a hand still, change the value between runs until the gun's grip sits on the controller, and write
-the row. The held item's name and offset are logged on each change. The key is the base weapon's decl: a
-weapon mod does not change the held item's decl, so one row covers every mod of a weapon.
+and below the eye. Each weapon's row puts the glove's grip on the gun at the controller's grip: the right
+glove's wrist (the arms model's right hand joint, as the game animates the weapon at idle) lands where the
+off hand's wrist goes (8 cm behind the grip's centre and 3.5 cm toward the back of the hand), and the model
+is not turned. The row is that wrist target less the wrist's position in the model's frame, with the
+`[sights]` turn below taken into account; the wrist positions are measured on the hands rig
+([rig-findings/hands-rig.md](rig-findings/hands-rig.md), section 10), and
+`tests/game/eternal/hand_grip_tests.cpp` checks every row against them. The chaingun and the ballista are
+shown held by the left hand at idle, with the right glove parked off the gun; their rows put the gun's own
+grip point at the controller (the weapon's root joint plus the glove's offset from it on the other guns),
+so the gun sits in the hand while the right glove stays off it. The wrist target is kept in the controller
+grip's own frame (`xr_math::placeViewmodel`): on a headset the grip is turned from the aim ray (the layer logs
+the turn and the move it makes, 'the weapon hand's grip against its aim ray'), so the model is moved, not
+turned, until the glove's wrist sits where the real wrist is; the gun keeps the aim ray's orientation, so the
+sights and shots do not change. The rows are measured with the sights turn on; with `ETERNALVR_WEAPON_SIGHTS=0`
+(rig and debugging only) the wrist lands up to 0.5 cm off target (the 8.7 cm wrist offset turned by
+the sights row, at most 3.5 degrees). With the weapon in the left hand the
+arms model's right glove holds the gun on the left controller (the model is not mirrored) and its wrist
+follows the same rule; left-handed placement is not measured. The `default` row (the fists, chainsaw,
+Crucible, hammer and Unmaykr) is the first estimate, not measured. Seated play uses the same rows: the
+glove follows the real hand in either posture (a `[seated]` section is still read and wins while seated).
+To measure a weapon: the hands rig's per-weapon sweep with the arm dump, or on the rig
+`ETERNALVR_VIEWMODEL_OFFSET=f,l,u` with the test input holding a hand still. The held item's name and
+offset are logged on each change. The key is the base weapon's decl: a weapon mod does not change the
+held item's decl, so one row covers every mod of a weapon.
 
 Weapon sights (on by default, T-135; `ETERNALVR_WEAPON_SIGHTS=0` turns them off on the rig): the table's
 `[sights]` section gives, per weapon, the direction of its sight line in the arms model's frame as the game
@@ -1175,7 +1194,8 @@ for seconds (below).
   left hand. The arm holding the gun keeps the gun's grip; `ETERNALVR_WEAPON_ARM=ik` (the default) bends its
   forearm and upper arm up to a shoulder beside the head, so it shows in view (docs/VR_HANDS_HUD.md, "The
   weapon arm").
-- **Seated** offsets are chosen by `ETERNALVR_SEATED`; posture detection is not wired to them yet.
+- **Seated** viewmodel rows: the built-in table has none (the glove follows the real hand in either posture); a
+  `[seated]` section, if one is added, is chosen by `ETERNALVR_SEATED` or a seated room posture.
 - **Bindings from the player's profile** (REQ-11) come through `ETERNALVR_CONTROLLER_DATA`: the launcher's
   controls editor (Edit controls) saves the player's edited copies of the built-in files in the controls
   folder, checked with the layer's rules first (launcher/src/EternalVR.Launcher.Core/Controls,

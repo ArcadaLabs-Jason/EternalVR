@@ -1,8 +1,6 @@
 #include "stereo_seq/refraction_history.hpp"
 
-#include "stereo_seq/stereo_taa.hpp"
-
-#include <string>
+#include <cstddef>
 
 namespace evr::stereo_seq {
 
@@ -106,6 +104,8 @@ const char* refractionRestartName(RefractionRestart restart) {
         return "eye L after an untagged render";
     case RefractionRestart::Resumed:
         return "after dynamic resolution";
+    case RefractionRestart::Resized:
+        return "after the render size changed";
     case RefractionRestart::CountChanged:
         return "the eye's update count changed";
     case RefractionRestart::NotInLast:
@@ -114,36 +114,7 @@ const char* refractionRestartName(RefractionRestart restart) {
     return "?";
 }
 
-RefractionMode refractionMode(std::string_view value) {
-    std::string lower;
-    for (const char c : value) {
-        lower.push_back(static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
-    }
-    if (lower == "hold") {
-        return RefractionMode::Hold;
-    }
-    return switchValue(lower, false) ? RefractionMode::PerEye : RefractionMode::Off;
-}
-
-const char* refractionModeName(RefractionMode mode) {
-    switch (mode) {
-    case RefractionMode::PerEye:
-        return "per eye";
-    case RefractionMode::Hold:
-        return "hold";
-    case RefractionMode::Off:
-        return "off";
-    }
-    return "?";
-}
-
 const char* refractionNotReady(const RefractionReadiness& r) {
-    if (r.mode == RefractionMode::Off) {
-        return "it is off (the default; ETERNALVR_STEREO_REFRACTION_TAA=1 turns it on)";
-    }
-    if (r.mode == RefractionMode::Hold) {
-        return "it is held off (ETERNALVR_STEREO_REFRACTION_TAA=hold)";
-    }
     if (!r.installed) {
         return "its hooks are not installed";
     }
@@ -163,7 +134,7 @@ const char* refractionNotReady(const RefractionReadiness& r) {
 }
 
 bool refractionHeldOff(const RefractionReadiness& r, Eye eye) {
-    if (eye == Eye::Mono || r.mode == RefractionMode::Off || !r.installed || !r.gameTouch) {
+    if (eye == Eye::Mono || !r.installed || !r.gameTouch) {
         return false;
     }
     return refractionNotReady(r) != nullptr;

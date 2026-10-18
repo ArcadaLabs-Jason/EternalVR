@@ -36,15 +36,18 @@ constexpr const char* kTable = R"(# comment
 
 } // namespace
 
-TEST_CASE("the built-in table reads without issues and has a default for both postures") {
+TEST_CASE("the built-in table reads without issues, and seated play uses the standing rows") {
     const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
     INFO(describe(table));
     CHECK(table.ok());
     CHECK(table.standing.contains("default"));
-    CHECK(table.seated.contains("default"));
-    // The seated placement is pulled back toward the body (T-074).
-    CHECK(table.lookup("weapon/player/shotgun", OffsetPosture::Seated).forward <
-          table.lookup("weapon/player/shotgun", OffsetPosture::Standing).forward);
+    // The glove follows the real hand in either posture.
+    CHECK(table.seated.empty());
+    for (const char* weapon :
+         {"weapon/player/shotgun", "weapon/player/chaingun", "weapon/player/fists", ""}) {
+        INFO(weapon);
+        CHECK(table.lookup(weapon, OffsetPosture::Seated) == table.lookup(weapon, OffsetPosture::Standing));
+    }
 }
 
 TEST_CASE("the built-in sights cover the weapons with a sight line and no others") {

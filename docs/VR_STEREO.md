@@ -294,12 +294,12 @@ coefficient 0.029 / 0.029 against a control of 0.014, the same as v1 and against
 TAA; DLSS per eye 0.030 / 0.030; TAA costs about 0.09 ms per eye at 1280x740
 (`docs/rig-findings/stereo-temporal.md` section 7).
 
-Auto exposure, the light scattering, SSDO and (opt-in, `ETERNALVR_STEREO_REFRACTION_TAA=1`) the refraction
+Auto exposure, the light scattering, SSDO and the refraction
 are kept per eye by hooks of their own, which need the eye tags only. They run whenever Route S runs: with per-eye history on, off (`ETERNALVR_STEREO_TAA=0`,
 the launcher's Anti-aliasing Off, `-StereoV1`) or failed closed. The start-up line `seq-exposure: per-eye TAA
 ...; auto-exposure index per eye hooked, eye R takes eye L's exposure; scattering history per eye hooked;
-SSDO history per eye hooked; refraction history per eye` names the mode (`... held off in stereo`, `off` or
-`NOT hooked` for the refraction).
+SSDO history per eye hooked; refraction history per eye` names the mode (`NOT hooked` for the refraction when
+its signatures are missing).
 
 - **Auto exposure** (`src/vkcore/exposure_hooks.*`, `docs/rig-findings/stereo-temporal.md` 3.3): eye L and
   mono frames alternate their exposure image by their own frame count, and eye R takes the one eye L wrote
@@ -331,8 +331,8 @@ SSDO history per eye hooked; refraction history per eye` names the mode (`... he
   stereo tick logs whether the history is ready (`seq-ssdo: the SSDO history per eye is ready at the first
   stereo tick ...`, or `... is not ready ...: <why>`, for example eye R's targets never made). Route S only: Parallel Eye Rendering keeps the launcher's `r_SSDOTemporalAA 0`.
   Static work so far; the rig A/B (noise at a still view against mono, the ghost check) is still to do.
-- **Refraction** (glass and other refractive surfaces; OFF by default until it has been tried in a headset: `ETERNALVR_STEREO_REFRACTION_TAA=1` turns it on, `=hold` holds the history off in
-  stereo, `=0` leaves it to the engine; `src/vkcore/refraction_hooks.*`, `src/stereo_seq/refraction_history.*`):
+- **Refraction** (glass and other refractive surfaces; always per eye under Route S, no switch;
+  `src/vkcore/refraction_hooks.*`, `src/vkcore/refraction_sizes.hpp`, `src/stereo_seq/refraction_history.*`):
   refractive surfaces sample a half-size copy of the scene behind them, and the refraction pass (RVA
   0x1C63DB0) blends each refraction update's copy (up to `r_refractionMaxUpdates`, 2) with the last render's
   from a pair of accumulation images per update (`_refractionAccumulationBuffer<pair><update>`, device
@@ -344,7 +344,19 @@ SSDO history per eye hooked; refraction history per eye` names the mode (`... he
   head moved. The stereo set's `r_refractionTAA 0` did not stop it: that cvar is read only without the mask
   (static reading of build 25216728). Eye R gets two mask tile images and four accumulation images of its
   own, made with the engine's in the device context constructor (hooks at RVA 0x1C1D4AA and 0x1C1DD63, the
-  engine's own image description; the render-size change does not resize the refraction images). Each eye
+  engine's own image description). The render-size change (RVA 0x1CDD6D0, run before every frame) resizes the
+  engine's in place whenever the render size differs: the accumulation targets to half the render size, the
+  mask tiles to 1/32 of it, through the image resize (RVA 0x1C4AE30); right after it (hook at RVA 0x1CDDBBB)
+  eye R's follow to the engine's sizes, and when any had to, both eyes start over. Before this nothing resized
+  eye R's: they kept the size of the window the game started with (594x566 against the engine's 1024x1104 at
+  a 2048x2208 render size on the rig), and the refraction pass wrote and read eye R's history at that size.
+  Through glass eye R was about 30% darker than eye L and than a mono render, while opaque surfaces matched
+  (rig 2026-10-18 at Urdak's big curved window, still head: glass luminance eye L / mono 1.01, eye R / mono
+  0.69; the same with the history held off in stereo 1.03 / 1.03, so eye R's history was the fault; headset
+  captures of 2026-10-13 had shown eye L / eye R 1.28 to 1.50 there). While eye R's images are not the
+  engine's size every render blends with no history (the first such eye R render also starts both eyes over,
+  so no eye reads a slot a held render wrote) while the next render-size change retries (a resize that leaves
+  an image at its size is logged with its index); eight such eye R renders in a row fail closed. Each eye
   alternates within its own set by its own renders: at the entry of the mask pass and of the refraction pass
   the render's eye is found by that counter and the plan made (once per render; the mask pass and each update
   ask for the same render), then the mask pass's output and
@@ -363,19 +375,27 @@ SSDO history per eye hooked; refraction history per eye` names the mode (`... he
   per eye, per-eye TAA's set writes `r_refractionTAA 1` instead of 0. While `rs_enable` reads non-zero
   (dynamic resolution, which scales the engine's refraction images of the counter's parity at each frame's
   start, RVA 0x1CDE950, and never eye R's; per-eye TAA holds it at 0, Anti-aliasing Off does not) stereo
-  renders are held off as with `=hold`; when it is 0 again both eyes start over. A check after start-up that
+  renders are held off (every stereo render blends with no history); when it is 0 again both eyes start over. A check after start-up that
   fails (another device context, an image on the pass's arguments that is not the engine's, an update not
-  below the render's count) holds the history off in stereo for the rest of the session, as `=hold` does:
+  below the render's count, eye R's images still not the engine's size) holds the history off in stereo until
+  the device context is built again:
   every stereo render blends with no history (the pass's reset flag, or the blend 1.0 without the mask), so
   neither eye reads the other's. Missing signatures leave the game untouched (the engine's shared history, as
   before); they also match the Game Pass build (1.0.56.0), where this has not been tested. The first stereo
-  render logs whether the history is per eye. Rig A/B 2026-10-11 (Urdak's ring-hub glass, head sway, bursts
+  render logs whether the history is per eye. With eye R's images following the resize (rig 2026-10-18, still
+  head, the history running with no restarts): at the window eye L / mono 1.01 and eye R / mono 1.01 (eye R =
+  0.93 x eye L + 4 on the 8-bit values, the same as with the history held off); over a glass floor above
+  energy (e3m3) eye L / mono 1.02 and eye R / mono 1.01, against 1.02 / 0.64 before; opaque surfaces at the
+  start of e1m2 unchanged (eye L / eye R 1.003, before 1.002). The shared history it replaces (the engine's
+  own, the default before) blended each eye's glass with the other eye's picture: at the window both eyes
+  lost contrast (eye R = 0.63 x eye L + 23, eye L / mono 0.93, eye R / mono 0.96), over the floor eye L /
+  mono 0.83. Rig A/B 2026-10-11 (Urdak's ring-hub glass, head sway, bursts
   of eye L / eye R captures; before the per-update restart, two updates in every render): the share of
   textured glass tiles at the same screen spot in both eyes (the other eye's picture: real geometry there
-  always has stereo disparity) was median 0.018 / p90 0.054 with `=0` against 0.000 / 0.000 per eye. With
+  always has stereo disparity) was median 0.018 / p90 0.054 with the shared history against 0.000 / 0.000 per eye. With
   `r_refractionMaxUpdates` switched 2 -> 1 -> 2 -> 1 -> 2 during the sway (the per-update restart in place), every
   switch restarted the eyes' updates ("the eye's update count changed") and the share was median 0.016 / p90
-  0.037 with `=0` against 0.000 / 0.008 per eye. That share measures the other eye's picture only, not an eye
+  0.037 with the shared history against 0.000 / 0.008 per eye. That share measures the other eye's picture only, not an eye
   blending its own stale history after a count change, which the per-update restart covers by its tests and
   log lines. The headset look is still to do.
 
@@ -1256,7 +1276,6 @@ axis).
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end (under Parallel Eye Rendering once a render frame at its view dispatch), as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
-| `ETERNALVR_STEREO_REFRACTION_TAA` | 0 | 1: the refraction's history (glass and other refractive surfaces) per eye under Route S (section "Per-eye temporal history", Refraction); `hold`: held off in stereo (every stereo render blends with no history); 0 (the default until it has been tried in a headset): the engine's, shared between the eyes (`seq-refract: off (the default; ETERNALVR_STEREO_REFRACTION_TAA=1 turns it on); ...`) |
 | `ETERNALVR_LIGHT_FRUSTUM` | 1 | a light Umbra's culling hides is kept when the view frustum keeps it (the Fortress of Doom's dais steps going dark; `docs/rig-findings/umbra-lights.md`), Steam build 25216728 and Game Pass 1.0.56.0 only (`light_cull_builds.hpp`; the log's `light-cull: on ...` line names the build), head tracking only (not Cinema), and only while the multiplayer guard is armed; on any other build it logs why and leaves the game's culling alone (`light-cull: ...`); only `0` turns it off (`light-cull: off (ETERNALVR_LIGHT_FRUSTUM=0); ...`), any other value or unset leaves it on |
 | `ETERNALVR_STEREO_SSDO_TAA` | 1 | SSDO's temporal filter (`r_SSDOTemporalAA`) per eye under Route S (section "Per-eye temporal history", SSDO); 0: the filter held off in stereo (`seq-ssdo: off (ETERNALVR_STEREO_SSDO_TAA=0); ...`) |
 | `ETERNALVR_STEREO_EXPERIMENT` | unset | `left-eye` or `two-views`: the EngineNativeStereo experiments instead of Route S (Parallel Eye Rendering stays off with either) |
@@ -1298,20 +1317,22 @@ cvars, each hook point with its RVA, `frame-end job wrapped`, then `Route S on`.
   reads ...`, with `history reset: ...` where it starts over).
 - `seq-refract: refraction history per eye: A eye L / mono and B eye R render(s); K mask pass(es), M refraction
   update(s) with the mask and P without; restarts F first, G after a gap, U untagged after eye L, L eye L after
-  it, D after dynamic resolution; update restarts N count changed, O not in the eye's last render; E engine
+  it, D after dynamic resolution, Z after a resize; update restarts N count changed, O not in the eye's last render; E engine
   reset(s) dropped (another render's count); H update(s) held off; V other view(s) left to the engine; C
   render(s) whose tag in flight names another eye; r_transparencyEnableRefractionMask X, r_refractionTAA T,
   rs_enable R`: counts renders with refraction in view only (none without refractive surfaces in view). In
-  steady stereo A equals B, K is A + B with the mask on, the restarts come only when the glass comes into view
-  and after a skipped eye R, U, H and R are 0 and T is 1 (`... not per eye: ...` with H above 0 when held
+  steady stereo A equals B, K is A + B with the mask on, the restarts come only when the glass comes into view,
+  after a skipped eye R and after the render size changed (Z, one per eye), U, H and R are 0 and T is 1 (`... not per eye: ...` with H above 0 when held
   off). N counts updates (each eye's, both updates) that started over because the eye's update count changed
   (`r_refractionMaxUpdates` changed, or the surfaces in view need more or fewer updates); O is 0 unless a
   render ran only some or none of its updates (its count 0); E is above 0 only while the two eyes' counts, or
   another view's, differ. The first eight
   update restarts are logged as `seq-refract: render N for eye X: update U of C starts over: <why>`. At
-  start-up `seq-refract: refraction images (RVA ...), mask pass
+  start-up `seq-refract: refraction images (RVA ...), their resize (RVA ...), mask pass
   (RVA ...) and refraction pass (RVA ...) hooked: each eye keeps its own refraction history ...`, `seq-refract:
-  eye R's refraction images made with device context ...: mask tiles ..., accumulation ...`, at the first stereo
+  eye R's refraction images made with device context ...: mask tiles ..., accumulation ...`, at each render-size
+  change `seq-refract: refraction images resized to WxH (mask tiles WxH): N of eye R's followed; both eyes
+  start over` (N: the eye R images whose size changed), at the first stereo
   render `seq-refract: the refraction history is per eye at the first stereo render ...` (or `... is not per eye
   ...: <why>`), and the first four renders with glass (`seq-refract: render N for eye X: writes mask ..., updates
   ...; reads ...`, with `history reset: ...` where it starts over).
@@ -1719,8 +1740,8 @@ each run from its own call.
   quad (`ETERNALVR_UI_DISTANCE`, `_WIDTH`, `_OFFSET_Y`) and kept out of both eyes; under hand aim the game's
   crosshair is left out and a dot is drawn on the weapon hand's ray. `ETERNALVR_UI_LAYER=0` goes back to
   the HUD in eye L only.
-- Temporal effects other than TAA, DLSS, auto exposure, the light scattering, SSDO and (opt-in,
-  `ETERNALVR_STEREO_REFRACTION_TAA=1`) the refraction (depth of field, water, the anti-ghosting mask) still
+- Temporal effects other than TAA, DLSS, auto exposure, the light scattering, SSDO and the refraction
+  (depth of field, water, the anti-ghosting mask) still
   share their history between the eyes and stay off; the
   headset check of per-eye TAA is open (`docs/rig-findings/stereo-temporal.md` section 8).
 - The eye tags rely on one backend frame per tagged frame. A frame the engine kicks but never renders,

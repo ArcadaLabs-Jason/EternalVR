@@ -9,7 +9,9 @@
 //   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). A weapon with a
 //   [sights] row is then turned about the grip so its sight line runs parallel to the aim ray (on by default,
 //   T-135; ETERNALVR_WEAPON_SIGHTS=0 turns it off on the rig); the shot ray and the aim dot do not change.
-//   The game's own stores then carry it into both the deferred and the current render-model pose.
+//   Last the model is moved, not turned, so the glove's wrist keeps the grip's own frame
+//   (xr_math::placeViewmodel). The game's own stores then carry it into both the deferred and the current
+//   render-model pose.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -99,6 +101,35 @@ std::atomic<std::uint64_t> g_loggedPlacements{0};
 std::atomic<bool> g_loggedEyeMismatch{false};
 // A cutscene shown around the player with the arms hidden (noteImmersiveCutscene; camera hook writes).
 std::atomic<bool> g_cutsceneArms{false};
+
+// The controller's grip orientation against its aim ray, logged when it first shows and when it turns by more
+// than kGripLogDegrees from the last line (camera hook thread, under the view lock), with how far the glove
+// moves to keep its wrist in the grip's frame (xr_math::placeViewmodel). The simulator gives both one pose.
+constexpr float kGripLogDegrees = 5.0f;
+std::optional<xr_math::IdAngles> g_loggedGrip;
+int g_gripLines = 0;
+
+void logGripAgainstAim(const xr_math::IdViewAxis& aim, const xr_math::IdViewAxis& grip) {
+    const auto inAim = [&aim](Vec3 v) {
+        return Vec3{dot(aim.forward, v), dot(aim.left, v), dot(aim.up, v)};
+    };
+    const xr_math::IdAngles rel =
+        xr_math::anglesFromAxis({inAim(grip.forward), inAim(grip.left), inAim(grip.up)});
+    if (g_gripLines >= 6 || (g_loggedGrip && std::fabs(rel.pitch - g_loggedGrip->pitch) <= kGripLogDegrees &&
+                             std::fabs(rel.yaw - g_loggedGrip->yaw) <= kGripLogDegrees &&
+                             std::fabs(rel.roll - g_loggedGrip->roll) <= kGripLogDegrees)) {
+        return;
+    }
+    g_loggedGrip = rel;
+    ++g_gripLines;
+    const game::WeaponOffset& w = game::kRowsWrist;
+    const Vec3 shift =
+        inAim(grip.forward * w.forward + grip.left * w.left + grip.up * w.up) - Vec3{w.forward, w.left, w.up};
+    EVR_LOG(
+        "%s: the weapon hand's grip against its aim ray: (%.1f %.1f %.1f) deg; the glove moves (%.1f %.1f "
+        "%.1f) cm (aim frame) to keep its wrist in the grip's frame",
+        kTag, rel.pitch, rel.yaw, rel.roll, shift.x * 100.0f, shift.y * 100.0f, shift.z * 100.0f);
+}
 
 // How far a sight row turns the model: the sight line's angle from the model's forward.
 float sightTurnDegrees(const game::WeaponSight& sight) {
@@ -209,11 +240,12 @@ void onViewmodel(const HookRegisters& regs) {
     }
     const Vec3 translation{offset.forward, offset.left, offset.up};
     const xr_math::IdAngles rotation{offset.pitch, offset.yaw, offset.roll};
-    const xr_math::EyeRelativePose placed =
-        g_cachedSight ? xr_math::applyLocalOffsetWithSight(world.grip, translation, rotation,
-                                                           {g_cachedSight->pitch, g_cachedSight->yaw, 0.0f},
-                                                           world.unitsPerMetre)
-                      : xr_math::applyLocalOffset(world.grip, translation, rotation, world.unitsPerMetre);
+    const std::optional<xr_math::IdAngles> sight =
+        g_cachedSight ? std::optional<xr_math::IdAngles>({g_cachedSight->pitch, g_cachedSight->yaw, 0.0f})
+                      : std::nullopt;
+    const xr_math::EyeRelativePose placed = xr_math::placeViewmodel(
+        world.grip, world.gripAxis, translation, rotation, sight,
+        {game::kRowsWrist.forward, game::kRowsWrist.left, game::kRowsWrist.up}, world.unitsPerMetre);
     const Vec3 origin = xr_math::atEye({eye[0], eye[1], eye[2]}, placed);
     const float newOrigin[3] = {origin.x, origin.y, origin.z};
     const float newAxis[9] = {placed.axis.forward.x, placed.axis.forward.y, placed.axis.forward.z,
@@ -366,6 +398,10 @@ void endGameView(std::byte* renderView,
     world.grip = p.gripValid[hand]
                      ? xr_math::controllerRelativeToEye(body, headOffset, p.head, p.grip[hand], unitsPerMetre)
                      : world.aim;
+    if (p.gripValid[hand]) {
+        logGripAgainstAim(world.aim.axis, world.grip.axis);
+    }
+    world.gripAxis = world.grip.axis;
     world.grip.axis = world.aim.axis;
     // The head's yaw frame in the world: the arms' shoulders and their elbows' bend follow the head's
     // heading.

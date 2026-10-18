@@ -112,8 +112,8 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
   1 s of readings in one posture's range detects it and re-anchors the height behind the blink, as a posture
   change does, so `real` eye height takes the player's own height from then on (`room: posture standing
   (detected once the floor could be read: head 1.75 m above it for 1.0 s); re-anchoring the height`).
-  Seated feeds the input mapper's seated behaviour, the seated viewmodel offsets (T-074) and body follow's
-  seated block.
+  Seated feeds the input mapper's seated behaviour, any `[seated]` viewmodel rows (the built-in table has
+  none) and body follow's seated block.
   - **A floor no head can have is ignored**: a head less than 0.5 m or more than 2.3 m above the floor
     (sitting on the floor or a deep crouch is still above 0.5 m; a 2.2 m tall player's eyes are below
     2.3 m) never decides the posture, at an anchor or in re-detection, and the anchor keeps the last usable

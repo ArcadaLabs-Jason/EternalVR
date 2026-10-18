@@ -2,8 +2,9 @@
 
 // Where the refraction history's hooks go (refraction_hooks.hpp; Steam build 25216728), located by signature
 // and checked before anything is changed: every site in its function and in order, the loops' image names,
-// one image manager and create function for both loops, one device context global for every pass site, and
-// the transparency job's call of the refraction pass with its update count (kRefractionUpdateCount).
+// one image manager and create function for both loops, one device context global for every pass site and the
+// resize, and the transparency job's call of the refraction pass with its update count
+// (kRefractionUpdateCount).
 
 #include <cstddef>
 
@@ -24,7 +25,10 @@ struct RefractionSites {
     std::byte* passEntry = nullptr; // its entry: rdx the transparency context, r8d the update, r9b the reset
     std::byte* passMask =
         nullptr; // RVA 0x1C63EF0: the argument block filled (with the mask), before `test bl`
-    std::byte* passPlain = nullptr;           // RVA 0x1C6402B: the same without the mask, the blend stored
+    std::byte* passPlain = nullptr; // RVA 0x1C6402B: the same without the mask, the blend stored
+    // The render-size change (RVA 0x1CDD6D0), after it resized the engine's refraction images.
+    std::byte* imagesResized = nullptr;       // RVA 0x1CDDBBB
+    const std::byte* resizeImage = nullptr;   // (image, width, height, depth, mips), RVA 0x1C4AE30
     const std::byte* imageManager = nullptr;  // [ ] = the image manager
     const std::byte* createImage = nullptr;   // (manager, name, description) -> image
     const std::byte* deviceContext = nullptr; // [ ] = the device context

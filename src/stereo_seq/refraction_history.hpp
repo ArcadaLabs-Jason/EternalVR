@@ -19,7 +19,8 @@
 // writes; the other slot, its last written one, is read. The mask pass and each refraction update (job
 // threads) ask for the same render: the first asking makes the plan, the others get it again. An eye starts
 // its history over (the refraction pass then blends with no history):
-// - its first render, its first after reset(), and its first after invalidate() (dynamic resolution);
+// - its first render, its first after reset(), and its first after invalidate() (dynamic resolution, the
+//   render size changed);
 // - its own last render is neither one nor two renders back (a mono stretch, a skipped eye R, glass out of
 //   view for a while);
 // - a mono render right after an eye L render (most likely eye R's, its tag not found: it must not take eye
@@ -40,7 +41,6 @@
 #include <array>
 #include <cstdint>
 #include <optional>
-#include <string_view>
 
 namespace evr::stereo_seq {
 
@@ -61,11 +61,12 @@ enum class RefractionRestart : std::uint8_t {
     Untagged,      // a mono render right after an eye L render
     AfterUntagged, // eye L's next render after such a mono render
     Resumed,       // its first render after dynamic resolution held the history off (invalidate())
+    Resized,       // its first render after the render size changed the images' size (invalidate())
     // One update, the render going on:
     CountChanged, // the eye's update count differs from its own last render's
     NotInLast,    // the eye's own last render did not run the update
 };
-inline constexpr int kRefractionRestarts = 8;
+inline constexpr int kRefractionRestarts = 9;
 
 const char* refractionRestartName(RefractionRestart restart);
 
@@ -117,16 +118,8 @@ private:
     std::array<PerEye, 2> eyes_{};
 };
 
-// ETERNALVR_STEREO_REFRACTION_TAA: 1, on or true keeps the history per eye; hold holds it off in stereo
-// (every stereo render blends with no history); unset, 0, off, false or anything else leaves the engine's
-// (shared between the eyes), the default until the per-eye history has been tried in a headset.
-enum class RefractionMode : std::uint8_t { PerEye, Hold, Off };
-RefractionMode refractionMode(std::string_view value);
-const char* refractionModeName(RefractionMode mode);
-
 // What the per-eye history needs before it runs.
 struct RefractionReadiness {
-    RefractionMode mode = RefractionMode::PerEye;
     bool installed = false;         // every hook in place
     bool gameTouch = false;         // the multiplayer guard allows game writes
     bool failedClosed = false;      // a check after start-up failed (sticky)
@@ -137,9 +130,9 @@ struct RefractionReadiness {
 // Why the history is not per eye, or nullptr when it is.
 const char* refractionNotReady(const RefractionReadiness& readiness);
 
-// A stereo render (eye L or eye R) whose history is held off: hold mode, or per eye requested but not ready
-// (failed closed, eye R's images missing, dynamic resolution on) while the hooks are in place. Mono renders
-// are left to the engine.
+// A stereo render (eye L or eye R) whose history is held off: not ready (failed closed, eye R's images
+// missing, dynamic resolution on) while the hooks are in place, so neither eye reads the other's. Mono
+// renders are left to the engine.
 bool refractionHeldOff(const RefractionReadiness& readiness, Eye eye);
 
 } // namespace evr::stereo_seq

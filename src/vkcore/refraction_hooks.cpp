@@ -6,6 +6,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/refraction_locate.hpp"
+#include "vkcore/refraction_resize.hpp"
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/stereo_hooks.hpp"
 #include "vkcore/taa_locate.hpp"
@@ -36,12 +37,11 @@ constexpr std::size_t kArgRead = 0x68;
 constexpr std::size_t kArgBlend = 0x90;
 
 // The device context's pairs: the mask tiles [parity], the accumulation images and targets [parity * 2 +
-// update]. A render target's colour image at +0x10; an image's size at +0x64.
+// update]. A render target's colour image at +0x10.
 constexpr std::size_t kDcMaskTiles = 0x488;
 constexpr std::size_t kDcAccImages = 0x440;
 constexpr std::size_t kDcAccTargets = 0x5F0;
 constexpr std::size_t kTargetImage = 0x10;
-constexpr std::size_t kImageSize = 0x64;
 // The transparency context (render context + 0x706CB0): its render view (+0x10, stored at RVA 0x1C601AA) and
 // the backend counter the render-view job read for the render (+0xF8, stored at RVA 0x1C60253).
 constexpr std::size_t kContextRenderView = 0x10;
@@ -65,7 +65,6 @@ struct EyeSet {
 };
 
 std::once_flag g_once;
-stereo_seq::RefractionMode g_mode = stereo_seq::RefractionMode::PerEye;
 std::atomic<bool> g_installed{false};
 void* const* g_manager = nullptr;
 CreateImageFn g_create = nullptr;
@@ -131,19 +130,10 @@ void writeAt(std::uintptr_t at, T v) {
     std::memcpy(reinterpret_cast<void*>(at), &v, sizeof(v));
 }
 
-struct Size {
-    std::int32_t width = 0;
-    std::int32_t height = 0;
-    friend constexpr bool operator==(Size, Size) = default;
-};
-
-Size imageSize(const void* image) {
-    return image ? readAt<Size>(static_cast<const std::byte*>(image) + kImageSize) : Size{};
-}
+using refraction_sizes::extentOf;
 
 stereo_seq::RefractionReadiness readiness() {
     stereo_seq::RefractionReadiness r;
-    r.mode = g_mode;
     r.installed = g_installed.load(std::memory_order_acquire);
     r.gameTouch = mp_guard::allowsGameTouch();
     r.failedClosed = g_failedClosed.load(std::memory_order_acquire);
@@ -154,8 +144,9 @@ stereo_seq::RefractionReadiness readiness() {
 
 void failClosed(const char* why) {
     if (!g_failedClosed.exchange(true, std::memory_order_acq_rel)) {
-        EVR_LOG("%s: %s; the refraction history is held off in stereo for the rest of the session", kTag,
-                why);
+        EVR_LOG(
+            "%s: %s; the refraction history is held off in stereo until the device context is built again",
+            kTag, why);
     }
 }
 
@@ -167,13 +158,14 @@ void* makeImage(const char* name, const std::byte* description) {
 }
 
 void onMaskImagesBuilt(const HookRegisters& r) {
-    if (g_mode != stereo_seq::RefractionMode::PerEye || !mp_guard::allowsGameTouch()) {
+    if (!mp_guard::allowsGameTouch()) {
         return;
     }
     auto* dc = reinterpret_cast<std::byte*>(r.rdi);
     const auto* description = reinterpret_cast<const std::byte*>(r.rbp) + kRefractionMaskDescription;
     std::lock_guard lock(g_mutex);
     g_ready.store(false, std::memory_order_release);
+    trackRefractionImages(nullptr, {}); // the old set's images are not followed any more
     g_pendingDc = dc;
     for (int i = 0; i < 2; ++i) {
         g_pendingMask[i] = makeImage(kMaskNames[i], description); // never freed, as the engine's own
@@ -181,7 +173,7 @@ void onMaskImagesBuilt(const HookRegisters& r) {
 }
 
 void onAccImagesBuilt(const HookRegisters& r) {
-    if (g_mode != stereo_seq::RefractionMode::PerEye || !mp_guard::allowsGameTouch()) {
+    if (!mp_guard::allowsGameTouch()) {
         return;
     }
     auto* dc = reinterpret_cast<std::byte*>(r.rdi);
@@ -199,7 +191,7 @@ void onAccImagesBuilt(const HookRegisters& r) {
     for (int slot = 0; slot < 2; ++slot) {
         engine.mask[slot] = readAt<void*>(dc + kDcMaskTiles + 8 * slot);
         eyeR.mask[slot] = g_pendingMask[slot];
-        ok = ok && imageSize(eyeR.mask[slot]) == imageSize(engine.mask[slot]);
+        ok = ok && extentOf(eyeR.mask[slot]) == extentOf(engine.mask[slot]);
         all.push_back(engine.mask[slot]);
         all.push_back(eyeR.mask[slot]);
         for (int u = 0; u < kUpdates; ++u) {
@@ -209,19 +201,19 @@ void onAccImagesBuilt(const HookRegisters& r) {
             const auto* target = readAt<const std::byte*>(dc + kDcAccTargets + 8 * k);
             // The pass reads the targets' colour images: they must be the images the constructor made.
             ok = ok && target && readAt<void*>(target + kTargetImage) == engine.acc[u][slot] &&
-                 imageSize(made[k]) == imageSize(engine.acc[u][slot]);
+                 extentOf(made[k]) == extentOf(engine.acc[u][slot]);
             all.push_back(engine.acc[u][slot]);
             all.push_back(made[k]);
         }
     }
     for (std::size_t i = 0; i < all.size(); ++i) {
-        ok = ok && all[i] != nullptr && imageSize(all[i]).width > 0 && imageSize(all[i]).height > 0;
+        ok = ok && all[i] != nullptr && extentOf(all[i]).width > 0 && extentOf(all[i]).height > 0;
         for (std::size_t j = i + 1; j < all.size(); ++j) {
             ok = ok && all[i] != all[j];
         }
     }
-    const Size maskSize = imageSize(engine.mask[0]);
-    const Size accSize = imageSize(engine.acc[0][0]);
+    const refraction_sizes::Extent maskSize = extentOf(engine.mask[0]);
+    const refraction_sizes::Extent accSize = extentOf(engine.acc[0][0]);
     EVR_LOG(
         "%s: eye R's refraction images made with device context %p: mask tiles %p %p (the engine's %p %p, "
         "%dx%d), accumulation %p %p %p %p (the engine's %p %p %p %p, %dx%d)",
@@ -235,13 +227,22 @@ void onAccImagesBuilt(const HookRegisters& r) {
             "hold other images; the refraction history is held off in stereo",
             kTag);
         g_dc = nullptr;
+        trackRefractionImages(nullptr, {});
         return;
     }
     g_sets[0] = engine;
     g_sets[1] = eyeR;
     g_dc = dc;
+    trackRefractionImages(dc, refraction_sizes::pairsOf(engine.mask, engine.acc, eyeR.mask, eyeR.acc));
     g_history.reset();
+    g_failedClosed.store(false, std::memory_order_release); // a new device context: its checks start over
     g_ready.store(true, std::memory_order_release);
+}
+
+// Eye R's images followed the engine's resize (refraction_resize.hpp, the renderer's thread).
+void restartAfterResize() {
+    std::lock_guard lock(g_mutex);
+    g_history.invalidate(stereo_seq::RefractionRestart::Resized);
 }
 
 // ---- Each render's passes (job threads) ----
@@ -262,16 +263,18 @@ void report() {
     EVR_LOG(
         "%s: refraction history %s: %llu eye L / mono and %llu eye R render(s); %llu mask pass(es), %llu "
         "refraction update(s) with the mask and %llu without; restarts %llu first, %llu after a gap, %llu "
-        "untagged after eye L, %llu eye L after it, %llu after dynamic resolution; update restarts %llu "
-        "count changed, %llu not in the eye's last render; %llu engine reset(s) dropped (another render's "
-        "count); %llu update(s) held off; %llu other view(s) left to the engine; %llu render(s) whose tag in "
-        "flight names another eye; r_transparencyEnableRefractionMask %d, r_refractionTAA %d, rs_enable %d",
+        "untagged after eye L, %llu eye L after it, %llu after dynamic resolution, %llu after a resize; "
+        "update restarts %llu count changed, %llu not in the eye's last render; %llu engine reset(s) dropped "
+        "(another render's count); %llu update(s) held off; %llu other view(s) left to the engine; %llu "
+        "render(s) whose tag in flight names another eye; r_transparencyEnableRefractionMask %d, "
+        "r_refractionTAA %d, rs_enable %d",
         kTag, stereo_seq::refractionNotReady(readiness()) ? "not per eye" : "per eye",
         take(g_counters.renders[0]), take(g_counters.renders[1]), take(g_counters.masks),
         take(g_counters.passes[0]), take(g_counters.passes[1]), restarts(R::First), restarts(R::Gap),
-        restarts(R::Untagged), restarts(R::AfterUntagged), restarts(R::Resumed), restarts(R::CountChanged),
-        restarts(R::NotInLast), take(g_counters.kept), take(g_counters.held), take(g_counters.others),
-        take(g_counters.inFlightDiffers), cvarInt(g_maskCvar), cvarInt(g_taaCvar), cvarInt(g_dynamicCvar));
+        restarts(R::Untagged), restarts(R::AfterUntagged), restarts(R::Resumed), restarts(R::Resized),
+        restarts(R::CountChanged), restarts(R::NotInLast), take(g_counters.kept), take(g_counters.held),
+        take(g_counters.others), take(g_counters.inFlightDiffers), cvarInt(g_maskCvar), cvarInt(g_taaCvar),
+        cvarInt(g_dynamicCvar));
 }
 
 void logFirst(stereo_seq::Eye eye, const stereo_seq::RefractionReadiness& r) {
@@ -362,6 +365,19 @@ PassPlan planFor(const std::byte* context, int update) {
     if (update != kMaskPass && update >= updates) {
         failClosed("a refraction update is not below the render's update count");
         out.held = eye != stereo_seq::Eye::Mono;
+        return out;
+    }
+    using refraction_sizes::SizeCheck;
+    if (const SizeCheck size = eye == stereo_seq::Eye::Right  ? checkRefractionImageSizes(counter)
+                               : refractionImagesMismatched() ? SizeCheck::HoldOff
+                                                              : SizeCheck::Same;
+        size != SizeCheck::Same) {
+        if (size == SizeCheck::HoldOffFirst) {
+            g_history.invalidate(stereo_seq::RefractionRestart::Resized); // no eye reads a held render's slot
+        } else if (size == SizeCheck::FailClosed) {
+            failClosed("eye R's refraction images stayed another size than the engine's");
+        }
+        out.held = true; // blends with no history while eye R's images are of another size
         return out;
     }
     const stereo_seq::RefractionPlan plan =
@@ -507,20 +523,6 @@ void onPassPlain(HookRegisters& r) {
 
 bool installRefractionHooksEarly() {
     std::call_once(g_once, [] {
-        std::wstring value;
-        std::string narrow;
-        if (readEnv(L"ETERNALVR_STEREO_REFRACTION_TAA", value)) {
-            for (const wchar_t c : value) {
-                narrow.push_back(c < 0x80 ? static_cast<char>(c) : '?');
-            }
-        }
-        g_mode = stereo_seq::refractionMode(narrow);
-        if (g_mode == stereo_seq::RefractionMode::Off) {
-            EVR_LOG("%s: off (the default; ETERNALVR_STEREO_REFRACTION_TAA=1 turns it on); the refraction "
-                    "history is the engine's, shared between the eyes",
-                    kTag);
-            return;
-        }
         if (!mp_guard::allowsGameTouch()) {
             EVR_LOG("%s: the multiplayer guard is not armed; the refraction history is the engine's", kTag);
             return;
@@ -553,6 +555,7 @@ bool installRefractionHooksEarly() {
             !installMidHookEdit(s.passEntry, &onPassEntry, error) ||
             !installMidHookEdit(s.passMask, &onPassMask, error) ||
             !installMidHookEdit(s.passPlain, &onPassPlain, error) ||
+            !installRefractionResizeHook(s, &restartAfterResize, error) ||
             !installMidHook(s.maskImagesBuilt, &onMaskImagesBuilt, error) ||
             !installMidHook(s.accImagesBuilt, &onAccImagesBuilt, error)) {
             EVR_LOG("%s: hook failed: %s; the refraction history is the engine's", kTag, error.c_str());
@@ -560,26 +563,18 @@ bool installRefractionHooksEarly() {
         }
         g_installed.store(true, std::memory_order_release);
         EVR_LOG(
-            "%s: refraction images (RVA 0x%X, 0x%X), mask pass (RVA 0x%X) and refraction pass (RVA 0x%X) "
-            "hooked: %s (ETERNALVR_STEREO_REFRACTION_TAA; device context global RVA 0x%X, image manager RVA "
-            "0x%X, create RVA 0x%X)",
-            kTag, image.rva(s.maskImagesBuilt), image.rva(s.accImagesBuilt), image.rva(s.maskEntry),
-            image.rva(s.passEntry),
-            g_mode == stereo_seq::RefractionMode::Hold ? "the history is held off in stereo"
-                                                       : "each eye keeps its own refraction history",
-            image.rva(s.deviceContext), image.rva(s.imageManager), image.rva(s.createImage));
+            "%s: refraction images (RVA 0x%X, 0x%X), their resize (RVA 0x%X), mask pass (RVA 0x%X) and "
+            "refraction pass (RVA 0x%X) hooked: each eye keeps its own refraction history (device context "
+            "global RVA 0x%X, image manager RVA 0x%X, create RVA 0x%X, resize RVA 0x%X)",
+            kTag, image.rva(s.maskImagesBuilt), image.rva(s.accImagesBuilt), image.rva(s.imagesResized),
+            image.rva(s.maskEntry), image.rva(s.passEntry), image.rva(s.deviceContext),
+            image.rva(s.imageManager), image.rva(s.createImage), image.rva(s.resizeImage));
     });
     return g_installed.load(std::memory_order_acquire);
 }
 
 const char* refractionHooksText() {
-    if (g_mode == stereo_seq::RefractionMode::Off) {
-        return "off";
-    }
-    if (!g_installed.load(std::memory_order_acquire)) {
-        return "NOT hooked";
-    }
-    return g_mode == stereo_seq::RefractionMode::Hold ? "held off in stereo" : "per eye";
+    return g_installed.load(std::memory_order_acquire) ? "per eye" : "NOT hooked";
 }
 
 bool refractionPerEyeReady() {

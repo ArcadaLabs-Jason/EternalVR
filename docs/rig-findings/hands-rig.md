@@ -468,3 +468,68 @@ checks as `r4-default`, no wrist or weight lines.
 Captures (both eyes, eight poses each): `r4-ref-bind`, `r4-bind`, `r4-bind2`, `r4-bind3`, `r4-skin3`,
 `r4-hands`, `r4-base`, `r4-default`, `r4-default2` in `tmp-vr\rs\hands\runs\<run>\captures` on the rig PC; the
 clearest before and after is `roll-L-90` and `two-1` in `r4-ref-bind` against `r4-bind2`.
+
+## 10. The glove on the grip, per weapon (2026-10-18, OpenXR-Simulator)
+
+The sights sweep (section 6) with both eyes captured (`grip-sweep.ps1`, one pair kept per weapon from its neutral
+hold) and a checker, `grip_check.py`; both are rig-local like the rest of the hands rig (the sweep holds the
+rig's paths and the checker builds on `check_hands.py`). Per dump line it takes the right `hand` joint (the
+glove's wrist) in the arms model's frame, places it with the dumped model pose, and measures it in the controller
+grip's frame against the wrist target: the off hand's wrist rule (`kDefaultOffhandOffset`: 8 cm behind the grip's
+centre, 3.5 cm toward the back of the hand) mirrored for the right hand, so both gloves sit alike on their
+controllers. The grip frame is the model's axis with the weapon's `[sights]` turn taken back out. Per weapon it
+reports the median and the largest miss over the five holds and the row that puts the wrist on the target
+(`(-0.08, -0.035, 0)` less the wrist in the model's frame, through the sights turn). Evidence: rig (the simulator
+and the scripted input, which gives the grip and the aim one pose), not a headset.
+
+**The chaingun and the ballista hold the gun with the left hand.** In their idle animations the right glove is
+parked off the gun, above and behind the camera (statically, from the idle animations: the right hand 3 cm above
+the camera on the chaingun, at its height on the ballista; on the rig, 72 and 48 cm from the gun's grip point); the
+left glove is on the gun. On every other gun the glove's wrist sits at one offset from the weapon's root joint
+(`righthandattach`): `(-0.171, -0.040, -0.086)` m in the joint's frame, the median over 100 lines (the rocket
+launcher's root sits elsewhere on its gun, `(0.013, -0.041, -0.118)`); the chaingun's own zoom pose, where the
+right glove does hold it, puts it at `(-0.170, -0.041, -0.074)`. For these two the grip point is the root joint
+plus that common offset, and the row puts it on the target: the gun sits in the hand, with no right glove on it.
+
+Before (`hg-main1`, dev main 0.1.60, every weapon on the `default` row) and after (`hg-grip1`, the rows in
+`data/weapons/viewmodel_offsets.toml`), the wrist (or grip point) from its target in the grip's frame, cm, forward /
+left / up; the owner's headset estimate is where the real hand was against the in-game one (headset 2026-10-13,
+Quest 3, rough inches; minus the rig's miss is the same quantity):
+
+| Weapon | Before: miss (f l u), largest | Real hand vs glove, rig / owner | After: largest miss |
+|---|---|---|---|
+| combat shotgun | -6.5, 5.2, -0.4; 8.4 | 6.5 ahead, 5.2 right, 0.4 up / 5 in ahead, 3 in right, 2 in below | 0.2 |
+| Heavy Cannon | 2.1, 6.6, 1.4; 7.2 | 2.1 behind, 6.6 right, 1.4 below / 3 in ahead, 3 in right, 2 in below | 0.3 |
+| super shotgun | -5.5, 4.5, -0.6; 7.2 | 5.5 ahead, 4.5 right / about the combat shotgun's | 0.2 |
+| plasma rifle | -22.5, -2.1, -14.2; 26.7 | 22.5 ahead, 14 below / like the chaingun, less | 0.1 |
+| rocket launcher | 9.4, 3.2, 0.5; 10.0 | 9.4 behind, 3.2 right, 0.5 below / 3 in behind, 2-3 in right, 2-3 in below | 0.2 |
+| BFG | 10.5, 8.6, -16.3; 21.4 | 10.5 behind, 8.6 right, 16 above / 7 in behind, 5 in right, 7 in above | 0.2 |
+| chaingun (grip point) | 36.5, 1.2, -11.4; 38.3 | the parked glove 26 behind, 25 above the hand / real hand far ahead | 0.2 |
+| ballista (grip point) | 20.5, 0.7, -6.8; 21.7 | the parked glove 18 behind, 22 above / the hand not on the gun | 0.4 |
+
+The directions agree on every weapon. Where they do not: the owner puts the real hand about 2 in lower than the
+rig on the Heavy Cannon, the combat shotgun and the rocket launcher, and further ahead on the two shotguns and the
+Heavy Cannon. The likely cause [inferred, not checked in a headset]: the gun follows the aim ray and the rows
+place the wrist in that frame, while the real wrist is fixed in the grip's frame; on a headset the two differ by
+the runtime's aim to grip turn, which the simulator does not have, so the 8.7 cm wrist offset lands several cm
+off (about 6 cm for a 40 degree turn). The layer now keeps the wrist target in the grip's frame each frame
+(`xr_math::placeViewmodel`: the model is moved, not turned, so the sights and shots keep the aim ray) and logs
+the turn and the move ('the weapon hand's grip against its aim ray'). On the simulator the move is zero and the
+numbers below are unchanged (`hg-grip3`). A seated session would also have put every glove 5 cm further back
+(the old `[seated]` row).
+
+The model's rotation is unchanged, so the sights stay parallel to the shot ray: `sights_check.py` on `hg-grip1`
+passes every row (largest angle 0.16 to 0.20 deg, as in section 6). The sights move with the gun: the sight line
+from the aim ray, left / up, before and after: combat shotgun 6.8 / 17.2 and 1.7 / 17.5 cm, Heavy Cannon (iron
+sights) 7.4 / 18.9 and 0.8 / 17.4, chaingun (zoom axis) 6.5 / 7.7 and 5.3 / 19.1, ballista (bore) 1.4 / 1.9 and
+0.7 / 8.7. Shots keep the aim ray; a muzzle-start weapon's start moves along it with the muzzle.
+
+Captures (both eyes per weapon, the neutral hold): `hg-main1` and `hg-grip1`. The guns the glove holds show it on
+the grip; the chaingun and the BFG fill the lower part of the view, against the chest, under the line of sight;
+nothing reaches the centre of either eye.
+
+Hands check (merge QA, combat shotgun, `hg-hands1`): one change against the baseline, `reach-R-060 R:landed` 12.4
+mm (9.7 on main): with the wrist 6.7 cm further forward, the weapon arm is at full stretch at 0.60 m (shoulder to
+wrist 0.549 of 0.551 m), where it was at 0.75 m before, and lands as far off as the stretched poses always have
+(12.0 to 12.5 mm at 0.75 and 0.95 m). The weapon wrist from the grip (`R:reach`) goes from 146 to 88 mm, the
+wrist target's own distance from the grip.

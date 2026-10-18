@@ -68,7 +68,7 @@
 //   ETERNALVR_BUTTON_PROMPTS 1 / 0              the game's prompts name the VR buttons, not keys
 //   ETERNALVR_WEAPON_FOV     1 / 0              the weapon drawn with the headset's FOV
 //   ETERNALVR_VIEWMODEL_OFFSET  f,l,u[,pitch,yaw,roll]  one offset for every weapon (tuning)
-//   ETERNALVR_SEATED         1 / 0              the seated viewmodel offsets (T-074)
+//   ETERNALVR_SEATED         1 / 0              seated posture (T-074): input, any [seated] viewmodel rows
 //   ETERNALVR_WEAPON_SIGHTS  1 / 0              weapons with a [sights] row turned so their sight line runs
 //                                               parallel to the aim ray (on; weapon_offsets.hpp). 0: rig and
 //                                               debug only, not offered to players (T-135)

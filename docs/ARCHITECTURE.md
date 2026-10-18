@@ -584,8 +584,8 @@ Rules:
   calibrated modes recenter is yaw-only, as R10 recommends.
 - **Seated defaults (T-074).** When posture is seated, detected or overridden: holster and gesture
   zones sit at shoulder height, not the hip; a hands-jump gesture, if one is built, is off by default;
-  the physical-punch threshold works with seated arm motion; the default seated weapon offset and
-  controller rest pose keep the hands clear of a desk. The owner's own profile overrides posture to
+  the physical-punch threshold works with seated arm motion; the controller rest pose keeps the hands
+  clear of a desk (the weapon offsets are the standing ones: they put the glove on the real hand). The owner's own profile overrides posture to
   Seated; every other profile starts on Auto.
 - Provisional until the M4 and M7 playtests.
 
@@ -866,8 +866,8 @@ Layered injection (R13):
     play.
   - Weapon selection never shares the turn stick in a way that causes accidental swaps (R14).
 - **Seated (T-074):** holster and gesture zones at shoulder height, any hands-jump gesture off by
-  default, a punch threshold that works with seated arm motion, and desk-safe weapon offsets (section
-  6.2).
+  default, a punch threshold that works with seated arm motion, and a desk-safe controller rest pose
+  (section 6.2); the weapon offsets are the standing ones (the glove sits on the real hand).
 - **Haptics (v1 if time allows):** game rumble (`XInputSetState`) goes to `xrApplyHapticFeedback`, per
   hand where attributable. bHaptics, PSVR2 adaptive triggers and Index finger curl are stretch goals,
   as optional modules.

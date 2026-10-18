@@ -57,6 +57,20 @@ EyeRelativePose applyLocalOffsetWithSight(const EyeRelativePose& pose,
                                           const IdAngles& sight,
                                           float unitsPerMetre);
 
+// The viewmodel's pose (T-054). `hand` is the controller's grip position with the aim ray's axis, `gripAxis`
+// the grip's own orientation. The model is placed by `translation` and `rotation` in the aim's frame
+// (applyLocalOffset, or applyLocalOffsetWithSight with a `sight`), then moved, not turned, so that the point
+// the offset puts at `wrist` in the aim's frame lands at `wrist` in the grip's frame: the glove's wrist
+// follows the real wrist, which is fixed to the grip, while the model keeps the aim ray's orientation (the
+// sights and the shots do not change). With the grip's axis on the aim's (one pose) nothing moves.
+EyeRelativePose placeViewmodel(const EyeRelativePose& hand,
+                               const IdViewAxis& gripAxis,
+                               Vec3 translation,
+                               const IdAngles& rotation,
+                               const std::optional<IdAngles>& sight,
+                               Vec3 wrist,
+                               float unitsPerMetre);
+
 // A shot's start and axis (idFireParms start and fireAxis; forward is the direction of fire).
 struct Shot {
     Vec3 origin;

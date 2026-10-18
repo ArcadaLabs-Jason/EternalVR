@@ -136,6 +136,7 @@ struct WorldHand {
     LONGLONG qpc = 0;
     xr_math::EyeRelativePose aim;  // the aim ray: origin offset and axis (forward = the ray)
     xr_math::EyeRelativePose grip; // the grip position with the aim axis (the barrel follows the ray)
+    xr_math::IdViewAxis gripAxis;  // the grip's own orientation (the aim's without a grip pose)
     bool offValid = false;
     xr_math::EyeRelativePose offGrip; // the off hand's grip (position and orientation)
     // The off hand's aim ray and the rendered head (its offset from the eye and its axis), for Flame Belch

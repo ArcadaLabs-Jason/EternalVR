@@ -159,6 +159,7 @@ add_library(evr_layer SHARED
     queue_entry.cpp
     refraction_hooks.cpp
     refraction_locate.cpp
+    refraction_resize.cpp
     room_follow.cpp
     room_posture.cpp
     reticle_depth.cpp

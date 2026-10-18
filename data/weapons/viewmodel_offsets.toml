@@ -9,15 +9,34 @@
 # row covers every mod of a weapon. A name without its own entry uses the entry of the longest key it starts
 # with followed by '_' ("weapon/player/fists_doom5melee" uses "weapon/player/fists"), then "default".
 #
-# The values below are starting estimates and are tuned on the rig with ETERNALVR_VIEWMODEL_OFFSET
-# (docs/VR_CONTROLLERS.md); per-weapon rows are added as each weapon is checked.
+# Each weapon's row puts the glove's grip on the gun at the controller's grip: the right glove's wrist (the
+# arms model's right hand joint, as the game animates the weapon at idle) lands where the off hand's wrist
+# goes, 8 cm behind the grip's centre and 3.5 cm toward the back of the hand, with the model's rotation
+# unchanged. Row = (-0.08, -0.035, 0) less the wrist's position in the model's frame, the [sights] turn taken
+# into account. The wrist positions are measured on the hands rig (docs/rig-findings/hands-rig.md, section 10).
+# The chaingun and the ballista park the right glove off the gun at idle (the game shows them held by the left
+# hand); their rows put the gun's own grip point there instead: the weapon's root joint plus the glove's
+# offset from it on the guns the glove holds. "default" (the fists, the chainsaw, the Crucible, the hammer,
+# the Unmaykr) is the first estimate, not measured. ETERNALVR_VIEWMODEL_OFFSET replaces a row on the rig.
+#
+# No [seated] rows: seated play uses the same ones, since the glove follows the real hand in either posture.
+#
+# The layer keeps that wrist target in the controller grip's own frame while the gun keeps the aim ray's
+# orientation (on a headset the grip is turned from the aim ray; the simulator gives both one pose). The rows
+# are measured with the sights turn on: with ETERNALVR_WEAPON_SIGHTS=0 (rig and debugging only) the wrist lands
+# up to 0.5 cm off target (8.7 cm turned by at most 3.5 degrees). Left-handed, the right glove holds the gun on
+# the left controller (the arms model is not mirrored) and its wrist follows the same rule: not measured.
 
 [standing]
 "default" = [-0.25, 0.18, 0.22, 0, 0, 0]
-
-# Desk-safe placement while seated (T-074): the same shape, pulled 5 cm back toward the body.
-[seated]
-"default" = [-0.30, 0.18, 0.22, 0, 0, 0]
+"weapon/player/shotgun" = [-0.183, 0.131, 0.223]
+"weapon/player/heavy_cannon" = [-0.270, 0.114, 0.204]
+"weapon/player/plasma_rifle" = [-0.025, 0.201, 0.362]
+"weapon/player/rocket_launcher" = [-0.344, 0.148, 0.215]
+"weapon/player/double_barrel" = [-0.195, 0.135, 0.225]
+"weapon/player/gauss_rifle" = [-0.455, 0.169, 0.285]
+"weapon/player/chaingun" = [-0.615, 0.168, 0.336]
+"weapon/player/bfg" = [-0.355, 0.094, 0.383]
 
 # Weapon sights (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): [pitch, yaw] in
 # degrees (pitch positive down, yaw counter-clockwise) is the direction of the weapon's sight line in the arms

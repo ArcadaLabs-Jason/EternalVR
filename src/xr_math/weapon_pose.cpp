@@ -88,6 +88,20 @@ EyeRelativePose applyLocalOffsetWithSight(const EyeRelativePose& pose,
     return out;
 }
 
+EyeRelativePose placeViewmodel(const EyeRelativePose& hand,
+                               const IdViewAxis& gripAxis,
+                               Vec3 translation,
+                               const IdAngles& rotation,
+                               const std::optional<IdAngles>& sight,
+                               Vec3 wrist,
+                               float unitsPerMetre) {
+    EyeRelativePose placed =
+        sight ? applyLocalOffsetWithSight(hand, translation, rotation, *sight, unitsPerMetre)
+              : applyLocalOffset(hand, translation, rotation, unitsPerMetre);
+    placed.offset = placed.offset + (inFrame(gripAxis, wrist) - inFrame(hand.axis, wrist)) * unitsPerMetre;
+    return placed;
+}
+
 std::optional<Shot>
 shotFromHand(Vec3 eye, Vec3 rayOffset, Vec3 direction, float maxReach, float muzzleDistance) {
     if (!finite(eye) || !finite(rayOffset) || !std::isfinite(maxReach) || maxReach < 0.0f ||

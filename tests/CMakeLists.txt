@@ -69,12 +69,13 @@ evr_add_test(evr_game_eternal_tests
         game/eternal/controller_data_tests.cpp
         game/eternal/controls_coverage_tests.cpp
         game/eternal/game_action_tests.cpp
+        game/eternal/hand_grip_tests.cpp
         game/eternal/quest_touch_bindings_tests.cpp
         game/eternal/usercmd_buttons_tests.cpp
         game/eternal/weapon_offsets_tests.cpp
         game/eternal/zoom_look_tests.cpp
         game/eternal/zoom_look_book_tests.cpp
-    DEPENDS evr_input)
+    DEPENDS evr_input evr_xr_math)
 
 evr_add_test(evr_posture_tests
     SOURCES
@@ -276,6 +277,7 @@ if(TARGET evr_device_features)
             vkcore/light_cull_tests.cpp
             vkcore/log_cap_tests.cpp
             vkcore/parallel_eyes_settings_tests.cpp
+            vkcore/refraction_sizes_tests.cpp
             vkcore/snapshot_pairs_tests.cpp
             vkcore/snapshot_ring_tests.cpp
             vkcore/status_file_tests.cpp

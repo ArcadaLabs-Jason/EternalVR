@@ -151,8 +151,9 @@ them is worse for you than described here.
   "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
   why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
-  may smear briefly while you turn. An experimental fix is in, off by default (the normal renderer only).
-  A first headset test showed no clear difference, so it stays off for now.
+  may smear briefly while you turn. Each eye now keeps its own history for the glass, and standing still
+  both eyes match the flat game on a test rig; whether the brief blur while turning is gone has not been
+  checked in a headset yet.
 - **Demons flying far off can leave a trail.** In a headset test in Exultia, distant flying demons smeared
   the way anti-aliasing (TAA) can smear fast motion. Anti-aliasing Off on the Play tab avoids TAA's
   smearing, at the cost of some shimmer on edges.
@@ -245,10 +246,14 @@ them is worse for you than described here.
 - **A sweep of the right stick down can swap weapons.** The weapon wheel opens sooner (0.15 s) when the stick is
   pushed within 20 degrees of straight down, so a sweep that drifts out of that cone after 0.15 s counts as a
   hold and can swap weapons when you let go.
-- **Weapon placement** in your hand is one estimate for all weapons; some guns may sit a little off.
+- **The Chaingun and the Ballista have no right glove on them.** Every gun is now placed so the glove's grip
+  sits where your hand holds the controller. The game's own animation holds those two with the left hand and
+  keeps the right glove off the gun, so the gun's grip is in your hand but no glove holds it yet. The placement
+  was measured on the test rig, not yet in a headset; if a gun still sits off your hand, please tell me which
+  one and roughly how far.
 - **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
   and Ballista point their sights where the shots go. The other guns follow; until then their sights can
-  point a little off your aim. The sights run parallel to the shot line, about 13 to 21 cm above it, so up
+  point a little off your aim. The sights run parallel to the shot line, about 9 to 20 cm above it, so up
   close they sit a bit above where the shots go. The Ballista and the Chaingun have no sight parts, so they
   line up along the barrel's bore (Ballista) and the zoom axis (Chaingun). Shots always go along your
   controller's aim, and the Aim dot sits exactly on that line at any distance.
@@ -264,8 +269,9 @@ them is worse for you than described here.
 - **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
   hand can cover it.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
-  weapon in your left hand the game still draws its right arm, reaching across to the gun. Turning off Show
-  arms (Play tab) hides both arms.
+  weapon in your left hand the game still draws its right arm, reaching across to the gun, and the right glove
+  holds the gun in your left hand; its placement there has not been measured. Turning off Show arms (Play
+  tab) hides both arms.
   A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand
   jitters when the gun arm moves, and the fist pose is odd); once those are fixed it becomes the standard,
   with no option to turn it on or off.

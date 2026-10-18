@@ -118,6 +118,20 @@ constexpr const char* kPassCallSignature =
     "44 8D 41 FF 8B 83 D0 37 01 00 48 8B D3 39 05 ?? ?? ?? ?? 48 8B CF 41 0F 95 C1 E8 ?? ?? ?? ??";
 constexpr std::size_t kPassCallCall = 0x1A;
 
+// ---- The render-size change (RVA 0x1CDD6D0) ----
+
+// After the accumulation targets (half the render size) and the mask chain, the mask tiles' pair (RVA
+// 0x1CDDB83): `mov ebx, 0x488`, a loop `mov rcx, [rip + deviceContext]` (+0xD) .. `mov rcx, [rbx + rcx]`,
+// `call resize(image, width >> 5, height >> 5, 1, 1)` (+0x26, RVA 0x1C4AE30), `add rbx, 8; cmp rbx, 0x498;
+// jl`; the hook on the next instruction (+0x38, `mov r14d, [rsp + 0x40]`), where every engine image is at its
+// new size.
+constexpr const char* kResizeSignature =
+    "BB 88 04 00 00 41 BE 01 00 00 00 66 90 48 8B 0D ?? ?? ?? ?? 45 8B CE 44 8B C7 44 89 74 24 20 41 8B D7 "
+    "48 8B 0C 0B E8 ?? ?? ?? ?? 48 83 C3 08 48 81 FB 98 04 00 00 7C D5 44 8B 74 24 40";
+constexpr std::size_t kResizeDc = 0xD;
+constexpr std::size_t kResizeCall = 0x26;
+constexpr std::size_t kResizeHook = 0x38;
+
 struct Sites {
     const std::byte* maskImages = nullptr;
     const std::byte* accHead = nullptr;
@@ -132,6 +146,7 @@ struct Sites {
     const std::byte* passMask = nullptr;
     const std::byte* passPlain = nullptr;
     const std::byte* passCall = nullptr;
+    const std::byte* resize = nullptr;
 };
 
 bool findSites(const GameImage& image, const char* tag, Sites& s) {
@@ -148,24 +163,28 @@ bool findSites(const GameImage& image, const char* tag, Sites& s) {
     s.passMask = findUnique(image, tag, "refraction pass with the mask", kPassMaskSignature);
     s.passPlain = findUnique(image, tag, "refraction pass without the mask", kPassPlainSignature);
     s.passCall = findUnique(image, tag, "refraction pass call", kPassCallSignature);
+    s.resize = findUnique(image, tag, "refraction image resize", kResizeSignature);
     return s.maskImages && s.accHead && s.accCreate && s.accTail && s.maskEntry && s.maskSlots &&
-           s.maskSize && s.maskLast && s.maskOut && s.passEntry && s.passMask && s.passPlain && s.passCall;
+           s.maskSize && s.maskLast && s.maskOut && s.passEntry && s.passMask && s.passPlain && s.passCall &&
+           s.resize;
 }
 
 // Every site in its function and in order, both loops' names, image manager and create function the same,
-// every pass site reading one device context global, and the job's call reaching the pass.
+// every pass site and the resize reading one device context global, and the job's call reaching the pass.
 bool checkSites(const GameImage& image,
                 const char* tag,
                 const Sites& s,
                 const std::byte*& manager,
                 const std::byte*& create,
-                const std::byte*& dc) {
+                const std::byte*& dc,
+                const std::byte*& resize) {
     const auto rip = [&](const std::byte* at, std::size_t disp) {
         return ripTarget(image, at + disp, at + disp + 4);
     };
     manager = rip(s.maskImages, kMaskImagesManager + 3);
     create = branchTarget(image, s.maskImages + kMaskImagesCreate);
     dc = rip(s.passMask, 3);
+    resize = branchTarget(image, s.resize + kResizeCall);
     const std::byte* constructor = functionStart(image, s.maskImages);
     const bool built =
         stringAt(image, rip(s.maskImages, kMaskImagesName + 3)) == "_refractionMaskTiles32x%d" &&
@@ -189,12 +208,15 @@ bool checkSites(const GameImage& image,
         s.passMask < s.passPlain && branchTarget(image, s.passCall + kPassCallCall) == s.passEntry;
     const bool oneDc = dc && image.contains(dc, sizeof(void*)) && rip(s.passPlain, kPassPlainDc + 3) == dc &&
                        rip(s.maskEntry, kMaskEntryDc + 3) == dc && rip(s.maskSlots, 3) == dc &&
-                       rip(s.maskSize, 3) == dc && rip(s.maskLast, 3) == dc && rip(s.maskOut, 3) == dc;
-    if (!built || !mask || !pass || !oneDc) {
+                       rip(s.maskSize, 3) == dc && rip(s.maskLast, 3) == dc && rip(s.maskOut, 3) == dc &&
+                       rip(s.resize, kResizeDc + 3) == dc;
+    const bool resized =
+        resize && functionStart(image, resize) == resize && functionStart(image, s.resize) != nullptr;
+    if (!built || !mask || !pass || !oneDc || !resized) {
         EVR_LOG(
-            "%s: the device context's refraction images (%d), the mask pass (%d), the refraction pass (%d) "
-            "or their device context (%d) did not check out; not installed",
-            tag, built, mask, pass, oneDc);
+            "%s: the device context's refraction images (%d), the mask pass (%d), the refraction pass (%d), "
+            "their device context (%d) or the image resize (%d) did not check out; not installed",
+            tag, built, mask, pass, oneDc, resized);
         return false;
     }
     return true;
@@ -210,7 +232,8 @@ bool locateRefractionSites(const GameImage& image, const char* tag, RefractionSi
     const std::byte* manager = nullptr;
     const std::byte* create = nullptr;
     const std::byte* dc = nullptr;
-    if (!checkSites(image, tag, s, manager, create, dc)) {
+    const std::byte* resize = nullptr;
+    if (!checkSites(image, tag, s, manager, create, dc, resize)) {
         return false;
     }
     const auto at = [](const std::byte* p, std::size_t offset) {
@@ -224,6 +247,8 @@ bool locateRefractionSites(const GameImage& image, const char* tag, RefractionSi
     out.passEntry = at(s.passEntry, 0);
     out.passMask = at(s.passMask, kPassMaskHook);
     out.passPlain = at(s.passPlain, kPassPlainHook);
+    out.imagesResized = at(s.resize, kResizeHook);
+    out.resizeImage = resize;
     out.imageManager = manager;
     out.createImage = create;
     out.deviceContext = dc;

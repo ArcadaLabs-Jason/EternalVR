@@ -5,11 +5,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 using evr::stereo_seq::Eye;
 using evr::stereo_seq::kRefractionUpdates;
 using evr::stereo_seq::RefractionHistory;
-using evr::stereo_seq::RefractionMode;
 using evr::stereo_seq::RefractionPlan;
 using evr::stereo_seq::RefractionReadiness;
 using evr::stereo_seq::RefractionRestart;
@@ -323,6 +323,15 @@ TEST_CASE("refraction history: invalidate makes every eye start over for its rea
     const auto next = renderWith(h, Eye::Left, 11, 2);
     CHECK_FALSE(next[0].fresh());
     CHECK_FALSE(next[1].fresh());
+
+    // The render size changed: both eyes start over once more, for that reason.
+    renderWith(h, Eye::Right, 12, 2);
+    h.invalidate(RefractionRestart::Resized);
+    CHECK(renderWith(h, Eye::Left, 13, 2)[0].restart == RefractionRestart::Resized);
+    CHECK(renderWith(h, Eye::Right, 14, 2)[1].restart == RefractionRestart::Resized);
+    CHECK_FALSE(renderWith(h, Eye::Left, 15, 2)[0].fresh());
+    CHECK(std::strcmp(evr::stereo_seq::refractionRestartName(RefractionRestart::Resized),
+                      "after the render size changed") == 0);
 }
 
 TEST_CASE("refraction history: the engine's accumulation index is pair * 2 + update") {
@@ -332,19 +341,6 @@ TEST_CASE("refraction history: the engine's accumulation index is pair * 2 + upd
     CHECK(evr::stereo_seq::refractionAccIndex(0, 1) == 1);
     CHECK(evr::stereo_seq::refractionAccIndex(1, 0) == 2);
     CHECK(evr::stereo_seq::refractionAccIndex(1, 1) == 3);
-}
-
-TEST_CASE("refraction mode: off by default, per eye when asked, hold") {
-    CHECK(evr::stereo_seq::refractionMode("") == RefractionMode::Off);
-    CHECK(evr::stereo_seq::refractionMode("something") == RefractionMode::Off);
-    CHECK(evr::stereo_seq::refractionMode("1") == RefractionMode::PerEye);
-    CHECK(evr::stereo_seq::refractionMode("On") == RefractionMode::PerEye);
-    CHECK(evr::stereo_seq::refractionMode("TRUE") == RefractionMode::PerEye);
-    CHECK(evr::stereo_seq::refractionMode("hold") == RefractionMode::Hold);
-    CHECK(evr::stereo_seq::refractionMode("HOLD") == RefractionMode::Hold);
-    CHECK(evr::stereo_seq::refractionMode("0") == RefractionMode::Off);
-    CHECK(evr::stereo_seq::refractionMode("off") == RefractionMode::Off);
-    CHECK(evr::stereo_seq::refractionMode("False") == RefractionMode::Off);
 }
 
 TEST_CASE("refraction readiness: why not, and when stereo renders are held off") {
@@ -371,17 +367,7 @@ TEST_CASE("refraction readiness: why not, and when stereo renders are held off")
     CHECK(evr::stereo_seq::refractionHeldOff(r, Eye::Right));
     CHECK_FALSE(evr::stereo_seq::refractionHeldOff(r, Eye::Mono));
 
-    r = ready();
-    r.mode = RefractionMode::Hold;
-    CHECK(evr::stereo_seq::refractionNotReady(r) != nullptr);
-    CHECK(evr::stereo_seq::refractionHeldOff(r, Eye::Left));
-    CHECK_FALSE(evr::stereo_seq::refractionHeldOff(r, Eye::Mono));
-
-    // Off, or without the hooks or the guard: the engine's own, nothing held.
-    r = ready();
-    r.mode = RefractionMode::Off;
-    CHECK(evr::stereo_seq::refractionNotReady(r) != nullptr);
-    CHECK_FALSE(evr::stereo_seq::refractionHeldOff(r, Eye::Left));
+    // Without the hooks or the guard: the engine's own, nothing held.
     r = ready();
     r.installed = false;
     CHECK_FALSE(evr::stereo_seq::refractionHeldOff(r, Eye::Left));
