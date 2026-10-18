@@ -9,6 +9,7 @@
 #include "features/foveation/rate_pattern.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/view_slots.hpp"
+#include "vkcore/vrs_khr_plan.hpp"
 #include "vkcore/vrs_nv_impl.hpp"
 
 #include <algorithm>
@@ -35,6 +36,7 @@ Settings readRequested() {
     std::wstring value;
     out.marks = readEnv(L"ETERNALVR_VRS_TINT", value) && value == L"1";
     out.guesses = readEnv(L"ETERNALVR_TEST_VRS_PARITY", value) && value == L"1";
+    out.testKhr = readEnv(L"ETERNALVR_TEST_VRS_KHR", value) && value == L"1";
     if (!readEnv(L"ETERNALVR_VRS_TEST", value) || value.empty()) {
         // The player's setting (the launcher's Foveated rendering row): a preset's full-rate angle, half rate
         // for the preset's band more.
@@ -109,6 +111,9 @@ bool createAndUpload(VrsDevice& d,
                      const std::vector<std::uint8_t>& pattern,
                      RateImage& out) {
     DeviceData& data = *d.data;
+    const VkImageUsageFlags usage =
+        d.khr ? (VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+              : (VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     info.imageType = VK_IMAGE_TYPE_2D;
     info.format = VK_FORMAT_R8_UINT;
@@ -117,7 +122,7 @@ bool createAndUpload(VrsDevice& d,
     info.arrayLayers = 1;
     info.samples = VK_SAMPLE_COUNT_1_BIT;
     info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    info.usage = VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    info.usage = usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (data.vk.CreateImage(data.device, &info, nullptr, &out.image) != VK_SUCCESS) {
@@ -141,8 +146,14 @@ bool createAndUpload(VrsDevice& d,
     if (d.createImageView(data.device, &view, nullptr, &out.view) != VK_SUCCESS) {
         return false;
     }
+    // VK_NV_shading_rate_image's texels are the palette indices themselves.
+    std::vector<std::uint8_t> encoded;
+    if (d.khr) {
+        encoded = vrs_khr::encodeRates(pattern, d.khr4x4);
+    }
+    const std::vector<std::uint8_t>& texelValues = d.khr ? encoded : pattern;
     VkBufferCreateInfo buffer{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    buffer.size = pattern.size();
+    buffer.size = texelValues.size();
     buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     if (data.vk.CreateBuffer(data.device, &buffer, nullptr, &out.staging) != VK_SUCCESS) {
@@ -159,7 +170,7 @@ bool createAndUpload(VrsDevice& d,
         data.vk.MapMemory(data.device, out.stagingMemory, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS) {
         return false;
     }
-    std::memcpy(mapped, pattern.data(), pattern.size());
+    std::memcpy(mapped, texelValues.data(), texelValues.size());
     data.vk.UnmapMemory(data.device, out.stagingMemory);
 
     VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
@@ -178,18 +189,40 @@ bool createAndUpload(VrsDevice& d,
     d.cmdCopyBufferToImage(commandBuffer, out.staging, out.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &copy);
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
+    barrier.newLayout = d.khr ? VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR
+                              : VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV;
-    data.vk.CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               VK_PIPELINE_STAGE_SHADING_RATE_IMAGE_BIT_NV, 0, 0, nullptr, 0, nullptr, 1,
-                               &barrier);
+    barrier.dstAccessMask = d.khr ? VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR
+                                  : VK_ACCESS_SHADING_RATE_IMAGE_READ_BIT_NV;
+    const VkPipelineStageFlags dstStage = d.khr ? VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR
+                                                : VK_PIPELINE_STAGE_SHADING_RATE_IMAGE_BIT_NV;
+    data.vk.CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage, 0, 0, nullptr, 0,
+                               nullptr, 1, &barrier);
     out.uploadedBy = commandBuffer;
     out.uploadedAt = nowSeconds();
     return true;
 }
 
 } // namespace
+
+void destroyRateImage(VrsDevice& d, const RateImage& image) {
+    DeviceData& data = *d.data;
+    if (image.view != VK_NULL_HANDLE) {
+        d.destroyImageView(data.device, image.view, nullptr);
+    }
+    if (image.image != VK_NULL_HANDLE) {
+        data.vk.DestroyImage(data.device, image.image, nullptr);
+    }
+    if (image.memory != VK_NULL_HANDLE) {
+        data.vk.FreeMemory(data.device, image.memory, nullptr);
+    }
+    if (image.staging != VK_NULL_HANDLE) {
+        data.vk.DestroyBuffer(data.device, image.staging, nullptr);
+    }
+    if (image.stagingMemory != VK_NULL_HANDLE) {
+        data.vk.FreeMemory(data.device, image.stagingMemory, nullptr);
+    }
+}
 
 const Settings& settings() {
     static const Settings s = readSettings();
@@ -325,8 +358,12 @@ VkImageView viewFor(VrsDevice& d, VkCommandBuffer commandBuffer, VkExtent2D exte
     if (!createAndUpload(d, commandBuffer, texels, pattern, image)) {
         EVR_LOG("vrs: the rate image for %ux%u could not be made; that size keeps full rate", extent.width,
                 extent.height);
+        // Nothing was recorded (each failure returns before the upload): its texels were never written, so
+        // what was made is freed and never bound.
+        destroyRateImage(d, image);
+        image = {};
     }
-    d.images[key] = image; // kept even when it failed, so it is not tried again
+    d.images[key] = image; // kept even when it failed (no view), so it is not tried again
     ++d.generationImages;
     return image.view;
 }

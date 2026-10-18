@@ -17,6 +17,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace evr::vkcore::vrs_khr {
+struct KhrDevice; // vrs_khr_impl.hpp: the VK_KHR_fragment_shading_rate path's state, on its device only
+} // namespace evr::vkcore::vrs_khr
+
 namespace evr::vkcore::vrs_nv {
 
 using DispatchKey = void*;
@@ -35,10 +39,11 @@ struct Settings {
     float halfDegrees = 40.0f; // Fovea: the half-rate region's angle; quarter rate outside
     bool marks = false;        // ETERNALVR_VRS_TINT: the presenter marks the reduced-rate areas
     bool guesses = false;      // ETERNALVR_TEST_VRS_PARITY: passes also take their recording's guessed frame
+    bool testKhr = false;      // ETERNALVR_TEST_VRS_KHR: VK_NV_shading_rate_image is not used (vrs_khr.hpp)
 };
 
-// Read once from ETERNALVR_VRS_TEST, ETERNALVR_VRS_FOVEA, ETERNALVR_FOVEATION, ETERNALVR_VRS_TINT and
-// ETERNALVR_TEST_VRS_PARITY.
+// Read once from ETERNALVR_VRS_TEST, ETERNALVR_VRS_FOVEA, ETERNALVR_FOVEATION, ETERNALVR_VRS_TINT,
+// ETERNALVR_TEST_VRS_PARITY and ETERNALVR_TEST_VRS_KHR.
 const Settings& settings();
 
 // A render pass's eye: 0 (L), 1 (R) or kNoEye (mono, untagged or not known: full rate).
@@ -56,13 +61,27 @@ struct RateImage {
 
 struct VrsDevice {
     bool on = false; // the extension is enabled
+    // On through VK_KHR_fragment_shading_rate (vrs_khr.hpp) instead of VK_NV_shading_rate_image; `khr4x4`:
+    // its largest fragment is 4x4 (quarter rate is 2x2 otherwise).
+    bool khr = false;
+    bool khr4x4 = false;
+    vrs_khr::KhrDevice* khrState = nullptr; // set with `khr`
     DeviceData* data = nullptr;
     VkExtent2D texel{16, 16};
     PFN_vkCreateGraphicsPipelines createGraphicsPipelines = nullptr;
     PFN_vkCmdBeginRenderPass cmdBeginRenderPass = nullptr;
     PFN_vkCmdBindShadingRateImageNV cmdBindShadingRateImage = nullptr;
     PFN_vkCreateImageView createImageView = nullptr;
+    PFN_vkDestroyImageView destroyImageView = nullptr;
     PFN_vkCmdCopyBufferToImage cmdCopyBufferToImage = nullptr;
+    // What vrs_khr's hooks call on every device, its own or not (vrs_khr_impl.hpp, loadKhrPassThrough);
+    // createRenderPass2 on its device only.
+    PFN_vkCreateRenderPass createRenderPass = nullptr;
+    PFN_vkCreateRenderPass2 createRenderPass2 = nullptr;
+    PFN_vkDestroyRenderPass destroyRenderPass = nullptr;
+    PFN_vkCreateFramebuffer createFramebuffer = nullptr;
+    PFN_vkDestroyFramebuffer destroyFramebuffer = nullptr;
+    PFN_vkCmdBeginRenderPass2 cmdBeginRenderPass2 = nullptr;
     std::mutex imagesMutex;
     std::unordered_map<std::uint64_t, RateImage> images; // by eye shape generation, size and eye
     std::uint32_t imagesGeneration = 0;                  // the generation made last, and its images
@@ -105,6 +124,8 @@ struct VrsDevice {
 };
 
 VrsDevice* deviceOf(DispatchKey key);
+void registerDevice(DispatchKey key, VrsDevice* d);
+void noteFollowsFrames();
 
 double nowSeconds();
 
@@ -121,6 +142,9 @@ std::uint32_t eyeShapeGeneration();
 // The texels of `eye`'s pattern for a render target of `extent` (`texel` pixels per texel); empty while the
 // eye's shape is not known yet. `log`: the regions are logged (once per rate image).
 std::vector<std::uint8_t> patternFor(VkExtent2D texel, VkExtent2D extent, int eye, bool log);
+
+// Frees what of `image` was made (a rate image that failed, nothing recorded with it).
+void destroyRateImage(VrsDevice& d, const RateImage& image);
 
 // The rate image for a render target of `extent` drawn for `eye`, or VK_NULL_HANDLE (full rate) while it is
 // not ready. Made and uploaded in `commandBuffer` the first time.

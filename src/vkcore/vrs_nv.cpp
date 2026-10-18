@@ -8,6 +8,8 @@
 #include "vkcore/log.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/vrs_gui.hpp"
+#include "vkcore/vrs_khr.hpp"
+#include "vkcore/vrs_khr_impl.hpp"
 #include "vkcore/vrs_nv_impl.hpp"
 
 #include <algorithm>
@@ -52,6 +54,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
                                                        const VkAllocationCallbacks* pAllocator,
                                                        VkPipeline* pPipelines) {
     VrsDevice* d = deviceOf(keyOf(device));
+    if (d->khr) {
+        return vrs_khr::createGraphicsPipelines(*d, device, cache, count, pInfos, pAllocator, pPipelines);
+    }
     if (!d->on) {
         return d->createGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     }
@@ -93,6 +98,10 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
                                               const VkRenderPassBeginInfo* pRenderPassBegin,
                                               VkSubpassContents contents) {
     VrsDevice* d = deviceOf(keyOf(commandBuffer));
+    if (d->khr) {
+        vrs_khr::cmdBeginRenderPass(*d, commandBuffer, *pRenderPassBegin, contents);
+        return;
+    }
     if (d->on) {
         const VkExtent2D extent = pRenderPassBegin->renderArea.extent;
         // The eye of the backend frame these commands belong to (vrs_pass_eye.cpp): the render thread records
@@ -159,6 +168,15 @@ VrsDevice* deviceOf(DispatchKey key) {
     return it == g_devices.end() ? nullptr : it->second;
 }
 
+void registerDevice(DispatchKey key, VrsDevice* d) {
+    std::unique_lock lock(g_devicesMutex);
+    g_devices[key] = d;
+}
+
+void noteFollowsFrames() {
+    g_followsFrames.store(true, std::memory_order_relaxed);
+}
+
 bool wanted() {
     return settings().mode != Mode::Off;
 }
@@ -170,6 +188,11 @@ bool passesFollowFrames() {
 VkPhysicalDeviceShadingRateImageFeaturesNV*
 planDevice(InstanceData& inst, VkPhysicalDevice physicalDevice, std::vector<const char*>& extensions) {
     if (!wanted()) {
+        return nullptr;
+    }
+    if (settings().testKhr) {
+        EVR_LOG("vrs: ETERNALVR_TEST_VRS_KHR=1 (a rig switch): %s is not used, %s is tried",
+                VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME, VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
         return nullptr;
     }
     std::uint32_t count = 0;
@@ -187,7 +210,7 @@ planDevice(InstanceData& inst, VkPhysicalDevice physicalDevice, std::vector<cons
         inst.vk.GetPhysicalDeviceFeatures2(physicalDevice, &features);
     }
     if (!supported || !query.shadingRateImage) {
-        EVR_LOG("vrs: %s is not supported on this device (NVIDIA RTX only); foveated rendering stays off",
+        EVR_LOG("vrs: %s is not supported on this device (NVIDIA RTX only)",
                 VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
         return nullptr;
     }
@@ -197,8 +220,12 @@ planDevice(InstanceData& inst, VkPhysicalDevice physicalDevice, std::vector<cons
     return &g_feature;
 }
 
-void onDeviceCreated(DeviceData& data, bool enabled) {
+void onDeviceCreated(DeviceData& data, bool enabled, bool khr) {
     if (!wanted()) {
+        return;
+    }
+    if (khr) {
+        vrs_khr::onDeviceCreated(data);
         return;
     }
     auto* d = new VrsDevice; // kept for the process's life, like the other device tables
@@ -210,6 +237,7 @@ void onDeviceCreated(DeviceData& data, bool enabled) {
         reinterpret_cast<PFN_vkCreateGraphicsPipelines>(next("vkCreateGraphicsPipelines"));
     d->cmdBeginRenderPass = reinterpret_cast<PFN_vkCmdBeginRenderPass>(next("vkCmdBeginRenderPass"));
     loadCommandBufferFunctions(*d);
+    vrs_khr::loadKhrPassThrough(*d); // vrs_khr's hooks see this device too once a device has that path on
     if (enabled) {
         const auto load = [&](const char* name) {
             return data.nextGetDeviceProcAddr(data.device, name);
@@ -217,6 +245,7 @@ void onDeviceCreated(DeviceData& data, bool enabled) {
         d->cmdBindShadingRateImage =
             reinterpret_cast<PFN_vkCmdBindShadingRateImageNV>(load("vkCmdBindShadingRateImageNV"));
         d->createImageView = reinterpret_cast<PFN_vkCreateImageView>(load("vkCreateImageView"));
+        d->destroyImageView = reinterpret_cast<PFN_vkDestroyImageView>(load("vkDestroyImageView"));
         d->cmdCopyBufferToImage =
             reinterpret_cast<PFN_vkCmdCopyBufferToImage>(load("vkCmdCopyBufferToImage"));
         VkPhysicalDeviceShadingRateImagePropertiesNV props{
@@ -224,9 +253,9 @@ void onDeviceCreated(DeviceData& data, bool enabled) {
         VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &props};
         data.instance->vk.GetPhysicalDeviceProperties2(data.physicalDevice, &props2);
         d->texel = props.shadingRateTexelSize;
-        d->on = d->cmdBindShadingRateImage && d->createImageView && d->cmdCopyBufferToImage &&
-                props.shadingRatePaletteSize >= std::size(kPalette) && d->texel.width > 0 &&
-                d->texel.height > 0;
+        d->on = d->cmdBindShadingRateImage && d->createImageView && d->destroyImageView &&
+                d->cmdCopyBufferToImage && props.shadingRatePaletteSize >= std::size(kPalette) &&
+                d->texel.width > 0 && d->texel.height > 0;
         const Settings& s = settings();
         d->followsFrames = d->on && s.mode != Mode::Uniform;
         d->usesGuesses = d->followsFrames && s.guesses;
@@ -278,6 +307,9 @@ void noteSwapchain(VkDevice device, VkExtent2D extent) {
 PFN_vkVoidFunction findHook(const char* name) {
     if (!wanted()) {
         return nullptr;
+    }
+    if (const PFN_vkVoidFunction khr = vrs_khr::findHook(name)) {
+        return khr;
     }
     if (std::strcmp(name, "vkCreateGraphicsPipelines") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(&CreateGraphicsPipelines);

@@ -1139,7 +1139,7 @@ for seconds (below).
   10 s line), and that SteamVR's and Virtual Desktop's Touch emulation report the rest.
 - **Touch sensors as buttons** are covered by unit tests and scripted rig scenarios (`touchbtn-tap`,
   `touchbtn-unbound`, `touchbtn-press`, `touchbtn-face`, `touchbtn-stick` in
-  `tools/rig/qa/qa-scenarios-wheel.ps1`: A touched taps weapon_slot_2 and the heavy cannon comes up, the touch
+  `tools/rig/qa/qa-scenarios-binds.ps1`: A touched taps weapon_slot_2 and the heavy cannon comes up, the touch
   reaches the layer and nothing fires with no touch bound, A pressed while touched jumps and taps nothing, A
   pressed with the thumb also on B whose tap is bound jumps and taps nothing, X touched 0.15 s after the left
   stick is let go taps), not yet a headset. To confirm: a tap of A

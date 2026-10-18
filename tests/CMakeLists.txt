@@ -284,8 +284,9 @@ if(TARGET evr_device_features)
             vkcore/view_dlss_plan_tests.cpp
             vkcore/view_frames_tests.cpp
             vkcore/view_water_start_tests.cpp
+            vkcore/vrs_khr_plan_tests.cpp
         DEPENDS evr_adapter_order evr_code_refs evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
-            evr_parallel_eyes_settings evr_mp_policy)
+            evr_parallel_eyes_settings evr_mp_policy evr_vrs_khr_plan)
 endif()
 
 # The shader census tool (tools/shader_census) is tested on synthetic SPIR-V, with no SDK needed.

@@ -1,7 +1,7 @@
 # Control map scenarios beyond the thumb rests: a player's file with a later version's key (T-127,
 # docs/VR_CONTROLLERS.md, "Forward-compatible control maps"). Dot-sourced by qa-suite.ps1 after
-# qa-scenarios-wheel.ps1, whose helpers it uses (New-QaRestControls, Invoke-QaRestTap, Test-QaActionLines,
-# Get-QaHeldItems): added to $script:QaScenarios before the launcher's end-to-end suite.
+# qa-scenarios-wheel.ps1 and qa-scenarios-binds.ps1, whose helpers it uses (New-QaRestControls, Invoke-QaRestTap,
+# Test-QaActionLines, Get-QaHeldItems): added to $script:QaScenarios before the launcher's end-to-end suite.
 
 # A key no version has (a made-up input), beside the real binding of restbutton-tap.
 $script:QaLaterKey = '"left.futurebutton.tap" = "weapon_slot_3"'

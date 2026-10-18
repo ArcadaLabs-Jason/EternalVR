@@ -80,6 +80,8 @@ private:
     bool logged_ = false;
     bool loggedFallback_ = false;
     bool loggedNoAbilities_ = false;
+    // More head-locked pieces than quads (logged once).
+    bool loggedPieceCap_ = false;
     float lastDegrees_ = 180.0f; // the last facing and gaze angles, for the log
     float lastGaze_ = 180.0f;
     bool lastWant_ = false; // the fade's last target, for the log of its changes

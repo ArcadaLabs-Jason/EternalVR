@@ -63,6 +63,7 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-cloud.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-wheel.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-binds.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-controls.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-guard.ps1')
 

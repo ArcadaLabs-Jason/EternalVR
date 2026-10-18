@@ -128,7 +128,7 @@ namespace EternalVR.Launcher.Core.Tests
             var text = SettingTexts.For(Setting.Foveation);
             Assert.Equal("Foveated rendering (experimental)", text.Label);
             Assert.Equal(new[] { "Off", "Subtle", "Balanced", "Aggressive", "Maximum" }, text.Choices);
-            Assert.Contains("NVIDIA RTX only", text.Tooltip);
+            Assert.Contains("On NVIDIA RTX, AMD Radeon RX 6000 or newer and Intel Arc cards", text.Tooltip);
             Assert.Contains("Experimental", text.Tooltip);
             Assert.DoesNotContain("\u2014", text.Tooltip);
         }

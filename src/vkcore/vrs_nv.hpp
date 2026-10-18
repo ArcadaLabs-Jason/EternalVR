@@ -42,9 +42,10 @@ namespace evr::vkcore::vrs_nv {
 VkPhysicalDeviceShadingRateImageFeaturesNV*
 planDevice(InstanceData& inst, VkPhysicalDevice physicalDevice, std::vector<const char*>& extensions);
 
-// After the device is created with the plan. These hooks are the innermost of the layer's own chain: the
-// modules that hook the same functions call them, and they call the next layer.
-void onDeviceCreated(DeviceData& data, bool enabled);
+// After the device is created with the plan (`khr`: with vrs_khr's plan, set up there instead). These hooks
+// are the innermost of the layer's own chain: the modules that hook the same functions call them, and they
+// call the next layer.
+void onDeviceCreated(DeviceData& data, bool enabled, bool khr);
 void onDeviceDestroyed(VkDevice device);
 
 // The presenter's eye `eye` (0 = L, 1 = R): its FOV and its orientation in the head, from a frame whose eyes
@@ -78,7 +79,8 @@ void recordMarks(DeviceData& dev,
                  VkExtent2D extent);
 
 // vkCreateGraphicsPipelines, vkCmdBeginRenderPass and the command buffer functions that start and end a
-// recording (vrs_command_buffers.cpp) while wanted, and vrs_gui's hooks; nullptr otherwise.
+// recording (vrs_command_buffers.cpp) while wanted, and vrs_gui's hooks, or vrs_khr's where it has its own
+// (once a device has that path on); nullptr otherwise. Each acts on the device's own path.
 PFN_vkVoidFunction findHook(const char* name);
 
 } // namespace evr::vkcore::vrs_nv

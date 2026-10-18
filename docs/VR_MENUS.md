@@ -443,16 +443,20 @@ screen's tips bar names Q: LG`, each grip's key (`loading screen tips: Q down`, 
 
 `menu:` the located cursor (`cursor event handler at RVA 0x18000E0, cursor pointer at RVA 0x47DDB88`),
 the map page (`the Dossier's map page ...`), a panel placed again after a re-anchor,
-`pointer on; panel ...`, `right button down` / `up`, `the game shows its cursor (a menu screen | a menu over the game): panel ...`,
+`pointer on; panel ...`, `right button down` / `up`,
+`the game shows its cursor (a menu screen | a menu over the game): panel ...`,
 `the cursor is gone; the panel and the pointer are down` (or `...; the pointer is down, the panel stays
 while the menu's backdrop shows`, then `the cursor is back; the panel stays where it was` or `the panel is
-down (held N s)`), every button, key and wheel event (the first 300, then one a minute) and the first moves, `controllers' gameplay input
-held back (menu)` / `back on`, and every 10 s the counts (panel frames, moves, clicks, wheels, keys, not
-delivered, the cursor, and the game's desktop cursor moves and clips kept off the desktop). `keys:` `the
-game read an injected mouse event`, `desktop cursor kept from the game while it is not in the
-foreground`. `ui:` `weapon wheel straight ahead (panel HUD): GUI rect (x, y) w x h on a W x H m quad D m ahead
-(A deg wide); the head-locked HUD in N piece(s) around it` when the wheel goes ahead, `weapon wheel back on
-the HUD after S s (N headset frame(s) straight ahead)` when it goes back (the first 40 of these). `menu model:` at start-up `idMenuWidget_3D_Stand::UpdatePosition view at RVA 0x15A6D84` and
+down (held N s)`), every button, key and wheel event (the first 300, then one a minute) and the first
+moves, `controllers' gameplay input held back (menu)` / `back on`, and every 10 s the counts (panel frames,
+moves, clicks, wheels, keys, not delivered, the cursor, and the game's desktop cursor moves and clips kept
+off the desktop). `keys:` `the game read an injected mouse event`, `desktop cursor kept from the game while
+it is not in the foreground`. `ui:` `weapon wheel straight ahead (panel HUD): GUI rect (x, y) w x h on a
+W x H m quad D m ahead (A deg wide); the head-locked HUD in N piece(s) around it` when the wheel goes
+ahead and `weapon wheel back on the HUD after S s (N headset frame(s) straight ahead)` when it goes back
+(40 wheel lines in all, these and `weapon wheel up, but no wheel quad ...` counted together); once, `the head-locked HUD
+is cut into N pieces, only M fit; the rest is not shown` if the HUD ever needs more quads than the
+layer has. `menu model:` at start-up `idMenuWidget_3D_Stand::UpdatePosition view at RVA 0x15A6D84` and
 `hooks at RVA 0x15A6D97 (the render view) and 0x15A7134 (the placed model); ...` (or `off
 (ETERNALVR_MENU_MODEL_PANEL=0); ...`, or why a check failed), then once `the first model placed from the
 panel camera: camera (...) fwd (...), fov 90.00 x ..., the panel N unit(s) ahead; the model at (...),

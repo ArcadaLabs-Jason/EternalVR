@@ -13,6 +13,7 @@
 #include "vkcore/vrs_nv.hpp"
 #include "vkcore/vrs_nv_impl.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -122,8 +123,10 @@ VkImage dotImage(DeviceData& dev, VkCommandBuffer commandBuffer, std::uint32_t f
 }
 
 // Under g_mutex: the dot copies for eye `eye`'s image of `extent` at `offset`; empty while its pattern is not
-// known (asked again at the next copy).
-const std::vector<VkImageCopy>& regionsFor(VkExtent2D texel, int eye, VkOffset2D offset, VkExtent2D extent) {
+// known (asked again at the next copy). `khr`: vrs_khr's texel, which can be smaller than 16 (8 on AMD), so
+// the dots stay at least 32 pixels apart.
+const std::vector<VkImageCopy>&
+regionsFor(VkExtent2D texel, bool khr, int eye, VkOffset2D offset, VkExtent2D extent) {
     static const std::vector<VkImageCopy> kNone;
     const auto key =
         std::make_tuple(eyeShapeGeneration(), eye, extent.width, extent.height, offset.x, offset.y);
@@ -136,9 +139,11 @@ const std::vector<VkImageCopy>& regionsFor(VkExtent2D texel, int eye, VkOffset2D
     }
     const std::uint32_t columns = (extent.width + texel.width - 1) / texel.width;
     const std::uint32_t rows = (extent.height + texel.height - 1) / texel.height;
+    const std::uint32_t strideX = khr ? std::max(kStride, 32u / std::max(texel.width, 1u)) : kStride;
+    const std::uint32_t strideY = khr ? std::max(kStride, 32u / std::max(texel.height, 1u)) : kStride;
     std::vector<VkImageCopy> copies;
-    for (std::uint32_t ty = 0; ty < rows; ty += kStride) {
-        for (std::uint32_t tx = 0; tx < columns; tx += kStride) {
+    for (std::uint32_t ty = 0; ty < rows; ty += strideY) {
+        for (std::uint32_t tx = 0; tx < columns; tx += strideX) {
             const std::uint8_t rate = pattern[static_cast<std::size_t>(ty) * columns + tx];
             const std::uint32_t x = tx * texel.width + texel.width / 2 - kDot / 2;
             const std::uint32_t y = ty * texel.height + texel.height / 2 - kDot / 2;
@@ -184,7 +189,7 @@ void recordMarks(DeviceData& dev,
         return; // none of the eye's passes got a rate image since its previous marks
     }
     std::lock_guard lock(g_mutex);
-    const std::vector<VkImageCopy>& copies = regionsFor(d->texel, eye, offset, extent);
+    const std::vector<VkImageCopy>& copies = regionsFor(d->texel, d->khr, eye, offset, extent);
     const VkImage dot = copies.empty() ? VK_NULL_HANDLE : dotImage(dev, commandBuffer, family, format);
     if (!dot) {
         return;

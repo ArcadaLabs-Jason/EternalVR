@@ -44,6 +44,14 @@ target_compile_features(evr_dump_format PUBLIC cxx_std_20)
 target_compile_definitions(evr_dump_format PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(evr_dump_format PRIVATE evr_warnings PUBLIC Vulkan::Headers)
 
+# Foveated rendering through VK_KHR_fragment_shading_rate: its decisions (vrs_khr_plan.hpp), tested without a
+# device.
+add_library(evr_vrs_khr_plan STATIC vrs_khr_plan.cpp)
+target_include_directories(evr_vrs_khr_plan PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_vrs_khr_plan PUBLIC cxx_std_20)
+target_compile_definitions(evr_vrs_khr_plan PUBLIC VK_NO_PROTOTYPES)
+target_link_libraries(evr_vrs_khr_plan PRIVATE evr_warnings PUBLIC Vulkan::Headers evr_foveation)
+
 # The game settings line (game_settings.cpp): its cvars, text and schedule, tested without the game.
 add_library(evr_game_settings_line STATIC game_settings_line.cpp)
 target_include_directories(evr_game_settings_line PUBLIC "${PROJECT_SOURCE_DIR}/src")
@@ -261,6 +269,10 @@ target_sources(evr_layer PRIVATE
     viewmodel_hook.cpp
     vrs_command_buffers.cpp
     vrs_gui.cpp
+    vrs_khr.cpp
+    vrs_khr_begin.cpp
+    vrs_khr_neutral.cpp
+    vrs_khr_passes.cpp
     vrs_marks.cpp
     vrs_nv.cpp
     vrs_pass_eye.cpp
@@ -294,6 +306,7 @@ target_link_libraries(evr_layer PRIVATE
     evr_dump_format
     evr_game_settings_line
     evr_parallel_eyes_settings
+    evr_vrs_khr_plan
     evr_gpu_timing
     evr_layer_gate
     evr_key_injection

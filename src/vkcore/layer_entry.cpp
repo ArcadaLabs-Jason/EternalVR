@@ -395,7 +395,8 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
     cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
     stall_watch::onDeviceCreated(*data, inst->isGame && !t_passThrough); // always on, after the dump
-    vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate); // ETERNALVR_VRS_TEST, innermost of the chain
+    // ETERNALVR_VRS_TEST, innermost of the chain; vrs_khr's path where planned (VK_KHR_fragment_shading_rate)
+    vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate, interop && plan.shadingRateKhr);
     // ETERNALVR_TEST_CB_CHECK, a Parallel Eye Rendering rig tool: last, it chains to every hook above.
     cb_check::onDeviceCreated(*data, inst->isGame && !t_passThrough, &findDeviceHookAfterCheck);
 

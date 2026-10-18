@@ -67,9 +67,4 @@ WheelCentring::Step WheelCentring::update(bool wheelInImage, double seconds) {
     return step;
 }
 
-void WheelCentring::reset() {
-    centred_ = false;
-    lastUp_ = 0.0;
-}
-
 } // namespace evr::ui_layer

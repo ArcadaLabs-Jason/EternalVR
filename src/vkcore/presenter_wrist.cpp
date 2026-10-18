@@ -91,6 +91,11 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     for (const ui_layer::PixelRect& r : hud.pieces) {
         // Room for the hand quads and the wheel after the pieces.
         if (n == kMaxQuads - 4) {
+            if (!loggedPieceCap_) {
+                loggedPieceCap_ = true;
+                EVR_LOG("ui: the head-locked HUD is cut into %zu pieces, only %u fit; the rest is not shown",
+                        hud.pieces.size(), n);
+            }
             break;
         }
         const ui_layer::PanelPiece piece = ui_layer::panelPiece(r, shown, ui.size.width);
@@ -113,7 +118,7 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
         XrCompositionLayerQuad q = ui;
         q.next = nullptr;
         q.subImage.imageRect = toXrRect(hud.wheel->rect);
-        q.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {hud.wheel->centreX, hud.wheel->centreY, -hud.wheel->distance}};
+        q.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -hud.wheel->distance}};
         q.size = {hud.wheel->width, hud.wheel->height};
         out[n++] = q;
     }

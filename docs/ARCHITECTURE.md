@@ -995,9 +995,21 @@ documentation say so.
 eye bound for each render pass into a target in the eye's space, off by default and offered as an
 experimental launcher setting; `adjustForLens` is not called. Each region is the cone of its preset angle
 around head-forward, so a direction gets the same rate in both eyes (`foveation_region.hpp`, T-128).
+On a GPU without that extension (AMD, Intel) the same patterns reach the same passes through
+`VK_KHR_fragment_shading_rate`'s shading rate attachment (src/vkcore/vrs_khr.cpp, T-137): the game's
+render passes are remade with `vkCreateRenderPass2` and the attachment, their framebuffers carry a
+full-rate image, their pipelines take the attachment's rate, and an eye pass's begin swaps in a
+framebuffer with the eye's rate image. What the rig showed the game uses there (RTX 3080 Ti with
+`ETERNALVR_TEST_VRS_KHR=1`, e1m2, 2026-10-17): a Vulkan 1.1 device whose 21 extensions include none
+of `VK_KHR_create_renderpass2`, `VK_KHR_imageless_framebuffer`, `VK_KHR_dynamic_rendering` or
+`VK_KHR_fragment_shading_rate`; render passes only through `vkCreateRenderPass`, all 1,234 of them a
+single graphics subpass with nothing chained, so all promoted; every begin through
+`vkCmdBeginRenderPass` with inline contents (none through `vkCmdBeginRenderPass2` and none with
+secondary command buffers in about 400,000 begins); 917 graphics pipelines, all with a render pass;
+every pass into an eye-space target one layer with its render area the whole framebuffer.
 docs/VR_STEREO.md has the details. The
 plan below (`VK_KHR_fragment_shading_rate`, a 2-layer shading-rate image selected by `ViewIndex`, on by
-default) was written for the multiview design and was not built.
+default) was written for the multiview design and was not built as such.
 - **Fixed foveation on every headset** (the plan; v1 covers NVIDIA RTX, T-130). Regions are defined in degrees and centred per
   eye on head-forward projected into that eye's frustum.
 - Presets: Off / Subtle / Balanced / Aggressive / Maximum. Pancake-lens headsets default one notch gentler.

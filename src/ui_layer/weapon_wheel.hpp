@@ -28,13 +28,10 @@ namespace evr::ui_layer {
 // width, clear of the corner blocks below it (from y 0.76) and of the crosshair's rings (up to x 0.61).
 BandRect wheelBandRect();
 
-// The wheel's quad while it is centred: the part of the target it shows, where its centre is in the head's
-// space (metres: +x right, +y up, -z ahead; straight ahead: x and y 0, z = -distance) and its size in metres.
-// It faces the eyes.
+// The wheel's quad while it is centred: the part of the target it shows and its size in metres. Its centre is
+// straight ahead of the eyes, `distance` metres away (x and y 0, z = -distance in the head's space).
 struct CentredWheel {
     PixelRect rect;
-    float centreX = 0.0f;
-    float centreY = 0.0f;
     float distance = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
@@ -75,8 +72,6 @@ public:
     };
     // One headset frame at `seconds`: `wheelInImage`, the frame of the shown GUI image had the wheel up.
     Step update(bool wheelInImage, double seconds);
-    void reset();
-    [[nodiscard]] bool centred() const { return centred_; }
 
 private:
     bool centred_ = false;

@@ -86,9 +86,8 @@ std::optional<Seen> seenWheel(const HeadLockedHud& hud,
                               float distance) {
     if (hud.wheel) {
         const CentredWheel& w = *hud.wheel;
-        return Seen{std::atan2(w.centreX, w.distance) * kDegreesPerRadian,
-                    std::atan2(w.centreY, w.distance) * kDegreesPerRadian,
-                    2.0 * std::atan(w.width / 2.0 / w.distance) * kDegreesPerRadian};
+        // Straight ahead (CentredWheel).
+        return Seen{0.0, 0.0, 2.0 * std::atan(w.width / 2.0 / w.distance) * kDegreesPerRadian};
     }
     const std::int64_t cx = wheel.x + wheel.width / 2;
     const std::int64_t cy = wheel.y + wheel.height / 2;
@@ -248,6 +247,4 @@ TEST_CASE("weapon wheel: centred from the first image with the wheel up, held br
     s = c.update(true, 12.0);
     CHECK(s.centred);
     CHECK(s.started);
-    c.reset();
-    CHECK_FALSE(c.centred());
 }

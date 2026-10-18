@@ -172,14 +172,16 @@ them is worse for you than described here.
   there before), please tell me where it happened.
 - **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
   player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
-  `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX cards, but it is
-  experimental and off by default.
+  `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX, AMD Radeon RX 6000 or
+  newer and Intel Arc cards, but it is experimental and off by default.
 - **Foveated rendering (experimental) is less sharp toward the edges, by design.** Since 0.1.48 the sharp
   area is measured as an angle from where your head points, so a spot in the scene gets the same detail in
   both eyes (before, some detail off to the side could be sharp in one eye and blurry in the other). On
   headsets whose eye images aren't symmetric (Quest 3 for one) the blurrier band toward your nose and at
-  the top is narrower than in 0.1.47 and more of it sits on the outer side. It is off by default, NVIDIA
-  RTX only, and off with Parallel Eye Rendering. If you use it, tell me how it looks to you.
+  the top is narrower than in 0.1.47 and more of it sits on the outer side. It is off by default and off
+  with Parallel Eye Rendering. Since 0.1.56 it also runs on AMD Radeon RX 6000 or newer and Intel Arc cards,
+  through Vulkan's standard shading rate (a player's RX 6750 XT ran it; Intel Arc has not been tried, and
+  my test PC has neither). If you use it, tell me how it looks to you.
 - **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
   picture can stop for about half a second. That is the game's own checkpoint autosave, not the mod: the
   game holds everything while it writes the save. It happens in the flat game too, but in the headset a

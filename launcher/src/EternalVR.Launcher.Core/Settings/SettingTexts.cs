@@ -203,7 +203,8 @@ namespace EternalVR.Launcher.Core.Settings
                 "Shades the edges of each eye at a lower rate, where the lenses blur anyway, so the graphics card does less "
                 + "work (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). "
                 + "It changes the frame rate only when the graphics card is what limits it. Subtle keeps the most of each eye "
-                + "at full detail, Maximum the least. NVIDIA RTX only; other cards ignore it. Off by default. Experimental.",
+                + "at full detail, Maximum the least. On NVIDIA RTX, AMD Radeon RX 6000 or newer and Intel Arc cards (not yet tried "
+                + "on Intel); other cards ignore it. Off by default. Experimental.",
                 "Off", "Subtle", "Balanced", "Aggressive", "Maximum"),
             [Setting.FramePacing] = new Text("Frame pacing",
                 "How the game's frames are timed against your headset's. As fast as the game runs: the game draws as many "

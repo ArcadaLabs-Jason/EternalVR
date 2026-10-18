@@ -311,7 +311,8 @@ namespace EternalVR.Launcher.Core.Launch
             // Off: no per-eye temporal history; the layer holds r_antialiasing 0 and r_TAASafeMode 1 (docs/VR_STEREO.md).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Off) Set("ETERNALVR_STEREO_TAA", "0");
             // Fixed foveated rendering (experimental): the edges of each eye shaded at a lower rate through NVIDIA's shading
-            // rate image (src/vkcore/vrs_nv.cpp; other cards log it as unsupported). Stereo only, not with Parallel Eye
+            // rate image (src/vkcore/vrs_nv.cpp) or VK_KHR_fragment_shading_rate's attachment (src/vkcore/vrs_khr.cpp; cards
+            // with neither log it as unsupported). Stereo only, not with Parallel Eye
             // Rendering (the layer turns it off there), absent when off.
             if (stereo && !parallel && s.Foveation != FoveationMode.Off)
                 Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));

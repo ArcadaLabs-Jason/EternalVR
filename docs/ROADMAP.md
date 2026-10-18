@@ -710,9 +710,10 @@ v1 if time allows
 - [ ] 120 Hz at Quest 3 size with DLSS Quality, fixed foveation and about 0.85 render scale (R11
       section 5.2), same measurement against the 8.3 ms period
 - [ ] Eye-tracked foveation verified by a tester on a gaze-capable headset
-- [ ] The KHR foveation path for AMD and Intel (T-130, D-049): `vulkaninfo` recorded on such a GPU,
-      including the fragment-shading-rate features and `layeredShadingRateAttachments`, and which
-      extension `r_VRSEnabled` enables (NV or KHR, T-037)
+- [ ] The KHR foveation path for AMD and Intel (T-130, D-049): built and rig-checked on NVIDIA (T-137,
+      `ETERNALVR_TEST_VRS_KHR=1`); still open: a log from an AMD or Intel GPU with the path on and the
+      foveation rings seen in a headset there, `vulkaninfo` recorded on such a GPU with the
+      fragment-shading-rate features, and which extension `r_VRSEnabled` enables (NV or KHR, T-037)
 - [ ] FSR 4 through OptiScaler, verified by a tester with an RDNA 3 or RDNA 4 GPU (T-065)
 
 ## M10: Beta and public release

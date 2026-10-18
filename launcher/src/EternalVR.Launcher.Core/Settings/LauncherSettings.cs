@@ -42,7 +42,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>What points at the weapon wheel (the layer's <c>ETERNALVR_WHEEL_SELECT</c>): the stick that holds it open, or the weapon hand.</summary>
     public enum WheelSelect { Stick, Hand }
 
-    /// <summary>Fixed foveated rendering in stereo (the layer's <c>ETERNALVR_FOVEATION</c>, experimental, NVIDIA RTX only): the edges
+    /// <summary>Fixed foveated rendering in stereo (the layer's <c>ETERNALVR_FOVEATION</c>, experimental): the edges
     /// of each eye shaded at a lower rate, from the gentlest preset to the strongest.</summary>
     public enum FoveationMode { Off, Subtle, Balanced, Aggressive, Maximum }
 
