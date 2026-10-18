@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <optional>
 
 namespace evr::xr_math {
 
@@ -10,6 +11,7 @@ namespace {
 
 constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 constexpr float kDegreesPerRadian = 180.0f / std::numbers::pi_v<float>;
+constexpr float kDrivenCameraCos = 0.966f; // cos 15 degrees
 
 } // namespace
 
@@ -94,6 +96,25 @@ float headYawHeld(const HeadAimState& state, float deltaYaw, bool gameRewrote) {
 
 float drivenBodyYaw(const HeadAimState& state, float gameYaw, float deltaYaw, bool gameRewrote) {
     return normalize180(gameYaw - headYawHeld(state, deltaYaw, gameRewrote));
+}
+
+bool drivenCamera(const IdViewAxis& playerView, const IdViewAxis& rendered) {
+    return dot(playerView.forward, rendered.forward) < kDrivenCameraCos;
+}
+
+float menuBodyYaw(const HeadAimState& state,
+                  float heldYaw,
+                  const IdViewAxis& playerView,
+                  const IdViewAxis& rendered) {
+    if (!drivenCamera(playerView, rendered)) {
+        return heldYaw;
+    }
+    const std::optional<IdViewAxis> camera = yawOnly(rendered);
+    if (!camera) {
+        return heldYaw;
+    }
+    // A scripted camera ignores the delta, so the head yaw it holds is the one injected last.
+    return drivenBodyYaw(state, anglesFromAxis(*camera).yaw, 0.0f, false);
 }
 
 HeadAimStep headAimStep(HeadAimState& state,

@@ -345,8 +345,8 @@ them is worse for you than described here.
   the loading screen's tips read "[LG] PREVIOUS | [RG] NEXT" and the grips change the tip.
 - **In the weapon upgrade screen** the gun can ghost a little when you move your head.
 - **The Fortress of Doom** has a few rough spots: some outside surfaces look wrongly shaded, a canister can
-  show black without its texture, the collectible viewer shows no models, the old computer is hard to use,
-  and the displays in the Slayer's office can ghost.
+  show black without its texture, the old computer is hard to use, and the displays in the Slayer's office
+  can ghost.
 
 ## Launcher and settings
 

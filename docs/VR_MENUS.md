@@ -106,7 +106,13 @@ XR worker, every XR frame                                     game (message pump
   from the game's angles, which the game rewrites every frame while a popup holds its view (about 94
   rewrites a second in the owner's Objective Marker popup, 2026-09-27, with the logged body yaw moving from
   95.0 to 112.6 degrees while the game's view stayed at 80.3): the owner saw the view turn the wrong way when
-  he looked around in the popup.
+  he looked around in the popup. When the game renders a camera of its own under the menu instead of the
+  player's view (its forward more than 15 degrees from the player's view angles: the Fortress's collectible
+  viewer below), the body takes the camera's heading without the head yaw the game's yaw holds, as for a
+  scripted camera with no menu (`xr_math::menuBodyYaw`): the view faces what the camera shows while the head
+  is where it was when the menu came up, and turns with the head from there. The log says `aim: under the
+  menu the view faces the camera the game drives (body yaw ..., held ...; game view yaw ...)` and `... is the
+  player's own again`.
 - **Gameplay held back.** While the menu is up, the controllers' gameplay actions, movement and turning are
   not sent (only the pause key, so the Menu button still opens and closes the pause menu). After the menu
   closes they stay held back until every trigger, grip, A, B, X, Y and stick click is let go (the router's
@@ -384,6 +390,16 @@ the router takes it for a popup; the grips send Q and E there as everywhere, whi
 previous / next keys read `LG` / `RG` (the game wrote Q / E). The album posters open the same viewer with one
 item and no previous / next. The log has the item shown each time it changes (`prompts: the Fortress viewer
 shows item 0x...`, its title's text id).
+
+The viewer (`idInteractable_CollectibleViewer`, the GUI `idHUDMenu_CollectibleViewer`) shows its models in
+the 3D world through a camera of its own (`idCollectibleCamera_Orbit`, "Camera for viewing collectibles"):
+first at the shelf, then, once an item is chosen, at an external scene where the item's model is placed
+(`externalScene`, `externalSceneModel`), where the camera orbits, pans and zooms around it. Measured on the
+rig (build 25216728, eye captures): the shelf camera looks the player's way, 17 degrees down; the toys'
+close-up camera and the album posters' camera look 90 degrees to the side of the player's heading. While
+the view kept the body yaw held for the menu, the close-up showed an empty floor (the toy 90 degrees to the
+side) and the album viewer a corridor; the view now faces the viewer's camera (`The view while a menu is
+up` above).
 
 **The fast-travel notice with a Tab key** (`idHUD_Notification_FastTravel`, its key text at 0xF1355E in
 build 25216728) is not the campaign's: a mission's fast travel unlock shows "FAST TRAVEL UNLOCKED / Use in the

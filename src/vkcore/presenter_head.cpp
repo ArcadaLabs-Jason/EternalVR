@@ -39,6 +39,12 @@ struct BodyJumpWatch {
 };
 BodyJumpWatch g_bodyJump;
 
+// Whether the view under a menu faces a camera the game drives (aimWithHead), for the log's changes.
+struct MenuCameraWatch {
+    bool on = false;
+    int lines = 0;
+} g_menuCamera;
+
 void watchBodyYaw(float yaw, bool headAimed, bool forcedView, bool cutscene, bool menuUp) {
     if (g_bodyJump.lastYaw) {
         const float turn = xr_math::normalize180(yaw - *g_bodyJump.lastYaw);
@@ -462,7 +468,10 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
     // A menu or popup over the game (the pause menu, the Dossier, a tutorial popup): the game holds its view
     // and keeps rewriting the delta, and the hand that aims points at the panel. Nothing is written and the
     // body keeps the yaw it had when the menu came up, so the world stays put while the head looks around
-    // (the owner's Quest 3, 2026-09-27: the view seemed to turn the wrong way in a tutorial popup).
+    // (the owner's Quest 3, 2026-09-27: the view seemed to turn the wrong way in a tutorial popup). Under a
+    // camera the game drives with the menu up (the Fortress's collectible viewer), the view faces the
+    // camera's heading instead (xr_math::menuBodyYaw).
+    const xr_math::IdViewAxis angleAxis = xr_math::axisFromAngles({sample.view.pitch, sample.view.yaw, 0.0f});
     if (menuUp.load(std::memory_order_relaxed) && aimMenuBody) {
         if (aimMenuFrames++ == 0) {
             EVR_LOG(
@@ -470,15 +479,22 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
                 *aimMenuBody);
         }
         controllers::noteAimPaused();
-        return xr_math::axisFromAngles({0.0f, *aimMenuBody, 0.0f});
+        const float yaw = xr_math::menuBodyYaw(aimState, *aimMenuBody, angleAxis, gameAxis);
+        const bool camera = xr_math::drivenCamera(angleAxis, gameAxis);
+        if (camera != g_menuCamera.on && g_menuCamera.lines++ < 40) {
+            EVR_LOG("aim: under the menu the view %s (body yaw %.1f, held %.1f; game view yaw %.1f)",
+                    camera ? "faces the camera the game drives" : "is the player's own again", yaw,
+                    *aimMenuBody, xr_math::anglesFromAxis(gameAxis).yaw);
+        }
+        g_menuCamera.on = camera;
+        return xr_math::axisFromAngles({0.0f, yaw, 0.0f});
     }
 
-    // Only while the view is the player's own (not a cinematic or scripted camera).
-    const xr_math::IdViewAxis angleAxis = xr_math::axisFromAngles({sample.view.pitch, sample.view.yaw, 0.0f});
-    // In a cutscene shown around the player, with its cuts re-based, every frame is the camera's: a camera
-    // within 15 degrees of the player's angles does not turn head aim back on mid-cutscene.
+    // Only while the view is the player's own (not a cinematic or scripted camera). In a cutscene shown
+    // around the player, with its cuts re-based, every frame is the camera's: a camera within 15 degrees of
+    // the player's angles does not turn head aim back on mid-cutscene.
     const bool cutsceneCamera = cutscene && !settings.cutsceneCinema && settings.cutsceneCutRebase;
-    if (cutsceneCamera || dot(angleAxis.forward, gameAxis.forward) < 0.966f) { // 15 degrees
+    if (cutsceneCamera || xr_math::drivenCamera(angleAxis, gameAxis)) {
         // A scripted camera (a glory kill's): nothing is written, and the view faces the camera's heading
         // while the head is where it was when the camera took over (not the camera plus the head's whole
         // yaw in the room, which faces backwards for a player turned round in the room).

@@ -36,6 +36,7 @@ evr_add_test(evr_xr_math_tests
         xr_math/eye_clip_transform_tests.cpp
         xr_math/hand_aim_tests.cpp
         xr_math/head_aim_tests.cpp
+        xr_math/menu_camera_tests.cpp
         xr_math/forced_view_tests.cpp
         xr_math/head_view_tests.cpp
         xr_math/offhand_pose_tests.cpp

@@ -91,6 +91,22 @@ float headYawHeld(const HeadAimState& state, float deltaYaw, bool gameRewrote);
 // while the head is where it was when the game took over, and turns with the head from there.
 float drivenBodyYaw(const HeadAimState& state, float gameYaw, float deltaYaw, bool gameRewrote);
 
+// True when the frame's view is a camera the game drives, not the player's own view angles: its forward is
+// more than 15 degrees from theirs (a glory kill's camera, the Fortress's collectible viewer).
+bool drivenCamera(const IdViewAxis& playerView, const IdViewAxis& rendered);
+
+// The body yaw while a menu or popup is up and head aim writes nothing. Over the player's own view (the pause
+// menu, the Dossier, a tutorial popup) it is `heldYaw`, the body yaw from when the menu came up, so the world
+// stays put while the head looks around. Under a camera the game drives with the menu up (the Fortress's
+// collectible viewer: its orbit camera faces the toy or album from a side of the game's choosing, 90 degrees
+// from the player's heading for the toys' close-up), it is the camera's heading without the head yaw the
+// game's yaw holds (drivenBodyYaw): the view faces what the camera shows while the head is where it was when
+// the menu came up.
+float menuBodyYaw(const HeadAimState& state,
+                  float heldYaw,
+                  const IdViewAxis& playerView,
+                  const IdViewAxis& rendered);
+
 // Records the delta yaw just written (after the step's deltaYaw was added) with the head yaw it carries.
 void noteWritten(HeadAimState& state, float writtenDeltaYaw);
 
