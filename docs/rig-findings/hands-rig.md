@@ -602,3 +602,154 @@ up, then 0.1 to 11.4; held again 0.1; firing 17.0, 9.2, 7.9 and 7.2. Ballista he
 read a frame before, so where the gun moves fast within a frame (a mod coming up, the shots' recoil, the
 ballista's kick) the glove lands where the gun was. Not isolated: the chaingun's zoom pose (holding the
 weapon mod ran whichever mod the save has equipped) and a reload (none was triggered).
+
+## 12. The rest of the held items: Unmaykr, Crucible, chainsaw, fists, hammer (2026-10-18, OpenXR-Simulator)
+
+One simulator run per build with a plan of taps, presses, holds (five and a view hold per item, as in section 11)
+and console steps; the debug schedule's allow-list now takes `removeInventoryItem`, `judgementMeter_Set` and
+`chrispy` (rig tests only, like the rest of it). Before: `gr-main1` (dev main, every item below on the `default`
+row); after: `gr-rows1` (the Unmaykr's and the Crucible's rows). Evidence: rig (the simulator gives the grip and
+the aim one pose), not a headset.
+
+**How each comes out on the rig.**
+- Unmaykr: `give all` does not give it (no earlier run ever held it); `give weapon/player/unmaykr` puts it in
+  the hands, and the weapon slot 8 then switches between the BFG and the Unmaykr on each press.
+- Crucible: `give weapon/player/crucible`, then the Crucible's button (left stick click). It becomes the held
+  item (`weapon/player/crucible`) and stays out, idling, until a switch; the trigger swings it.
+- Chainsaw: its button (right stick up) with no demon in reach puts `weapon/player/chainsaw` in the hands for
+  0.8 s, then the item before it comes back. Held as a weapon it showed up only after the console had removed
+  every gun: the next trigger presses brought it up and it idled like a gun.
+- Fists: a melee puts `weapon/player/fists_doom5melee` in the hands for 0.5 s. Plain `weapon/player/fists`
+  never showed: with every gun removed the held item stayed the BFG's decl, then the chainsaw. No Berserk:
+  `give powerup/berserk`, `give pickup/powerup/berserk` and `chrispy pickup/powerup/berserk` (the hand aimed at
+  the floor, then a walk over the spot) put no Berserk fists in the hands.
+- Sentinel Hammer: with the Crucible swapped for it (`removeInventoryItem weapon/player/crucible`, `give
+  weapon/player/hammer`, the wiki's swap) the Crucible's button changed nothing on e1m1, in both runs: no held
+  item, no hand-back. The layer's arm policy hands the arm back for its throw and slam (the hands' pending
+  action `HammerThrow` / `HammerSlam`, `features/input/offhand_policy.cpp`) [static].
+
+**Who holds what** (the right and left wrists in the item's root joint's frame, `righthandattach`; the glove's
+orientation against the Heavy Cannon's, both in the aim ray's frame at the neutral hold).
+- Unmaykr: the right glove on the gun, its wrist (-0.168, -0.037, -0.080) m from the root, the guns' common
+  offset (section 10), turned 3.6 degrees from the Heavy Cannon's glove (the eight guns are within 7); the
+  game's left glove on the gun's front (0.02, 0.26, -0.04) m. Held like the other guns.
+- Crucible: one-handed, in the right fist. The fist closes on the hilt just under the guard, the wrist (0.053,
+  -0.063, -0.007) m from the root (the hilt hangs from it as a gun does), the blade along the root's z axis,
+  up (0.92), leaning forward and to the right by about 15 degrees each; the glove is turned 37.0 degrees from
+  the Heavy Cannon's. The game's left glove hangs behind and below the hilt, (-0.30, -0.14, -0.20) m, not on
+  it. Split about the hilt: 22 degrees around it and 30 degrees off it.
+- Chainsaw held as a weapon: the right glove on its rear handle, turned 38 degrees from the Heavy Cannon's;
+  the left glove on its front.
+
+**Hand-backs** (the dump's weight on both arms, a line every 0.25 s): the Crucible's swing goes to 0 within
+one line of the trigger and the arm comes back eased 1.5 s later; the chainsaw's quick action and the melee
+are at 0 for every line their item is held; the console emptying the inventory handed the arm back for 1 s.
+
+| Item | Before: glove wrist from its target, median / largest; glove vs the Heavy Cannon's | After |
+|---|---|---|
+| Unmaykr | 13.7 / 13.8 cm (13.6 cm under it); 3.6 deg | 0.1 / 0.2 cm; 3.6 deg |
+| Crucible | 40.0 / 40.1 cm (39.4 cm ahead of it); 37.0 deg | 0.3 / 0.4 cm; 0.1 deg |
+| the eight guns | unchanged (the BFG, held in both runs: 0.2 / 0.2 cm) | unchanged |
+
+`grip_check.py --glove --read` as in section 11; it now takes a row's own turn (pitch, yaw, roll) back out of
+the model's axis to find the grip's frame, as it does the sights turn. Its per-line listing (`--per-hold`)
+showed one other thing: after a scripted walk into the gate at the end of the hall, with every gun removed, the
+BFG's glove read back 22.4 cm off its target at every hold, with the model's placement and the grip unchanged,
+so the game's own pose of the glove had moved (the capture shows the gun lowered and to the left) [rig]; it is
+not a row's doing and was not followed further.
+
+Captures (both eyes, the neutral hold and the view hold, per item, before and after): before, the Crucible's
+hilt sits 40 cm ahead of the hand at the right of the view with the blade leaning out; after, the fist sits
+where the controller is, close by the right of the view, the blade standing up out of it. The Unmaykr's view
+hold shows the right glove closed on its grip.
+
+## 13. The glove in the gun's frame: the chaingun and the ballista firing (2026-10-18, OpenXR-Simulator)
+
+**Where an override can be** [static: the modifier pass 0x19E1040, Steam, build 25216728; the Game Pass build's
+pass at 0x19EC8A0 has the same code, the flag branches checked at the same distances]. Flag 1 of a modifier picks
+its space: with it the pass builds the parent's model pose as modified so far and turns the modifier into the
+joint's pose in that frame, so a model-space override lands where it was written whatever the parent does in that
+frame; without it an override's rotation, scale and translation become the joint's pose under its parent as they
+are. SetJointMod stores the flags it is handed. The layer's overrides were 0x22B (model space); the glove's are now
+0x22A (features/arm/parent_frames.hpp; VR_HANDS_HUD.md, "In the gun's frame").
+
+**The cause, per tick** (`gl-before`: dev main's model-space glove with a per-tick trace, the weapon-mod and fire
+sequence of `ga-mod1` on both guns; `gl_ticks.py`). Per tick, the glove's wrist as read back in the gun's root
+frame against where it was meant to land, and how far the root moved at the grip between the read the write was
+placed under and the frame the game drew it in:
+
+| Gun | Phase | Ticks | Miss median / p95 / largest, mm | Root's move at the grip, largest, mm | Correlation, slope |
+|---|---|---|---|---|---|
+| chaingun | held | 215 | 0.1 / 0.1 / 0.1 | 0.1 | 0.85, 0.89 |
+| chaingun | mod held | 435 | 0.0 / 4.8 / 33.5 | 35.1 | 1.000, 0.96 |
+| chaingun | firing | 257 | 1.6 / 7.6 / 17.1 | 17.9 | 1.000, 0.96 |
+| ballista | held | 220 | 0.0 / 0.1 / 0.1 | 0.1 | 0.98, 0.97 |
+| ballista | mod held | 394 | 0.1 / 3.9 / 15.0 | 15.8 | 1.000, 0.95 |
+| ballista | firing | 256 | 1.1 / 12.0 / 151.3 | 158.0 | 0.999, 0.97 |
+
+The miss is the root's move times the hands' modifier weight (0.95): the glove is placed where the gun was.
+
+**After** (`gl-after`, the same sequence, the glove and the forearm in their parents' frames):
+
+| Gun | Phase | Miss median / p95 / largest, mm | Root's move at the grip, largest, mm |
+|---|---|---|---|
+| chaingun | held | 0.0 / 0.0 / 0.0 | 0.1 |
+| chaingun | mod held | 0.0 / 0.0 / 0.0 | 31.1 |
+| chaingun | firing | 0.0 / 0.0 / 0.0 | 17.8 |
+| ballista | held | 0.0 / 0.0 / 0.0 | 0.1 |
+| ballista | mod held | 0.0 / 0.0 / 0.0 | 17.5 |
+| ballista | firing | 0.0 / 1.6 / 15.0 | 158.0 |
+
+Over 5 mm: 4 of the ballista's 259 firing ticks, in the first frames of its two shots (15.0, 6.2, 5.1 and
+5.3 mm, slope 0.05 against the root's move): the blend's 1 - 0.95 share of the game's own hand under the glove,
+which the read shows a frame late [inferred: the slope, and the ballista's shots move its handle hand 10 to 20 cm
+in the decoded animation]. After the shots the ballista's hand moves again and the glove is up to 10.1 mm off for
+a few ticks (9.5 before the change) while the wrist tracker waits for steady overrides; one tick of 6.1 mm while
+the mod switches. The sleeve's end stays on the glove (2.9 mm at most, as before). The shoulder end now rides the
+gun for the frame of a kick: up to 173.7 mm from its target in the ballista's first shot (48.6 before), back on
+it at the next tick's solve.
+
+The grip sweep on the change (`gl-grip`): GRIP PASS, the glove's wrist from its target, median / largest, chaingun
+0.1 / 0.3 cm and ballista 0.2 / 0.5 (as `ga-grip3`), the other six 0.1 to 0.2 / 0.2 to 0.3; SIGHTS PASS, largest
+angle 0.20 degrees on both guns (0.20 before). Hands check (`gl-hands`, combat shotgun): 0 regressions against
+the baseline.
+
+## 14. Hitches: the arms keep the controller, and the rig's own stalls (2026-10-19, OpenXR-Simulator)
+
+**The one-off regressions.** Three hands checks on 2026-10-18 each reported one regression that a rerun cleared
+(flex-L-y45, roll-L+0, roll-L+150), each on a 0.65 to 1.1 s gap in the dump at the start of that hold, where both
+arms went back to the game (`game (untracked)`). The gaps are the game's own: the layer logs a `stall:` line for
+each frame that long. Over the 103 earlier sweeps with a layer log, 90 of the 104 stalls logged during the poses
+came within 50 ms after the layer read a new scripted input file (`controllers: test input ... read`), the read
+the camera hook makes on the game's thread when the sweep has just replaced the file. The read now logs how long
+it held its thread: in `sg-hands1` it took 300.3 ms once (a 274.6 ms stall) and 56.7 ms once (59.0 ms), median
+0.4 ms. The same writes and reads outside the game (40 replacements each, with and without 3.4 MB files written
+beside them as the captures are) took 11.6 ms at most, so the long reads need the game's load as well. With the
+run folders (`tmp-vr\rs\hands\runs`) excluded from Defender's real-time scanning (allowed on the rig PC; set
+once with `Add-MpPreference -ExclusionPath`), `sg-hands2` to `sg-hands4` read in 21.0 ms at most and logged no
+stall in play. A rig that runs the sweep needs the same exclusion; without it the hands check's holds can start
+with a long frame.
+
+**Why a long frame handed the arms back.** The arm policy used the hands' poses only while they were at most 0.1 s
+old at the read; that age is the gap since the last view, so any frame over 0.1 s handed both arms back for about
+0.45 s (docs/VR_HANDS_HUD.md, "When the arms go back to the game"). A scripted hitch (`hitch-sweep.ps1`: the
+game's process suspended for 150 or 400 ms, three of each with the Chaingun and with the Heavy Cannon held, the
+hands still; `hs-sweep.sh`, checked by `hitch_check.py`):
+
+| Run | Layer | Hitches handed back | Weapon arm weight after | Off hand's written wrist off its target |
+|---|---|---|---|---|
+| `sg-hb1` | dev main | 12 of 12 (both arms, `untracked`) | 0 (1 to 2 of the 4 dump lines in the next second posed by the game) | up to 24.0 cm while it blended back |
+| `sg-hf2` | views by ticks only | 0 of 12 | 1.00 | 0.0, then from the Heavy Cannon's second hitch on growing to 36.3 cm and staying |
+| `sg-hf3` | views by ticks and the clean read by ticks | 0 of 12 | 1.00 | 0.0 (HITCH PASS 12/12) |
+
+In `sg-hb1` the right glove, caught mid-blend, was 62.9 and 71.6 cm from where it sat before the hitch on the
+Chaingun. `sg-hf2` showed the second fault the hand-backs had hidden: the off hand's read counted as clean 150 ms
+after the last write even while the layer was still writing, so after a hitch over 150 ms the solve fed on its own
+override and the arm's reach shrank (0.74, then 0.53, 0.42, 0.36, 0.35 on the Heavy Cannon), the glove further off
+the controller with each hitch. A read now counts as clean only 150 ms and 3 ticks after the last write on both
+arms, as it already did for the wrist's change. Hands checks with both changes: `sg-hands2`, `sg-hands3` and
+`sg-hands4`, 0 regressions each; `sg-hands1` (the first change only, no exclusion yet) had 7 (6 L:flipped-elbow,
+1 L:twiststep), and no hand-back after its 274.6 ms stall.
+
+The suspension stops the whole process, the XR worker and the simulator included; a hitch in the game's thread
+alone leaves the worker running, which the rule does not depend on (the views and the ticks are both the game's).

@@ -273,6 +273,7 @@ target_sources(evr_layer PRIVATE
     rumble_hook.cpp
     touch_buttons_log.cpp
     usercmd_hook.cpp
+    view_poses.cpp
     viewmodel_hook.cpp
     vrs_command_buffers.cpp
     vrs_gui.cpp

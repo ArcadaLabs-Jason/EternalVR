@@ -115,13 +115,10 @@ void onLaunch(const HookRegisters& regs) {
         !readFloats(player + kPlayerFirstPersonOrigin, eye, 3)) {
         return;
     }
-    WorldHand world;
-    {
-        std::lock_guard lock(s.viewMutex);
-        world = s.world;
-    }
+    const TickView view = tickView();
+    const WorldHand& world = view.world;
     const bool usable = cfg.aim == input::AimSource::Hand && s.attached.load(std::memory_order_acquire) &&
-                        world.valid && secondsSince(world.qpc) <= kWorldStaleSeconds && !s.yielding.load();
+                        view.worldCurrent && !s.yielding.load();
     std::uint64_t skipped = 0;
     const bool log = g_launchLines.due(GetTickCount64(), skipped);
     if (!usable || cfg.actionAim.equipment == input::ActionAimSource::Same) {
@@ -175,13 +172,9 @@ void onBelchAxis(const HookRegisters& regs) {
         !safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return;
     }
-    WorldHand world;
-    {
-        std::lock_guard lock(s.viewMutex);
-        world = s.world;
-    }
-    if (!s.attached.load(std::memory_order_acquire) || !world.valid ||
-        secondsSince(world.qpc) > kWorldStaleSeconds || s.yielding.load()) {
+    const TickView view = tickView();
+    const WorldHand& world = view.world;
+    if (!s.attached.load(std::memory_order_acquire) || !view.worldCurrent || s.yielding.load()) {
         return;
     }
     auto* axis = reinterpret_cast<std::byte*>(regs.rbp + kMuzzleAxisFromRbp);

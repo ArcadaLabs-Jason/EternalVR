@@ -47,6 +47,9 @@ constexpr std::string_view kAllowedCommands[] = {
     // Rig scripts: positions, pickups, damage, triggers and checkpoints.
     "getviewpos", "teleport", "teleportposition", "notarget", "noclip", "kill", "damage", "hurt", "health",
     "give", "trigger", "activatetargets", "activateCheckPoint",
+    // The hands rig: the Crucible and the Sentinel Hammer swap places in the inventory, the Crucible's
+    // charges, an emptied inventory (the fists) and a pickup or demon spawned at the crosshair.
+    "removeInventoryItem", "judgementMeter_Set", "chrispy",
     // Demons (docs/rig-findings/debug-commands.md).
     "ai_Show", "ai_Hide", "nextActiveAI", "nextAI", "prevAI", "ai_teleportToPlayer", "moveToFacingPlayer",
     "ai_forceIdle", "ai_forceFreeze", "ai_forceAnim", "killAI", "removeAI", "healAI", "encounter_clearWait",

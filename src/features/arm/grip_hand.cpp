@@ -61,6 +61,16 @@ std::optional<HandJointIndices> findHandJoints(const Skeleton& skeleton,
     return out;
 }
 
+std::array<xr_math::ModelPose, kHandJointCount>
+handLocal(const std::array<xr_math::ModelPose, 1 + kHandJointCount>& model) {
+    std::array<xr_math::ModelPose, kHandJointCount> out{};
+    for (std::size_t i = 0; i < kHandJointCount; ++i) {
+        const std::int16_t parent = kHandJointParents[i];
+        out[i] = relative(model[parent < 0 ? 0 : static_cast<std::size_t>(parent) + 1], model[i + 1]);
+    }
+    return out;
+}
+
 const GripPose& heavyCannonGrip() {
     // Local poses (position, then the quaternion x y z w) of the Heavy Cannon idle's frame 0, which the idle
     // holds still: md6/player/human/base/motion/core/assaultrifles/heavy_cannon/idle.md6anim on
@@ -139,8 +149,8 @@ std::optional<xr_math::ModelPose> WristTracker::update(bool clean,
             return animated_;
         }
     }
-    // The override written last, as the game placed it: under the attach joint this read gives.
-    const auto a = animatedUnder(landed, relative(attach, model_[0]), weight_);
+    // The override written last, as the game placed it: in the attach joint's frame as written.
+    const auto a = animatedUnder(landed, written_[0], weight_);
     if (a && plausiblePose(*a) && length(a->position) <= kMaxUnits) {
         animated_ = a;
     }
@@ -152,15 +162,15 @@ WristTracker::readLag(const xr_math::ModelPose& attach, const xr_math::ModelPose
     if (!animated_ || writes_ < kSteadyWrites) {
         return std::nullopt;
     }
-    for (std::size_t i = 1; i < model_.size(); ++i) {
-        if (length(model_[i].position - model_[i - 1].position) < kLagApartUnits) {
+    for (std::size_t i = 1; i < written_.size(); ++i) {
+        if (length(written_[i].position - written_[i - 1].position) < kLagApartUnits) {
             return std::nullopt;
         }
     }
     const xr_math::ModelPose landed = relative(attach, wrist);
     std::optional<Lag> out;
-    for (std::size_t i = 0; i < model_.size(); ++i) {
-        const xr_math::ModelPose at = mixPose(*animated_, relative(attach, model_[i]), weight);
+    for (std::size_t i = 0; i < written_.size(); ++i) {
+        const xr_math::ModelPose at = mixPose(*animated_, written_[i], weight);
         const float miss = length(at.position - landed.position);
         if (!out || miss < out->miss) {
             out = Lag{static_cast<int>(i) + 1, miss};
@@ -187,10 +197,6 @@ void WristTracker::wrote(const xr_math::ModelPose& attach, const xr_math::ModelP
         written_[i] = written_[i - 1];
     }
     written_[0] = relative(attach, written);
-    for (std::size_t i = model_.size() - 1; i > 0; --i) {
-        model_[i] = model_[i - 1];
-    }
-    model_[0] = written;
     writes_ = std::min(writes_ + 1, kSteadyWrites);
 }
 
@@ -232,10 +238,13 @@ GripOverrides gripOverrides(const xr_math::ModelPose& attach,
         return weight ? pastPose(from, to, *weight) : to;
     };
     GripOverrides out;
-    out.wrist = compose(attach, past(animatedWrist, wantedWrist));
+    out.attach = attach;
+    out.wristLocal = past(animatedWrist, wantedWrist);
+    out.wrist = compose(attach, out.wristLocal);
     // Each joint placed under its parent's written pose: the modifiers are mixed in each joint's parent's
     // frame.
     std::array<xr_math::ModelPose, kHandJointCount> written{};
+    std::array<xr_math::ModelPose, kHandJointCount> local{};
     std::array<bool, kHandJointCount> finger{};
     for (const std::uint8_t i : kFingerMods) {
         finger[i] = true;
@@ -244,12 +253,13 @@ GripOverrides gripOverrides(const xr_math::ModelPose& attach,
     for (std::size_t i = 0; i < kHandJointCount; ++i) {
         const std::int16_t p = kHandJointParents[i];
         const xr_math::ModelPose& parent = p < 0 ? out.wrist : written[static_cast<std::size_t>(p)];
-        const xr_math::ModelPose local =
+        local[i] =
             finger[i] ? past(animatedHand[i], mixPose(animatedHand[i], grip.hand[i], t)) : animatedHand[i];
-        written[i] = compose(parent, local);
+        written[i] = compose(parent, local[i]);
     }
     for (std::size_t k = 0; k < kFingerModCount; ++k) {
         out.fingers[k] = written[kFingerMods[k]];
+        out.fingersLocal[k] = local[kFingerMods[k]];
     }
     return out;
 }

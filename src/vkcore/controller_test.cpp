@@ -72,6 +72,7 @@ std::optional<std::vector<std::string>> folderFileNames(const std::string& utf8P
 void refreshTestInput() {
     // The camera hook and the XR worker both call this (menus run without the game view).
     static std::mutex refreshMutex;
+    const LONGLONG start = nowQpc();
     std::lock_guard refreshLock(refreshMutex);
     State& s = state();
     const std::string& path = settings().testInputPath;
@@ -102,7 +103,10 @@ void refreshTestInput() {
     for (const std::string& issue : parsed.issues) {
         EVR_LOG("%s: test input %s", kTag, issue.c_str());
     }
-    EVR_LOG("%s: test input '%s' read (%zu issue(s))", kTag, path.c_str(), parsed.issues.size());
+    // How long this call held its thread (the camera hook's or the XR worker's), the other caller's turn
+    // included, for the rig.
+    EVR_LOG("%s: test input '%s' read (%zu issue(s)) in %.1f ms", kTag, path.c_str(), parsed.issues.size(),
+            secondsSince(start) * 1000.0);
     std::lock_guard lock(s.testMutex);
     s.test = std::move(parsed);
 }

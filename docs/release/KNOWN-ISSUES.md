@@ -250,8 +250,18 @@ them is worse for you than described here.
   sits where your hand holds the controller. The game's own pose holds these two by a handle on top that's
   turned way off from how you hold a controller, so the glove now takes the Heavy Cannon's grip instead (the
   same grip the Chaingun uses when you zoom). The Ballista has no real grip, so the glove closes on the ridge
-  under its stock. All of this was measured on the test rig, not yet in a headset; if a glove or a gun sits
-  off your hand, please tell me which one and roughly how far.
+  under its stock. The glove now stays on the gun while it fires and kicks too (before, it could trail the
+  Ballista's kick by up to 15 cm for a frame); for that frame the arm moves with the gun, so the shoulder end
+  can jump by up to about 17 cm for one frame with a Ballista shot. A stutter (one long frame) no longer hands
+  your arms back to the game's pose for a moment either: on these two guns that slid the glove off the grip
+  and back over about half a second, and your left hand slid toward the game's own pose and back. All of
+  this was measured on the test rig, not yet in a headset; if a glove or a gun sits off your hand, please
+  tell me which one and roughly how far.
+- **The Unmaykr and the Crucible now sit in your hand too.** The Unmaykr is held like the other guns. The
+  Crucible is held in your right fist the way the game holds it, so the blade stands up out of your fist
+  (it's turned a bit from the flat game's angle so the hand matches yours). A punch, a chainsaw cut, a
+  Crucible swing and the Sentinel Hammer's slam still play the game's own arm animation. The Berserk fists
+  haven't been checked yet. Test rig only so far, not yet in a headset.
 - **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
   and Ballista point their sights where the shots go. The other guns follow; until then their sights can
   point a little off your aim. The sights run parallel to the shot line, about 9 to 20 cm above it, so up

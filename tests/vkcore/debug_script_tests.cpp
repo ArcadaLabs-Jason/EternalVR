@@ -69,6 +69,17 @@ TEST_CASE("debug script: the QA suite's token schedule passes the allow-list who
     CHECK(script.steps[3].commands[0] == "setviewpos -34.98 -250.31 33.2 45");
 }
 
+TEST_CASE("debug script: the hands rig's inventory swaps and spawns pass the allow-list") {
+    const auto script = parseDebugScript(
+        "26:give weapon/player/crucible;judgementMeter_Set 3|80:removeInventoryItem weapon/player/crucible;"
+        "give weapon/player/hammer|122:chrispy pickup/powerup/berserk");
+    CHECK(script.error.empty());
+    CHECK(script.refused.empty());
+    REQUIRE(script.steps.size() == 3);
+    CHECK(script.steps[1].commands[0] == "removeInventoryItem weapon/player/crucible");
+    CHECK(script.steps[2].commands[0] == "chrispy pickup/powerup/berserk");
+}
+
 TEST_CASE("debug script: command names are matched without case, cvars take a value") {
     const auto script = parseDebugScript("1:GOD;SetViewPos 1 2 3 4|2:r_sharpening 2.5;give armor/sp_armor_5");
     CHECK(script.refused.empty());

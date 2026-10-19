@@ -6,6 +6,8 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -33,7 +35,8 @@ constexpr Vec3 kWrist{evr::game::kRowsWrist.forward, evr::game::kRowsWrist.left,
 // (docs/rig-findings/hands-rig.md, section 10), the median over five held controller poses (the idle sway
 // moves it by under 1 cm): the right hand joint (the glove's wrist); for the chaingun and the ballista, whose
 // idle parks the right glove 72 and 48 cm off the gun, where the weapon arm puts it on the gun's grip
-// (features/arm/grip_hand.hpp).
+// (features/arm/grip_hand.hpp). The Unmaykr and the Crucible: section 12 (the Crucible's row also turns the
+// model).
 struct Glove {
     const char* weapon;
     Vec3 wrist;
@@ -47,7 +50,27 @@ constexpr Glove kGloves[] = {
     {"weapon/player/gauss_rifle", {0.246f, -0.210f, -0.385f}},
     {"weapon/player/chaingun", {0.535f, -0.201f, -0.324f}},
     {"weapon/player/bfg", {0.275f, -0.129f, -0.383f}},
+    {"weapon/player/unmaykr", {0.165f, -0.229f, -0.356f}},
+    {"weapon/player/crucible", {0.564f, -0.280f, -0.245f}},
 };
+
+// The glove's wrist joint axes (rows: the joint's x, y and z), measured on the hands rig at the neutral hold
+// (docs/rig-findings/hands-rig.md, section 12): the Heavy Cannon's in the aim ray's frame, with its sights
+// turn, which every gun's glove matches within 7 degrees; the Crucible's in the arms model's own frame.
+constexpr Vec3 kGunGlove[3] = {
+    {0.231f, 0.112f, -0.966f}, {-0.967f, -0.079f, -0.241f}, {-0.104f, 0.991f, 0.090f}};
+constexpr Vec3 kCrucibleGlove[3] = {
+    {-0.247f, 0.367f, -0.897f}, {-0.877f, -0.479f, 0.046f}, {-0.412f, 0.798f, 0.440f}};
+
+// The largest angle, in degrees, between matching axes of two frames.
+float largestAxisAngle(const Vec3 (&a)[3], const Vec3 (&b)[3]) {
+    float largest = 0.0f;
+    for (int i = 0; i < 3; ++i) {
+        const float c = evr::dot(evr::normalize(a[i]), evr::normalize(b[i]));
+        largest = std::max(largest, std::acos(std::clamp(c, -1.0f, 1.0f)) * 57.29578f);
+    }
+    return largest;
+}
 
 // How far the glove's wrist may sit from its target.
 constexpr float kToleranceMetres = 0.01f;
@@ -116,4 +139,20 @@ TEST_CASE(
         CHECK(evr::length(model.forward - onAim.forward) <= 1e-6f);
         CHECK(evr::length(model.up - onAim.up) <= 1e-6f);
     }
+}
+
+TEST_CASE("the Crucible's row turns the model so the glove holds the hilt as a gun's grip is held") {
+    // Its idle holds the hilt in the right fist turned 37 degrees from every gun's grip; nothing on it aims
+    // (the swing hands the arm back to the game), so the row turns the model until the glove sits as on the
+    // guns, and the hilt stays in the fist as the game holds it.
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    REQUIRE(table.ok());
+    const EyeRelativePose grip{};
+    IdViewAxis model;
+    placedWrist(table, {"weapon/player/crucible", {}}, grip, grip.axis, &model);
+    const Vec3 glove[3] = {inFrame(model, kCrucibleGlove[0]), inFrame(model, kCrucibleGlove[1]),
+                           inFrame(model, kCrucibleGlove[2])};
+    const float turned = largestAxisAngle(glove, kGunGlove);
+    INFO("the Crucible's glove from the guns' grip: ", turned, " deg");
+    CHECK(turned <= 3.0f);
 }

@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <numbers>
 #include <optional>
@@ -74,6 +75,14 @@ float g_settleWeight = 0.0f;
 // Trace only: the glove's wrist read back against where it was meant to land the tick before (game units,
 // the largest since the last trace line), and how many reads showed the write of 1, 2 or 3 ticks before.
 std::optional<xr_math::ModelPose> g_lastWanted;
+// Trace only: the gun's root joint as read the tick the last glove was written under it, and the per-tick
+// lines logged.
+std::optional<xr_math::ModelPose> g_lastAttach;
+// The forearm's first joint where it was meant to land, in the wrist's frame.
+xr_math::ModelPose g_lastSleeve{};
+Vec3 g_lastShoulder{}; // the shoulder end where it was meant to land (model space)
+std::uint64_t g_tickLines = 0;
+constexpr std::uint64_t kMaxTickLines = 6000;
 float g_landedMax = 0.0f;
 std::array<unsigned, 3> g_readLags{};
 // Trace only: ticks on one modifier node, the ticks its generation's low bit (the list SetJointMod writes)
@@ -124,11 +133,38 @@ float smooth(float t) {
     return t * t * (3.0f - 2.0f * t);
 }
 
+// Trace only, every tick the glove was written the tick before: its wrist as read back (`miss`, game units,
+// in the gun's root frame as read now) against where it was meant to land, and how far the root moved
+// between the read the write was placed under and the frame the game drew it in (this read): at the grip,
+// at the root, and its turn; and the forearm's first joint (the sleeve's end at the glove) as read back in
+// the wrist's frame against where it was meant to land (`sleeve`, game units), and the shoulder end as read
+// back against where it was meant to land in model space (`shoulder`).
+void traceTick(const xr_math::ModelPose& attach, float miss, float sleeve, float shoulder) {
+    if (!g_lastAttach || !g_lastWanted || g_tickLines >= kMaxTickLines) {
+        return;
+    }
+    ++g_tickLines;
+    const Vec3 then = arm::compose(*g_lastAttach, *g_lastWanted).position;
+    const Vec3 now = arm::compose(attach, *g_lastWanted).position;
+    const Quat q = conjugate(arm::toQuat(g_lastAttach->axis)) * arm::toQuat(attach.axis);
+    const float turn = 2.0f * std::atan2(length(Vec3{q.x, q.y, q.z}), std::fabs(q.w)) * kDegreesPerRadian;
+    EVR_LOG(
+        "%s: glove tick: wrist %.1f mm off in the gun's frame, the sleeve's end %.1f mm off the glove, the "
+        "shoulder end %.1f mm off; "
+        "the gun's root moved %.1f mm at the grip (%.1f mm at the root, turned %.2f deg) from the read the "
+        "write was placed under",
+        kTag, static_cast<double>(miss) * 1000.0, static_cast<double>(sleeve) * 1000.0,
+        static_cast<double>(shoulder) * 1000.0, static_cast<double>(length(now - then)) * 1000.0,
+        static_cast<double>(length(attach.position - g_lastAttach->position)) * 1000.0,
+        static_cast<double>(turn));
+}
+
 // The arm back to the game: the layer's modifiers to no change, the arm's surface as the weapon's kit has it.
 void giveBack(const std::byte* hands) {
     g_lastTwist.reset();
     g_wrist.idle();
     g_lastWanted.reset();
+    g_lastAttach.reset();
     game_arm::releaseArm(kSide, hands);
     hands_surfaces::update(kSide, hands, false);
 }
@@ -211,8 +247,14 @@ bool poseArm(const std::byte* hands,
             }
         }
         if (g_lastWanted) {
-            g_landedMax = std::max(
-                g_landedMax, length(arm::relative(attach, readWrist).position - g_lastWanted->position));
+            const float miss = length(arm::relative(attach, readWrist).position - g_lastWanted->position);
+            g_landedMax = std::max(g_landedMax, miss);
+            if (cfg.offhandTrace) {
+                const xr_math::ModelPose sleeve =
+                    arm::relative(readWrist, read->read[index(ArmJoint::Roll3)]);
+                traceTick(attach, miss, length(sleeve.position - g_lastSleeve.position),
+                          length(read->read[index(ArmJoint::UpperArm)].position - g_lastShoulder));
+            }
         }
         wristAnimated = g_wrist.update(clean, attach, readWrist, settled.has_value());
         game_arm::HandRead hand;
@@ -281,8 +323,10 @@ bool poseArm(const std::byte* hands,
                                                    glove ? &glove->wrist : &animated[index(ArmJoint::Hand)])
                                 : mixed;
     if (glove && !mix) {
-        // Each override is mixed in its parent's frame, so the forearm is written under the glove's wrist as
-        // written (past its target), as it should sit under the wrist where it lands.
+        // The default solve: the forearm is not written past its targets but placed as wanted under the
+        // glove's wrist as written (past its target), so it hangs from the wrist where the blend lands it.
+        // The bind solve (`mix`) writes it past its targets instead (modifiedFor, forearmPast in
+        // mod_mix.cpp), each joint placed from where the one before lands.
         for (std::size_t i = index(ArmJoint::Hand) + 1; i < arm::kArmJointCount; ++i) {
             written[i] = arm::compose(glove->wrist, arm::relative(mixed[index(ArmJoint::Hand)], mixed[i]));
         }
@@ -295,9 +339,13 @@ bool poseArm(const std::byte* hands,
     if (glove) {
         g_wrist.wrote(attach, glove->wrist, g_gloveWeight.write);
         g_lastWanted = arm::relative(attach, mixed[index(ArmJoint::Hand)]);
+        g_lastAttach = attach;
+        g_lastSleeve = arm::relative(mixed[index(ArmJoint::Hand)], mixed[index(ArmJoint::Roll3)]);
+        g_lastShoulder = mixed[index(ArmJoint::UpperArm)].position;
     } else {
         g_wrist.idle();
         g_lastWanted.reset();
+        g_lastAttach.reset();
     }
     g_posedHands = hands;
     // The weapon's mesh kit usually hides this arm (hands_surfaces.hpp): shown while the layer poses it.
@@ -367,8 +415,6 @@ void tick(const std::byte* hands,
           const ModelPlacement& model,
           float dt) {
     const input::ControllerSettings& cfg = settings();
-    // The head and the weapon hand: the shoulder's point and the gun.
-    signals.offHandTracked = world.valid && secondsSince(world.qpc) <= kWorldStaleSeconds;
     const input::ArmDecision decision = input::decideWeaponArm(signals, cfg.weaponArm);
     const float weight =
         g_blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);

@@ -42,9 +42,10 @@
 // the arm was a stretched tube. So writeArm subtracts the root's pose read this tick; the joints then read
 // back within a centimetre of where they were written. And GetJointTransforms reads the blend's final pose,
 // the layer's overrides of the last frame included, so the solver would feed on its own output. While an
-// override may still show (kOverrideShowsMs after the last), the layer's joints are taken as the last read
-// without overrides placed them relative to the wrist, which the overrides do not move; and if they read
-// back away from where they were written for kLandingTicks in a row, the arm is refused for good (logged).
+// override may still show (kOverrideShowsMs and 3 ticks after the last), the layer's joints are taken as the
+// last read without overrides placed them relative to the wrist, which the overrides do not move; and if
+// they read back away from where they were written for kLandingTicks in a row, the arm is refused for good
+// (logged).
 //
 // Adding them writes new entries past the end of both lists and then raises both counts, the way SetNum
 // does, and only when both lists already have room (no reallocation while the blend job may read the
@@ -115,9 +116,12 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
 // to land after the blend's mix (written past them, features/arm/mod_mix.hpp): the read-back is measured
 // against it instead of `poses`. An arm with the wrist's change (the off hand with the bind solve,
 // offhand_mods::layerCount) also gets `wrist` (internal units; nullptr for no change) as that change, and the
-// wrist's read-back counts in ArmRead::landed (not toward the landing guard). The weapon arm's glove
-// (offhand_mods::fingerCount) gets `glove`'s overrides on its wrist and fingers, no change without one. False
-// when the modifiers are no longer in place or a write failed.
+// wrist's read-back counts in ArmRead::landed (not toward the landing guard). With `glove` (the weapon arm's
+// glove on a grip) every modifier of the arm, the wrist's, the six and the fingers', is an override in its
+// joint's parent's frame (arm::gloveWrites, features/arm/parent_frames.hpp), so the glove and the forearm
+// ride the gun's pose of the frame the game draws, and the next read is measured against `landing` carried by
+// the attach joint as read then; without `glove` the glove's modifiers are no change. False when the
+// modifiers are no longer in place or a write failed.
 bool writeArm(arm::ArmSide side,
               const std::byte* hands,
               const arm::ArmPoses& poses,

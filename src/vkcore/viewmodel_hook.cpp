@@ -209,24 +209,22 @@ void onViewmodel(const HookRegisters& regs) {
     }
     State& s = state();
     const input::ControllerSettings& cfg = settings();
-    if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load()) {
-        return; // forced views (glory kills, cutscenes) keep the game's own hands animation
-    }
     const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
     const std::byte* owner = nullptr;
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return;
     }
-    noteZoomLookHands(hands, owner); // the gun stays in the hand while zoomed (zoom_look.cpp)
-    WorldHand world;
-    {
-        std::lock_guard lock(s.viewMutex);
-        world = s.world;
+    // Every tick of the player's hands counts, the game's own included: the views' poses age by ticks
+    // (view_pose_clock.hpp).
+    const TickView view = handsTick();
+    if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load()) {
+        return; // forced views (glory kills, cutscenes) keep the game's own hands animation
     }
+    noteZoomLookHands(hands, owner); // the gun stays in the hand while zoomed (zoom_look.cpp)
+    const WorldHand& world = view.world;
     float eye[3];
-    if (!world.valid || secondsSince(world.qpc) > kWorldStaleSeconds ||
-        !safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye)) || !std::isfinite(eye[0]) ||
-        !std::isfinite(eye[1]) || !std::isfinite(eye[2])) {
+    if (!view.worldCurrent || !safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye)) ||
+        !std::isfinite(eye[0]) || !std::isfinite(eye[1]) || !std::isfinite(eye[2])) {
         return;
     }
     const game::WeaponOffset offset = offsetFor(hands);

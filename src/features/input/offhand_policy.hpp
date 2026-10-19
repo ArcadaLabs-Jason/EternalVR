@@ -77,8 +77,8 @@ inline constexpr std::uint64_t kLeftArmBusy =
 } // namespace hands_flag
 
 struct ArmSignals {
-    bool offHandTracked = false;      // the off-hand controller's pose is fresh
-    bool modelPlaced = false;         // the arms model was placed at the weapon hand this frame
+    bool offHandTracked = false;      // the off hand's pose is valid and current (view_pose_clock.hpp)
+    bool modelPlaced = false;         // the arms model's placement at the weapon hand is current
     bool forcedView = false;          // the camera hook's forced-view gate (glory kills, meathook, cutscenes)
     bool syncActive = false;          // idPlayer::syncMaster is set (sync / glory kill)
     std::int32_t fpHandsDisabled = 0; // idPlayer::disableFPHandsReasons

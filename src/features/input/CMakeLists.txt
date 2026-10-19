@@ -43,6 +43,7 @@ evr_add_module(evr_input
         turn_stick_arbiter.cpp
         usercmd_injection.cpp
         usercmd_motion.cpp
+        view_pose_clock.cpp
         virtual_gamepad.cpp
         weapon_directions.cpp
         wheel_hand.cpp

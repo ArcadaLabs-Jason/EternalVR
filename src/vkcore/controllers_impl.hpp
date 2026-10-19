@@ -29,6 +29,7 @@
 #include "features/input/input_mapper.hpp"
 #include "features/input/test_input.hpp"
 #include "features/input/usercmd_injection.hpp"
+#include "features/input/view_pose_clock.hpp"
 #include "features/input/wheel_hand.hpp"
 #include "features/input/wheel_mouse.hpp"
 #include "features/input/xr_action_set.hpp"
@@ -58,8 +59,12 @@ namespace evr::vkcore::controllers {
 
 // A snapshot older than this is not used (the XR worker stopped or the session lost focus).
 inline constexpr double kSnapshotStaleSeconds = 0.25;
-// World hand poses older than this are not used by the fire and viewmodel hooks.
+// Once the views stop (no camera hook: a menu, a lost session) the hand poses they wrote are not used past
+// this age; a long frame alone does not age them (view_pose_clock.hpp, tickView()).
 inline constexpr double kWorldStaleSeconds = 0.1;
+// No hand pose is used past this age, a long frame or not (view_pose_clock.hpp): longer than every single
+// frame the rig logged in play (891 ms at most), shorter than a load or a freeze.
+inline constexpr double kWorldHitchCapSeconds = 1.0;
 
 // Every family's controller data, indexed by game::Controller.
 using FamilyData = std::array<input::ControllerData, game::kControllerCount>;
@@ -161,6 +166,18 @@ struct ModelPlacement {
     xr_math::EyeRelativePose pose;
 };
 
+// The view's hand poses as one tick of the game reads them (view_poses.cpp): copied under viewMutex, each
+// with whether it is current (view_pose_clock.hpp).
+struct TickView {
+    WorldHand world;
+    ModelPlacement model;
+    bool worldCurrent = false; // world.valid, and current
+    bool modelCurrent = false; // model.valid, and current
+};
+TickView tickView();
+// The viewmodel hook, at each tick of the game's hands (forced views included): stamps the tick, then reads.
+TickView handsTick();
+
 struct State {
     // Written once by settingsOnce() (any thread), read-only afterwards.
     std::once_flag settingsOnce;
@@ -201,6 +218,7 @@ struct State {
     GameViewPoses poses;
     WorldHand world;
     ModelPlacement model;
+    input::ViewPoseClock viewClock; // ticked by handsTick()
     // The game view's yaw in tracking space (radians, locomotion_direction.hpp convention), for the mapper.
     std::atomic<float> viewYawTracking{0.0f};
 

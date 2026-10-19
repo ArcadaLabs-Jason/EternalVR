@@ -10,6 +10,7 @@ evr_add_module(evr_arm
         hand_offset.cpp
         mod_mix.cpp
         mod_room.cpp
+        parent_frames.cpp
         twist_fault.cpp
         two_bone_ik.cpp
     DEPENDS

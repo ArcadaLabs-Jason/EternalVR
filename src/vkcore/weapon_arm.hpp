@@ -39,7 +39,8 @@ namespace evr::vkcore::controllers::weapon_arm {
 void logSettings();
 
 // Every tick, from the off-hand hook: the arm solved and written, or set back to the game's. `signals`
-// are the hands' and player's (offHandTracked is set here); `dt` the seconds since the last tick.
+// are the hands' and player's, with offHandTracked for the head and the weapon hand (the shoulder's point
+// and the gun: the view's poses current, tickView()); `dt` the seconds since the last tick.
 void tick(const std::byte* hands,
           input::ArmSignals signals,
           const WorldHand& world,

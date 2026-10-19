@@ -116,6 +116,26 @@ std::optional<std::array<std::int16_t, N>> nameHandles(const std::array<const ch
 
 } // namespace
 
+std::optional<Vec3> readModelScale(const std::byte* animator, std::string& error) {
+    constexpr std::size_t kAnimatorScale = 0x500;
+    float scale[3] = {};
+    if (!safeCopy(scale, animator + kAnimatorScale, sizeof(scale))) {
+        error = "the model scale cannot be read";
+        return std::nullopt;
+    }
+    for (const float s : scale) {
+        if (!std::isfinite(s) || s < 0.5f || s > 2.0f) {
+            char message[96];
+            std::snprintf(message, sizeof(message), "the model scale (%.3f %.3f %.3f) is out of range",
+                          static_cast<double>(scale[0]), static_cast<double>(scale[1]),
+                          static_cast<double>(scale[2]));
+            error = message;
+            return std::nullopt;
+        }
+    }
+    return Vec3{scale[0], scale[1], scale[2]};
+}
+
 bool isIdentity(const xr_math::IdViewAxis& a) {
     return a.forward == Vec3{1.0f, 0.0f, 0.0f} && a.left == Vec3{0.0f, 1.0f, 0.0f} &&
            a.up == Vec3{0.0f, 0.0f, 1.0f};

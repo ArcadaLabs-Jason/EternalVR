@@ -1004,9 +1004,16 @@ sights and shots do not change. The rows are measured with the sights turn on; w
 (rig and debugging only) the wrist lands up to 0.5 cm off target (the 8.7 cm wrist offset turned by
 the sights row, at most 3.5 degrees). With the weapon in the left hand the
 arms model's right glove holds the gun on the left controller (the model is not mirrored) and its wrist
-follows the same rule; left-handed placement is not measured. The `default` row (the fists, chainsaw,
-Crucible, hammer and Unmaykr) is the first estimate, not measured. Seated play uses the same rows: the
-glove follows the real hand in either posture (a `[seated]` section is still read and wins while seated).
+follows the same rule; left-handed placement is not measured. The Unmaykr's row is measured the same way
+(its idle holds it with the guns' grip). The Crucible is held one-handed in the right fist, turned 37 degrees
+from the guns' grip, so its row also turns the model (pitch -24.39, yaw -23.75, roll -10.59) until the glove
+sits as on the guns, with the hilt in the fist as the game holds it; nothing on it aims, since its swing hands
+the arm back to the game (DECISIONS T-139; rig-findings/hands-rig.md, section 12). The `default` row is the
+first estimate, not measured: the fists (a melee's are out only while the arm is handed back), the chainsaw
+(its button is a quick action that hands the arm back), the Sentinel Hammer (not brought out on the rig; its
+throw and slam are actions of the hands, which hand the arm back) and anything new. Seated play uses the same
+rows: the glove follows the real hand in either posture (a `[seated]` section is still read and wins while
+seated).
 To measure a weapon: the hands rig's per-weapon sweep with the arm dump, or on the rig
 `ETERNALVR_VIEWMODEL_OFFSET=f,l,u` with the test input holding a hand still. The held item's name and
 offset are logged on each change. The key is the base weapon's decl: a weapon mod does not change the

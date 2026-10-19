@@ -64,6 +64,11 @@ std::optional<HandJointIndices> findHandJoints(const Skeleton& skeleton,
                                                const std::array<std::int16_t, kHandJointCount>& handles,
                                                std::string& error);
 
+// The hand's joints in their parents' frames (kRightHandJointNames order) from their model poses `model`:
+// the wrist first, then the hand's joints in that order.
+std::array<xr_math::ModelPose, kHandJointCount>
+handLocal(const std::array<xr_math::ModelPose, 1 + kHandJointCount>& model);
+
 // A glove's grip on a gun: the wrist in the weapon's root joint's frame (the right attach joint) and each
 // hand joint in its parent's frame (kRightHandJointNames order), game units.
 struct GripPose {
@@ -84,14 +89,15 @@ animatedUnder(const xr_math::ModelPose& landed, const xr_math::ModelPose& writte
 // The wrist's animated pose in the attach joint's frame while the layer's override hides it.
 //
 // A read the override had not reached gives it as read. After that each read is the last frame's mix of the
-// animated pose and the override written for it, so the animated pose is taken back out (animatedUnder) with
-// the override written for it, but only once each of the last kSteadyWrites overrides was within kSteadyUnits
-// (game units) and kSteadyDegrees of the one before: the read is a frame or two behind, so while the override
-// moves (the blend in or out) the read may belong to an older one (taken back out with the wrong override it
-// is off by weight / (1 - weight) times their difference, 19 times at 0.95, and the glove lands off by about
-// that difference), and the last good estimate is kept. The read is taken to show the override written the
-// tick before, as every read the rig could tell apart did (readLag). With that guard a read two frames
-// behind, or a dropped frame, still lands the glove within 3 mm while the game's wrist moves under it
+// animated pose and the override written for it, held in the attach joint's frame (parent_frames.hpp), so the
+// animated pose is taken back out (animatedUnder) with the override written for it as it was written,
+// whatever the attach joint did since, but only once each of the last kSteadyWrites overrides was within
+// kSteadyUnits (game units) and kSteadyDegrees of the one before: the read is a frame or two behind, so while
+// the override moves (the blend in or out) the read may belong to an older one (taken back out with the wrong
+// override it is off by weight / (1 - weight) times their difference, 19 times at 0.95, and the glove lands
+// off by about that difference), and the last good estimate is kept. The read is taken to show the override
+// written the tick before, as every read the rig could tell apart did (readLag). With that guard a read two
+// frames behind, or a dropped frame, still lands the glove within 3 mm while the game's wrist moves under it
 // (unit-tested). An estimate that is not a plausible pose, or further than kMaxUnits from the attach joint,
 // is not taken either.
 class WristTracker {
@@ -107,8 +113,8 @@ public:
     // The estimate (attach frame), or nullopt before the first clean read.
     std::optional<xr_math::ModelPose>
     update(bool clean, const xr_math::ModelPose& attach, const xr_math::ModelPose& wrist, bool settled);
-    // The override written this tick (model space), the attach joint it was placed under and the weight it
-    // was written past by.
+    // The override written this tick (model space, as placed under the attach joint `attach`; it is written
+    // in that joint's frame) and the weight it was written past by.
     void wrote(const xr_math::ModelPose& attach, const xr_math::ModelPose& written, float weight);
     // No override written this tick (the arm the game's).
     void idle();
@@ -131,7 +137,6 @@ public:
 private:
     std::optional<xr_math::ModelPose> animated_;
     std::array<xr_math::ModelPose, kSteadyWrites> written_{}; // attach frame, the last first
-    std::array<xr_math::ModelPose, kSteadyWrites> model_{};   // model space, the last first
     int writes_ = 0;                                          // overrides written in a row, capped
     float weight_ = 1.0f;                                     // the last override's write weight
 };
@@ -184,11 +189,16 @@ GloveArm gloveArm(const ArmPoses& read,
                   const GripPose& grip,
                   float gripWeight);
 
-// What the layer writes for the glove (model space, game units): the wrist's override and the fifteen
-// fingers' (kFingerMods order).
+// What the layer writes for the glove (game units): the wrist's override and the fifteen fingers'
+// (kFingerMods order), in model space under the attach joint they were placed under, and each in its
+// parent's frame, which is how they are written (parent_frames.hpp): the wrist in the attach joint's frame,
+// each finger in its parent's.
 struct GripOverrides {
+    xr_math::ModelPose attach;
     xr_math::ModelPose wrist;
     std::array<xr_math::ModelPose, kFingerModCount> fingers;
+    xr_math::ModelPose wristLocal;
+    std::array<xr_math::ModelPose, kFingerModCount> fingersLocal;
 };
 
 // The overrides that land the wrist at `wantedWrist` and close the fingers `curl` of the way (0 to 1) from

@@ -152,6 +152,48 @@ back after 0.25 s, blended over `ETERNALVR_OFFHAND_BLEND` (0.15 s).
   rejected, and showed two faults the arm below fixes: the forearm and sleeve stretched from the shoulder
   to the hand, and the hand did not take the controller's orientation.
 
+### When the arms go back to the game
+
+The arm policy hands an arm back to the game (`untracked`) when the hands' poses it is posed from are not
+current: the weapon hand and the head (the weapon arm's shoulder and its gun), the off hand, and the arms
+model's placement at the weapon hand. The camera hook writes the hands for each view of the game, at the
+runtime's pose predicted for when that frame is shown, and the viewmodel hook places the arms model at each
+tick of the game's hands; the hooks of the following tick read both (`vkcore/view_poses.cpp`). Until
+2026-10-19 a pose counted as current while it was at most 0.1 s old at the read. That age is the gap since
+the last view, not the pose's age: a single frame longer than 0.1 s (a hitch) made the newest poses the
+runtime had given look stale, and every arm went back to the game's animation for about 0.45 s (handed
+back over 0.05 s, the 0.25 s hold, eased in over 0.15 s). On the Chaingun and the Ballista the game's right
+hand sits on a top handle about 0.6 m away and turned about 78 degrees, so the glove slid off the grip and
+back; below 10 fps every frame did it.
+
+Now (`features/input/view_pose_clock.hpp`) a pose is current while the views keep coming: written after the
+tick before the last one, however long the frames were, or at most 0.1 s old (`kWorldStaleSeconds`) once
+they stop (no camera hook: a menu, the session losing focus), and never older than 1 s
+(`kWorldHitchCapSeconds`, longer than any single frame the rig logged in play, 891 ms at most): when the views
+and the ticks both stop (a load, a freeze), a shot or the off hand read before the first tick after it does
+not take the pose from before it, and a hitch over 1 s hands the arms back as before. The viewmodel hook
+counts every tick of the local player's hands (it checks the owner first), forced views included, so the old
+poses of a stopped camera hook still age out by ticks. Two ticks back, so the rule holds whether the off-hand
+hook reads before or after the viewmodel hook within a tick. Without the viewmodel hook
+(`ETERNALVR_VIEWMODEL=0`, or its install checks failed) nothing counts the ticks and the rule is the age
+alone, as before this change; the off-hand hook, which poses both arms, is then not installed at all
+(`controllers.cpp` installs it only with the viewmodel hook), so that leaves the shots and the equipment
+launches on the age rule. If the game ran `idHands::UpdatePosition` more than once a tick for the player's
+hands, the window would shrink and a hitch could hand the arms back again [unverified: the rig logs do not
+count its calls per frame; the scripted hitches below kept the arms in 12 of 12]. The same rule
+covers the gun's placement (the viewmodel hook), the shots and the equipment launches (aim and launch
+hooks). A lost controller does not go through this: the runtime's location flags (orientation and position
+valid) make its pose invalid at once and the arm goes back that tick, as before. What the player sees on
+the first frame after a hitch is the hand where the runtime predicted it for the frame before (no newer
+pose exists then); the next view has the new one.
+
+On the rig (docs/rig-findings/hands-rig.md, section 14) scripted hitches of 150 and 400 ms with the Chaingun
+and the Heavy Cannon held handed both arms back in 12 of 12 on dev main and in none now, the weapon arm at
+weight 1 and the off hand's written wrist on its target through all of them. Posing through a hitch also
+needed the arms' clean read to count ticks (a read counts as clean only 150 ms and 3 ticks after the last
+write, on both arms; "The whole arm" below): with the time alone, the off hand's glove on the Heavy Cannon
+ended up to 36 cm off the controller after six hitches.
+
 ### The whole arm (free mode)
 
 **Why the sleeve stretched.** The arms skeleton (`md6/player/human/base/assets/mesh/arms.md6skl`, read out
@@ -277,11 +319,11 @@ the weapon's grip point), so putting it at the controller did not put the hand t
   is taken from the root, so the layer subtracts the root's position read that tick. The joints then read
   back within about a centimetre of where they were written. GetJointTransforms reads the blend's final
   pose, which includes the layer's overrides of the last frame, so feeding it to the solver made the arm
-  run away (bone lengths of several metres in ik4); for 150 ms after the last override the layer's joints
-  are taken instead as the last read without overrides placed them relative to `LeftHand`, which the
-  overrides do not move. An override read back more than 0.1 from where it was written for 30 ticks in a
-  row stops the arm for the session (`offhand: arm: the layer's overrides do not land where written ...`).
-  **The mix** [static: InitJointMods 0x138B080 +0xB0 hands the modifier node's create (0x497E00) the
+  run away (bone lengths of several metres in ik4); for 150 ms and 3 ticks after the last override the
+  layer's joints are taken instead as the last read without overrides placed them relative to `LeftHand`,
+  which the overrides do not move. An override read back more than 0.1 from where it was written for 30 ticks
+  in a row stops the arm for the session (`offhand: arm: the layer's overrides do not land where written
+  ...`). **The mix** [static: InitJointMods 0x138B080 +0xB0 hands the modifier node's create (0x497E00) the
   constant 0.95, which it copies to the owner's (idHands+0x2888) current weight +0x3C and target weight
   +0x40; GetWeight (0x497DE0) returns +0x3C, SetWeight moves +0x40 and fades +0x3C toward it; the Game Pass
   build has the same bytes; rig: ap-base0, ap-final, ap-w1]. The blend mixes the arm's pose without
@@ -333,14 +375,16 @@ the weapon's grip point), so putting it at the controller did not put the hand t
   sweep; other weapons and their animations not measured). The wrist's landing counts in `landed` but not
   toward the landing guard, so a wrist offset of the game's own cannot stop the arm for the session. With the
   wrist's change the offsets taken from a clean read are dropped when the hands, the modifier node or the
-  skeleton change (a new level, a skin), and a read counts as clean only 150 ms and 3 ticks after the last
-  write (the time rule alone took a read the overrides still showed in after a hitch); without `bind` both
-  stay as they were. The weapon arm's wrist and attach joint stay the game's: its wrist as read is taken as
-  the parent of the first roll joint, an approximation, since the read has the game's attach change (the
-  weapon lag) mixed in at the weight and the joints are mixed from the wrist with it whole, so they land off
-  by (1 - weight) of that change (1.4 mm median, 1.8 at most on the rig with nlerp, `r4-bind2`; the 1.5 and
-  4.4 of `ap2-comp2` included the slerp model's own error). The read-back is measured against the target
-  (`landed`).
+  skeleton change (a new level, a skin); without `bind` they stay as they were. A read counts as clean only
+  150 ms and 3 ticks after the last write, on both arms (the time rule alone took a read the overrides still
+  showed in after a hitch: with the wrist's change first; from 2026-10-19, when the arms keep posing through
+  a hitch, the off hand's arm on the Heavy Cannon too: its reach shrank from 0.74 to 0.35 over six scripted
+  hitches of 150 and 400 ms, and the glove was left up to 36 cm off the controller). The weapon arm's wrist
+  and attach joint stay the game's: its wrist as read is taken as the parent of the first roll joint, an
+  approximation, since the read has the game's attach change (the weapon lag) mixed in at the weight and the
+  joints are mixed from the wrist with it whole, so they land off by (1 - weight) of that change (1.4 mm
+  median, 1.8 at most on the rig with nlerp, `r4-bind2`; the 1.5 and 4.4 of `ap2-comp2` included the slerp
+  model's own error). The read-back is measured against the target (`landed`).
   Rig (`ap2-comp2`, 72 holds, against `ap-final`): the weapon arm's read-back from 5.9 mm median (45 at
   most, 26 holds over 10 mm) to 1.5 (4.4 at most, none over 10); the left arm's from 26 mm median (106
   at most, all 72 holds over 10 mm) to 2.3 (19 at most, 4 holds between 10 and 19 mm: the roll -90 lead-in
@@ -365,7 +409,11 @@ the weapon's grip point), so putting it at the controller did not put the hand t
   supersedes the 0x19E2A60 cited here before (that pass skips them: it filters on flag 0x400); the behaviour
   below is seen live on the rig since ik5]. A model-space modifier is applied after the joint's parent: a
   change multiplies its quaternion on the left and adds its translation, an
-  override (0x20) replaces the joint's model-space pose. SetJointMod makes the quaternion from the matrix it
+  override (0x20) replaces the joint's model-space pose. Flag 1 is what makes a modifier model-space
+  [static: 0x19E1040 tests it per entry, and the Game Pass build's pass, at 0x19EC8A0, the same; SetJointMod
+  stores the flags as given]: without it the modifier is in the joint's parent's frame, an override's
+  rotation, scale and translation becoming the joint's pose under its parent as they are, so it rides the
+  parent's pose of the frame the game draws (`features/arm/parent_frames.hpp`; the glove on a grip, below). SetJointMod makes the quaternion from the matrix it
   is given as if the rows were the joint's rotated axes, so the joint's axis becomes animated x matrix,
   which is what `xr_math/offhand_pose.hpp` has always assumed. Positions go in divided by the animator's
   model scale (+0x500), which GetJointTransforms multiplies them by (1 expected; outside 0.5 to 2 the arm
@@ -441,7 +489,9 @@ as "the right forearm" (2026-10-01, the right hand far out front-right) was the 
   side, such as `0,-0.5,0.3`, sends the arm out of both eyes. The start-up line ends `, TEST shoulder
   (ETERNALVR_WEAPON_ARM_TEST_SHOULDER)`.
 - **Unverified.** The overrides read GetJointTransforms, which gives the last frame's pose, so in a fast
-  animation (recoil) the sleeve may trail the glove by a frame. First rig runs (2026-10-02, simulator,
+  animation (recoil) the sleeve may trail the glove by a frame (on every gun but the two whose glove is on a
+  grip, where the forearm is written in its joints' parents' frames and rides the glove: "In the gun's frame",
+  below). First rig runs (2026-10-02, simulator,
   `right.position = 0.15, -0.25, -0.35`): joints found, modifiers added, 0 rejected, overrides read back,
   but the picture was the same as with `game`, even with the arm across the view: the weapon's mesh kit
   had the arm switched off (below). Showing it is not yet confirmed on the rig.
@@ -526,8 +576,8 @@ The forearm, elbow and upper arm reach the wrist by the same IK as on every gun.
   hand-back) mixes it like the rest of the arm, the fingers too. On a switch the weapon's kit then hides the
   right arm, glove included, as on every gun, until the arm comes back on the new gun. Holding the weapon mod
   does not hand the arm back on either gun (rig); switching the mod does, for about 2 s. A frame longer than
-  0.1 s hands it back too ('untracked'), and on these two guns the glove then eases off the grip toward the
-  game's handle hand and back within about 0.45 s.
+  0.1 s no longer hands it back ("When the arms go back to the game" above; until 2026-10-19 the glove then
+  eased off the grip toward the game's handle hand and back within about 0.45 s).
 - **The left glove** is unchanged: with the free off hand (the baseline) it follows the left controller and
   is shown on the ballista, whose kit hides both arms; with `ETERNALVR_OFFHAND=game` the game's left glove
   holds the chaingun's front handle as in flat play, and the ballista has none [rig: `ga-view2`].
@@ -537,22 +587,70 @@ The forearm, elbow and upper arm reach the wrist by the same IK as on every gun.
   .. RightHandPinky3 22` and `offhand: arm: the hands' modifier weight 0.950 ...`; when such a weapon comes up
   `weapon arm: 'weapon/player/chaingun' holds its gun by a handle turned away from a controller's grip: the
   glove goes on a grip in the Heavy Cannon's idle grip ...`. With `ETERNALVR_OFFHAND_TRACE=1` the pose line
-  ends `glove on the grip (grip G, fingers F)` or `glove the game's`.
+  ends `glove on the grip (grip G, fingers F)` or `glove the game's`, and every tick the glove was written
+  the tick before (up to 6000 lines) `weapon arm: glove tick: wrist W mm off in the gun's frame, the sleeve's
+  end S mm off the glove, the shoulder end H mm off; the gun's root moved G mm at the grip (R mm at the root,
+  turned T deg) from the read the write was placed under`.
 - **Rig** (OpenXR-Simulator, the grip sweep, five holds and a view hold per gun; docs/rig-findings/hands-rig.md,
   section 11): the glove's wrist from its target, median / largest, chaingun 72.3 / 72.5 cm before (dev main)
   and 0.1 / 0.3 after, ballista 48.0 / 48.2 and 0.2 / 0.5, the other six unchanged (0.1 to 0.2 / 0.2 to 0.3);
   the sights check passes (largest 0.20 degrees on both); the merge-QA hands check (combat shotgun) has no
   regression against its baseline. The captures show the forearm going into the chaingun's grip from below
   (the fist inside the grip's housing) and the fist closed under the ballista's stock.
-- **Behind the gun by a frame.** The glove's override is a model-space pose under the root joint as read a
-  frame before, so where the gun moves fast within a frame the glove lands where the gun was: on the rig
-  (docs/rig-findings/hands-rig.md, section 11) up to 17 mm while the chaingun fires and 35 mm as its mod comes
-  up, and up to 15 cm in the first two seconds of the ballista's shots; 0.1 mm while the gun is still. An
-  override in the root joint's own frame would follow the gun; whether the game's modifier pass takes one is
-  not checked.
+- **In the gun's frame** (`features/arm/parent_frames.hpp`). With the glove on a grip all 22 of the weapon
+  arm's modifiers are overrides in their joint's parent's frame (flags 0x22A, the layer's 0x22B without flag 1;
+  "How the modifiers work"): the wrist in the gun's root joint's frame, each finger under its parent, each
+  forearm joint under the one before it and the first under the glove's wrist, with the poses the layer has
+  always computed, taken relative to their parents as written. Written in model space under the root joint
+  as read (the last frame's), the glove landed where the gun had been wherever the game's animation moved
+  the gun within a frame: on the rig (docs/rig-findings/hands-rig.md, section 13), per tick, the glove's miss
+  in the gun's frame was the root's move at the grip between the read and the frame drawn times the hands'
+  modifier weight (correlation 1.000, slope 0.95 to 0.97), up to 17.1 mm while the chaingun fires, 33.5 mm as
+  its mod comes up and 151.3 mm in the ballista's first shot. Held in the parents' frames, the game places
+  the glove by the gun's pose of the frame it draws: 0.0 mm in every phase on the chaingun, and on the
+  ballista 0.0 mm median and 1.6 at the 95th percentile while firing. What is left is the blend's share of
+  the game's own hand under the glove (1 - 0.95 of how far the ballista's animation moves its handle hand in
+  the frame of a shot, which the read shows a frame late): 4 of 259 firing ticks over 5 mm, in the two
+  shots' first frames, the largest 15.0 mm; and, as before the change, up to 10.1 mm for a few ticks as the
+  ballista's animation moves its hand after the shots while the wrist tracker waits for steady overrides. The
+  forearm, elbow and upper arm ride the glove and the gun for that frame, as the game's own arm does (the arm
+  hangs from the attach joint), so the shoulder end moves with the ballista's kick by up to 17 cm for a frame
+  before the next tick's solve takes it back to the head's point; the sleeve's end stays on the glove (2.9 mm
+  at most, as before). The landing guard measures each joint against where it was meant to land carried by
+  the root joint read then. The other six guns, whose glove is the game's, write as before. Only a uniform
+  model scale divides out of an offset in a parent's frame (the scale is along the model's axes), so with a
+  scale whose three axes differ (by more than 1e-4 of the largest) the glove's modifiers are written in model
+  space as before, trailing a fast gun by a frame but landing where written (unit test: at (1, 1.2, 1) the
+  glove would land 18 mm off in the parent's frame); the rig reads 1, 1, 1. Not run: `ETERNALVR_ARM_SOLVE=bind`
+  with either gun (its forearm is written past its targets, `modifiedFor`, and taken into the parents' frames
+  the same way; untested on the rig).
 - **Not verified.** In a headset; the ballista's ridge as a grip (the game never holds the ballista this
   way); which of each gun's mods the rig's save had equipped; melee and glory kills on these two guns (the
   same policy hand-back as a switch, not run).
+
+### The other held items
+
+[rig: the hands rig, docs/rig-findings/hands-rig.md, section 12; static: the arm policy's code] The
+**Unmaykr**'s idle holds it with the guns' grip (the glove 3.6 degrees from the Heavy Cannon's, at the guns'
+offset from the root joint), so its `[standing]` row is measured like theirs: the glove's wrist 13.8 cm from
+the real hand before, 0.2 cm after. The **Crucible** comes out as a held item (its button, then it idles until
+a switch) and is held one-handed in the right fist: the hilt hangs from the root joint as a gun does, the fist
+closed on it just under the guard, turned 37 degrees from the guns' grip; the game's left glove hangs behind
+it, not on it. Nothing on it aims (its swing hands the arm back to the game: the weight was 0 at the next of
+the rig's dump lines, 0.25 s apart, and came back 1.5 s later),
+so its row turns the whole model (pitch -24.39, yaw -23.75, roll -10.59) until the glove sits on the
+controller as on the guns, and the hilt stays in the fist exactly as the game holds it (DECISIONS T-139): the
+wrist 40.1 cm off before, 0.4 cm after, the glove 37.0 degrees from the guns' grip before, 0.1 after. The game's
+swing then plays in the turned model. With the free off hand the left glove follows the left controller as on
+every gun; the Crucible stays in the right hand.
+
+The rest stays on the `default` row because the arm is the game's while they are out: the **chainsaw**'s
+button is a quick action (its held item for 0.8 s, the arm handed back for all of it: its hands states and
+actions are in the policy's list), a **melee**'s fists are out for 0.5 s, handed back the same way, and the
+**Sentinel Hammer**'s throw and slam are actions of the hands the policy hands back (`HammerThrow`,
+`HammerSlam`); the rig did not bring the hammer out (the Crucible swapped for it, its button changed nothing on
+e1m1). Not seen on the rig: the Berserk's and the swim's fists, and the chainsaw as a weapon outside an
+inventory emptied by the console.
 
 ### The weapon's mesh kit
 

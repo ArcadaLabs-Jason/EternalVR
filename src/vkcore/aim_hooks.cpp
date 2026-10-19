@@ -231,19 +231,15 @@ void onFire(const HookRegisters& regs) {
         return;
     }
     s.shots.fetch_add(1, std::memory_order_relaxed);
-    WorldHand world;
-    {
-        std::lock_guard lock(s.viewMutex);
-        world = s.world;
-    }
+    const TickView view = tickView();
+    const WorldHand& world = view.world;
     Vec3 eye;
     auto* firePos = reinterpret_cast<std::byte*>(regs.rsp + kFirePosFromRsp);
     auto* fireAxis = reinterpret_cast<std::byte*>(regs.rbp + kFireAxisFromRbp);
     Vec3 gamePos;
     float axis[9];
-    if (!world.valid || secondsSince(world.qpc) > kWorldStaleSeconds || s.yielding.load() ||
-        !readVec3(owner + kPlayerFirstPersonOrigin, eye) || !readVec3(firePos, gamePos) ||
-        !safeCopy(axis, fireAxis, sizeof(axis))) {
+    if (!view.worldCurrent || s.yielding.load() || !readVec3(owner + kPlayerFirstPersonOrigin, eye) ||
+        !readVec3(firePos, gamePos) || !safeCopy(axis, fireAxis, sizeof(axis))) {
         logShotStats(s);
         return;
     }

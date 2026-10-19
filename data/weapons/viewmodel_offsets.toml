@@ -16,9 +16,16 @@
 # into account. The wrist positions are measured on the hands rig (docs/rig-findings/hands-rig.md, section 10).
 # The chaingun's and the ballista's idles hold the gun by its rear top handle, the glove turned across a
 # controller's grip; the weapon arm puts the glove on a grip instead ([right_grip] below), and their rows put
-# that wrist on the target like the others' (measured with the glove there). "default" (the fists, the chainsaw,
-# the Crucible, the hammer, the Unmaykr) is the first estimate, not measured. ETERNALVR_VIEWMODEL_OFFSET
-# replaces a row on the rig.
+# that wrist on the target like the others' (measured with the glove there). The Unmaykr's idle holds it with
+# the guns' grip. The Crucible's idle holds the hilt in the right fist turned 37 degrees from the guns' grip,
+# so its row also turns the model (nothing on it aims: its swing hands the arm back to the game) until the
+# glove sits as on the guns, with the hilt in the fist as the game holds it (its offset is the target less the
+# wrist as turned). "default" is the first estimate, not measured: the fists (a melee's are out only while
+# the arm is handed back to the game; the Berserk's and the swim's not seen on the rig), the chainsaw (its
+# button is a quick action that hands the arm back; held as a weapon only with no gun left in the inventory),
+# the Sentinel Hammer (not brought out on the rig; its throw and slam hand the arm back) and anything new.
+# Measured: docs/rig-findings/hands-rig.md, section 12.
+# ETERNALVR_VIEWMODEL_OFFSET replaces a row on the rig.
 #
 # No [seated] rows: seated play uses the same ones, since the glove follows the real hand in either posture.
 #
@@ -38,6 +45,8 @@
 "weapon/player/gauss_rifle" = [-0.326, 0.173, 0.384]
 "weapon/player/chaingun" = [-0.615, 0.166, 0.325]
 "weapon/player/bfg" = [-0.355, 0.094, 0.383]
+"weapon/player/unmaykr" = [-0.245, 0.194, 0.356]
+"weapon/player/crucible" = [-0.493, 0.496, -0.060, -24.39, -23.75, -10.59]
 
 # Weapon sights (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): [pitch, yaw] in
 # degrees (pitch positive down, yaw counter-clockwise) is the direction of the weapon's sight line in the arms

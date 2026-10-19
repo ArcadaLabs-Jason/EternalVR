@@ -404,24 +404,22 @@ void poseLeftHand(const HookRegisters& regs) {
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return;
     }
-    WorldHand world;
-    ModelPlacement model;
-    {
-        std::lock_guard lock(s.viewMutex);
-        world = s.world;
-        model = s.model;
-    }
+    const TickView view = tickView();
+    const WorldHand& world = view.world;
+    const ModelPlacement& model = view.model;
     arm_dump::noteView(world, model);
     input::ArmSignals sig = readSignals(hands, owner);
     sig.forcedView = s.yielding.load();
-    sig.modelPlaced = model.valid && secondsSince(model.qpc) <= kWorldStaleSeconds;
+    sig.modelPlaced = view.modelCurrent;
     const LONGLONG now = nowQpc();
     const float dt = g_lastQpc ? static_cast<float>(secondsSince(g_lastQpc)) : 0.0f;
     g_lastQpc = now;
     if (g_weaponArm) {
-        weapon_arm::tick(hands, sig, world, model, dt);
+        input::ArmSignals weaponSig = sig;
+        weaponSig.offHandTracked = view.worldCurrent; // the weapon arm's: the head and the weapon hand
+        weapon_arm::tick(hands, weaponSig, world, model, dt);
     }
-    sig.offHandTracked = world.valid && world.offValid && secondsSince(world.qpc) <= kWorldStaleSeconds;
+    sig.offHandTracked = view.worldCurrent && world.offValid;
     const input::ArmDecision decision = input::decideArm(sig, cfg.offhand);
     const float weight =
         g_blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);

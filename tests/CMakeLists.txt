@@ -175,6 +175,7 @@ evr_add_test(evr_input_tests
         features/input/locomotion_direction_tests.cpp
         features/input/menu_release_latch_tests.cpp
         features/input/offhand_policy_tests.cpp
+        features/input/view_pose_clock_tests.cpp
         features/input/player_controller_data_tests.cpp
         features/input/prompt_keys_tests.cpp
         features/input/weapon_info_labels_tests.cpp
@@ -232,6 +233,7 @@ evr_add_test(evr_arm_tests
         features/arm/hand_offset_tests.cpp
         features/arm/mod_mix_tests.cpp
         features/arm/mod_room_tests.cpp
+        features/arm/parent_frames_tests.cpp
         features/arm/twist_fault_tests.cpp
         features/arm/two_bone_ik_tests.cpp
     DEPENDS evr_arm)

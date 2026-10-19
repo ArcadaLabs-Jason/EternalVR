@@ -4,7 +4,8 @@
 // by the skeleton's shape from the game's own attach joint of that arm, the names checked against the
 // handles the game's name table gives (the lookup idHands::InitJointMods makes for the attach joints), and,
 // on the first failure per arm, the pointers followed and hex dumps of the skeleton's header, name handles,
-// the file's name block and parent table in the log. Game thread (the off-hand hook) only.
+// the file's name block and parent table in the log; and the arms animator's model scale. Game thread (the
+// off-hand hook) only.
 
 #include "features/arm/arm_skeleton.hpp"
 #include "features/arm/grip_hand.hpp"
@@ -42,6 +43,10 @@ struct SkeletonPath {
 bool isIdentity(const xr_math::IdViewAxis& a);
 // Each component of `a` within `eps` of `b`'s.
 bool closeTo(Vec3 a, Vec3 b, float eps);
+
+// The arms animator's model scale (idJointAnimator +0x500: game units per internal unit, per axis), or
+// nullopt with `error` set when it cannot be read or an axis is outside 0.5 to 2.
+std::optional<Vec3> readModelScale(const std::byte* animator, std::string& error);
 
 // Install time: checks the code the arms rely on (game_arm::install): the animator getter
 // UpdateWeaponLagJointMods calls at +0x94 and the offsets GetJointTransforms and SetJointMod use. The getter,
