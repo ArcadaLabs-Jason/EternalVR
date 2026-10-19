@@ -501,8 +501,11 @@ namespace EternalVR.Launcher.Core.Launch
         /// <c>LAYER_LOADED</c> marker the game exited before the Vulkan loader loaded EternalVR: only the command line and the
         /// environment can have played a part (a Game Pass player's game crashed this way 22 times in a row after a
         /// flat session from the Xbox app, 2026-10-03, also with the layer turned off).</summary>
-        public static string EarlyExitMessage(double seconds, int exitCode, bool layerLoaded)
+        public static string EarlyExitMessage(double seconds, int exitCode, bool layerLoaded, string gameError = null)
         {
+            if (!layerLoaded && !string.IsNullOrEmpty(gameError))
+                return "The game stopped before EternalVR loaded, with its own error: " + Sentence(gameError)
+                    + " Still stopping? " + Report.ReportHint.Ask;
             if (!layerLoaded && GameExit.IsCrash(exitCode))
                 // One line, the thing that matters first; the exit code is in the log line before it.
                 return "The game crashed before EternalVR loaded. Start it once from the Xbox app or Steam, or restart the PC, then try again. "
@@ -513,13 +516,18 @@ namespace EternalVR.Launcher.Core.Launch
 
         /// <summary>The status line when the game the DOOM Eternal Launcher started had ended before the launcher could open
         /// it (no exit code to read): the session's <c>LAYER_LOADED</c> marker says whether EternalVR had loaded.</summary>
-        public static string GoneMessage(bool layerLoaded)
+        public static string GoneMessage(bool layerLoaded, string gameError = null)
         {
+            if (!layerLoaded && !string.IsNullOrEmpty(gameError))
+                return "The game closed right after it started, before EternalVR loaded, with its own error: " + Sentence(gameError)
+                    + " Still closing? " + Report.ReportHint.Ask;
             if (!layerLoaded)
                 return "The game closed right after it started, before EternalVR loaded. Start it once from the Xbox app, "
                     + "or restart the PC, then try again. Still closing? " + Report.ReportHint.Ask;
             return "The game closed right after it started. If it keeps happening: " + Report.ReportHint.Ask;
         }
+
+        private static string Sentence(string text) => ".!?".IndexOf(text[text.Length - 1]) >= 0 ? text : text + ".";
 
         public const string HandOffMessage =
             "The game was restarted by Steam without EternalVR (a hand-off). VR is not active in this game window. " +

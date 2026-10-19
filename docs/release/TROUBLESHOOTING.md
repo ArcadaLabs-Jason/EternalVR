@@ -280,7 +280,9 @@ pose ever arrives while you play. Also check that both controllers are on and tr
 to recenter, or use the headset's own recenter (hold the Meta / Oculus button).
 
 **The game crashed.** Send an Export report (above): it holds the game's own crash report and console log
-as well as the mod's log. Your settings are restored when the
+as well as the mod's log. If the game stops within its first seconds, before EternalVR has loaded, the launcher shows the game's own
+error when it wrote one (for example "Please update your driver: VK_KHR_get_surface_capabilities2 is required": a missing or broken
+graphics driver, fixed by reinstalling it). Your settings are restored when the
 game has exited (or the next time you open the launcher).
 
 **"The game was ended (exit code -1)".** The game did not crash: it was closed, by itself or by another

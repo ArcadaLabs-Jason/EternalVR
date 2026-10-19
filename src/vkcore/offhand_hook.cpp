@@ -41,9 +41,11 @@
 #include "features/arm/twist_fault.hpp"
 #include "features/input/offhand_policy.hpp"
 #include "vkcore/arm_dump.hpp"
+#include "vkcore/arm_signals.hpp"
 #include "vkcore/game_arm.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
+#include "vkcore/left_hand_arms.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -96,13 +98,8 @@ constexpr std::size_t kAnimPositionFromRsp = 0x68;
 constexpr std::ptrdiff_t kAnimAxisFromRbp = 0x30;
 
 // Type info (build 25216728).
-constexpr std::size_t kHandsOwner = 0x358;             // idHands::owner
-constexpr std::size_t kHandsDestState = 0x1970;        // idHands::destHandsState
-constexpr std::size_t kHandsLeftAttachJoint = 0x28E4;  // the left attach joint's index (the byte check)
-constexpr std::size_t kHandsHiddenReasons = 0x29A0;    // idHands::hiddenReasons
-constexpr std::size_t kHandsPendingAction = 0x8CD0;    // idHands::pendingAction.action
-constexpr std::size_t kHandsFlags = 0x8DA0;            // idHands::handsFlags
-constexpr std::size_t kPlayerFpHandsDisabled = 0x5C28; // idPlayer::disableFPHandsReasons
+constexpr std::size_t kHandsOwner = 0x358;            // idHands::owner
+constexpr std::size_t kHandsLeftAttachJoint = 0x28E4; // the left attach joint's index (the byte check)
 
 // A probe modifier never reaches further than this from the animated pose, nor the wrist in free mode.
 constexpr float kMaxReachMetres = 1.5f;
@@ -162,18 +159,6 @@ Vec3 scaled(Vec3 v, Vec3 s) {
 
 Vec3 unscaled(Vec3 v, Vec3 s) {
     return {v.x / s.x, v.y / s.y, v.z / s.z};
-}
-
-input::ArmSignals readSignals(const std::byte* hands, const std::byte* player) {
-    input::ArmSignals s;
-    safeRead(hands + kHandsPendingAction, s.pendingAction);
-    safeRead(hands + kHandsDestState, s.destHandsState);
-    safeRead(hands + kHandsHiddenReasons, s.hiddenReasons);
-    safeRead(hands + kHandsFlags, s.handsFlags);
-    safeRead(player + kPlayerFpHandsDisabled, s.fpHandsDisabled);
-    // Any sync: a pickup's animation moves the hands too.
-    s.syncActive = syncEntity(player) != nullptr;
-    return s;
 }
 
 void trace(const input::ArmSignals& sig, const input::ArmDecision& d, float weight) {
@@ -395,7 +380,9 @@ void poseLeftHand(const HookRegisters& regs) {
     }
     if (!s.attached.load(std::memory_order_acquire)) {
         giveBackLeft(hands);
-        if (g_weaponArm) {
+        if (offhand_mods::fingerCount(arm::ArmSide::Left) > 0) {
+            left_hand_arms::release(hands); // both arms, their blends and the gun's placement
+        } else if (g_weaponArm) {
             weapon_arm::release(hands);
         }
         return;
@@ -408,18 +395,23 @@ void poseLeftHand(const HookRegisters& regs) {
     const WorldHand& world = view.world;
     const ModelPlacement& model = view.model;
     arm_dump::noteView(world, model);
-    input::ArmSignals sig = readSignals(hands, owner);
+    input::ArmSignals sig = readArmSignals(hands, owner);
     sig.forcedView = s.yielding.load();
     sig.modelPlaced = view.modelCurrent;
     const LONGLONG now = nowQpc();
     const float dt = g_lastQpc ? static_cast<float>(secondsSince(g_lastQpc)) : 0.0f;
     g_lastQpc = now;
+    input::ArmSignals weaponSig = sig;
+    weaponSig.offHandTracked = view.worldCurrent; // the weapon arm's: the head and the weapon hand
+    sig.offHandTracked = view.worldCurrent && world.offValid;
+    if (offhand_mods::fingerCount(arm::ArmSide::Left) > 0) {
+        left_hand_arms::tick(hands, weaponSig, sig, world, model,
+                             dt); // the left attach joint stays the game's
+        return;
+    }
     if (g_weaponArm) {
-        input::ArmSignals weaponSig = sig;
-        weaponSig.offHandTracked = view.worldCurrent; // the weapon arm's: the head and the weapon hand
         weapon_arm::tick(hands, weaponSig, world, model, dt);
     }
-    sig.offHandTracked = view.worldCurrent && world.offValid;
     const input::ArmDecision decision = input::decideArm(sig, cfg.offhand);
     const float weight =
         g_blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
@@ -547,13 +539,14 @@ bool installOffhandHook(bool& weaponArmInstalled) {
     }
     const input::ControllerSettings& cfg = settings();
     // Free mode and the weapon arm pose whole arms and need the arms' own checks; probe and trace do not.
-    const offhand_mods::ArmSet wanted{cfg.offhand == input::OffhandMode::Free,
+    const offhand_mods::ArmSet wanted{cfg.offhand == input::OffhandMode::Free || input::leftHandArms(cfg),
                                       cfg.weaponArm == input::WeaponArmMode::Ik};
     const offhand_mods::ArmSet ready = wanted.offHand || wanted.weapon
                                            ? game_arm::install(image, start, getJoints, setJointMod, wanted)
                                            : offhand_mods::ArmSet{};
     const bool offHandHooks = cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace;
-    if ((wanted.offHand && !ready.offHand) || (!offHandHooks && !ready.weapon && !cfg.armsHidden)) {
+    if ((cfg.offhand == input::OffhandMode::Free && !ready.offHand) ||
+        (!offHandHooks && !ready.weapon && !cfg.armsHidden)) {
         return false;
     }
     if ((ready.offHand || ready.weapon || cfg.armsHidden) &&
@@ -584,7 +577,10 @@ bool installOffhandHook(bool& weaponArmInstalled) {
             cfg.offhandHoldSeconds, w.forward, w.left, w.up, w.pitch, w.yaw, w.roll,
             input::shoulderAnchorName(input::shoulderAnchorFor(cfg.offhandShoulder, cfg.handedness)),
             sh.forward, sh.left, sh.up, e.forward, e.left, e.up,
-            mirrored ? ", mirrored for the right controller (weapon in the left hand)" : "",
+            offhand_mods::fingerCount(arm::ArmSide::Left) > 0
+                ? ", the arms take each other's roles (weapon in the left hand, left_hand_arms.hpp)"
+            : mirrored ? ", mirrored for the right controller (weapon in the left hand)"
+                       : "",
             cfg.offhandTrace ? ", trace on" : "");
     return true;
 }

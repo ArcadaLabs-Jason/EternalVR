@@ -75,6 +75,8 @@ const char* armReasonName(ArmReason reason) {
         return "left-arm animation";
     case ArmReason::HandsState:
         return "hands state";
+    case ArmReason::NoGrip:
+        return "no grip read yet";
     }
     return "?";
 }
@@ -109,6 +111,14 @@ ArmDecision decideArm(const ArmSignals& s, OffhandMode mode) {
         return game(ArmReason::Untracked);
     }
     return {true, ArmReason::Controller};
+}
+
+bool readsGameGrip(const ArmSignals& weaponSignals, WeaponArmMode mode) {
+    return decideWeaponArm(weaponSignals, mode).controller;
+}
+
+OffhandMode leftHandOffMode(OffhandMode mode, bool onController) {
+    return mode == OffhandMode::Game && onController ? OffhandMode::Free : mode;
 }
 
 ArmDecision decideWeaponArm(const ArmSignals& signals, WeaponArmMode mode) {

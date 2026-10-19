@@ -46,11 +46,10 @@ TEST_CASE("debug script: online commands and maps that are not single-player are
     CHECK_FALSE(parseDebugScript("1:ai_Show|2:JoinShellLobby").error.empty());
     CHECK_FALSE(parseDebugScript("1:map game/pvp/pvp_inferno").error.empty());
     CHECK_FALSE(parseDebugScript("1:devmap").error.empty());
-    // A single-player map passes the policy but is not a test command.
+    // A single-player map passes the policy and is a test command (the hands rig loads a level again).
     const auto map = parseDebugScript("1:map game/sp/e1m1_intro/e1m1_intro");
     CHECK(map.error.empty());
-    CHECK(map.steps.empty());
-    CHECK(map.refused.size() == 1);
+    CHECK(map.refused.empty());
 }
 
 TEST_CASE("debug script: empty steps are dropped and the time must be finite") {
@@ -78,6 +77,14 @@ TEST_CASE("debug script: the hands rig's inventory swaps and spawns pass the all
     REQUIRE(script.steps.size() == 3);
     CHECK(script.steps[1].commands[0] == "removeInventoryItem weapon/player/crucible");
     CHECK(script.steps[2].commands[0] == "chrispy pickup/powerup/berserk");
+}
+
+TEST_CASE("debug script: the hands rig's level load passes the allow-list") {
+    const auto script = parseDebugScript("100:map game/sp/e1m1_intro/e1m1_intro|140:give all");
+    CHECK(script.error.empty());
+    CHECK(script.refused.empty());
+    REQUIRE(script.steps.size() == 2);
+    CHECK(script.steps[0].commands[0] == "map game/sp/e1m1_intro/e1m1_intro");
 }
 
 TEST_CASE("debug script: command names are matched without case, cvars take a value") {

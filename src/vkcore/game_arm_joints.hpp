@@ -10,6 +10,7 @@
 #include "features/arm/arm_skeleton.hpp"
 #include "features/arm/grip_hand.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/offhand_mods.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +28,9 @@ struct SideText {
     const char* side;    // "left" / "right"
 };
 const SideText& sideText(arm::ArmSide side);
+
+// "...; <the arms> stay the game's" for the arms install was asked for.
+const char* staysText(offhand_mods::ArmSet wanted);
 
 // The pointers followed from the hands to the skeleton data (the way GetJointTransforms reaches it).
 struct SkeletonPath {
@@ -78,10 +82,11 @@ std::optional<arm::ArmJointIndices> findJoints(arm::ArmSide side,
                                                JointsProblem& problem,
                                                std::string& error);
 
-// The weapon arm's glove joints under the wrist `wrist` in the skeleton at `path.data` (arm::findHandJoints,
-// the names' handles from the game's name table), logged once found; nullopt with `error` set.
+// The glove joints of the arm on `side` under the wrist `wrist` in the skeleton at `path.data`
+// (arm::findHandJoints, the names' handles from the game's name table), logged once found; nullopt with
+// `error` set.
 std::optional<arm::HandJointIndices>
-findHandJoints(const SkeletonPath& path, std::int16_t wrist, std::string& error);
+findHandJoints(arm::ArmSide side, const SkeletonPath& path, std::int16_t wrist, std::string& error);
 
 // Once per arm, on its first failure to reach or read the skeleton: the pointers followed and the bytes
 // found, so a rig log shows the real layout.

@@ -156,6 +156,12 @@ struct WorldHand {
     // The weapon arm's IK (weapon_arm.cpp): the same, on the weapon hand's side.
     Vec3 weaponShoulder;
     Vec3 weaponElbow;
+    // With the weapon in the left hand (left_hand_arms.hpp) each arm keeps its own side: the left arm's as
+    // the off hand's are given, the right arm's mirrored.
+    Vec3 leftShoulder;
+    Vec3 leftElbow;
+    Vec3 rightShoulder;
+    Vec3 rightElbow;
     float unitsPerMetre = 1.0f;
 };
 

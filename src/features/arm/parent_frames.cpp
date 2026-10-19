@@ -34,11 +34,15 @@ bool uniformScale(Vec3 scale) {
     return lo > 0.0f && hi - lo <= kUniformScale * hi;
 }
 
+bool heldInParents(const GripOverrides& glove, Vec3 scale) {
+    return uniformScale(scale) && !glove.modelSpace;
+}
+
 std::array<ModWrite, kGloveWrites> gloveWrites(
     const ArmPoses& arm, const GripOverrides& glove, Vec3 scale, Vec3 origin, std::uint32_t zeroScale) {
     std::array<ModWrite, kGloveWrites> out{};
     std::size_t k = 0;
-    if (!uniformScale(scale)) {
+    if (!heldInParents(glove, scale)) {
         out[k++] = inModelSpace(glove.wrist, scale, origin);
         for (const ArmJoint joint : kLayerModJoints) {
             out[k++] =

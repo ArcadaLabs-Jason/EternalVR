@@ -20,11 +20,13 @@
 # the guns' grip. The Crucible's idle holds the hilt in the right fist turned 37 degrees from the guns' grip,
 # so its row also turns the model (nothing on it aims: its swing hands the arm back to the game) until the
 # glove sits as on the guns, with the hilt in the fist as the game holds it (its offset is the target less the
-# wrist as turned). "default" is the first estimate, not measured: the fists (a melee's are out only while
-# the arm is handed back to the game; the Berserk's and the swim's not seen on the rig), the chainsaw (its
-# button is a quick action that hands the arm back; held as a weapon only with no gun left in the inventory),
-# the Sentinel Hammer (not brought out on the rig; its throw and slam hand the arm back) and anything new.
-# Measured: docs/rig-findings/hands-rig.md, section 12.
+# wrist as turned). The swim's fists (held while the player is under water) are placed by the same rule from
+# their idle: the game's swim stroke moves the glove's wrist up to 11 cm about that point, mostly side to
+# side. "default" is the first estimate, not measured: the fists (a melee's are out only while the arm is
+# handed back to the game; the Berserk's not brought out on the rig), the chainsaw (its button is a quick
+# action that hands the arm back; held as a weapon only with no gun left in the inventory), the Sentinel
+# Hammer (not brought out on the rig; its throw and slam hand the arm back) and anything new. Measured:
+# docs/rig-findings/hands-rig.md, sections 12 and 16.
 # ETERNALVR_VIEWMODEL_OFFSET replaces a row on the rig.
 #
 # No [seated] rows: seated play uses the same ones, since the glove follows the real hand in either posture.
@@ -32,8 +34,9 @@
 # The layer keeps that wrist target in the controller grip's own frame while the gun keeps the aim ray's
 # orientation (on a headset the grip is turned from the aim ray; the simulator gives both one pose). The rows
 # are measured with the sights turn on: with ETERNALVR_WEAPON_SIGHTS=0 (rig and debugging only) the wrist lands
-# up to 0.5 cm off target (8.7 cm turned by at most 3.5 degrees). Left-handed, the right glove holds the gun on
-# the left controller (the arms model is not mirrored) and its wrist follows the same rule: not measured.
+# up to 0.5 cm off target (8.7 cm turned by at most 3.5 degrees). With the weapon in the left hand the same rows
+# place the model, their turn reflected, then move it until the left glove's wrist sits in the left hand by the
+# same rule (docs/VR_HANDS_HUD.md, "The weapon in the left hand").
 
 [standing]
 "default" = [-0.25, 0.18, 0.22, 0, 0, 0]
@@ -47,6 +50,7 @@
 "weapon/player/bfg" = [-0.355, 0.094, 0.383]
 "weapon/player/unmaykr" = [-0.245, 0.194, 0.356]
 "weapon/player/crucible" = [-0.493, 0.496, -0.060, -24.39, -23.75, -10.59]
+"weapon/player/fists_swim" = [-0.493, 0.264, 0.177]
 
 # Weapon sights (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): [pitch, yaw] in
 # degrees (pitch positive down, yaw counter-clockwise) is the direction of the weapon's sight line in the arms
@@ -82,3 +86,13 @@
 [right_grip]
 "weapon/player/chaingun" = "heavy_cannon"
 "weapon/player/gauss_rifle" = ["heavy_cannon", -0.302, -0.039, -0.181]
+
+# With the weapon in the left hand and the game's off hand (ETERNALVR_OFFHAND=game, the default), the right glove
+# holds the gun in the game's left grip reflected across the gun's middle (DECISIONS T-140). The chaingun's front
+# handle is on its left side only: reflected, the right glove's finger joints sit 10 to 17 cm from the gun's mesh
+# (2.5 to 6 cm as the game's left glove holds the handle), a fist closed on nothing beside the gun. "controller":
+# on such a weapon the right glove follows the right controller instead, as with the free off hand (DECISIONS
+# T-141). Every other gun's left grip, reflected, is as close to its mesh as the game's (the meshes are
+# symmetric there). Same key rules, no "default".
+[left_handed_off_hand]
+"weapon/player/chaingun" = "controller"

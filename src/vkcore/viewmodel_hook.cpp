@@ -15,13 +15,16 @@
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "features/arm/left_hand.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
+#include "vkcore/left_hand_arms.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/offhand_mods.hpp"
 #include "vkcore/room_scale.hpp"
 #include "xr_math/hand_aim.hpp"
 
@@ -237,13 +240,28 @@ void onViewmodel(const HookRegisters& regs) {
         return;
     }
     const Vec3 translation{offset.forward, offset.left, offset.up};
-    const xr_math::IdAngles rotation{offset.pitch, offset.yaw, offset.roll};
+    xr_math::IdAngles rotation{offset.pitch, offset.yaw, offset.roll};
+    // The weapon in the left hand: once the left glove's wrist on the held item is known, the model moved
+    // until it sits in the hand, also while the game has the arms (left_hand_arms.hpp); the rows are measured
+    // for the right glove.
+    left_hand_arms::Placement lefty = offhand_mods::fingerCount(arm::ArmSide::Left) > 0
+                                          ? left_hand_arms::placement()
+                                          : left_hand_arms::Placement{};
+    lefty.weight = lefty.decl == g_cachedDecl ? lefty.weight : 0.0f; // for the held item only
+    rotation = lefty.weight > 0.0f ? arm::leftHandTurn(rotation, lefty.weight) : rotation;
     const std::optional<xr_math::IdAngles> sight =
         g_cachedSight ? std::optional<xr_math::IdAngles>({g_cachedSight->pitch, g_cachedSight->yaw, 0.0f})
                       : std::nullopt;
-    const xr_math::EyeRelativePose placed = xr_math::placeViewmodel(
-        world.grip, world.gripAxis, translation, rotation, sight,
-        {game::kRowsWrist.forward, game::kRowsWrist.left, game::kRowsWrist.up}, world.unitsPerMetre);
+    const game::WeaponOffset& w = game::kRowsWrist;
+    xr_math::EyeRelativePose placed =
+        xr_math::placeViewmodel(world.grip, world.gripAxis, translation, rotation, sight,
+                                {w.forward, w.left, w.up}, world.unitsPerMetre);
+    if (lefty.weight > 0.0f) {
+        placed.offset =
+            placed.offset + arm::leftGloveShift(placed, lefty.leftWrist, world.grip.offset, world.gripAxis,
+                                                {w.forward, -w.left, w.up}, world.unitsPerMetre) *
+                                lefty.weight;
+    }
     const Vec3 origin = xr_math::atEye({eye[0], eye[1], eye[2]}, placed);
     const float newOrigin[3] = {origin.x, origin.y, origin.z};
     const float newAxis[9] = {placed.axis.forward.x, placed.axis.forward.y, placed.axis.forward.z,
@@ -416,6 +434,12 @@ void endGameView(std::byte* renderView,
                                : input::weaponArmOffsetFor(cfg.offhandShoulderOffset, cfg.handedness)) *
                          unitsPerMetre;
     world.weaponElbow = inYaw(input::weaponArmOffsetFor(cfg.offhandElbow, cfg.handedness));
+    world.leftShoulder = headOffset + inYaw(cfg.offhandShoulderOffset) * unitsPerMetre;
+    world.leftElbow = inYaw(cfg.offhandElbow);
+    const game::Handedness right = game::Handedness::Right;
+    world.rightShoulder =
+        headOffset + inYaw(input::weaponArmOffsetFor(cfg.offhandShoulderOffset, right)) * unitsPerMetre;
+    world.rightElbow = inYaw(input::weaponArmOffsetFor(cfg.offhandElbow, right));
     // The off hand (the left arm, offhand_hook.cpp): its grip with its own orientation.
     const std::size_t off = 1 - hand;
     world.offValid = p.gripValid[off] || p.aimValid[off];

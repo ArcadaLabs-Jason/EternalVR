@@ -43,6 +43,51 @@ TEST_CASE("offhand policy: the controller drives an idle left arm in free and pr
     CHECK(game.reason == ArmReason::ModeGame);
 }
 
+TEST_CASE("offhand policy: left-handed, the game's off hand follows the right controller on a row's weapon") {
+    using evr::input::leftHandOffMode;
+    // The chaingun's row: its game left grip, reflected, closes on nothing, so the right glove follows the
+    // right controller and the free off hand's rules decide when.
+    CHECK(leftHandOffMode(OffhandMode::Game, true) == OffhandMode::Free);
+    CHECK(decideArm(idle(), leftHandOffMode(OffhandMode::Game, true)).controller);
+    // Every other weapon keeps the reflected grip; the free off hand is free on every weapon.
+    CHECK(leftHandOffMode(OffhandMode::Game, false) == OffhandMode::Game);
+    CHECK(leftHandOffMode(OffhandMode::Free, false) == OffhandMode::Free);
+    CHECK(leftHandOffMode(OffhandMode::Free, true) == OffhandMode::Free);
+    CHECK(leftHandOffMode(OffhandMode::Probe, true) == OffhandMode::Probe);
+}
+
+TEST_CASE("offhand policy: left-handed, the game's grips are read only outside the game's own arm actions") {
+    using evr::input::readsGameGrip;
+    using evr::input::WeaponArmMode;
+    // An idle gun: the grip read is the held item's.
+    CHECK(readsGameGrip(idle(), WeaponArmMode::Ik));
+    // With the weapon arm the game's no grip is read at all: the left-handed arms are the layer's in ik only.
+    CHECK_FALSE(readsGameGrip(idle(), WeaponArmMode::Game));
+    // The raise of a first equip, a melee's fists, a switch, the chainsaw's quick action: the pose is the
+    // action's.
+    ArmSignals raise = idle();
+    raise.pendingAction = action(HandsAction::BringUp);
+    CHECK_FALSE(readsGameGrip(raise, WeaponArmMode::Ik));
+    ArmSignals melee = idle();
+    melee.pendingAction = action(HandsAction::Melee);
+    CHECK_FALSE(readsGameGrip(melee, WeaponArmMode::Ik));
+    ArmSignals punch = idle();
+    punch.handsFlags = hands_flag::kMeleeAnim;
+    CHECK_FALSE(readsGameGrip(punch, WeaponArmMode::Ik));
+    ArmSignals change = idle();
+    change.handsFlags = hands_flag::kChangingWeapon;
+    CHECK_FALSE(readsGameGrip(change, WeaponArmMode::Ik));
+    ArmSignals saw = idle();
+    saw.destHandsState = evr::input::kHandsStateChainsawRev;
+    CHECK_FALSE(readsGameGrip(saw, WeaponArmMode::Ik));
+    ArmSignals glory = idle();
+    glory.forcedView = true;
+    CHECK_FALSE(readsGameGrip(glory, WeaponArmMode::Ik));
+    ArmSignals lost = idle();
+    lost.offHandTracked = false;
+    CHECK_FALSE(readsGameGrip(lost, WeaponArmMode::Ik));
+}
+
 TEST_CASE("offhand policy: every left-arm action of the game takes the arm back") {
     struct Case {
         const char* what;

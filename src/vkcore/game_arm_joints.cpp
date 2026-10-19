@@ -178,6 +178,12 @@ const SideText& sideText(arm::ArmSide side) {
     return kSideText[slot(side)];
 }
 
+const char* staysText(offhand_mods::ArmSet wanted) {
+    return wanted.offHand && wanted.weapon ? "the off hand and the weapon arm stay the game's"
+           : wanted.weapon                 ? "the weapon arm stays the game's"
+                                           : "off hand stays the game's";
+}
+
 void findNameTable(const GameImage& image, const char* tag) {
     g_textBegin = image.text.data();
     g_textEnd = image.text.data() + image.text.size();
@@ -298,13 +304,14 @@ std::optional<arm::ArmJointIndices> findJoints(arm::ArmSide side,
 }
 
 std::optional<arm::HandJointIndices>
-findHandJoints(const SkeletonPath& path, std::int16_t wrist, std::string& error) {
+findHandJoints(arm::ArmSide side, const SkeletonPath& path, std::int16_t wrist, std::string& error) {
     const std::byte* data = path.data;
     const arm::SkeletonRead read = [data](std::size_t offset, void* out, std::size_t size) {
         return offset + size <= kMaxSkeletonBytes && safeCopy(out, data + offset, size);
     };
     const auto skeleton = arm::readSkeleton(read, error);
-    const auto handles = skeleton ? nameHandles(arm::kRightHandJointNames) : std::nullopt;
+    const auto& names = arm::handJointNames(side);
+    const auto handles = skeleton ? nameHandles(names) : std::nullopt;
     if (!skeleton) {
         return std::nullopt;
     }
@@ -314,9 +321,8 @@ findHandJoints(const SkeletonPath& path, std::int16_t wrist, std::string& error)
     }
     const auto hand = arm::findHandJoints(*skeleton, wrist, *handles, error);
     if (hand) {
-        EVR_LOG("weapon arm: the glove's joints (names checked with the game's name handles): %s %d .. %s %d",
-                arm::kRightHandJointNames.front(), hand->front(), arm::kRightHandJointNames.back(),
-                hand->back());
+        EVR_LOG("%s: the glove's joints (names checked with the game's name handles): %s %d .. %s %d",
+                sideText(side).tag, names.front(), hand->front(), names.back(), hand->back());
     }
     return hand;
 }

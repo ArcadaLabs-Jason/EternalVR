@@ -438,8 +438,9 @@ as "the right forearm" (2026-10-01, the right hand far out front-right) was the 
 **What the layer does** (`vkcore/weapon_arm.cpp`, on the same hook and arm code as the free off hand).
 **Default: `ik`**, whatever `ETERNALVR_OFFHAND` is; `game` leaves the arm as before.
 
-- **The arm.** The arms model is never mirrored, so the weapon arm is always the model's right arm,
-  whichever hand holds the weapon. Its joints are found the off hand's way from the game's right attach
+- **The arm.** The arms model is never mirrored. With the weapon in the right hand the weapon arm is the
+  model's right arm; with the weapon in the left hand the model's left arm holds the gun and its right arm
+  is the off hand ("The weapon in the left hand", below). Its joints are found the off hand's way from the game's right attach
   joint: `righthandattach` 2 carries `RightHand` 3, then `rightforearmroll3`, `rightforearmroll2`,
   `rightforearmroll1`, `RightForeArmRoll`, `RightForeArm` and `RightArm`, 24 to 29 [static: marine.md6skl
   and arms.md6skl, read out of `gameresources.resources`; no device hangs from the right forearm]. The
@@ -649,8 +650,28 @@ button is a quick action (its held item for 0.8 s, the arm handed back for all o
 actions are in the policy's list), a **melee**'s fists are out for 0.5 s, handed back the same way, and the
 **Sentinel Hammer**'s throw and slam are actions of the hands the policy hands back (`HammerThrow`,
 `HammerSlam`); the rig did not bring the hammer out (the Crucible swapped for it, its button changed nothing on
-e1m1). Not seen on the rig: the Berserk's and the swim's fists, and the chainsaw as a weapon outside an
+e1m1, nor on the first level of The Ancient Gods, Part Two: hands-rig.md, section 16). Not seen on the rig: the
+Berserk's fists (the console's give and spawn put none in the hands) and the chainsaw as a weapon outside an
 inventory emptied by the console.
+
+The **swim's fists** (`weapon/player/fists_swim`, in the hands while the player is under water) are held, not
+an action: the layer poses both arms as on a gun (the free off hand's left glove on the left controller). On
+the `default` row the right glove's wrist sat 26.4 cm (median; 31.0 at most) ahead of and right of the real
+hand; their own row puts it there by the guns' rule, measured from the swim idle's median (hands-rig.md, section
+16): 4.7 cm (median; 6.3 at most) on the rig after. The game's swim stroke keeps moving the glove about that
+point, up to 11 cm (5.7 median), mostly side to side: the glove follows the stroke as it follows a gun's sway.
+Going under water the model's placement changes by 34 cm with the row (8 cm on `default`) while the game has the
+arms for the swap. With the weapon in the left hand the left glove sits 11.0 cm (median) from the left hand: its
+grip is read at one moment of the stroke. Not chosen: the glove held on the controller
+while swimming (the stroke dropped; the game's left glove, with the default off hand, would still swim).
+
+**Quick actions and the row.** A melee or the chainsaw's button puts its own item in the hands, and the model's
+placement takes that item's row (`default`) at once: 8.3 cm and 2.2 degrees from the combat shotgun's, 38.1 cm
+from the chaingun's, 48.7 cm and 37 degrees from the Crucible's (rig, the dump's placement at the change). The
+arms are the game's for the whole action (the dump's weights 0), and the captures every 12 frames through a
+Crucible melee show the game's punch, then the Crucible back in the right fist within about 0.7 s; the frame of
+the change itself was not captured, and the dump holds no joints while the game has the arm, so whether the
+change shows as a jump is not measured.
 
 ### The weapon's mesh kit
 
@@ -717,12 +738,144 @@ ballista, BFG and unmaykr its left arm is shown while the layer poses it.
   layer's arm modifiers set back to no change; ...` and `... surface 1 hidden again as the weapon's mesh
   kit has it`.
 
+## The weapon in the left hand
+
+With the weapon in the left hand (`ETERNALVR_HANDEDNESS=left` or `left_mirror`) and the weapon arm on (the
+default), the Slayer's left glove holds the gun in the left hand and his right arm is the off hand
+(`vkcore/left_hand_arms.cpp`, `features/arm/left_hand.hpp`; DECISIONS T-140; GitHub issue #23). Before, the
+arms model's right arm held the gun on the left controller and stretched across the view to it, and its left
+arm floated beside it or reached across for the right controller.
+
+**Why it works without mirroring the model** [static and rig]. The gun hangs from the right attach joint
+(`righthandattach`, the weapon's root; "The glove on the grip"). The left attach joint (`lefthandattach`, the
+left arm's) is posed with it: in the hands rig's arm dumps, every tick the game had the left arm, the two read
+the same pose to 0.0 mm and 0.0000 in their axes, the game's weapon-lag modifier included, on the combat
+shotgun, the Heavy Cannon, the chaingun, the ballista, the BFG and the Crucible, in their idles and their shots;
+the bind pose has them at the same point too [static: marine.md6skl]. The chaingun's mod is the one animation
+found that parts them (below). So the left glove, the left attach joint's child, can be held in that
+frame exactly as the right glove is on a grip ("In the gun's frame"): it rides the gun's pose of the frame the
+game draws. Each arm takes the other's role in the gun's root frame, reflected across the root's x-z plane (the
+gun's middle: the root's y axis is the model's left to 0.991 or better on every gun dumped), and the
+reflection keeps each joint's frame right-handed the way the skeleton does (the left arm's bind pose is the
+right's reflected with each joint's axes negated, the hand and fingers to 0.5 mm [static]): a joint held in
+the root's frame takes the position reflected and each axis reflected and negated; a hand joint held in its
+parent's frame keeps its turn, its offset pointing the other way (unit-tested against the bind pose of both
+arms and the Heavy Cannon's grip).
+
+**What the layer does.**
+
+- **The left glove holds the gun.** Its wrist and fifteen finger bones take the game's right grip of the held
+  item, reflected (the `[right_grip]` row's grip on the chaingun and the ballista, reflected the same way),
+  written in their parents' frames like the right glove on a grip; the forearm, elbow and upper arm reach it
+  by the weapon arm's IK from a shoulder beside the head on the left (`ETERNALVR_OFFHAND_SHOULDER` and
+  `_ELBOW` as given). The game's modifier of the left attach joint (the weapon lag) is left as it is. The
+  grip is in the gun's root frame and the glove is written in the left attach joint's, so each tick the
+  grip is placed on the gun's root as read: the same pose wherever the game poses the two joints together,
+  and the left glove stays on the gun where it does not (the chaingun's mod moves the left attach joint 13
+  to 25 cm from the gun's root: the glove 0.0 mm median and 13.2 at most off its grip in the gun's frame over
+  the mod's 2.5 s, 373.7 mm without the placement on the root; rig `lf-fire3`, `lf-fire2`). The gun is not
+  mirrored: its markings read the right way round, and its sight line and shots are the same as in the right
+  hand.
+- **The right arm is the off hand.** With `ETERNALVR_OFFHAND=game` (the default) the right glove takes the
+  game's left grip of the held item, reflected (on the combat shotgun's fore-end), held in the gun's frame, its
+  forearm reaching a shoulder on the right; on the chaingun, whose front handle is on its left side only, it
+  follows the right controller instead (below). That grip is read under the left attach joint and taken onto the gun's root only where the two
+  were read within 1 cm and 2 degrees of each other (`arm::onGunRoot`); a grip read while the game held them
+  apart is read again. With `free` the right glove follows the
+  right controller: the left hand's wrist rule reflected (8 cm behind the grip's centre, 3.5 cm toward the
+  back of the hand, `ETERNALVR_OFFHAND_OFFSET` as given for the left hand), written in model space so the
+  gun's kick does not move it, its fingers as the game's right hand holds them. The right arm's surface is
+  shown while the layer poses it, as the weapon arm's always was.
+- **The gun in the left hand.** The viewmodel rows are measured for the right glove. For the left glove the
+  model is placed by the same row, its turn reflected (the yaw and roll change sign; only the Crucible's row
+  turns the model), then moved, not turned, until the left glove's wrist, where its grip puts it on the gun as
+  the grip was read, sits on the left hand's wrist point in the grip's own frame (8 cm behind its centre,
+  3.5 cm toward the back of the left hand; `arm::leftGloveShift`). A gun's sight line is its own, so the
+  sights turn is the same as in the right hand. The move applies once the left glove's wrist on the held item
+  is known (from the first switch to it) and stays while the game has the arms (a switch, a glory kill, a
+  melee), so the gun stays on the left hand; the game's right glove then holds it 0.8 to 2.4 cm from where the
+  right glove's row would put it. Following the arms' hand-backs instead, the gun slid by that much each time
+  (rig `lf-hb1`; hands-rig.md, section 15). A first version reflected the row across the plane of the model's forward and
+  up axes through the gun's root instead: the root is turned up to 2.2 degrees from the model's axes (the
+  combat shotgun's, the gun's own sight line), so the left glove landed up to 2.4 cm off (rig `lf-free4`).
+- **The grips are read, not stored.** Each grip is the game's own, read from its arm while the layer's
+  overrides are off it (a clean read: 150 ms and 3 ticks after the last write) and taken once the gun's root
+  has held still for 3 reads in a row (within 0.5 mm and 0.2 degrees, `arm::SteadyPose`), kept per held item
+  for the hands it was read on and by the item's decl name across new hands (`arm::GripBook`): the game's
+  animations are the same on every level, so after a level load each item is held with the grip read on the
+  level before until one is read on the new hands (which replaces it). New hands forget which item each decl
+  pointer named, which a new level may give to another item; a name that does not read (empty) is not
+  learned and is read again. A kept grip is used only while the gun's root as read last sits where the grip
+  was read (within 1 cm and 2 degrees, `arm::sameRootPose`): a weapon mod that holds the gun elsewhere waits
+  for a read on the new hands, both arms the game's until then. Taken from any clean read, a grip read while the gun was still coming back up
+  after a melee put the gun 8 cm off the left hand until the next switch (rig `lf-hb1`, `lf-hb2`). Until both
+  arms have one for the held item (the right arm's only with the free off hand) both arms are the game's (`no
+  grip read yet`); the first switch to a weapon hands both arms back anyway. Until then the gun sits at the
+  right glove's row: on each item's first equip of the session, the grips were read
+  0.38 to 0.42 s after the held item changed (rig `lf-hb3`), and the gun then moves at once by the difference
+  of the rows, 0.8 to 2.4 cm by gun, while the arms blend in; after a level load the held items take their kept
+  grips at once (rig `hc-d-lvl`: the Crucible's first raise on the reloaded level placed in the left hand from its
+  first frame, 68.5 cm and 59 degrees on the level before; the combat shotgun's kept grip 0.5 cm from the one read
+  on the new hands). Each still read replaces a grip; a weapon mod
+  that moved the gun's root in the model would keep the grip read before it until the next hand-back with a
+  still read. A held item whose reads never hold still keeps both arms the game's and is logged once
+  (`... grip of '<item>' not taken: ... the last moved ...`), as is an item past the 24 grips kept per arm. The arm policy decides for both as for the weapon arm, and for the free off hand as for the
+  off hand.
+- **Modifiers.** Both arms have the glove's 22 (the wrist, the six, the fifteen fingers), 44 in all
+  (`offhand: arm: ... both gloves (the weapon in the left hand)`); the left arm has no wrist change of the
+  bind solve. Right-handed play makes exactly the room it did before.
+- **Rig** (OpenXR-Simulator, the hands rig's per-weapon sweep with the weapon in the left hand: every hold
+  mirrored onto the left controller, the right controller at rest; docs/rig-findings/hands-rig.md, section 15).
+  The left glove's wrist from the left hand's wrist point, median / largest: 0.1 to 0.3 / 0.2 to 0.4 cm on
+  all eight guns (`lf-free5`); the right glove on the right controller with the free off hand: 0.0 / 0.0 cm on
+  all eight; the sights check passes (largest 0.20 degrees on a gun with a sight row, the same as in the right
+  hand). Firing (`lf-fire3`, the default off hand), the left glove's wrist in the gun's frame, median / 95th
+  percentile / largest: combat shotgun 0.0 / 0.6 / 1.0 mm while the gun's root moved up to 41 mm at the grip,
+  chaingun 0.0 / 0.0 / 0.1 mm (root 20 mm), ballista 0.0 / 0.0 / 3.3 mm (root 156 mm): the left attach joint
+  moves with the gun in the shots too. Captures show the left glove's fist closed on the combat shotgun's
+  pistol grip and the right glove free in the right hand, and with the default off hand the right glove on the
+  shotgun's fore-end. Right-handed play is unchanged: the grip sweep within 0.1 cm and the sights within 0.01
+  degree of dev main's, the merge-QA hands check 0 regressions.
+- **The chaingun's free hand** (DECISIONS T-141; `[left_handed_off_hand]` in
+  `data/weapons/viewmodel_offsets.toml`). The game's left glove holds the chaingun by a front handle on its
+  left side only: reflected, the right glove's fist closed beside the gun's right side on nothing [static: the
+  chaingun's idle and mesh, the right glove's finger joints 10 to 17 cm from the gun's mesh, 13.1 median,
+  against 2.5 to 6.1 as the game's left glove holds the handle; on every other gun the reflected grip is as
+  close to the mesh as the game's, the meshes being symmetric there; rig: the capture of the fist beside the
+  gun]. With the default off hand the right glove follows the right controller on the chaingun, as the free
+  off hand does on every gun (the free off hand's rules decide when, its fingers the game's right hand's).
+- **Grips only from the item's own hold.** The game's grips are read only while the weapon arm's rules have no
+  reason of their own to give the arms to the game (`input::readsGameGrip`): not during a raise, a switch, a
+  melee's fists or a quick action, whose pose is the action's. Read then, a grip moved the whole model while the
+  game had the arms (rig `hc-lf1`, the default off hand): 16.6 to 19.9 cm three times through the Unmaykr's first
+  raise, 66.9 cm and 59 degrees through the Crucible's, and at each later melee by 53.8 cm (from the combat
+  shotgun) and 87.4 cm (from the Crucible) where the right hand's step is 8.3 and 48.7 cm (the melee's fists
+  kept a grip of their own, read from the punch). After: steps only at an item change, the rows' difference as
+  in the right hand (a melee from the combat shotgun 9.4 cm). Still: the Crucible's first raise of a session
+  moves the model 68.6 cm and 59 degrees as its grip is read, 0.25 s before the arms blend in; on later levels
+  its kept grip places it from the first frame (hands-rig.md, section 16).
+- **Rig, the rest of the held items** (hands-rig.md, section 16; the default off hand). The left glove's wrist
+  from the left hand's wrist point, median / largest: Unmaykr 0.2 / 0.3 cm, Crucible 0.2 / 0.5 (its row's turn
+  reflected), chaingun 0.2 / 0.3, combat shotgun 0.1 / 0.2. The swim's fists: 11.0 / 12.4 cm, the stroke about a
+  grip read at one moment of it (the right hand's figures above are about the stroke's median). Melee and the
+  chainsaw's button hand both arms back for the whole action, as in the right hand.
+- **Not verified.** In a headset; glory kills with the weapon in the left hand [static: a forced view keeps the
+  game's own hands animation, the viewmodel hook leaves the model where the game puts it and the arm policy
+  gives both arms back, so it plays as the flat game's, right-handed]; the hammer and the Berserk's fists (not
+  brought out on the rig in either hand).
+- **Logs.** `left-handed arms: the left glove holds the gun (the right glove's grip reflected), the right
+  arm is the off hand (on the right controller | the game's left glove reflected)` and `left-handed arms: no
+  grip of the game's for the held item yet ...` as that changes; the left arm's lines read `weapon arm (left
+  glove): ...`, the off hand's `weapon arm: ...` as the weapon arm's did, both with the weapon arm's trace. On
+  the chaingun with the default off hand, once per item: `left-handed arms: 'weapon/player/chaingun': the
+  game's left grip, reflected, holds nothing on this gun: the right glove follows the right controller`.
+
 ## Hidden arms (ETERNALVR_ARMS)
 
 `ETERNALVR_ARMS=hidden` (the launcher's "Show arms" off) hides both first-person arms and leaves the weapon
-alone. It is the fallback for the weapon in the left hand: the arms model is not mirrored, so the game's
-right arm keeps reaching across the view to the gun in the left hand (GitHub issue #23). Mirrored arms are
-the real fix and need an arm model of their own (the free-arm survey above).
+alone. It was the fallback for the weapon in the left hand until the arms took each other's roles there
+("The weapon in the left hand", above; GitHub issue #23), and it hides both arms the same way in either
+hand.
 
 - **How.** The same surfaces as above (`arm_low_rt_base`; `arm_low_lf_base` with its two armour plates),
   hidden with the game's own Hide on every hands tick, whatever the weapon's kit or the layer's posing: an
@@ -898,8 +1051,9 @@ cutscene around the player starts: the arms hidden, the weapon FOV the game's` /
 | `ETERNALVR_CUTSCENE_ARMS` | `shown` / `hidden` (`hidden`) | In cutscenes shown around the player the arms hidden with the game's weapon FOV kept, or as before; nothing with `ETERNALVR_ARMS=hidden` ("Arms in cutscenes" above and in the launcher) |
 
 **The weapon in the left hand** (`ETERNALVR_HANDEDNESS=left` or `left_mirror`). The off hand is then the
-right controller. The arms model is not mirrored (a reflected model would turn its triangles inside out),
-so its left arm reaches for the right controller: `ETERNALVR_OFFHAND_OFFSET`, `_SHOULDER` and `_ELBOW`,
+right controller. With the weapon arm on (the default) the arms take each other's roles ("The weapon in the
+left hand" above). Only with `ETERNALVR_WEAPON_ARM=game` (rig and debugging) does the model's left arm still
+reach for the right controller: `ETERNALVR_OFFHAND_OFFSET`, `_SHOULDER` and `_ELBOW`,
 given for the left hand, are mirrored left to right (the left distance, yaw and roll change sign), and
 `_SHOULDER=model` uses the head's point, since the model's left shoulder then sits beside the weapon. The
 left hand keeps its thumb up and its fingers along the grip, so its palm faces out; the start-up line says

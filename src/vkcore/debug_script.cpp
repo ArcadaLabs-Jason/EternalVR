@@ -50,6 +50,8 @@ constexpr std::string_view kAllowedCommands[] = {
     // The hands rig: the Crucible and the Sentinel Hammer swap places in the inventory, the Crucible's
     // charges, an emptied inventory (the fists) and a pickup or demon spawned at the crosshair.
     "removeInventoryItem", "judgementMeter_Set", "chrispy",
+    // The hands rig: a level loaded again in the run (the left-handed arms' grips kept across new hands).
+    "map",
     // Demons (docs/rig-findings/debug-commands.md).
     "ai_Show", "ai_Hide", "nextActiveAI", "nextAI", "prevAI", "ai_teleportToPlayer", "moveToFacingPlayer",
     "ai_forceIdle", "ai_forceFreeze", "ai_forceAnim", "killAI", "removeAI", "healAI", "encounter_clearWait",

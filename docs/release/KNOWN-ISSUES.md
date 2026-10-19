@@ -257,11 +257,16 @@ them is worse for you than described here.
   and back over about half a second, and your left hand slid toward the game's own pose and back. All of
   this was measured on the test rig, not yet in a headset; if a glove or a gun sits off your hand, please
   tell me which one and roughly how far.
+- **Floating at the water's surface** the game holds the gun in a pose of its own, and the gun and glove can
+  sit 30 to 70 cm away from your hand (with the weapon in the left hand, much further) until you're back on
+  land or under water. Test rig only.
 - **The Unmaykr and the Crucible now sit in your hand too.** The Unmaykr is held like the other guns. The
   Crucible is held in your right fist the way the game holds it, so the blade stands up out of your fist
   (it's turned a bit from the flat game's angle so the hand matches yours). A punch, a chainsaw cut, a
-  Crucible swing and the Sentinel Hammer's slam still play the game's own arm animation. The Berserk fists
-  haven't been checked yet. Test rig only so far, not yet in a headset.
+  Crucible swing and the Sentinel Hammer's slam still play the game's own arm animation. Under water the
+  swimming hands now sit at your right hand too (before, about 25 cm ahead of it); the swim stroke still moves
+  them around by up to about 10 cm. The Berserk fists and the Sentinel Hammer haven't been checked yet (I
+  couldn't get either into the Slayer's hands on the test PC). Test rig only so far, not yet in a headset.
 - **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
   and Ballista point their sights where the shots go. The other guns follow; until then their sights can
   point a little off your aim. The sights run parallel to the shot line, about 9 to 20 cm above it, so up
@@ -280,9 +285,19 @@ them is worse for you than described here.
 - **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
   hand can cover it.
 - **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
-  weapon in your left hand the game still draws its right arm, reaching across to the gun, and the right glove
-  holds the gun in your left hand; its placement there has not been measured. Turning off Show arms (Play
-  tab) hides both arms.
+  weapon in your left hand the Slayer's left glove now holds the gun and his right arm is your off hand: it
+  holds the gun's front the way his left hand does for right-handed play, reflected, or follows your right
+  controller with the free off hand. The gun itself is not mirrored. So far this is checked on the test PC
+  only, not in a headset, with the guns, the Unmaykr and the Crucible held, fired, switched and a melee and
+  the chainsaw: glory kills and the Sentinel Hammer have not been tried left-handed yet. The Chaingun's front
+  handle is only on its left side, so there your right hand follows your right controller instead of holding
+  the gun. While the game plays its own arm animations (a switch, a melee, a glory kill) the game's right
+  glove holds the gun in your left hand about 2 cm from where it would sit for right-handers. The first time
+  you bring out each weapon after starting the game the arms stay the game's for about half a second while
+  the mod reads how the Slayer holds it, then the gun shifts by 1 to 2.5 cm into your hand (the Crucible
+  swings in from much further, about 70 cm); after that it remembers, also across levels. (Before, the Unmaykr could also hop around by about
+  20 cm while it first came up, and a melee could throw the gun about half a metre for a moment; both fixed.)
+  Turning off Show arms (Play tab) hides both arms.
   A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand
   jitters when the gun arm moves, and the fist pose is odd); once those are fixed it becomes the standard,
   with no option to turn it on or off.

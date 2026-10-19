@@ -203,6 +203,7 @@ namespace EternalVR.Launcher
             }
             var marker = new SessionMarker { State = SessionState.Preparing, SessionId = id, GameExe = plan.ExePath };
             Process game = null;
+            var launchBeganUtc = DateTime.UtcNow;
             try
             {
                 // Closing the window stops the launch before the marker, or after the preparation and before the game's
@@ -262,7 +263,8 @@ namespace EternalVR.Launcher
                 {
                     if (storeGame) RestoreBethesdaTarget(plan.ExePath);
                     Report(StatusKind.Problem, e is PackageLaunch.GameGoneException
-                        ? StartWatch.GoneMessage(File.Exists(Path.Combine(ctx.Paths.SessionLogDir(id), LayerStatusFile.LoadedMarker)))
+                        ? StartWatch.GoneMessage(File.Exists(Path.Combine(ctx.Paths.SessionLogDir(id), LayerStatusFile.LoadedMarker)),
+                            GameOwnError(false, launchBeganUtc))
                         : "The launch failed: " + e.Message);
                     CleanUpAfterSession(marker);
                     return false;
@@ -520,6 +522,23 @@ namespace EternalVR.Launcher
             return Process.Start(psi) ?? throw new InvalidOperationException("the game process did not start");
         }
 
+        private static DateTime GameStartUtc(Process game, DateTime fallbackUtc)
+        {
+            try { return game.StartTime.ToUniversalTime(); }
+            catch (Exception e) when (e is InvalidOperationException || e is System.ComponentModel.Win32Exception || e is NotSupportedException)
+            {
+                return fallbackUtc.AddSeconds(-1);
+            }
+        }
+
+        /// <summary>The game's own fatal error from this launch's console log, logged for the export; null when it wrote none.</summary>
+        private string GameOwnError(bool layerLoaded, DateTime sinceUtc)
+        {
+            var line = GameFatalError.Lookup(layerLoaded, () => ctx.SavedGamesDir, ctx.Settings.ExtraArguments, sinceUtc);
+            if (line != null) Log.Info("the game's own error (last FATAL ERROR line of its console log): " + line);
+            return line;
+        }
+
         private void WatchStart(Process game, CancellationToken cancel, string logDir, DateTime startedUtc)
         {
             var started = DateTime.UtcNow;
@@ -547,7 +566,8 @@ namespace EternalVR.Launcher
                         + (layerLoaded ? "after EternalVR loaded" : "before EternalVR loaded (no " + LayerStatusFile.LoadedMarker + ")")
                         + $"; see the logs in {ctx.Paths.Logs}");
                     if (storeGame) Log.Info(StoreProcesses.Describe("after the early exit", WindowsSystem.RunningProcesses(StoreProcesses.Names)));
-                    Report(StatusKind.Problem, StartWatch.EarlyExitMessage(elapsed - sinceExit, game.ExitCode, layerLoaded));
+                    Report(StatusKind.Problem, StartWatch.EarlyExitMessage(elapsed - sinceExit, game.ExitCode, layerLoaded,
+                        GameOwnError(layerLoaded, GameStartUtc(game, startedUtc))));
                     return;
                 }
                 if (!exited) WatchLayer(logDir, startedUtc);

@@ -184,6 +184,13 @@ ShoulderAnchor shoulderAnchorFor(ShoulderAnchor anchor, game::Handedness handedn
 // model's right arm reaches for the left controller. Its shoulder is always the head's point.
 game::WeaponOffset weaponArmOffsetFor(const game::WeaponOffset& offset, game::Handedness handedness);
 
+struct ControllerSettings;
+
+// With the weapon in the left hand and the weapon arm on (ETERNALVR_WEAPON_ARM=ik), the arms model's arms
+// swap roles in the gun's frame (docs/VR_HANDS_HUD.md, "The weapon in the left hand"): its left glove holds
+// the gun, its right arm is the off hand.
+bool leftHandArms(const ControllerSettings& cfg);
+
 // Defaults of the off-hand arm (metres, degrees; the grip's or the head's forward, left, up).
 inline constexpr game::WeaponOffset kDefaultOffhandOffset{-0.08f, 0.035f, 0.0f, 0.0f, 0.0f, 0.0f};
 inline constexpr game::WeaponOffset kDefaultOffhandShoulder{-0.08f, 0.18f, -0.24f, 0.0f, 0.0f, 0.0f};

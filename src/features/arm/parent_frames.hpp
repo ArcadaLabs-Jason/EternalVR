@@ -64,14 +64,19 @@ inline constexpr std::size_t kGloveWrites = 1 + static_cast<std::size_t>(kModsPe
 inline constexpr float kUniformScale = 1e-4f;
 bool uniformScale(Vec3 scale);
 
+// Whether gloveWrites holds `glove` in its joints' parents' frames for the model scale `scale`: a uniform
+// scale and a glove not in model space.
+bool heldInParents(const GripOverrides& glove, Vec3 scale);
+
 // Each of them as an override in its joint's parent's frame: the wrist under the attach joint `glove` was
 // placed under (GripOverrides::attach), each forearm joint of `arm` (model space, game units: the wrist's
 // forearm as written under the glove's wrist, the weapon arm's `written`) under the one before it as written
 // (the first under the glove's wrist), each finger under its parent as written, the offsets divided by the
-// model scale `scale` (the rig reads 1, 1, 1). With a scale that is not uniform (uniformScale), each in model
-// space instead, as the layer wrote them before (flag 1; the offset from the skeleton's root `origin` divided
-// by the scale per axis), so the glove trails a fast gun by a frame but lands where it is written. A forearm
-// joint in `zeroScale` (bit n for ArmJoint n, arm::handsOnly) also scales to nothing.
+// model scale `scale` (the rig reads 1, 1, 1). With a scale that is not uniform (uniformScale), or a glove in
+// model space (GripOverrides::modelSpace), each in model space instead, as the layer wrote them before (flag
+// 1; the offset from the skeleton's root `origin` divided by the scale per axis), so the glove trails a fast
+// gun by a frame but lands where it is written. A forearm joint in `zeroScale` (bit n for ArmJoint n,
+// arm::handsOnly) also scales to nothing.
 std::array<ModWrite, kGloveWrites> gloveWrites(
     const ArmPoses& arm, const GripOverrides& glove, Vec3 scale, Vec3 origin, std::uint32_t zeroScale = 0);
 

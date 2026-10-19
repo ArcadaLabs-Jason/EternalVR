@@ -399,6 +399,10 @@ game::WeaponOffset offhandOffsetFor(const game::WeaponOffset& offset, game::Hand
     return mirrored;
 }
 
+bool leftHandArms(const ControllerSettings& cfg) {
+    return cfg.handedness != game::Handedness::Right && cfg.weaponArm == WeaponArmMode::Ik;
+}
+
 ShoulderAnchor shoulderAnchorFor(ShoulderAnchor anchor, game::Handedness handedness) {
     return handedness == game::Handedness::Right ? anchor : ShoulderAnchor::Head;
 }

@@ -45,6 +45,16 @@ inline constexpr std::array<const char*, kHandJointCount> kRightHandJointNames{
     "RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3", "righthandringroot",
     "RightHandRing1",   "RightHandRing2",   "RightHandRing3",   "righthandpinkyroot",
     "RightHandPinky1",  "RightHandPinky2",  "RightHandPinky3"};
+// The left hand's, the same joints in the same order (the bind pose has them reflected to 0.5 mm) [static:
+// marine.md6skl].
+inline constexpr std::array<const char*, kHandJointCount> kLeftHandJointNames{
+    "LeftHandThumb1",    "LeftHandThumb2",   "LeftHandThumb3",     "lefthandindexroot", "LeftHandIndex1",
+    "LeftHandIndex2",    "LeftHandIndex3",   "lefthandmiddleroot", "LeftHandMiddle1",   "LeftHandMiddle2",
+    "LeftHandMiddle3",   "lefthandringroot", "LeftHandRing1",      "LeftHandRing2",     "LeftHandRing3",
+    "lefthandpinkyroot", "LeftHandPinky1",   "LeftHandPinky2",     "LeftHandPinky3"};
+constexpr const std::array<const char*, kHandJointCount>& handJointNames(ArmSide side) {
+    return side == ArmSide::Right ? kRightHandJointNames : kLeftHandJointNames;
+}
 // Each one's parent: an index into the list, or -1 for the wrist.
 inline constexpr std::array<std::int16_t, kHandJointCount> kHandJointParents{
     -1, 0, 1, -1, 3, 4, 5, -1, 7, 8, 9, -1, 11, 12, 13, -1, 15, 16, 17};
@@ -199,6 +209,9 @@ struct GripOverrides {
     std::array<xr_math::ModelPose, kFingerModCount> fingers;
     xr_math::ModelPose wristLocal;
     std::array<xr_math::ModelPose, kFingerModCount> fingersLocal;
+    // Written in model space instead (parent_frames.hpp): a glove that follows a controller, not the gun (the
+    // right glove as the off hand with the weapon in the left hand).
+    bool modelSpace = false;
 };
 
 // The overrides that land the wrist at `wantedWrist` and close the fingers `curl` of the way (0 to 1) from

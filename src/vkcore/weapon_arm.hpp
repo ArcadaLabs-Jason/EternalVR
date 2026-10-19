@@ -28,10 +28,13 @@
 // (game_arm.hpp), and a result that is not plausible leaves the arm the game's for that tick. Off-hand
 // hook thread (the game thread running idHands::Update) only.
 
+#include "features/arm/grip_hand.hpp"
 #include "features/input/offhand_policy.hpp"
 #include "vkcore/controllers_impl.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 
 namespace evr::vkcore::controllers::weapon_arm {
 
@@ -51,7 +54,52 @@ void tick(const std::byte* hands,
 void release(const std::byte* hands);
 
 // After a multiplayer guard trip (the guard already refuses every other write), once: the same give-back,
-// on the hands the arm was posed on (another hands' tick passes). Nothing when the arm was never posed.
+// on the hands the arm was posed on (another hands' tick passes), for each arm this file posed. Nothing for
+// an arm never posed.
 void releaseOnTrip(const std::byte* hands);
+
+// With the weapon in the left hand (left_hand_arms.hpp) this file poses both arms, each holding a glove:
+// what the arm holds this tick, and where its shoulder and elbow go (world, relative to the eye, in the
+// head's yaw frame; the elbow's bend direction).
+struct Hold {
+    input::ArmDecision decision;
+    const arm::GripPose* grip = nullptr; // none: the glove eases off its last grip
+    bool modelSpace = false;             // the glove follows a controller, written in model space
+    Vec3 shoulder;
+    Vec3 elbow;
+    // With `grip`: its wrist placed here instead (model space) each tick, under the attach joint as read.
+    std::optional<xr_math::ModelPose> wrist;
+};
+void holding(arm::ArmSide side,
+             const std::byte* hands,
+             const Hold& hold,
+             const WorldHand& world,
+             const ModelPlacement& model,
+             float dt);
+
+// The game's own grip of the held item, from the last read of the arm the layer's overrides had not reached
+// (taken only with the weapon in the left hand, also on each tick it was given back): the held item's decl it
+// was read with, the wrist in the attach joint's frame and the hand's joints in their parents', and the
+// attach joint as read (model space, game units).
+struct Capture {
+    const std::byte* decl = nullptr;
+    arm::GripPose grip;
+    xr_math::ModelPose root;
+    std::uint32_t serial = 0; // numbers the arm's captures, one per read
+};
+std::optional<Capture> captured(arm::ArmSide side);
+// Drops the arm's last capture (new hands, or the arms given back for good).
+void forgetCapture(arm::ArmSide side);
+
+// The arm's attach joint as read this tick (model space, game units), or nullopt when the arm was not read.
+std::optional<xr_math::ModelPose> attachRead(arm::ArmSide side);
+
+// The held item's [right_grip] row's grip (wrist in the gun's root frame), or nullopt for a weapon without
+// one.
+std::optional<arm::GripPose> rowGrip(const std::byte* hands);
+
+// The arm on `side` given back (release() above for that arm), its blend and its glove's grip started again
+// from the game's.
+void release(arm::ArmSide side, const std::byte* hands);
 
 } // namespace evr::vkcore::controllers::weapon_arm

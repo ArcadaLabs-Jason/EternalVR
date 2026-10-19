@@ -207,7 +207,7 @@ bool resolveJoints(arm::ArmSide side, const SkeletonPath& path, std::int16_t att
     }
     c.joints = *joints;
     if (offhand_mods::fingerCount(side) > 0) {
-        const auto hand = findHandJoints(path, c.joints[arm::index(arm::ArmJoint::Hand)], error);
+        const auto hand = findHandJoints(side, path, c.joints[arm::index(arm::ArmJoint::Hand)], error);
         if (!hand) {
             refuse(side, Refusal::Joints, error.c_str());
             return false;
@@ -256,12 +256,6 @@ bool writeMod(arm::ArmSide side,
     return true;
 }
 
-const char* stays(offhand_mods::ArmSet wanted) {
-    return wanted.offHand && wanted.weapon ? "the off hand and the weapon arm stay the game's"
-           : wanted.weapon                 ? "the weapon arm stays the game's"
-                                           : "off hand stays the game's";
-}
-
 } // namespace
 
 offhand_mods::ArmSet install(const GameImage& image,
@@ -270,7 +264,7 @@ offhand_mods::ArmSet install(const GameImage& image,
                              const std::byte* setJointMod,
                              offhand_mods::ArmSet wanted) {
     const std::byte* getter =
-        checkArmCalls(image, lagModsStart, getJointTransforms, setJointMod, stays(wanted));
+        checkArmCalls(image, lagModsStart, getJointTransforms, setJointMod, staysText(wanted));
     if (!getter) {
         return {};
     }
@@ -293,7 +287,8 @@ offhand_mods::ArmSet install(const GameImage& image,
 std::optional<ArmRead> readArm(arm::ArmSide side,
                                const std::byte* hands,
                                std::int16_t attachJoint,
-                               const xr_math::ModelPose* attachAnimated) {
+                               const xr_math::ModelPose* attachAnimated,
+                               bool countTick) {
     Cache& c = cacheOf(side);
     if (!g_getJoints || !g_setJointMod || c.offForGood) {
         return std::nullopt;
@@ -363,7 +358,7 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
     // Hands only: the layer's joints read back scaled to nothing while its overrides show; they are replaced
     // below by where the last read without them put them, so only the attach joint and the wrist are checked.
     const bool wrist = offhand_mods::hasWrist(side);
-    c.ticksSinceOverride = std::min(c.ticksSinceOverride + 1, kTicksCap);
+    c.ticksSinceOverride = std::min(c.ticksSinceOverride + (countTick ? 1 : 0), kTicksCap);
     const bool overrideShows =
         GetTickCount64() - c.lastOverride <= kOverrideShowsMs || c.ticksSinceOverride < kOverrideShowsTicks;
     for (std::size_t i = 0; i < arm::kArmJointCount; ++i) {
@@ -514,7 +509,7 @@ bool writeArm(arm::ArmSide side,
             }
         }
     }
-    c.writtenUnder = glove && arm::uniformScale(scale) ? std::optional(glove->attach) : std::nullopt;
+    c.writtenUnder = glove && arm::heldInParents(*glove, scale) ? std::optional(glove->attach) : std::nullopt;
     c.lastOverride = GetTickCount64();
     c.ticksSinceOverride = 0;
     c.written = landing ? *landing : poses;

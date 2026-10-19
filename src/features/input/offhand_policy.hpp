@@ -98,6 +98,7 @@ enum class ArmReason : std::uint8_t {
     Action,     // a pending left-arm action (melee, throw, switch, custom animation, chainsaw, hammer)
     BusyFlags,  // a hands flag of a left-arm animation
     HandsState, // chainsaw or transitioning
+    NoGrip,     // the weapon in the left hand: no grip of the game's read for the held item yet
 };
 
 const char* armReasonName(ArmReason reason);
@@ -110,6 +111,19 @@ struct ArmDecision {
 // The decision for this tick. Probe mode counts as free (the offset is applied while nothing else
 // animates the arm).
 ArmDecision decideArm(const ArmSignals& signals, OffhandMode mode);
+
+// With the weapon in the left hand the right arm is the off hand: the mode it is posed in. `onController`:
+// the held item's [left_handed_off_hand] row, for a weapon whose game left grip, reflected for the right
+// glove, holds nothing (the chaingun's front handle is on its left side only), so with the game's off hand
+// the right glove follows the right controller there instead, as with the free one.
+OffhandMode leftHandOffMode(OffhandMode mode, bool onController);
+
+// With the weapon in the left hand the arms hold the game's own grips of the held item, read from its pose
+// while the arms are the game's (left_hand_arms.hpp): read only while the weapon arm's rules have no reason
+// of their own to give the arms to the game. During a raise, a melee's fists, a quick action or a switch the
+// pose is the action's: a grip read then moved the whole model 18 to 87 cm while the game had the arms (rig:
+// the Unmaykr's and the Crucible's first raise, a melee after one).
+bool readsGameGrip(const ArmSignals& weaponSignals, WeaponArmMode mode);
 
 // The same rules for the weapon arm, which goes back to the game for the same actions: glory and sync
 // kills, melee, throws, weapon switches, custom animations, hidden hands and forced views. Its

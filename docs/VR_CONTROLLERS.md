@@ -1002,9 +1002,13 @@ the turn and the move it makes, 'the weapon hand's grip against its aim ray'), s
 turned, until the glove's wrist sits where the real wrist is; the gun keeps the aim ray's orientation, so the
 sights and shots do not change. The rows are measured with the sights turn on; with `ETERNALVR_WEAPON_SIGHTS=0`
 (rig and debugging only) the wrist lands up to 0.5 cm off target (the 8.7 cm wrist offset turned by
-the sights row, at most 3.5 degrees). With the weapon in the left hand the
-arms model's right glove holds the gun on the left controller (the model is not mirrored) and its wrist
-follows the same rule; left-handed placement is not measured. The Unmaykr's row is measured the same way
+the sights row, at most 3.5 degrees). With the weapon in the left hand the arms model's left glove holds
+the gun (the right glove's grip reflected across the gun's middle; the model is not mirrored): the model is
+placed by the right glove's row, its turn reflected (only the Crucible's row turns it), then moved, not
+turned, until the left glove's wrist sits on the left hand's wrist point in the grip's frame
+(`arm::leftGloveShift`), applied once the left glove's wrist on the held item is known and kept while the game
+has the arms, so the rows need no left-hand copy
+(docs/VR_HANDS_HUD.md, "The weapon in the left hand"). The Unmaykr's row is measured the same way
 (its idle holds it with the guns' grip). The Crucible is held one-handed in the right fist, turned 37 degrees
 from the guns' grip, so its row also turns the model (pitch -24.39, yaw -23.75, roll -10.59) until the glove
 sits as on the guns, with the hilt in the fist as the game holds it; nothing on it aims, since its swing hands
@@ -1197,8 +1201,9 @@ for seconds (below).
 - **The virtual gamepad** depends on the game's default pad binds and, for the sticks, on `in_joystick`.
 - **One hand model.** The game's hands model holds both arms; placed at the weapon hand, the left arm
   follows it (T-054: no off-hand model in v1). `ETERNALVR_OFFHAND=free` poses the left arm at the off-hand
-  controller instead (docs/VR_HANDS_HUD.md, "Off hand"), mirrored to the right side with the weapon in the
-  left hand. The arm holding the gun keeps the gun's grip; `ETERNALVR_WEAPON_ARM=ik` (the default) bends its
+  controller instead (docs/VR_HANDS_HUD.md, "Off hand"). With the weapon in the left hand the model's left
+  glove holds the gun and its right arm is the off hand (docs/VR_HANDS_HUD.md, "The weapon in the left
+  hand"; T-140). The arm holding the gun keeps the gun's grip; `ETERNALVR_WEAPON_ARM=ik` (the default) bends its
   forearm and upper arm up to a shoulder beside the head, so it shows in view (docs/VR_HANDS_HUD.md, "The
   weapon arm").
 - **Seated** viewmodel rows: the built-in table has none (the glove follows the real hand in either posture); a

@@ -51,6 +51,20 @@ TEST_CASE("the built-in table reads without issues, and seated play uses the sta
     }
 }
 
+TEST_CASE("the swim's fists have their own row; a melee's and the Berserk's fists keep the default") {
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    const WeaponOffset fallback = table.lookup("", OffsetPosture::Standing);
+    const WeaponOffset swim = table.lookup("weapon/player/fists_swim", OffsetPosture::Standing);
+    // Measured on the hands rig under water: the glove's wrist 26.4 cm (median) ahead of and right of the
+    // real hand on the default row.
+    CHECK(swim == WeaponOffset{-0.493f, 0.264f, 0.177f, 0.0f, 0.0f, 0.0f});
+    CHECK_FALSE(swim == fallback);
+    CHECK(table.lookup("weapon/player/fists_doom5melee", OffsetPosture::Standing) == fallback);
+    CHECK(table.lookup("weapon/player/fists_berserk", OffsetPosture::Standing) == fallback);
+}
+
 TEST_CASE("the built-in sights cover the weapons with a sight line and no others") {
     const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
     INFO(describe(table));
@@ -227,5 +241,38 @@ TEST_CASE("right grip rows follow the name rules; bad ones are reported and skip
     CHECK(table.lookupRightGrip("weapon/player/gauss_rifle") == moved);
     CHECK_FALSE(table.lookupRightGrip("weapon/player/chaingunner").has_value());
     // The section after it reads as before.
+    CHECK(table.lookupSight("weapon/player/chaingun") == WeaponSight{0.32f, -0.01f});
+}
+
+TEST_CASE("the built-in left-handed off-hand rows cover the chaingun only") {
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    CHECK(table.lookupLeftOffHand("weapon/player/chaingun") == evr::game::LeftOffHand::Controller);
+    for (const char* other : {"weapon/player/shotgun", "weapon/player/heavy_cannon",
+                              "weapon/player/plasma_rifle", "weapon/player/rocket_launcher",
+                              "weapon/player/double_barrel", "weapon/player/gauss_rifle", "weapon/player/bfg",
+                              "weapon/player/unmaykr", "weapon/player/crucible", "weapon/player/fists", ""}) {
+        INFO(other);
+        CHECK_FALSE(table.lookupLeftOffHand(other).has_value());
+    }
+}
+
+TEST_CASE("left-handed off-hand rows follow the name rules; bad ones are reported and skipped") {
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([left_handed_off_hand]
+"weapon/player/chaingun" = "controller"
+"default" = "controller"
+"a" = controller
+"b" = "game"
+"weapon/player/chaingun" = "controller"
+[sights]
+"weapon/player/chaingun" = [0.32, -0.01]
+)");
+    INFO(describe(table));
+    CHECK(table.issues.size() == 4);
+    CHECK(table.issues.front().starts_with("line 3:"));
+    CHECK(table.leftOffHands.size() == 1);
+    CHECK(table.lookupLeftOffHand("weapon/player/chaingun_turret") == evr::game::LeftOffHand::Controller);
+    CHECK_FALSE(table.lookupLeftOffHand("weapon/player/chaingunner").has_value());
     CHECK(table.lookupSight("weapon/player/chaingun") == WeaponSight{0.32f, -0.01f});
 }

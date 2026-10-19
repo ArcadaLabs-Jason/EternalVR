@@ -27,71 +27,91 @@ namespace evr::vkcore::controllers::weapon_arm {
 
 namespace {
 
-constexpr const char* kTag = "weapon arm";
-constexpr arm::ArmSide kSide = arm::ArmSide::Right;
-
-// Type info (build 25216728): the right attach joint's index, stored by InitJointMods' second AddJointMod
-// (checked at install, offhand_mods.hpp).
-constexpr std::size_t kHandsRightAttachJoint = 0x28E6;
-
 // No solved joint is further than this from the wrist (the arm is about 0.56 long): a read that runs away
 // is not written.
 constexpr float kMaxArmMetres = 1.5f;
 constexpr float kDegreesPerRadian = 180.0f / std::numbers::pi_v<float>;
-
-// Off-hand hook thread only.
-input::ArmBlend g_blend;
-input::ArmDecision g_lastDecision{false, input::ArmReason::ModeGame};
-bool g_traced = false;
-std::uint64_t g_traceLines = 0;
-ULONGLONG g_lastPoseTrace = 0;
-bool g_loggedBones = false;
-std::atomic<std::uint64_t> g_rejected{0};
-// The hands the arm was last posed on, and whether the one give-back after a multiplayer guard trip ran.
-const std::byte* g_posedHands = nullptr;
-bool g_tripReleased = false;
-// The arm's twist of the last tick it was solved (arm_solve.hpp), until the arm is given back.
-std::optional<float> g_lastTwist;
-
-// The glove on the grip (features/arm/grip_hand.hpp): the held item's [right_grip] row, the grip's weight
-// (0 to 1, eased in and out over ETERNALVR_OFFHAND_BLEND as the held weapon has a row or not), the wrist's
-// animated pose and the idle hand's fingers as the last clean read had them.
-const std::byte* g_gripDecl = nullptr;
-std::optional<game::RightGrip> g_grip;       // the held item's
-std::optional<game::RightGrip> g_activeGrip; // the held item's, or the last one's while the grip eases out
-std::string g_gripItem;
-float g_gripRamp = 0.0f;
-arm::WristTracker g_wrist;
-std::array<xr_math::ModelPose, arm::kHandJointCount> g_idleHand{};
-bool g_idleHandOk = false;
-const std::byte* g_gloveHands = nullptr;
-std::uint64_t g_gripLines = 0;
-float g_gloveCurl = 0.0f; // the last tick's, for the trace
-// The hands' modifier weights this tick, how the glove is written for them and its settle weight (tick()).
-std::optional<arm::ModWeights> g_weights;
-arm::GloveWeight g_gloveWeight;
-arm::GloveSettle g_settle;
-float g_settleWeight = 0.0f;
-// Trace only: the glove's wrist read back against where it was meant to land the tick before (game units,
-// the largest since the last trace line), and how many reads showed the write of 1, 2 or 3 ticks before.
-std::optional<xr_math::ModelPose> g_lastWanted;
-// Trace only: the gun's root joint as read the tick the last glove was written under it, and the per-tick
-// lines logged.
-std::optional<xr_math::ModelPose> g_lastAttach;
-// The forearm's first joint where it was meant to land, in the wrist's frame.
-xr_math::ModelPose g_lastSleeve{};
-Vec3 g_lastShoulder{}; // the shoulder end where it was meant to land (model space)
-std::uint64_t g_tickLines = 0;
 constexpr std::uint64_t kMaxTickLines = 6000;
-float g_landedMax = 0.0f;
-std::array<unsigned, 3> g_readLags{};
-// Trace only: ticks on one modifier node, the ticks its generation's low bit (the list SetJointMod writes)
-// changed since the tick before, and the largest step.
-std::optional<std::int32_t> g_lastGeneration;
-unsigned g_generationTicks = 0;
-unsigned g_generationSteps = 0;
-std::int32_t g_generationJump = 0; // the largest move
-const std::byte* g_generationNode = nullptr;
+
+// One arm holding a glove (off-hand hook thread only): the weapon arm, and with the weapon in the left hand
+// the left arm too (holding()).
+struct ArmState {
+    arm::ArmSide side;
+    // Type info (build 25216728): the arm's attach joint's index, stored by InitJointMods' AddJointMod (the
+    // right one's checked at install, offhand_mods.hpp).
+    std::size_t attachJoint;
+    const char* tag;
+    input::ArmBlend blend;
+    input::ArmDecision lastDecision{false, input::ArmReason::ModeGame};
+    bool traced = false;
+    std::uint64_t traceLines = 0;
+    ULONGLONG lastPoseTrace = 0;
+    bool loggedBones = false;
+    std::atomic<std::uint64_t> rejected{0};
+    // The hands the arm was last posed on, and whether the one give-back after a multiplayer guard trip ran.
+    const std::byte* posedHands = nullptr;
+    bool tripReleased = false;
+    // The arm's twist of the last tick it was solved (arm_solve.hpp), until the arm is given back.
+    std::optional<float> lastTwist;
+
+    // The glove on the grip (features/arm/grip_hand.hpp): the grip held this tick (the held item's
+    // [right_grip] row's), the last one held while the grip eases out, the grip's weight (0 to 1, eased in
+    // and out over ETERNALVR_OFFHAND_BLEND as there is a grip or not), the wrist's animated pose and the idle
+    // hand's fingers as the last clean read had them.
+    std::optional<arm::GripPose> held;
+    arm::GripPose activeGrip = arm::heavyCannonGrip();
+    bool hasActive = false;
+    bool modelSpace = false; // the glove written in model space (holding(): a glove on a controller)
+    std::optional<xr_math::ModelPose> wristTarget; // the glove's wrist there (model space), placed each tick
+    std::optional<xr_math::ModelPose> attachRead;  // the arm's attach joint as read this tick
+    float gripRamp = 0.0f;
+    arm::WristTracker wrist;
+    std::array<xr_math::ModelPose, arm::kHandJointCount> idleHand{};
+    bool idleHandOk = false;
+    const std::byte* gloveHands = nullptr;
+    float gloveCurl = 0.0f; // the last tick's, for the trace
+    // The game's own grip of the held item as the last clean read had it (capture()).
+    std::optional<Capture> captured;
+    std::uint32_t captures = 0;
+    // The hands' modifier weights this tick, how the glove is written for them and its settle weight
+    // (tick()).
+    std::optional<arm::ModWeights> weights;
+    arm::GloveWeight gloveWeight;
+    arm::GloveSettle settle;
+    float settleWeight = 0.0f;
+    // Trace only: the glove's wrist read back against where it was meant to land the tick before (game
+    // units, the largest since the last trace line), and how many reads showed the write of 1, 2 or 3 ticks
+    // before.
+    std::optional<xr_math::ModelPose> lastWanted;
+    // Trace only: the gun's root joint as read the tick the last glove was written under it.
+    std::optional<xr_math::ModelPose> lastAttach;
+    // The forearm's first joint where it was meant to land, in the wrist's frame.
+    xr_math::ModelPose lastSleeve{};
+    Vec3 lastShoulder{}; // the shoulder end where it was meant to land (model space)
+    std::uint64_t tickLines = 0;
+    float landedMax = 0.0f;
+    std::array<unsigned, 3> readLags{};
+    // Trace only: ticks on one modifier node, the ticks its generation's low bit (the list SetJointMod
+    // writes) changed since the tick before, and the largest step.
+    std::optional<std::int32_t> lastGeneration;
+    unsigned generationTicks = 0;
+    unsigned generationSteps = 0;
+    std::int32_t generationJump = 0; // the largest move
+    const std::byte* generationNode = nullptr;
+};
+
+ArmState g_right{arm::ArmSide::Right, 0x28E6, "weapon arm"};
+ArmState g_left{arm::ArmSide::Left, 0x28E4, "weapon arm (left glove)"};
+
+ArmState& stateOf(arm::ArmSide side) {
+    return side == arm::ArmSide::Right ? g_right : g_left;
+}
+
+// The held item's [right_grip] row (the weapon arm's), looked up when the held item changes.
+const std::byte* g_gripDecl = nullptr;
+std::optional<game::RightGrip> g_grip;
+std::string g_gripItem;
+std::uint64_t g_gripLines = 0;
 
 // The glove's grip for a [right_grip] row: the game grip, its wrist moved where the row says.
 arm::GripPose gripPose(const game::RightGrip& row) {
@@ -105,9 +125,7 @@ arm::GripPose gripPose(const game::RightGrip& row) {
     }
     return grip;
 }
-arm::GripPose g_gripPose = arm::heavyCannonGrip(); // the active grip's
 
-// The held item's grip row, looked up when the held item changes.
 void updateGrip(const std::byte* hands) {
     const std::byte* decl = heldItemDecl(hands);
     if (decl == g_gripDecl) {
@@ -116,16 +134,12 @@ void updateGrip(const std::byte* hands) {
     g_gripDecl = decl;
     g_gripItem = decl ? itemDeclName(decl) : std::string{};
     g_grip = state().offsets.lookupRightGrip(g_gripItem);
-    if (g_grip) {
-        g_activeGrip = g_grip;
-        g_gripPose = gripPose(*g_grip);
-    }
     if (g_grip && g_gripLines < 20) {
         ++g_gripLines;
         EVR_LOG("%s: '%s' holds its gun by a handle turned away from a controller's grip: the glove goes "
                 "on a grip in the Heavy Cannon's idle grip while the layer poses the arm (the gun stays the "
                 "game's)",
-                kTag, g_gripItem.c_str());
+                g_right.tag, g_gripItem.c_str());
     }
 }
 
@@ -139,74 +153,98 @@ float smooth(float t) {
 // at the root, and its turn; and the forearm's first joint (the sleeve's end at the glove) as read back in
 // the wrist's frame against where it was meant to land (`sleeve`, game units), and the shoulder end as read
 // back against where it was meant to land in model space (`shoulder`).
-void traceTick(const xr_math::ModelPose& attach, float miss, float sleeve, float shoulder) {
-    if (!g_lastAttach || !g_lastWanted || g_tickLines >= kMaxTickLines) {
+void traceTick(ArmState& s, const xr_math::ModelPose& attach, float miss, float sleeve, float shoulder) {
+    if (!s.lastAttach || !s.lastWanted || s.tickLines >= kMaxTickLines) {
         return;
     }
-    ++g_tickLines;
-    const Vec3 then = arm::compose(*g_lastAttach, *g_lastWanted).position;
-    const Vec3 now = arm::compose(attach, *g_lastWanted).position;
-    const Quat q = conjugate(arm::toQuat(g_lastAttach->axis)) * arm::toQuat(attach.axis);
+    ++s.tickLines;
+    const Vec3 then = arm::compose(*s.lastAttach, *s.lastWanted).position;
+    const Vec3 now = arm::compose(attach, *s.lastWanted).position;
+    const Quat q = conjugate(arm::toQuat(s.lastAttach->axis)) * arm::toQuat(attach.axis);
     const float turn = 2.0f * std::atan2(length(Vec3{q.x, q.y, q.z}), std::fabs(q.w)) * kDegreesPerRadian;
     EVR_LOG(
         "%s: glove tick: wrist %.1f mm off in the gun's frame, the sleeve's end %.1f mm off the glove, the "
         "shoulder end %.1f mm off; "
         "the gun's root moved %.1f mm at the grip (%.1f mm at the root, turned %.2f deg) from the read the "
         "write was placed under",
-        kTag, static_cast<double>(miss) * 1000.0, static_cast<double>(sleeve) * 1000.0,
+        s.tag, static_cast<double>(miss) * 1000.0, static_cast<double>(sleeve) * 1000.0,
         static_cast<double>(shoulder) * 1000.0, static_cast<double>(length(now - then)) * 1000.0,
-        static_cast<double>(length(attach.position - g_lastAttach->position)) * 1000.0,
+        static_cast<double>(length(attach.position - s.lastAttach->position)) * 1000.0,
         static_cast<double>(turn));
 }
 
 // The arm back to the game: the layer's modifiers to no change, the arm's surface as the weapon's kit has it.
-void giveBack(const std::byte* hands) {
-    g_lastTwist.reset();
-    g_wrist.idle();
-    g_lastWanted.reset();
-    g_lastAttach.reset();
-    game_arm::releaseArm(kSide, hands);
-    hands_surfaces::update(kSide, hands, false);
+void giveBack(ArmState& s, const std::byte* hands) {
+    s.lastTwist.reset();
+    s.wrist.idle();
+    s.lastWanted.reset();
+    s.lastAttach.reset();
+    game_arm::releaseArm(s.side, hands);
+    hands_surfaces::update(s.side, hands, false);
 }
 
-void trace(const input::ArmDecision& d, float weight) {
-    if ((g_traced && d.controller == g_lastDecision.controller && d.reason == g_lastDecision.reason) ||
-        g_traceLines >= 400) {
+void trace(ArmState& s, const input::ArmDecision& d, float weight) {
+    if ((s.traced && d.controller == s.lastDecision.controller && d.reason == s.lastDecision.reason) ||
+        s.traceLines >= 400) {
         return;
     }
-    g_traced = true;
-    g_lastDecision = d;
-    ++g_traceLines;
-    EVR_LOG("%s: %s (%s), weight %.2f", kTag, d.controller ? "ik" : "game", input::armReasonName(d.reason),
+    s.traced = true;
+    s.lastDecision = d;
+    ++s.traceLines;
+    EVR_LOG("%s: %s (%s), weight %.2f", s.tag, d.controller ? "ik" : "game", input::armReasonName(d.reason),
             weight);
 }
 
-bool poseTraceDue(const input::ControllerSettings& cfg) {
+bool poseTraceDue(ArmState& s, const input::ControllerSettings& cfg) {
     if (!cfg.offhandTrace) {
         return false;
     }
     const ULONGLONG ticks = GetTickCount64();
-    if (ticks - g_lastPoseTrace < 1000) {
+    if (ticks - s.lastPoseTrace < 1000) {
         return false;
     }
-    g_lastPoseTrace = ticks;
+    s.lastPoseTrace = ticks;
     return true;
+}
+
+// Where the arm's shoulder and elbow go (world, relative to the eye; the elbow's bend direction).
+struct Shoulder {
+    Vec3 point;
+    Vec3 elbow;
+};
+
+// The game's grip of the held item from a read the layer's overrides had not reached: the wrist in the attach
+// joint's frame, the hand's joints in their parents' frames, and the attach joint.
+void noteCapture(ArmState& s, const std::byte* hands, const game_arm::ArmRead& read) {
+    using arm::ArmJoint;
+    using arm::index;
+    game_arm::HandRead hand;
+    if (!game_arm::readHand(s.side, hands, hand)) {
+        return;
+    }
+    const xr_math::ModelPose& attach = read.read[index(ArmJoint::Attach)];
+    s.captured = Capture{heldItemDecl(hands),
+                         {arm::relative(attach, read.read[index(ArmJoint::Hand)]), hand.local},
+                         attach,
+                         ++s.captures};
 }
 
 // The arm solved to the wrist and mixed with the game's by `weight`, written; false when it cannot be used
 // this tick (nothing written).
-bool poseArm(const std::byte* hands,
+bool poseArm(ArmState& s,
+             const std::byte* hands,
              const WorldHand& world,
              const ModelPlacement& model,
+             const Shoulder& where,
              const input::ControllerSettings& cfg,
              float weight) {
     using arm::ArmJoint;
     using arm::index;
     std::int16_t attachJoint = -1;
-    if (!safeRead(hands + kHandsRightAttachJoint, attachJoint)) {
+    if (!safeRead(hands + s.attachJoint, attachJoint)) {
         return false;
     }
-    const auto read = game_arm::readArm(kSide, hands, attachJoint, nullptr);
+    const auto read = game_arm::readArm(s.side, hands, attachJoint, nullptr);
     if (!read) {
         return false;
     }
@@ -219,51 +257,56 @@ bool poseArm(const std::byte* hands,
     arm::ArmPoses from = animated;
     std::optional<arm::GripOverrides> glove;
     const xr_math::ModelPose& attach = read->read[index(ArmJoint::Attach)];
+    s.attachRead = attach;
     std::optional<xr_math::ModelPose> wristAnimated;
-    if (offhand_mods::fingerCount(kSide) > 0) {
-        if (hands != g_gloveHands) {
-            g_gloveHands = hands;
-            g_wrist.reset();
-            g_idleHandOk = false;
+    if (offhand_mods::fingerCount(s.side) > 0) {
+        if (hands != s.gloveHands) {
+            s.gloveHands = hands;
+            s.wrist.reset();
+            s.idleHandOk = false;
+            s.captured.reset();
         }
         const bool clean = read->landed < 0.0f;
         const xr_math::ModelPose& readWrist = read->read[index(ArmJoint::Hand)];
         const std::optional<float> settled =
-            g_weights && g_gloveWeight.settled ? std::optional<float>(g_gloveWeight.write) : std::nullopt;
+            s.weights && s.gloveWeight.settled ? std::optional<float>(s.gloveWeight.write) : std::nullopt;
         if (cfg.offhandTrace) {
             const std::optional<std::int32_t> generation = offhand_mods::modGeneration(hands);
             const std::byte* node = offhand_mods::modNode(hands);
-            if (generation && g_lastGeneration && node == g_generationNode) {
-                ++g_generationTicks;
-                g_generationSteps += ((*generation - *g_lastGeneration) & 1) != 0 ? 1u : 0u;
-                g_generationJump = std::max(g_generationJump, *generation - *g_lastGeneration);
+            if (generation && s.lastGeneration && node == s.generationNode) {
+                ++s.generationTicks;
+                s.generationSteps += ((*generation - *s.lastGeneration) & 1) != 0 ? 1u : 0u;
+                s.generationJump = std::max(s.generationJump, *generation - *s.lastGeneration);
             }
-            g_lastGeneration = generation;
-            g_generationNode = node;
+            s.lastGeneration = generation;
+            s.generationNode = node;
         }
         if (cfg.offhandTrace && settled) {
-            if (const auto lag = g_wrist.readLag(attach, readWrist, *settled)) {
-                ++g_readLags[static_cast<std::size_t>(std::clamp(lag->ticks, 1, 3) - 1)];
+            if (const auto lag = s.wrist.readLag(attach, readWrist, *settled)) {
+                ++s.readLags[static_cast<std::size_t>(std::clamp(lag->ticks, 1, 3) - 1)];
             }
         }
-        if (g_lastWanted) {
-            const float miss = length(arm::relative(attach, readWrist).position - g_lastWanted->position);
-            g_landedMax = std::max(g_landedMax, miss);
+        if (s.lastWanted) {
+            const float miss = length(arm::relative(attach, readWrist).position - s.lastWanted->position);
+            s.landedMax = std::max(s.landedMax, miss);
             if (cfg.offhandTrace) {
                 const xr_math::ModelPose sleeve =
                     arm::relative(readWrist, read->read[index(ArmJoint::Roll3)]);
-                traceTick(attach, miss, length(sleeve.position - g_lastSleeve.position),
-                          length(read->read[index(ArmJoint::UpperArm)].position - g_lastShoulder));
+                traceTick(s, attach, miss, length(sleeve.position - s.lastSleeve.position),
+                          length(read->read[index(ArmJoint::UpperArm)].position - s.lastShoulder));
             }
         }
-        wristAnimated = g_wrist.update(clean, attach, readWrist, settled.has_value());
+        wristAnimated = s.wrist.update(clean, attach, readWrist, settled.has_value());
         game_arm::HandRead hand;
-        if (clean && game_arm::readHand(kSide, hands, hand)) {
-            g_idleHand = hand.local;
-            g_idleHandOk = true;
+        if (clean && game_arm::readHand(s.side, hands, hand)) {
+            s.idleHand = hand.local;
+            s.idleHandOk = true;
+            if (input::leftHandArms(cfg)) {
+                noteCapture(s, hands, *read);
+            }
         }
     }
-    const float gripWeight = smooth(g_gripRamp) * g_settleWeight;
+    const float gripWeight = smooth(s.gripRamp) * s.settleWeight;
     // The glove's inputs this tick: the wrist's animated pose, the grip, the hands' modifier weight.
     struct GloveIn {
         xr_math::ModelPose wrist;
@@ -271,8 +314,11 @@ bool poseArm(const std::byte* hands,
         float modWeight;
     };
     std::optional<GloveIn> gloveIn;
-    if (g_activeGrip && gripWeight > 0.0f && wristAnimated && g_idleHandOk && g_weights) {
-        gloveIn = GloveIn{*wristAnimated, &g_gripPose, g_gloveWeight.write};
+    if (s.wristTarget) {
+        s.activeGrip.wrist = arm::relative(attach, *s.wristTarget);
+    }
+    if (s.hasActive && gripWeight > 0.0f && wristAnimated && s.idleHandOk && s.weights) {
+        gloveIn = GloveIn{*wristAnimated, &s.activeGrip, s.gloveWeight.write};
         const arm::GloveArm arms = arm::gloveArm(read->animated, gloveIn->wrist, *gloveIn->grip, gripWeight);
         animated = arms.animated;
         from = arms.from;
@@ -280,15 +326,15 @@ bool poseArm(const std::byte* hands,
 
     // The shoulder and the elbow's bend in the arms model's space; the wrist stays the game's (or the
     // grip's).
-    const Vec3 shoulder = xr_math::inModelSpace(model.pose, {world.weaponShoulder, model.pose.axis}).position;
-    const Vec3 pole = arm::toLocal(model.pose.axis, world.weaponElbow);
-    auto ours = arm::solveArmToWrist(from, shoulder, pole, g_lastTwist,
+    const Vec3 shoulder = xr_math::inModelSpace(model.pose, {where.point, model.pose.axis}).position;
+    const Vec3 pole = arm::toLocal(model.pose.axis, where.elbow);
+    auto ours = arm::solveArmToWrist(from, shoulder, pole, s.lastTwist,
                                      cfg.armSolve == input::ArmSolve::Bind ? arm::TwistFrom::Bind
                                                                            : arm::TwistFrom::Animated);
     if (!ours) {
         return false;
     }
-    g_lastTwist = ours->twist;
+    s.lastTwist = ours->twist;
     if (cfg.testArmTwistFault) {
         arm::plantTwistFault(*ours, animated);
     }
@@ -298,10 +344,11 @@ bool poseArm(const std::byte* hands,
     }
     if (gloveIn) {
         // The glove: its wrist where the arm's blend puts it, the fingers closed as far.
-        g_gloveCurl = weight * gripWeight;
+        s.gloveCurl = weight * gripWeight;
         glove =
             arm::gripOverrides(attach, gloveIn->wrist, arm::relative(attach, mixed[index(ArmJoint::Hand)]),
-                               g_idleHand, *gloveIn->grip, g_gloveCurl, gloveIn->modWeight);
+                               s.idleHand, *gloveIn->grip, s.gloveCurl, gloveIn->modWeight);
+        glove->modelSpace = s.modelSpace;
     }
     const arm::HandsOnlyArm handsOnly = arm::handsOnly(mixed, game_arm::cuffOf(cfg.handsCuff));
     mixed = cfg.armsHandsOnly ? handsOnly.joints : mixed;
@@ -331,57 +378,136 @@ bool poseArm(const std::byte* hands,
             written[i] = arm::compose(glove->wrist, arm::relative(mixed[index(ArmJoint::Hand)], mixed[i]));
         }
     }
-    if (!mp_guard::allowsGameTouch() || !game_arm::writeArm(kSide, hands, written, read->scale, read->origin,
+    if (!mp_guard::allowsGameTouch() || !game_arm::writeArm(s.side, hands, written, read->scale, read->origin,
                                                             cfg.armsHandsOnly ? handsOnly.zeroScale : 0u,
                                                             &mixed, nullptr, glove ? &*glove : nullptr)) {
         return false;
     }
     if (glove) {
-        g_wrist.wrote(attach, glove->wrist, g_gloveWeight.write);
-        g_lastWanted = arm::relative(attach, mixed[index(ArmJoint::Hand)]);
-        g_lastAttach = attach;
-        g_lastSleeve = arm::relative(mixed[index(ArmJoint::Hand)], mixed[index(ArmJoint::Roll3)]);
-        g_lastShoulder = mixed[index(ArmJoint::UpperArm)].position;
+        s.wrist.wrote(attach, glove->wrist, s.gloveWeight.write);
+        s.lastWanted = arm::relative(attach, mixed[index(ArmJoint::Hand)]);
+        s.lastAttach = attach;
+        s.lastSleeve = arm::relative(mixed[index(ArmJoint::Hand)], mixed[index(ArmJoint::Roll3)]);
+        s.lastShoulder = mixed[index(ArmJoint::UpperArm)].position;
     } else {
-        g_wrist.idle();
-        g_lastWanted.reset();
-        g_lastAttach.reset();
+        s.wrist.idle();
+        s.lastWanted.reset();
+        s.lastAttach.reset();
     }
-    g_posedHands = hands;
+    s.posedHands = hands;
     // The weapon's mesh kit usually hides this arm (hands_surfaces.hpp): shown while the layer poses it.
-    hands_surfaces::update(kSide, hands, true);
-    arm_dump::noteLayerArm(kSide, weight, ours->twist, *read, mixed, nullptr);
+    hands_surfaces::update(s.side, hands, true);
+    arm_dump::noteLayerArm(s.side, weight, ours->twist, *read, mixed, nullptr);
 
     const Vec3 solvedShoulder = ours->joints[index(ArmJoint::UpperArm)].position;
-    if (!g_loggedBones) {
-        g_loggedBones = true;
+    if (!s.loggedBones) {
+        s.loggedBones = true;
         EVR_LOG("%s: upper arm %.3f, forearm %.3f (animated, game units), model scale (%.3f %.3f %.3f); the "
                 "first pose moves the arm up to %.2f from the game's%s",
-                kTag, ours->upper, ours->lower, read->scale.x, read->scale.y, read->scale.z, moved,
+                s.tag, ours->upper, ours->lower, read->scale.x, read->scale.y, read->scale.z, moved,
                 cfg.weaponArmTestShoulder ? " (test shoulder)" : "");
     }
-    if (poseTraceDue(cfg)) {
+    if (poseTraceDue(s, cfg)) {
         const Vec3 e = mixed[index(ArmJoint::ForeArm)].position;
-        const Vec3 s = mixed[index(ArmJoint::UpperArm)].position;
+        const Vec3 sh = mixed[index(ArmJoint::UpperArm)].position;
         EVR_LOG(
             "%s: ik: wrist (%.2f %.2f %.2f), elbow (%.2f %.2f %.2f), shoulder (%.2f %.2f %.2f), %.2f from "
             "the head's point, reach %.2f, twist %.0f deg, weight %.2f, up to %.2f from the game's pose, "
-            "read back within %.2f; %llu rejected; right arm surface %s; glove %s (grip %.2f, fingers %.2f, "
+            "read back within %.2f; %llu rejected; %s arm surface %s; glove %s (grip %.2f, fingers %.2f, "
             "weight %.3f %s, landed within %.1f mm, reads of the write 1/2/3 ticks before %u/%u/%u); the "
             "list "
             "switched in %u of %u ticks (generation steps up to %d)",
-            kTag, wrist.x, wrist.y, wrist.z, e.x, e.y, e.z, s.x, s.y, s.z, length(solvedShoulder - shoulder),
-            ours->ik.reach, ours->twist * kDegreesPerRadian, weight, moved, read->landed,
-            static_cast<unsigned long long>(g_rejected.load()),
-            arm::surfaceStateName(hands_surfaces::state(kSide)), glove ? "on the grip" : "the game's",
-            gripWeight, glove ? g_gloveCurl : 0.0f,
-            g_weights ? static_cast<double>(g_weights->current) : -1.0,
-            g_gloveWeight.settled ? "settled" : "fading", static_cast<double>(g_landedMax) * 1000.0,
-            g_readLags[0], g_readLags[1], g_readLags[2], g_generationSteps, g_generationTicks,
-            g_generationJump);
-        g_landedMax = 0.0f;
+            s.tag, wrist.x, wrist.y, wrist.z, e.x, e.y, e.z, sh.x, sh.y, sh.z,
+            length(solvedShoulder - shoulder), ours->ik.reach, ours->twist * kDegreesPerRadian, weight, moved,
+            read->landed, static_cast<unsigned long long>(s.rejected.load()),
+            s.side == arm::ArmSide::Right ? "right" : "left",
+            arm::surfaceStateName(hands_surfaces::state(s.side)), glove ? "on the grip" : "the game's",
+            gripWeight, glove ? s.gloveCurl : 0.0f,
+            s.weights ? static_cast<double>(s.weights->current) : -1.0,
+            s.gloveWeight.settled ? "settled" : "fading", static_cast<double>(s.landedMax) * 1000.0,
+            s.readLags[0], s.readLags[1], s.readLags[2], s.generationSteps, s.generationTicks,
+            s.generationJump);
+        s.landedMax = 0.0f;
     }
     return true;
+}
+
+// On a tick the arm was given back (with the weapon in the left hand): reads it, and takes the game's grip
+// when the read is clean. The give-back counted the tick already (game_arm::releaseArm).
+void captureFrom(ArmState& s, const std::byte* hands) {
+    std::int16_t attachJoint = -1;
+    if (offhand_mods::fingerCount(s.side) == 0 || !safeRead(hands + s.attachJoint, attachJoint)) {
+        return;
+    }
+    if (hands != s.gloveHands) {
+        s.gloveHands = hands;
+        s.wrist.reset();
+        s.idleHandOk = false;
+        s.captured.reset();
+    }
+    const auto read = game_arm::readArm(s.side, hands, attachJoint, nullptr, false);
+    s.attachRead = read ? std::optional(read->read[arm::index(arm::ArmJoint::Attach)]) : std::nullopt;
+    if (read && read->landed < 0.0f) {
+        noteCapture(s, hands, *read);
+    }
+}
+
+// One tick of an arm with its decision, the grip it holds (or none) and its shoulder.
+void tickArm(ArmState& s,
+             const std::byte* hands,
+             const input::ArmDecision& decision,
+             const WorldHand& world,
+             const ModelPlacement& model,
+             const Shoulder& where,
+             float dt) {
+    const input::ControllerSettings& cfg = settings();
+    s.attachRead.reset();
+    const float weight =
+        s.blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
+    if (cfg.offhandTrace) {
+        trace(s, decision, weight);
+    }
+    arm_dump::noteGameArm(s.side, weight);
+    if (s.held) {
+        s.activeGrip = *s.held;
+        s.hasActive = true;
+    }
+    const float step = cfg.offhandBlendSeconds > 0.0f ? dt / cfg.offhandBlendSeconds : 1.0f;
+    s.gripRamp = std::clamp(s.gripRamp + (s.held ? step : -step), 0.0f, 1.0f);
+    s.weights = offhand_mods::fingerCount(s.side) > 0 ? offhand_mods::modWeights(hands) : std::nullopt;
+    s.gloveWeight = s.weights ? arm::gloveWeight(*s.weights) : arm::GloveWeight{};
+    s.settleWeight = s.settle.update(s.weights && s.gloveWeight.settled, dt, cfg.offhandBlendSeconds);
+    if (weight <= 0.0f) {
+        giveBack(s, hands);
+        if (input::leftHandArms(cfg)) {
+            captureFrom(s, hands);
+        }
+        return;
+    }
+    if (!poseArm(s, hands, world, model, where, cfg, weight)) {
+        s.rejected.fetch_add(1, std::memory_order_relaxed);
+        giveBack(s, hands);
+    }
+}
+
+void releaseAfterTrip(ArmState& s, const std::byte* hands) {
+    if (s.tripReleased || (s.posedHands && hands != s.posedHands)) {
+        return;
+    }
+    s.tripReleased = true;
+    if (!s.posedHands) {
+        return;
+    }
+    // Both lists at once, with no call into the game (game_arm::releaseArm); the overrides left read back.
+    const bool released = game_arm::releaseArm(s.side, hands, true);
+    const auto left = game_arm::overridesLeft(s.side, hands);
+    hands_surfaces::releaseAfterTrip(s.side, hands);
+    EVR_LOG(
+        "%s: the multiplayer guard tripped: %s (overrides left per list %d/%d); the weapon arm is the game's",
+        s.tag,
+        released ? "the layer's arm modifiers set back to no change in both lists"
+                 : "the layer's arm modifiers could not be set back",
+        left[0], left[1]);
 }
 
 } // namespace
@@ -396,7 +522,7 @@ void logSettings() {
         "%s: ik on the arms model's right arm (righthandattach, idHands+0x%zX): the wrist stays under the "
         "gun, shoulder (%.2f %.2f %.2f) m from the eyes, elbow toward (%.2f %.2f %.2f), blend %.2f s, hold "
         "%.2f s%s%s%s",
-        kTag, kHandsRightAttachJoint, sh.forward, sh.left, sh.up, e.forward, e.left, e.up,
+        g_right.tag, g_right.attachJoint, sh.forward, sh.left, sh.up, e.forward, e.left, e.up,
         cfg.offhandBlendSeconds, cfg.offhandHoldSeconds,
         cfg.handedness != game::Handedness::Right ? ", for the left controller (weapon in the left hand)"
                                                   : "",
@@ -405,8 +531,13 @@ void logSettings() {
     if (cfg.testArmTwistFault) {
         EVR_LOG("%s: planted twist fault ON (ETERNALVR_TEST_ARM_FAULT): the whole twist on the wrist, both "
                 "arms (rig test)",
-                kTag);
+                g_right.tag);
     }
+}
+
+std::optional<arm::GripPose> rowGrip(const std::byte* hands) {
+    updateGrip(hands);
+    return g_grip ? std::optional(gripPose(*g_grip)) : std::nullopt;
 }
 
 void tick(const std::byte* hands,
@@ -415,51 +546,52 @@ void tick(const std::byte* hands,
           const ModelPlacement& model,
           float dt) {
     const input::ControllerSettings& cfg = settings();
-    const input::ArmDecision decision = input::decideWeaponArm(signals, cfg.weaponArm);
-    const float weight =
-        g_blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
-    if (cfg.offhandTrace) {
-        trace(decision, weight);
-    }
-    arm_dump::noteGameArm(kSide, weight);
     updateGrip(hands);
-    const float step = cfg.offhandBlendSeconds > 0.0f ? dt / cfg.offhandBlendSeconds : 1.0f;
-    g_gripRamp = std::clamp(g_gripRamp + (g_grip ? step : -step), 0.0f, 1.0f);
-    g_weights = offhand_mods::fingerCount(kSide) > 0 ? offhand_mods::modWeights(hands) : std::nullopt;
-    g_gloveWeight = g_weights ? arm::gloveWeight(*g_weights) : arm::GloveWeight{};
-    g_settleWeight = g_settle.update(g_weights && g_gloveWeight.settled, dt, cfg.offhandBlendSeconds);
-    if (weight <= 0.0f) {
-        giveBack(hands);
-        return;
-    }
-    if (!poseArm(hands, world, model, cfg, weight)) {
-        g_rejected.fetch_add(1, std::memory_order_relaxed);
-        giveBack(hands);
-    }
+    g_right.held = g_grip ? std::optional(gripPose(*g_grip)) : std::nullopt;
+    g_right.modelSpace = false;
+    tickArm(g_right, hands, input::decideWeaponArm(signals, cfg.weaponArm), world, model,
+            {world.weaponShoulder, world.weaponElbow}, dt);
+}
+
+void holding(arm::ArmSide side,
+             const std::byte* hands,
+             const Hold& hold,
+             const WorldHand& world,
+             const ModelPlacement& model,
+             float dt) {
+    ArmState& s = stateOf(side);
+    s.held = hold.grip ? std::optional(*hold.grip) : std::nullopt;
+    s.modelSpace = hold.modelSpace;
+    s.wristTarget = hold.grip ? hold.wrist : std::nullopt;
+    tickArm(s, hands, hold.decision, world, model, {hold.shoulder, hold.elbow}, dt);
+}
+
+std::optional<Capture> captured(arm::ArmSide side) {
+    return stateOf(side).captured;
+}
+
+void forgetCapture(arm::ArmSide side) {
+    stateOf(side).captured.reset();
+}
+
+std::optional<xr_math::ModelPose> attachRead(arm::ArmSide side) {
+    return stateOf(side).attachRead;
 }
 
 void release(const std::byte* hands) {
-    giveBack(hands);
+    giveBack(g_right, hands);
+}
+
+void release(arm::ArmSide side, const std::byte* hands) {
+    ArmState& s = stateOf(side);
+    giveBack(s, hands);
+    s.blend.reset(); // blended in again from the game's arm when it is taken back
+    s.gripRamp = 0.0f;
 }
 
 void releaseOnTrip(const std::byte* hands) {
-    if (g_tripReleased || (g_posedHands && hands != g_posedHands)) {
-        return;
-    }
-    g_tripReleased = true;
-    if (!g_posedHands) {
-        return;
-    }
-    // Both lists at once, with no call into the game (game_arm::releaseArm); the overrides left read back.
-    const bool released = game_arm::releaseArm(kSide, hands, true);
-    const auto left = game_arm::overridesLeft(kSide, hands);
-    hands_surfaces::releaseAfterTrip(kSide, hands);
-    EVR_LOG(
-        "%s: the multiplayer guard tripped: %s (overrides left per list %d/%d); the weapon arm is the game's",
-        kTag,
-        released ? "the layer's arm modifiers set back to no change in both lists"
-                 : "the layer's arm modifiers could not be set back",
-        left[0], left[1]);
+    releaseAfterTrip(g_right, hands);
+    releaseAfterTrip(g_left, hands);
 }
 
 } // namespace evr::vkcore::controllers::weapon_arm

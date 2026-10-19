@@ -254,10 +254,12 @@ target_sources(evr_layer PRIVATE
     input_xr.cpp
     arm_dump.cpp
     arm_model.cpp
+    arm_signals.cpp
     game_arm.cpp
     game_arm_joints.cpp
     game_arm_weight.cpp
     hands_surfaces.cpp
+    left_hand_arms.cpp
     offhand_hook.cpp
     offhand_mods.cpp
     weapon_arm.cpp

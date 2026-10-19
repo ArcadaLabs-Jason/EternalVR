@@ -99,11 +99,13 @@ struct ArmRead {
 
 // The arm on `side` of `hands` as animated this tick, with the layer's modifiers in place. `attachJoint` is
 // the joint the game's modifier is for; `attachAnimated`, when given, the pose the game read for it, which
-// the read must match. nullopt when anything does not check out (logged once per reason).
+// the read must match. Each call counts a tick toward a clean read, but with `countTick` false (a tick
+// releaseArm counted already). nullopt when anything does not check out (logged once per reason).
 std::optional<ArmRead> readArm(arm::ArmSide side,
                                const std::byte* hands,
                                std::int16_t attachJoint,
-                               const xr_math::ModelPose* attachAnimated);
+                               const xr_math::ModelPose* attachAnimated,
+                               bool countTick = true);
 
 // Writes the layer's modifiers of that arm: the forearm, elbow and shoulder joints of `poses` (model space,
 // game units) as overrides. Each joint in `zeroScale` (bit n for arm::ArmJoint n, arm::handsOnly) also

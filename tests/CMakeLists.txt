@@ -229,8 +229,10 @@ evr_add_test(evr_arm_tests
         features/arm/arm_solve_tests.cpp
         features/arm/arm_surfaces_tests.cpp
         features/arm/arm_twist_tests.cpp
+        features/arm/grip_book_tests.cpp
         features/arm/grip_hand_tests.cpp
         features/arm/hand_offset_tests.cpp
+        features/arm/left_hand_tests.cpp
         features/arm/mod_mix_tests.cpp
         features/arm/mod_room_tests.cpp
         features/arm/parent_frames_tests.cpp

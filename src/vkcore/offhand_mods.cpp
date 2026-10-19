@@ -104,6 +104,8 @@ SetNumFn g_setNum = nullptr;
 std::int32_t g_room = 0;  // the modifiers made room for: six per arm (install, then read-only)
 bool g_wrist = false;     // the off hand has the wrist's change too (install, then read-only)
 bool g_gloveMods = false; // the weapon arm has the glove's wrist and fingers too (install, then read-only)
+bool g_leftGlove =
+    false; // the left arm has them too, with the weapon in the left hand (install, then read-only)
 std::atomic<std::uint32_t> g_roomLines{0};
 
 // The weapon arm's attach joint: the joint InitJointMods stores at idHands+0x28E6 is the one named
@@ -285,6 +287,8 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     }
     ArmSet ready = wanted;
     ready.weapon = wanted.weapon && rightAttachChecks(image, init);
+    // The left arm only for the free off hand, or for the weapon in the left hand with a weapon arm to pair.
+    ready.offHand = wanted.offHand && (ready.weapon || settings().offhand == input::OffhandMode::Free);
     const std::int32_t arms = (ready.offHand ? 1 : 0) + (ready.weapon ? 1 : 0);
     if (arms == 0) {
         return {};
@@ -292,10 +296,14 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     // The off hand's wrist's change only for the bind solve, which writes past its targets. The weapon arm's
     // glove (its wrist and fingers) always, and the weight with it: the glove is written past its targets in
     // either solve.
-    g_wrist = ready.offHand && settings().armSolve == input::ArmSolve::Bind;
+    // With the weapon in the left hand both arms hold a glove on the gun (vkcore/left_hand_arms.hpp): the
+    // left arm has the glove's modifiers too, and no wrist change.
+    g_leftGlove = ready.offHand && ready.weapon && input::leftHandArms(settings());
+    g_wrist = ready.offHand && settings().armSolve == input::ArmSolve::Bind && !g_leftGlove;
     g_gloveMods = ready.weapon;
-    g_room = arm::modsForArms(arms) + (g_wrist ? 1 : 0) +
-             (g_gloveMods ? 1 + static_cast<std::int32_t>(arm::kFingerModCount) : 0);
+    const std::int32_t glove = 1 + static_cast<std::int32_t>(arm::kFingerModCount);
+    g_room =
+        arm::modsForArms(arms) + (g_wrist ? 1 : 0) + (g_gloveMods ? glove : 0) + (g_leftGlove ? glove : 0);
     g_weightChecked =
         (settings().armSolve == input::ArmSolve::Bind || g_gloveMods) && weightChecks(image, init);
     g_setNum = reinterpret_cast<SetNumFn>(const_cast<std::byte*>(setNum));
@@ -311,7 +319,9 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
             ready.offHand && ready.weapon ? "the off hand and the weapon arm"
             : ready.weapon                ? "the weapon arm"
                                           : "the off hand",
-            g_wrist ? ", the off hand's wrist too" : "");
+            g_wrist       ? ", the off hand's wrist too"
+            : g_leftGlove ? ", both gloves (the weapon in the left hand)"
+                          : "");
     if (g_gloveMods) {
         EVR_LOG(
             "weapon arm: room for the glove's modifiers too (its wrist and %zu finger joints), to put it on "
@@ -322,11 +332,12 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
 }
 
 bool hasWrist(arm::ArmSide side) {
-    return side == arm::ArmSide::Left ? g_wrist : g_gloveMods;
+    return side == arm::ArmSide::Left ? g_wrist || g_leftGlove : g_gloveMods;
 }
 
 std::int32_t fingerCount(arm::ArmSide side) {
-    return side == arm::ArmSide::Right && g_gloveMods ? static_cast<std::int32_t>(arm::kFingerModCount) : 0;
+    const bool glove = side == arm::ArmSide::Right ? g_gloveMods : g_leftGlove;
+    return glove ? static_cast<std::int32_t>(arm::kFingerModCount) : 0;
 }
 
 std::int32_t armCount(arm::ArmSide side) {

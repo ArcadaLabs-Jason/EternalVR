@@ -753,3 +753,180 @@ arms, as it already did for the wrist's change. Hands checks with both changes: 
 
 The suspension stops the whole process, the XR worker and the simulator included; a hitch in the game's thread
 alone leaves the worker running, which the rule does not depend on (the views and the ticks are both the game's).
+
+## 15. The weapon in the left hand: the arms swap roles (2026-10-19, OpenXR-Simulator)
+
+**The two attach joints are one pose** [rig: the arm dumps of the hands rig's runs since `ap-base-model`, every
+line where the game had the left arm]. `lefthandattach` and `righthandattach` read the same position to 0.0 mm and
+the same axes to 0.0000, both as animated and with the game's weapon-lag modifier, on the combat shotgun, the Heavy
+Cannon, the chaingun, the ballista, the BFG and the Crucible; the bind pose has them at one point too [static:
+marine.md6skl, (0.5715, 0, 1.2383)], and the left hand and fingers are the right ones reflected across the model's
+x-z plane to 0.5 mm. The gun's root is turned up to 2.2 degrees from the model's axes (its y axis the model's left
+to 0.991 or better on every gun dumped). So the left glove can be held in the left attach joint's frame as the
+right glove is on a grip (section 13), each arm in the other's grip reflected across the root's x-z plane
+(docs/VR_HANDS_HUD.md, "The weapon in the left hand").
+
+**The sweep** (`tmp-vr\rs\hands\lefty-sweep.ps1 -Lefty`, grip-rest-sweep.ps1 with `ETERNALVR_HANDEDNESS=left`:
+each hold mirrored onto the left controller, x, yaw and roll negated, the right controller at the left's rest
+mirrored; the slot taps bound in `[map.left_button_swap]`, which the left-handed binding reads; checked by
+`lefty_check.py`, the left glove's wrist against the left hand's wrist point in the grip's frame and the right
+glove's against the right hand's in the right controller's).
+
+| Run | Layer | Left glove from the left hand, median / largest, cm | Right glove (free off hand), cm | Sights largest, deg |
+|---|---|---|---|---|
+| `lf-free4` | the row reflected across the model's x-z plane through the root | 0.1 to 2.3 / 0.2 to 2.4 (combat shotgun 1.4 / 1.6, ballista 1.8 / 1.8, chaingun 2.3 / 2.4) | 0.0 / 0.0 | 0.20 |
+| `lf-free5` | the model moved until the left glove's wrist is on the wrist point | 0.1 to 0.3 / 0.2 to 0.4 on all eight guns | 0.0 / 0.0 | 0.20 |
+
+`lf-free4`'s misses were along the grip's left: the gun's root is turned from the model's axes (the combat
+shotgun's by its own sight line), so the left glove's grip, reflected across the root's plane, is not the right one
+reflected across a plane of the model's. Every gun's sight line reads as in the right hand (the dev main sweep of
+section 11 gave the same largest angles per gun to 0.01 degree; the plasma rifle, the rocket launcher and the BFG
+have no sight row).
+
+**Firing** (`lf-fire3`, `ETERNALVR_OFFHAND=game`, the trigger held 3 s on the combat shotgun, the chaingun and the
+ballista, the chaingun's mod held 2.5 s; `lf_ticks.py`, the weapon arm's glove trace per arm). The left glove's
+wrist as read back in the gun's frame against where it was meant to land, per tick, median / 95th percentile /
+largest, and the gun's root's move at the grip between the read the write was placed under and the frame drawn:
+
+| Gun | Phase | Ticks | Left glove, mm | Right glove (off hand), mm | Root's move at the grip, largest, mm |
+|---|---|---|---|---|---|
+| combat shotgun | firing | 270 | 0.0 / 0.6 / 1.0 | 0.0 / 0.0 / 0.0 | 41.0 |
+| chaingun | firing | 266 | 0.0 / 0.0 / 0.1 | 0.0 / 0.0 / 0.0 | 19.7 |
+| ballista | firing | 267 | 0.0 / 0.0 / 3.3 | 0.0 / 0.4 / 15.0 | 156.3 |
+
+The left glove rides the gun through the shots: the game moves the left attach joint with the gun's root in these
+animations too. The chaingun's mod does not: while it is held the game puts the left attach joint 13 to 25 cm from
+the gun's root (13 of the dump's lines; the trace above, measured in the left attach joint's frame, cannot see it).
+In the dump, the left glove's wrist in the gun's root frame against its median over the posed lines: `lf-fire2`,
+the grip held in the left attach joint's frame as read, 373.7 mm at most (133 mm median over those 13 lines);
+`lf-fire3`, the grip placed on the gun's root as read each tick, 13.2 mm at most (0.0 median; the largest in the
+first two lines of the mod, a frame behind as the joints part), and 0.6 mm on the combat shotgun, 0.0 on the
+ballista and the BFG. The right glove's 15.0 mm is the right glove's own ballista figure of section 13 (its share of the
+game's hand under it in the shots' first frames).
+
+**Hand-backs** (`lf-hb1` before, `lf-hb3` after; the default off hand; the combat shotgun held, two melees, a
+switch to the Heavy Cannon, a melee, a switch back; the model's place against the left hand in the dump, model
+frame). Before, the gun was placed by the left glove's share on its grip, so each hand-back slid it to the right
+glove's row and back: 2.0 cm on the shotgun's melee, 1.1 on the Heavy Cannon's (0.8 to 2.4 cm by gun, the
+difference between the two rows, not the hands' distance). The grip taken from the last clean read was also
+taken while the gun came back up after the melee: the shotgun's posed place then sat 8 cm from where it was
+before the melee until the next switch (its posed place spread 6.8 cm over the run). After (the placement kept
+while the game has the arms, a grip only from a root still for 3 reads, kept per held item): 0.0 cm on every
+handed-back line of a melee, and the shotgun's posed place spread 0.4 cm over the run.
+
+**The default off hand** (`lf-game3`, `ETERNALVR_OFFHAND=game`): the right glove holds each gun where the game's
+left glove does, reflected. The left glove from the left hand: 0.1 to 0.2 cm median, 0.2 to 0.4 at most on all
+eight guns; the sights check passes (0.20 degrees at most). The captures show the right glove on the combat
+shotgun's fore-end from the right, and on the chaingun's right side, where the game's left glove holds its left.
+
+**Right-handed play** (the same build): the grip sweep `rh-grip1` against section 13's `gl-grip` (dev main's
+glove): every gun's glove from the real hand within 0.1 cm of it (GRIP PASS, 0.0 to 0.2 cm median, 0.5 at most),
+the derived rows within 1 mm, the sights' largest angles within 0.01 degree (SIGHTS PASS); the merge-QA hands
+check (`lf-hands2`, and `lf-hands3` after the hand-back fixes, the Release build): 0 regressions against its baseline, the same known-bistable warns
+on roll-R+150 and the same standing R:reach finding as dev main's `sg-hands4`.
+
+**Not run**: a headset; the Unmaykr, the Crucible, the hammer, glory kills and melee with the weapon in the left
+hand.
+
+## 16. The rest of the held items in both hands: DLC2, the hammer, the swim's and the Berserk's fists, quick actions (2026-10-19, OpenXR-Simulator)
+
+The sweep of section 15 with a map and a plan per run (`hc-sweep.ps1`: `lefty-sweep.ps1` with `-Map`); a checker
+for hand-backs and jumps, `hb_check.py` (per held item, who poses each arm over time; every step of the model's
+placement against the weapon-hand grip, or of a glove, between two dump lines 0.25 s apart while the scripted input
+has held for three lines). `lefty_check.py` now takes a row's own turn, reflected, out of the model's axis as
+`grip_check.py` does (the Crucible's: without it the Crucible read 4.3 cm off the left hand). Before: the
+lefty-arms layer (`hc-*` runs); after: this branch (`hc-a*`). Evidence: rig (the simulator gives the grip and the
+aim one pose) and, where marked, static.
+
+**The Ancient Gods, Part Two loads on the rig.** `+map game/dlc2/e5m1_spear/e5m1_spear` loads the World Spear as a
+single-player map (the guard's `map load ... (single-player)`; captures of the village) and the debug schedule
+runs there. The Sentinel Hammer still did not come out: `give weapon/player/hammer` (with `give all`), then the
+Crucible's button (the left stick click right-handed, the right stick click left-handed) 13 and 28 s after the
+give and again 126 s after it (a tap, then a 1.5 s hold): no held item change, no hand-back, the arms posed on the combat shotgun throughout
+(`hc-d2r`, `hc-d2l`, `hc-d2w`). The hammer is left for a save that has it.
+
+**The swim's fists** (`e4m1_rig`, `teleport bubbles_underwater_1`: under water, `weapon/player/fists_swim` in the
+hands, the layer posing both arms). Right hand, the glove's wrist from the real hand's wrist point, median /
+largest: 26.4 / 31.0 cm on the `default` row (24.3 ahead, 8.4 right, 4.3 up; `hc-swr`); the swim idle moves the
+wrist about its median by 5.7 cm (median) and 10.7 at most over the holds, 22.7 cm side to side over the whole
+swim. The row `[-0.493, 0.264, 0.177]` is that median's (grip_check's derived row). On it (`hc-a-swr`): 4.7 / 6.3
+cm, the median 3.4 cm left of the first run's (the stroke's phase over the holds), the swing about the median 2.2 /
+9.7 cm; going under water the model's placement changes by 34.2 cm (the shotgun's row to the swim's; 8.3 on the
+`default` row) while the game has the arms for the swap. Left hand
+(`hc-lf2`, the default off hand): the left glove 11.0 / 12.4 cm from the left hand, 10.8 cm ahead: the grip is
+read at one moment of the stroke; the model moved 58.8 cm when it was read and 54.8 cm each time the held item
+changed between the shotgun and the swim's fists at the surface. With the grips read only from the item's own
+hold (`hc-c-lfs`) the steady rule still fires during the swim (the stroke has still moments: both arms posed for
+6.2 s on the first dive), the left glove 11.5 / 12.4 cm from the left hand; on a second dive the arms were posed
+from the first dive's grip (that dive's reads did not hold still: `not taken` logged). Under water going
+in (`hc-c-wet`, right hand, captures every 12 frames): the shotgun lowers out of view, about 0.8 s with no right
+hand in view, then the swim's hand rises in; the model's 34.2 cm change falls in those empty frames (no capture
+shows a jump; the change frame itself was not captured).
+
+**At the surface** [rig]. Floating at the water's surface the game puts the shotgun back in the hands but holds it
+in a pose of its own: the right glove's wrist 34 cm (median) and 68 at most from the real hand (`hc-swr`, right
+hand), the left glove 1.3 m behind the left hand (`hc-c-lfs`, the shotgun's grip read on land). Not changed here.
+
+**The Berserk's fists: not reached.** `chrispy pickup/powerup/berserk` twice with the weapon hand aimed straight
+down (both signs of pitch; the player cannot walk on the rig), `give weapon/player/fists_berserk` (`hc-qa1`), and
+section 12's `give powerup/berserk` and `give pickup/powerup/berserk`: none put `fists_berserk` in the hands. Plain
+`weapon/player/fists` never shows (section 12).
+
+**Quick actions, right hand** (`hc-rh1`, `hc-qa1`). A melee (`fists_doom5melee`, 0.25 to 0.5 s) and the chainsaw's
+button (0.75 s) hand both arms back for the whole action (weights 0 on every line). The model's placement takes
+the action item's `default` row at the change: 8.3 cm and 2.2 degrees from the combat shotgun's, 38.1 cm and 0.4
+from the chaingun's, 48.7 cm and 37.0 from the Crucible's, the same back. Captures every 12 frames through a
+Crucible melee: the game's punch (the left fist across the view), the right arm coming back up, the Crucible in
+the right fist within about 0.7 s, no frame with the Crucible away from the hand; the frame of the change was not
+captured and the dump has no joints while the game has the arm, so a step of the glove itself there is not
+measured.
+
+**Left hand, the Unmaykr, the Crucible and the chaingun** (`hc-lf1`, the default off hand). The left glove's wrist
+from the left hand's wrist point, median / largest: Unmaykr 0.2 / 0.3 cm, Crucible 0.2 / 0.5, chaingun 0.2 / 0.3,
+combat shotgun 0.1 / 0.2. Captures: the left fist on the Crucible's hilt, the blade up. Jumps while the game had the
+arms, the model's placement against the left grip: through the Unmaykr's first raise (5.9 s) 16.6, 19.9, 19.2 and
+18.0 cm; through the Crucible's (1.3 s) 66.9 cm and 59.3 degrees, then 13.9 cm; at a melee from the Crucible 87.4 cm
+(48.7 in the right hand), from the combat shotgun 53.8 cm (8.3), and at the chainsaw's button 9.4 cm. The cause: the
+game's grips were taken from any read that held still, also while the game played the raise or the punch, and the
+melee's fists kept a grip of their own (kept per held item), so the left glove's placement followed those poses.
+The fix (VR_HANDS_HUD.md, "Grips only from the item's own hold"): grips are read only while the weapon arm's rules
+have no reason of their own to give the arms to the game. After (`hc-a-lf1`): no step while the game had the
+arms other than at an item change, where it is the rows' difference as in the right hand (15.1 to 16.5 cm between
+the combat shotgun, the BFG and the Unmaykr); a melee from the combat shotgun 9.4 cm, from the chaingun 38 cm, from
+the Crucible 68.6 cm and 37 degrees (the Crucible's left-handed placement against the fists' `default` row; 48.7 in
+the right hand); the left glove on the left hand as before (Unmaykr 0.2 / 0.3, Crucible 0.2 / 0.5, chaingun 0.2 /
+0.4, combat shotgun 0.1 / 0.2 cm). The Crucible's first raise still moved the model by 68.6 cm and 59.3 degrees
+when its grip was read (0.25 s before the arms blend in): until then the model sits by the right glove's row, and
+the left glove's place is not known before its grip is read. Placed by the row's turn reflected from the first
+frame the move was 68.6 cm without the turn (`hc-b-lf1`), and by the whole row reflected 53 cm (computed from the
+rig's Crucible sample: the hilt is held 21 cm right of the model's middle), so neither was kept. Instead the grips
+are kept by the item's name across new hands (`arm::GripBook`). Across a level load (`hc-d-lvl`, the debug
+schedule's `map` loading e1m1 again; the default off hand): on the first level the Crucible's first raise moved the
+model 68.5 cm and 59.3 degrees; on the reloaded level it sat at its left-hand placement from its first frame, no
+step, and the combat shotgun and the BFG took their kept grips at once (logged `the grips kept from earlier hands`);
+the shotgun's placement moved 0.5 cm when its grip was read on the new hands, the correction a weapon mod's own
+idle would add on top (the decl does not name the mod; not measured per mod). Not explained: during the reloaded
+level's start, while the game had the arms for 28 s before the player had control, the model sat 25 cm higher
+against the grip and came back 0.25 s before the arms blended in (the first level's start had no placement to
+compare).
+
+**The chaingun's right glove with the default off hand** [static: the chaingun's idle, frame 0, and its mesh, build
+25216728]. The game's left finger joints sit 2.5 to 6.1 cm (median 4.1) from the chaingun's mesh, on a side handle
+at the gun's left (the mesh's parts at y 0.15 to 0.46 m in the root's frame; on the right nothing past 0.24 m);
+reflected across the root's x-z plane, 10 to 17 cm (median 13.1). On the other guns the reflected grip is as close
+to the mesh as the game's (medians, as held / reflected: combat shotgun 2.3 / 2.3, Heavy Cannon 2.1 / 2.1, super
+shotgun 2.5 / 2.5, plasma rifle 1.3 / 1.3, rocket launcher 2.5 / 2.5, ballista 2.5 / 2.5, BFG 2.9 / 2.9, Unmaykr
+4.7 / 4.7 cm; Crucible 0.9 / 1.1). The capture of section 15 (`lf-game3`) shows the right fist beside the
+chaingun's right side. The change (DECISIONS T-141): on the chaingun the right glove follows the right controller. After (`hc-a-lf1`): its
+wrist from the right hand's wrist point 0.0 / 0.0 cm over 18 posed lines, the left glove 0.2 / 0.4 cm, the log line
+once per equip.
+
+**Regression** (this branch). Right hand: the grip sweep `hc-agrip` against section 15's `rh-grip1`, every gun's
+glove within 0.1 cm (GRIP PASS, 0.1 to 0.2 cm median, 0.5 at most), the derived rows within 1 mm; the sights'
+largest angles within 0.005 degree (SIGHTS PASS); the merge-QA hands check (`hc-ahands`, the Release build): 0
+regressions against its baseline, the same three known-bistable warns on roll-R+150 and the standing R:reach finding
+(FAIL 72/72, as `lf-hands3`). Left hand, the free off hand (`hc-alfree`): the left glove 0.1 to 0.3 / 0.2 to 0.4 cm on
+all eight guns, the right glove 0.0 / 0.0 (LEFTY PASS), as `lf-free5`.
+
+**Not run**: a headset; glory kills in either hand (no staggered demon on the rig); the hammer; the Berserk's
+fists.
