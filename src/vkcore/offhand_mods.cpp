@@ -2,6 +2,7 @@
 
 #include "vkcore/offhand_mods.hpp"
 
+#include "features/arm/grip_hand.hpp"
 #include "features/arm/mod_mix.hpp"
 #include "features/arm/mod_room.hpp"
 #include "vkcore/controllers_impl.hpp"
@@ -100,8 +101,9 @@ bool g_weightUsedLogged = false;
 
 using SetNumFn = void(__fastcall*)(void* node, std::int32_t num);
 SetNumFn g_setNum = nullptr;
-std::int32_t g_room = 0; // the modifiers made room for: six per arm (install, then read-only)
-bool g_wrist = false;    // the off hand has the wrist's change too (install, then read-only)
+std::int32_t g_room = 0;  // the modifiers made room for: six per arm (install, then read-only)
+bool g_wrist = false;     // the off hand has the wrist's change too (install, then read-only)
+bool g_gloveMods = false; // the weapon arm has the glove's wrist and fingers too (install, then read-only)
 std::atomic<std::uint32_t> g_roomLines{0};
 
 // The weapon arm's attach joint: the joint InitJointMods stores at idHands+0x28E6 is the one named
@@ -287,11 +289,15 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     if (arms == 0) {
         return {};
     }
-    // The wrist's change and the weight only for the bind solve, which writes past its targets: the default
-    // leaves the lists and the log as they were.
+    // The off hand's wrist's change only for the bind solve, which writes past its targets. The weapon arm's
+    // glove (its wrist and fingers) always, and the weight with it: the glove is written past its targets in
+    // either solve.
     g_wrist = ready.offHand && settings().armSolve == input::ArmSolve::Bind;
-    g_room = arm::modsForArms(arms) + (g_wrist ? 1 : 0);
-    g_weightChecked = settings().armSolve == input::ArmSolve::Bind && weightChecks(image, init);
+    g_gloveMods = ready.weapon;
+    g_room = arm::modsForArms(arms) + (g_wrist ? 1 : 0) +
+             (g_gloveMods ? 1 + static_cast<std::int32_t>(arm::kFingerModCount) : 0);
+    g_weightChecked =
+        (settings().armSolve == input::ArmSolve::Bind || g_gloveMods) && weightChecks(image, init);
     g_setNum = reinterpret_cast<SetNumFn>(const_cast<std::byte*>(setNum));
     std::string error;
     std::byte* site = const_cast<std::byte*>(init + kHookSite);
@@ -306,15 +312,33 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
             : ready.weapon                ? "the weapon arm"
                                           : "the off hand",
             g_wrist ? ", the off hand's wrist too" : "");
+    if (g_gloveMods) {
+        EVR_LOG(
+            "weapon arm: room for the glove's modifiers too (its wrist and %zu finger joints), to put it on "
+            "a grip for a weapon whose idle holds it by a handle turned away from a controller's grip",
+            arm::kFingerModCount);
+    }
     return ready;
 }
 
+bool hasWrist(arm::ArmSide side) {
+    return side == arm::ArmSide::Left ? g_wrist : g_gloveMods;
+}
+
+std::int32_t fingerCount(arm::ArmSide side) {
+    return side == arm::ArmSide::Right && g_gloveMods ? static_cast<std::int32_t>(arm::kFingerModCount) : 0;
+}
+
+std::int32_t armCount(arm::ArmSide side) {
+    return arm::layerModCount(hasWrist(side));
+}
+
 std::int32_t layerCount(arm::ArmSide side) {
-    return arm::layerModCount(side == arm::ArmSide::Left && g_wrist);
+    return armCount(side) + fingerCount(side);
 }
 
 arm::ArmJoint layerJoint(arm::ArmSide side, std::int32_t k) {
-    return arm::layerModJoint(side == arm::ArmSide::Left && g_wrist, k);
+    return arm::layerModJoint(hasWrist(side), k);
 }
 
 const std::byte* modNode(const std::byte* hands) {
@@ -349,20 +373,67 @@ std::optional<float> modWeight(const std::byte* hands) {
         g_weightUsedLogged = true;
         EVR_LOG(
             "%s: arm: the hands' modifier weight %.3f (target %.3f): the arms' joints are written past their "
-            "targets by it (ETERNALVR_ARM_SOLVE=bind)",
+            "targets by it (the glove on the grip; with ETERNALVR_ARM_SOLVE=bind every joint)",
             kTag, static_cast<double>(weight), static_cast<double>(target));
     }
     return weight;
 }
 
-bool layerModsInPlace(const std::byte* node,
-                      std::int32_t base,
-                      const arm::ArmJointIndices& joints,
-                      arm::ArmSide side) {
+std::optional<std::int32_t> modGeneration(const std::byte* hands) {
+    constexpr std::size_t kNodeGeneration = 0x28;
+    const std::byte* node = modNode(hands);
+    std::int32_t generation = 0;
+    return node && safeRead(node + kNodeGeneration, generation) ? std::optional<std::int32_t>(generation)
+                                                                : std::nullopt;
+}
+
+std::optional<arm::ModWeights> modWeights(const std::byte* hands) {
+    const std::byte* owner = nullptr;
+    arm::ModWeights w;
+    if (!g_weightChecked || !hands || !safeRead(hands + kHandsJointMods, owner) || !owner ||
+        !safeRead(owner + kOwnerWeight, w.current) || !safeRead(owner + kOwnerTargetWeight, w.target) ||
+        !(w.current >= 0.0f && w.current <= 1.0f) || !(w.target >= 0.0f && w.target <= 1.0f)) {
+        return std::nullopt;
+    }
+    return w;
+}
+
+bool clearLayerMods(const std::byte* node, std::int32_t base, std::span<const std::int16_t> ids) {
+    ModList lists[2];
+    if (!layerModsInPlace(node, base, ids) || !readList(node, 0, lists[0]) || !readList(node, 1, lists[1])) {
+        return false;
+    }
+    bool ok = true;
+    for (const arm::EntryWrite& w : arm::noChangeWrites(base, ids)) {
+        ok = safeCopy(lists[w.list].data + w.offset, w.bytes.data(), w.bytes.size()) && ok;
+    }
+    return ok;
+}
+
+std::array<std::int32_t, 2>
+overridesInLists(const std::byte* node, std::int32_t base, std::span<const std::int16_t> ids) {
+    std::array<std::int32_t, 2> out{-1, -1};
+    for (std::size_t which = 0; which < 2; ++which) {
+        ModList list;
+        if (!node || base < 0 || !readList(node, which, list) ||
+            list.num < base + static_cast<std::int32_t>(ids.size())) {
+            continue;
+        }
+        out[which] = 0;
+        for (std::size_t k = 0; k < ids.size(); ++k) {
+            std::uint16_t flags = 0;
+            safeRead(list.data + (static_cast<std::size_t>(base) + k) * kModSize + kModJoint + 4, flags);
+            out[which] += (flags & 0x20) != 0 ? 1 : 0;
+        }
+    }
+    return out;
+}
+
+bool layerModsInPlace(const std::byte* node, std::int32_t base, std::span<const std::int16_t> ids) {
     if (!node || base < 0) {
         return false;
     }
-    const std::int32_t count = layerCount(side);
+    const auto count = static_cast<std::int32_t>(ids.size());
     for (std::size_t which = 0; which < 2; ++which) {
         ModList list;
         if (!readList(node, which, list) || list.num < base + count || list.num > list.size ||
@@ -370,7 +441,7 @@ bool layerModsInPlace(const std::byte* node,
             return false;
         }
         for (std::int32_t k = 0; k < count; ++k) {
-            if (jointAt(list, base + k) != joints[arm::index(layerJoint(side, k))]) {
+            if (jointAt(list, base + k) != ids[static_cast<std::size_t>(k)]) {
                 return false;
             }
         }
@@ -379,7 +450,7 @@ bool layerModsInPlace(const std::byte* node,
 }
 
 std::int32_t
-addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndices& joints, AddError& error) {
+addLayerMods(const std::byte* node, arm::ArmSide side, std::span<const std::int16_t> ids, AddError& error) {
     ModList lists[2];
     if (!readList(node, 0, lists[0]) || !readList(node, 1, lists[1]) ||
         !arm::modListsAgree(counts(lists[0]), counts(lists[1]))) {
@@ -387,7 +458,7 @@ addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndice
         return -1;
     }
     const std::int32_t base = lists[0].num;
-    const std::int32_t count = layerCount(side);
+    const auto count = static_cast<std::int32_t>(ids.size());
     if (!arm::roomFor(counts(lists[0]), counts(lists[1]), count)) {
         char message[160];
         std::snprintf(
@@ -400,31 +471,19 @@ addLayerMods(const std::byte* node, arm::ArmSide side, const arm::ArmJointIndice
     }
     for (const ModList& list : lists) {
         for (std::int32_t m = 0; m < base; ++m) {
-            for (std::int32_t k = 0; k < count; ++k) {
-                const arm::ArmJoint j = layerJoint(side, k);
-                if (jointAt(list, m) == joints[arm::index(j)]) {
-                    error = {Problem::Taken, std::string("the game already modifies ") +
-                                                 arm::armJointNames(side)[arm::index(j)]};
+            for (const std::int16_t joint : ids) {
+                if (jointAt(list, m) == joint) {
+                    error = {Problem::Taken, "the game already modifies joint " + std::to_string(joint) +
+                                                 ", one of the layer's"};
                     return -1;
                 }
             }
         }
     }
-    for (ModList& list : lists) {
-        for (std::int32_t k = 0; k < count; ++k) {
-            std::byte entry[kModSize] = {};
-            const float identity[12] = {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-                                        0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
-            const std::int16_t joint = joints[arm::index(layerJoint(side, k))];
-            const std::int16_t noParent = -1;
-            std::memcpy(entry, identity, sizeof(identity));
-            std::memcpy(entry + kModJoint, &joint, sizeof(joint));
-            std::memcpy(entry + kModJoint + 2, &noParent, sizeof(noParent));
-            std::memcpy(entry + kModJoint + 4, &kFlagsChange, sizeof(kFlagsChange));
-            if (!safeCopy(list.data + static_cast<std::size_t>(base + k) * kModSize, entry, sizeof(entry))) {
-                error = {Problem::List, "a joint modifier could not be written"};
-                return -1;
-            }
+    for (const arm::EntryWrite& w : arm::noChangeWrites(base, ids)) {
+        if (!safeCopy(lists[w.list].data + w.offset, w.bytes.data(), w.bytes.size())) {
+            error = {Problem::List, "a joint modifier could not be written"};
+            return -1;
         }
     }
     // The counts last, as SetNum does, so a reader never sees an entry before it is filled in.

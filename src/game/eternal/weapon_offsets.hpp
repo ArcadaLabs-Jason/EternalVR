@@ -28,8 +28,16 @@
 // [sights] (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): the direction of
 // the weapon's sight line in the arms model's frame as the game animates it at idle (pitch positive down,
 // yaw counter-clockwise, degrees). The layer turns the model so that line runs parallel to the aim ray. Same
-// key rules, but no "default": a weapon without a row is not turned. There is no file IO here.
+// key rules, but no "default": a weapon without a row is not turned.
+//
+// [right_grip]: the weapons whose idle animations hold them by a handle turned well away from how a hand
+// holds a controller (the chaingun's and the ballista's rear top handle), and the game grip the weapon arm
+// puts the glove in instead ("heavy_cannon": the Heavy Cannon's idle hand, which the chaingun's zoom and
+// reload use too), as `"name"` or, with the grip's wrist moved on this gun, `["name", forward, left, up]`.
+// Same key rules, no "default": a weapon without a row keeps the glove where the game animates it. There is
+// no file IO here.
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -57,6 +65,20 @@ struct WeaponSight {
     friend bool operator==(const WeaponSight&, const WeaponSight&) = default;
 };
 
+// The game grips the right glove can be put in (features/arm/grip_hand.hpp).
+enum class GameGrip : unsigned char {
+    HeavyCannon,
+};
+
+// A weapon's [right_grip] row: the game grip, and where its wrist sits on this gun (metres, in the weapon's
+// root joint's frame: forward, left, up) when the gun's grip is not where the grip's own gun has it.
+struct RightGrip {
+    GameGrip grip = GameGrip::HeavyCannon;
+    std::optional<std::array<float, 3>> wrist;
+
+    friend bool operator==(const RightGrip&, const RightGrip&) = default;
+};
+
 enum class OffsetPosture : unsigned char {
     Standing,
     Seated,
@@ -72,6 +94,7 @@ struct WeaponOffsetTable {
     std::map<std::string, WeaponOffset, std::less<>> standing;
     std::map<std::string, WeaponOffset, std::less<>> seated;
     std::map<std::string, WeaponSight, std::less<>> sights;
+    std::map<std::string, RightGrip, std::less<>> rightGrips;
     std::vector<std::string> issues; // one line per problem, with its line number
 
     [[nodiscard]] bool ok() const { return issues.empty(); }
@@ -79,11 +102,14 @@ struct WeaponOffsetTable {
     [[nodiscard]] WeaponOffset lookup(std::string_view declName, OffsetPosture posture) const;
     // The sight line of the held item `declName`, or nullopt for a weapon without a row (rules above).
     [[nodiscard]] std::optional<WeaponSight> lookupSight(std::string_view declName) const;
+    // The grip the right glove is put in for `declName`, or nullopt for a weapon without a row (rules above).
+    [[nodiscard]] std::optional<RightGrip> lookupRightGrip(std::string_view declName) const;
 };
 
 // Reads the table. Lines with problems are reported and skipped; the rest are kept. Offsets must be three
 // or six finite numbers, translations within 2 m and angles within 180 degrees; sights two angles within
-// 45 degrees.
+// 45 degrees; right grips a quoted grip name ("heavy_cannon"), alone or first in a list with three numbers
+// within 1 m.
 WeaponOffsetTable parseWeaponOffsets(std::string_view text);
 
 // The built-in table's text (data/weapons/viewmodel_offsets.toml).

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 
 namespace evr::vkcore::controllers::game_arm {
@@ -15,6 +16,28 @@ namespace evr::vkcore::controllers::game_arm {
 namespace {
 
 constexpr std::size_t kMaxSkeletonBytes = 0x10000;
+
+struct Expect {
+    std::size_t at;
+    const char* bytes;
+};
+// UpdateWeaponLagJointMods: the call of the animator getter.
+constexpr std::size_t kAnimatorCall = 0x94;
+constexpr const char* kAnimatorGetter = "48 8B 81 70 03 00 00 48 8B 80 E0 04 00 00 C3";
+constexpr Expect kGetJointsExpected[] = {
+    {0x24, "48 8B 49 08"},                      // mov rcx, [rcx+8]           the model
+    {0x36, "B8 78 03 00 00 41 B8 80 03 00 00"}, // 0x378 / 0x380              the pose by space
+    {0x57, "48 8B 81 80 00 00 00"},             // mov rax, [rcx+0x80]
+    {0x61, "48 8B 88 10 03 00 00"},             // mov rcx, [rax+0x310]       the skeleton
+    {0x68, "48 8B 41 60 44 0F B7 68 02"},       // [rcx+0x60], its u16 at +2  the joint count
+    {0xE1, "F3 41 0F 59 87 00 05 00 00"},       // mulss xmm0, [r15+0x500]    the scale
+};
+constexpr Expect kSetJointModExpected[] = {
+    {0x1A, "48 8B 89 88 28 00 00"},                                  // [hands+0x2888]
+    {0x2A, "48 8B 49 18"},                                           // +0x18: the node
+    {0x37, "8B 41 28 83 E0 01 48 83 C0 02 48 8D 04 40 48 8B 14 C1"}, // lists at +0x30 + (gen & 1) * 0x18
+    {0x5A, "48 C1 E1 06"},                                           // 0x40 per modifier
+};
 
 // The global name table's string-to-handle call, as idHands::InitJointMods (0x138B080) makes it for the
 // attach joints: mov rcx, [table]; lea rdx, [out]; mov r8, [name]; mov rax, [rcx]; call [rax+0x38].
@@ -66,8 +89,9 @@ bool callNameHandle(void* table, NameHandleFn fn, std::int16_t& out, const char*
 // Game thread only: the name lookup faulted once, so it is never called again this session.
 bool g_nameLookupFaulted = false;
 
-// The handles of the arm's joint names, or nullopt when the name table cannot be used.
-std::optional<std::array<std::int16_t, arm::kArmJointCount>> nameHandles(arm::ArmSide side) {
+// The handles of `names`, or nullopt when the name table cannot be used.
+template <std::size_t N>
+std::optional<std::array<std::int16_t, N>> nameHandles(const std::array<const char*, N>& names) {
     if (g_nameLookupFaulted) {
         return std::nullopt;
     }
@@ -78,12 +102,11 @@ std::optional<std::array<std::int16_t, arm::kArmJointCount>> nameHandles(arm::Ar
         !vtable || !safeRead(vtable + kNameHandleSlot, fn) || !fn || fn < g_textBegin || fn >= g_textEnd) {
         return std::nullopt;
     }
-    std::array<std::int16_t, arm::kArmJointCount> out{};
-    for (std::size_t j = 0; j < arm::kArmJointCount; ++j) {
+    std::array<std::int16_t, N> out{};
+    for (std::size_t j = 0; j < N; ++j) {
         out[j] = -1;
         if (!callNameHandle(const_cast<std::byte*>(table),
-                            reinterpret_cast<NameHandleFn>(const_cast<std::byte*>(fn)), out[j],
-                            arm::armJointNames(side)[j])) {
+                            reinterpret_cast<NameHandleFn>(const_cast<std::byte*>(fn)), out[j], names[j])) {
             g_nameLookupFaulted = true;
             return std::nullopt;
         }
@@ -92,6 +115,44 @@ std::optional<std::array<std::int16_t, arm::kArmJointCount>> nameHandles(arm::Ar
 }
 
 } // namespace
+
+bool isIdentity(const xr_math::IdViewAxis& a) {
+    return a.forward == Vec3{1.0f, 0.0f, 0.0f} && a.left == Vec3{0.0f, 1.0f, 0.0f} &&
+           a.up == Vec3{0.0f, 0.0f, 1.0f};
+}
+
+bool closeTo(Vec3 a, Vec3 b, float eps) {
+    return std::fabs(a.x - b.x) <= eps && std::fabs(a.y - b.y) <= eps && std::fabs(a.z - b.z) <= eps;
+}
+
+const std::byte* checkArmCalls(const GameImage& image,
+                               const std::byte* lagModsStart,
+                               const std::byte* getJointTransforms,
+                               const std::byte* setJointMod,
+                               const char* stays) {
+    constexpr const char* kTag = "offhand";
+    const std::byte* call = lagModsStart + kAnimatorCall;
+    const std::byte* getter = image.inText(call, 5) && static_cast<std::uint8_t>(call[0]) == 0xE8
+                                  ? call + 5 + readI32(call + 1)
+                                  : nullptr;
+    if (!getter || !matchesAt(image, getter, kAnimatorGetter)) {
+        EVR_LOG("%s: arm: the animator getter is not where expected; %s", kTag, stays);
+        return nullptr;
+    }
+    for (const Expect& e : kGetJointsExpected) {
+        if (!matchesAt(image, getJointTransforms + e.at, e.bytes)) {
+            EVR_LOG("%s: arm: GetJointTransforms differs at +0x%zX; %s", kTag, e.at, stays);
+            return nullptr;
+        }
+    }
+    for (const Expect& e : kSetJointModExpected) {
+        if (!matchesAt(image, setJointMod + e.at, e.bytes)) {
+            EVR_LOG("%s: arm: SetJointMod differs at +0x%zX; %s", kTag, e.at, stays);
+            return nullptr;
+        }
+    }
+    return getter;
+}
 
 const SideText& sideText(arm::ArmSide side) {
     return kSideText[slot(side)];
@@ -187,7 +248,7 @@ std::optional<arm::ArmJointIndices> findJoints(arm::ArmSide side,
         dumpSkeleton(side, path, attach);
         return std::nullopt;
     }
-    const auto handles = nameHandles(side);
+    const auto handles = nameHandles(arm::armJointNames(side));
     if (g_nameLookupFaulted) {
         problem = JointsProblem::Fault;
         error = "the game's name lookup faulted; off for this session";
@@ -214,6 +275,30 @@ std::optional<arm::ArmJointIndices> findJoints(arm::ArmSide side,
                     : "found by shape; names NOT checked, the game's name table was not usable",
             n[0], j[0], n[1], j[1], n[2], j[2], n[3], j[3], n[4], j[4], n[5], j[5], n[6], j[6], n[7], j[7]);
     return joints;
+}
+
+std::optional<arm::HandJointIndices>
+findHandJoints(const SkeletonPath& path, std::int16_t wrist, std::string& error) {
+    const std::byte* data = path.data;
+    const arm::SkeletonRead read = [data](std::size_t offset, void* out, std::size_t size) {
+        return offset + size <= kMaxSkeletonBytes && safeCopy(out, data + offset, size);
+    };
+    const auto skeleton = arm::readSkeleton(read, error);
+    const auto handles = skeleton ? nameHandles(arm::kRightHandJointNames) : std::nullopt;
+    if (!skeleton) {
+        return std::nullopt;
+    }
+    if (!handles) {
+        error = "the game's name table is not usable, so the glove's finger joints cannot be found";
+        return std::nullopt;
+    }
+    const auto hand = arm::findHandJoints(*skeleton, wrist, *handles, error);
+    if (hand) {
+        EVR_LOG("weapon arm: the glove's joints (names checked with the game's name handles): %s %d .. %s %d",
+                arm::kRightHandJointNames.front(), hand->front(), arm::kRightHandJointNames.back(),
+                hand->back());
+    }
+    return hand;
 }
 
 } // namespace evr::vkcore::controllers::game_arm

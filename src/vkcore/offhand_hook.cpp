@@ -369,10 +369,13 @@ void releaseOnTrip(const std::byte* hands) {
         return;
     }
     g_tripReleased = true;
-    const bool released = armHands && game_arm::releaseArm(arm::ArmSide::Left, hands);
-    EVR_LOG("%s: the multiplayer guard tripped: %s", kTag,
-            released ? "the layer's arm modifiers set back to no change; the left arm is the game's"
-                     : "no arm modifiers of the layer's in place; the left arm is the game's");
+    const bool released = armHands && game_arm::releaseArm(arm::ArmSide::Left, hands, true);
+    const auto left = game_arm::overridesLeft(arm::ArmSide::Left, hands);
+    EVR_LOG("%s: the multiplayer guard tripped: %s (overrides left per list %d/%d)", kTag,
+            released
+                ? "the layer's arm modifiers set back to no change in both lists; the left arm is the game's"
+                : "no arm modifiers of the layer's in place; the left arm is the game's",
+            left[0], left[1]);
 }
 
 void poseLeftHand(const HookRegisters& regs) {

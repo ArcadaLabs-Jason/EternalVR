@@ -246,11 +246,12 @@ them is worse for you than described here.
 - **A sweep of the right stick down can swap weapons.** The weapon wheel opens sooner (0.15 s) when the stick is
   pushed within 20 degrees of straight down, so a sweep that drifts out of that cone after 0.15 s counts as a
   hold and can swap weapons when you let go.
-- **The Chaingun and the Ballista have no right glove on them.** Every gun is now placed so the glove's grip
-  sits where your hand holds the controller. The game's own animation holds those two with the left hand and
-  keeps the right glove off the gun, so the gun's grip is in your hand but no glove holds it yet. The placement
-  was measured on the test rig, not yet in a headset; if a gun still sits off your hand, please tell me which
-  one and roughly how far.
+- **The Chaingun and the Ballista: the right glove now holds them.** Every gun is placed so the glove's grip
+  sits where your hand holds the controller. The game's own pose holds these two by a handle on top that's
+  turned way off from how you hold a controller, so the glove now takes the Heavy Cannon's grip instead (the
+  same grip the Chaingun uses when you zoom). The Ballista has no real grip, so the glove closes on the ridge
+  under its stock. All of this was measured on the test rig, not yet in a headset; if a glove or a gun sits
+  off your hand, please tell me which one and roughly how far.
 - **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
   and Ballista point their sights where the shots go. The other guns follow; until then their sights can
   point a little off your aim. The sights run parallel to the shot line, about 9 to 20 cm above it, so up

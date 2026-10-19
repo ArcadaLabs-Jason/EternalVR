@@ -2,6 +2,12 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
 using evr::arm::ArmJoint;
 using evr::arm::kMaxJointMods;
 using evr::arm::layerModCount;
@@ -92,4 +98,85 @@ TEST_CASE("an arm's modifiers: the six overrides, the wrist's change first when 
     for (int k = 0; k < layerModCount(false); ++k) {
         CHECK(layerModJoint(false, k) != ArmJoint::Hand);
     }
+}
+
+namespace {
+
+// Two modifier lists as the game keeps them (jointMod_t entries), each with the layer's modifiers from `base`
+// written as overrides: what both hold after the layer posed an arm for two ticks.
+struct Lists {
+    std::array<std::vector<std::byte>, 2> data;
+};
+
+Lists posedLists(std::int32_t base, const std::vector<std::int16_t>& ids) {
+    Lists l;
+    for (std::vector<std::byte>& list : l.data) {
+        list.assign((static_cast<std::size_t>(base) + ids.size()) * evr::arm::kJointModSize, std::byte{0x5A});
+        for (std::size_t k = 0; k < ids.size(); ++k) {
+            evr::arm::JointModEntry e = evr::arm::noChangeEntry(ids[k]);
+            const std::uint16_t override =
+                0x22B; // the layer's override flags, with a pose that moves the joint
+            std::memcpy(e.data() + evr::arm::kJointModJoint + 4, &override, sizeof(override));
+            e[0] = std::byte{0x7F};
+            std::memcpy(list.data() + (static_cast<std::size_t>(base) + k) * evr::arm::kJointModSize,
+                        e.data(), e.size());
+        }
+    }
+    return l;
+}
+
+bool noChangeAt(const std::vector<std::byte>& list, std::int32_t base, const std::vector<std::int16_t>& ids) {
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        const evr::arm::JointModEntry want = evr::arm::noChangeEntry(ids[k]);
+        if (std::memcmp(list.data() + (static_cast<std::size_t>(base) + k) * evr::arm::kJointModSize,
+                        want.data(), want.size()) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("a no-change modifier is the identity on its joint with the game's change flags") {
+    const evr::arm::JointModEntry e = evr::arm::noChangeEntry(27);
+    float pose[12] = {};
+    std::memcpy(pose, e.data(), sizeof(pose));
+    CHECK(pose[3] == 1.0f); // quaternion w
+    CHECK(pose[0] == 0.0f);
+    CHECK(pose[4] == 0.0f); // translation
+    CHECK(pose[8] == 1.0f); // scale
+    std::int16_t joint = 0;
+    std::int16_t parent = 0;
+    std::uint16_t flags = 0;
+    std::memcpy(&joint, e.data() + 0x30, 2);
+    std::memcpy(&parent, e.data() + 0x32, 2);
+    std::memcpy(&flags, e.data() + 0x34, 2);
+    CHECK(joint == 27);
+    CHECK(parent == -1);
+    CHECK(flags == 0x20B);
+}
+
+TEST_CASE("the give-back after a guard trip leaves no override of the layer's in either list") {
+    // The weapon arm's 22 modifiers from index 3 (behind the game's three attach-joint ones); after the trip
+    // no tick runs, so whatever the one give-back leaves in a list stays there.
+    std::vector<std::int16_t> ids(22);
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        ids[k] = static_cast<std::int16_t>(3 + k);
+    }
+    Lists l = posedLists(3, ids);
+    std::array<std::size_t, 2> writes{};
+    for (const evr::arm::EntryWrite& w : evr::arm::noChangeWrites(3, ids)) {
+        ++writes[w.list < 2 ? w.list : 0];
+        REQUIRE(w.list < 2);
+        REQUIRE(w.offset + w.bytes.size() <= l.data[w.list].size());
+        std::memcpy(l.data[w.list].data() + w.offset, w.bytes.data(), w.bytes.size());
+    }
+    CHECK(writes[0] == ids.size()); // each list gets every modifier, once
+    CHECK(writes[1] == ids.size());
+    CHECK(noChangeAt(l.data[0], 3, ids));
+    CHECK(noChangeAt(l.data[1], 3, ids));
+    // The game's three entries before them are untouched.
+    CHECK(l.data[0][0] == std::byte{0x5A});
+    CHECK(l.data[1][2 * evr::arm::kJointModSize] == std::byte{0x5A});
 }

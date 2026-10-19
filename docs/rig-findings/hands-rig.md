@@ -490,6 +490,7 @@ left glove is on the gun. On every other gun the glove's wrist sits at one offse
 launcher's root sits elsewhere on its gun, `(0.013, -0.041, -0.118)`); the chaingun's own zoom pose, where the
 right glove does hold it, puts it at `(-0.170, -0.041, -0.074)`. For these two the grip point is the root joint
 plus that common offset, and the row puts it on the target: the gun sits in the hand, with no right glove on it.
+(Section 11 corrects the reading: the right glove is not parked off the gun but holds its rear top handle.)
 
 Before (`hg-main1`, dev main 0.1.60, every weapon on the `default` row) and after (`hg-grip1`, the rows in
 `data/weapons/viewmodel_offsets.toml`), the wrist (or grip point) from its target in the grip's frame, cm, forward /
@@ -533,3 +534,71 @@ mm (9.7 on main): with the wrist 6.7 cm further forward, the weapon arm is at fu
 wrist 0.549 of 0.551 m), where it was at 0.75 m before, and lands as far off as the stretched poses always have
 (12.0 to 12.5 mm at 0.75 and 0.95 m). The weapon wrist from the grip (`R:reach`) goes from 146 to 88 mm, the
 wrist target's own distance from the grip.
+
+## 11. The glove on a grip: the chaingun and the ballista (2026-10-18, OpenXR-Simulator)
+
+**What the two guns' idles hold** [static: the idle, shooting, turret, zoom, reload and switch animations of both
+guns, their weapon meshes and `marine.md6skl`, decoded from `gameresources.resources`, build 25216728]. The right
+glove is not parked off the gun: the chaingun's and the ballista's idles hold the gun by its rear top handle
+(`chaingun_base_handle_rear`, `gauss_base_handle`, a bar along the gun at its back), the fist 1.5 and 1.2 cm from
+the handle's mesh, the wrist at (-0.79, -0.04, 0.28) and (-0.56, -0.03, 0.20) m in the weapon root's frame, and
+the hand turned 78 and 73 degrees from the grip of the other six guns (all within 7 degrees of the Heavy Cannon's;
+their fists close on the gun's pistol grip, the mesh 0.3 to 0.4 cm from the finger joints on the Heavy Cannon,
+the combat shotgun and the chaingun's zoom grip). The chaingun's zoom and reload hold it by its pistol grip in
+exactly the Heavy Cannon's idle grip (wrist and fingers to 3e-6). The ballista's mesh has no pistol grip: at the
+Heavy Cannon's offset the fist sits inside its stock (no vertex within 7 cm). The decoded local poses match the
+hands rig's read (the combat shotgun's wrist in the root's frame to 1e-4), so the gun hangs from the root joint
+and the wrist is its child.
+
+**The change** (VR_HANDS_HUD.md, "The glove on the grip"; DECISIONS T-138): the weapon arm writes the glove's
+wrist and fingers into the Heavy Cannon's grip on both guns (the ballista's wrist moved to (-0.302, -0.039,
+-0.181) m, the fist on the ridge under its stock), the gun untouched, and the two `[standing]` rows put that wrist
+on the target. Checker: `grip_check.py` as in section 10 with `--glove --read`: the glove's own wrist as read
+back from the game (what landed), never the grip-point stand-in.
+
+| Weapon | Before (`hg-grip3`, dev main): glove wrist miss, median / largest | After (`ga-grip3`) |
+|---|---|---|
+| chaingun | 72.3 / 72.5 cm | 0.1 / 0.3 cm |
+| ballista | 48.0 / 48.2 cm | 0.2 / 0.5 cm |
+| the other six | 0.1 to 0.2 / 0.2 to 0.3 cm | unchanged |
+
+Five holds and a view hold per gun, the glove read back where written (`read` equal to `final`); GRIP PASS.
+`sights_check.py` on `ga-grip3`: SIGHTS PASS, the largest angle 0.20 degrees on both guns; the sight lines from
+the aim ray (left / up): chaingun zoom axis 5.1 / 18.0 cm (5.3 / 19.1 before), ballista bore 0.9 / 18.5 cm (0.7
+/ 8.7 before: the hand is under the stock's ridge now, so the gun sits higher in it). With the Heavy Cannon's
+offset left on the ballista (`ga-grip2`) the wrist landed as well (0.2 / 0.4 cm), but the captures show the
+fingers inside the stock.
+
+Captures (both eyes, the neutral hold and views with the gun turned so the glove shows): `ga-grip3`, `ga-bal1`
+(the ballista's ridge grip from four sides), `ga-view4` (both guns held out low to the right and turned left:
+the forearm goes into the chaingun's grip from below, the fist inside the grip's housing; the fist closed
+under the ballista's stock) and `ga-view2` (`ETERNALVR_OFFHAND=game`: the game's left glove on
+the chaingun's front handle as in flat play, none on the ballista). The run with the glove left at the Heavy
+Cannon's offset on the ballista is `ga-grip2`.
+
+Hand-backs (`ga-switch1`, `ga-switch2`: the combat shotgun, the chaingun, the shotgun, the ballista and the shotgun
+in turn; in `ga-switch1` each of the two guns' weapon mod held 2.5 s, switched, held again; captures every 4
+frames from 0.3 s before each switch or press to 5.5 s after; the arm's weight from the dump, every 0.25 s). A
+switch hands the arm back within 1 s of the tap (the policy takes it at once and eases it out in a third of
+0.15 s) and the weapon's kit then hides the right arm, glove included, as on every gun: the game's switch
+animation runs without a right arm, and the glove is back on the new gun's grip 2.3 to 3.3 s after the tap,
+once the gun is up (the policy's 0.25 s hold, then 0.15 s eased in). Holding the weapon mod (the chaingun's and
+the ballista's, whichever the save has equipped) kept the weight at 1 on both: the glove stays on the grip
+while the mod is used. Switching the mod handed the arm back for about 2 s (the game hides the hands and
+animates the switch) and it came back eased the same way. A frame longer than 0.1 s also hands the arm back
+(the policy's 'untracked'): with captures every 4 frames that happened 21 to 33 times a run, and each time the
+glove eased off the grip toward the game's handle hand and back within about 0.45 s; with captures every 30
+frames it happened only while the level loaded. The ease of each hand-back is the policy's (unit test: the
+glove's landing moves at most 0.3 of the way in one 90 Hz tick of a 5-tick hand-back).
+
+**The read's lag and the glove in the guns' own animations** (`ga-lag1`, `ga-mod1`, a build with the trace's
+glove fields). In every read of the glove the rig could tell apart (the overrides more than 1 cm apart, while
+the glove blends in), it showed the override written the tick before: 36 of 36, none older. Per phase, the
+glove's wrist read back against where it was meant to land the tick before, in the gun's root frame (the
+trace's largest per second): chaingun held still 0.1 mm; its weapon mod held, 35.5 mm in the second it comes
+up, then 0.1 to 11.4; held again 0.1; firing 17.0, 9.2, 7.9 and 7.2. Ballista held still 0.1; its mod held
+10.2, 0.6 and 4.5, the second time 14.6, 15.0 and 7.6; firing 157.1 and 150.7 in the first two seconds, then
+12.4 and 9.2. The cause [inferred]: the glove's override is a model-space pose placed under the root joint as
+read a frame before, so where the gun moves fast within a frame (a mod coming up, the shots' recoil, the
+ballista's kick) the glove lands where the gun was. Not isolated: the chaingun's zoom pose (holding the
+weapon mod ran whichever mod the save has equipped) and a reload (none was triggered).

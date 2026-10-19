@@ -7,6 +7,7 @@
 // the file's name block and parent table in the log. Game thread (the off-hand hook) only.
 
 #include "features/arm/arm_skeleton.hpp"
+#include "features/arm/grip_hand.hpp"
 #include "vkcore/game_text.hpp"
 
 #include <cstddef>
@@ -37,6 +38,20 @@ struct SkeletonPath {
     const std::byte* data = nullptr;      // +0x60
 };
 
+// An axis that is the identity (GetJointTransforms hands it out for an axis it could not use).
+bool isIdentity(const xr_math::IdViewAxis& a);
+// Each component of `a` within `eps` of `b`'s.
+bool closeTo(Vec3 a, Vec3 b, float eps);
+
+// Install time: checks the code the arms rely on (game_arm::install): the animator getter
+// UpdateWeaponLagJointMods calls at +0x94 and the offsets GetJointTransforms and SetJointMod use. The getter,
+// or nullptr (logged, ending "; <stays>").
+const std::byte* checkArmCalls(const GameImage& image,
+                               const std::byte* lagModsStart,
+                               const std::byte* getJointTransforms,
+                               const std::byte* setJointMod,
+                               const char* stays);
+
 // Install time: the game's name table, found where InitJointMods asks it for "lefthandattach". Without it
 // the joints are still found by the skeleton's shape, but their names go unchecked (logged).
 void findNameTable(const GameImage& image, const char* tag);
@@ -57,6 +72,11 @@ std::optional<arm::ArmJointIndices> findJoints(arm::ArmSide side,
                                                std::int16_t attach,
                                                JointsProblem& problem,
                                                std::string& error);
+
+// The weapon arm's glove joints under the wrist `wrist` in the skeleton at `path.data` (arm::findHandJoints,
+// the names' handles from the game's name table), logged once found; nullopt with `error` set.
+std::optional<arm::HandJointIndices>
+findHandJoints(const SkeletonPath& path, std::int16_t wrist, std::string& error);
 
 // Once per arm, on its first failure to reach or read the skeleton: the pointers followed and the bytes
 // found, so a rig log shows the real layout.

@@ -60,9 +60,11 @@
 
 #include "features/arm/arm_joints.hpp"
 #include "features/arm/arm_solve.hpp"
+#include "features/arm/grip_hand.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/offhand_mods.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -113,8 +115,9 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
 // to land after the blend's mix (written past them, features/arm/mod_mix.hpp): the read-back is measured
 // against it instead of `poses`. An arm with the wrist's change (the off hand with the bind solve,
 // offhand_mods::layerCount) also gets `wrist` (internal units; nullptr for no change) as that change, and the
-// wrist's read-back counts in ArmRead::landed (not toward the landing guard). False when the modifiers are no
-// longer in place or a write failed.
+// wrist's read-back counts in ArmRead::landed (not toward the landing guard). The weapon arm's glove
+// (offhand_mods::fingerCount) gets `glove`'s overrides on its wrist and fingers, no change without one. False
+// when the modifiers are no longer in place or a write failed.
 bool writeArm(arm::ArmSide side,
               const std::byte* hands,
               const arm::ArmPoses& poses,
@@ -122,7 +125,16 @@ bool writeArm(arm::ArmSide side,
               Vec3 origin,
               std::uint32_t zeroScale = 0,
               const arm::ArmPoses* landing = nullptr,
-              const xr_math::JointMod* wrist = nullptr);
+              const xr_math::JointMod* wrist = nullptr,
+              const arm::GripOverrides* glove = nullptr);
+
+// The weapon arm's glove as GetJointTransforms reads it this tick, after readArm: each of its joints
+// (arm::kRightHandJointNames) in its parent's frame.
+struct HandRead {
+    std::array<xr_math::ModelPose, arm::kHandJointCount> local;
+};
+// False when the arm has no glove modifiers, readArm did not run for these hands, or the read failed.
+bool readHand(arm::ArmSide side, const std::byte* hands, HandRead& out);
 
 // Development only (ETERNALVR_TEST_ARM_MOD_WEIGHT): holds the hands' joint-modifier weight at `weight`
 // while the free off hand is posed. The modifier owner (idHands+0x2888) keeps its current weight at +0x3C and
@@ -140,7 +152,17 @@ void releaseModWeight(const std::byte* hands);
 arm::Cuff cuffOf(input::HandsCuff cuff);
 
 // Sets the layer's modifiers of that arm of `hands`, if it has them, back to no change. True when it did.
-bool releaseArm(arm::ArmSide side, const std::byte* hands);
+// Each call writes the list of the current generation (the game fills one a tick); for three calls after a
+// pose, then none. `bothLists` writes both lists at once instead, into memory with no call into the game,
+// even after a game call faulted (the give-back after a multiplayer guard trip, after which no tick runs).
+bool releaseArm(arm::ArmSide side, const std::byte* hands, bool bothLists = false);
+
+// Rig diagnostics: how many of the layer's modifiers of that arm are overrides (flag 0x20) in each of the two
+// lists, or -1 when they cannot be read.
+std::array<std::int32_t, 2> overridesLeft(arm::ArmSide side, const std::byte* hands);
+
+// Whether one of the game's calls faulted this session (no call into either arm is made again).
+bool gameCallFaulted();
 
 // The hands the layer's modifiers of that arm were added to last, or nullptr before any.
 const std::byte* armHands(arm::ArmSide side);

@@ -15,6 +15,8 @@ constexpr float kMaxTranslation = 2.0f;
 constexpr float kMaxAngle = 180.0f;
 // A sight line further off the model's forward than this is a mistake in the table.
 constexpr float kMaxSightAngle = 45.0f;
+// A grip's wrist further than this from the weapon's root is a mistake in the table.
+constexpr float kMaxGripWrist = 1.0f;
 
 std::string_view trim(std::string_view s) {
     while (!s.empty() && (s.front() == ' ' || s.front() == '\t' || s.front() == '\r')) {
@@ -95,6 +97,32 @@ bool parseSight(std::string_view text, WeaponSight& out) {
     return true;
 }
 
+// A right grip: "heavy_cannon", or ["heavy_cannon", forward, left, up] with the wrist within kMaxGripWrist.
+std::optional<RightGrip> parseGrip(std::string_view value) {
+    constexpr std::string_view kName = "\"heavy_cannon\"";
+    if (value == kName) {
+        return RightGrip{};
+    }
+    if (value.size() < 2 || value.front() != '[' || value.back() != ']') {
+        return std::nullopt;
+    }
+    std::string_view inner = trim(value.substr(1, value.size() - 2));
+    const std::size_t comma = inner.find(',');
+    if (comma == std::string_view::npos || trim(inner.substr(0, comma)) != kName) {
+        return std::nullopt;
+    }
+    std::array<float, 6> v{};
+    if (parseList(inner.substr(comma + 1), v) != 3) {
+        return std::nullopt;
+    }
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (std::fabs(v[i]) > kMaxGripWrist) {
+            return std::nullopt;
+        }
+    }
+    return RightGrip{GameGrip::HeavyCannon, std::array<float, 3>{v[0], v[1], v[2]}};
+}
+
 // The entry for `name` itself or for the longest key it starts with followed by '_'; never "default".
 template <typename Entry>
 const Entry* specific(const std::map<std::string, Entry, std::less<>>& entries, std::string_view name) {
@@ -144,6 +172,11 @@ std::optional<WeaponSight> WeaponOffsetTable::lookupSight(std::string_view declN
     return match ? std::optional<WeaponSight>(*match) : std::nullopt;
 }
 
+std::optional<RightGrip> WeaponOffsetTable::lookupRightGrip(std::string_view declName) const {
+    const RightGrip* match = specific(rightGrips, declName);
+    return match ? std::optional<RightGrip>(*match) : std::nullopt;
+}
+
 WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     WeaponOffsetTable table;
     if (text.starts_with("\xEF\xBB\xBF")) {
@@ -151,6 +184,7 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     }
     OffsetMap* section = &table.standing;
     bool inSights = false;
+    bool inGrips = false;
     int lineNumber = 0;
     while (!text.empty()) {
         const std::size_t newline = text.find('\n');
@@ -166,6 +200,7 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
         };
         if (line.front() == '[') {
             inSights = false;
+            inGrips = false;
             if (line == "[standing]") {
                 section = &table.standing;
             } else if (line == "[seated]") {
@@ -173,13 +208,16 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
             } else if (line == "[sights]") {
                 section = nullptr;
                 inSights = true;
+            } else if (line == "[right_grip]") {
+                section = nullptr;
+                inGrips = true;
             } else {
-                issue("unknown section (expected [standing], [seated] or [sights])");
+                issue("unknown section (expected [standing], [seated], [sights] or [right_grip])");
                 section = nullptr;
             }
             continue;
         }
-        if (!section && !inSights) {
+        if (!section && !inSights && !inGrips) {
             continue; // entries of an unknown section were reported with its header
         }
         const std::size_t equals = line.find('=');
@@ -209,6 +247,20 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
                 issue("duplicate name; the first one is kept");
             } else {
                 table.sights.emplace(std::string(key), sight);
+            }
+            continue;
+        }
+        if (inGrips) {
+            const std::optional<RightGrip> grip = parseGrip(value);
+            if (key == "default") {
+                issue("[right_grip] has no \"default\": a weapon without a row keeps the game's glove");
+            } else if (!grip) {
+                issue(
+                    "expected a grip: \"heavy_cannon\" or [\"heavy_cannon\", forward, left, up] within 1 m");
+            } else if (table.rightGrips.contains(key)) {
+                issue("duplicate name; the first one is kept");
+            } else {
+                table.rightGrips.emplace(std::string(key), *grip);
             }
             continue;
         }

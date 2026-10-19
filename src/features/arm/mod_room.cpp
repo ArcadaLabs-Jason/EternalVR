@@ -1,5 +1,7 @@
 #include "features/arm/mod_room.hpp"
 
+#include <cstring>
+
 namespace evr::arm {
 
 namespace {
@@ -36,6 +38,28 @@ bool restoreCount(ModListCounts list, std::int32_t num) {
 
 bool roomMade(ModListCounts first, ModListCounts second, std::int32_t num, std::int32_t extra) {
     return first.num == num && roomFor(first, second, extra);
+}
+
+JointModEntry noChangeEntry(std::int16_t joint) {
+    JointModEntry entry{};
+    const float identity[12] = {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
+    const std::int16_t noParent = -1;
+    std::memcpy(entry.data(), identity, sizeof(identity));
+    std::memcpy(entry.data() + kJointModJoint, &joint, sizeof(joint));
+    std::memcpy(entry.data() + kJointModJoint + 2, &noParent, sizeof(noParent));
+    std::memcpy(entry.data() + kJointModJoint + 4, &kJointModNoChangeFlags, sizeof(kJointModNoChangeFlags));
+    return entry;
+}
+
+std::vector<EntryWrite> noChangeWrites(std::int32_t base, std::span<const std::int16_t> ids) {
+    std::vector<EntryWrite> out;
+    for (std::size_t list = 0; list < 2; ++list) {
+        for (std::size_t k = 0; k < ids.size(); ++k) {
+            out.push_back(
+                {list, (static_cast<std::size_t>(base) + k) * kJointModSize, noChangeEntry(ids[k])});
+        }
+    }
+    return out;
 }
 
 } // namespace evr::arm

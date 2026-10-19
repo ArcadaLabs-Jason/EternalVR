@@ -256,6 +256,7 @@ target_sources(evr_layer PRIVATE
     arm_model.cpp
     game_arm.cpp
     game_arm_joints.cpp
+    game_arm_weight.cpp
     hands_surfaces.cpp
     offhand_hook.cpp
     offhand_mods.cpp

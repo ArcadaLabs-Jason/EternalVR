@@ -23,7 +23,10 @@
 #include "features/arm/arm_joints.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <span>
+#include <vector>
 
 namespace evr::arm {
 
@@ -89,5 +92,29 @@ bool restoreCount(ModListCounts list, std::int32_t num);
 
 // The room was made: both lists hold `num` again, with room for `extra` more.
 bool roomMade(ModListCounts first, ModListCounts second, std::int32_t num, std::int32_t extra);
+
+// A jointMod_t (vkcore/game_arm.hpp): 0x40 bytes, the int16 joint at +0x30, its constraint parent at +0x32,
+// the uint16 flags at +0x34.
+inline constexpr std::size_t kJointModSize = 0x40;
+inline constexpr std::size_t kJointModJoint = 0x30;
+// Model space, rotation, translation, reference pose: with an identity pose, no change.
+inline constexpr std::uint16_t kJointModNoChangeFlags = 0x20B;
+using JointModEntry = std::array<std::byte, kJointModSize>;
+
+// The entry of a modifier on `joint` that changes nothing (identity rotation, zero translation, unit scale).
+JointModEntry noChangeEntry(std::int16_t joint);
+
+// One entry to write: into list `list` (0 or 1) at byte `offset` from its data.
+struct EntryWrite {
+    std::size_t list = 0;
+    std::size_t offset = 0;
+    JointModEntry bytes{};
+};
+
+// The writes that set the layer's modifiers on `ids`, from index `base`, to no change in both of the hands'
+// lists at once. The game's SetJointMod writes only the list of the current generation (its low bit) and the
+// game fills one list a tick, so a single round of SetJointMod leaves the other list as it was; after a
+// multiplayer guard trip no later tick writes it, so the trip writes both.
+std::vector<EntryWrite> noChangeWrites(std::int32_t base, std::span<const std::int16_t> ids);
 
 } // namespace evr::arm

@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
 #include <ostream>
 #include <string>
 
@@ -182,4 +183,49 @@ TEST_CASE("the tuning override reads three or six numbers") {
     CHECK_FALSE(parseOffsetList("1,2", offset));
     CHECK_FALSE(parseOffsetList("a,b,c", offset));
     CHECK_FALSE(parseOffsetList("0,0,0,0,0,0,0", offset));
+}
+
+TEST_CASE("the built-in right grips cover the weapons whose idle parks the glove and no others") {
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    for (const char* weapon : {"weapon/player/chaingun", "weapon/player/gauss_rifle"}) {
+        INFO(weapon);
+        REQUIRE(table.lookupRightGrip(weapon).has_value());
+        CHECK(table.lookupRightGrip(weapon)->grip == evr::game::GameGrip::HeavyCannon);
+    }
+    for (const char* other :
+         {"weapon/player/shotgun", "weapon/player/heavy_cannon", "weapon/player/plasma_rifle",
+          "weapon/player/rocket_launcher", "weapon/player/double_barrel", "weapon/player/bfg",
+          "weapon/player/unmaykr", "weapon/player/fists", "weapon/player/chainsaw", ""}) {
+        INFO(other);
+        CHECK_FALSE(table.lookupRightGrip(other).has_value());
+    }
+}
+
+TEST_CASE("right grip rows follow the name rules; bad ones are reported and skipped") {
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([right_grip]
+"weapon/player/chaingun" = "heavy_cannon"
+"weapon/player/gauss_rifle" = ["heavy_cannon", -0.3, -0.04, -0.17]
+"default" = "heavy_cannon"
+"a" = "shotgun"
+"b" = heavy_cannon
+"c" = ["heavy_cannon", 0, 0]
+"d" = ["heavy_cannon", 0, 0, 2]
+"e" = ["shotgun", 0, 0, 0]
+"weapon/player/chaingun" = "heavy_cannon"
+[sights]
+"weapon/player/chaingun" = [0.32, -0.01]
+)");
+    INFO(describe(table));
+    CHECK(table.issues.size() == 7);
+    CHECK(table.issues.front().starts_with("line 4:"));
+    CHECK(table.rightGrips.size() == 2);
+    CHECK(table.lookupRightGrip("weapon/player/chaingun_turret") == evr::game::RightGrip{});
+    const evr::game::RightGrip moved{evr::game::GameGrip::HeavyCannon,
+                                     std::array<float, 3>{-0.3f, -0.04f, -0.17f}};
+    CHECK(table.lookupRightGrip("weapon/player/gauss_rifle") == moved);
+    CHECK_FALSE(table.lookupRightGrip("weapon/player/chaingunner").has_value());
+    // The section after it reads as before.
+    CHECK(table.lookupSight("weapon/player/chaingun") == WeaponSight{0.32f, -0.01f});
 }

@@ -31,9 +31,9 @@ constexpr Vec3 kWrist{evr::game::kRowsWrist.forward, evr::game::kRowsWrist.left,
 // Where the right glove holds each gun, in the arms model's frame as the game animates the weapon at idle:
 // metres along the model's forward, left and up from its origin. Measured on the hands rig
 // (docs/rig-findings/hands-rig.md, section 10), the median over five held controller poses (the idle sway
-// moves it by under 1 cm): the right hand joint (the glove's wrist), or for the chaingun and the ballista,
-// whose idle parks the right glove 72 and 48 cm off the gun, the weapon's root joint plus the glove's offset
-// from it on the guns it holds.
+// moves it by under 1 cm): the right hand joint (the glove's wrist); for the chaingun and the ballista, whose
+// idle parks the right glove 72 and 48 cm off the gun, where the weapon arm puts it on the gun's grip
+// (features/arm/grip_hand.hpp).
 struct Glove {
     const char* weapon;
     Vec3 wrist;
@@ -44,8 +44,8 @@ constexpr Glove kGloves[] = {
     {"weapon/player/plasma_rifle", {-0.055f, -0.236f, -0.362f}},
     {"weapon/player/rocket_launcher", {0.264f, -0.183f, -0.215f}},
     {"weapon/player/double_barrel", {0.115f, -0.171f, -0.224f}},
-    {"weapon/player/gauss_rifle", {0.376f, -0.205f, -0.287f}},
-    {"weapon/player/chaingun", {0.535f, -0.203f, -0.336f}},
+    {"weapon/player/gauss_rifle", {0.246f, -0.210f, -0.385f}},
+    {"weapon/player/chaingun", {0.535f, -0.201f, -0.324f}},
     {"weapon/player/bfg", {0.275f, -0.129f, -0.383f}},
 };
 
