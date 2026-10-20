@@ -209,14 +209,29 @@ namespace EternalVR.Launcher.Core.Tests
             var s = new LauncherSettings { Controllers = false };
             foreach (var setting in new[]
             {
-                Setting.Turning, Setting.TurnSpeed, Setting.Vignette, Setting.GloryKills, Setting.WalkInRoom, Setting.RecenterHold, Setting.WeaponHand, Setting.MoveToward,
+                Setting.Turning, Setting.TurnSpeed, Setting.WeaponHand, Setting.MoveToward,
                 Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
-                Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.Bhaptics, Setting.RevenantAimWith,
+                Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.RevenantAimWith,
                 Setting.MeleeAimWith, Setting.EquipmentAimWith,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
             Assert.Null(SettingRules.WhyNot(Setting.AimWith, s));
             Assert.Null(SettingRules.WhyNot(Setting.MotionControllers, s));
+        }
+
+        [Fact]
+        public void GamepadModeKeepsWhatTheLayerReadsFromTheGameAndThePad()
+        {
+            // Motion controllers off: the layer reads the game's own pad and view for these (docs/VR_CONTROLLERS.md "Gamepad
+            // mode"), so they stay available, in mono too.
+            foreach (var s in new[] { new LauncherSettings { Controllers = false }, new LauncherSettings { Controllers = false, Mode = VrMode.Mono } })
+            {
+                foreach (var setting in new[] { Setting.Vignette, Setting.GloryKills, Setting.RecenterHold, Setting.Bhaptics, Setting.WalkInRoom })
+                    Assert.Null(SettingRules.WhyNot(setting, s));
+            }
+            // Room-scale still does not apply while sitting, with the controllers or without.
+            Assert.Equal(SettingRules.NotSitting,
+                SettingRules.WhyNot(Setting.WalkInRoom, new LauncherSettings { Controllers = false, Posture = PostureMode.Seated }));
         }
 
         [Fact]

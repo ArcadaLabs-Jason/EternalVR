@@ -59,7 +59,9 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
     (`left.menu.tap`); a player's own map can still bind `left.menu.hold` to `recenter`. A hold released
     early is logged (`room: recenter binding released after 0.62 s; hold it 2.00 s to recenter`), and a gap
     in the mapper's calls (over 0.25 s: menus, a stall) counts as a release, so a press can never carry over
-    into the next one.
+    into the next one. In gamepad mode (motion controllers off) both pad sticks pressed are the hold, read
+    from the game's own pad reads and counted for the whole 2 s (`features/input/pad_watch.hpp`,
+    docs/VR_CONTROLLERS.md "Gamepad mode"); the game sees both clicks too.
   - The runtime's recenter (`XrEventDataReferenceSpaceChangePending` for `LOCAL`, e.g. holding the Meta
     button): the anchor first follows the runtime's move (`poseInPreviousSpace`, when given; VDXR gives
     none), then re-anchors like ours, except for the posture (below).
@@ -269,11 +271,14 @@ origin(N) - origin(N-1)  --body frame (N-1)--> room displacement
   and the move axes take body follow's move only in a command the game's own input does not move: the pad's
   move stick blocks follow as the controllers' stick does (**the stick wins**, `blocked frames: stick N`).
   The view yaw and the piloted demon come from the camera hook (`body_follow::noteView`), not from the
-  controllers. Still controllers-only: the forced-view gate (`controllers::forcedView`, from their aim
-  hooks), so in gamepad mode only a cutscene, the stick, the teleport, airborne and fast-motion blocks stop
-  follow while the game drives the body (glory and sync kills, the Meathook pull); see
-  `docs/release/KNOWN-ISSUES.md`. Before this, with the controllers off, the hook was never installed and
-  follow logged `blocked frames: off N` with `0 command(s) sent` (a player's report, 0.1.66).
+  controllers. The forced-view gate (`controllers::forcedView`) runs in gamepad mode too, from the
+  read-only SetViewAngles hook and the camera hook (docs/VR_CONTROLLERS.md "Gamepad mode"), so glory and
+  sync kills, pickup animations and the Meathook pull stop follow there as with the controllers (`blocked
+  frames: ... cutscene or forced view N`), and the head's offset eases onto the game's eye meanwhile; the
+  pad's weapon wheel does not (its inhibit bits alone are the wheel). Up to 0.1.68 that gate was the
+  controllers' only,
+  and before 0.1.68, with the controllers off, the hook was never installed and follow logged `blocked
+  frames: off N` with `0 command(s) sent` (a player's report, 0.1.66).
 - **Why the stick wins rather than summing (R10 section 3.2 item 6 suggested summing).** The feedback
   cannot tell the stick's share of a displacement from the follow share, so with both in one command the
   stick's walk would be taken into the room and the stick would feel slow while leaning. With the stick in

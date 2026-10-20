@@ -1,6 +1,7 @@
 #include "vkcore/seq_eye_fixes.hpp"
 
 #include "vkcore/bin_tile_hooks.hpp"
+#include "vkcore/decal_frustum_hooks.hpp"
 #include "vkcore/fx_sync_hooks.hpp"
 #include "vkcore/geomcache_prev_hooks.hpp"
 #include "vkcore/keep_prev_hooks.hpp"
@@ -22,6 +23,7 @@ void installSeqEyeFixes() {
     installGeomCachePrevHooks(); // and geometry caches (banners, hanging bodies) their previous frame
     installFxSyncHooks();        // CPU particles and effects alike in both eyes
     installSsrNoiseHooks();      // the screen-space reflections' noise index
+    installDecalFrustumHook();   // decals from the frustum around the eye pair
 }
 
 } // namespace evr::vkcore

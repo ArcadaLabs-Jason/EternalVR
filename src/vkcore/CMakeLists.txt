@@ -114,6 +114,7 @@ add_library(evr_layer SHARED
     motion_capture.cpp
     moved_flag_hooks.cpp
     mp_guard.cpp
+    decal_frustum_hooks.cpp
     object_prev_hooks.cpp
     vis_gate_hooks.cpp
     world_gui_hooks.cpp
@@ -248,6 +249,7 @@ target_sources(evr_layer PRIVATE
     controllers.cpp
     equipment_launch_hook.cpp
     game_view_poses.cpp
+    gamepad_mode.cpp
     haptics_xr.cpp
     input_profiles.cpp
     input_watch.cpp

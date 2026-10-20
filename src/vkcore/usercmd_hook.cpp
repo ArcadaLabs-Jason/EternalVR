@@ -19,6 +19,7 @@
 #include "vkcore/bug_capture.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/gamepad_mode.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/log.hpp"
@@ -366,6 +367,9 @@ game::GameActionSet heldActions() {
 }
 
 ArtificialMotion artificialMotion() {
+    if (!settings().enabled) {
+        return padMotion(); // gamepad mode: the game's own pad, read where the game reads it
+    }
     const State& s = state();
     const LONGLONG at = s.motionQpc.load(std::memory_order_relaxed);
     if (at == 0 || secondsSince(at) > kHeldActionsStaleSeconds) {

@@ -67,10 +67,14 @@ namespace EternalVR.Launcher.Core.Settings
             bool handAim = s.Controllers && s.Aim == AimMode.Hand;
             switch (setting)
             {
-                case Setting.Turning:
+                // With the controllers off (a gamepad, keyboard and mouse) the layer reads the game's own pad and view for
+                // these, never changing the game's input (docs/VR_CONTROLLERS.md "Gamepad mode").
                 case Setting.Vignette:
                 case Setting.GloryKills:
                 case Setting.RecenterHold:
+                case Setting.Bhaptics:
+                    return null;
+                case Setting.Turning:
                 case Setting.WeaponHand:
                 case Setting.Arms:
                 case Setting.MoveToward:
@@ -84,7 +88,6 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.PunchSpeed:
                 case Setting.HoldTime:
                 case Setting.Vibration:
-                case Setting.Bhaptics:
                 case Setting.ButtonLayout:
                     return s.Controllers ? null : NeedsControllers;
                 case Setting.TurnSpeed:
@@ -102,7 +105,8 @@ namespace EternalVR.Launcher.Core.Settings
                     if (s.ThumbRest == ThumbRestMode.Off) return NeedsThumbRest;
                     return s.ThumbRestPicks == ThumbRestPick.Directions ? null : NeedsDirectionPick;
                 case Setting.WalkInRoom:
-                    return !s.Controllers ? NeedsControllers : s.Posture == PostureMode.Seated ? NotSitting : null;
+                    // Body follow needs no controllers: with them off it writes only its own move (usercmd_hook_use.hpp).
+                    return s.Posture == PostureMode.Seated ? NotSitting : null;
                 case Setting.RevenantAimWith:
                     // Without the controllers, or with the mouse, there is nothing to choose between.
                     return !s.Controllers ? NeedsControllers : s.Aim == AimMode.View ? NeedsHeadOrHandAim : null;

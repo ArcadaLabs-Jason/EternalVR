@@ -191,11 +191,12 @@ bool scopeZoomed();
 
 // Any thread: the artificial motion of the last mapper run, for the comfort vignette: the turn rate (degrees
 // per second, smooth or snap, either direction) and the move stick's magnitude after its response (0 to 1).
-// Zero while a menu holds the controllers back, while they are off or when the mapper has not run for a
-// moment.
+// Zero while a menu holds the controllers back or when the mapper has not run for a moment. With the
+// controllers off (gamepad mode) it is the pad's motion instead.
 struct ArtificialMotion {
     float turnDegreesPerSecond = 0.0f;
     float move = 0.0f;
+    float turnStick = 0.0f; // gamepad mode: the pad's look stick sideways (gamepad_mode.hpp padMotion)
 };
 ArtificialMotion artificialMotion();
 

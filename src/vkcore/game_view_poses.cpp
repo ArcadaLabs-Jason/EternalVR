@@ -5,6 +5,8 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "vkcore/controllers.hpp"
+#include "vkcore/demon_view.hpp"
+#include "vkcore/gamepad_mode.hpp"
 
 #include <cstddef>
 #include <mutex>
@@ -43,6 +45,13 @@ std::optional<WeaponAim> beginGameView(
     // Head aim keeps the view on a climbable wall with the controllers attached or not (climb_hook.cpp).
     const bool wallClimb = climbFrame();
     if (!s.attached.load(std::memory_order_acquire)) {
+        if (gamepadView()) {
+            // Gamepad mode (gamepad_mode.hpp): the gate, bHaptics and the piloted demon read the game's view;
+            // there are no hands.
+            updateForcedView(player, cutscene, cameraAnimation, wallClimb);
+            noteBhapticsFrame(player);
+            notePilotedDemon(isPilotedDemon(player, s.player));
+        }
         return std::nullopt;
     }
     updateForcedView(player, cutscene, cameraAnimation, wallClimb);

@@ -2,9 +2,11 @@
 
 #include "vkcore/controllers.hpp"
 
+#include "features/input/gamepad_mode.hpp"
 #include "vkcore/arm_model.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/demon_view.hpp"
+#include "vkcore/gamepad_mode.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -111,15 +113,43 @@ void install() {
     }
 }
 
-// Gamepad mode (the controllers off): the game's own pad, keyboard and mouse input stays as it is; the
-// user-command hook goes in for body follow alone (usercmd_hook_use.hpp).
-void installBodyFollowOnly() {
-    bool angle = false;
-    const bool command = installUserCmdHooks(input::CommandHookUse::BodyFollow, false, angle);
-    EVR_LOG("room: body follow: %s (motion controllers off): only body follow's move goes into the game's "
+// Gamepad mode (the controllers off, features/input/gamepad_mode.hpp): the game's own pad, keyboard and mouse
+// input stays as it is. The user-command hook goes in for body follow alone (usercmd_hook_use.hpp);
+// everything else here only reads the game and its pad.
+void installGamepadMode() {
+    const input::ControllerSettings& cfg = settings();
+    State& s = state();
+    if (input::commandHookUse(false, cfg.path, roomScaleSettings().follow.enabled) ==
+        input::CommandHookUse::BodyFollow) {
+        bool angle = false;
+        const bool command = installUserCmdHooks(input::CommandHookUse::BodyFollow, false, angle);
+        EVR_LOG(
+            "room: body follow: %s (motion controllers off): only body follow's move goes into the game's "
             "command, the game's own pad, keyboard and mouse input stays as the game builds it",
             command ? "the user-command hook is in place for body follow alone"
                     : "the user-command hook could not be installed");
+    }
+    const input::GamepadModeHooks use = input::gamepadModeHooks(s.player.init(), cfg.bhaptics);
+    const bool pad = use.padWatch && installPadWatch();
+    if (use.viewGate) {
+        // Read only without the controllers: SetViewAngles is counted, the fire hook only notes shots.
+        bool fire = false;
+        s.setViewAnglesHook = installAimHooks(fire);
+        s.fireHook = fire;
+        setGamepadView();
+    }
+    if (use.demonAim) {
+        s.demonAimHook = installDemonAimHook();
+    }
+    if (use.bhaptics) {
+        startBhaptics();
+    }
+    EVR_LOG(
+        "%s: gamepad mode (motion controllers off): the game's pad, keyboard and mouse input stays as the "
+        "game builds it; pad watch %s (the recenter hold, the comfort vignette), forced view %s, shots %s, "
+        "demon aim %s%s",
+        kTag, onOff(pad), onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.demonAimHook),
+        use.viewGate ? "" : " (unknown game build: no forced-view gate)");
 }
 
 } // namespace
@@ -157,15 +187,12 @@ XrSpace weaponHandAimSpace() {
 
 void installGameHooks() {
     const bool controllers = settings().enabled;
-    if (!controllers && !roomScaleSettings().follow.enabled) {
-        return;
-    }
     // The caller checked the guard; asked again here because installing is what the guard gates.
     if (!mp_guard::allowsGameTouch()) {
         EVR_LOG("%s: the multiplayer guard is not armed; no controller hooks", kTag);
         return;
     }
-    std::call_once(g_installOnce, controllers ? &install : &installBodyFollowOnly);
+    std::call_once(g_installOnce, controllers ? &install : &installGamepadMode);
 }
 
 } // namespace evr::vkcore::controllers

@@ -160,6 +160,7 @@ evr_add_test(evr_input_tests
         features/input/dossier_press_tests.cpp
         features/input/forced_angles_tests.cpp
         features/input/forward_maps_tests.cpp
+        features/input/gamepad_mode_tests.cpp
         features/input/hands_jump_tests.cpp
         features/input/haptics_policy_tests.cpp
         features/input/input_mapper_stick_tests.cpp
@@ -175,6 +176,7 @@ evr_add_test(evr_input_tests
         features/input/locomotion_direction_tests.cpp
         features/input/menu_release_latch_tests.cpp
         features/input/offhand_policy_tests.cpp
+        features/input/pad_watch_tests.cpp
         features/input/view_pose_clock_tests.cpp
         features/input/player_controller_data_tests.cpp
         features/input/prompt_keys_tests.cpp
@@ -342,6 +344,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/moved_flag_tests.cpp
         stereo_seq/ngx_eye_tests.cpp
         stereo_seq/ngx_twin_retry_tests.cpp
+        stereo_seq/decal_frustum_tests.cpp
         stereo_seq/object_prev_tests.cpp
         stereo_seq/pass_frames_tests.cpp
         stereo_seq/world_gui_tests.cpp

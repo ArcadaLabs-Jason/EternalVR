@@ -20,6 +20,7 @@ evr_add_module(evr_input
         dossier_press.cpp
         family_touch_settings.cpp
         forced_angles.cpp
+        gamepad_mode.cpp
         hands_jump.cpp
         haptics_policy.cpp
         input_mapper.cpp
@@ -28,6 +29,7 @@ evr_add_module(evr_input
         interaction_profiles.cpp
         locomotion_direction.cpp
         offhand_policy.cpp
+        pad_watch.cpp
         player_controller_data.cpp
         punch_detector.cpp
         rest_touch_bindings.cpp

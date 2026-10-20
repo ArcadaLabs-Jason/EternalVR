@@ -307,6 +307,7 @@ void XrPresenter::Impl::frame() {
                 comfort::VignetteMotion motion;
                 motion.turnDegreesPerSecond = stick.turnDegreesPerSecond;
                 motion.moveMagnitude = stick.move;
+                motion.turnStick = stick.turnStick;
                 motion.gameMotion = controllers::forcedView() ||
                                     game::contains(controllers::heldActions(), game::GameAction::Dash);
                 const auto make = [this](XrSwapchain& swapchain, const std::vector<std::uint8_t>& pixels,

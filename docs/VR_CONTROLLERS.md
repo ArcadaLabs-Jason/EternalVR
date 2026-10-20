@@ -79,16 +79,37 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   `toggleMainMenu` is a command, not a button), sent through key injection, also while buttons are
   suppressed so the menu can be closed.
 - **Gamepad mode** (the controllers off, `ETERNALVR_CONTROLLERS=0`; the launcher's Motion controllers
-  unticked). Nothing of this file runs except one hook: the same PutUserCmd hook, installed for room-scale
-  body follow alone (`features/input/usercmd_hook_use.hpp`, `docs/VR_ROOMSCALE.md` "Gamepad mode"). It adds
-  body follow's move to `forwardmove` / `rightmove` in a command the pad, keyboard or mouse does not move,
-  and writes nothing else: no mapper, no buttons, no turn, no keys; head aim is the camera hook's, as before.
-  The same holds under the virtual gamepad (`ETERNALVR_XINPUT=1`), where the controllers' input goes through
-  the pad instead. Still controllers-only, so dead in gamepad mode: the comfort vignette's motion (the mapper's
-  move and turn, the forced-view gate, a held dash), the recenter hold and the capture chord (the mapper's
-  bindings), the forced-view gate itself (the aim hooks; body follow's forced-view block and the glory-kill
-  options' forced-view input), the piloted-demon check head aim asks (`controllers::pilotingDemon`, kept by
-  the viewmodel hook while the controllers are attached), and bHaptics (started with the controllers' hooks).
+  unticked; `features/input/gamepad_mode.hpp`, `vkcore/gamepad_mode.hpp`). No mapper, no buttons, no turn and
+  no keys: the game's own pad, keyboard and mouse input is never eaten or added to. What goes in
+  (`installGamepadMode`, logged `controllers: gamepad mode (motion controllers off): ... pad watch on (the
+  recenter hold, the comfort vignette), forced view on, shots on, demon aim on`):
+  - the PutUserCmd hook for room-scale body follow alone (`features/input/usercmd_hook_use.hpp`,
+    `docs/VR_ROOMSCALE.md` "Gamepad mode"): body follow's move in a command the pad, keyboard or mouse does
+    not move, nothing else. The same holds under the virtual gamepad (`ETERNALVR_XINPUT=1`), where the
+    controllers' input goes through the pad instead;
+  - **the pad watch** (`xinput_hook.cpp`, `features/input/pad_watch.hpp`): the exe's XInputGetState import
+    calls XInput and hands its answer back unchanged, noting each pad the game reads (no poll of its own,
+    every pad slot the game polls). Both sticks pressed on one pad are the **recenter hold**
+    (`noteRecenterBinding` with no mapper hold before it, so the whole `ETERNALVR_RECENTER_HOLD` counts; the
+    game sees both clicks too, and the right one melees); the move stick's deflection past XInput's deadzone
+    and the look stick's sideways push are the **comfort vignette**'s motion (`artificialMotion`; the turn
+    on the move stick's scale, since the turn rate is the game's look sensitivity). Logged `controllers:
+    gamepad mode: the game reads a pad (user N) ...` once and `... both sticks pressed (the recenter hold)` /
+    `let go`;
+  - **the forced-view gate** on a known build: the SetViewAngles hook (it only counts calls) and the fire
+    hook (it only notes shots without the controllers), and the camera hook runs the gate
+    (`updateForcedView` from `beginGameView` without the controllers attached). Body follow's forced-view
+    block, the vignette's game motion, the glory-kill options' sync kills (`syncKillActive`), head aim's
+    check and the weapon wheel straight ahead all follow it. The pad's wheel button is the game's own bind,
+    so the wheel is told by its inhibit bits alone, exactly 0x18 (`input::wheelSignal`): it yields the aim
+    only, as with the controllers' wheel;
+  - **head aim for a piloted demon**: `notePilotedDemon` from the camera hook and the demon aim hook, so
+    the Revenant aims where the head looks as the Slayer does under head aim (`demon_view.hpp`);
+  - **bHaptics** (`startBhaptics`) with the fire hook's shots, the camera hook's frame and its own hooks; a
+    Flame Belch shot is told by its fire info (`belchFireInfo`), since no held action names it.
+  Still controllers-only: the capture chord (on a pad every button and chord is the game's, and the chord
+  takes its buttons away from the game), a dash or the equipment launcher for the vignette and bHaptics (the
+  pad's binds are the game's), and keyboard or mouse motion for the vignette.
 - **Turning.** A mid-hook at the generator's angle conversion (RVA 0x17FD3C0): for local user 0's build
   (`[rdi+0x8D0]`; the generator builds every local user's command) the turn (smooth, or snap in whole
   steps) is added to the accumulated yaw at `[[rdi+0x8D8]+8]`, where mouse motion goes, so it
@@ -559,8 +580,8 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   so the HUD stays readable. Never with a menu up or on the flat screen (cutscenes, the multiplayer guard).
   `light` closes to 40 degrees with 80 % dark edges, `strong` to 25 degrees with black edges. Log:
   `vignette: <look>, 8 level(s) of 256x256 ready ...` once, then every 10 s `vignette: <look>, shown N of
-  M frame(s), max level L of 8; turn up to D deg/s, move up to X, game camera G frame(s), H frame(s) held
-  back (menu)`.
+  M frame(s), max level L of 8; turn up to D deg/s, move up to X, pad turn up to P, game camera G frame(s), H
+  frame(s) held back (menu)`. In gamepad mode the move and the pad turn are the pad's sticks (above).
 - **Multiplayer guard.** Every hook is installed only while the guard is armed (`installGameHooks` is
   called next to the camera hook's install), and every callback that writes asks
   `mp_guard::allowsGameTouch()` first and again just before it writes (`docs/rig-findings/mp-guard.md`).
@@ -733,7 +754,8 @@ apart from a click at the first press); let go within 0.15 s, it is an ordinary 
 frame. The chord's `recenter` action goes down 0.25 s after the second stick (like a binding's hold) and
 the layer counts the rest of `ETERNALVR_RECENTER_HOLD` (2 s by default; 0 turns the chord off) as before
 (`noteRecenterBinding`). In a menu the router sends no C / E for the second stick of the chord. A player's
-own map can still bind `left.menu.hold = "recenter"`; the built-in maps no longer do.
+own map can still bind `left.menu.hold = "recenter"`; the built-in maps no longer do. In gamepad mode both
+pad sticks pressed are the same hold, read from the game's own pad reads ("Gamepad mode" above).
 
 **X: tap or hold for the Dossier.** `ETERNALVR_DOSSIER=tap` swaps the two actions on the off hand's X
 (A in the full mirror): a tap opens the Dossier and a hold (0.25 s) switches equipment. The swap is made on
@@ -1176,6 +1198,7 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 14 | Arm gestures (`ETERNALVR_THROW=1`, `ETERNALVR_SWING=1`), in e1m2: the file `left.aim = 0, 0` with `left.position = -0.15, 0.05, 0.15` (wound up) for 1 s, then `left.position = -0.15, -0.05, -0.3` with `left.velocity = 0, -0.5, -3.5` for 0.3 s, then the left hand at rest; later `right.aim = 0, 0` with `right.position = 0.15, 0.3, -0.1` (raised) for 1 s, then `right.position = 0.15, -0.1, -0.35` with `right.velocity = 0, -3.5, -1.5` for 0.3 s; and a control: `left.position = -0.2, -0.3, -0.45` with `left.velocity = 0, 0, -3.5` (a punch from the chest) | Pending. Expect `throw gesture on, overhead swing on` at the end of the `controllers: on:` line; `controllers: gesture: throw` then `controllers: action equipment` and no `action melee` for the throw; `gesture: overhead swing` then `action crucible` and no `action melee` for the swing (the Crucible itself needs the weapon; the press is what is checked); `action melee` and no gesture line for the control |
 | 15 | Inputs held through a menu's close, in e1m2: `ETERNALVR_TEST_KEYS=<ms>:ESC` opens the pause menu; once the log has `menu: the game shows its cursor`, the file `left.secondary = 1` for 0.15 s, then `left.secondary = 0`. Then the Dossier: `left.primary = 1` for 0.5 s, then 0; once the Dossier is up, `right.stick = 0, -1` for 0.5 s, then `left.secondary = 1` for 0.15 s with the stick still down, the stick held 0.5 s more, then `right.stick = 0, 0` | Pending. Expect for the pause menu `menu: key down 0x1b`, `menu: the cursor is gone`, `menu: controllers' gameplay input back on`, `controllers: gameplay input back on: presses begun in the menu are dropped` and no `controllers: action switch_weapon_mod` after it (before the fix: `action switch_weapon_mod` in the same millisecond); for the Dossier the same line ending `; a control still held stays out of the game until let go`, and no `action weapon_wheel`, `action quick_switch` or `weapon wheel` line after it |
 | 16 | Melee and equipment aim (`tools/rig/qa` scenario `action-aim`: e1m3 `cp_03_shoot_gate`, hand aim, `ETERNALVR_MELEE_AIM=offhand`, `ETERNALVR_EQUIPMENT_AIM=head`, the weapon hand 90 degrees to the left) | Pass (2026-10-02, Debug, runs QA-aim-actions-2 and -3): each melee press held back 1 command (6.0 to 8.8 ms) until the view took the off hand; the first game frame after it has the game's view on the off hand (yaw -90.0, and pitch 15.0 with the off hand at the token) while the weapon hand is at +90; back to the weapon hand 0.5 s after; a frag launched about 0.15 s after the press from the weapon hand's side along yaw 135 (`dir (-0.707 0.707 0.035)`) was moved to the eye and turned to the head's yaw 45 with the same arc (`dir (0.707 0.707 0.035)`), and in screenshots it explodes in front of the head instead of out of view to the left; Flame Belch shots turned the same way. The Praetor token's Use is a trigger box (picked up with the view 90 degrees away), so a target picked by the view (a lunge, a glory kill) is for the headset |
+| 17 | Gamepad mode (`ETERNALVR_CONTROLLERS=0`, `+in_joystick 1`, a virtual Xbox 360 pad through ViGEmBus; the 0.1.68 layer against this one) | Pass: e1m2: both sticks held 2.6 s give `both sticks pressed (the recenter hold)`, `recenter binding held for 2.00 s` and a user recenter, 1 s gives `released after 1.00 s` (0.1.68: none); the move stick and the look stick give `vignette: light, shown 570 of 898 frame(s) ... move up to 1.00, pad turn up to 1.00` (0.1.68: shown 0 in every line); RT fires (`bhaptics: firing 'weapon/player/shotgun'`) and Y counts `belch 2` (0.1.68: no bHaptics); RB held gives `forced view starts (weapon wheel; inhibit 0x18)` and `ui: weapon wheel straight ahead (panel HUD)` (0.1.68: neither). With the move stick held forward and the pause menu, then the Dossier, opened by injected keys (ESC, TAB): `shown 0 of 900 frame(s) ... move up to 1.00 ... 900 frame(s) held back (menu)` in the pause menu and 3 of 899 (the frames after it closed) in the Dossier: the layer's menu test keeps the vignette off, as for the controllers. e1m3 `cp_03_shoot_gate`, the stick click at the Praetor Suit token: `controllers: sync 'interact/preator_suit_token/preator_suit_token_sync' (not a kill)`, body follow blocked `cutscene or forced view 182` (0.1.68: 0) and the token's wave for bHaptics. e1m3 `cp_12_possession`: `piloting a demon` and `demon aim: the demon follows the head` (0.1.68: no piloting line, and head aim kept writing the Slayer's angles while piloting: 645 rewrites by the game in 10 s). Controllers on, unchanged: the same game hooks line, 4 forced-view episodes each, body follow 4.32 m (0.1.68: 4.25 m) over 17 legs; the virtual gamepad's import line the same |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent

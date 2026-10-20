@@ -6,10 +6,14 @@
 // input in (features/input/virtual_gamepad.hpp), so a connected pad keeps working. It runs on the game's
 // pad sampler thread. Pad 0 reads as connected while the controllers are live; the packet number moves
 // on whenever the merged state changes, which is when the game reads a new state.
+//
+// Gamepad mode (the controllers off, gamepad_mode.hpp) puts a watch in the same slot instead: it calls the
+// real function, notes the pad the game read and returns XInput's answer as it is, never changing it.
 
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/virtual_gamepad.hpp"
+#include "vkcore/gamepad_mode.hpp"
 #include "vkcore/import_patch.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -17,8 +21,10 @@
 #include <Xinput.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstring>
 #include <mutex>
+#include <optional>
 
 namespace evr::vkcore::controllers {
 
@@ -101,24 +107,34 @@ DWORD WINAPI hookedGetState(DWORD user, XINPUT_STATE* out) {
     return ERROR_SUCCESS;
 }
 
+// Gamepad mode's watch: the game's call goes to XInput, and XInput's answer back to the game as it is.
+DWORD WINAPI watchedGetState(DWORD user, XINPUT_STATE* out) {
+    const GetStateFn original = g_original.load(std::memory_order_acquire);
+    const DWORD result = original ? original(user, out) : static_cast<DWORD>(ERROR_DEVICE_NOT_CONNECTED);
+    if (out) {
+        notePadRead(static_cast<unsigned>(user),
+                    result == ERROR_SUCCESS ? std::optional(fromXInput(out->Gamepad)) : std::nullopt);
+    }
+    return result;
+}
+
 bool isXInputModule(const char* name) {
     return _strnicmp(name, "xinput", 6) == 0;
 }
 
-} // namespace
-
-bool installXInputHook() {
-    auto* module = reinterpret_cast<std::byte*>(GetModuleHandleW(nullptr));
+// The exe's import slot of XInputGetState (by ordinal or by name) and the DLL it is imported from; nullptr
+// when the exe does not import it, with `noImports` set when it has no imports at all.
+IMAGE_THUNK_DATA64* getStateSlot(std::byte* module, const char*& dll, bool& noImports) {
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(module + dos->e_lfanew);
     const IMAGE_DATA_DIRECTORY& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-    if (!dir.VirtualAddress) {
-        EVR_LOG("%s: the exe has no imports; no virtual gamepad", kTag);
-        return false;
+    noImports = !dir.VirtualAddress;
+    if (noImports) {
+        return nullptr;
     }
     for (auto* desc = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(module + dir.VirtualAddress);
          desc->Name; ++desc) {
-        const char* dll = reinterpret_cast<const char*>(module + desc->Name);
+        dll = reinterpret_cast<const char*>(module + desc->Name);
         if (!isXInputModule(dll) || !desc->OriginalFirstThunk) {
             continue;
         }
@@ -133,22 +149,60 @@ bool installXInputHook() {
                     reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(module + names->u1.AddressOfData);
                 match = std::strcmp(reinterpret_cast<const char*>(byName->Name), "XInputGetState") == 0;
             }
-            if (!match) {
-                continue;
+            if (match) {
+                return slots;
             }
-            // The original is stored before the slot is switched, so a racing call never sees null.
-            g_original.store(reinterpret_cast<GetStateFn>(slots->u1.Function), std::memory_order_release);
-            if (!writeReadOnlySlot(&slots->u1.Function, reinterpret_cast<void*>(&hookedGetState))) {
-                EVR_LOG("%s: cannot unprotect the XInputGetState import; no virtual gamepad", kTag);
-                return false;
-            }
-            EVR_LOG("%s: virtual gamepad: %s XInputGetState import replaced (IAT RVA 0x%X)", kTag, dll,
-                    static_cast<unsigned>(reinterpret_cast<std::byte*>(&slots->u1.Function) - module));
-            return true;
         }
     }
-    EVR_LOG("%s: the exe does not import XInputGetState; no virtual gamepad", kTag);
-    return false;
+    return nullptr;
+}
+
+// `replacement` in the XInputGetState slot, the real function kept in g_original. `what` names it in the log.
+bool replaceGetState(GetStateFn replacement, const char* what) {
+    auto* module = reinterpret_cast<std::byte*>(GetModuleHandleW(nullptr));
+    const char* dll = "";
+    bool noImports = false;
+    IMAGE_THUNK_DATA64* slot = getStateSlot(module, dll, noImports);
+    if (noImports) {
+        EVR_LOG("%s: the exe has no imports; no %s", kTag, what);
+        return false;
+    }
+    if (!slot) {
+        EVR_LOG("%s: the exe does not import XInputGetState; no %s", kTag, what);
+        return false;
+    }
+    // Once only: a second replacement would keep the first one (or itself) as the call to pass on, and every
+    // XInputGetState would then call itself forever. installGameHooks installs once (call_once) and the
+    // virtual gamepad and the pad watch never go in together; this keeps it so if that ever changes. The
+    // check reads the exe's live import slot, so it has no unit test.
+    const GetStateFn current = reinterpret_cast<GetStateFn>(slot->u1.Function);
+    if (current == replacement) {
+        EVR_LOG("%s: %s: the XInputGetState import already goes to it", kTag, what);
+        return true;
+    }
+    if (g_original.load(std::memory_order_acquire) != nullptr) {
+        EVR_LOG("%s: the XInputGetState import is already replaced; no %s", kTag, what);
+        return false;
+    }
+    // The original is stored before the slot is switched, so a racing call never sees null.
+    g_original.store(current, std::memory_order_release);
+    if (!writeReadOnlySlot(&slot->u1.Function, reinterpret_cast<void*>(replacement))) {
+        EVR_LOG("%s: cannot unprotect the XInputGetState import; no %s", kTag, what);
+        return false;
+    }
+    EVR_LOG("%s: %s: %s XInputGetState import replaced (IAT RVA 0x%X)", kTag, what, dll,
+            static_cast<unsigned>(reinterpret_cast<std::byte*>(&slot->u1.Function) - module));
+    return true;
+}
+
+} // namespace
+
+bool installXInputHook() {
+    return replaceGetState(&hookedGetState, "virtual gamepad");
+}
+
+bool installPadWatch() {
+    return replaceGetState(&watchedGetState, "pad watch");
 }
 
 } // namespace evr::vkcore::controllers

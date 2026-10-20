@@ -21,6 +21,9 @@ struct VignetteMotion {
     float turnDegreesPerSecond = 0.0f; // the stick's turning (smooth or snap), either direction
     float moveMagnitude = 0.0f;        // the move stick after its response, 0 to 1
     bool gameMotion = false;           // the game moves the camera (a dash or a forced view)
+    // Gamepad mode: the pad's look stick sideways past its deadzone, 0 to 1 (pad_watch.hpp). The turn rate it
+    // makes is the game's (its look sensitivity), so the deflection counts on the move stick's scale.
+    float turnStick = 0.0f;
 };
 
 struct VignetteTiming {
@@ -34,8 +37,8 @@ struct VignetteTiming {
     float fallSeconds = 0.5f; // full to clear at most this long
 };
 
-// The amount the motion asks for: the largest of the turn's, the move's and the game's (1 while it moves
-// the camera). Non-finite motion counts as none.
+// The amount the motion asks for: the largest of the turn's, the move's, the pad's turn stick's and the
+// game's (1 while it moves the camera). Non-finite motion counts as none.
 float vignetteTarget(const VignetteMotion& motion, const VignetteTiming& timing);
 
 class VignettePolicy {

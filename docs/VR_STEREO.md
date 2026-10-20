@@ -132,6 +132,16 @@ binding; every other particle system and effect keeps the reuse (`src/vkcore/fx_
 read-only hook on the GPU particle step (0x1C28DD0) adds the per-eye counts to the `seq-fx:` line
 (`docs/rig-findings/stereo-fx-lag.md`, section 7).
 
+**Decals around the eye pair.** Each eye's frustum is asymmetric (Quest 3: 54 degrees out, 40 in), and Umbra's
+per-view query culls with it. With the eye's 40-degree inner side Umbra reported decals hidden that still cover
+surfaces in view: the wet patches of puddled floors went missing, darker in both eyes and differently in each.
+A detour on the decal gather (RVA 0x1C77C90, `src/vkcore/decal_frustum_hooks.cpp`, `seq-decals:` lines) adds
+every active decal whose bounds reach the frustum centred on the eye's axis with, per axis, the larger of the
+eye's wider side and the view's fov_x / fov_y (the head-tracked mono view; 54 x 54.27 degrees for a Quest 3),
+box against side planes, without occlusion. Geometry, lights and world areas keep the eye's own Umbra query,
+so the eyes draw what they drew before (`docs/rig-findings/stereo-umbra-decals.md`). Route S only; a mono view
+keeps the engine's list; on a game build where the pattern is not found nothing is hooked.
+
 ## Stack
 
 Eye R's whole chain runs nested inside eye L's frame-end job on the same job thread's stack (the engine

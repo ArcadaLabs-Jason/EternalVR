@@ -112,7 +112,8 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(1.0, LauncherSettings.Parse("schema_version = 2\nbhaptics_intensity = 7\n").BhapticsIntensity, 3);
             Assert.Empty(LauncherSettings.Parse("schema_version = 2\nbhaptics = 1\nbhaptics_intensity = 0.4\n").UnknownKeys);
             Assert.False(on.WithDefaults().Bhaptics);
-            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.Bhaptics, new LauncherSettings { Controllers = false }));
+            // The effects come from the game, so a gamepad player can turn them on too.
+            Assert.Null(SettingRules.WhyNot(Setting.Bhaptics, new LauncherSettings { Controllers = false }));
             Assert.Null(SettingRules.WhyNot(Setting.Bhaptics, on));
         }
 

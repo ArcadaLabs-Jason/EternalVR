@@ -70,6 +70,8 @@ bool VignetteLayer::prepare(ui_layer::VignetteMode mode,
     maxTurn_ =
         std::max(maxTurn_, std::isfinite(motion.turnDegreesPerSecond) ? motion.turnDegreesPerSecond : 0.0f);
     maxMove_ = std::max(maxMove_, std::isfinite(motion.moveMagnitude) ? motion.moveMagnitude : 0.0f);
+    maxTurnStick_ =
+        std::max(maxTurnStick_, std::isfinite(motion.turnStick) ? std::fabs(motion.turnStick) : 0.0f);
     gameFrames_ += motion.gameMotion ? 1 : 0;
     const double dt = lastSeconds_ < 0.0 ? 0.0 : nowSeconds - lastSeconds_;
     lastSeconds_ = nowSeconds;
@@ -106,9 +108,9 @@ void VignetteLayer::logStats(ui_layer::VignetteMode mode) {
     }
     EVR_LOG(
         "vignette: %s, shown %llu of %llu frame(s), max level %d of %d; turn up to %.0f deg/s, move up to "
-        "%.2f, game camera %llu frame(s), %llu frame(s) held back (menu)%s",
+        "%.2f, pad turn up to %.2f, game camera %llu frame(s), %llu frame(s) held back (menu)%s",
         modeName(mode), static_cast<unsigned long long>(shown_), static_cast<unsigned long long>(frames_),
-        maxLevel_, kLevels, maxTurn_, maxMove_, static_cast<unsigned long long>(gameFrames_),
+        maxLevel_, kLevels, maxTurn_, maxMove_, maxTurnStick_, static_cast<unsigned long long>(gameFrames_),
         static_cast<unsigned long long>(heldBack_), failed_ ? "; images failed" : "");
     frames_ = 0;
     shown_ = 0;
@@ -117,6 +119,7 @@ void VignetteLayer::logStats(ui_layer::VignetteMode mode) {
     maxLevel_ = 0;
     maxTurn_ = 0.0f;
     maxMove_ = 0.0f;
+    maxTurnStick_ = 0.0f;
 }
 
 void VignetteLayer::destroy(const XrFunctions& xr) {

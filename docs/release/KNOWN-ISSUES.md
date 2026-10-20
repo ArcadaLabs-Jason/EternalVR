@@ -33,12 +33,10 @@ them is worse for you than described here.
   down is noticed after a second or so (the view blinks while your height is reset); if it is not (a very
   tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds. If walking stops
   following you while you stand (a headset that reports the floor in the wrong place), set Play position
-  to Standing in the launcher. With motion controllers off (a gamepad, or keyboard and mouse) it works too
-  now; before, the Slayer stood still there while you walked. With controllers off it can't yet tell when
-  the game takes over your body for a glory kill or a pickup animation, so it may keep pulsing then: tell me
-  if a glory kill feels off that way. If you play lying down, set Play position to Sitting: the mod ignores
-  a head that low. On a chair with wheels, set Play position to Sitting too: rolling more than a metre
-  counts as walking and switches to standing.
+  to Standing in the launcher. With motion controllers off (a gamepad, or keyboard and mouse) it works too,
+  and it now also waits out glory kills and pickup animations there. If you play lying down, set Play
+  position to Sitting: the mod ignores a head that low. On a chair with wheels, set Play position to Sitting
+  too: rolling more than a metre counts as walking and switches to standing.
 - **Only tested on NVIDIA here:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have
   not been tried here; what players with AMD cards have reported is under "Image and performance".
 - **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands, Pico 4 and Steam
@@ -172,6 +170,12 @@ them is worse for you than described here.
   Fortress of Doom are one place). A fix is on by default on the Steam and Game Pass (1.0.56.0) versions of
   the game; on any other version the game keeps its own light culling and the log says why (lines starting
   with `light-cull:`). If a spot looks wrongly lit since this fix, please tell me where.
+- **Wet floors and puddles were darker, and different in each eye** (the start of the second mission of The
+  Ancient Gods part two, for one). The game left out wet patches (decals) just past each eye's inner edge. The
+  eyes now keep every decal in the view around both of them, on the Steam and Game Pass (1.0.56.0) versions of
+  the game; on any other version they keep the game's own decal culling and the log says why (lines starting
+  with `seq-decals:`). On my test PC's captures the puddles match the flat game's brightness within about 5%,
+  the right eye's still a little darker. Not tried in a headset yet, nor on Game Pass.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
@@ -318,7 +322,7 @@ them is worse for you than described here.
   Which side of the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms
   them.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; while it is open it is
-  shown straight ahead. With motion controllers off (gamepad) it stays where the game draws it, to the right.
+  shown straight ahead, with motion controllers or a gamepad.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
   new and has not been tried in a headset yet. How far you need to turn your hand may change.
 - **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new
@@ -360,6 +364,13 @@ them is worse for you than described here.
   your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
   pilot it, and at some angles you can see inside its shoulders.
 - **Index controllers** have bindings but have never been tried.
+- **Playing with a gamepad** (Motion controllers unticked on the Advanced tab): the recenter hold (both sticks
+  pressed for 2 seconds; the game sees both clicks too, so the right one also melees), the comfort vignette
+  (it follows your sticks), the Glory kills options, Room-scale and bHaptics now work as with motion
+  controllers, and the weapon wheel shows straight ahead. They have been tried on a headset simulator with a
+  virtual Xbox pad, not in a headset yet. Still missing with a gamepad: the in-headset screenshot (it needs
+  the motion controllers), the vignette for a dash or for keyboard and mouse movement, and the equipment
+  launcher on a bHaptics vest.
 
 ## Menus
 

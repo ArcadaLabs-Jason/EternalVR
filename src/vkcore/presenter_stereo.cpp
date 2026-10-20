@@ -8,6 +8,7 @@
 #include "features/tracking/fov_watch.hpp"
 
 #include "stereo_seq/adaptive_eyes.hpp"
+#include "vkcore/decal_frustum_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/pe_flares.hpp"
 #include "vkcore/presenter_eyes.hpp"
@@ -253,6 +254,7 @@ std::optional<xr_math::EngineMatrix> XrPresenter::Impl::writeEyePose(std::byte* 
     std::memcpy(renderView + stereo_view_fields::kExplicitProjection, projection->data(),
                 sizeof(*projection));
     renderView[stereo_view_fields::kUseExplicitProjection] = std::byte{1};
+    noteEyeViewProjection(renderView, projection->data()); // its decals come from around the pair
     return projection;
 }
 

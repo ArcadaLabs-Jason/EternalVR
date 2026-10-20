@@ -59,7 +59,8 @@ float vignetteTarget(const VignetteMotion& motion, const VignetteTiming& timing)
     const float turn =
         ramp(std::fabs(motion.turnDegreesPerSecond), t.turnStartDegreesPerSecond, t.turnFullDegreesPerSecond);
     const float move = ramp(std::fabs(motion.moveMagnitude), t.moveStart, t.moveFull);
-    return std::max(turn, move);
+    const float turnStick = ramp(std::fabs(motion.turnStick), t.moveStart, t.moveFull);
+    return std::max({turn, move, turnStick});
 }
 
 VignettePolicy::VignettePolicy(VignetteTiming timing) : timing_(sanitized(timing)) {}

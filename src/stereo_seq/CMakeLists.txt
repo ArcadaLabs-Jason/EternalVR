@@ -22,6 +22,7 @@ evr_add_module(evr_stereo_seq
         moved_flag.cpp
         ngx_eye.cpp
         ngx_twin_retry.cpp
+        decal_frustum.cpp
         object_prev.cpp
         pass_frames.cpp
         png_writer.cpp

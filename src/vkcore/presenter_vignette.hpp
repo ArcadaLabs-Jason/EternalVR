@@ -69,6 +69,7 @@ private:
     int maxLevel_ = 0;
     float maxTurn_ = 0.0f;
     float maxMove_ = 0.0f;
+    float maxTurnStick_ = 0.0f; // gamepad mode: the pad's look stick
 };
 
 } // namespace evr::vkcore

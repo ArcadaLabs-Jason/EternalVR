@@ -24,8 +24,10 @@
 
 #include "features/comfort/glory_kill.hpp"
 
+#include "features/input/gamepad_mode.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/gamepad_mode.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -100,6 +102,13 @@ bool isIdentity(const float (&m)[9]) {
     return true;
 }
 
+// The shot's fire info is the Flame Belch's: GetWeaponFireInfo, which resets overrideStartFxAxis for every
+// shot, set it (not identity).
+bool belchFireInfo(const std::byte* hands) {
+    float fxAxis[9];
+    return safeCopy(fxAxis, hands + kHandsStartFxAxis, sizeof(fxAxis)) && !isIdentity(fxAxis);
+}
+
 // A hand that loses tracking keeps aiming where it last pointed for this long, then the head takes over.
 constexpr double kHandHoldSeconds = 0.5;
 // The farthest a shot may start from the eye, in metres (arm's reach plus the controller).
@@ -118,6 +127,11 @@ std::atomic<bool> g_aimOnly{false};
 std::atomic<bool> g_swimAims{false};
 std::atomic<std::uint64_t> g_loggedSwims{0};
 const std::byte* g_imageBase = nullptr;
+
+// The camera hook runs the gate: the controllers attached, or gamepad mode's view reads (gamepad_mode.hpp).
+bool gateLive() {
+    return state().attached.load(std::memory_order_acquire) || gamepadView();
+}
 
 // Distinct foreign SetViewAngles callers seen, for the log (the live check of section 2's table).
 std::mutex g_callersMutex;
@@ -226,7 +240,8 @@ void onFire(const HookRegisters& regs) {
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return; // not the local player's hands
     }
-    noteBhapticsShot(hands);
+    // In gamepad mode no held action names the Flame Belch: its fire info does (belchFireInfo).
+    noteBhapticsShot(hands, gamepadView() && belchFireInfo(hands));
     if (!handAim) {
         return;
     }
@@ -249,8 +264,7 @@ void onFire(const HookRegisters& regs) {
     // (launchDirOffsetDegsFlameBelch): carried onto the head's ray it sent the flames 30 to 45 deg low. A
     // shot is the Belch's when GetWeaponFireInfo, which resets overrideStartFxAxis for every shot, set it
     // (not identity), so a gun fired while the Belch's button is held keeps the weapon hand.
-    float fxAxis[9];
-    const bool belchShot = safeCopy(fxAxis, hands + kHandsStartFxAxis, sizeof(fxAxis)) && !isIdentity(fxAxis);
+    const bool belchShot = belchFireInfo(hands);
     const xr_math::EyeRelativePose* alternate = actionShotRay(world, hands, belchShot);
     const xr_math::EyeRelativePose& ray = alternate ? *alternate : world.aim;
     const Vec3 direction = ray.axis.forward;
@@ -386,11 +400,13 @@ void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimati
     signals.cutscene = cutscene;
     signals.cameraAnimation = cameraAnimation;
     signals.wallClimb = wallClimb;
-    signals.weaponWheel = game::contains(heldActions(), game::GameAction::WeaponWheel);
     if (isPlayerSafe(player)) {
         g_viewPlayer.store(player, std::memory_order_relaxed);
         safeRead(player + kPlayerInhibitFlags, signals.inhibitFlags);
     }
+    // In gamepad mode the pad's wheel button is the game's: its bits tell the wheel (gamepad_mode.hpp).
+    signals.weaponWheel = input::wheelSignal(game::contains(heldActions(), game::GameAction::WeaponWheel),
+                                             gamepadView(), signals.inhibitFlags);
     const bool yield = s.gate.update(signals);
     const bool headAims = yield && input::aimsWithHead(s.gate.reason());
     // The weapon wheel: hand aim sends nothing, the viewmodel, the off hand, the shots and the head go on.
@@ -416,12 +432,11 @@ void updateForcedView(const std::byte* player, bool cutscene, bool cameraAnimati
 }
 
 bool wheelView() {
-    return state().attached.load(std::memory_order_acquire) && g_aimOnly.load();
+    return gateLive() && g_aimOnly.load();
 }
 
 bool forcedView() {
-    State& s = state();
-    return s.attached.load(std::memory_order_acquire) && s.yielding.load();
+    return gateLive() && state().yielding.load();
 }
 
 ForeignViewWrites takeForeignViewWrites() {
@@ -442,7 +457,7 @@ const std::byte* syncEntity(const std::byte* player) {
 }
 
 bool syncKillActive(const std::byte* player) {
-    if (!state().attached.load(std::memory_order_acquire) || !isPlayerSafe(player)) {
+    if (!gateLive() || !isPlayerSafe(player)) {
         return false;
     }
     const std::byte* sync = syncEntity(player);

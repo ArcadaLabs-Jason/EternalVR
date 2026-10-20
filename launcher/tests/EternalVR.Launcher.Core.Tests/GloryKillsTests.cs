@@ -66,11 +66,12 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void ItNeedsTheControllers()
+        public void ItAppliesWithTheControllersOrWithout()
         {
             Assert.Null(SettingRules.WhyNot(Setting.GloryKills, new LauncherSettings()));
             Assert.Null(SettingRules.WhyNot(Setting.GloryKills, new LauncherSettings { Mode = VrMode.Mono }));
-            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.GloryKills, new LauncherSettings { Controllers = false }));
+            // Gamepad mode: the layer tells the kills from the game's view, not the controllers.
+            Assert.Null(SettingRules.WhyNot(Setting.GloryKills, new LauncherSettings { Controllers = false }));
         }
 
         [Fact]

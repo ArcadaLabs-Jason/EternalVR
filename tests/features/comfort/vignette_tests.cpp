@@ -66,6 +66,30 @@ TEST_CASE("the target follows the turn rate and the move stick") {
     CHECK(vignetteTarget(moving(INFINITY), timing) == 0.0f);
 }
 
+TEST_CASE("gamepad mode: the pad's look stick turning brings the vignette in on the move stick's scale") {
+    const VignetteTiming timing;
+    VignetteMotion pad;
+    pad.turnStick = 0.05f;
+    CHECK(vignetteTarget(pad, timing) == 0.0f);
+    pad.turnStick = 0.4f;
+    CHECK(vignetteTarget(pad, timing) == doctest::Approx(0.5f));
+    pad.turnStick = 1.0f;
+    CHECK(vignetteTarget(pad, timing) == 1.0f);
+    pad.turnStick = -1.0f; // either direction
+    CHECK(vignetteTarget(pad, timing) == 1.0f);
+    pad.turnStick = std::nanf("");
+    CHECK(vignetteTarget(pad, timing) == 0.0f);
+    // The largest of the pad's turn and its move.
+    VignetteMotion both = moving(0.4f);
+    both.turnStick = 1.0f;
+    CHECK(vignetteTarget(both, timing) == 1.0f);
+    VignettePolicy policy;
+    pad.turnStick = 1.0f;
+    const double in = secondsTo(policy, pad, 1.0f, true);
+    CHECK(in > 0.15);
+    CHECK(in <= 0.22);
+}
+
 TEST_CASE("a smooth turn brings the vignette in within the rise time and it clears within the fall time") {
     VignettePolicy policy;
     const double in = secondsTo(policy, turning(230.0f), 1.0f, true);
