@@ -7,9 +7,11 @@
 
 #include "vkcore/body_follow.hpp"
 
+#include "vkcore/demon_view.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/player_aim.hpp"
 #include "vkcore/seh_filter.hpp"
+#include "xr_math/head_aim.hpp"
 
 #include <windows.h>
 
@@ -18,7 +20,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <mutex>
+#include <numbers>
 
 namespace evr::vkcore::body_follow {
 
@@ -29,6 +33,7 @@ constexpr std::size_t kPhysicsFlags = 0x1C8;
 constexpr std::uint8_t kFutureOriginBit = 0x20;
 constexpr std::size_t kFutureOrigin = 0x128;
 constexpr std::size_t kBodyOrigin = 0xB0;
+constexpr std::size_t kViewYaw = 0x3F10 + 4; // viewAngles' yaw (player_aim.cpp), degrees
 // The eye is this far above the origin and this close to it horizontally when the read is right (the
 // standing eye is 1.657 m up, the crouched 0.876 m).
 constexpr float kMinEyeAbove = 0.3f;
@@ -36,6 +41,9 @@ constexpr float kMaxEyeAbove = 2.5f;
 constexpr float kMaxEyeAside = 0.5f;
 // A request older than this (the camera hook stopped: menus, loading) is not sent.
 constexpr double kRequestStaleSeconds = 0.1;
+// A piloted demon's view seen this recently still counts (demon_view.cpp holds the controllers' the same).
+constexpr double kDemonHoldSeconds = 0.5;
+constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 
 double nowSeconds() {
     LARGE_INTEGER t;
@@ -76,6 +84,8 @@ std::atomic<std::uint64_t> g_commands{0};
 std::atomic<int> g_peakAxis{0};
 std::atomic<int> g_testCommand{0}; // the command test's value (0: none)
 std::atomic<bool> g_testSideways{false};
+std::atomic<float> g_viewYawRoom{std::numeric_limits<float>::quiet_NaN()};
+std::atomic<double> g_demonSeconds{-1.0};
 
 // The physics origin, or nullopt when it cannot be read.
 std::optional<Vec3> physicsOrigin(const std::byte* player) {
@@ -129,6 +139,37 @@ std::optional<Vec3> playerOrigin(const std::byte* player, Vec3 eye, float unitsP
                           : "the game's eye (the physics read failed)");
     }
     return plausible ? *origin : eye;
+}
+
+void noteView(const std::byte* player, Vec3 bodyForward) {
+    std::call_once(g_playerOnce, [] { g_playerKnown = g_player.init(); });
+    if (!g_playerKnown || !player) {
+        return;
+    }
+    if (controllers::isPilotedDemon(player, g_player)) {
+        g_demonSeconds.store(nowSeconds(), std::memory_order_relaxed);
+        return;
+    }
+    // The game's view yaw less the body's: the quantity the controllers' mapper turns its stick by
+    // (viewmodel_hook.cpp), read here because that one is kept only while the controllers are attached.
+    float viewYaw = 0.0f;
+    if (!g_player.isPlayer(player) ||
+        !copyGuarded(&viewYaw, player + kPlayerPhysics + kViewYaw, sizeof(viewYaw)) ||
+        !std::isfinite(viewYaw) || !finite(bodyForward)) {
+        return;
+    }
+    const float bodyYaw = std::atan2(bodyForward.y, bodyForward.x) / kRadiansPerDegree;
+    g_viewYawRoom.store(xr_math::normalize180(viewYaw - bodyYaw) * kRadiansPerDegree,
+                        std::memory_order_relaxed);
+}
+
+float viewYawRoom() {
+    return g_viewYawRoom.load(std::memory_order_relaxed);
+}
+
+bool pilotingDemon() {
+    const double last = g_demonSeconds.load(std::memory_order_relaxed);
+    return last >= 0.0 && nowSeconds() - last <= kDemonHoldSeconds;
 }
 
 void publish(roomscale::FollowMove move) {

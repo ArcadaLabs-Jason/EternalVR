@@ -7,7 +7,9 @@
 //   publishes it here in the room frame.
 // - The user-command hook (usercmd_hook.cpp) adds it to the next command, turned into the game's view
 //   frame, unless the stick or keys already move the player or jump or dash is pressed; it notes those,
-//   and when a follow move went out, for the camera hook's next frame.
+//   and when a follow move went out, for the camera hook's next frame. With the motion controllers off
+//   (gamepad mode) or on the virtual gamepad the hook is installed for this alone
+//   (features/input/usercmd_hook_use.hpp).
 //
 // Threads: the camera hook and the game's command build; everything here is atomic or under one lock.
 
@@ -33,6 +35,16 @@ std::optional<float> feetHeight(const std::byte* player);
 
 // Camera hook: the move body follow asks for this frame (room frame; zero for none).
 void publish(roomscale::FollowMove move);
+
+// Camera hook, once the view's body frame is known (`bodyForward`, id Tech world): the game view's yaw in
+// that frame, which the command's move axes follow, and whether the view is a demon the player pilots
+// (demon_view.hpp). Read from the game here, so body follow has both with the motion controllers off too.
+void noteView(const std::byte* player, Vec3 bodyForward);
+
+// User-command hook: the game view's yaw in room space (radians, locomotion_direction.hpp convention; NaN
+// before the camera hook read one), and whether the player piloted a demon within the last half second.
+float viewYawRoom();
+bool pilotingDemon();
 
 // User-command hook, once per command of local user 0. `moving`: the command already moves the player
 // (the stick or the keyboard); `jumpOrDash`: it jumps or dashes; `gameplay`: the game takes the command

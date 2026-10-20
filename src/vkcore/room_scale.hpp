@@ -31,6 +31,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -82,8 +83,9 @@ public:
     roomscale::ClearanceStep
     clearance(Vec3 desiredOffset, std::optional<float> hitFraction, float unitsPerMetre);
     // Camera hook, once the body frame is known: its id Tech forward and left rows. The next frame turns
-    // the origin's displacement into room axes with it.
-    void noteBody(Vec3 forward, Vec3 left);
+    // the origin's displacement into room axes with it; with body follow on, the user command turns its
+    // move into the view of `player` (the view's object) with it (body_follow::noteView).
+    void noteBody(const std::byte* player, Vec3 forward, Vec3 left);
 
     // XR worker: the runtime moved LOCAL (ReferenceSpaceChangePending); `newInPrevious` when it said how.
     // `reconnect`: a new session after the old one was lost (LOCAL may be elsewhere, the head may have moved

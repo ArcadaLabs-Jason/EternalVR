@@ -100,7 +100,8 @@ XrSpace offHandGripSpace();
 // the weapon HUD's quads (placed like the wrist's); XR_NULL_HANDLE otherwise.
 XrSpace weaponHandAimSpace();
 
-// XR worker, while the multiplayer guard is armed (head-tracked mode): installs the game hooks.
+// XR worker, while the multiplayer guard is armed (head-tracked mode): installs the game hooks. With the
+// controllers off (gamepad mode) only the user-command hook, for body follow alone (usercmd_hook_use.hpp).
 void installGameHooks();
 
 // Camera hook, before beginGameView: the room transform (recenter, room_scale.hpp). Every controller and

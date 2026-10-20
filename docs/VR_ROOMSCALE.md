@@ -235,7 +235,9 @@ origin(N) - origin(N-1)  --body frame (N-1)--> room displacement
   stop radius, the creep value (`_CREEP`, 60) while it would still be short of the head, and nothing (coast)
   otherwise. It starts beyond the deadzone (`_DEADZONE`, 0.04 m) and stops within 40 % of it (0.016 m), so a
   head standing still never makes the body creep. The move goes into the command in the game's view frame,
-  turned by the same view yaw the stick uses (`viewYawTracking`), so it works under head, hand and view aim.
+  turned by the game's view yaw less the body's (the yaw the controllers' stick uses; read by the camera hook
+  in `body_follow::noteView`, so it is there with the controllers off too), so it works under head, hand and
+  view aim.
 - **Feedback on the real body.** Each frame the player's origin (`idHavokPhysics_Player` futureOrigin or
   bodyOrigin, as its GetOrigin picks, collision-query.md section 2; checked to be 0.3 to 2.5 m below the
   eye and within 0.5 m of it, else the eye stands in, logged; the physics read held in every rig run after a level's first frames) is
@@ -248,7 +250,8 @@ origin(N) - origin(N-1)  --body frame (N-1)--> room displacement
   sent are the game's own: the view rides with the body, as without body follow. The anchor is shifted
   before the head is placed, so the view and the hands never lag the body by a frame.
 - **Blocks.** Follow asks nothing and takes nothing, this frame and for 0.3 s after, when: body follow is
-  off or the user-command hook is missing (it needs `ETERNALVR_CONTROLLERS=1`); the room is not anchored;
+  off or the user-command hook is missing (its signature not found, or the multiplayer guard not armed);
+  the room is not anchored;
   the posture is seated; the origin could not be read or game frames stopped for more than 0.25 s
   (menus, loading); the origin jumped more than 1 m in one frame (a teleport, a checkpoint, a respawn:
   never fed into the anchor); a VR menu or the pause menu drives the controllers, or the game suppresses
@@ -258,6 +261,19 @@ origin(N) - origin(N-1)  --body frame (N-1)--> room displacement
   1.5 m/s (airborne: a jump, a fall, a lift, a step-up on stairs); or horizontally faster than 6 m/s (a
   dash, the Meathook pull, a knockback). The multiplayer guard gates both hooks as before. The grounded
   flag itself is not read: the vertical-speed test and the jump button stand in for it.
+- **Gamepad mode** (motion controllers off: the launcher's Motion controllers unticked,
+  `ETERNALVR_CONTROLLERS=0`), and the controllers on the virtual gamepad (`ETERNALVR_XINPUT=1`). Body follow
+  works the same: the PutUserCmd hook is installed for body follow alone
+  (`features/input/usercmd_hook_use.hpp`), and then it writes nothing but body follow's move. The
+  buttons, the up axis and the angles stay exactly as the game built them from the pad, keyboard and mouse,
+  and the move axes take body follow's move only in a command the game's own input does not move: the pad's
+  move stick blocks follow as the controllers' stick does (**the stick wins**, `blocked frames: stick N`).
+  The view yaw and the piloted demon come from the camera hook (`body_follow::noteView`), not from the
+  controllers. Still controllers-only: the forced-view gate (`controllers::forcedView`, from their aim
+  hooks), so in gamepad mode only a cutscene, the stick, the teleport, airborne and fast-motion blocks stop
+  follow while the game drives the body (glory and sync kills, the Meathook pull); see
+  `docs/release/KNOWN-ISSUES.md`. Before this, with the controllers off, the hook was never installed and
+  follow logged `blocked frames: off N` with `0 command(s) sent` (a player's report, 0.1.66).
 - **Why the stick wins rather than summing (R10 section 3.2 item 6 suggested summing).** The feedback
   cannot tell the stick's share of a displacement from the follow share, so with both in one command the
   stick's walk would be taken into the room and the stick would feel slow while leaning. With the stick in
@@ -287,7 +303,9 @@ room: ... m`; `room: body follow: first frame blocked by <reason>` once per reas
 origin jumped ... m in one frame (teleport N); not followed`; and every 10 s `room: body follow: N frame(s)
 following (walk N, creep N, coast N), N command(s) sent, ... m taken into the room, largest gap ... m;
 blocked frames: stick N, ...`. Without the command hook: `room: body follow is on but the user-command hook
-is not in place ...`. While test steps run, every change of tier is traced: `room: body follow: walk at gap
+is not in place ...`. In gamepad mode, at start: `room: body follow: the user-command hook is in place for
+body follow alone (motion controllers off): ...`, after `controllers: user command (body follow only) hook at
+RVA ...`. While test steps run, every change of tier is traced: `room: body follow: walk at gap
 0.180 m, body 0.000 m/s toward the head`.
 
 **Live results (2026-09-27, rig, OpenXR-Simulator, stereo, e1m2, hand aim; logs `tmp-vr\rs\bf<N>-logs`).**

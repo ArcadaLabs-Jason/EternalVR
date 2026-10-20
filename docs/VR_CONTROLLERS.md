@@ -78,6 +78,17 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   pad keep working. Nothing is ORed while the game suppresses buttons. Pause is the Escape key (the game's
   `toggleMainMenu` is a command, not a button), sent through key injection, also while buttons are
   suppressed so the menu can be closed.
+- **Gamepad mode** (the controllers off, `ETERNALVR_CONTROLLERS=0`; the launcher's Motion controllers
+  unticked). Nothing of this file runs except one hook: the same PutUserCmd hook, installed for room-scale
+  body follow alone (`features/input/usercmd_hook_use.hpp`, `docs/VR_ROOMSCALE.md` "Gamepad mode"). It adds
+  body follow's move to `forwardmove` / `rightmove` in a command the pad, keyboard or mouse does not move,
+  and writes nothing else: no mapper, no buttons, no turn, no keys; head aim is the camera hook's, as before.
+  The same holds under the virtual gamepad (`ETERNALVR_XINPUT=1`), where the controllers' input goes through
+  the pad instead. Still controllers-only, so dead in gamepad mode: the comfort vignette's motion (the mapper's
+  move and turn, the forced-view gate, a held dash), the recenter hold and the capture chord (the mapper's
+  bindings), the forced-view gate itself (the aim hooks; body follow's forced-view block and the glory-kill
+  options' forced-view input), the piloted-demon check head aim asks (`controllers::pilotingDemon`, kept by
+  the viewmodel hook while the controllers are attached), and bHaptics (started with the controllers' hooks).
 - **Turning.** A mid-hook at the generator's angle conversion (RVA 0x17FD3C0): for local user 0's build
   (`[rdi+0x8D0]`; the generator builds every local user's command) the turn (smooth, or snap in whole
   steps) is added to the accumulated yaw at `[[rdi+0x8D8]+8]`, where mouse motion goes, so it

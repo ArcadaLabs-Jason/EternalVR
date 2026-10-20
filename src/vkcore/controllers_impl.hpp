@@ -29,6 +29,7 @@
 #include "features/input/input_mapper.hpp"
 #include "features/input/offhand_policy.hpp"
 #include "features/input/test_input.hpp"
+#include "features/input/usercmd_hook_use.hpp"
 #include "features/input/usercmd_injection.hpp"
 #include "features/input/view_pose_clock.hpp"
 #include "features/input/wheel_hand.hpp"
@@ -565,7 +566,8 @@ bool installBhapticsLaunchHooks();
 bool installBhapticsAmmoHooks();
 
 // Installers (each logs what it did); `image` checks were made by the caller.
-bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
+// The user-command hook as `use` says (usercmd_hook_use.hpp), and with `turn` the turn hook.
+bool installUserCmdHooks(input::CommandHookUse use, bool turn, bool& angleInstalled);
 bool installAimHooks(bool& fireInstalled);
 bool installViewmodelHook();
 // The arms hold the swim fists (ArmsTick::arms), which the game puts in the hands while the player swims, its

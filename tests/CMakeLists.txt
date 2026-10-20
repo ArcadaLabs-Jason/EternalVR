@@ -199,6 +199,7 @@ evr_add_test(evr_input_tests
         features/input/touch_keys_tests.cpp
         features/input/turn_policy_tests.cpp
         features/input/turn_stick_arbiter_tests.cpp
+        features/input/usercmd_hook_use_tests.cpp
         features/input/usercmd_injection_tests.cpp
         features/input/usercmd_motion_tests.cpp
         features/input/virtual_gamepad_tests.cpp

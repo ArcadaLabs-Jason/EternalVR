@@ -33,7 +33,10 @@ them is worse for you than described here.
   down is noticed after a second or so (the view blinks while your height is reset); if it is not (a very
   tall chair, no floor height from your headset), hold both sticks pressed for 2 seconds. If walking stops
   following you while you stand (a headset that reports the floor in the wrong place), set Play position
-  to Standing in the launcher. If you play lying down, set Play position to Sitting: the mod ignores
+  to Standing in the launcher. With motion controllers off (a gamepad, or keyboard and mouse) it works too
+  now; before, the Slayer stood still there while you walked. With controllers off it can't yet tell when
+  the game takes over your body for a glory kill or a pickup animation, so it may keep pulsing then: tell me
+  if a glory kill feels off that way. If you play lying down, set Play position to Sitting: the mod ignores
   a head that low. On a chair with wheels, set Play position to Sitting too: rolling more than a metre
   counts as walking and switches to standing.
 - **Only tested on NVIDIA here:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have

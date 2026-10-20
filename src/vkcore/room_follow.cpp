@@ -25,10 +25,13 @@ std::uint32_t bitOf(roomscale::FollowBlock block) {
 
 } // namespace
 
-void RoomScale::noteBody(Vec3 forward, Vec3 left) {
+void RoomScale::noteBody(const std::byte* player, Vec3 forward, Vec3 left) {
     bodyForward_ = forward;
     bodyLeft_ = left;
     bodyKnown_ = true;
+    if (roomScaleSettings().follow.enabled) {
+        body_follow::noteView(player, forward);
+    }
 }
 
 Vec3 RoomScale::testStep(double seconds) {
@@ -163,8 +166,8 @@ void RoomScale::follow(const Input& in, Vec3 testOffset) {
     }
     if (!command.hookInstalled && !loggedNoHook_) {
         loggedNoHook_ = true;
-        EVR_LOG("room: body follow is on but the user-command hook is not in place (it needs "
-                "ETERNALVR_CONTROLLERS=1 and the command path); the body does not follow");
+        EVR_LOG("room: body follow is on but the user-command hook is not in place (its signature was not "
+                "found or the multiplayer guard is not armed); the body does not follow");
     }
     if (step.cause == roomscale::FollowBlock::Teleport && ++teleports_ <= 20) {
         EVR_LOG("room: body follow: the origin jumped %.2f m in one frame (teleport %llu); not followed",

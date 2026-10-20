@@ -1,5 +1,6 @@
 // Motion controllers, the user command (controllers.hpp, docs/rig-findings/input-aim.md sections 1.3
-// and 1.4).
+// and 1.4). With the controllers off or on the virtual gamepad the PutUserCmd hook carries body follow's
+// move alone (features/input/usercmd_hook_use.hpp).
 //
 // Two mid-function hooks in the game's per-frame command build:
 // - At the call of idUserCmdMgr::PutUserCmd (RVA 0x43E8DD in build 25216728): r8 is the finished command
@@ -157,8 +158,9 @@ void sendWheelPointer(State& s, bool held, input::Axis2 pointer, float dt) {
 }
 
 // Body follow (body_follow.hpp): the move toward the head, added to the finished command only when
-// nothing else moves the player in it.
-void addBodyFollow(std::byte* cmd, bool suppressed) {
+// nothing else moves the player in it. `piloting`: the player pilots a demon (body follow steers the
+// Slayer's body toward the head, never the demon).
+void addBodyFollow(std::byte* cmd, bool suppressed, bool piloting) {
     std::uint64_t buttons = 0;
     std::int8_t forward = 0;
     std::int8_t right = 0;
@@ -170,10 +172,9 @@ void addBodyFollow(std::byte* cmd, bool suppressed) {
     const bool moving = forward != 0 || right != 0;
     const bool jumpOrDash =
         up != 0 || (buttons & (game::usercmd_button::kMoveUp | game::usercmd_button::kDash)) != 0;
-    // Not while piloting a demon: body follow steers the Slayer's body toward the head.
-    const bool gameplay = !suppressed && !menu_input::suppressGameplay() && !pilotingDemon();
-    const input::MoveAxes move = body_follow::commandMove(
-        moving, jumpOrDash, gameplay, state().viewYawTracking.load(std::memory_order_relaxed));
+    const bool gameplay = !suppressed && !menu_input::suppressGameplay() && !piloting;
+    const input::MoveAxes move =
+        body_follow::commandMove(moving, jumpOrDash, gameplay, body_follow::viewYawRoom());
     if (move == input::MoveAxes{} || !mp_guard::allowsGameTouch()) {
         return;
     }
@@ -209,7 +210,7 @@ void onPutUserCmd(const HookRegisters& regs) {
         sendPopupKey(s.popupUseDown, 'E', popup && game::contains(mapped.actions, game::GameAction::Melee));
     }
     if (!mapped.live) {
-        addBodyFollow(cmd, suppressed);
+        addBodyFollow(cmd, suppressed, pilotingDemon());
         return;
     }
     if (settings().trace) {
@@ -257,7 +258,7 @@ void onPutUserCmd(const HookRegisters& regs) {
     safeCopy(cmd + kCmdRight, &newRight, sizeof(newRight));
     safeCopy(cmd + kCmdUp, &newUp, sizeof(newUp));
     summary.reachedGame = !suppressed;
-    addBodyFollow(cmd, suppressed);
+    addBodyFollow(cmd, suppressed, pilotingDemon());
     if (injected != 0 || move.forward != 0 || move.right != 0) {
         s.commandsWithInput.fetch_add(1, std::memory_order_relaxed);
         if (g_loggedCommands.fetch_add(1) < 12) {
@@ -267,6 +268,17 @@ void onPutUserCmd(const HookRegisters& regs) {
                     suppressed ? " (suppressed by the game)" : "", forward, right, move.forward, move.right);
         }
     }
+}
+
+// Body follow alone (features/input/usercmd_hook_use.hpp: the controllers off, or on the virtual gamepad):
+// only body follow's move goes into the command, under the same rules as above. The buttons, the up axis
+// and the angles stay as the game built them from the pad, keyboard and mouse.
+void onPutUserCmdFollow(const HookRegisters& regs) {
+    if (!mp_guard::allowsGameTouch() || (regs.rbx & 0xFFFFFFFFu) != 0) {
+        return; // local user 0 only: single player
+    }
+    addBodyFollow(reinterpret_cast<std::byte*>(regs.r8), (regs.r14 & 0xFFu) != 0,
+                  body_follow::pilotingDemon());
 }
 
 void onAngles(const HookRegisters& regs) {
@@ -523,24 +535,29 @@ MappedInput runMapper() {
     return out;
 }
 
-bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled) {
+bool installUserCmdHooks(input::CommandHookUse use, bool turn, bool& angleInstalled) {
+    angleInstalled = false;
     GameImage image;
     if (!locateGameImage(image, kTag)) {
-        angleInstalled = false;
         return false;
     }
     bool commandInstalled = false;
-    if (buttonsAndMove) {
+    if (use != input::CommandHookUse::None) {
         if (const std::byte* site = findUnique(image, kTag, "PutUserCmd call", kPutUserCmdSignature)) {
-            g_buttonsAndMove = true;
-            commandInstalled = hookAt(image, "user command", site + kPutUserCmdCall, &onPutUserCmd);
-            g_buttonsAndMove = commandInstalled;
+            const bool controllers = use == input::CommandHookUse::Controllers;
+            g_buttonsAndMove = controllers;
+            commandInstalled = controllers
+                                   ? hookAt(image, "user command", site + kPutUserCmdCall, &onPutUserCmd)
+                                   : hookAt(image, "user command (body follow only)", site + kPutUserCmdCall,
+                                            &onPutUserCmdFollow);
+            g_buttonsAndMove = controllers && commandInstalled;
             body_follow::setCommandHook(commandInstalled);
         }
     }
-    angleInstalled = false;
-    if (const std::byte* site = findUnique(image, kTag, "angle conversion", kAngleSignature)) {
-        angleInstalled = hookAt(image, "turn", site, &onAngles);
+    if (turn) {
+        if (const std::byte* site = findUnique(image, kTag, "angle conversion", kAngleSignature)) {
+            angleInstalled = hookAt(image, "turn", site, &onAngles);
+        }
     }
     return commandInstalled;
 }

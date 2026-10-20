@@ -9,6 +9,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/room_scale.hpp"
 
 #include <mutex>
 #include <shared_mutex>
@@ -37,7 +38,10 @@ void install() {
     // The pause action is the Escape key.
     installKeyInjection();
     bool angle = false;
-    s.userCmdHook = installUserCmdHooks(cfg.path != input::InputPath::XInput, angle);
+    const input::CommandHookUse use =
+        input::commandHookUse(true, cfg.path, roomScaleSettings().follow.enabled);
+    const bool command = installUserCmdHooks(use, true, angle);
+    s.userCmdHook = command && use == input::CommandHookUse::Controllers;
     s.angleHook = angle;
     // The thumb-rest wheel's cvars: the game's wheel open delay, and its slowdown (rest_wheel.cpp).
     locateWheelCvars();
@@ -94,8 +98,8 @@ void install() {
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
         "%s, off hand %s (%s), weapon arm %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable "
         "walls %s, button prompts %s, equipment launch %s, Flame Belch plume %s",
-        kTag, onOff(s.userCmdHook), onOff(s.angleHook), onOff(s.xinputActive.load()),
-        onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook),
+        kTag, s.userCmdHook ? "on" : (command ? "body follow only" : "off"), onOff(s.angleHook),
+        onOff(s.xinputActive.load()), onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook),
         onOff(s.offhandHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)),
         input::offhandModeName(cfg.offhand), onOff(s.weaponArmHook), input::weaponArmModeName(cfg.weaponArm),
         onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook), onOff(s.climbHook),
@@ -105,6 +109,17 @@ void install() {
     if (!s.userCmdHook && !s.xinputActive.load()) {
         EVR_LOG("%s: no input path to the game: controller buttons and movement do nothing", kTag);
     }
+}
+
+// Gamepad mode (the controllers off): the game's own pad, keyboard and mouse input stays as it is; the
+// user-command hook goes in for body follow alone (usercmd_hook_use.hpp).
+void installBodyFollowOnly() {
+    bool angle = false;
+    const bool command = installUserCmdHooks(input::CommandHookUse::BodyFollow, false, angle);
+    EVR_LOG("room: body follow: %s (motion controllers off): only body follow's move goes into the game's "
+            "command, the game's own pad, keyboard and mouse input stays as the game builds it",
+            command ? "the user-command hook is in place for body follow alone"
+                    : "the user-command hook could not be installed");
 }
 
 } // namespace
@@ -141,7 +156,8 @@ XrSpace weaponHandAimSpace() {
 }
 
 void installGameHooks() {
-    if (!settings().enabled) {
+    const bool controllers = settings().enabled;
+    if (!controllers && !roomScaleSettings().follow.enabled) {
         return;
     }
     // The caller checked the guard; asked again here because installing is what the guard gates.
@@ -149,7 +165,7 @@ void installGameHooks() {
         EVR_LOG("%s: the multiplayer guard is not armed; no controller hooks", kTag);
         return;
     }
-    std::call_once(g_installOnce, &install);
+    std::call_once(g_installOnce, controllers ? &install : &installBodyFollowOnly);
 }
 
 } // namespace evr::vkcore::controllers

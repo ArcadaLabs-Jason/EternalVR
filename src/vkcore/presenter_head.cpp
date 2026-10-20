@@ -244,7 +244,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         headGame = xr_math::idTechToOpenXr(headId);
     }
     const xr_math::IdViewAxis view = xr_math::composeHeadAxis(*body, headId);
-    room.noteBody(body->forward, body->left);
+    room.noteBody(player, body->forward, body->left);
 
     const float gameFovX = fov[0];
     const float gameFovY = fov[1];

@@ -42,6 +42,7 @@ evr_add_module(evr_input
         touch_inputs.cpp
         turn_policy.cpp
         turn_stick_arbiter.cpp
+        usercmd_hook_use.cpp
         usercmd_injection.cpp
         usercmd_motion.cpp
         view_pose_clock.cpp
