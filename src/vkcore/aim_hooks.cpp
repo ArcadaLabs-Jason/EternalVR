@@ -82,8 +82,8 @@ constexpr const char* kGetWeaponFireInfoSignature =
 // Type info (build 25216728; the offsets are used only when PlayerAim confirmed the build).
 constexpr std::size_t kHandsOwner = 0x358; // idHands::owner
 // idHands::overrideStartFxAxis (idMat3): GetWeaponFireInfo resets it to identity and sets it to the Flame
-// Belch's fire axis. It drives the hands' effect group (0x136CD70), not the plume (belch_axis_hook.cpp):
-// read only, to tell a Belch shot.
+// Belch's fire axis. It drives the hands' effect group (0x136CD70), not the plume
+// (equipment_launch_hook.cpp): read only, to tell a Belch shot.
 constexpr std::size_t kHandsStartFxAxis = 0x8E3C;
 constexpr std::size_t kPlayerInhibitFlags = 0x87FC;       // idPlayer::inhibitFlags
 constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
@@ -109,8 +109,6 @@ bool belchFireInfo(const std::byte* hands) {
     return safeCopy(fxAxis, hands + kHandsStartFxAxis, sizeof(fxAxis)) && !isIdentity(fxAxis);
 }
 
-// A hand that loses tracking keeps aiming where it last pointed for this long, then the head takes over.
-constexpr double kHandHoldSeconds = 0.5;
 // The farthest a shot may start from the eye, in metres (arm's reach plus the controller).
 constexpr float kMaxReachMetres = 1.0f;
 // A game fire position this far from the eye is the muzzle, not the view origin.
@@ -240,8 +238,10 @@ void onFire(const HookRegisters& regs) {
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return; // not the local player's hands
     }
-    // In gamepad mode no held action names the Flame Belch: its fire info does (belchFireInfo).
-    noteBhapticsShot(hands, gamepadView() && belchFireInfo(hands));
+    // A Flame Belch shot is told by its fire info (belchFireInfo), not by its button: a Belch fires its
+    // burst for about half a second after a tap, and a shot after the button was let go played the held
+    // gun's kick on the weapon arm's side.
+    noteBhapticsShot(hands, belchFireInfo(hands));
     if (!handAim) {
         return;
     }
@@ -258,9 +258,10 @@ void onFire(const HookRegisters& regs) {
         logShotStats(s);
         return;
     }
-    // A Flame Belch shot under ETERNALVR_EQUIPMENT_AIM keeps its start at the shoulder launcher and goes
-    // along the head's or the off hand's ray, as its flames do (belch_axis_hook.cpp), so the damage cone and
-    // the plume start at the same place and point the same way. Without the launcher's downward turn
+    // A Flame Belch shot under ETERNALVR_EQUIPMENT_AIM keeps its start at the shoulder launcher's muzzle,
+    // which is drawn at the head (launcher_place.hpp), and goes along the head's or the off hand's ray, as
+    // its flames do (equipment_launch_hook.cpp), so the damage cone and the plume start at the launcher the
+    // player sees and point the same way. Without the launcher's downward turn
     // (launchDirOffsetDegsFlameBelch): carried onto the head's ray it sent the flames 30 to 45 deg low. A
     // shot is the Belch's when GetWeaponFireInfo, which resets overrideStartFxAxis for every shot, set it
     // (not identity), so a gun fired while the Belch's button is held keeps the weapon hand.

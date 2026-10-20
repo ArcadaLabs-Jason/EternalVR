@@ -485,7 +485,8 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   shotgun and the Heavy Cannon the open end of the game's left sleeve shows at the bottom of the view, which
   the flat game's narrower view crops.
 - **Melee and equipment aim** (`ETERNALVR_MELEE_AIM`, `ETERNALVR_EQUIPMENT_AIM`,
-  `features/input/action_aim.hpp`, `src/vkcore/action_aim_hook.cpp`, `src/vkcore/equipment_launch_hook.cpp`;
+  `features/input/action_aim.hpp`, `src/vkcore/action_aim_hook.cpp`, `src/vkcore/equipment_launch_hook.cpp`,
+  `src/vkcore/launcher_place_hook.cpp`;
   the launcher's Play tab, Controls, "Melee aim with" and "Equipment aim with", GitHub issue 11). Under hand
   aim, melee (one button in the game: melee, Blood Punch, glory kills and use; a punch too) and the
   shoulder-mounted equipment launcher and Flame Belch (the throw gesture too) can aim with the head or the
@@ -517,20 +518,55 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
     origin and axis from the shoulder launcher's muzzle joint (0x1389020 -> 0xFDBD10, turned by the decl's
     `launchDirOffsetDegs*`) and passes them to the launch core (0x1389910); the Belch fires through
     `FireWeapon` with the same joint's muzzle as fire position and axis. With the arms model at the weapon
-    hand both follow the weapon hand whatever the view does. So the view stays on the weapon hand, and a
-    mid hook before that call (RVA 0x13898A1: rsi the hands item, slot 5 or 6, r14 the player, the origin
-    at `[rbp-0x80]`, the axis at `[rbp+0x98]`; installed only with `ETERNALVR_EQUIPMENT_AIM` set) moves a
-    grenade's start to the head's (or the off hand's) ray start and turns its axis onto that ray, keeping the
-    turn and arc the game's axis has from the weapon hand's ray (`xr_math::carryAimOffset`). A Belch shot is
-    turned the same way in the fire hook (below), and so is its flames' axis (`idHands` +0x8E3C). A shot is
-    the Belch's when that axis is not identity: `GetWeaponFireInfo` resets it for every shot and sets it for
-    the Belch alone, so a gun fired while the Belch's button is held keeps the weapon hand.
+    hand both follow the weapon hand whatever the view does, and so does the launcher the player sees: each
+    tick of the hands the game places the shoulder launcher's model (hands slots 5 and 6) at its joint on
+    the arms model (`idHandsItem` 0x138A480, from the arms model's current origin and axis), so it popped up
+    in front of the weapon hand pointing along it, and the Belch's flames, which leave its muzzle, started
+    there (public issue 14: with the flames turned onto the head's ray they still came out of a launcher
+    floating ahead of the gun hand). So the view stays on the weapon hand, and three hooks, installed only
+    under hand aim with `ETERNALVR_EQUIPMENT_AIM` set, carry the equipment over:
+    - The shoulder launcher (`launcher_place.hpp`, a mid hook on that placement's store at RVA 0x138A75D: r13
+      the hands item, r12 the hands, the origin at `[rsp+0x30]`, the axis at `[rsp+0x68]`) moves the
+      launcher's model from the arms model at the weapon hand to the arms model at the rendered head, where
+      the game's own view shows it (over the left shoulder; the game puts the arms model's origin at its eye
+      with the view's axis), pointing along the head's ray or the off hand's (`xr_math::launcherAtHead`;
+      without roll, as the game's view has none). Its pose in the arms model, the pop-up included, stays the
+      game's. The Belch's flames, its shots and a launch all leave its muzzle, so they start at the launcher
+      the player sees. On the rig the launcher's joint sits 0.28 m behind the arms model's origin, 0.05 m to
+      its left and 0.07 m below it; its body reaches forward from there over the left shoulder, as on a flat
+      screen.
+    - The Belch's plume axis (`idFXFlameBelchAxisUpdate`, the store at RVA 0x138B02D) is turned onto that ray
+      exactly, without the launcher's launch turn (`launchDirOffsetDegsFlameBelch`, which sent the flames 30
+      to 45 degrees low), and a Belch shot keeps its start (the muzzle) and goes along the ray in the fire hook
+      (below), so the damage cone and the flames agree.
+    - The launch (a mid hook before the launch core's call, RVA 0x13898A1: rsi the hands item, slot 5 or 6,
+      r14 the player, the origin at `[rbp-0x80]`, the axis at `[rbp+0x98]`) keeps the game's origin (the
+      muzzle) and turns its axis onto the ray, keeping the turn and arc the game's axis has from the ray the
+      launcher was drawn along (`xr_math::equipmentLaunch`): with the launcher at the head that is the game's
+      own axis. A launcher the hook left at the weapon hand (not placed in the last 0.1 s, or the hook not
+      installed) has its muzzle away from the ray, so that launch starts at the ray's start (the rendered
+      head, or the off hand; at most 1 m from the eye) and is turned from the weapon hand's ray, as before the
+      launcher hook. Without the launcher hook the start-up log says `WARNING: equipment aim ... without the
+      shoulder launcher hook`.
+
+    The off hand's ray is held for 0.5 s when the off hand loses tracking (`kHandHoldSeconds`, as the weapon
+    hand's aim), so a tracking blip does not flip the launcher and the flames to the head's ray and back.
+
+    A shot is the Belch's when `idHands::overrideStartFxAxis` (+0x8E3C) is not identity: `GetWeaponFireInfo`
+    resets it for every shot and sets it for the Belch alone, so a gun fired while the Belch's button is held
+    keeps the weapon hand. Under head aim none of this is installed: the game places the arms model at the
+    head (head aim's gun, T-143), so the launcher is at the head and the Belch and a launch go along the
+    game's view, which is the head's.
   - Log: `controllers: on: ... melee aim <source>, equipment aim <source>`, `game hooks: ... equipment launch
     on`, `action aim: the view follows the off hand for melee (generation N)`, `action aim: melee press held
     back C command(s), T ms, until the view took its target`, for the first two game frames after the press
     `action aim: melee press, game frame 1 after it went out: game view P Y (pitch, yaw from the body); head
-    ..., weapon hand ..., off hand ...`, `equipment launch (slot 5): origin (...) dir (...) -> (...) dir (...)
-    along the head; weapon hand (...)` (the first 12), and a shot while a melee or equipment button is held
+    ..., weapon hand ..., off hand ...`, `equipment launch (slot 5): origin (...) dir (...) -> dir (...) along
+    the head, from the launcher at the head; weapon hand (...)` (the first 12), `shoulder launcher hook at RVA
+    0x138A75D`, `shoulder launcher (slot 5, 'equipmentlauncher/equipmentlauncherleft'): model (...) dir (...)
+    -> (...) dir (...) at the head, along the head; arms model (...) ..., launcher 0.28 from the head` (each
+    slot's first placement, then while the Belch's or the equipment's button is held: the first 6, then one
+    every 2 s), and a shot while a melee or equipment button is held
     with its decl (`action aim: a Flame Belch shot while flame_belch held, decl '...'` for a Belch shot, the first 12). Nothing changes
     under head or view aim, or with both left on the weapon hand (the default).
 - **Aim smoothing** (`ETERNALVR_AIM_SMOOTHING`, `features/input/aim_smoothing.hpp`,
@@ -1238,6 +1274,7 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 15 | Inputs held through a menu's close, in e1m2: `ETERNALVR_TEST_KEYS=<ms>:ESC` opens the pause menu; once the log has `menu: the game shows its cursor`, the file `left.secondary = 1` for 0.15 s, then `left.secondary = 0`. Then the Dossier: `left.primary = 1` for 0.5 s, then 0; once the Dossier is up, `right.stick = 0, -1` for 0.5 s, then `left.secondary = 1` for 0.15 s with the stick still down, the stick held 0.5 s more, then `right.stick = 0, 0` | Pending. Expect for the pause menu `menu: key down 0x1b`, `menu: the cursor is gone`, `menu: controllers' gameplay input back on`, `controllers: gameplay input back on: presses begun in the menu are dropped` and no `controllers: action switch_weapon_mod` after it (before the fix: `action switch_weapon_mod` in the same millisecond); for the Dossier the same line ending `; a control still held stays out of the game until let go`, and no `action weapon_wheel`, `action quick_switch` or `weapon wheel` line after it |
 | 16 | Melee and equipment aim (`tools/rig/qa` scenario `action-aim`: e1m3 `cp_03_shoot_gate`, hand aim, `ETERNALVR_MELEE_AIM=offhand`, `ETERNALVR_EQUIPMENT_AIM=head`, the weapon hand 90 degrees to the left) | Pass (2026-10-02, Debug, runs QA-aim-actions-2 and -3): each melee press held back 1 command (6.0 to 8.8 ms) until the view took the off hand; the first game frame after it has the game's view on the off hand (yaw -90.0, and pitch 15.0 with the off hand at the token) while the weapon hand is at +90; back to the weapon hand 0.5 s after; a frag launched about 0.15 s after the press from the weapon hand's side along yaw 135 (`dir (-0.707 0.707 0.035)`) was moved to the eye and turned to the head's yaw 45 with the same arc (`dir (0.707 0.707 0.035)`), and in screenshots it explodes in front of the head instead of out of view to the left; Flame Belch shots turned the same way. The Praetor token's Use is a trigger box (picked up with the view 90 degrees away), so a target picked by the view (a lunge, a glory kill) is for the headset |
 | 17 | Gamepad mode (`ETERNALVR_CONTROLLERS=0`, `+in_joystick 1`, a virtual Xbox 360 pad through ViGEmBus; the 0.1.68 layer against this one) | Pass: e1m2: both sticks held 2.6 s give `both sticks pressed (the recenter hold)`, `recenter binding held for 2.00 s` and a user recenter, 1 s gives `released after 1.00 s` (0.1.68: none); the move stick and the look stick give `vignette: light, shown 570 of 898 frame(s) ... move up to 1.00, pad turn up to 1.00` (0.1.68: shown 0 in every line); RT fires (`bhaptics: firing 'weapon/player/shotgun'`) and Y counts `belch 2` (0.1.68: no bHaptics); RB held gives `forced view starts (weapon wheel; inhibit 0x18)` and `ui: weapon wheel straight ahead (panel HUD)` (0.1.68: neither). With the move stick held forward and the pause menu, then the Dossier, opened by injected keys (ESC, TAB): `shown 0 of 900 frame(s) ... move up to 1.00 ... 900 frame(s) held back (menu)` in the pause menu and 3 of 899 (the frames after it closed) in the Dossier: the layer's menu test keeps the vignette off, as for the controllers. e1m3 `cp_03_shoot_gate`, the stick click at the Praetor Suit token: `controllers: sync 'interact/preator_suit_token/preator_suit_token_sync' (not a kill)`, body follow blocked `cutscene or forced view 182` (0.1.68: 0) and the token's wave for bHaptics. e1m3 `cp_12_possession`: `piloting a demon` and `demon aim: the demon follows the head` (0.1.68: no piloting line, and head aim kept writing the Slayer's angles while piloting: 645 rewrites by the game in 10 s). Controllers on, unchanged: the same game hooks line, 4 forced-view episodes each, body follow 4.32 m (0.1.68: 4.25 m) over 17 legs; the virtual gamepad's import line the same |
+| 18 | The shoulder launcher and the Flame Belch under equipment aim (public issue 14; e1m3 `cp_03_shoot_gate`, hand aim, the weapon hand 60 degrees right of the head, in-headset capture bursts 0.15 and 0.4 s into a Belch held 1.8 s; the 0.1.70 layer against this one) | Pass: `ETERNALVR_EQUIPMENT_AIM=head`: 0.1.70 turned the flames onto the head, but the launcher popped up in front of the face about 20 degrees right, pointing along the weapon hand, the flames a haze in front of it; now the launcher pops up top left in both eyes along the head, the jet and fireball leave its muzzle along the head, `shoulder launcher (slot 5, 'equipmentlauncher/equipmentlauncherleft'): ... at the head, along the head; ... launcher 0.28 from the head` and the five Belch shots start at its muzzle along the head (`shot: game start ... dir (-0.259 0.965 0.035) -> ... dir (-0.259 0.966 0.000)`, the head's forward). `offhand` with the off hand 40 degrees left: the flames go left along it. Same and Aim = head (the launcher hooks not installed: `equipment launch off, Flame Belch plume off, shoulder launcher off`) as 0.1.70: Same's jet along the weapon hand from a launcher at the hand, Aim = head's launcher top left with the flames along the view. The `action-aim` scenario passes with its frag `equipment launch (slot 5): ... -> dir (-0.707 0.707 0.035) along the head, from the launcher at the head` (the game's own axis kept). A Belch tapped (0.1 s) three times with the stand-in bHaptics Player: 0.1.70 15 `evr_shot_ForearmR` + `evr_shot_VestFront` kicks and no Belch pulse; now 6 `evr_belch` left-shoulder pulses and no kick (the layer's 10 s lines `shot 0, ... belch 12` and `belch 4`, no `bhaptics: firing` line). Weapon in the left hand (`ETERNALVR_HANDEDNESS=left`, the Belch on the right grip): the launcher top left with the flames along the head; with `offhand` the flames follow the right controller. With the off hand 40 degrees off the view the launcher turns about its joint behind the shoulder and is out of the view; the flames still leave its muzzle along the off hand. Hand aim's grip sweep GRIP PASS, SIGHTS PASS (0.334 deg), the hands check 0 regressions, also with `ETERNALVR_EQUIPMENT_AIM=head` |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent

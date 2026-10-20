@@ -26,8 +26,8 @@
 // - rune: its pickup animation (after the rune's menu, as for a crystal: the Slayer takes the rune's charge)
 //   shocks the whole suit from kRuneDelaySeconds into it: motors at random all over the vest and both
 //   sleeves for kRuneShockSeconds (crystal.hpp; a tester's ask, public issue #25);
-// - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot while its
-//   button is held) and an equipment launch pulse the top of the left side, front and back; the launch
+// - Flame Belch and equipment launcher: both sit on the Slayer's left shoulder, so a belch (a shot whose fire
+//   info is the Belch's) and an equipment launch pulse the top of the left side, front and back; the launch
 //   lighter and shorter (a tester's suggestion, public issue #1);
 // - death: the player dying fills both sides of the vest once;
 // - landing: coming down from a fall of kLandingDrop or more (the layer's LandingDetector, run on every game
@@ -202,7 +202,7 @@ struct BodySignals {
     bool sync = false;                       // a sync or glory kill runs
     SyncKind syncKind = SyncKind::GloryKill; // what the running sync is (with `sync`)
     std::uint32_t shots = 0;                 // shots since the last update (the Flame Belch's not among them)
-    std::uint32_t belches = 0;   // shots while the Flame Belch's button was held, since the last update
+    std::uint32_t belches = 0;               // the Flame Belch's shots since the last update
     std::uint32_t equipment = 0; // presses of the equipment launcher's button since the last update
     WeaponClass weapon = WeaponClass::Medium;
     input::Hand weaponHand = input::Hand::Right;

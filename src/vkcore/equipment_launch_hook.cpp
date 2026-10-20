@@ -11,27 +11,32 @@
 //
 // A mid hook on the LEA at RVA 0x13898A1, just before that call: rsi is the idHandsItem (its first int the
 // hands slot: 5 or 6 for the shoulder launchers), r14 the idPlayer, the origin (idVec3) at [rbp-0x80] and the
-// axis (idMat3, rows forward, left, up) at [rbp+0x98]. For the local player under hand aim the origin moves
-// to the head's (or the off hand's) ray start and the axis to that ray, keeping the turn and arc the game's
-// axis has from the weapon hand's ray (xr_math::carryAimOffset). Installed only when ETERNALVR_EQUIPMENT_AIM
-// is set.
+// axis (idMat3, rows forward, left, up) at [rbp+0x98]. For the local player under hand aim the launch goes
+// along the head's (or the off hand's) ray (xr_math::equipmentLaunch): with the launcher drawn at the head
+// along that ray (launcher_place.hpp) it keeps the game's origin, the muzzle the player sees, and the game's
+// axis; a launcher left at the weapon hand (the shoulder launcher hook off, or a tick it left alone) moves
+// the launch to the ray's start, turned from the weapon hand's ray, keeping its turn and arc
+// (xr_math::carryAimOffset). Installed only when ETERNALVR_EQUIPMENT_AIM is set.
 //
 // The Flame Belch's visible plume takes its own axis, refreshed every frame (static RE, Steam build): the
 // plume effect started by PrepareFire follows idEquipmentLauncher's
-// idFXFlameBelchAxisUpdate (launcher+0x110, its axis at launcher+0x120), which the hands item's update
-// 0x138AB20 sets from the launcher's muzzle joint (GetMuzzleTransform, vslot 0xC8) at 0x138B02D, the axis
-// only (the plume's origin is the launcher model's). A mid hook on that store turns the muzzle axis at
-// [rbp-9] (idMat3, rows forward, left, up) onto the head's or the off hand's ray before it is stored; the
-// Belch's damage (the fire hook, aim_hooks.cpp) takes the same ray from the same launcher position.
+// idFXFlameBelchAxisUpdate (launcher+0x110, its axis at launcher+0x120; idEquipmentLauncher's vslot 0x228,
+// 0xFDD250, hands it to the effect for the Belch's launcher types), which the hands item's update 0x138AB20
+// sets from the launcher's muzzle joint (GetMuzzleTransform, vslot 0xC8) at 0x138B02D, the axis only (the
+// plume's origin is the launcher model's, which launcher_place.hpp moves to the head). A mid hook on that
+// store turns the muzzle axis at [rbp-9] (idMat3, rows forward, left, up) onto the head's or the off hand's
+// ray before it is stored; the Belch's damage (the fire hook, aim_hooks.cpp) takes the same ray from the
+// same launcher position.
 
 #include "vkcore/controllers_impl.hpp"
 
 #include "vkcore/controllers.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/launcher_place.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
-#include "xr_math/hand_aim.hpp"
+#include "xr_math/launcher_pose.hpp"
 #include "xr_math/weapon_pose.hpp"
 
 #include <windows.h>
@@ -64,7 +69,8 @@ constexpr std::ptrdiff_t kAxisFromRbp = 0x98;
 constexpr int kLeftShoulderSlot = 5;
 constexpr int kRightShoulderSlot = 6;
 constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
-// The farthest the launch may start from the eye, in metres (arm's reach plus the controller).
+// The farthest a launch moved to the ray's start may start from the eye, in metres (arm's reach plus the
+// controller).
 constexpr float kMaxReachMetres = 1.0f;
 
 LogCap g_launchLines{12};
@@ -132,14 +138,11 @@ void onLaunch(const HookRegisters& regs) {
     }
     const bool offHand = cfg.actionAim.equipment == input::ActionAimSource::OffHand && world.offAimValid;
     const xr_math::EyeRelativePose& ray = offHand ? world.offAim : world.head;
-    const Vec3 eyeAt{eye[0], eye[1], eye[2]};
-    const std::optional<Vec3> direction = xr_math::carryAimOffset({gameAxis[0], gameAxis[1], gameAxis[2]},
-                                                                  world.aim.axis.forward, ray.axis.forward);
-    if (!direction) {
-        return;
-    }
+    const std::optional<Vec3> drawn = launcher_place::drawnAlong(slot);
     const std::optional<xr_math::Shot> shot =
-        xr_math::shotFromHand(eyeAt, ray.offset, *direction, kMaxReachMetres * world.unitsPerMetre, 0.0f);
+        xr_math::equipmentLaunch({eye[0], eye[1], eye[2]}, {gameOrigin[0], gameOrigin[1], gameOrigin[2]},
+                                 {gameAxis[0], gameAxis[1], gameAxis[2]}, drawn, world.aim.axis.forward, ray,
+                                 kMaxReachMetres * world.unitsPerMetre);
     if (!shot || !mp_guard::allowsGameTouch()) {
         return;
     }
@@ -151,12 +154,15 @@ void onLaunch(const HookRegisters& regs) {
     safeCopy(axis, newAxis, sizeof(newAxis));
     if (log) {
         const Vec3 hand = world.aim.axis.forward;
-        EVR_LOG("%s: equipment launch (slot %d): origin (%.2f %.2f %.2f) dir (%.3f %.3f %.3f) "
-                "-> (%.2f %.2f %.2f) dir (%.3f %.3f %.3f) along the %s; weapon hand (%.3f %.3f %.3f), "
-                "eye (%.2f %.2f %.2f)",
+        EVR_LOG("%s: equipment launch (slot %d): origin (%.2f %.2f %.2f) dir (%.3f %.3f %.3f) -> (%.2f %.2f "
+                "%.2f) dir (%.3f %.3f %.3f) along the %s, %s; weapon hand (%.3f %.3f %.3f), eye (%.2f %.2f "
+                "%.2f)",
                 kTag, slot, gameOrigin[0], gameOrigin[1], gameOrigin[2], gameAxis[0], gameAxis[1],
                 gameAxis[2], newOrigin[0], newOrigin[1], newOrigin[2], newAxis[0], newAxis[1], newAxis[2],
-                offHand ? "off hand" : "head", hand.x, hand.y, hand.z, eye[0], eye[1], eye[2]);
+                offHand ? "off hand" : "head",
+                drawn ? "from the launcher at the head"
+                      : "from the ray's start (the launcher at the weapon hand)",
+                hand.x, hand.y, hand.z, eye[0], eye[1], eye[2]);
     }
 }
 

@@ -422,7 +422,7 @@ $script:QaScenarios = @(
     },
     @{
         Name = 'action-aim'; Kind = 'game'
-        Proves = 'Melee aim with the off hand and equipment aim with the head (issue #11): with the weapon hand pointing 90 degrees away, each melee press is held back until the view took the off hand, reaches the game with the view on it, Use still picks up the Praetor Suit token, the view goes back to the weapon hand, the equipment launcher launches along the head without moving the view, and the Flame Belch''s plume goes along the head (screenshot belch)'
+        Proves = 'Melee aim with the off hand and equipment aim with the head (issue #11): with the weapon hand pointing 90 degrees away, each melee press is held back until the view took the off hand, reaches the game with the view on it, Use still picks up the Praetor Suit token, the view goes back to the weapon hand, the equipment launcher launches along the head without moving the view, and the shoulder launcher is drawn at the head with the Flame Belch''s plume going along the head (screenshot belch)'
         Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
         Env = @('ETERNALVR_AIM=hand', 'ETERNALVR_MELEE_AIM=offhand', 'ETERNALVR_EQUIPMENT_AIM=head',
                 "ETERNALVR_DEBUG_COMMANDS=$script:QaTokenSchedule")
@@ -466,6 +466,10 @@ $script:QaScenarios = @(
             Test-QaPresent $c 'action aim: a Flame Belch shot while flame_belch held'
             Test-QaPresent $c 'Flame Belch axis hook at RVA'
             Test-QaPresent $c 'Flame Belch plume axis \(.*\) -> \(.*\) along the head' -Regex
+            # The launcher the flames and the frag leave is drawn at the head, not at the weapon hand (issue #14).
+            Test-QaPresent $c 'shoulder launcher hook at RVA'
+            Test-QaPresent $c 'shoulder launcher \(slot 5, .*\): .* at the head, along the head' -Regex
+            Test-QaPresent $c 'equipment launch \(slot \d\): .* along the head, from the launcher at the head' -Regex
             Test-QaPresent $c 'action aim: the view follows the weapon hand'
             Test-QaAbsent $c 'then sent anyway'
         }

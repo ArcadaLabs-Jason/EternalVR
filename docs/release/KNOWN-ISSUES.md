@@ -250,6 +250,12 @@ them is worse for you than described here.
 
 ## Controllers and aiming
 
+- **The Flame Belch now comes out over your left shoulder.** With Equipment aim set to Head (or Off hand),
+  the flames already went where you look, but they came out of a shoulder launcher that popped up in front
+  of your gun hand. Now the launcher pops up over your left shoulder, like on a flat screen, points where you
+  look (or where your off hand points), and the flames, their damage and your grenades all leave it from
+  there. The gun stays in your hand. With bHaptics, a quick tap of the Belch could play as gun kicks on your
+  right side; it's always the left shoulder now. Test rig only so far, not yet in a headset.
 - **With head aim the gun now sits in front of your face.** With motion controllers on and Aim with set to
   Head, your shots already went where you look, but the gun stayed in your hand, so with your hands down it
   pointed at the floor and you had to lift the controller to see it. Now it's placed like in gamepad mode: in

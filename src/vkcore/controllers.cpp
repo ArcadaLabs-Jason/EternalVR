@@ -8,6 +8,7 @@
 #include "vkcore/demon_view.hpp"
 #include "vkcore/gamepad_mode.hpp"
 #include "vkcore/key_inject.hpp"
+#include "vkcore/launcher_place.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -63,6 +64,7 @@ void install() {
     if (cfg.buttonPrompts) {
         s.promptHooks = installPromptHooks();
     }
+    bool launcherHook = false; // the shoulder launcher drawn at the head (launcher_place.hpp)
     if (knownBuild) {
         bool fire = false;
         s.setViewAnglesHook = installAimHooks(fire);
@@ -77,6 +79,16 @@ void install() {
         if (cfg.aim == input::AimSource::Hand && cfg.actionAim.equipment != input::ActionAimSource::Same) {
             s.equipmentHook = installEquipmentLaunchHook();
             s.belchAxisHook = installBelchAxisHook();
+            launcherHook = launcher_place::install();
+            if (!launcherHook) {
+                EVR_LOG(
+                    "%s: WARNING: equipment aim %s without the shoulder launcher hook: the launcher stays at "
+                    "the weapon hand, so the Flame Belch's flames leave it there (along the %s) and a launch "
+                    "starts at the %s ray's start",
+                    kTag, input::actionAimSourceName(cfg.actionAim.equipment),
+                    input::actionAimSourceName(cfg.actionAim.equipment),
+                    input::actionAimSourceName(cfg.actionAim.equipment));
+            }
         }
         // The off hand on the game's left arm and the weapon arm's IK need the arms at the weapon hand
         // (docs/VR_HANDS_HUD.md); without the viewmodel hook both arms stay the game's. Hidden arms use the
@@ -99,13 +111,13 @@ void install() {
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
         "%s, off hand %s (%s), weapon arm %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable "
-        "walls %s, button prompts %s, equipment launch %s, Flame Belch plume %s",
+        "walls %s, button prompts %s, equipment launch %s, Flame Belch plume %s, shoulder launcher %s",
         kTag, s.userCmdHook ? "on" : (command ? "body follow only" : "off"), onOff(s.angleHook),
         onOff(s.xinputActive.load()), onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook),
         onOff(s.offhandHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)),
         input::offhandModeName(cfg.offhand), onOff(s.weaponArmHook), input::weaponArmModeName(cfg.weaponArm),
         onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook), onOff(s.climbHook),
-        onOff(s.promptHooks), onOff(s.equipmentHook), onOff(s.belchAxisHook));
+        onOff(s.promptHooks), onOff(s.equipmentHook), onOff(s.belchAxisHook), onOff(launcherHook));
     EVR_LOG("%s: hooks in use: %d of %d mid hooks, %d of %d inline hooks", kTag, midHookCount(), kMaxMidHooks,
             inlineHookCount(), kMaxInlineHooks);
     if (!s.userCmdHook && !s.xinputActive.load()) {

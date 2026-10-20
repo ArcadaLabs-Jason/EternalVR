@@ -67,6 +67,8 @@ inline constexpr double kWorldStaleSeconds = 0.1;
 // No hand pose is used past this age, a long frame or not (view_pose_clock.hpp): longer than every single
 // frame the rig logged in play (891 ms at most), shorter than a load or a freeze.
 inline constexpr double kWorldHitchCapSeconds = 1.0;
+// A hand that loses tracking keeps aiming where it last pointed for this long, then the head takes over.
+inline constexpr double kHandHoldSeconds = 0.5;
 
 // Every family's controller data, indexed by game::Controller.
 using FamilyData = std::array<input::ControllerData, game::kControllerCount>;
@@ -552,7 +554,7 @@ void noteZoomLookHands(const std::byte* hands, const std::byte* player);
 
 // bHaptics (bhaptics_game.cpp, docs/BHAPTICS.md). With the game hooks: starts its thread once when
 // ETERNALVR_BHAPTICS=1. The fire hook: a shot of the local player's `hands` (`belch`: the fire info was the
-// Flame Belch's, told in gamepad mode, where no held action names it). The camera hook, once a game
+// Flame Belch's; its button is not asked, as the burst outlasts a tap). The camera hook, once a game
 // frame: the player's health, armor, hits and sync kill. The portal hooks (bhaptics_portal.cpp, installed by
 // startBhaptics): the player went through a portal, a pad or a level exit, or fast travelled. The launch
 // hooks (bhaptics_launch.cpp, the same): a jump pad or a booster launched the player (once per launch,

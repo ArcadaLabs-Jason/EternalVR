@@ -45,8 +45,8 @@ constexpr float kGloryKill = 80.0f;
 constexpr int kGloryKillMillis = 250;
 constexpr float kDeath = 100.0f;
 constexpr int kDeathMillis = 700;
-// The Flame Belch (a burst while its button is held: at most one pulse every kBelchGapSeconds) and the
-// equipment launcher.
+// The Flame Belch (a burst of shots for about half a second: at most one pulse every kBelchGapSeconds) and
+// the equipment launcher.
 constexpr float kBelch = 70.0f;
 constexpr int kBelchMillis = 300;
 constexpr double kBelchGapSeconds = 0.25;

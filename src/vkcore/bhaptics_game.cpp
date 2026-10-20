@@ -456,7 +456,7 @@ void noteBhapticsShot(const std::byte* hands, bool belch) {
     if (!g_running.load(std::memory_order_relaxed)) {
         return;
     }
-    if (belch || game::contains(heldActions(), game::GameAction::FlameBelch)) {
+    if (belch) {
         // The Flame Belch fires through the same hook, with the held weapon's decl.
         g_belches.fetch_add(1, std::memory_order_relaxed);
         return;

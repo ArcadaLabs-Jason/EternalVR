@@ -23,9 +23,9 @@
 // the setting.
 //
 // The equipment launcher and the Flame Belch aim from the shoulder launcher's muzzle joint, which follows the
-// weapon hand with the arms model, not from the view angles (static RE, vkcore/equipment_launch_hook.cpp):
-// the layer turns their launches and shots in its hooks and runs this policy for melee alone. The policy
-// itself handles both actions.
+// arms model, not from the view angles (static RE, vkcore/equipment_launch_hook.cpp): the layer draws that
+// launcher at the head (vkcore/launcher_place.hpp), turns their launches and shots in its hooks and runs this
+// policy for melee alone. The policy itself handles both actions.
 //
 // - The game takes a melee, glory kill or use target from its view angles when the press reaches it. So a
 //   press that needs another target is held back until the camera hook has written that target at least

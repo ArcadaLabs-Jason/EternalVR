@@ -10,8 +10,8 @@
 // - Only melee moves the view. The equipment launcher and the Flame Belch aim from the shoulder launcher's
 //   muzzle joint, not from the view angles (static RE, equipment_launch_hook.cpp), so turning the view would
 //   not move them: the launch hook turns a grenade, and the fire hook (actionShotRay) a Flame Belch shot,
-//   which goes through idHands::FireWeapon with the held weapon's decl while its button is held
-//   (docs/BHAPTICS.md).
+//   which goes through idHands::FireWeapon with the held weapon's decl (docs/BHAPTICS.md); the shoulder
+//   launcher hook draws the launcher they leave at the head (launcher_place.hpp).
 // - endGameView (noteActionPressView): the game's view angles in the game frames after a held-back press went
 //   out, against the head and both hands, for rig checks.
 

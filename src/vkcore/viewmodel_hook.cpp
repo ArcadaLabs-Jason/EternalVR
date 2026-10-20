@@ -113,6 +113,11 @@ std::atomic<bool> g_cutsceneArms{false};
 // than kGripLogDegrees from the last line (camera hook thread, under the view lock), with how far the glove
 // moves to keep its wrist in the grip's frame (xr_math::placeViewmodel). The simulator gives both one pose.
 constexpr float kGripLogDegrees = 5.0f;
+// The off hand's aim ray as last tracked and when (camera hook thread, under the view lock): a tracking blip
+// keeps it for kHandHoldSeconds, as the weapon hand's aim, so the equipment's ray (an off-hand Flame Belch or
+// launch) does not flip to the head and back.
+xr_math::EyeRelativePose g_offAim;
+LONGLONG g_offAimQpc = 0;
 std::optional<xr_math::IdAngles> g_loggedGrip;
 int g_gripLines = 0;
 
@@ -480,9 +485,13 @@ void endGameView(std::byte* renderView,
         world.offElbow = inYaw(input::offhandOffsetFor(cfg.offhandElbow, cfg.handedness));
     }
     // The off hand's aim ray and the head, for a Flame Belch shot under ETERNALVR_EQUIPMENT_AIM.
-    world.offAimValid = p.aimValid[off];
+    if (p.aimValid[off]) {
+        g_offAim = xr_math::controllerRelativeToEye(body, headOffset, p.head, p.aim[off], unitsPerMetre);
+        g_offAimQpc = nowQpc();
+    }
+    world.offAimValid = g_offAimQpc != 0 && (p.aimValid[off] || secondsSince(g_offAimQpc) < kHandHoldSeconds);
     if (world.offAimValid) {
-        world.offAim = xr_math::controllerRelativeToEye(body, headOffset, p.head, p.aim[off], unitsPerMetre);
+        world.offAim = g_offAim;
     }
     world.head = xr_math::controllerRelativeToEye(body, headOffset, p.head, p.head, unitsPerMetre);
     world.unitsPerMetre = unitsPerMetre;
