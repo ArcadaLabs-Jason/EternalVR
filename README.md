@@ -106,6 +106,14 @@ Open a [GitHub issue](../../issues/new/choose) with the bug template. In the lau
 account ID removed, and the dialog lists every file before you save it. Check
 [`docs/release/KNOWN-ISSUES.md`](docs/release/KNOWN-ISSUES.md) first.
 
+**Something looks wrong in one eye, or different between your eyes?** Take a capture in the headset at that
+spot: hold the **left Menu** button and pull a **trigger**. It saves each eye separately plus the HUD, and the
+game doesn't pause or fire. On SteamVR with Quest/Rift controllers the left Menu button opens the SteamVR
+dashboard, so there you hold **both sticks pressed** and pull a trigger instead. **Export report...** puts your
+latest captures in the zip by itself. They're also on your PC in `%LOCALAPPDATA%\EternalVR\logs\<session>\captures\`
+(a `-L.png` and `-R.png` per capture). A normal screenshot or a Virtual Desktop one only shows one eye, so for
+these bugs the capture is what helps.
+
 ## Ideas and questions
 
 Use [GitHub Discussions](../../discussions) for ideas, questions and setups that work (or do not).
