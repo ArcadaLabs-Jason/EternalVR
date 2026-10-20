@@ -257,9 +257,12 @@ them is worse for you than described here.
   and back over about half a second, and your left hand slid toward the game's own pose and back. All of
   this was measured on the test rig, not yet in a headset; if a glove or a gun sits off your hand, please
   tell me which one and roughly how far.
-- **Floating at the water's surface** the game holds the gun in a pose of its own, and the gun and glove can
-  sit 30 to 70 cm away from your hand (with the weapon in the left hand, much further) until you're back on
-  land or under water. Test rig only.
+- **Floating at the water's surface** your hands now stay on your real hands. Up there the game keeps
+  swimming with both arms and tucks the gun away out of view (it can't be fired either), even though it
+  counts the gun as held. Before, the swimming hand sat about 30 cm off your hand, and with the weapon in
+  the left hand the left glove ended up more than a metre behind you. Now the arms are placed like they are
+  under water, so the swim stroke still moves your hands around by up to about 17 cm. When the game briefly
+  raises or lowers the gun up there, you may see it for a split second a bit off your hand. Test rig only.
 - **The Unmaykr and the Crucible now sit in your hand too.** The Unmaykr is held like the other guns. The
   Crucible is held in your right fist the way the game holds it, so the blade stands up out of your fist
   (it's turned a bit from the flat game's angle so the hand matches yours). A punch, a chainsaw cut, a

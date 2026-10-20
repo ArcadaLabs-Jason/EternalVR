@@ -255,6 +255,7 @@ target_sources(evr_layer PRIVATE
     arm_dump.cpp
     arm_model.cpp
     arm_signals.cpp
+    arms_item.cpp
     game_arm.cpp
     game_arm_joints.cpp
     game_arm_weight.cpp
@@ -263,6 +264,7 @@ target_sources(evr_layer PRIVATE
     offhand_hook.cpp
     offhand_mods.cpp
     weapon_arm.cpp
+    weapon_arm_row.cpp
     prompt_command_bar.cpp
     prompt_hint_keys.cpp
     prompt_hooks.cpp
@@ -273,6 +275,7 @@ target_sources(evr_layer PRIVATE
     prompt_weapon_info.cpp
     rest_wheel.cpp
     rumble_hook.cpp
+    input_summary_log.cpp
     touch_buttons_log.cpp
     usercmd_hook.cpp
     view_poses.cpp

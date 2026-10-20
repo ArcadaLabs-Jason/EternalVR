@@ -42,8 +42,10 @@
 namespace evr::vkcore::controllers::left_hand_arms {
 
 // Every tick of the player's hands while both arms are the layer's (instead of the weapon arm and the off
-// hand): `weaponSignals` with offHandTracked for the head and the weapon hand, `offSignals` for the off hand.
+// hand): `arms` the tick's arms' item, `weaponSignals` with offHandTracked for the head and the weapon hand,
+// `offSignals` for the off hand.
 void tick(const std::byte* hands,
+          const ArmsTick& arms,
           const input::ArmSignals& weaponSignals,
           const input::ArmSignals& offSignals,
           const WorldHand& world,

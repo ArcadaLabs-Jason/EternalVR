@@ -80,6 +80,9 @@ ArmDumpRecord sample() {
     r.aimValid = true;
     r.aim.offset = {0.3f, -0.15f, -0.25f};
     r.grip = Vec3{0.3f, -0.15f, -0.25f};
+    r.armsItem = "weapon/player/fists_swim";
+    r.handsState = 12;
+    r.handsSwim = true;
     return r;
 }
 
@@ -96,7 +99,7 @@ TEST_CASE("a dump line is one balanced JSON object with every key in order") {
               0) == 0);
     std::size_t at = 0;
     for (const char* key : {"\"input\":", "\"arms\":", "\"model\":", "\"head\":", "\"item\":", "\"weapon\":",
-                            "\"aim\":", "\"grip\":", "\"offgrip\":"}) {
+                            "\"aim\":", "\"grip\":", "\"offgrip\":", "\"arms_item\":", "\"hstate\":"}) {
         const std::size_t found = line.find(key, at);
         CHECK_MESSAGE(found != std::string::npos, key);
         at = found == std::string::npos ? at : found;
@@ -125,7 +128,8 @@ TEST_CASE("a dump line gives the scripted input, the arms and the view as docume
                    "-0.20000],\"axis\":[1.00000,0.00000,0.00000,0.00000,1.00000,0.00000,0.00000,0.00000,"
                    "1.00000]},\"head\":null,\"item\":\"weapon/player/shotgun\",\"weapon\":[0.58500,"));
     CHECK(contains(line, "\"aim\":{\"origin\":[0.30000,-0.15000,-0.25000],\"dir\":[1.00000,0.00000,0.00000]},"
-                         "\"grip\":[0.30000,-0.15000,-0.25000],\"offgrip\":null}\n"));
+                         "\"grip\":[0.30000,-0.15000,-0.25000],\"offgrip\":null,"
+                         "\"arms_item\":\"weapon/player/fists_swim\",\"hstate\":12,\"hswim\":true}\n"));
 }
 
 TEST_CASE("a dump line escapes the item's name and writes null for what is not known") {
@@ -139,5 +143,6 @@ TEST_CASE("a dump line escapes the item's name and writes null for what is not k
     CHECK(contains(line, "\"fault\":\"none\""));
     CHECK(contains(line, "\"input\":{\"L\":null,\"R\":null}"));
     CHECK(contains(line, "\"model\":null,\"head\":null"));
-    CHECK(contains(line, "\"weapon\":null,\"aim\":null,\"grip\":null,\"offgrip\":null}"));
+    CHECK(contains(line, "\"weapon\":null,\"aim\":null,\"grip\":null,\"offgrip\":null,\"arms_item\":\"\","
+                         "\"hstate\":null,\"hswim\":null}"));
 }

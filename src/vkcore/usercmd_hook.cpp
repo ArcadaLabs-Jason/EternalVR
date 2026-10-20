@@ -195,6 +195,7 @@ void onPutUserCmd(const HookRegisters& regs) {
     const bool suppressed = (regs.r14 & 0xFFu) != 0;
     s.gameSuppressing.store(suppressed, std::memory_order_relaxed);
     const MappedInput mapped = runMapper();
+    InputSummaryCommit summary; // counts "sent" only when the command below is written
     auto* cmd = reinterpret_cast<std::byte*>(regs.r8);
     // The pause key goes out even while the game suppresses buttons: that is how its menu is closed. Every
     // key the controllers hold goes up when their input goes stale.
@@ -255,6 +256,7 @@ void onPutUserCmd(const HookRegisters& regs) {
     safeCopy(cmd + kCmdForward, &newForward, sizeof(newForward));
     safeCopy(cmd + kCmdRight, &newRight, sizeof(newRight));
     safeCopy(cmd + kCmdUp, &newUp, sizeof(newUp));
+    summary.reachedGame = !suppressed;
     addBodyFollow(cmd, suppressed);
     if (injected != 0 || move.forward != 0 || move.right != 0) {
         s.commandsWithInput.fetch_add(1, std::memory_order_relaxed);
@@ -403,6 +405,7 @@ MappedInput runMapper() {
         sendWheelPointer(s, false, {}, 0.0f);
         s.wheelHand.reset();
         restoreWheelSlowdown("the controllers' input went stale");
+        gapInputSummary();
         return out;
     }
     if (!ensureMapper(s, snapshot.controller, "")) {
@@ -445,6 +448,7 @@ MappedInput runMapper() {
             s.wheelHand->update(game::contains(out.actions, game::GameAction::WeaponWheel), hand.poseValid,
                                 hand.aimPose.orientation);
     }
+    const input::GameInput asked = out.input; // for the 10 s input line, before a menu holds it back
     // Published before a menu holds them back: in a tutorial popup the menu router presses their keys.
     s.heldActionBits.store(out.actions.to_ullong(), std::memory_order_relaxed);
     s.heldActionsQpc.store(now, std::memory_order_relaxed);
@@ -472,6 +476,7 @@ MappedInput runMapper() {
         EVR_LOG("%s: gesture:%s%s%s", kTag, out.input.thrown ? " throw" : "",
                 out.input.swung ? " overhead swing" : "", jump);
     }
+    stageInputSummary(snapshot.frame, asked, out, dt, menuHold);
     s.viewQueue.add({0.0f, out.input.turnDegrees});
     // The comfort vignette follows the motion sent (artificialMotion); the mapper counted at most this step.
     const float mapDt = std::min(dt, input::kMaxFrameSeconds);

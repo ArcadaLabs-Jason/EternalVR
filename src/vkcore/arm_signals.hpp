@@ -6,6 +6,8 @@
 #include "features/input/offhand_policy.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 
 namespace evr::vkcore::controllers {
 
@@ -13,5 +15,9 @@ namespace evr::vkcore::controllers {
 // disables and sync (type info, build 25216728); offHandTracked, modelPlaced and forcedView are left to the
 // caller.
 input::ArmSignals readArmSignals(const std::byte* hands, const std::byte* player);
+
+// idHands::destHandsState alone, or nullopt when it cannot be read; idHands::handsFlags alone, or 0.
+std::optional<std::int32_t> readDestHandsState(const std::byte* hands);
+std::uint64_t readHandsFlags(const std::byte* hands);
 
 } // namespace evr::vkcore::controllers

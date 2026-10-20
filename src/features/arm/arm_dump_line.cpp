@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <string>
 #include <string_view>
 
 namespace evr::arm {
@@ -216,6 +217,12 @@ std::string armDumpLine(const ArmDumpRecord& r) {
     optionalVec(out, r.grip);
     out += ",\"offgrip\":";
     optionalVec(out, r.offGrip);
+    out += ",\"arms_item\":";
+    text(out, r.armsItem);
+    out += ",\"hstate\":";
+    out += r.handsState ? std::to_string(*r.handsState) : std::string("null");
+    out += ",\"hswim\":";
+    out += !r.handsSwim ? "null" : *r.handsSwim ? "true" : "false";
     out += "}\n";
     return out;
 }

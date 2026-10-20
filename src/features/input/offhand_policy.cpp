@@ -117,6 +117,26 @@ bool readsGameGrip(const ArmSignals& weaponSignals, WeaponArmMode mode) {
     return decideWeaponArm(weaponSignals, mode).controller;
 }
 
+bool handsSwim(std::int32_t destHandsState, std::uint64_t handsFlags) {
+    return (handsFlags & hands_flag::kSwimming) != 0 || destHandsState == kHandsStateSwimIdle;
+}
+
+const void* armsItem(const void* held, bool heldIsSwimFists, bool swim, const void* swimFists) {
+    return swim && swimFists && !heldIsSwimFists ? swimFists : held;
+}
+
+float secondsSinceSwim(float before, bool swim, float dtSeconds) {
+    if (swim) {
+        return 0.0f;
+    }
+    const float dt = std::isfinite(dtSeconds) ? std::max(0.0f, dtSeconds) : 0.0f;
+    return std::min(kNeverSwamSeconds, before + dt);
+}
+
+bool gripTakingAllowed(bool readsGameGrip, bool armsIsHeld, bool handsSwim, float secondsSinceSwimEnded) {
+    return readsGameGrip && armsIsHeld && !handsSwim && secondsSinceSwimEnded >= kSwimGripHoldOffSeconds;
+}
+
 OffhandMode leftHandOffMode(OffhandMode mode, bool onController) {
     return mode == OffhandMode::Game && onController ? OffhandMode::Free : mode;
 }

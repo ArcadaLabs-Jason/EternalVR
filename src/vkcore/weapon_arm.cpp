@@ -21,7 +21,6 @@
 #include <cstdint>
 #include <numbers>
 #include <optional>
-#include <string>
 
 namespace evr::vkcore::controllers::weapon_arm {
 
@@ -70,8 +69,9 @@ struct ArmState {
     bool idleHandOk = false;
     const std::byte* gloveHands = nullptr;
     float gloveCurl = 0.0f; // the last tick's, for the trace
-    // The game's own grip of the held item as the last clean read had it (capture()).
+    // The game's own grip of the arms' item `item` (the tick's) as the last clean read had it (capture()).
     std::optional<Capture> captured;
+    const std::byte* item = nullptr;
     std::uint32_t captures = 0;
     // The hands' modifier weights this tick, how the glove is written for them and its settle weight
     // (tick()).
@@ -105,42 +105,6 @@ ArmState g_left{arm::ArmSide::Left, 0x28E4, "weapon arm (left glove)"};
 
 ArmState& stateOf(arm::ArmSide side) {
     return side == arm::ArmSide::Right ? g_right : g_left;
-}
-
-// The held item's [right_grip] row (the weapon arm's), looked up when the held item changes.
-const std::byte* g_gripDecl = nullptr;
-std::optional<game::RightGrip> g_grip;
-std::string g_gripItem;
-std::uint64_t g_gripLines = 0;
-
-// The glove's grip for a [right_grip] row: the game grip, its wrist moved where the row says.
-arm::GripPose gripPose(const game::RightGrip& row) {
-    arm::GripPose grip = arm::heavyCannonGrip();
-    switch (row.grip) {
-    case game::GameGrip::HeavyCannon:
-        break;
-    }
-    if (row.wrist) {
-        grip.wrist.position = {(*row.wrist)[0], (*row.wrist)[1], (*row.wrist)[2]};
-    }
-    return grip;
-}
-
-void updateGrip(const std::byte* hands) {
-    const std::byte* decl = heldItemDecl(hands);
-    if (decl == g_gripDecl) {
-        return;
-    }
-    g_gripDecl = decl;
-    g_gripItem = decl ? itemDeclName(decl) : std::string{};
-    g_grip = state().offsets.lookupRightGrip(g_gripItem);
-    if (g_grip && g_gripLines < 20) {
-        ++g_gripLines;
-        EVR_LOG("%s: '%s' holds its gun by a handle turned away from a controller's grip: the glove goes "
-                "on a grip in the Heavy Cannon's idle grip while the layer poses the arm (the gun stays the "
-                "game's)",
-                g_right.tag, g_gripItem.c_str());
-    }
 }
 
 float smooth(float t) {
@@ -223,10 +187,8 @@ void noteCapture(ArmState& s, const std::byte* hands, const game_arm::ArmRead& r
         return;
     }
     const xr_math::ModelPose& attach = read.read[index(ArmJoint::Attach)];
-    s.captured = Capture{heldItemDecl(hands),
-                         {arm::relative(attach, read.read[index(ArmJoint::Hand)]), hand.local},
-                         attach,
-                         ++s.captures};
+    s.captured = Capture{
+        s.item, {arm::relative(attach, read.read[index(ArmJoint::Hand)]), hand.local}, attach, ++s.captures};
 }
 
 // The arm solved to the wrist and mixed with the game's by `weight`, written; false when it cannot be used
@@ -535,19 +497,15 @@ void logSettings() {
     }
 }
 
-std::optional<arm::GripPose> rowGrip(const std::byte* hands) {
-    updateGrip(hands);
-    return g_grip ? std::optional(gripPose(*g_grip)) : std::nullopt;
-}
-
 void tick(const std::byte* hands,
+          const ArmsTick& arms,
           input::ArmSignals signals,
           const WorldHand& world,
           const ModelPlacement& model,
           float dt) {
     const input::ControllerSettings& cfg = settings();
-    updateGrip(hands);
-    g_right.held = g_grip ? std::optional(gripPose(*g_grip)) : std::nullopt;
+    g_right.item = arms.arms;
+    g_right.held = rowGrip(arms.arms);
     g_right.modelSpace = false;
     tickArm(g_right, hands, input::decideWeaponArm(signals, cfg.weaponArm), world, model,
             {world.weaponShoulder, world.weaponElbow}, dt);
@@ -562,6 +520,7 @@ void holding(arm::ArmSide side,
     ArmState& s = stateOf(side);
     s.held = hold.grip ? std::optional(*hold.grip) : std::nullopt;
     s.modelSpace = hold.modelSpace;
+    s.item = hold.item;
     s.wristTarget = hold.grip ? hold.wrist : std::nullopt;
     tickArm(s, hands, hold.decision, world, model, {hold.shoulder, hold.elbow}, dt);
 }

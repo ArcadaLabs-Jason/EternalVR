@@ -363,7 +363,7 @@ void releaseOnTrip(const std::byte* hands) {
             left[0], left[1]);
 }
 
-void poseLeftHand(const HookRegisters& regs) {
+void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
     if (!mp_guard::allowsGameTouch()) {
         releaseOnTrip(hands);
@@ -405,12 +405,12 @@ void poseLeftHand(const HookRegisters& regs) {
     weaponSig.offHandTracked = view.worldCurrent; // the weapon arm's: the head and the weapon hand
     sig.offHandTracked = view.worldCurrent && world.offValid;
     if (offhand_mods::fingerCount(arm::ArmSide::Left) > 0) {
-        left_hand_arms::tick(hands, weaponSig, sig, world, model,
+        left_hand_arms::tick(hands, arms, weaponSig, sig, world, model,
                              dt); // the left attach joint stays the game's
         return;
     }
     if (g_weaponArm) {
-        weapon_arm::tick(hands, weaponSig, world, model, dt);
+        weapon_arm::tick(hands, arms, weaponSig, world, model, dt);
     }
     const input::ArmDecision decision = input::decideArm(sig, cfg.offhand);
     const float weight =
@@ -500,12 +500,23 @@ void noteAttachMod(const HookRegisters& regs) {
 }
 
 void onLeftHandMod(const HookRegisters& regs) {
-    poseLeftHand(regs);
+    // The arms' item as the viewmodel hook read it this tick, for the arms and the dump alike: for the
+    // player's hands only. The hook runs for whatever idHands calls UpdateWeaponLagJointMods, and other hands
+    // would make the arms' item forget the player's (its swim fists and the swim's clock). Both users check
+    // the owner again before they read `arms`.
+    const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
+    const std::byte* owner = nullptr;
+    ArmsTick arms;
+    arms.hands = hands;
+    if (mp_guard::allowsGameTouch() && safeRead(hands + kHandsOwner, owner) && isPlayerSafe(owner)) {
+        arms = armsTick(hands);
+    }
+    poseLeftHand(regs, arms);
     if (settings().armSolve == input::ArmSolve::Bind) {
         noteAttachMod(regs);
     }
     if (arm_dump::on()) {
-        arm_dump::tick(reinterpret_cast<const std::byte*>(regs.rdi));
+        arm_dump::tick(arms);
     }
 }
 

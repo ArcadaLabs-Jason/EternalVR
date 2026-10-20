@@ -29,6 +29,10 @@
 //   weapon  the weapon's root: the right arm's attach joint (righthandattach) as read, a pose of 12
 //   aim     the ray shots take: {"origin" [x y z] from the eye, "dir" [x y z] world}
 //   grip    the weapon hand's grip position from the eye [x y z]; offgrip the off hand's, or null
+//   arms_item  the item the arms are placed and held by (input::armsItem: the swim fists while the hands swim
+//           with a gun held), "" for none; hstate the hands' state (idHands::destHandsState: 0 HS_IDLE,
+//           12 HS_SWIM_IDLE, 14 HS_TRANSITIONING), or null; hswim whether the hands swim (true / false,
+//           input::handsSwim), or null
 
 #include "features/arm/arm_joints.hpp"
 #include "xr_math/weapon_pose.hpp"
@@ -76,6 +80,9 @@ struct ArmDumpRecord {
     xr_math::EyeRelativePose aim; // offset = the ray's start from the eye, axis.forward = its direction
     std::optional<Vec3> grip;
     std::optional<Vec3> offGrip;
+    std::string armsItem;
+    std::optional<int> handsState;
+    std::optional<bool> handsSwim;
 };
 
 // The joint roles in a pose set, in ArmJoint order.

@@ -23,6 +23,7 @@ evr_add_module(evr_input
         hands_jump.cpp
         haptics_policy.cpp
         input_mapper.cpp
+        input_summary.cpp
         menu_release_latch.cpp
         interaction_profiles.cpp
         locomotion_direction.cpp

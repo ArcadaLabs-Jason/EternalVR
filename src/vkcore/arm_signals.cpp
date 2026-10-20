@@ -30,4 +30,14 @@ input::ArmSignals readArmSignals(const std::byte* hands, const std::byte* player
     return s;
 }
 
+std::optional<std::int32_t> readDestHandsState(const std::byte* hands) {
+    std::int32_t state = -1;
+    return hands && safeRead(hands + kHandsDestState, state) ? std::optional(state) : std::nullopt;
+}
+
+std::uint64_t readHandsFlags(const std::byte* hands) {
+    std::uint64_t flags = 0;
+    return hands && safeRead(hands + kHandsFlags, flags) ? flags : 0;
+}
+
 } // namespace evr::vkcore::controllers

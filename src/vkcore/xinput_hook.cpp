@@ -66,6 +66,7 @@ DWORD WINAPI hookedGetState(DWORD user, XINPUT_STATE* out) {
     // Pad 0 stays connected while the controllers are attached, even while their input is stale (the
     // headset taken off), so the game never sees the pad come and go.
     const MappedInput mapped = runMapper();
+    InputSummaryCommit summary{true}; // the pad below carries what the mapper made
     s.padReads.fetch_add(1, std::memory_order_relaxed);
     const bool connected = result == ERROR_SUCCESS;
     const input::PadState real = connected ? fromXInput(out->Gamepad) : input::PadState{};

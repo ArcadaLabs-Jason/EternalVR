@@ -665,6 +665,37 @@ arms for the swap. With the weapon in the left hand the left glove sits 11.0 cm 
 grip is read at one moment of the stroke. Not chosen: the glove held on the controller
 while swimming (the stroke dropped; the game's left glove, with the default off hand, would still swim).
 
+**At the water's surface the arms swim with the gun in the slot** (`features/input/offhand_policy.hpp`, armsItem;
+`vkcore/arms_item.cpp`; DECISIONS T-142; hands-rig.md, section 17). Floating at the surface the game puts the gun back
+in the right hand's slot now and then while the arms keep the swim's pose: the gun's root, which the gun hangs from,
+stays where the swim parks it, about 1.5 m from each glove behind the camera (the left attach joint with it, to
+0.0 mm), so no gun shows but for a few frames as the game raises or lowers it, and the trigger fires nothing [rig].
+Placed by the gun's row, the swim's right glove sat 28.3 to 34.6 cm (the median of the settled dump lines) from the real
+hand; with the weapon in the left hand the left glove was held on the gun's parked root, 1.3 m behind the left hand.
+While the hands swim (the hands' flag `swimming`, bit 35 of idHands::handsFlags, or their state HS_SWIM_IDLE [static:
+the reflected type info; rig: set through every swim and never on land]) the arms are placed and held as the swim's
+fists' whatever the slot holds: their row, their grips with the weapon in the left hand (the player's own swim fists,
+idPlayer::weaponFistsSwim, checked by name), and the view follows the head as for the swim's fists. The item is read
+once per tick of the hands, by the viewmodel hook, and the rows, the grips and the arm dump all go by that one answer
+(`vkcore/controllers_impl.hpp`, ArmsTick). After: the right glove 5.7 cm (median, 17.1 at most once settled) from the
+real hand, as with the swim's fists, the left glove 11.2 / 12.4 cm (from 127.8), and no step of the model at the changes
+of the held item in the water (before: one of the rows' difference, 28 to 55 cm, at each). The game's own raise or lower
+at those changes, a few frames with the gun in view while the game has the arms, is now placed by the swim's row too, so
+the gun shows there up to 34 cm from where the gun's row would put it. The game's grips of the held item (the weapon in
+the left hand) are read only while the arms hold that item, the hands do not swim, and they last swam 1 s ago or more
+(input::gripTakingAllowed): the swim's pose and the hands' signals change a few ticks apart, and a grip read from the
+swim's pose is kept as the gun's, by name, across levels. At a dive the hands swim a tick before their pose leaves the
+gun's, and a grip read then held the left glove 1.3 m off through the whole swim (rig, a build without the rule). On the
+way out the 1 s outlasts the hands' signal's clear spells in the water (a lower: one dump line, 0.25 s) and is as long as
+the game's longest raise after a teleport onto land (0.5 to 1.0 s) [rig]; a way out by swimming to a shore or climbing out has not been
+run. Logs: `controllers: the hands swim with '<item>' held: the arms are placed and held as the swim fists'` as that
+starts (up to 40 lines); `controllers: the hands swim ('<item>' held)` at a dive and `controllers: the hands have not
+swum for 1.0 s ('<item>' held): the arms' grips of the game's are read again` on the way out (up to 40 lines);
+`controllers: idPlayer::weaponFistsSwim reads as '<name>', not the swim fists: the arms keep the held item's row` once
+per pointer if the field holds another item; with the weapon in the left hand, `left-handed arms: the <right|left> arm's
+grip of '<item>' kept, read with the gun's root at (x y z) m (model)` when a kept grip's item changes or its root moves
+1 cm (up to 80 lines).
+
 **Quick actions and the row.** A melee or the chainsaw's button puts its own item in the hands, and the model's
 placement takes that item's row (`default`) at once: 8.3 cm and 2.2 degrees from the combat shotgun's, 38.1 cm
 from the chaingun's, 48.7 cm and 37 degrees from the Crucible's (rig, the dump's placement at the change). The
@@ -856,7 +887,9 @@ arms and the Heavy Cannon's grip).
   its kept grip places it from the first frame (hands-rig.md, section 16).
 - **Rig, the rest of the held items** (hands-rig.md, section 16; the default off hand). The left glove's wrist
   from the left hand's wrist point, median / largest: Unmaykr 0.2 / 0.3 cm, Crucible 0.2 / 0.5 (its row's turn
-  reflected), chaingun 0.2 / 0.3, combat shotgun 0.1 / 0.2. The swim's fists: 11.0 / 12.4 cm, the stroke about a
+  reflected), chaingun 0.2 / 0.3, combat shotgun 0.1 / 0.2. At the water's surface with the gun in the slot the
+  left glove held as on the swim's fists (11.2 / 12.4 cm; 127.8 / 137.5 before: "At the water's surface" above). The
+  swim's fists: 11.0 / 12.4 cm, the stroke about a
   grip read at one moment of it (the right hand's figures above are about the stroke's median). Melee and the
   chainsaw's button hand both arms back for the whole action, as in the right hand.
 - **Not verified.** In a headset; glory kills with the weapon in the left hand [static: a forced view keeps the

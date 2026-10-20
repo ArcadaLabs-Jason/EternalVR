@@ -33,6 +33,8 @@ ModelPlacement g_model;
 std::array<arm::DumpArm, 2> g_arms;
 const std::byte* g_itemDecl = nullptr;
 std::string g_itemName;
+const std::byte* g_armsDecl = nullptr;
+std::string g_armsName;
 
 std::wstring widen(const std::string& text) {
     const int size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0);
@@ -131,7 +133,8 @@ void noteLayerArm(arm::ArmSide side,
     a.root = read.root;
 }
 
-void tick(const std::byte* hands) {
+void tick(const ArmsTick& arms) {
+    const std::byte* hands = arms.hands;
     if (!on() || !g_viewNoted) {
         forgetTick();
         return;
@@ -168,12 +171,20 @@ void tick(const std::byte* hands) {
             r.offGrip = g_world.offGrip.offset;
         }
     }
-    const std::byte* decl = heldItemDecl(hands);
+    const std::byte* decl = arms.held;
     if (decl != g_itemDecl) {
         g_itemDecl = decl;
         g_itemName = decl ? itemDeclName(decl) : std::string{};
     }
     r.item = g_itemName;
+    const std::byte* armsDecl = arms.arms;
+    if (armsDecl != g_armsDecl) {
+        g_armsDecl = armsDecl;
+        g_armsName = armsDecl ? itemDeclName(armsDecl) : std::string{};
+    }
+    r.armsItem = g_armsName;
+    r.handsState = arms.handsState; // null when unread
+    r.handsSwim = arms.swim;
     const arm::DumpArm& right = g_arms[slot(arm::ArmSide::Right)];
     if (right.readPoses) {
         r.weapon = (*right.readPoses)[arm::index(arm::ArmJoint::Attach)];

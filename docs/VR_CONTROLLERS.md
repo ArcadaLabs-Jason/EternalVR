@@ -47,6 +47,30 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   least 50 ms and two commands, so the game samples it). Every action that starts is logged by name
   (`controllers: action quick_switch`), which the weapon-swap protocol needs: the first 500, then one a minute
   with the count left out (`ETERNALVR_CONTROLLERS_TRACE=1` logs them all).
+- **Input summary** (`features/input/input_summary.hpp`, `vkcore/input_summary_log.cpp`). So that a report of
+  "the controllers did nothing" can be read from a log, every 10 s of play in which anything happened (a
+  press, a stick out of the centre, input held back), and once a minute while nothing does, one line:
+  `controllers: input, last 10 s: left stick max 0.00, off centre 0.0 s; right stick max 0.93, off centre
+  4.2 s; move max 0.93 (sent 0.93); turn 0 deg (sent 0); presses mapped/sent: fire 3/3, jump 1/0; held back:
+  menu 3.2 s, game suppressing buttons 0.0 s, forced view 0.0 s`. The 10 s are command time while the game
+  runs (the mapper's frames, each counted at most 0.1 s): the window stretches below 10 fps and stops while
+  no commands arrive, so it does not line up exactly with the log's timestamps. Per hand, the raw stick's
+  largest deflection and the time it was past 0.25 (the stick counts as off centre); the move axis' largest
+  magnitude and the turn in degrees as the mapper made them and, in brackets, as sent to the game; per game
+  action the presses the controls made ("mapped": the action went down in the mapper's output) and how many
+  of them reached the game ("sent": the action went down in the game's command that the layer wrote, after a
+  menu's hold, the minimum hold and the melee/equipment aim wait; a frame where the layer wrote nothing, as
+  while the game suppresses buttons, sends nothing, and the same goes for its move and turn); and the
+  seconds gameplay input was held back by a menu (or a control still held from one), by the game
+  suppressing buttons (a popup, a cutscene) and by a forced view (a Glory Kill, a camera animation). Only
+  actions with a press are listed (`none` otherwise); a list too long for the line ends in `...` and the
+  held-back part is kept. Reading it: a stick that never leaves 0.00 reports nothing from the runtime;
+  mapped above sent (`jump 2/0`) means the control worked and something kept the press from the game: a
+  menu, the game suppressing buttons, a forced view (see the held back seconds), the minimum hold (a double
+  tap inside it gives 2/1), or the aim wait (a melee or equipment press released before the wait ends gives
+  1/0); no entry at all for an action means it never went down in that window: the player did not press it,
+  or the binding did not fire. The first 360 lines with something in them are all logged, then one a
+  minute; the idle lines do not count against that.
 - **User command** (L1). A mid-hook on the call of `idUserCmdMgr::PutUserCmd` (RVA 0x43E8DD; r8 the finished
   command, ebx the local user, r14b set while the game suppresses buttons). For local user 0 the actions'
   bits (`game/eternal/usercmd_buttons.hpp`) are ORed into `buttons` (+0x10) and the move is added to

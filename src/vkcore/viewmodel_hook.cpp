@@ -84,8 +84,8 @@ constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
 // hands are left where the game puts them from its view while the fists are held: the punch goes where the
 // view looks (issue #15: with the arms kept on the weapon hand the punch went along the controller).
 constexpr std::string_view kFistsPrefix = "weapon/player/fists";
-// While the player swims the game puts these fists in the hands; the swim and its dash follow the game's
-// view.
+// While the player swims the game puts these fists in the hands, or the arms hold their pose with a gun in
+// the slot (ArmsTick); the swim and its dash follow the game's view.
 constexpr std::string_view kSwimFists = "weapon/player/fists_swim";
 
 // The held item's decl, its offset and its sight row (viewmodel hook thread only).
@@ -165,10 +165,19 @@ std::string declName(const std::byte* decl) {
     return std::string(text);
 }
 
-game::WeaponOffset offsetFor(const std::byte* hands) {
+// The held item's decl, and the one the arms are placed and held by (the tick's ArmsTick).
+const std::byte* g_loggedArmsHeld = nullptr;
+std::atomic<int> g_armsLines{0};
+
+game::WeaponOffset offsetFor(const ArmsTick& arms) {
     const input::ControllerSettings& cfg = settings();
-    const std::byte* decl = nullptr;
-    safeRead(hands + kHandsRightItemDecl, decl);
+    const std::byte* held = arms.held;
+    const std::byte* decl = arms.arms;
+    if (decl != held && held != g_loggedArmsHeld && g_armsLines.fetch_add(1) < 40) {
+        EVR_LOG("%s: the hands swim with '%s' held: the arms are placed and held as the swim fists'", kTag,
+                held ? declName(held).c_str() : "");
+    }
+    g_loggedArmsHeld = decl != held ? held : nullptr;
     if (decl != g_swimDecl) {
         g_swimDecl = decl;
         g_swimFists.store(decl && declName(decl).starts_with(kSwimFists), std::memory_order_relaxed);
@@ -220,6 +229,7 @@ void onViewmodel(const HookRegisters& regs) {
     // Every tick of the player's hands counts, the game's own included: the views' poses age by ticks
     // (view_pose_clock.hpp).
     const TickView view = handsTick();
+    const ArmsTick arms = noteArmsTick(hands); // the tick's arms' item, for every hook of the tick
     if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load()) {
         return; // forced views (glory kills, cutscenes) keep the game's own hands animation
     }
@@ -230,7 +240,7 @@ void onViewmodel(const HookRegisters& regs) {
         !std::isfinite(eye[0]) || !std::isfinite(eye[1]) || !std::isfinite(eye[2])) {
         return;
     }
-    const game::WeaponOffset offset = offsetFor(hands);
+    const game::WeaponOffset offset = offsetFor(arms);
     if (g_cachedFists && cfg.aim == input::AimSource::Hand &&
         cfg.actionAim.melee != input::ActionAimSource::Same) {
         if (g_loggedFists.fetch_add(1) == 0) {

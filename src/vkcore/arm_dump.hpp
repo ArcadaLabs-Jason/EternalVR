@@ -36,8 +36,8 @@ void noteLayerArm(arm::ArmSide side,
                   const arm::ArmPoses& written,
                   const xr_math::ModelPose* target);
 
-// After the hook ran for `hands`: writes a line when 0.25 s have passed since the last and a view was noted
-// this tick, then forgets the tick's notes.
-void tick(const std::byte* hands);
+// After the hook ran for the tick's hands (`arms`, with the tick's arms' item): writes a line when 0.25 s
+// have passed since the last and a view was noted this tick, then forgets the tick's notes.
+void tick(const ArmsTick& arms);
 
 } // namespace evr::vkcore::controllers::arm_dump

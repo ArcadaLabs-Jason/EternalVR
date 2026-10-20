@@ -46,7 +46,13 @@ struct Grips {
     const std::byte* unsettledDecl = nullptr;
     int unsettledTicks = 0;
     std::vector<const std::byte*> logged; // held items logged as unsettled, or not stored (full)
+    // The grip last logged as kept: its item and the gun's root it was read under.
+    const std::byte* keptDecl = nullptr;
+    Vec3 keptRoot;
 };
+// A kept grip is logged when its item changes or its root moves this far from the last line's (metres).
+constexpr float kKeptLogMetres = 0.01f;
+int g_readLines = 0;
 std::array<Grips, 2> g_grips;
 const std::byte* g_gripHands = nullptr;
 // Hook thread only: whether the held item's [left_handed_off_hand] row puts the right glove on the right
@@ -120,12 +126,25 @@ void keepGrip(arm::ArmSide side, float unitsPerMetre) {
         return;
     }
     g.unsettledTicks = 0;
-    if ((!learned(g, c->decl) || !g.book.keep(c->decl, *c)) && firstLog(g.logged, c->decl)) {
-        EVR_LOG(
-            "%s: the %s arm's grips are full (%zu held items): '%s' is not kept, its arms stay the game's",
-            kTag, sideName(side), arm::GripBook<weapon_arm::Capture>::kMaxItems,
-            itemDeclName(c->decl).c_str());
+    if (!learned(g, c->decl) || !g.book.keep(c->decl, *c)) {
+        if (firstLog(g.logged, c->decl)) {
+            EVR_LOG("%s: the %s arm's grips are full (%zu held items): '%s' is not kept, its arms stay the "
+                    "game's",
+                    kTag, sideName(side), arm::GripBook<weapon_arm::Capture>::kMaxItems,
+                    itemDeclName(c->decl).c_str());
+        }
+        return;
     }
+    if ((c->decl != g.keptDecl || length(c->root.position - g.keptRoot) > kKeptLogMetres * unitsPerMetre) &&
+        g_readLines < 80) {
+        ++g_readLines;
+        const Vec3 r = c->root.position * (1.0f / unitsPerMetre);
+        EVR_LOG("%s: the %s arm's grip of '%s' kept, read with the gun's root at (%.3f %.3f %.3f) m (model)",
+                kTag, sideName(side), itemDeclName(c->decl).c_str(), static_cast<double>(r.x),
+                static_cast<double>(r.y), static_cast<double>(r.z));
+    }
+    g.keptDecl = c->decl;
+    g.keptRoot = c->root.position;
 }
 
 // The arm's grip for the held item `decl`: read on these hands, else kept from a level before while the gun's
@@ -184,20 +203,24 @@ void logReady(bool ready, bool right, bool left, bool free) {
 } // namespace
 
 void tick(const std::byte* hands,
+          const ArmsTick& arms,
           const input::ArmSignals& weaponSignals,
           const input::ArmSignals& offSignals,
           const WorldHand& world,
           const ModelPlacement& model,
           float dt) {
     const input::ControllerSettings& cfg = settings();
-    const std::byte* decl = heldItemDecl(hands);
+    const std::byte* decl = arms.arms;
     if (hands != g_gripHands) {
         g_gripHands = hands;
         forgetGrips();
     }
     // A grip is the held item's idle hold: not taken while the game has the arms for an action of its own (a
-    // raise, a melee's fists, a switch), whose pose would move the gun off the hand.
-    if (input::readsGameGrip(weaponSignals, cfg.weaponArm)) {
+    // raise, a melee's fists, a switch), whose pose would move the gun off the hand, nor while the hands swim
+    // or have just stopped (input::gripTakingAllowed): the swim's pose and the hands' signals change a few
+    // ticks apart, with no switch handing the arms back.
+    if (input::gripTakingAllowed(input::readsGameGrip(weaponSignals, cfg.weaponArm), decl == arms.held,
+                                 arms.swim, arms.sinceSwim)) {
         keepGrip(arm::ArmSide::Right, world.unitsPerMetre);
         keepGrip(arm::ArmSide::Left, world.unitsPerMetre);
     } else {
@@ -237,7 +260,7 @@ void tick(const std::byte* hands,
     g_keptDecl = ready && !gripsOf(arm::ArmSide::Right).book.readHere(decl) ? decl : nullptr;
 
     // The left glove: the held item's [right_grip] row's grip, else the game's right grip, reflected.
-    const std::optional<arm::GripPose> row = weapon_arm::rowGrip(hands);
+    const std::optional<arm::GripPose> row = weapon_arm::rowGrip(decl);
     std::optional<arm::GripPose> leftGrip;
     if (row) {
         leftGrip = arm::mirroredGrip(*row);
@@ -267,12 +290,14 @@ void tick(const std::byte* hands,
     weapon_arm::Hold rightHold{offDecision, rightGrip ? &*rightGrip : nullptr, free, world.rightShoulder,
                                world.rightElbow};
     rightHold.wrist = rightWrist;
+    rightHold.item = decl;
     weapon_arm::holding(arm::ArmSide::Right, hands, rightHold, world, model, dt);
     // The left glove's grip is in the gun's root frame; it is written in the left attach joint's, which the
     // game poses with the gun's root except in a few animations (the chaingun's mod: up to 24 cm apart), so
     // it is placed on the gun's root as read this tick.
     weapon_arm::Hold leftHold{weaponDecision, leftGrip ? &*leftGrip : nullptr, false, world.leftShoulder,
                               world.leftElbow};
+    leftHold.item = decl;
     const std::optional<xr_math::ModelPose> gun = weapon_arm::attachRead(arm::ArmSide::Right);
     if (gun && leftGrip) {
         leftHold.wrist = arm::compose(*gun, leftGrip->wrist);

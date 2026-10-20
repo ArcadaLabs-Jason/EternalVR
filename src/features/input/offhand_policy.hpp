@@ -56,13 +56,15 @@ enum class HandsAction : std::int32_t {
     HammerSlam = 33,
 };
 
-// idHands::handsState_t values.
+// idHands::handsState_t values (reflected enum, build 25216728: HS_NONE is -1, HS_IDLE 0).
 inline constexpr std::int32_t kHandsStateHidden = 4;
 inline constexpr std::int32_t kHandsStateChainsawRev = 10;
 inline constexpr std::int32_t kHandsStateChainsawStab = 11;
+inline constexpr std::int32_t kHandsStateSwimIdle = 12; // HS_SWIM_IDLE: the swim's idle with an item held
 inline constexpr std::int32_t kHandsStateTransitioning = 14;
 
-// idHands::handsFlags_t bits (declaration order, [inferred]).
+// idHands::handsFlags_t bits (declaration order, [inferred]; the reflected bitfield's order, build 25216728,
+// puts `swimming` 36th, bit 35).
 namespace hands_flag {
 inline constexpr std::uint64_t kReloading = 1ull << 1;
 inline constexpr std::uint64_t kThrowing = 1ull << 19;
@@ -71,6 +73,7 @@ inline constexpr std::uint64_t kMeleeLunge = 1ull << 21;
 inline constexpr std::uint64_t kChangingWeapon = 1ull << 29;
 inline constexpr std::uint64_t kModChangeAnim = 1ull << 47;
 inline constexpr std::uint64_t kCustomAnim = 1ull << 52;
+inline constexpr std::uint64_t kSwimming = 1ull << 35;
 // Every flag that means the game animates the left arm.
 inline constexpr std::uint64_t kLeftArmBusy =
     kReloading | kThrowing | kMeleeAnim | kMeleeLunge | kChangingWeapon | kModChangeAnim | kCustomAnim;
@@ -124,6 +127,44 @@ OffhandMode leftHandOffMode(OffhandMode mode, bool onController);
 // pose is the action's: a grip read then moved the whole model 18 to 87 cm while the game had the arms (rig:
 // the Unmaykr's and the Crucible's first raise, a melee after one).
 bool readsGameGrip(const ArmSignals& weaponSignals, WeaponArmMode mode);
+
+// Whether the hands swim: the hands flag `swimming`, or the swim's idle with an item held (HS_SWIM_IDLE,
+// which the rig saw for a tick at a lower's start with the flag clear).
+bool handsSwim(std::int32_t destHandsState, std::uint64_t handsFlags);
+
+// The item whose pose the game's arms hold, for the rows and grips the arms are placed and held by: the held
+// item `held`, but the swim's fists `swimFists` (idPlayer::weaponFistsSwim) while the hands swim (`swim`,
+// handsSwim). At the water's surface the game puts the gun back in the right hand's slot now and then while
+// the arms keep swimming: the gun's root, which the gun hangs from, stays where the swim parks it, about 1.5
+// m from each glove and out of view, and the gloves keep the swim's pose (rig:
+// docs/rig-findings/hands-rig.md, section 17). Placed by the gun's row there, the swim's right glove sat 28.3
+// to 34.6 cm from the real hand (the median of the settled dump lines; the Heavy Cannon, the shotgun); held
+// by the gun's grips with the weapon in the left hand, the left glove went 1.3 m behind the left hand. With
+// no swim fists known (null), the held item; with the swim fists held (`heldIsSwimFists`), the held one.
+const void* armsItem(const void* held, bool heldIsSwimFists, bool swim, const void* swimFists);
+
+// After the hands stop swimming the grips are not read for this long (gripTakingAllowed): the swim's pose and
+// the hands' signals change a few ticks apart (a tick at a dive). Longer than the signals' clear spells in
+// the water (a lower: one dump line, 0.25 s), and as long as the game's longest raise after a teleport onto
+// land (0.5 to 1.0 s) on the rig (hands-rig.md, section 17); a way out by swimming to a shore was not run. On
+// land it only delays a grip not read yet by that long after a swim.
+inline constexpr float kSwimGripHoldOffSeconds = 1.0f;
+// The clock's value for hands that have not swum (secondsSinceSwim).
+inline constexpr float kNeverSwamSeconds = 1e9f;
+
+// Seconds since the hands last swam, one tick later: 0 while they swim (`swim`, handsSwim), else `before`
+// plus the tick's `dtSeconds` (a negative or non-finite step counts as none), at most kNeverSwamSeconds.
+float secondsSinceSwim(float before, bool swim, float dtSeconds);
+
+// Whether the arms' grips of the game's are read for the held item this tick (left_hand_arms.cpp): the weapon
+// arm's rules give the arms to the game for nothing of their own (`readsGameGrip`), the arms hold the held
+// item itself (`armsIsHeld`: not the swim fists' pose with a gun in the slot), the hands do not swim
+// (`handsSwim`), and they last swam kSwimGripHoldOffSeconds ago or more. A grip read from the swim's pose is
+// kept as the gun's, by its name across levels (rig: at a dive the hands swim a tick before their pose leaves
+// the gun's; a grip read there put the left glove 1.3 m behind the left hand). The swim is checked here, not
+// only through `armsIsHeld`: with the swim fists unknown (idPlayer::weaponFistsSwim unread, or another
+// item's) the arms' item is the held one while the hands swim.
+bool gripTakingAllowed(bool readsGameGrip, bool armsIsHeld, bool handsSwim, float secondsSinceSwimEnded);
 
 // The same rules for the weapon arm, which goes back to the game for the same actions: glory and sync
 // kills, melee, throws, weapon switches, custom animations, hidden hands and forced views. Its

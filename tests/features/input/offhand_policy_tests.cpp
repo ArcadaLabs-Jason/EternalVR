@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -266,4 +267,92 @@ TEST_CASE("weapon arm policy: IK on an idle arm, the game's for every arm animat
     ArmSignals firing = idle();
     firing.handsFlags = (1ull << 10) | (1ull << 13);
     CHECK(decideWeaponArm(firing, WeaponArmMode::Ik).controller);
+}
+
+TEST_CASE("arms item: while the hands swim the arms hold the swim fists' pose, whatever the held item") {
+    using evr::input::armsItem;
+    using evr::input::handsSwim;
+    // The hands' state and flags as the hands rig's layer logs show them (ETERNALVR_OFFHAND_TRACE lines):
+    struct Sample {
+        std::int32_t state;
+        std::uint64_t flags;
+        bool swim;
+    };
+    const Sample samples[] = {
+        {0, 0x0000200080000030ull, false}, // on land, the shotgun held
+        {0, 0x00012008D00000F0ull, true},  // in the water, the swim fists held
+        {12, 0x00012008D0000070ull,
+         true}, // at the surface, the shotgun held, the arms swimming (HS_SWIM_IDLE)
+        {12, 0x00012000D2000050ull, true}, // the first tick of a lower there: the flag clear for that tick
+        {0, 0x00012000F0000050ull, false}, // a lower in progress at the surface: neither (the game's arms)
+    };
+    for (const Sample& s : samples) {
+        CHECK(handsSwim(s.state, s.flags) == s.swim);
+    }
+    // Stand-ins for the decl pointers: the held gun and the player's swim fists.
+    const int gun = 0;
+    const int swim = 0;
+    const int heldSwim = 0; // the swim fists held, as another decl pointer of that name
+    CHECK(armsItem(&gun, false, true, &swim) == &swim);
+    CHECK(armsItem(&swim, true, true, &swim) == &swim);
+    CHECK(armsItem(&heldSwim, true, true, &swim) == &heldSwim);
+    CHECK(armsItem(&gun, false, false, &swim) == &gun);
+    CHECK(armsItem(&gun, false, true, nullptr) == &gun); // no swim fists known: the held item
+    CHECK(armsItem(nullptr, false, false, &swim) == nullptr);
+}
+
+TEST_CASE("arms item: the swim's hands with a gun held stay the layer's (the policy has no reason to give "
+          "them back)") {
+    using evr::input::decideWeaponArm;
+    using evr::input::WeaponArmMode;
+    // The signals the rig logged in the water with the shotgun held: no action, HS_SWIM_IDLE, the flags
+    // 0x00012008D0000070.
+    ArmSignals s = idle();
+    s.pendingAction = 0;
+    s.destHandsState = evr::input::kHandsStateSwimIdle;
+    s.handsFlags = 0x00012008D0000070ull;
+    CHECK(decideWeaponArm(s, WeaponArmMode::Ik).controller);
+    CHECK(decideArm(s, OffhandMode::Free).controller);
+}
+
+TEST_CASE("grip taking: not while the hands swim, nor for the hold-off after, whatever the arms' item") {
+    using evr::input::gripTakingAllowed;
+    using evr::input::kNeverSwamSeconds;
+    using evr::input::kSwimGripHoldOffSeconds;
+    using evr::input::secondsSinceSwim;
+    // On land, never swum: the weapon arm's rules decide, with the arms on the held item.
+    CHECK(gripTakingAllowed(true, true, false, kNeverSwamSeconds));
+    CHECK_FALSE(gripTakingAllowed(false, true, false, kNeverSwamSeconds)); // a raise, a melee, a switch
+    CHECK_FALSE(gripTakingAllowed(true, false, false, kNeverSwamSeconds)); // the arms on another item
+    // The dive: the hands swim a tick before their pose leaves the gun's. With the swim fists not known the
+    // arms' item is the held one (armsIsHeld), and the swim alone keeps the grip from being read.
+    CHECK_FALSE(gripTakingAllowed(true, true, true, 0.0f));
+    // The exit: the hands' signals clear while the arms may still hold the swim's pose, the gun in the slot
+    // and the arms' item the held one again.
+    float since = secondsSinceSwim(kNeverSwamSeconds, true, 1.0f / 60.0f);
+    CHECK(since == 0.0f);
+    since = secondsSinceSwim(since, false, 1.0f / 60.0f);
+    CHECK_FALSE(gripTakingAllowed(true, true, false, since));
+    // Ticks of 1/60 s until the hold-off has passed: no grip before it, then the land's rules again.
+    int ticks = 1;
+    while (since < kSwimGripHoldOffSeconds) {
+        CHECK_FALSE(gripTakingAllowed(true, true, false, since));
+        since = secondsSinceSwim(since, false, 1.0f / 60.0f);
+        ++ticks;
+    }
+    CHECK(ticks >= static_cast<int>(kSwimGripHoldOffSeconds * 60.0f));
+    CHECK(gripTakingAllowed(true, true, false, since));
+    // A swim again restarts the hold-off.
+    since = secondsSinceSwim(since, true, 1.0f / 60.0f);
+    CHECK_FALSE(gripTakingAllowed(true, true, false, secondsSinceSwim(since, false, 0.5f)));
+}
+
+TEST_CASE("swim clock: a bad step counts as none, and the clock saturates") {
+    using evr::input::kNeverSwamSeconds;
+    using evr::input::secondsSinceSwim;
+    CHECK(secondsSinceSwim(1.0f, false, -0.5f) == 1.0f);
+    CHECK(secondsSinceSwim(1.0f, false, std::numeric_limits<float>::quiet_NaN()) == 1.0f);
+    CHECK(secondsSinceSwim(1.0f, false, std::numeric_limits<float>::infinity()) == 1.0f);
+    CHECK(secondsSinceSwim(kNeverSwamSeconds, false, 10.0f) == kNeverSwamSeconds);
+    CHECK(secondsSinceSwim(5.0f, true, 0.1f) == 0.0f);
 }

@@ -311,6 +311,7 @@ void restartRestWheelStats() {
     g_loggedStats = {};
     g_loggedButtons = {};
     restartTouchButtonStats();
+    restartInputSummary();
 }
 
 bool restWheelBlocked(const State& s) {

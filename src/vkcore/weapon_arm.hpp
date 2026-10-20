@@ -43,8 +43,10 @@ void logSettings();
 
 // Every tick, from the off-hand hook: the arm solved and written, or set back to the game's. `signals`
 // are the hands' and player's, with offHandTracked for the head and the weapon hand (the shoulder's point
-// and the gun: the view's poses current, tickView()); `dt` the seconds since the last tick.
+// and the gun: the view's poses current, tickView()); `arms` the tick's arms' item; `dt` the seconds since
+// the last tick.
 void tick(const std::byte* hands,
+          const ArmsTick& arms,
           input::ArmSignals signals,
           const WorldHand& world,
           const ModelPlacement& model,
@@ -69,6 +71,7 @@ struct Hold {
     Vec3 elbow;
     // With `grip`: its wrist placed here instead (model space) each tick, under the attach joint as read.
     std::optional<xr_math::ModelPose> wrist;
+    const std::byte* item = nullptr; // the tick's arms' item (ArmsTick::arms), which a capture is taken for
 };
 void holding(arm::ArmSide side,
              const std::byte* hands,
@@ -78,9 +81,9 @@ void holding(arm::ArmSide side,
              float dt);
 
 // The game's own grip of the held item, from the last read of the arm the layer's overrides had not reached
-// (taken only with the weapon in the left hand, also on each tick it was given back): the held item's decl it
-// was read with, the wrist in the attach joint's frame and the hand's joints in their parents', and the
-// attach joint as read (model space, game units).
+// (taken only with the weapon in the left hand, also on each tick it was given back): the arms' item it was
+// read with (the tick's ArmsTick::arms), the wrist in the attach joint's frame and the hand's joints in their
+// parents', and the attach joint as read (model space, game units).
 struct Capture {
     const std::byte* decl = nullptr;
     arm::GripPose grip;
@@ -94,9 +97,9 @@ void forgetCapture(arm::ArmSide side);
 // The arm's attach joint as read this tick (model space, game units), or nullopt when the arm was not read.
 std::optional<xr_math::ModelPose> attachRead(arm::ArmSide side);
 
-// The held item's [right_grip] row's grip (wrist in the gun's root frame), or nullopt for a weapon without
-// one.
-std::optional<arm::GripPose> rowGrip(const std::byte* hands);
+// The [right_grip] row's grip of the arms' item `decl` (ArmsTick::arms; wrist in the gun's root frame), or
+// nullopt for a weapon without one.
+std::optional<arm::GripPose> rowGrip(const std::byte* decl);
 
 // The arm on `side` given back (release() above for that arm), its blend and its glove's grip started again
 // from the game's.

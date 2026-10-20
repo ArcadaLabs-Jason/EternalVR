@@ -191,6 +191,7 @@ evr_add_test(evr_input_tests
         features/input/stick_chord_tests.cpp
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp
+        features/input/input_summary_tests.cpp
         features/input/test_input_tests.cpp
         features/input/touch_button_tests.cpp
         features/input/touch_control_button_tests.cpp

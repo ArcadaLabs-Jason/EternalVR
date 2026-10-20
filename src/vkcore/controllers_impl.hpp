@@ -27,6 +27,7 @@
 #include "features/input/game_input.hpp"
 #include "features/input/haptics_policy.hpp"
 #include "features/input/input_mapper.hpp"
+#include "features/input/offhand_policy.hpp"
 #include "features/input/test_input.hpp"
 #include "features/input/usercmd_injection.hpp"
 #include "features/input/view_pose_clock.hpp"
@@ -489,6 +490,25 @@ void restartRestWheelStats();
 // restartRestWheelStats, their counts from zero again.
 void noteTouchButtons(const input::InputFrame& frame, const input::InputMapper& mapper, float dt);
 void restartTouchButtonStats();
+// The 10 s input line (input_summary_log.cpp, features/input/input_summary.hpp). The mapper, under
+// mapperMutex, once a frame after the menu hold: `asked` is the mapper's output before a menu held it back,
+// `sent` what went to the game; and from restartRestWheelStats, the window from zero again.
+// runMapper holds the frame for the 10 s input line (mapperMutex held); the command hook adds it with whether
+// its write reached the game (`sent` counts what was written, not what was asked), or the pad hook with true.
+void stageInputSummary(const input::InputFrame& frame,
+                       const input::GameInput& asked,
+                       const MappedInput& sent,
+                       float dt,
+                       bool menuHold);
+void commitInputSummary(bool reachedGame);
+// The input went stale: held actions count as new presses afterwards, the window keeps its time.
+void gapInputSummary();
+void restartInputSummary();
+// Adds the staged frame when the scope ends, whatever way the hook leaves it.
+struct InputSummaryCommit {
+    bool reachedGame = false;
+    ~InputSummaryCommit() { commitInputSummary(reachedGame); }
+};
 // installGameHooks, with the thumb-rest wheel on: finds the game's wheel open delay
 // (weaponWheel_HoldTimeForOpeningWheel) and, when the player turned the wheel's slowdown off,
 // weaponWheel_slowTimeScale (each logged when not found).
@@ -508,6 +528,21 @@ void updateHaptics(const XrInput& xr, bool focused);
 // decl's name ("weapon/player/shotgun"), or empty.
 const std::byte* heldItemDecl(const std::byte* hands);
 std::string itemDeclName(const std::byte* decl);
+// The item the game's arms hold as it animates them, read once per tick of the hands (arms_item.cpp) so the
+// rows, the grips and the dump go by one answer within a tick.
+struct ArmsTick {
+    const std::byte* hands = nullptr;
+    const std::byte* held = nullptr; // heldItemDecl
+    // input::armsItem: the held item, but the player's swim fists while the hands swim with a gun in the slot
+    const std::byte* arms = nullptr;
+    std::optional<std::int32_t> handsState;     // idHands::destHandsState, nullopt when unreadable
+    bool swim = false;                          // input::handsSwim
+    float sinceSwim = input::kNeverSwamSeconds; // input::secondsSinceSwim on these hands
+};
+// The viewmodel hook, at each tick of the game's hands: reads the tick's and keeps it.
+ArmsTick noteArmsTick(const std::byte* hands);
+// The tick's as the viewmodel hook read it for `hands`, or read now for hands it has not seen.
+ArmsTick armsTick(const std::byte* hands);
 // The viewmodel hook, each update with the controllers' viewmodel on (zoom_look.cpp): the held weapon's decls
 // get the VR zoom look (game/eternal/zoom_look.hpp) when they do not have it yet.
 void noteZoomLookHands(const std::byte* hands, const std::byte* player);
@@ -533,9 +568,9 @@ bool installBhapticsAmmoHooks();
 bool installUserCmdHooks(bool buttonsAndMove, bool& angleInstalled);
 bool installAimHooks(bool& fireInstalled);
 bool installViewmodelHook();
-// The held item is the swim fists, which the game puts in the hands while the player swims
-// (viewmodel_hook.cpp): under hand aim the view then follows the head (aimAngles), since the game swims and
-// dashes along its view.
+// The arms hold the swim fists (ArmsTick::arms), which the game puts in the hands while the player swims, its
+// gun in the slot now and then while the hands keep swimming (viewmodel_hook.cpp): under hand aim the view
+// then follows the head (aimAngles), since the game swims and dashes along its view.
 bool swimFistsHeld();
 // The hook on the game's left-hand modifier, which also bends the weapon arm (`weaponArmInstalled`).
 bool installOffhandHook(bool& weaponArmInstalled);

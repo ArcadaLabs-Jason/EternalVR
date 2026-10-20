@@ -31,7 +31,9 @@ Everything here is rig use only. Without the variables the layer does nothing ne
     rendered head's axis), `item` (the held item's decl name), `weapon` (the weapon's root: `righthandattach` as
     read; the weapon model hangs from it; null while the game poses the weapon arm, since it is read with the layer's
     pose of that arm), `aim` (the ray shots take: start from the eye and direction), `grip` and
-    `offgrip` (each controller's grip from the eye).
+    `offgrip` (each controller's grip from the eye); `arms_item` (the item the arms are placed and held by: the
+    swim's fists while the hands swim, section 17), `hstate` (idHands::destHandsState) and `hswim` (whether the
+    hands swim).
 
   All of it comes from what the off-hand hook, the weapon arm and the viewmodel hook already read (the eye is the
   player field the viewmodel and fire hooks read); no game function, hook or field is added.
@@ -865,7 +867,7 @@ shows a jump; the change frame itself was not captured).
 
 **At the surface** [rig]. Floating at the water's surface the game puts the shotgun back in the hands but holds it
 in a pose of its own: the right glove's wrist 34 cm (median) and 68 at most from the real hand (`hc-swr`, right
-hand), the left glove 1.3 m behind the left hand (`hc-c-lfs`, the shotgun's grip read on land). Not changed here.
+hand), the left glove 1.3 m behind the left hand (`hc-c-lfs`, the shotgun's grip read on land). Section 17.
 
 **The Berserk's fists: not reached.** `chrispy pickup/powerup/berserk` twice with the weapon hand aimed straight
 down (both signs of pitch; the player cannot walk on the rig), `give weapon/player/fists_berserk` (`hc-qa1`), and
@@ -930,3 +932,122 @@ all eight guns, the right glove 0.0 / 0.0 (LEFTY PASS), as `lf-free5`.
 
 **Not run**: a headset; glory kills in either hand (no staggered demon on the rig); the hammer; the Berserk's
 fists.
+
+## 17. The water's surface: the arms swim with the gun in the slot (2026-10-19, OpenXR-Simulator)
+
+`e4m1_rig`, `teleport bubbles_underwater_1`, then no input for 50 s: the camera does not move in any capture, and the
+held item changes every 0.5 to 12 s between the swim's fists and the gun held before the dive (the shotgun, or the
+Heavy Cannon in one run). The runs before (`hw-m-r`, `hw-m-l`: dev main's layer) and after (`hw-c-r`, `hw-c-l`; `hw-b-*`
+an earlier build of the change) take captures every 12 frames through it (`hw-sweep.ps1`, `hc-sweep.ps1` with this
+branch's owner and worktree; `hw-m1.sh`, `hw-a1.sh`; the dump checked by `hb_check.py` and `water_check.py`, which
+splits it by state). Evidence: rig, and static where marked.
+
+**What the game does there.**
+
+- **The arms keep the swim's pose; the gun's root stays where the swim parks it** [rig: the dump's joints, every line
+  the layer posed]. With the gun in the slot the right attach joint (`righthandattach`, the gun's root: the gun hangs
+  from it) sits 1.0 to 1.1 m behind the model's origin and 0.5 m down, turned 37 degrees up, the glove's wrist 1.46 to
+  1.51 m from it: the same poses as with the swim's fists held (the wrist in the root's frame (1.30 to 1.33, -0.24 to
+  -0.47, -0.59) m in both). On land the root sits at (0.27, -0.12, -0.14) and the wrist 0.20 m from it. The left
+  attach joint is the gun's root's pose to 0.0 mm and 0.3 degrees in the water too (`hc-c-lfs`, `hw-m-l`): the gun's
+  root does not move against the attach joints; both are parked with the swim's arms. So it is the same held item,
+  not held: the gun out of view behind the camera, both gloves open in the stroke.
+- **Captures** [rig]: in the gun's periods only the swim's open hand shows (`hw-m-r`, 13:34:19 and 13:34:32: no gun).
+  The gun shows for one or two captures (0.1 to 0.3 s) as the game raises or lowers it at a change of the held item,
+  the glove closed on it, while the game has the arms for that action (`action 10`, BringDown); with the weapon in the
+  left hand nothing shows in those periods on dev main (`hw-m-l`: the left glove on the gun's parked root, 1.3 m back).
+- **The hands' state** [static: the reflected type info of build 25216728; rig: the layer's trace lines]. The hands'
+  flag `swimming` (idHands::handsFlags_t, bit 35) is set from 0.2 to 0.9 s after the teleport through the swim's fists and
+  the gun's periods (69 of 79 trace lines in the water in `hw-a-r`, 142 of 169 in `hw-m-r`; clear only on the lines
+  of a lower's first tick and through some lowers), and on none of 3,820 trace lines on land over the 162 runs logged
+  (`swimming` sits between `startingQueuedBurst` and `shouldPerformOneHitMeleeKill` in the bitfield, which also puts
+  the policy's reloading, throw, melee, switch, mod and custom-animation bits where offhand_policy.hpp has them). The
+  hands' destination state is `HS_SWIM_IDLE` (12; the reflected enum has HS_NONE -1, HS_IDLE 0) through the gun's
+  periods and HS_IDLE through the swim fists' after the first; `idPlayer::weaponFistsSwim` (+0x4D188, "swim fists
+  decl") holds the swim's fists.
+- **No shots** [log]: the trigger held 12 s across a gun's period (`hw-b-r`, `hw-c-r`, `hw-c-l`) fired nothing (the
+  layer's shot counter logged no shot in any of the three runs).
+
+So at the surface the game swims: the gun is in the slot, not in the hand. Placing the gun in the hand would mean
+writing the gun's root, which the game parks away from both gloves, into an open swimming hand; the decision is to
+place and hold the arms as the swim's fists' while the hands swim (DECISIONS T-142).
+
+**Before and after**, the weapon hand's glove (the wrist) from the real hand's wrist point, median / largest over the
+lines the layer posed at weight 1, cm; "settled" leaves out the first two lines (0.5 s) after the arms blend in:
+
+| Hand | State | Before (dev main) | Before, settled | After | After, settled |
+|---|---|---|---|---|---|
+| right | the gun in the slot, the arms swimming | 29.7 / 38.4 (`hw-m-r`, Heavy Cannon); 34.4 / 42.6 (`hc-swr`, shotgun) | 28.3 / 38.4 (`hw-m-r`); 34.6 / 42.6 (`hc-swr`) | 6.2 / 38.1 (`hw-c-r`) | 5.7 / 17.1 |
+| right | the swim's fists held | 5.4 / 84.0 | 5.8 / 18.4 | 5.2 / 40.9 | 5.2 / 17.9 |
+| left | the gun in the slot, the arms swimming | 127.9 / 141.0 (`hw-m-l`) | 127.8 / 137.5 | 11.0 / 12.4 (`hw-c-l`) | 11.2 / 12.4 |
+| left | the swim's fists held | 11.6 / 12.4 | 11.6 / 12.4 | 11.4 / 12.4 | 11.7 / 12.4 |
+| right | the shotgun on land | 0.3 / 2.8 | 0.3 / 0.4 | 0.3 / 2.8 | 0.3 / 0.4 |
+| left | the shotgun on land | 0.6 / 0.7 | 0.6 / 0.7 | 2.4 / 3.2 | 2.4 / 2.5 |
+
+The surface's offset before the change is quoted elsewhere (VR_HANDS_HUD.md, DECISIONS T-142, offhand_policy.hpp) by
+one statistic, the median of the settled lines: 28.3 to 34.6 cm (the Heavy Cannon, the shotgun). The left-handed land
+line differs by run, not by build: its grip is the one read while the gun's root holds still
+(the shotgun's read in `hw-b-l` and `hw-c-l`: 2.3 / 3.4 and 2.4 / 3.2; `hw-m-l` 0.6 / 0.7), and the regression sweeps
+below are the measure of the land placement. The swim's own stroke moves the glove about its row's point (about
+5 cm median, 17 cm at most, right hand).
+
+**Transitions** (`hb_check.py`, the model's placement against the weapon-hand grip between dump lines 0.25 s apart,
+the scripted input held). Before, every change of the held item in the water stepped the model by the rows'
+difference (34.2 cm on the shotgun, 28.3 on the Heavy Cannon; left-handed 55.0 cm): 18 steps in `hw-m-r`'s 57 s in the
+water (17 of 28.3 to 34.2 cm), 8 in `hw-m-l`. After, none at the changes (left-handed 0.0 cm on all 16), and one step and back in `hw-c-r`
+(34.2 cm, 0.25 s, the game's arms), where both signals were clear through a lower. Going into the water both builds
+step once (34.2 cm on the shotgun, 35.9 left-handed), at the same moment. A first build that took the swim's row only
+in HS_SWIM_IDLE (`hw-a-r`) stepped 14 times in 54 s: the game's raise and lower at each change run in HS_IDLE, so the
+row went to the gun's and back around each of them, while the hand on view was mostly still the swim's.
+
+**A grip taken from the gun's pose** (`hw-b-l`, the earlier build without the read rule below). The hands swim a tick
+before their pose leaves the gun's: at the dive the left-handed arms read the shotgun's land grip as the swim fists'
+(still for 3 reads, no switch handing the arms back), and both the gun's periods and the swim fists' put the left
+glove 127.8 / 140.7 and 127.5 / 128.3 cm from the left hand. The grips are now read only while the arms hold the held
+item itself (left_hand_arms.cpp): `hw-c-l` 11.0 / 12.4 and 11.4 / 12.4.
+
+**The way out and the hold-off** (review fix, after `e6982154`). The grips are now read only while the hands do not swim
+and last swam 1.0 s ago or more (input::gripTakingAllowed, kSwimGripHoldOffSeconds), checked on the swim's signal itself
+as well as on the arms' item (with the swim fists unknown the arms' item is the held one while the hands swim), and the
+arms' item, the swim and the time since it are read once per tick of the hands by the viewmodel hook and passed to the
+rows, the grips, the captures and the dump (ArmsTick). Runs: `e4m1_rig`, left-handed with the game's off hand, `teleport
+bubbles_underwater_1` at 30, 62 and 94 s and `teleport checkpoints_player_start_18` (a deck) at 52, 84 and 116 s
+(`hw-x1.sh`; `setviewpos` moves only the view, so the player goes out by teleport); `hw-x-o` the build before the fix,
+`hw-x-n` and `hw-x-n2` after (`n2` the final build); `exit_check.py` splits the dump at each way out.
+
+- **What the game does on a teleport out** [rig: trace and dump]. The hands' flag clears within 50 ms of the teleport; the game holds
+  the arms for a forced view and then a left-arm animation (its raise), and the first line the layer posed after it, 0.5
+  to 1.0 s after the flag cleared, has the gun's root on land (the shotgun (0.27, -0.11, -0.14), the Heavy Cannon (0.36,
+  -0.11, -0.14)); the root was at the swim's parked pose on no line after the flag cleared (9 ways out over the three
+  runs). The raise alone keeps the grips from being read there (readsGameGrip), on both builds.
+- **In the water the swim's signal clears for a tick** at most changes of the held item (the layer's lines: the hands
+  stop swimming, then swim again within 31 ms; 12 such in `hw-x-n`'s first 21 s in the water) and for one dump line
+  (0.25 s) at some lowers. So the hold-off is longer than those (one tick to 0.25 s) and as long as the longest raise
+  after a way out (0.5 to 1.0 s): 1.0 s. On land it only delays by that long a grip not read yet; a way out with no raise (swimming to a
+  shore, climbing out) was not run, as the rig's player does not move.
+- **The kept grips before and after** (the left glove's wrist from the real left hand on land, median / largest, cm,
+  from 2 s after each way out; the shotgun, else the item named). Before the fix (`hw-x-o`): 0.6 / 0.7 before the first
+  swim, then 0.4 / 0.5, 0.4 / 0.5 and 0.4 / 0.5 (Heavy Cannon). After (`hw-x-n2`): 2.4 / 19.1 before (19.1 and 4.5 on
+  two lines early in the level, before any swim; the grip read at another moment, as section 17's land line), then 2.4 /
+  2.5, 0.5 / 0.6 (Heavy Cannon) and 0.4 / 0.5; `hw-x-n` 0.6 / 0.8, then 0.5 / 0.6, 0.5 / 0.6 and 0.6 / 0.8. Every grip
+  the final build kept was read with the gun's root on land (its log: the shotgun at (0.272, -0.103, -0.139) m before
+  the first swim, the Heavy Cannon at (0.360, -0.108, -0.137) 1.06 s after the second teleport out, the shotgun at
+  (0.273, -0.115, -0.140) 1.06 s after the third), none at the parked pose (x about -1.0). The way out by teleport did
+  not reach the hazard on the build before the fix either: the case the hold-off covers (the flag clear for longer than
+  a few ticks with the swim's pose still on the arms and no raise) has not been seen on the rig.
+- **Regression** (final build): the grip sweep `hw-dgrip` against `hw-cgrip`, every gun's glove median and largest the
+  same (GRIP PASS), the sights' largest angle per gun within 0.002 degree (SIGHTS PASS); the left-handed free off hand
+  `hw-dfree` the left glove 0.1 to 0.3 / 0.2 to 0.4 cm on all eight guns, the right glove 0.0 / 0.0 (LEFTY PASS), as
+  `hw-cfree` within 0.1 cm.
+
+**Regression** (this branch, after the change; on land the hands never swim, so the arms go by the held item as
+before). Right hand: the grip sweep `hw-cgrip` against section 16's `hc-agrip`, every gun's glove the same to 0.1 cm
+(GRIP PASS, 0.1 to 0.2 cm median, 0.5 at most), the derived rows within 1 mm; the sights' largest angles within 0.005
+degree (SIGHTS PASS; the double-barrel 0.152 to 0.157, the value of section 15's `rh-grip1`); the merge-QA hands check
+(`hw-chands`, the Release build): 0 regressions against its baseline, two known-bistable warns on roll-R+150 and the
+standing R:reach finding (FAIL 72/72, as `hc-ahands`). Left hand, the free off hand (`hw-cfree`): the left glove 0.1
+to 0.2 / 0.2 to 0.4 cm on all eight guns, the right glove 0.0 / 0.0 (LEFTY PASS), as `hc-alfree`.
+
+**Not run**: a headset; a swim that reaches the surface by moving (the rig's player does not move); leaving the water
+onto land by swimming or climbing out (the rig cannot walk the player out; it was teleported out, above); other guns
+than the shotgun and the Heavy Cannon in the slot.
