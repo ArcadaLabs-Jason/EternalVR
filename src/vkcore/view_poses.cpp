@@ -46,6 +46,13 @@ TickView tickView() {
     return readLocked(s, now);
 }
 
+input::ViewClockRead viewClockRead() {
+    State& s = state();
+    const LONGLONG now = nowQpc();
+    std::lock_guard lock(s.viewMutex);
+    return {s.viewClock, now, staleCounts(), capCounts()};
+}
+
 TickView handsTick() {
     State& s = state();
     const LONGLONG now = nowQpc();

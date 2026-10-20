@@ -250,6 +250,16 @@ them is worse for you than described here.
 
 ## Controllers and aiming
 
+- **With head aim the gun now sits in front of your face.** With motion controllers on and Aim with set to
+  Head, your shots already went where you look, but the gun stayed in your hand, so with your hands down it
+  pointed at the floor and you had to lift the controller to see it. Now it's placed like in gamepad mode: in
+  front of you, pointing where you look, and it follows your head when you lean or crouch. A few things come
+  with that: both arms are the game's own (like the flat game), a punch, grenades and the Flame Belch go where
+  you look, the ammo on the gun ("Health and ammo") stays on your hand, and with the weapon in your left hand
+  the gun still shows on the right. With some guns you may see the open end of the Slayer's left sleeve at
+  the bottom of your view, same as in gamepad mode: the game's arms are made for a flat screen's narrower
+  view. Hand aim is unchanged. Test rig only so far, not yet in a headset.
+
 - **A sweep of the right stick down can swap weapons.** The weapon wheel opens sooner (0.15 s) when the stick is
   pushed within 20 degrees of straight down, so a sweep that drifts out of that cone after 0.15 s counts as a
   hold and can swap weapons when you let go.

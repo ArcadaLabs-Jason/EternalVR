@@ -116,7 +116,8 @@ XR worker, every XR frame (presenter_wrist.cpp, the same path as the wrist)
 - **Fallbacks.** No controllers, a stale snapshot or no aim space: the whole HUD stays on the head-locked
   quad (logged once: `ui: weapon HUD: no controllers (or no weapon-hand aim space); the HUD stays on the
   panel`). With the viewmodel off the gun is the game's, in front of the head, and the panel still follows
-  the controller.
+  the controller. The same under head aim, where the gun is in front of the face (docs/VR_CONTROLLERS.md,
+  "Head aim and the gun"): the ammo stays on the weapon hand.
 
 ## The free off hand (ETERNALVR_OFFHAND)
 
@@ -156,7 +157,9 @@ back after 0.25 s, blended over `ETERNALVR_OFFHAND_BLEND` (0.15 s).
 
 The arm policy hands an arm back to the game (`untracked`) when the hands' poses it is posed from are not
 current: the weapon hand and the head (the weapon arm's shoulder and its gun), the off hand, and the arms
-model's placement at the weapon hand. The camera hook writes the hands for each view of the game, at the
+model's placement at the weapon hand. Under head aim the model is never placed at the hand (the gun is in
+front of the face, docs/VR_CONTROLLERS.md "Head aim and the gun", DECISIONS T-143), so both arms are the
+game's there, as in gamepad mode. The camera hook writes the hands for each view of the game, at the
 runtime's pose predicted for when that frame is shown, and the viewmodel hook places the arms model at each
 tick of the game's hands; the hooks of the following tick read both (`vkcore/view_poses.cpp`). Until
 2026-10-19 a pose counted as current while it was at most 0.1 s old at the read. That age is the gap since

@@ -38,4 +38,14 @@ private:
     int ticks_ = 0;             // up to 2
 };
 
+// The clock as a reader sees it at `now`, with the limits `current` takes.
+struct ViewClockRead {
+    ViewPoseClock clock;
+    std::int64_t now = 0;
+    std::int64_t stale = 0;
+    std::int64_t cap = 0;
+
+    [[nodiscard]] bool current(std::int64_t written) const { return clock.current(written, now, stale, cap); }
+};
+
 } // namespace evr::input

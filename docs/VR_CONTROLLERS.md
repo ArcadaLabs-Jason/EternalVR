@@ -445,6 +445,45 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   (`weapon/player/fists_swim`) mark swimming; the viewmodel hook sees them (`viewmodel_hook.cpp`), so with
   `ETERNALVR_VIEWMODEL=0` the weapon hand still aims in the water. Log: `controllers: swimming: the view
   follows the head` and `controllers: out of the water: the weapon hand aims again`.
+- **Head aim and the gun** (`ETERNALVR_AIM=head` with the controllers on; `features/input/gun_placement.hpp`,
+  `src/vkcore/head_gun.cpp`; DECISIONS T-143). Under head aim the shots go where the head looks, so the gun
+  is drawn there too: the viewmodel hook leaves the arms model where the game puts it from its view (the
+  head's, through head aim's closed loop), as gamepad mode shows it, and moves it by the rendered head's
+  offset from the game's eye (the head position the camera hook adds: a lean, a crouch in the room), so it
+  sits in front of the face the player sees and points along the aim, with the game's own bob, recoil and
+  animations. Before (0.1.68 and earlier) the gun was placed at the weapon hand as under hand aim while the
+  hand did not aim: with the hands low it pointed at the floor and had to be lifted to be seen, and a player
+  asked for it in front of the face. The weapon hand is not needed for it, so a hand out of tracking does
+  not move the gun. The offset is the one the camera hook noted for the last view, used only while it is
+  current on the views' clock, as the hand poses are (`view_pose_clock.hpp`): when the views stop (head
+  tracking lost, a load) the gun goes back to the game's placement as the view goes back to the game's eye,
+  and new hands (a level load) or a new session never take the old offset. It is the offset clear of the
+  walls (the one shots start from): with the head in a wall the view goes on, the gun stops at the wall. What goes with it, all as in gamepad mode: both arms are the game's (the arms model is
+  not at the hand, so the arm policy's `modelPlaced` is false: the weapon arm's IK and a free off hand hand
+  their arms back; hidden arms stay hidden); the weapon in the left hand is drawn where the game draws it,
+  on the right; the per-weapon rows and the `[sights]` turn are not used (the game's own sight lines run to
+  its crosshair); the fists of a melee or a Blood Punch are at the head too, and so is the shoulder
+  launcher, so the punch, the equipment launcher and the Flame Belch, which aim from the hands model's joints
+  ("Melee and equipment aim", below), go where the head looks instead of along the weapon hand [inferred from
+  those joints; not measured]; and a muzzle-fired shot (the Heavy
+  Cannon, projectiles) starts at the gun in front of the face, not at the low hand. What stays on the hands:
+  the punch's detection, the gestures, the wrist HUD (the off hand's controller), the weapon HUD (the weapon
+  hand's aim space; with head aim it shows on the hand, not on the gun), vibration and the menu pointer.
+  Hand aim and gamepad mode are unchanged; view aim keeps the gun at the hand. Log: `controllers:
+  viewmodel: head aim: game origin (...) -> at the head (...); eye (...), head offset (...), model from the
+  eye D; N placed`, the first five and then every 10 s; the `controllers: on:` line reads `viewmodel at the
+  head (the game's view)`. Rig (OpenXR-Simulator, both hands low by the hip pointing 50 degrees down, the
+  head level; dev main, then this change): before, the grip 0.55 m below the rendered eye
+  and the gun pitched 50 degrees off the aim, only its tip at the bottom edge of the left eye's image; after,
+  the model's origin at the rendered eye (the game's origin is its eye; the head stood 0.25 m above it), the
+  gun along the view in both eyes with the combat shotgun, the Heavy Cannon zoomed (its scope on the line of
+  sight), a melee and the Rocket Launcher. With head position off
+  the head-aim images match gamepad mode's (the BFG held, a mean difference of
+  4.4 to 5.2 grey levels per pair, as between two gamepad runs, 3.8 to 4.2). Hand aim's grip sweep (GRIP
+  PASS, every gun's glove 0.1 to 0.2 cm median from its target) and sights check (SIGHTS PASS) and the hands
+  check (0 regressions) are unchanged. Seen with it, as gamepad mode draws the game's arms: with the combat
+  shotgun and the Heavy Cannon the open end of the game's left sleeve shows at the bottom of the view, which
+  the flat game's narrower view crops.
 - **Melee and equipment aim** (`ETERNALVR_MELEE_AIM`, `ETERNALVR_EQUIPMENT_AIM`,
   `features/input/action_aim.hpp`, `src/vkcore/action_aim_hook.cpp`, `src/vkcore/equipment_launch_hook.cpp`;
   the launcher's Play tab, Controls, "Melee aim with" and "Equipment aim with", GitHub issue 11). Under hand
@@ -645,7 +684,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | Variable | Values | Default |
 |---|---|---|
 | `ETERNALVR_CONTROLLERS` | `1` / `0` | `1` |
-| `ETERNALVR_AIM` | `head` (view follows the head), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
+| `ETERNALVR_AIM` | `head` (view follows the head; the gun in front of the face, "Head aim and the gun"), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
 | `ETERNALVR_DEMON_AIM` | what aims a piloted demon (the Cultist Base Revenant, above): `head` or `hand`; unset or empty follows `ETERNALVR_AIM`. No effect under `view` aim, where the demon keeps the game's own aim | unset |
 | `ETERNALVR_MELEE_AIM` | what aims melee, Blood Punch, glory kills and use under hand aim (above): `head` or `offhand`; unset, empty or `hand`, the weapon hand | unset |
 | `ETERNALVR_EQUIPMENT_AIM` | the same for the equipment launcher, the Flame Belch and the throw gesture | unset |

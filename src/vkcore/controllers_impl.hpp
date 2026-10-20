@@ -185,6 +185,8 @@ struct TickView {
 TickView tickView();
 // The viewmodel hook, at each tick of the game's hands (forced views included): stamps the tick, then reads.
 TickView handsTick();
+// The views' clock as the last tick left it, read now with its limits (head aim's gun, head_gun.cpp).
+input::ViewClockRead viewClockRead();
 
 struct State {
     // Written once by settingsOnce() (any thread), read-only afterwards.

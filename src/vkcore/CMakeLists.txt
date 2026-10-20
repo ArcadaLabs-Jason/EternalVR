@@ -262,6 +262,7 @@ target_sources(evr_layer PRIVATE
     game_arm_joints.cpp
     game_arm_weight.cpp
     hands_surfaces.cpp
+    head_gun.cpp
     left_hand_arms.cpp
     offhand_hook.cpp
     offhand_mods.cpp

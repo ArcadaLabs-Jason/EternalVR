@@ -21,6 +21,7 @@ evr_add_module(evr_input
         family_touch_settings.cpp
         forced_angles.cpp
         gamepad_mode.cpp
+        gun_placement.cpp
         hands_jump.cpp
         haptics_policy.cpp
         input_mapper.cpp

@@ -11,15 +11,19 @@
 //   T-135; ETERNALVR_WEAPON_SIGHTS=0 turns it off on the rig); the shot ray and the aim dot do not change.
 //   Last the model is moved, not turned, so the glove's wrist keeps the grip's own frame
 //   (xr_math::placeViewmodel). The game's own stores then carry it into both the deferred and the current
-//   render-model pose.
+//   render-model pose. Under head aim the game's own placement stays, moved by the rendered head's offset
+//   from the game's eye (input::gunPlacement, head_gun.hpp, T-143): the gun in front of the face, along the
+//   aim.
 
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/arm/left_hand.hpp"
+#include "features/input/gun_placement.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
+#include "vkcore/head_gun.hpp"
 #include "vkcore/left_hand_arms.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -234,15 +238,27 @@ void onViewmodel(const HookRegisters& regs) {
         return; // forced views (glory kills, cutscenes) keep the game's own hands animation
     }
     noteZoomLookHands(hands, owner); // the gun stays in the hand while zoomed (zoom_look.cpp)
-    const WorldHand& world = view.world;
     float eye[3];
-    if (!view.worldCurrent || !safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye)) ||
-        !std::isfinite(eye[0]) || !std::isfinite(eye[1]) || !std::isfinite(eye[2])) {
+    const bool eyeRead = safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye)) &&
+                         std::isfinite(eye[0]) && std::isfinite(eye[1]) && std::isfinite(eye[2]);
+    // g_cachedFists is the last tick's until offsetFor() below reads this tick's item; under head aim the
+    // placement does not depend on it, and under hand aim the GameView test below reads it again after.
+    if (input::gunPlacement(cfg.aim, g_cachedFists, cfg.actionAim.melee) == input::GunPlacement::Head) {
+        // Head aim: the game's placement moved to the rendered head. The weapon hand is not needed, and with
+        // the arms model away from the hand both arms are the game's (gun_placement.hpp).
+        offsetFor(arms); // the held item's log line and the swim's fists
+        if (eyeRead) {
+            head_gun::moveToHead(hands, reinterpret_cast<std::byte*>(regs.rsp + kOriginFromRsp),
+                                 {eye[0], eye[1], eye[2]});
+        }
+        return;
+    }
+    const WorldHand& world = view.world;
+    if (!view.worldCurrent || !eyeRead) {
         return;
     }
     const game::WeaponOffset offset = offsetFor(arms);
-    if (g_cachedFists && cfg.aim == input::AimSource::Hand &&
-        cfg.actionAim.melee != input::ActionAimSource::Same) {
+    if (input::gunPlacement(cfg.aim, g_cachedFists, cfg.actionAim.melee) == input::GunPlacement::GameView) {
         if (g_loggedFists.fetch_add(1) == 0) {
             EVR_LOG("%s: viewmodel: the fists follow the game's view, on the melee aim's %s", kTag,
                     input::actionAimSourceName(cfg.actionAim.melee));
@@ -366,6 +382,7 @@ void endGameView(std::byte* renderView,
         return;
     }
     const input::ControllerSettings& cfg = settings();
+    head_gun::noteView(headOffset); // head aim's gun follows the rendered head (head_gun.hpp)
     // In a cutscene around the player the game's hands model keeps the game's own FOV (the arms are hidden).
     if (cfg.weaponFov && !g_cutsceneArms.load(std::memory_order_relaxed)) {
         float fov[2];

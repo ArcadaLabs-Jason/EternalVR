@@ -161,6 +161,7 @@ evr_add_test(evr_input_tests
         features/input/forced_angles_tests.cpp
         features/input/forward_maps_tests.cpp
         features/input/gamepad_mode_tests.cpp
+        features/input/gun_placement_tests.cpp
         features/input/hands_jump_tests.cpp
         features/input/haptics_policy_tests.cpp
         features/input/input_mapper_stick_tests.cpp

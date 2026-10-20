@@ -10,6 +10,7 @@
 #include "features/input/interaction_profiles.hpp"
 #include "features/tracking/pose_guard.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/head_gun.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/seh_filter.hpp"
 #include "vkcore/xr_runtime.hpp"
@@ -412,7 +413,10 @@ bool attach(const XrContext& context) {
         : cfg.turn.mode == input::TurnMode::Snap ? "snap"
                                                  : "off",
         cfg.turn.smoothDegreesPerSecond, cfg.turn.snapDegrees, static_cast<int>(cfg.handedness),
-        input::inputPathName(cfg.path), cfg.viewmodel ? "at the hand" : "the game's",
+        input::inputPathName(cfg.path),
+        !cfg.viewmodel                      ? "the game's"
+        : cfg.aim == input::AimSource::Head ? "at the head (the game's view)"
+                                            : "at the hand",
         cfg.weaponFov ? "on" : "off", cfg.shotOrigin == input::ShotOrigin::Hand ? "hand" : "eye",
         cfg.aimSmoothing, s.aimFilter ? "" : " (off)", input::dossierPressName(cfg.dossier),
         cfg.mapSticks == input::MapSticks::OtherPans ? "other" : "weapon hand's",
@@ -440,6 +444,7 @@ void detach() {
         s.poses = {};
         s.world = {};
     }
+    head_gun::forget(); // a session attached later does not take this one's head offset
     EVR_LOG("%s: detached (%llu sync(s))", kTag, static_cast<unsigned long long>(s.syncs.load()));
 }
 
