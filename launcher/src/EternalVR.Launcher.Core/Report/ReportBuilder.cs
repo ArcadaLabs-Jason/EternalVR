@@ -88,6 +88,12 @@ namespace EternalVR.Launcher.Core.Report
         public byte[] Zip { get; }
         public long UncompressedBytes => Files.Sum(f => f.Bytes);
 
+        /// <summary>How many in-headset captures the report holds (one per capture, whatever its files; a burst's frames are one).</summary>
+        public int CaptureCount => Files
+            .Where(f => f.ZipPath.IndexOf("/captures/", StringComparison.Ordinal) >= 0)
+            .Select(f => f.ZipPath.Substring(0, f.ZipPath.LastIndexOf('/') + 1) + ReportBuilder.CaptureStem(f.ZipPath.Substring(f.ZipPath.LastIndexOf('/') + 1)))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
         /// <summary>The file list and sizes, for the confirmation dialog.</summary>
         public string Describe()
         {

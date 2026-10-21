@@ -126,7 +126,7 @@ namespace EternalVR.Launcher
                         ctx.Log.Warn("could not open the report's folder: " + e.Message);
                     }
                     // Where to post it, with a link to each, and how to capture the headset's view for the next one.
-                    using (var saved = new ReportSavedDialog(dlg.FileName, ctx.Log.Error)) saved.ShowDialog(owner);
+                    using (var saved = new ReportSavedDialog(dlg.FileName, report.CaptureCount, ctx.Log.Error)) saved.ShowDialog(owner);
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
                 {

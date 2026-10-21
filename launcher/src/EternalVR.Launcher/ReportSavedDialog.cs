@@ -18,7 +18,7 @@ namespace EternalVR.Launcher
             Text = "Close", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(90, 30), DialogResult = DialogResult.OK,
         };
 
-        public ReportSavedDialog(string zipPath, Action<string> logError)
+        public ReportSavedDialog(string zipPath, int captures, Action<string> logError)
         {
             Text = "Export report";
             SuspendLayout();
@@ -40,8 +40,16 @@ namespace EternalVR.Launcher
             };
             var capture = new Label
             {
-                AutoSize = true, MaximumSize = new Size(TextWidth, 0), Margin = new Padding(0, 8, 0, 8), Text = ReportLinks.CaptureHint,
+                AutoSize = true, MaximumSize = new Size(TextWidth, 0), Margin = new Padding(0, 8, 0, 8), Text = ReportLinks.CaptureLine(captures),
+                ForeColor = captures > 0 ? SystemColors.GrayText : SystemColors.ControlText,
             };
+            var others = new Label
+            {
+                AutoSize = true, MaximumSize = new Size(TextWidth, 0), Margin = new Padding(0, 0, 0, 8), ForeColor = SystemColors.GrayText,
+                Text = ReportLinks.CaptureOtherControllers, Visible = captures <= 0,
+                Font = new Font(Font.FontFamily, Font.Size * 0.9F),
+            };
+            Disposed += (s, e) => others.Font.Dispose();
             var tips = new ToolTip { AutoPopDelay = 30000, InitialDelay = 400, ReshowDelay = 100 };
             Disposed += (s, e) => tips.Dispose();
             var links = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 4, 0, 0), WrapContents = false };
@@ -50,7 +58,7 @@ namespace EternalVR.Launcher
             var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
             buttons.Controls.Add(close);
             var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill };
-            layout.Controls.AddRange(new Control[] { saved, links, capture, buttons });
+            layout.Controls.AddRange(new Control[] { saved, links, capture, others, buttons });
             Controls.Add(layout);
             AcceptButton = close;
             CancelButton = close;

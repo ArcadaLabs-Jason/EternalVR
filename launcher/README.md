@@ -318,7 +318,9 @@ before asking where to save. `docs/release/TROUBLESHOOTING.md` documents the man
 rules for testers. The game's crash reports and console log come from the `base` folder of the Saved Games
 settings location (the one the settings snapshot uses, Steam and Game Pass alike;
 `Report/ReportBuilder.Game.cs`); the Windows event log entries are read by `Platform/WindowsEventLogs.cs` and
-chosen and written by `Report/WindowsEvents.cs`.
+chosen and written by `Report/WindowsEvents.cs`. The dialog after a saved report says how many in-headset
+captures the zip holds (`ReportResult.CaptureCount`, a burst counts once), or, with none, how to take one for a
+bug that shows in one eye (`ReportLinks.CaptureLine`); the button's tooltip carries the same instructions.
 
 ## Start-up checks, status and the session finisher
 

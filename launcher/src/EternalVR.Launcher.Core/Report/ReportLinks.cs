@@ -29,9 +29,22 @@ namespace EternalVR.Launcher.Core.Report
         /// eye and the HUD, and the next report takes the newest captures. Said in Export report's tooltip and the saved dialog.
         /// </summary>
         public const string CaptureHint =
-            "To show what you see: in the headset, hold the left Menu button and pull a trigger (SteamVR with Touch: hold both "
-            + "sticks pressed, pull a trigger after ¼ s; Index: the firm left trackpad press; Steam Frame: View). Each eye and "
-            + "the HUD are saved, and the next Export report includes them.";
+            "Bug in one eye, or different between your eyes? Take a capture where it happens: in the headset, hold the left Menu "
+            + "button and pull a trigger. Then export again.";
+
+        /// <summary>The same press on the controllers whose left Menu button is not the one to use (see docs/release/CONTROLS.md).</summary>
+        public const string CaptureOtherControllers =
+            "SteamVR with Quest/Rift controllers: both sticks pressed + a trigger" + "\n"
+            + "Index: firm left trackpad press + a trigger · Steam Frame: View + a trigger";
+
+        /// <summary>
+        /// What the saved dialog says about captures: with none in the report, <see cref="CaptureHint"/>; with some, a quiet line
+        /// that they are in, so the player knows the report shows both eyes.
+        /// </summary>
+        public static string CaptureLine(int captures) =>
+            captures <= 0 ? CaptureHint
+            : captures == 1 ? "1 capture from the headset is in this report, both eyes and the HUD."
+            : captures + " captures from the headset are in this report, both eyes and the HUD each.";
 
         /// <summary>
         /// Opens <paramref name="url"/> with the program Windows has for it (the default browser, or the Discord app), through

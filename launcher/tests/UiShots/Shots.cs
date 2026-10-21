@@ -158,7 +158,9 @@ namespace EternalVR.Launcher.UiShots
             yield return new Scenario { Name = "controls-layout-profile", Open = () => EditControlsOf("Layout check"), Steps = f => LayoutSteps.For(f, true) };
             yield return Modal("weapon-directions", () => new WeaponDirectionsDialog("up_right=none,down_left=none"), null);
             yield return Modal("report-saved", () => new ReportSavedDialog(
-                @"C:\Users\<user>\Desktop\EternalVR-report-v0.1.50-2026-10-13-A1B2C3.zip", _ => { }), null);
+                @"C:\Users\<user>\Desktop\EternalVR-report-v0.1.50-2026-10-13-A1B2C3.zip", 0, _ => { }), null);
+            yield return Modal("report-saved-captures", () => new ReportSavedDialog(
+                @"C:\Users\<user>\Desktop\EternalVR-report-v0.1.50-2026-10-13-A1B2C3.zip", 2, _ => { }), null);
             foreach (var name in new[] { "restore-saves", "restore-saves-layout" })
                 yield return new Scenario
                 {

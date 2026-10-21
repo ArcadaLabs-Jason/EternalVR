@@ -303,6 +303,7 @@ namespace EternalVR.Launcher.Core.Tests
                         Assert.Contains(Zip(stem, suffix), names);
                 Assert.DoesNotContain(names, n => n.Contains("p000010"));
                 Assert.Contains(report.Dropped, d => d.Contains("1 older capture(s)"));
+                Assert.Equal(2, report.CaptureCount); // the two taken, not the one left out
 
                 using (var a = new ZipArchive(new MemoryStream(report.Zip), ZipArchiveMode.Read))
                 {
@@ -318,6 +319,28 @@ namespace EternalVR.Launcher.Core.Tests
                 }
                 // The text cap still holds for the logs; the captures do not count toward it.
                 Assert.DoesNotContain(report.Dropped, d => d.Contains("the report would pass"));
+            }
+        }
+
+        [Fact]
+        public void CaptureCountIsZeroWithNoCapturesAndCountsABurstOnceAcrossSessions()
+        {
+            using (var t = new TempDir())
+            {
+                var inputs = Setup(t);
+                Assert.Equal(0, ReportBuilder.Build(inputs).CaptureCount);
+                var png = new byte[] { 0x89, (byte)'P', (byte)'N', (byte)'G', 0, 0xFF, 13, 10 };
+                var older = t.Combine("data", "logs", "20260926-090000", "captures");
+                var newer = t.Combine("data", "logs", "20260926-100000-2", "captures");
+                Directory.CreateDirectory(older);
+                Directory.CreateDirectory(newer);
+                // One burst of three frames with its text file and GUI image, and one single capture in another session.
+                foreach (var f in new[] { "-f00-L.png", "-f00-R.png", "-f01-L.png", "-f01-R.png", "-f02-L.png", "-f02-R.png", "-UI.png" })
+                    File.WriteAllBytes(Path.Combine(newer, "capture-20260926-100100-p000010-t100" + f), png);
+                File.WriteAllText(Path.Combine(newer, "capture-20260926-100100-p000010-t100.txt"), "head pose: 1 2 3\n");
+                File.WriteAllBytes(Path.Combine(older, "capture-20260926-090100-p000005-t50-mono.png"), png);
+                File.WriteAllText(Path.Combine(older, "capture-20260926-090100-p000005-t50.txt"), "head pose: 1 2 3\n");
+                Assert.Equal(2, ReportBuilder.Build(inputs).CaptureCount);
             }
         }
 

@@ -48,17 +48,33 @@ namespace EternalVR.Launcher.Core.Tests
         {
             var hint = ReportLinks.CaptureHint;
             Assert.Contains("hold the left Menu button and pull a trigger", hint);
-            Assert.Contains("Each eye and the HUD are saved", hint);
-            Assert.Contains("Export report", hint);
-            Assert.Contains(ReportHint.ButtonName, hint);
+            Assert.EndsWith("Then export again.", hint);
+            Assert.DoesNotContain("¼", hint + ReportLinks.CaptureOtherControllers);
+            Assert.DoesNotContain("Touch", ReportLinks.CaptureOtherControllers);
             // The SteamVR, Index and Steam Frame presses, as the player docs give them.
-            Assert.Contains("SteamVR with Touch: hold both sticks pressed, pull a trigger after ¼ s", hint);
-            Assert.Contains("Index: the firm left trackpad press; Steam Frame: View", hint);
+            Assert.Equal("SteamVR with Quest/Rift controllers: both sticks pressed + a trigger\n"
+                + "Index: firm left trackpad press + a trigger · Steam Frame: View + a trigger", ReportLinks.CaptureOtherControllers);
             var controls = File.ReadAllText(RepoFile("docs", "release", "CONTROLS.md"));
             Assert.Contains("| Hold left Menu + pull a trigger | Save a screenshot of each eye", controls);
             Assert.Contains("| Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot", controls);
             Assert.Contains("Pull the trigger after ¼ s", controls);
             Assert.Contains("Index: the firm left trackpad press; Steam Frame: View", controls);
+        }
+
+        [Fact]
+        public void TheSavedDialogSaysHowManyCapturesAreInOrOtherwiseHowToTakeOne()
+        {
+            Assert.Equal(ReportLinks.CaptureHint, ReportLinks.CaptureLine(0));
+            Assert.Equal(ReportLinks.CaptureHint, ReportLinks.CaptureLine(-1));
+            Assert.Contains("different between your eyes", ReportLinks.CaptureHint);
+            Assert.Equal("1 capture from the headset is in this report, both eyes and the HUD.", ReportLinks.CaptureLine(1));
+            Assert.StartsWith("3 captures from the headset are in this report", ReportLinks.CaptureLine(3));
+            foreach (var n in new[] { 0, 1, 3 })
+            {
+                var line = ReportLinks.CaptureLine(n);
+                Assert.DoesNotContain("we ", line + " ");
+                Assert.DoesNotContain("stereo", line);
+            }
         }
 
         [Fact]
