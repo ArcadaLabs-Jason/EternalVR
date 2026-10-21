@@ -227,13 +227,26 @@ std::optional<PanelSize> panelSize(float widthMetres, std::uint32_t width, std::
 }
 
 PixelRect wideContentRect(std::uint32_t width, std::uint32_t height) {
-    // 16:9 is 1.7778; a target at most 0.5 % taller counts as 16:9 (rounding of window sizes).
-    const double bandHeight = std::round(static_cast<double>(width) * 9.0 / 16.0);
-    if (width == 0 || height == 0 || static_cast<double>(height) <= bandHeight * 1.005) {
+    // 16:9 is 1.7778; a target at most 0.5 % taller or wider counts as 16:9 (rounding of window sizes).
+    if (width == 0 || height == 0) {
         return PixelRect{0, 0, width, height};
     }
-    const auto band = static_cast<std::uint32_t>(bandHeight);
-    return PixelRect{0, static_cast<std::int32_t>((height - band) / 2), width, band};
+    const double bandHeight = std::round(static_cast<double>(width) * 9.0 / 16.0);
+    if (static_cast<double>(height) > bandHeight * 1.005) {
+        const auto band = static_cast<std::uint32_t>(bandHeight);
+        return PixelRect{0, static_cast<std::int32_t>((height - band) / 2), width, band};
+    }
+    const double bandWidth = std::round(static_cast<double>(height) * 16.0 / 9.0);
+    if (static_cast<double>(width) > bandWidth * 1.005) {
+        const auto band = static_cast<std::uint32_t>(bandWidth);
+        return PixelRect{static_cast<std::int32_t>((width - band) / 2), 0, band, height};
+    }
+    return PixelRect{0, 0, width, height};
+}
+
+PixelRect wideContentRectOf(const PixelRect& rect) {
+    const PixelRect band = wideContentRect(rect.width, rect.height);
+    return PixelRect{rect.x + band.x, rect.y + band.y, band.width, band.height};
 }
 
 ImageUv contentToImage(float u, float v, const PixelRect& rect, std::uint32_t width, std::uint32_t height) {

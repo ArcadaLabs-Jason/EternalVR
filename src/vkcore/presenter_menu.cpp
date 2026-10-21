@@ -484,10 +484,11 @@ void XrPresenter::Impl::placeOnMenuPanel(XrCompositionLayerQuad& quad) const {
     if (settings.ui.wideCrop) {
         // The quad's image cut to its 16:9 band, as the panel's size is (a band already cut stays as it is).
         XrRect2Di& rect = quad.subImage.imageRect;
-        const ui_layer::PixelRect band = ui_layer::wideContentRect(
-            static_cast<std::uint32_t>(rect.extent.width), static_cast<std::uint32_t>(rect.extent.height));
-        rect.offset.y += band.y;
-        rect.extent.height = static_cast<std::int32_t>(band.height);
+        const ui_layer::PixelRect band = ui_layer::wideContentRectOf(
+            {rect.offset.x, rect.offset.y, static_cast<std::uint32_t>(rect.extent.width),
+             static_cast<std::uint32_t>(rect.extent.height)});
+        rect = {{band.x, band.y},
+                {static_cast<std::int32_t>(band.width), static_cast<std::int32_t>(band.height)}};
     }
     quad.space = localSpace;
     quad.pose = toXr(menuPanel.pose);

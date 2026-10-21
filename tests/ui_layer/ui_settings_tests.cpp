@@ -218,9 +218,10 @@ TEST_CASE("wide content: the centred 16:9 band of a near-square target") {
     CHECK(old.y == 469);
 }
 
-TEST_CASE("wide content: a 16:9 or wider target is shown whole") {
+TEST_CASE("wide content: a 16:9 target is shown whole") {
+    // Within 0.5 % either way (rounding of window sizes).
     for (const auto& [w, h] :
-         {std::pair<std::uint32_t, std::uint32_t>{1920, 1080}, {2560, 1080}, {1280, 720}, {1281, 723}}) {
+         {std::pair<std::uint32_t, std::uint32_t>{1920, 1080}, {1280, 720}, {1281, 723}, {1286, 720}}) {
         const auto r = evr::ui_layer::wideContentRect(w, h);
         CHECK(r.x == 0);
         CHECK(r.y == 0);
@@ -229,6 +230,50 @@ TEST_CASE("wide content: a 16:9 or wider target is shown whole") {
     }
     const auto empty = evr::ui_layer::wideContentRect(0, 0);
     CHECK(empty.width == 0);
+}
+
+TEST_CASE("wide content: the centred 16:9 columns of a target wider than 16:9") {
+    // A 2048x864 GUI capture (a 2560x1080 render size in the runtime's pixel budget) had the HUD's blocks and
+    // the weapon wheel at the same fractions of its centred 1536 x 864 frame as a 2048x2208 capture of its
+    // 2048 x 1152 band, to 0.002: idSWF fits its 16:9 frame inside the target either way.
+    const auto band = evr::ui_layer::wideContentRect(2048, 864);
+    CHECK(band.x == 256);
+    CHECK(band.y == 0);
+    CHECK(band.width == 1536);
+    CHECK(band.height == 864);
+    const auto ultra = evr::ui_layer::wideContentRect(2560, 1080);
+    CHECK(ultra.x == 320);
+    CHECK(ultra.width == 1920);
+    CHECK(ultra.height == 1080);
+    const auto odd = evr::ui_layer::wideContentRect(3441, 1440); // 2560 columns, 881 left over
+    CHECK(odd.width == 2560);
+    CHECK(odd.x == 440);
+    // A point on the band's panel maps onto the whole image.
+    const auto left = evr::ui_layer::contentToImage(0.0f, 0.5f, band, 2048, 864);
+    CHECK(left.u == doctest::Approx(256.0 / 2048.0));
+    CHECK(left.v == doctest::Approx(0.5));
+    const auto right = evr::ui_layer::contentToImage(1.0f, 0.5f, band, 2048, 864);
+    CHECK(right.u == doctest::Approx(1792.0 / 2048.0));
+}
+
+TEST_CASE("wide content: the menu panel's cut of a quad's part of an image") {
+    // Eye R's half of a ring two eyes wide: its band, in the ring's pixels, columns and rows alike.
+    const auto wide = evr::ui_layer::wideContentRectOf({2048, 0, 2048, 864});
+    CHECK(wide.x == 2048 + 256);
+    CHECK(wide.y == 0);
+    CHECK(wide.width == 1536);
+    CHECK(wide.height == 864);
+    const auto tall = evr::ui_layer::wideContentRectOf({2056, 0, 2056, 2216});
+    CHECK(tall.x == 2056);
+    CHECK(tall.y == (2216 - 1157) / 2);
+    CHECK(tall.width == 2056);
+    CHECK(tall.height == 1157);
+    // A band already cut stays as it is.
+    const auto cut = evr::ui_layer::wideContentRectOf({256, 0, 1536, 864});
+    CHECK(cut.x == 256);
+    CHECK(cut.y == 0);
+    CHECK(cut.width == 1536);
+    CHECK(cut.height == 864);
 }
 
 TEST_CASE("wide content: a point on the band's panel maps onto the whole image") {

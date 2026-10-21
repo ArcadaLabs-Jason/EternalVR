@@ -40,8 +40,11 @@ XR worker, every XR frame (presenter_wrist.cpp)
   16:9 band, measured on the rig's GUI captures (2560x2100 and 2054x2068; the same band coordinates to 0.005
   in both) with a margin for animations and key hints. The band is `ui_layer::wideContentRect`, the same
   rows the UI quad shows since the render size made the eye image near-square (1280x1400, 2064x2100), so a
-  crop never reaches the empty rows above or below it. Unit tests check every block and cut lies in the band
-  at 1280x1400, 2064x2100, 2560x2100, 2054x2068 and 1920x1080.
+  crop never reaches the empty rows above or below it; on a GUI target wider than 16:9 it is the centred
+  columns the game fits its 16:9 frame into (a 2048x864 capture had the corners within 0.002 of the band
+  coordinates above; up to 0.1.70 such a target was taken whole and the corners were cut at the wrong
+  columns). Unit tests check every block and cut lies in the band at 1280x1400, 2064x2100, 2560x2100,
+  2054x2068, 1920x1080, 2048x864 and 2560x1080, and that the blocks hold what the 2048x864 capture shows.
 - **Where the panel is** (`ui_layer/wrist_hud.hpp`). In the off hand's OpenXR grip space: on the inside of
   the forearm (the palm side), 13 cm behind the grip toward the elbow and 4 cm out from the palm, the
   vitals + weapon row 16 cm wide. The panel's normal is the palm's; the image's up is the thumb side. Turning

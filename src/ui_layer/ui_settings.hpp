@@ -110,7 +110,7 @@ struct UiSettings {
     bool menuFollow = true;
     // ETERNALVR_UI_CROP: the UI quad and the menu panel show only the 16:9 band of the GUI target the game's
     // screens are laid out in (wideContentRect), not the empty rows above and below it on a near-square eye
-    // image (T-031).
+    // image (T-031) or the empty columns beside it on an image wider than 16:9.
     bool wideCrop = true;
     // ETERNALVR_UI_WASH: the full-screen additive wash (the red hit and low-health vignette) is taken out of
     // the GUI image before it goes on the HUD quad (additive_wash.hpp); 0 shows the image as the game drew
@@ -161,11 +161,18 @@ struct PixelRect {
 std::vector<PixelRect>
 copyRegionsWithoutCentre(std::uint32_t width, std::uint32_t height, float maskFraction);
 
-// idSWF lays the game's screens out in a centred 16:9 frame fitted to the target's width: the menus, the
-// HUD's corners and the subtitles sit inside it (docs/rig-findings/render-size.md, section 5; the UI captures
-// at 2064x2100 and 2560x2100). The part of a `width` x `height` target that holds them: that band when the
-// target is taller than 16:9 (its height rounded to whole pixels, centred), the whole target otherwise.
+// idSWF lays the game's screens out in a centred 16:9 frame fitted inside the target: the menus, the HUD's
+// corners, the weapon wheel and the subtitles sit inside it (docs/rig-findings/render-size.md, section 5;
+// the UI captures at 2064x2100 and 2560x2100 for taller targets, at 2048x864 for a wider one, where the HUD
+// blocks and the wheel sat at the same fractions of the centred 1536 x 864 frame as on a near-square
+// target). The part of a `width` x `height` target that holds them: the full-width band of rows when the
+// target is taller than 16:9, the full-height band of columns when it is wider (its size rounded to whole
+// pixels, centred), the whole target when it is 16:9 within 0.5 %.
 PixelRect wideContentRect(std::uint32_t width, std::uint32_t height);
+
+// The 16:9 band (wideContentRect) of the part `rect` of an image that holds a whole GUI or eye image, in the
+// image's pixels: the menu panel's cut of the quad it takes over (a band already cut stays as it is).
+PixelRect wideContentRectOf(const PixelRect& rect);
 
 // A point at (u, v) on a panel that shows `rect` of a `width` x `height` image, as (u, v) on the whole image
 // (both 0..1, row 0 at the top).

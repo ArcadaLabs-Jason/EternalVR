@@ -4,9 +4,11 @@
 //
 // The HUD SWF is laid out in the 16:9 band of the GUI target that ui_layer::wideContentRect gives: on a
 // target taller than 16:9 (the near-square eye image of the render size, e.g. 2064x2100 or 1280x1400) the
-// band spans the whole width and is centred vertically; a 16:9 target is its own band. The UI quad shows
-// that band (ETERNALVR_UI_CROP), so the blocks are measured in the same band. Measured on the rig's GUI
-// captures at 2560x2100 and 2054x2068 (the same band coordinates to 0.005 in both):
+// band spans the whole width and is centred vertically; on a wider target it spans the whole height and is
+// centred horizontally; a 16:9 target is its own band. The UI quad shows that band (ETERNALVR_UI_CROP), so
+// the blocks are measured in the same band. Measured on the rig's GUI captures at 2560x2100 and 2054x2068
+// (the same band coordinates to 0.005 in both; a 2048x864 capture had them within 0.002 of a 2048x2208 one,
+// in its centred 1536 x 864 band):
 //
 //   health, armor, extra lives      x 0.022..0.197  y 0.838..0.960  (bottom left)
 //   ammo, equipment, flame belch    x 0.781..0.944  y 0.815..0.949  (bottom right, key hints above)

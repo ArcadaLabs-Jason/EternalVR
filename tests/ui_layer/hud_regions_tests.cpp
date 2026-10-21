@@ -43,9 +43,10 @@ PixelRect measured(float x0, float x1, float y0, float y1, std::uint32_t w, std:
 } // namespace
 
 TEST_CASE("hud regions: every block lies inside the 16:9 band the UI quad shows") {
-    // The render size's near-square eye images (docs/rig-findings/render-size.md), the old window sizes and
-    // a plain 16:9 target.
-    const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {2054, 2068}, {1920, 1080}};
+    // The render size's near-square eye images (docs/rig-findings/render-size.md), the old window sizes, a
+    // plain 16:9 target and two wider ones.
+    const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {2054, 2068},
+                                      {1920, 1080}, {2048, 864},  {2560, 1080}};
     for (const auto& size : sizes) {
         const std::uint32_t w = size[0];
         const std::uint32_t h = size[1];
@@ -79,6 +80,28 @@ TEST_CASE("hud regions: the blocks on a 1280x1400 eye image") {
     const PixelRect abilities = toPixels(wristBlockRect(WristBlock::Abilities), 1280, 1400);
     CHECK(abilities.y == 649);                                               // floor(340 + 0.43 * 720)
     CHECK(abilities.y + static_cast<std::int64_t>(abilities.height) == 765); // ceil(340 + 0.59 * 720)
+}
+
+TEST_CASE("hud regions: the blocks on a GUI target wider than 16:9") {
+    // A 2048x864 GUI capture (a 2560x1080 render size): the game drew health and armor at x 298..547, y
+    // 737..818 and the ammo block with its key hints at x 1465..1694, y 715..812 (alpha above 8), inside its
+    // centred 1536 x 864 frame. The blocks the hand HUDs move and cut hold them.
+    const PixelRect band = wideContentRect(2048, 864);
+    REQUIRE(band.x == 256);
+    REQUIRE(band.width == 1536);
+    const PixelRect drawnVitals{298, 737, 547 - 298, 818 - 737};
+    const PixelRect drawnWeapon{1465, 715, 1694 - 1465, 812 - 715};
+    const PixelRect vitals = toPixels(wristBlockRect(WristBlock::Vitals), 2048, 864);
+    const PixelRect weapon = toPixels(wristBlockRect(WristBlock::Weapon), 2048, 864);
+    CHECK(contains(vitals, drawnVitals));
+    CHECK(contains(weapon, drawnWeapon));
+    CHECK(contains(cutRect(WristBlock::Vitals, 2048, 864), drawnVitals));
+    CHECK(contains(cutRect(WristBlock::Weapon, 2048, 864), drawnWeapon));
+    // Inside the frame: the empty columns beside it are not the blocks'.
+    CHECK(vitals.x == 256);
+    CHECK(weapon.x + static_cast<std::int64_t>(weapon.width) == 1792);
+    CHECK(contains(band, cutRect(WristBlock::Vitals, 2048, 864)));
+    CHECK(contains(band, cutRect(WristBlock::Weapon, 2048, 864)));
 }
 
 TEST_CASE("hud regions: block rectangles in pixels") {

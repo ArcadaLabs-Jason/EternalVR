@@ -526,7 +526,7 @@ bool XrPresenter::Impl::fillUiQuad(XrCompositionLayerQuad& quad) {
         return false;
     }
     // The 16:9 band the game's HUD and menus are laid out in (the rows above and below it on a near-square
-    // eye image are empty).
+    // eye image are empty, as are the columns beside it on an image wider than 16:9).
     const ui_layer::PixelRect content = settings.ui.wideCrop
                                             ? ui_layer::wideContentRect(uiExtent.width, uiExtent.height)
                                             : ui_layer::PixelRect{0, 0, uiExtent.width, uiExtent.height};

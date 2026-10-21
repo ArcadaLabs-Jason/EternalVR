@@ -51,8 +51,9 @@ std::uint64_t area(const PixelRect& r) {
     return static_cast<std::uint64_t>(r.width) * r.height;
 }
 
-// The wheel as the game drew it on two GUI captures with the wheel up (alpha above 8, right of the ability
-// icons): 2048x2208 (the default render size) and 1760x1400 (a player's headset), pixels [x0, x1) x [y0, y1).
+// The wheel as the game drew it on GUI captures with the wheel up (alpha above 8, right of the ability
+// icons): 2048x2208 (the default render size), 1760x1400 (a player's headset) and 2048x864 (wider than 16:9,
+// a 2560x1080 render size: the game fits its 16:9 frame between empty columns), pixels [x0, x1) x [y0, y1).
 // The right edge includes the objective marker beside the wheel.
 struct Capture {
     std::uint32_t width;
@@ -62,6 +63,7 @@ struct Capture {
 const Capture kCaptures[] = {
     {2048, 2208, {1341, 791, 1921 - 1341, 1369 - 791}},
     {1760, 1400, {1152, 431, 1651 - 1152, 928 - 431}},
+    {2048, 864, {1262, 198, 1697 - 1262, 631 - 198}},
 };
 
 // HUD placements: the default (2.0 m wide at 1.5 m) and the player's (2.5 m at 0.9 m).
@@ -182,9 +184,11 @@ TEST_CASE("weapon wheel: the head-locked HUD keeps everything else where it was,
             CAPTURE(moved.size());
             const HeadLockedHud up = headLockedHud(shown, c.width, c.height, moved, true, 1.5f);
             REQUIRE(up.wheel);
-            // Not shown twice: no piece of the head-locked quad shows any of the wheel's rectangle.
+            // Not shown twice: no piece of the head-locked quad shows any of the wheel's rectangle, nor any
+            // of the wheel the game drew (a slice of it left there shows beside the centred quad).
             for (const PixelRect& p : up.pieces) {
                 CHECK_FALSE(overlap(p, up.wheel->rect));
+                CHECK_FALSE(overlap(p, c.wheel));
                 CHECK(contains(shown, p));
             }
             // Nothing else lost: the pieces and the wheel's rectangle cover the band minus the moved blocks.

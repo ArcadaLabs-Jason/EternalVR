@@ -259,7 +259,7 @@ TEST_CASE("wrist hud: laid out around an identity hand, the quads are relative t
 
 TEST_CASE("wrist hud: the head-locked pieces keep the band but the corners") {
     const std::vector<WristBlock> kCorners{WristBlock::Vitals, WristBlock::Weapon};
-    const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {1920, 1080}};
+    const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {1920, 1080}, {2048, 864}};
     for (const auto& size : sizes) {
         const std::uint32_t width = size[0];
         const std::uint32_t height = size[1];

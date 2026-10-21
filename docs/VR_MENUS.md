@@ -425,16 +425,21 @@ weapon wheel's cursor is gone`.
 **Where the wheel shows** (`ui_layer/weapon_wheel.hpp`, `vkcore/presenter_wrist.cpp`). The game draws the wheel
 right of the middle of the HUD: its centre at 79.7% of the 16:9 band's width and 48% of its height, 28% of
 the band's width across (the rig's GUI captures at 2048x2208, 1760x1400 and 1440x1600, the same band
-coordinates to 0.001). On the head-locked UI quad that is about 22 degrees right of straight ahead on the
+coordinates to 0.001; at 2048x864, wider than 16:9, the same to 0.002 in the centred 1536 x 864 band the game
+fits its frame into). On the head-locked UI quad that is about 22 degrees right of straight ahead on the
 default HUD (2.0 m wide at 1.5 m) and about 40 degrees on a 2.5 m HUD at 0.9 m, at the edge of the view or
 past it (a player's report on a Pimax Dream Air). While the wheel is up, its rectangle of the GUI image (x
 0.64..0.95, y 0.20..0.75 of the band) goes on a quad of its own straight ahead at the HUD's distance, at the
 angle it spans on the default HUD (23 degrees for the rectangle, 21 for the wheel), in every HUD mode (panel,
 wrist, weapon) and at any HUD width or distance; the head-locked quad keeps the rest of the band, cut into
 rectangles around it as for the blocks the hand HUDs move, so the wheel is not shown twice and nothing else
-moves. A map marker the game draws inside that rectangle while the wheel is up moves with it. Selection is
-unchanged: the stick, the thumb rest or the hand move the game's cursor around the wheel's centre in the GUI
-image, wherever the quad shows it.
+moves. The band is `ui_layer::wideContentRect`: the centred rows of a target taller than 16:9, the centred
+columns of a wider one. Up to 0.1.70 a wider target was taken whole, so the rectangle started right of the
+wheel's left edge (at 2.37:1 about 11% of the wheel, more on wider images): that slice stayed on the
+head-locked quad at the wheel's place on the HUD, just right of the centre, and showed through the centred
+wheel's right side, the shape of a player's report of a "sliced" wheel. A map marker the game draws inside
+that rectangle while the wheel is up moves with it. Selection is unchanged: the stick, the thumb rest or the
+hand move the game's cursor around the wheel's centre in the GUI image, wherever the quad shows it.
 
 "The wheel is up" is the forced-view gate's weapon wheel state (`features/input/forced_angles.hpp`: the
 game's view and button inhibit bits, 0x18, set while `weapon_wheel` is held), read at the camera hook after

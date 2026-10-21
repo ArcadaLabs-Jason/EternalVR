@@ -226,7 +226,7 @@ TEST_CASE("weapon hud: the ammo block alone, or with health and armor beside it"
 }
 
 TEST_CASE("weapon hud: the head-locked pieces lose only what moved to the gun") {
-    const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {1920, 1080}};
+    const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {1920, 1080}, {2048, 864}};
     for (const auto& size : sizes) {
         const std::uint32_t width = size[0];
         const std::uint32_t height = size[1];

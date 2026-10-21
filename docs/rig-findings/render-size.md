@@ -176,6 +176,16 @@ of `tmp-vr/m6t3-ui` and `tmp-vr/u2-ui`]. So the UI quad and the menu panel show 
 (2056 x 1157 at the default size, near ARCHITECTURE 7a's 2048 x 1152), at the same place and size in metres
 as before. The menu pointer's hits on the band are mapped onto the whole image for the game's cursor.
 
+The frame is fitted inside the target whatever its shape: on a target wider than 16:9 it spans the height and
+is centred between empty columns. A GUI capture at 2048 x 864 (a 2560 x 1080 render size in the runtime's pixel
+budget, 2026-10-20) had the HUD corners and the weapon wheel within 0.002 of the band coordinates of a 2048 x
+2208 capture, in its centred 1536 x 864 frame, and nothing outside it in play (full-screen backdrops such as the
+loading screen fill the whole target, as they do on a near-square one). Up to 0.1.70 `wideContentRect` took a
+wider target whole, so every crop measured in the band landed too far out on it: the weapon wheel's rectangle
+missed the wheel's left edge (about 11% of the wheel at 2.37:1, which then stayed on the head-locked quad beside
+the centred wheel), and the wrist and weapon HUD cut the corners at the wrong columns. A near-square eye image
+never had this; a headset whose eye image is wider than 16:9, or a render size or window of that shape, did.
+
 ## 7. Launcher
 
 Stereo launches set `ETERNALVR_RENDER_SIZE` (`render_size` in `launcher.ini`, default `auto`) and
