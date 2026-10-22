@@ -142,6 +142,30 @@ box against side planes, without occlusion. Geometry, lights and world areas kee
 so the eyes draw what they drew before (`docs/rig-findings/stereo-umbra-decals.md`). Route S only; a mono view
 keeps the engine's list; on a game build where the pattern is not found nothing is hooked.
 
+**Screen-space reflections along each eye's own screen.** The SSR/SSDO setup (RVA 0x1C71630) packs the view's
+projection into four floats from its diagonal terms only (`packedProjection`, `packedInverseProjection0/1`), and
+the opaque pass's materials march SSR with them, `uv = 0.5 + packed.xy * xy / z` (0.5 fixed in the shader): for
+an asymmetric eye frustum that is a view space sheared by c = m2 / m0 sideways and d = m6 / m5 up and down (Quest 3:
+-0.27 in eye L, +0.27 in eye R, -0.21 in both). The reflection is turned into view space by the true rotation (`inverseViewMatrixX/Y/Z`
+as columns), so the march ran along another screen line than the reflected ray, about 13 to 17 degrees off on
+floors, sideways in opposite directions per eye and tilted toward the floor in both: puddles lost their
+reflection, or took it from different places in each eye. A hook in the render-view job, right after it sets
+those three parameters (RVA 0x1C54C95, `src/vkcore/screen_space_view_hooks.cpp`, `seq-ssr-view:` lines) sets them again
+sheared for the view's own projection (`stereo_seq::screenSpaceShear`), which makes the whole march the sheared
+image of the true one: exact for the opaque pass's SSR (and, in a model, for SSDO's bent normal of an open
+surface). The ray-traced reflections' own compute SSR (on while ray tracing is) reflects in view space and keeps
+an error of about the same size. A centred projection gives no shear (mono, the flat game). Route S only.
+The shear comes with a patch of the SSR shaders' screen-edge fade (`src/vkcore/ssr_fade_hooks.cpp`, `ssr-fade:`
+lines): each eye faded hits by its own image, 27.2 degrees in and 46.4 out, so a reflection in one eye's nasal band
+faded in that eye only. At their creation the 22 known SSR modules (by hash; the patched words validated with
+spirv-val and pinned by their hash) get the horizontal frame both eyes have pixels for, ndc_x' = (ndc_x + m2) /
+(1 - |m2|), m2 derived in the shader from the sheared rows it already loads and `packedProjection` (no new data).
+The shear runs only while all 22 are patched and no module of unknown hash carries the fade; else every
+off-centre render stays unsheared (counted as held). Rig (Urdak, ray tracing off, eye R aligned to eye L by
+disparity): L~R correlation of the SSR contribution over the overlap 0.94 / 0.31 / 0.92 -> 0.99 / 0.79 / 0.98 at
+three positions (the shear alone: 0.94 / 0.30 / 0.69); each eye's outer strip past 40 degrees, seen by that eye
+only, loses most of its screen-space reflection (`docs/rig-findings/stereo-screen-space.md`).
+
 ## Stack
 
 Eye R's whole chain runs nested inside eye L's frame-end job on the same job thread's stack (the engine
@@ -295,7 +319,8 @@ history runs, screen-space reflections are held at the player's own `r_SSR` (`ET
 the game's own `r_SSR 0` after the start-up `r_TAASafeMode 1` left them off in every session), and the hold
 follows the game's Reflections setting whenever that runs (the profile's load, an apply in the video menu):
 SSR keeps no history of its own and reads the last frame's colour through the TAA history selector (0x1CBB6C0),
-which gives each eye its own (static reading; no headset check yet). Without per-eye history (`ETERNALVR_STEREO_TAA=0`,
+which gives each eye its own (static reading; no headset check yet; the march's direction per eye: Route S above, "Screen-space
+reflections along each eye's own screen"). Without per-eye history (`ETERNALVR_STEREO_TAA=0`,
 failed closed) the game writes `r_SSR 0` on every render itself while `r_TAASafeMode` is 1, and that stays:
 the eyes would share that colour. The launcher and
 `launch-ht.ps1 -Stereo` put the cvars on the command line (`-StereoV1`: the v1 set and

@@ -291,6 +291,7 @@ if(TARGET evr_device_features)
             vkcore/refraction_sizes_tests.cpp
             vkcore/snapshot_pairs_tests.cpp
             vkcore/snapshot_ring_tests.cpp
+            vkcore/ssr_fade_patch_tests.cpp
             vkcore/status_file_tests.cpp
             vkcore/submit_order_tests.cpp
             vkcore/swap_images_tests.cpp
@@ -301,7 +302,7 @@ if(TARGET evr_device_features)
             vkcore/view_water_start_tests.cpp
             vkcore/vrs_khr_plan_tests.cpp
         DEPENDS evr_adapter_order evr_code_refs evr_debug_script evr_device_features evr_dump_format evr_game_settings_line
-            evr_parallel_eyes_settings evr_mp_policy evr_vrs_khr_plan)
+            evr_parallel_eyes_settings evr_mp_policy evr_vrs_khr_plan evr_ssr_fade_patch evr_stereo_seq)
 endif()
 
 # The shader census tool (tools/shader_census) is tested on synthetic SPIR-V, with no SDK needed.
@@ -356,6 +357,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/refraction_history_tests.cpp
         stereo_seq/render_idle_tests.cpp
         stereo_seq/scatter_history_tests.cpp
+        stereo_seq/screen_space_view_tests.cpp
         stereo_seq/seq_settings_tests.cpp
         stereo_seq/setting_follow_tests.cpp
         stereo_seq/ssdo_history_tests.cpp

@@ -44,6 +44,12 @@ target_compile_features(evr_dump_format PUBLIC cxx_std_20)
 target_compile_definitions(evr_dump_format PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(evr_dump_format PRIVATE evr_warnings PUBLIC Vulkan::Headers)
 
+# The SSR fade patch (ssr_fade_patch.hpp): SPIR-V words in and out, tested without a device.
+add_library(evr_ssr_fade_patch STATIC ssr_fade_patch.cpp)
+target_include_directories(evr_ssr_fade_patch PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_ssr_fade_patch PUBLIC cxx_std_20)
+target_link_libraries(evr_ssr_fade_patch PRIVATE evr_warnings PUBLIC evr_dump_format)
+
 # Foveated rendering through VK_KHR_fragment_shading_rate: its decisions (vrs_khr_plan.hpp), tested without a
 # device.
 add_library(evr_vrs_khr_plan STATIC vrs_khr_plan.cpp)
@@ -174,6 +180,8 @@ add_library(evr_layer SHARED
     seq_locate.cpp
     seq_prev.cpp
     seq_stack.cpp
+    screen_space_view_hooks.cpp
+    ssr_fade_hooks.cpp
     shader_dump.cpp
     shader_dump_record.cpp
     ssdo_hooks.cpp
@@ -324,6 +332,7 @@ target_link_libraries(evr_layer PRIVATE
     evr_game_settings_line
     evr_parallel_eyes_settings
     evr_vrs_khr_plan
+    evr_ssr_fade_patch
     evr_gpu_timing
     evr_layer_gate
     evr_key_injection

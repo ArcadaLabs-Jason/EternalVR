@@ -20,6 +20,7 @@
 #include "vkcore/queue_entry.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
+#include "vkcore/ssr_fade_hooks.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/stereo_hooks.hpp"
@@ -391,6 +392,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
     // The shader dump (a rig tool, ETERNALVR_DUMP_SHADERS) only observes Vulkan calls, no game memory, so it
     // is not gated on the multiplayer guard: it keeps recording after a trip.
     shader_dump::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);
+    ssr_fade::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);       // the SSR fade patch
     ui_vulkan::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);      // ETERNALVR_UI_LAYER
     gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
     cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
@@ -417,6 +419,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
     }
     view_snapshot::onDeviceDestroyed(*data);
     shader_dump::onDeviceDestroyed(device);
+    ssr_fade::onDeviceDestroyed(device);
     ui_vulkan::onDeviceDestroyed(device);
     gpu_timing::onDeviceDestroyed(device);
     cpu_timing::onDeviceDestroyed(device);
@@ -450,9 +453,9 @@ PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name) {
     const PFN_vkVoidFunction cpu = cpu_timing::findHook(name); // chains to the GPU timing's, UI's or dump's
     const PFN_vkVoidFunction timing = gpu_timing::findHook(name); // chains to the UI layer's where both hook
     const PFN_vkVoidFunction ui = ui_vulkan::findHook(name); // chains to the shader dump's where both hook
-    const PFN_vkVoidFunction dump =
-        shader_dump::findHook(name); // chains to the VRS experiment's where both hook
-    return cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : vrs_nv::findHook(name);
+    const PFN_vkVoidFunction dump = shader_dump::findHook(name); // chains to the VRS experiment's
+    const PFN_vkVoidFunction fade = ssr_fade::findHook(name); // before the dump's: a dump records the patch
+    return fade ? fade : cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : vrs_nv::findHook(name);
 }
 
 // The command buffer check (a Parallel Eye Rendering rig tool, off by default: then null) goes before every

@@ -7,6 +7,7 @@
 #include "vkcore/keep_prev_hooks.hpp"
 #include "vkcore/moved_flag_hooks.hpp"
 #include "vkcore/object_prev_hooks.hpp"
+#include "vkcore/screen_space_view_hooks.hpp"
 #include "vkcore/ssr_noise_hooks.hpp"
 #include "vkcore/vis_gate_hooks.hpp"
 #include "vkcore/world_gui_hooks.hpp"
@@ -20,10 +21,11 @@ void installSeqEyeFixes() {
     installWorldGuiHook();    // world GUIs (holograms, screens) in eye R too
     installMovedFlagHooks();  // moving objects keep their motion vectors in eye R
     installKeepPrevHooks();   // and their previous model matrix from eye L
-    installGeomCachePrevHooks(); // and geometry caches (banners, hanging bodies) their previous frame
-    installFxSyncHooks();        // CPU particles and effects alike in both eyes
-    installSsrNoiseHooks();      // the screen-space reflections' noise index
-    installDecalFrustumHook();   // decals from the frustum around the eye pair
+    installGeomCachePrevHooks();  // and geometry caches (banners, hanging bodies) their previous frame
+    installFxSyncHooks();         // CPU particles and effects alike in both eyes
+    installSsrNoiseHooks();       // the screen-space reflections' noise index
+    installScreenSpaceViewHook(); // and their march along each eye's own screen
+    installDecalFrustumHook();    // decals from the frustum around the eye pair
 }
 
 } // namespace evr::vkcore

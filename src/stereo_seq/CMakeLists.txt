@@ -31,6 +31,7 @@ evr_add_module(evr_stereo_seq
         refraction_history.cpp
         render_idle.cpp
         scatter_history.cpp
+        screen_space_view.cpp
         seq_settings.cpp
         setting_follow.cpp
         ssdo_history.cpp

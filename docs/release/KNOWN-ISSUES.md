@@ -176,6 +176,13 @@ them is worse for you than described here.
   the game; on any other version they keep the game's own decal culling and the log says why (lines starting
   with `seq-decals:`). On my test PC's captures the puddles match the flat game's brightness within about 5%,
   the right eye's still a little darker. Not tried in a headset yet, nor on Game Pass.
+- **Reflections in puddles and glossy floors with ray tracing off** (the screen-space reflections) pointed
+  the wrong way in each eye: some puddles did not reflect at all except from certain spots, and then the two
+  eyes showed different things (the round platform at the start of Urdak, for one). Each eye now marches its
+  reflections along its own view, and both eyes fade them out toward the sides at the same angles. On my test PC
+  both eyes' reflections are now much more alike across the view; at the far left and right edges (past about 40
+  degrees, where only one eye sees) these reflections fade out sooner than in the flat game. With ray tracing on,
+  some spots can still differ between the eyes. Not tried in a headset yet, nor on Game Pass.
 - **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
   other eye shows it.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
