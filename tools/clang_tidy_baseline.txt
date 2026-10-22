@@ -27,7 +27,6 @@
 1 src/stereo_seq/refraction_history.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
 1 src/stereo_seq/seq_settings.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
 1 src/ui_layer/wrist_hud.cpp [bugprone-branch-clone] repeated branch body in conditional chain
-1 src/ui_layer/wrist_hud.cpp [performance-inefficient-vector-operation] 'push_back' is called inside a loop; consider pre-allocating the container capacity before the loop
 2 src/vkcore/adapter_order.cpp [bugprone-unchecked-optional-access] unchecked access to optional value
 1 src/vkcore/adapter_order.cpp [performance-use-std-move] 'order' could be moved here
 1 src/vkcore/bhaptics_link.cpp [bugprone-casting-through-void] do not cast 'FARPROC' (aka 'long long (*)()') to 'T' through 'void *'; use reinterpret_cast instead

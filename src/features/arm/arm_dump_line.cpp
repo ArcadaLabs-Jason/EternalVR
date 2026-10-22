@@ -223,6 +223,12 @@ std::string armDumpLine(const ArmDumpRecord& r) {
     out += r.handsState ? std::to_string(*r.handsState) : std::string("null");
     out += ",\"hswim\":";
     out += !r.handsSwim ? "null" : *r.handsSwim ? "true" : "false";
+    out += ",\"mods\":[";
+    text(out, r.mods[0]);
+    out += ',';
+    text(out, r.mods[1]);
+    out += "],\"sight\":";
+    text(out, r.sightRow);
     out += "}\n";
     return out;
 }

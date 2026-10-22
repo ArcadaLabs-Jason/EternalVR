@@ -5,6 +5,7 @@
 // set, runtime_cvars_pe.hpp) and runtime_cvars_reticle.cpp (hand aim's crosshair hold,
 // runtime_cvars_reticle.hpp).
 
+#include "platform/mp_policy/profile_cvars.hpp"
 #include "stereo_seq/seq_settings.hpp"
 #include "ui_layer/crosshair.hpp"
 #include "vkcore/cvar_book.hpp"
@@ -44,7 +45,18 @@ struct Held {
     bool reticle = false;    // hud_reticle_styleOverride: 0 while hand aim asks for it (applyReticle)
     ui_layer::ReticleKeep reticleKeep; // ... its value before the layer's first write (reticleWrite)
     bool profile = false; // in profile.bin (mp_policy::profileStoredCvar): left alone in profile I/O
+    bool yields = false;  // a change in the game's menu ends the hold (the HUD Scale, yieldTurn)
+    mp_policy::YieldingHold yield;
 };
+
+// The held list (built by the first apply), under heldMutex().
+std::vector<Held>& heldList();
+
+// runtime_cvars_yield.cpp: one present's turn of a hold that yields (h.yields: the HUD Scale). True when the
+// cvar is left alone this time: the held value is live, or the player changed it in the game's menu (from
+// then on it is not held, and the profile hooks take the new value as the player's: profilePlayerChoice).
+// False: write the held value. Under heldMutex().
+bool yieldTurn(Held& h);
 
 // Whether the first apply() has run (under heldMutex(), runtime_cvars.hpp): the held list is built then and
 // stays as it is.

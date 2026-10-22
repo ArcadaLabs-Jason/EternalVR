@@ -14,8 +14,10 @@
 // HUD, and the head-locked quad is cut around it.
 //
 // Either way the rest of the 16:9 band the UI quad shows (subtitles, prompts, boss and encounter bars,
-// markers, damage) stays on the head-locked quad, cut into pieces around the blocks that moved. Every quad
-// shows a sub-rectangle of the same UI swapchain image, so there is no extra copy.
+// markers, damage) stays on the head-locked quad, cut into pieces around the blocks that moved. The blocks
+// are where the game drew them (measured from the image: ui_layer/hud_blocks.hpp); until they are measured
+// the hand HUD waits and the HUD stays whole on the head-locked quad. Every quad shows a sub-rectangle of
+// the same UI swapchain image, so there is no extra copy.
 
 #include "vkcore/presenter_wrist.hpp"
 
@@ -94,7 +96,17 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
                     ui_layer::hudModeName(settings.hud), weapon ? "weapon-hand aim" : "off-hand grip");
         }
     }
-    const bool hands = frame && space != XR_NULL_HANDLE;
+    // The blocks the hand HUD moves, where the game drew them; none until all of them are measured.
+    const ui_layer::CornerBlocks drawn = corners_.update(width, height, WheelProbe::latestCorners());
+    ui_layer::HandCuts cuts;
+    if (frame && space != XR_NULL_HANDLE) {
+        cuts = ui_layer::handCuts(weapon ? ui_layer::weaponMovedBlocks(settings.weapon)
+                                         : std::vector<ui_layer::WristBlock>{ui_layer::WristBlock::Vitals,
+                                                                             ui_layer::WristBlock::Weapon},
+                                  drawn, width, height);
+        logCuts(settings, cuts);
+    }
+    const bool hands = cuts.complete;
     // The part of the target the UI quad shows (the 16:9 band, ETERNALVR_UI_CROP), in pixels.
     const XrRect2Di& shownRect = ui.subImage.imageRect;
     const ui_layer::PixelRect shown{shownRect.offset.x, shownRect.offset.y,
@@ -110,14 +122,9 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
         publish(view);
         return 0;
     }
-    std::vector<ui_layer::WristBlock> moved;
-    if (hands) {
-        moved = weapon ? ui_layer::weaponMovedBlocks(settings.weapon)
-                       : std::vector<ui_layer::WristBlock>{ui_layer::WristBlock::Vitals,
-                                                           ui_layer::WristBlock::Weapon};
-    }
     const ui_layer::HeadLockedHud hud =
-        ui_layer::headLockedHud(shown, width, height, moved, wheelRect, settings.distanceMetres);
+        ui_layer::headLockedHud(shown, width, height, hands ? cuts.cuts : std::vector<ui_layer::PixelRect>{},
+                                wheelRect, settings.distanceMetres);
     std::uint32_t n = 0;
     for (const ui_layer::PixelRect& r : hud.pieces) {
         // Room for the hand quads and the wheel after the pieces.
@@ -143,10 +150,11 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
         return 0;
     }
     view.pieces.assign(hud.pieces.begin(), hud.pieces.begin() + n);
-    if (hands) {
+    if (hands && frame) {
         const std::uint32_t pieces = n;
-        n = addHandQuads(settings, width, height, *frame, space, ui, n, out);
+        n = addHandQuads(settings, width, height, cuts, *frame, space, ui, n, out);
         view.handQuads = n > pieces;
+        view.handCuts = cuts.cuts;
     }
     if (hud.wheel) {
         view.wheel = hud.wheel->rect;
@@ -167,6 +175,7 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
 std::uint32_t WristHud::addHandQuads(const ui_layer::UiSettings& settings,
                                      std::uint32_t width,
                                      std::uint32_t height,
+                                     const ui_layer::HandCuts& cuts,
                                      const input::InputFrame& frame,
                                      XrSpace space,
                                      const XrCompositionLayerQuad& ui,
@@ -229,9 +238,10 @@ std::uint32_t WristHud::addHandQuads(const ui_layer::UiSettings& settings,
     // Laid out around the hand's own space (identity for the grip; the gun's frame in the aim space): the
     // poses are then relative to it and the runtime places them at display time.
     const std::vector<ui_layer::WristQuad> quads =
-        weapon ? ui_layer::layoutWeaponQuads(weaponInAim_.value_or(Pose::identity()), width, height,
-                                             settings.weapon, left)
-               : ui_layer::layoutWristQuads(Pose::identity(), width, height, ws, left);
+        weapon
+            ? ui_layer::layoutWeaponQuads(weaponInAim_.value_or(Pose::identity()), cuts.weapon, cuts.vitals,
+                                          settings.weapon, left)
+            : ui_layer::layoutWristQuads(Pose::identity(), cuts.vitals, cuts.weapon, width, height, ws, left);
     return addQuads(quads, space, alpha, ui, n, out);
 }
 
@@ -343,6 +353,38 @@ std::uint32_t WristHud::addQuads(const std::vector<ui_layer::WristQuad>& quads,
         out[n++] = q;
     }
     return n;
+}
+
+void WristHud::logCuts(const ui_layer::UiSettings& settings, const ui_layer::HandCuts& cuts) {
+    const char* mode = ui_layer::hudModeName(settings.hud);
+    if (!cuts.complete) {
+        ++unmeasuredFrames_;
+        if (!loggedUnmeasured_) {
+            loggedUnmeasured_ = true;
+            EVR_LOG("ui: %s HUD waits for where the game drew the corner blocks (the GUI readback); the HUD "
+                    "stays whole on the head-locked quad until then",
+                    mode);
+        }
+        return;
+    }
+    const auto same = [](const ui_layer::PixelRect& a, const ui_layer::PixelRect& b) {
+        return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+    };
+    if (same(cuts.vitals, cutVitals_) && same(cuts.weapon, cutWeapon_)) {
+        return;
+    }
+    cutVitals_ = cuts.vitals;
+    cutWeapon_ = cuts.weapon;
+    if (cutChangesLogged_ >= kLoggedChanges) {
+        return;
+    }
+    ++cutChangesLogged_;
+    EVR_LOG(
+        "ui: %s HUD cuts the corner blocks where the game drew them: health and armor GUI rect (%d, %d) %u "
+        "x %u, ammo (%d, %d) %u x %u (empty: stays on the head-locked quad); %llu frame(s) waited for the "
+        "first measurement",
+        mode, cutVitals_.x, cutVitals_.y, cutVitals_.width, cutVitals_.height, cutWeapon_.x, cutWeapon_.y,
+        cutWeapon_.width, cutWeapon_.height, static_cast<unsigned long long>(unmeasuredFrames_));
 }
 
 void WristHud::logStats(const ui_layer::UiSettings& settings) {

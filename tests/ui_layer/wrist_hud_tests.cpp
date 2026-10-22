@@ -1,3 +1,5 @@
+#include "hud_test_cuts.hpp"
+#include "ui_layer/weapon_wheel.hpp"
 #include "ui_layer/wrist_hud.hpp"
 
 #include <doctest/doctest.h>
@@ -13,7 +15,7 @@
 using evr::Pose;
 using evr::Quat;
 using evr::Vec3;
-using evr::ui_layer::headLockedPieces;
+using evr::ui_layer::headLockedHud;
 using evr::ui_layer::HudMode;
 using evr::ui_layer::layoutWristQuads;
 using evr::ui_layer::PixelRect;
@@ -210,8 +212,15 @@ TEST_CASE("wrist hud: layout of the quads on the left wrist") {
     WristSettings s;
     s.widthMetres = 0.2f;
     const Pose hand = leftPalmUp({0.0f, -0.4f, -0.1f});
-    const auto quads = layoutWristQuads(hand, 1280, 1400, s, true);
+    const auto cuts = hud_test::cutsAt(false, hud_test::corners(), 1280, 1400);
+    REQUIRE(cuts.complete);
+    const auto quads = layoutWristQuads(hand, cuts.vitals, cuts.weapon, 1280, 1400, s, true);
     REQUIRE(quads.size() == 3);
+    // The quads show what the head-locked HUD lost.
+    CHECK(quads[0].rect.x == cuts.vitals.x);
+    CHECK(quads[0].rect.height == cuts.vitals.height);
+    CHECK(quads[1].rect.x == cuts.weapon.x);
+    CHECK(quads[1].rect.width == cuts.weapon.width);
     CHECK(quads[0].block == WristBlock::Vitals);
     CHECK(quads[1].block == WristBlock::Weapon);
     CHECK(quads[2].block == WristBlock::Abilities);
@@ -231,44 +240,60 @@ TEST_CASE("wrist hud: layout of the quads on the left wrist") {
     // The abilities above the row: further from the body.
     CHECK(quads[2].pose.position.z < quads[0].pose.position.z);
     s.abilities = false;
-    CHECK(layoutWristQuads(hand, 1280, 1400, s, true).size() == 2);
-    CHECK(layoutWristQuads(hand, 0, 0, s, true).empty());
+    CHECK(layoutWristQuads(hand, cuts.vitals, cuts.weapon, 1280, 1400, s, true).size() == 2);
+    CHECK(layoutWristQuads(hand, cuts.vitals, cuts.weapon, 0, 0, s, true).empty());
+    CHECK(layoutWristQuads(hand, PixelRect{}, cuts.weapon, 1280, 1400, s, true).empty());
 }
 
 TEST_CASE("wrist hud: laid out around an identity hand, the quads are relative to the grip") {
     const WristSettings s;
-    for (const bool left : {true, false}) {
-        CAPTURE(left);
-        const auto quads = layoutWristQuads(Pose::identity(), 1280, 1400, s, left);
-        REQUIRE(quads.size() == 3);
-        // The row's centre is the offset: the two blocks' centres straddle it along the image's right.
-        const Vec3 centre = (quads[0].pose.position + quads[1].pose.position) * 0.5f;
-        const Vec3 along = evr::rotate(wristPanelRotation(left), {1.0f, 0.0f, 0.0f});
-        const Vec3 offset = evr::ui_layer::wristPanelOffset(s, left);
-        const float shift = (quads[0].width - quads[1].width) / 4.0f; // unequal widths
-        CHECK(near(centre, offset + along * shift, 1e-3f));
-        // Every crop lies in the band the UI quad shows.
-        const PixelRect band = wideContentRect(1280, 1400);
-        for (const auto& q : quads) {
-            CHECK(q.rect.y >= band.y);
-            CHECK(q.rect.y + static_cast<std::int64_t>(q.rect.height) <=
-                  band.y + static_cast<std::int64_t>(band.height));
+    for (const bool large : {false, true}) {
+        for (const bool left : {true, false}) {
+            CAPTURE(large);
+            CAPTURE(left);
+            const auto cuts = hud_test::cutsAt(large, hud_test::corners(), 1280, 1400);
+            const auto quads =
+                layoutWristQuads(Pose::identity(), cuts.vitals, cuts.weapon, 1280, 1400, s, left);
+            REQUIRE(quads.size() == 3);
+            // In the panel's frame (image right, image up): the row is centred on the offset along the
+            // image's right, and the two blocks' bottoms are in line (both reach the band's bottom on screen)
+            // though the vitals block is the taller.
+            const Vec3 offset = evr::ui_layer::wristPanelOffset(s, left);
+            const Quat toPanel = evr::conjugate(wristPanelRotation(left));
+            const Vec3 v = evr::rotate(toPanel, quads[0].pose.position - offset);
+            const Vec3 w = evr::rotate(toPanel, quads[1].pose.position - offset);
+            CHECK(quads[0].height > quads[1].height);
+            CHECK(v.x - quads[0].width / 2.0f == doctest::Approx(-s.widthMetres / 2.0f));
+            CHECK(w.x + quads[1].width / 2.0f == doctest::Approx(s.widthMetres / 2.0f));
+            CHECK(v.y - quads[0].height / 2.0f == doctest::Approx(w.y - quads[1].height / 2.0f));
+            // The row (as tall as the taller block) centred on the offset.
+            CHECK(v.y - quads[0].height / 2.0f == doctest::Approx(-quads[0].height / 2.0f));
+            CHECK(std::fabs(v.z) < 1e-5f);
+            // Every crop lies in the band the UI quad shows.
+            const PixelRect band = wideContentRect(1280, 1400);
+            for (const auto& q : quads) {
+                CHECK(q.rect.y >= band.y);
+                CHECK(q.rect.y + static_cast<std::int64_t>(q.rect.height) <=
+                      band.y + static_cast<std::int64_t>(band.height));
+            }
         }
     }
 }
 
 TEST_CASE("wrist hud: the head-locked pieces keep the band but the corners") {
-    const std::vector<WristBlock> kCorners{WristBlock::Vitals, WristBlock::Weapon};
     const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {1920, 1080}, {2048, 864}};
     for (const auto& size : sizes) {
         const std::uint32_t width = size[0];
         const std::uint32_t height = size[1];
         CAPTURE(width);
         const PixelRect band = wideContentRect(width, height);
-        const auto pieces = headLockedPieces(band, width, height, kCorners);
-        REQUIRE(pieces.size() == 2);
-        const auto v = evr::ui_layer::cutRect(WristBlock::Vitals, width, height);
-        const auto w = evr::ui_layer::cutRect(WristBlock::Weapon, width, height);
+        const auto cuts = hud_test::cutsAt(true, hud_test::corners(), width, height);
+        const auto pieces = headLockedHud(band, width, height, cuts.cuts, std::nullopt, 1.5f).pieces;
+        // The band down to the taller corner block, then the bottom rows right of it down to the other, then
+        // the bottom middle.
+        REQUIRE(pieces.size() == 3);
+        const auto& v = cuts.vitals;
+        const auto& w = cuts.weapon;
         std::uint64_t kept = 0;
         for (const auto& p : pieces) {
             kept += static_cast<std::uint64_t>(p.width) * p.height;
@@ -282,13 +307,16 @@ TEST_CASE("wrist hud: the head-locked pieces keep the band but the corners") {
         // The top piece is the band down to the corner blocks.
         CHECK(pieces[0].y == band.y);
         CHECK(pieces[0].width == band.width);
+        CHECK(pieces[0].y + static_cast<std::int64_t>(pieces[0].height) == v.y);
     }
     // With ETERNALVR_UI_CROP=0 the quad shows the whole target: the rows outside the band stay on it.
-    const auto whole = headLockedPieces(PixelRect{0, 0, 1280, 1400}, 1280, 1400, kCorners);
-    REQUIRE(whole.size() == 3);
+    const auto cuts = hud_test::cutsAt(true, hud_test::corners(), 1280, 1400);
+    const auto whole =
+        headLockedHud(PixelRect{0, 0, 1280, 1400}, 1280, 1400, cuts.cuts, std::nullopt, 1.5f).pieces;
+    REQUIRE(whole.size() == 4);
     CHECK(whole[0].y == 0);
-    CHECK(whole[2].y + static_cast<std::int64_t>(whole[2].height) == 1400);
-    CHECK(headLockedPieces(PixelRect{}, 0, 0, kCorners).empty());
+    CHECK(whole[3].y + static_cast<std::int64_t>(whole[3].height) == 1400);
+    CHECK(headLockedHud(PixelRect{}, 0, 0, cuts.cuts, std::nullopt, 1.5f).pieces.empty());
 }
 
 TEST_CASE("wrist hud settings: defaults and every variable") {

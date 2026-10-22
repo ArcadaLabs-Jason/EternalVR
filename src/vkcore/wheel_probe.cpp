@@ -45,6 +45,10 @@ ui_layer::WheelMeasurement WheelProbe::latest() {
     return g_latest;
 }
 
+WheelProbe::Rows WheelProbe::rowsOf(const ui_layer::PixelRect& area, VkDeviceSize offset) {
+    return Rows{area, ui_layer::gridRows(area, ui_layer::kWheelGridStep), offset};
+}
+
 bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
     if (failed_) {
         return false;
@@ -58,10 +62,17 @@ bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
         }
     }
     freeBuffer(dev);
-    const ui_layer::PixelRect area = ui_layer::wheelSearchRect(extent.width, extent.height);
-    const std::uint32_t rows = ui_layer::gridRows(area, ui_layer::kWheelGridStep);
-    readingBytes_ = VkDeviceSize{area.width} * 4 * rows;
-    if (readingBytes_ == 0) {
+    // One slot holds either reading: the wheel's search rectangle, or the two corners one after the other.
+    const Rows wheel = rowsOf(ui_layer::wheelSearchRect(extent.width, extent.height), 0);
+    const Rows vitals =
+        rowsOf(ui_layer::cornerSearchRect(ui_layer::WristBlock::Vitals, extent.width, extent.height), 0);
+    const Rows weapon =
+        rowsOf(ui_layer::cornerSearchRect(ui_layer::WristBlock::Weapon, extent.width, extent.height), 0);
+    const VkDeviceSize wheelBytes = VkDeviceSize{wheel.area.width} * 4 * wheel.rows;
+    const VkDeviceSize cornerBytes =
+        VkDeviceSize{vitals.area.width} * 4 * vitals.rows + VkDeviceSize{weapon.area.width} * 4 * weapon.rows;
+    readingBytes_ = std::max(wheelBytes, cornerBytes);
+    if (wheelBytes == 0 || cornerBytes == 0) {
         return false;
     }
     VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -88,8 +99,8 @@ bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
             }
         }
         if (type == UINT32_MAX) {
-            EVR_LOG("ui: weapon wheel bounds: the GPU has no cached host memory to read them from; the wheel "
-                    "stays where the game draws it");
+            EVR_LOG("ui: GUI readback: the GPU has no cached host memory to read the GUI image into; the "
+                    "wheel stays where the game draws it and the hand HUDs are not shown");
             freeBuffer(dev);
             failed_ = true;
             return false;
@@ -104,16 +115,20 @@ bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
              dev.vk.MapMemory(dev.device, memory_, 0, VK_WHOLE_SIZE, 0, &mapped_) == VK_SUCCESS;
     }
     if (!ok) {
-        EVR_LOG("ui: no host buffer for the weapon wheel's bounds; the wheel stays where the game draws it");
+        EVR_LOG("ui: no host buffer for the GUI readback; the wheel stays where the game draws it and the "
+                "hand HUDs are not shown");
         freeBuffer(dev);
         failed_ = true;
         return false;
     }
     bufferExtent_ = extent;
-    EVR_LOG("ui: weapon wheel bounds: GUI rows read while the wheel is up: (%d, %d) %u x %u, every %u-th row "
-            "(%u rows, %llu KiB per reading)",
-            area.x, area.y, area.width, area.height, ui_layer::kWheelGridStep, rows,
-            static_cast<unsigned long long>(readingBytes_ / 1024));
+    EVR_LOG("ui: GUI readback: every %u-th row of (%d, %d) %u x %u while the wheel is up (%llu KiB a "
+            "reading); of the corners (%d, %d) %u x %u and (%d, %d) %u x %u now and then in wrist or weapon "
+            "mode (%llu KiB a reading)",
+            ui_layer::kWheelGridStep, wheel.area.x, wheel.area.y, wheel.area.width, wheel.area.height,
+            static_cast<unsigned long long>(wheelBytes / 1024), vitals.area.x, vitals.area.y,
+            vitals.area.width, vitals.area.height, weapon.area.x, weapon.area.y, weapon.area.width,
+            weapon.area.height, static_cast<unsigned long long>(cornerBytes / 1024));
     return true;
 }
 
@@ -147,32 +162,14 @@ bool WheelProbe::ensureTiming(DeviceData& dev, std::uint32_t family) {
                         t.createQueryPool(dev.device, &info, nullptr, &t.pool) == VK_SUCCESS;
         if (!ok) {
             t.pool = VK_NULL_HANDLE;
-            EVR_LOG("ui: weapon wheel bounds: no timestamp queries; the readback's GPU time is not measured");
+            EVR_LOG("ui: GUI readback: no timestamp queries; the readback's GPU time is not measured");
         }
     }
     return t.pool && family < t.validBits.size() && t.validBits[family] > 0;
 }
 
-bool WheelProbe::record(DeviceData& dev,
-                        VkCommandBuffer cb,
-                        std::uint32_t family,
-                        VkImage source,
-                        VkExtent2D extent,
-                        bool wheelUp) {
-    const bool read = cadence_.next(wheelUp);
-    if (!wheelUp) {
-        // The wheel went down: the readings of this time up in one line (their time, for the cost).
-        if (readings_ > loggedReadings_) {
-            logStats(true);
-        }
-        return false;
-    }
-    ++framesUp_;
-    if (!read) {
-        return false;
-    }
+WheelProbe::Reading* WheelProbe::freeSlot(std::uint32_t& index) {
     Reading* slot = nullptr;
-    std::uint32_t index = 0;
     for (std::uint32_t i = 0; i < kReadings; ++i) {
         if (slots_[i].state == State::Recorded) {
             slots_[i].state = State::Idle; // recorded but never marked submitted or cancelled
@@ -182,11 +179,16 @@ bool WheelProbe::record(DeviceData& dev,
             index = i;
         }
     }
-    if (!slot || !ensureBuffer(dev, extent)) {
-        return false;
-    }
-    const ui_layer::PixelRect area = ui_layer::wheelSearchRect(extent.width, extent.height);
-    const std::uint32_t rows = ui_layer::gridRows(area, ui_layer::kWheelGridStep);
+    return slot;
+}
+
+void WheelProbe::recordCopy(DeviceData& dev,
+                            VkCommandBuffer cb,
+                            std::uint32_t family,
+                            VkImage source,
+                            std::uint32_t index,
+                            const Rows* parts,
+                            std::uint32_t count) {
     const VkDeviceSize base = readingBytes_ * index;
     const bool timed = ensureTiming(dev, family);
     if (timed) {
@@ -195,16 +197,21 @@ bool WheelProbe::record(DeviceData& dev,
         timing_.cmdResetQueryPool(cb, timing_.pool, index * 2, 2);
         timing_.cmdWriteTimestamp(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, timing_.pool, index * 2);
     }
-    regions_.resize(rows);
-    for (std::uint32_t r = 0; r < rows; ++r) {
-        VkBufferImageCopy& region = regions_[r];
-        region.bufferOffset = base + VkDeviceSize{area.width} * 4 * r;
-        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageOffset = {area.x, area.y + static_cast<std::int32_t>(r * ui_layer::kWheelGridStep), 0};
-        region.imageExtent = {area.width, 1, 1};
+    regions_.clear();
+    for (std::uint32_t p = 0; p < count; ++p) {
+        const Rows& part = parts[p];
+        for (std::uint32_t r = 0; r < part.rows; ++r) {
+            VkBufferImageCopy region{};
+            region.bufferOffset = base + part.offset + VkDeviceSize{part.area.width} * 4 * r;
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageOffset = {part.area.x,
+                                  part.area.y + static_cast<std::int32_t>(r * ui_layer::kWheelGridStep), 0};
+            region.imageExtent = {part.area.width, 1, 1};
+            regions_.push_back(region);
+        }
     }
-    dev.vk.CmdCopyImageToBuffer(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer_, rows,
-                                regions_.data());
+    dev.vk.CmdCopyImageToBuffer(cb, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer_,
+                                static_cast<std::uint32_t>(regions_.size()), regions_.data());
     VkBufferMemoryBarrier toHost{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
     toHost.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     toHost.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
@@ -218,9 +225,35 @@ bool WheelProbe::record(DeviceData& dev,
     }
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr,
                               1, &toHost, 0, nullptr);
-    slot->state = State::Recorded;
+    slots_[index].state = State::Recorded;
+    slots_[index].timed = timed;
+}
+
+bool WheelProbe::record(DeviceData& dev,
+                        VkCommandBuffer cb,
+                        std::uint32_t family,
+                        VkImage source,
+                        VkExtent2D extent,
+                        bool wheelUp,
+                        bool cornersWanted) {
+    const bool read = cadence_.next(wheelUp);
+    if (!wheelUp) {
+        // The wheel went down: the readings of this time up in one line (their time, for the cost).
+        if (readings_ > loggedReadings_) {
+            logStats(true);
+        }
+        return recordCorners(dev, cb, family, source, extent, cornersWanted);
+    }
+    ++framesUp_;
+    std::uint32_t index = 0;
+    Reading* slot = read ? freeSlot(index) : nullptr;
+    if (!slot || !ensureBuffer(dev, extent)) {
+        return false;
+    }
+    const Rows part = rowsOf(ui_layer::wheelSearchRect(extent.width, extent.height), 0);
+    recordCopy(dev, cb, family, source, index, &part, 1);
+    slot->kind = Kind::Wheel;
     slot->extent = extent;
-    slot->timed = timed;
     return true;
 }
 
@@ -237,6 +270,22 @@ void WheelProbe::cancel() {
     for (Reading& r : slots_) {
         if (r.state == State::Recorded) {
             r.state = State::Idle;
+        }
+    }
+}
+
+void WheelProbe::readGrid(const std::uint8_t* bytes, const Rows& part, ui_layer::AlphaGrid& grid) {
+    grid.area = part.area;
+    grid.step = ui_layer::kWheelGridStep;
+    grid.columns = ui_layer::gridColumns(grid.area, grid.step);
+    grid.rows = ui_layer::gridRows(grid.area, grid.step);
+    grid.alpha.resize(std::size_t{grid.columns} * grid.rows);
+    const std::uint8_t* at = bytes + part.offset;
+    const std::size_t rowBytes = std::size_t{grid.area.width} * 4;
+    for (std::uint32_t r = 0; r < grid.rows; ++r) {
+        const std::uint8_t* row = at + rowBytes * r;
+        for (std::uint32_t c = 0; c < grid.columns; ++c) {
+            grid.alpha[std::size_t{r} * grid.columns + c] = row[std::size_t{c} * grid.step * 4 + 3];
         }
     }
 }
@@ -264,32 +313,27 @@ void WheelProbe::poll(DeviceData& dev, std::uint64_t completedTimeline) {
         slots_[i].state = State::Idle;
         const VkExtent2D extent = slots_[i].extent;
         std::array<std::uint64_t, 2> stamps{};
+        double gpu = -1.0; // not timed
         if (slots_[i].timed &&
             timing_.getQueryPoolResults(dev.device, timing_.pool, i * 2, 2, sizeof(stamps), stamps.data(),
                                         sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
             stamps[1] >= stamps[0]) {
-            const double gpu = static_cast<double>(stamps[1] - stamps[0]) * timing_.periodNs * 1e-9;
+            gpu = static_cast<double>(stamps[1] - stamps[0]) * timing_.periodNs * 1e-9;
+        }
+        const auto* bytes = static_cast<const std::uint8_t*>(mapped_) + readingBytes_ * i;
+        if (slots_[i].kind == Kind::Corners) {
+            measureCorners(bytes, extent, gpu);
+            continue;
+        }
+        if (gpu >= 0.0) {
             gpuSeconds_ += gpu;
             maxGpuSeconds_ = std::max(maxGpuSeconds_, gpu);
             ++gpuReadings_;
         }
         const LONGLONG start = qpc();
-        ui_layer::AlphaGrid& grid = grid_;
-        grid.area = ui_layer::wheelSearchRect(extent.width, extent.height);
-        grid.step = ui_layer::kWheelGridStep;
-        grid.columns = ui_layer::gridColumns(grid.area, grid.step);
-        grid.rows = ui_layer::gridRows(grid.area, grid.step);
-        grid.alpha.resize(std::size_t{grid.columns} * grid.rows);
-        const auto* bytes = static_cast<const std::uint8_t*>(mapped_) + readingBytes_ * i;
-        const std::size_t rowBytes = std::size_t{grid.area.width} * 4;
-        for (std::uint32_t r = 0; r < grid.rows; ++r) {
-            const std::uint8_t* row = bytes + rowBytes * r;
-            for (std::uint32_t c = 0; c < grid.columns; ++c) {
-                grid.alpha[std::size_t{r} * grid.columns + c] = row[std::size_t{c} * grid.step * 4 + 3];
-            }
-        }
+        readGrid(bytes, rowsOf(ui_layer::wheelSearchRect(extent.width, extent.height), 0), grid_);
         const std::optional<ui_layer::PixelRect> wheel =
-            ui_layer::measureWheel(grid, extent.width, extent.height, &scratch_);
+            ui_layer::measureWheel(grid_, extent.width, extent.height, &scratch_);
         const double seconds = qpcToSeconds(qpc() - start);
         measureSeconds_ += seconds;
         pollSeconds += seconds;

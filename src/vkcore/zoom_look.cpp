@@ -17,6 +17,7 @@
 #include "vkcore/game_build.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/weapon_mods.hpp"
 
 #include <array>
 #include <atomic>
@@ -32,17 +33,10 @@ namespace {
 
 constexpr const char* kTag = "zoom look";
 
-// Type info (build 25216728; the Game Pass build's type info is the same for these classes).
-// idHands::rightItem (0x29B0) .item (idHandsItem 0x30, an idManagedClassPtr of 0x20 bytes): its first word is
-// a handle and the object pointer the second (rig, aim-0151: that word's idInventoryItem names the held
-// decl); the object is used only when its decl is the held one.
-constexpr std::size_t kHandsItemObject = 0x29B0 + 0x30 + 0x8;
-constexpr std::size_t kInventoryItemDecl = 0x38;       // idInventoryItem::decl
-constexpr std::size_t kWeaponSupercharge = 0x120;      // idWeapon::superchargeParms[2], weaponDecl first
-constexpr std::size_t kWeaponSuperchargeSize = 0x38;   // idWeapon::superchargeParms_t
-constexpr std::size_t kWeaponModOverrides = 0x3328;    // idWeapon::weaponModOverrides[2]
-constexpr std::size_t kWeaponModOverridesSize = 0x3D8; // idWeapon::weaponModOverrides_t
-constexpr std::size_t kModOverrideDecl = 0x8;          // weaponModOverrides_t::weaponDecl
+// Type info (build 25216728; the Game Pass build's type info is the same for these classes). The held item's
+// object and its mod decls: weapon_mods.hpp.
+constexpr std::size_t kWeaponSupercharge = 0x120;    // idWeapon::superchargeParms[2], weaponDecl first
+constexpr std::size_t kWeaponSuperchargeSize = 0x38; // idWeapon::superchargeParms_t
 // idPlayer's zoom flags byte: zoomedIn is bit 1 (set at the zoom's start, Steam RVA 0x1462EE4, cleared at its
 // end, 0x1462F34). Read on the Steam build only: on Game Pass the bit is not checked yet, so the scoped-zoom
 // hold stays off there (head aim then shows the scope's ring; hand aim holds the reticle anyway).
@@ -254,9 +248,9 @@ void noteZoomLookHands(const std::byte* hands, const std::byte* player) {
     const std::byte* weaponDecl = nullptr;
     if (decls[0] && safeRead(hands + kHandsItemObject, weapon) && weapon) {
         if (safeRead(weapon + kInventoryItemDecl, weaponDecl) && weaponDecl == decls[0]) {
+            const ModDecls mods = weaponModDecls(weapon);
             for (std::size_t i = 0; i < 2; ++i) {
-                safeRead(weapon + kWeaponModOverrides + i * kWeaponModOverridesSize + kModOverrideDecl,
-                         decls[2 + i]);
+                decls[2 + i] = mods[i];
                 safeRead(weapon + kWeaponSupercharge + i * kWeaponSuperchargeSize, decls[4 + i]);
             }
         } else if (!g_loggedItemMismatch) {

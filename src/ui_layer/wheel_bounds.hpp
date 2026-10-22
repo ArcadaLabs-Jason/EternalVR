@@ -52,18 +52,27 @@ struct AlphaGrid {
 std::uint32_t gridColumns(const PixelRect& area, std::uint32_t step);
 std::uint32_t gridRows(const PixelRect& area, std::uint32_t step);
 
-// Working memory for measureWheel, kept between readings so they do not allocate.
+// Working memory for measureWheel (and the corner blocks' measure, hud_blocks.hpp), kept between readings so
+// they do not allocate.
 struct WheelScratch {
     struct Box {
         std::uint32_t c0 = 0;
         std::uint32_t r0 = 0;
         std::uint32_t c1 = 0; // inclusive
         std::uint32_t r1 = 0; // inclusive
+        std::uint32_t samples = 0;
     };
     std::vector<std::uint32_t> label; // per sample: its shape's number, 0 for none
     std::vector<std::uint32_t> stack;
-    std::vector<Box> boxes; // per shape number
+    std::vector<Box> boxes;           // per shape number
+    std::vector<std::uint8_t> joined; // per shape number: part of the block (hud_blocks.cpp)
 };
+
+// Labels the connected drawn shape (8-neighbours, alpha at least kWheelMinAlpha) holding the drawn,
+// unlabelled sample (c, r) with `label` in s.label (sized for the grid), and returns its box and sample
+// count.
+WheelScratch::Box
+labelShape(const AlphaGrid& grid, std::uint32_t c, std::uint32_t r, std::uint32_t label, WheelScratch& s);
 
 // The wheel's rectangle in a `width` x `height` target from its grid. The wheel is the connected drawn shape
 // (8-neighbours) holding the first drawn sample on the centre row, from the band's x 0.93 leftwards, whose

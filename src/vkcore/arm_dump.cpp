@@ -3,6 +3,7 @@
 #include "vkcore/arm_dump.hpp"
 
 #include "vkcore/log.hpp"
+#include "vkcore/weapon_mods.hpp"
 
 #include <array>
 #include <cstdio>
@@ -10,6 +11,7 @@
 #include <optional>
 #include <share.h>
 #include <string>
+#include <utility>
 
 namespace evr::vkcore::controllers::arm_dump {
 
@@ -185,6 +187,9 @@ void tick(const ArmsTick& arms) {
     r.armsItem = g_armsName;
     r.handsState = arms.handsState; // null when unread
     r.handsSwim = arms.swim;
+    SightRowNote sights = sightRowNote(); // as the viewmodel hook last chose it
+    r.mods = std::move(sights.mods);
+    r.sightRow = std::move(sights.row);
     const arm::DumpArm& right = g_arms[slot(arm::ArmSide::Right)];
     if (right.readPoses) {
         r.weapon = (*right.readPoses)[arm::index(arm::ArmJoint::Attach)];

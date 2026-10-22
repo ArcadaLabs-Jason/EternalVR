@@ -168,4 +168,9 @@ TEST_CASE("hud view: an image or view that does not fit gives nothing; an uncut 
     REQUIRE(out.size() == 64u * 36u * 4u);
     CHECK(out[(4 * 64 + 10) * 4 + 3] == 255);
     CHECK(describeHudView(view).find("no weapon wheel quad") != std::string::npos);
+    CHECK(describeHudView(view).find("cut for the hand HUD") == std::string::npos);
+    // The corner blocks the hand HUD took, for the capture's text.
+    view.handCuts = {PixelRect{0, 30, 10, 12}, PixelRect{50, 32, 14, 10}};
+    CHECK(describeHudView(view).find("; cut for the hand HUD: (0, 30) 10 x 12 (50, 32) 14 x 10") !=
+          std::string::npos);
 }

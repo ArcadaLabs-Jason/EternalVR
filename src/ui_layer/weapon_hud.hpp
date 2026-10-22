@@ -43,10 +43,14 @@ WristSettings weaponShowSettings(const WeaponHudSettings& weapon, const WristSet
 // `vitals`.
 std::vector<WristBlock> weaponMovedBlocks(const WeaponHudSettings& s);
 
-// The weapon HUD's quads for a `width` x `height` GUI target and the gun's frame `weapon`: the ammo block
-// `s.widthMetres` wide, and with `s.vitals` the health block at the same scale on its left (as on screen),
-// the row centred on the offset. Empty for an empty target.
-std::vector<WristQuad> layoutWeaponQuads(
-    const Pose& weapon, std::uint32_t width, std::uint32_t height, const WeaponHudSettings& s, bool leftHand);
+// The weapon HUD's quads for the gun's frame `weapon`: `ammo` (the part of the GUI target cut for the ammo
+// block, HandCuts) `s.widthMetres` wide, and with a non-empty `vitals` (cut for health and armor, with
+// `s.vitals`) that block at the same scale on its left (as on screen), the row centred on the offset. Empty
+// for an empty `ammo`.
+std::vector<WristQuad> layoutWeaponQuads(const Pose& weapon,
+                                         const PixelRect& ammo,
+                                         const PixelRect& vitals,
+                                         const WeaponHudSettings& s,
+                                         bool leftHand);
 
 } // namespace evr::ui_layer

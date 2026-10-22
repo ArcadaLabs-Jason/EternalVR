@@ -20,15 +20,18 @@
 //   "weapon/player/shotgun" = [0.21, 2.17]   the sight line in the model's frame (pitch, yaw; degrees)
 //
 // Keys are the inventory decl names of the held item. That is the base weapon's decl: a weapon mod does not
-// change it, so one row covers every mod of a weapon. A decl whose exact name has no entry uses the longest
-// key it starts with followed by '_' ("weapon/player/fists_doom5melee" uses "weapon/player/fists"), then
-// "default", then no offset. Seated, the [seated] entry for the weapon wins, then the seated "default",
-// then the standing rules.
+// change it, so one row covers every mod of a weapon (a [sights] row may name a mod, below). A decl whose
+// exact name has no entry uses the longest key it starts with followed by '_'
+// ("weapon/player/fists_doom5melee" uses "weapon/player/fists"), then "default", then no offset. Seated, the
+// [seated] entry for the weapon wins, then the seated "default", then the standing rules.
 //
 // [sights] (on by default, T-135; ETERNALVR_WEAPON_SIGHTS=0 turns them off on the rig): the direction of
 // the weapon's sight line in the arms model's frame as the game animates it at idle (pitch positive down,
 // yaw counter-clockwise, degrees). The layer turns the model so that line runs parallel to the aim ray. Same
-// key rules, but no "default": a weapon without a row is not turned.
+// key rules, but no "default": a weapon without a row is not turned. A weapon mod that changes the sight
+// line (the Heavy Cannon's Precision Bolt draws a scope in place of the iron sights) has a row keyed by the
+// mod's own weapon decl, which the held weapon names while that mod is active (idWeapon's mod overrides):
+// "weapon/player/heavy_cannon_bolt_action". Such a row wins over the weapon's while its mod is active.
 //
 // [right_grip]: the weapons whose idle animations hold them by a handle turned well away from how a hand
 // holds a controller (the chaingun's and the ballista's rear top handle), and the game grip the weapon arm
@@ -68,6 +71,18 @@ struct WeaponSight {
     float yaw = 0.0f;
 
     friend bool operator==(const WeaponSight&, const WeaponSight&) = default;
+};
+
+// The held weapon's active mod decls: the decl names of idWeapon::weaponModOverrides[0] and [1] (one per fire
+// mode), "" for none.
+using WeaponModDecls = std::array<std::string_view, 2>;
+
+// The [sights] row in force and the key it was found under.
+struct SightRow {
+    WeaponSight sight;
+    std::string_view key;
+
+    friend bool operator==(const SightRow&, const SightRow&) = default;
 };
 
 // The game grips the right glove can be put in (features/arm/grip_hand.hpp).
@@ -113,6 +128,12 @@ struct WeaponOffsetTable {
     [[nodiscard]] WeaponOffset lookup(std::string_view declName, OffsetPosture posture) const;
     // The sight line of the held item `declName`, or nullopt for a weapon without a row (rules above).
     [[nodiscard]] std::optional<WeaponSight> lookupSight(std::string_view declName) const;
+    // The sight row of the held item `declName` with its active mod decls `mods`: a row keyed by an active
+    // mod's decl (a key longer than `declName` that the mod's name matches, the mod's name being the held
+    // decl's followed by '_') wins over the held decl's own row; the longest such key when both mods have
+    // one. nullopt when neither has a row.
+    [[nodiscard]] std::optional<SightRow> lookupSight(std::string_view declName,
+                                                      const WeaponModDecls& mods) const;
     // The grip the right glove is put in for `declName`, or nullopt for a weapon without a row (rules above).
     [[nodiscard]] std::optional<RightGrip> lookupRightGrip(std::string_view declName) const;
     // The [left_handed_off_hand] row for `declName`, or nullopt for a weapon without one (rules above).

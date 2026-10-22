@@ -6,8 +6,9 @@
 # by the distance the gun is drawn ahead, right and below the eye.
 #
 # Keys are the held item's inventory decl name: the base weapon's, which a weapon mod does not change, so one
-# row covers every mod of a weapon. A name without its own entry uses the entry of the longest key it starts
-# with followed by '_' ("weapon/player/fists_doom5melee" uses "weapon/player/fists"), then "default".
+# row covers every mod of a weapon ([sights] below can name a mod). A name without its own entry uses the entry
+# of the longest key it starts with followed by '_' ("weapon/player/fists_doom5melee" uses
+# "weapon/player/fists"), then "default".
 #
 # Each weapon's row puts the glove's grip on the gun at the controller's grip: the right glove's wrist (the
 # arms model's right hand joint, as the game animates the weapon at idle) lands where the off hand's wrist
@@ -56,23 +57,32 @@
 # degrees (pitch positive down, yaw counter-clockwise) is the direction of the weapon's sight line in the arms
 # model's frame as the game animates it at idle. The model is turned about the grip so that line runs parallel
 # to the aim ray: the sights then point where the shots go, offset from the ray by the sights' fixed height
-# and side above the hand. Same key rules, but no "default": a weapon without a row is not turned (plasma
-# rifle, rocket launcher, BFG, Unmaykr, fists, chainsaw, Crucible, hammer). Each row is the sight line in the
-# weapon's own frame (noted per row) turned by the idle pose the hands rig measured: the centre of its spread
-# over five held controller poses (docs/rig-findings/hands-rig.md, section 6), which keeps the idle sway's
-# worst case smallest: about 0.15 to 0.2 degrees either side.
+# and side above the hand. Same key rules, but no "default": a weapon without a row is not turned (the BFG and
+# the Unmaykr, whose bores run within 0.06 degrees of the ray as the game holds them; the fists, chainsaw,
+# Crucible and hammer, which have no sights). A mod that changes the sight line has its own row, keyed by the
+# weapon decl the mod puts in the held weapon while it is active ("weapon/player/heavy_cannon_bolt_action":
+# the Precision Bolt); it wins over the weapon's row while that mod is active, from the next frame after a mod
+# switch, and turns the gun about the glove's wrist so the hand stays where the weapon's row above puts it.
+# Each row is the sight line in the weapon's own frame (noted per row) turned by the idle pose the hands rig
+# measured: the centre of its spread over five held controller poses (docs/rig-findings/hands-rig.md, sections
+# 6 and 18), which keeps the idle sway's worst case smallest: about 0.15 to 0.2 degrees either side.
 [sights]
 # Receiver top to the bead; the idle pose toes the gun in about 2.2 degrees.
 "weapon/player/shotgun" = [0.21, 2.17]
-# The iron sights, 3.5 degrees above the bore. The precision bolt's scope sits about 3.3 degrees off this
-# line (0.2 degrees above the bore); the held decl does not name the active mod, so one row serves both.
+# The iron sights, 3.5 degrees above the bore (no mod, or the Micro Missiles).
 "weapon/player/heavy_cannon" = [-3.45, 0.19]
+# The Precision Bolt's scope, 0.2 degrees above the bore (its zoom pose's eye axis, on the scope's tube).
+"weapon/player/heavy_cannon_bolt_action" = [-0.15, 0.15]
 # The zoom pose's eye axis.
 "weapon/player/chaingun" = [0.32, -0.01]
 # Rear sight top to the muzzle top (mesh fit, low confidence).
 "weapon/player/double_barrel" = [0.69, 0.16]
 # The bore (no sight parts); the idle pose tilts the gun up and in.
 "weapon/player/gauss_rifle" = [-0.83, 1.08]
+# The bore (no sight parts).
+"weapon/player/plasma_rifle" = [-0.14, 0.00]
+# The bore (no sight parts).
+"weapon/player/rocket_launcher" = [0.04, 0.14]
 
 # The right glove on a grip (docs/VR_HANDS_HUD.md, "The glove on the grip"): weapons whose idle animations hold
 # the gun by a handle turned well away from how a hand holds a controller (the chaingun's and the ballista's rear

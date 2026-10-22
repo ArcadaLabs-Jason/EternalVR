@@ -75,19 +75,16 @@ struct WristQuad {
     float height = 0.0f;
 };
 
-// The wrist HUD's quads for a `width` x `height` GUI target and the hand's grip pose: the vitals and weapon
-// blocks side by side along the forearm (vitals toward the image's left, as on screen), their row
-// `s.widthMetres` wide at one common scale, and the abilities block (when enabled) centred above them.
-// Empty for an empty target.
-std::vector<WristQuad> layoutWristQuads(
-    const Pose& hand, std::uint32_t width, std::uint32_t height, const WristSettings& s, bool leftHand);
-
-// The rectangles of the target the head-locked quad keeps in wrist or weapon mode: `shown` (the UI quad's
-// image rectangle: the 16:9 band, or the whole target with ETERNALVR_UI_CROP=0) minus the cut rectangles
-// (hud_regions.hpp) of the blocks in `moved` (both corners for the wrist), as disjoint pieces.
-std::vector<PixelRect> headLockedPieces(const PixelRect& shown,
+// The wrist HUD's quads for the hand's grip pose: `vitals` and `weapon` (the parts of a `width` x `height`
+// GUI target cut for them, HandCuts) side by side along the forearm (vitals toward the image's left, as on
+// screen), their row `s.widthMetres` wide at one common scale, and the abilities block (when enabled)
+// centred above them. Empty for an empty target or rectangle.
+std::vector<WristQuad> layoutWristQuads(const Pose& hand,
+                                        const PixelRect& vitals,
+                                        const PixelRect& weapon,
                                         std::uint32_t width,
                                         std::uint32_t height,
-                                        const std::vector<WristBlock>& moved);
+                                        const WristSettings& s,
+                                        bool leftHand);
 
 } // namespace evr::ui_layer

@@ -1,20 +1,24 @@
+#include "hud_test_cuts.hpp"
 #include "ui_layer/hud_regions.hpp"
 
 #include <doctest/doctest.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
+using evr::ui_layer::abilitiesRect;
 using evr::ui_layer::BandRect;
+using evr::ui_layer::CornerBlocks;
 using evr::ui_layer::cutRect;
+using evr::ui_layer::handCuts;
 using evr::ui_layer::panelPiece;
 using evr::ui_layer::PixelRect;
 using evr::ui_layer::subtractRects;
 using evr::ui_layer::toPixels;
 using evr::ui_layer::wideContentRect;
 using evr::ui_layer::WristBlock;
-using evr::ui_layer::wristBlockRect;
 
 namespace {
 
@@ -42,7 +46,7 @@ PixelRect measured(float x0, float x1, float y0, float y1, std::uint32_t w, std:
 
 } // namespace
 
-TEST_CASE("hud regions: every block lies inside the 16:9 band the UI quad shows") {
+TEST_CASE("hud regions: every block and cut lies inside the 16:9 band the UI quad shows") {
     // The render size's near-square eye images (docs/rig-findings/render-size.md), the old window sizes, a
     // plain 16:9 target and two wider ones.
     const std::uint32_t sizes[][2] = {{1280, 1400}, {2064, 2100}, {2560, 2100}, {2054, 2068},
@@ -53,66 +57,77 @@ TEST_CASE("hud regions: every block lies inside the 16:9 band the UI quad shows"
         CAPTURE(w);
         CAPTURE(h);
         const PixelRect band = wideContentRect(w, h);
-        for (const WristBlock b : {WristBlock::Vitals, WristBlock::Weapon, WristBlock::Abilities}) {
-            const PixelRect r = toPixels(wristBlockRect(b), w, h);
+        const PixelRect abilities = toPixels(abilitiesRect(), w, h);
+        CHECK(area(abilities) > 0);
+        CHECK(contains(band, abilities));
+        for (const bool large : {false, true}) {
+            const CornerBlocks blocks = hud_test::blocksAt(large, w, h);
+            const PixelRect v = cutRect(WristBlock::Vitals, *blocks.vitals, w, h);
+            const PixelRect r = cutRect(WristBlock::Weapon, *blocks.weapon, w, h);
+            CHECK(area(v) > 0);
             CHECK(area(r) > 0);
+            CHECK(contains(band, v));
             CHECK(contains(band, r));
-        }
-        for (const WristBlock b : {WristBlock::Vitals, WristBlock::Weapon}) {
-            CHECK(contains(band, cutRect(b, w, h)));
+            CHECK(contains(v, *blocks.vitals));
+            CHECK(contains(r, *blocks.weapon));
         }
     }
 }
 
-TEST_CASE("hud regions: the blocks on a 1280x1400 eye image") {
+TEST_CASE("hud regions: the cuts and the abilities on a 1280x1400 eye image") {
     // The band: 1280 x 720 from row 340.
     const PixelRect band = wideContentRect(1280, 1400);
     REQUIRE(band.y == 340);
     REQUIRE(band.height == 720);
-    const PixelRect vitals = toPixels(wristBlockRect(WristBlock::Vitals), 1280, 1400);
+    // Where the game drew the blocks (the readback's measure), each grown to the band's edges it is at.
+    const PixelRect drawnVitals{22, 886, 236, 132};
+    const PixelRect drawnWeapon{955, 913, 248, 128};
+    const PixelRect vitals = cutRect(WristBlock::Vitals, drawnVitals, 1280, 1400);
     CHECK(vitals.x == 0);
-    CHECK(vitals.width == 276);                                         // ceil(0.215 * 1280)
-    CHECK(vitals.y == 887);                                             // floor(340 + 0.76 * 720)
+    CHECK(vitals.width == 258);
+    CHECK(vitals.y == 886);
     CHECK(vitals.y + static_cast<std::int64_t>(vitals.height) == 1060); // the band's bottom, not 1400
-    const PixelRect weapon = toPixels(wristBlockRect(WristBlock::Weapon), 1280, 1400);
-    CHECK(weapon.x == 979); // floor(0.765 * 1280)
+    const PixelRect weapon = cutRect(WristBlock::Weapon, drawnWeapon, 1280, 1400);
+    CHECK(weapon.x == 955);
+    CHECK(weapon.y == 913);
     CHECK(weapon.x + static_cast<std::int64_t>(weapon.width) == 1280);
-    const PixelRect abilities = toPixels(wristBlockRect(WristBlock::Abilities), 1280, 1400);
+    CHECK(weapon.y + static_cast<std::int64_t>(weapon.height) == 1060);
+    const PixelRect abilities = toPixels(abilitiesRect(), 1280, 1400);
     CHECK(abilities.y == 649);                                               // floor(340 + 0.43 * 720)
     CHECK(abilities.y + static_cast<std::int64_t>(abilities.height) == 765); // ceil(340 + 0.59 * 720)
+    // Nothing to cut for an empty rectangle, one outside the band, or the abilities.
+    CHECK(area(cutRect(WristBlock::Vitals, PixelRect{}, 1280, 1400)) == 0);
+    CHECK(area(cutRect(WristBlock::Vitals, PixelRect{0, 100, 200, 100}, 1280, 1400)) == 0);
+    CHECK(area(cutRect(WristBlock::Abilities, drawnVitals, 1280, 1400)) == 0);
 }
 
-TEST_CASE("hud regions: the blocks on a GUI target wider than 16:9") {
+TEST_CASE("hud regions: the cuts on a GUI target wider than 16:9") {
     // A 2048x864 GUI capture (a 2560x1080 render size): the game drew health and armor at x 298..547, y
     // 737..818 and the ammo block with its key hints at x 1465..1694, y 715..812 (alpha above 8), inside its
-    // centred 1536 x 864 frame. The blocks the hand HUDs move and cut hold them.
+    // centred 1536 x 864 frame. The cuts hold them and stay in the frame.
     const PixelRect band = wideContentRect(2048, 864);
     REQUIRE(band.x == 256);
     REQUIRE(band.width == 1536);
     const PixelRect drawnVitals{298, 737, 547 - 298, 818 - 737};
     const PixelRect drawnWeapon{1465, 715, 1694 - 1465, 812 - 715};
-    const PixelRect vitals = toPixels(wristBlockRect(WristBlock::Vitals), 2048, 864);
-    const PixelRect weapon = toPixels(wristBlockRect(WristBlock::Weapon), 2048, 864);
+    const PixelRect vitals = cutRect(WristBlock::Vitals, drawnVitals, 2048, 864);
+    const PixelRect weapon = cutRect(WristBlock::Weapon, drawnWeapon, 2048, 864);
     CHECK(contains(vitals, drawnVitals));
     CHECK(contains(weapon, drawnWeapon));
-    CHECK(contains(cutRect(WristBlock::Vitals, 2048, 864), drawnVitals));
-    CHECK(contains(cutRect(WristBlock::Weapon, 2048, 864), drawnWeapon));
     // Inside the frame: the empty columns beside it are not the blocks'.
     CHECK(vitals.x == 256);
     CHECK(weapon.x + static_cast<std::int64_t>(weapon.width) == 1792);
-    CHECK(contains(band, cutRect(WristBlock::Vitals, 2048, 864)));
-    CHECK(contains(band, cutRect(WristBlock::Weapon, 2048, 864)));
+    CHECK(contains(band, vitals));
+    CHECK(contains(band, weapon));
 }
 
-TEST_CASE("hud regions: block rectangles in pixels") {
-    const PixelRect vitals = toPixels(wristBlockRect(WristBlock::Vitals), 2560, 2100);
-    CHECK(vitals.x == 0);
-    CHECK(vitals.width == 551); // ceil(0.215 * 2560)
-    CHECK(vitals.y == 1424);    // floor(330 + 0.76 * 1440)
-    CHECK(vitals.y + static_cast<std::int64_t>(vitals.height) == 1770);
-    const PixelRect weapon = toPixels(wristBlockRect(WristBlock::Weapon), 2560, 2100);
-    CHECK(weapon.x + static_cast<std::int64_t>(weapon.width) == 2560);
-    CHECK(toPixels(BandRect{1.2f, 0.0f, 1.5f, 1.0f}, 100, 100).width == 0); // outside
+TEST_CASE("hud regions: band rectangles in pixels") {
+    const PixelRect abilities = toPixels(abilitiesRect(), 2560, 2100);
+    CHECK(abilities.x == 998); // floor(0.39 * 2560)
+    CHECK(abilities.y == 949); // floor(330 + 0.43 * 1440)
+    CHECK(abilities.width == 564);
+    CHECK(toPixels(BandRect{0.0f, 0.76f, 0.215f, 1.0f}, 2560, 2100).width == 551); // ceil(0.215 * 2560)
+    CHECK(toPixels(BandRect{1.2f, 0.0f, 1.5f, 1.0f}, 100, 100).width == 0);        // outside
 }
 
 TEST_CASE("hud regions: the blocks cover what the rig's captures show, at both window sizes") {
@@ -139,28 +154,60 @@ TEST_CASE("hud regions: the blocks cover what the rig's captures show, at both w
         const auto m = [&c](const float r[4]) {
             return measured(r[0], r[1], r[2], r[3], c.w, c.h);
         };
-        CHECK(contains(toPixels(wristBlockRect(WristBlock::Vitals), c.w, c.h), m(c.vitals)));
-        CHECK(contains(toPixels(wristBlockRect(WristBlock::Weapon), c.w, c.h), m(c.weapon)));
-        CHECK(contains(toPixels(wristBlockRect(WristBlock::Abilities), c.w, c.h), m(c.abilities)));
-        // The top bars and the objective marker on the right are not taken.
+        CHECK(contains(toPixels(abilitiesRect(), c.w, c.h), m(c.abilities)));
+        // The cuts of the blocks measured there hold them; the top bars and the objective marker on the
+        // right are not taken.
+        const PixelRect v = cutRect(WristBlock::Vitals, m(c.vitals), c.w, c.h);
+        const PixelRect w = cutRect(WristBlock::Weapon, m(c.weapon), c.w, c.h);
+        CHECK(contains(v, m(c.vitals)));
+        CHECK(contains(w, m(c.weapon)));
         const PixelRect topBar = measured(0.3844f, 0.6156f, 0.0264f, 0.0986f, c.w, c.h);
         const PixelRect marker = measured(0.9031f, 0.9469f, 0.4653f, 0.5597f, c.w, c.h);
-        for (const WristBlock b : {WristBlock::Vitals, WristBlock::Weapon}) {
-            CHECK_FALSE(overlap(cutRect(b, c.w, c.h), topBar));
-            CHECK_FALSE(overlap(cutRect(b, c.w, c.h), marker));
+        for (const PixelRect& cut : {v, w}) {
+            CHECK_FALSE(overlap(cut, topBar));
+            CHECK_FALSE(overlap(cut, marker));
         }
     }
 }
 
 TEST_CASE("hud regions: corner cuts reach the band's edges; the centre is never cut") {
     // The band of 2560x2100: 2560 x 1440 from row 330.
-    const PixelRect v = cutRect(WristBlock::Vitals, 2560, 2100);
+    const CornerBlocks blocks = hud_test::blocksAt(true, 2560, 2100);
+    const PixelRect v = cutRect(WristBlock::Vitals, *blocks.vitals, 2560, 2100);
     CHECK(v.x == 0);
+    CHECK(v.y == blocks.vitals->y);
+    CHECK(v.x + static_cast<std::int64_t>(v.width) == blocks.vitals->x + std::int64_t{blocks.vitals->width});
     CHECK(v.y + static_cast<std::int64_t>(v.height) == 1770);
-    const PixelRect w = cutRect(WristBlock::Weapon, 2560, 2100);
+    const PixelRect w = cutRect(WristBlock::Weapon, *blocks.weapon, 2560, 2100);
+    CHECK(w.x == blocks.weapon->x);
     CHECK(w.x + static_cast<std::int64_t>(w.width) == 2560);
     CHECK(w.y + static_cast<std::int64_t>(w.height) == 1770);
-    CHECK(area(cutRect(WristBlock::Abilities, 2560, 2100)) == 0);
+    CHECK(area(cutRect(WristBlock::Abilities, *blocks.vitals, 2560, 2100)) == 0);
+}
+
+TEST_CASE("hud regions: the hand HUD cuts only once every block it moves is measured") {
+    const CornerBlocks blocks = hud_test::blocksAt(true, 2064, 2100);
+    const auto both = handCuts({WristBlock::Vitals, WristBlock::Weapon}, blocks, 2064, 2100);
+    REQUIRE(both.complete);
+    REQUIRE(both.cuts.size() == 2);
+    CHECK(both.cuts[0].x == both.vitals.x);
+    CHECK(both.cuts[1].x == both.weapon.x);
+    CHECK(both.vitals.width == cutRect(WristBlock::Vitals, *blocks.vitals, 2064, 2100).width);
+    // The weapon HUD's ammo alone: health and armor are not cut.
+    const auto ammo = handCuts({WristBlock::Weapon}, blocks, 2064, 2100);
+    REQUIRE(ammo.complete);
+    REQUIRE(ammo.cuts.size() == 1);
+    CHECK(area(ammo.vitals) == 0);
+    // A block not measured yet: no cut at all, the HUD stays whole.
+    CornerBlocks half = blocks;
+    half.weapon.reset();
+    const auto waiting = handCuts({WristBlock::Vitals, WristBlock::Weapon}, half, 2064, 2100);
+    CHECK_FALSE(waiting.complete);
+    CHECK(waiting.cuts.empty());
+    CHECK(area(waiting.vitals) == 0);
+    CHECK(handCuts({WristBlock::Vitals}, half, 2064, 2100).complete);
+    CHECK_FALSE(handCuts({}, blocks, 2064, 2100).complete);
+    CHECK_FALSE(handCuts({WristBlock::Vitals, WristBlock::Weapon}, CornerBlocks{}, 2064, 2100).complete);
 }
 
 TEST_CASE("hud regions: subtracting two bottom corners leaves a top band and a bottom middle") {

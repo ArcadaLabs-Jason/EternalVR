@@ -40,8 +40,8 @@ std::optional<CentredWheel>
 centredWheel(const PixelRect& rect, std::uint32_t width, std::uint32_t height, float distanceMetres);
 
 // The head-locked HUD of one frame: the rectangles of the target the head-locked quad keeps (`shown`, the UI
-// quad's image rectangle, minus the cut rectangles of the blocks in `moved` and, with `wheel` (the wheel
-// centred and measured), the wheel's rectangle) and, with `wheel`, the wheel's own quad.
+// quad's image rectangle, minus `cuts` (the hand HUDs' blocks, HandCuts) and, with `wheel` (the wheel centred
+// and measured), the wheel's rectangle) and, with `wheel`, the wheel's own quad.
 struct HeadLockedHud {
     std::vector<PixelRect> pieces;
     std::optional<CentredWheel> wheel;
@@ -49,7 +49,7 @@ struct HeadLockedHud {
 HeadLockedHud headLockedHud(const PixelRect& shown,
                             std::uint32_t width,
                             std::uint32_t height,
-                            const std::vector<WristBlock>& moved,
+                            const std::vector<PixelRect>& cuts,
                             const std::optional<PixelRect>& wheel,
                             float distanceMetres);
 

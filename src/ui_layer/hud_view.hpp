@@ -26,6 +26,9 @@ struct HudView {
     float wheelWidth = 0.0f;
     float wheelHeight = 0.0f;
     bool handQuads = false; // the wrist or weapon HUD's quads were shown too (not drawn: they follow a hand)
+    // The corner blocks cut for the hand HUDs (the hand quads show them while they face the head), where the
+    // game drew them (hud_blocks.hpp).
+    std::vector<PixelRect> handCuts;
 };
 
 // An RGBA8 image (premultiplied), `width` x `height`.

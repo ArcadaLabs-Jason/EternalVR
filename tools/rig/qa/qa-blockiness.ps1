@@ -25,11 +25,20 @@ The 4x4 block's size in captured pixels (default 4).
 
 .PARAMETER Skip
 Captures left out at the start, sorted by name (default 3: the first ones can predate the rate images).
+
+.PARAMETER Since
+Only pairs whose eye L file was written at or after this time (default: all).
+
+.PARAMETER Until
+Only pairs whose eye L file was written before this time (default: all). With -Since, one stretch of a run,
+such as the captures before and after a map is loaded again.
 #>
 param(
     [string]$Dir = '',
     [int]$Period = 4,
-    [int]$Skip = 3
+    [int]$Skip = 3,
+    [Nullable[datetime]]$Since = $null,
+    [Nullable[datetime]]$Until = $null
 )
 
 if (-not ('QaBlocks' -as [type])) {
@@ -93,9 +102,11 @@ public static class QaBlocks {
 }
 
 # Per eye and half: Images, LeftL, RightL (eye L's left and right half), LeftR, RightR; $null without captures.
-function Measure-QaBlockiness([string]$Dir, [int]$Period = 4, [int]$Skip = 3) {
+function Measure-QaBlockiness([string]$Dir, [int]$Period = 4, [int]$Skip = 3, $Since = $null, $Until = $null) {
     $pairs = @(Get-ChildItem -LiteralPath $Dir -Filter '*-L.png' -File -ErrorAction SilentlyContinue | Sort-Object Name |
-        Where-Object { Test-Path -LiteralPath ($_.FullName -replace '-L\.png$', '-R.png') } | Select-Object -Skip $Skip)
+        Where-Object { Test-Path -LiteralPath ($_.FullName -replace '-L\.png$', '-R.png') } |
+        Where-Object { ($null -eq $Since -or $_.LastWriteTime -ge $Since) -and ($null -eq $Until -or $_.LastWriteTime -lt $Until) } |
+        Select-Object -Skip $Skip)
     if ($pairs.Count -eq 0) { return $null }
     $sum = @{ LeftL = 0.0; RightL = 0.0; LeftR = 0.0; RightR = 0.0 }
     foreach ($p in $pairs) {
@@ -114,6 +125,9 @@ function Measure-QaBlockiness([string]$Dir, [int]$Period = 4, [int]$Skip = 3) {
 }
 
 if (-not $Dir) { throw 'no -Dir (a folder of <name>-L.png and <name>-R.png capture pairs)' }
-$m = Measure-QaBlockiness $Dir $Period $Skip
-if (-not $m) { throw "no capture pairs in $Dir after the first $Skip" }
+$m = Measure-QaBlockiness $Dir $Period $Skip $Since $Until
+if (-not $m) {
+    $window = if ($null -ne $Since -or $null -ne $Until) { " written from $Since until $Until" } else { '' }
+    throw "no capture pairs in $Dir$window after the first $Skip"
+}
 $m

@@ -6,6 +6,7 @@ evr_add_module(evr_ui_layer
         backdrop.cpp
         crosshair.cpp
         gui_target.cpp
+        hud_blocks.cpp
         hud_view.cpp
         hud_regions.cpp
         layout_tracker.cpp

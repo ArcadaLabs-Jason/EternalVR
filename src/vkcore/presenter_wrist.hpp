@@ -7,6 +7,7 @@
 
 #include "common/pose.hpp"
 #include "features/input/controller_state.hpp"
+#include "ui_layer/hud_blocks.hpp"
 #include "ui_layer/hud_view.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "ui_layer/weapon_wheel.hpp"
@@ -26,10 +27,11 @@ namespace evr::vkcore {
 
 class WristHud {
 public:
-    // The head-locked pieces (2 in practice, 5 with the wheel centred), the hand quads (3 on the wrist, 2 on
-    // the gun) and the centred wheel that replace the UI quad. With the projection, the vignette, the reticle
-    // and the fade a frame then has at most 13 layers (OpenXR guarantees 16).
-    static constexpr std::uint32_t kMaxQuads = 10;
+    // The head-locked pieces (2 or 3 in practice; up to 7 with the wheel centred, when the corner blocks'
+    // tops differ as they do at the Large HUD Scale), the hand quads (3 on the wrist, 2 on the gun) and the
+    // centred wheel that replace the UI quad. With the projection, the vignette, the reticle and the fade a
+    // frame then has at most 15 layers (OpenXR guarantees 16).
+    static constexpr std::uint32_t kMaxQuads = 11;
 
     // XR_KHR_composition_layer_color_scale_bias is enabled (the quads fade); set at instance creation.
     bool colorScaleBias = false;
@@ -52,10 +54,11 @@ public:
     static std::optional<ui_layer::HudView> lastView(double maxAgeSeconds);
 
 private:
-    // The hand quads after the `n` head-locked pieces in `out`; returns the new count.
+    // The hand quads after the `n` head-locked pieces in `out`, showing `cuts`; returns the new count.
     std::uint32_t addHandQuads(const ui_layer::UiSettings& settings,
                                std::uint32_t width,
                                std::uint32_t height,
+                               const ui_layer::HandCuts& cuts,
                                const input::InputFrame& frame,
                                XrSpace space,
                                const XrCompositionLayerQuad& ui,
@@ -77,6 +80,9 @@ private:
                            std::uint32_t n,
                            XrCompositionLayerQuad* out);
     void logStats(const ui_layer::UiSettings& settings);
+    // The hand HUD's cuts (with hands) in the log: each change of where the corner blocks are (the first
+    // kLoggedChanges), and once while they wait for their first measurement.
+    void logCuts(const ui_layer::UiSettings& settings, const ui_layer::HandCuts& cuts);
 
     ui_layer::WristFacing facing_;
     ui_layer::WristFade fade_;
@@ -105,6 +111,13 @@ private:
     bool wheelQuadLogged_ = false;
     ui_layer::PixelRect wheelLast_{};
     std::uint32_t wheelChangesLogged_ = 0;
+    // The corner blocks where the game drew them (hud_blocks.hpp), and what the log last said of them.
+    ui_layer::CornerRectTracker corners_;
+    ui_layer::PixelRect cutVitals_{};
+    ui_layer::PixelRect cutWeapon_{};
+    std::uint32_t cutChangesLogged_ = 0;
+    std::uint64_t unmeasuredFrames_ = 0; // frames with hands whose blocks were not measured yet
+    bool loggedUnmeasured_ = false;
 };
 
 } // namespace evr::vkcore

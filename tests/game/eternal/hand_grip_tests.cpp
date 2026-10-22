@@ -25,6 +25,7 @@ using evr::xr_math::EyeRelativePose;
 using evr::xr_math::IdAngles;
 using evr::xr_math::IdViewAxis;
 using evr::xr_math::placeViewmodel;
+using evr::xr_math::translationKeepingWrist;
 
 namespace {
 
@@ -155,4 +156,38 @@ TEST_CASE("the Crucible's row turns the model so the glove holds the hilt as a g
     const float turned = largestAxisAngle(glove, kGunGlove);
     INFO("the Crucible's glove from the guns' grip: ", turned, " deg");
     CHECK(turned <= 3.0f);
+}
+
+TEST_CASE("with the Precision Bolt's scope row the Heavy Cannon's glove stays where its row puts it") {
+    // The layer's placement for a mod's row (arm::rowPlacement, the right hand): the weapon's offset row,
+    // its translation moved so the gun turns about the glove's wrist from the weapon's own sight turn to the
+    // mod's.
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    REQUIRE(table.ok());
+    const Glove& cannon = kGloves[1];
+    REQUIRE(std::string(cannon.weapon) == "weapon/player/heavy_cannon");
+    const std::optional<evr::game::SightRow> irons = table.lookupSight(cannon.weapon, {"", ""});
+    const std::optional<evr::game::SightRow> scope =
+        table.lookupSight(cannon.weapon, {"", "weapon/player/heavy_cannon_bolt_action"});
+    REQUIRE(irons.has_value());
+    REQUIRE(scope.has_value());
+    REQUIRE(scope->key != irons->key);
+    const IdAngles ironsTurn{irons->sight.pitch, irons->sight.yaw, 0.0f};
+    const IdAngles scopeTurn{scope->sight.pitch, scope->sight.yaw, 0.0f};
+    const WeaponOffset o = table.lookup(cannon.weapon, OffsetPosture::Standing);
+    const Vec3 rowTranslation{o.forward, o.left, o.up};
+    const IdAngles rotation{o.pitch, o.yaw, o.roll};
+    const EyeRelativePose grip{};
+    const auto wristWith = [&](Vec3 translation, const IdAngles& turn) {
+        const EyeRelativePose placed =
+            placeViewmodel(grip, grip.axis, translation, rotation, turn, kWrist, 1.0f);
+        return placed.offset + inFrame(placed.axis, cannon.wrist);
+    };
+    const Vec3 withIrons = wristWith(rowTranslation, ironsTurn);
+    const Vec3 moved = translationKeepingWrist(rowTranslation, rotation, ironsTurn, scopeTurn, kWrist);
+    const Vec3 withScope = wristWith(moved, scopeTurn);
+    INFO("wrist with the scope's row (", withScope.x, " ", withScope.y, " ", withScope.z, ")");
+    CHECK(evr::length(withScope - withIrons) <= 0.001f);
+    // Turned about the grip with the row's own translation, it would sit about 5 mm off.
+    CHECK(evr::length(wristWith(rowTranslation, scopeTurn) - withIrons) > 0.003f);
 }

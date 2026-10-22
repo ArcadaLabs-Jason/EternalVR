@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <optional>
 #include <ostream>
 
 using evr::Pose;
@@ -28,6 +29,7 @@ using evr::xr_math::IdAngles;
 using evr::xr_math::IdViewAxis;
 using evr::xr_math::isOrthonormal;
 using evr::xr_math::shotFromHand;
+using evr::xr_math::translationKeepingWrist;
 
 namespace {
 
@@ -257,4 +259,66 @@ TEST_CASE("a sight on the model's forward changes nothing") {
     CHECK(approxEqual(placed.axis.forward, plain.axis.forward));
     CHECK(approxEqual(placed.axis.left, plain.axis.left));
     CHECK(approxEqual(placed.axis.up, plain.axis.up));
+}
+
+namespace {
+
+// Where a model point lands for a placement at the eye with the identity axis (metres).
+EyeRelativePose
+placedAtEye(Vec3 translation, const IdAngles& rotation, const std::optional<IdAngles>& sight) {
+    return sight ? applyLocalOffsetWithSight({}, translation, rotation, *sight, 1.0f)
+                 : applyLocalOffset({}, translation, rotation, 1.0f);
+}
+
+// The model point a placement puts at `at`, in the model's frame.
+Vec3 modelPointAt(const EyeRelativePose& placed, Vec3 at) {
+    const Vec3 d = at - placed.offset;
+    return {dot(placed.axis.forward, d), dot(placed.axis.left, d), dot(placed.axis.up, d)};
+}
+
+constexpr Vec3 kRowsWrist{-0.08f, -0.035f, 0.0f};
+
+} // namespace
+
+TEST_CASE("a changed sight turn keeps the model's point at the wrist where the first turn put it") {
+    const std::optional<IdAngles> turns[] = {std::nullopt, kSights[0], kSights[1],
+                                             IdAngles{-0.15f, 0.15f, 0.0f}};
+    const IdAngles rotations[] = {{}, {2.0f, -3.0f, 5.0f}};
+    for (const IdAngles& rotation : rotations) {
+        for (const std::optional<IdAngles>& from : turns) {
+            for (const std::optional<IdAngles>& to : turns) {
+                const Vec3 point = modelPointAt(placedAtEye(kOffset, rotation, from), kRowsWrist);
+                const Vec3 moved = translationKeepingWrist(kOffset, rotation, from, to, kRowsWrist);
+                const EyeRelativePose after = placedAtEye(moved, rotation, to);
+                CHECK(approxEqual(after.offset + worldOf(after.axis, point), kRowsWrist, 1e-5f));
+                // The new turn itself is kept: the translation does not change the model's axis.
+                const EyeRelativePose plain = placedAtEye(kOffset, rotation, to);
+                CHECK(approxEqual(after.axis.forward, plain.axis.forward));
+                CHECK(approxEqual(after.axis.up, plain.axis.up));
+            }
+        }
+    }
+}
+
+TEST_CASE("the same sight turn keeps the row's translation exactly") {
+    const IdAngles rotation{2.0f, -3.0f, 5.0f};
+    for (const std::optional<IdAngles>& turn :
+         {std::optional<IdAngles>{}, std::optional<IdAngles>{kSights[1]}}) {
+        const Vec3 moved = translationKeepingWrist(kOffset, rotation, turn, turn, kRowsWrist);
+        CHECK(moved.x == kOffset.x);
+        CHECK(moved.y == kOffset.y);
+        CHECK(moved.z == kOffset.z);
+    }
+}
+
+TEST_CASE("turned about the grip instead, the wrist would move by the turn's change") {
+    // The Heavy Cannon's iron sights to its Precision Bolt's scope: about 3.3 degrees at 8.7 cm from the
+    // grip.
+    const std::optional<IdAngles> irons = kSights[1];
+    const std::optional<IdAngles> scope = IdAngles{-0.15f, 0.15f, 0.0f};
+    const Vec3 point = modelPointAt(placedAtEye(kOffset, {}, irons), kRowsWrist);
+    const EyeRelativePose aboutGrip = placedAtEye(kOffset, {}, scope);
+    const float off = length(aboutGrip.offset + worldOf(aboutGrip.axis, point) - kRowsWrist);
+    CHECK(off > 0.004f);
+    CHECK(off < 0.006f);
 }

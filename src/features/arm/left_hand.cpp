@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <optional>
 
 namespace evr::arm {
 
@@ -99,6 +100,19 @@ void SteadyPose::reset() {
 xr_math::IdAngles leftHandTurn(const xr_math::IdAngles& rowTurn, float weight) {
     return {rowTurn.pitch, lerp(rowTurn.yaw, -rowTurn.yaw, weight),
             lerp(rowTurn.roll, -rowTurn.roll, weight)};
+}
+
+RowPlacement rowPlacement(Vec3 translation,
+                          const xr_math::IdAngles& rowTurn,
+                          float weight,
+                          const std::optional<xr_math::IdAngles>& ownSight,
+                          const std::optional<xr_math::IdAngles>& sight,
+                          Vec3 wrist,
+                          bool keepWrist) {
+    const xr_math::IdAngles turn = weight > 0.0f ? leftHandTurn(rowTurn, weight) : rowTurn;
+    return {keepWrist ? xr_math::translationKeepingWrist(translation, turn, ownSight, sight, wrist)
+                      : translation,
+            turn};
 }
 
 Vec3 leftGloveShift(const xr_math::EyeRelativePose& placed,

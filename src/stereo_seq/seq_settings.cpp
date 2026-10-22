@@ -173,6 +173,16 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
     return cvars;
 }
 
+CvarExpectation stereoHudScaleCvar() {
+    return {"swf_anchorProfile", "2", false, true};
+}
+
+std::vector<CvarExpectation> stereoVrHeldCvars() {
+    std::vector<CvarExpectation> held = stereoComfortCvars();
+    held.push_back(stereoHudScaleCvar());
+    return held;
+}
+
 std::optional<CvarExpectation> stereoSsdoCvar(std::string_view setting) {
     if (setting.empty() || setting == "1") {
         return CvarExpectation{"r_SSDO", "1"};

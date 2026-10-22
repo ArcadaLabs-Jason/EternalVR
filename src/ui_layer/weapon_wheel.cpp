@@ -29,25 +29,21 @@ centredWheel(const PixelRect& rect, std::uint32_t width, std::uint32_t height, f
 HeadLockedHud headLockedHud(const PixelRect& shown,
                             std::uint32_t width,
                             std::uint32_t height,
-                            const std::vector<WristBlock>& moved,
+                            const std::vector<PixelRect>& cuts,
                             const std::optional<PixelRect>& wheel,
                             float distanceMetres) {
     HeadLockedHud hud;
     if (width == 0 || height == 0) {
         return hud;
     }
-    std::vector<PixelRect> cuts;
-    cuts.reserve(moved.size() + 1);
-    for (const WristBlock block : moved) {
-        cuts.push_back(cutRect(block, width, height));
-    }
+    std::vector<PixelRect> all = cuts;
     if (wheel) {
         hud.wheel = centredWheel(*wheel, width, height, distanceMetres);
         if (hud.wheel) {
-            cuts.push_back(hud.wheel->rect);
+            all.push_back(hud.wheel->rect);
         }
     }
-    hud.pieces = subtractRects(shown, cuts);
+    hud.pieces = subtractRects(shown, all);
     return hud;
 }
 

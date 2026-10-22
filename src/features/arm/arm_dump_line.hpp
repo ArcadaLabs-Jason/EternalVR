@@ -33,6 +33,9 @@
 //           with a gun held), "" for none; hstate the hands' state (idHands::destHandsState: 0 HS_IDLE,
 //           12 HS_SWIM_IDLE, 14 HS_TRANSITIONING), or null; hswim whether the hands swim (true / false,
 //           input::handsSwim), or null
+//   mods    the held weapon's active mods: the decl names of its two mod overrides ["" for none, ...]
+//           (vkcore/weapon_mods.hpp); sight the key of the [sights] row the viewmodel turns the weapon by, ""
+//           for none
 
 #include "features/arm/arm_joints.hpp"
 #include "xr_math/weapon_pose.hpp"
@@ -83,6 +86,8 @@ struct ArmDumpRecord {
     std::string armsItem;
     std::optional<int> handsState;
     std::optional<bool> handsSwim;
+    std::array<std::string, 2> mods;
+    std::string sightRow;
 };
 
 // The joint roles in a pose set, in ArmJoint order.

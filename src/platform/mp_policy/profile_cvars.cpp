@@ -11,7 +11,7 @@
 namespace evr::mp_policy {
 
 const std::vector<std::string_view>& profileStoredCvars() {
-    static const std::vector<std::string_view> cvars{"view_skipShakes", "r_sharpening"};
+    static const std::vector<std::string_view> cvars{"view_skipShakes", "r_sharpening", "swf_anchorProfile"};
     return cvars;
 }
 
@@ -63,6 +63,21 @@ ProfileRepair profileRepair(bool requested, const std::optional<std::string>& lo
     }
     return loadedShakes && sameCvarValue(*loadedShakes, "1") ? ProfileRepair::Repair
                                                              : ProfileRepair::NotNeeded;
+}
+
+YieldingHold::Step YieldingHold::step(std::string_view live, std::string_view held) {
+    if (yielded_) {
+        return Step::Keep;
+    }
+    if (sameCvarValue(live, held)) {
+        confirmed_ = true;
+        return Step::Keep;
+    }
+    if (confirmed_) {
+        yielded_ = true;
+        return Step::Yield;
+    }
+    return Step::Hold;
 }
 
 const char* profileRepairStatus(ProfileRepair repair, bool savedSince) {

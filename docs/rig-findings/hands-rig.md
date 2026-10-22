@@ -237,14 +237,14 @@ scripted input), not a headset.
 
 Open:
 
-1. **The active mod**: the Heavy Cannon's row is its iron sights; the precision bolt's scope line sits about 3.3 deg
-   off it. A row per mod needs the active mod's decl read from the weapon (`idWeapon` weapon mod overrides, from the
-   type info, untested), checked on the Game Pass build too.
+1. **The active mod** (done, section 18): the Heavy Cannon's row is its iron sights; the precision bolt's scope line
+   sits about 3.3 deg off it. A row per mod needs the active mod's decl read from the weapon (`idWeapon` weapon mod
+   overrides, from the type info, untested), checked on the Game Pass build too.
 2. **Parallax**: the sights run parallel to the ray, not on it: they sit their fixed height and side above the hand
    (about 13 to 21 cm up, 7 cm left by the sights survey). Moving the gun so the sights lie on the ray is the next
    step and is not measured here.
-3. **The Unmaykr**: whether `give all` grants it, and how it is selected on the rig, is not known; it has no row
-   either way.
+3. **The Unmaykr** (done, sections 12 and 18): whether `give all` grants it, and how it is selected on the rig, is not
+   known; it has no row either way.
 
 ## 7. Arm solve and model (feature step 3 prototype, 2026-10-12, OpenXR-Simulator)
 
@@ -1051,3 +1051,106 @@ to 0.2 / 0.2 to 0.4 cm on all eight guns, the right glove 0.0 / 0.0 (LEFTY PASS)
 **Not run**: a headset; a swim that reaches the surface by moving (the rig's player does not move); leaving the water
 onto land by swimming or climbing out (the rig cannot walk the player out; it was teleported out, above); other guns
 than the shotgun and the Heavy Cannon in the slot.
+
+## 18. Weapon sights for every gun, and the active weapon mod (2026-10-22, OpenXR-Simulator)
+
+Feature step 2's exit (docs/ROADMAP.md, "Plan from v0.1.49"): with the eye on the sight line, the sight line parallel to
+the aim ray within 0.25 deg for every weapon. Section 6 left the precision bolt (one row served both Heavy Cannon mods),
+the plasma rifle, the rocket launcher, the BFG and the Unmaykr. Evidence: rig (the simulator and the scripted input),
+Steam build 25216728; not a headset.
+
+**The active mod.** The held item's decl stays the base weapon's whichever mod is active, but the weapon object in the
+hands' right item (idHandsItem::item, its decl checked against the held one) carries one override per fire mode,
+`idWeapon::weaponModOverrides[2].weaponDecl`, and that decl names the active mod. The layer reads both every update of
+the hands (`src/vkcore/weapon_mods.cpp`; the zoom look reads the same fields) and logs each change (`held item '...'
+(mods '...', '...')`, then `mods changed on held '...'` on a switch). Seen on the rig, both mods of each weapon (the
+switch is the left controller's top button, `switch_weapon_mod`):
+
+| Weapon | Overrides (fire mode 0, 1): mod A / mod B |
+|---|---|
+| combat shotgun | -, `shotgun_secondary_pop_rockets` / -, `shotgun_secondary_full_auto` |
+| Heavy Cannon | -, `heavy_cannon_bolt_action` (precision bolt) / -, `heavy_cannon_burst_detonate_mastery` (micro missiles) |
+| plasma rifle | -, `plasma_rifle_secondary_aoe` / -, `plasma_rifle_secondary_microwave` |
+| rocket launcher | `rocket_launcher_detonate`, - / -, `rocket_launcher_lock_mod_mastery` |
+| ballista | -, `gauss_rifle_ballista` / -, `gauss_rifle_destroyer` |
+| chaingun | `chaingun_turret_primary`, `chaingun_turret_secondary` / `chaingun_energy_shell_primary`, `chaingun_energy_shell` |
+| super shotgun | `double_barrel_primary_lockon`, `double_barrel_meat_hook` (one mod) |
+| BFG | `bfg_charge_sphere_burn`, - (no mod to switch) |
+| Unmaykr | -, - |
+
+The switch shows in the same update as the zoom look's own read of the fields (both log lines at the same moment), so a
+row keyed by a mod takes over on the next frame drawn. On Game Pass 1.0.56.0 idHands, idHandsItem, idInventoryItem,
+idWeapon and weaponModOverrides_t have the same size and every field the same offset as on Steam (the two images' type
+info tables, read with `tools/typeinfo/extract_typeinfo.py`) [static]; no signature is involved. `[sights]` rows can
+now be keyed by a mod's decl (`WeaponOffsetTable::lookupSight` with the mods: a row for an active mod's decl wins over
+the weapon's own; a weapon whose mods have no row keeps its row). A mod's row turns the gun about the glove's wrist
+instead of the grip (`xr_math::translationKeepingWrist`): the offset rows are measured with the weapon's own turn, and
+3.3 deg about the grip would move the wrist 0.5 cm.
+
+**Which mods change the sight line.** Idle: none. Each weapon's line in the model's frame sits at the same centre in
+both mods, within 0.01 deg (`s2-off1` below: shotgun (0.205, 2.173) and (0.206, 2.167); the Heavy Cannon's irons line
+(-3.455, 0.185) with the micro missiles, the bolt's idle carrying the same irons line; plasma rifle (-0.143, -0.003) and
+(-0.144, -0.003); rocket launcher (0.040, 0.141) and (0.041, 0.140); ballista (-0.831, 1.075) and (-0.829, 1.075);
+chaingun (0.318, -0.011) and (0.317, -0.013)). Sight parts: only the Heavy Cannon's. The captures of the neutral hold
+show the precision bolt's scope on top of the gun and, with the micro missiles, no scope: the rail with the rear iron
+sight and the missile pods beside it; the other guns' tops are the same in both mods (the shotgun's mods hang under the
+barrel). The precision bolt's line is its scope: the bolt's zoom pose's eye axis, 0.20 deg above the bore, which runs
+through the scope's tube within 2 mm (the sights survey) [static]; the iron sights stay the line for the micro missiles
+and with no mod.
+
+**The Unmaykr on the rig.** `give weapon/player/unmaykr` after `give all` in the debug schedule (section 12): the first
+slot-8 touch brought it out, and the weapon-mod switch then changed between it and the BFG (they share the slot).
+
+**Runs** (the sights sweep on the rig PC, `tmp-vr\rs\sights2\sights2-sweep.ps1`: section 6's sweep with the Unmaykr
+given and, per slot, a 0.4 s touch, five holds, the weapon-mod switch, five holds; slot 8 twice; 90 holds, 2 or 3 dump
+lines each; the dump now also writes `mods`, the held weapon's overrides, and `sight`, the row the layer turned it
+by): `s2-off1` this branch with `ETERNALVR_WEAPON_SIGHTS=0` (the rows' source: each new row is the centre of the
+line's spread there, as in section 6), `s2-main1` the 0.1.75 build (dev main: the five rows of section 6, the mod not
+read), `s2-on1` this branch. The checker next to it (`sights2_check.py`: section 6's `sights_check.py` per weapon and
+mod) picks the weapon-space line by the dumped mods (the precision bolt's scope, else section 6's lines); for
+`s2-main1`, whose dump has no mods, the mod per hold group comes from its zoom look lines (the bolt first, as in the
+other runs).
+
+| Weapon (mod) | Line in weapon space | Row (down, left) | Spread (down, left) | Sights off | 0.1.75 | This branch |
+|---|---|---|---|---|---|---|
+| combat shotgun (both) | receiver top to bead | 0.21, 2.17 | 0.15, 0.31 | 2.34 deg | 0.161 deg | 0.162 deg |
+| Heavy Cannon (precision bolt) | the scope's axis | **-0.15, 0.15** (new) | 0.09, 0.31 | 0.33 deg | 3.340 deg | 0.170 deg |
+| Heavy Cannon (micro missiles) | iron sights | -3.45, 0.19 | 0.09, 0.38 | 3.50 deg | 0.200 deg | 0.195 deg |
+| plasma rifle (both) | bore | **-0.14, 0.00** (new) | 0.38, 0.01 | 0.33 deg | 0.334 deg | 0.194 deg |
+| rocket launcher (both) | bore | **0.04, 0.14** (new) | 0.09, 0.31 | 0.30 deg | 0.306 deg | 0.160 deg |
+| super shotgun | rear sight to muzzle top | 0.69, 0.16 | 0.09, 0.30 | 0.79 deg | 0.153 deg | 0.152 deg |
+| ballista (both) | bore | -0.83, 1.08 | 0.40, 0.07 | 1.51 deg | 0.202 deg | 0.204 deg |
+| chaingun (both) | zoom pose's eye axis | 0.32, -0.01 | 0.37, 0.19 | 0.51 deg | 0.204 deg | 0.202 deg |
+| BFG | bore | none | 0.05, 0.00 | 0.057 deg | 0.057 deg | 0.057 deg |
+| Unmaykr | bore | none | 0.05, 0.00 | 0.052 deg | 0.052 deg | 0.052 deg |
+
+The largest angle to the ray per weapon over both mods' holds (`s2-main1`: three over 0.25, SIGHTS FAIL; `s2-on1`:
+SIGHTS PASS, every weapon and mod within 0.21 deg, the idle sway as in section 6). The BFG's and the Unmaykr's bores run
+within 0.06 deg of the ray unturned, so they keep no row. The precision bolt unturned (0.33 deg) is closer than with
+the irons' row (3.34 deg): its scope sits near the bore, the irons 3.5 deg above it.
+
+**The glove** (the grip checker of section 10 with `--glove`, the rig PC's copy that takes the row each dump line
+names): the Heavy Cannon's glove wrist 0.1 / 0.3 cm (median / largest) from its target with either mod's row, every
+other gun 0.1 to 0.2 / 0.2 to 0.5 cm (GRIP PASS). The offset rows the sweep derives for the plasma rifle and the
+rocket launcher with their new turns are their rows within 1 mm, so those stay; the bolt's derived row is the irons'
+row moved by the wrist-keeping step, (-0.270, 0.113, 0.209) against (-0.270, 0.113, 0.205).
+
+**The weapon in the left hand** (review fix): the wrist-keeping step now takes the turn the model is placed with, the
+row's turn reflected for the left glove included (`arm::rowPlacement`), and leaves an `ETERNALVR_VIEWMODEL_OFFSET`
+untouched; unit tests in `left_hand_tests.cpp` fail on the first version (the wrist kept under the row's own turn).
+Run `s2-lefty1` (the same sweep left-handed, section 15's mirrored holds, the free off hand; the combat shotgun, then
+the Heavy Cannon with the bolt, the micro missiles, the micro missiles and the bolt again, 10 holds per mod), checked
+with section 15's left-handed glove checker taking the dumped row: the left glove's wrist 0.1 / 0.2 cm from the left
+hand's wrist point with either mod (median per axis within 1 mm of each other), the right glove 0.0 / 0.0 (LEFTY
+PASS); the sight line 0.168 deg at most with the bolt, 0.200 with the micro missiles (SIGHTS PASS). These holds are
+all at the left glove's full share; the blend while its wrist is first read is covered by the unit tests only.
+
+**Not checked**: a headset (how the lined-up sights look and feel, and whether the 3.3 deg turn at a Heavy Cannon mod
+switch is noticed: open until the owner's headset look); the Heavy Cannon with no mod (the save has both; the irons'
+row applies by the key rules); the precision bolt zoomed (its zoom pose puts the scope on the model's forward, so
+while zoomed the bolt's row leaves the scope about 0.2 deg off the ray, within the 0.25 deg budget) [static]; the
+plasma rifle's, rocket launcher's, BFG's and Unmaykr's lines are their bores (no sight parts; the survey found none);
+the mod read on Game Pass at run time (its type info is the Steam build's, above). On a weapon switch the mods were
+already set on the first update with the new weapon (every switch's first held-item line in `s2-off1` and `s2-on1`
+names them; 0 `mods changed` lines outside the mod switches and the level's start), so no frame on the weapon's own
+row instead of its mod's was seen; a weapon whose object lagged its decl would show its own row for that update.

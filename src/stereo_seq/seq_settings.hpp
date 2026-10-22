@@ -32,6 +32,7 @@ struct CvarExpectation {
     std::string_view name;
     std::string_view value;
     bool fraction = false; // a float cvar: a hold compares it as a float (0.5 is not taken for 0)
+    bool yields = false;   // a change in the game's menu ends the hold (mp_policy::YieldingHold)
 };
 
 // r_TAASafeMode 1, r_antialiasing 0, r_jitter 0, rs_enable 0, r_swapInterval 0.
@@ -75,6 +76,20 @@ CvarExpectation stereoSsdoFilterCvar(bool perEyeHistory);
 // mono both eyes see one picture, so it is held in stereo only. session-keys.txt restores it and
 // r_blurRadialScale (the game saves both; it writes r_blurRadialScale itself after r_motionblur 0).
 const std::vector<CvarExpectation>& stereoComfortCvars();
+
+// swf_anchorProfile 2, the game's HUD Scale at Large (Settings, HUD; 0 Small, 1 Medium, 2 Large), held at run
+// time under Route S and Parallel Eye Rendering beside the comfort set. On the HUD quad at the default size
+// the game's smaller HUD texts measure under half a degree at Medium (docs/test-protocols/ui-legibility.md);
+// at Large each gains two or three pixels. The game keeps the setting in the player's profile (profile.bin),
+// not in a text config, so the profile hooks put the player's own value into every profile save
+// (mp_policy/profile_cvars.hpp); a player already at Large sees no change. A player who changes it in the
+// game's menu during VR keeps that choice: the hold yields (mp_policy::YieldingHold). Mono launches leave it
+// alone.
+CvarExpectation stereoHudScaleCvar();
+
+// What Route S and Parallel Eye Rendering hold for comfort and legibility (runtime_cvars.cpp,
+// runtime_cvars_pe.cpp): the comfort set and the HUD Scale.
+std::vector<CvarExpectation> stereoVrHeldCvars();
 
 // r_SSDO under Route S (ETERNALVR_STEREO_SSDO). The game turns SSDO off itself after r_TAASafeMode 1
 // (0x1C6FCC0), which Route S holds at start-up, so without a hold every Route S session ran without it.

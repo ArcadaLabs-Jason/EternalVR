@@ -1,5 +1,6 @@
 #include "platform/mp_policy/profile_cvars.hpp"
 #include "platform/mp_policy/saved_cvars.hpp"
+#include "stereo_seq/seq_settings.hpp"
 
 #include <doctest/doctest.h>
 
@@ -23,14 +24,15 @@ struct Sim {
     SavedCvars<int> book;
     std::optional<std::string> loaded;
     bool fixed = true; // the profile hooks are in
+    std::string name = "view_skipShakes";
 
     std::optional<std::string> before() const {
-        const auto* e = book.find("view_skipShakes");
+        const auto* e = book.find(name);
         return e ? std::optional<std::string>(e->value) : std::nullopt;
     }
     void hold(const std::string& value) { // runtime_cvars::apply through the book
         if (live != value) {
-            book.beforeWrite("view_skipShakes", live, 0);
+            book.beforeWrite(name, live, 0);
             live = value;
         }
     }
@@ -60,10 +62,12 @@ struct Sim {
 
 } // namespace
 
-TEST_CASE("profile cvars: view_skipShakes and r_sharpening, not the cvars the load sets again") {
+TEST_CASE(
+    "profile cvars: view_skipShakes, r_sharpening and the HUD scale, not the cvars the load sets again") {
     CHECK(profileStoredCvar("view_skipShakes"));
     CHECK(profileStoredCvar("VIEW_SKIPSHAKES"));
     CHECK(profileStoredCvar("r_sharpening"));
+    CHECK(profileStoredCvar("swf_anchorProfile"));
     CHECK_FALSE(profileStoredCvar("r_antialiasing"));
     CHECK_FALSE(profileStoredCvar("r_raytracedReflectionsTemporalUpscaleQuality"));
     CHECK_FALSE(profileStoredCvar("view_skipKicks")); // not in the profile
@@ -237,4 +241,199 @@ TEST_CASE("profile cvars: a repaired profile saves 0 while the session holds 1")
     s.save();
     CHECK(s.file == std::optional<std::string>("0"));
     CHECK(s.live == "1");
+}
+
+// The HUD Scale (swf_anchorProfile: 0 Small, 1 Medium, 2 Large) held at Large in VR
+// (stereo_seq::stereoHudScaleCvar). The game keeps it in profile.bin only, so without the hooks a VR session
+// left the flat game at Large (rig: a GUI capture experiment holding 2 saved 2 into the rig's profile).
+TEST_CASE("profile cvars: the HUD scale VR holds is one the profile hooks keep out of the profile") {
+    const auto hud = evr::stereo_seq::stereoHudScaleCvar();
+    CHECK(std::string(hud.name) == "swf_anchorProfile");
+    CHECK(std::string(hud.value) == "2");
+    CHECK(profileStoredCvar(hud.name));
+}
+
+TEST_CASE("profile cvars: positive control, without the hooks the held Large HUD reaches the profile") {
+    Sim s{"1", std::string("1")};
+    s.name = "swf_anchorProfile";
+    s.fixed = false;
+    s.load();
+    s.hold("2");
+    s.save();
+    CHECK(s.file == std::optional<std::string>("2"));
+}
+
+TEST_CASE("profile cvars: the HUD scale's lifetime: held from the session's start, never in the profile") {
+    SUBCASE("Route S: the profile loads before the first present; every save keeps Medium") {
+        Sim s{"0", std::string("1")}; // registered at 0, the player's profile at Medium
+        s.name = "swf_anchorProfile";
+        s.load();
+        CHECK(s.live == "1");
+        s.hold("2"); // the first present
+        CHECK(s.live == "2");
+        s.save(); // the save about 20 s in
+        CHECK(s.file == std::optional<std::string>("1"));
+        CHECK(s.live == "2");
+        s.hold("2");
+        s.save(); // a later save
+        CHECK(s.file == std::optional<std::string>("1"));
+        CHECK(s.live == "2");
+        // The session ends (a quit or a crash): nothing runs at the end, and the profile already holds the
+        // player's Medium from every save; the flat game loads it.
+        Sim flat{"0", s.file};
+        flat.name = "swf_anchorProfile";
+        flat.fixed = false;
+        flat.load();
+        CHECK(flat.live == "1");
+    }
+    SUBCASE("Parallel Eye Rendering: the hold writes before the profile's load") {
+        Sim s{"0", std::string("0")}; // a player at Small
+        s.name = "swf_anchorProfile";
+        s.hold("2");
+        s.load(); // seeded with 0 (before the layer's first write), then the profile's 0
+        CHECK(s.loaded == std::optional<std::string>("0"));
+        s.hold("2");
+        s.save();
+        CHECK(s.file == std::optional<std::string>("0"));
+        CHECK(s.live == "2");
+    }
+    SUBCASE("a player already at Large: nothing to write, nothing changes") {
+        Sim s{"0", std::string("2")};
+        s.name = "swf_anchorProfile";
+        s.load();
+        s.hold("2");
+        CHECK(s.book.find(s.name) == nullptr); // the hold found 2 and wrote nothing
+        s.save();
+        CHECK(s.file == std::optional<std::string>("2"));
+    }
+    SUBCASE("a trip gives the player's value back, and later saves leave it alone") {
+        Sim s{"0", std::string("1")};
+        s.name = "swf_anchorProfile";
+        s.load();
+        s.hold("2");
+        s.book.takeAll();   // the multiplayer guard tripped: the layer stops holding
+        s.live = *s.loaded; // cvar_book::setTripValue: the load's value, not the registered 0
+        s.save();
+        CHECK(s.file == std::optional<std::string>("1"));
+        CHECK(s.live == "1");
+    }
+}
+
+// The HUD Scale's hold yields to the player's choice in the game's menu (mp_policy::YieldingHold): the layer
+// holds Large until the game shows a value it did not write while the hold stood confirmed.
+namespace {
+
+// The HUD Scale as the hold (runtime_cvars_yield.cpp) and the profile hooks (profile_hooks.cpp) see it.
+struct HudSim {
+    std::string live = "0"; // registered at 0
+    std::optional<std::string> file = std::string("1");
+    std::optional<std::string> loaded;
+    std::optional<std::string> before; // the book: the value before the layer's first write
+    evr::mp_policy::YieldingHold yield;
+
+    void present() { // runtime_cvars::apply: yieldTurn, else the write
+        const auto step = yield.step(live, "2");
+        if (step == evr::mp_policy::YieldingHold::Step::Yield) {
+            loaded = live; // profilePlayerChoice
+        } else if (step == evr::mp_policy::YieldingHold::Step::Hold) {
+            if (!before) {
+                before = live;
+            }
+            live = "2";
+        }
+    }
+    void load() { // beforeLoad, the game's load, afterLoad
+        yield.profileLoaded();
+        if (const auto seed = profileLoadSeed(live, before)) {
+            live = *seed;
+        }
+        if (file) {
+            live = *file;
+        }
+        loaded = live;
+    }
+    void save() { // beforeSave (playerChose, then profileWrite), the game's write, afterSave
+        if (yield.step(live, "2") == evr::mp_policy::YieldingHold::Step::Yield) {
+            loaded = live; // profilePlayerChoice
+        }
+        const std::string held = live;
+        const auto w = profileWrite(live, loaded, before);
+        file = w.swap ? w.value : live;
+        live = held;
+    }
+};
+
+} // namespace
+
+TEST_CASE("profile cvars: a HUD Scale the player changes in the game's menu during VR sticks and is saved") {
+    SUBCASE("seen at a present") {
+        HudSim s;
+        s.present(); // the first present, before the load
+        s.load();
+        s.present();
+        s.present(); // the hold confirmed: Large live
+        CHECK(s.live == "2");
+        s.save();
+        CHECK(s.file == std::optional<std::string>("1"));
+        s.live = "0"; // the player picks Small in the game's menu
+        s.present();
+        CHECK(s.live == "0"); // not written back to Large
+        CHECK(s.yield.yielded());
+        s.save();
+        CHECK(s.file == std::optional<std::string>("0"));
+        s.present();
+        s.save();
+        CHECK(s.live == "0");
+        CHECK(s.file == std::optional<std::string>("0"));
+    }
+    SUBCASE("seen at the save that follows the menu, before any present") {
+        HudSim s;
+        s.load();
+        s.present();
+        s.present();
+        s.live = "0";
+        s.save();
+        CHECK(s.file == std::optional<std::string>("0"));
+        s.present();
+        CHECK(s.live == "0");
+    }
+    SUBCASE("the player picks Large: the same as the hold, and saved") {
+        HudSim s;
+        s.load();
+        s.present();
+        s.present();
+        s.live = "2";
+        s.present();
+        s.save();
+        CHECK(s.file == std::optional<std::string>("1")); // no change seen: the profile keeps theirs
+    }
+    SUBCASE("a profile load is not a choice: the hold is written again after it") {
+        HudSim s;
+        s.present();
+        s.present(); // confirmed before the load (Parallel Eye Rendering's order)
+        s.load();    // sets 1
+        CHECK(s.live == "1");
+        s.present();
+        CHECK(s.live == "2");
+        CHECK_FALSE(s.yield.yielded());
+        s.save();
+        CHECK(s.file == std::optional<std::string>("1"));
+    }
+}
+
+TEST_CASE("profile cvars: a yielding hold writes until confirmed, then yields to a value it did not write") {
+    using Step = evr::mp_policy::YieldingHold::Step;
+    evr::mp_policy::YieldingHold y;
+    CHECK(y.step("1", "2") == Step::Hold); // not confirmed yet: write
+    CHECK(y.step("2", "2") == Step::Keep); // confirmed
+    CHECK(y.step("2.0", "2") == Step::Keep);
+    y.profileLoaded();
+    CHECK(y.step("1", "2") == Step::Hold); // the load's value is not a choice
+    CHECK(y.step("2", "2") == Step::Keep);
+    CHECK(y.step("0", "2") == Step::Yield);
+    CHECK(y.yielded());
+    CHECK(y.step("0", "2") == Step::Keep);
+    CHECK(y.step("1", "2") == Step::Keep); // never held again this session
+    y.profileLoaded();
+    CHECK(y.step("1", "2") == Step::Keep);
 }

@@ -28,7 +28,7 @@ constexpr double kGatherFraction = 0.025;
 using Box = WheelScratch::Box;
 
 Box flood(const AlphaGrid& g, std::uint32_t c, std::uint32_t r, std::uint32_t label, WheelScratch& s) {
-    Box box{c, r, c, r};
+    Box box{c, r, c, r, 0};
     s.stack.clear();
     s.stack.push_back(r * g.columns + c);
     s.label[s.stack.back()] = label;
@@ -37,6 +37,7 @@ Box flood(const AlphaGrid& g, std::uint32_t c, std::uint32_t r, std::uint32_t la
         s.stack.pop_back();
         const std::uint32_t ac = at % g.columns;
         const std::uint32_t ar = at / g.columns;
+        ++box.samples;
         box.c0 = std::min(box.c0, ac);
         box.c1 = std::max(box.c1, ac);
         box.r0 = std::min(box.r0, ar);
@@ -61,7 +62,7 @@ Box flood(const AlphaGrid& g, std::uint32_t c, std::uint32_t r, std::uint32_t la
 
 // The box of the samples labelled `label` in `b` from column `c0` on.
 Box clipLeft(const AlphaGrid& g, const WheelScratch& s, std::uint32_t label, const Box& b, std::uint32_t c0) {
-    Box out{b.c1, b.r1, c0, b.r0};
+    Box out{b.c1, b.r1, c0, b.r0, 0};
     for (std::uint32_t r = b.r0; r <= b.r1; ++r) {
         for (std::uint32_t c = c0; c <= b.c1; ++c) {
             if (s.label[std::size_t{r} * g.columns + c] == label) {
@@ -103,6 +104,11 @@ Box gather(const AlphaGrid& g, WheelScratch& s, std::uint32_t wheel, const Box& 
 }
 
 } // namespace
+
+WheelScratch::Box
+labelShape(const AlphaGrid& grid, std::uint32_t c, std::uint32_t r, std::uint32_t label, WheelScratch& s) {
+    return flood(grid, c, r, label, s);
+}
 
 PixelRect wheelSearchRect(std::uint32_t width, std::uint32_t height) {
     const PixelRect band = wideContentRect(width, height);

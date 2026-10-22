@@ -83,6 +83,24 @@ private:
 // before the left glove's wrist on the held item is known) to the left glove's (1).
 xr_math::IdAngles leftHandTurn(const xr_math::IdAngles& rowTurn, float weight);
 
+// The turn and translation the viewmodel places the model by for a weapon's row: the row's turn reflected
+// toward the left glove by `weight` (leftHandTurn), and the row's translation moved so that, when the
+// [sights] row in force (`sight`, a mod's) is not the weapon's own (`ownSight`, the one the offset rows are
+// measured with), the gun turns about the wrist point `wrist` (metres, the aim's frame) under the turn
+// actually applied (xr_math::translationKeepingWrist). `keepWrist` false (ETERNALVR_VIEWMODEL_OFFSET in place
+// of the table's row) leaves the translation as given.
+struct RowPlacement {
+    Vec3 translation;
+    xr_math::IdAngles rotation;
+};
+RowPlacement rowPlacement(Vec3 translation,
+                          const xr_math::IdAngles& rowTurn,
+                          float weight,
+                          const std::optional<xr_math::IdAngles>& ownSight,
+                          const std::optional<xr_math::IdAngles>& sight,
+                          Vec3 wrist,
+                          bool keepWrist);
+
 // How far to move the model `placed` (relative to the eye, game units) so that its point `wristInModel` (the
 // left glove's wrist on the gun, model space, game units) lands at `wristInGrip` (metres, the grip's forward,
 // left and up) in the controller's grip: its position `grip` and its own orientation `gripAxis`.

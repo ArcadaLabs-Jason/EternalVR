@@ -9,7 +9,8 @@
 // live value unless the cvar is archived to a text config (flags 0x30000); a load sets each cvar from the
 // profile. The game saves the profile in every session, so a held value went into profile.bin and stayed in
 // the flat game: view_skipShakes 1 (no camera shake) after every Route S or Parallel Eye Rendering session
-// (rig: 0 before, 1 after), and the launcher's Sharpening level. A detour of the serializer, for the cvars of
+// (rig: 0 before, 1 after), and the launcher's Sharpening level; the HUD Scale VR holds at Large would have
+// stayed Large in the flat game the same way. A detour of the serializer, for the cvars of
 // mp_policy::profileStoredCvars:
 // - load: a cvar the layer wrote first gets its value from before the layer's first write, so the load sets
 //   the profile's value over it, or leaves the game's own when the profile has no key; the value after the
@@ -19,7 +20,8 @@
 //   cvar book, which asks the multiplayer guard). Without a load seen, the player's value is the one before
 //   the layer's first write.
 // - a change the player makes to one of these settings in the game's menu during a VR session is not saved:
-//   the hold overrides it live, and the save writes the value the profile's load gave.
+//   the hold overrides it live, and the save writes the value the profile's load gave. Except the HUD Scale,
+//   whose hold yields to it (runtime_cvars::playerChose, profilePlayerChoice): the saves write the choice.
 //
 // Locking: the swaps are made under runtime_cvars::heldMutex, which is then released while the game's
 // serializer runs; runtime_cvars::setProfileIo keeps apply() off these cvars until the hook takes the lock
@@ -39,11 +41,19 @@
 // Only while the multiplayer guard allows game touches; after a trip the book gave the player's values back
 // and the serializer runs as is.
 
+#include <string>
+#include <string_view>
+
 namespace evr::vkcore {
 
 // From vkCreateInstance with Route S or Parallel Eye Rendering, after the multiplayer guard, before the game
 // loads the profile. Locates the serializer (its signature once in .text, view_skipShakes' archive check
 // inside it) and hooks it; logs and does nothing when a check fails.
 void installProfileHooks();
+
+// Under runtime_cvars::heldMutex: the player chose `value` for the profile-stored cvar `name` in the game's
+// menu while the layer held it (runtime_cvars.hpp, playerChose): the saves write it from now on, and a
+// multiplayer guard trip gives it back.
+void profilePlayerChoice(std::string_view name, const std::string& value);
 
 } // namespace evr::vkcore

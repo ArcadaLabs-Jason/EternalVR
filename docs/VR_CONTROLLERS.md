@@ -1156,7 +1156,7 @@ seated).
 To measure a weapon: the hands rig's per-weapon sweep with the arm dump, or on the rig
 `ETERNALVR_VIEWMODEL_OFFSET=f,l,u` with the test input holding a hand still. The held item's name and
 offset are logged on each change. The key is the base weapon's decl: a weapon mod does not change the
-held item's decl, so one row covers every mod of a weapon.
+held item's decl, so one row covers every mod of a weapon (a `[sights]` row can name a mod, below).
 
 Weapon sights (on by default, T-135; `ETERNALVR_WEAPON_SIGHTS=0` turns them off on the rig): the table's
 `[sights]` section gives, per weapon, the direction of its sight line in the arms model's frame as the game
@@ -1165,9 +1165,19 @@ counter-clockwise seen from above). After the offset the model is turned about t
 on the controller, until that line runs parallel to the aim ray; a rotation in the offset (or in
 `ETERNALVR_VIEWMODEL_OFFSET`) is then a deliberate turn away from parallel. The shots and the aim dot keep
 the controller's ray: the sights point where the shots go, a fixed distance beside the ray (the sights'
-height and side above the hand). A weapon without a row (there is no default) is not turned. The held-item
-line logs the row and how far it turns the model. The rows are measured on the hands rig
-([rig-findings/hands-rig.md](rig-findings/hands-rig.md)).
+height and side above the hand). A weapon without a row (there is no default) is not turned. A weapon mod
+that changes the sight line has its own row, keyed by the weapon decl the mod puts in the held weapon while
+it is active (`idWeapon`'s mod overrides, one per fire mode, read each update in `src/vkcore/weapon_mods.cpp`;
+the type info is the same on the Steam and the Game Pass builds): the Heavy Cannon's Precision Bolt
+(`weapon/player/heavy_cannon_bolt_action`) draws a scope 0.2 degrees above the bore where the gun's iron
+sights are 3.5 degrees above it. Such a row wins over the weapon's while its mod is active, from the next
+update after a mod switch (`WeaponOffsetTable::lookupSight` with the mods), and the gun turns about the
+glove's wrist instead of the grip under the turn it is placed with, the left hand's included (`arm::rowPlacement`;
+not with `ETERNALVR_VIEWMODEL_OFFSET`, used as given), so the hand stays where the weapon's
+offset row puts it; a weapon whose mods have no row of their own keeps its row. The held-item line logs the
+held weapon's mods, the row and how far it turns the model, and a mod switch logs `mods changed on held`. The
+rows are measured on the hands rig ([rig-findings/hands-rig.md](rig-findings/hands-rig.md), sections 6 and
+18).
 
 Zoomed weapons (T-136; `src/game/eternal/zoom_look.hpp`, `zoom_look_book.hpp`, `src/vkcore/zoom_look.cpp`): a
 weapon's zoom (`ironSightZoom` in its decl) can hide the hands and the gun at the zoom's start

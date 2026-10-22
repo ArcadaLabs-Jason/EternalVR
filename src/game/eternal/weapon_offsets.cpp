@@ -6,6 +6,9 @@
 #include <cmath>
 #include <cstddef>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace evr::game {
 
@@ -123,22 +126,33 @@ std::optional<RightGrip> parseGrip(std::string_view value) {
     return RightGrip{GameGrip::HeavyCannon, std::array<float, 3>{v[0], v[1], v[2]}};
 }
 
-// The entry for `name` itself or for the longest key it starts with followed by '_'; never "default".
+// The entry for `name` itself or for the longest key it starts with followed by '_', with its key; never
+// "default". {nullptr, nullptr} when there is none.
 template <typename Entry>
-const Entry* specific(const std::map<std::string, Entry, std::less<>>& entries, std::string_view name) {
+std::pair<const std::string*, const Entry*>
+specificEntry(const std::map<std::string, Entry, std::less<>>& entries, std::string_view name) {
     if (const auto it = entries.find(name); it != entries.end()) {
-        return &it->second;
+        return {&it->first, &it->second};
     }
-    const Entry* best = nullptr;
-    std::size_t bestLength = 0;
+    std::pair<const std::string*, const Entry*> best{nullptr, nullptr};
     for (const auto& [key, entry] : entries) {
         if (key.size() < name.size() && name.starts_with(key) && name[key.size()] == '_' &&
-            key.size() > bestLength) {
-            best = &entry;
-            bestLength = key.size();
+            (!best.first || key.size() > best.first->size())) {
+            best = {&key, &entry};
         }
     }
     return best;
+}
+
+template <typename Entry>
+const Entry* specific(const std::map<std::string, Entry, std::less<>>& entries, std::string_view name) {
+    return specificEntry(entries, name).second;
+}
+
+// `mod` names a mod of the weapon `declName`: the weapon's decl name followed by '_'.
+bool modOf(std::string_view mod, std::string_view declName) {
+    return !declName.empty() && mod.size() > declName.size() + 1 && mod.starts_with(declName) &&
+           mod[declName.size()] == '_';
 }
 
 using OffsetMap = std::map<std::string, WeaponOffset, std::less<>>;
@@ -170,6 +184,26 @@ WeaponOffset WeaponOffsetTable::lookup(std::string_view declName, OffsetPosture 
 std::optional<WeaponSight> WeaponOffsetTable::lookupSight(std::string_view declName) const {
     const WeaponSight* match = specific(sights, declName);
     return match ? std::optional<WeaponSight>(*match) : std::nullopt;
+}
+
+std::optional<SightRow> WeaponOffsetTable::lookupSight(std::string_view declName,
+                                                       const WeaponModDecls& mods) const {
+    // A mod's row is a key past the weapon's own name: the mod's decl or a longer prefix of it.
+    std::pair<const std::string*, const WeaponSight*> best{nullptr, nullptr};
+    for (const std::string_view mod : mods) {
+        if (!modOf(mod, declName)) {
+            continue;
+        }
+        const auto match = specificEntry(sights, mod);
+        if (match.first && match.first->size() > declName.size() &&
+            (!best.first || match.first->size() > best.first->size())) {
+            best = match;
+        }
+    }
+    if (!best.first) {
+        best = specificEntry(sights, declName);
+    }
+    return best.first ? std::optional<SightRow>(SightRow{*best.second, *best.first}) : std::nullopt;
 }
 
 std::optional<RightGrip> WeaponOffsetTable::lookupRightGrip(std::string_view declName) const {

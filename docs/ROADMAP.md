@@ -2,7 +2,7 @@
 
 ## At a glance
 
-Status as of 2026-10-12 (v0.1.49). The order of the work left is under "Plan from v0.1.49".
+Status as of 2026-10-21 (v0.1.75). The order of the work left is under "Plan from v0.1.49".
 
 | Milestone | What a player sees or plays | Needs a person? | Status |
 |---|---|---|---|
@@ -12,12 +12,12 @@ Status as of 2026-10-12 (v0.1.49). The order of the work left is under "Plan fro
 | M2 Skeleton in the game | The flat game; a debug key turns the view without turning the aim | No, if command-line cvars reach the game (a level is loaded by `+map`); otherwise one short [owner] run into a level | Done |
 | **M3 First head-tracked view** | **Looking around inside the game in the Quest 3 (mono, gamepad or mouse to play); optional debug stereo peek** | Wears the headset | Done |
 | M4 Stereo | The game in 3D in the headset, head position tracked | Wears the headset | Done (per-eye TAA and DLSS, room-scale) |
-| **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for eight controller families, `docs/VR_CONTROLLERS.md`) |
-| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (v0.1.12); the wrist and weapon HUDs are options, checked on the rig, waiting for a headset test |
+| **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for eight controller families, `docs/VR_CONTROLLERS.md`); the gloves hold the weapons at the real hand (v0.1.62 to v0.1.67) |
+| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (v0.1.12); the wrist and weapon HUDs are options, checked on the rig, waiting for a headset test; the weapon wheel straight ahead with the HUD cut around it (v0.1.55), following the game's HUD scale (v0.1.75); the legibility protocol written (v0.1.57), its headset reading still open |
 | M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen, around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12) |
-| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles (Recommended plus the player's changes, marked in the window), each with its own controls, the controls editor, preflight, update alerts with in-place updates, and an Export report for bug reports |
-| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL, downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6); frame pacing to the headset (on by default); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
-| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.50; v0.2.0 is the first beta |
+| M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles (Recommended plus the player's changes, marked in the window), each with its own controls, the controls editor, preflight, update alerts with in-place updates, an Export report for bug reports, and a start watchdog that tells a slow start from one that stalls (v0.1.50) |
+| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL, downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6), and on AMD and Intel through the KHR path since v0.1.56 (a contributor's change, not yet seen in a headset on those GPUs); frame pacing to the headset (on by default); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.75; v0.2.0 is the first beta |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
 
 The Status column says what has shipped. The boxes in the milestones below are ticked only when a
@@ -79,12 +79,14 @@ Foundation, in order:
    campaign mission (done 2026-10-12 on Steam and Game Pass: `docs/rig-findings/online-features.md`); the
    guard checks run in every package QA (done 2026-10-13: the rig QA suite checks the guard in every game scenario
    and has two offline positive controls, `docs/rig-findings/mp-guard.md` section 4b); uninstall checked on a clean
-   machine (the Windows Sandbox check is written, `tools/rig/uninstall`, and waits for the rig PC's restart; the
+   machine (done 2026-10-16 in Windows Sandbox on the published v0.1.50 zip: nothing of EternalVR left after the
+   uninstall steps, `tools/rig/uninstall`; the
    HKCU route's empty leftover keys fixed: `docs/rig-findings/uninstall.md`). Exit: the M10 multiplayer and
    uninstall criteria pass.
 3. **Robustness** (M4.5, M8): a 30-minute simulator soak; a startup watchdog that tells "VR never
-   appeared" apart from a slow launch; adapter steering on two-GPU machines (built, off by default behind
-   `ETERNALVR_ADAPTER_STEER=1`, checked with a software Vulkan device; waiting for a two-GPU headset test:
+   appeared" apart from a slow launch (done: v0.1.50, see M8); adapter steering on two-GPU machines
+   (built, off by default behind `ETERNALVR_ADAPTER_STEER=1`, checked with a software Vulkan device;
+   waiting for a two-GPU headset test:
    `docs/rig-findings/adapter-steer.md`). Exit: those criteria pass.
 4. **Playthrough log** (REQ-01, M7): every campaign mission, both DLCs and the Fortress, each logged
    with its build. Exit: the M7 playthrough criterion passes.
@@ -123,7 +125,9 @@ headset.
    `data/weapons/viewmodel_offsets.toml`. Exit: on the rig, with the eye on the sight line, the sight
    line stays parallel to the aim ray within 0.25° for every weapon; the owner's headset look on two or
    three weapons. The owner decided after his headset look (2026-10-13): sights are on for everyone with
-   no option, and the weapons without a row yet follow as their rows are measured (T-135). Scopes do not
+   no option (T-135). On the rig every weapon meets the 0.25° exit (2026-10-22), the Heavy Cannon's row following
+   its active mod (the Precision Bolt's scope or the iron sights; rig-findings/hands-rig.md, section 18); the
+   headset look, and how the 3.3° turn at a Heavy Cannon mod switch feels, are still open. Scopes do not
    magnify for now; the owner agreed on 2026-10-16 that they need to eventually, as a scope lens after or at the end of
    the beta (a picture-in-picture scope is a separate feature, T-136).
 3. **Arm solve and model.** The arm solve fixed, with unit tests: the wrist's twist measured from the
@@ -446,7 +450,9 @@ Required for v1
       `src/engine/eternal` and `src/game/eternal`
 - [ ] No stall or deadlock (T-023): in a 30-minute simulator soak and an [owner] 30-minute headset
       session, the frame log shows no `xrEndFrame` gap over 1 s outside loading, and the run ends
-      cleanly through `stop.ps1`
+      cleanly through `stop.ps1` (the simulator half passed on v0.1.49, 2026-10-13, and again on v0.1.75, 2026-10-22:
+      31 minutes in play, the largest XR frame gap 48.6 ms, none over 100 ms, video memory flat, a clean stop; the
+      headset session is still to come)
 - [ ] [owner] SteamVR: the stereo build runs on SteamVR (Quest 3 over Steam Link); a tester on SteamVR with
       Index or on PSVR2 has run it and sent an "Export report", or the gap is recorded for the release
       notes (T-076)
@@ -637,7 +643,13 @@ Required for v1
       Standing, Slayer height / Real height, explicit calibration) changes the posture and height the
       layer reports on its debug overlay as specified in ARCHITECTURE section 6.2. The owner's profile
       defaults to Seated (T-074), and a new profile defaults to Auto
-- [ ] Startup watchdog tells "VR never appeared" apart from a slow launch, with guidance
+- [x] Startup watchdog tells "VR never appeared" apart from a slow launch, with guidance (v0.1.50,
+      `StartupWatchdog.cs`: a slow load is Info at 60 s and a stall a Warning at 300 s, no OpenXR session 30 s
+      after the first picture, a session the runtime does not start in 15 s and no headset frame in 15 s each a
+      Warning naming one thing to try; checked by 19 tests in every merge QA, one of them a positive control
+      that the session's monitor runs the watchdog; in the field, 46 player starts in exported reports walked the
+      steps to the headset's first frame with no stall message. The stall messages have not been seen in a player's
+      window yet)
 - [ ] Tester matrix (T-076): AMD (RDNA 2 and RDNA 3 or 4), Intel with XeSS, SteamVR with Index, and
       PSVR2 each have a tester who has run a current build, or the gap is recorded for the release
       notes; at least one external "Export report" received and readable
@@ -719,7 +731,7 @@ v1 if time allows
 
 ## M10: Beta and public release
 
-Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.50 (2026-09-28 to 2026-10-13) and
+Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.75 (2026-09-28 to 2026-10-21) and
 players reporting through GitHub issues.
 
 **Beta (owner's decision, 2026-10-13):** v0.2.0 is the first beta. It does not wait for every fault to be
@@ -756,15 +768,19 @@ Required for v1
       `eee2bb2` test package: the Steam scenarios and the Game Pass launch), trips it with the test trip in play and
       refuses multiplayer arguments and an unknown exe with a stand-in program (the positive controls: Steam build
       only; `docs/rig-findings/mp-guard.md` section 4b); the anti-cheat tripwire's negative test is not part of it
-- [ ] `THIRD_PARTY_NOTICES.md` complete (REQ-19, T-095): every adapted file has an origin header and is
+- [x] `THIRD_PARTY_NOTICES.md` complete (REQ-19, T-095): every adapted file has an origin header and is
       listed, every redistributed library is listed with its full licence text and any required
-      NOTICE, and the file is inside the release zip
+      NOTICE, and the file is inside the release zip (audited 2026-10-21 at v0.1.75: no adapted source file;
+      the one function signature taken from DE Advanced Options now credited with its BSD 2-Clause text;
+      safetyhook, Zydis, Zycore, the OpenXR loader with JsonCpp, Vulkan-Headers and the static MSVC runtime
+      listed with their licences; `make-release.ps1` refuses an unlisted third-party binary and copies the
+      file into the zip, where the v0.1.75 zip has it)
 - [ ] Uninstall (T-093): on a clean machine (T-105), after install, VR sessions and the launcher's uninstall
       action, the layer registry key and the game folder listing match a pre-install snapshot, and the
       flat settings equal the pre-VR snapshot. 2026-10-13: the default route writes no registry value; the
-      clean-machine check without the game is `tools/rig/uninstall/start-sandbox.ps1` (Windows Sandbox), not yet run
-      (the feature needs a restart of the rig PC); the launcher has no uninstall action yet (INSTALL.md's three steps
-      stand in); the VR sessions and the game folder listing need the game (`docs/rig-findings/uninstall.md`)
+      clean-machine check without the game is `tools/rig/uninstall/start-sandbox.ps1` (Windows Sandbox), run
+      2026-10-16 on the published v0.1.50 zip: no EternalVR file, folder or key left after the uninstall steps;
+      the launcher has no uninstall action yet (INSTALL.md's three steps stand in); the VR sessions and the game folder listing need the game (`docs/rig-findings/uninstall.md`)
 - [ ] Updates (T-123, which superseded T-093's update-check clause): the check disclosed in the launcher,
       at most once an hour, switchable off; the download and in-place install only when the player
       agrees, checked against the published SHA-256 and `SHA256SUMS.txt` (done since v0.1.5,

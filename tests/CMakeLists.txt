@@ -258,7 +258,7 @@ evr_add_test(evr_mp_policy_tests
         platform/mp_policy/profile_cvars_tests.cpp
         platform/mp_policy/saved_cvars_tests.cpp
         platform/mp_policy/trip_listeners_tests.cpp
-    DEPENDS evr_mp_policy)
+    DEPENDS evr_mp_policy evr_stereo_seq)
 # The argument cases the launcher's ArgumentPolicy tests read as well.
 target_compile_definitions(evr_mp_policy_tests
     PRIVATE EVR_MP_ARGUMENT_CASES="${CMAKE_CURRENT_SOURCE_DIR}/platform/mp_policy/argument-cases.txt")
@@ -407,6 +407,7 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/backdrop_tests.cpp
         ui_layer/crosshair_tests.cpp
         ui_layer/gui_target_tests.cpp
+        ui_layer/hud_blocks_tests.cpp
         ui_layer/hud_view_tests.cpp
         ui_layer/hud_regions_tests.cpp
         ui_layer/layout_tracker_tests.cpp

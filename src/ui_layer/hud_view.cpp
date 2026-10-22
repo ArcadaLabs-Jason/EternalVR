@@ -126,6 +126,12 @@ std::string describeHudView(const HudView& view) {
     } else {
         s += "; no weapon wheel quad";
     }
+    if (!view.handCuts.empty()) {
+        s += "; cut for the hand HUD:";
+        for (const PixelRect& p : view.handCuts) {
+            appendf(s, " (%lld, %lld) %u x %u", p.x, p.y, p.width, p.height);
+        }
+    }
     if (view.handQuads) {
         s += "; hand HUD quads shown too (not drawn)";
     }

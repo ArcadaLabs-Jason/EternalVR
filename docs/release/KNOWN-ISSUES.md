@@ -202,8 +202,13 @@ them is worse for you than described here.
   area is measured as an angle from where your head points, so a spot in the scene gets the same detail in
   both eyes (before, some detail off to the side could be sharp in one eye and blurry in the other). On
   headsets whose eye images aren't symmetric (Quest 3 for one) the blurrier band toward your nose and at
-  the top is narrower than in 0.1.47 and more of it sits on the outer side. It is off by default and off
-  with Parallel Eye Rendering. Since 0.1.56 it also runs on AMD Radeon RX 6000 or newer and Intel Arc cards,
+  the top is narrower than in 0.1.47 and more of it sits on the outer side. The bottom of the view is about
+  as far from where your head points as the outer edges (on Quest 3, 55 degrees down against 44 up), so it
+  gets the same coarsest shading; with DLSS, floors there can look blocky or streaked. Loading a checkpoint
+  doesn't move it from one eye to the other: I measured each eye's pattern before and after map loads on my
+  test PC and in captures from a headset session. If it looks different to you after a load, an in-headset
+  capture before and one after it from the same spot (hold the left Menu button and pull a trigger) would
+  help me a lot. It is off by default and off with Parallel Eye Rendering. Since 0.1.56 it also runs on AMD Radeon RX 6000 or newer and Intel Arc cards,
   through Vulkan's standard shading rate (a player's RX 6750 XT ran it; Intel Arc has not been tried, and
   my test PC has neither). If you use it, tell me how it looks to you.
 - **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
@@ -300,18 +305,20 @@ them is worse for you than described here.
   swimming hands now sit at your right hand too (before, about 25 cm ahead of it); the swim stroke still moves
   them around by up to about 10 cm. The Berserk fists and the Sentinel Hammer haven't been checked yet (I
   couldn't get either into the Slayer's hands on the test PC). Test rig only so far, not yet in a headset.
-- **Sights are lined up on five guns so far:** the Combat Shotgun, Heavy Cannon, Super Shotgun, Chaingun
-  and Ballista point their sights where the shots go. The other guns follow; until then their sights can
-  point a little off your aim. The sights run parallel to the shot line, about 9 to 20 cm above it, so up
-  close they sit a bit above where the shots go. The Ballista and the Chaingun have no sight parts, so they
-  line up along the barrel's bore (Ballista) and the zoom axis (Chaingun). Shots always go along your
-  controller's aim, and the Aim dot sits exactly on that line at any distance.
+- **Sights are lined up on every gun, but only checked on the test PC so far, not in a headset.** Every
+  gun points its sights where the shots go, and the Heavy Cannon follows the mod you have active: the
+  Precision Bolt's scope with the Bolt, the iron sights otherwise. The sights run parallel to the shot line,
+  about 9 to 20 cm above it, so up close they sit a bit above where the shots go. Guns with no sight parts
+  (Plasma Rifle, Rocket Launcher, Ballista, BFG 9000, Unmaykr) line up along the barrel, and the Chaingun
+  along its zoom axis. Shots always go along your controller's aim, and the Aim dot sits exactly on that line
+  at any distance.
 - **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
   Aim dot shows where shots go.
-- **The Precision Bolt's scope points about 3 degrees off your aim.** The Heavy Cannon's sights are lined up
-  for its iron sights, so with the Bolt the scope on the gun sits a little off the shot line. Go by the Aim
-  dot.
+- **Switching the Heavy Cannon's mod turns the gun by about 3 degrees.** The Precision Bolt's scope and the
+  iron sights point about 3 degrees apart, so when you switch between the Bolt and the Micro Missiles the gun
+  turns a little to put the sights you now have on your aim. Your hand stays where it is. I haven't tried it
+  in a headset yet, so I don't know yet whether the turn bothers you.
 - **With head aim there is no crosshair or aim mark while the Precision Bolt is zoomed in.** Shots go to the
   middle of your view. On the Game Pass version, head aim may still show the scope's ring (the zoom
   bit is unchecked there; I have not tested it).
@@ -348,9 +355,20 @@ them is worse for you than described here.
   shown straight ahead, with motion controllers or a gamepad. The mod finds the wheel where the game drew
   it, so a larger HUD layout no longer leaves the wheel's edges behind on the HUD; the very first time it
   opens in a session it can sit at its usual place on the right for a frame or two.
-- **Health and ammo on the wrist or the gun with a larger HUD.** Those modes cut the corners of the HUD by
-  fixed rectangles made for the default layout. When the game lays its HUD out larger (one tester's was
-  about 10% larger), a thin edge of the health or ammo block can stay on the floating panel.
+- **The game's HUD Scale is Large in VR.** The mod sets the game's own HUD Scale to Large while you play in
+  VR, so its small text (mission challenges, the demonic corruption bar, the equipment labels) is easier to
+  read; your own HUD Scale stays for the flat game. If you change HUD Scale in the game's menu during VR, your
+  choice sticks for the rest of that session and is saved as your own setting, like in the flat game (picking
+  Large changes nothing, since that's what VR already shows). To make the HUD bigger or smaller in VR without
+  touching the game's setting, change HUD distance or size on the Advanced tab. Two small texts are still a
+  little under the size I aim for: the hint under the mission challenges and the demonic corruption title.
+  Checked on the test PC, not tried in a headset yet.
+- **Health and ammo on the wrist or the gun** now follow where the game draws them, at any HUD Scale (checked
+  on the test PC, not in a headset yet). When you start the game they show on the floating panel for a moment
+  until the mod has found them; after that they stay on the wrist or the gun across levels. Something new in
+  them (an extra life, the equipment row) can show on the panel for a moment before it moves too. The wrist
+  needs both the health and the ammo block on screen, the gun needs the ammo block: if you hid one in the
+  game's HUD settings, the whole HUD stays on the floating panel.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
   new and has not been tried in a headset yet. How far you need to turn your hand may change.
 - **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new

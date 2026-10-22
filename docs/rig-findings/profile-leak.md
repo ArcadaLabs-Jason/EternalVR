@@ -38,7 +38,8 @@ profile's own fields (the DLSS index, the Reflections level), so a held value sa
 ## The fix (vkcore/profile_hooks.hpp)
 
 A detour of 0x141D040 (signature once in `.text` on both builds; view_skipShakes' archive check found inside
-it, +0x1A8F on both) for `mp_policy::profileStoredCvars` (view_skipShakes, r_sharpening):
+it, +0x1A8F on both) for `mp_policy::profileStoredCvars` (view_skipShakes, r_sharpening, and since the HUD
+Scale hold `swf_anchorProfile`: docs/rig-findings/hud-scale.md):
 
 - load: a cvar the layer wrote first gets its value from before the layer's first write, so the load sets the
   profile's value, or leaves the game's own when the profile has no key. The value after the load is the

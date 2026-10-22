@@ -83,6 +83,8 @@ ArmDumpRecord sample() {
     r.armsItem = "weapon/player/fists_swim";
     r.handsState = 12;
     r.handsSwim = true;
+    r.mods = {"", "weapon/player/heavy_cannon_bolt_action"};
+    r.sightRow = "weapon/player/heavy_cannon_bolt_action";
     return r;
 }
 
@@ -99,7 +101,8 @@ TEST_CASE("a dump line is one balanced JSON object with every key in order") {
               0) == 0);
     std::size_t at = 0;
     for (const char* key : {"\"input\":", "\"arms\":", "\"model\":", "\"head\":", "\"item\":", "\"weapon\":",
-                            "\"aim\":", "\"grip\":", "\"offgrip\":", "\"arms_item\":", "\"hstate\":"}) {
+                            "\"aim\":", "\"grip\":", "\"offgrip\":", "\"arms_item\":", "\"hstate\":",
+                            "\"hswim\":", "\"mods\":", "\"sight\":"}) {
         const std::size_t found = line.find(key, at);
         CHECK_MESSAGE(found != std::string::npos, key);
         at = found == std::string::npos ? at : found;
@@ -129,7 +132,9 @@ TEST_CASE("a dump line gives the scripted input, the arms and the view as docume
                    "1.00000]},\"head\":null,\"item\":\"weapon/player/shotgun\",\"weapon\":[0.58500,"));
     CHECK(contains(line, "\"aim\":{\"origin\":[0.30000,-0.15000,-0.25000],\"dir\":[1.00000,0.00000,0.00000]},"
                          "\"grip\":[0.30000,-0.15000,-0.25000],\"offgrip\":null,"
-                         "\"arms_item\":\"weapon/player/fists_swim\",\"hstate\":12,\"hswim\":true}\n"));
+                         "\"arms_item\":\"weapon/player/fists_swim\",\"hstate\":12,\"hswim\":true,"
+                         "\"mods\":[\"\",\"weapon/player/heavy_cannon_bolt_action\"],"
+                         "\"sight\":\"weapon/player/heavy_cannon_bolt_action\"}\n"));
 }
 
 TEST_CASE("a dump line escapes the item's name and writes null for what is not known") {
@@ -144,5 +149,5 @@ TEST_CASE("a dump line escapes the item's name and writes null for what is not k
     CHECK(contains(line, "\"input\":{\"L\":null,\"R\":null}"));
     CHECK(contains(line, "\"model\":null,\"head\":null"));
     CHECK(contains(line, "\"weapon\":null,\"aim\":null,\"grip\":null,\"offgrip\":null,\"arms_item\":\"\","
-                         "\"hstate\":null,\"hswim\":null}"));
+                         "\"hstate\":null,\"hswim\":null,\"mods\":[\"\",\"\"],\"sight\":\"\"}"));
 }

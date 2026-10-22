@@ -1,3 +1,4 @@
+#include "hud_test_cuts.hpp"
 #include "ui_layer/hud_regions.hpp"
 #include "ui_layer/weapon_wheel.hpp"
 #include "ui_layer/wheel_bounds.hpp"
@@ -248,8 +249,6 @@ TEST_CASE("wheel bounds: the larger HUD's wheel fell outside the fixed rectangle
 }
 
 TEST_CASE("wheel bounds: on the default HUD the measured wheel stays clear of the corner blocks") {
-    using evr::ui_layer::cutRect;
-    using evr::ui_layer::WristBlock;
     for (std::size_t i = 1; i < std::size(wheel_grids::kGrids); ++i) {
         const wheel_grids::Grid& g = wheel_grids::kGrids[i];
         if (!g.hasWheel) {
@@ -258,8 +257,8 @@ TEST_CASE("wheel bounds: on the default HUD the measured wheel stays clear of th
         CAPTURE(g.what);
         const std::optional<PixelRect> wheel = measureWheel(decode(g), g.width, g.height);
         REQUIRE(wheel);
-        for (const WristBlock b : {WristBlock::Vitals, WristBlock::Weapon}) {
-            CHECK_FALSE(overlap(*wheel, cutRect(b, g.width, g.height)));
+        for (const PixelRect& cut : hud_test::cutsAt(false, hud_test::corners(), g.width, g.height).cuts) {
+            CHECK_FALSE(overlap(*wheel, cut));
         }
     }
 }

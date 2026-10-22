@@ -233,6 +233,27 @@ TEST_CASE("window cvars: without a size on the command line, ETERNALVR_WINDOW's"
     }
 }
 
+TEST_CASE("VR held cvars: the comfort set and the HUD Scale at Large, which yields to the game's menu") {
+    // What Route S (runtime_cvars.cpp) and Parallel Eye Rendering (runtime_cvars_pe.cpp) hold.
+    const auto held = evr::stereo_seq::stereoVrHeldCvars();
+    const auto& comfort = evr::stereo_seq::stereoComfortCvars();
+    REQUIRE(held.size() == comfort.size() + 1);
+    for (std::size_t i = 0; i < comfort.size(); ++i) {
+        CHECK(std::string(held[i].name) == std::string(comfort[i].name));
+        CHECK(std::string(held[i].value) == std::string(comfort[i].value));
+        CHECK_FALSE(held[i].yields);
+    }
+    int hud = 0;
+    for (const auto& c : held) {
+        if (c.name == "swf_anchorProfile") {
+            ++hud;
+            CHECK(std::string(c.value) == "2");
+            CHECK(c.yields);
+        }
+    }
+    CHECK(hud == 1);
+}
+
 TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name once") {
     const auto& held = evr::stereo_seq::stereoComfortCvars();
     const auto value = [&](const char* name) -> std::string {

@@ -19,8 +19,9 @@ without it the arm holding the gun is out of view; `ETERNALVR_WEAPON_ARM=game` t
 ```
 XR worker, every XR frame (presenter_wrist.cpp)
   UI quad filled as before: the 16:9 band of the GUI target (wideContentRect), head-locked
-  wrist mode, no menu panel up (nor held), controllers attached?
-    head-locked pieces: the band minus the two bottom corners (health block, weapon block)
+  wrist mode, no menu panel up (nor held), controllers attached, both corner blocks measured?
+    head-locked pieces: the band minus the two bottom corners (health block, weapon block), where the game
+      drew them (the GUI readback, hud_blocks.hpp)
     facing test: the off hand's grip pose and the head (controller snapshot, room space)
       facing angle <= 40 deg and gaze angle <= 40 deg -> shown; > 55 deg either -> hidden
     shown (or fading): three quads in the off hand's grip space, cropped from the same UI image
@@ -36,15 +37,54 @@ XR worker, every XR frame (presenter_wrist.cpp)
   show on the wrist only under head aim. Everything else on the GUI target stays on the
   head-locked quad: subtitles, prompts, pop-ups, boss and encounter bars, markers, the damage direction.
   The corners are always cut from the head-locked quad in wrist mode, so they show only on the wrist.
-- **Where the crops come from** (`ui_layer/hud_regions.hpp`). The blocks are fixed rectangles in the HUD's
-  16:9 band, measured on the rig's GUI captures (2560x2100 and 2054x2068; the same band coordinates to 0.005
-  in both) with a margin for animations and key hints. The band is `ui_layer::wideContentRect`, the same
-  rows the UI quad shows since the render size made the eye image near-square (1280x1400, 2064x2100), so a
-  crop never reaches the empty rows above or below it; on a GUI target wider than 16:9 it is the centred
-  columns the game fits its 16:9 frame into (a 2048x864 capture had the corners within 0.002 of the band
-  coordinates above; up to 0.1.70 such a target was taken whole and the corners were cut at the wrong
-  columns). Unit tests check every block and cut lies in the band at 1280x1400, 2064x2100, 2560x2100,
-  2054x2068, 1920x1080, 2048x864 and 2560x1080, and that the blocks hold what the 2048x864 capture shows.
+- **Where the crops come from** (`ui_layer/hud_regions.hpp`, `ui_layer/hud_blocks.hpp`). Each corner block
+  is cut where the game drew it, measured from the GUI image ("Where the corner blocks are" below), and
+  grown to the band's side and bottom edges it sits at; its hand quad shows that same rectangle. The band is
+  `ui_layer::wideContentRect`, the same rows the UI quad shows since the render size made the eye image
+  near-square (1280x1400, 2064x2100), so a crop never reaches the empty rows above or below it; on a GUI
+  target wider than 16:9 it is the centred columns the game fits its 16:9 frame into (up to 0.1.70 such a
+  target was taken whole and the corners were cut at the wrong columns). The ability rings are a fixed
+  rectangle (x 0.39..0.61, y 0.43..0.59 of the band): they are drawn the same at every HUD Scale. Unit tests
+  check every cut lies in the band at 1280x1400, 2064x2100, 2560x2100, 2054x2068, 1920x1080, 2048x864 and
+  2560x1080 and holds its block.
+- **Where the corner blocks are** (`ui_layer/hud_blocks.hpp`, `vkcore/wheel_probe_corners.cpp`). The blocks'
+  size and place follow the game's HUD Scale (Large, which VR holds, draws them about 17% larger than Medium;
+  `hud_regions.hpp` has the band coordinates at Small, Medium and Large) and what they hold: the extra lives
+  row above health and armor, the equipment row and its key hints above the ammo come and go, and the opening
+  cinematic's skip prompt sits where the ammo block goes. Up to 0.1.75 the cuts were fixed rectangles made for
+  Medium (x 0..0.215 and 0.765..1 from y 0.76 of the band): at Large about 6.5% of the health block's drawn
+  pixels and 2.6% of the ammo block's stayed on the head-locked HUD. The weapon wheel's readback
+  (`vkcore/wheel_probe.hpp`, docs/VR_MENUS.md, "Where the wheel shows") reads the corners too: in wrist or
+  weapon mode, outside menus and full-screen backdrops (a fade) with the wheel down, a GUI copy copies every 4th row of the band's two bottom corners (the bottom 40% of
+  its height, the outer 40% of its width on each side) into the same host buffer. The layer then labels the
+  connected drawn shapes (alpha 16 or more on a 4-pixel grid) in each corner and takes the largest one that
+  touches neither the corner's top nor its inner edge (a menu or a fade fills the corner and touches them; so
+  do the open wheel's bottom and a long subtitle reaching in from the middle): the block's bars and icons,
+  which their glow joins. It must reach below 0.85 of the band's height and be at least 5% of its width
+  across; with it go the shapes whose box comes within 2% of the band's height of the block's (a key hint
+  label), until none does; a result more than 30% of the band's width or height across is not a block. The
+  box is grown by the grid's step and 1% of the band's width. The head-locked HUD and the hand quads use the
+  union of each block's last 8 readings: a block that grows (the extra lives row appears) is cut whole from
+  its next reading on, and the space it leaves comes back 8 readings later. Readings are made every GUI copy
+  until one finds both blocks (at most 30 of them: a HUD the player hid has nothing to find), then every
+  30th; a copy that finds no reading slot free leaves the read to the next one; a new target size starts over
+  (the cuts stay across map loads at one size). Wrist mode needs both blocks measured, weapon mode the ammo
+  block (and health and armor with `ETERNALVR_WEAPON_HUD_VITALS=1`): a player who hid one in the game's HUD
+  settings keeps the whole HUD on the head-locked quad. A corner more than half drawn (a fade, a backdrop) is not labelled.
+  Until both blocks of a mode are measured the hand HUD waits and the whole HUD stays on the head-locked quad
+  (logged once: `... HUD waits for where the game drew the corner blocks`); on the rig, after a map's loading
+  screen and its fade, the fourth GUI copy read found both blocks (the three before it found neither). Each change of the cuts
+  is logged (`... HUD cuts the corner blocks where the game drew them: health and armor GUI rect ..., ammo
+  ...`, the first 40), and the readback's `ui: corner blocks:` lines (the first reading that finds both, then
+  every 60 readings) give its CPU and GPU time. On the rig (Release, 2048x2208 GUI target, 3 minutes in play
+  in e1m3) a reading took 270 to 290 us of the present hook's CPU on average (65 to 80 of them reading the
+  grid out of the host buffer), 490 us at most, and its copy about 105 us of GPU time; at every 30th GUI copy
+  that is 9 to 10 us a copy on average. It runs on the present hook as the wheel's does; moving the measuring
+  to a worker thread would take it off there. In panel mode nothing is read. A GPU without cached host memory has no readback: the wheel stays
+  where the game draws it and the hand HUDs are not shown (logged). Nothing here reads game memory, so it is
+  the same on Steam and Game Pass. Unit tests measure both corners of real GUI captures at Small, Medium and
+  Large, with the wheel open, in a cinematic and on a loading screen, against the blocks as drawn at full
+  resolution; rig QA `hand-hud-large` checks the GUI captures against the logged cuts.
 - **Where the panel is** (`ui_layer/wrist_hud.hpp`). In the off hand's OpenXR grip space: on the inside of
   the forearm (the palm side), 13 cm behind the grip toward the elbow and 4 cm out from the palm, the
   vitals + weapon row 16 cm wide. The panel's normal is the palm's; the image's up is the thumb side. Turning
@@ -64,8 +104,9 @@ XR worker, every XR frame (presenter_wrist.cpp)
   up or its panel is held for the backdrop (the menu panel takes the UI quad as before). The desktop window's
   menu image, the wash filter and the crosshair mask work on the UI image itself, which the wrist quads
   share, so they are unchanged.
-- **Fallbacks.** No controllers, a stale controller snapshot, no grip space: the whole HUD stays on the
-  head-locked quad as in panel mode (logged once). Loading screens and menus are unchanged.
+- **Fallbacks.** No controllers, a stale controller snapshot, no grip space, or the corner blocks not
+  measured yet: the whole HUD stays on the head-locked quad as in panel mode (logged once). Loading screens
+  and menus are unchanged.
 - **Head-locked HUD.** `ETERNALVR_HUD=panel` (the default; launcher: "Health and ammo" = On the HUD panel) is
   the earlier behaviour, unchanged.
 
@@ -77,7 +118,7 @@ the gun the way a VR shooter shows it, read with a glance at the hand that holds
 ```
 XR worker, every XR frame (presenter_wrist.cpp, the same path as the wrist)
   UI quad filled as before; weapon mode, no menu panel up (nor held), controllers attached?
-    head-locked pieces: the band minus the bottom-right corner (ammo block); with
+    head-locked pieces: the band minus the bottom-right corner (ammo block) where the game drew it; with
       ETERNALVR_WEAPON_HUD_VITALS=1 minus both corners, as on the wrist
     the gun's frame: the weapon hand's grip position with its aim orientation (the viewmodel's)
     facing test: the panel's normal and the head (controller snapshot, room space)
@@ -86,7 +127,8 @@ XR worker, every XR frame (presenter_wrist.cpp, the same path as the wrist)
 ```
 
 - **What moves to the gun.** The HUD's bottom-right block: the ammo count, the equipment (grenade, its
-  cooldown) and the flame belch, cropped from the GUI target exactly as the wrist does (`hud_regions.hpp`).
+  cooldown) and the flame belch, cropped from the GUI target where the game drew it, exactly as the wrist
+  does (`hud_blocks.hpp`).
   Health and armor stay on the head-locked quad unless `ETERNALVR_WEAPON_HUD_VITALS=1`, which puts the
   bottom-left block beside the ammo at the same scale (on the image's left, as on screen). The ability rings
   stay head-locked. Everything else on the GUI target is as in wrist mode.

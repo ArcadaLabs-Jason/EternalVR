@@ -267,7 +267,7 @@ void start(bool stereo) {
         g_held.push_back(Held{std::string(ssdoFilter.name), std::string(ssdoFilter.value), true, false});
         g_held.back().ssdo = true;
         addWindowSet(g_held);
-        for (const auto& c : stereo_seq::stereoComfortCvars()) {
+        for (const auto& c : stereo_seq::stereoVrHeldCvars()) {
             g_held.push_back(comfortHeld(c));
         }
         const std::string ssdo = narrowEnv(L"ETERNALVR_STEREO_SSDO");
@@ -398,8 +398,13 @@ std::string narrowEnv(const wchar_t* name) {
     return narrow;
 }
 
+std::vector<Held>& heldList() {
+    return g_held;
+}
+
 Held comfortHeld(const stereo_seq::CvarExpectation& c) {
     Held h{std::string(c.name), std::string(c.value), true, false};
+    h.yields = c.yields;
     if (c.fraction) {
         h.exact = true;
         h.exactValue = std::strtof(h.value.c_str(), nullptr);
@@ -458,6 +463,9 @@ void apply(bool stereo) {
                     "renders at its window's size (a held size would resize the window)",
                     kTag, h.name.c_str(), readValue(h.object), h.value.c_str());
             }
+            continue;
+        }
+        if (h.yields && yieldTurn(h)) {
             continue;
         }
         const int before = readValue(h.object);

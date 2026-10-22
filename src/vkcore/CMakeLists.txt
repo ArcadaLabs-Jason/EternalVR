@@ -139,6 +139,7 @@ add_library(evr_layer SHARED
     runtime_cvars.cpp
     runtime_cvars_pe.cpp
     runtime_cvars_reticle.cpp
+    runtime_cvars_yield.cpp
     profile_hooks.cpp
     pe_flares.cpp
     pe_flare_contexts.cpp
@@ -242,6 +243,7 @@ add_library(evr_layer SHARED
     virtual_client_settings.cpp
     vram_watch.cpp
     wheel_probe.cpp
+    wheel_probe_corners.cpp
     window_cap.cpp
     xr_presenter.cpp)
 # Motion controllers (M5, controllers.hpp).
@@ -293,6 +295,7 @@ target_sources(evr_layer PRIVATE
     usercmd_hook.cpp
     view_poses.cpp
     viewmodel_hook.cpp
+    weapon_mods.cpp
     vrs_command_buffers.cpp
     vrs_gui.cpp
     vrs_khr.cpp

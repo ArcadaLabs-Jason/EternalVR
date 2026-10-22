@@ -5,7 +5,8 @@
 // Every 0.25 s the off-hand hook appends one JSON line (features/arm/arm_dump_line.hpp) with what the
 // layer read and wrote for both arms at that tick: the scripted input as read, both arms' final poses (the
 // layer's modifiers as written), their read-back and animated poses, the wrist target, the posing state
-// and weight, the arms model's placement, the held item, the weapon's root joint and the ray shots take.
+// and weight, the arms model's placement, the held item, its active mods and the sights row in force, the
+// weapon's root joint and the ray shots take.
 // Everything comes from values the off-hand hook, the weapon arm and the viewmodel hook already read; no
 // game function or field is added. Without the variable nothing is collected or written.
 //

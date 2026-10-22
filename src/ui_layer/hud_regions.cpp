@@ -27,16 +27,8 @@ PixelRect fromEdges(std::int64_t x0, std::int64_t y0, std::int64_t x1, std::int6
 
 } // namespace
 
-BandRect wristBlockRect(WristBlock block) {
-    switch (block) {
-    case WristBlock::Vitals:
-        return {0.0f, 0.76f, 0.215f, 1.0f};
-    case WristBlock::Weapon:
-        return {0.765f, 0.76f, 1.0f, 1.0f};
-    case WristBlock::Abilities:
-        return {0.39f, 0.43f, 0.61f, 0.59f};
-    }
-    return {};
+BandRect abilitiesRect() {
+    return {0.39f, 0.43f, 0.61f, 0.59f};
 }
 
 PixelRect toPixels(const BandRect& rect, std::uint32_t width, std::uint32_t height) {
@@ -59,12 +51,15 @@ PixelRect toPixels(const BandRect& rect, std::uint32_t width, std::uint32_t heig
     return fromEdges(x0, y0, x1, y1);
 }
 
-PixelRect cutRect(WristBlock block, std::uint32_t width, std::uint32_t height) {
-    const PixelRect r = toPixels(wristBlockRect(block), width, height);
-    if (r.width == 0) {
+PixelRect cutRect(WristBlock block, const PixelRect& drawn, std::uint32_t width, std::uint32_t height) {
+    const PixelRect band = wideContentRect(width, height);
+    // Inside the band (a measured rectangle is; this keeps any other inside too).
+    const PixelRect r =
+        fromEdges(std::max<std::int64_t>(drawn.x, band.x), std::max<std::int64_t>(drawn.y, band.y),
+                  std::min(right(drawn), right(band)), std::min(bottom(drawn), bottom(band)));
+    if (r.width == 0 || r.height == 0) {
         return {};
     }
-    const PixelRect band = wideContentRect(width, height);
     switch (block) {
     case WristBlock::Vitals:
         return fromEdges(band.x, r.y, right(r), bottom(band));
@@ -74,6 +69,24 @@ PixelRect cutRect(WristBlock block, std::uint32_t width, std::uint32_t height) {
         return {};
     }
     return {};
+}
+
+HandCuts handCuts(const std::vector<WristBlock>& moved,
+                  const CornerBlocks& drawn,
+                  std::uint32_t width,
+                  std::uint32_t height) {
+    HandCuts out;
+    for (const WristBlock block : moved) {
+        const std::optional<PixelRect>& at = block == WristBlock::Vitals ? drawn.vitals : drawn.weapon;
+        const PixelRect cut = at ? cutRect(block, *at, width, height) : PixelRect{};
+        if (cut.width == 0 || cut.height == 0) {
+            return {};
+        }
+        (block == WristBlock::Vitals ? out.vitals : out.weapon) = cut;
+        out.cuts.push_back(cut);
+    }
+    out.complete = !out.cuts.empty();
+    return out;
 }
 
 std::vector<PixelRect> subtractRects(const PixelRect& whole, const std::vector<PixelRect>& cuts) {

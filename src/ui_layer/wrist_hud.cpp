@@ -97,12 +97,16 @@ float WristFade::update(bool target, float dtSeconds, const WristSettings& s) {
     return alpha_;
 }
 
-std::vector<WristQuad> layoutWristQuads(
-    const Pose& hand, std::uint32_t width, std::uint32_t height, const WristSettings& s, bool leftHand) {
-    const PixelRect vitals = toPixels(wristBlockRect(WristBlock::Vitals), width, height);
-    const PixelRect weapon = toPixels(wristBlockRect(WristBlock::Weapon), width, height);
+std::vector<WristQuad> layoutWristQuads(const Pose& hand,
+                                        const PixelRect& vitals,
+                                        const PixelRect& weapon,
+                                        std::uint32_t width,
+                                        std::uint32_t height,
+                                        const WristSettings& s,
+                                        bool leftHand) {
     const std::uint32_t rowPixels = vitals.width + weapon.width;
-    if (rowPixels == 0 || vitals.height == 0 || weapon.height == 0) {
+    if (width == 0 || height == 0 || vitals.width == 0 || weapon.width == 0 || vitals.height == 0 ||
+        weapon.height == 0) {
         return {};
     }
     const float metresPerPixel = s.widthMetres / static_cast<float>(rowPixels);
@@ -117,36 +121,25 @@ std::vector<WristQuad> layoutWristQuads(
         return q;
     };
     const float rowWidth = s.widthMetres;
+    // Both blocks reach the band's bottom: their bottoms in line, as on screen.
+    const float rowHeight = static_cast<float>(std::max(vitals.height, weapon.height)) * metresPerPixel;
+    const auto lineY = [&](const PixelRect& rect) {
+        return (static_cast<float>(rect.height) * metresPerPixel - rowHeight) / 2.0f;
+    };
     std::vector<WristQuad> quads;
     const float vitalsWidth = static_cast<float>(vitals.width) * metresPerPixel;
     const float weaponWidth = static_cast<float>(weapon.width) * metresPerPixel;
-    quads.push_back(quadAt(WristBlock::Vitals, vitals, -rowWidth / 2.0f + vitalsWidth / 2.0f, 0.0f));
-    quads.push_back(quadAt(WristBlock::Weapon, weapon, rowWidth / 2.0f - weaponWidth / 2.0f, 0.0f));
+    quads.push_back(quadAt(WristBlock::Vitals, vitals, -rowWidth / 2.0f + vitalsWidth / 2.0f, lineY(vitals)));
+    quads.push_back(quadAt(WristBlock::Weapon, weapon, rowWidth / 2.0f - weaponWidth / 2.0f, lineY(weapon)));
     if (s.abilities) {
-        const PixelRect abilities = toPixels(wristBlockRect(WristBlock::Abilities), width, height);
+        const PixelRect abilities = toPixels(abilitiesRect(), width, height);
         if (abilities.width != 0 && abilities.height != 0) {
-            const float rowHeight =
-                static_cast<float>(std::max(vitals.height, weapon.height)) * metresPerPixel;
             const float abilitiesHeight = static_cast<float>(abilities.height) * metresPerPixel;
             quads.push_back(quadAt(WristBlock::Abilities, abilities, 0.0f,
                                    rowHeight / 2.0f + kAbilitiesGap + abilitiesHeight / 2.0f));
         }
     }
     return quads;
-}
-
-std::vector<PixelRect> headLockedPieces(const PixelRect& shown,
-                                        std::uint32_t width,
-                                        std::uint32_t height,
-                                        const std::vector<WristBlock>& moved) {
-    if (width == 0 || height == 0) {
-        return {};
-    }
-    std::vector<PixelRect> cuts;
-    for (const WristBlock block : moved) {
-        cuts.push_back(cutRect(block, width, height));
-    }
-    return subtractRects(shown, cuts);
 }
 
 } // namespace evr::ui_layer

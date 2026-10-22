@@ -74,9 +74,21 @@ criterion's "flat settings equal the pre-VR snapshot".
 
 ## 4. Results
 
-- **Not a clean machine yet.** Windows Sandbox (`Containers-DisposableClientVM`) was not enabled on the development
-  PC; enabling it on 2026-10-13 reported that a restart is needed, and the PC was not restarted. The check of
-  section 3 has not run in the sandbox.
+- **Clean machine, 2026-10-16** (Windows Sandbox, the published v0.1.50 zip `EternalVR-alpha-0.1.50-2ac77a1.zip`;
+  evidence `<workspace>\sandbox-0150b\evidence\run.log`, the diffs and the two window shots; [sandbox]):
+  the zip matched its published SHA-256 and all 31 files their `SHA256SUMS.txt` lines; the launcher window opened
+  on the first run (`02-first-run.png`); `--dry-run` changed nothing in the targeted snapshot; the registration of
+  step 4 created `SOFTWARE\Khronos`, `SOFTWARE\Khronos\Vulkan` and `ImplicitLayers` (none existed), and the next
+  `--dry-run` removed the value, the marker and all three keys (targeted snapshot 0 added, 0 removed); after the
+  uninstall steps the EternalVR file listing and the targeted registry snapshot equal the pre-install ones. What the
+  diffs still show is Windows' own: `UserAssist` and `MuiCache` entries naming the launcher (Windows records every
+  program it runs), `HKLM\SOFTWARE\Microsoft\Tracing\EternalVR_RASAPI32` and `EternalVR_RASMANCS` (written by
+  Windows' networking stack when the update check loads it; HKLM because the sandbox user is an administrator), and
+  the performance counter names Windows rewrites on a program's first run. An earlier run the same evening never
+  opened the launcher window (Windows PowerShell 5.1 refuses an empty `-ArgumentList`; fixed in the kit, which now
+  fails the run when the launcher does not start). Left in the kit: in the sandbox's logon session the launcher's
+  window title reads empty, so the kit stops the launcher instead of closing its window; harmless here, since
+  step 3 deletes the launcher's data folder.
 - **Mechanics on the development PC, 2026-10-13** (`uninstall-check.ps1 -HostTest`, the `eee2bb2` test package's
   zip and launcher; evidence `<workspace>\UNINSTALL-20261013\host-test2\run.log`; [rig]): the zip
   matched its `.sha256` and all 31 files their `SHA256SUMS.txt` lines; `--dry-run` with a scratch data folder changed
@@ -92,4 +104,4 @@ criterion's "flat settings equal the pre-VR snapshot".
   are deleted deepest first, a created key holding another value is kept (and so are its parents), a key that existed
   before is kept even when empty, and a marker naming a key that is not the layer key or a parent of it leaves that
   key alone. Each check fails when its part of the clean-up is taken out (no key deletion; every `created key:` line
-  accepted; no emptiness check). The sandbox run is still to show it on a clean machine.
+  accepted; no emptiness check). The sandbox run of 2026-10-16 shows it on a clean machine (above).

@@ -388,7 +388,7 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Motion controllers | Play with the headset's controllers; off for keyboard, mouse or a gamepad | On |
 | Shots come from | Your weapon hand, Your eyes (stops shots through thin walls) | Your weapon hand |
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
-| HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m) | 1.5 m, 2 m, 0 |
+| HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m). In VR the game's own HUD Scale is set to Large so its small text is easier to read; your own HUD Scale stays for the flat game (changing it in the game's menu during VR sticks and is saved), and these settings make the HUD bigger or smaller | 1.5 m, 2 m, 0 |
 | Health and ammo | On the HUD panel; On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you); or On your weapon (experimental: the ammo just above the back of the gun in your weapon hand, health and armour stay on the panel). The wrist and the weapon need Motion controllers | On the HUD panel |
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |

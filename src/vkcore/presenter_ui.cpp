@@ -341,8 +341,11 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
         mirror.keepPanel(dev, cb, family, image, uiExtent, panel->format, panel->extent);
     }
     uiBackdrop.record(dev, cb, image, uiExtent, ui_layer::kCrosshairMask);
-    // While the weapon wheel is up, where the game drew it (wheel_probe.hpp).
-    uiBackdrop.wheel.record(dev, cb, family, image, uiExtent, controllers::wheelView());
+    // While the weapon wheel is up, where the game drew it; in wrist or weapon mode outside menus and
+    // full-screen backdrops, now and then, where it drew the corner blocks the hand HUDs show
+    // (wheel_probe.hpp); also while the game drives the view (a map's start camera, a glory kill).
+    const bool corners = settings.ui.hud != ui_layer::HudMode::Panel && !menu && !backdrop;
+    uiBackdrop.wheel.record(dev, cb, family, image, uiExtent, controllers::wheelView(), corners);
     if (const VkBuffer buffer = uiCapture.bufferFor(dev, uiCaptures, uiExtent)) {
         EyeCapture::record(dev, cb, image, uiExtent, buffer);
     }

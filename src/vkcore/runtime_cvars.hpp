@@ -11,8 +11,9 @@
 //   while the scattering history is per eye (scatter_hooks.hpp), else 0; and r_SSDOTemporalAA
 //   (stereo_seq::stereoSsdoFilterCvar): 1 while SSDO's history is per eye (ssdo_hooks.hpp), else 0.
 // - Route S, whatever the temporal mode: the comfort set (stereo_seq::stereoComfortCvars), which in stereo
-//   only this hold sets (the launcher's command line has only r_hdrDisplay of it). apply() runs from Route
-//   S's first present (presenter_copy.cpp), before the runtime's session and the first map.
+//   only this hold sets (the launcher's command line has only r_hdrDisplay of it), and the game's HUD Scale
+//   at Large (stereo_seq::stereoHudScaleCvar). apply() runs from Route S's first present
+//   (presenter_copy.cpp), before the runtime's session and the first map.
 // - Route S: r_SSDO at ETERNALVR_STEREO_SSDO's value (stereo_seq::stereoSsdoCvar), against the game's own
 //   r_SSDO 0 after r_TAASafeMode 1, then at what the game's Directional Occlusion setting writes whenever it
 //   runs (ssdo_menu_hook.hpp); with ETERNALVR_STEREO_SSDO=off at 0 whatever that setting.
@@ -46,8 +47,8 @@
 // then the first 12 later writes; the rest are counted. Only while the multiplayer guard allows touching the
 // game. Every write goes through the cvar book (cvar_book.hpp): a trip sets each cvar written back to its
 // value before the layer's first write, except the window set and r_hdrDisplay, which stay (logged). The game
-// saves view_skipShakes and r_sharpening into the player's profile: profile_hooks.hpp puts the player's own
-// value into each profile save.
+// saves view_skipShakes, r_sharpening and swf_anchorProfile into the player's profile: profile_hooks.hpp puts
+// the player's own value into each profile save.
 
 #include "stereo_seq/seq_settings.hpp"
 
@@ -84,6 +85,14 @@ void setStereoTemporal(stereo_seq::StereoTemporal temporal);
 
 // The lock apply() and the setters hold while they write.
 std::mutex& heldMutex();
+
+// Under heldMutex(), as a profile load starts (profile_hooks.hpp): the value it sets for `name` is the
+// player's stored one, not a change in the game's menu (mp_policy::YieldingHold).
+void profileLoading(std::string_view name);
+
+// Under heldMutex(), before a profile save: whether `live`, the value of `name` now, is the player's choice
+// in the game's menu while the layer held it (a hold that yields, the HUD Scale); it is then no longer held.
+bool playerChose(std::string_view name, std::string_view live);
 
 // A profile load or save starts (true) or ends (false), with heldMutex() held by the caller
 // (profile_hooks.hpp): while one is under way apply() leaves the cvars the profile stores

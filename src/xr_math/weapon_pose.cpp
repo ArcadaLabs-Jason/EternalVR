@@ -88,6 +88,29 @@ EyeRelativePose applyLocalOffsetWithSight(const EyeRelativePose& pose,
     return out;
 }
 
+Vec3 translationKeepingWrist(Vec3 translation,
+                             const IdAngles& rotation,
+                             const std::optional<IdAngles>& from,
+                             const std::optional<IdAngles>& to,
+                             Vec3 wrist) {
+    if (from.has_value() == to.has_value() &&
+        (!from || (from->pitch == to->pitch && from->yaw == to->yaw && from->roll == to->roll))) {
+        return translation; // the same turn: exactly the row
+    }
+    const auto place = [&rotation](Vec3 t, const std::optional<IdAngles>& sight) {
+        return sight ? applyLocalOffsetWithSight({}, t, rotation, *sight, 1.0f)
+                     : applyLocalOffset({}, t, rotation, 1.0f);
+    };
+    // The model's point at the wrist now, and where the origin must go to keep it there after the turn. The
+    // origin is a rotation of the translation, so its columns (the unit translations' origins) invert it.
+    const EyeRelativePose before = place(translation, from);
+    const Vec3 point = ofFrame(before.axis, wrist - before.offset);
+    const Vec3 origin = wrist - inFrame(place({}, to).axis, point);
+    return {dot(place({1.0f, 0.0f, 0.0f}, to).offset, origin),
+            dot(place({0.0f, 1.0f, 0.0f}, to).offset, origin),
+            dot(place({0.0f, 0.0f, 1.0f}, to).offset, origin)};
+}
+
 EyeRelativePose placeViewmodel(const EyeRelativePose& hand,
                                const IdViewAxis& gripAxis,
                                Vec3 translation,

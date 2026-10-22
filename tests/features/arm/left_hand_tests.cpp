@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 using evr::Vec3;
 using evr::arm::compose;
@@ -26,6 +27,8 @@ using evr::arm::onGunRoot;
 using evr::arm::plausiblePose;
 using evr::arm::relative;
 using evr::arm::rightWristFromGrip;
+using evr::arm::RowPlacement;
+using evr::arm::rowPlacement;
 using evr::arm::sameRootPose;
 using evr::arm::SteadyPose;
 using evr::arm::wristFromGrip;
@@ -33,6 +36,8 @@ using evr::test::approxEqual;
 using evr::test::approxPose;
 using evr::test::bindArm;
 using evr::test::bindRightArm;
+using evr::xr_math::applyLocalOffset;
+using evr::xr_math::applyLocalOffsetWithSight;
 using evr::xr_math::axisFromAngles;
 using evr::xr_math::EyeRelativePose;
 using evr::xr_math::IdAngles;
@@ -151,6 +156,63 @@ TEST_CASE("the shift moves a turned model, not turning it, onto the grip's own w
     const Vec3 target = grip + gripAxis.forward * kLeftWristPoint.x + gripAxis.left * kLeftWristPoint.y +
                         gripAxis.up * kLeftWristPoint.z;
     CHECK(approxEqual(landed, target, 1e-5f));
+}
+
+namespace {
+
+// The model's placement at the eye on the identity axis (metres) for a translation, turn and sight.
+EyeRelativePose placedAt(Vec3 translation, const IdAngles& turn, const std::optional<IdAngles>& sight) {
+    return sight ? applyLocalOffsetWithSight({}, translation, turn, *sight, 1.0f)
+                 : applyLocalOffset({}, translation, turn, 1.0f);
+}
+
+// Where the model's point `point` (metres, the model's frame) lands for a placement.
+Vec3 landed(const EyeRelativePose& placed, Vec3 point) {
+    return placed.offset + placed.axis.forward * point.x + placed.axis.left * point.y +
+           placed.axis.up * point.z;
+}
+
+} // namespace
+
+TEST_CASE(
+    "a mod's sight row turns the gun about the wrist point under the turn applied, left hand included") {
+    // A row with a turn of its own (as the Crucible's), and the Heavy Cannon's two sight rows: the iron
+    // sights (the weapon's own, which the offset rows are measured with) and the Precision Bolt's scope (a
+    // mod's).
+    const Vec3 rowTranslation{-0.27f, 0.114f, 0.204f};
+    const IdAngles rowTurn{-4.0f, -6.0f, -3.0f};
+    const std::optional<IdAngles> irons = IdAngles{-3.45f, 0.19f, 0.0f};
+    const std::optional<IdAngles> scope = IdAngles{-0.15f, 0.15f, 0.0f};
+    for (const float weight : {0.0f, 0.3f, 0.5f, 1.0f}) {
+        CAPTURE(weight);
+        const RowPlacement got =
+            rowPlacement(rowTranslation, rowTurn, weight, irons, scope, kRightWristPoint, true);
+        const IdAngles applied = leftHandTurn(rowTurn, weight);
+        CHECK(approxEqual(got.rotation.pitch, applied.pitch));
+        CHECK(approxEqual(got.rotation.yaw, applied.yaw));
+        CHECK(approxEqual(got.rotation.roll, applied.roll));
+        // The model point the weapon's own row puts at the wrist point, with the turn applied, stays there.
+        const EyeRelativePose before = placedAt(rowTranslation, applied, irons);
+        const Vec3 d = kRightWristPoint - before.offset;
+        const Vec3 point{dot(before.axis.forward, d), dot(before.axis.left, d), dot(before.axis.up, d)};
+        CHECK(approxEqual(landed(placedAt(got.translation, got.rotation, scope), point), kRightWristPoint,
+                          1e-5f));
+    }
+}
+
+TEST_CASE("the weapon's own sight row, or an offset given in place of the table's, keeps its translation") {
+    const Vec3 t{-0.27f, 0.114f, 0.204f};
+    const IdAngles rowTurn{-4.0f, -6.0f, -3.0f};
+    const std::optional<IdAngles> irons = IdAngles{-3.45f, 0.19f, 0.0f};
+    const std::optional<IdAngles> scope = IdAngles{-0.15f, 0.15f, 0.0f};
+    for (const float weight : {0.0f, 0.5f}) {
+        const RowPlacement same = rowPlacement(t, rowTurn, weight, irons, irons, kRightWristPoint, true);
+        CHECK((same.translation.x == t.x && same.translation.y == t.y && same.translation.z == t.z));
+        // ETERNALVR_VIEWMODEL_OFFSET replaces the row untouched, a mod's sight row or not.
+        const RowPlacement given = rowPlacement(t, rowTurn, weight, irons, scope, kRightWristPoint, false);
+        CHECK((given.translation.x == t.x && given.translation.y == t.y && given.translation.z == t.z));
+        CHECK(approxEqual(given.rotation.yaw, leftHandTurn(rowTurn, weight).yaw));
+    }
 }
 
 TEST_CASE("the row's turn is reflected for the left glove, blended with its share on the grip") {

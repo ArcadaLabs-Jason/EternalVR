@@ -33,6 +33,14 @@ function Get-QaThrowPose([string]$Y) {
 $script:QaEyeCaptureEvery = 81
 $script:QaEyeMinPairs = 32
 function Test-QaEyeTestBlocks($Ctx) {
+    Test-QaEyeTestHalves $Ctx
+    Test-QaPassFrames $Ctx
+}
+
+# The halves of the eye test's captures; with -Since/-Until only the pairs written in that stretch of the run,
+# and each result named with -Window first (the stretches before and after a map is loaded again).
+function Test-QaEyeTestHalves($Ctx, $Since = $null, $Until = $null, [string]$Window = '') {
+    $at = if ($Window) { "${Window}: " } else { '' }
     $period = 4
     $resize = Get-QaMatches $Ctx 'seq-taa: resize to \d+x\d+ \(upscaled \d+x\d+\)' -Regex | Select-Object -Last 1
     if ($resize -match 'resize to (\d+)x\d+ \(upscaled (\d+)x\d+\)') {
@@ -41,21 +49,20 @@ function Test-QaEyeTestBlocks($Ctx) {
     $dir = "$($Ctx.Stage)-eyes"
     $m = $null
     $failed = ''
-    try { $m = & (Join-Path $script:QaRig 'qa\qa-blockiness.ps1') -Dir $dir -Period $period } catch { $failed = $_.Exception.Message }
+    try { $m = & (Join-Path $script:QaRig 'qa\qa-blockiness.ps1') -Dir $dir -Period $period -Since $Since -Until $Until } catch { $failed = $_.Exception.Message }
     if (-not $m) {
         # The script throws "no capture pairs ..." when the folder has none; anything else is the measure's own error.
         $why = if (-not $failed -or $failed -like 'no capture pairs*') { "no capture pairs in $dir" } else { "measuring failed: $failed" }
-        Add-QaResult $Ctx 'eye captures measured' $false $why
+        Add-QaResult $Ctx "${at}eye captures measured" $false $why
     } else {
         $detail = '{0} pair(s), period {1}: eye L left {2:N2} right {3:N2}; eye R left {4:N2} right {5:N2}' -f $m.Images,
             $period, $m.LeftL, $m.RightL, $m.LeftR, $m.RightR
-        Add-QaResult $Ctx "eye captures measured ($script:QaEyeMinPairs pairs or more)" ($m.Images -ge $script:QaEyeMinPairs) $detail
-        Add-QaResult $Ctx "eye L's left half coarse (block-edge ratio 1.20 or more)" ($m.LeftL -ge 1.2) $detail
-        Add-QaResult $Ctx "eye L's right half not (1.10 or less)" ($m.RightL -le 1.1) $detail
-        Add-QaResult $Ctx "eye R's right half coarse (1.20 or more)" ($m.RightR -ge 1.2) $detail
-        Add-QaResult $Ctx "eye R's left half not (1.10 or less)" ($m.LeftR -le 1.1) $detail
+        Add-QaResult $Ctx "${at}eye captures measured ($script:QaEyeMinPairs pairs or more)" ($m.Images -ge $script:QaEyeMinPairs) $detail
+        Add-QaResult $Ctx "${at}eye L's left half coarse (block-edge ratio 1.20 or more)" ($m.LeftL -ge 1.2) $detail
+        Add-QaResult $Ctx "${at}eye L's right half not (1.10 or less)" ($m.RightL -le 1.1) $detail
+        Add-QaResult $Ctx "${at}eye R's right half coarse (1.20 or more)" ($m.RightR -ge 1.2) $detail
+        Add-QaResult $Ctx "${at}eye R's left half not (1.10 or less)" ($m.LeftR -le 1.1) $detail
     }
-    Test-QaPassFrames $Ctx
 }
 
 # The `vrs: render pass frames:` lines (every 200,000 passes, counts since the start): the last has no parity

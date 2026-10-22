@@ -60,7 +60,10 @@ constexpr std::string_view kAllowedCommands[] = {
     // frame recreate the swapchain.
     "g_dumpSpawnedEntities", "g_setting_hud_auto_dismiss_tutorials", "g_setting_tutorials",
     "p_debugAnimatedCamera", "r_sharpening", "is_update", "is_defrag", "r_skipGPUParticles", "r_hdrDisplay",
-    "r_refractionMaxUpdates"};
+    "r_refractionMaxUpdates",
+    // The HUD Scale changed in play as the game's menu changes it (a write the layer did not make; the
+    // hold yields to it: runtime_cvars_yield.cpp).
+    "swf_anchorProfile"};
 
 char lower(char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;

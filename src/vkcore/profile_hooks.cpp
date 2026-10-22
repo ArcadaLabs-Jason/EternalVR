@@ -13,6 +13,7 @@
 #include "vkcore/view_slots.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -114,6 +115,7 @@ void reportRepair(bool savedSince) {
 // Under heldMutex, before the load.
 void beforeLoad() {
     for (ProfileCvar& c : g_cvars) {
+        runtime_cvars::profileLoading(c.name);
         const std::string live = cvar_book::valueText(c.object);
         if (const auto seed = mp_policy::profileLoadSeed(live, cvar_book::valueBefore(c.name))) {
             g_set(c.object, seed->c_str(), true);
@@ -167,8 +169,12 @@ void afterLoad() {
 // Under heldMutex, before the save: the player's values in.
 std::vector<Swap> beforeSave(std::string& list) {
     std::vector<Swap> swapped;
-    for (const ProfileCvar& c : g_cvars) {
+    for (ProfileCvar& c : g_cvars) {
         const std::string live = cvar_book::valueText(c.object);
+        // A choice the player made in the game's menu while the layer held it: theirs from now on.
+        if (runtime_cvars::playerChose(c.name, live)) {
+            profilePlayerChoice(c.name, live);
+        }
         const mp_policy::ProfileWrite w =
             mp_policy::profileWrite(live, c.loaded, cvar_book::valueBefore(c.name));
         if (!w.swap) {
@@ -183,14 +189,21 @@ std::vector<Swap> beforeSave(std::string& list) {
 }
 
 // Under heldMutex, after the save: the held values back, through the book (after a trip the player's value
-// stays).
-void afterSave(const std::vector<Swap>& swapped, const std::string& list, bool log) {
+// stays). `since`: when the player's values went in; how long they were live is logged (the save runs on a
+// thread of the game's own while it goes on drawing, so a frame drawn meanwhile sees the player's values).
+void afterSave(const std::vector<Swap>& swapped,
+               const std::string& list,
+               bool log,
+               std::chrono::steady_clock::time_point since) {
     for (const Swap& s : swapped) {
         cvar_book::write(s.cvar->name, s.cvar->object, g_set, s.held.c_str());
     }
     if (log) {
-        const std::string what =
-            list.empty() ? "no held value in it" : "the player's values went in: " + list;
+        const double us =
+            std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - since).count();
+        const std::string what = list.empty() ? "no held value in it"
+                                              : "the player's values went in: " + list + " (live for " +
+                                                    std::to_string(static_cast<long long>(us)) + " us)";
         EVR_LOG("%s: the game saved the profile: %s", kTag, what.c_str());
     }
     if (g_repair == mp_policy::ProfileRepair::Repair && g_repairWritten) {
@@ -212,12 +225,14 @@ void onSerialize(void* settings, std::uint8_t* context, std::uintptr_t flag, std
     std::string list;
     bool log = false;
     ProfileIo io; // declared before the locks: on a throw it ends after they are released
+    std::chrono::steady_clock::time_point since;
     {
         std::lock_guard lock(runtime_cvars::heldMutex());
         io.begin();
         if (save) {
             log = logCall();
             swapped = beforeSave(list);
+            since = std::chrono::steady_clock::now();
         } else {
             beforeLoad();
         }
@@ -225,7 +240,7 @@ void onSerialize(void* settings, std::uint8_t* context, std::uintptr_t flag, std
     g_original(settings, context, flag, r9);
     std::lock_guard lock(runtime_cvars::heldMutex());
     if (save) {
-        afterSave(swapped, list, log);
+        afterSave(swapped, list, log, since);
     } else {
         afterLoad();
     }
@@ -277,6 +292,17 @@ bool locate(const GameImage& image, const std::byte*& serializer) {
 
 } // namespace
 
+void profilePlayerChoice(std::string_view name, const std::string& value) {
+    ProfileCvar* c = named(name);
+    if (!c) {
+        return;
+    }
+    c->loaded = value;
+    cvar_book::setTripValue(c->name, value);
+    EVR_LOG("%s: %.*s %s is the player's choice in the game's menu: the profile's saves write it from now on",
+            kTag, static_cast<int>(name.size()), name.data(), value.c_str());
+}
+
 void installProfileHooks() {
     std::call_once(g_installOnce, [] {
         if (!(routeSRequested() || parallelEyesChangedEngine()) || !mp_guard::allowsGameTouch()) {
@@ -302,8 +328,8 @@ void installProfileHooks() {
             return;
         }
         EVR_LOG(
-            "%s: profile cvar serializer hooked at RVA 0x%X: the profile keeps the player's view_skipShakes "
-            "and r_sharpening while the layer holds them",
+            "%s: profile cvar serializer hooked at RVA 0x%X: the profile keeps the player's view_skipShakes, "
+            "r_sharpening and swf_anchorProfile while the layer holds them",
             kTag, image.rva(serializer));
     });
 }

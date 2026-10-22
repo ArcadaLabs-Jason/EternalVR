@@ -1,4 +1,6 @@
+#include "hud_test_cuts.hpp"
 #include "ui_layer/weapon_hud.hpp"
+#include "ui_layer/weapon_wheel.hpp"
 
 #include <doctest/doctest.h>
 
@@ -14,7 +16,7 @@
 using evr::Pose;
 using evr::Quat;
 using evr::Vec3;
-using evr::ui_layer::headLockedPieces;
+using evr::ui_layer::headLockedHud;
 using evr::ui_layer::HudMode;
 using evr::ui_layer::layoutWeaponQuads;
 using evr::ui_layer::PixelRect;
@@ -127,8 +129,9 @@ TEST_CASE("weapon hud: the gun's frame is the grip's position with the aim's ori
     // does in room space.
     const WeaponHudSettings s;
     const Pose inAim = evr::compose(evr::inverse(aim), gun);
-    const auto room = layoutWeaponQuads(gun, 2064, 2100, s, false);
-    const auto local = layoutWeaponQuads(inAim, 2064, 2100, s, false);
+    const auto cuts = hud_test::cutsAt(true, weaponMovedBlocks(s), 2064, 2100);
+    const auto room = layoutWeaponQuads(gun, cuts.weapon, cuts.vitals, s, false);
+    const auto local = layoutWeaponQuads(inAim, cuts.weapon, cuts.vitals, s, false);
     REQUIRE(room.size() == 1);
     REQUIRE(local.size() == 1);
     const Pose back = evr::compose(aim, local[0].pose);
@@ -187,7 +190,10 @@ TEST_CASE("weapon hud: shown with hysteresis on the facing alone, faded with the
 TEST_CASE("weapon hud: the ammo block alone, or with health and armor beside it") {
     WeaponHudSettings s;
     s.widthMetres = 0.12f;
-    const auto quads = layoutWeaponQuads(Pose::identity(), 1280, 1400, s, false);
+    const auto cuts = hud_test::cutsAt(true, weaponMovedBlocks(s), 1280, 1400);
+    REQUIRE(cuts.complete);
+    CHECK(cuts.vitals.width == 0); // health and armor stay on the head-locked HUD
+    const auto quads = layoutWeaponQuads(Pose::identity(), cuts.weapon, cuts.vitals, s, false);
     REQUIRE(quads.size() == 1);
     const auto& ammo = quads[0];
     CHECK(ammo.block == WristBlock::Weapon);
@@ -205,24 +211,31 @@ TEST_CASE("weapon hud: the ammo block alone, or with health and armor beside it"
           band.y + static_cast<std::int64_t>(band.height));
 
     s.vitals = true;
+    const auto both = hud_test::cutsAt(true, weaponMovedBlocks(s), 1280, 1400);
+    REQUIRE(both.complete);
     for (const bool left : {false, true}) {
         CAPTURE(left);
-        const auto row = layoutWeaponQuads(Pose::identity(), 1280, 1400, s, left);
+        const auto row = layoutWeaponQuads(Pose::identity(), both.weapon, both.vitals, s, left);
         REQUIRE(row.size() == 2);
         CHECK(row[0].block == WristBlock::Vitals);
         CHECK(row[1].block == WristBlock::Weapon);
-        // The ammo keeps its size; health and armor at the same scale, on the image's left, touching.
+        CHECK(row[0].rect.x == both.vitals.x);
+        CHECK(row[1].rect.x == both.weapon.x);
+        // In the panel's frame: the ammo keeps its size; health and armor at the same scale, on the image's
+        // left, touching, their bottoms in line (both reach the band's bottom on screen), the row centred on
+        // the (mirrored) offset.
+        const Quat toPanel = evr::conjugate(weaponPanelRotation(s.tiltDegrees));
+        const Vec3 v = evr::rotate(toPanel, row[0].pose.position - weaponPanelOffset(s, left));
+        const Vec3 w = evr::rotate(toPanel, row[1].pose.position - weaponPanelOffset(s, left));
         CHECK(row[1].width == doctest::Approx(0.12f));
-        CHECK(row[0].height == doctest::Approx(row[1].height));
-        CHECK(row[0].pose.position.x < row[1].pose.position.x);
-        CHECK(row[1].pose.position.x - row[0].pose.position.x ==
-              doctest::Approx((row[0].width + row[1].width) / 2.0f));
-        // The row is centred on the (mirrored) offset.
-        const Vec3 centre = (row[0].pose.position + row[1].pose.position) * 0.5f;
-        const float shift = (row[0].width - row[1].width) / 4.0f;
-        CHECK(near(centre, weaponPanelOffset(s, left) + Vec3{shift, 0.0f, 0.0f}, 1e-4f));
+        CHECK(row[0].height > row[1].height);
+        CHECK(row[0].width / row[0].height == doctest::Approx(static_cast<float>(row[0].rect.width) /
+                                                              static_cast<float>(row[0].rect.height)));
+        CHECK(w.x - v.x == doctest::Approx((row[0].width + row[1].width) / 2.0f));
+        CHECK(v.x - row[0].width / 2.0f == doctest::Approx(-(w.x + row[1].width / 2.0f)));
+        CHECK(v.y - row[0].height / 2.0f == doctest::Approx(w.y - row[1].height / 2.0f));
     }
-    CHECK(layoutWeaponQuads(Pose::identity(), 0, 0, s, false).empty());
+    CHECK(layoutWeaponQuads(Pose::identity(), PixelRect{}, both.vitals, s, false).empty());
 }
 
 TEST_CASE("weapon hud: the head-locked pieces lose only what moved to the gun") {
@@ -233,12 +246,13 @@ TEST_CASE("weapon hud: the head-locked pieces lose only what moved to the gun") 
         CAPTURE(width);
         const PixelRect band = wideContentRect(width, height);
         WeaponHudSettings s;
-        const auto pieces = headLockedPieces(band, width, height, weaponMovedBlocks(s));
+        const auto cuts = hud_test::cutsAt(true, weaponMovedBlocks(s), width, height);
+        const auto pieces = headLockedHud(band, width, height, cuts.cuts, std::nullopt, 1.5f).pieces;
         // The band down to the ammo block, then the bottom row left of it (health stays head-locked).
         REQUIRE(pieces.size() == 2);
         CHECK(pieces[0].y == band.y);
         CHECK(pieces[0].width == band.width);
-        const auto w = evr::ui_layer::cutRect(WristBlock::Weapon, width, height);
+        const auto& w = cuts.weapon;
         CHECK(pieces[1].x == band.x);
         CHECK(pieces[1].width == static_cast<std::uint32_t>(w.x - band.x));
         std::uint64_t kept = 0;
@@ -249,8 +263,14 @@ TEST_CASE("weapon hud: the head-locked pieces lose only what moved to the gun") 
                           static_cast<std::uint64_t>(w.width) * w.height);
         // With health and armor on the gun too: both corners go, as on the wrist.
         s.vitals = true;
-        const auto both = headLockedPieces(band, width, height, weaponMovedBlocks(s));
-        const auto wrist = headLockedPieces(band, width, height, {WristBlock::Vitals, WristBlock::Weapon});
+        const auto both = headLockedHud(band, width, height,
+                                        hud_test::cutsAt(true, weaponMovedBlocks(s), width, height).cuts,
+                                        std::nullopt, 1.5f)
+                              .pieces;
+        const auto wrist =
+            headLockedHud(band, width, height,
+                          hud_test::cutsAt(true, hud_test::corners(), width, height).cuts, std::nullopt, 1.5f)
+                .pieces;
         REQUIRE(both.size() == wrist.size());
         for (std::size_t i = 0; i < both.size(); ++i) {
             CHECK(both[i].x == wrist[i].x);

@@ -1,9 +1,10 @@
 # Third-party notices
 
 Every file copied or adapted from another project is listed here with its origin (repo + commit),
-license, and original copyright notice. None yet: no source file is copied or adapted from another
-project. (The published material under `reference/` is research input, never built or shipped; its
-sources and licences are in `reference/MANIFEST.md`.)
+license, and original copyright notice. No source file is copied or adapted from another project;
+one function signature is taken from one (DE Advanced Options, below). (The published material under
+`reference/` is research input, never built or shipped; its sources and licences are in
+`reference/MANIFEST.md`.)
 
 Every library the release redistributes, statically linked or shipped as a file, is listed here too,
 with its version, its full licence text and any NOTICE file its licence requires: safetyhook with
@@ -229,6 +230,41 @@ license you like.
   LLVM-exception, its Ryu-derived parts Boost Software License 1.0; both let code compiled from it be
   redistributed without its notices (the LLVM exception waives Apache-2.0 sections 4(a), 4(b) and
   4(d)). The rest is Microsoft's runtime library code, linked as the Visual Studio licence allows.
+
+## DE Advanced Options (one function signature in EternalVR.dll)
+
+- Origin: https://github.com/SteamKaibz/DE_AdvancedOptionsModPublic, commit
+  f6368680c0e0fad5192f834dfe0d21232328b3bf, `DE/Sigs.h`: the byte signature of the game's
+  `idResourceListForClassName`, used as is by `kListForClassSignature` in `src/vkcore/arm_model.cpp`. A byte
+  pattern of the game's own code, credited here because it was found by that project. No other code is taken.
+- Licence: BSD 2-Clause.
+
+```
+BSD 2-Clause License
+
+Copyright (c) [3/7/2024], [SteamKaibz]
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 ## Build and test only (not redistributed)
 

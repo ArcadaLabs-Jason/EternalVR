@@ -30,7 +30,8 @@ ParallelEyesHolds g_parallelHolds;
 //   eyes to the display's size (as in Route S).
 // - Route S's comfort set (stereo_seq::stereoComfortCvars): without it the game's low-health damage view
 //   effect left both eyes red after a death and checkpoint reload (rig runs pe1 and crt1), which Route
-//   S never shows because it holds view_skipDamageEffect and the rest.
+//   S never shows because it holds view_skipDamageEffect and the rest. With it the HUD scale at Large
+//   (stereo_seq::stereoVrHeldCvars), as under Route S.
 // - The launcher's anti-aliasing (parallel_eyes::antiAliasingCvars): TAA, DLSS (TAA while it has fallen back,
 //   view_dlss.hpp), or with Off the stereo path's r_TAASafeMode 1 and r_antialiasing 0 (the game applies the
 //   player's own mode after the command line).
@@ -63,7 +64,7 @@ void addParallelEyeSet(std::vector<Held>& held) {
                 kTag);
     }
     addWindowSet(held);
-    for (const auto& c : stereo_seq::stereoComfortCvars()) {
+    for (const auto& c : stereo_seq::stereoVrHeldCvars()) {
         held.push_back(comfortHeld(c));
     }
     const std::string ssr = narrowEnv(L"ETERNALVR_STEREO_SSR");

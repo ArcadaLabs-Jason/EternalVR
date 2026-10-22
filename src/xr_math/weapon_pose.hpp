@@ -57,6 +57,17 @@ EyeRelativePose applyLocalOffsetWithSight(const EyeRelativePose& pose,
                                           const IdAngles& sight,
                                           float unitsPerMetre);
 
+// The translation that keeps the model's point at `wrist` (the pose's frame, metres) where it is when the
+// sight turn changes from `from` to `to` (nullopt: no turn), with `rotation` unchanged. A weapon's offset row
+// is measured with its own sight turn; when a mod's sight row turns the model by another angle, the gun turns
+// about the glove's wrist instead of the grip, so the hand stays where the row puts it. The same turn (or
+// none on both sides) returns `translation` itself.
+Vec3 translationKeepingWrist(Vec3 translation,
+                             const IdAngles& rotation,
+                             const std::optional<IdAngles>& from,
+                             const std::optional<IdAngles>& to,
+                             Vec3 wrist);
+
 // The viewmodel's pose (T-054). `hand` is the controller's grip position with the aim ray's axis, `gripAxis`
 // the grip's own orientation. The model is placed by `translation` and `rotation` in the aim's frame
 // (applyLocalOffset, or applyLocalOffsetWithSight with a `sight`), then moved, not turned, so that the point

@@ -6,13 +6,21 @@
 // target taller than 16:9 (the near-square eye image of the render size, e.g. 2064x2100 or 1280x1400) the
 // band spans the whole width and is centred vertically; on a wider target it spans the whole height and is
 // centred horizontally; a 16:9 target is its own band. The UI quad shows that band (ETERNALVR_UI_CROP), so
-// the blocks are measured in the same band. Measured on the rig's GUI captures at 2560x2100 and 2054x2068
-// (the same band coordinates to 0.005 in both; a 2048x864 capture had them within 0.002 of a 2048x2208 one,
-// in its centred 1536 x 864 band):
+// the blocks are found in the same band (the same band coordinates to 0.005 at every target size the rig
+// captured, 1280x720 to 2560x2100).
 //
-//   health, armor, extra lives      x 0.022..0.197  y 0.838..0.960  (bottom left)
-//   ammo, equipment, flame belch    x 0.781..0.944  y 0.815..0.949  (bottom right, key hints above)
-//   crosshair and ability rings     x 0.405..0.592  y 0.449..0.571  (centre)
+// The corner blocks' size and place follow the game's HUD Scale (swf_anchorProfile; VR holds Large,
+// stereo_seq::stereoHudScaleCvar) and what they hold (the extra lives row, the equipment row and its key
+// hints come and go), so they are measured where the game drew them (hud_blocks.hpp). Rig GUI captures, band
+// coordinates of what was drawn:
+//
+//   health, armor, extra lives    Small  x 0.038..0.175  y 0.867..0.944  (no extra lives row)
+//                                 Medium x 0.029..0.188  y 0.780..0.947  (with it)
+//                                 Large  x 0.037..0.225  y 0.749..0.944  (with it)
+//   ammo, equipment, key hints    Small  x 0.809..0.934  y 0.844..0.939
+//                                 Medium x 0.793..0.936  y 0.829..0.940
+//                                 Large  x 0.752..0.922  y 0.805..0.937
+//   crosshair and ability rings   x 0.405..0.592  y 0.449..0.571 at every HUD Scale (centre)
 //   boss / encounter bars, markers  top and sides: stay head-locked
 //
 // The wrist HUD shows the corner blocks (and optionally the centre abilities) on quads at the off hand, the
@@ -22,6 +30,7 @@
 #include "ui_layer/ui_settings.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace evr::ui_layer {
@@ -40,19 +49,41 @@ enum class WristBlock : std::uint8_t {
     Abilities, // the rings around the crosshair (cooldowns)
 };
 
-// The measured rectangle of a block, with a margin for animations and the key hints.
-BandRect wristBlockRect(WristBlock block);
+// The ability rings' rectangle (they do not change with the HUD Scale), with a margin for their animations.
+BandRect abilitiesRect();
+
+// The corner blocks where the game drew them in a target (hud_blocks.hpp, with its margin), in its pixels;
+// nullopt while not measured.
+struct CornerBlocks {
+    std::optional<PixelRect> vitals;
+    std::optional<PixelRect> weapon;
+};
 
 // A band rectangle in pixels of a `width` x `height` target (its band: wideContentRect), rounded outward
 // and clamped to the band; empty (0 x 0) when it falls outside.
 PixelRect toPixels(const BandRect& rect, std::uint32_t width, std::uint32_t height);
 
-// The part of the target taken away from the head-locked quad for a block shown on the wrist: its
-// rectangle grown to the band's edges it is anchored to (the corners reach its side and bottom edges). The
-// centre abilities are never cut: under head aim the crosshair stays on the head-locked quad, and under hand
-// aim there is no abilities quad (the crosshair hold leaves the rings on the head-locked quad, the mask takes
-// them).
-PixelRect cutRect(WristBlock block, std::uint32_t width, std::uint32_t height);
+// The part of the target taken away from the head-locked quad for a corner block shown on a hand, which
+// that hand's quad shows: `drawn` (where the game drew the block) grown to the band's edges the block is
+// anchored to (the corners reach its side and bottom edges). Empty for an empty `drawn`. The centre
+// abilities are never cut (empty): under head aim the crosshair stays on the head-locked quad, and under
+// hand aim there is no abilities quad (the crosshair hold leaves the rings on the head-locked quad, the mask
+// takes them).
+PixelRect cutRect(WristBlock block, const PixelRect& drawn, std::uint32_t width, std::uint32_t height);
+
+// What the hand HUDs take from the target for the blocks in `moved`: each one's cutRect (empty for a block
+// not in `moved`), and those cuts in the order of `moved`. `complete` only when every block in `moved` is
+// measured (`drawn`); otherwise no cut at all: the hand HUD waits and the head-locked HUD stays whole.
+struct HandCuts {
+    PixelRect vitals;
+    PixelRect weapon;
+    std::vector<PixelRect> cuts;
+    bool complete = false;
+};
+HandCuts handCuts(const std::vector<WristBlock>& moved,
+                  const CornerBlocks& drawn,
+                  std::uint32_t width,
+                  std::uint32_t height);
 
 // `whole` minus every rectangle of `cuts`, as disjoint rectangles (row bands from top to bottom, left to
 // right inside a band), neighbouring pieces of the same rows merged. Empty cuts are ignored.

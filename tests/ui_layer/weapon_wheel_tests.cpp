@@ -1,3 +1,4 @@
+#include "hud_test_cuts.hpp"
 #include "ui_layer/weapon_wheel.hpp"
 #include "ui_layer/wheel_bounds.hpp"
 #include "ui_layer/wrist_hud.hpp"
@@ -13,10 +14,8 @@
 
 using evr::ui_layer::CentredWheel;
 using evr::ui_layer::centredWheel;
-using evr::ui_layer::cutRect;
 using evr::ui_layer::headLockedHud;
 using evr::ui_layer::HeadLockedHud;
-using evr::ui_layer::headLockedPieces;
 using evr::ui_layer::kWheelGridStep;
 using evr::ui_layer::panelPiece;
 using evr::ui_layer::PixelRect;
@@ -80,6 +79,12 @@ PixelRect measured(const Capture& c) {
     const std::int64_t y1 = std::min<std::int64_t>(bottom(c.wheel) + grow, bottom(band));
     return PixelRect{static_cast<std::int32_t>(x0), static_cast<std::int32_t>(y0),
                      static_cast<std::uint32_t>(x1 - x0), static_cast<std::uint32_t>(y1 - y0)};
+}
+
+// The cuts of the hand HUDs' `moved` blocks on a capture: the Large HUD's blocks on the player's 1736x1896
+// capture (its HUD Scale), Medium's on the others (hud_test_cuts.hpp).
+std::vector<PixelRect> cutsFor(const Capture& c, const std::vector<WristBlock>& moved) {
+    return hud_test::cutsAt(c.width == 1736, moved, c.width, c.height).cuts;
 }
 
 // HUD placements: the default (2.0 m wide at 1.5 m) and the player's (2.5 m at 0.9 m).
@@ -154,7 +159,8 @@ TEST_CASE("weapon wheel: with the wheel up it is seen straight ahead at the defa
             for (const auto& moved :
                  {std::vector<WristBlock>{}, std::vector<WristBlock>{WristBlock::Vitals, WristBlock::Weapon},
                   std::vector<WristBlock>{WristBlock::Weapon}}) {
-                const HeadLockedHud hud = headLockedHud(shown, c.width, c.height, moved, rect, h.distance);
+                const HeadLockedHud hud =
+                    headLockedHud(shown, c.width, c.height, cutsFor(c, moved), rect, h.distance);
                 const std::optional<Seen> seen = seenWheel(hud, shown, c.wheel, h.width, h.distance);
                 REQUIRE(seen);
                 CHECK(std::abs(seen->yaw) < 0.5);
@@ -189,7 +195,8 @@ TEST_CASE("weapon wheel: the head-locked HUD keeps everything else where it was,
               std::vector<WristBlock>{WristBlock::Weapon},
               std::vector<WristBlock>{WristBlock::Vitals, WristBlock::Weapon}}) {
             CAPTURE(moved.size());
-            const HeadLockedHud up = headLockedHud(shown, c.width, c.height, moved, measured(c), 1.5f);
+            const std::vector<PixelRect> cuts = cutsFor(c, moved);
+            const HeadLockedHud up = headLockedHud(shown, c.width, c.height, cuts, measured(c), 1.5f);
             REQUIRE(up.wheel);
             // Not shown twice: no piece of the head-locked quad shows any of the wheel's rectangle, nor any
             // of the wheel the game drew (a slice of it left there shows beside the centred quad).
@@ -200,7 +207,7 @@ TEST_CASE("weapon wheel: the head-locked HUD keeps everything else where it was,
             }
             // Nothing else lost: the pieces and the wheel's rectangle cover the band minus the moved blocks.
             std::uint64_t before = 0;
-            for (const PixelRect& p : headLockedPieces(shown, c.width, c.height, moved)) {
+            for (const PixelRect& p : subtractRects(shown, cuts)) {
                 before += area(p);
             }
             std::uint64_t kept = 0;
@@ -208,21 +215,17 @@ TEST_CASE("weapon wheel: the head-locked HUD keeps everything else where it was,
                 kept += area(p);
             }
             // (A larger HUD's wheel can reach into a moved block's cut: that part is counted once.)
-            std::vector<PixelRect> cuts;
-            for (const WristBlock b : moved) {
-                cuts.push_back(cutRect(b, c.width, c.height));
-            }
             std::uint64_t wheel = 0;
             for (const PixelRect& p : subtractRects(up.wheel->rect, cuts)) {
                 wheel += area(p);
             }
             CHECK(kept + wheel == before);
-            // The presenter has room for 6 pieces besides the hand quads and the wheel (WristHud::kMaxQuads).
-            CHECK(up.pieces.size() <= 6);
+            // The presenter has room for 7 pieces besides the hand quads and the wheel (WristHud::kMaxQuads).
+            CHECK(up.pieces.size() <= 7);
             // Wheel down: the pieces are exactly those the HUD had before.
-            const HeadLockedHud down = headLockedHud(shown, c.width, c.height, moved, std::nullopt, 1.5f);
+            const HeadLockedHud down = headLockedHud(shown, c.width, c.height, cuts, std::nullopt, 1.5f);
             CHECK_FALSE(down.wheel);
-            const std::vector<PixelRect> pieces = headLockedPieces(shown, c.width, c.height, moved);
+            const std::vector<PixelRect> pieces = subtractRects(shown, cuts);
             REQUIRE(down.pieces.size() == pieces.size());
             for (std::size_t i = 0; i < pieces.size(); ++i) {
                 CHECK(down.pieces[i].x == pieces[i].x);

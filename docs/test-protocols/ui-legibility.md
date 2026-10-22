@@ -78,3 +78,21 @@ over 150 of 255, so a glyph's glow may add a pixel):
 | Demonic corruption bar title | "DEMONIC CORRUPTION" | 12 px | 0.45 deg | **fail** |
 | Equipment button labels (above the equipment slots) | "Left Grip", "Right Stick", "Left Trigger" | 22 px | 0.82 deg | **fail**: the names are longer than their boxes and overlap ("Left Grip ght St... ft Tr...") |
 | Pop-ups, tutorial prompts, subtitles in play | not captured yet | | | to do |
+
+0.1.75 (dev main 6a2e235b), the same settings, mission three at the checkpoint before the gate (the challenges panel
+and the demonic corruption bar on screen), once at the game's default HUD scale and once with its HUD scale held at
+Large (`swf_anchorProfile` 2), plus the first mission's opening on a new profile. Same measure:
+
+| Item | Text measured | Default HUD scale | Large HUD scale |
+| --- | --- | --- | --- |
+| Mission challenges notification, title | "MISSION CHALLENGES" (the M) | 14 px, 0.52 deg, pass | 16 px, 0.60 deg, pass |
+| Mission challenges notification, names | "Master of Turrets" (the M) | 12 px, 0.45 deg, **fail** | 14 px, 0.52 deg, pass |
+| Mission challenges notification, hint | "PRESS [HOLD X] TO VIEW CHALLENGE DETAILS" (the P) | 10 px, 0.37 deg, **fail** | 13 px, 0.49 deg, **fail** |
+| Demonic corruption bar title | "DEMONIC CORRUPTION" (the D) | 12 px, 0.45 deg, **fail** | 13 px, 0.49 deg, **fail** |
+| Equipment button labels | "LG" (the L; short names since 0.1.58, no longer overlapping) | 13 px, 0.49 deg, **fail** | 15 px, 0.56 deg, pass |
+| Low ammo warning (first mission) | "LOW AMMO" (the L) | 15 px, 0.56 deg, pass | not captured |
+| Pop-ups, tutorial prompts | not captured: a new profile on the first mission's opening showed no tutorial pop-up in four minutes of scripted play | | to do |
+
+At the default HUD scale four of the game's small texts are under the bar (0.37 to 0.49 deg); at Large every one of
+them gains two or three pixels, the names and the labels pass, and the hint and the corruption title fall short by
+less than a pixel (0.49 deg). Part 2 decides whether 0.5 deg is the right bar (T-077).

@@ -59,39 +59,39 @@ std::vector<WristBlock> weaponMovedBlocks(const WeaponHudSettings& s) {
 }
 
 std::vector<WristQuad> layoutWeaponQuads(const Pose& weapon,
-                                         std::uint32_t width,
-                                         std::uint32_t height,
+                                         const PixelRect& ammo,
+                                         const PixelRect& vitals,
                                          const WeaponHudSettings& s,
                                          bool leftHand) {
-    const PixelRect ammo = toPixels(wristBlockRect(WristBlock::Weapon), width, height);
     if (ammo.width == 0 || ammo.height == 0) {
         return {};
-    }
-    PixelRect vitals;
-    if (s.vitals) {
-        vitals = toPixels(wristBlockRect(WristBlock::Vitals), width, height);
     }
     const float metresPerPixel = s.widthMetres / static_cast<float>(ammo.width);
     const Pose panel =
         compose(weapon, Pose{weaponPanelRotation(s.tiltDegrees), weaponPanelOffset(s, leftHand)});
-    const auto quadAt = [&](WristBlock block, const PixelRect& rect, float x) {
+    const auto quadAt = [&](WristBlock block, const PixelRect& rect, float x, float y) {
         WristQuad q;
         q.block = block;
         q.rect = rect;
         q.width = static_cast<float>(rect.width) * metresPerPixel;
         q.height = static_cast<float>(rect.height) * metresPerPixel;
-        q.pose = compose(panel, Pose{Quat::identity(), {x, 0.0f, 0.0f}});
+        q.pose = compose(panel, Pose{Quat::identity(), {x, y, 0.0f}});
         return q;
     };
     std::vector<WristQuad> quads;
     if (vitals.width == 0 || vitals.height == 0) {
-        quads.push_back(quadAt(WristBlock::Weapon, ammo, 0.0f));
+        quads.push_back(quadAt(WristBlock::Weapon, ammo, 0.0f, 0.0f));
         return quads;
     }
+    // Both blocks reach the band's bottom: their bottoms in line, as on screen.
+    const float rowHeight = static_cast<float>(std::max(vitals.height, ammo.height)) * metresPerPixel;
+    const auto lineY = [&](const PixelRect& rect) {
+        return (static_cast<float>(rect.height) * metresPerPixel - rowHeight) / 2.0f;
+    };
     const float vitalsWidth = static_cast<float>(vitals.width) * metresPerPixel;
     const float rowWidth = vitalsWidth + s.widthMetres;
-    quads.push_back(quadAt(WristBlock::Vitals, vitals, -rowWidth / 2.0f + vitalsWidth / 2.0f));
-    quads.push_back(quadAt(WristBlock::Weapon, ammo, rowWidth / 2.0f - s.widthMetres / 2.0f));
+    quads.push_back(quadAt(WristBlock::Vitals, vitals, -rowWidth / 2.0f + vitalsWidth / 2.0f, lineY(vitals)));
+    quads.push_back(quadAt(WristBlock::Weapon, ammo, rowWidth / 2.0f - s.widthMetres / 2.0f, lineY(ammo)));
     return quads;
 }
 

@@ -9,6 +9,8 @@
 //   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). A weapon with a
 //   [sights] row is then turned about the grip so its sight line runs parallel to the aim ray (on by default,
 //   T-135; ETERNALVR_WEAPON_SIGHTS=0 turns it off on the rig); the shot ray and the aim dot do not change.
+//   The weapon's active mod is read each update (weapon_mods.hpp): a mod's own row (the Precision Bolt's
+//   scope) replaces the weapon's from the next update on, turning the gun about the glove's wrist.
 //   Last the model is moved, not turned, so the glove's wrist keeps the grip's own frame
 //   (xr_math::placeViewmodel). The game's own stores then carry it into both the deferred and the current
 //   render-model pose. Under head aim the game's own placement stays, moved by the rendered head's offset
@@ -30,8 +32,10 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/offhand_mods.hpp"
 #include "vkcore/room_scale.hpp"
+#include "vkcore/weapon_mods.hpp"
 #include "xr_math/hand_aim.hpp"
 
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -96,14 +100,17 @@ constexpr std::string_view kSwimFists = "weapon/player/fists_swim";
 const std::byte* g_cachedDecl = nullptr;
 bool g_cachedSeated = false;
 game::WeaponOffset g_cachedOffset;
-std::optional<game::WeaponSight> g_cachedSight; // not with ETERNALVR_WEAPON_SIGHTS=0
-bool g_cachedFists = false;                     // the held item is the fists of a melee or a Blood Punch
+std::optional<game::WeaponSight> g_cachedSight;    // not with ETERNALVR_WEAPON_SIGHTS=0
+std::optional<game::WeaponSight> g_cachedOwnSight; // the weapon's own row, the mods not read
+ModDecls g_cachedMods{};                           // the held weapon's active mods (weapon_mods.hpp)
+bool g_cachedFists = false;                        // the held item is the fists of a melee or a Blood Punch
 // The held item's decl the swim check last saw (viewmodel hook thread only), and its answer (read by the
 // camera hook on any thread).
 const std::byte* g_swimDecl = nullptr;
 std::atomic<bool> g_swimFists{false};
 std::atomic<std::uint64_t> g_loggedFists{0};
 std::atomic<std::uint64_t> g_loggedWeapons{0};
+std::atomic<std::uint64_t> g_loggedMods{0};
 std::atomic<std::uint64_t> g_loggedPlacements{0};
 std::atomic<bool> g_loggedEyeMismatch{false};
 // A cutscene shown around the player with the arms hidden (noteImmersiveCutscene; camera hook writes).
@@ -147,6 +154,10 @@ void logGripAgainstAim(const xr_math::IdViewAxis& aim, const xr_math::IdViewAxis
 float sightTurnDegrees(const game::WeaponSight& sight) {
     const float c = std::cos(sight.pitch * kRadiansPerDegree) * std::cos(sight.yaw * kRadiansPerDegree);
     return std::acos(std::fmin(1.0f, std::fmax(-1.0f, c))) / kRadiansPerDegree;
+}
+
+std::optional<xr_math::IdAngles> sightAngles(const std::optional<game::WeaponSight>& sight) {
+    return sight ? std::optional<xr_math::IdAngles>({sight->pitch, sight->yaw, 0.0f}) : std::nullopt;
 }
 
 // The decl name of the item in the right hand, or empty.
@@ -193,9 +204,13 @@ game::WeaponOffset offsetFor(const ArmsTick& arms) {
     }
     // Seated offsets when ETERNALVR_SEATED says so or the room's posture is seated (T-074).
     const bool seated = cfg.seated || roomPosture() == posture::Posture::Seated;
-    if (decl != g_cachedDecl || seated != g_cachedSeated) {
+    // The held weapon's active mods, each tick: a mod switch turns the model on the next update.
+    const ModDecls mods = weaponModDecls(heldItemObject(arms.hands, decl));
+    const bool itemChanged = decl != g_cachedDecl || seated != g_cachedSeated;
+    if (itemChanged || mods != g_cachedMods) {
         g_cachedDecl = decl;
         g_cachedSeated = seated;
+        g_cachedMods = mods;
         const std::string name = decl ? declName(decl) : std::string{};
         g_cachedFists = name.starts_with(kFistsPrefix);
         // ETERNALVR_VIEWMODEL_OFFSET replaces the table's offset; a sight row still applies on top of it.
@@ -203,22 +218,30 @@ game::WeaponOffset offsetFor(const ArmsTick& arms) {
                              ? *cfg.viewmodelOffset
                              : state().offsets.lookup(name, seated ? game::OffsetPosture::Seated
                                                                    : game::OffsetPosture::Standing);
-        g_cachedSight = cfg.weaponSights ? state().offsets.lookupSight(name) : std::nullopt;
-        if (g_loggedWeapons.fetch_add(1) < 40) {
-            char sight[96] = "off";
+        const std::array<std::string, 2> modNames{mods[0] ? declName(mods[0]) : std::string{},
+                                                  mods[1] ? declName(mods[1]) : std::string{}};
+        const SightRows rows = sightRowsFor(name, modNames);
+        const std::optional<game::SightRow>& sightRow = rows.row;
+        g_cachedSight = sightRow ? std::optional<game::WeaponSight>(sightRow->sight) : std::nullopt;
+        g_cachedOwnSight = rows.own ? std::optional<game::WeaponSight>(rows.own->sight) : std::nullopt;
+        if (itemChanged ? g_loggedWeapons.fetch_add(1) < 40 : g_loggedMods.fetch_add(1) < 40) {
+            char sight[160] = "off";
             if (cfg.weaponSights) {
                 if (g_cachedSight) {
-                    std::snprintf(sight, sizeof(sight), "row (%.2f %.2f) deg: the model turned %.2f deg",
+                    std::snprintf(sight, sizeof(sight),
+                                  "row '%.*s' (%.2f %.2f) deg: the model turned %.2f deg",
+                                  static_cast<int>(sightRow->key.size()), sightRow->key.data(),
                                   g_cachedSight->pitch, g_cachedSight->yaw, sightTurnDegrees(*g_cachedSight));
                 } else {
                     std::snprintf(sight, sizeof(sight), "no row: not turned");
                 }
             }
-            EVR_LOG(
-                "%s: held item '%s': viewmodel offset (%.2f %.2f %.2f) m, (%.1f %.1f %.1f) deg%s; sights %s",
-                kTag, name.c_str(), g_cachedOffset.forward, g_cachedOffset.left, g_cachedOffset.up,
-                g_cachedOffset.pitch, g_cachedOffset.yaw, g_cachedOffset.roll,
-                cfg.viewmodelOffset ? " (ETERNALVR_VIEWMODEL_OFFSET)" : "", sight);
+            EVR_LOG("%s: %s '%s' (mods '%s', '%s'): viewmodel offset (%.3f %.3f %.3f) m, (%.1f %.1f %.1f) "
+                    "deg%s; sights %s",
+                    kTag, itemChanged ? "held item" : "mods changed on held", name.c_str(),
+                    modNames[0].c_str(), modNames[1].c_str(), g_cachedOffset.forward, g_cachedOffset.left,
+                    g_cachedOffset.up, g_cachedOffset.pitch, g_cachedOffset.yaw, g_cachedOffset.roll,
+                    cfg.viewmodelOffset ? " (ETERNALVR_VIEWMODEL_OFFSET)" : "", sight);
         }
     }
     return g_cachedOffset;
@@ -270,8 +293,6 @@ void onViewmodel(const HookRegisters& regs) {
         }
         return;
     }
-    const Vec3 translation{offset.forward, offset.left, offset.up};
-    xr_math::IdAngles rotation{offset.pitch, offset.yaw, offset.roll};
     // The weapon in the left hand: once the left glove's wrist on the held item is known, the model moved
     // until it sits in the hand, also while the game has the arms (left_hand_arms.hpp); the rows are measured
     // for the right glove.
@@ -279,13 +300,15 @@ void onViewmodel(const HookRegisters& regs) {
                                           ? left_hand_arms::placement()
                                           : left_hand_arms::Placement{};
     lefty.weight = lefty.decl == g_cachedDecl ? lefty.weight : 0.0f; // for the held item only
-    rotation = lefty.weight > 0.0f ? arm::leftHandTurn(rotation, lefty.weight) : rotation;
-    const std::optional<xr_math::IdAngles> sight =
-        g_cachedSight ? std::optional<xr_math::IdAngles>({g_cachedSight->pitch, g_cachedSight->yaw, 0.0f})
-                      : std::nullopt;
+    const std::optional<xr_math::IdAngles> sight = sightAngles(g_cachedSight);
     const game::WeaponOffset& w = game::kRowsWrist;
+    // A mod's sight row turns the gun about the glove's wrist under the turn applied here; an
+    // ETERNALVR_VIEWMODEL_OFFSET is used as given.
+    const arm::RowPlacement row = arm::rowPlacement(
+        {offset.forward, offset.left, offset.up}, {offset.pitch, offset.yaw, offset.roll}, lefty.weight,
+        sightAngles(g_cachedOwnSight), sight, {w.forward, w.left, w.up}, !cfg.viewmodelOffset);
     xr_math::EyeRelativePose placed =
-        xr_math::placeViewmodel(world.grip, world.gripAxis, translation, rotation, sight,
+        xr_math::placeViewmodel(world.grip, world.gripAxis, row.translation, row.rotation, sight,
                                 {w.forward, w.left, w.up}, world.unitsPerMetre);
     if (lefty.weight > 0.0f) {
         placed.offset =

@@ -3,13 +3,17 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 
 using evr::game::builtinWeaponOffsets;
 using evr::game::OffsetPosture;
 using evr::game::parseOffsetList;
 using evr::game::parseWeaponOffsets;
+using evr::game::SightRow;
+using evr::game::WeaponModDecls;
 using evr::game::WeaponOffset;
 using evr::game::WeaponOffsetTable;
 using evr::game::WeaponSight;
@@ -65,20 +69,22 @@ TEST_CASE("the swim's fists have their own row; a melee's and the Berserk's fist
     CHECK(table.lookup("weapon/player/fists_berserk", OffsetPosture::Standing) == fallback);
 }
 
-TEST_CASE("the built-in sights cover the weapons with a sight line and no others") {
+TEST_CASE("the built-in sights cover every gun whose line is off the ray, and nothing else") {
     const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
     INFO(describe(table));
     REQUIRE(table.ok());
     for (const char* weapon :
          {"weapon/player/shotgun", "weapon/player/heavy_cannon", "weapon/player/chaingun",
-          "weapon/player/double_barrel", "weapon/player/gauss_rifle"}) {
+          "weapon/player/double_barrel", "weapon/player/gauss_rifle", "weapon/player/plasma_rifle",
+          "weapon/player/rocket_launcher"}) {
         INFO(weapon);
         CHECK(table.lookupSight(weapon).has_value());
     }
-    for (const char* other :
-         {"weapon/player/plasma_rifle", "weapon/player/rocket_launcher", "weapon/player/bfg",
-          "weapon/player/unmaykr", "weapon/player/fists", "weapon/player/fists_doom5melee",
-          "weapon/player/chainsaw", "weapon/player/crucible", "weapon/player/hammer", ""}) {
+    // The BFG's and the Unmaykr's lines are within 0.06 degrees of the ray unturned
+    // (docs/rig-findings/hands-rig.md, section 18).
+    for (const char* other : {"weapon/player/bfg", "weapon/player/unmaykr", "weapon/player/fists",
+                              "weapon/player/fists_doom5melee", "weapon/player/chainsaw",
+                              "weapon/player/crucible", "weapon/player/hammer", ""}) {
         INFO(other);
         CHECK_FALSE(table.lookupSight(other).has_value());
     }
@@ -100,6 +106,66 @@ TEST_CASE("sight rows follow the name rules, with no default") {
     CHECK_FALSE(table.lookupSight("weapon/player/plasma_rifle").has_value());
     // The sections around it read as before.
     CHECK(table.lookup("weapon/player/shotgun", OffsetPosture::Standing).forward == -0.25f);
+}
+
+TEST_CASE("a row keyed by the active mod's decl wins over the weapon's while that mod is active") {
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([sights]
+"weapon/player/heavy_cannon" = [-3.45, 0.19]
+"weapon/player/heavy_cannon_bolt_action" = [-0.15, 0.15]
+"weapon/player/shotgun" = [0.21, 2.17]
+"weapon/player/rifle_scope" = [0.5, 0.5]
+)");
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    constexpr std::string_view kCannon = "weapon/player/heavy_cannon";
+    constexpr std::string_view kBolt = "weapon/player/heavy_cannon_bolt_action";
+    const SightRow irons{{-3.45f, 0.19f}, kCannon};
+    const SightRow scope{{-0.15f, 0.15f}, kBolt};
+    // The Precision Bolt active (its decl in either fire mode's override): the scope's row.
+    CHECK(table.lookupSight(kCannon, {"", kBolt}) == scope);
+    CHECK(table.lookupSight(kCannon, {kBolt, ""}) == scope);
+    // A longer decl of the mod (a mastered one) takes the mod's row by the name rules.
+    CHECK(table.lookupSight(kCannon, {"", "weapon/player/heavy_cannon_bolt_action_mastery"}) == scope);
+    // The other mod, its mastered decl, or none: the weapon's own row.
+    for (const WeaponModDecls& mods :
+         {WeaponModDecls{"", "weapon/player/heavy_cannon_burst_detonate"},
+          WeaponModDecls{"", "weapon/player/heavy_cannon_burst_detonate_mastery"}, WeaponModDecls{"", ""}}) {
+        INFO(mods[1]);
+        CHECK(table.lookupSight(kCannon, mods) == irons);
+    }
+    // A weapon with one row keeps it whatever its mods.
+    const SightRow shotgun{{0.21f, 2.17f}, "weapon/player/shotgun"};
+    CHECK(table.lookupSight("weapon/player/shotgun", {"", "weapon/player/shotgun_secondary_pop_rockets"}) ==
+          shotgun);
+    // Only the held weapon's own mods count: another weapon's mod decl is not looked at.
+    CHECK(table.lookupSight("weapon/player/shotgun", {kBolt, ""}) == shotgun);
+    // No row for the weapon nor its mod: not turned.
+    CHECK_FALSE(
+        table.lookupSight("weapon/player/plasma_rifle", {"", "weapon/player/plasma_rifle_secondary_aoe"})
+            .has_value());
+    // A mod's row on a weapon without one of its own applies only while that mod is active.
+    CHECK(table.lookupSight("weapon/player/rifle", {"weapon/player/rifle_scope", ""}) ==
+          SightRow{{0.5f, 0.5f}, "weapon/player/rifle_scope"});
+    CHECK_FALSE(table.lookupSight("weapon/player/rifle", {"", ""}).has_value());
+    // The held decl's own rules are the plain lookup's.
+    CHECK(table.lookupSight("weapon/player/shotgun_sticky", {"", ""}) == shotgun);
+}
+
+TEST_CASE("the built-in table gives the Precision Bolt its scope's row and the Micro Missiles the irons'") {
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    const std::optional<SightRow> bolt =
+        table.lookupSight("weapon/player/heavy_cannon", {"", "weapon/player/heavy_cannon_bolt_action"});
+    const std::optional<SightRow> missiles = table.lookupSight(
+        "weapon/player/heavy_cannon", {"", "weapon/player/heavy_cannon_burst_detonate_mastery"});
+    REQUIRE(bolt.has_value());
+    REQUIRE(missiles.has_value());
+    CHECK(bolt->key == "weapon/player/heavy_cannon_bolt_action");
+    CHECK(missiles->key == "weapon/player/heavy_cannon");
+    CHECK(missiles->sight == table.lookupSight("weapon/player/heavy_cannon"));
+    // The scope's line is 0.2 degrees above the bore and the iron sights' 3.5: the rows about 3.3 apart.
+    CHECK(bolt->sight.pitch - missiles->sight.pitch == doctest::Approx(3.3).epsilon(0.1));
 }
 
 TEST_CASE("bad sight rows are reported and skipped") {

@@ -459,8 +459,8 @@ the same rectangle, then every 8th frame (a reading that differs goes back to ev
 HUD on the rig (Release) that took the CPU spent measuring from 255 to 37 us a frame on average at 1280x720
 and from 435 to 59 at 1736x1896; a frame that reads still spends up to 0.4 to 0.7 ms. The log's `weapon wheel bounds:` lines (when the
 wheel goes down, and every 600 readings) give its CPU and GPU time. Nothing here reads game memory, so it is
-the same on Steam and Game Pass. The wrist and weapon HUDs' corner blocks are still cut by fixed rectangles
-(docs/release/KNOWN-ISSUES.md). An in-headset capture's `-HUD.png` draws the quads of the last headset frame
+the same on Steam and Game Pass. The wrist and weapon HUDs' corner blocks are measured by the same readback
+while the wheel is down (docs/VR_HANDS_HUD.md, "Where the corner blocks are"). An in-headset capture's `-HUD.png` draws the quads of the last headset frame
 (at most 0.25 s before the capture) over the GUI image saved with it, a frame or two later.
 
 The band is `ui_layer::wideContentRect`: the centred rows of a target taller than 16:9, the centred
@@ -478,8 +478,9 @@ frame of the GUI image the headset shows, not the game's latest frame, and stays
 with the wheel up (`WheelCentring::kHoldSeconds`). The gate needs the controllers: with
 `ETERNALVR_CONTROLLERS=0` the wheel stays where the game draws it. The gate's inputs are the camera hook, the
 player's vtable (per build, `game_build.cpp`, both builds) and `idPlayer::inhibitFlags` (+0x87FC, the same
-type layout on the Game Pass build), so nothing here is Steam-only. A frame then has up to 13 layers with the
-wrist HUD (OpenXR guarantees 16). Rig QA: `wheel-centre` (`tools/rig/qa/README.md`) checks that the wheel the
+type layout on the Game Pass build), so nothing here is Steam-only. A frame then has up to 15 layers with the
+wrist HUD (OpenXR guarantees 16): with the wheel and both corner blocks cut at the Large HUD Scale the
+head-locked quad is up to 7 pieces. Rig QA: `wheel-centre` (`tools/rig/qa/README.md`) checks that the wheel the
 game drew lies in the logged rectangle.
 
 ## The menu's 3D model

@@ -12,11 +12,14 @@
 namespace evr::mp_policy {
 
 // The cvars the game's profile serializer writes from their live value (no archive flag keeps them out) and
-// the layer may hold: view_skipShakes (the comfort set, held 1 in VR) and r_sharpening (the launcher's
-// Sharpening). The serializer also writes r_antialiasing and r_raytracedReflectionsTemporalUpscaleQuality,
-// but the profile's load sets both again from its own fields (the DLSS index and the Reflections level), so a
-// held value saved there does not reach the flat game; putting another r_antialiasing in for a save would
-// also switch the renderer's anti-aliasing for that moment. They are left out.
+// the layer may hold: view_skipShakes (the comfort set, held 1 in VR), r_sharpening (the launcher's
+// Sharpening) and swf_anchorProfile (the HUD Scale, held at Large in VR; registered with flags 0x2, written
+// through the serializer's generic cvar entry at +0x1A4F, just before view_skipShakes'; its load then lays
+// the game's GUIs out again, 0x182A7B0). The serializer also writes r_antialiasing and
+// r_raytracedReflectionsTemporalUpscaleQuality, but the profile's load sets both again from its own fields
+// (the DLSS index and the Reflections level), so a held value saved there does not reach the flat game;
+// putting another r_antialiasing in for a save would also switch the renderer's anti-aliasing for that
+// moment. They are left out.
 const std::vector<std::string_view>& profileStoredCvars();
 bool profileStoredCvar(std::string_view name);
 
@@ -58,5 +61,28 @@ ProfileRepair profileRepair(bool requested, const std::optional<std::string>& lo
 // The status file's profile_repair value (vkcore/status_file.hpp): "off", "not_needed", or "done" once a
 // profile save after the repair wrote 0; nullptr while a repair waits for that save.
 const char* profileRepairStatus(ProfileRepair repair, bool savedSince);
+
+// A held cvar the player may still change in the game's own menu (the HUD Scale,
+// stereo_seq::stereoVrHeldCvars): the layer holds it until the game shows a value the layer did not write
+// while the hold stood confirmed (read back at the held value since the last profile load). That value is the
+// player's choice: from then on it is not held, and the profile's saves write it. A profile load sets the
+// player's stored value, which is not a choice: the hold is written again after it.
+class YieldingHold {
+public:
+    enum class Step {
+        Hold,  // write the held value
+        Keep,  // nothing to write (the held value is live, or the hold has yielded)
+        Yield, // the player changed it: from now on Keep
+    };
+    // `live`: the cvar's value now; `held`: the value the layer holds. Before a write and before a save.
+    Step step(std::string_view live, std::string_view held);
+    // A profile load starts.
+    void profileLoaded() { confirmed_ = false; }
+    [[nodiscard]] bool yielded() const { return yielded_; }
+
+private:
+    bool confirmed_ = false;
+    bool yielded_ = false;
+};
 
 } // namespace evr::mp_policy
