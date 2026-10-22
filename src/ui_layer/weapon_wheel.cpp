@@ -4,15 +4,11 @@
 
 namespace evr::ui_layer {
 
-BandRect wheelBandRect() {
-    return {0.64f, 0.20f, 0.95f, 0.75f};
-}
-
-std::optional<CentredWheel> centredWheel(std::uint32_t width, std::uint32_t height, float distanceMetres) {
+std::optional<CentredWheel>
+centredWheel(const PixelRect& rect, std::uint32_t width, std::uint32_t height, float distanceMetres) {
     if (!(distanceMetres > 0.0f) || !std::isfinite(distanceMetres)) {
         return std::nullopt;
     }
-    const PixelRect rect = toPixels(wheelBandRect(), width, height);
     const PixelRect band = wideContentRect(width, height);
     if (rect.width == 0 || rect.height == 0 || band.width == 0) {
         return std::nullopt;
@@ -34,7 +30,7 @@ HeadLockedHud headLockedHud(const PixelRect& shown,
                             std::uint32_t width,
                             std::uint32_t height,
                             const std::vector<WristBlock>& moved,
-                            bool wheelCentred,
+                            const std::optional<PixelRect>& wheel,
                             float distanceMetres) {
     HeadLockedHud hud;
     if (width == 0 || height == 0) {
@@ -45,8 +41,8 @@ HeadLockedHud headLockedHud(const PixelRect& shown,
     for (const WristBlock block : moved) {
         cuts.push_back(cutRect(block, width, height));
     }
-    if (wheelCentred) {
-        hud.wheel = centredWheel(width, height, distanceMetres);
+    if (wheel) {
+        hud.wheel = centredWheel(*wheel, width, height, distanceMetres);
         if (hud.wheel) {
             cuts.push_back(hud.wheel->rect);
         }

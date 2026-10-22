@@ -7,9 +7,13 @@
 // flight; a present that finds none free is simply not probed.
 //
 // All calls run on the present hook under the presenter's mutex, except backdrop(), which any thread reads.
+//
+// The weapon wheel's readback (wheel_probe.hpp) reads the same GUI target copies: `wheel` is recorded next to
+// this probe, and submitted(), cancel(), poll() and destroy() are passed on to it.
 
 #include "ui_layer/backdrop.hpp"
 #include "vkcore/dispatch.hpp"
+#include "vkcore/wheel_probe.hpp"
 
 #include <array>
 #include <atomic>
@@ -34,6 +38,9 @@ public:
     [[nodiscard]] bool backdrop() const { return backdrop_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::uint64_t readings() const { return readings_; }
     [[nodiscard]] std::uint64_t backdropsSeen() const { return ups_; }
+
+    // The weapon wheel's bounds, read from the same copies.
+    WheelProbe wheel;
 
 private:
     static constexpr std::uint32_t kReadings = 4;

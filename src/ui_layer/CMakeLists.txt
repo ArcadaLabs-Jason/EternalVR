@@ -6,12 +6,14 @@ evr_add_module(evr_ui_layer
         backdrop.cpp
         crosshair.cpp
         gui_target.cpp
+        hud_view.cpp
         hud_regions.cpp
         layout_tracker.cpp
         motion_target.cpp
         ui_settings.cpp
         weapon_hud.cpp
         weapon_wheel.cpp
+        wheel_bounds.cpp
         wrist_hud.cpp
     DEPENDS
         evr_common)

@@ -102,6 +102,7 @@ bool BackdropProbe::record(
 }
 
 void BackdropProbe::submitted(std::uint64_t timelineValue) {
+    wheel.submitted(timelineValue);
     for (Reading& r : slots_) {
         if (r.state == State::Recorded) {
             r.state = State::Submitted;
@@ -111,6 +112,7 @@ void BackdropProbe::submitted(std::uint64_t timelineValue) {
 }
 
 void BackdropProbe::cancel() {
+    wheel.cancel();
     for (Reading& r : slots_) {
         if (r.state == State::Recorded) {
             r.state = State::Idle;
@@ -119,6 +121,7 @@ void BackdropProbe::cancel() {
 }
 
 void BackdropProbe::poll(DeviceData& dev, std::uint64_t completedTimeline) {
+    wheel.poll(dev, completedTimeline);
     std::vector<std::uint32_t> done;
     for (std::uint32_t i = 0; i < kReadings; ++i) {
         if (slots_[i].state == State::Submitted && slots_[i].value <= completedTimeline) {
@@ -164,6 +167,7 @@ void BackdropProbe::poll(DeviceData& dev, std::uint64_t completedTimeline) {
 }
 
 void BackdropProbe::destroy(DeviceData& dev) {
+    wheel.destroy(dev);
     if (mapped_) {
         dev.vk.UnmapMemory(dev.device, memory_);
         mapped_ = nullptr;

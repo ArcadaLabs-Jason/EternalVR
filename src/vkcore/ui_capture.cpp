@@ -9,12 +9,26 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
 namespace evr::vkcore {
+
+namespace {
+
+bool writePng(const std::wstring& path, const std::vector<std::uint8_t>& png) {
+    std::FILE* f = nullptr;
+    if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) {
+        return false;
+    }
+    const bool ok = std::fwrite(png.data(), 1, png.size(), f) == png.size();
+    return std::fclose(f) == 0 && ok;
+}
+
+} // namespace
 
 void UiCapture::configure(const stereo_seq::CaptureSetting& setting) {
     directory_ = setting.directory;
@@ -103,6 +117,8 @@ VkBuffer UiCapture::bufferFor(DeviceData& dev, std::uint64_t index, VkExtent2D e
     index_ = index;
     currentPath_ = std::move(oncePath_);
     oncePath_.clear();
+    currentHud_ = std::move(onceHud_);
+    onceHud_.reset();
     return buffer_;
 }
 
@@ -117,6 +133,7 @@ void UiCapture::cancel() {
     if (state_ == State::Recorded) {
         state_ = State::Idle;
         currentPath_.clear(); // the eye capture takes the next pair, and arms this again
+        currentHud_.reset();
     }
 }
 
@@ -139,6 +156,8 @@ void UiCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     const bool once = !currentPath_.empty();
     std::shared_ptr<std::vector<std::uint8_t>> pixels;
     std::wstring path;
+    std::optional<ui_layer::HudView> hud = once ? std::move(currentHud_) : std::nullopt;
+    currentHud_.reset();
     state_ = State::Idle;
     const bool ready = finishes([&] {
         pixels = std::make_shared<std::vector<std::uint8_t>>(std::size_t{extent_.width} * extent_.height * 4);
@@ -157,15 +176,27 @@ void UiCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     const std::uint64_t index = index_;
     // The DLL is pinned by the XR worker, so the thread's code outlives any unload of the layer.
     auto write = [busy = writerBusy_, pixels = std::move(pixels), path = std::move(path), extent, logIt,
-                  index] {
+                  index, hud = std::move(hud)] {
         std::vector<std::uint8_t> png;
         bool ok =
             finishes([&] { png = stereo_seq::encodePngRgba8(pixels->data(), extent.width, extent.height); });
-        std::FILE* f = nullptr;
-        ok = ok && _wfopen_s(&f, path.c_str(), L"wb") == 0 && f;
-        if (ok) {
-            ok = std::fwrite(png.data(), 1, png.size(), f) == png.size();
-            ok = std::fclose(f) == 0 && ok;
+        ok = ok && writePng(path, png);
+        // The head-locked quads as they show (hud_view.hpp), next to the -UI.png.
+        const std::size_t ui = path.rfind(L"-UI.png");
+        if (ok && hud && ui != std::wstring::npos) {
+            std::wstring hudPath;
+            const bool drawn = finishes([&] {
+                const ui_layer::HudImage view =
+                    ui_layer::composeHudView(pixels->data(), extent.width, extent.height, *hud).image;
+                png = view.rgba.empty()
+                          ? std::vector<std::uint8_t>{}
+                          : stereo_seq::encodePngRgba8(view.rgba.data(), view.width, view.height);
+                hudPath = path.substr(0, ui) + L"-HUD.png";
+            });
+            if (!drawn || png.empty() || !writePng(hudPath, png)) {
+                EVR_LOG("ui: the composed HUD of GUI target capture %llu was NOT written",
+                        static_cast<unsigned long long>(index));
+            }
         }
         if (logIt || !ok) {
             EVR_LOG("ui: GUI target capture %llu %s (%ux%u)", static_cast<unsigned long long>(index),

@@ -428,12 +428,42 @@ the band's width across (the rig's GUI captures at 2048x2208, 1760x1400 and 1440
 coordinates to 0.001; at 2048x864, wider than 16:9, the same to 0.002 in the centred 1536 x 864 band the game
 fits its frame into). On the head-locked UI quad that is about 22 degrees right of straight ahead on the
 default HUD (2.0 m wide at 1.5 m) and about 40 degrees on a 2.5 m HUD at 0.9 m, at the edge of the view or
-past it (a player's report on a Pimax Dream Air). While the wheel is up, its rectangle of the GUI image (x
-0.64..0.95, y 0.20..0.75 of the band) goes on a quad of its own straight ahead at the HUD's distance, at the
-angle it spans on the default HUD (23 degrees for the rectangle, 21 for the wheel), in every HUD mode (panel,
-wrist, weapon) and at any HUD width or distance; the head-locked quad keeps the rest of the band, cut into
-rectangles around it as for the blocks the hand HUDs move, so the wheel is not shown twice and nothing else
-moves. The band is `ui_layer::wideContentRect`: the centred rows of a target taller than 16:9, the centred
+past it (a player's report on a Pimax Dream Air). While the wheel is up, its rectangle of the GUI image goes
+on a quad of its own straight ahead at the HUD's distance, at the angle it spans on the default HUD (23
+degrees on the default layout), in every HUD mode (panel, wrist, weapon) and at any HUD width or distance; the
+head-locked quad keeps the rest of the band, cut into rectangles around it as for the blocks the hand HUDs
+move, so the wheel is not shown twice and nothing else moves.
+
+The rectangle is where the game drew the wheel, measured from the GUI image (`ui_layer/wheel_bounds.hpp`,
+`vkcore/wheel_probe.hpp`), not a fixed one: the game's layout of the wheel is not fixed. A player's 1736x1896
+capture had it 17% larger and further in (band x 0.604..0.935, y 0.182..0.769), with the corner blocks larger
+too; up to 0.1.73 the fixed rectangle (x 0.64..0.95, y 0.20..0.75) left the wheel's left edge, top and bottom
+on the head-locked HUD at the game's wheel position, beside the centred quad. While the wheel is up, each GUI
+copy also copies every 4th row of the band's right part (from 0.45 of its width) into a host buffer (cached
+host memory; a GPU without it leaves the wheel where the game draws it, with a log line). Once the copy is
+done the layer takes the connected drawn shape (alpha 16 or more on a 4-pixel grid) that crosses the band's
+row 0.48 right of the middle, is clear of the band's top and bottom and has a wheel's size and shape. A shape
+more than 6% wider than tall is the wheel with something touching it on the left (the crosshair's rings end
+about 0.012 of the band's width left of the larger wheel above): it is cut to its right part, as wide as it
+is tall. Shapes lying wholly within 2.5% of the ring's height around it are added (a part of the wheel apart
+from the ring; on the rig's 79 wheel captures, highlighted segments included, and the player's, no drawn shape
+other than the ring lay within 8% of it, and the nearest other HUD element, the ammo block's prompts, is 5.9%
+below it). The bounding box is grown by the grid's step and 1% of the band's width. Within one time up the
+rectangle only grows (a highlighted segment's bar); the next time up starts from it, so the wheel is centred
+from its first frame. That rectangle is kept while the new measurements agree with it within 5% of the
+wheel's width on every edge; measurements reaching outside it, or smaller for 15 readings, replace it (the HUD
+laid out anew), and a wheel still opening never shrinks it. A GUI target resized while the wheel is up drops
+the rectangle. Before the first measurement of a session (one or two game frames) the wheel stays where the
+game draws it. The readback runs only while the wheel is up: every frame until three readings in a row find
+the same rectangle, then every 8th frame (a reading that differs goes back to every frame). With the larger
+HUD on the rig (Release) that took the CPU spent measuring from 255 to 37 us a frame on average at 1280x720
+and from 435 to 59 at 1736x1896; a frame that reads still spends up to 0.4 to 0.7 ms. The log's `weapon wheel bounds:` lines (when the
+wheel goes down, and every 600 readings) give its CPU and GPU time. Nothing here reads game memory, so it is
+the same on Steam and Game Pass. The wrist and weapon HUDs' corner blocks are still cut by fixed rectangles
+(docs/release/KNOWN-ISSUES.md). An in-headset capture's `-HUD.png` draws the quads of the last headset frame
+(at most 0.25 s before the capture) over the GUI image saved with it, a frame or two later.
+
+The band is `ui_layer::wideContentRect`: the centred rows of a target taller than 16:9, the centred
 columns of a wider one. Up to 0.1.70 a wider target was taken whole, so the rectangle started right of the
 wheel's left edge (at 2.37:1 about 11% of the wheel, more on wider images): that slice stayed on the
 head-locked quad at the wheel's place on the HUD, just right of the centre, and showed through the centred
@@ -550,10 +580,13 @@ down (held N s)`), every button, key and wheel event (the first 300, then one a 
 moves, `controllers' gameplay input held back (menu)` / `back on`, and every 10 s the counts (panel frames,
 moves, clicks, wheels, keys, not delivered, the cursor, and the game's desktop cursor moves and clips kept
 off the desktop). `keys:` `the game read an injected mouse event`, `desktop cursor kept from the game while
-it is not in the foreground`. `ui:` `weapon wheel straight ahead (panel HUD): GUI rect (x, y) w x h on a
-W x H m quad D m ahead (A deg wide); the head-locked HUD in N piece(s) around it` when the wheel goes
-ahead and `weapon wheel back on the HUD after S s (N headset frame(s) straight ahead)` when it goes back
-(40 wheel lines in all, these and `weapon wheel up, but no wheel quad ...` counted together); once, `the head-locked HUD
+it is not in the foreground`. `ui:` `weapon wheel straight ahead (panel HUD): GUI rect (x, y) w x h where the game drew it
+(from the GUI image; N headset frame(s) after it came up) on a W x H m quad D m ahead (A deg wide); the head-locked HUD in N piece(s) around it` when the wheel goes
+ahead and `weapon wheel back on the HUD after S s (N headset frame(s) straight ahead of M up; last GUI rect (x, y)
+w x h)` when it goes back, and `weapon wheel bounds: ... reading(s) in all, ... with the wheel found; ... CPU
+... us a reading ...; GPU copy ... us ...` after the first wheel found and every 600 readings (30 lines)
+(40 wheel lines in all, these and `weapon wheel up for S s (N headset frame(s)), but where the game drew it was
+not measured: it stayed on the HUD` counted together); once, `the head-locked HUD
 is cut into N pieces, only M fit; the rest is not shown` if the HUD ever needs more quads than the
 layer has. `menu model:` at start-up `idMenuWidget_3D_Stand::UpdatePosition view at RVA 0x15A6D84` and
 `hooks at RVA 0x15A6D97 (the render view) and 0x15A7134 (the placed model); ...` (or `off

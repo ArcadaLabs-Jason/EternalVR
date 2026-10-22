@@ -345,7 +345,12 @@ them is worse for you than described here.
   Which side of the vest a hit plays on, and the heartbeat's place, may be mirrored until a tester confirms
   them.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; while it is open it is
-  shown straight ahead, with motion controllers or a gamepad.
+  shown straight ahead, with motion controllers or a gamepad. The mod finds the wheel where the game drew
+  it, so a larger HUD layout no longer leaves the wheel's edges behind on the HUD; the very first time it
+  opens in a session it can sit at its usual place on the right for a frame or two.
+- **Health and ammo on the wrist or the gun with a larger HUD.** Those modes cut the corners of the HUD by
+  fixed rectangles made for the default layout. When the game lays its HUD out larger (one tester's was
+  about 10% larger), a thin edge of the health or ammo block can stay on the floating panel.
 - **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
   new and has not been tried in a headset yet. How far you need to turn your hand may change.
 - **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new

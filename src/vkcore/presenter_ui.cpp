@@ -341,6 +341,8 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
         mirror.keepPanel(dev, cb, family, image, uiExtent, panel->format, panel->extent);
     }
     uiBackdrop.record(dev, cb, image, uiExtent, ui_layer::kCrosshairMask);
+    // While the weapon wheel is up, where the game drew it (wheel_probe.hpp).
+    uiBackdrop.wheel.record(dev, cb, family, image, uiExtent, controllers::wheelView());
     if (const VkBuffer buffer = uiCapture.bufferFor(dev, uiCaptures, uiExtent)) {
         EyeCapture::record(dev, cb, image, uiExtent, buffer);
     }

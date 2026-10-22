@@ -98,6 +98,25 @@ function Test-QaWheelRect($Ctx) {
     $fills = $s[0] -gt 0 -and ($s[4] - $s[2]) -ge 0.7 * $rw -and ($s[5] - $s[3]) -ge 0.7 * $rh
     Add-QaResult $Ctx $name ($share -ge 0.99 -and $fills) ("$($before.Name) -> $($open.Name): $($s[0]) changed pixel(s) inside, $($s[1]) outside ({0:P1} inside), inside ($($s[2]), $($s[3]))..($($s[4]), $($s[5])); rectangle ($rx, $ry) $rw x $rh" -f $share)
 }
+# The in-headset capture taken with the wheel open: its text names the wheel's quad straight ahead (the
+# head-locked quads as cut), and when it saved the GUI target, -HUD.png draws them. With the periodic GUI
+# capture on (UiCaptures) its writer is often busy and the capture's GUI target is then not saved.
+function Test-QaWheelHudCapture($Ctx) {
+    $name = 'the in-headset capture has the centred wheel'
+    $dir = Join-Path $Ctx.LogsDir 'captures'
+    $txt = @(Get-ChildItem -LiteralPath $dir -Filter 'capture-*.txt' -ErrorAction SilentlyContinue) | Select-Object -Last 1
+    if (-not $txt) { Add-QaResult $Ctx $name $false "no capture in $dir"; return }
+    $text = Read-QaShared $txt.FullName
+    $named = $text -match 'weapon wheel quad straight ahead: GUI rect \(\d+, \d+\) \d+ x \d+, [\d.]+ x [\d.]+ m'
+    $hud = $txt.FullName -replace '\.txt$', '-HUD.png'
+    if ($text -match 'gui target: saved') {
+        $ok = $named -and (Test-Path -LiteralPath $hud)
+        Add-QaResult $Ctx $name $ok "$($txt.Name); -HUD.png $(if (Test-Path -LiteralPath $hud) { 'written' } else { 'MISSING' })"
+    } else {
+        Add-QaResult $Ctx $name $named "$($txt.Name); GUI target not saved with it, so no -HUD.png"
+    }
+}
+
 $wheelScenarios = @(
     @{
         Name = 'thumbrest-pick'; Kind = 'game'
@@ -348,7 +367,7 @@ $wheelScenarios = @(
     },
     @{
         Name = 'wheel-centre'; Kind = 'game'
-        Proves = 'The weapon wheel held open with the stick shows straight ahead: the layer logs the wheel quad and its rectangle, the wheel the game drew lies in that rectangle (GUI captures before the stick and with the wheel open), and it goes back when the wheel closes'
+        Proves = 'The weapon wheel held open with the stick shows straight ahead: the layer logs the wheel quad and its rectangle, the wheel the game drew lies in that rectangle (GUI captures before the stick and with the wheel open), an in-headset capture with the wheel open draws it centred (-HUD.png), and it goes back when the wheel closes'
         Env = @()
         UiCaptures = 10
         Input = @()
@@ -358,6 +377,10 @@ $wheelScenarios = @(
             $c.WheelDown = Get-Date
             Write-QaInput $c @('right.stick = 0, -1'); Wait-QaSeconds $c 2
             Save-QaShot $c 'wheel'; Save-QaXrShot $c 'wheel'
+            # The in-headset capture (left Menu held, then a trigger) with the wheel open: its -HUD.png.
+            Write-QaInput $c @('right.stick = 0, -1', 'left.menu = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c @('right.stick = 0, -1', 'left.menu = 1', 'left.trigger = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c @('right.stick = 0, -1'); Wait-QaSeconds $c 1.5
             $c.WheelUp = Get-Date
             Write-QaInput $c @(); Wait-QaSeconds $c 1.5
             Save-QaXrShot $c 'after'
@@ -367,8 +390,9 @@ $wheelScenarios = @(
             Test-QaPresent $c 'controllers: forced view starts (weapon wheel'
             Test-QaPresent $c 'ui: weapon wheel straight ahead (panel HUD): GUI rect'
             Test-QaPresent $c 'ui: weapon wheel back on the HUD after'
-            Test-QaAbsent $c 'ui: weapon wheel up, but no wheel quad'
+            Test-QaAbsent $c 'where the game drew it was not measured'
             Test-QaWheelRect $c
+            Test-QaWheelHudCapture $c
         }
     }
 )

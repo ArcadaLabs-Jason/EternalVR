@@ -241,6 +241,7 @@ add_library(evr_layer SHARED
     virtual_client.cpp
     virtual_client_settings.cpp
     vram_watch.cpp
+    wheel_probe.cpp
     window_cap.cpp
     xr_presenter.cpp)
 # Motion controllers (M5, controllers.hpp).

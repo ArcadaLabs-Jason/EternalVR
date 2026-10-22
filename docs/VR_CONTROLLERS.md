@@ -866,7 +866,10 @@ it (it switches to the desktop view), so it is not used.
 
 The layer saves into `<ETERNALVR_LOG_DIR>\captures\` (`vkcore/bug_capture.hpp`, `presenter_snapshot.cpp`):
 `capture-<date>-<time>-p<pair>-t<tick>-L.png` and `-R.png` (the two eye images as presented), `-UI.png` (the
-game's GUI target, what the HUD quad shows, with its alpha) and `.txt` (the head and eye poses and FOVs, where
+game's GUI target, what the HUD quad shows, with its alpha), `-HUD.png` (the head-locked quads as the
+headset showed them in the last frames: the GUI target cut into the HUD quad's pieces around the blocks the
+hand HUDs move, with the centred weapon wheel's quad drawn over them where the player sees it; the hand HUDs'
+own quads follow a hand and are not drawn; `ui_layer/hud_view.hpp`) and `.txt` (the head and eye poses and FOVs, where
 the player stands in the map (the game's view origin and yaw, as `where` and `setviewpos` use them), the
 render size, the TAA / DLSS state, the tick). In a menu or loading screen there is no stereo pair: after 0.3 s
 the next mono frame is saved as `-mono.png` instead. Under Parallel Eye Rendering a capture's `-L.png` and

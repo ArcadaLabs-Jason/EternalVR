@@ -7,8 +7,10 @@
 
 #include "common/pose.hpp"
 #include "features/input/controller_state.hpp"
+#include "ui_layer/hud_view.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "ui_layer/weapon_wheel.hpp"
+#include "ui_layer/wheel_bounds.hpp"
 #include "ui_layer/wrist_hud.hpp"
 
 #include <windows.h>
@@ -44,6 +46,10 @@ public:
                        const XrCompositionLayerQuad& ui,
                        bool wheelInImage,
                        XrCompositionLayerQuad* out);
+
+    // Any thread: the head-locked quads of the last frame fill() composed, when that was at most
+    // `maxAgeSeconds` ago (none while a menu panel or no GUI image is shown); for the in-headset capture.
+    static std::optional<ui_layer::HudView> lastView(double maxAgeSeconds);
 
 private:
     // The hand quads after the `n` head-locked pieces in `out`; returns the new count.
@@ -90,10 +96,14 @@ private:
     // snapshot with both poses tracked.
     std::optional<Pose> weaponInAim_;
     std::array<XrCompositionLayerColorScaleBiasKHR, kMaxQuads> bias_{};
-    // The weapon wheel straight ahead (every HUD mode).
+    // The weapon wheel straight ahead (every HUD mode), where the game drew it (wheel_bounds.hpp).
     ui_layer::WheelCentring wheel_;
-    double wheelSince_ = 0.0;       // when the wheel was last centred
-    std::uint64_t wheelFrames_ = 0; // headset frames with the wheel centred, this time
+    ui_layer::WheelRectTracker wheelRect_;
+    double wheelSince_ = 0.0;         // when the wheel was last centred
+    std::uint64_t wheelFrames_ = 0;   // headset frames with the wheel on its quad, this time up
+    std::uint64_t wheelUpFrames_ = 0; // headset frames with the wheel up, this time
+    bool wheelQuadLogged_ = false;
+    ui_layer::PixelRect wheelLast_{};
     std::uint32_t wheelChangesLogged_ = 0;
 };
 

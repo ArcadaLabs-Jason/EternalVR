@@ -9,11 +9,13 @@
 // All calls except the writer thread run on the present hook under the presenter's mutex.
 
 #include "stereo_seq/seq_settings.hpp"
+#include "ui_layer/hud_view.hpp"
 #include "vkcore/dispatch.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -36,12 +38,17 @@ public:
     void destroy(DeviceData& dev);
 
     // The in-headset capture (bug_capture.hpp): the next bufferFor takes this image whatever the every-N
-    // setting and whether it is on, written as `path`. disarmOnce drops it and returns true when it was not
-    // taken.
-    void armOnce(std::wstring path) { oncePath_ = std::move(path); }
+    // setting and whether it is on, written as `path`; with `hud` (the head-locked quads composed last,
+    // hud_view.hpp) also drawn as they show, as `path` with -HUD.png for its -UI.png. disarmOnce drops it and
+    // returns true when it was not taken.
+    void armOnce(std::wstring path, std::optional<ui_layer::HudView> hud = std::nullopt) {
+        oncePath_ = std::move(path);
+        onceHud_ = std::move(hud);
+    }
     bool disarmOnce() {
         const bool untaken = !oncePath_.empty();
         oncePath_.clear();
+        onceHud_.reset();
         return untaken;
     }
 
@@ -63,8 +70,10 @@ private:
     void* mapped_ = nullptr;
     std::shared_ptr<std::atomic<bool>> writerBusy_ = std::make_shared<std::atomic<bool>>(false);
     std::uint64_t written_ = 0;
-    std::wstring oncePath_;    // armed
-    std::wstring currentPath_; // the image in flight is a one-shot, written here
+    std::wstring oncePath_;                       // armed
+    std::wstring currentPath_;                    // the image in flight is a one-shot, written here
+    std::optional<ui_layer::HudView> onceHud_;    // armed with it
+    std::optional<ui_layer::HudView> currentHud_; // the one-shot in flight's
 };
 
 } // namespace evr::vkcore

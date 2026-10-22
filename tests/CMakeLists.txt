@@ -407,12 +407,14 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/backdrop_tests.cpp
         ui_layer/crosshair_tests.cpp
         ui_layer/gui_target_tests.cpp
+        ui_layer/hud_view_tests.cpp
         ui_layer/hud_regions_tests.cpp
         ui_layer/layout_tracker_tests.cpp
         ui_layer/motion_target_tests.cpp
         ui_layer/ui_settings_tests.cpp
         ui_layer/weapon_hud_tests.cpp
         ui_layer/weapon_wheel_tests.cpp
+        ui_layer/wheel_bounds_tests.cpp
         ui_layer/wrist_hud_tests.cpp
     DEPENDS evr_ui_layer)
 

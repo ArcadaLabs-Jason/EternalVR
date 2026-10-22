@@ -13,12 +13,16 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <utility>
 
 namespace evr::vkcore {
 
 namespace {
+
+// How old the head-locked composition may be for a capture (a few headset frames).
+constexpr double kHudViewSeconds = 0.25;
 
 void append(std::string& out, const char* format, ...) {
     char line[512];
@@ -173,7 +177,11 @@ bool armCapture(XrPresenter::Impl& p,
     append(t, "route S: %s; menu up: %s; UI layer: %s\n", p.seqActive.load() ? "on" : "off",
            p.menuUp.load() ? "yes" : "no", p.settings.ui.enabled ? "on" : "off");
     if (p.settings.ui.enabled) {
-        p.uiCapture.armOnce(shot.base + L"-UI.png");
+        // The head-locked quads the headset showed last (the hand HUDs' and the wheel's cuts): -HUD.png.
+        std::optional<ui_layer::HudView> hud = WristHud::lastView(kHudViewSeconds);
+        t += hud ? ui_layer::describeHudView(*hud)
+                 : std::string("hud as composed: none in the last frames (a menu panel or no GUI image)\n");
+        p.uiCapture.armOnce(shot.base + L"-UI.png", std::move(hud));
     }
     if (p.motionCapture.enabled() && kind == CaptureKind::Pair) { // it takes Route S's eye R only
         p.motionCapture.armOnce(shot.base);
