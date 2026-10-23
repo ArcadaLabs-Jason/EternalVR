@@ -158,7 +158,10 @@ them is worse for you than described here.
 - **Demons flying far off can leave a trail.** In a headset test in Exultia, distant flying demons smeared
   the way anti-aliasing (TAA) can smear fast motion. Anti-aliasing Off on the Play tab avoids TAA's
   smearing, at the cost of some shimmer on edges.
-- **The HUD's objective marker can sit a little off** the place it points to.
+- **The HUD's markers are drawn at the HUD's distance.** Objective and other map markers now point at the
+  place they mark; before, they could sit well off it. I checked this on a test rig, not yet in a headset. They
+  are still drawn on the HUD panel, so while you look at a far-off spot its marker may look doubled (and the
+  other way round). A marker above or below the HUD panel waits at its top or bottom edge.
 - **The HUD's smallest text is hard to read.** The mission challenge names, the "PRESS [HOLD X] TO VIEW
   CHALLENGE DETAILS" hint and the Demonic Corruption bar's title are small on the default HUD panel. A larger
   HUD size (or a shorter HUD distance) on the Play tab makes them bigger, along with the rest of the HUD.

@@ -15,6 +15,7 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/light_cull.hpp"
+#include "vkcore/marker_hooks.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/stall_watch.hpp"
@@ -400,6 +401,9 @@ void XrPresenter::Impl::frame() {
         // A menu's 3D model goes where the panel shows the menu (menu_model_hook.hpp).
         menu_model::notePanel(headTracked && uiShown && (menuOn || menuHeld), uiQuad, uiExtent.width,
                               uiExtent.height);
+        // The HUD's world-attached markers follow the head-locked quad (marker_hooks.hpp).
+        noteMarkerQuad(headTracked && uiShown && !menuOn && !menuHeld, settings.ui, uiExtent.width,
+                       uiExtent.height);
     } else {
         releaseMenuInput(*this, "the headset is not showing frames");
     }

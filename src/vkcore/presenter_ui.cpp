@@ -7,6 +7,7 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/controllers.hpp"
+#include "vkcore/marker_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/runtime_cvars_reticle.hpp"
 #include "vkcore/taa_hooks.hpp"
@@ -36,6 +37,9 @@ constexpr DXGI_FORMAT kUiSwapchainFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
 void XrPresenter::Impl::startUi() {
     const bool located = ui_engine::install(settings.ui.skipComposite);
+    if (located) {
+        installMarkerHooks(); // the HUD's world-attached markers (marker_hooks.hpp)
+    }
     EVR_LOG("ui: UI layer %s; quad %.2f m wide, %.2f m ahead, %.2f m up, head-locked; GUI composite in the "
             "eyes %s; the game's crosshair under hand aim: %s (ETERNALVR_UI_CROSSHAIR)",
             located ? "on" : "OFF (reason above)", settings.ui.widthMetres, settings.ui.distanceMetres,

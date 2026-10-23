@@ -826,11 +826,13 @@ is shown, without leaning in or moving the panel: 10 wrist glances, 10 subtitle 
 notifications, 3 pop-ups and 3 tutorial prompts, each read correctly and completely. Crosshair and HUD
 options are forced through cvars and decl data where no cvar exists (R03).
 
-**Screen-projected markers (T-058).** Objective and POI markers, and any prompt drawn at an object's
-screen position (R12 section 4.1), are placed for the centred camera, so on a layer 2 m away they point
-at the wrong place. v1 hides the objective markers (`g_setting_objectiveMarkers 0`). The interact
-prompt is checked in M6 and hidden (`g_setting_interact_prompt 0`) if it misaligns. Reprojecting
-markers to world depth is v1.x.
+**Screen-projected markers (T-058, T-145).** Objective and POI markers, damage numbers and the other
+world-attached HUD pieces are drawn where the HUD's one world-to-screen matrix per game frame puts their
+target on the GUI target. While the HUD is on the head-locked quad the layer gives that matrix the quad's
+frustum (the GUI target as the quad shows it, seen from the head), so a marker shows in its target's
+direction, and a marker above or below the 16:9 band is clamped to the band's edge
+(`src/vkcore/marker_hooks.*`, docs/rig-findings/hud-markers.md). The interact prompt is not
+world-projected. Markers stay at the quad's depth; drawing them per eye at their target's depth is v1.x.
 
 ## 9. Input and aim (`engine/eternal`, `xr/`)
 

@@ -257,9 +257,8 @@ Required for v1
 - [ ] Forced cvars applied from the lists kept as data: the launcher's command line
       (`launcher/data/forced-cvars.txt`) and the layer's run-time holds (`src/stereo_seq/seq_settings.cpp`),
       with a check that code sets no cvar outside them (T-092): bob, kicks, shakes, blur, aim assist,
-      `hands_fovScale 1` (permanent, T-053), `g_setting_objectiveMarkers 0` (T-058), `r_hdrDisplay 0`
-      (T-080), the pacing cvars of T-047 (`r_swapInterval 0`, `rs_enable 0`, frame-rate cap off) and GPU
-      triangle culling off (T-073)
+      `hands_fovScale 1` (permanent, T-053), `r_hdrDisplay 0` (T-080), the pacing cvars of T-047
+      (`r_swapInterval 0`, `rs_enable 0`, frame-rate cap off) and GPU triangle culling off (T-073)
 - [ ] BATTLEMODE guard (REQ-16, T-109): each signal (the lobby-join and matchmaking entry, the Steam
       join callbacks the game registers, the BATTLEMODE screens, a `game/pvp/*` load) is injected through
       a development-build test hook; the log names the signal and every game-touching feature is latched
@@ -548,8 +547,10 @@ Required for v1
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere
 - [ ] The UI image joins the presenter's shared-image slots (`src/vkcore/presenter_copy.cpp`), and its
       copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3)
-- [ ] Screen-projected markers (T-058): objective markers stay hidden; the interact prompt is checked in
-      the combat and hub routes and hidden (`g_setting_interact_prompt 0`) if it misaligns
+- [ ] Screen-projected markers (T-058, T-145): the HUD's objective and POI markers and damage numbers follow
+      the head-locked quad, those above or below the 16:9 band clamped to its edge; built and measured on the
+      rig with OpenXR-Simulator (docs/rig-findings/hud-markers.md: 6 to 23 degrees off before, under 1 after;
+      QA scenario `hud-markers`); the interact prompt is not world-projected. Waits for a headset look
 - [ ] [owner] Legibility protocol written in a new `docs/test-protocols/ui-legibility.md` (T-077); each of
       the following passes it at default settings, read by the owner and one tester where available:
   - wrist-glance HUD: health, armor and ammo read correctly on 10 of 10 prompted glances during the
@@ -728,6 +729,20 @@ v1 if time allows
       foveation rings seen in a headset there, `vulkaninfo` recorded on such a GPU with the
       fragment-shading-rate features, and which extension `r_VRSEnabled` enables (NV or KHR, T-037)
 - [ ] FSR 4 through OptiScaler, verified by a tester with an RDNA 3 or RDNA 4 GPU (T-065)
+- [ ] Frame generation, after the feature track (owner, 2026-10-22: performance is already good, and VR
+      features matter to more players sooner), or earlier only if a player's hardware makes it urgent. A study of existing solutions' code (OFXR Bridge and its
+      DLSS-FG fork, VDXR, Monado, the `XR_FB_space_warp` / `XR_EXT_frame_synthesis` specs) set the order:
+      (a) a "submit new frames only" XR pacing setting (launcher Advanced, off by default): today the XR loop
+      resubmits the last image each headset frame, which leaves third-party OpenXR frame generators such as
+      OFXR Bridge nothing to interpolate; (b) give the runtime the per-eye depth the layer already makes
+      (`XR_KHR_composition_layer_depth`, listed by VDXR; no depth is submitted today), then measure the
+      runtime's own reprojection and space warp with and without it in the headset; (c) an offline rig spike
+      that extrapolates real frame N to frame N+1's pose and time from colour alone (as runtime space warp
+      does) and from the game's per-eye motion vectors and depth, scored against the real N+1, so the
+      decision on (d) rests on numbers; (d) the layer's own per-eye extrapolation only if (c) shows a clear win
+      on moving enemies. No built-in interpolation: in VR it always costs a display period (11 ms at 90 Hz).
+      On the test PC (2026-10-22, no headset connected) VDXR (Virtual Desktop Streamer 1.34.22) lists 31
+      instance extensions and no frame-synthesis extension, and its code has no such path
 
 ## M10: Beta and public release
 

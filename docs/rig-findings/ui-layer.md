@@ -180,7 +180,7 @@ all runtime-settable, `analysis/ui-layer/cvars.py`) [static-verified]:
 | `g_showHud` | 0x463AAC0 | 1 | hides all HUD elements (debug; T-043 captures) |
 | `g_setting_hud_show`, `g_setting_hud_preset` | 0x45F46E0, 0x4696000 | 1, 4 | menu settings: HUD on/off; preset 0 none .. 4 all, 5 custom |
 | `g_setting_hudNotifications`, `g_setting_hud_*` | 0x45F4980, ... | 1 | per element (powerups, tooltips, ability indicators, mission challenges) |
-| `g_setting_objectiveMarkers`, `g_setting_interact_prompt` | 0x45F4900, 0x45F4760 | 1 | screen-projected markers (T-058) |
+| `g_setting_objectiveMarkers`, `g_setting_interact_prompt` | 0x45F4900, 0x45F4760 | 1 | screen-projected markers (T-058; they follow the quad: T-145, hud-markers.md) |
 | `hud_globalAlpha` | 0x4642E50 | 1.0 | HUD opacity |
 | `swf_safeFrame` | 0x47CBF60 | 0.005 | margin to the screen edge (region cutting, T-077) |
 | `hud_subtitles_textSize`, `swf_useSubtitles` | 0x46413D0, 0x467DB20 | 1, 0 | subtitle size (0 small .. 2 large) |

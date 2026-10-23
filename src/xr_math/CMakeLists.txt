@@ -12,6 +12,7 @@ evr_add_module(evr_xr_math
         head_aim.cpp
         head_view.cpp
         launcher_pose.cpp
+        marker_projection.cpp
         offhand_pose.cpp
         weapon_pose.cpp
         projection.cpp

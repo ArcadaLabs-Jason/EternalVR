@@ -68,6 +68,7 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios-controls.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-guard.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-foveation.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-markers.ps1')
 
 if (-not $LayerSrc) { $LayerSrc = Join-Path $script:QaRepo 'build\windows-msvc\src\vkcore' }
 if (-not $Out) { $Out = "E:\Code\resources\Testing\QA-$((Get-Date).ToString('yyyyMMdd-HHmm'))" }

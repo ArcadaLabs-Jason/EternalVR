@@ -40,6 +40,7 @@ evr_add_test(evr_xr_math_tests
         xr_math/forced_view_tests.cpp
         xr_math/head_view_tests.cpp
         xr_math/launcher_pose_tests.cpp
+        xr_math/marker_projection_tests.cpp
         xr_math/offhand_pose_tests.cpp
         xr_math/weapon_pose_tests.cpp
         xr_math/projection_tests.cpp

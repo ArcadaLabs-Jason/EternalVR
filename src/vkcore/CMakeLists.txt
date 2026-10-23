@@ -203,6 +203,7 @@ add_library(evr_layer SHARED
     taa_resize.cpp
     test_cpu_load.cpp
     test_keys.cpp
+    marker_hooks.cpp
     ui_capture.cpp
     ui_engine.cpp
     ui_vulkan.cpp
