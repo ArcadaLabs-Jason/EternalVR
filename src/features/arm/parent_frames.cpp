@@ -57,7 +57,10 @@ std::array<ModWrite, kGloveWrites> gloveWrites(
     const xr_math::ModelPose* parent = &glove.wrist;
     for (const ArmJoint joint : kLayerModJoints) {
         const xr_math::ModelPose& pose = arm[index(joint)];
-        out[k++] = inParentFrame(relative(*parent, pose), scale, (zeroScale & (1u << index(joint))) != 0);
+        const bool zero = (zeroScale & (1u << index(joint))) != 0;
+        out[k++] = joint == ArmJoint::UpperArm && glove.modelShoulder
+                       ? inModelSpace(pose, scale, origin, zero)
+                       : inParentFrame(relative(*parent, pose), scale, zero);
         parent = &pose;
     }
     for (const xr_math::ModelPose& finger : glove.fingersLocal) {

@@ -20,6 +20,7 @@ using evr::arm::kHandJointCount;
 using evr::arm::kHandJointParents;
 using evr::arm::leftGloveShift;
 using evr::arm::leftHandTurn;
+using evr::arm::LeftWristOnGun;
 using evr::arm::mirroredGrip;
 using evr::arm::mirroredInRoot;
 using evr::arm::mirroredLocal;
@@ -285,4 +286,86 @@ TEST_CASE("two reads of a root are one pose within 1 cm and 2 degrees") {
     CHECK_FALSE(sameRootPose(root, turned, 0.01f));
     turned.axis = axisFromAngles({0.0f, 1.5f, 0.0f});
     CHECK(sameRootPose(root, turned, 0.01f));
+}
+
+namespace {
+
+// The Crucible's gun root in a held pose (a rig dump, model space) and its right glove's wrist from the root
+// (hands-rig.md, section 12), mirrored for the left glove as left_hand_arms.cpp does; its row (metres).
+const ModelPose kCrucibleRoot{
+    {0.6114f, -0.2136f, -0.2279f},
+    {{0.9993f, 0.03723f, 0.00257f}, {-0.03715f, 0.99898f, -0.0258f}, {-0.00353f, 0.02569f, 0.99966f}}};
+const Vec3 kCrucibleRow{0.681f, -0.240f, -0.266f};
+
+GripPose crucibleLeftGrip() {
+    GripPose right = heavyCannonGrip();
+    right.wrist.position = {0.053f, -0.063f, -0.007f};
+    return mirroredGrip(right);
+}
+
+} // namespace
+
+TEST_CASE("the left glove's wrist on the gun: from the game's grip once read, else the item's row at the "
+          "world's scale") {
+    const GripPose left = crucibleLeftGrip();
+    const int item = 0;
+    LeftWristOnGun wrist;
+    // Before the grip is read the row places it, in game units: metres times the world's units per metre.
+    const auto before = wrist.update(&item, std::nullopt, std::nullopt, kCrucibleRow, 1.0f);
+    REQUIRE(before);
+    CHECK(approxEqual(*before, kCrucibleRow, 1e-6f));
+    const auto scaled = wrist.update(&item, std::nullopt, std::nullopt, kCrucibleRow, 1.5f);
+    REQUIRE(scaled);
+    CHECK(approxEqual(*scaled, kCrucibleRow * 1.5f, 1e-6f));
+    CHECK_FALSE(wrist.fromGrip(&item));
+    // A root without the left grip (or a grip without the root) is no read.
+    const auto rootOnly = wrist.update(&item, kCrucibleRoot, std::nullopt, kCrucibleRow, 1.5f);
+    REQUIRE(rootOnly);
+    CHECK(approxEqual(*rootOnly, kCrucibleRow * 1.5f, 1e-6f));
+    // Once read, the grip places it (already in game units: no scale).
+    const auto read = wrist.update(&item, kCrucibleRoot, left, kCrucibleRow, 1.5f);
+    REQUIRE(read);
+    CHECK(approxEqual(*read, compose(kCrucibleRoot, left.wrist).position, 1e-5f));
+    CHECK(wrist.fromGrip(&item));
+    // With neither row nor grip the model stays the right glove's.
+    LeftWristOnGun none;
+    CHECK_FALSE(none.update(&item, std::nullopt, left, std::nullopt, 1.0f).has_value());
+    CHECK_FALSE(none.update(&item, std::nullopt, std::nullopt, std::nullopt, 1.0f).has_value());
+}
+
+TEST_CASE("the left glove's wrist taken from the game's grip stays for the held item when the grip lapses") {
+    const GripPose left = crucibleLeftGrip();
+    const int item = 0;
+    const int other = 0;
+    LeftWristOnGun wrist;
+    const auto read = wrist.update(&item, kCrucibleRoot, left, kCrucibleRow, 1.0f);
+    REQUIRE(read);
+    REQUIRE(length(*read - kCrucibleRow) > 0.05f); // the two apart, so the test tells them apart
+    // The grip lapses (a kept grip whose root no longer holds): the last wrist read, not the row.
+    for (const auto& root : {std::optional<ModelPose>{}, std::optional<ModelPose>{kCrucibleRoot}}) {
+        const auto lapsed =
+            wrist.update(&item, root, root ? std::nullopt : std::optional(left), kCrucibleRow, 1.0f);
+        REQUIRE(lapsed);
+        CHECK(approxEqual(*lapsed, *read, 1e-6f));
+        CHECK(wrist.fromGrip(&item));
+    }
+    // A read under a moved root replaces it.
+    ModelPose moved = kCrucibleRoot;
+    moved.position.x += 0.02f;
+    const auto again = wrist.update(&item, moved, left, kCrucibleRow, 1.0f);
+    REQUIRE(again);
+    CHECK(approxEqual(*again, compose(moved, left.wrist).position, 1e-5f));
+    CHECK(approxEqual(*wrist.update(&item, std::nullopt, std::nullopt, kCrucibleRow, 1.0f), *again, 1e-6f));
+    // Another item starts over: its row, or nothing; so does the first again.
+    CHECK_FALSE(wrist.fromGrip(&other));
+    CHECK(approxEqual(*wrist.update(&other, std::nullopt, std::nullopt, kCrucibleRow, 1.0f), kCrucibleRow,
+                      1e-6f));
+    CHECK_FALSE(wrist.fromGrip(&item));
+    CHECK_FALSE(wrist.update(&item, std::nullopt, std::nullopt, std::nullopt, 1.0f).has_value());
+    // New hands forget it.
+    REQUIRE(wrist.update(&item, kCrucibleRoot, left, kCrucibleRow, 1.0f));
+    wrist.forget();
+    CHECK_FALSE(wrist.fromGrip(&item));
+    CHECK(approxEqual(*wrist.update(&item, std::nullopt, std::nullopt, kCrucibleRow, 1.0f), kCrucibleRow,
+                      1e-6f));
 }

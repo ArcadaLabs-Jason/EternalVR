@@ -337,8 +337,9 @@ them is worse for you than described here.
   the gun. While the game plays its own arm animations (a switch, a melee, a glory kill) the game's right
   glove holds the gun in your left hand about 2 cm from where it would sit for right-handers. The first time
   you bring out each weapon after starting the game the arms stay the game's for about half a second while
-  the mod reads how the Slayer holds it, then the gun shifts by 1 to 2.5 cm into your hand (the Crucible
-  swings in from much further, about 70 cm); after that it remembers, also across levels. (Before, the Unmaykr could also hop around by about
+  the mod reads how the Slayer holds it, then the gun shifts by 1 to 2.5 cm into your hand; after that it
+  remembers, also across levels. The Crucible now sits in your left hand from its first raise too (before, it
+  swung in from about 70 cm the first time). (Before, the Unmaykr could also hop around by about
   20 cm while it first came up, and a melee could throw the gun about half a metre for a moment; both fixed.)
   Turning off Show arms (Play tab) hides both arms.
   A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand

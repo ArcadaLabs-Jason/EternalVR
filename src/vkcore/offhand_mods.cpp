@@ -5,6 +5,7 @@
 #include "features/arm/grip_hand.hpp"
 #include "features/arm/mod_mix.hpp"
 #include "features/arm/mod_room.hpp"
+#include "vkcore/arm_solve_mode.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -299,13 +300,12 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     // With the weapon in the left hand both arms hold a glove on the gun (vkcore/left_hand_arms.hpp): the
     // left arm has the glove's modifiers too, and no wrist change.
     g_leftGlove = ready.offHand && ready.weapon && input::leftHandArms(settings());
-    g_wrist = ready.offHand && settings().armSolve == input::ArmSolve::Bind && !g_leftGlove;
+    g_wrist = ready.offHand && armSolveMode().wristChange && !g_leftGlove;
     g_gloveMods = ready.weapon;
     const std::int32_t glove = 1 + static_cast<std::int32_t>(arm::kFingerModCount);
     g_room =
         arm::modsForArms(arms) + (g_wrist ? 1 : 0) + (g_gloveMods ? glove : 0) + (g_leftGlove ? glove : 0);
-    g_weightChecked =
-        (settings().armSolve == input::ArmSolve::Bind || g_gloveMods) && weightChecks(image, init);
+    g_weightChecked = (armSolveMode().writesPast || g_gloveMods) && weightChecks(image, init);
     g_setNum = reinterpret_cast<SetNumFn>(const_cast<std::byte*>(setNum));
     std::string error;
     std::byte* site = const_cast<std::byte*>(init + kHookSite);

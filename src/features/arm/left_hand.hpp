@@ -111,4 +111,33 @@ Vec3 leftGloveShift(const xr_math::EyeRelativePose& placed,
                     Vec3 wristInGrip,
                     float unitsPerMetre);
 
+// The left glove's wrist on the held item's gun (model space, game units) that the model is placed by
+// (leftGloveShift), for one held item at a time.
+class LeftWristOnGun {
+public:
+    // Whether the wrist on `item` has been taken from the game's grip (its row is not needed).
+    [[nodiscard]] bool fromGrip(const void* item) const { return item == item_ && fromGrip_.has_value(); }
+
+    // The wrist on the held item `item`: where the left glove's grip `leftGrip` (in the gun's root frame)
+    // puts it on the gun's root `root` as the game's grip was read, once both are known; after that, while
+    // either lapses (a kept grip whose root no longer holds), the last one so taken for the same item; until
+    // one is taken, the item's [left_hand_wrist] row `rowMetres` (the same point as measured at idle, metres)
+    // at `unitsPerMetre`; nullopt with none (the model placed for the right glove). A new item starts over.
+    std::optional<Vec3> update(const void* item,
+                               const std::optional<xr_math::ModelPose>& root,
+                               const std::optional<GripPose>& leftGrip,
+                               const std::optional<Vec3>& rowMetres,
+                               float unitsPerMetre);
+
+    // Forgets the wrist taken from a grip (new hands: an item's pointer may be another item's).
+    void forget() {
+        item_ = nullptr;
+        fromGrip_.reset();
+    }
+
+private:
+    const void* item_ = nullptr;
+    std::optional<Vec3> fromGrip_;
+};
+
 } // namespace evr::arm

@@ -272,7 +272,8 @@ modifier on the attach joint carries the whole arm along rigidly, and the skin b
 and the arm's upper end stretched. Also, the attach joint sits about half a metre from the wrist (it is
 the weapon's grip point), so putting it at the controller did not put the hand there.
 
-**What the layer does** (`features/arm/`, pure and unit-tested; `vkcore/game_arm.cpp` for the game):
+**What the layer does** (`features/arm/`, pure and unit-tested; `vkcore/game_arm.cpp` and `game_arm_write.cpp` for the
+game):
 
 - **Joints by shape, checked by name.** The layer reads the parent and name-handle tables of the loaded
   skeleton the way `GetJointTransforms` reaches it (the animator's model +0x80, +0x310, data +0x60; count
@@ -684,9 +685,16 @@ The forearm, elbow and upper arm reach the wrist by the same IK as on every gun.
   model scale divides out of an offset in a parent's frame (the scale is along the model's axes), so with a
   scale whose three axes differ (by more than 1e-4 of the largest) the glove's modifiers are written in model
   space as before, trailing a fast gun by a frame but landing where written (unit test: at (1, 1.2, 1) the
-  glove would land 18 mm off in the parent's frame); the rig reads 1, 1, 1. Not run: `ETERNALVR_ARM_SOLVE=bind`
-  with either gun (its forearm is written past its targets, `modifiedFor`, and taken into the parents' frames
-  the same way; untested on the rig).
+  glove would land 18 mm off in the parent's frame); the rig reads 1, 1, 1. With `ETERNALVR_ARM_SOLVE=bind`
+  (its forearm written past its targets, `modifiedFor`, and taken into the parents' frames the same way) the
+  shoulder end (`RightArm`, the arm's last joint) is a model-space override instead
+  (`arm::SolveMode::modelShoulder`, `GripOverrides::modelShoulder`): the kick carries the glove and the forearm
+  but not the shoulder, which keeps its place at the head but for the blend's 0.05 share of the game's own arm
+  under it; for that frame the upper arm between the elbow, which rides the kick, and the shoulder takes it up
+  (not seen in a capture). Rig (docs/rig-findings/hands-rig.md, section 19, the
+  ballista's two shots with `bind`): the shoulder end off its target at most 166.7 mm before, 30.8 mm after, its
+  largest step between two frames 31.0 mm; the glove as before (0.0 mm median, 15.0 at most). The default
+  `animated` solve keeps the shoulder in its parent's frame until the bind solve has been seen in a headset.
 - **Not verified.** In a headset; the ballista's ridge as a grip (the game never holds the ballista this
   way); which of each gun's mods the rig's save had equipped; melee and glory kills on these two guns (the
   same policy hand-back as a switch, not run).
@@ -906,7 +914,12 @@ arms and the Heavy Cannon's grip).
   grip read yet`); the first switch to a weapon hands both arms back anyway. Until then the gun sits at the
   right glove's row: on each item's first equip of the session, the grips were read
   0.38 to 0.42 s after the held item changed (rig `lf-hb3`), and the gun then moves at once by the difference
-  of the rows, 0.8 to 2.4 cm by gun, while the arms blend in; after a level load the held items take their kept
+  of the rows, 0.8 to 2.4 cm by gun, while the arms blend in; an item with a `[left_hand_wrist]` row (the
+  Crucible: its row turns the model, and it moved 68.7 cm and 59 degrees as its grip was read) is placed in the
+  left hand by that row from its first frame, the left glove's wrist on it at idle as measured on the rig (metres,
+  taken at the world's scale), and moves 0.1 to 0.2 cm when its grip is read (hands-rig.md, section 19;
+  DECISIONS T-146); once a grip has placed it, a grip kept from a level before that no longer holds (its root
+  moved) leaves the held item where that grip put it, not on the row or back on the right glove's; after a level load the held items take their kept
   grips at once (rig `hc-d-lvl`: the Crucible's first raise on the reloaded level placed in the left hand from its
   first frame, 68.5 cm and 59 degrees on the level before; the combat shotgun's kept grip 0.5 cm from the one read
   on the new hands). Each still read replaces a grip; a weapon mod
@@ -944,9 +957,10 @@ arms and the Heavy Cannon's grip).
   raise, 66.9 cm and 59 degrees through the Crucible's, and at each later melee by 53.8 cm (from the combat
   shotgun) and 87.4 cm (from the Crucible) where the right hand's step is 8.3 and 48.7 cm (the melee's fists
   kept a grip of their own, read from the punch). After: steps only at an item change, the rows' difference as
-  in the right hand (a melee from the combat shotgun 9.4 cm). Still: the Crucible's first raise of a session
-  moves the model 68.6 cm and 59 degrees as its grip is read, 0.25 s before the arms blend in; on later levels
-  its kept grip places it from the first frame (hands-rig.md, section 16).
+  in the right hand (a melee from the combat shotgun 9.4 cm). The Crucible's first raise of a session moved the
+  model 68.6 cm and 59 degrees as its grip was read, 0.25 s before the arms blend in; its `[left_hand_wrist]`
+  row now places it in the left hand from the first frame (0.1 to 0.2 cm as the grip is read; hands-rig.md,
+  sections 16 and 19).
 - **Rig, the rest of the held items** (hands-rig.md, section 16; the default off hand). The left glove's wrist
   from the left hand's wrist point, median / largest: Unmaykr 0.2 / 0.3 cm, Crucible 0.2 / 0.5 (its row's turn
   reflected), chaingun 0.2 / 0.3, combat shotgun 0.1 / 0.2. At the water's surface with the gun in the slot the

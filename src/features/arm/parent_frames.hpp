@@ -75,8 +75,10 @@ bool heldInParents(const GripOverrides& glove, Vec3 scale);
 // model scale `scale` (the rig reads 1, 1, 1). With a scale that is not uniform (uniformScale), or a glove in
 // model space (GripOverrides::modelSpace), each in model space instead, as the layer wrote them before (flag
 // 1; the offset from the skeleton's root `origin` divided by the scale per axis), so the glove trails a fast
-// gun by a frame but lands where it is written. A forearm joint in `zeroScale` (bit n for ArmJoint n,
-// arm::handsOnly) also scales to nothing.
+// gun by a frame but lands where it is written. With GripOverrides::modelShoulder the shoulder end (UpperArm,
+// the last joint) is in model space whatever the rest: the gun's move within a frame carries the glove and
+// the forearm but not it. A forearm joint in `zeroScale` (bit n for ArmJoint n, arm::handsOnly) also scales
+// to nothing.
 std::array<ModWrite, kGloveWrites> gloveWrites(
     const ArmPoses& arm, const GripOverrides& glove, Vec3 scale, Vec3 origin, std::uint32_t zeroScale = 0);
 

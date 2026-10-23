@@ -109,7 +109,8 @@ float kickAt(std::size_t t) {
 // (parent_frames.hpp, mod_mix.hpp): each override becomes its joint's pose in its parent's frame (in model
 // space, against the parent as modified so far, the translation from the skeleton's root, here at the
 // origin; in the parent's frame, as written), and each joint is mixed from its animated pose in its parent's
-// frame at the node's weight. No writes: the animated pose.
+// frame at the node's weight. No writes: the animated pose. With both sets of poses and `inModel`, each write
+// is read as its own flag says.
 struct Drawn {
     ModelPose attach;
     ArmPoses arm{};                              // model space; the attach joint's unused
@@ -118,7 +119,8 @@ struct Drawn {
 Drawn draw(const ModelPose& attach,
            const ModelPose& animatedWrist,
            const std::array<ModelPose, kGloveWrites>* modelPoses, // the writes' poses as model poses
-           const std::array<ModelPose, kGloveWrites>* parentPoses) {
+           const std::array<ModelPose, kGloveWrites>* parentPoses,
+           const std::array<bool, kGloveWrites>* inModel = nullptr) {
     const ArmPoses forearm = forearmLocals();
     Drawn out{attach, {}, {}};
     ModelPose modified = attach; // the parent as modified so far
@@ -126,7 +128,7 @@ Drawn draw(const ModelPose& attach,
     const auto apply = [&](std::size_t k, const ModelPose& animatedLocal, const ModelPose& parentModified,
                            const ModelPose& parentDrawn, ModelPose& modifiedOut) {
         ModelPose modLocal = animatedLocal;
-        if (modelPoses) {
+        if (modelPoses && (!inModel || (*inModel)[k])) {
             modLocal = relative(parentModified, (*modelPoses)[k]);
         } else if (parentPoses) {
             modLocal = (*parentPoses)[k];
@@ -291,6 +293,63 @@ Worst run(std::size_t ticks, float gunKick, Vec3 wristKick, bool useModelSpace =
     return worst;
 }
 
+// The shoulder end over a run of the full kick (as `run`): the glove on the grip as in `tick`, the forearm
+// hanging from it, and the shoulder end written at one model pose, the still arm's, as the weapon arm's IK
+// holds it at the head's point; GripOverrides::modelShoulder as given. The worst, from tick 12 on, of the
+// drawn shoulder end's step from the frame before and of the glove's wrist from where it is meant to land in
+// the gun's root frame (game units).
+struct ShoulderWorst {
+    float step = 0.0f;
+    float wrist = 0.0f;
+};
+ShoulderWorst shoulderRun(bool modelShoulder) {
+    WristTracker tracker;
+    const ArmPoses forearm = forearmLocals();
+    const GripPose& grip = heavyCannonGrip();
+    const auto attachAt = [&](std::size_t t) {
+        return compose(kAttach, kick(kickAt(t)));
+    };
+    ModelPose shoulder = compose(kAttach, grip.wrist);
+    for (const ArmJoint j : kLayerModJoints) {
+        shoulder = compose(shoulder, forearm[index(j)]);
+    }
+    Drawn read = draw(attachAt(0), kHandleWrist, nullptr, nullptr);
+    ShoulderWorst worst;
+    for (std::size_t t = 1; t < 90; ++t) {
+        const auto estimate =
+            tracker.update(t == 1, read.attach, read.arm[index(ArmJoint::Hand)], /*settled=*/true);
+        REQUIRE(estimate);
+        GripOverrides glove =
+            evr::arm::gripOverrides(read.attach, *estimate, grip.wrist, kHandleHand, grip, 1.0f, kWeight);
+        glove.modelShoulder = modelShoulder;
+        ArmPoses arm{};
+        arm[index(ArmJoint::Attach)] = read.attach;
+        arm[index(ArmJoint::Hand)] = compose(read.attach, grip.wrist);
+        ModelPose parent = glove.wrist;
+        for (const ArmJoint j : kLayerModJoints) {
+            arm[index(j)] = j == ArmJoint::UpperArm ? shoulder : compose(parent, forearm[index(j)]);
+            parent = arm[index(j)];
+        }
+        const auto writes = evr::arm::gloveWrites(arm, glove, {1.0f, 1.0f, 1.0f}, {});
+        tracker.wrote(read.attach, glove.wrist, kWeight);
+        std::array<ModelPose, kGloveWrites> poses{};
+        std::array<bool, kGloveWrites> inModel{};
+        for (std::size_t k = 0; k < kGloveWrites; ++k) {
+            poses[k] = writes[k].pose;
+            inModel[k] = (writes[k].flags & evr::arm::kModModelSpace) != 0;
+        }
+        const Drawn d = draw(attachAt(t), kHandleWrist, &poses, &poses, &inModel);
+        if (t >= 12) {
+            const std::size_t u = index(ArmJoint::UpperArm);
+            worst.step = std::max(worst.step, length(d.arm[u].position - read.arm[u].position));
+            const ModelPose wrist = relative(d.attach, d.arm[index(ArmJoint::Hand)]);
+            worst.wrist = std::max(worst.wrist, length(wrist.position - grip.wrist.position));
+        }
+        read = d;
+    }
+    return worst;
+}
+
 } // namespace
 
 TEST_CASE("parent frames: every glove write is an override in its parent's frame") {
@@ -378,4 +437,44 @@ TEST_CASE("parent frames: a model scale that is not uniform writes in model spac
         // The glove's wrist lands where it was meant to (game units), either way.
         CHECK(length(lands(writes[0], turned, scale) - glove.wrist.position) < 1e-4f);
     }
+}
+
+TEST_CASE(
+    "parent frames: with modelShoulder the shoulder end is a model-space override, the rest as before") {
+    const GripPose& grip = heavyCannonGrip();
+    GripOverrides glove =
+        evr::arm::gripOverrides(kAttach, kHandleWrist, grip.wrist, kHandleHand, grip, 1.0f, kWeight);
+    glove.modelShoulder = true;
+    const ArmPoses arm = evr::test::bindRightArm();
+    const Vec3 origin{-0.24f, 0.0f, -1.59f};
+    const auto writes = evr::arm::gloveWrites(arm, glove, {1.0f, 1.0f, 1.0f}, origin);
+    for (std::size_t k = 0; k < kGloveWrites; ++k) {
+        CAPTURE(k);
+        const bool shoulder = k == 1 + index(ArmJoint::UpperArm) - index(ArmJoint::Roll3);
+        CHECK(((writes[k].flags & evr::arm::kModModelSpace) != 0) == shoulder);
+        CHECK((writes[k].flags & evr::arm::kModOverride) != 0);
+    }
+    // Placed from the skeleton's root, as every model-space override.
+    const ModWrite& s = writes[1 + index(ArmJoint::UpperArm) - index(ArmJoint::Roll3)];
+    CHECK(length(s.pose.position + origin - arm[index(ArmJoint::UpperArm)].position) < 1e-5f);
+    // A glove written in model space anyway (one on a controller) stays all in model space.
+    glove.modelSpace = true;
+    for (const ModWrite& w : evr::arm::gloveWrites(arm, glove, {1.0f, 1.0f, 1.0f}, origin)) {
+        CHECK((w.flags & evr::arm::kModModelSpace) != 0);
+    }
+}
+
+TEST_CASE("parent frames: with modelShoulder the gun's kick within a frame leaves the shoulder end") {
+    // The kick of `run` (16 cm and 10 degrees at the gun's root in one frame): the glove stays on the grip
+    // either way; held in its parent's frame the shoulder end rides the kick for that frame (the Ballista's
+    // up to 17 cm on the rig), written in model space it moves by the blend's share of the game's own pose
+    // under it (1 - 0.95 of the kick) at most.
+    const ShoulderWorst rides = shoulderRun(false);
+    const ShoulderWorst stays = shoulderRun(true);
+    CHECK(rides.wrist < 0.005f);
+    CHECK(stays.wrist < 0.005f);
+    CHECK(rides.step > 0.1f);
+    CHECK(stays.step < 0.03f);
+    MESSAGE("shoulder end's largest step: " << rides.step << " held in the parent's frame, " << stays.step
+                                            << " in model space");
 }

@@ -342,3 +342,45 @@ TEST_CASE("left-handed off-hand rows follow the name rules; bad ones are reporte
     CHECK_FALSE(table.lookupLeftOffHand("weapon/player/chaingunner").has_value());
     CHECK(table.lookupSight("weapon/player/chaingun") == WeaponSight{0.32f, -0.01f});
 }
+
+TEST_CASE("the built-in left-hand wrist rows cover the Crucible only") {
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    INFO(describe(table));
+    REQUIRE(table.ok());
+    const auto crucible = table.lookupLeftHandWrist("weapon/player/crucible");
+    REQUIRE(crucible.has_value());
+    // In front of the model's origin and to its right, below it, where the hilt sits at idle.
+    CHECK((*crucible)[0] > 0.5f);
+    CHECK((*crucible)[1] < 0.0f);
+    CHECK((*crucible)[2] < 0.0f);
+    for (const char* other : {"weapon/player/shotgun", "weapon/player/heavy_cannon",
+                              "weapon/player/plasma_rifle", "weapon/player/rocket_launcher",
+                              "weapon/player/double_barrel", "weapon/player/gauss_rifle", "weapon/player/bfg",
+                              "weapon/player/unmaykr", "weapon/player/chaingun", "weapon/player/fists", ""}) {
+        INFO(other);
+        CHECK_FALSE(table.lookupLeftHandWrist(other).has_value());
+    }
+}
+
+TEST_CASE("left-hand wrist rows follow the name rules; bad ones are reported and skipped") {
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([left_hand_wrist]
+"weapon/player/crucible" = [0.681, -0.240, -0.266]
+"default" = [0.5, 0, 0]
+"a" = [0.5, 0]
+"b" = [0.5, 0, 0, 0, 0, 0]
+"c" = [2.5, 0, 0]
+"d" = 0.5, 0, 0
+"weapon/player/crucible" = [0.1, 0.1, 0.1]
+[sights]
+"weapon/player/chaingun" = [0.32, -0.01]
+)");
+    INFO(describe(table));
+    CHECK(table.issues.size() == 6);
+    CHECK(table.issues.front().starts_with("line 3:"));
+    CHECK(table.leftHandWrists.size() == 1);
+    const std::array<float, 3> crucible{0.681f, -0.240f, -0.266f};
+    CHECK(table.lookupLeftHandWrist("weapon/player/crucible") == crucible);
+    CHECK(table.lookupLeftHandWrist("weapon/player/crucible_x") == crucible);
+    CHECK_FALSE(table.lookupLeftHandWrist("weapon/player/cruciblex").has_value());
+    CHECK(table.lookupSight("weapon/player/chaingun") == WeaponSight{0.32f, -0.01f});
+}

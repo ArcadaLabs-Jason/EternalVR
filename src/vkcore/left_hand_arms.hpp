@@ -23,7 +23,9 @@
 // - The model is placed so the left glove's wrist, not the right one's, sits in the left hand
 //   (viewmodel_hook.cpp, arm::leftGloveShift): placed by the right glove's row (its turn reflected), then
 //   moved, not turned, until the left glove's wrist sits on the left hand's wrist point; the move stays while
-//   the game has the arms (a switch, a glory kill), so the gun stays on the left hand.
+//   the game has the arms (a switch, a glory kill), so the gun stays on the left hand. The wrist is the one
+//   the game's grip gives, kept for the held item if that grip lapses (arm::LeftWristOnGun); before any is
+//   read, the item's [left_hand_wrist] row's (metres, at the world's scale).
 //
 // The grips are the game's own, read from each arm while the layer's overrides are off it (a clean read,
 // game_arm.hpp) once the read has held still for a few ticks (arm::SteadyPose: not while the gun comes up),

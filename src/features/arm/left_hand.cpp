@@ -2,6 +2,8 @@
 
 #include "features/arm/left_hand.hpp"
 
+#include "features/arm/arm_frames.hpp"
+
 #include <cmath>
 #include <cstddef>
 #include <optional>
@@ -113,6 +115,24 @@ RowPlacement rowPlacement(Vec3 translation,
     return {keepWrist ? xr_math::translationKeepingWrist(translation, turn, ownSight, sight, wrist)
                       : translation,
             turn};
+}
+
+std::optional<Vec3> LeftWristOnGun::update(const void* item,
+                                           const std::optional<xr_math::ModelPose>& root,
+                                           const std::optional<GripPose>& leftGrip,
+                                           const std::optional<Vec3>& rowMetres,
+                                           float unitsPerMetre) {
+    if (item != item_) {
+        item_ = item;
+        fromGrip_.reset();
+    }
+    if (root && leftGrip) {
+        fromGrip_ = compose(*root, leftGrip->wrist).position;
+    }
+    if (fromGrip_) {
+        return fromGrip_;
+    }
+    return rowMetres ? std::optional(*rowMetres * unitsPerMetre) : std::nullopt;
 }
 
 Vec3 leftGloveShift(const xr_math::EyeRelativePose& placed,

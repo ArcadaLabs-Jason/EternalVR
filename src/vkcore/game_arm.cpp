@@ -1,4 +1,5 @@
-// The game's first-person arms bent by the layer (game_arm.hpp).
+// The game's first-person arms bent by the layer: install and the read (game_arm.hpp; the writes in
+// game_arm_write.cpp).
 
 #include "vkcore/game_arm.hpp"
 
@@ -6,6 +7,7 @@
 #include "features/arm/parent_frames.hpp"
 #include "features/input/controller_settings.hpp"
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/game_arm_cache.hpp"
 #include "vkcore/game_arm_joints.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/seh_filter.hpp"
@@ -20,6 +22,12 @@
 
 namespace evr::vkcore::controllers::game_arm {
 
+using detail::Cache;
+using detail::cacheOf;
+using detail::callFaulted;
+using detail::idsOf;
+using detail::kTicksCap;
+
 namespace {
 
 constexpr const char* kTag = "offhand";
@@ -33,9 +41,6 @@ constexpr std::size_t kModelDecl = 0x80;
 constexpr std::size_t kDeclSkeleton = 0x310;
 constexpr std::size_t kSkeletonData = 0x60;
 
-constexpr std::uint16_t kFlagsChange = 0x20B;   // model space, rotation, translation, reference pose
-constexpr std::uint16_t kFlagsOverride = 0x22B; // the same, as the joint's whole pose
-constexpr std::uint16_t kFlagScale = 0x4;       // with the entry's scale (zero after SetJointMod)
 // How long after the last override the read may still show it (the blend runs a frame or two behind).
 constexpr ULONGLONG kOverrideShowsMs = 150;
 // Also this many ticks since the last write, for every arm, so a hitch longer than kOverrideShowsMs does not
@@ -44,15 +49,10 @@ constexpr std::int32_t kOverrideShowsTicks = 3;
 // The wrist is read live once the wrist's change has been written as no change this many ticks in a row
 // (the read is a frame or two behind the writes).
 constexpr std::int32_t kWristQuietTicks = 3;
-constexpr std::int32_t kTicksCap = 1 << 20;
 // An override read back further than this from where it was written (game units; the arm is about 0.55
 // long, and a frame's lag moves a hand a few centimetres) for this many ticks in a row stops the arm.
 constexpr float kLandingTolerance = 0.1f;
 constexpr std::int32_t kLandingTicks = 30;
-constexpr std::int32_t kReleaseWrites = 3; // no-change writes that reach both lists (one a tick); then none
-
-// The most modifiers one arm has: the wrist's, the six and the glove's fingers.
-constexpr std::size_t kMaxLayerMods = 1 + offhand_mods::kLayerCount + arm::kFingerModCount;
 
 using GetJointTransformsFn = bool(__fastcall*)(void* animator,
                                                std::int32_t space,
@@ -60,51 +60,12 @@ using GetJointTransformsFn = bool(__fastcall*)(void* animator,
                                                std::int32_t count,
                                                float* positions,
                                                float* axes);
-using SetJointModFn = void(__fastcall*)(void* hands,
-                                        std::int32_t mod,
-                                        std::int16_t joint,
-                                        const float* translation,
-                                        const float* rotation,
-                                        std::uint16_t flags);
 
 GetJointTransformsFn g_getJoints = nullptr;
-SetJointModFn g_setJointMod = nullptr;
+detail::SetJointModFn g_setJointMod = nullptr;
 
-// One per arm, game thread only.
-struct Cache {
-    const std::byte* skeletonData = nullptr;
-    std::int16_t attach = -1;
-    arm::ArmJointIndices joints{};
-    arm::HandJointIndices hand{}; // the weapon arm's glove: the wrist's finger joints
-    // The joints of the layer's modifiers in list order (offhand_mods::layerCount of them).
-    std::array<std::int16_t, kMaxLayerMods> ids{};
-    bool jointsOk = false;
-    const std::byte* animator = nullptr; // the last readArm's
-    const std::byte* hands = nullptr;
-    const std::byte* node = nullptr;
-    std::int32_t base = -1; // the first of the layer's modifiers in both lists
-    // The layer's joints relative to the wrist, from the last read the layer's overrides had not reached.
-    arm::ArmPoses fromHand{};
-    xr_math::ModelPose handFromAttach{}; // the wrist relative to the attach joint (the bind solve's wrist)
-    bool fromHandOk = false;
-    ULONGLONG lastOverride = 0;          // GetTickCount64 of the last override written
-    std::int32_t ticksSinceOverride = 0; // ticks (readArm or releaseArm calls) since the last write
-    std::int32_t wristQuietTicks = 0;    // writes in a row with the wrist's change as no change
-    std::int32_t releaseWrites = 0;      // no-change writes since the last pose
-    arm::ArmPoses written{};             // the poses last written
-    // With the glove on a grip the last write was in each joint's parent's frame (parent_frames.hpp), placed
-    // under this attach joint: the read is measured against `written` carried by the attach joint read then.
-    std::optional<xr_math::ModelPose> writtenUnder;
-    std::int32_t offTicks = 0; // ticks in a row the read put an override away from where it was written
-    bool offForGood = false;
-    bool collapsed = false; // the last write scaled the layer's joints to nothing (hands only)
-    std::uint32_t loggedReasons = 0;
-};
+// One per arm.
 Cache g_cache[2];
-
-Cache& cacheOf(arm::ArmSide side) {
-    return g_cache[side == arm::ArmSide::Right ? 1 : 0];
-}
 
 enum class Refusal : std::uint8_t {
     Animator,
@@ -136,13 +97,6 @@ void refuse(arm::ArmSide side, Refusal reason, const char* message) {
 // is made again this session.
 bool g_gameCallFaulted = false;
 
-void callFaulted(arm::ArmSide side, const char* call) {
-    g_gameCallFaulted = true;
-    cacheOf(side).offForGood = true;
-    const std::string message = std::string("the game's ") + call + " faulted; off for this session";
-    refuse(side, Refusal::Fault, message.c_str());
-}
-
 // The game's calls, apart from anything with a destructor (__try needs that). False when they faulted.
 bool callGetJoints(void* animator,
                    const std::int16_t* joints,
@@ -152,16 +106,6 @@ bool callGetJoints(void* animator,
                    bool& result) {
     __try {
         result = g_getJoints(animator, 1, joints, count, positions, axes);
-        return true;
-    } __except (accessViolationOnly(GetExceptionCode())) {
-        return false;
-    }
-}
-
-bool callSetJointMod(
-    void* hands, std::int32_t mod, std::int16_t joint, const float* t, const float* r, std::uint16_t f) {
-    __try {
-        g_setJointMod(hands, mod, joint, t, r, f);
         return true;
     } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
@@ -224,39 +168,34 @@ bool resolveJoints(arm::ArmSide side, const SkeletonPath& path, std::int16_t att
     return true;
 }
 
+} // namespace
+
+namespace detail {
+
+Cache& cacheOf(arm::ArmSide side) {
+    return g_cache[side == arm::ArmSide::Right ? 1 : 0];
+}
+
 std::span<const std::int16_t> idsOf(const Cache& c, arm::ArmSide side) {
     return {c.ids.data(), static_cast<std::size_t>(offhand_mods::layerCount(side))};
 }
 
-// Writes the modifier `k` of the arm: an override at `pose` (model space, game units) or, without one, no
-// change. False (the session's calls off) when the call faulted.
-bool writeMod(arm::ArmSide side,
-              const std::byte* hands,
-              std::int32_t k,
-              const xr_math::ModelPose* pose,
-              Vec3 scale,
-              Vec3 origin,
-              std::uint16_t flags = kFlagsOverride) {
-    Cache& c = cacheOf(side);
-    const float zero[3] = {};
-    const xr_math::Mat3Rows identity = xr_math::JointMod{}.rotation;
-    float translation[3] = {};
-    xr_math::Mat3Rows rotation = identity;
-    if (pose) {
-        translation[0] = (pose->position.x - origin.x) / scale.x;
-        translation[1] = (pose->position.y - origin.y) / scale.y;
-        translation[2] = (pose->position.z - origin.z) / scale.z;
-        rotation = xr_math::toRows(pose->axis);
-    }
-    if (!callSetJointMod(const_cast<std::byte*>(hands), c.base + k, c.ids[static_cast<std::size_t>(k)],
-                         pose ? translation : zero, rotation.data(), pose ? flags : kFlagsChange)) {
-        callFaulted(side, "SetJointMod");
-        return false;
-    }
-    return true;
+SetJointModFn setJointMod() {
+    return g_setJointMod;
 }
 
-} // namespace
+bool faulted() {
+    return g_gameCallFaulted;
+}
+
+void callFaulted(arm::ArmSide side, const char* call) {
+    g_gameCallFaulted = true;
+    cacheOf(side).offForGood = true;
+    const std::string message = std::string("the game's ") + call + " faulted; off for this session";
+    refuse(side, Refusal::Fault, message.c_str());
+}
+
+} // namespace detail
 
 offhand_mods::ArmSet install(const GameImage& image,
                              const std::byte* lagModsStart,
@@ -274,7 +213,7 @@ offhand_mods::ArmSet install(const GameImage& image,
         return {};
     }
     g_getJoints = reinterpret_cast<GetJointTransformsFn>(const_cast<std::byte*>(getJointTransforms));
-    g_setJointMod = reinterpret_cast<SetJointModFn>(const_cast<std::byte*>(setJointMod));
+    g_setJointMod = reinterpret_cast<detail::SetJointModFn>(const_cast<std::byte*>(setJointMod));
     EVR_LOG("%s: arm: animator getter at RVA 0x%X, name table at RVA 0x%X; the forearm, elbow and shoulder "
             "follow the hand (two-bone IK)%s",
             kTag, image.rva(getter), nameTableRva(image),
@@ -409,8 +348,11 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
     // been no change for kWristQuietTicks (then only the attach joint carries it, and its offset from the
     // attach joint is taken again), and after a change is carried by the attach joint at that offset.
     const std::size_t h = arm::index(arm::ArmJoint::Hand);
-    const arm::ArmPoses landing =
+    arm::ArmPoses landing =
         c.writtenUnder ? arm::carriedBy(*c.writtenUnder, out.animated[0], c.written) : c.written;
+    if (c.modelShoulder) { // in model space: it lands where written, wherever the gun went
+        landing[arm::index(arm::ArmJoint::UpperArm)] = c.written[arm::index(arm::ArmJoint::UpperArm)];
+    }
     // An alias of out.animated[h]: the live read until the wrist is rebuilt below, the rebuilt wrist after.
     const xr_math::ModelPose& hand = out.animated[h];
     if (!overrideShows) {
@@ -454,70 +396,6 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
     return out;
 }
 
-bool writeArm(arm::ArmSide side,
-              const std::byte* hands,
-              const arm::ArmPoses& poses,
-              Vec3 scale,
-              Vec3 origin,
-              std::uint32_t zeroScale,
-              const arm::ArmPoses* landing,
-              const xr_math::JointMod* wrist,
-              const arm::GripOverrides* glove) {
-    Cache& c = cacheOf(side);
-    if (g_gameCallFaulted || hands != c.hands ||
-        !offhand_mods::layerModsInPlace(c.node, c.base, idsOf(c, side))) {
-        return false;
-    }
-    if (glove) {
-        // The glove on a grip: each modifier in its joint's parent's frame (parent_frames.hpp).
-        if (offhand_mods::layerCount(side) != static_cast<std::int32_t>(arm::kGloveWrites)) {
-            return false;
-        }
-        const auto writes = arm::gloveWrites(poses, *glove, scale, origin, zeroScale);
-        for (std::size_t k = 0; k < writes.size(); ++k) {
-            if (!writeMod(side, hands, static_cast<std::int32_t>(k), &writes[k].pose, {1.0f, 1.0f, 1.0f}, {},
-                          writes[k].flags)) {
-                return false;
-            }
-        }
-        c.wristQuietTicks = 0;
-    } else {
-        // The wrist's modifier first, when the arm has one (offhand_mods::layerJoint): the off hand's change,
-        // the weapon arm's glove as no change.
-        const std::int32_t first = offhand_mods::hasWrist(side) ? 1 : 0;
-        const xr_math::JointMod change = wrist ? *wrist : xr_math::JointMod{};
-        const bool none = change.translation == Vec3{} && change.rotation == xr_math::JointMod{}.rotation;
-        c.wristQuietTicks = none ? std::min(c.wristQuietTicks + 1, kTicksCap) : 0;
-        const float translation[3] = {change.translation.x, change.translation.y, change.translation.z};
-        if (first > 0 && !callSetJointMod(const_cast<std::byte*>(hands), c.base, c.ids[0], translation,
-                                          change.rotation.data(), kFlagsChange)) {
-            callFaulted(side, "SetJointMod");
-            return false;
-        }
-        for (std::int32_t k = 0; k < offhand_mods::kLayerCount; ++k) {
-            const arm::ArmJoint joint = offhand_mods::kLayerJoints[static_cast<std::size_t>(k)];
-            const bool zero = (zeroScale & (1u << arm::index(joint))) != 0;
-            if (!writeMod(side, hands, first + k, &poses[arm::index(joint)], scale, origin,
-                          zero ? static_cast<std::uint16_t>(kFlagsOverride | kFlagScale) : kFlagsOverride)) {
-                return false;
-            }
-        }
-        const std::int32_t fingers = offhand_mods::armCount(side);
-        for (std::int32_t k = 0; k < offhand_mods::fingerCount(side); ++k) {
-            if (!writeMod(side, hands, fingers + k, nullptr, scale, origin)) {
-                return false;
-            }
-        }
-    }
-    c.writtenUnder = glove && arm::heldInParents(*glove, scale) ? std::optional(glove->attach) : std::nullopt;
-    c.lastOverride = GetTickCount64();
-    c.ticksSinceOverride = 0;
-    c.written = landing ? *landing : poses;
-    c.releaseWrites = 0;
-    c.collapsed = zeroScale != 0;
-    return true;
-}
-
 bool readHand(arm::ArmSide side, const std::byte* hands, HandRead& out) {
     Cache& c = cacheOf(side);
     if (g_gameCallFaulted || offhand_mods::fingerCount(side) == 0 || !c.animator || hands != c.hands) {
@@ -548,42 +426,6 @@ bool readHand(arm::ArmSide side, const std::byte* hands, HandRead& out) {
     }
     out.local = arm::handLocal(model);
     return true;
-}
-
-bool releaseArm(arm::ArmSide side, const std::byte* hands, bool bothLists) {
-    Cache& c = cacheOf(side);
-    // A tick without the layer's overrides: counted toward a clean read (readArm), the wrist's change as
-    // none.
-    c.ticksSinceOverride = std::min(c.ticksSinceOverride + 1, kTicksCap);
-    c.wristQuietTicks = std::min(c.wristQuietTicks + 1, kTicksCap);
-    if (bothLists) { // memory writes only, no call into the game: also after a faulted call
-        return hands && hands == c.hands && offhand_mods::clearLayerMods(c.node, c.base, idsOf(c, side));
-    }
-    if (g_gameCallFaulted || !hands || hands != c.hands ||
-        !offhand_mods::layerModsInPlace(c.node, c.base, idsOf(c, side))) {
-        return false;
-    }
-    for (std::int32_t k = 0; k < offhand_mods::layerCount(side) && c.releaseWrites < kReleaseWrites; ++k) {
-        if (!writeMod(side, hands, k, nullptr, {1.0f, 1.0f, 1.0f}, {})) {
-            return false;
-        }
-    }
-    c.releaseWrites = std::min(c.releaseWrites + 1, kReleaseWrites);
-    return true;
-}
-
-std::array<std::int32_t, 2> overridesLeft(arm::ArmSide side, const std::byte* hands) {
-    const Cache& c = cacheOf(side);
-    return hands && hands == c.hands ? offhand_mods::overridesInLists(c.node, c.base, idsOf(c, side))
-                                     : std::array<std::int32_t, 2>{-1, -1};
-}
-
-bool gameCallFaulted() {
-    return g_gameCallFaulted;
-}
-
-const std::byte* armHands(arm::ArmSide side) {
-    return cacheOf(side).hands;
 }
 
 } // namespace evr::vkcore::controllers::game_arm

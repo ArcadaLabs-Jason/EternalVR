@@ -272,16 +272,19 @@ target_sources(evr_layer PRIVATE
     arm_signals.cpp
     arms_item.cpp
     game_arm.cpp
+    game_arm_write.cpp
     game_arm_joints.cpp
     game_arm_weight.cpp
     hands_surfaces.cpp
     head_gun.cpp
     launcher_place_hook.cpp
     left_hand_arms.cpp
+    offhand_arm.cpp
     offhand_hook.cpp
     offhand_mods.cpp
     weapon_arm.cpp
     weapon_arm_row.cpp
+    weapon_arm_trace.cpp
     prompt_command_bar.cpp
     prompt_hint_keys.cpp
     prompt_hooks.cpp
@@ -297,6 +300,7 @@ target_sources(evr_layer PRIVATE
     usercmd_hook.cpp
     view_poses.cpp
     viewmodel_hook.cpp
+    viewmodel_view.cpp
     weapon_mods.cpp
     vrs_command_buffers.cpp
     vrs_gui.cpp

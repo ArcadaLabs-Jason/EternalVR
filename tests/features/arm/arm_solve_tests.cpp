@@ -2,6 +2,7 @@
 
 #include "features/arm/arm_fixture.hpp"
 #include "features/arm/arm_frames.hpp"
+#include "features/arm/solve_mode.hpp"
 #include "xr_math/head_aim.hpp"
 
 #include <doctest/doctest.h>
@@ -364,4 +365,19 @@ TEST_CASE("the solve's defaults are the layer's: the animated hand's") {
                                              {-0.2f, -0.6f, -1.0f});
     REQUIRE(s);
     CHECK(s->twistFrom == TwistFrom::Animated);
+}
+
+TEST_CASE("the solve mode: the bind pose's solve changes every branch, the animated one none") {
+    constexpr evr::arm::SolveMode bind = evr::arm::solveMode(TwistFrom::Bind);
+    CHECK(bind.twistFrom == TwistFrom::Bind);
+    CHECK(bind.limitSwing);
+    CHECK(bind.writesPast);
+    CHECK(bind.wristChange);
+    CHECK(bind.modelShoulder);
+    constexpr evr::arm::SolveMode animated = evr::arm::solveMode(TwistFrom::Animated);
+    CHECK(animated.twistFrom == TwistFrom::Animated);
+    CHECK_FALSE(animated.limitSwing);
+    CHECK_FALSE(animated.writesPast);
+    CHECK_FALSE(animated.wristChange);
+    CHECK_FALSE(animated.modelShoulder);
 }

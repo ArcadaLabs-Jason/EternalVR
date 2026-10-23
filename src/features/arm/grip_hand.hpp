@@ -212,6 +212,9 @@ struct GripOverrides {
     // Written in model space instead (parent_frames.hpp): a glove that follows a controller, not the gun (the
     // right glove as the off hand with the weapon in the left hand).
     bool modelSpace = false;
+    // Held in the parents' frames, the arm's shoulder end (its last joint) in model space all the same
+    // (features/arm/solve_mode.hpp, modelShoulder): the gun's kick does not carry it.
+    bool modelShoulder = false;
 };
 
 // The overrides that land the wrist at `wantedWrist` and close the fingers `curl` of the way (0 to 1) from

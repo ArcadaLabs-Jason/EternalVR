@@ -63,6 +63,14 @@ bool g_offRowController = false;
 int g_offRowLines = 0;
 int g_keptLines = 0;
 const std::byte* g_keptDecl = nullptr; // the held item last logged as on kept grips
+// Hook thread only: the held item's [left_hand_wrist] row (the left glove's wrist on it at idle, model
+// space), which places the model until the game's grip is read, for the decl it was looked up for on these
+// hands.
+std::optional<const std::byte*> g_wristRowDecl;
+std::optional<Vec3> g_wristRow;
+int g_wristRowLines = 0;
+// Hook thread only: the left glove's wrist on the held item the model is placed by.
+arm::LeftWristOnGun g_leftWrist;
 
 const char* sideName(arm::ArmSide side) {
     return side == arm::ArmSide::Right ? "right" : "left";
@@ -95,6 +103,8 @@ void forgetGrips() {
         g.unsettledTicks = 0;
     }
     g_offRowDecl.reset();
+    g_wristRowDecl.reset();
+    g_leftWrist.forget();
     // A capture read before counts for nothing now.
     weapon_arm::forgetCapture(arm::ArmSide::Right);
     weapon_arm::forgetCapture(arm::ArmSide::Left);
@@ -176,6 +186,23 @@ bool offHandOnController(const std::byte* decl) {
         }
     }
     return g_offRowController;
+}
+
+// Metres, model space.
+std::optional<Vec3> wristRow(const std::byte* decl) {
+    if (decl != g_wristRowDecl) {
+        g_wristRowDecl = decl;
+        const std::string name = decl ? itemDeclName(decl) : std::string{};
+        const auto row = state().offsets.lookupLeftHandWrist(name);
+        g_wristRow = row ? std::optional(Vec3{(*row)[0], (*row)[1], (*row)[2]}) : std::nullopt;
+        if (g_wristRow && g_wristRowLines < 20) {
+            ++g_wristRowLines;
+            EVR_LOG("%s: '%s': placed in the left hand by its [left_hand_wrist] row until the game's grip is "
+                    "read",
+                    kTag, name.c_str());
+        }
+    }
+    return g_wristRow;
 }
 
 // Hook thread only: the readiness last logged.
@@ -304,14 +331,19 @@ void tick(const std::byte* hands,
     }
     weapon_arm::holding(arm::ArmSide::Left, hands, leftHold, world, model, dt);
     // The gun stays placed for the left glove whenever its wrist on the held item is known, also while the
-    // game has the arms (a switch, a melee), so the gun stays on the left hand.
-    const bool known = rightOk && leftGrip;
+    // game has the arms (a switch, a melee), so the gun stays on the left hand; once taken from the game's
+    // grip it stays for the held item if the grip lapses (a grip kept from a level before whose root no
+    // longer holds); before the game's grip is read, where the item's row has it.
+    const bool gripNow = rightOk && leftGrip;
+    const std::optional<Vec3> leftWrist = g_leftWrist.update(
+        decl, rightOk ? std::optional(rightOk->root) : std::nullopt, leftGrip,
+        gripNow || g_leftWrist.fromGrip(decl) ? std::nullopt : wristRow(decl), world.unitsPerMetre);
     std::lock_guard lock(g_placementMutex);
-    if (known) {
-        g_placement.leftWrist = arm::compose(rightOk->root, leftGrip->wrist).position;
+    if (leftWrist) {
+        g_placement.leftWrist = *leftWrist;
     }
     g_placement.decl = decl;
-    g_placement.weight = known ? 1.0f : 0.0f;
+    g_placement.weight = leftWrist ? 1.0f : 0.0f;
 }
 
 void release(const std::byte* hands) {

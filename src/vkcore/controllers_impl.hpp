@@ -153,7 +153,7 @@ struct WorldHand {
     bool offAimValid = false;
     xr_math::EyeRelativePose offAim;
     xr_math::EyeRelativePose head;
-    // The off-hand arm's IK (offhand_hook.cpp): the shoulder fixed to the head (relative to the eye) and
+    // The off-hand arm's IK (offhand_arm.cpp): the shoulder fixed to the head (relative to the eye) and
     // the elbow's bend direction (world), both in the head's yaw frame.
     Vec3 offShoulder;
     Vec3 offElbow;

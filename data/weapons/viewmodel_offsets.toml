@@ -106,3 +106,15 @@
 # symmetric there). Same key rules, no "default".
 [left_handed_off_hand]
 "weapon/player/chaingun" = "controller"
+
+# With the weapon in the left hand the model is placed so the left glove's wrist on the gun, where the game's own
+# grip of the held item reflected puts it, sits in the left hand (docs/VR_HANDS_HUD.md, "The weapon in the left
+# hand"). The grip is read from the game's arm once the item idles, so on an item's first raise of a session the
+# model sits by the right glove's row until then and moves into the left hand as the grip is read: by the rows'
+# difference on the guns (0.8 to 2.4 cm), but 68.6 cm and 59 degrees on the Crucible, whose row turns the model.
+# [forward, left, up], metres in the arms model's frame: the left glove's wrist on the item at idle as the game's
+# grip puts it, which places the model until the grip is read (measured on the hands rig: the Crucible's posed
+# left wrist, its median over a level's idle). Same key rules, no "default": an item without a row is placed for
+# the right glove until its grip is read.
+[left_hand_wrist]
+"weapon/player/crucible" = [0.681, -0.240, -0.266]

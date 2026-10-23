@@ -1154,3 +1154,91 @@ the mod read on Game Pass at run time (its type info is the Steam build's, above
 already set on the first update with the new weapon (every switch's first held-item line in `s2-off1` and `s2-on1`
 names them; 0 `mods changed` lines outside the mod switches and the level's start), so no frame on the weapon's own
 row instead of its mod's was seen; a weapon whose object lagged its decl would show its own row for that update.
+
+## 19. Arm solve and model, chunks A and B: room, and the solve's open fixes (2026-10-22/23, OpenXR-Simulator)
+
+Feature step 3 (docs/ROADMAP.md, "Arm solve and model"). Chunk A makes room without a change of behaviour; chunk B
+fixes what the bind solve (`ETERNALVR_ARM_SOLVE=bind`) still had open. The default solve stays `animated` until the
+owner's headset look. Evidence: rig (the simulator and the scripted input), Steam build 25216728; not a headset.
+
+**A: room.** The free off hand's arm moved out of `offhand_hook.cpp` (599 to 426 lines) into `offhand_arm.cpp`, the
+arms' writes and give-back out of `game_arm.cpp` (589 to 428 lines, 431 after B) into `game_arm_write.cpp` (their shared state in
+`game_arm_cache.hpp`), the weapon arm's state and trace out of `weapon_arm.cpp` (556 to 442, 444 after B) into
+`weapon_arm_state.hpp` and `weapon_arm_trace.cpp`; every difference between the two solves is asked of one helper,
+`arm::SolveMode` (`features/arm/solve_mode.hpp`, `vkcore/arm_solve_mode.hpp`). On 0.1.78, Release:
+
+| Run | Layer, solve | Against | Result |
+|---|---|---|---|
+| `ab-a-def` | A, default | the baseline | 0 regressions; known-bistable warns on roll-R+150 only |
+| `ab-a-bind` | A, `bind` | `ab-m-bind` (origin/main 9b56efcf, `bind`) | the same verdicts in 72 of 72 holds; both 0 regressions against the baseline |
+| `ab-a-bind` | A, `bind` | section 9's `r4-bind3` | no check fails that passed there; there the sight (every hold), mirror and six right-arm checks also failed, since fixed on main (sections 11 to 18) |
+
+The arm lines of the layer logs are the same (the log lines of `ab-a-bind` against `ab-m-bind`, numbers and handles
+taken out: the arm's lines alike, the rest handles and the end of the session; `ab-a-def` against the merge QA run of
+the same day: no arm line differs).
+
+The viewmodel hook's camera-hook half (the game's view: the hands' poses relative to the eye, the weapon FOV) moved
+out of `viewmodel_hook.cpp` (567 to 349 lines) into `viewmodel_view.cpp`, on top of B and 0.1.79 (`ab-c-def`: 0
+regressions, the same verdicts as `ab-b-def` but the roll-R+150 warns; `ab-c-gripd`: GRIP PASS, SIGHTS PASS, 0.204
+degrees at most; the log lines alike but the session's end).
+
+**B, the weapon arm's landing per gun.** `landed` (the layer's own measure, its joints read back against where they
+were written), the grip sweep's holds with `bind`, per held item and mod, the settled lines at full weight: at most
+1.6 mm on every gun and mod (the combat shotgun 1.5 / 1.6 mm median / largest; the other eight guns and the Unmaykr
+0.1 to 0.2 / 0.2 to 0.5) before the B changes (`ab-a-grip`) and after (`ab-b-grip`); with the weapon in the left hand
+both arms at most 1.0 mm (`ab-a-lefty`, `ab-b-lefty`). No change was needed. The default solve, which does not write
+past its targets, reads 4.5 to 35 mm (`ab-b-gripd`, as dev main's sights runs), the read 95 % of the way.
+
+**B, the ballista's shoulder end.** With the glove on a grip every modifier is held in its parent's frame
+(section 13), so in the frame of a shot the forearm, elbow and shoulder end ride the gun's kick and the shoulder end
+jumps for that frame. With `bind` the shoulder end (the arm's last joint) is now a model-space override
+(`arm::SolveMode::modelShoulder`); the glove and the forearm still ride the gun. The firing run: the ballista's trigger
+held 3 s twice, the chaingun's once, `bind`, the glove trace (`fire_check.py`; the trace now also gives the shoulder
+end's step from the read of the frame before):
+
+| Run | Gun | Glove off its grip in the gun's frame, median / p95 / largest | Shoulder end off its target, largest | Its largest step between frames | The gun's root at the grip, largest |
+|---|---|---|---|---|---|
+| `ab-a-fire` (before) | ballista | 0.0 / 1.3 to 1.8 / 15.0 mm | 166.7 mm | (not traced) | 157.7 mm |
+| `ab-b-fire` (after) | ballista | 0.0 / 0.6 to 1.5 / 15.0 mm | 30.8 mm | 31.0 mm | 157.6 mm |
+| `ab-b-fire` (after) | chaingun | 0.0 / 0.0 / 0.0 mm | 4.9 mm | 1.3 mm | 17.8 mm |
+
+What is left in the shot's first frame [inferred]: the blend mixes each joint at 0.95, so the shoulder end keeps the
+0.05 share of the game's own upper arm, which the shot's animation swings under it (the same share as the glove's
+15.0 mm, section 13); the layer reads it a frame late. Unit test (`parent_frames_tests.cpp`, a 16 cm and 10 degree
+kick in one frame): the shoulder end's largest step 186 mm held in its parent's frame, 15 mm in model space.
+
+**B, the Crucible's first raise with the weapon in the left hand.** The `[left_hand_wrist]` row (DECISIONS T-146)
+places the model in the left hand from the item's first frame until its grip is read. The left-handed sweep (every
+gun's holds, then the Crucible's button: its first raise of the session), `hb_check.py --lefty`, the model's largest
+step against the left hand between dump lines with the same input:
+
+| Run | Solve | Through the Crucible's first raise | LEFTY |
+|---|---|---|---|
+| `ab-a-lefty` (before) | `bind` | 68.7 cm and 59.3 degrees, as its grip was read | PASS |
+| `ab-b-lefty` (after) | `bind` | 0.1 cm and 0.2 degrees | PASS |
+| `ab-b-leftyd` (after) | default, the game's off hand | 0.2 cm and 0.2 degrees | PASS |
+
+The row is the median of the posed left wrist on the Crucible at idle (two runs within 0.4 mm). At the change of the
+held item the model still steps by the rows' difference while the game has the arms (shotgun to Crucible 73.0 cm and
+38.4 degrees, as at every later switch). LEFTY: the left glove 0.1 to 0.5 cm (median / largest per gun, the Crucible
+0.2 / 0.5) from the left hand in all three runs, the free right glove 0.0 / 0.0 cm.
+
+**Regression, B on 0.1.79** (Release): the hands sweep `ab-b-def` 0 regressions (the roll-R+150 warns),
+`ab-b-bind` 0 regressions and the same verdicts as `ab-m-bind` in 72 of 72 holds; the planted twist fault
+`ab-b-fault` (`bind`) 62 regressions (the right twist step in 61 holds, the left in 11, collapse in 7 left and 8
+right); GRIP PASS (`ab-b-grip`, `ab-b-gripd`, every gun's glove 0.1 to 0.2 / 0.2 to 0.5 cm), SIGHTS PASS in every run
+(0.204 degrees at most).
+
+**Review fixes** (on 0.1.79, Release): the `[left_hand_wrist]` row (metres) is taken at the world's scale (it was
+used as game units, off by `ETERNALVR_WORLD_SCALE` away from 1; the rig runs at 1), and once the game's grip has
+placed the held item, a kept grip that stops holding (its root moved) leaves the wrist that grip gave instead of
+going back to the row, or with no row to the right glove's placement (`arm::LeftWristOnGun`; unit tests, each
+failing on the code without its fix). Rig: `ab-d-lefty` (`bind`) and `ab-d-leftyd` (default) LEFTY PASS with the
+same per-gun figures as `ab-b-lefty`/`ab-b-leftyd` but the Crucible's left glove median 0.3 cm (was 0.2) in
+`ab-d-lefty`; the Crucible's first raise 0.2 cm and 0.2 degrees (`bind`), 0.1 cm and 0.2 degrees (default);
+SIGHTS PASS (0.204 degrees at most); the hands sweep `ab-d-def` 0 regressions, the same verdicts as `ab-b-def` but
+the roll-R+150 warns.
+
+**Not run**: a headset (the shoulder end and the upper arm in a ballista shot, the Crucible's first raise in the
+left hand); the upper arm's shape in the shot's frame (no capture lands on it); a world scale other than 1 on the
+rig.
