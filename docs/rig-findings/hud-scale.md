@@ -98,7 +98,8 @@ OpenXR-Simulator, Route S unless named; the rig profile at Medium (`swf_anchorPr
   reading on average (65 to 80 reading the grid), 340 to 490 us at most; 9 to 10 us a GUI copy on average; GPU
   copy 104 to 107 us. The first readings of a session, of the map start's fade, took up to 1.1 ms labelling a
   whole corner before a corner more than half drawn was left unlabelled; with it, 112 to 214 us [rig]. Panel
-  mode: no reading at all (no `ui: corner blocks:` line in two panel runs) [rig].
+  mode: no reading at all (no `ui: corner blocks:` line in two panel runs) [rig]. That CPU time was spent on
+  the present hook; since then it runs on the readback's own thread (rig-findings/gui-readback.md).
 - The wheel at Large: `weapon wheel straight ahead ... GUI rect (759, 116) 456 x 452`, the drawn wheel 99.9%
   inside it, in panel and wrist mode; with the wrist cuts and the wheel the head-locked HUD was 6 pieces [rig].
 

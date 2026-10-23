@@ -16,8 +16,10 @@
 // Either way the rest of the 16:9 band the UI quad shows (subtitles, prompts, boss and encounter bars,
 // markers, damage) stays on the head-locked quad, cut into pieces around the blocks that moved. The blocks
 // are where the game drew them (measured from the image: ui_layer/hud_blocks.hpp); until they are measured
-// the hand HUD waits and the HUD stays whole on the head-locked quad. Every quad shows a sub-rectangle of
-// the same UI swapchain image, so there is no extra copy.
+// the hand HUD waits and the HUD stays whole on the head-locked quad. In a cutscene the HUD stays whole there
+// too: the hands are hidden then (the game owns the view), and the corner a block came from holds the
+// cinematic's skip prompt, which cut out would show nowhere. Every quad shows a sub-rectangle of the same UI
+// swapchain image, so there is no extra copy.
 
 #include "vkcore/presenter_wrist.hpp"
 
@@ -62,6 +64,8 @@ void publish(const ui_layer::HudView& view) {
 constexpr float kMaxFadeStep = 0.1f;
 // How many show / hide changes are logged.
 constexpr std::uint32_t kLoggedChanges = 40;
+// How long after a cutscene frame the corner readings are still passed over (fill()).
+constexpr double kCutscenePassOverSeconds = 0.5;
 
 } // namespace
 
@@ -78,8 +82,10 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
                              std::uint32_t height,
                              const XrCompositionLayerQuad& ui,
                              bool wheelInImage,
+                             bool cutsceneInImage,
                              XrCompositionLayerQuad* out) {
-    const ui_layer::WheelCentring::Step wheel = wheel_.update(wheelInImage, qpcSeconds(qpcNow()));
+    const double now = qpcSeconds(qpcNow());
+    const ui_layer::WheelCentring::Step wheel = wheel_.update(wheelInImage, now);
     // Where the game drew the wheel this time up; until it is measured it stays there, whole, on the HUD.
     const std::optional<ui_layer::PixelRect> wheelRect =
         wheelRect_.update(wheel.centred, width, height, WheelProbe::latest());
@@ -96,8 +102,15 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
                     ui_layer::hudModeName(settings.hud), weapon ? "weapon-hand aim" : "off-hand grip");
         }
     }
-    // The blocks the hand HUD moves, where the game drew them; none until all of them are measured.
-    const ui_layer::CornerBlocks drawn = corners_.update(width, height, WheelProbe::latestCorners());
+    // The blocks the hand HUD moves, where the game drew them; none until all of them are measured. Readings
+    // from a cutscene, and for kCutscenePassOverSeconds after it (a reading arrives a frame or two after its
+    // copy), are passed over: the blocks are not drawn then, and the skip prompt is not one.
+    if (cutsceneInImage) {
+        lastCutsceneSeconds_ = now;
+    }
+    const bool passOver = lastCutsceneSeconds_ > 0.0 && now - lastCutsceneSeconds_ < kCutscenePassOverSeconds;
+    const ui_layer::CornerBlocks drawn =
+        corners_.update(width, height, WheelProbe::latestCorners(), passOver);
     ui_layer::HandCuts cuts;
     if (frame && space != XR_NULL_HANDLE) {
         cuts = ui_layer::handCuts(weapon ? ui_layer::weaponMovedBlocks(settings.weapon)
@@ -106,7 +119,20 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
                                   drawn, width, height);
         logCuts(settings, cuts);
     }
-    const bool hands = cuts.complete;
+    // In a cutscene nothing is cut: the hand quads are hidden, and the skip prompt is in the ammo corner.
+    // The hand quads are not drawn meanwhile: they fade in again from nothing after it.
+    const bool hands = cuts.complete && !cutsceneInImage;
+    if (cutsceneInImage) {
+        fade_.reset();
+        facing_.reset();
+    }
+    if (cuts.complete && cutsceneInImage && !loggedCutsceneWhole_) {
+        loggedCutsceneWhole_ = true;
+        EVR_LOG(
+            "ui: %s HUD: in a cutscene the HUD stays whole on the head-locked quad (the skip prompt is in "
+            "a corner the hand HUD takes)",
+            ui_layer::hudModeName(settings.hud));
+    }
     // The part of the target the UI quad shows (the 16:9 band, ETERNALVR_UI_CROP), in pixels.
     const XrRect2Di& shownRect = ui.subImage.imageRect;
     const ui_layer::PixelRect shown{shownRect.offset.x, shownRect.offset.y,

@@ -40,13 +40,15 @@ public:
     // `width` x `height` GUI target) split into its head-locked pieces, the hand quads and the wheel's quad,
     // written to `out` (at most kMaxQuads); 0 when the whole UI quad stays as it is (panel mode or no
     // controllers, and no wheel). `wheelInImage`: the frame of the GUI image on the quad had the weapon wheel
-    // up (ViewRecord::weaponWheel). The quads written point into this object (the fade), so they are valid
-    // until the next call.
+    // up (ViewRecord::weaponWheel); `cutsceneInImage`: it was a cutscene frame (ViewRecord::cutscene), and
+    // the hand HUD takes no blocks off the head-locked quad. The quads written point into this object (the
+    // fade), so they are valid until the next call.
     std::uint32_t fill(const ui_layer::UiSettings& settings,
                        std::uint32_t width,
                        std::uint32_t height,
                        const XrCompositionLayerQuad& ui,
                        bool wheelInImage,
+                       bool cutsceneInImage,
                        XrCompositionLayerQuad* out);
 
     // Any thread: the head-locked quads of the last frame fill() composed, when that was at most
@@ -92,6 +94,8 @@ private:
     bool logged_ = false;
     bool loggedFallback_ = false;
     bool loggedNoAbilities_ = false;
+    bool loggedCutsceneWhole_ = false; // a cutscene kept the HUD whole (logged once)
+    double lastCutsceneSeconds_ = 0.0; // the last cutscene frame fill() saw (QPC seconds)
     // More head-locked pieces than quads (logged once).
     bool loggedPieceCap_ = false;
     float lastDegrees_ = 180.0f; // the last facing and gaze angles, for the log

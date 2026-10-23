@@ -96,3 +96,23 @@ Large (`swf_anchorProfile` 2), plus the first mission's opening on a new profile
 At the default HUD scale four of the game's small texts are under the bar (0.37 to 0.49 deg); at Large every one of
 them gains two or three pixels, the names and the labels pass, and the hint and the corruption title fall short by
 less than a pixel (0.49 deg). Part 2 decides whether 0.5 deg is the right bar (T-077).
+
+0.1.77 (dev main f07c9ef8), the same settings with the HUD Scale held at Large (the VR default since 0.1.77), on a new
+profile (no tutorial seen): the Slayer Tutorial pop-up on the game's tutorial map (`+devmap
+game/tutorials/tutorial_sp`, the first pop-up of a new profile), the first mission's loading screen and the death
+screen, and the prompts in the tutorial map's first room. Same measure (white text: pixels whose darkest channel is
+over 150, so the orange or green behind it does not count):
+
+| Item | Text measured | Cap height | Angle | Part 1 |
+| --- | --- | --- | --- | --- |
+| Tutorial pop-up, title | "SLAYER TUTORIAL" (the S) | 21 px | 0.78 deg | pass |
+| Tutorial pop-up, body | "This is the Slayer Tutorial." (the T) | 16 px | 0.60 deg | pass |
+| Tutorial pop-up, dismiss line | "[A] TO DISMISS" (the D) | 15 px | 0.56 deg | pass |
+| Loading screen tip | "Keep moving in combat." (the K) | 16 px | 0.60 deg | pass |
+| Death screen | "LOAD CHECKPOINT", "EXIT" (the L, the E) | 18 px | 0.67 deg | pass |
+| Tutorial prompts on the tutorial map | "Double Jump [A], [A]" (the D; a sign in the world, measured in the eye image at about 0.077 deg per pixel near the middle, from where the player first sees it) | 26 px | about 2.0 deg | pass |
+| Mission-complete screen | not captured: needs the end of a mission | | | to do |
+
+The pop-up is dismissed with A as its line says (the rig's scripted A press closed it). The tutorial map's prompts are
+signs in the world, so their size depends on the distance; the first mission's "[button] to ..." prompts use the hint
+bar measured above ("HOLD TO SKIP", 15 px at the default HUD scale).

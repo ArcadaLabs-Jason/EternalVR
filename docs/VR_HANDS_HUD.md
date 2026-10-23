@@ -76,11 +76,14 @@ XR worker, every XR frame (presenter_wrist.cpp)
   screen and its fade, the fourth GUI copy read found both blocks (the three before it found neither). Each change of the cuts
   is logged (`... HUD cuts the corner blocks where the game drew them: health and armor GUI rect ..., ammo
   ...`, the first 40), and the readback's `ui: corner blocks:` lines (the first reading that finds both, then
-  every 60 readings) give its CPU and GPU time. On the rig (Release, 2048x2208 GUI target, 3 minutes in play
-  in e1m3) a reading took 270 to 290 us of the present hook's CPU on average (65 to 80 of them reading the
-  grid out of the host buffer), 490 us at most, and its copy about 105 us of GPU time; at every 30th GUI copy
-  that is 9 to 10 us a copy on average. It runs on the present hook as the wheel's does; moving the measuring
-  to a worker thread would take it off there. In panel mode nothing is read. A GPU without cached host memory has no readback: the wheel stays
+  every 60 readings) give its CPU and GPU time. The present hook only records the copy and hands the done
+  reading to the readback's own thread, which reads the grid out of the host buffer, measures it and
+  publishes it (docs/rig-findings/gui-readback.md). On the rig (Release, 2048x2208 GUI target, Route S with
+  Parallel Eye Rendering, wrist mode in e1m3) a reading took 280 us of that thread's CPU on average (70 to
+  105 of them reading the grid), 650 us at most, and its copy about 100 us of GPU time; the present hook spent 2.1
+  us a GUI copy on average on the readback, most of it the 38 us of recording a reading's copy (up to 0.1.77 it
+  measured the readings itself: 11.4 us a copy, up to 670 us on a frame that read). A reading is published
+  0.3 ms after the present hook sees its copy done. In panel mode nothing is read. A GPU without cached host memory has no readback: the wheel stays
   where the game draws it and the hand HUDs are not shown (logged). Nothing here reads game memory, so it is
   the same on Steam and Game Pass. Unit tests measure both corners of real GUI captures at Small, Medium and
   Large, with the wheel open, in a cinematic and on a loading screen, against the blocks as drawn at full
@@ -105,7 +108,18 @@ XR worker, every XR frame (presenter_wrist.cpp)
   menu image, the wash filter and the crosshair mask work on the UI image itself, which the wrist quads
   share, so they are unchanged.
 - **Fallbacks.** No controllers, a stale controller snapshot, no grip space, or the corner blocks not
-  measured yet: the whole HUD stays on the head-locked quad as in panel mode (logged once). Loading screens
+  measured yet: the whole HUD stays on the head-locked quad as in panel mode (logged once). In a cutscene
+  frame (`renderView_t.inCutscene`, `ViewRecord::cutscene`) the HUD stays whole there too, in wrist and
+  weapon mode: the hand quads are hidden then, and the game draws its "Hold to skip" prompt in the ammo
+  block's corner. Up to 0.1.77 that corner stayed cut, so with cutscenes shown around the player
+  (`ETERNALVR_CUTSCENES=immersive`) the prompt showed nowhere; on the rig (e1m1's opening cinematic after
+  play in e1m3, the dash button held) it was drawn at x 1658..1933 of a 2048-wide GUI target, inside the
+  ammo cut from x 1516, and is now on the head-locked quad. A cutscene on the flat screen (the default)
+  composes no HUD, so it was never affected. Logged once: `... in a cutscene the HUD stays whole on the
+  head-locked quad`. Corner readings made in a cutscene, and in the 0.5 s after one (a reading arrives a
+  frame or two after its copy), are not counted: the blocks are not drawn then, and in e1m1's opening
+  cinematic such readings grew the ammo cut to 720 pixels wide and the health cut to 824, kept for the next
+  8 readings. The hand quads fade in again from nothing after a cutscene. Loading screens
   and menus are unchanged.
 - **Head-locked HUD.** `ETERNALVR_HUD=panel` (the default; launcher: "Health and ammo" = On the HUD panel) is
   the earlier behaviour, unchanged.

@@ -1,52 +1,24 @@
 #include "vkcore/wheel_probe.hpp"
 
 #include "vkcore/log.hpp"
-
-#include <windows.h>
+#include "vkcore/xr_presenter.hpp"
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
-#include <mutex>
-#include <optional>
+#include <cstdint>
 #include <type_traits>
 #include <vector>
 
 namespace evr::vkcore {
 
-namespace {
-
-std::mutex g_latestLock;
-ui_layer::WheelMeasurement g_latest;
-
-double qpcToSeconds(LONGLONG ticks) {
-    static const LONGLONG frequency = [] {
-        LARGE_INTEGER f;
-        QueryPerformanceFrequency(&f);
-        return f.QuadPart;
-    }();
-    return static_cast<double>(ticks) / static_cast<double>(frequency);
+WheelProbe::WheelProbe() {
+    worker_.setMeasure([this](const ReadbackJob& job) { return measure_.measure(job); });
 }
 
-LONGLONG qpc() {
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return now.QuadPart;
-}
-
-// How many summary lines the log gets (one when the wheel goes down, and every kReadingsPerLine readings).
-constexpr std::uint32_t kStatsLines = 30;
-constexpr std::uint64_t kReadingsPerLine = 600;
-
-} // namespace
-
-ui_layer::WheelMeasurement WheelProbe::latest() {
-    std::lock_guard lock(g_latestLock);
-    return g_latest;
-}
-
-WheelProbe::Rows WheelProbe::rowsOf(const ui_layer::PixelRect& area, VkDeviceSize offset) {
-    return Rows{area, ui_layer::gridRows(area, ui_layer::kWheelGridStep), offset};
+WheelProbe::~WheelProbe() {
+    if (processTerminating()) {
+        worker_.abandon(); // the thread is gone already and may have held the worker's lock
+    }
 }
 
 bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
@@ -56,21 +28,17 @@ bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
     if (buffer_ && extent.width == bufferExtent_.width && extent.height == bufferExtent_.height) {
         return true;
     }
-    for (const Reading& r : slots_) {
-        if (r.state == State::Submitted) {
-            return false; // a new size waits for the old readings
-        }
+    if (ring_.inUse(worker_.busy())) {
+        return false; // a new size waits for the old readings, in flight or being measured
     }
     freeBuffer(dev);
     // One slot holds either reading: the wheel's search rectangle, or the two corners one after the other.
-    const Rows wheel = rowsOf(ui_layer::wheelSearchRect(extent.width, extent.height), 0);
-    const Rows vitals =
-        rowsOf(ui_layer::cornerSearchRect(ui_layer::WristBlock::Vitals, extent.width, extent.height), 0);
-    const Rows weapon =
-        rowsOf(ui_layer::cornerSearchRect(ui_layer::WristBlock::Weapon, extent.width, extent.height), 0);
+    const ReadbackRows wheel = wheelReadbackRows(extent.width, extent.height);
+    const std::array<ReadbackRows, 2> corners = cornerReadbackRows(extent.width, extent.height);
+    const ReadbackRows& vitals = corners[0];
+    const ReadbackRows& weapon = corners[1];
     const VkDeviceSize wheelBytes = VkDeviceSize{wheel.area.width} * 4 * wheel.rows;
-    const VkDeviceSize cornerBytes =
-        VkDeviceSize{vitals.area.width} * 4 * vitals.rows + VkDeviceSize{weapon.area.width} * 4 * weapon.rows;
+    const VkDeviceSize cornerBytes = weapon.offset + VkDeviceSize{weapon.area.width} * 4 * weapon.rows;
     readingBytes_ = std::max(wheelBytes, cornerBytes);
     if (wheelBytes == 0 || cornerBytes == 0) {
         return false;
@@ -86,8 +54,8 @@ bool WheelProbe::ensureBuffer(DeviceData& dev, VkExtent2D extent) {
         dev.vk.GetBufferMemoryRequirements(dev.device, buffer_, &req);
         VkPhysicalDeviceMemoryProperties props{};
         dev.instance->vk.GetPhysicalDeviceMemoryProperties(dev.physicalDevice, &props);
-        // Host-visible and cached: the grid is read sample by sample on the present hook, which uncached
-        // (write-combined) memory would make slow.
+        // Host-visible and cached: the grid is read sample by sample (on the measuring thread), which
+        // uncached (write-combined) memory would make slow.
         constexpr VkMemoryPropertyFlags kWanted =
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         for (std::uint32_t t = 0; t < props.memoryTypeCount; ++t) {
@@ -168,18 +136,8 @@ bool WheelProbe::ensureTiming(DeviceData& dev, std::uint32_t family) {
     return t.pool && family < t.validBits.size() && t.validBits[family] > 0;
 }
 
-WheelProbe::Reading* WheelProbe::freeSlot(std::uint32_t& index) {
-    Reading* slot = nullptr;
-    for (std::uint32_t i = 0; i < kReadings; ++i) {
-        if (slots_[i].state == State::Recorded) {
-            slots_[i].state = State::Idle; // recorded but never marked submitted or cancelled
-        }
-        if (!slot && slots_[i].state == State::Idle) {
-            slot = &slots_[i];
-            index = i;
-        }
-    }
-    return slot;
+std::uint32_t WheelProbe::freeSlot() {
+    return ring_.pick(worker_.busy());
 }
 
 void WheelProbe::recordCopy(DeviceData& dev,
@@ -187,8 +145,10 @@ void WheelProbe::recordCopy(DeviceData& dev,
                             std::uint32_t family,
                             VkImage source,
                             std::uint32_t index,
-                            const Rows* parts,
-                            std::uint32_t count) {
+                            const ReadbackRows* parts,
+                            std::uint32_t count,
+                            PresentCost& cost) {
+    const std::int64_t start = readbackTicks();
     const VkDeviceSize base = readingBytes_ * index;
     const bool timed = ensureTiming(dev, family);
     if (timed) {
@@ -199,7 +159,7 @@ void WheelProbe::recordCopy(DeviceData& dev,
     }
     regions_.clear();
     for (std::uint32_t p = 0; p < count; ++p) {
-        const Rows& part = parts[p];
+        const ReadbackRows& part = parts[p];
         for (std::uint32_t r = 0; r < part.rows; ++r) {
             VkBufferImageCopy region{};
             region.bufferOffset = base + part.offset + VkDeviceSize{part.area.width} * 4 * r;
@@ -225,8 +185,11 @@ void WheelProbe::recordCopy(DeviceData& dev,
     }
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr,
                               1, &toHost, 0, nullptr);
-    slots_[index].state = State::Recorded;
+    ring_.recorded(index);
     slots_[index].timed = timed;
+    slots_[index].recordedTicks = readbackTicks();
+    slots_[index].recordedCopy = copyCount_;
+    cost.addRecord(readbackSeconds(start, slots_[index].recordedTicks));
 }
 
 bool WheelProbe::record(DeviceData& dev,
@@ -236,152 +199,126 @@ bool WheelProbe::record(DeviceData& dev,
                         VkExtent2D extent,
                         bool wheelUp,
                         bool cornersWanted) {
+    const std::int64_t start = readbackTicks();
+    ++copyCount_;
+    measure_.guiCopies.store(copyCount_, std::memory_order_relaxed);
     const bool read = cadence_.next(wheelUp);
+    bool recorded = false;
     if (!wheelUp) {
-        // The wheel went down: the readings of this time up in one line (their time, for the cost).
-        if (readings_ > loggedReadings_) {
-            logStats(true);
+        // The wheel went down: its line is logged once its last readings are measured (poll).
+        wheelDownDue_ = wheelDownDue_ || wheelWasUp_;
+        wheelWasUp_ = false;
+        recorded = recordCorners(dev, cb, family, source, extent, cornersWanted);
+        if (cornersWanted) {
+            cornerCost_.add(pollSeconds_ + readbackSeconds(start, readbackTicks()));
         }
-        return recordCorners(dev, cb, family, source, extent, cornersWanted);
+        pollSeconds_ = 0.0;
+        return recorded;
     }
-    ++framesUp_;
-    std::uint32_t index = 0;
-    Reading* slot = read ? freeSlot(index) : nullptr;
-    if (!slot || !ensureBuffer(dev, extent)) {
-        return false;
+    if (wheelDownDue_) {
+        handWheelDown(); // up again before the last time up's line went out
     }
-    const Rows part = rowsOf(ui_layer::wheelSearchRect(extent.width, extent.height), 0);
-    recordCopy(dev, cb, family, source, index, &part, 1);
-    slot->kind = Kind::Wheel;
-    slot->extent = extent;
-    return true;
+    wheelWasUp_ = true;
+    const std::uint32_t index = read ? freeSlot() : readback::kNoSlot;
+    if (read && index == readback::kNoSlot) {
+        ++wheelCost_.noSlot;
+    }
+    if (index != readback::kNoSlot && ensureBuffer(dev, extent)) {
+        const ReadbackRows part = wheelReadbackRows(extent.width, extent.height);
+        recordCopy(dev, cb, family, source, index, &part, 1, wheelCost_);
+        slots_[index].kind = ReadbackJob::Kind::Wheel;
+        slots_[index].extent = extent;
+        recorded = true;
+    }
+    wheelCost_.add(pollSeconds_ + readbackSeconds(start, readbackTicks()));
+    pollSeconds_ = 0.0;
+    return recorded;
 }
 
 void WheelProbe::submitted(std::uint64_t timelineValue) {
-    for (Reading& r : slots_) {
-        if (r.state == State::Recorded) {
-            r.state = State::Submitted;
-            r.value = timelineValue;
-        }
-    }
+    ring_.submitted(timelineValue);
 }
 
 void WheelProbe::cancel() {
-    for (Reading& r : slots_) {
-        if (r.state == State::Recorded) {
-            r.state = State::Idle;
-        }
-    }
+    ring_.cancel();
 }
 
-void WheelProbe::readGrid(const std::uint8_t* bytes, const Rows& part, ui_layer::AlphaGrid& grid) {
-    grid.area = part.area;
-    grid.step = ui_layer::kWheelGridStep;
-    grid.columns = ui_layer::gridColumns(grid.area, grid.step);
-    grid.rows = ui_layer::gridRows(grid.area, grid.step);
-    grid.alpha.resize(std::size_t{grid.columns} * grid.rows);
-    const std::uint8_t* at = bytes + part.offset;
-    const std::size_t rowBytes = std::size_t{grid.area.width} * 4;
-    for (std::uint32_t r = 0; r < grid.rows; ++r) {
-        const std::uint8_t* row = at + rowBytes * r;
-        for (std::uint32_t c = 0; c < grid.columns; ++c) {
-            grid.alpha[std::size_t{r} * grid.columns + c] = row[std::size_t{c} * grid.step * 4 + 3];
+void WheelProbe::handReading(DeviceData& dev, std::uint32_t index) {
+    const Reading& slot = slots_[index];
+    ReadbackJob job;
+    job.kind = slot.kind;
+    job.slot = index;
+    job.bytes = static_cast<const std::uint8_t*>(mapped_) + readingBytes_ * index;
+    job.width = slot.extent.width;
+    job.height = slot.extent.height;
+    std::array<std::uint64_t, 2> stamps{};
+    if (slot.timed &&
+        timing_.getQueryPoolResults(dev.device, timing_.pool, index * 2, 2, sizeof(stamps), stamps.data(),
+                                    sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
+        stamps[1] >= stamps[0]) {
+        job.gpuSeconds = static_cast<double>(stamps[1] - stamps[0]) * timing_.periodNs * 1e-9;
+    }
+    job.recordedTicks = slot.recordedTicks;
+    job.recordedCopy = slot.recordedCopy;
+    job.handedTicks = readbackTicks();
+    job.handedCopy = copyCount_;
+    PresentCost& cost = slot.kind == ReadbackJob::Kind::Corners ? cornerCost_ : wheelCost_;
+    job.present = cost;
+    cost = PresentCost{};
+    worker_.hand(job);
+}
+
+bool WheelProbe::wheelInFlight() const {
+    for (std::uint32_t i = 0; i < kReadings; ++i) {
+        if (ring_.state(i) == readback::SlotRing<kReadings>::State::Submitted &&
+            slots_[i].kind == ReadbackJob::Kind::Wheel) {
+            return true;
         }
     }
+    return false;
+}
+
+void WheelProbe::handWheelDown() {
+    ReadbackJob job;
+    job.kind = ReadbackJob::Kind::WheelDown;
+    job.present = wheelCost_;
+    wheelCost_ = PresentCost{};
+    worker_.hand(job);
+    wheelDownDue_ = false;
 }
 
 void WheelProbe::poll(DeviceData& dev, std::uint64_t completedTimeline) {
-    std::vector<std::uint32_t> done;
-    for (std::uint32_t i = 0; i < kReadings; ++i) {
-        if (slots_[i].state == State::Submitted && slots_[i].value <= completedTimeline) {
-            done.push_back(i);
+    const std::int64_t start = readbackTicks();
+    // What the readings measured since the last poll found, in the order they were made.
+    worker_.take(results_);
+    for (const ReadbackResult& r : results_) {
+        if (r.kind == ReadbackJob::Kind::Wheel) {
+            cadence_.measured(r.wheel);
+        } else if (r.kind == ReadbackJob::Kind::Corners) {
+            cornerCadence_.measured(r.width, r.height, r.both);
         }
     }
-    if (done.empty() || !mapped_) {
-        return;
-    }
-    std::sort(done.begin(), done.end(),
-              [this](std::uint32_t a, std::uint32_t b) { return slots_[a].value < slots_[b].value; });
-    if (!coherent_) {
-        VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
-        range.memory = memory_;
-        range.size = VK_WHOLE_SIZE;
-        dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
-    }
-    double pollSeconds = 0.0;
-    for (const std::uint32_t i : done) {
-        slots_[i].state = State::Idle;
-        const VkExtent2D extent = slots_[i].extent;
-        std::array<std::uint64_t, 2> stamps{};
-        double gpu = -1.0; // not timed
-        if (slots_[i].timed &&
-            timing_.getQueryPoolResults(dev.device, timing_.pool, i * 2, 2, sizeof(stamps), stamps.data(),
-                                        sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
-            stamps[1] >= stamps[0]) {
-            gpu = static_cast<double>(stamps[1] - stamps[0]) * timing_.periodNs * 1e-9;
+    std::array<std::uint32_t, kReadings> done{};
+    const std::uint32_t count = ring_.completed(completedTimeline, done);
+    if (count > 0 && mapped_) {
+        if (!coherent_) {
+            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+            range.memory = memory_;
+            range.size = VK_WHOLE_SIZE;
+            dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
         }
-        const auto* bytes = static_cast<const std::uint8_t*>(mapped_) + readingBytes_ * i;
-        if (slots_[i].kind == Kind::Corners) {
-            measureCorners(bytes, extent, gpu);
-            continue;
+        for (std::uint32_t k = 0; k < count; ++k) {
+            handReading(dev, done[k]);
         }
-        if (gpu >= 0.0) {
-            gpuSeconds_ += gpu;
-            maxGpuSeconds_ = std::max(maxGpuSeconds_, gpu);
-            ++gpuReadings_;
-        }
-        const LONGLONG start = qpc();
-        readGrid(bytes, rowsOf(ui_layer::wheelSearchRect(extent.width, extent.height), 0), grid_);
-        const std::optional<ui_layer::PixelRect> wheel =
-            ui_layer::measureWheel(grid_, extent.width, extent.height, &scratch_);
-        const double seconds = qpcToSeconds(qpc() - start);
-        measureSeconds_ += seconds;
-        pollSeconds += seconds;
-        cadence_.measured(wheel);
-        maxMeasureSeconds_ = std::max(maxMeasureSeconds_, seconds);
-        ++readings_;
-        if (wheel) {
-            ++found_;
-            lastRect_ = *wheel;
-            std::lock_guard lock(g_latestLock);
-            ++g_latest.serial;
-            g_latest.rect = *wheel;
-            g_latest.width = extent.width;
-            g_latest.height = extent.height;
-        }
-        maxPollSeconds_ = std::max(maxPollSeconds_, pollSeconds);
-        logStats(found_ == 1 && wheel);
     }
-}
-
-void WheelProbe::logStats(bool force) {
-    if (statsLogged_ >= kStatsLines || (!force && readings_ - loggedReadings_ < kReadingsPerLine)) {
-        return;
+    if (wheelDownDue_ && !wheelInFlight()) {
+        handWheelDown();
     }
-    ++statsLogged_;
-    const std::uint64_t n = readings_ - loggedReadings_;
-    EVR_LOG(
-        "ui: weapon wheel bounds: %llu reading(s) in all, %llu with the wheel found; the last at GUI rect "
-        "(%d, %d) %u x %u; since the last line (%llu reading(s) over %llu frame(s) with the wheel up): CPU "
-        "%.0f us a reading on average, %.0f us at most; %.1f us a frame on average, %.0f us at most; GPU "
-        "copy %.1f us on average, %.1f us at most (%llu timed)",
-        static_cast<unsigned long long>(readings_), static_cast<unsigned long long>(found_), lastRect_.x,
-        lastRect_.y, lastRect_.width, lastRect_.height, static_cast<unsigned long long>(n),
-        static_cast<unsigned long long>(framesUp_), n ? measureSeconds_ / static_cast<double>(n) * 1e6 : 0.0,
-        maxMeasureSeconds_ * 1e6, framesUp_ ? measureSeconds_ / static_cast<double>(framesUp_) * 1e6 : 0.0,
-        maxPollSeconds_ * 1e6, gpuReadings_ ? gpuSeconds_ / static_cast<double>(gpuReadings_) * 1e6 : 0.0,
-        maxGpuSeconds_ * 1e6, static_cast<unsigned long long>(gpuReadings_));
-    loggedReadings_ = readings_;
-    framesUp_ = 0;
-    maxPollSeconds_ = 0.0;
-    measureSeconds_ = 0.0;
-    maxMeasureSeconds_ = 0.0;
-    gpuSeconds_ = 0.0;
-    maxGpuSeconds_ = 0.0;
-    gpuReadings_ = 0;
+    pollSeconds_ += readbackSeconds(start, readbackTicks());
 }
 
 void WheelProbe::destroy(DeviceData& dev) {
+    worker_.stop(); // nothing reads the host buffer past this
     freeBuffer(dev);
     destroyTiming(dev);
 }
@@ -399,6 +336,7 @@ void WheelProbe::freeBuffer(DeviceData& dev) {
         dev.vk.FreeMemory(dev.device, memory_, nullptr);
         memory_ = VK_NULL_HANDLE;
     }
+    ring_.reset();
     slots_ = {};
     bufferExtent_ = {};
 }

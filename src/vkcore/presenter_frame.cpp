@@ -326,10 +326,11 @@ void XrPresenter::Impl::frame() {
                 // The hand HUDs and the weapon wheel straight ahead (presenter_wrist.cpp): the UI quad's
                 // head-locked pieces, the hand quads and the wheel's quad; not while the UI quad is the menu
                 // panel.
-                const std::uint32_t hud = menuOn || menuHeld
-                                              ? 0
-                                              : wrist.fill(settings.ui, uiExtent.width, uiExtent.height,
-                                                           uiQuad, shownView.weaponWheel, hudQuads.data());
+                const std::uint32_t hud =
+                    menuOn || menuHeld
+                        ? 0
+                        : wrist.fill(settings.ui, uiExtent.width, uiExtent.height, uiQuad,
+                                     shownView.weaponWheel, shownView.cutscene, hudQuads.data());
                 for (std::uint32_t i = 0; i < hud; ++i) {
                     layers[layerCount++] =
                         reinterpret_cast<const XrCompositionLayerBaseHeader*>(&hudQuads[i]);

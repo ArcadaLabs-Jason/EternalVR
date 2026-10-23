@@ -244,6 +244,7 @@ add_library(evr_layer SHARED
     vram_watch.cpp
     wheel_probe.cpp
     wheel_probe_corners.cpp
+    wheel_probe_measure.cpp
     window_cap.cpp
     xr_presenter.cpp)
 # Motion controllers (M5, controllers.hpp).

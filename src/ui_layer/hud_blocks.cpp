@@ -175,8 +175,10 @@ std::optional<PixelRect> CornerRectTracker::Kept::merged() const {
     return out;
 }
 
-CornerBlocks
-CornerRectTracker::update(std::uint32_t width, std::uint32_t height, const CornerMeasurement& latest) {
+CornerBlocks CornerRectTracker::update(std::uint32_t width,
+                                       std::uint32_t height,
+                                       const CornerMeasurement& latest,
+                                       bool passOver) {
     if (width != width_ || height != height_) {
         // A rectangle of another target size does not fit this one.
         width_ = width;
@@ -186,7 +188,7 @@ CornerRectTracker::update(std::uint32_t width, std::uint32_t height, const Corne
     }
     if (latest.serial > seen_) {
         seen_ = latest.serial;
-        if (latest.width == width && latest.height == height) {
+        if (!passOver && latest.width == width && latest.height == height) {
             if (latest.vitals && latest.vitals->width != 0 && latest.vitals->height != 0) {
                 vitals_.add(*latest.vitals);
             }

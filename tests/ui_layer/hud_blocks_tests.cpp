@@ -245,6 +245,32 @@ TEST_CASE("hud blocks: a layer over the corner, a block too high or too small, o
     CHECK_FALSE(measureCornerBlock(AlphaGrid{}, WristBlock::Vitals, g.width, g.height).has_value());
 }
 
+TEST_CASE("hud blocks: readings passed over (a cutscene) do not count") {
+    CornerRectTracker t;
+    CornerMeasurement m;
+    m.width = 2048;
+    m.height = 2208;
+    const PixelRect ammo{1516, 1431, 532, 249};
+    const PixelRect prompt{1340, 1431, 708, 249}; // what the corner holds in a cutscene
+    m.serial = 1;
+    m.weapon = ammo;
+    CornerBlocks b = t.update(2048, 2208, m);
+    REQUIRE(b.weapon);
+    CHECK(same(*b.weapon, ammo));
+    m.serial = 2;
+    m.weapon = prompt;
+    b = t.update(2048, 2208, m, true);
+    REQUIRE(b.weapon);
+    CHECK(same(*b.weapon, ammo));
+    // Seen while passed over, it does not count later either.
+    b = t.update(2048, 2208, m);
+    CHECK(same(*b.weapon, ammo));
+    // A new reading after it counts as before.
+    m.serial = 3;
+    b = t.update(2048, 2208, m);
+    CHECK(same(*b.weapon, prompt));
+}
+
 TEST_CASE("hud blocks: the tracker keeps the union of the last readings, per target size") {
     CornerRectTracker t;
     CornerMeasurement m;

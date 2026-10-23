@@ -457,8 +457,12 @@ the rectangle. Before the first measurement of a session (one or two game frames
 game draws it. The readback runs only while the wheel is up: every frame until three readings in a row find
 the same rectangle, then every 8th frame (a reading that differs goes back to every frame). With the larger
 HUD on the rig (Release) that took the CPU spent measuring from 255 to 37 us a frame on average at 1280x720
-and from 435 to 59 at 1736x1896; a frame that reads still spends up to 0.4 to 0.7 ms. The log's `weapon wheel bounds:` lines (when the
-wheel goes down, and every 600 readings) give its CPU and GPU time. Nothing here reads game memory, so it is
+and from 435 to 59 at 1736x1896. The measuring runs on the readback's own thread, not on the present hook,
+which only records the copy and hands the done reading over (docs/rig-findings/gui-readback.md): on the rig at
+2048x2208 with the wheel open, 8 us a frame on average on the present hook and 67 to 138 us at most (46 us of
+it recording the copy), against 95 us and 1.0 to 1.1 ms when the present hook measured (up to 0.1.77); a
+reading is published 0.65 ms after its copy is seen done. The log's `weapon wheel bounds:` lines (when the
+wheel goes down, and every 600 readings) give the measuring, present-hook and GPU time and the latency. Nothing here reads game memory, so it is
 the same on Steam and Game Pass. The wrist and weapon HUDs' corner blocks are measured by the same readback
 while the wheel is down (docs/VR_HANDS_HUD.md, "Where the corner blocks are"). An in-headset capture's `-HUD.png` draws the quads of the last headset frame
 (at most 0.25 s before the capture) over the GUI image saved with it, a frame or two later.

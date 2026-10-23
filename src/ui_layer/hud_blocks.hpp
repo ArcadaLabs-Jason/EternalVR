@@ -75,11 +75,14 @@ struct CornerMeasurement {
 // The corner blocks for each headset frame: per block, the union of its last kCornerKeptReadings
 // measurements of this target size (a reading that found no block does not count). nullopt for a block
 // before its first measurement of this size: it then stays where the game draws it, on the head-locked HUD.
-// A new target size drops what was measured: a rectangle of the old size does not fit it.
+// A new target size drops what was measured: a rectangle of the old size does not fit it. Readings that
+// arrive while `passOver` (a cutscene: the blocks are not drawn, and what a corner holds then, such as the
+// skip prompt, is not a block) are marked seen without counting.
 inline constexpr std::size_t kCornerKeptReadings = 8;
 class CornerRectTracker {
 public:
-    CornerBlocks update(std::uint32_t width, std::uint32_t height, const CornerMeasurement& latest);
+    CornerBlocks
+    update(std::uint32_t width, std::uint32_t height, const CornerMeasurement& latest, bool passOver = false);
 
 private:
     struct Kept {

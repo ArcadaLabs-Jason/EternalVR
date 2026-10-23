@@ -288,6 +288,7 @@ if(TARGET evr_device_features)
             vkcore/light_cull_tests.cpp
             vkcore/log_cap_tests.cpp
             vkcore/parallel_eyes_settings_tests.cpp
+            vkcore/readback_worker_tests.cpp
             vkcore/refraction_sizes_tests.cpp
             vkcore/snapshot_pairs_tests.cpp
             vkcore/snapshot_ring_tests.cpp
