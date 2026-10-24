@@ -175,10 +175,13 @@ them is worse for you than described here.
   with `light-cull:`). If a spot looks wrongly lit since this fix, please tell me where.
 - **Wet floors and puddles were darker, and different in each eye** (the start of the second mission of The
   Ancient Gods part two, for one). The game left out wet patches (decals) just past each eye's inner edge. The
-  eyes now keep every decal in the view around both of them, on the Steam and Game Pass (1.0.56.0) versions of
-  the game; on any other version they keep the game's own decal culling and the log says why (lines starting
-  with `seq-decals:`). On my test PC's captures the puddles match the flat game's brightness within about 5%,
-  the right eye's still a little darker. Not tried in a headset yet, nor on Game Pass.
+  eyes now also get the decals nearest to them in the view around both eyes, placed after the game's own list so
+  the game's own decals keep drawing, on the Steam and Game Pass (1.0.56.0) versions of the game. On any other
+  version they keep the game's own decal culling and the log says why (lines starting with `seq-decals:`). On my
+  test PC's captures the right eye's puddles match the flat game's brightness and the left eye's are about 8%
+  darker. I haven't tried it in a headset yet, nor on Game Pass. Through 0.1.79 the eyes got so many decals that
+  at some view directions the floor's own decals stopped drawing (I saw the grate in an Urdak tunnel turn into a
+  smooth panel). That's fixed too.
 - **Reflections in puddles and glossy floors with ray tracing off** (the screen-space reflections) pointed
   the wrong way in each eye: some puddles did not reflect at all except from certain spots, and then the two
   eyes showed different things (the round platform at the start of Urdak, for one). Each eye now marches its

@@ -135,12 +135,18 @@ read-only hook on the GPU particle step (0x1C28DD0) adds the per-eye counts to t
 **Decals around the eye pair.** Each eye's frustum is asymmetric (Quest 3: 54 degrees out, 40 in), and Umbra's
 per-view query culls with it. With the eye's 40-degree inner side Umbra reported decals hidden that still cover
 surfaces in view: the wet patches of puddled floors went missing, darker in both eyes and differently in each.
-A detour on the decal gather (RVA 0x1C77C90, `src/vkcore/decal_frustum_hooks.cpp`, `seq-decals:` lines) adds
+A detour on the decal gather (RVA 0x1C77C90, `src/vkcore/decal_frustum_hooks.cpp`, `seq-decals:` lines) chooses
 every active decal whose bounds reach the frustum centred on the eye's axis with, per axis, the larger of the
 eye's wider side and the view's fov_x / fov_y (the head-tracked mono view; 54 x 54.27 degrees for a Quest 3),
-box against side planes, without occlusion. Geometry, lights and world areas keep the eye's own Umbra query,
-so the eyes draw what they drew before (`docs/rig-findings/stereo-umbra-decals.md`). Route S only; a mono view
-keeps the engine's list; on a game build where the pattern is not found nothing is hooked.
+box against side planes, without occlusion, the nearest 2048. Adding all of them to Umbra's list (0.1.69 to
+0.1.79) listed thousands of hidden decals, and past about 1,664 scored decals the engine stops drawing the last
+ranked (a measured bracket: what takes the sorted list on was not read), which were the floor's own (a grate in the Urdak tunnel turned into a smooth panel at some yaws). So the
+chosen decals are scored and ranked by the engine's own jobs after the engine's list is done (a detour on its
+sorting job, RVA 0x1CB8D80) and follow that list with their keys, under 1,632 decals in all; where the engine's list leaves less
+than 640 of room, its last-ranked decals give way for them. Geometry, lights and world areas keep the eye's own
+Umbra query (`docs/rig-findings/stereo-umbra-decals.md`). Route S only; a mono view
+keeps the engine's list. On a game build where a pattern is not found nothing is hooked, and when one of the
+two hooks fails to install the other passes straight through.
 
 **Screen-space reflections along each eye's own screen.** The SSR/SSDO setup (RVA 0x1C71630) packs the view's
 projection into four floats from its diagonal terms only (`packedProjection`, `packedInverseProjection0/1`), and

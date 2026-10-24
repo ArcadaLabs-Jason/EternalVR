@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -9,6 +10,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <vector>
 
 using evr::stereo_seq::boxOutside;
 using evr::stereo_seq::Matrix4;
@@ -231,28 +233,246 @@ TEST_CASE("a decal past a Quest 3 eye's inner side but in the flat game's view i
     CHECK(cubeOutside(*pair, along(o, axis, -deg(57.0f), 0.0f, 6.0f), 0.2f));
 }
 
-TEST_CASE("decals are added only where active and inside, and every visible decal stays") {
-    using evr::stereo_seq::addDecals;
-    std::array<std::uint64_t, 2> visible{0x3ull, 0x8000000000000000ull}; // 0, 1 and 127 already visible
-    std::size_t activeAsked = 0;
-    const auto active = [&](std::size_t i) {
-        ++activeAsked;
-        return i != 5;
+TEST_CASE(
+    "the decals chosen for the pair are the active, inside ones the engine's list lacks, nearest first") {
+    using evr::stereo_seq::nearestDecals;
+    std::array<std::uint64_t, 2> visible{0x3ull, 0x8000000000000000ull}; // 0, 1 and 127 already listed
+    const auto active = [](std::size_t i) {
+        return i != 60;
     };
     const auto inside = [](std::size_t i) {
-        return i % 2 == 1 || i == 64;
+        return i >= 40 && i < 100;
     };
-    // 100 records: odd ones and 64 inside; 5 inactive; 1 already visible.
-    const std::size_t added = addDecals(visible, 100, active, inside);
-    CHECK(added == 49); // odd 3..99 (49) minus 5, plus 64
-    CHECK(visible[0] == (0xAAAAAAAAAAAAAAAAull & ~(std::uint64_t{1} << 5)) + 1);
-    CHECK(visible[1] == (0x8000000000000000ull | 0x1ull | (0xAAAAAAAAAull & ((std::uint64_t{1} << 36) - 1))));
-    CHECK(activeAsked == 98); // every record below the count but the visible 0 and 1
-    // Nothing more to add.
-    CHECK(addDecals(visible, 100, active, inside) == 0);
-    // The count is clipped to the set's size.
-    std::array<std::uint64_t, 1> small{0};
-    CHECK(addDecals(small, 1000, active, inside) == 31);
+    const auto distance2 = [](std::size_t i) {
+        const float d = static_cast<float>(i) - 64.0f;
+        return d * d;
+    };
+    auto indices = nearestDecals(visible, 128, 1000, active, inside, distance2);
+    // 40..99 inside, 60 inactive: 59 decals (in no particular order).
+    REQUIRE(indices.size() == 59);
+    CHECK(std::find(indices.begin(), indices.end(), 60) == indices.end()); // inactive
+    CHECK(std::find(indices.begin(), indices.end(), 39) == indices.end()); // outside
+    CHECK(std::find(indices.begin(), indices.end(), 100) == indices.end());
+    // A decal the engine's list holds is not chosen again.
+    visible[0] |= std::uint64_t{1} << 63;
+    const auto without = nearestDecals(visible, 128, 1000, active, inside, distance2);
+    CHECK(without.size() == 58);
+    // Limited to 5 (63 is listed, 60 inactive): the nearest to 64 are 64, 65, 62 and 66 (a tie at 4),
+    // then 61.
+    auto nearest = nearestDecals(visible, 128, 5, active, inside, distance2);
+    std::sort(nearest.begin(), nearest.end());
+    CHECK(nearest == std::vector<std::uint16_t>{61, 62, 64, 65, 66});
+
+    CHECK(std::find(without.begin(), without.end(), 63) == without.end());
+}
+
+TEST_CASE("only the nearest decals up to the limit are chosen") {
+    using evr::stereo_seq::kPairCandidates;
+    using evr::stereo_seq::nearestDecals;
+    constexpr std::size_t kCount = 8192;
+    const std::array<std::uint64_t, kCount / 64> visible{};
+    const auto all = [](std::size_t) {
+        return true;
+    };
+    // Distance grows with the index, so the nearest are the lowest indices.
+    const auto distance2 = [](std::size_t i) {
+        return static_cast<float>(i);
+    };
+    const auto indices = nearestDecals(visible, kCount, kPairCandidates, all, all, distance2);
+    REQUIRE(indices.size() == kPairCandidates);
+    for (std::size_t i = 0; i < indices.size(); ++i) {
+        REQUIRE(indices[i] == i);
+    }
+    // Fewer candidates than the limit: all of them.
+    CHECK(nearestDecals(visible, 100, kPairCandidates, all, all, distance2).size() == 100);
+    CHECK(nearestDecals(visible, 100, 7, all, all, distance2).size() == 7);
+}
+
+TEST_CASE("the chosen decals only take the room the engine's own list leaves under the limit") {
+    using evr::stereo_seq::extraRoom;
+    using evr::stereo_seq::kViewDecalCapacity;
+    using evr::stereo_seq::kViewDecalSafeCount;
+    // On the rig the floor's decals held with 1,660 scored decals and were lost from 1,678.
+    CHECK(kViewDecalCapacity >= 1660);
+    CHECK(kViewDecalCapacity < 1678);
+    CHECK(kViewDecalSafeCount < kViewDecalCapacity);
+    CHECK(extraRoom(0) == kViewDecalSafeCount);
+    CHECK(extraRoom(20) == kViewDecalSafeCount - 20);
+    CHECK(extraRoom(kViewDecalSafeCount - 1) == 1);
+    CHECK(extraRoom(kViewDecalSafeCount) == 0);
+    CHECK(extraRoom(kViewDecalCapacity) == 0);
+    CHECK(extraRoom(2048) == 0);
+    // Below the limit the room is exactly what fills it.
+    for (std::size_t kept : {0u, 20u, 1588u, 1599u, 1600u, 1631u}) {
+        CHECK(kept + extraRoom(kept) == kViewDecalSafeCount);
+    }
+}
+
+TEST_CASE("the chosen decals follow the engine's list, and it gives way only to make the minimum room") {
+    using evr::stereo_seq::kPairMinimum;
+    using evr::stereo_seq::kViewDecalSafeCount;
+    using evr::stereo_seq::placeExtras;
+    // A tunnel: the engine kept 14 decals; every chosen one that scored fits and nothing gives way.
+    auto p = placeExtras(14, 1000);
+    CHECK(p.keep == 14);
+    CHECK(p.take == 1000);
+    // Plenty of room, more scored than fits: the room is filled and nothing gives way.
+    p = placeExtras(100, 5000);
+    CHECK(p.keep == 100);
+    CHECK(p.take == kViewDecalSafeCount - 100);
+    // A busy scene: 1,382 kept leaves 250; the minimum takes 640 and the last 390 of the engine's give way.
+    p = placeExtras(1382, 1969);
+    CHECK(kViewDecalSafeCount - 1382 < kPairMinimum);
+    CHECK(p.take == kPairMinimum);
+    CHECK(p.keep == kViewDecalSafeCount - kPairMinimum);
+    CHECK(1382 - p.keep == 1382 + kPairMinimum - kViewDecalSafeCount);
+    // Fewer scored than the minimum: all of them, and the engine gives up only what they need.
+    p = placeExtras(1600, 100);
+    CHECK(p.take == 100);
+    CHECK(p.keep == kViewDecalSafeCount - 100);
+    // Nothing scored: the engine's list is left as it is, even past the limit.
+    p = placeExtras(1700, 0);
+    CHECK(p.keep == 1700);
+    CHECK(p.take == 0);
+    // The list never passes the limit once something is placed, and the engine's list is never reordered.
+    for (std::size_t kept : {0u, 14u, 1382u, 1632u, 1700u, 2048u}) {
+        for (std::size_t scored : {1u, 100u, 639u, 640u, 2048u}) {
+            p = placeExtras(kept, scored);
+            CHECK(p.keep <= kept);
+            CHECK(p.take <= scored);
+            CHECK(p.keep + p.take <= kViewDecalSafeCount);
+        }
+    }
+}
+
+TEST_CASE("the placement at the edges of the minimum room and of the limit") {
+    using evr::stereo_seq::kPairMinimum;
+    using evr::stereo_seq::kViewDecalSafeCount;
+    using evr::stereo_seq::placeExtras;
+    REQUIRE(kViewDecalSafeCount == 1632);
+    REQUIRE(kPairMinimum == 640);
+    // 992 kept leaves exactly the minimum: one fewer leaves one more, one more makes one give way.
+    auto p = placeExtras(991, 2048);
+    CHECK(p.keep == 991);
+    CHECK(p.take == 641);
+    p = placeExtras(992, 2048);
+    CHECK(p.keep == 992);
+    CHECK(p.take == 640);
+    p = placeExtras(993, 2048);
+    CHECK(p.keep == 992);
+    CHECK(p.take == 640);
+    // At and past the limit (room 1, 0, 0): the minimum is made by the engine's last-ranked decals.
+    for (const std::size_t scored : {639u, 640u, 641u}) {
+        const std::size_t take = std::min<std::size_t>(scored, 640);
+        p = placeExtras(1631, scored);
+        CHECK(p.take == take);
+        CHECK(p.keep == 1632 - take);
+        p = placeExtras(1632, scored);
+        CHECK(p.take == take);
+        CHECK(p.keep == 1632 - take);
+        p = placeExtras(1633, scored);
+        CHECK(p.take == take);
+        CHECK(p.keep == 1632 - take);
+    }
+}
+
+TEST_CASE("a record's index from its address, and the decal box distance") {
+    using evr::stereo_seq::boxDistance2;
+    using evr::stereo_seq::keyRecord;
+    using evr::stereo_seq::kNoRecord;
+    using evr::stereo_seq::recordIndex;
+    std::array<std::byte, 0x50 * 4> records{};
+    const std::byte* base = records.data();
+    CHECK(recordIndex(base, base, 0x50, 4) == 0);
+    CHECK(recordIndex(base + 0x50 * 3, base, 0x50, 4) == 3);
+    CHECK(recordIndex(base + 0x50 * 4, base, 0x50, 4) == kNoRecord); // past the array
+    CHECK(recordIndex(base + 0x28, base, 0x50, 4) == kNoRecord);     // not a record's start
+    CHECK(recordIndex(base, base + 0x50, 0x50, 4) == kNoRecord);     // before the array
+    CHECK(recordIndex(nullptr, base, 0x50, 4) == kNoRecord);
+    // The record a key names: its low 16 bits, as the sorting job reads it.
+    CHECK(keyRecord(0xABCD'1234'0000'7FFFull) == 0x7FFF);
+    CHECK(keyRecord(0x0000'0001'0002'0003ull) == 3);
+    // The distance to the box centre.
+    CHECK(boxDistance2({0, 0, 0, 2, 4, 6}, {1, 2, 3}) == 0.0f);
+    CHECK(boxDistance2({0, 0, 0, 2, 4, 6}, {4, 2, 3}) == 9.0f);
+    CHECK(boxDistance2({-1, -1, -1, 1, 1, 1}, {1, 2, 2}) == 9.0f);
+}
+
+TEST_CASE("the chosen decals the engine's list already holds are left out") {
+    using evr::stereo_seq::markHeld;
+    using evr::stereo_seq::withoutHeld;
+    std::array<std::byte, 0x50 * 200> records{};
+    std::byte* base = records.data();
+    // The engine's list: records 5, 64 and 199, and one that is not a record (left alone).
+    std::array<std::byte*, 4> list{base + 5 * 0x50, base + 64 * 0x50, base + 199 * 0x50, base + 7};
+    std::array<std::uint64_t, 4> held{~0ull, ~0ull, ~0ull, ~0ull}; // cleared first
+    markHeld(held, list, base, 0x50);
+    CHECK(held[0] == (std::uint64_t{1} << 5));
+    CHECK(held[1] == 1);
+    CHECK(held[2] == 0);
+    CHECK(held[3] == (std::uint64_t{1} << (199 - 192)));
+    const std::array<std::uint16_t, 6> chosen{3, 5, 64, 65, 199, 255};
+    std::vector<std::uint16_t> out{42}; // cleared first
+    withoutHeld(chosen, held, out);
+    CHECK(out == std::vector<std::uint16_t>{3, 65, 255}); // 255: past the held bits, kept
+}
+
+TEST_CASE("the nearest scored keys take the places, ties by record") {
+    using evr::stereo_seq::keepNearestKeys;
+    // Keys with records 10..19 in a shuffled order and high bits set (the engine's score).
+    std::vector<std::uint64_t> keys;
+    for (const std::uint64_t r : {17u, 12u, 19u, 10u, 15u, 11u, 18u, 13u, 16u, 14u}) {
+        keys.push_back((0xFFFFull << 48) | (r * 7) << 16 | r);
+    }
+    const auto byRecord = [](std::size_t record) {
+        return static_cast<float>(record);
+    };
+    keepNearestKeys(keys, 4, byRecord);
+    std::vector<std::size_t> first;
+    for (std::size_t i = 0; i < 4; ++i) {
+        first.push_back(keys[i] & 0xFFFF);
+    }
+    std::sort(first.begin(), first.end());
+    CHECK(first == std::vector<std::size_t>{10, 11, 12, 13});
+    CHECK(((keys[0] >> 48) & 0xFFFF) == 0xFFFF); // the key moves whole
+    // Ties go to the lower record, whatever the order.
+    std::vector<std::uint64_t> tied{9, 4, 7, 2, 8};
+    keepNearestKeys(tied, 2, [](std::size_t) { return 1.0f; });
+    std::sort(tied.begin(), tied.begin() + 2);
+    CHECK(tied[0] == 2);
+    CHECK(tied[1] == 4);
+    // Room for all of them: nothing moves.
+    std::vector<std::uint64_t> few{3, 1, 2};
+    keepNearestKeys(few, 3, byRecord);
+    CHECK(few == std::vector<std::uint64_t>{3, 1, 2});
+}
+
+TEST_CASE("the placed decals and their keys follow the kept part of the engine's list") {
+    using evr::stereo_seq::Placement;
+    using evr::stereo_seq::writeExtras;
+    std::array<std::byte, 0x50 * 100> records{};
+    std::byte* base = records.data();
+    std::array<std::byte*, 8> list{};
+    std::array<std::uint64_t, 8> keys{};
+    for (std::size_t i = 0; i < 8; ++i) {
+        list[i] = base + i * 0x50;
+        keys[i] = 0x1000 + i;
+    }
+    const std::array<std::uint64_t, 3> extras{(5ull << 32) | 40, (6ull << 32) | 41, (7ull << 32) | 42};
+    // Keep 4 of the engine's, place 2: list and keys from slot 4 on, the count 6.
+    CHECK(writeExtras(list, keys, Placement{4, 2}, extras, base, 0x50) == 6);
+    CHECK(list[3] == base + 3 * 0x50); // the kept part untouched
+    CHECK(keys[3] == 0x1003);
+    CHECK(list[4] == base + 40 * 0x50);
+    CHECK(keys[4] == ((5ull << 32) | 40));
+    CHECK(list[5] == base + 41 * 0x50);
+    CHECK(keys[5] == ((6ull << 32) | 41));
+    CHECK(list[6] == base + 6 * 0x50); // past the count: untouched
+    // Never past the arrays: 7 kept leave one slot.
+    CHECK(writeExtras(list, keys, Placement{7, 3}, extras, base, 0x50) == 8);
+    CHECK(list[7] == base + 40 * 0x50);
+    // More places than extras: only the extras.
+    CHECK(writeExtras(list, keys, Placement{1, 5}, extras, base, 0x50) == 4);
 }
 
 TEST_CASE("what is not a view or not a box adds nothing") {

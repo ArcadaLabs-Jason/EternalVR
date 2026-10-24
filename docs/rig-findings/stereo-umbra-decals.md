@@ -73,7 +73,8 @@ its Umbra-off block checked as the witness of the decal record layout). Umbra's 
 so geometry, lights and world areas are exactly as without the fix. Before the gather lists the decals Umbra
 reported, every active decal record (0x50 bytes at [[viewContext + 0x28] + 0x10]: active when the word at
 +0x38 and the dword at +0x3C are not 0, as the engine's Umbra-off path tests) whose bounds (+0x20, mins and
-maxs) reach the frustum around the eye pair gets its visible bit too. That frustum is centred on the eye's axis
+maxs) reach the frustum around the eye pair gets its visible bit too. (That is 0.1.69 to 0.1.79; since section 7 the nearest of those decals are chosen at the
+  gather and listed after the engine's own, scored by its jobs.) That frustum is centred on the eye's axis
 with, per axis, the larger of the eye's wider side and the flat game's half-angle (the view's latched fov_x /
 fov_y, the head-tracked mono view: 54 x 54.27 degrees for a Quest 3; `stereo_seq::pairDecalProjection`), from
 the eye's latched origin and axis. The test is the box against the four side planes, without occlusion: a
@@ -143,3 +144,176 @@ against 73.9): eye L's missing wet patches lie wholly inside its own frustum.
 - `packedInverseProjection0` and `packedProjection` (RVA 0x1C71630) still assume a centred frustum for the
   screen-space passes that read them (SSDO, SSR and the reflections composite); setting the inverse from each
   eye's projection (a lab hook) left the puddles unchanged.
+
+## 7. Too many decals listed: the floor's own decals stop drawing (Urdak)
+
+A player's headset session (Urdak, `game/sp/e3m3_maykr/e3m3_maykr`) showed a tunnel wall and floor whose
+textures "only load when I look in a specific direction". The rig reproduced it at the player's spot
+(`setviewpos 47.20 175.64 -160.24`, yaw swept 85 to 145 in steps of 5, a capture 3 s after each; each capture
+resampled to one world-fixed window so a wall point sits at the same pixel at every yaw; Release, Route S,
+2048 x 2208 per eye, ray tracing and SSR on, 0.1.79). Beside the round door the surface shows either a dark
+grated pattern (mean luminance of the patch about 42 to 57) or a smooth pale panel (83 to 97), and it switches as
+a step with the view yaw (panel at yaw 125 and below, grate from 130) while the patch is 5 to 15 degrees from the
+view centre. The flat game's view (`ETERNALVR_STEREO_SAME_VIEW=1`) shows only the grate at every yaw.
+
+### 7.1 Which objects
+
+`r_skipDecals 1` shows the panel at every yaw, so the grate is a decal drawn over the panel. Umbra reports 13 to
+24 decals visible at this spot, out of 13,067 active ones. The pair gather of section 4 adds every active decal in
+the frustum around the pair: 12,900 at yaw 104, 3,400 at yaw 145, hidden ones included. In a player's 0.1.79
+session (95 ten-second windows over several missions) 71 windows added 2,000 or more decals a gather, the median
+4,176 and the most 12,884: the flood is the normal case on the default path, not an Urdak one.
+
+| Arm (yaw 85 to 145) | Where the panel shows |
+|---|---|
+| 0.1.79 (every decal in the frustum added) | 125 and below |
+| the added decals left out (lab) | nowhere |
+| same view, Umbra on | nowhere |
+| same view, `r_useUmbraCulling 0` (the engine lists every decal in the frustum) | 105 to 125 |
+| added decals within 30 m, or within 100 m, of the eye (lab) | nowhere |
+| only added decals with an index above the floor's (13,200 and up) | nowhere |
+| only added decals with an index below the floor's (13,158 and down) | 125 and below |
+| the nearest 1,000 added | nowhere |
+| the nearest 2,000 added | 120 and below |
+| `r_geoDecalMaxProjections 4096` or `16384` on 0.1.79 (it reads 1008) | unchanged |
+
+### 7.2 The limit
+
+The engine scores and ranks a view's listed decals in two jobs (read statically): the first (RVA 0x1CB8950)
+drops decals that face away or are too small and gives the rest a key (decals within the fade distance first, the
+others by size over distance, ties by index); the second (RVA 0x1CB8D80) sorts the keys, keeps the first 2048 and
+rewrites the list in rank order. At the eye view the scored count, with the list sizes of the rig arms (a lab
+build logged the second job's input and output counts at the eye's origin, every 150 ms):
+
+| List (added decals) | Scored decals at yaw 105 / 110 / 115 / 120 / 125 / 130 | Panel at |
+|---|---|---|
+| Umbra's + the nearest 1,800 in all | 1660 / 1651 / 1651 / 1649 / 1595 / 1449 | none |
+| ... 1,900 in all | 1741 / 1718 / 1694 / 1678 / 1607 / 1459 | 105 to 120 |
+| ... 2,100 in all | 1779 / 1747 / 1721 / 1705 / 1622 / 1467 | 105 to 120 |
+| every decal in the frustum | 2011 / 1972 / 1942 / 1920 / 1819 / 1614 | 105 to 125 |
+
+The floor's decals drew with 1,660 scored decals or fewer and stopped from 1,678 (the rig has no run between the
+two), at every yaw and every list size. The second job's output equals its input in all of these (below 2048, so
+it cuts nothing), so the limit lies after it, in what takes the sorted list on (not read; a fixed-size
+per-view buffer of 1,664 is the inference). With a thousand and more hidden decals ranked ahead of them, the
+floor's decals (Umbra lists them; the engine ranks them low) fall past it.
+
+### 7.3 Fix
+
+The gather no longer adds to Umbra's list. For an eye view it chooses the decals around the pair that the list
+lacks (active, inside the pair frustum, not already listed), the nearest 2048 (`stereo_seq::nearestDecals`), and
+leaves them for the view's scoring. A detour on the sorting job (RVA 0x1CB8D80, found by signature together with
+the scoring job, RVA 0x1CB8950; both unique in the Steam build and the Game Pass 1.0.56.0 image, RVA 0x1D44EE0
+and 0x1D45310) lets the engine finish its own list, then scores and ranks the chosen decals with the engine's own
+two jobs on a copy of the job's parameters (so decals that face away or are too small drop out as they do for the
+engine's) and puts the nearest of them after the engine's list, each with its key (section 7.4), up to
+`kViewDecalSafeCount` (1,632, the 1,664 limit less 32) in all. The engine's decals keep their places. Where the engine's list leaves less than `kPairMinimum`
+(640) of room, its last-ranked decals give way for that many: at the Reclaimed Earth start the engine keeps about
+1,380 decals and leaves 250, and the wet patches came back for eye L with 400 chosen decals and for both eyes with
+640 (nothing given way: neither; 250 chosen: neither; 400: eye L only).
+
+The log counts it every 10 s (`seq-decals: decal list after the engine's scoring`): eye views, decals the engine
+kept, chosen decals that scored, appended, given way, and the views in which the chosen ones did not all fit.
+
+| Scene (eye views a 10 s window, mean a view) | Engine kept | Chosen, scored | Appended | Gave way | Did not all fit |
+|---|---|---|---|---|---|
+| Urdak tunnel (1,569) | 13 | 1,079 | 1,079 | 0 | 0 views |
+| Reclaimed Earth start (1,113) | 1,382 | 1,969 | 640 | 390 | all |
+| `e2m2_base` arena, `checkpoints_player_start_cp_12` (1,446) | 471 | 1,896 | 1,161 | 0 | all |
+| early hub, `setviewpos 0.5 -1.5 7.4` (1,419) | 503 | 1,778 | 1,128 | 0 | all |
+
+Urdak, the same yaw sweep, the patch luminance (grate 42 to 57): 0.1.79 panel at 125 and below (83 to 97), the fix
+29 to 57 at every yaw, as with the added decals left out and as the flat view.
+
+The build that also writes the placed decals' keys and keeps each chosen set to its own gather (section 7.4)
+reads the same: Urdak 29.4 to 57.1 at every yaw; the puddle 67.9 / 74.2 and the strip 81.0 / 78.9 (eye L /
+eye R), 640 appended and 390 given way a view at Reclaimed Earth.
+
+Puddle scene (section 1's `setviewpos 381 -886 -130.3 140`, mean luminance of the large puddle and of the wet
+strip, eye L / eye R, four-frame captures):
+
+| Arm | Puddle | Strip |
+|---|---|---|
+| same view (the reference) | 73.9 / 73.9 | 82.7 / 82.7 |
+| 0.1.79 | 67.5 / 73.7 | 80.5 / 78.4 |
+| the fix | 67.9 / 74.2 | 81.0 / 78.9 |
+| the added decals left out | 60.8 / 65.5 | 66.4 / 65.2 |
+| the fix with only the room under the limit (250) | 61.0 / 65.9 | 66.7 / 65.5 |
+| ... and 400 of room | 67.3 / 65.5 | 80.4 / 65.1 |
+
+In the arena scene each eye's picture against the same-view reference (mean absolute luminance difference, eye L / eye R,
+over the upper 60% of the picture) is 8.6 / 7.9 with the fix, 8.7 / 8.1 and 8.7 / 8.0 on 0.1.79 (two runs) and
+8.7 / 7.9 without the added decals; over the whole picture 13.6 / 13.9 with the fix and 13.6 / 13.8 without the
+added decals, 14.4 to 14.6 / 14.6 to 14.8 on 0.1.79: no difference between the arms in the upper part beyond
+parallax and noise, and the fix is as close to the reference as no added decals in the rest. Hub: the mean
+luminance of eight yaws differs 0.3 or less between 0.1.79 and the fix.
+
+Cost (Release, Route S, TAA, ray tracing on, 2048 x 2208 per eye, frame pacing off, GPU timing sampled, head
+still; A = 0.1.79, B = the fix, run in the order A B B A; six ten-second windows each, from 35 s after the
+schedule's clock; median [range] of the two runs of an arm):
+
+| Scene | Ticks/s A -> B | GPU per stereo tick (ms) | Process CPU per tick (ms) | Eye R render wall (ms) |
+|---|---|---|---|---|
+| Reclaimed Earth start | 54.16 [53.25-55.07] -> 55.27 [54.55-56.00], +2.1% | 18.01 -> 17.72, -1.6% | 66.31 -> 65.24, -1.6% | 8.52 -> 8.35 |
+| `e2m2_base` arena | 69.84 [66.77-72.92] -> 71.75 [71.35-72.15], +2.7% | 13.08 -> 13.23, +1.2% | 68.86 -> 67.47, -2.0% | 6.77 -> 6.36 |
+
+A first pass with an earlier build of the fix (it sorted the 2,048 chosen decals and the engine's ranked ones; the
+final build selects without sorting) read +0.1% at the level start and, in the arena, 73.96 [73.80-74.12] ->
+70.93 [69.45-72.42] (-4.1%). The same A build read 69.84 in the second pass (one of its runs 66.77), so the
+rig's run-to-run spread in the arena is about 9% and a difference under a few percent is not measurable there;
+the fix's own two runs in the second pass were 71.35 and 72.15. The two sorts of that build were the added work that grew with the
+candidate count (inferred as the cause); they were replaced by selections.
+
+
+### 7.4 What the jobs read and write (static)
+
+Read in the Steam build; the Game Pass 1.0.56.0 bodies (RVA 0x1D44EE0, 0x1D45310) are the same instruction for
+instruction (225 and 117), each call shifted with the function (+0x8C590; the memmove +0x9CB70), and the submit
+site (0x1CE9430 there) matches over its first 200 instructions.
+
+- **Arguments.** The submit site (0x1C5CEA0) builds the jobs' parameter block at +0x522640 of its frame context
+  and queues the jobs through a table (0x39A9540 the scoring job's thunk, 0x39A9548 the sorting job's), or calls
+  them inline as `mov rcx, block; call [table]` (0x1C5D0CE, 0x1C5D170), rdx left as it is: one argument. In the
+  scoring job rdx, r8 and r9 are first written at 0x1CB8AE6 (`imul`), 0x1CB8AD0 and 0x1CB8AD8; in the sorting job
+  r8 at 0x1CB8D9E, r9 at 0x1CB8DF0, rdx at 0x1CB8DFC. Its byte at [rsp + 0x60] is its own home slot (an empty
+  comparator). The detour and the direct calls pass the block alone.
+- **The block.** 0x40 bytes (the next block starts at +0x522680): +0x08 the idRenderView, +0x10 the list
+  (+0x7B2F8 of the context), +0x18 the keys (+0xB72F8), +0x20 the decal manager, +0x28 the count (+0x4D9B80);
+  +0x00, +0x30 and +0x38 are read by neither job. The list and the keys are 0x3C000 bytes apart, 0x7800 entries,
+  as many as there are decal records. The copy the fix hands the jobs is the 0x30 bytes up to the count, with its
+  own list, keys and count; the scoring job reads the view's latched fields, the list and the manager's tables
+  (+0x10 records, +0x20, +0x28, +0x38) and a cvar (0x1CBF920); it writes only keys[0..kept) and the count. The
+  sorting job writes only the keys, the list and the count. Nothing engine-owned is written through the copy.
+- **The keys.** The scoring job writes one key per decal it keeps, in order (0x1CB8CE4), the record index in the
+  low 16 bits. The sorting job sorts keys[0..count) in place: a partial partition (0x1CB8770) when more than 2048,
+  then an in-place sort (0x1CB9B40 or 0x1CB75A0, the latter a radix sort whose scratch is 1 MB of its own stack
+  frame) and rebuilds list[0..count) from the keys (0x1CB8F00: records + (key & 0xFFFF) * 0x50). Nothing past the
+  count is read or written, so keys the size of the chosen list are enough. A later stage reads the keys with the
+  same count (a block at +0x6A75D0 of the context, set at 0x1C5F674: the viewport size, the view, the manager,
+  the keys, the count; published at +0x5226F8 + 0x170). Its use was not read. So the decals placed after the
+  engine's list get their keys at the same places as their list entries. The third job (0x1CB8F30, the same
+  block) reads only +0x30 and +0x38.
+- **The view.** The gather keys its chosen decals by [viewContext + 0x20] and the sorting job's detour looks them
+  up by [block + 8]. They are the same object. In every 10 s window the count of gathers that chose decals and the
+  count of sorting jobs that found them are equal (Urdak: `decal gathers: 1569 with the decals around the eye
+  pair` and `decal list after the engine's scoring (limit 1632): 1569 eye views`; Reclaimed Earth: 1090 and 1090),
+  and the scoring job read the eye's origin at +0x28A64 of [block + 8] (a lab build, 47.20 175.64 at the Urdak
+  spot). Each gather drops what its view had waiting before it chooses, and the sorting job's detour checks the
+  view is still the eye view the layer wrote. So a set is only used by the sorting job of the gather that chose
+  it.
+- **Order of install.** The three functions are found first, then the sorting job and the gather are hooked;
+  both detours pass straight through until both are in, and for good when one install failed.
+
+### 7.5 Open
+
+- What takes the sorted list on and holds 1,664 was not read; the 1,664 is a measured bracket (1,660 drew, 1,678
+  did not) at one spot, so `kViewDecalSafeCount` keeps 32 under it.
+- A busy scene's room: where the engine's list is near the limit (Reclaimed Earth's start), 390 of its own
+  last-ranked decals give way for the chosen ones, as they did for the flood of 0.1.79 (which ranked its thousands
+  against them); which decals those are was not looked at.
+- The late hub (the Fortress of Doom exterior a player reported): not reached by the stereo rig scripts, which
+  have no menu key presses; the early hub was looked at instead (above), and its decal flood is 1,780 a gather.
+- Occlusion: Umbra's occlusion buffer test (RVA 0x2272270, used by the light gather) would drop the hidden
+  decals before they are chosen. Calling it from the decal gather with the packet's third field as the object
+  closed the game within a second of the first gather; not pursued.
+- Parallel Eye Rendering does not install the detour yet (as in section 6).
