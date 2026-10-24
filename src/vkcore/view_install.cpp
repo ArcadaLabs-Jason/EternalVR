@@ -11,6 +11,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/pe_flares.hpp"
 #include "vkcore/runtime_cvars_pe.hpp"
+#include "vkcore/screen_space_view_hooks.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/view_async.hpp"
 #include "vkcore/view_block.hpp"
@@ -80,6 +81,7 @@ bool installChanges(const std::byte* base) {
         return false;
     }
     installBinTileHook(); // each view's lights binned in its own (asymmetric) frustum; a missing piece logs
+    installScreenSpaceViewHook();   // SSR's view rotation sheared for each view's own projection; a miss logs
     installViewUpdates(base);       // models only view 1 sees prepared and updated; a missing piece logs
     installViewSwapGuard(base);     // view 0's screen pass left out after a swapchain recreate; a miss logs
     installViewDlss();              // with DLSS: each view's feature; a failed hook logs and holds TAA

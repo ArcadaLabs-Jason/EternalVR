@@ -57,8 +57,9 @@ projection gives c = d = 0 and nothing is set, so mono frames and the flat game 
 Located by signature (unique in the Steam build and in the Game Pass 1.0.56.0 image, where the three handles'
 declarations also read `inverseViewMatrixX/Y/Z`) and checked by the parameters' names and the setter being a
 function; anything missing logs `seq-ssr-view:` and leaves the game's parameters. Every 10 s a `seq-ssr-view:` line
-counts the view renders sheared, left centred, skipped and held (below). Route S only (installed with the other eye
-fixes); Parallel Eye Rendering does not install it yet.
+counts the view renders sheared, left centred, skipped and held (below). Route S installs it with the other eye
+fixes; Parallel Eye Rendering installs it with its own changes to the engine (`view_install.cpp`), the same hook
+and the same code (section 5).
 
 The shear alone moves reflections to their true place but leaves each eye's own screen-edge fade (section 3, "Both eyes
 agreeing"): `smoothstep(0, 0.5, clamp(1 - dot(ndc, ndc), 0, 1))` on the hit's reprojected uv, the same
@@ -198,5 +199,59 @@ world normal built from the true frustum vectors, so it gets S R n; ray tracing 
   and keeps an error of about the same size (a model of both rotations: 16 degrees median); no parameter undoes
   it. The ray-traced reflections themselves reconstruct positions from world-space frustum vectors the latch
   builds from the full matrix (RVA 0x1CE1B51) and are not affected.
-- Parallel Eye Rendering does not install the hook.
-- Not checked in a headset; on the Game Pass build only up to its main menu.
+- Not checked in a headset; on the Game Pass build only up to its main menu. Parallel Eye Rendering: ray tracing on
+  and a headset not checked either (section 5).
+
+## 5. Parallel Eye Rendering
+
+Parallel Eye Rendering did not install the hook until the fix described here, so its screen-space reflections had
+the engine's centred rotation in both views (section 1) and the shared-frame fade patch, installed for every mode,
+did nothing without the shear (an unsheared rotation gives c = 0, the game's fade).
+
+What the hook sees [log]. The hook sits in the per-view render-view job (RVA 0x1C54C95): r13 is that view's own
+idRenderView, r15 its parameter context. Parallel Eye Rendering writes each view's pose and explicit projection with
+the code Route S uses for an eye view (`writeEyePose`) and the engine's latch then builds the view's
+`projectionMatrix`, the field the hook reads. First hook lines of a run, one per view, from two threads:
+
+| View | Latched projection [0] [2] [5] [6] | Shear x, y | Row X |
+|---|---|---|---|
+| 0 (eye L) | 0.9027 -0.2425 0.8492 -0.1805 | -0.2686, -0.2125 | 0.9713 0.0000 0.2380 -> 0.9073 -0.0506 |
+| 1 (eye R) | 0.9027 +0.2425 0.8492 -0.1805 | +0.2686, -0.2125 | 0.9713 0.0000 0.2380 -> 1.0352 -0.0506 |
+
+Route S logs the same two lines, to the digit. The summary lines then count 2,100 to 2,500 sheared view renders per
+10 s (both views, about 120 ticks per second), none skipped or held and, after the first summary (8 centred
+renders in it), none centred; `ssr-fade: all 22 SSR shader modules
+patched` comes at 8 s, before the first map. The hook only reads the view's own projection and writes the view's own
+parameter context, and its counters are atomic, so the two views running at once share nothing it writes.
+
+The fix installs it once from the engine changes of the Parallel Eye Rendering install (`view_install.cpp`), after
+the bin tile hook, with no option of its own.
+
+Rig [rig]. Urdak at the same four positions, head still and level, DLSS in each view (quality, preset K), ray tracing
+off, pacing off, 2048 x 2208 per eye, four frames averaged per eye; contribution, reference, floor rows and blur as in
+section 3, the reference being Route S with both eyes from the head centre (symmetric FOV). Correlation of the
+contribution with the reference resampled to the eye's pixel directions, and its mean magnitude on the floor
+(reference magnitude in the last column); then the correlation of eye L with eye R over +-40 degrees on a common grid:
+
+| Arm | Position | Eye L | Eye R | Reference | L ~ R |
+|---|---|---|---|---|---|
+| Parallel Eye Rendering before | Rock | 0.94, 2.71 | 0.94, 2.60 | 2.16 / 1.97 | 0.89 |
+| | Platform | 0.26, 3.83 | 0.13, 5.57 | 7.81 / 7.11 | 0.50 |
+| | Third position | 0.77, 5.96 | 0.81, 3.94 | 6.27 / 3.69 | 0.74 |
+| Parallel Eye Rendering with the hook | Rock | 0.96, 2.17 | 0.97, 1.99 | | 0.96 |
+| | Platform | 0.55, 4.57 | 0.62, 4.37 | | 0.84 |
+| | Third position | 0.62, 5.23 | 0.86, 4.42 | | 0.75 |
+| Route S with the hook | Rock | 0.95, 2.48 | 0.97, 2.36 | | 0.96 |
+| | Platform | 0.55, 4.56 | 0.62, 4.34 | | 0.84 |
+| | Third position | 0.62, 5.25 | 0.86, 4.44 | | 0.75 |
+
+With the hook the two modes agree to the second decimal on the platform and the third position (each eye's
+correlation and magnitude), so nothing else of Route S's SSR work (the noise index, the history holds) was needed
+to get there. The platform's eyes agree with each other at 0.84 instead of 0.50. The third position's eye L goes
+down (0.77 to 0.62) as in Route S: the inner band's reflection fades out with the shared frame (section 3). The
+corridor has little SSR (contribution about 1 to 1.5) and its numbers are noise in every arm. Ray tracing on and a
+headset were not run for Parallel Eye Rendering.
+
+Performance (Parallel Eye Rendering on, pacing off, the platform, warm-up then main, fix, fix, main, main, fix, fix,
+main): ticks per second 107.1 on both (mean of four runs each, +0.02%), stereo tick GPU 8.67 ms on main and 8.68 ms
+with the hook; the runs drift down by about 3% over the sequence (the card warming), alike in both arms [rig].

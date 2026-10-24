@@ -135,6 +135,7 @@ evr_add_test(evr_foveation_tests
         features/foveation/attachment_images_tests.cpp
         features/foveation/eye_shape_latch_tests.cpp
         features/foveation/eye_targets_tests.cpp
+        features/foveation/foveation_gentle_tests.cpp
         features/foveation/foveation_preset_tests.cpp
         features/foveation/foveation_region_tests.cpp
         features/foveation/rate_pattern_tests.cpp

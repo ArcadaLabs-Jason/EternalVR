@@ -198,9 +198,9 @@ TEST_CASE("the presets' angles are the ones these tests use") {
     const std::vector<Preset> p = presets();
     REQUIRE(p.size() == 4u);
     CHECK(p[1].full == 24.0f); // Balanced
-    CHECK(p[1].half == 40.0f);
-    CHECK(p[0].half == 46.0f); // Subtle
-    CHECK(p[3].half == 24.0f); // Maximum
+    CHECK(p[1].half == 56.0f);
+    CHECK(p[0].half == 56.0f); // Subtle
+    CHECK(p[3].half == 56.0f); // Maximum
 }
 
 TEST_CASE("the view ray's angle matches the eye's projection, canted or not") {
@@ -253,7 +253,12 @@ TEST_CASE("a symmetric square FOV: the angle rule gives the old rule's pattern")
 }
 
 TEST_CASE("Quest 3 eyes: the same direction gets the same rate in both eyes") {
+    // The half-rate ends the presets had when the earlier rule was compared (16 degrees past the full-rate
+    // angle, 12 for Maximum); the presets' half-rate region has since grown to 56 degrees.
+    const std::vector<float> historicHalf{46.0f, 40.0f, 34.0f, 24.0f};
+    std::size_t index = 0;
     for (const Preset p : presets()) {
+        const float oldHalf = historicHalf[index++];
         CAPTURE(p.full);
         const Regions left = regions(kQuest3Left, Quat::identity(), p.full, p.half);
         const Regions right = regions(kQuest3Right, Quat::identity(), p.full, p.half);
@@ -271,8 +276,8 @@ TEST_CASE("Quest 3 eyes: the same direction gets the same rate in both eyes") {
                 CAPTURE(y);
                 ++compared;
                 REQUIRE(pointRate(left, *l) == pointRate(right, *r));
-                oldDiffer += oldPointRate(kQuest3Left, p.full, p.half, *l) !=
-                                     oldPointRate(kQuest3Right, p.full, p.half, *r)
+                oldDiffer += oldPointRate(kQuest3Left, p.full, oldHalf, *l) !=
+                                     oldPointRate(kQuest3Right, p.full, oldHalf, *r)
                                  ? 1
                                  : 0;
             }

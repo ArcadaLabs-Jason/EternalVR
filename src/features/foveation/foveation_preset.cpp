@@ -19,17 +19,11 @@ std::optional<float> fullRateHalfAngleDegrees(FoveationPreset preset) {
 }
 
 std::optional<float> halfRateBandDegrees(FoveationPreset preset) {
-    switch (preset) {
-    case FoveationPreset::Off:
+    const std::optional<float> full = fullRateHalfAngleDegrees(preset);
+    if (!full) {
         return std::nullopt;
-    case FoveationPreset::Subtle:
-    case FoveationPreset::Balanced:
-    case FoveationPreset::Aggressive:
-        return half_rate_bands::kDefaultDegrees;
-    case FoveationPreset::Maximum:
-        return half_rate_bands::kMaximumDegrees;
     }
-    return std::nullopt;
+    return half_rate_ends::kDegrees - *full;
 }
 
 FoveationPreset adjustForLens(FoveationPreset preset, bool gentlerForPancake) {

@@ -2,10 +2,11 @@
 
 // Fixed foveation presets (ARCHITECTURE section 11).
 //
-// A preset sets the angle of the full-rate region around head-forward and how many degrees more the
-// half-rate region has. Each region is the cone of its angle around head-forward, the same directions in
-// both eyes (foveation_region.hpp). Outside the half-rate region shading is at quarter rate. Angles are in
-// degrees because that is how they are tuned and discussed; conversion happens at the point of use.
+// A preset sets the angle of the full-rate region around head-forward. The half-rate region reaches from
+// there to the same end for every preset (below). Each region is the cone of its angle around head-forward,
+// the same directions in both eyes (foveation_region.hpp). Outside the half-rate region shading is at quarter
+// rate. Angles are in degrees because that is how they are tuned and discussed; conversion happens at the
+// point of use.
 
 #include <cstdint>
 #include <optional>
@@ -32,17 +33,21 @@ inline constexpr float kAggressiveDegrees = 18.0f;
 inline constexpr float kMaximumDegrees = 12.0f;
 } // namespace half_angles
 
-// Half-rate band widths beyond the full-rate half-angle, in degrees. Maximum's band is narrower, so
-// its quarter rate starts at the region of 24 degrees.
-namespace half_rate_bands {
-inline constexpr float kDefaultDegrees = 16.0f;
-inline constexpr float kMaximumDegrees = 12.0f;
-} // namespace half_rate_bands
+// Where the half-rate region ends, in degrees from head-forward, the same for every preset: beyond it shading
+// is at quarter rate. 56 degrees is past the bottom and the temporal edge of a Quest 3 eye image (54.3 and 54
+// degrees), so there only the corners of the image reach quarter rate; the earlier ends of 24 to 46 degrees
+// put the whole bottom and the outer edge at quarter rate, where 4x4 blocks showed on shiny floors with DLSS.
+// The presets differ in their full-rate angle alone, so the stronger ones still shade less of the image at
+// full rate.
+namespace half_rate_ends {
+inline constexpr float kDegrees = 56.0f;
+} // namespace half_rate_ends
 
 // Full-rate half-angle for a preset; nullopt for Off (everything is full rate).
 std::optional<float> fullRateHalfAngleDegrees(FoveationPreset preset);
 
-// Width of the half-rate band beyond the full-rate half-angle; nullopt for Off.
+// Width of the half-rate band beyond the full-rate half-angle, up to where the half-rate region ends; nullopt
+// for Off.
 std::optional<float> halfRateBandDegrees(FoveationPreset preset);
 
 // Pancake lenses stay sharp much further from the centre than fresnel lenses, so reduced shading

@@ -17,16 +17,17 @@ TEST_CASE("presets map to their full-rate half-angles") {
     CHECK(fullRateHalfAngleDegrees(FoveationPreset::Maximum) == 12.0f);
 }
 
-TEST_CASE("presets map to their half-rate bands") {
+TEST_CASE("presets map to their half-rate bands, which all end at 56 degrees") {
     CHECK_FALSE(halfRateBandDegrees(FoveationPreset::Off).has_value());
-    CHECK(halfRateBandDegrees(FoveationPreset::Subtle) == 16.0f);
-    CHECK(halfRateBandDegrees(FoveationPreset::Balanced) == 16.0f);
-    CHECK(halfRateBandDegrees(FoveationPreset::Aggressive) == 16.0f);
-    CHECK(halfRateBandDegrees(FoveationPreset::Maximum) == 12.0f);
-    // Maximum's quarter rate starts at 24 degrees.
-    CHECK(*fullRateHalfAngleDegrees(FoveationPreset::Maximum) +
-              *halfRateBandDegrees(FoveationPreset::Maximum) ==
-          24.0f);
+    CHECK(halfRateBandDegrees(FoveationPreset::Subtle) == 26.0f);
+    CHECK(halfRateBandDegrees(FoveationPreset::Balanced) == 32.0f);
+    CHECK(halfRateBandDegrees(FoveationPreset::Aggressive) == 38.0f);
+    CHECK(halfRateBandDegrees(FoveationPreset::Maximum) == 44.0f);
+    for (const auto p : {FoveationPreset::Subtle, FoveationPreset::Balanced, FoveationPreset::Aggressive,
+                         FoveationPreset::Maximum}) {
+        CAPTURE(static_cast<int>(p));
+        CHECK(*fullRateHalfAngleDegrees(p) + *halfRateBandDegrees(p) == 56.0f);
+    }
 }
 
 TEST_CASE("stronger presets have smaller full-rate regions") {

@@ -209,8 +209,12 @@ them is worse for you than described here.
   both eyes (before, some detail off to the side could be sharp in one eye and blurry in the other). On
   headsets whose eye images aren't symmetric (Quest 3 for one) the blurrier band toward your nose and at
   the top is narrower than in 0.1.47 and more of it sits on the outer side. The bottom of the view is about
-  as far from where your head points as the outer edges (on Quest 3, 55 degrees down against 44 up), so it
-  gets the same coarsest shading; with DLSS, floors there can look blocky or streaked. Loading a checkpoint
+  as far from where your head points as the outer edges (on Quest 3, 55 degrees down against 44 up). A
+  headset test showed floors there blocky and streaked with DLSS, because that band was shaded at the
+  coarsest, quarter rate. I moved the quarter rate out to 56 degrees from where your head points for every
+  setting: the bottom and the outer edges of a Quest 3's view now get half rate, and only the far corners of
+  each eye keep quarter rate. Floors there can still look a little coarser than the middle, as half rate does,
+  so tell me if they still bother you. Loading a checkpoint
   doesn't move it from one eye to the other: I measured each eye's pattern before and after map loads on my
   test PC and in captures from a headset session. If it looks different to you after a load, an in-headset
   capture before and one after it from the same spot (hold the left Menu button and pull a trigger) would
@@ -251,8 +255,10 @@ them is worse for you than described here.
   - **Stutter and eyes out of step.** Now and then the headset shows the same picture twice. Both eyes
     normally show the same game frame, but right after a load, or when no new pair of eye images comes for a
     few frames, the headset can briefly show eyes from different frames.
-  - **Some effects differ between the eyes.** Some reflections show in one eye only, and glass and the
-    underwater view can look different in each eye. Close demons can show a wrong pose in the left eye for a
+  - **Some effects differ between the eyes.** The screen-space reflections (ray tracing off) now point the
+    right way in each eye here too, as in the normal mode; the wet patches on floors (puddles) are still drawn the
+    old way, so they can be darker or missing in one eye. I haven't tried the reflections in a headset yet.
+    Glass and the underwater view can look different in each eye. Close demons can show a wrong pose in the left eye for a
     single frame. Menus can flash. The muzzle flash may look wrong; it is not known yet whether that comes
     from Parallel Eye Rendering.
   - **Smaller ones:** after the game rebuilds its swapchain the headset can keep the last picture for a few
