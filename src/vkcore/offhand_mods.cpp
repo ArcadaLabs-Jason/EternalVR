@@ -107,6 +107,8 @@ bool g_wrist = false;     // the off hand has the wrist's change too (install, t
 bool g_gloveMods = false; // the weapon arm has the glove's wrist and fingers too (install, then read-only)
 bool g_leftGlove =
     false; // the left arm has them too, with the weapon in the left hand (install, then read-only)
+// The free off hand's fingers (features/arm/hand_pose.hpp): the bind solve only (install, then read-only).
+bool g_offFingers = false;
 std::atomic<std::uint32_t> g_roomLines{0};
 
 // The weapon arm's attach joint: the joint InitJointMods stores at idHands+0x28E6 is the one named
@@ -302,9 +304,14 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
     g_leftGlove = ready.offHand && ready.weapon && input::leftHandArms(settings());
     g_wrist = ready.offHand && armSolveMode().wristChange && !g_leftGlove;
     g_gloveMods = ready.weapon;
+    // The free off hand's fingers follow its controller with the bind solve (hand poses): its fifteen finger
+    // bones after the six, no change while the game has the arm.
+    g_offFingers = ready.offHand && !g_leftGlove && settings().offhand == input::OffhandMode::Free &&
+                   armSolveMode().writesPast;
     const std::int32_t glove = 1 + static_cast<std::int32_t>(arm::kFingerModCount);
-    g_room =
-        arm::modsForArms(arms) + (g_wrist ? 1 : 0) + (g_gloveMods ? glove : 0) + (g_leftGlove ? glove : 0);
+    const std::int32_t fingers = static_cast<std::int32_t>(arm::kFingerModCount);
+    g_room = arm::modsForArms(arms) + (g_wrist ? 1 : 0) + (g_gloveMods ? glove : 0) +
+             (g_leftGlove ? glove : 0) + (g_offFingers ? fingers : 0);
     g_weightChecked = (armSolveMode().writesPast || g_gloveMods) && weightChecks(image, init);
     g_setNum = reinterpret_cast<SetNumFn>(const_cast<std::byte*>(setNum));
     std::string error;
@@ -319,9 +326,10 @@ ArmSet install(const GameImage& image, ArmSet wanted) {
             ready.offHand && ready.weapon ? "the off hand and the weapon arm"
             : ready.weapon                ? "the weapon arm"
                                           : "the off hand",
-            g_wrist       ? ", the off hand's wrist too"
-            : g_leftGlove ? ", both gloves (the weapon in the left hand)"
-                          : "");
+            g_wrist && g_offFingers ? ", the off hand's wrist and fingers too"
+            : g_wrist               ? ", the off hand's wrist too"
+            : g_leftGlove           ? ", both gloves (the weapon in the left hand)"
+                                    : "");
     if (g_gloveMods) {
         EVR_LOG(
             "weapon arm: room for the glove's modifiers too (its wrist and %zu finger joints), to put it on "
@@ -335,8 +343,12 @@ bool hasWrist(arm::ArmSide side) {
     return side == arm::ArmSide::Left ? g_wrist || g_leftGlove : g_gloveMods;
 }
 
+bool leftGlove() {
+    return g_leftGlove;
+}
+
 std::int32_t fingerCount(arm::ArmSide side) {
-    const bool glove = side == arm::ArmSide::Right ? g_gloveMods : g_leftGlove;
+    const bool glove = side == arm::ArmSide::Right ? g_gloveMods : g_leftGlove || g_offFingers;
     return glove ? static_cast<std::int32_t>(arm::kFingerModCount) : 0;
 }
 

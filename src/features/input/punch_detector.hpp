@@ -6,7 +6,7 @@
 // along the head's forward, not total speed, keeps sideways sweeps of the weapon and reloading-style
 // motions from punching. One punch fires per crossing: the hand has to slow below a fraction of the
 // threshold before it can punch again, and a hand whose tracking starts or resumes mid-motion must
-// slow down first as well. So must a hand whose punch was held back for a throw or an overhead swing
+// slow down first as well. So must a hand whose punch was held back for an overhead swing
 // (arm_gestures.hpp), so the end of that gesture never punches.
 
 #include "features/input/controller_state.hpp"

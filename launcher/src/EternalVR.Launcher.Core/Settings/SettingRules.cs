@@ -13,7 +13,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: body
         PlayPosition, EyeHeight,
         // Play: gestures
-        ThrowGesture, SwingGesture, HandsJump, PunchSpeed,
+        RollWrist, SwingGesture, HandsJump, PunchSpeed,
         // Play: controls
         AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
@@ -21,7 +21,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
-        VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms,
+        VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms, Cutscene3D,
         HudDistance, HudSize, HudHeight, HudPlace,
         MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, AdapterSteer, ExtraArguments,
     }
@@ -46,7 +46,8 @@ namespace EternalVR.Launcher.Core.Settings
             "Only when the game renders at the headset's size (render_size in launcher.ini): otherwise the window is the eye image.";
         public const string NeedsCinema = "Only with cutscenes on a flat screen (Cutscene view).";
         public const string NeedsImmersive = "Only with cutscenes around you (Cutscene view).";
-        public const string NeedsShownArms = "Only with Show arms on (Play tab): otherwise the arms are hidden in cutscenes too.";
+        public const string NeedsShownArms = "Not with Show arms on Hidden (Play tab): the arms are hidden in cutscenes too.";
+        public const string NotWithAlternateEyes = "Not with Alternate eyes (Advanced tab): the two eyes must come from the same game frame.";
         public const string NeedsDlss = "Only with DLSS (Anti-aliasing).";
         public const string NotWithAntiAliasingOff = "Not with Anti-aliasing Off: screen-space reflections are off then.";
         public const string NotWithParallelEyes = "Not with Parallel Eye Rendering (Play tab).";
@@ -82,7 +83,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.DossierMapSticks:
                 case Setting.WeaponWheel:
                 case Setting.ThumbRestWheel:
-                case Setting.ThrowGesture:
+                case Setting.RollWrist:
                 case Setting.SwingGesture:
                 case Setting.HandsJump:
                 case Setting.PunchSpeed:
@@ -167,10 +168,16 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.CutsceneShape:
                     if (!stereo) return NeedsStereo;
                     return s.Cutscenes == CutsceneView.Cinema ? null : NeedsCinema;
+                case Setting.Cutscene3D:
+                    // Two renders of the cutscene camera, shown as a pair on the flat screen (Route S only).
+                    if (!stereo) return NeedsStereo;
+                    if (s.Cutscenes != CutsceneView.Cinema) return NeedsCinema;
+                    if (parallel) return NotWithParallelEyes;
+                    return s.AlternateEyes == AlternateEyesMode.Off ? null : NotWithAlternateEyes;
                 case Setting.CutsceneArms:
                     if (!s.Controllers) return NeedsControllers;
                     if (s.Cutscenes != CutsceneView.Immersive) return NeedsImmersive;
-                    return s.ShowArms ? null : NeedsShownArms;
+                    return s.Arms == ArmsView.Hidden ? NeedsShownArms : null;
                 default:
                     return null;
             }

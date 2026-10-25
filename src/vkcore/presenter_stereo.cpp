@@ -27,6 +27,15 @@ namespace evr::vkcore {
 
 namespace {
 
+// A stereo cutscene's lens can change while its camera holds still (the same view axis on several frames):
+// its record is the one with this view's FOV as well, so the eyes' frusta are this frame's.
+bool sameGameFov(const ViewRecord& r, const std::byte* renderView) {
+    const auto* fov = reinterpret_cast<const float*>(renderView + render_view::kFovX);
+    const auto f = xr_math::fovFromGame({fov[0], fov[1]});
+    return f && std::fabs(f->angleRight - r.fov.angleRight) < 1e-5f &&
+           std::fabs(f->angleUp - r.fov.angleUp) < 1e-5f;
+}
+
 bool stereoFlag(const wchar_t* name, bool fallback) {
     std::wstring value;
     if (!readEnv(name, value) || value.empty()) {
@@ -209,6 +218,8 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
                     idEye.axis.up.x,      idEye.axis.up.y,      idEye.axis.up.z};
     }
     record.stereo = true;
+    record.historyReset =
+        cinema3dResetAfter(*this, record.cutscene); // the player's view after a stereo cutscene
     if (!loggedFirstEyes) {
         loggedFirstEyes = true;
         for (std::size_t i = 0; i < 2; ++i) {
@@ -231,7 +242,8 @@ bool XrPresenter::Impl::recordForView(const std::byte* renderView, ViewRecord& o
     std::lock_guard lock(historyMutex);
     for (std::size_t i = 0; i < kHistorySize && i < latestSeq; ++i) {
         const ViewRecord& r = history[(latestSeq - i) % kHistorySize];
-        if (std::memcmp(r.axis.data(), axis, sizeof(r.axis)) == 0) {
+        if (std::memcmp(r.axis.data(), axis, sizeof(r.axis)) == 0 &&
+            (!r.cinema3D || sameGameFov(r, renderView))) {
             out = r;
             return true;
         }

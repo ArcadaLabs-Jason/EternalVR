@@ -34,4 +34,11 @@ void plantTwistFault(ArmSolution& solution, const ArmPoses& animated) {
     }
 }
 
+HandsOnlyArm plantForearmFault(const ArmPoses& arm) {
+    HandsOnlyArm out{arm, 0};
+    out.joints[index(ArmJoint::UpperArm)] = arm[index(ArmJoint::ForeArm)];
+    out.zeroScale = 1u << index(ArmJoint::UpperArm);
+    return out;
+}
+
 } // namespace evr::arm

@@ -210,7 +210,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.WeaponHand, Setting.MoveToward,
-                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.ThrowGesture, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
+                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.RollWrist, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.RevenantAimWith,
                 Setting.MeleeAimWith, Setting.EquipmentAimWith,
             })

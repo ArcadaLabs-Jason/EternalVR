@@ -242,6 +242,19 @@ them is worse for you than described here.
   on TAA, fast-moving demons can smear a little more than without it; Off avoids that. "Auto" does this only
   while your processor cannot keep up with the headset and draws both eyes again once it can (the switch
   takes a second or a few). Turn it off if it does not help.
+- **Stereoscopic cutscenes cost about twice the graphics card's time while a cutscene plays.** "Stereoscopic
+  cutscenes" on the launcher's Advanced tab (on by default) draws each cutscene on the flat screen from two cameras a
+  little apart and shows the pair in 3D, like a 3D movie. On my RTX 3080 Ti it held 88.8 fps on average at 90 Hz
+  over a minute of cutscenes, 83 at the worst moment; on a slower card it may not keep up, and then turning it off
+  gives you the flat screen as before. It only works with the flat screen (Cutscene view), VR mode stereo,
+  and neither Alternate eyes nor Parallel Eye Rendering. The two cameras are at most your eye distance apart (the
+  launcher's setting, else 63 mm), closer together in shots with a narrow lens or with something near the camera
+  in the level. I set the amounts from numbers, not from wearing it, so some shots may feel flat or too deep.
+  The mod cannot see the Slayer or a prop right at the lens, so in some close-ups (the opening cutscene has a
+  few) the picture pops out of the screen further than is comfortable. It doubles the GPU time of a cutscene
+  frame (4.9 to 9.9 ms on my RTX 3080 Ti at 2048x2208 per eye, where the headset's 90 Hz did not hold in the
+  heavy shots). Foveated rendering is left off for these frames (its sharp centre follows the headset's
+  view, not the screen), so they cost the full amount.
 - **Parallel Eye Rendering is experimental and for testing.** It renders both eyes as two views of one game
   frame instead of one eye after the other: the Play tab's Parallel Eye Rendering (highly experimental),
   off by default (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Steam version only
@@ -350,10 +363,17 @@ them is worse for you than described here.
   remembers, also across levels. The Crucible now sits in your left hand from its first raise too (before, it
   swung in from about 70 cm the first time). (Before, the Unmaykr could also hop around by about
   20 cm while it first came up, and a melee could throw the gun about half a metre for a moment; both fixed.)
-  Turning off Show arms (Play tab) hides both arms.
-  A free off hand that reaches for your off-hand controller is in testing (first headset tries: the hand
-  jitters when the gun arm moves, and the fist pose is odd); once those are fixed it becomes the standard,
-  with no option to turn it on or off.
+  Show arms on Hidden (Play tab) hides both arms.
+  The Slayer's other arm now follows your off-hand controller, its fingers follow your grip, trigger and thumb, and
+  both arms bend by the new arm solve; there is no option for the old arms. While the game plays an animation in
+  which his left arm is the action (a melee, a glory kill, the chainsaw, a ledge grab, the Super Shotgun loading its
+  shells) the arm is the game's for that moment, easing there and back. A weapon switch or a weapon mod switch
+  leaves your off hand where it is.
+- **Hands only (Show arms, Play tab)** leaves the Slayer's gloves and folds the arms behind them away. In my first
+  headset try the off-hand glove looked turned about 90 degrees from my hand; it now turns the way it does with the
+  arms shown, which looked right. I checked that on the test PC, not yet in the headset. While the game plays its own
+  arm animations (a melee, a glory kill) it draws the whole arms for that moment, and with head aim (Aim with: Head)
+  the arms are the game's, so they show whole all the time.
 - **Shots can pass through thin walls** if you push the gun through one; the shot starts at your hand
   and there is no wall check yet.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
@@ -411,10 +431,15 @@ them is worse for you than described here.
   the built-in controls.
 - **Edit controls...** should open much faster now (it used to take several seconds and show "Not
   Responding" first). If it still takes several seconds, tell me.
-- **Throwing grenades and the overhead swing** (Gestures on the Play tab, both off by default) are new and
-  have not been tried in a headset yet. How hard you need to throw or swing may change. The grenade flies
-  where your gun points (or where you look with head aim), not where your hand threw it. A throw or a swing
-  you did not mean still spends a grenade or a Crucible charge, so turn them off if they fire by mistake.
+- **The overhead swing** (Gestures on the Play tab, off by default) has had little headset time. How hard you
+  need to swing may change. A swing you did not mean still spends a Crucible charge, so turn it off if it fires by
+  mistake.
+- **Roll wrist** (Gestures on the Play tab, on by default): turning your gun hand over and back quickly switches
+  the weapon mod. Turning fast while aiming almost straight up can look like a roll to the mod; if it switches your
+  weapon mod when you didn't mean it, you can turn it off there, and please tell me what you were doing.
+- **Rumble by hand** (always on): the game does not say what a vibration is for, so the mod guesses from what you
+  pressed in the last moments: a hit that lands late, or two things at once, can go to the wrong hand. Tell me if a
+  vibration is on the wrong hand.
 - **The meathook and glory kills with hand aim** have had little testing.
 - **Jumping off climbable walls where you look** is new; it works on a Quest 3, other headsets are untried.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side

@@ -26,6 +26,7 @@
 // up.
 
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 
 #include "features/input/wheel_slowdown.hpp"
 #include "platform/mp_policy/saved_cvars.hpp"

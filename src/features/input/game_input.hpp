@@ -33,11 +33,20 @@ struct GameInput {
     // This frame's melee press is a punch's (no control held melee already): under hand aim it aims with the
     // head (action_aim.hpp).
     bool meleeFromPunch = false;
-    // A throw of the off hand (the equipment launcher) or an overhead swing of the weapon hand (the Crucible)
-    // this frame (arm_gestures.hpp), or a jump with both hands thrown up (hands_jump.hpp), for the log.
-    bool thrown = false;
+    // An overhead swing of the weapon hand (the Crucible) this frame (arm_gestures.hpp), or a jump with both
+    // hands thrown up (hands_jump.hpp), for the log.
     bool swung = false;
     bool handsJumped = false;
+    // A hand reached out and pressed use alone this frame (reach_use.hpp), for the log.
+    bool reached = false;
+    // The weapon hand's wrist rolled and switched the weapon mod this frame (wrist_flick.hpp), for the log.
+    bool flicked = false;
 };
+
+// Under hand aim this frame's melee-class press aims with the head (action_aim.hpp): a punch's melee, or a
+// reach's use.
+[[nodiscard]] inline bool pressAimsWithHead(const GameInput& input) {
+    return input.meleeFromPunch || input.reached;
+}
 
 } // namespace evr::input

@@ -205,7 +205,7 @@ void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     }
     if (!s.attached.load(std::memory_order_acquire)) {
         offhand_arm::giveBack(hands);
-        if (offhand_mods::fingerCount(arm::ArmSide::Left) > 0) {
+        if (offhand_mods::leftGlove()) {
             left_hand_arms::release(hands); // both arms, their blends and the gun's placement
         } else if (g_weaponArm) {
             weapon_arm::release(hands);
@@ -229,7 +229,7 @@ void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     input::ArmSignals weaponSig = sig;
     weaponSig.offHandTracked = view.worldCurrent; // the weapon arm's: the head and the weapon hand
     sig.offHandTracked = view.worldCurrent && world.offValid;
-    if (offhand_mods::fingerCount(arm::ArmSide::Left) > 0) {
+    if (offhand_mods::leftGlove()) {
         left_hand_arms::tick(hands, arms, weaponSig, sig, world, model,
                              dt); // the left attach joint stays the game's
         return;
@@ -237,9 +237,10 @@ void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     if (g_weaponArm) {
         weapon_arm::tick(hands, arms, weaponSig, world, model, dt);
     }
-    const input::ArmDecision decision = input::decideArm(sig, cfg.offhand);
+    const input::ArmDecision decision = input::decideOffHand(sig, cfg.offhand);
     const float weight =
-        g_blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
+        g_blend.updateOffHand(decision.controller, decision.reason == input::ArmReason::HandsHidden, dt,
+                              cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
     if (cfg.offhandTrace) {
         trace(sig, decision, weight);
     }
@@ -415,7 +416,7 @@ bool installOffhandHook(bool& weaponArmInstalled) {
             cfg.offhandHoldSeconds, w.forward, w.left, w.up, w.pitch, w.yaw, w.roll,
             input::shoulderAnchorName(input::shoulderAnchorFor(cfg.offhandShoulder, cfg.handedness)),
             sh.forward, sh.left, sh.up, e.forward, e.left, e.up,
-            offhand_mods::fingerCount(arm::ArmSide::Left) > 0
+            offhand_mods::leftGlove()
                 ? ", the arms take each other's roles (weapon in the left hand, left_hand_arms.hpp)"
             : mirrored ? ", mirrored for the right controller (weapon in the left hand)"
                        : "",

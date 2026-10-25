@@ -12,6 +12,7 @@
 //   it persists into every later command exactly like mouse motion.
 
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 
 #include "features/input/usercmd_motion.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
@@ -397,6 +398,7 @@ MappedInput runMapper() {
         // (OpenXR-Simulator's window does, for seconds at a time) must not stall a rig test.
         if (const auto test = testInput()) {
             input::InputFrame frame;
+            frame.sampleSeconds = qpcToSeconds(now);
             {
                 std::lock_guard viewLock(s.viewMutex);
                 frame.head.poseValid = s.poses.valid;
@@ -451,7 +453,8 @@ MappedInput runMapper() {
     noteRecenterBinding(game::contains(out.input.down, game::GameAction::Recenter), cfg.holdSeconds);
     out.turnStick = s.mapper->turnStick();
     // A melee or equipment press that aims with the head or the off hand waits for the view (action_aim.hpp).
-    out.actions = s.hold.update(aimActions(s, out.input.down, out.input.meleeFromPunch, menuHold, dt), dt);
+    out.actions =
+        s.hold.update(aimActions(s, out.input.down, input::pressAimsWithHead(out.input), menuHold, dt), dt);
     out.live = true;
     if (cfg.wheelSelect == input::WheelSelect::Hand && !out.input.restWheel.wheelDown) {
         // The weapon hand points at the wheel; the stick or button only holds it (wheel_hand.hpp). The
@@ -482,15 +485,15 @@ MappedInput runMapper() {
         out.input.punch = {};
         out.input.down = out.actions;
         out.turnStick = {};
-    } else if (out.input.thrown || out.input.swung || out.input.handsJumped) {
+    } else if (out.input.swung || out.input.handsJumped || out.input.reached || out.input.flicked) {
         // Its action is logged below with every other action sent (arm_gestures.hpp, hands_jump.hpp).
         const char* jump = "";
         if (out.input.handsJumped) {
             jump = context.posture == posture::Posture::Seated ? " hands-up jump (seated height)"
                                                                : " hands-up jump";
         }
-        EVR_LOG("%s: gesture:%s%s%s", kTag, out.input.thrown ? " throw" : "",
-                out.input.swung ? " overhead swing" : "", jump);
+        EVR_LOG("%s: gesture:%s%s%s%s", kTag, out.input.swung ? " overhead swing" : "",
+                out.input.reached ? " reach" : "", out.input.flicked ? " roll wrist" : "", jump);
     }
     stageInputSummary(snapshot.frame, asked, out, dt, menuHold);
     s.viewQueue.add({0.0f, out.input.turnDegrees});

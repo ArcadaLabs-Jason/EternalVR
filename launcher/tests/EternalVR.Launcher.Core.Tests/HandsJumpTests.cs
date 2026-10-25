@@ -31,12 +31,12 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void TheSettingRoundTripsWithTheOtherGestures()
         {
-            var s = LauncherSettings.Parse(new LauncherSettings { HandsJump = true, ThrowGesture = true }.Serialize());
+            var s = LauncherSettings.Parse(new LauncherSettings { HandsJump = true, RollWrist = false }.Serialize());
             Assert.True(s.HandsJump);
-            Assert.True(s.ThrowGesture);
+            Assert.False(s.RollWrist);
             Assert.False(s.SwingGesture);
             Assert.Contains("hands_jump = 1", new LauncherSettings { HandsJump = true }.Serialize());
-            Assert.False(LauncherSettings.Parse("schema_version = 2\nthrow_gesture = 1\n").HandsJump);
+            Assert.False(LauncherSettings.Parse("schema_version = 2\nswing_gesture = 1\n").HandsJump);
             Assert.Empty(LauncherSettings.Parse("schema_version = 2\nhands_jump = 1\n").UnknownKeys);
             Assert.False(new LauncherSettings { HandsJump = true }.WithDefaults().HandsJump);
         }

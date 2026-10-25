@@ -103,6 +103,8 @@ void noteMapperHaptics(const game::GameActionSet& sent, const input::GameInput& 
         s.hapticEvents.punch[i] = s.hapticEvents.punch[i] || input.punch[i];
     }
     s.hapticEvents.capture = s.hapticEvents.capture || input.capture;
+    // Who a melee press belongs to, and the shoulder launcher's presses, for where the game's rumble goes.
+    input::addRumbleCauses(input, weaponHand(), s.hapticEvents.melee, s.hapticEvents.shoulder);
     for (std::size_t i = 0; i < input.restWheel.tick.size(); ++i) {
         input::WheelTick& pending = s.hapticEvents.wheel[i];
         if (input.restWheel.tick[i] == input::WheelTick::Pick || pending == input::WheelTick::None) {
@@ -138,10 +140,12 @@ void updateHaptics(const XrInput& xr, bool focused) {
         s.hapticEvents.capture = false;
         s.hapticEvents.menu = {};
         s.hapticEvents.wheel = {};
+        s.hapticEvents.melee = {};
+        s.hapticEvents.shoulder = false;
     }
     if (!s.haptics) {
         const float strength = settings().haptics;
-        s.haptics.emplace(strength);
+        s.haptics.emplace(strength, settings().rumbleRoute);
         if (strength > 0.0f) {
             EVR_LOG("%s: on, strength %.2f (fire, punch, menu, capture, game rumble, thumb-rest wheel)", kTag,
                     strength);
@@ -161,12 +165,21 @@ void updateHaptics(const XrInput& xr, bool focused) {
     frame.capture = events.capture;
     frame.menu = events.menu;
     frame.wheel = events.wheel;
+    frame.melee = events.melee;
+    frame.shoulder = events.shoulder;
     // No game rumble while a menu holds gameplay back (the game may keep its last mix under a menu).
     if (events.rumbleQpc && secondsSince(events.rumbleQpc) < kRumbleStaleSeconds &&
         !menu_input::suppressGameplay()) {
         frame.rumble = events.rumble;
     }
     const std::array<input::HapticCommand, 2> commands = s.haptics->update(frame);
+    if (const auto cause = s.haptics->takeRoutedCause()) {
+        static std::uint64_t routed = 0;
+        if (++routed <= 20) {
+            EVR_LOG("%s: game rumble %llu starts and is taken to come from %s", kTag,
+                    static_cast<unsigned long long>(routed), input::rumbleCauseName(*cause));
+        }
+    }
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         const input::HapticCommand& command = commands[static_cast<std::size_t>(hand)];
         if (command.kind != input::HapticCommandKind::None) {

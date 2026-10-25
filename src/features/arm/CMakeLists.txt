@@ -8,6 +8,7 @@ evr_add_module(evr_arm
         arm_twist.cpp
         grip_hand.cpp
         hand_offset.cpp
+        hand_pose.cpp
         left_hand.cpp
         mod_mix.cpp
         mod_room.cpp

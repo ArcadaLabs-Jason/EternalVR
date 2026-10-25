@@ -11,6 +11,7 @@
 // real function, notes the pad the game read and returns XInput's answer as it is, never changing it.
 
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 
 #include "features/input/virtual_gamepad.hpp"
 #include "vkcore/gamepad_mode.hpp"

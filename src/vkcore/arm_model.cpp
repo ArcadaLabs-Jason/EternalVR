@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
-#include <string_view>
 
 namespace evr::vkcore::controllers::arm_model {
 
@@ -48,7 +47,6 @@ constexpr const char* kFindPrologue = "4C 8B DC 55 53 41 56 49 8D AB 18 FC FF FF
 // The md6 decl (build 25216728): the vtable, the name (a C string) at +8, the decl it inherits from.
 constexpr std::size_t kDeclName = 0x8;
 constexpr std::size_t kDeclParent = 0xB8;
-constexpr int kMaxParents = 4;
 // The resource list node: its list at +8.
 constexpr std::size_t kListNodeList = 0x8;
 
@@ -101,10 +99,6 @@ const void* vtableOf(const std::byte* object) {
     return object && safeRead(object, vtable) ? vtable : nullptr;
 }
 
-bool endsWith(std::string_view text, std::string_view tail) {
-    return text.size() >= tail.size() && text.substr(text.size() - tail.size()) == tail;
-}
-
 // The game's lookups, apart from anything with a destructor (__try needs that). False when they faulted.
 bool callListForClass(const char* className, const std::byte*& out) {
     __try {
@@ -122,22 +116,6 @@ bool callFind(const std::byte* list, const char* name, const std::byte*& out) {
     } __except (accessViolationOnly(GetExceptionCode())) {
         return false;
     }
-}
-
-const std::byte* baseFor(const std::byte* decl, std::string& why) {
-    const std::byte* d = decl;
-    for (int step = 0; d && step <= kMaxParents; ++step) {
-        if (endsWith(declName(d), "fp_hands.md6")) {
-            return d;
-        }
-        const std::byte* parent = nullptr;
-        if (!safeRead(d + kDeclParent, parent)) {
-            break;
-        }
-        d = parent;
-    }
-    why = "no decl named ...fp_hands.md6 within " + std::to_string(kMaxParents) + " parents";
-    return nullptr;
 }
 
 const std::byte* skinFor(std::string& why) {
@@ -173,7 +151,7 @@ const std::byte* candidateFor(const std::byte* game) {
         }
     }
     std::string why;
-    const std::byte* candidate = g_model == input::ArmModel::Base ? baseFor(game, why) : skinFor(why);
+    const std::byte* candidate = skinFor(why);
     if (candidate && vtableOf(candidate) != vtableOf(game)) {
         why = "the candidate " + declName(candidate) + " is not a decl of the game's class";
         candidate = nullptr;
@@ -237,19 +215,16 @@ bool install() {
                 kTag);
         return false;
     }
-    if (g_model == input::ArmModel::Skin) {
-        const std::byte* listForClass =
-            findUnique(image, kTag, "the resource list by class", kListForClassSignature);
-        const std::byte* findCall = findUnique(image, kTag, "FindWithInheritance's find", kFindCallSignature);
-        const std::byte* find = findCall ? callTarget(image, findCall + kFindCall) : nullptr;
-        if (!listForClass || !find || !matchesAt(image, find, kFindPrologue)) {
-            EVR_LOG("%s: the decl lookup by name is not where expected; the arms model stays the game's",
-                    kTag);
-            return false;
-        }
-        g_listForClass = reinterpret_cast<ListForClassFn>(const_cast<std::byte*>(listForClass));
-        g_find = reinterpret_cast<FindFn>(const_cast<std::byte*>(find));
+    const std::byte* listForClass =
+        findUnique(image, kTag, "the resource list by class", kListForClassSignature);
+    const std::byte* findCall = findUnique(image, kTag, "FindWithInheritance's find", kFindCallSignature);
+    const std::byte* find = findCall ? callTarget(image, findCall + kFindCall) : nullptr;
+    if (!listForClass || !find || !matchesAt(image, find, kFindPrologue)) {
+        EVR_LOG("%s: the decl lookup by name is not where expected; the arms model stays the game's", kTag);
+        return false;
     }
+    g_listForClass = reinterpret_cast<ListForClassFn>(const_cast<std::byte*>(listForClass));
+    g_find = reinterpret_cast<FindFn>(const_cast<std::byte*>(find));
     std::string error;
     for (const std::byte* call : {initCall + kInitHandsCall, skinCall + kSkinCall}) {
         if (!installMidHookEdit(const_cast<std::byte*>(call), &onSetModel, error)) {
@@ -261,11 +236,11 @@ bool install() {
         }
     }
     g_live.store(true, std::memory_order_release);
-    EVR_LOG("%s: ETERNALVR_ARM_MODEL=%s%s (rig tests): idHands::SetModel at RVA 0x%X, its calls in InitHands "
-            "(RVA 0x%X) and the skin apply (RVA 0x%X) hooked",
-            kTag, input::armModelName(g_model),
-            g_model == input::ArmModel::Skin ? (":" + std::to_string(g_skin)).c_str() : "",
-            image.rva(setModel), image.rva(initCall + kInitHandsCall), image.rva(skinCall + kSkinCall));
+    EVR_LOG(
+        "%s: ETERNALVR_ARM_MODEL=%s:%d (rig tests): idHands::SetModel at RVA 0x%X, its calls in InitHands "
+        "(RVA 0x%X) and the skin apply (RVA 0x%X) hooked",
+        kTag, input::armModelName(g_model), g_skin, image.rva(setModel), image.rva(initCall + kInitHandsCall),
+        image.rva(skinCall + kSkinCall));
     return true;
 }
 

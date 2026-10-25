@@ -16,6 +16,7 @@
 #include "features/input/locomotion_direction.hpp"
 #include "features/input/menu_release_latch.hpp"
 #include "features/input/punch_detector.hpp"
+#include "features/input/reach_use.hpp"
 #include "features/input/rest_wheel.hpp"
 #include "features/input/stick_chord.hpp"
 #include "features/input/stick_response.hpp"
@@ -24,6 +25,7 @@
 #include "features/input/touch_inputs.hpp"
 #include "features/input/turn_policy.hpp"
 #include "features/input/turn_stick_arbiter.hpp"
+#include "features/input/wrist_flick.hpp"
 #include "features/posture/posture_detector.hpp"
 
 #include <array>
@@ -63,9 +65,12 @@ struct MapperSettings {
     float wheelStickHoldSeconds = kWheelStickHoldSeconds;
     HandsJumpSettings handsJump;
     PunchSettings punch;
-    // The throw and the overhead swing (arm_gestures.hpp), both off by default.
-    ThrowSettings throwGesture;
+    // The overhead swing (arm_gestures.hpp), off by default.
     SwingSettings swing;
+    // Reaching a hand out to press use alone (reach_use.hpp), off by default.
+    ReachSettings reach;
+    // A fast roll of the weapon hand switches the weapon mod (wrist_flick.hpp), on by default.
+    FlickSettings flick;
     // The thumb-rest weapon wheel (rest_wheel.hpp), which hands can sense a resting thumb (the control map's
     // controllers), and whether a face button's touch counts as the rest where there is no thumb rest. A hand
     // whose thumb rest the profile binds like a button is no rest of the wheel's (one rest, one job): the
@@ -118,8 +123,9 @@ struct MapperContext {
     // keys); one still held when the hold ends stays out of gameplay until it is let go
     // (menu_release_latch.hpp).
     bool menuHold = false;
-    // The thumb-rest wheel starts nothing and ends what it was doing (rest_wheel.hpp): the game suppresses
-    // buttons, forces the view, plays a cutscene, or the player pilots a demon.
+    // The thumb-rest wheel starts nothing and ends what it was doing (rest_wheel.hpp), and neither do the
+    // reach and the wrist flick: the game suppresses buttons, forces the view, plays a cutscene, or the
+    // player pilots a demon.
     bool restWheelBlocked = false;
     // The least time the thumb-rest wheel holds the game's wheel (wheelHoldSeconds, from the game's open
     // delay).
@@ -198,6 +204,8 @@ private:
     LocomotionDirection locomotion_;
     HandsJumpDetector handsJump_;
     ArmGestures armGestures_;
+    ReachUse reachUse_;
+    WristFlick wristFlick_;
     PunchDetector punch_;
     CaptureChord captureChord_;
     StickChord stickChord_;

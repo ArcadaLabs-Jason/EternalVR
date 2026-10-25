@@ -39,10 +39,10 @@
 
 namespace evr::arm {
 
-// What the wrist's twist is measured from: the bind pose (arm_twist.hpp; ETERNALVR_ARM_SOLVE=bind) or, as
-// the solve did before, the game's animated hand carried by the forearm, wrapped to half a turn every tick,
-// with every joint keeping its animated relation to its bone and the wrist's swing not limited
-// (ETERNALVR_ARM_SOLVE=animated, the layer's default until the bind pose's has been seen in a headset).
+// What the wrist's twist is measured from: the bind pose (arm_twist.hpp; ETERNALVR_ARM_SOLVE=bind, the
+// layer's default) or, as the solve did before, the game's animated hand carried by the forearm, wrapped to
+// half a turn every tick, with every joint keeping its animated relation to its bone and the wrist's swing
+// not limited (ETERNALVR_ARM_SOLVE=animated).
 enum class TwistFrom : std::uint8_t {
     Bind,
     Animated,
@@ -56,8 +56,12 @@ struct ArmTargets {
     // none for the first tick, which takes the branch within half a turn of the centre.
     std::optional<float> lastTwist;
     bool limitSwing = true; // the wrist's swing limited (the off hand); the weapon arm keeps the game's wrist
-    // The layer's default (ETERNALVR_ARM_SOLVE=animated); the bind pose's only when asked for.
+    // The solve as before when nothing is given; the layer passes the setting's (vkcore/arm_solve_mode.hpp,
+    // bind by default).
     TwistFrom twistFrom = TwistFrom::Animated;
+    // The wrist always on its target (handsOnlyTargets): a shoulder further from it than the arm reaches, or
+    // closer than it folds, is moved along the line to it until the bones meet it (rootWithinReach).
+    bool reachAlways = false;
 };
 
 struct ArmSolution {
@@ -90,10 +94,30 @@ std::optional<ArmSolution> solveArmToWrist(const ArmPoses& animated,
 // pose to `attach` (the game's modifier moves only that joint; the rest follow as its children).
 ArmPoses followAttach(const ArmPoses& animated, const xr_math::ModelPose& attach);
 
-// Hands only (ETERNALVR_ARMS=hands, rig tests): the forearm's roll joints, the elbow and the shoulder put on
+// The off hand's targets for hands only (ETERNALVR_ARMS=hands): only the glove is drawn, so no forearm
+// holds it short. The wrist reaches its target wherever it is (`reachAlways`), and its swing is limited as
+// the shown arm's is (`limitSwing` as given), so the glove turns as the shown arm's glove does: in the
+// owner's headset test of 2026-10-24 the shown arm's glove was right and the unlimited one looked turned
+// about 90 degrees with the arm out and the palm down. The arm behind it is still solved, its twist kept
+// continuous, and then folded into the wrist (handsOnly).
+ArmTargets handsOnlyTargets(ArmTargets targets);
+
+// The off hand's sanity limits on a tick's writes (game units): how far the wrist may move from the game's
+// animated hand, and the attach joint's modifier reach. Shown arms keep `maxReach` and `maxAttach`: a wrist
+// further away would stretch the arm, so the tick is given back to the game. Hands only draws the glove
+// alone, so a far controller is no reason to give the tick back (that would draw the game's whole arm for
+// it): its limits grow with the wrist's move. A non-finite move keeps the plain limits, so it is still
+// rejected.
+struct ReachLimits {
+    float wrist = 0.0f;
+    float attach = 0.0f;
+};
+ReachLimits reachLimits(bool handsOnly, float wristMove, float maxReach, float maxAttach);
+
+// Hands only (ETERNALVR_ARMS=hands): the forearm's roll joints, the elbow and the shoulder put on
 // the wrist (or the last roll joint), so the skin they carry, written with a zero scale (game_arm::writeArm),
 // shrinks into it and the glove is left. The attach joint and the wrist stay. How it closes the sleeve at the
-// glove (ETERNALVR_TEST_HANDS_CUFF, rig tests):
+// glove (ETERNALVR_TEST_HANDS_CUFF, rig tests; `fold` for players):
 enum class Cuff : std::uint8_t {
     Fold, // every joint from the last roll joint to the shoulder on the wrist, scaled to nothing
     Stub, // the last roll joint left where the arm has it (a stub of forearm about 6 cm long), the joints

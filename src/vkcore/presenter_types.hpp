@@ -81,6 +81,10 @@ struct Settings {
     // ETERNALVR_CUTSCENES: "cinema" (default) shows cutscenes on the flat screen in front of the player, with
     // the game's own camera; "immersive" keeps the head in the cutscene's moving camera.
     bool cutsceneCinema = true;
+    // ETERNALVR_CUTSCENE_3D: on the flat screen a cutscene is rendered as two eyes of the game's camera and
+    // shown as a stereo pair (cinema_eyes.hpp, presenter_cinema3d.hpp). On by default (read in
+    // xr_presenter.cpp).
+    bool cutscene3D = true;
     // ETERNALVR_CUTSCENE_CUT_REBASE (on by default): in a cutscene shown around the player each cut of its
     // camera, and its end, turn the view so the new shot's forward is where the head looks
     // (xr_math/cutscene_cuts.hpp).
@@ -144,6 +148,12 @@ struct ViewRecord {
     // kept (controllers::cutsceneArmsHidden): the per-eye hooks leave the hands and guns matrices alone then.
     bool cutscene = false;
     bool cutsceneArms = false;
+    // A cutscene frame on the flat screen rendered as a stereo pair of the game's camera
+    // (presenter_cinema3d.hpp): shown on two quads, one per eye, not as a head-tracked projection.
+    // historyReset: the frame starts a new shot (the game's camera cut, or the 3D view starting or ending),
+    // so both eyes drop their temporal history.
+    bool cinema3D = false;
+    bool historyReset = false;
     std::array<EyeRecord, 2> eyes{};
     // The game's own view origin (renderView_t, in the units `where` and `setviewpos` use) and the yaw of its
     // forward axis in degrees, as the game gave them before the head is written: where the player stands, for

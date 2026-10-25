@@ -10,8 +10,9 @@ wrist HUD shows at a watch glance, hides with the hand down, forward or turned a
 the threshold, and hides under the pause menu); **not yet tried in a headset**, and glory kills, cutscenes
 and real head motion are not scriptable on the rig. All are opt-in until the headset checks pass, and the
 wrist HUD becomes a default only together with the free off hand: the head-locked panel stays the default HUD and the wrist or the weapon is one setting
-away (`ETERNALVR_HUD=wrist` or `weapon`, or the launcher's Advanced tab); the free off hand needs
-`ETERNALVR_OFFHAND=free`. The exception is the weapon arm's IK ("The weapon arm"), on by default because
+away (`ETERNALVR_HUD=wrist` or `weapon`, or the launcher's Advanced tab). The free off hand, the bind solve
+and the off hand's fingers are on by default since the owner's headset test of 2026-10-24 (DECISIONS T-160). The
+exception is the weapon arm's IK ("The weapon arm"), on by default because
 without it the arm holding the gun is out of view; `ETERNALVR_WEAPON_ARM=game` turns it off.
 
 ## The wrist HUD
@@ -186,12 +187,21 @@ hand follows the `lefthandattach` joint modifier the game writes every tick
 `SetJointMod` call (`vkcore/offhand_hook.cpp`) rewrites that modifier so the wrist goes to the off-hand
 controller's grip with its orientation, and poses the forearm, elbow and upper arm with two-bone IK
 (`features/arm/`, "The whole arm" below), blended with the game's own by the arm policy
-(`features/input/offhand_policy.hpp`), which hands the arm back to the game at once for glory and sync
-kills, melee, throws, weapon switches, custom animations, hidden hands and any forced view, and takes it
-back after 0.25 s, blended over `ETERNALVR_OFFHAND_BLEND` (0.15 s).
+(`features/input/offhand_policy.hpp`, `decideOffHand`), which hands the arm over to the game, blended out over
+`ETERNALVR_OFFHAND_BLEND` (0.15 s), for the actions in which the game's left arm is the action: glory and sync
+kills, melee and Blood Punch, equipment throws, the chainsaw, custom animations (ledge grabs, pickups), hidden
+hands and any forced view; and takes it back after 0.25 s, blended in over the same time. A weapon switch and a
+weapon mod switch keep the off hand on its controller (DECISIONS T-165; "Switches and the off hand" below). A
+hand-over during which the hands were hidden throughout (the swap of a mod switch) gives the arm back at once.
 
-- **Default: `game`.** Nothing is installed and the game's animation drives the left arm, as before. The
-  off hand is still tracked for the wrist HUD, which uses the real controller, not the game's arm.
+- **Default: `free`** (DECISIONS T-160), with `ETERNALVR_ARM_SOLVE=bind`, which also poses the off hand's
+  fingers ("Hand poses" below). `game` leaves the left arm to the game's animation, as in 0.1.82 and before: nothing is
+  installed; the off hand is still tracked for the wrist HUD, which uses the real controller.
+- **The launcher** has no setting for it: it sends `free` and `bind` while the weapon hand aims with the
+  controllers on. Under head aim, the view or a gamepad the layer poses no arm, so the launcher then sends `game`,
+  `animated` and `ETERNALVR_ARMS=shown` (hidden stays hidden) whatever is saved, and the layer installs nothing
+  for the arms (`LauncherSettings.ArmsPosed`). An older launcher.ini's `new_arms` (the testing build's New arms
+  checkbox) is not read.
 - **Fail closed.** The function, its calls of `SetJointMod` and `GetJointTransforms` and every frame offset
   the hook reads or writes are checked by signature and bytes at install time (build 25216728): each of the
   three signatures must match exactly once in .text (`findUnique`), the eight byte checks must hold and the
@@ -255,6 +265,32 @@ weight 1 and the off hand's written wrist on its target through all of them. Pos
 needed the arms' clean read to count ticks (a read counts as clean only 150 ms and 3 ticks after the last
 write, on both arms; "The whole arm" below): with the time alone, the off hand's glove on the Heavy Cannon
 ended up to 36 cm off the controller after six hitches.
+
+### Switches and the game's arm animations (DECISIONS T-165)
+
+The arm policy hands the free off hand to the game only for the animations in which the game's left arm is the
+action, judged by what the player does in VR (`decideOffHand`; measured on the rig, docs/rig-findings/hands-rig.md
+section 21):
+
+| The game's animation | Its signals | The free off hand |
+|---|---|---|
+| Weapon mod switch (every gun with a mod) | the generic hide (action 24, fp hands disabled, the hidden state) for about 0.33 s while the game swaps the weapon, then the flag `modChangeAnim` for about 1.3 s | stays on its controller; during the swap the hands are not drawn, and the first frame they are drawn again it is on its controller at full weight |
+| Weapon switch | `BringDown` / `BringUp`, the flag `changingWeapon` (0.7 to 1.4 s) | stays on its controller |
+| Super shotgun's reload after each shot | the flag `reloading` (0.8 s) | the game's: its left hand loads the shells |
+| Melee, Blood Punch | the `Melee` actions, `meleeAnim`, `meleeLunge` (0.36 s) | the game's: the punch is the left hand's |
+| Glory and sync kills, the chainsaw, ledge grabs, pickups, equipment throws, forced views | as before | the game's |
+| Equipment launcher, Flame Belch, firing the other guns | none | stays (nothing animates the left arm) |
+
+Where the game takes the arm, it is handed over and back over `ETERNALVR_OFFHAND_BLEND` (0.15 s) both ways, eased: a
+glove 0.4 m from the gun moves at 4 m/s at most, slower than a punch; before, the hand-over took a third of that (0.05
+s, 4 to 5 frames at 90 Hz). Taking it back still waits 0.25 s after the game's animation ends. A hand-over during which
+the hands were hidden throughout (the mod switch's swap) gives the arm back at once (`ArmBlend::updateOffHand`). The
+game makes the hands' joint modifier lists again on every weapon switch; the layer keeps its offsets of the arm
+without its overrides for the same hands (`vkcore/game_arm.cpp`), so it poses the off hand through the switch
+instead of waiting 150 ms for a clean read with the game's arm drawn (a blink at every switch on the rig). With
+the weapon in the left hand the right glove, the off hand there, follows the same rules (`left_hand_arms.cpp`,
+`weapon_arm.cpp`). The weapon arm's IK keeps the full rules: the gun moves in the switch animations, so its forearm
+goes to the game's for them, with the quick hand-over as before.
 
 ### The whole arm (free mode)
 
@@ -877,7 +913,7 @@ arms and the Heavy Cannon's grip).
   the mod's 2.5 s, 373.7 mm without the placement on the root; rig `lf-fire3`, `lf-fire2`). The gun is not
   mirrored: its markings read the right way round, and its sight line and shots are the same as in the right
   hand.
-- **The right arm is the off hand.** With `ETERNALVR_OFFHAND=game` (the default) the right glove takes the
+- **The right arm is the off hand.** With `ETERNALVR_OFFHAND=game` the right glove takes the
   game's left grip of the held item, reflected (on the combat shotgun's fore-end), held in the gun's frame, its
   forearm reaching a shoulder on the right; on the chaingun, whose front handle is on its left side only, it
   follows the right controller instead (below). That grip is read under the left attach joint and taken onto the gun's root only where the two
@@ -1008,6 +1044,13 @@ hand.
 
 ## Arms model (ETERNALVR_ARM_MODEL, rig tests)
 
+The rule (DECISIONS T-148): the arms model is the game's. The layer never swaps it for players: the cosmetic
+skin a player chose is applied by the game itself (its skin apply, below) and the layer poses whatever model
+the hands have, the same way on the game's model and a skin (round 4: every left joint within 0.8 mm on both).
+The switch stays for rig tests only, so a sweep can put a skin on that the rig's save does not wear; its
+`base` value (the base arms mesh) was dropped: that model is not animated and is drawn 2.5 times its size
+(below), so it is no candidate and there was nothing left to test with it.
+
 Rig tests only, nothing changes without the variable (`vkcore/arm_model.hpp`). The first-person arms are one
 model owned by the hands (idHands, idPlayer+0xD2C8: render model +0x370, its md6 decl +0x4D0), set only by
 `idHands::SetModel(hands, decl)` (Steam RVA 0x1369450, Game Pass 0x136DA30) from two callers: idPlayer's
@@ -1019,9 +1062,10 @@ own code builds the model, its animator, its joint modifiers (the layer's room a
 at the moment it would anyway, and SetModel's own check (the model's decl is the one asked for) keeps a
 later InitHands from building it again.
 
-- `base`: the decl the game's inherits from whose name ends in `fp_hands.md6`, reached through the decl's
-  parent (+0xB8): on the rig `md6def/player/human/base/praetor.md6` has the parent
-  `md6def/player/human/base/fp_hands.md6` (the base arms mesh `arms.md6mesh`, 79 joints).
+- `base` (dropped, T-148): was the decl the game's inherits from whose name ends in `fp_hands.md6`, reached
+  through the decl's parent (+0xB8): on the rig `md6def/player/human/base/praetor.md6` has the parent
+  `md6def/player/human/base/fp_hands.md6` (the base arms mesh `arms.md6mesh`, 79 joints). Its rig results
+  stay below for the record.
 - `skin` or `skin:<N>`: `md6def/customization/player/human/set<N>/base/praetor_set<N>.md6` (set 3 by
   default, in `gameresources.resources`), found by name in the game's md6 decl list: the resource list of
   the class `idDeclMD6` (the game's lookup of a resource list by class name) and the list's find by name
@@ -1071,9 +1115,29 @@ Rig (OpenXR-Simulator; docs/rig-findings/hands-rig.md, section 7):
   model by name or by kit (set 3: by kit); the base model has one `armsMesh` surface for both arms and
   none per arm, so the layer leaves them to the weapon's kit.
 
-## Hands only (ETERNALVR_ARMS=hands, rig tests)
+## Hands only (ETERNALVR_ARMS=hands)
 
-`ETERNALVR_ARMS=hands` (rig tests only) leaves the gloves: while the layer poses an arm (the free off hand,
+The launcher's Show arms has three values, Shown, Hidden and Hands only (`ETERNALVR_ARMS=shown`, `hidden`,
+`hands`; DECISIONS T-148). Shown and Hidden are as before. Hands only is a player choice, off by default. In the
+owner's headset test of 2026-10-24 its off-hand glove looked turned about 90 degrees from the controller while the
+shown arm's was right, so its glove now turns as the shown arm's (below; DECISIONS T-160). It needs the layer to pose both arms with the bind solve, so for the
+session it takes the free off hand, the weapon arm's `ik` and `ETERNALVR_ARM_SOLVE=bind` whatever those
+variables say (a variable that says otherwise is reported in the log and overridden;
+`features/input/controller_settings.cpp`); without `bind` the glove of the free off hand is not at the wrist
+(below). Nothing else changes: the launcher sets no other arm variable for it. Only the glove is drawn, so no
+forearm holds it short: the off hand's wrist goes to its target wherever it is (the shoulder moved along the line to
+it until the bones reach, as the weapon arm's is). Its swing is limited as the shown arm's (`arm::handsOnlyTargets`,
+DECISIONS T-160), so the glove turns exactly as the shown arm's glove for the same controller pose (rig: 0.00
+degrees in 90 poses, right- and left-handed; hands-rig section 22); before, unlimited, it turned as the controller's
+grip and looked turned about 90 degrees in the headset. Nor does a far controller
+give the tick back to the game (which would draw its whole arm for that tick): the shown arm's 1.5 m limit on
+the wrist's move from the game's animated hand, and the attach joint's 3 m, grow with the move in hands only;
+a move that is not a number is still rejected (`arm::reachLimits`). With the forearm drawn the
+off hand stops short of a target out of reach (two-handed holds 13 to 25 cm short in `r4-hands`); both stop its
+swing at 70 by 35 degrees (the glove up to 53 degrees off the controller's grip at pitch -60). The weapon arm's glove holds the gun as before, the wrist the game's. Under head aim, or with
+the controllers off, the arms are the game's (the arms model is not at the hand) and are drawn whole.
+
+While the layer poses an arm (the free off hand,
 the weapon arm in `ik`), its forearm roll joints, elbow and shoulder joint are put on the wrist with its
 orientation (`features/arm/arm_solve.hpp`, `handsOnly`, the `fold` cuff) and written with the modifier's scale
 flag (4) and the zero scale SetJointMod leaves in the entry, so the skin they carry shrinks into the wrist
@@ -1088,7 +1152,10 @@ Rig run ap-hands2: both arms posed in all 72 holds; the forearms and upper arms 
 the cuff closed into a long cone with spikes. That cone was the off hand's attach joint ("Where an override
 lands"): the left glove stayed near the pump while the folded joints sat at the solved wrist about 0.2 m
 away, and the skin between them stretched. The checker's bone, swing and mesh checks fail by design in this
-mode.
+mode; its hands-only mode (`--hands-only`, hands-rig section 20) checks what this mode draws instead: the folded
+joints on the wrist and scaled to nothing, no skin past the wrist's cut, no opening either eye sees, the off
+glove on its target and turned as it is, the weapon glove where the game holds it. On the game's model and on
+skin set 3 every hold passes (runs `e-hands`, `e-hskin3`); the planted forearm fails every hold.
 
 `ETERNALVR_TEST_HANDS_CUFF` (rig tests) closes the cuff three ways (`arm::handsOnly`): `fold` (the default,
 as above), `stub` (the last roll joint left where the arm has it, a stub of forearm about 6 cm long, the
@@ -1099,6 +1166,48 @@ the glove at the wrist with a short rounded cuff and no spikes, a little smearin
 roll +90; `stub` leaves a bulky stump of armoured forearm behind the glove; `ring` opens the gauntlet's
 ring, its inside and a flap of skin showing. Without `bind` the glove of the free off hand is not at the
 wrist and every way shows the stretch above.
+
+## Hand poses (the free off hand's fingers)
+
+Feature step 4 of docs/ROADMAP.md. With the free off hand and the bind solve (the default, DECISIONS T-160) the
+off hand's fingers follow its controller (`features/arm/hand_pose.hpp`, `vkcore/offhand_fingers.cpp`):
+the middle, ring and little fingers close with the grip's squeeze, the index finger with the trigger (a
+little bent, 0.3 of the way, while it only rests on it), and the thumb lies down while it touches a face
+button, the stick, the trackpad or the thumb rest; each eased over about 0.06 s so a touch sensor that flips
+does not snap a finger. Closed is the game's own grip of a gun's handle (the Heavy Cannon idle's right hand,
+reflected for the left; "The glove on the grip"), so a squeezed hand closes round a handle the way every gun
+is held and no finger goes through the palm; open is the same hand with every finger bone straightened in its
+parent's frame (each finger bone runs along its parent's -y and bends about its x in the rig's skeleton), the
+finger roots and the thumb's base as the grip has them: a flat hand, the thumb out to the side. The bones keep
+the model's own lengths (each bone's offset read from the game's hand while none of the layer's overrides
+show), so a skin's hand keeps its proportions.
+
+The off hand's arm has room for its fifteen finger bones after its six (and its wrist's change) only with the
+bind solve (`offhand_mods::fingerCount`); they are written each tick as overrides in their parents' frames
+while the layer poses the arm, and as no change while the game has it (a glory kill, a melee, a weapon
+switch: the game's own fingers then). They are written as wanted, not past their targets: the hands'
+modifier weight (0.95) leaves 5 % of the game's own finger pose in the mix [inferred from mod_mix.hpp; the
+rig's read-back below]. Until the first read of the game's hand without the layer's overrides, or without a
+controller frame, the fingers stay the game's. They leave with the arm: each tick the posed hand is mixed with
+the game's (as last read without the overrides) by the arm's weight, so the fingers blend out with the arm
+instead of snapping back when it is given back; and once the controller's grip pose is lost or the controller
+is off they ease back to the game's (two thirds of the way in 0.1 s, `arm::FingerHold`) rather than keep the
+last curls or the zeros of a controller that sends nothing, and ease in again when it is back. A controller
+without touch sensors (a Vive wand: no trigger touch, no thumb touch) moves only what it has: the index finger
+with the trigger alone, the thumb out; a digital grip closes the three fingers over the same 0.06 s ease. The
+finger state starts again on other hands and on every map load. The weapon hand's fingers stay the game's own grip on the gun
+(the chaingun's and the ballista's glove on its grip as before); its index finger does not follow the trigger
+yet. With the weapon in the left hand the off hand is the model's right arm, posed with the weapon arm's
+code; its fingers keep the game's left grip reflected, as before ("The weapon in the left hand").
+
+Rig: `tmp-vr\rs\armc\handpose-sweep.ps1` (the hands sweep's run, the off hand at four positions and turns, six
+sensor states each: open, half, grip, fist, point, thumb up; a rig controls file without the left trigger's and
+grip's presses) and `hp_check.py` (per pose: the fingers posed, each curl the sensors', every finger bone as
+read within 8 degrees of its turn as written, and with every sensor off no finger bone but the thumb's base
+turned more than 10 degrees). The dump's arm record gives `fingers` (the curls, each bone's turn written and
+read). Positive control: `ETERNALVR_TEST_ARM_FAULT=fingers` (the fingers left the game's while the curls and
+the turns wanted are still computed and dumped) must fail it. Results: docs/rig-findings/hands-rig.md, section
+20.
 
 ## Arms in cutscenes (ETERNALVR_CUTSCENE_ARMS)
 
@@ -1141,7 +1250,7 @@ cutscene around the player starts: the arms hidden, the weapon FOV the game's` /
 | `ETERNALVR_WEAPON_HUD_TILT` | -90..90 degrees (45) | The panel's face: 0 straight back along the barrel, 90 straight up |
 | `ETERNALVR_WEAPON_HUD_ANGLE` | 5..90 degrees (60) | Facing angle to show; hidden above it + 15 |
 | `ETERNALVR_WEAPON_HUD_VITALS` | 0 / 1 (0) | Health and armor on the gun too, beside the ammo |
-| `ETERNALVR_OFFHAND` | `game` / `free` / `probe` (`game`) | Who drives the game's left arm |
+| `ETERNALVR_OFFHAND` | `game` / `free` / `probe` (`free`) | Who drives the game's left arm; the launcher sends `free` (with `ETERNALVR_ARM_SOLVE=bind`) while the weapon hand aims, `game` otherwise (T-160) |
 | `ETERNALVR_OFFHAND_OFFSET` | f,l,u[,pitch,yaw,roll] m, deg (-0.08,0.035,0) | The wrist (`LeftHand`) from the off-hand grip, in the grip's forward/left/up, then turned about its axes |
 | `ETERNALVR_OFFHAND_SHOULDER` | `head` / `model` / f,l,u m (`head`: -0.08,0.18,-0.24) | Where the arm's IK starts: fixed to the head (f,l,u from the eyes in the head's yaw frame) or the game's animated shoulder |
 | `ETERNALVR_OFFHAND_ELBOW` | f,l,u (-0.2,0.6,-1) | The elbow's bend direction in the head's yaw frame |
@@ -1151,12 +1260,12 @@ cutscene around the player starts: the arms hidden, the weapon FOV the game's` /
 | `ETERNALVR_WEAPON_ARM` | `ik` / `game` (`ik`) | Who poses the weapon arm's forearm, elbow and upper arm; the gun stays the game's, and so does the wrist but on the chaingun and the ballista, whose glove goes on a grip |
 | `ETERNALVR_WEAPON_ARM_TEST_SHOULDER` | f,l,u m (unset) | Rig tests: the weapon arm's shoulder at this point from the eyes (head's yaw frame), not mirrored |
 | `ETERNALVR_TEST_ARM_DUMP` | file (unset) | Rig tests: both arms' poses every 0.25 s as JSON lines for the hands rig ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) |
-| `ETERNALVR_TEST_ARM_FAULT` | `none` / `twist` (`none`) | Development only: the whole wrist twist on the wrist joint, the hands rig's positive control |
-| `ETERNALVR_ARMS` | `shown` / `hidden` / `hands` (`shown`) | Both first-person arms drawn, or hidden with the weapon alone ("Hidden arms" above; the launcher's "Show arms"); `hands`, rig tests: the gloves alone ("Hands only" above) |
-| `ETERNALVR_ARM_SOLVE` | `animated` / `bind` (`animated`) | The arm solve's wrist twist measured from the game's animated hand (as before) or from the bind pose, kept continuous and shared to the upper arm, the off hand's swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ("The whole arm" and "Where an override lands" above) |
+| `ETERNALVR_TEST_ARM_FAULT` | `none` / `twist` / `forearm` / `fingers` (`none`) | Development only, the hands rig's positive controls: the whole wrist twist on the wrist joint, with `ETERNALVR_ARMS=hands` the forearm left drawn (only the upper arm folded), or the free off hand's fingers left the game's ("Hand poses" above) |
+| `ETERNALVR_ARMS` | `shown` / `hidden` / `hands` (`shown`) | Both first-person arms drawn, hidden with the weapon alone ("Hidden arms" above), or the gloves alone with the free off hand, the weapon arm's ik and the bind solve ("Hands only" above); the launcher's "Show arms" |
+| `ETERNALVR_ARM_SOLVE` | `animated` / `bind` (`bind`) | The arm solve's wrist twist measured from the game's animated hand (as in 0.1.82 and before) or from the bind pose, kept continuous and shared to the upper arm, the off hand's swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ("The whole arm" and "Where an override lands" above) |
 | `ETERNALVR_TEST_ARM_MOD_WEIGHT` | 0..1 (unset) | Development only: the hands' joint-modifier weight held while the free off hand is posed, the weights found put back when the arm goes back to the game or the multiplayer guard trips; new hands (a new level's) start at the game's own ("Where an override lands" above) |
 | `ETERNALVR_TEST_HANDS_CUFF` | `fold` / `stub` / `ring` (`fold`) | Rig tests: how `ETERNALVR_ARMS=hands` closes the sleeve at the glove ("Hands only" above) |
-| `ETERNALVR_ARM_MODEL` | `game` / `base` / `skin[:N]` (`game`) | Rig tests: the hands' model, the game's, the base arms mesh or Slayer skin set N, 3 by default ("Arms model" above) |
+| `ETERNALVR_ARM_MODEL` | `game` / `skin[:N]` (`game`) | Rig tests: the hands' model, the game's or Slayer skin set N, 3 by default ("Arms model" above; T-148) |
 | `ETERNALVR_CUTSCENE_ARMS` | `shown` / `hidden` (`hidden`) | In cutscenes shown around the player the arms hidden with the game's weapon FOV kept, or as before; nothing with `ETERNALVR_ARMS=hidden` ("Arms in cutscenes" above and in the launcher) |
 
 **The weapon in the left hand** (`ETERNALVR_HANDEDNESS=left` or `left_mirror`). The off hand is then the

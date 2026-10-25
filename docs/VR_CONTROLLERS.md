@@ -413,18 +413,36 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   untouched: the file is edited line by line, so an unknown line is written back byte for byte. Tests:
   `tests/features/input/forward_maps_tests.cpp` (one case table, read by the launcher's `ForwardMapsTests`
   to check `ControlMapRules` against the compiler), `ForwardMapsTests.cs` (round trip, LF and CRLF).
-- **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's
-  Play tab, Gestures; both off by default; design and ranking in `docs/VR_INTERACTIONS.md`). The throw: the
-  off hand wound up beside the head (at most 0.15 m below the eyes, no more than 0.10 m ahead of them along
-  the head's heading) primes it for 0.8 s, and a forward speed of 2 m/s (`ETERNALVR_THROW_SPEED`) within
-  that time presses `equipment` once. The overhead swing: the weapon hand at least 0.10 m above the eyes,
-  the other hand not, primes it; a downward speed of 2.5 m/s (`ETERNALVR_SWING_SPEED`) presses `crucible`
-  once. Both hands raised together block the swing until the weapon hand has come down. One gesture per
-  pose, 0.5 s apart. A primed hand's punch is held back and it has to slow down before it can punch, so the
-  gesture's own motion never also punches. The press is one mapper frame, held by `ActionHold` like a tap.
-  Log: the `controllers: on:` line ends `throw gesture on|off, overhead swing on|off`, and each gesture
-  logs `controllers: gesture: throw` (or `overhead swing`) followed by `controllers: action equipment`
-  (or `action crucible`).
+- **The overhead swing** (`ETERNALVR_SWING`, `features/input/arm_gestures.hpp`; the launcher's Play tab, Gestures;
+  off by default; design and ranking in `docs/VR_INTERACTIONS.md`): the weapon hand at least 0.10 m above the eyes,
+  the other hand not, primes it; a downward speed of 2.5 m/s (`ETERNALVR_SWING_SPEED`) presses `crucible` once. Both
+  hands raised together block the swing until the weapon hand has come down. One swing per raise, 0.5 s apart. A
+  primed hand's punch is held back and it has to slow down before it can punch, so the swing never also punches. The
+  press is one mapper frame, held by `ActionHold` like a tap. Log: the `controllers: on:` line has `overhead swing
+  on|off`, and a swing logs `controllers: gesture: overhead swing` followed by `controllers: action crucible`. (The
+  throw gesture and the holsters were removed after the owner's headset test of 2026-10-24, DECISIONS T-161.)
+- **Reach to use** (`ETERNALVR_REACH_USE`, `features/input/reach_use.hpp`; off by default, a developer switch with
+  no launcher row until round 2, DECISIONS T-163). A hand reached out and pulled back presses `use` (the game's `_use` alone, 0x8) once, on the way
+  back: out past 0.45 m ahead of the eyes along the head's heading in one movement at 0.6 to 2.4 m/s, then within
+  0.8 s back 0.12 m from the furthest point without dropping first (an arm lowered from the shoulder drops), with
+  its trigger never pulled; the hand has to come back within 0.30 m before the next, 0.5 s apart. A weapon raised
+  to aim stays out, so it presses nothing (unit tests: 144 synthetic raises, none). Under hand aim the use aims
+  with the head like a punch. Rig check: the use button alone opened the Fortress mission-select popup, and with
+  nothing in view it did nothing (docs/VR_INTERACTIONS.md section 2.3). Log: `controllers: gesture: reach` then
+  `action use`.
+- **Roll wrist** (`ETERNALVR_WRIST_FLICK`, `ETERNALVR_FLICK_RATE`, `features/input/wrist_flick.hpp`; the launcher's
+  Play tab, Gestures; on by default, DECISIONS T-162; `ETERNALVR_FLICK_RATE` is an environment variable only, with no
+  launcher control).
+  The weapon hand's roll rate about its pointing axis, taken from its aim orientation between two samples over the
+  samples' own times (`InputFrame::sampleSeconds`; a gap of 0.1 s or more is a stall and reads nothing) and
+  smoothed over about 25 ms, at 450 degrees per second or more in either direction (200 to 1500 with
+  `ETERNALVR_FLICK_RATE`), at least twice the swing rate of the pointing direction, with the hand moving no faster
+  than 1.5 m/s, presses `switch_weapon_mod` once; 0.6 s apart, and the roll has to stay below a quarter of the
+  minimum for 0.2 s before the next the same way, 0.8 s before one the other way (a flick's roll back). Log: `controllers: gesture: roll wrist` then `action switch_weapon_mod`.
+  Design: `docs/VR_INTERACTIONS.md` section 2.7.
+- The reach and Roll wrist start nothing, and start over, while the thumb-rest wheel would
+  (`restWheelBlocked`: the game suppresses buttons, forces the view, plays a cutscene, or a demon is piloted), while
+  a menu holds gameplay back, and while the weapon wheel is up.
 - **Locomotion.** The move stick is relative to where the head looks, the left hand points or the right
   hand points (`ETERNALVR_LOCOMOTION=look|left|right`, `features/input/locomotion_direction.hpp`) and is
   rotated into the game's view yaw, which the camera hook measures each frame as the player's view yaw
@@ -489,7 +507,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   `src/vkcore/launcher_place_hook.cpp`;
   the launcher's Play tab, Controls, "Melee aim with" and "Equipment aim with", GitHub issue 11). Under hand
   aim, melee (one button in the game: melee, Blood Punch, glory kills and use; a punch too) and the
-  shoulder-mounted equipment launcher and Flame Belch (the throw gesture too) can aim with the head or the
+  shoulder-mounted equipment launcher and Flame Belch can aim with the head or the
   off hand instead of the weapon hand.
   - Melee: the game takes its target from its view angles when the press reaches it, so the mapper holds the
     press back (before `ActionHold`) until the camera hook has written the new target into the game's angles
@@ -638,7 +656,21 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   back. Each hand gets the strongest pulse of a frame, and a weaker one never cuts a stronger one from
   another source short. The strength (0 off, default 0.6) scales every pulse. Log: `haptics: on, strength
   S`, `haptics: rumble hook at RVA 0x...`, `haptics: the game's first rumble: low L, high H`, and every
-  10 s with something new `haptics: N pulses (fire a, punch b, menu c, game d, capture e), r refused`.
+  10 s with something new `haptics: N pulses (fire a, punch b, menu c, game d, capture e, wheel w),
+  r refused`.
+  **Rumble by hand** (`ETERNALVR_RUMBLE_ROUTE`, `features/input/rumble_route.hpp`; on by default with no launcher
+  row, DECISIONS T-163; `0` turns it off for a developer). The game's mix says nothing about what made it, so each rumble that starts (both motors
+  under 0.02 before) or rises by 0.3 while it plays is given a cause from the mapper's latest event: the fire action
+  down, or up within 0.15 s, is the weapon's; a melee press within 0.45 s (a punch or the button) is a melee, the hand
+  that punched or the weapon hand for the button; the equipment launcher or the Flame Belch pressed within
+  0.15 s is the shoulder launcher's; none of those is the body's (damage, explosions, landings). The causes come from
+  the mapper's output (`addRumbleCauses`). The most recent
+  event wins. The cause is kept until the rumble ends. The hand that earns a rumble gets the louder of the two
+  motors and the other hand a quarter of the low motor; the body's rumble splits as before (low motor on both
+  hands, high on the weapon hand). Log: `haptics: game rumble N starts and is taken to come from the weapon` (the
+  first 20). Rig check (2026-10-24, scripted trigger pulls): the game's rumble on each of three shots was taken to
+  come from the weapon; a melee in the air and the equipment launcher made no game rumble there, so those causes
+  are covered by unit tests only.
 - **bHaptics** (`ETERNALVR_BHAPTICS`, `ETERNALVR_BHAPTICS_INTENSITY`; [BHAPTICS.md](BHAPTICS.md)). Off by
   default. Vests and arm sleeves through the bHaptics Player's local WebSocket: shots, damage with its
   direction, a low-health heartbeat, glory kills and death, from the fire hook and the player's health
@@ -723,7 +755,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_AIM` | `head` (view follows the head; the gun in front of the face, "Head aim and the gun"), `hand` (follows the weapon hand), `view` (the game's own) | `head` |
 | `ETERNALVR_DEMON_AIM` | what aims a piloted demon (the Cultist Base Revenant, above): `head` or `hand`; unset or empty follows `ETERNALVR_AIM`. No effect under `view` aim, where the demon keeps the game's own aim | unset |
 | `ETERNALVR_MELEE_AIM` | what aims melee, Blood Punch, glory kills and use under hand aim (above): `head` or `offhand`; unset, empty or `hand`, the weapon hand | unset |
-| `ETERNALVR_EQUIPMENT_AIM` | the same for the equipment launcher, the Flame Belch and the throw gesture | unset |
+| `ETERNALVR_EQUIPMENT_AIM` | the same for the equipment launcher and the Flame Belch | unset |
 | `ETERNALVR_LOCOMOTION` | `look` / `left` / `right` (that hand, whatever the handedness); the older `head` (= `look`) and `hand` (the hand with the move stick) are still read | `look` |
 | `ETERNALVR_TURN` | `smooth` / `snap` / `off` | `smooth` |
 | `ETERNALVR_TURN_RATE` | smooth turn, 150 to 400 degrees per second | 230 |
@@ -741,26 +773,28 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_THUMBREST_SLOWDOWN` | `0`: no slowdown while the thumb-rest wheel holds the game's wheel open (`weaponWheel_slowTimeScale` held at 1); `1` writes nothing | `1` |
 | `ETERNALVR_THUMBREST_WINDOW` | `edge`: seconds from the thumb's landing to the push, 0.2 to 1 (tuning) | 0.5 |
 | `ETERNALVR_THUMBREST_HOLDOVER` | the thumb-rest wheel: seconds a lost touch of the rest is forgiven before it lifts, 0.1 to 0.3 (tuning; never longer than the touch was on, never under 0.05 s) | 0.15 |
-| `ETERNALVR_THROW` | `1`: the off hand's overhand throw presses the equipment launcher (above) | `0` |
-| `ETERNALVR_THROW_SPEED` | the throw's forward speed, 1 to 5 metres per second | 2 |
 | `ETERNALVR_SWING` | `1`: the weapon hand's overhead swing presses the Crucible (above) | `0` |
 | `ETERNALVR_SWING_SPEED` | the swing's downward speed, 1 to 5 metres per second | 2.5 |
+| `ETERNALVR_REACH_USE` | `1`: a hand reached out ahead of the face and pulled back presses use alone (above); a developer switch for now | `0` |
+| `ETERNALVR_WRIST_FLICK` | `1`: a fast roll of the weapon hand's wrist presses the weapon mod switch (Roll wrist, above) | `1` |
+| `ETERNALVR_FLICK_RATE` | the flick's roll rate, 200 to 1500 degrees per second (no launcher control) | 450 |
 | `ETERNALVR_POSE_GUARD` | `1` / `0`: with `0` hand positions that jump further than a hand moves are used as they are, and so is any hand velocity (docs/VR_ROOMSCALE.md, Tracked positions that jump) | `1` |
 | `ETERNALVR_PUNCH_SPEED` | how fast a hand must move where the head looks to punch, 1 to 4 metres per second; the launcher's Punch speed: Light 1.6, Medium 2.2, Hard 2.8, Very hard 3.4 | 2.8 |
 | `ETERNALVR_HOLD_SECONDS` | how long a button is held before its hold action starts (a shorter press is a tap), 0.1 to 1 s; the stick held down waits 0.05 s longer (0.30 s at the default), and when the weapon wheel is all it opens a push within 20 degrees of straight down holds sooner, 0.10 s less than the buttons, at least 0.10 s (0.15 s at the default; up to 0.1.50 always 0.30 s, so 0.48 s with the game's 0.18 s open delay before the wheel opened, 0.33 s now): the wheel's key is also the quick switch's and the game tells a tap from a hold after its own delay, so a flick is still a quick switch (`features/input/turn_stick_arbiter.hpp`). The trade-off: a down push that rolls out of the 45-degree stay cone after 0.15 s is a hold and its release swaps the weapon, where up to 0.1.50 it was cancelled until 0.30 s (R14 failure mode 4); a roll already past 20 degrees at 0.15 s is still cancelled. A player's map that binds the down hold to anything else has no early hold. Logged `controllers: the turn stick's down hold (the weapon wheel's): 0.15 s within 20 deg of straight down, else 0.30 s; ...`; it also sets the both-sticks recenter and capture chords (the recenter hold still totals its own time); the launcher's Hold time: Short 0.15, Medium 0.25, Long 0.4, Very long 0.6 | 0.25 |
 | `ETERNALVR_XINPUT` | `auto` (virtual gamepad only if the user-command hook fails), `1` (instead of it), `0` (never) | `auto` |
 | `ETERNALVR_SHOT_ORIGIN` | `hand` / `eye` | `hand` |
 | `ETERNALVR_AIM_SMOOTHING` | hand-aim smoothing, `0` (off) to `1` (strongest) | `0.3` |
+| `ETERNALVR_RUMBLE_ROUTE` | `1`: the game's rumble goes to the hand that earns it: the weapon hand for a shot, the hand that punched, the off hand for the shoulder launcher, both for the rest (above) | `1` |
 | `ETERNALVR_HAPTICS` | controller vibration strength, `0` (off) to `1`; the launcher's Vibration: Off 0, Light 0.35, Medium 0.6, Strong 1 | `0.6` |
 | `ETERNALVR_BHAPTICS` | `1`: bHaptics suits and sleeves through the bHaptics Player ([BHAPTICS.md](BHAPTICS.md)) | `0` |
 | `ETERNALVR_BHAPTICS_INTENSITY` | the bHaptics effects' strength, `0` to `1` | `1` |
 | `ETERNALVR_VIEWMODEL` | `1` / `0` | `1` |
 | `ETERNALVR_WEAPON_ARM` | `ik`: the weapon arm's forearm, elbow and upper arm reach the gun from a shoulder fixed to the head, the gun and wrist where the game puts them; `game`: the game's pose, which points back out of view ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The weapon arm"). Most weapons tell the game not to draw the right arm at all (their mesh kit); with `ik` the layer draws it while it poses it and hides it again when the game takes the arm back ("The weapon's mesh kit"). Needs `ETERNALVR_VIEWMODEL=1`; works with either `ETERNALVR_OFFHAND` | `ik` |
-| `ETERNALVR_ARMS` | `shown`: the first-person arms drawn; `hidden`: both hidden, the weapon alone, whatever the weapon's mesh kit or the layer's posing ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hidden arms"); `hands`: rig tests, the forearms and upper arms the layer poses shrunk into the wrists, the gloves alone ("Hands only") | `shown` |
-| `ETERNALVR_ARM_SOLVE` | `animated`: the arm solve measures the wrist's twist from the game's animated hand, as before; `bind`: from the bind pose, kept continuous from tick to tick, the forearm's share limited and the rest passed to the upper arm, the off hand's wrist swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The whole arm", "Where an override lands") | `animated` |
+| `ETERNALVR_ARMS` | `shown`: the first-person arms drawn; `hidden`: both hidden, the weapon alone, whatever the weapon's mesh kit or the layer's posing ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hidden arms"); `hands`: hands only, the forearms and upper arms the layer poses shrunk into the wrists, the gloves alone, the off-hand glove on its controller; it takes `ETERNALVR_OFFHAND=free`, `ETERNALVR_WEAPON_ARM=ik` and `ETERNALVR_ARM_SOLVE=bind` for the session whatever those say ("Hands only"). The launcher's Show arms (Shown, Hidden, Hands only) | `shown` |
+| `ETERNALVR_ARM_SOLVE` | `animated`: the arm solve measures the wrist's twist from the game's animated hand, as before; `bind`: from the bind pose, kept continuous from tick to tick, the forearm's share limited and the rest passed to the upper arm, the off hand's wrist swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "The whole arm", "Where an override lands"); with the free off hand also the off hand's fingers from its controller ("Hand poses"). The launcher sends `bind` with `ETERNALVR_OFFHAND=free` while the weapon hand aims, `animated` and `game` otherwise (DECISIONS T-160) | `bind` |
 | `ETERNALVR_TEST_ARM_MOD_WEIGHT` | development use only: the hands' joint-modifier weight (0 to 1) held while the free off hand is posed, to test where the overrides land, the weights found put back when the arm goes back to the game or the multiplayer guard trips, new hands starting at the game's own ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Where an override lands") | unset |
 | `ETERNALVR_TEST_HANDS_CUFF` | rig tests: how `ETERNALVR_ARMS=hands` closes the sleeve at the glove: `fold` (every joint from the last roll joint to the shoulder scaled to nothing on the wrist), `stub` (a stub of forearm left), `ring` (the roll joints on the wrist at full size) ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Hands only") | `fold` |
-| `ETERNALVR_ARM_MODEL` | rig tests: the hands' model: `game`, `base` (the base arms mesh, fp_hands.md6) or `skin[:N]` (Slayer skin set N, 3 by default), through the game's own SetModel ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms model") | `game` |
+| `ETERNALVR_ARM_MODEL` | rig tests: the hands' model: `game` or `skin[:N]` (Slayer skin set N, 3 by default), through the game's own SetModel, to sweep a skin the rig's save does not wear; for players the model is always the game's, their cosmetic skin included ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms model"; DECISIONS T-148) | `game` |
 | `ETERNALVR_CUTSCENE_ARMS` | `hidden`: in cutscenes around the player (`ETERNALVR_CUTSCENES=immersive`) both arms hidden, the game's weapon FOV kept; `shown`: as in play. Nothing with `ETERNALVR_ARMS=hidden` ([VR_HANDS_HUD.md](VR_HANDS_HUD.md), "Arms in cutscenes"; the launcher's "Arms in cutscenes") | `hidden` |
 | `ETERNALVR_BUTTON_PROMPTS` | `0`: the game's prompts keep naming keyboard keys (below) | `1` |
 | `ETERNALVR_WEAPON_FOV` | `1` / `0` | `1` |
@@ -771,7 +805,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
 | `ETERNALVR_TEST_ARM_DUMP` | rig tests: a file the layer appends one JSON line to every 0.25 s with both arms' poses as written and read back, the scripted input as read, the arms model's placement, the held item, the weapon's root joint and the ray shots take; read by the hands rig's checker ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) | none |
-| `ETERNALVR_TEST_ARM_FAULT` | `twist`: development use only, the hands rig's positive control: the forearm's roll joints take none of the forearm's share of the wrist's twist, so it sits on the wrist joint (a candy wrapper the checker must fail) | `none` |
+| `ETERNALVR_TEST_ARM_FAULT` | `twist`: development use only, the hands rig's positive control: the forearm's roll joints take none of the forearm's share of the wrist's twist, so it sits on the wrist joint (a candy wrapper the checker must fail); `forearm`, with `ETERNALVR_ARMS=hands`: the forearm left drawn, only the upper arm folded (the hands-only checks must fail it); `fingers`: the free off hand's fingers left the game's (the hand-pose check must fail it) | `none` |
 | `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Touch controllers' dashboard pause and stick capture) | none |
 | `ETERNALVR_LOOK_TRIGGERS` | `0`: look-at triggers test the game's view (the gun under hand aim) instead of the head, and the tests are only logged (above) | `1` |
 | `ETERNALVR_CLIMB_LOOK` | `0` (or `off`): on a climbable wall the game's wall-climb mechanic keeps the view and the jump follows the stick, as in the flat game (above) | `1` |
@@ -805,8 +839,9 @@ A value that cannot be used is logged with its name and the default is kept
 | Left Menu held + a trigger | Save a capture of each eye for a bug report (below) | the layer's own |
 | Both sticks held + a trigger (SteamVR, Touch) | The same capture, since SteamVR keeps the left Menu button (below) | the layer's own |
 | A physical punch | Melee | as the stick click |
-| Off hand wound up by the ear, then thrown forward (`ETERNALVR_THROW=1`) | Equipment launcher | as the left trigger |
 | Weapon hand raised above the head, then swung down (`ETERNALVR_SWING=1`) | Crucible | as the left stick click |
+| A hand reached out ahead of the face and pulled back (`ETERNALVR_REACH_USE=1`) | Use (alone, no melee) | `_use` 0x8 |
+| Weapon hand rolled fast about its pointing axis (Roll wrist, `ETERNALVR_WRIST_FLICK`, on by default) | Switch weapon mod | as the Y tap |
 
 While a menu is up the controllers drive the menu instead (laser pointer, trigger clicks, B / Y back, the
 grips switch tabs, sticks scroll and switch tabs or move the Dossier map, a stick click centres it) and
@@ -1281,9 +1316,9 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 9 | Virtual gamepad (`ETERNALVR_XINPUT=1`, `+in_joystick 1`) | Pass: A jumps, the left stick walks, the trigger fires (16 to 14), turning goes through the turn hook |
 | 10 | Guard trip (`ETERNALVR_GUARD_TEST_TRIP_MS=40000`) | Pass: after the trip the trace and the action log stop, the view stays where it was, and a held trigger fires nothing (15 stays 15) |
 | 11 | Weapon wheel through the cursor: in e1m2 with two or more weapons, the file `right.stick = 0, -1` for 1 s, then `right.stick = 1, 0` for 1 s, then `right.stick = 0, 0` | Pending. Expect `action weapon_wheel`, about 0.25 s later `the weapon wheel is up`, `weapon wheel: pointing down (motion 0, 200)`, then `pointing right (motion 200, -200)`, then `weapon wheel released after N motion(s)` and a `held item` line for the weapon on the wheel's right; no `menu: the game shows its cursor` (if the game does show it: `menu: the weapon wheel is up: ...` and no panel); the `aim:` line's body yaw unchanged across the wheel |
-| 12 | Vibration: in e1m2, the file `right.trigger = 1` for 2 s, then `right.trigger = 0`; then `left.menu = 1` with `right.trigger = 1` (the capture), both back to 0; then the Menu button (pause), `right.aim = 0, 0` and a `right.trigger = 1` tap on the pause menu | Pending. Expect `haptics: on, strength 0.60 ...`, `haptics: rumble hook at RVA 0xAAE730` and `rumble on` in the `game hooks:` line, `haptics: the game's first rumble: low L, high H` on the first shot, then within 10 s `haptics: N pulses (fire a, punch 0, menu c, game d, capture e), r refused` with a up to 14 for 2 s held (one at the press, then every 0.15 s; fewer where the game's rumble on that hand is stronger), d above 0 while shooting, e 2 (both hands), c 1 or more after the click. A runtime without haptics shows the pulses as refused (the first one logged with its result). A punch needs hand velocity: `right.velocity = 0, 0, -3.5` with an aim for 0.3 s |
+| 12 | Vibration: in e1m2, the file `right.trigger = 1` for 2 s, then `right.trigger = 0`; then `left.menu = 1` with `right.trigger = 1` (the capture), both back to 0; then the Menu button (pause), `right.aim = 0, 0` and a `right.trigger = 1` tap on the pause menu | Pending. Expect `haptics: on, strength 0.60 ...`, `haptics: rumble hook at RVA 0xAAE730` and `rumble on` in the `game hooks:` line, `haptics: the game's first rumble: low L, high H` on the first shot, then within 10 s `haptics: N pulses (fire a, punch 0, menu c, game d, capture e, wheel 0, r refused` with a up to 14 for 2 s held (one at the press, then every 0.15 s; fewer where the game's rumble on that hand is stronger), d above 0 while shooting, e 2 (both hands), c 1 or more after the click. A runtime without haptics shows the pulses as refused (the first one logged with its result). A punch needs hand velocity: `right.velocity = 0, 0, -3.5` with an aim for 0.3 s |
 | 13 | Weapon wheel by the hand (`ETERNALVR_WHEEL_SELECT=hand`): in e1m2 with two or more weapons, the file `right.aim = 0, 0`, then with it `right.stick = 0, -1` for 1.5 s, then (the stick still down) `right.aim = -25, 0` for 1 s, `right.aim = 0, 25` for 1 s, then `right.stick = 0, 0` | Pending. Expect `weapon wheel by the hand` at the end of the `controllers: on:` line, `action weapon_wheel`, `the weapon wheel is up: the weapon hand moves the game's wheel cursor (200 px to the rim at a 20 deg turn)`, no `pointing` line while the hand is still, then `weapon wheel: pointing right (motion 200, 0)`, `pointing up (motion -200, -200)`, `weapon wheel released after N motion(s)` and a `held item` line for the weapon at the wheel's top |
-| 14 | Arm gestures (`ETERNALVR_THROW=1`, `ETERNALVR_SWING=1`), in e1m2: the file `left.aim = 0, 0` with `left.position = -0.15, 0.05, 0.15` (wound up) for 1 s, then `left.position = -0.15, -0.05, -0.3` with `left.velocity = 0, -0.5, -3.5` for 0.3 s, then the left hand at rest; later `right.aim = 0, 0` with `right.position = 0.15, 0.3, -0.1` (raised) for 1 s, then `right.position = 0.15, -0.1, -0.35` with `right.velocity = 0, -3.5, -1.5` for 0.3 s; and a control: `left.position = -0.2, -0.3, -0.45` with `left.velocity = 0, 0, -3.5` (a punch from the chest) | Pending. Expect `throw gesture on, overhead swing on` at the end of the `controllers: on:` line; `controllers: gesture: throw` then `controllers: action equipment` and no `action melee` for the throw; `gesture: overhead swing` then `action crucible` and no `action melee` for the swing (the Crucible itself needs the weapon; the press is what is checked); `action melee` and no gesture line for the control |
+| 14 | Arm gestures (`ETERNALVR_SWING=1`; the throw half, `ETERNALVR_THROW=1`, was removed in T-161 and is kept here as the record of that check), in e1m2: the file `left.aim = 0, 0` with `left.position = -0.15, 0.05, 0.15` (wound up) for 1 s, then `left.position = -0.15, -0.05, -0.3` with `left.velocity = 0, -0.5, -3.5` for 0.3 s, then the left hand at rest; later `right.aim = 0, 0` with `right.position = 0.15, 0.3, -0.1` (raised) for 1 s, then `right.position = 0.15, -0.1, -0.35` with `right.velocity = 0, -3.5, -1.5` for 0.3 s; and a control: `left.position = -0.2, -0.3, -0.45` with `left.velocity = 0, 0, -3.5` (a punch from the chest) | Pending. Expect `throw gesture on, overhead swing on` at the end of the `controllers: on:` line; `controllers: gesture: throw` then `controllers: action equipment` and no `action melee` for the throw; `gesture: overhead swing` then `action crucible` and no `action melee` for the swing (the Crucible itself needs the weapon; the press is what is checked); `action melee` and no gesture line for the control |
 | 15 | Inputs held through a menu's close, in e1m2: `ETERNALVR_TEST_KEYS=<ms>:ESC` opens the pause menu; once the log has `menu: the game shows its cursor`, the file `left.secondary = 1` for 0.15 s, then `left.secondary = 0`. Then the Dossier: `left.primary = 1` for 0.5 s, then 0; once the Dossier is up, `right.stick = 0, -1` for 0.5 s, then `left.secondary = 1` for 0.15 s with the stick still down, the stick held 0.5 s more, then `right.stick = 0, 0` | Pending. Expect for the pause menu `menu: key down 0x1b`, `menu: the cursor is gone`, `menu: controllers' gameplay input back on`, `controllers: gameplay input back on: presses begun in the menu are dropped` and no `controllers: action switch_weapon_mod` after it (before the fix: `action switch_weapon_mod` in the same millisecond); for the Dossier the same line ending `; a control still held stays out of the game until let go`, and no `action weapon_wheel`, `action quick_switch` or `weapon wheel` line after it |
 | 16 | Melee and equipment aim (`tools/rig/qa` scenario `action-aim`: e1m3 `cp_03_shoot_gate`, hand aim, `ETERNALVR_MELEE_AIM=offhand`, `ETERNALVR_EQUIPMENT_AIM=head`, the weapon hand 90 degrees to the left) | Pass (2026-10-02, Debug, runs QA-aim-actions-2 and -3): each melee press held back 1 command (6.0 to 8.8 ms) until the view took the off hand; the first game frame after it has the game's view on the off hand (yaw -90.0, and pitch 15.0 with the off hand at the token) while the weapon hand is at +90; back to the weapon hand 0.5 s after; a frag launched about 0.15 s after the press from the weapon hand's side along yaw 135 (`dir (-0.707 0.707 0.035)`) was moved to the eye and turned to the head's yaw 45 with the same arc (`dir (0.707 0.707 0.035)`), and in screenshots it explodes in front of the head instead of out of view to the left; Flame Belch shots turned the same way. The Praetor token's Use is a trigger box (picked up with the view 90 degrees away), so a target picked by the view (a lunge, a glory kill) is for the headset |
 | 17 | Gamepad mode (`ETERNALVR_CONTROLLERS=0`, `+in_joystick 1`, a virtual Xbox 360 pad through ViGEmBus; the 0.1.68 layer against this one) | Pass: e1m2: both sticks held 2.6 s give `both sticks pressed (the recenter hold)`, `recenter binding held for 2.00 s` and a user recenter, 1 s gives `released after 1.00 s` (0.1.68: none); the move stick and the look stick give `vignette: light, shown 570 of 898 frame(s) ... move up to 1.00, pad turn up to 1.00` (0.1.68: shown 0 in every line); RT fires (`bhaptics: firing 'weapon/player/shotgun'`) and Y counts `belch 2` (0.1.68: no bHaptics); RB held gives `forced view starts (weapon wheel; inhibit 0x18)` and `ui: weapon wheel straight ahead (panel HUD)` (0.1.68: neither). With the move stick held forward and the pause menu, then the Dossier, opened by injected keys (ESC, TAB): `shown 0 of 900 frame(s) ... move up to 1.00 ... 900 frame(s) held back (menu)` in the pause menu and 3 of 899 (the frames after it closed) in the Dossier: the layer's menu test keeps the vignette off, as for the controllers. e1m3 `cp_03_shoot_gate`, the stick click at the Praetor Suit token: `controllers: sync 'interact/preator_suit_token/preator_suit_token_sync' (not a kill)`, body follow blocked `cutscene or forced view 182` (0.1.68: 0) and the token's wave for bHaptics. e1m3 `cp_12_possession`: `piloting a demon` and `demon aim: the demon follows the head` (0.1.68: no piloting line, and head aim kept writing the Slayer's angles while piloting: 645 rewrites by the game in 10 s). Controllers on, unchanged: the same game hooks line, 4 forced-view episodes each, body follow 4.32 m (0.1.68: 4.25 m) over 17 legs; the virtual gamepad's import line the same |
@@ -1342,13 +1377,15 @@ for seconds (below).
   touched on a Quest 3 fires its binding and a jump does not, how often a thumb or finger resting on a control
   fires a press or hold by mistake (the log's 10 s line), the trigger's touch on Touch and Index, and that
   SteamVR's and Virtual Desktop's emulation report each sensor.
-- **Arm gestures** (`ETERNALVR_THROW`, `ETERNALVR_SWING`) are covered by unit tests only. To confirm in a
-  headset: the thresholds, false triggers in a real fight, and whether the grenade should fly along the
-  throw rather than the view (`docs/VR_INTERACTIONS.md` section 5).
+- **Rumble by hand** (`ETERNALVR_RUMBLE_ROUTE`) is covered by unit tests of the cause guess on event sequences
+  and of the policy's split; which hand a given game rumble really belongs to is a guess to check in a headset (the
+  game says nothing about a rumble's source; `PlayRumble`, RVA 0xAAE880, would, with new reverse engineering).
+- **The overhead swing** (`ETERNALVR_SWING`) is covered by unit tests only. To confirm in a headset: the threshold
+  and false swings in a real fight (`docs/VR_INTERACTIONS.md` section 5).
 - **The virtual gamepad** depends on the game's default pad binds and, for the sticks, on `in_joystick`.
 - **One hand model.** The game's hands model holds both arms; placed at the weapon hand, the left arm
-  follows it (T-054: no off-hand model in v1). `ETERNALVR_OFFHAND=free` poses the left arm at the off-hand
-  controller instead (docs/VR_HANDS_HUD.md, "Off hand"). With the weapon in the left hand the model's left
+  follows it (T-054: no off-hand model in v1). `ETERNALVR_OFFHAND=free` (the default, DECISIONS T-160) poses the
+  left arm at the off-hand controller instead (docs/VR_HANDS_HUD.md, "Off hand"). With the weapon in the left hand the model's left
   glove holds the gun and its right arm is the off hand (docs/VR_HANDS_HUD.md, "The weapon in the left
   hand"; T-140). The arm holding the gun keeps the gun's grip; `ETERNALVR_WEAPON_ARM=ik` (the default) bends its
   forearm and upper arm up to a shoulder beside the head, so it shows in view (docs/VR_HANDS_HUD.md, "The

@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
 #include <cstddef>
 #include <limits>
 #include <string>
@@ -117,7 +118,7 @@ TEST_CASE("a dump line gives the scripted input, the arms and the view as docume
                          "\"landed\":0.00200,\"final\":{\"attach\":[0.58500,0.00000,1.26750,1.00000,0.00000,"
                          "0.00000,0.00000,1.00000,0.00000,0.00000,0.00000,1.00000],\"hand\":[0.37829,"));
     CHECK(contains(line, "\"root\":[0.00000,0.00000,-1.60000,1.00000,0.00000,0.00000,0.00000,1.00000,0.00000,"
-                         "0.00000,0.00000,1.00000]},\"R\":"));
+                         "0.00000,0.00000,1.00000],\"zero\":0,\"fingers\":null},\"R\":"));
     for (const char* key : {"\"roll3\":[", "\"roll2\":[", "\"roll1\":[", "\"forearmroll\":[", "\"forearm\":[",
                             "\"upperarm\":[-0.03531,0.22438,1.45470,"}) {
         CHECK_MESSAGE(contains(line, key), key);
@@ -125,7 +126,8 @@ TEST_CASE("a dump line gives the scripted input, the arms and the view as docume
     // The arm the game poses has its share and no poses.
     CHECK(contains(line,
                    "\"R\":{\"posing\":\"game\",\"weight\":0.25000,\"twist\":0.00000,\"landed\":-1.00000,"
-                   "\"final\":null,\"read\":null,\"animated\":null,\"target\":null,\"root\":null}"));
+                   "\"final\":null,\"read\":null,\"animated\":null,\"target\":null,\"root\":null,"
+                   "\"zero\":0,\"fingers\":null}"));
     CHECK(contains(line,
                    "\"model\":{\"eye\":[100.00000,200.00000,30.00000],\"offset\":[0.30000,-0.10000,"
                    "-0.20000],\"axis\":[1.00000,0.00000,0.00000,0.00000,1.00000,0.00000,0.00000,0.00000,"
@@ -135,6 +137,39 @@ TEST_CASE("a dump line gives the scripted input, the arms and the view as docume
                          "\"arms_item\":\"weapon/player/fists_swim\",\"hstate\":12,\"hswim\":true,"
                          "\"mods\":[\"\",\"weapon/player/heavy_cannon_bolt_action\"],"
                          "\"sight\":\"weapon/player/heavy_cannon_bolt_action\"}\n"));
+}
+
+TEST_CASE("a dump line gives the joints hands only writes scaled to nothing, and the forearm fault") {
+    ArmDumpRecord r = sample();
+    r.fault = "forearm";
+    r.arms[0].zeroScale = 0xFCu; // the roll joints, the elbow and the shoulder (ArmJoint 2 to 7)
+    r.arms[1].layer = true;
+    r.arms[1].zeroScale = 0x80u; // the shoulder alone
+    const std::string line = armDumpLine(r);
+    CHECK(balanced(line));
+    CHECK(contains(line, "\"fault\":\"forearm\","));
+    CHECK(contains(line, "1.00000],\"zero\":252,\"fingers\":null},\"R\":{\"posing\":\"layer\","));
+    CHECK(contains(line, "\"root\":null,\"zero\":128,\"fingers\":null}},\"model\":"));
+}
+
+TEST_CASE("a dump line gives the free off hand's fingers: curls, each bone's turn written and read") {
+    ArmDumpRecord r = sample();
+    evr::arm::DumpFingers f;
+    f.curl = {0.0f, 0.3f, 1.0f, 1.0f, 0.5f};
+    f.want[0] = 12.5f;
+    f.want[14] = 40.0f;
+    r.arms[0].fingers = f;
+    std::string line = armDumpLine(r);
+    CHECK(balanced(line));
+    CHECK(contains(line, "\"zero\":0,\"fingers\":{\"curl\":[0.00000,0.30000,1.00000,1.00000,0.50000],"
+                         "\"want\":[12.50000,0.00000,"));
+    CHECK(contains(line, ",40.00000],\"read\":null}},\"R\":"));
+    f.read = std::array<float, 15>{};
+    (*f.read)[3] = 7.0f;
+    r.arms[0].fingers = f;
+    line = armDumpLine(r);
+    CHECK(balanced(line));
+    CHECK(contains(line, "\"read\":[0.00000,0.00000,0.00000,7.00000,0.00000,"));
 }
 
 TEST_CASE("a dump line escapes the item's name and writes null for what is not known") {

@@ -99,6 +99,8 @@ std::uint64_t usercmdButtons(GameAction action) {
         return kInventory;
     case GameAction::MissionInfo:
         return kObjectives;
+    case GameAction::Use:
+        return kUse;
     case GameAction::Pause:
     case GameAction::Recenter:
     case GameAction::Count:

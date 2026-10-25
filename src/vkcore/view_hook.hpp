@@ -31,6 +31,7 @@ inline constexpr std::size_t kViewAxis = 0xA0;
 // (+0xD4), and meshes are then drawn from viewOriginOffset + localViewOrigin, not from vieworg.
 inline constexpr std::size_t kUsesViewOriginOffset = 0xC4;
 inline constexpr std::size_t kLocalViewOrigin = 0xC8;
+inline constexpr std::size_t kViewOriginOffset = 0xD4;
 inline constexpr std::size_t kSize = 0x970;
 
 // Moves the view's origin by (x, y, z): vieworg, and localViewOrigin too while the view renders relative to

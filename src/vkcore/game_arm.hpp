@@ -72,6 +72,7 @@
 
 namespace evr::input {
 enum class HandsCuff : std::uint8_t; // features/input/controller_settings.hpp
+struct ControllerSettings;           // features/input/controller_settings.hpp
 } // namespace evr::input
 
 namespace evr::vkcore::controllers::game_arm {
@@ -132,7 +133,8 @@ bool writeArm(arm::ArmSide side,
               std::uint32_t zeroScale = 0,
               const arm::ArmPoses* landing = nullptr,
               const xr_math::JointMod* wrist = nullptr,
-              const arm::GripOverrides* glove = nullptr);
+              const arm::GripOverrides* glove = nullptr,
+              const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers = nullptr);
 
 // The weapon arm's glove as GetJointTransforms reads it this tick, after readArm: each of its joints
 // (arm::kRightHandJointNames) in its parent's frame.
@@ -156,6 +158,11 @@ void releaseModWeight(const std::byte* hands);
 
 // The cuff hands only closes (ETERNALVR_TEST_HANDS_CUFF).
 arm::Cuff cuffOf(input::HandsCuff cuff);
+
+// The arm as it is written: with hands only (ETERNALVR_ARMS=hands) folded into the wrist with the setting's
+// cuff (arm::handsOnly), or with the planted forearm fault (ETERNALVR_TEST_ARM_FAULT=forearm,
+// arm::plantForearmFault); otherwise `arm` itself with nothing scaled.
+arm::HandsOnlyArm handsOnlyFor(const arm::ArmPoses& arm, const input::ControllerSettings& cfg);
 
 // Sets the layer's modifiers of that arm of `hands`, if it has them, back to no change. True when it did.
 // Each call writes the list of the current generation (the game fills one a tick); for three calls after a

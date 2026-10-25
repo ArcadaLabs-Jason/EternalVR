@@ -253,9 +253,8 @@ void onViewmodel(const HookRegisters& regs) {
     // The weapon in the left hand: once the left glove's wrist on the held item is known, the model moved
     // until it sits in the hand, also while the game has the arms (left_hand_arms.hpp); the rows are measured
     // for the right glove.
-    left_hand_arms::Placement lefty = offhand_mods::fingerCount(arm::ArmSide::Left) > 0
-                                          ? left_hand_arms::placement()
-                                          : left_hand_arms::Placement{};
+    left_hand_arms::Placement lefty =
+        offhand_mods::leftGlove() ? left_hand_arms::placement() : left_hand_arms::Placement{};
     lefty.weight = lefty.decl == g_cachedDecl ? lefty.weight : 0.0f; // for the held item only
     const std::optional<xr_math::IdAngles> sight = sightAngles(g_cachedSight);
     const game::WeaponOffset& w = game::kRowsWrist;

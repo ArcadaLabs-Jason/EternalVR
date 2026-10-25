@@ -33,6 +33,7 @@ TEST_CASE("each action presses what its default Slayer key presses") {
     CHECK(usercmdButtons(GameAction::Jump) == 0x100000000);          // SPACE _jump
     CHECK(usercmdButtons(GameAction::Dash) == 0x400000);             // LSHIFT _dash
     CHECK(usercmdButtons(GameAction::Melee) == (0x2 | 0x8));         // E _attack2 _use
+    CHECK(usercmdButtons(GameAction::Use) == 0x8);                   // _use alone (the reach)
     CHECK(usercmdButtons(GameAction::Chainsaw) == 0x8000000);        // C _quick3
     CHECK(usercmdButtons(GameAction::FlameBelch) == 0x100000);       // R _bfg
     CHECK(usercmdButtons(GameAction::Equipment) == 0x800000);        // LCTRL _quickuse
@@ -146,13 +147,14 @@ TEST_CASE("a set presses the union of its actions' bits") {
     CHECK(usercmdButtons(pauseOnly) == 0);
 }
 
-TEST_CASE("distinct gameplay actions press distinct bits, except the two faces of one key") {
+TEST_CASE("distinct gameplay actions press distinct bits, except the faces of one key and use inside melee") {
     for (std::size_t a = 0; a < kGameActionCount; ++a) {
         for (std::size_t b = a + 1; b < kGameActionCount; ++b) {
             const auto first = static_cast<GameAction>(a);
             const auto second = static_cast<GameAction>(b);
             const bool sameKey = (first == GameAction::QuickSwitch && second == GameAction::WeaponWheel) ||
-                                 (first == GameAction::Dossier && second == GameAction::Automap);
+                                 (first == GameAction::Dossier && second == GameAction::Automap) ||
+                                 (first == GameAction::Melee && second == GameAction::Use);
             CAPTURE(gameActionName(first));
             CAPTURE(gameActionName(second));
             if (!sameKey) {
@@ -190,7 +192,7 @@ TEST_CASE("a usercmd button index names the action that presses it") {
     CHECK(actionForUsercmdButton(0) == GameAction::Fire);
     CHECK(actionForUsercmdButton(1) == GameAction::Melee);
     CHECK(actionForUsercmdButton(2) == GameAction::WeaponMod);
-    CHECK(actionForUsercmdButton(3) == GameAction::Melee);
+    CHECK(actionForUsercmdButton(3) == GameAction::Melee); // _use is melee's too; melee comes first
     CHECK(actionForUsercmdButton(4) == GameAction::WeaponMod);
     CHECK(actionForUsercmdButton(6) == GameAction::QuickSwitch);
     CHECK(actionForUsercmdButton(7) == GameAction::SwitchWeaponMod);

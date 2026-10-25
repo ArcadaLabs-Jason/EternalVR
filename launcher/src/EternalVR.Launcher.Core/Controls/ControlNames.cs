@@ -208,6 +208,7 @@ namespace EternalVR.Launcher.Core.Controls
             new ControlAction("mission_info", "Mission info"),
             new ControlAction("automap", "Automap"),
             new ControlAction("recenter", "Recenter"),
+            new ControlAction("use", "Use (without melee)"),
         };
 
         public static ControlAction FindAction(string name) => Actions.FirstOrDefault(a => a.Name == name);

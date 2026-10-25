@@ -29,6 +29,8 @@ evr_add_test(evr_xr_math_tests
     SOURCES
         xr_math/aim_check_tests.cpp
         xr_math/camera_anim_tests.cpp
+        xr_math/cinema_eyes_tests.cpp
+        xr_math/cinema_run_tests.cpp
         xr_math/cinema_quad_tests.cpp
         xr_math/cutscene_cuts_tests.cpp
         xr_math/display_lead_tests.cpp
@@ -148,6 +150,7 @@ evr_add_test(evr_input_tests
         features/input/aim_smoothing_tests.cpp
         features/input/analog_button_tests.cpp
         features/input/arm_gestures_tests.cpp
+        features/input/arms_settings_tests.cpp
         features/input/binding_compiler_tests.cpp
         features/input/binding_keys_tests.cpp
         features/input/binding_overrides_tests.cpp
@@ -186,6 +189,9 @@ evr_add_test(evr_input_tests
         features/input/prompt_keys_tests.cpp
         features/input/weapon_info_labels_tests.cpp
         features/input/punch_detector_tests.cpp
+        features/input/gesture_mapper_tests.cpp
+        features/input/reach_use_tests.cpp
+        features/input/rumble_route_tests.cpp
         features/input/rest_touch_bindings_tests.cpp
         features/input/rest_wheel_tests.cpp
         features/input/rest_wheel_stats_tests.cpp
@@ -212,6 +218,7 @@ evr_add_test(evr_input_tests
         features/input/weapon_directions_tests.cpp
         features/input/wheel_hand_tests.cpp
         features/input/wheel_mouse_tests.cpp
+        features/input/wrist_flick_tests.cpp
         features/input/wheel_slowdown_tests.cpp
         features/input/xr_action_set_tests.cpp
     DEPENDS evr_input)
@@ -240,6 +247,8 @@ evr_add_test(evr_arm_tests
         features/arm/grip_book_tests.cpp
         features/arm/grip_hand_tests.cpp
         features/arm/hand_offset_tests.cpp
+        features/arm/hand_pose_tests.cpp
+        features/arm/hands_only_tests.cpp
         features/arm/left_hand_tests.cpp
         features/arm/mod_mix_tests.cpp
         features/arm/mod_room_tests.cpp

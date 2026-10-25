@@ -344,13 +344,25 @@ LONGLONG nowQpc() {
     return t.QuadPart;
 }
 
-double secondsSince(LONGLONG qpc) {
+namespace {
+
+LONGLONG qpcFrequency() {
     static const LONGLONG frequency = [] {
         LARGE_INTEGER f;
         QueryPerformanceFrequency(&f);
         return f.QuadPart;
     }();
-    return static_cast<double>(nowQpc() - qpc) / static_cast<double>(frequency);
+    return frequency;
+}
+
+} // namespace
+
+double secondsSince(LONGLONG qpc) {
+    return static_cast<double>(nowQpc() - qpc) / static_cast<double>(qpcFrequency());
+}
+
+double qpcToSeconds(LONGLONG qpc) {
+    return static_cast<double>(qpc) / static_cast<double>(qpcFrequency());
 }
 
 bool attach(const XrContext& context) {
@@ -399,7 +411,7 @@ bool attach(const XrContext& context) {
         "%s: on: aim %s, demon aim %s%s, melee aim %s, equipment aim %s%s, locomotion %s, "
         "turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
         "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
-        "Dossier map panned by the %s stick, weapon wheel by the %s, throw gesture %s, overhead swing %s, "
+        "Dossier map panned by the %s stick, weapon wheel by the %s, overhead swing %s, "
         "hands-up jump %s, punch at %.1f m/s, button hold %.2f s, thumb-rest wheel %s (picks with %s, face "
         "touch %s, slowdown %s, hold-over %.2f s)",
         kTag, input::aimSourceName(cfg.aim), input::aimSourceName(input::demonAimSource(cfg)),
@@ -420,11 +432,14 @@ bool attach(const XrContext& context) {
         cfg.weaponFov ? "on" : "off", cfg.shotOrigin == input::ShotOrigin::Hand ? "hand" : "eye",
         cfg.aimSmoothing, s.aimFilter ? "" : " (off)", input::dossierPressName(cfg.dossier),
         cfg.mapSticks == input::MapSticks::OtherPans ? "other" : "weapon hand's",
-        input::wheelSelectName(cfg.wheelSelect), cfg.throwGesture.enabled ? "on" : "off",
-        cfg.swing.enabled ? "on" : "off", cfg.handsJump.enabled ? "on" : "off", cfg.punchSpeed,
-        cfg.holdSeconds, input::restWheelModeName(cfg.thumbRest.mode),
-        input::restWheelPickName(cfg.thumbRest.pick), cfg.thumbRestFaceTouch ? "on" : "off",
-        cfg.thumbRestSlowdown ? "on" : "off", cfg.thumbRest.holdOverSeconds);
+        input::wheelSelectName(cfg.wheelSelect), cfg.swing.enabled ? "on" : "off",
+        cfg.handsJump.enabled ? "on" : "off", cfg.punchSpeed, cfg.holdSeconds,
+        input::restWheelModeName(cfg.thumbRest.mode), input::restWheelPickName(cfg.thumbRest.pick),
+        cfg.thumbRestFaceTouch ? "on" : "off", cfg.thumbRestSlowdown ? "on" : "off",
+        cfg.thumbRest.holdOverSeconds);
+    EVR_LOG("%s: interactions: roll wrist %s, rumble by hand %s, reach to use %s", kTag,
+            cfg.flick.enabled ? "on" : "off", cfg.rumbleRoute ? "on" : "off",
+            cfg.reach.enabled ? "on" : "off");
     return true;
 }
 
@@ -468,6 +483,7 @@ void sync(XrTime predictedDisplayTime, bool focused) {
         if (r == XR_SUCCESS) {
             next.valid = true;
             next.qpc = nowQpc();
+            next.frame.sampleSeconds = qpcToSeconds(next.qpc);
             // One room transform for the whole frame, kept with it (the menu pointer takes the hands back
             // into LOCAL with it).
             next.frame.roomFromLocal = currentRoomFromLocal();
@@ -487,6 +503,7 @@ void sync(XrTime predictedDisplayTime, bool focused) {
         if (!next.valid) {
             next.valid = true;
             next.qpc = nowQpc();
+            next.frame.sampleSeconds = qpcToSeconds(next.qpc);
             next.frame.roomFromLocal = currentRoomFromLocal();
             next.frame.head.poseValid = locate(xr, xr.viewSpace, predictedDisplayTime, next.frame.head.pose,
                                                nullptr, nullptr, &next.frame.roomFromLocal);

@@ -265,7 +265,12 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
         return std::nullopt;
     }
     if (c.hands != hands || c.node != node || !offhand_mods::layerModsInPlace(node, c.base, idsOf(c, side))) {
-        if (c.hands != hands || c.node != node) {
+        // New hands forget the offsets. A new modifier node on the same hands does not: the game makes
+        // the hands' lists again on every weapon switch, and the offsets are the skeleton's (resolveJoints
+        // forgets them for another). Forgotten there, the free off hand, which stays on its controller
+        // through a switch (offhand_policy.hpp, decideOffHand), went to the game's arm for the 150 ms a
+        // clean read needs.
+        if (c.hands != hands) {
             forgetOffsets(side);
         }
         c.hands = hands;

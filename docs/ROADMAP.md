@@ -136,9 +136,16 @@ headset.
    the game's arms, the base arms mesh and a Slayer skin). A third arms setting, hands only, beside
    shown and hidden. Exit: on the sweep, full wrist roll and elbow range with no collapse or flicker and
    closed geometry from every view, for each model; the owner's headset look before any default changes.
+   On the rig (2026-10-24, rig-findings/hands-rig.md sections 19 and 20): the solve's open fixes, hands only
+   (Show arms: Shown, Hidden, Hands only) passing its own checks on the game's model and a skin, and the model
+   rule (the game's model, the player's cosmetic skin; T-148). The owner's headset look (2026-10-24): the bind
+   solve, the free off hand and its fingers passed and are the default with no option (T-160); hands only showed
+   its off-hand glove turned about 90 degrees, and now turns it as the shown arm's glove (T-160).
 4. **Hand poses.** Fingers posed per weapon grip and from the controllers' touch and grip
    sensors. Exit: on the sweep captures every weapon's grip closes on the gun with no finger through
-   it, and an open hand opens.
+   it, and an open hand opens. On the rig (2026-10-24, hands-rig section 20): the free off hand's fingers follow
+   its controller (open, the game's grip of a handle, index and thumb on their own sensors; the default since T-160); the
+   weapon hand keeps the game's grip on each gun, its index finger not yet on the trigger's sensor.
 5. **Two-handed grips and a virtual stock** (a Should item, M5). The off hand takes a per-weapon support
    point and the gun aims along the line between the hands. Exit: the sweep's two-handed holds pass;
    letting go returns to one-handed aim within one frame; the owner's headset look.
@@ -503,7 +510,7 @@ Required for v1
       seated run of the swap protocol; each combat input (equipment, weapon select and the rest) is
       performed 3 of 3 times; the glove stays on the real hand seated as standing (the same viewmodel rows;
       a drawn gun cannot touch the real desk). When
-      seated, holster and gesture zones sit at shoulder height and any hands-jump gesture is off by
+      seated, gesture zones sit at shoulder height and any hands-jump gesture is off by
       default. If a seated punch threshold is needed, it has a unit test (T-106)
 - [x] Room-scale head offset (T-062): a 0.8 m lean logs a clamp at 0.60 ±0.01 m; the head moved into a
       wall reaches full fade within 150 ms; shots come from the last valid head position

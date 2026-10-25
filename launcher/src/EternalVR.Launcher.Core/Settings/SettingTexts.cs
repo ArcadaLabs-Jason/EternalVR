@@ -74,10 +74,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "The game's: your eyes at the Slayer's height, however tall you are. Your real height: your own eye height "
                 + "above the floor (needs a headset that knows where the floor is).",
                 "The game's (Slayer)", "Your real height"),
-            [Setting.ThrowGesture] = new Text("Throw grenades",
-                "Throw a grenade with your off hand, as you would throw a ball: bring the hand up beside your ear, then "
-                + "swing it forward. It fires the equipment launcher, like its button; the grenade flies where you aim. "
-                + "Off by default. Experimental: not yet tried in a headset."),
+            [Setting.RollWrist] = new Text("Roll wrist",
+                "Turn your weapon hand over and back quickly, rolling your wrist, to switch the weapon mod, like the button. "
+                + "Aiming fast does not count: only the roll of the controller does. Turning back is part of the same roll. "
+                + "On by default; off keeps the mod on its button alone."),
             [Setting.HandsJump] = new Text("Jump with both hands",
                 "Throw both hands up above your head, fast, to jump, like in DOOM VFR. The jump button still works. "
                 + "Sitting, the hands have to go higher. Off by default: two-handed moves can set it off by accident."),
@@ -105,8 +105,11 @@ namespace EternalVR.Launcher.Core.Settings
                 "The hand that holds the gun. Left swaps the buttons between the hands; the second left option also swaps the sticks.",
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),
             [Setting.Arms] = new Text("Show arms",
-                "Off hides the Slayer's arms and leaves the weapon alone. Useful with the weapon in the left hand, where the "
-                + "game still draws its right arm reaching across to the gun."),
+                "Shown: the Slayer's arms as the game draws them. Hidden: no arms, the weapon alone; useful with the weapon in "
+                + "the left hand, where the game still draws its right arm reaching across to the gun. Hands only: the gloves "
+                + "alone, each on your hand, with the arms behind them folded away. It needs the weapon hand to aim (Aim with), "
+                + "and while the game animates the arms itself (a melee, a glory kill) they show whole for that moment.",
+                "Shown", "Hidden", "Hands only"),
             [Setting.MoveToward] = new Text("Move toward",
                 "What pushing the move stick forward moves you toward: where you look, where your left hand points, or "
                 + "where your right hand points, with either Weapon hand.",
@@ -270,6 +273,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "The shape of the flat screen cutscenes play on: a 16:9 or 16:10 screen, or the whole eye image as the game "
                 + "draws it.",
                 "16:9", "16:10", "Full eye image"),
+            [Setting.Cutscene3D] = new Text("Stereoscopic cutscenes",
+                "Shows the flat cutscene screen in 3D, like a 3D movie: the game draws each cutscene from two cameras a "
+                + "little apart. Costs a second render while a cutscene plays, about twice the graphics card's time in cutscenes. On "
+                + "by default."),
             [Setting.CutsceneArms] = new Text("Arms in cutscenes",
                 "In cutscenes around you, On shows the Slayer's arms as before. Off keeps the game's own weapon view, "
                 + "which may keep them out of sight."),

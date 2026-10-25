@@ -60,6 +60,8 @@ std::string_view gameActionName(GameAction action) {
         return "automap";
     case GameAction::Recenter:
         return "recenter";
+    case GameAction::Use:
+        return "use";
     case GameAction::Count:
         break;
     }

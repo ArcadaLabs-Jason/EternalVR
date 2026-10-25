@@ -247,7 +247,11 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_VIGNETTE", LauncherSettings.VignetteName(s.Vignette));
             Set("ETERNALVR_GLORY_KILLS", LauncherSettings.GloryKillName(s.GloryKills));
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
-            Set("ETERNALVR_ARMS", s.ShowArms ? "shown" : "hidden");
+            Set("ETERNALVR_ARMS", s.ArmsEnvironment());
+            // The arms: the off hand on its controller and the bind pose's solve while the weapon hand aims (T-160); otherwise the
+            // game's off hand and the animated solve, as before.
+            Set("ETERNALVR_OFFHAND", s.OffhandName());
+            Set("ETERNALVR_ARM_SOLVE", s.ArmSolveName());
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
             Set("ETERNALVR_MAP_STICKS", LauncherSettings.MapSticksName(s.MapSticks));
@@ -258,8 +262,8 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_THUMBREST_FACE_TOUCH", s.ThumbRestFaceTouch ? "1" : "0");
             Set("ETERNALVR_THUMBREST_SLOWDOWN", s.ThumbRestSlowdown ? "1" : "0");
             if (!string.IsNullOrWhiteSpace(s.WeaponDirections)) Set("ETERNALVR_WEAPON_DIRECTIONS", s.WeaponDirections.Trim());
-            // Arm gestures (docs/VR_INTERACTIONS.md), off by default: the throw and the overhead swing.
-            Set("ETERNALVR_THROW", s.ThrowGesture ? "1" : "0");
+            // Arm gestures (docs/VR_INTERACTIONS.md): Roll wrist (on by default) and the overhead swing (off).
+            Set("ETERNALVR_WRIST_FLICK", s.RollWrist ? "1" : "0");
             Set("ETERNALVR_SWING", s.SwingGesture ? "1" : "0");
             Set("ETERNALVR_HANDS_JUMP", s.HandsJump ? "1" : "0");
             Set("ETERNALVR_PUNCH_SPEED", Number(s.PunchSpeed, LauncherSettings.MinPunchSpeed, LauncherSettings.MaxPunchSpeed, LauncherSettings.DefaultPunchSpeed));
@@ -282,6 +286,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_MIRROR", LauncherSettings.MirrorName(s.Mirror));
             Set("ETERNALVR_CUTSCENES", LauncherSettings.CutsceneName(s.Cutscenes));
             Set("ETERNALVR_CUTSCENE_ARMS", s.CutsceneArms ? "shown" : "hidden");
+            Set("ETERNALVR_CUTSCENE_3D", s.Cutscene3D ? "1" : "0");
             Set("ETERNALVR_SHOT_ORIGIN", LauncherSettings.ShotOriginName(s.Shots));
             Set("ETERNALVR_MENU_BEAM", s.MenuBeam ? "1" : "0");
             // The per-eye temporal set holds r_antialiasing at run time; it keeps DLSS (2) only when asked to (taa_hooks.cpp).

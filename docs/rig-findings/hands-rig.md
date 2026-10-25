@@ -37,6 +37,9 @@ Everything here is rig use only. Without the variables the layer does nothing ne
 
   All of it comes from what the off-hand hook, the weapon arm and the viewmodel hook already read (the eye is the
   player field the viewmodel and fire hooks read); no game function, hook or field is added.
+- **`ETERNALVR_TEST_ARM_FAULT=forearm`** (with `ETERNALVR_ARMS=hands`, section 20): hands only with the
+  forearm left drawn, the hands-only checks' positive control. The dump's arm record also gives `zero`, the
+  joints written scaled to nothing (bit n for the n-th joint role).
 - **`ETERNALVR_TEST_ARM_FAULT=twist`**: development use only, the checker's positive control
   (`src/features/arm/twist_fault.{hpp,cpp}`, unit-tested). After the solve, every roll joint of both arms is turned
   back by the share of the wrist twist it took, so the whole twist sits on the wrist joint: a candy wrapper the
@@ -1242,3 +1245,207 @@ the roll-R+150 warns.
 **Not run**: a headset (the shoulder end and the upper arm in a ballista shot, the Crucible's first raise in the
 left hand); the upper arm's shape in the shot's frame (no capture lands on it); a world scale other than 1 on the
 rig.
+
+## 20. Hands only, the arms model rule and hand poses (feature steps 3 and 4, 2026-10-24, OpenXR-Simulator)
+
+Feature step 3's chunk C (hands only as the third value of Show arms, the model rule; DECISIONS T-148) and feature
+step 4 (the free off hand's fingers from its controller; T-149), both behind New arms or hands only and off by
+default. Every run here is the branch's Release at its head (the fix of the left-handed check, below, included),
+Steam build 25216728. Evidence: rig (the simulator and the scripted input), not a headset.
+
+**The hands-only checks** (`check_hands.py --hands-only`, `hands_only.py` beside it on the rig PC). The arm checks
+of section 3 measure an arm hands only does not draw (bones, twist step, swing, the forearm's flicker and wrap,
+collapse, flipped), so per posed arm they are replaced by: `zero` (the dump's new `zero` mask holds the six folded
+joints and not the wrist or the attach joint), `fold` (every folded joint as written on the wrist, within 0.5 mm),
+`cut` (no vertex of the proxy skin, skinned with the dumped joints and their zero scales, further past the wrist's
+cut toward the elbow than the glove's own skin reaches in the bind pose, 13.0 mm for the cuff vertices that are 94 %
+on the wrist, plus 5 mm), `open` (no open edge of the posed proxy longer than 1 mm that either eye, the model's eye
+-+ 32 mm along the head's left axis, sees in front of it from the side its triangle faces away), `holes` (no seam
+parts), `reach` (the off hand's wrist on its target within 10 mm with no beyond-reach exemption), `aim` (the off
+hand's glove turned as its target within 2 degrees), `held` (the weapon glove where the game holds it on the gun,
+its wrist in the attach joint's frame against the animated pose, within 10 mm; the wrist's distance from the
+controller's grip is reported only), `landed`, `flicker` and `jump` of the glove (5 degrees, 10 mm), the glove's
+`wrap` over the roll sweeps, and mirror and sight as before. There is no baseline: every pose must pass. Positive
+controls, from a real hands-only dump (`r4-hands`, `selftest_hands_only.py`): the forearm put back where the game's
+arm has it fails `zero`, `fold` and `cut` in 72 of 72 poses; the zero mask cleared fails `zero`; the target moved
+30 mm and turned 10 degrees fails `reach` and `aim`; the glove turned 8 degrees on every other line fails
+`flicker`; the eye test on a made-up opening counts it from inside only. The normal mode gives the same report and
+CSV as before on `ab-b-def`. The proxy is the base arms mesh (closed but for its shoulder cut), not the drawn model:
+whether the drawn cuff is closed is judged from the captures.
+
+| Run | Arms, model, solve | Result |
+|---|---|---|
+| `e-hands` | hands only, the game's model | HANDS-RIG PASS 72/72: fold 0.0 mm, zero mask 252 on both arms in every hold, cut 13.0 mm (the glove's own), no open edge seen, no seam parted; the off glove 0.0 mm and 0.21 degrees at most from its target (the reach and flex poses and the two-handed holds included), the weapon glove 0.0 mm from the game's hold; flicker 0.21 / 0.64 degrees, landed 0.09 / 0.17 mm, mirror 2.4 mm, sight 0.16 degrees |
+| `e-hskin3` | hands only, skin set 3 (`ETERNALVR_ARM_MODEL=skin:3`, the log names `praetor_set3.md6`) | HANDS-RIG PASS 72/72, the same figures to 0.03 mm and 0.01 degrees (mirror 2.2 mm) |
+| `e-hfault` | hands only, `ETERNALVR_TEST_ARM_FAULT=forearm` (positive control) | HANDS-RIG FAIL 72/72: zero, fold (274 mm) and cut (up to 285 mm past the glove) on both arms in every hold |
+| `e-def` | shown, the default solve | 0 regressions against the baseline; known-bistable warns on roll-R+150 only |
+| `e-bind` | shown, `ETERNALVR_ARM_SOLVE=bind` (the off hand's fingers posed, open) | 0 regressions; one known-bistable warn (reach-L-across035's left wrist flips, 13 at its limit) |
+| `e-skin3` | shown, `bind`, skin set 3 | 0 regressions; the same warn |
+
+Captures (both eyes, ten poses each) in `tmp-vr\rs\hands\runs\<run>\captures` on the rig PC: in `e-hands` and
+`e-hskin3` the forearms and upper arms are gone in every capture and the off glove sits on its controller, open,
+with the short rounded cap at the cuff (roll -90 shows it from the side); in `e-hfault` the forearm shows behind
+the glove.
+
+**The bug the hand-pose sweep found.** The first hand-pose run (`d-hp`, the commit before the fix) posed nothing:
+the off-hand hook took finger modifiers on the left arm to mean the weapon in the left hand, so with the free off
+hand's fingers it ran the left-handed arms ("no grip of the game's for the held item yet") and both arms stayed the
+game's in all 297 dump lines. `offhand_mods::leftGlove()` now says it; every run above is after the fix.
+
+**Hand poses** (`tmp-vr\rs\armc\handpose-sweep.ps1`, `hp_check.py`; VR_HANDS_HUD.md, "Hand poses"). The hands
+sweep's run with the off hand at four places and turns (neutral, rolled 90, raised and pitched 30, across and turned),
+six sensor states at each (open; half: grip 0.5, the trigger touched; grip; fist: grip and trigger, the stick
+touched; point: grip, the stick touched, the trigger let go; thumb up: grip and trigger, the stick let go), 1.5 s
+holds, a rig controls file without the left trigger's and grip's presses (so a squeeze throws nothing), both eyes
+kept for every pose.
+
+| Run | | Result |
+|---|---|---|
+| `e-hp` | `bind`, the free off hand | HANDPOSE PASS 24/24: every curl the sensors' (0.000 off once settled); every finger bone as read within 3.5 degrees of its turn as written (the hands' modifier weight leaves 5 % of the game's own fingers, which grip the shotgun's pump at 65 degrees on the middle finger's second bone); open, no bone but the thumb's base turned more than 3.5 degrees as read (the game's own: 65); squeezed, that bone 83.2 degrees as read for 84.3 written |
+| `e-hpfault` | `bind`, `ETERNALVR_TEST_ARM_FAULT=fingers` (positive control) | HANDPOSE FAIL 24/24: lands (52 to 74 degrees) in every pose and opens (74 degrees) in the four open ones |
+| `e-hphands` | hands only | HANDPOSE PASS 24/24, every bone within 3.5 degrees as in `e-hp` |
+
+In the captures at the neutral and the rolled places the open hand is flat with the thumb up, the grip and the fist
+close round a handle (the game's grip of a gun) with no finger through the palm; at the raised place the glove is
+seen from its back and at the across place it is behind the forearm, so the fingers do not show there.
+
+**Not run**: a headset (all of it: the cuff and the glove alone from a free head, the fingers with real
+controllers); the moments the game draws the whole arms in hands only (a weapon switch, a melee, a glory kill: by
+the code, not measured); hands only and hand poses with the weapon in the left hand (the left-handed sweep); a world
+scale other than 1; the drawn model's own closed geometry beyond the captures (the proxy is the base mesh).
+
+### 20a. After the review fixes (2026-10-24)
+
+The branch's Release with the launcher's hand-aim rule, hands only's limits that grow with a far controller
+(`arm::reachLimits`), the fingers mixed by the arm's weight and eased back when the controller goes
+(`arm::FingerHold`), and the finger state started again on map loads. Evidence: rig, OpenXR-Simulator.
+
+| Run | | Result |
+|---|---|---|
+| `f-def` | shown, the default solve | 0 regressions against the baseline; the roll-R+150 known-bistable warns only |
+| `f-hands` | hands only, the game's model | HANDS-RIG PASS 72/72, the figures of `e-hands` to 0.05 degrees and 0.1 mm (fold 0.0 mm, zero mask 252, cut 0.0 mm past the glove's own, off glove 0.0 mm and 0.21 degrees from its target) |
+| `f-hp` | hand poses, `bind` | HANDPOSE PASS 24/24, every finger bone within 3.5 degrees as read (n-fist's capture missed; its three dump lines pass) |
+
+The sweeps' own stop now puts the Steam Cloud files back (`-RestoreCloudFiles`): all three runs report the
+five changed files restored. Not run on the rig: a controller lost mid-pose (the simulator's grip pose stays
+valid), a controller more than 1.5 m from the game's hand, a map load during a pose; those are covered by the
+unit tests only.
+
+## 21. The free off hand through switches and the game's arm animations (rel-arms, 2026-10-24, OpenXR-Simulator)
+
+The owner's headset test of the round-1 package (2026-10-24) saw the left hand flash onto the gun and back on a weapon
+mod switch, on some guns; with the free off hand now the default (DECISIONS T-160) every player would see it. Which of
+the game's animations take the free off hand, for how long, and what the fix does (DECISIONS T-165). Evidence: rig (the
+simulator and the scripted input), Steam build 25216728; not a headset.
+
+**The sweep** (`ms-run.sh`, `hc-sweep.ps1 -Plan` on the rig PC): e1m1 with `give all`, the free off hand and the bind
+solve, `ETERNALVR_OFFHAND_TRACE=1` (every change of the left arm's signals and decision, with the weight, in the
+layer's log), the arm dump every 0.25 s, both eyes captured every 8 frames and kept around each press. The off hand is
+held still at its rest (0.2 m left, 0.3 m below, 0.4 m ahead of the head) throughout. Per gun with a mod (the slots
+of the combat shotgun, Heavy Cannon, plasma rifle, rocket launcher, ballista and chaingun): the slot's touch (a weapon
+switch), then two mod switches (the left Y tap) 3 s apart; then the super shotgun fired twice, a melee, the equipment
+launcher and the Flame Belch. Two checks: `ms_trace.py` (each hand-back of the off hand in the trace: its length, the
+reasons and hands flags in it, the event before it) and `ms_glove.py` (per weapon switch and mod switch found in the
+dump, the dump lines from 0.6 s before to 2.6 s after: the off arm's weight, whether the layer posed it, and its hand
+joint against its controller's wrist target; lines with the hands hidden, `hstate` 4, are counted apart).
+
+**Before** (`ms-base`, `ms2-base`: the merge of the three branches, the layer of the round-1 package's rules):
+
+| Game animation | Hands signals (trace) | The off hand handed to the game | Per event |
+|---|---|---|---|
+| Weapon mod switch, every gun with a mod (12 switches) | the generic hide (action 24, fp hands disabled, hidden state 4) for 0.31 to 0.34 s while the game swaps the weapon, then the flag `modChangeAnim` (bit 47) for about 1.3 s | 1.56 to 1.67 s, then 0.25 s held and 0.15 s blended back | the off glove up to 427 mm and 78 degrees from its controller; the captures show the game's left arm out over the gun for about 2 s |
+| Weapon switch (8) | `BringDown` (action 10), then `changingWeapon` (bit 29) | 0.69 to 1.39 s | up to 418 mm and 78 degrees |
+| Super shotgun fired (2) | the flag `reloading` (bit 1, its shells loaded by the left hand) | 0.81 to 0.83 s | |
+| Melee (3) | the `Melee` action (7), `meleeAnim`, `meleeLunge`, the transitioning state (14) | 0.36 s | up to 474 mm and 90 degrees (the melee's fists item) |
+| Equipment launcher, Flame Belch, the combat shotgun and rocket launcher fired | none | none | |
+
+Every hand-over went out in 0.05 s (the blend's third): 4 to 5 frames at 90 Hz for a glove 0.4 m from the gun.
+
+**After** (this branch's Release):
+
+- `ms-fix1` (`decideOffHand`, `ArmBlend::updateOffHand`): mod switches handed the off hand to the game only for the
+  swap's hidden phase (0.31 to 0.34 s, every tick with the hands disabled or the hidden state); at the first tick the
+  hands are drawn again the arm is the controller's at weight 1.00 (`offhand: arm controller (controller), weight
+  1.00` with `modChangeAnim` still set). Weapon switches gave no hand-back in the trace, but the off arm was not
+  posed on the dump line at the item's change on six of eight: the layer's own read refused it (`no animated pose of
+  the arm without the layer's overrides yet`, the off hand's rejected count up by 11 or 12 at each switch,
+  136 over the run; a diagnostic build logged
+  nine rejected ticks in a row, 0.14 s, at each switch, every one `readArm`). The game makes the hands' modifier lists
+  again at every weapon switch, and the layer forgot its offsets of the arm without its overrides on any new list
+  node, then waited 150 ms for a clean read, with the arm the game's meanwhile: a blink of the off hand at every
+  switch, which the old hand-over had hidden.
+- `ms-fix2` (the offsets kept for the same hands, `vkcore/game_arm.cpp`): every one of the 12 mod switches (six guns)
+  and 9 weapon switches (one of them `give all`'s to the BFG) holds the off glove on its controller at weight 1 on every dump line the hands are drawn
+  (0.0 mm, 0.0 degrees from its wrist target, the 18 lines with the hands hidden apart); the trace's hand-backs are the
+  12 hidden phases (0.31 to 0.33 s), the super shotgun's reload (0.81, 0.83 s) and two melees (0.34, 0.36 s); two
+  rejected ticks in the whole run (136 in `ms-fix1`). The captures every 8 frames through the
+  shotgun's mod switch show the off arm unmoved where `ms-base`'s show the game's left arm out over the gun.
+- `ms-lfix2` (left-handed, the weapon in the left hand, the right glove the off hand; four guns, each raised for the
+  first time in the session): every one of the 8 mod switches handed the right glove to the game only for the
+  swap's hidden phase and gave it back at weight 1.00 on the first drawn tick (`weapon arm: game (hands hidden)`,
+  then `weapon arm: ik (controller), weight 1.00`, 8 of 8 in the trace). Each weapon switch here was the item's first
+  raise, which keeps both arms the game's until the game's grip is read (`no grip read yet`, about 0.4 s, as before;
+  KNOWN-ISSUES), so a left-handed switch of an item already read is not measured. The left-handed dump has no wrist
+  target for the gloves, so the glove against its controller is not measured there either.
+
+Not measured here: glory kills, the chainsaw and ledge grabs (they need a demon or a ledge in the scripted level);
+they keep the rule they had, now eased over 0.15 s both ways. The weapon arm keeps the full rules and the quick
+hand-over for switches.
+
+### 21a. The merge QA sweep on the new defaults (2026-10-24)
+
+The layer's defaults are now the free off hand and the bind solve (DECISIONS T-160), so the merge QA sweep of section
+4, which sets `ETERNALVR_OFFHAND=free` and leaves the solve to the layer, runs the bind solve. Its run on the merge of
+the three branches with the free off hand and the bind solve (`ho-shown`, 72 poses, `check_hands.py --mesh --baseline
+runs/baseline.csv`): 0 regressions, the known-bistable warn on reach-L-across035's wrist flips (13, at its limit),
+and checks fixed against the baseline on all 72 poses (most of them the off hand's `landed` and twist step). The
+baseline is left as it is: nothing in it is a regression now, and a baseline of the bind solve wants the repeat
+sweeps of section 4 to find its bistable pairs first. Roll wrist is on by default in the layer (T-162) and the
+sweeps' poses jump in one frame, so a roll step would read as a roll of the wrist and switch the weapon mod: the
+sweep scripts set `ETERNALVR_WRIST_FLICK=0`, as they set the other gestures off.
+
+## 22. Hands only against the shown arms (rel-arms, 2026-10-24, OpenXR-Simulator)
+
+In the owner's headset test of the round-1 package (2026-10-24) the hands-only off-hand glove looked turned about 90
+degrees from the controller: with the arm out and the palm down the glove stood upright, and turned
+counterclockwise it lay flat; with the arms shown it was right. Question for the rig: for the same controller poses,
+is the hands-only left glove turned as the shown arm's? Evidence: rig (the simulator gives the grip and the aim one
+pose, which a real controller does not), Steam build 25216728; not a headset.
+
+**The sweep.** The 72-pose sweep of section 2 twice on the merge of the three branches (the free off hand, the bind
+solve), `ho-shown` (`ETERNALVR_ARMS=shown`) and `ho-hands` (`hands`), then `ho_compare.py`: per pose, the hand joint
+as written (the dump's `final`, the hold's last 0.75 s) of one run against the other's, and each against the off
+hand's wrist target (its controller's grip with the wrist offset).
+
+**Result.** Hands only puts the left glove exactly on its target in all 72 poses (0.00 degrees). The shown arm does
+too wherever its swing limit and reach allow, and differs from it in 12 poses, all where the bind solve limits the
+wrist's swing (70 by 35 degrees) or the arm stops short: flex-L-p-60 53.1 degrees, flex-L-y45 27.6, flex-L-p-30 26.5,
+mirror-3 25.8, flex-L-y22.5 12.1, flex-L-p60 7.1, mirror-1 6.9, reach-L-030 6.0, roll-L-120 4.6, roll-L-90 and lead-L
+3.9, roll-L-150 3.7 (more than 2 degrees); in the roll sweep at the neutral position the two are within 4.6 degrees
+at every step, so a hand rolled on its own axis turns the glove alike in both. The right (weapon) glove is within 1.1
+degrees between the two runs. The captures of roll 0, -90, +90 and 180 show the hands-only glove turned as the shown
+one. So on the rig hands only does not turn the glove 90 degrees from the shown arm's; where they differ, hands only
+follows the target and the shown arm's swing limit does not.
+
+**Not reproduced here, and why.** The 90 degrees the owner saw comes from a pose the rig cannot give: here the grip
+and the aim are one pose, while on a Quest controller the grip pose is turned against the aim, and the glove's target is
+the grip's. A grip-to-glove turn off by a large angle would show fully in hands only, where nothing limited the glove,
+and only up to the swing limit with the arm drawn, which matches "with arms shown it is right" [inferred, not
+measured].
+
+**The fix: hands only keeps the shown arm's swing limit** (`arm::handsOnlyTargets` no longer turns it off; the wrist
+still reaches a far target; DECISIONS T-160). The check: for the same controller poses the hands-only
+off glove turned as the shown arm's within 2 degrees, the weapon glove unchanged, left-handed mode too. The sweep has
+18 poses more for it (`ho-sweep.ps1`: the arm out 0.75 m with the palm down, turned up, rolled 180 and level, across
+the chest palm down and up, raised palm down and up, for each hand). On the fix's build, shown against hands only:
+
+| Runs | Off glove, shown vs hands only | Weapon glove, shown vs hands only |
+|---|---|---|
+| `hor-shown` / `hor-hands`, right-handed, 90 poses | 0.00 degrees in all 90 (in the flex poses both 53.1, 26.5, 27.6 ... degrees off the grip, the swing limit's) | within 0.46 degrees |
+| `hor-lshown` / `hor-lhands`, left-handed (the right glove the off hand), 90 poses | 0.00 degrees in all 90 | within 0.94 degrees |
+
+The weapon glove of hands only against the build before the fix (`ho-hands`, 72 poses): within 0.74 degrees; the shown
+arm's off glove against it (`ho-shown`): 0.00. Hands only's fold (the zero mask 252 on both arms) as before. The
+hands-only checker's `aim` check (section 20: the off glove turned as its target within 2 degrees) now fails by design
+where the swing is limited (the glove follows the shown arm's limit, not the grip), so its reference is the shown
+arm's glove from here on; the rest of its checks are unchanged.

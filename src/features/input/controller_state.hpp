@@ -68,6 +68,9 @@ struct InputFrame {
     // The room transform the poses above were located with (LOCAL to room space; identity without a
     // recenter), so a pose can be taken back into LOCAL.
     Pose roomFromLocal;
+    // When the poses were sampled, in seconds on a steady clock; 0 when not known. The same frame read twice
+    // (the mapper running between two syncs) has the same time.
+    double sampleSeconds = 0.0;
 
     [[nodiscard]] const HandState& hand(Hand which) const { return which == Hand::Left ? left : right; }
 };

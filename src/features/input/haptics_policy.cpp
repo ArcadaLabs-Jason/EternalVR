@@ -59,11 +59,19 @@ const char* hapticSourceName(HapticSource source) {
     return "?";
 }
 
-HapticsPolicy::HapticsPolicy(float strength)
-    : strength_(finiteInRangeOr(strength, 0.0f, 1.0f, kDefaultHapticStrength)) {}
+HapticsPolicy::HapticsPolicy(float strength, bool routeRumble)
+    : strength_(finiteInRangeOr(strength, 0.0f, 1.0f, kDefaultHapticStrength)), routeRumble_(routeRumble) {}
+
+std::optional<RumbleCause> HapticsPolicy::takeRoutedCause() {
+    const std::optional<RumbleCause> cause = routedCause_;
+    routedCause_.reset();
+    return cause;
+}
 
 void HapticsPolicy::reset() {
     hands_ = {};
+    router_.reset();
+    routedCause_.reset();
     fireWasHeld_ = false;
     nextFire_ = 0.0;
 }
@@ -133,12 +141,23 @@ std::array<HapticCommand, 2> HapticsPolicy::update(const HapticsFrame& frame) {
 
     const float low = motor(frame.rumble.low);
     const float high = motor(frame.rumble.high);
+    std::array<float, 2> rumbleLevel{};
+    if (routeRumble_) {
+        const RumbleLevels routed = router_.route(
+            now, frame.weaponHand, RumbleEvents{frame.fireHeld, frame.melee, frame.shoulder}, low, high);
+        rumbleLevel = routed.level;
+        if (routed.changed) {
+            routedCause_ = routed.cause;
+        }
+    } else {
+        rumbleLevel[index(frame.weaponHand)] = std::max(low, high);
+        rumbleLevel[index(otherHand(frame.weaponHand))] = low;
+    }
     std::array<bool, 2> rumbleEnded{};
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         auto& b = best[index(hand)];
         HandHaptics& state = hands_[index(hand)];
-        const float level = hand == frame.weaponHand ? std::max(low, high) : low;
-        rumbleEnded[index(hand)] = offerRumble(b, state, level, now);
+        rumbleEnded[index(hand)] = offerRumble(b, state, rumbleLevel[index(hand)], now);
         if (frame.punch[index(hand)]) {
             offer(b, HapticSource::Punch, kPunch.amplitude, kPunch.seconds);
         }

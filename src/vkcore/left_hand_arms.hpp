@@ -16,7 +16,7 @@
 //   forearm and upper arm by IK to a shoulder beside the head on the left, the weapon arm's own code
 //   (weapon_arm.hpp, holding()). The game's modifier of the left attach joint (the weapon lag) stays the
 //   game's.
-// - The right arm is the off hand. With ETERNALVR_OFFHAND=game (the default) its glove holds the gun as the
+// - The right arm is the off hand. With ETERNALVR_OFFHAND=game (no hand aim) its glove holds the gun as the
 //   game's left glove does, reflected, held in the gun's frame; with `free` it follows the right controller,
 //   held in model space (the gun's kick does not move it), its fingers as the game's right hand has them. Its
 //   forearm reaches a shoulder on the right.

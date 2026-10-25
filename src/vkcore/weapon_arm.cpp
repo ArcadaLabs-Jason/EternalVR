@@ -185,7 +185,7 @@ bool poseArm(ArmState& s,
         return false;
     }
     s.lastTwist = ours->twist;
-    if (cfg.testArmTwistFault) {
+    if (cfg.testArmFault == input::ArmFault::Twist) {
         arm::plantTwistFault(*ours, animated);
     }
     arm::ArmPoses mixed;
@@ -201,8 +201,8 @@ bool poseArm(ArmState& s,
         glove->modelSpace = s.modelSpace;
         glove->modelShoulder = solve.modelShoulder;
     }
-    const arm::HandsOnlyArm handsOnly = arm::handsOnly(mixed, game_arm::cuffOf(cfg.handsCuff));
-    mixed = cfg.armsHandsOnly ? handsOnly.joints : mixed;
+    const arm::HandsOnlyArm handsOnly = game_arm::handsOnlyFor(mixed, cfg);
+    mixed = handsOnly.joints;
     const Vec3 wrist = mixed[index(ArmJoint::Hand)].position;
     // How far the layer moves the arm from the game's pose: near 0 where the game's arm already reaches a
     // shoulder at the head (a flat-screen-like grip), which looks the same as ETERNALVR_WEAPON_ARM=game.
@@ -228,9 +228,9 @@ bool poseArm(ArmState& s,
             written[i] = arm::compose(glove->wrist, arm::relative(mixed[index(ArmJoint::Hand)], mixed[i]));
         }
     }
-    if (!mp_guard::allowsGameTouch() || !game_arm::writeArm(s.side, hands, written, read->scale, read->origin,
-                                                            cfg.armsHandsOnly ? handsOnly.zeroScale : 0u,
-                                                            &mixed, nullptr, glove ? &*glove : nullptr)) {
+    if (!mp_guard::allowsGameTouch() ||
+        !game_arm::writeArm(s.side, hands, written, read->scale, read->origin, handsOnly.zeroScale, &mixed,
+                            nullptr, glove ? &*glove : nullptr)) {
         return false;
     }
     if (glove) {
@@ -247,7 +247,7 @@ bool poseArm(ArmState& s,
     s.posedHands = hands;
     // The weapon's mesh kit usually hides this arm (hands_surfaces.hpp): shown while the layer poses it.
     hands_surfaces::update(s.side, hands, true);
-    arm_dump::noteLayerArm(s.side, weight, ours->twist, *read, mixed, nullptr);
+    arm_dump::noteLayerArm(s.side, weight, ours->twist, *read, mixed, nullptr, handsOnly.zeroScale);
 
     const Vec3 solvedShoulder = ours->joints[index(ArmJoint::UpperArm)].position;
     if (!s.loggedBones) {
@@ -312,8 +312,12 @@ void tickArm(ArmState& s,
              float dt) {
     const input::ControllerSettings& cfg = settings();
     s.attachRead.reset();
+    // A glove on a controller is the off hand (the right one with the weapon in the left hand): its blend.
     const float weight =
-        s.blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
+        s.modelSpace
+            ? s.blend.updateOffHand(decision.controller, decision.reason == input::ArmReason::HandsHidden, dt,
+                                    cfg.offhandBlendSeconds, cfg.offhandHoldSeconds)
+            : s.blend.update(decision.controller, dt, cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
     if (cfg.offhandTrace) {
         trace(s, decision, weight);
     }
@@ -378,10 +382,12 @@ void logSettings() {
                                                   : "",
         cfg.offhandTrace ? ", trace on" : "",
         cfg.weaponArmTestShoulder ? ", TEST shoulder (ETERNALVR_WEAPON_ARM_TEST_SHOULDER)" : "");
-    if (cfg.testArmTwistFault) {
-        EVR_LOG("%s: planted twist fault ON (ETERNALVR_TEST_ARM_FAULT): the whole twist on the wrist, both "
-                "arms (rig test)",
-                g_right.tag);
+    if (cfg.testArmFault != input::ArmFault::None) {
+        EVR_LOG("%s: planted %s fault ON (ETERNALVR_TEST_ARM_FAULT): %s, both arms (rig test)", g_right.tag,
+                input::armFaultName(cfg.testArmFault),
+                cfg.testArmFault == input::ArmFault::Twist     ? "the whole twist on the wrist"
+                : cfg.testArmFault == input::ArmFault::Forearm ? "hands only with the forearm left drawn"
+                                                               : "the off hand's fingers left the game's");
     }
 }
 

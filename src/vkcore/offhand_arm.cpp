@@ -14,6 +14,7 @@
 #include "vkcore/hands_surfaces.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/offhand_fingers.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -108,12 +109,14 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     targets.lastTwist = g_lastTwist;
     targets.twistFrom = solve.twistFrom;
     targets.limitSwing = solve.limitSwing;
+    // Hands only draws the glove alone: on its target wherever it is, turned as the controller is.
+    targets = cfg.armsHandsOnly ? arm::handsOnlyTargets(targets) : targets;
     auto ours = arm::solveArm(animated, targets);
     if (!ours) {
         return std::nullopt;
     }
     g_lastTwist = ours->twist;
-    if (cfg.testArmTwistFault) {
+    if (cfg.testArmFault == input::ArmFault::Twist) {
         arm::plantTwistFault(*ours, animated);
     }
 
@@ -132,8 +135,8 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     mixed[index(ArmJoint::Attach)] =
         arm::parentFor(mixed[index(ArmJoint::Hand)],
                        arm::relative(animated[index(ArmJoint::Attach)], animated[index(ArmJoint::Hand)]));
-    const arm::HandsOnlyArm gloves = arm::handsOnly(mixed, game_arm::cuffOf(cfg.handsCuff));
-    mixed = cfg.armsHandsOnly ? gloves.joints : mixed;
+    const arm::HandsOnlyArm gloves = game_arm::handsOnlyFor(mixed, cfg);
+    mixed = gloves.joints;
 
     // Written past, the wrist takes the rest of a turn the attach joint cannot make (mod_mix.hpp).
     const arm::WristArm out = mix ? arm::modifiedWithWrist(pre, mixed, *mix) : arm::WristArm{mixed, false};
@@ -145,10 +148,16 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     mod.translation = unscaled(mod.translation, read->scale);
     const float wristMove =
         length(mixed[index(ArmJoint::Hand)].position - animated[index(ArmJoint::Hand)].position);
-    if (!(wristMove <= kMaxReachMetres * upm) || !xr_math::plausibleJointMod(mod, kMaxAttachMetres * upm) ||
-        !xr_math::plausibleJointMod(wrist, kMaxReachMetres * upm) || !mp_guard::allowsGameTouch() ||
-        !game_arm::writeArm(arm::ArmSide::Left, hands, written, read->scale, read->origin,
-                            cfg.armsHandsOnly ? gloves.zeroScale : 0u, &mixed, &wrist)) {
+    // The fingers from the controller (hand poses, the bind solve only; offhand_fingers.hpp).
+    const offhand_fingers::FingerWrites* fingers =
+        offhand_fingers::pose(hands, read->landed < 0.0f, weight, cfg);
+    // Hands only: a far controller still gets the glove, never the game's whole arm (arm::reachLimits).
+    const arm::ReachLimits limit =
+        arm::reachLimits(cfg.armsHandsOnly, wristMove, kMaxReachMetres * upm, kMaxAttachMetres * upm);
+    if (!(wristMove <= limit.wrist) || !xr_math::plausibleJointMod(mod, limit.attach) ||
+        !xr_math::plausibleJointMod(wrist, limit.wrist) || !mp_guard::allowsGameTouch() ||
+        !game_arm::writeArm(arm::ArmSide::Left, hands, written, read->scale, read->origin, gloves.zeroScale,
+                            &mixed, &wrist, nullptr, fingers)) {
         return std::nullopt;
     }
 
@@ -157,7 +166,8 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     }
     // The weapon's mesh kit may hide this arm (HideAll weapons): shown while the layer poses it.
     hands_surfaces::update(arm::ArmSide::Left, hands, true);
-    arm_dump::noteLayerArm(arm::ArmSide::Left, weight, ours->twist, *read, mixed, &targets.hand);
+    arm_dump::noteLayerArm(arm::ArmSide::Left, weight, ours->twist, *read, mixed, &targets.hand,
+                           gloves.zeroScale);
 
     if (!g_loggedBones) {
         g_loggedBones = true;
@@ -182,12 +192,14 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
             ours->swing.deviation * kDegreesPerRadian, ours->swing.clamped ? " (limited)" : "", weight,
             static_cast<unsigned long long>(rejected),
             arm::surfaceStateName(hands_surfaces::state(arm::ArmSide::Left)));
+        offhand_fingers::trace(hands, kTag);
     }
     return mod;
 }
 
 void giveBack(const std::byte* hands) {
     g_lastTwist.reset();
+    offhand_fingers::giveBack();
     if (settings().testArmModWeight) {
         game_arm::releaseModWeight(hands);
     }

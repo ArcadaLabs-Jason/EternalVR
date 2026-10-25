@@ -4,6 +4,8 @@ evr_add_module(evr_xr_math
         enclosing_fov.cpp
         eye_clip_transform.cpp
         camera_anim.cpp
+        cinema_eyes.cpp
+        cinema_run.cpp
         cinema_quad.cpp
         cutscene_cuts.cpp
         display_lead.cpp

@@ -307,27 +307,68 @@ TEST_CASE("the thumb-rest wheel: off and the game's wheel by default, face touch
     CHECK(bad.settings.thumbRest.directions[static_cast<std::size_t>(WheelDirection::Down)] == 2);
 }
 
-TEST_CASE("the throw and the overhead swing are off unless turned on") {
+TEST_CASE("the overhead swing is off unless turned on") {
     const auto defaults = parse({});
-    CHECK_FALSE(defaults.settings.throwGesture.enabled);
     CHECK_FALSE(defaults.settings.swing.enabled);
-    CHECK(defaults.settings.throwGesture.speed == evr::input::ThrowSettings{}.speed);
     CHECK(defaults.settings.swing.speed == evr::input::SwingSettings{}.speed);
-    const auto on = parse({{"ETERNALVR_THROW", "1"},
-                           {"ETERNALVR_THROW_SPEED", "2.4"},
-                           {"ETERNALVR_SWING", "on"},
-                           {"ETERNALVR_SWING_SPEED", "3"}});
+    const auto on = parse({{"ETERNALVR_SWING", "on"}, {"ETERNALVR_SWING_SPEED", "3"}});
     CHECK(on.issues.empty());
-    CHECK(on.settings.throwGesture.enabled);
-    CHECK(on.settings.throwGesture.speed == doctest::Approx(2.4f));
     CHECK(on.settings.swing.enabled);
     CHECK(on.settings.swing.speed == 3.0f);
-    const auto bad = parse(
-        {{"ETERNALVR_THROW", "maybe"}, {"ETERNALVR_THROW_SPEED", "0.2"}, {"ETERNALVR_SWING_SPEED", "nine"}});
-    CHECK(bad.issues.size() == 3);
-    CHECK_FALSE(bad.settings.throwGesture.enabled);
-    CHECK(bad.settings.throwGesture.speed == evr::input::ThrowSettings{}.speed);
+    const auto bad = parse({{"ETERNALVR_SWING", "maybe"}, {"ETERNALVR_SWING_SPEED", "nine"}});
+    CHECK(bad.issues.size() == 2);
+    CHECK_FALSE(bad.settings.swing.enabled);
     CHECK(bad.settings.swing.speed == evr::input::SwingSettings{}.speed);
+}
+
+TEST_CASE("the removed throw gesture's and holsters' variables are not read") {
+    // ETERNALVR_THROW, ETERNALVR_THROW_SPEED and the ETERNALVR_HOLSTER* variables are gone: a value left set
+    // is not a setting any more, so it is neither reported nor turns anything on.
+    const auto old = parse({{"ETERNALVR_THROW", "1"},
+                            {"ETERNALVR_THROW_SPEED", "2.4"},
+                            {"ETERNALVR_HOLSTERS", "1"},
+                            {"ETERNALVR_HOLSTER_HIP", "quick"}});
+    CHECK(old.issues.empty());
+    CHECK_FALSE(old.settings.swing.enabled);
+}
+
+TEST_CASE("the reach to use is off unless turned on") {
+    CHECK_FALSE(parse({}).settings.reach.enabled);
+    const auto on = parse({{"ETERNALVR_REACH_USE", "1"}});
+    CHECK(on.issues.empty());
+    CHECK(on.settings.reach.enabled);
+    const auto bad = parse({{"ETERNALVR_REACH_USE", "reach"}});
+    CHECK(bad.issues.size() == 1);
+    CHECK_FALSE(bad.settings.reach.enabled);
+}
+
+TEST_CASE("the rumble routing by hand is on unless turned off") {
+    CHECK(parse({}).settings.rumbleRoute);
+    const auto off = parse({{"ETERNALVR_RUMBLE_ROUTE", "0"}});
+    CHECK(off.issues.empty());
+    CHECK_FALSE(off.settings.rumbleRoute);
+    CHECK(parse({{"ETERNALVR_RUMBLE_ROUTE", "1"}}).settings.rumbleRoute);
+    const auto bad = parse({{"ETERNALVR_RUMBLE_ROUTE", "hand"}});
+    CHECK(bad.issues.size() == 1);
+    CHECK(bad.settings.rumbleRoute);
+}
+
+TEST_CASE("the wrist flick (Roll wrist) is on unless turned off") {
+    const auto defaults = parse({});
+    CHECK(defaults.settings.flick.enabled);
+    CHECK(defaults.settings.flick.minRollDegrees == evr::input::FlickSettings{}.minRollDegrees);
+    CHECK(defaults.settings.flick.minRollDegrees == 450.0f);
+    const auto off = parse({{"ETERNALVR_WRIST_FLICK", "0"}});
+    CHECK(off.issues.empty());
+    CHECK_FALSE(off.settings.flick.enabled);
+    const auto on = parse({{"ETERNALVR_WRIST_FLICK", "1"}, {"ETERNALVR_FLICK_RATE", "600"}});
+    CHECK(on.issues.empty());
+    CHECK(on.settings.flick.enabled);
+    CHECK(on.settings.flick.minRollDegrees == 600.0f);
+    const auto bad = parse({{"ETERNALVR_WRIST_FLICK", "flick"}, {"ETERNALVR_FLICK_RATE", "50"}});
+    CHECK(bad.issues.size() == 2);
+    CHECK(bad.settings.flick.enabled);
+    CHECK(bad.settings.flick.minRollDegrees == evr::input::FlickSettings{}.minRollDegrees);
 }
 
 TEST_CASE("the hands-up jump is off unless turned on") {
@@ -402,9 +443,7 @@ TEST_CASE("the arms are shown unless ETERNALVR_ARMS says hidden") {
     REQUIRE(bad.issues.size() == 1);
     CHECK(bad.issues[0].name == "ETERNALVR_ARMS");
     CHECK_FALSE(bad.settings.armsHidden);
-    // The rig-only value is taken but not offered to players.
-    CHECK(bad.issues[0].message.find("hands") == std::string::npos);
-    CHECK(bad.issues[0].message.find("shown, hidden") != std::string::npos);
+    CHECK(bad.issues[0].message.find("shown, hidden, hands") != std::string::npos);
 }
 
 TEST_CASE("the weapon sights are on by default; ETERNALVR_WEAPON_SIGHTS 0 or off turns them off") {
@@ -422,28 +461,42 @@ TEST_CASE("the weapon sights are on by default; ETERNALVR_WEAPON_SIGHTS 0 or off
 
 TEST_CASE("the hands rig's dump and planted fault are off unless their test variables are set") {
     CHECK(parse({}).settings.testArmDumpPath.empty());
-    CHECK_FALSE(parse({}).settings.testArmTwistFault);
+    CHECK(parse({}).settings.testArmFault == evr::input::ArmFault::None);
     const auto on =
         parse({{"ETERNALVR_TEST_ARM_DUMP", "C:/runs/arms.ndjson"}, {"ETERNALVR_TEST_ARM_FAULT", "twist"}});
     CHECK(on.issues.empty());
     CHECK(on.settings.testArmDumpPath == "C:/runs/arms.ndjson");
-    CHECK(on.settings.testArmTwistFault);
-    CHECK_FALSE(parse({{"ETERNALVR_TEST_ARM_FAULT", "none"}}).settings.testArmTwistFault);
+    CHECK(on.settings.testArmFault == evr::input::ArmFault::Twist);
+    CHECK(parse({{"ETERNALVR_TEST_ARM_FAULT", "none"}}).settings.testArmFault == evr::input::ArmFault::None);
     const auto bad = parse({{"ETERNALVR_TEST_ARM_FAULT", "wrap"}});
     REQUIRE(bad.issues.size() == 1);
     CHECK(bad.issues[0].name == "ETERNALVR_TEST_ARM_FAULT");
-    CHECK_FALSE(bad.settings.testArmTwistFault);
+    CHECK(bad.settings.testArmFault == evr::input::ArmFault::None);
 }
 
-TEST_CASE("the arm solve measures the twist from the animated hand unless ETERNALVR_ARM_SOLVE says bind") {
+TEST_CASE("the arm solve measures the twist from the bind pose unless ETERNALVR_ARM_SOLVE says animated") {
     using evr::input::ArmSolve;
-    CHECK(parse({}).settings.armSolve == ArmSolve::Animated);
+    CHECK(parse({}).settings.armSolve == ArmSolve::Bind);
     CHECK(parse({{"ETERNALVR_ARM_SOLVE", "bind"}}).settings.armSolve == ArmSolve::Bind);
     CHECK(parse({{"ETERNALVR_ARM_SOLVE", "animated"}}).settings.armSolve == ArmSolve::Animated);
     const auto bad = parse({{"ETERNALVR_ARM_SOLVE", "rest"}});
     REQUIRE(bad.issues.size() == 1);
     CHECK(bad.issues[0].name == "ETERNALVR_ARM_SOLVE");
-    CHECK(bad.settings.armSolve == ArmSolve::Animated);
+    CHECK(bad.settings.armSolve == ArmSolve::Bind);
+}
+
+TEST_CASE("the off hand is on its controller unless ETERNALVR_OFFHAND says game") {
+    using evr::input::OffhandMode;
+    const auto defaults = parse({});
+    CHECK(defaults.issues.empty());
+    CHECK(defaults.settings.offhand == OffhandMode::Free);
+    CHECK(parse({{"ETERNALVR_OFFHAND", "game"}}).settings.offhand == OffhandMode::Game);
+    CHECK(parse({{"ETERNALVR_OFFHAND", "free"}}).settings.offhand == OffhandMode::Free);
+    CHECK(parse({{"ETERNALVR_OFFHAND", "probe"}}).settings.offhand == OffhandMode::Probe);
+    const auto bad = parse({{"ETERNALVR_OFFHAND", "left"}});
+    REQUIRE(bad.issues.size() == 1);
+    CHECK(bad.issues[0].name == "ETERNALVR_OFFHAND");
+    CHECK(bad.settings.offhand == OffhandMode::Free);
 }
 
 TEST_CASE("the rig's arms model and hands-only arms are off unless their variables are set") {
@@ -451,7 +504,6 @@ TEST_CASE("the rig's arms model and hands-only arms are off unless their variabl
     const auto none = parse({});
     CHECK(none.settings.armModel == ArmModel::Game);
     CHECK_FALSE(none.settings.armsHandsOnly);
-    CHECK(parse({{"ETERNALVR_ARM_MODEL", "base"}}).settings.armModel == ArmModel::Base);
     const auto skin = parse({{"ETERNALVR_ARM_MODEL", "skin"}});
     CHECK(skin.issues.empty());
     CHECK(skin.settings.armModel == ArmModel::Skin);
@@ -460,7 +512,7 @@ TEST_CASE("the rig's arms model and hands-only arms are off unless their variabl
     CHECK(set38.issues.empty());
     CHECK(set38.settings.armModel == ArmModel::Skin);
     CHECK(set38.settings.armModelSkin == 38);
-    for (const char* bad : {"skin:", "skin:0", "skin:x", "skin38", "arms"}) {
+    for (const char* bad : {"skin:", "skin:0", "skin:x", "skin38", "arms", "base"}) {
         CAPTURE(bad);
         const auto r = parse({{"ETERNALVR_ARM_MODEL", bad}});
         REQUIRE(r.issues.size() == 1);

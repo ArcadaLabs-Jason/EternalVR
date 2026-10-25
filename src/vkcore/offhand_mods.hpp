@@ -73,9 +73,14 @@ inline constexpr std::int32_t kLayerCount = arm::kModsPerArm;
 // bind solve, the weapon arm's override.
 bool hasWrist(arm::ArmSide side);
 
-// The arm's modifiers on finger joints, after the six: arm::kFingerModCount for the weapon arm, none for the
-// off hand.
+// The arm's modifiers on finger joints, after the six: arm::kFingerModCount for the weapon arm, and for the
+// off hand with the weapon in the left hand or, with the bind solve, the free off hand (its hand poses,
+// features/arm/hand_pose.hpp); none otherwise.
 std::int32_t fingerCount(arm::ArmSide side);
+
+// Whether the left arm has the glove's modifiers for the weapon in the left hand (left_hand_arms.hpp): both
+// arms hold a glove on the gun. Not the free off hand's fingers, which have finger modifiers too.
+bool leftGlove();
 
 // The arm's modifiers on its own joints: the wrist's (when hasWrist) and the six.
 std::int32_t armCount(arm::ArmSide side);

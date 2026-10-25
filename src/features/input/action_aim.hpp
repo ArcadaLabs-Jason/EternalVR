@@ -10,9 +10,12 @@
 //   ETERNALVR_MELEE_AIM      head / offhand   melee, Blood Punch, glory kills and use (one button in the
 //                                             game); a punch too
 //   ETERNALVR_EQUIPMENT_AIM  head / offhand   the equipment launcher and the Flame Belch, which sit on the
-//                                             Slayer's left shoulder; the off hand's throw gesture too
+//                                             Slayer's left shoulder
 //
 // Unset, the weapon hand aims them as before. Neither does anything under head or view aim.
+//
+// The use button on its own (GameAction::Use, pressed by the reach, reach_use.hpp) is in the melee class: it
+// takes its focus from the view angles as melee does, and a reach aims with the head like a punch.
 //
 // A melee press that comes from the physical punch (punch_detector.hpp) always aims with the head under hand
 // aim, whatever ETERNALVR_MELEE_AIM says: the punch is measured along the head's forward, and a fist going

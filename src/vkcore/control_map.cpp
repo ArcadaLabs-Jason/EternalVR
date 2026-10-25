@@ -8,6 +8,7 @@
 // ahead of that as soon as the runtime reports a controller (prepareControlMap).
 
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 
 #include "features/input/binding_compiler.hpp"
 #include "features/input/binding_keys.hpp"
@@ -245,9 +246,10 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
     mapperSettings.stickChordRecenter = recenterHold > 0.0f;
     // SteamVR keeps Touch's left Menu: both sticks held + a trigger capture (capture_chord.hpp).
     mapperSettings.captureButtons = input::captureButtonsFor(xrRuntimeName(), controller);
-    mapperSettings.throwGesture = cfg.throwGesture;
     mapperSettings.swing = cfg.swing;
     mapperSettings.handsJump = cfg.handsJump;
+    mapperSettings.reach = cfg.reach;
+    mapperSettings.flick = cfg.flick;
     mapperSettings.punch.thresholdMetresPerSecond = cfg.punchSpeed;
     // The hold time (the launcher's Hold time) for the buttons, and for the stick held down: 0.05 s longer;
     // when the weapon wheel is all the down hold opens, a push within 20 degrees of straight down holds

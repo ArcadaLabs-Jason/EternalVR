@@ -5,6 +5,7 @@
 #include "features/input/gamepad_mode.hpp"
 #include "vkcore/arm_model.hpp"
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/gamepad_mode.hpp"
 #include "vkcore/key_inject.hpp"
@@ -106,6 +107,13 @@ void install() {
         if (cfg.armsHidden && !s.offhandHook) {
             EVR_LOG("%s: the arms stay shown (ETERNALVR_ARMS=hidden needs the viewmodel and hands hooks)",
                     kTag);
+        }
+        if (cfg.armsHandsOnly) {
+            EVR_LOG(
+                "%s: hands only (ETERNALVR_ARMS=hands)%s: the gloves alone while the layer poses the arms "
+                "(the free off hand, the weapon arm's ik, the bind solve); while the game animates an arm "
+                "(a weapon switch, a melee, a glory kill) it is drawn whole",
+                kTag, s.offhandHook ? "" : " has no effect: it needs the viewmodel and hands hooks");
         }
     }
     EVR_LOG(

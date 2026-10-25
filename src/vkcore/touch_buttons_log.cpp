@@ -12,6 +12,7 @@
 // minute), so a scripted touch can be seen reaching the layer.
 
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 
 #include "features/input/binding_keys.hpp"
 #include "features/input/touch_inputs.hpp"

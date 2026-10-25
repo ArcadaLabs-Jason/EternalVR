@@ -9,6 +9,7 @@
 // rig test knob ETERNALVR_TEST_VRS_PARITY=1: they can give a pass the other eye's pattern.
 
 #include "stereo_seq/eye_tags.hpp"
+#include "vkcore/cinema3d_frames.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/seq_hooks.hpp"
 #include "vkcore/vrs_nv_impl.hpp"
@@ -21,8 +22,10 @@ namespace evr::vkcore::vrs_nv {
 
 namespace {
 
+// A stereo cutscene's pair (cinema3d_frames.hpp) keeps full rate: the eye shapes are the headset's.
 int eyeOf(const std::optional<stereo_seq::RenderTag>& tag) {
-    return tag && stereo_seq::drawsEyeView(*tag) ? stereo_seq::eyeIndex(tag->eye) : kNoEye;
+    return tag && stereo_seq::drawsEyeView(*tag) && !cinema3dFrame(tag->tick) ? stereo_seq::eyeIndex(tag->eye)
+                                                                              : kNoEye;
 }
 
 } // namespace

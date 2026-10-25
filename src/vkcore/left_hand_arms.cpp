@@ -312,7 +312,7 @@ void tick(const std::byte* hands,
     const input::ArmDecision weaponDecision =
         ready ? input::decideWeaponArm(weaponSignals, cfg.weaponArm) : noGrip;
     const input::ArmDecision offDecision = !ready ? noGrip
-                                           : free ? input::decideArm(offSignals, offMode)
+                                           : free ? input::decideOffHand(offSignals, offMode)
                                                   : weaponDecision;
     weapon_arm::Hold rightHold{offDecision, rightGrip ? &*rightGrip : nullptr, free, world.rightShoulder,
                                world.rightElbow};

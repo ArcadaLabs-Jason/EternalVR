@@ -10,6 +10,7 @@
 #include "vkcore/exposure_hooks.hpp"
 #include "vkcore/flare_views.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/seq_cvar_log.hpp"
 #include "vkcore/seq_prev.hpp"
 #include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/status_file.hpp"
@@ -19,7 +20,6 @@
 
 #include <cstddef>
 #include <cstring>
-#include <string>
 
 namespace evr::vkcore {
 
@@ -32,40 +32,6 @@ constexpr std::size_t kWeaponViewProjections[] = {0x295B0, 0x29630, 0x29770, 0x2
 
 namespace {
 
-// The v1 cvar set on the game's command line (the launch helper passes it; docs/VR_STEREO.md). Only
-// logged: S3 turns them back on one at a time.
-void logCommandLineCvars() {
-    const wchar_t* wide = GetCommandLineW();
-    const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
-    std::string line(bytes > 0 ? static_cast<std::size_t>(bytes) : 0, '\0');
-    if (bytes > 0) {
-        WideCharToMultiByte(CP_UTF8, 0, wide, -1, line.data(), bytes, nullptr, nullptr);
-        line.resize(static_cast<std::size_t>(bytes - 1));
-    }
-    std::string summary;
-    int differing = 0;
-    for (const auto& c : stereo_seq::cvarsOnCommandLine(line, stereo_seq::sequentialCvars())) {
-        summary += " " + c.name + " " + (c.actual ? *c.actual : std::string("(not set)"));
-        if (!c.actual || *c.actual != c.expected) {
-            ++differing;
-        }
-    }
-    EVR_LOG("seq: command line cvars:%s; %s", summary.c_str(),
-            taaRequested()   ? "per-eye temporal history owns the TAA cvars"
-            : differing == 0 ? "the v1 set"
-                             : "NOT the v1 set (temporal effects may ghost between the eyes)");
-    if (taaRequested()) {
-        std::string taa;
-        for (const auto* set :
-             {&stereo_seq::stereoTaaCommandLineCvars(), &stereo_seq::stereoTaaForcedCvars()}) {
-            for (const auto& c : stereo_seq::cvarsOnCommandLine(line, *set)) {
-                taa += " " + c.name + " " + (c.actual ? *c.actual : std::string("(not set)"));
-            }
-        }
-        EVR_LOG("seq-taa: per-eye TAA requested (ETERNALVR_STEREO_TAA=1); command line:%s", taa.c_str());
-    }
-}
-
 // Per-eye TAA (taa_hooks.hpp), written by the per-eye hook into each eye's render view. Render job
 // threads; the two chains of a tick never overlap, the mutex only orders them.
 std::mutex g_taaMutex;
@@ -77,7 +43,7 @@ std::atomic<std::uint64_t> g_taaResets{0};
 TaaCounters g_lastTaa;
 ExposureCounters g_lastExposure;
 
-void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame) {
+void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame, bool newShot) {
     if (eye == Eye::Left) {
         taaOnStereoTick(); // the first stereo tick switches per-eye TAA on, or fails closed
         ssdoOnStereoTick();
@@ -102,7 +68,7 @@ void writeTaaEye(std::byte* renderView, Eye eye, std::uint64_t gameFrame) {
                        : seqAlternateEyes() ? g_altTaaReset.onEye(eye, gameFrame)
                        : eye == Eye::Left   ? g_taaReset.onLeft(gameFrame)
                                             : g_taaReset.onRight(gameFrame);
-    if (reset) {
+    if (reset || newShot) { // a new shot (stereo cutscenes): no history carried across the cut
         renderView[stereo_view_fields::kDisableTssaaNextFewFrames] = std::byte{1};
         noteNgxReset(eye, gameFrame); // DLSS does not read the flag: this render's evaluation resets
         ++g_taaResets;
@@ -119,7 +85,7 @@ void XrPresenter::Impl::startSequential() {
         v.sameView ? "SAME VIEW in both eyes (S1)" : "per-eye views", v.fullResolution ? "on" : "off",
         v.exposureOnce ? "on" : "off", v.discontinuous ? "on" : "off", v.inhibitModelFov ? 1 : 0,
         settings.stereo.prevMatrices ? "on" : "off");
-    logCommandLineCvars();
+    logSeqCommandLineCvars();
     if (!hooks.gameView) {
         EVR_LOG("seq: no camera hook; stereo off, mono");
         status::stereo(false, "the camera hook is missing");
@@ -262,7 +228,7 @@ void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
     setFlag(plan.discontinuousViewPosition, stereo_view_fields::kDiscontinuousViewPosition);
     // A cutscene with its arms hidden keeps the game's own model FOV scale (controllers::cutsceneArmsHidden).
     setFlag(plan.inhibitModelFovScale && !record.cutsceneArms, stereo_view_fields::kInhibitModelFovScale);
-    writeTaaEye(renderView, eye, record.seq);
+    writeTaaEye(renderView, eye, record.seq, record.historyReset);
     seqMarkEyeView(eye, record.seq);
     ++stereoStats.eyeViews[index];
     if (stereoStats.loggedEyes.fetch_add(1) < 6) {

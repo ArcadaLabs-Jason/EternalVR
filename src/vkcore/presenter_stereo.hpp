@@ -7,6 +7,7 @@
 
 #include "stereo_seq/eye_view_plan.hpp"
 #include "stereo_seq/seq_settings.hpp"
+#include "vkcore/presenter_cinema3d.hpp"
 #include "vkcore/stereo_hooks.hpp"
 #include "xr_math/stereo_view.hpp"
 

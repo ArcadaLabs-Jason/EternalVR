@@ -71,7 +71,9 @@ bool open() {
         return false;
     }
     EVR_LOG("%s: both arms every %.2f s to '%s'%s (rig test)", kTag, kIntervalSeconds, path.c_str(),
-            settings().testArmTwistFault ? ", planted twist fault ON (ETERNALVR_TEST_ARM_FAULT)" : "");
+            settings().testArmFault != input::ArmFault::None
+                ? ", a planted fault ON (ETERNALVR_TEST_ARM_FAULT)"
+                : "");
     return true;
 }
 
@@ -118,7 +120,8 @@ void noteLayerArm(arm::ArmSide side,
                   float twist,
                   const game_arm::ArmRead& read,
                   const arm::ArmPoses& written,
-                  const xr_math::ModelPose* target) {
+                  const xr_math::ModelPose* target,
+                  std::uint32_t zeroScale) {
     if (!on()) {
         return;
     }
@@ -133,6 +136,13 @@ void noteLayerArm(arm::ArmSide side,
     a.animated = read.animated;
     a.target = target ? std::optional<xr_math::ModelPose>(*target) : std::nullopt;
     a.root = read.root;
+    a.zeroScale = zeroScale;
+}
+
+void noteFingers(arm::ArmSide side, const arm::DumpFingers& fingers) {
+    if (on()) {
+        g_arms[slot(side)].fingers = fingers;
+    }
 }
 
 void tick(const ArmsTick& arms) {
@@ -157,7 +167,7 @@ void tick(const ArmsTick& arms) {
     arm::ArmDumpRecord r;
     r.seconds = qpcSeconds(now);
     r.unitsPerMetre = g_world.unitsPerMetre;
-    r.fault = settings().testArmTwistFault ? "twist" : "none";
+    r.fault = input::armFaultName(settings().testArmFault);
     const std::optional<input::TestInput> test = testInput();
     r.input = {handInput(test, input::Hand::Left), handInput(test, input::Hand::Right)};
     r.arms = g_arms;

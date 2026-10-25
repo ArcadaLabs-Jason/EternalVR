@@ -1,5 +1,6 @@
-// The test hold of the hands' joint-modifier weight and the cuff hands only closes (game_arm.hpp).
+// The test hold of the hands' joint-modifier weight and the arm hands only writes (game_arm.hpp).
 
+#include "features/arm/twist_fault.hpp"
 #include "features/input/controller_settings.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/game_arm.hpp"
@@ -67,6 +68,14 @@ arm::Cuff cuffOf(input::HandsCuff cuff) {
     return cuff == input::HandsCuff::Stub   ? arm::Cuff::Stub
            : cuff == input::HandsCuff::Ring ? arm::Cuff::Ring
                                             : arm::Cuff::Fold;
+}
+
+arm::HandsOnlyArm handsOnlyFor(const arm::ArmPoses& arm, const input::ControllerSettings& cfg) {
+    if (!cfg.armsHandsOnly) {
+        return {arm, 0u};
+    }
+    return cfg.testArmFault == input::ArmFault::Forearm ? arm::plantForearmFault(arm)
+                                                        : arm::handsOnly(arm, cuffOf(cfg.handsCuff));
 }
 
 } // namespace evr::vkcore::controllers::game_arm

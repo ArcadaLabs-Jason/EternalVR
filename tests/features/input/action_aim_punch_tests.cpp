@@ -77,6 +77,33 @@ TEST_CASE("punch aim: a punch's melee waits for the head with melee aim on the w
     CHECK(sent.target == ActionAimSource::Head);
 }
 
+TEST_CASE("punch aim: a reach's use aims with the head, a bound use button keeps the weapon hand") {
+    // The reach sends the use button alone, flagged like a punch.
+    ActionAim aim;
+    const ActionAimOutput pressed = step(aim, actions({GameAction::Use}), 0, true);
+    CHECK_FALSE(evr::game::contains(pressed.actions, GameAction::Use));
+    CHECK(pressed.holdingBack);
+    CHECK(pressed.target == ActionAimSource::Head);
+    CHECK(pressed.action == AimedAction::Melee);
+    const ActionAimOutput sent = step(aim, {}, 1);
+    CHECK(evr::game::contains(sent.actions, GameAction::Use));
+    CHECK(sent.released);
+    CHECK(sent.pressed == AimedAction::Melee);
+    // Not flagged (a button the player bound to use): the weapon hand, nothing held back.
+    ActionAim bound;
+    const ActionAimOutput plain = step(bound, actions({GameAction::Use}), 0, false);
+    CHECK(evr::game::contains(plain.actions, GameAction::Use));
+    CHECK_FALSE(plain.holdingBack);
+    CHECK(plain.target == ActionAimSource::Same);
+    // With melee aim on the head, the bound use button follows the setting like melee.
+    ActionAimSettings head;
+    head.melee = ActionAimSource::Head;
+    ActionAim setting(head);
+    const ActionAimOutput viaSetting = step(setting, actions({GameAction::Use}), 0, false);
+    CHECK(viaSetting.target == ActionAimSource::Head);
+    CHECK(viaSetting.holdingBack);
+}
+
 TEST_CASE("punch aim: a stick-click melee keeps the weapon hand") {
     ActionAim aim;
     const ActionAimOutput out = step(aim, actions({GameAction::Melee}), 0, false);

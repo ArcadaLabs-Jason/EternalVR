@@ -33,9 +33,11 @@ evr_add_module(evr_input
         pad_watch.cpp
         player_controller_data.cpp
         punch_detector.cpp
+        reach_use.cpp
         rest_touch_bindings.cpp
         rest_touch_filter.cpp
         rest_wheel.cpp
+        rumble_route.cpp
         rest_wheel_touch.cpp
         stick_chord.cpp
         stick_response.cpp
@@ -45,6 +47,7 @@ evr_add_module(evr_input
         touch_inputs.cpp
         turn_policy.cpp
         turn_stick_arbiter.cpp
+        wrist_flick.cpp
         usercmd_hook_use.cpp
         usercmd_injection.cpp
         usercmd_motion.cpp

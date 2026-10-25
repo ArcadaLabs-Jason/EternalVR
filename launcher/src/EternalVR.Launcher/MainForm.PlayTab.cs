@@ -24,7 +24,7 @@ namespace EternalVR.Launcher
         private readonly CheckBox skipCinematics = new CheckBox { AutoSize = true };
         private readonly ComboBox posture = Choices(Setting.PlayPosition);
         private readonly ComboBox height = Choices(Setting.EyeHeight);
-        private readonly CheckBox throwGesture = new CheckBox { AutoSize = true };
+        private readonly CheckBox rollWrist = new CheckBox { AutoSize = true };
         private readonly CheckBox swingGesture = new CheckBox { AutoSize = true };
         private readonly CheckBox handsJump = new CheckBox { AutoSize = true };
         private readonly ComboBox aim = Choices(Setting.AimWith);
@@ -45,7 +45,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
-        private readonly CheckBox showArms = new CheckBox { AutoSize = true };
+        private readonly ComboBox showArms = Choices(Setting.Arms);
         private readonly ComboBox vibration = Choices(Setting.Vibration);
         private readonly ComboBox punchSpeed = Choices(Setting.PunchSpeed);
         private readonly ComboBox holdTime = Choices(Setting.HoldTime);
@@ -100,7 +100,7 @@ namespace EternalVR.Launcher
                     s => height.SelectedIndex = (int)s.Height,
                     s => s.Height = (HeightMode)height.SelectedIndex));
             var gestures = Group("Gestures",
-                Row(Setting.ThrowGesture, throwGesture, s => throwGesture.Checked = s.ThrowGesture, s => s.ThrowGesture = throwGesture.Checked),
+                Row(Setting.RollWrist, rollWrist, s => rollWrist.Checked = s.RollWrist, s => s.RollWrist = rollWrist.Checked),
                 Row(Setting.SwingGesture, swingGesture, s => swingGesture.Checked = s.SwingGesture, s => s.SwingGesture = swingGesture.Checked),
                 Row(Setting.HandsJump, handsJump, s => handsJump.Checked = s.HandsJump, s => s.HandsJump = handsJump.Checked),
                 Row(Setting.PunchSpeed, punchSpeed, LoadPunchSpeed, ReadPunchSpeed));
@@ -120,7 +120,9 @@ namespace EternalVR.Launcher
                 Row(Setting.WeaponHand, hand,
                     s => hand.SelectedIndex = (int)s.Hand,
                     s => s.Hand = (Handedness)hand.SelectedIndex),
-                Row(Setting.Arms, showArms, s => showArms.Checked = s.ShowArms, s => s.ShowArms = showArms.Checked),
+                Row(Setting.Arms, showArms,
+                    s => showArms.SelectedIndex = (int)s.Arms,
+                    s => s.Arms = (ArmsView)showArms.SelectedIndex),
                 Row(Setting.MoveToward, locomotion,
                     s => locomotion.SelectedIndex = (int)s.Locomotion,
                     s => s.Locomotion = (LocomotionMode)locomotion.SelectedIndex),

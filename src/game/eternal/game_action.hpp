@@ -41,6 +41,7 @@ enum class GameAction : std::uint8_t {
     MissionInfo,
     Automap,
     Recenter, // The layer's own: re-anchors the play space (long-press, docs/VR_ROOMSCALE.md).
+    Use,      // `_use` alone: uses what is in focus, nothing otherwise (the reach, docs/VR_INTERACTIONS.md).
     Count,
 };
 

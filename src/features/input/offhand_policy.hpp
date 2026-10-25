@@ -5,11 +5,12 @@
 //
 // The first-person arms are one skinned model placed at the weapon hand; the left hand follows the
 // `lefthandattach` joint modifier the game writes every tick (idHands::UpdateWeaponLagJointMods). In free
-// mode the layer writes that modifier from the off hand's pose, except while the game animates the left
-// arm itself: glory and sync kills, Blood Punch and melee, equipment throws, weapon switches, custom
-// animations (ledge grabs, pickups), hidden hands, and any forced view. Those hand the arm back to the
-// game at once; the controller takes it again after a short hold, blended in. The weapon arm's IK
-// (ETERNALVR_WEAPON_ARM) is handed over by the same rules.
+// mode the layer writes that modifier from the off hand's pose, except while the game's left arm is the
+// action itself: glory and sync kills, Blood Punch and melee, equipment throws, custom animations (ledge
+// grabs, pickups), the chainsaw, hidden hands, and any forced view. Those hand the arm over to the game,
+// blended out; the controller takes it again after a short hold, blended in. A weapon switch and a weapon
+// mod switch keep the off hand on its controller (decideOffHand). The weapon arm's IK
+// (ETERNALVR_WEAPON_ARM) is handed over by the full rules, switches included.
 //
 // The signals are read from idHands and idPlayer (type info of build 25216728; bit positions of the
 // hands flags follow the declaration order [inferred], so ETERNALVR_OFFHAND_TRACE logs them for the live
@@ -20,8 +21,8 @@
 namespace evr::input {
 
 enum class OffhandMode : std::uint8_t {
-    Game,  // the game's animation drives the left arm (default; nothing is written)
-    Free,  // the off-hand controller drives it outside the game's own left-arm actions
+    Game,  // the game's animation drives the left arm (nothing is written)
+    Free,  // the off-hand controller drives it outside the game's own left-arm actions (default)
     Probe, // live check: the game's modifier plus a fixed offset (ETERNALVR_OFFHAND_PROBE)
 };
 
@@ -115,6 +116,16 @@ struct ArmDecision {
 // animates the arm).
 ArmDecision decideArm(const ArmSignals& signals, OffhandMode mode);
 
+// The off hand's decision (docs/DECISIONS.md T-165): decideArm's, except that a weapon switch (the
+// BringDown and BringUp actions, the hands flag `changingWeapon`) and a weapon mod switch (the flag
+// `modChangeAnim`) leave the off hand on its controller. In VR the player switches with a button or the
+// wheel and the off hand takes no part, but the game's switch animations swing its left arm onto the gun
+// and away (rig, every gun with a mod: the mod switch held the arm 1.56 to 1.67 s, a weapon switch 0.69 to
+// 1.39 s, each followed by the hold and the blend back), which in the headset is the off hand leaving the
+// controller for nothing. The actions in which the game's left arm is the action (melee, glory kills, the
+// chainsaw, ledge grabs) still take it. The weapon arm keeps the full rules (decideWeaponArm).
+ArmDecision decideOffHand(const ArmSignals& signals, OffhandMode mode);
+
 // With the weapon in the left hand the right arm is the off hand: the mode it is posed in. `onController`:
 // the held item's [left_handed_off_hand] row, for a weapon whose game left grip, reflected for the right
 // glove, holds nothing (the chaingun's front handle is on its left side only), so with the game's off hand
@@ -176,15 +187,28 @@ ArmDecision decideWeaponArm(const ArmSignals& signals, WeaponArmMode mode);
 // the game is quick (`blendSeconds` / 3) so a punch or a throw starts on time; taking it back waits until
 // the game has not wanted it for `holdSeconds`, then blends over `blendSeconds`. The output is eased
 // (smoothstep).
+//
+// The off hand's (updateOffHand, T-165) hands the arm over over the whole `blendSeconds`: eased over 0.15 s
+// a glove 0.4 m from the gun moves at 4 m/s at most, slower than a punch, where a third of it (0.05 s, 4 to
+// 5 frames at 90 Hz) is a jump of the glove. And a hand-over during which the hands were hidden throughout
+// (`handsHidden`: the game's left arm never drawn, as in a weapon mod switch's swap of the weapon) gives the
+// arm back to the controller at once, without the hold and the blend: nothing of the game's pose was seen
+// to blend from, so the glove shows on its controller again in the first frame the hands do.
 class ArmBlend {
 public:
     float update(bool controller, float dtSeconds, float blendSeconds, float holdSeconds);
+    float
+    updateOffHand(bool controller, bool handsHidden, float dtSeconds, float blendSeconds, float holdSeconds);
     [[nodiscard]] float weight() const;
     void reset();
 
 private:
-    float ramp_ = 0.0f;      // linear 0..1
-    float sinceGame_ = 1e9f; // seconds since the game last wanted the arm
+    float takeBack(float dt, float blendSeconds, float holdSeconds);
+
+    float ramp_ = 0.0f;       // linear 0..1
+    float sinceGame_ = 1e9f;  // seconds since the game last wanted the arm
+    bool handedOver_ = false; // updateOffHand: the game wanted the arm last tick
+    bool gameShown_ = true;   // updateOffHand: the hands were drawn at least once since then
 };
 
 } // namespace evr::input

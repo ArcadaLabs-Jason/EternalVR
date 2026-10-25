@@ -4,6 +4,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <map>
@@ -193,7 +194,7 @@ TEST_CASE("offhand settings: parsed with the controller settings") {
         {"ETERNALVR_OFFHAND", "both"}, {"ETERNALVR_OFFHAND_OFFSET", "x"}, {"ETERNALVR_OFFHAND_BLEND", "5"}};
     r = evr::input::parseControllerSettings(lookup);
     CHECK(r.issues.size() == 3);
-    CHECK(r.settings.offhand == OffhandMode::Game);
+    CHECK(r.settings.offhand == OffhandMode::Free); // the default
     CHECK(r.settings.offhandOffset == evr::input::kDefaultOffhandOffset);
     CHECK(r.settings.offhandBlendSeconds == doctest::Approx(0.15f));
     CHECK(std::string(evr::input::offhandModeName(OffhandMode::Probe)) == "probe");
@@ -232,6 +233,143 @@ TEST_CASE("offhand settings: the arm's wrist offset, shoulder and elbow") {
     CHECK(r.issues.size() == 2);
     CHECK(r.settings.offhandShoulder == ShoulderAnchor::Head);
     CHECK(r.settings.offhandElbow == evr::input::kDefaultOffhandElbow);
+}
+
+namespace {
+
+// The hands' signals of a weapon mod switch and a weapon switch as the layer read them on the rig
+// (ETERNALVR_OFFHAND_TRACE, the combat shotgun's mod switch and a switch to the Heavy Cannon, Steam build
+// 25216728), tick by tick.
+ArmSignals
+traced(std::int32_t pendingAction, std::int32_t state, std::uint64_t flags, std::int32_t fpDisabled = 0) {
+    ArmSignals s = idle();
+    s.pendingAction = pendingAction;
+    s.destHandsState = state;
+    s.handsFlags = flags;
+    s.fpHandsDisabled = fpDisabled;
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("off hand policy: a weapon mod switch and a weapon switch leave the off hand on its controller") {
+    using evr::input::decideOffHand;
+    using evr::input::decideWeaponArm;
+    using evr::input::WeaponArmMode;
+    // The mod switch's animation after the swap: the flag modChangeAnim (bit 47) for 1.3 s.
+    const ArmSignals modAnim = traced(0, 0, 0x0000A00090000080ull);
+    // The weapon switch: the BringDown action, then the flag changingWeapon (bit 29) with others.
+    const ArmSignals switches[] = {traced(10, 0, 0x0000200090000000ull), traced(0, 0, 0x00002000B0000000ull),
+                                   traced(0, 0, 0x00002000B8000010ull), traced(0, 0, 0x00002000F0000050ull),
+                                   traced(action(HandsAction::BringUp), 0, 0)};
+    CHECK(decideOffHand(modAnim, OffhandMode::Free).controller);
+    for (const ArmSignals& s : switches) {
+        CAPTURE(s.handsFlags);
+        CHECK(decideOffHand(s, OffhandMode::Free).controller);
+        // The weapon arm keeps the full rules: the gun moves in the switch.
+        CHECK_FALSE(decideWeaponArm(s, WeaponArmMode::Ik).controller);
+        CHECK_FALSE(decideArm(s, OffhandMode::Free).controller);
+    }
+    CHECK_FALSE(decideWeaponArm(modAnim, WeaponArmMode::Ik).controller);
+    // The mod switch's swap hides the hands (fp hands disabled, the hidden state, the generic hide and
+    // unhide): still the game's, whose hands are not drawn.
+    const ArmSignals hiddenTicks[] = {traced(24, 0, 0x0000200090000000ull, 2),
+                                      traced(0, 4, 0x0000A00010000000ull, 2),
+                                      traced(25, 4, 0x0000A00090000000ull)};
+    for (const ArmSignals& s : hiddenTicks) {
+        const auto d = decideOffHand(s, OffhandMode::Free);
+        CHECK_FALSE(d.controller);
+        CHECK(d.reason == ArmReason::HandsHidden);
+    }
+    // A switch flag with another left-arm animation still gives the arm to the game for that one.
+    ArmSignals punchDuringSwitch = traced(0, 0, hands_flag::kChangingWeapon | hands_flag::kMeleeAnim);
+    CHECK_FALSE(decideOffHand(punchDuringSwitch, OffhandMode::Free).controller);
+    // Game mode is the game's whatever happens.
+    CHECK_FALSE(decideOffHand(modAnim, OffhandMode::Game).controller);
+}
+
+TEST_CASE("off hand policy: the actions where the game's left arm is the action still take the off hand") {
+    using evr::input::decideOffHand;
+    const auto with = [](auto change) {
+        ArmSignals s = idle();
+        change(s);
+        return s;
+    };
+    const std::pair<ArmSignals, ArmReason> cases[] = {
+        {with([](ArmSignals& s) { s.forcedView = true; }), ArmReason::ForcedView},
+        {with([](ArmSignals& s) { s.syncActive = true; }), ArmReason::Sync},
+        {with([](ArmSignals& s) { s.fpHandsDisabled = 2; }), ArmReason::HandsHidden},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::MeleeLeft); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::Melee); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::ThrowItem); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = action(HandsAction::CustomAnim); }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.pendingAction = 28; }), ArmReason::Action},
+        {with([](ArmSignals& s) { s.handsFlags = hands_flag::kMeleeAnim; }), ArmReason::BusyFlags},
+        {with([](ArmSignals& s) { s.handsFlags = hands_flag::kThrowing; }), ArmReason::BusyFlags},
+        {with([](ArmSignals& s) { s.handsFlags = hands_flag::kCustomAnim; }), ArmReason::BusyFlags},
+        {with([](ArmSignals& s) { s.handsFlags = hands_flag::kReloading; }), ArmReason::BusyFlags},
+        {with([](ArmSignals& s) { s.destHandsState = evr::input::kHandsStateChainsawStab; }),
+         ArmReason::HandsState},
+        {with([](ArmSignals& s) { s.offHandTracked = false; }), ArmReason::Untracked},
+    };
+    for (const auto& [signals, reason] : cases) {
+        const auto d = decideOffHand(signals, OffhandMode::Free);
+        CHECK_FALSE(d.controller);
+        CHECK(d.reason == reason);
+    }
+    CHECK(decideOffHand(idle(), OffhandMode::Free).controller);
+}
+
+TEST_CASE("off hand blend: handed over over the whole blend, never in a few frames") {
+    ArmBlend b;
+    const float blend = 0.15f;
+    const float hold = 0.25f;
+    const float tick = 1.0f / 90.0f;
+    b.updateOffHand(true, false, 1.0f, blend, hold);
+    REQUIRE(b.updateOffHand(true, false, 1.0f, blend, hold) == doctest::Approx(1.0f));
+    // A melee: the arm goes to the game over 0.15 s. The largest step of the weight in one 90 Hz frame is the
+    // eased ramp's steepest, 1.5 x tick / blend: 0.11, so a glove 0.4 m from the gun moves 4.4 cm a frame.
+    float last = 1.0f;
+    float biggest = 0.0f;
+    int frames = 0;
+    while (last > 0.0f && frames < 100) {
+        const float w = b.updateOffHand(false, false, tick, blend, hold);
+        biggest = std::max(biggest, last - w);
+        last = w;
+        ++frames;
+    }
+    CHECK(frames >= 13);
+    CHECK(biggest <= doctest::Approx(1.5f * tick / blend).epsilon(0.02));
+    // Taken back after the hold, blended in.
+    CHECK(b.updateOffHand(true, false, 0.2f, blend, hold) == doctest::Approx(0.0f));
+    CHECK(b.updateOffHand(true, false, 0.1f, blend, hold) > 0.0f);
+}
+
+TEST_CASE("off hand blend: hands hidden throughout the hand-over give the arm back at once") {
+    ArmBlend b;
+    const float blend = 0.15f;
+    const float hold = 0.25f;
+    const float tick = 1.0f / 60.0f;
+    b.updateOffHand(true, false, 1.0f, blend, hold);
+    REQUIRE(b.updateOffHand(true, false, 1.0f, blend, hold) == doctest::Approx(1.0f));
+    // The mod switch's swap: 0.33 s of hidden hands, the weight down to 0 while nothing is drawn.
+    for (int i = 0; i < 20; ++i) {
+        b.updateOffHand(false, true, tick, blend, hold);
+    }
+    CHECK(b.weight() == doctest::Approx(0.0f));
+    // The hands are drawn again with the controller's arm: at full weight in that first frame.
+    CHECK(b.updateOffHand(true, false, tick, blend, hold) == doctest::Approx(1.0f));
+    // A hand-over in which the game's arm was drawn even once (a melee after the hands came back) keeps the
+    // hold and the blend.
+    b.updateOffHand(false, true, tick, blend, hold);
+    b.updateOffHand(false, false, tick, blend, hold);
+    for (int i = 0; i < 20; ++i) {
+        b.updateOffHand(false, true, tick, blend, hold);
+    }
+    CHECK(b.updateOffHand(true, false, tick, blend, hold) < 1.0f);
+    // After reset (new hands) the first hand-back is a shown one, as before.
+    b.reset();
+    CHECK(b.updateOffHand(true, false, tick, blend, hold) < 1.0f);
 }
 
 TEST_CASE("weapon arm policy: IK on an idle arm, the game's for every arm animation and in game mode") {

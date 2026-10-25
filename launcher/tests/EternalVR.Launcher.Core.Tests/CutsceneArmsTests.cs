@@ -26,11 +26,11 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.False(new LauncherSettings().CutsceneArms);
             Assert.Equal("hidden", Env(LaunchPlanBuilder.Build(Inputs()))["ETERNALVR_CUTSCENE_ARMS"]);
             Assert.Equal("shown", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { CutsceneArms = true })))["ETERNALVR_CUTSCENE_ARMS"]);
-            // Show arms off: the setting is still passed as it stands, and the layer ignores it under ETERNALVR_ARMS=hidden
+            // Show arms on Hidden: the setting is still passed as it stands, and the layer ignores it under ETERNALVR_ARMS=hidden
             // (the arms stay hidden in cutscenes, the weapon FOV as in play).
             foreach (var cutsceneArms in new[] { false, true })
             {
-                var env = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { ShowArms = false, CutsceneArms = cutsceneArms })));
+                var env = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Arms = ArmsView.Hidden, CutsceneArms = cutsceneArms })));
                 Assert.Equal("hidden", env["ETERNALVR_ARMS"]);
                 Assert.Equal(cutsceneArms ? "shown" : "hidden", env["ETERNALVR_CUTSCENE_ARMS"]);
             }
@@ -54,7 +54,9 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Null(SettingRules.WhyNot(Setting.CutsceneArms, immersive));
             Assert.Equal(SettingRules.NeedsImmersive, SettingRules.WhyNot(Setting.CutsceneArms, new LauncherSettings()));
             Assert.Equal(SettingRules.NeedsShownArms,
-                SettingRules.WhyNot(Setting.CutsceneArms, new LauncherSettings { Cutscenes = CutsceneView.Immersive, ShowArms = false }));
+                SettingRules.WhyNot(Setting.CutsceneArms, new LauncherSettings { Cutscenes = CutsceneView.Immersive, Arms = ArmsView.Hidden }));
+            // With hands only the game draws its arms whole in a cutscene, as with them shown, so the choice applies.
+            Assert.Null(SettingRules.WhyNot(Setting.CutsceneArms, new LauncherSettings { Cutscenes = CutsceneView.Immersive, Arms = ArmsView.HandsOnly }));
             Assert.Equal(SettingRules.NeedsControllers,
                 SettingRules.WhyNot(Setting.CutsceneArms, new LauncherSettings { Cutscenes = CutsceneView.Immersive, Controllers = false }));
             var text = SettingTexts.For(Setting.CutsceneArms);

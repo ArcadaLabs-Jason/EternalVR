@@ -20,6 +20,17 @@ void number(std::string& out, double value) {
     out += buffer;
 }
 
+void floats(std::string& out, const float* v, std::size_t n) {
+    out += '[';
+    for (std::size_t i = 0; i < n; ++i) {
+        if (i > 0) {
+            out += ',';
+        }
+        number(out, v[i]);
+    }
+    out += ']';
+}
+
 void vec(std::string& out, Vec3 v) {
     out += '[';
     number(out, v.x);
@@ -142,6 +153,24 @@ void armRecord(std::string& out, const DumpArm& arm) {
     out += ",\"root\":";
     if (arm.root) {
         pose(out, *arm.root);
+    } else {
+        out += "null";
+    }
+    out += ",\"zero\":";
+    out += std::to_string(arm.zeroScale);
+    out += ",\"fingers\":";
+    if (arm.fingers) {
+        out += "{\"curl\":";
+        floats(out, arm.fingers->curl.data(), arm.fingers->curl.size());
+        out += ",\"want\":";
+        floats(out, arm.fingers->want.data(), arm.fingers->want.size());
+        out += ",\"read\":";
+        if (arm.fingers->read) {
+            floats(out, arm.fingers->read->data(), arm.fingers->read->size());
+        } else {
+            out += "null";
+        }
+        out += '}';
     } else {
         out += "null";
     }

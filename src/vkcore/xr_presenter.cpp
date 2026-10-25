@@ -56,6 +56,7 @@ Settings readSettings() {
     if (readEnv(L"ETERNALVR_CUTSCENES", value) && _wcsicmp(value.c_str(), L"immersive") == 0) {
         s.cutsceneCinema = false;
     }
+    s.cutscene3D = envFlag(L"ETERNALVR_CUTSCENE_3D", true);
     s.cutsceneCutRebase = envFlag(L"ETERNALVR_CUTSCENE_CUT_REBASE", true);
     if (readEnv(L"ETERNALVR_GLORY_KILLS", value) && !value.empty()) {
         std::string narrow;

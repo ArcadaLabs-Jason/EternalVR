@@ -61,32 +61,27 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void TheArmGesturesAreOffUnlessTurnedOn()
+        public void TheSwingGestureIsOffUnlessTurnedOn()
         {
             var off = new LauncherSettings();
-            Assert.False(off.ThrowGesture);
             Assert.False(off.SwingGesture);
             var env = Env(LaunchPlanBuilder.Build(Inputs()));
-            Assert.Equal("0", env["ETERNALVR_THROW"]);
             Assert.Equal("0", env["ETERNALVR_SWING"]);
-            var on = new LauncherSettings { ThrowGesture = true, SwingGesture = true };
+            Assert.False(env.ContainsKey("ETERNALVR_THROW"));
+            var on = new LauncherSettings { SwingGesture = true };
             env = Env(LaunchPlanBuilder.Build(Inputs(on)));
-            Assert.Equal("1", env["ETERNALVR_THROW"]);
             Assert.Equal("1", env["ETERNALVR_SWING"]);
-            Assert.Contains("throw_gesture = 1", on.Serialize());
             Assert.Contains("swing_gesture = 1", on.Serialize());
-            var back = LauncherSettings.Parse(on.Serialize());
-            Assert.True(back.ThrowGesture);
-            Assert.True(back.SwingGesture);
-            Assert.False(LauncherSettings.Parse(off.Serialize()).ThrowGesture);
-            // A file without the keys (an older launcher's) or with a value that is not a clear yes keeps them off.
-            Assert.False(LauncherSettings.Parse("schema_version = 2\n").ThrowGesture);
-            Assert.False(LauncherSettings.Parse("schema_version = 2\nthrow_gesture = maybe\n").ThrowGesture);
+            Assert.True(LauncherSettings.Parse(on.Serialize()).SwingGesture);
+            Assert.False(LauncherSettings.Parse(off.Serialize()).SwingGesture);
+            // A file without the key (an older launcher's) or with a value that is not a clear yes keeps it off.
+            Assert.False(LauncherSettings.Parse("schema_version = 2\n").SwingGesture);
+            Assert.False(LauncherSettings.Parse("schema_version = 2\nswing_gesture = maybe\n").SwingGesture);
             Assert.True(LauncherSettings.Parse("schema_version = 2\nswing_gesture = On\n").SwingGesture);
-            Assert.Empty(LauncherSettings.Parse("schema_version = 2\nthrow_gesture = 1\nswing_gesture = 0\n").UnknownKeys);
-            // Reset to defaults turns them off; without controllers they do not apply.
-            Assert.False(on.WithDefaults().ThrowGesture);
-            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.ThrowGesture, new LauncherSettings { Controllers = false }));
+            Assert.Empty(LauncherSettings.Parse("schema_version = 2\nswing_gesture = 0\n").UnknownKeys);
+            // Reset to defaults turns it off; without controllers it does not apply.
+            Assert.False(on.WithDefaults().SwingGesture);
+            Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(Setting.SwingGesture, new LauncherSettings { Controllers = false }));
             Assert.Null(SettingRules.WhyNot(Setting.SwingGesture, on));
         }
 

@@ -525,6 +525,88 @@ render. The design, the expected saving and the rig recipe are in `docs/rig-find
   (`stereo_seq::AdaptiveEyes`). The way changes only at a pair's eye L and nothing resets. Log: `seq: adaptive
   eyes: ...` at every switch and every 10 s (the design doc, section 10).
 
+## Stereoscopic cutscenes (`ETERNALVR_CUTSCENE_3D`, on by default)
+
+The launcher's "Stereoscopic cutscenes" (Advanced tab, on by default since the owner's headset test of 2026-10-24,
+DECISIONS T-164; `ETERNALVR_CUTSCENE_3D=0` or the checkbox off gives the flat screen as before): a cutscene shown on the flat screen (`ETERNALVR_CUTSCENES`
+cinema, the default) is rendered as the two eyes of the game's cutscene camera and shown as a stereo pair on the
+screen, like a 3D movie. The code is `src/xr_math/cinema_eyes.*` (the eye math, unit-tested),
+`src/vkcore/presenter_cinema3d.*` (the camera hook's pair record and the two screen quads) and a few lines in
+`presenter_head.cpp`, `presenter_frame.cpp`, `presenter_stereo.cpp` and `presenter_seq.cpp`.
+
+- Applies with Route S stereo and the UI layer (on by default) only: not with Parallel Eye Rendering or alternate eyes (the eyes must come from one
+  game frame; `ETERNALVR_ALTERNATE_EYES` off), not for a glory kill on the screen, not in the around-you cutscene view
+  (already two real eyes there). Anything else leaves the cutscene as it was: one render, the same image in both eyes.
+- Camera hook (`cinema3dGameView`): instead of returning at the flat screen, the hook records a `ViewRecord` with
+  `stereo`, `cinema3D`, `cutscene` and `cutsceneArms` (the game's weapon FOV and matrices stay) set, the game's view axis
+  unchanged for both eyes, and per eye an offset along the camera's left axis and an off-axis FOV. The game's view,
+  head pose and body are not touched. The per-eye hook (`onSeqEyeView` / `writeEyePose`) renders both eyes from that
+  record, as for a head-tracked frame; the engine's `vieworg` handling in cutscenes (`render_view::moveViewOrigin`)
+  is what makes the offsets take effect there.
+- Eye math (`xr_math::cinemaStereo`): parallel cameras `b` apart, each frustum shifted so that infinity lands 1% of the
+  screen width behind the screen (2.4 cm on the 2.4 m screen, 0.55 degrees at 2.5 m, under any eye separation). The
+  screen disparity of a point `Z` metres ahead, as a fraction of the screen width (negative: in front of the screen), is
+  `0.01 - b / (2 tan(fovX / 2) Z)`; the plane at zero disparity is `b / (2 tan(fovX / 2) * 0.01)` away. `b` is the
+  player's eye distance (`ETERNALVR_IPD`, else 63 mm), lowered by the comfort clamp below.
+- Comfort clamp: `b` is lowered so that the nearest thing a shot is assumed to show stays within 1.2 degrees of crossed
+  disparity on the screen (2.18% of its width). The assumption is a face in a close-up, 0.7 m from the camera, whatever
+  the lens (`kCinemaNearestMetres`): the largest `b` is then `2 tan(fovX / 2) * 0.7 * 0.0318`, proportional to the
+  lens's half-width (44 mm at the 90 degree view of a 16:9 cutscene, 27 mm at 63, 14 mm at 34), and the zero-parallax
+  plane is 2.2 m away in every shot, so a given depth has the same disparity in each. (A first model took the nearest
+  distance from the lens, a subject of one size filling the frame; the opening cutscene's captures had 34 degree
+  lenses at 0.7 to 1 m, so it was dropped.)
+- Traces: every game frame the camera hook traces 15 rays (5 columns by 3 rows over the screen's view,
+  `cinemaRayFan`) 6 m through the world with the collision query the aim dot uses (`sweepShot`), and the nearest hit,
+  never nearer than 0.25 m, replaces the 0.7 m when nearer. The limit falls at once and rises over 0.6 s
+  (`cinemaSmoothLimit`); a camera cut or a run's first frame takes the new one at once. 57 microseconds a frame on
+  average, 2.8 ms at most (rig). The collision world holds the rooms and props, not the cutscene's actors: in the opening
+  cutscene a rig capture pair with the Slayer's shoulder or helmet 0.2 to 0.3 m from the lens was traced at 1.8 to 2.8 m
+  or nothing, and its nearest disparity measured 3 to 7 times the limit. 9 of the 46 capture pairs of that cutscene that
+  had a nearest disparity to measure (patch matching, `-0.0218 * width` the limit) were past the limit, all of them shots
+  with an actor or a prop at the lens; the rest were inside it. Closing that needs the distance to what is drawn (the depth
+  buffer, or the disparity of the eye pair itself), which is not done. The log's `cinema3D:` lines give the lens, the
+  separation used and wanted, the zero-parallax distance, the traced and assumed nearest distance and the disparity
+  there, at the start of each cutscene, on each camera cut and when the lens changes, and for every 240th game frame
+  (the same frame number as an `ETERNALVR_CAPTURE_EYES` capture).
+- A hit nearer than 0.4 m lowers the limit only once it is seen on two frames in a row (`CinemaNearConfirm`; a cut or a
+  run's first frame takes it at once), so a ray flickering through a thin object does not pop the depth. A view that
+  renders from `viewOriginOffset` plus `localViewOrigin` logs both beside `vieworg`, where the traces start.
+- Runs: a pair frame more than half a second after the last one starts a new run (history reset, the limit starts
+  afresh), so a cutscene that follows a skipped one or a level load without a head-tracked frame in between does not
+  continue the old one (`xr_math::CinemaRun`, unit-tested).
+- Per-eye record: under a pair, eye L's record is found by view axis and the view's FOV (a still shot repeats the axis
+  while its lens ramps); eye R renders from the record eye L's tick used.
+- Camera cuts and the cutscene's start and end: the frame carries `historyReset` (the game's `cameraCut` byte, a run's first
+  frame, and the first frames of the player's view after a run, three frames each); the per-eye hook sets
+  `kDisableTssaaNextFewFrames` on both eyes and resets DLSS for that frame (`writeTaaEye`), so neither eye reads history
+  across the cut.
+- Showing it (`cinemaEyeLayers`, `screenLayers`): `shownHasView` stays false for these frames, so the XR frame loop takes the flat screen
+  branch; when the pair is complete (`showEyes`) and no menu is up, the screen is two quads at the same pose and size
+  with the same band crop, `eyeVisibility` LEFT showing the left half of the ring and RIGHT the right half. A menu over
+  the cutscene, or a frame without both eyes, shows the one both-eyes quad with the left half, as before. Eye R's
+  render has no GUI (`docs/rig-findings/ui-layer.md`, section 3), so subtitles in the eye images would reach one eye
+  only: for a pair the GUI is left out of both eye images (`ui_engine::setSkipComposite`) and shown on the UI layer's own
+  GUI image as a third quad over the screen, both eyes, at the screen's pose and width (the 16:9 band the game lays its
+  GUI out in), so it sits at the screen plane. The pair needs a working UI layer with the composite skip (it is not
+  rendered with the layer off, `ETERNALVR_UI_SKIP_COMPOSITE` off, or after the layer's GUI images or swapchain failed).
+  A pair frame stays on its two eye quads while the GUI image is fresh or was within the last second, so the picture
+  does not flip between 3D and flat as subtitles come and go; while the GUI image is stale the GUI quad is left out and
+  the GUI stays out of the eye images. With no GUI image for longer than that (or none at all) the game composites its
+  GUI into eye L's image again and the frame goes on the one mono quad, eye L's half, so subtitles are never in one
+  eye only (`xr_math::cinemaLayerPlan`, `kCinemaGuiHoldSeconds`). The log's run-end line counts the pair frames shown
+  without a fresh GUI image and those shown on the mono quad.
+  Not rig-checked on a compositor: the OpenXR core defines `eyeVisibility` on quads, and Virtual Desktop / SteamVR
+  have not been tried here.
+- Foveated rendering builds its rate images from the headset's eye shapes, which are not the cinema view's, so the
+  frames of a pair run render at full rate (`cinema3dFrame`, `vrs_pass_eye.cpp`): the cutscene looks as it does without
+  foveation and costs the full GPU time.
+- Cost: about twice the GPU time while a cutscene plays (two renders). In the owner's session on the project's RTX
+  3080 Ti (2026-10-24, 90 Hz, the session's frames file): 88.8 fps on average over 65 s of stereo cutscene, the worst
+  2.7 s window 83 fps.
+- Logs: `cinema3D: pair run started / camera cut / lens or separation changed: ...`, `cinema3D: the first stereo cutscene
+  frame is on two screen quads`, `cinema3D: pair run ended (...)` with the frame, cut and clamp counts. The `seq:` pair line
+  counts the cutscene's pairs as complete pairs (0 mono once the eye tags are in step).
+
 ## Parallel Eye Rendering (`ETERNALVR_PARALLEL_EYES=1`, off by default, experimental)
 
 Instead of Route S's two renders per tick (eye L's, then eye R's nested in its frame end), the engine renders
@@ -1335,6 +1417,7 @@ axis).
 | `ETERNALVR_STEREO_VIS_GATE` | 1 | models one eye sees are drawn: the first-visible gate takes either eye's last render for models; particles, flares, beams and ribbons keep the engine's test (`docs/rig-findings/stereo-visibility-counter.md`); 0: the engine's own test, so a pickup in one eye's outer strip only is not drawn |
 | `ETERNALVR_FLARES_PER_EYE` | 1 | lens flares built again from each eye's own view after its latch (How Route S works, Lens flares); 0: the engine's quads from the head-centred view, at the same place in both eyes (farther than infinity) |
 | `ETERNALVR_PE_FLARES` | 1 | under Parallel Eye Rendering, each view's lens flares from its own eye, with its own occlusion queries (Parallel Eye Rendering, Lens flares per view); 0: flares off there (`r_skipFlares 1`), as before |
+| `ETERNALVR_CUTSCENE_3D` | 1 | 1 (default): a cutscene on the flat screen is rendered as two eyes of the game's camera and shown as a stereo pair (section "Stereoscopic cutscenes"); route S only |
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
 | `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced`, `aggressive` or `maximum` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within the region of 30, 24, 18 or 12 degrees around head-forward in each eye, half rate out to 56 degrees from head-forward for every preset, quarter rate outside (`src/vkcore/vrs_nv.cpp`; T-147). Up to 0.1.81 the half-rate region ended 16 degrees past the full-rate one (12 for `maximum`), so the quarter rate started at 24 to 46 degrees and covered the whole bottom and the temporal edge of a Quest 3 eye, where shiny floors showed 4x4 blocks with DLSS; 56 degrees is past those edges (54.3 and 54 degrees), so only the image corners reach quarter rate. A region is the cone of its angle around head-forward (the head's forward, also with canted displays): a rate texel is in it when the view ray of one of its pixels, through that eye's own projection, is within the angle, so a direction in the scene gets the same rate in both eyes (`src/features/foveation/foveation_region.cpp`, T-128). On an asymmetric eye FOV the cone sits off the image's centre, toward the nose and the top, and the image ends sooner there: on Quest 3 (eye L -54/40/44/-54.3 degrees) Balanced's 24 degree full-rate region sits toward eye L's nasal edge, so its reduced-rate band is on the temporal side and at the top and bottom. Up to 0.1.47 each region reached the same fraction of the way to every edge of its own eye's image instead; on that FOV eye L's full-rate region reached about 28 degrees to the left and eye R's about 18, and the eyes shaded the same surface at different rates (dam decals on Reclaimed Earth sharper in eye L). The share of the eye image at each rate is about the same as before (Balanced on the rig's 1188x1281 DLSS render size: 12.9% full, 31.2% half, 55.9% quarter, against 12.9/31.4/55.7; on canted displays about 1% to 3% more is shaded at full or half rate); `vrs: eye N, WxH: ...` logs each target's shares. Each eye's shape (its FOV and its orientation in the head) comes from stereo frames whose eyes pass the plausibility checks, the FOV check of `docs/VR_HEAD_TRACKED.md` among them (`ETERNALVR_FOV_CHECK`); a different shape that holds for 90 frames in a row replaces it and the rate images are made again, at most 8 times in a process (`src/features/foveation/eye_shape_latch.cpp`; `vrs: eye N's shape changed: ...`). Each render pass gets the pattern of the eye of the backend frame it is recorded for, and only where that frame is sure: the backend counter at the pass equals the counter the render-view job read for its render. Every other pass stays full rate. What its command buffer's recording since its `vkBeginCommandBuffer` or its parity (once two recordings in a row agreed two frames apart) would guess is counted, with the recordings a later agreement contradicts and the parity breaks, but not used: those guesses can name the other eye's frame (`src/stereo_seq/pass_frames.hpp`, `src/vkcore/vrs_command_buffers.cpp`; `vrs: render pass frames: ...` every 200,000 passes; on the rig every pass in the map agreed). A pass's eye so comes only from a frame its two counters agree on; with `ETERNALVR_TEST_VRS_PARITY=1` (a rig test) the guesses are used too. On a GPU without `VK_NV_shading_rate_image` (AMD RDNA 2 and later, Intel Arc) the same passes get the same patterns through `VK_KHR_fragment_shading_rate`'s shading rate attachment (`src/vkcore/vrs_khr.cpp`, T-137; rig-checked on an RTX 3080 Ti with `ETERNALVR_TEST_VRS_KHR=1`, not yet on an AMD or Intel GPU); a card with neither logs it and renders normally. Off with Parallel Eye Rendering (one line; "Parallel Eye Rendering", Known limits). Only render targets in the eye's space are foveated: the eye image and any copy of it scaled by one factor down to 1/8 (DLSS's smaller render size, the half size buffers; `src/features/foveation/eye_targets.cpp`); shadow maps and other targets stay full rate. Mono frames (the cinema screen, menus) stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`); without the UI layer they are foveated like the eye image. A map loaded again (the game's Load Checkpoint, chosen from the pause menu) keeps each eye's pattern: the rate images are not made again (same sizes, same eye shapes) and each pass still takes its eye from its own frame; the rig QA's `foveation-eyes-reload` scenario measures the eye test before and after one. On the rig (2026-10-21, RTX 3080 Ti, Balanced and the eye test, per-eye TAA and DLSS Balanced, three loads of the same map each, a fixed head) each eye measured the same in every stretch as before the first load, within the spread between captures, and a player's headset captures before and after a Load Checkpoint (DLSS Balanced) show 4x4 blocks at both eyes' outer edges and at the bottom and none at the centre in every pair |
 | `ETERNALVR_TEST_DLSS_TWIN_FAIL` | unset | test knob: a count from 1 to 100; eye R's first tries at its own DLSS feature fail without a create (result 0xBAD00000), to exercise the fallback to TAA, the tries after it and the menu's try (`docs/rig-findings/stereo-temporal.md`, Fail closed) |

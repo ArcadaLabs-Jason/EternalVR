@@ -7,6 +7,7 @@
 #include "features/input/game_input.hpp"
 #include "features/input/input_summary.hpp"
 #include "vkcore/controllers_impl.hpp"
+#include "vkcore/controllers_input_logs.hpp"
 #include "vkcore/log.hpp"
 
 #include <algorithm>

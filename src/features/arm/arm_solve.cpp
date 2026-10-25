@@ -64,13 +64,14 @@ solveArm(const ArmPoses& animated, const ArmTargets& targets, const TwistLimits&
     ArmSolution out;
     out.upper = length(elbowA - shoulderA);
     out.lower = length(wristA - elbowA);
-    const auto ik =
-        solveTwoBone({targets.shoulder, targets.hand.position, out.upper, out.lower, targets.pole});
+    const Vec3 shoulder = targets.reachAlways
+                              ? rootWithinReach(targets.shoulder, targets.hand.position, out.upper, out.lower)
+                              : targets.shoulder;
+    const auto ik = solveTwoBone({shoulder, targets.hand.position, out.upper, out.lower, targets.pole});
     if (!ik) {
         return std::nullopt;
     }
     out.ik = *ik;
-    const Vec3 shoulder = targets.shoulder;
     const Vec3 elbow = ik->joint;
     const Vec3 wrist = ik->end;
 
@@ -166,6 +167,18 @@ std::optional<ArmSolution> solveArmToWrist(
     at(out->joints, ArmJoint::Hand) = hand;
     at(out->joints, ArmJoint::Attach) = at(animated, ArmJoint::Attach);
     return out;
+}
+
+ArmTargets handsOnlyTargets(ArmTargets targets) {
+    targets.reachAlways = true;
+    return targets;
+}
+
+ReachLimits reachLimits(bool handsOnly, float wristMove, float maxReach, float maxAttach) {
+    if (!handsOnly || !std::isfinite(wristMove) || wristMove <= maxReach) {
+        return {maxReach, maxAttach};
+    }
+    return {wristMove, maxAttach + (wristMove - maxReach)};
 }
 
 HandsOnlyArm handsOnly(const ArmPoses& joints, Cuff cuff) {

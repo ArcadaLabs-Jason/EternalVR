@@ -24,6 +24,7 @@
 
 #include "features/input/controller_state.hpp"
 #include "features/input/rest_wheel_output.hpp"
+#include "features/input/rumble_route.hpp"
 
 #include <array>
 #include <cstddef>
@@ -73,6 +74,8 @@ struct HapticsFrame {
     bool capture = false;             // the capture chord fired since the last frame
     std::array<MenuTick, 2> menu{};   // per hand
     std::array<WheelTick, 2> wheel{}; // per hand
+    std::array<bool, 2> melee{};      // per hand: a melee press this frame (the punch or the button)
+    bool shoulder = false;            // the equipment launcher or the Flame Belch went down this frame
     GameRumble rumble;
 };
 
@@ -92,7 +95,9 @@ struct HapticCommand {
 class HapticsPolicy {
 public:
     // A strength that is not finite or not in [0, 1] falls back to kDefaultHapticStrength.
-    explicit HapticsPolicy(float strength = kDefaultHapticStrength);
+    // `routeRumble`: the game's rumble goes to the hand that caused it (rumble_route.hpp) instead of the low
+    // motor to both hands and the high one to the weapon hand.
+    explicit HapticsPolicy(float strength = kDefaultHapticStrength, bool routeRumble = false);
 
     // One command per hand (indexed by Hand).
     std::array<HapticCommand, 2> update(const HapticsFrame& frame);
@@ -101,6 +106,9 @@ public:
     void reset();
 
     [[nodiscard]] float strength() const { return strength_; }
+    [[nodiscard]] bool routesRumble() const { return routeRumble_; }
+    // The cause chosen for a rumble that started since the last call, for the log.
+    std::optional<RumbleCause> takeRoutedCause();
 
 private:
     struct Playing {
@@ -121,6 +129,9 @@ private:
     decide(HandHaptics& hand, std::optional<HapticCommand> best, bool rumbleEnded, double now);
 
     float strength_;
+    bool routeRumble_;
+    RumbleRouter router_;
+    std::optional<RumbleCause> routedCause_;
     std::array<HandHaptics, 2> hands_;
     bool fireWasHeld_ = false;
     double nextFire_ = 0.0;

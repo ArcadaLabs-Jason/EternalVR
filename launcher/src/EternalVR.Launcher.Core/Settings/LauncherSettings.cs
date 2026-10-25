@@ -67,12 +67,16 @@ namespace EternalVR.Launcher.Core.Settings
     /// recenter_hold) are optional in schema 2: a file without them takes the defaults, and an older launcher
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
-    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
-    /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, throw_gesture, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
+    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, cutscene_3d, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
+    /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, roll_wrist, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
     /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, preset, profile_unsaved, profile_check and adapter_steer
     /// (dlss_version replaced dlss_dll, which is still read once). skip_cutscenes (off by default) replaced skip_cinematics, which
     /// was on by default and written into every file: an old skip_cinematics line is not read, so the skip starts off once
-    /// for everyone, and it is dropped on the next save.
+    /// for everyone, and it is dropped on the next save. Keys of settings the launcher no longer has are not read and are dropped
+    /// on the next save the same way: throw_gesture (the throw gesture, removed), holsters, holster_shoulder, holster_other and
+    /// holster_hip (removed), reach_use and rumble_route (developer switches, the layer's variables alone), new_arms (the arms
+    /// the layer poses are always the new ones, so an old new_arms = 0 keeps nobody on the old arms) and wrist_flick (Roll
+    /// wrist's roll_wrist, on by default, replaced it).
     /// Keys this launcher does not know (a newer launcher's optional ones) are kept and written back as they were.
     /// A schema 1 file keeps its paths, runtime, world
     /// scale and argument choices and takes the new defaults for the rest (stereo, controllers on,
@@ -177,8 +181,6 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The comfort vignette while the stick moves or turns you; off by default.</summary>
         public VignetteMode Vignette { get; set; } = VignetteMode.Off;
         public Handedness Hand { get; set; } = Handedness.Right;
-        /// <summary>The first-person arms drawn (default) or hidden, the weapon alone (the layer's <c>ETERNALVR_ARMS</c>).</summary>
-        public bool ShowArms { get; set; } = true;
         public DossierPress Dossier { get; set; } = DossierPress.Hold;
         /// <summary>What points at the weapon wheel: the stick (default) or the weapon hand.</summary>
         public WheelSelect Wheel { get; set; } = WheelSelect.Stick;
@@ -206,6 +208,8 @@ namespace EternalVR.Launcher.Core.Settings
         public CutsceneView Cutscenes { get; set; } = CutsceneView.Cinema;
         /// <summary>The first-person arms in cutscenes around you: hidden (default) or drawn as the game has them (the layer's <c>ETERNALVR_CUTSCENE_ARMS</c>).</summary>
         public bool CutsceneArms { get; set; } = false;
+        /// <summary>Stereoscopic cutscenes on the flat screen: two cameras a little apart, shown as a pair (the layer's <c>ETERNALVR_CUTSCENE_3D</c>); on by default.</summary>
+        public bool Cutscene3D { get; set; } = true;
         /// <summary>The cutscene screen's shape (<see cref="MirrorSettings"/>).</summary>
         public CinemaShape Cinema { get; set; } = CinemaShape.Wide16x9;
         /// <summary>The desktop mirror's display: <c>auto</c>, <c>primary</c> or a desktop point <c>x,y</c> (<see cref="MirrorSettings"/>).</summary>
@@ -239,16 +243,6 @@ namespace EternalVR.Launcher.Core.Settings
         {
             GameDir = GameDir, LayerDir = LayerDir, Runtime = Runtime, UnknownKeys = UnknownKeys, Profile = Profile, DlssDllPath = DlssDllPath, Preset = Preset,
             AdapterSteer = AdapterSteer,
-        };
-
-        private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "schema_version", "game_dir", "layer_dir", "runtime", "world_scale", "mode", "controllers", "aim", "revenant_aim", "melee_aim", "equipment_aim", "render_size",
-            "render_scale", "eye_size", "skip_cinematics", "skip_cutscenes", "posture", "height", "ipd_mm", "recenter_hold", "turn", "snap_degrees",
-            "turn_rate", "handedness", "show_arms", "locomotion", "aim_dot", "anti_aliasing", "dlss_quality", "dlss_dll", "dlss_version", "dlss_dll_path", "dlss_preset", "sharpening", "screen_reflections", "resolution_base", "cpu_saver", "body_follow", "head_fade", "aim_smoothing", "hud_distance",
-            "hud_width", "hud_height", "mirror", "cutscene_view", "cutscene_arms", "shot_origin", "aim_dot_size", "menu_beam", "dossier", "map_sticks", "wheel_select", "thumb_rest_wheel", "thumb_rest_pick", "thumb_rest_face_touch", "thumb_rest_slowdown", "weapon_directions", "throw_gesture", "swing_gesture", "hands_jump", "mirror_display",
-            "mirror_size", "mirror_crop", "cinema_aspect", "hud", "vibration", "bhaptics", "bhaptics_intensity", "vignette", "glory_kills", "alternate_eyes", "parallel_eyes", "foveation", "pace", "frame_pacing", "extra_args", "profile",
-            "punch_speed", "hold_time", "preset", "profile_unsaved", "profile_check", "adapter_steer",
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -347,7 +341,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("vignette", out var vg)) s.Vignette = Pick(vg, VignetteMode.Off, ("light", VignetteMode.Light), ("strong", VignetteMode.Strong));
             if (map.TryGetValue("glory_kills", out var gk)) s.GloryKills = ParseGloryKills(gk);
             if (map.TryGetValue("handedness", out var hd)) s.Hand = Pick(hd, Handedness.Right, ("left", Handedness.Left), ("left_mirror", Handedness.LeftMirrored));
-            if (map.TryGetValue("show_arms", out var sa)) s.ShowArms = !(sa == "0" || string.Equals(sa, "false", StringComparison.OrdinalIgnoreCase));
+            if (map.TryGetValue("show_arms", out var sa)) s.Arms = ParseArms(sa);
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
             s.ReadLocomotion(map);
             if (map.TryGetValue("dossier", out var dp)) s.Dossier = Pick(dp, DossierPress.Hold, ("tap", DossierPress.Tap));
@@ -376,6 +370,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("mirror", out var mi)) s.Mirror = Pick(mi, MirrorMode.Left, ("right", MirrorMode.Right), ("off", MirrorMode.Off));
             if (map.TryGetValue("cutscene_view", out var cv)) s.Cutscenes = Pick(cv, CutsceneView.Cinema, ("immersive", CutsceneView.Immersive));
             if (map.TryGetValue("cutscene_arms", out var cuta)) s.CutsceneArms = On(cuta);
+            if (map.TryGetValue("cutscene_3d", out var cut3)) s.Cutscene3D = On(cut3);
             if (map.TryGetValue("shot_origin", out var so)) s.Shots = Pick(so, ShotOrigin.Hand, ("eye", ShotOrigin.Eye));
             if (map.TryGetValue("aim_dot_size", out var ds)) s.AimDotSize = Number(ds, MinAimDotSize, MaxAimDotSize, DefaultAimDotSize);
             if (map.TryGetValue("menu_beam", out var mb)) s.MenuBeam = Flag(mb);
@@ -437,7 +432,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("vignette = " + VignetteName(Vignette));
             sb.AppendLine("glory_kills = " + GloryKillName(GloryKills));
             sb.AppendLine("handedness = " + HandednessName(Hand));
-            sb.AppendLine("show_arms = " + (ShowArms ? "1" : "0"));
+            sb.AppendLine("show_arms = " + ArmsFileValue(Arms));
             WriteLocomotion(sb);
             sb.AppendLine("dossier = " + DossierName(Dossier));
             WriteMapSticks(sb);
@@ -463,6 +458,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("mirror = " + MirrorName(Mirror));
             sb.AppendLine("cutscene_view = " + CutsceneName(Cutscenes));
             sb.AppendLine("cutscene_arms = " + (CutsceneArms ? "1" : "0"));
+            sb.AppendLine("cutscene_3d = " + (Cutscene3D ? "1" : "0"));
             sb.AppendLine("shot_origin = " + ShotOriginName(Shots));
             sb.AppendLine("aim_dot_size = " + Metres(Clamp(AimDotSize, MinAimDotSize, MaxAimDotSize, DefaultAimDotSize)));
             sb.AppendLine("menu_beam = " + (MenuBeam ? "1" : "0"));

@@ -11,6 +11,7 @@ game::GameActionSet actionsOf(AimedAction action) {
     game::GameActionSet set;
     if (action == AimedAction::Melee) {
         game::add(set, game::GameAction::Melee);
+        game::add(set, game::GameAction::Use); // the game's use button, alone or inside melee
     } else if (action == AimedAction::Equipment) {
         game::add(set, game::GameAction::Equipment);
         game::add(set, game::GameAction::FlameBelch);
@@ -72,7 +73,9 @@ ActionAimOutput ActionAim::update(const ActionAimInput& input) {
     out.actions = input.actions;
     const game::GameActionSet pressed = input.actions & ~previous_;
     previous_ = input.actions;
-    const bool punch = input.meleeFromPunch && game::contains(pressed, game::GameAction::Melee);
+    const bool meleePressed =
+        game::contains(pressed, game::GameAction::Melee) || game::contains(pressed, game::GameAction::Use);
+    const bool punch = input.meleeFromPunch && meleePressed;
     if (!settings_.any() && !punch && target_ == ActionAimSource::Same && heldBack_.none()) {
         out.generation = generation_;
         return out;
@@ -84,7 +87,7 @@ ActionAimOutput ActionAim::update(const ActionAimInput& input) {
     if ((pressed & actionsOf(AimedAction::Equipment)).any()) {
         pressedAction = AimedAction::Equipment;
     }
-    if (game::contains(pressed, game::GameAction::Melee)) {
+    if (meleePressed) {
         pressedAction = AimedAction::Melee;
         meleeSource_ = punch ? ActionAimSource::Head : settings_.melee;
     }

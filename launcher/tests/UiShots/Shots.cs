@@ -191,7 +191,7 @@ namespace EternalVR.Launcher.UiShots
             var riley = ctx.Settings.Clone();
             riley.Turn = TurnMode.Snap;
             riley.Vignette = VignetteMode.Light;
-            riley.ShowArms = false;
+            riley.Arms = ArmsView.Hidden;
             riley.Hud = HudMode.Wrist;
             riley.WorldScale = 1.1;
             new ProfileStore(ctx.Paths.Profiles).Save("Riley", riley);

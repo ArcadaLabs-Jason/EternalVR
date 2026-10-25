@@ -7,7 +7,7 @@
 // The line, keys in this order (numbers with 5 decimals; `null` for what is not known at that moment):
 //   t       seconds, QueryPerformanceCounter over its frequency (the clock PowerShell's Stopwatch reads)
 //   upm     game units per metre; scale: the arms animator's model scale (x y z)
-//   fault   the planted fault in force: "none" or "twist" (ETERNALVR_TEST_ARM_FAULT)
+//   fault   the planted fault in force: "none", "twist" or "forearm" (ETERNALVR_TEST_ARM_FAULT)
 //   input   {"L": hand, "R": hand}, the scripted input as the layer read it: {"yaw", "pitch", "roll"
 //           (degrees), "pos" [x y z] (metres from the head, LOCAL; null for the side's rest position)}, or
 //           null for a hand the file gives no aim
@@ -17,11 +17,15 @@
 //           "final" (the poses the layer wrote this tick), "read" (the poses GetJointTransforms gave this
 //           tick, the blend's result of the last frame), "animated" (the game's own pose the solve
 //           started from), "target" (the wrist pose wanted; null for the weapon arm, whose wrist stays the
-//           game's), "root" (the skeleton's root joint as read: overrides are placed from it)}. A pose set is
-//           an object of the eight joints by role: attach, hand, roll3, roll2, roll1, forearmroll, forearm
-//           (the elbow), upperarm (the shoulder); a pose is 12 numbers: position x y z, then the axis rows
-//           forward, left, up. Model space of the arms model, game units. Joint poses are null while the game
-//           poses the arm.
+//           game's), "root" (the skeleton's root joint as read: overrides are placed from it), "zero" (the
+//           joints written scaled to nothing, hands only: bit n for the n-th role below, 0 for none),
+//           "fingers" (the free off hand's hand poses, features/arm/hand_pose.hpp: {"curl" [thumb, index,
+//           middle, ring, little] 0..1, "want" [15] each finger bone's turn in its parent's frame as written,
+//           degrees, in kFingerMods order, "read" [15] the same as GetJointTransforms gave it this tick, or
+//           null}; null while the arm's fingers are not posed)}. A pose set is an object of the eight joints
+//           by role: attach, hand, roll3, roll2, roll1, forearmroll, forearm (the elbow), upperarm (the
+//           shoulder); a pose is 12 numbers: position x y z, then the axis rows forward, left, up. Model
+//           space of the arms model, game units. Joint poses are null while the game poses the arm.
 //   model   the arms model's placement: {"eye" [x y z] world, "offset" [x y z] from the eye, "axis" [9]};
 //           world = eye + offset + axis rows times the model-space position
 //   head    the rendered head's axis rows [9] (world), for mirroring in its yaw frame
@@ -41,6 +45,7 @@
 #include "xr_math/weapon_pose.hpp"
 
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -51,6 +56,13 @@ struct DumpHandInput {
     float pitchDegrees = 0.0f;
     float rollDegrees = 0.0f;
     std::optional<Vec3> position; // metres from the head, LOCAL
+};
+
+// The free off hand's fingers ("fingers"): the curls, and each finger bone's turn written and read (degrees).
+struct DumpFingers {
+    std::array<float, 5> curl{};
+    std::array<float, 15> want{};
+    std::optional<std::array<float, 15>> read;
 };
 
 struct DumpArm {
@@ -64,6 +76,8 @@ struct DumpArm {
     std::optional<ArmPoses> animated;   // "animated"
     std::optional<xr_math::ModelPose> target;
     std::optional<xr_math::ModelPose> root; // the skeleton's root (joint 0) as read with the poses
+    std::uint32_t zeroScale = 0; // "zero": the joints written scaled to nothing (bit n: ArmJoint n)
+    std::optional<DumpFingers> fingers;
 };
 
 struct ArmDumpRecord {

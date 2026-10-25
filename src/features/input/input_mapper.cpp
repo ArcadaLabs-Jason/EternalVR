@@ -49,9 +49,9 @@ MapperSettings sanitized(MapperSettings settings, const BindingProfile& profile)
     // would jump from nothing to a sizeable fraction of full speed the moment the claim is made.
     settings.turn.smoothResponse = startingFrom(settings.turn.smoothResponse, settings.turnStick.turnClaim);
     settings.punch = PunchDetector(settings.punch).settings();
-    const ArmGestures arms(settings.throwGesture, settings.swing);
-    settings.throwGesture = arms.throwSettings();
-    settings.swing = arms.swingSettings();
+    settings.swing = ArmGestures(settings.swing).swingSettings();
+    settings.reach = ReachUse(settings.reach).settings();
+    settings.flick = WristFlick(settings.flick).settings();
     // One rest, one job: a rest of the wheel's bound like a button is not the wheel's.
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         if (bindsWheelRest(profile, settings, hand)) {
@@ -136,8 +136,8 @@ bool bindsWheelRest(const BindingProfile& profile, const MapperSettings& setting
 
 InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
     : profile_(std::move(profile)), settings_(sanitized(settings, profile_)), turnStick_(settings_.turnStick),
-      turn_(settings_.turn), handsJump_(settings_.handsJump),
-      armGestures_(settings_.throwGesture, settings_.swing), punch_(settings_.punch),
+      turn_(settings_.turn), handsJump_(settings_.handsJump), armGestures_(settings_.swing),
+      reachUse_(settings_.reach), wristFlick_(settings_.flick), punch_(settings_.punch),
       captureChord_(settings_.trigger, settings_.captureButtons, settings_.buttonHoldSeconds),
       stickChord_(settings_.buttonHoldSeconds),
       restWheel_(settings_.restWheel, {settings_.restSensors, profile_.moveStick, profile_.turnStick}),
@@ -191,6 +191,12 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         game::add(input.down, game::GameAction::Recenter);
     }
 
+    // The reach and the wrist flick start nothing while the game holds such input back (the thumb-rest
+    // wheel's own reasons: it suppresses buttons, forces the view, plays a cutscene, a demon is piloted),
+    // while a menu holds gameplay back, or while the weapon wheel is up (its pointer may be the weapon hand).
+    // Each starts over afterwards.
+    const bool gesturesBlocked = context.menuHold || context.restWheelBlocked ||
+                                 game::contains(previousDown_, game::GameAction::WeaponWheel);
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         HandButtons& buttons = hands_[handIndex(hand)];
         const ButtonLevels levels =
@@ -261,15 +267,25 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
     if (input.handsJumped) {
         game::add(input.down, game::GameAction::Jump);
     }
-    // A throw or an overhead swing holds back its hand's punch: the gesture's own motion would punch too.
+    // An overhead swing holds back the weapon hand's punch: the gesture's own motion would punch too.
     const ArmGestureOutput arms = armGestures_.update(frame, profile_.weaponHand, dt);
-    if (arms.thrown) {
-        game::add(input.down, game::GameAction::Equipment);
-    }
     if (arms.swung) {
         game::add(input.down, game::GameAction::Crucible);
     }
-    input.thrown = arms.thrown;
+    const bool wheelUp = gesturesBlocked || game::contains(input.down, game::GameAction::WeaponWheel);
+    // A reach out and back presses use alone (the game uses what is in focus; reach_use.hpp). A hand primed
+    // for a swing is not reaching.
+    const ReachOutput reach = reachUse_.update(frame, dt, arms.heldBack, wheelUp);
+    if (reach.useDown) {
+        game::add(input.down, game::GameAction::Use);
+    }
+    input.reached = reach.reached;
+    // A flick of the weapon hand's wrist switches the weapon mod (wrist_flick.hpp).
+    const FlickOutput flick = wristFlick_.update(frame, profile_.weaponHand, dt, wheelUp);
+    if (flick.flicked) {
+        game::add(input.down, game::GameAction::SwitchWeaponMod);
+    }
+    input.flicked = flick.flicked;
     input.swung = arms.swung;
     if (punch_.update(frame, arms.heldBack)) {
         input.meleeFromPunch = !game::contains(input.down, game::GameAction::Melee) &&

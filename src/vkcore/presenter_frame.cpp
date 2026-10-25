@@ -205,7 +205,7 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
     }
     hasImage = true;
     shownView = view;
-    shownHasView = hasView;
+    shownHasView = hasView && !view.cinema3D; // a stereo cutscene pair is shown on the screen quads
     ++xrCopies;
 }
 
@@ -242,6 +242,7 @@ void XrPresenter::Impl::frame() {
     }
 
     XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
+    XrCompositionLayerQuad quadR{XR_TYPE_COMPOSITION_LAYER_QUAD}; // eye R's screen (stereo cutscenes)
     XrCompositionLayerQuad uiQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     XrCompositionLayerQuad reticleQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
@@ -369,18 +370,7 @@ void XrPresenter::Impl::frame() {
             }
         } else if (hasImage) {
             ++xrQuadFrames;
-            // The layer repeats the last released image when no new frame arrived (never dropped).
-            quad.layerFlags = 0;
-            quad.space = localSpace;
-            quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-            quad.subImage.swapchain = xrSwapchain;
-            // The left half of a Route S ring (a mono frame fills both halves).
-            quad.subImage.imageRect = {
-                {0, 0},
-                {static_cast<std::int32_t>(eyeExtent.width), static_cast<std::int32_t>(eyeExtent.height)}};
-            quad.subImage.imageArrayIndex = 0;
-            quad.pose = quadPose;
-            quad.size = quadSize;
+            fillScreenQuad(*this, quad); // the layer repeats the last released image (never dropped)
             layerCount = 1;
             if (menuOn) {
                 // The title screen and the main menu: the whole frame on the menu panel, with the pointer.
@@ -390,12 +380,9 @@ void XrPresenter::Impl::frame() {
                 // The cursor went but the backdrop is still up (the end of a loading screen, or the main
                 // menu changing screens): the panel stays, no pointer, instead of a jump to the screen.
                 placeOnMenuPanel(quad);
-            } else if (const auto band = cinemaView.band(eyeExtent.width, eyeExtent.height)) {
-                // A cutscene drawn for a flat display's shape: only its band, on a screen of that shape.
-                quad.subImage.imageRect.offset.y = static_cast<std::int32_t>(band->y);
-                quad.subImage.imageRect.extent.height = static_cast<std::int32_t>(band->height);
-                quad.size.height =
-                    quadSize.width * static_cast<float>(band->height) / static_cast<float>(eyeExtent.width);
+            } else {
+                // The screen: a cutscene's band, and a stereo cutscene's eyes (presenter_cinema3d.cpp).
+                layerCount += screenLayers(*this, quad, quadR, uiQuad, &layers[layerCount], uiShown);
             }
         }
         // A menu's 3D model goes where the panel shows the menu (menu_model_hook.hpp).
@@ -411,6 +398,8 @@ void XrPresenter::Impl::frame() {
     if (settings.ui.enabled) {
         ui_engine::setSkipComposite(settings.ui.skipComposite && uiShown);
     }
+    cinema3dNoteUiLayer(settings.ui.enabled && settings.ui.skipComposite && ui_engine::skipHookInstalled() &&
+                        uiReady && !uiFailed);
     XrFrameEndInfo endInfo{XR_TYPE_FRAME_END_INFO};
     endInfo.displayTime = state.predictedDisplayTime;
     endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;

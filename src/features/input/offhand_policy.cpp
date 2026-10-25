@@ -141,6 +141,16 @@ OffhandMode leftHandOffMode(OffhandMode mode, bool onController) {
     return mode == OffhandMode::Game && onController ? OffhandMode::Free : mode;
 }
 
+ArmDecision decideOffHand(const ArmSignals& signals, OffhandMode mode) {
+    ArmSignals own = signals;
+    own.handsFlags &= ~(hands_flag::kChangingWeapon | hands_flag::kModChangeAnim);
+    const auto action = static_cast<HandsAction>(own.pendingAction);
+    if (action == HandsAction::BringDown || action == HandsAction::BringUp) {
+        own.pendingAction = 0;
+    }
+    return decideArm(own, mode);
+}
+
 ArmDecision decideWeaponArm(const ArmSignals& signals, WeaponArmMode mode) {
     return decideArm(signals, mode == WeaponArmMode::Ik ? OffhandMode::Free : OffhandMode::Game);
 }
@@ -153,6 +163,34 @@ float ArmBlend::update(bool controller, float dtSeconds, float blendSeconds, flo
         ramp_ = out > 0.0f ? std::max(0.0f, ramp_ - dt / out) : 0.0f;
         return weight();
     }
+    return takeBack(dt, blendSeconds, holdSeconds);
+}
+
+float ArmBlend::updateOffHand(
+    bool controller, bool handsHidden, float dtSeconds, float blendSeconds, float holdSeconds) {
+    const float dt = std::isfinite(dtSeconds) ? std::max(0.0f, dtSeconds) : 0.0f;
+    if (!controller) {
+        if (!handedOver_) {
+            handedOver_ = true;
+            gameShown_ = false;
+        }
+        gameShown_ = gameShown_ || !handsHidden;
+        sinceGame_ = 0.0f;
+        ramp_ = blendSeconds > 0.0f ? std::max(0.0f, ramp_ - dt / blendSeconds) : 0.0f;
+        return weight();
+    }
+    if (handedOver_) {
+        handedOver_ = false;
+        if (!gameShown_) {
+            ramp_ = 1.0f;
+            sinceGame_ = 1e9f;
+            return weight();
+        }
+    }
+    return takeBack(dt, blendSeconds, holdSeconds);
+}
+
+float ArmBlend::takeBack(float dt, float blendSeconds, float holdSeconds) {
     sinceGame_ += dt;
     if (sinceGame_ < holdSeconds) {
         return weight();
@@ -168,6 +206,8 @@ float ArmBlend::weight() const {
 void ArmBlend::reset() {
     ramp_ = 0.0f;
     sinceGame_ = 1e9f;
+    handedOver_ = false;
+    gameShown_ = true;
 }
 
 } // namespace evr::input

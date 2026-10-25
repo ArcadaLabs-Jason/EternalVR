@@ -126,6 +126,7 @@ add_library(evr_layer SHARED
     world_gui_hooks.cpp
     player_aim.cpp
     presenter_alt.cpp
+    presenter_cinema3d.cpp
     presenter_copy.cpp
     presenter_fade.cpp
     presenter_mirror.cpp
@@ -175,6 +176,7 @@ add_library(evr_layer SHARED
     save_hook.cpp
     scatter_hooks.cpp
     seq_alternate.cpp
+    seq_cvar_log.cpp
     seq_eye_fixes.cpp
     seq_hooks.cpp
     seq_render_counter.cpp
@@ -280,6 +282,7 @@ target_sources(evr_layer PRIVATE
     launcher_place_hook.cpp
     left_hand_arms.cpp
     offhand_arm.cpp
+    offhand_fingers.cpp
     offhand_hook.cpp
     offhand_mods.cpp
     weapon_arm.cpp

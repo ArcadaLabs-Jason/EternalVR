@@ -28,9 +28,6 @@ namespace evr::vkcore {
 
 namespace {
 
-// While a glory kill is shown as a fade, the camera hook holds the view black this far ahead, each frame.
-constexpr double kGloryBlackRefreshSeconds = 0.1;
-
 // The body yaw turning more than 90 degrees in one game frame (a stick turn never does): logged with what
 // drove the view, to find the rare half turn seen once in a seated glory kill (2026-09-28; camera hook only).
 struct BodyJumpWatch {
@@ -79,27 +76,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         }
         return;
     }
-    trackCutscene(renderView[render_view::kInCutscene] != std::byte{0});
-    cutscene_eyes::noteGameView(renderView, cutscene);
-    // Glory kills (glory_view.hpp): on the flat screen, faded out, or with a steady heading (below).
-    const double now = qpcSeconds(qpcNow());
-    const bool menu = menuUp.load(std::memory_order_relaxed);
-    if (glory.frame(player, controllers::forcedView(), menu, now).started && glory.onScreen()) {
-        replaceScreen.store(true, std::memory_order_release);
-    }
-    if (glory.black()) {
-        room.holdBlack(now + kGloryBlackRefreshSeconds);
-    }
-    const bool flatScreen = (cutscene && settings.cutsceneCinema) || glory.onScreen();
-    cinemaView.onGameView(reinterpret_cast<float*>(renderView + render_view::kFovX), flatScreen,
-                          settings.cinemaAspect);
-    if (!trackingReady.load(std::memory_order_acquire)) {
-        return;
-    }
-    if (flatScreen) {
-        // The cutscene (or glory kill) keeps the game's camera and view; without a head-tracked view its
-        // frames go to the flat screen (kViewStaleSeconds, or at once for a glory kill: GloryKills::flat),
-        // placed in front of the head when it started.
+    // Cutscenes and glory kills on the flat screen, and the frames before tracking is ready, end here.
+    if (flatScreenGameView(*this, renderView, player)) {
         return;
     }
     auto* fov = reinterpret_cast<float*>(renderView + render_view::kFovX);

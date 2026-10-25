@@ -40,9 +40,9 @@ controller do the X and Y jobs, and the grip actions need a firm squeeze.
 | Hold left Menu + pull a trigger | Save a screenshot of each eye and the HUD, for bug reports or just to keep (that press then does not pause, and the trigger does not fire; where the files go: TROUBLESHOOTING.md). Index: the firm left trackpad press; Steam Frame: View |
 | Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot, since SteamVR keeps the left Menu button. Pull the trigger after ¼ s; the trigger does not fire and the sticks do not recenter |
 | A real punch with your hand | Melee, Glory Kill, Blood Punch, use (punch a switch to press it); with Aim with: Weapon hand it aims where you look, not where the gun points |
-| Throw with your left hand (Throw grenades on) | Equipment launcher (below) |
 | Swing your right hand down from above your head (Overhead swing on) | Crucible, or the Sentinel Hammer (below) |
 | Throw both hands up above your head (Jump with both hands on) | Jump (below) |
+| Turn the gun hand over and back quickly, rolling your wrist (Roll wrist, on by default) | Switch weapon mod |
 
 **The weapon wheel.** Push the right stick down and keep it there: after about a third of a second the
 wheel opens (the game slows time) with the bottom weapon highlighted. With the standard controls and the
@@ -109,21 +109,24 @@ rest on Index and Pico 4 controllers, which have none. Nothing happens in menus,
 you pilot a demon, or while the game moves your view itself (glory kills, Meathook pulls, melee lunges):
 picking that has started is cancelled there, and a wheel already open closes and picks what is highlighted.
 
-**Gestures.** Two motions can do the work of a button. Both are off until you turn them on in the Gestures
-box of the launcher's Play tab, and both are new and not yet tried in a headset.
+**Gestures.** Motions that do the work of a button, in the Gestures box of the launcher's Play tab.
 
-- **Throw grenades:** throw with your off hand as you would throw a ball overarm. Bring the hand up beside
-  your ear first, then swing it forward; the equipment launcher fires as your hand comes forward. The grenade
-  goes where your gun points (with head aim, where you look), not along your throw. Swinging forward without
-  bringing the hand up by your ear first is an ordinary punch.
-- **Overhead swing:** raise your gun hand above your head, then bring it down hard, like a hammer. It swings
-  the Crucible, or in The Ancient Gods Part Two slams the Sentinel Hammer. Raising both hands does nothing,
-  so a stretch does not swing it.
-- **Jump with both hands:** throw both hands up above your head, fast, like in DOOM VFR. The jump button still works.
-  Sitting, the hands have to go higher. Both hands have to come down before the next jump.
+- **Roll wrist** (on by default): turn your gun hand over and back quickly, rolling your wrist, to switch the
+  weapon mod, like the button. Aiming fast does not count; only the turn of the controller about the way it points
+  does. Turning back is part of the same roll; to switch back, hold your wrist still for a second first. Turn it off
+  there if you'd rather switch mods with the button alone.
+- **Overhead swing** (off by default): raise your gun hand above your head, then bring it down hard, like a
+  hammer. It swings the Crucible, or in The Ancient Gods Part Two slams the Sentinel Hammer. Raising both hands
+  does nothing, so a stretch does not swing it. A swing does not punch as well.
+- **Jump with both hands** (off by default): throw both hands up above your head, fast, like in DOOM VFR. The jump
+  button still works. Sitting, the hands have to go higher. Both hands have to come down before the next jump.
 
-A throw or a swing does not punch as well. With the weapon in your left hand, the hands swap: the right hand
-throws and the left hand swings.
+With the weapon in your left hand, the hands swap: the left hand swings and rolls.
+
+**Rumble by hand.** The game's vibration goes to the hand that earns it: your gun hand when you shoot, the hand that
+punched when you punch, your off hand when the shoulder launcher fires. Damage, explosions and the rest shake both
+hands as before. The game does not say what a vibration is for, so the mod guesses from what you just did. It needs
+Vibration on.
 
 Movement goes where your head faces. With **hand aim** (the default) the gun shoots where your right hand
 points, and the weapon is drawn at your hand. With **head aim** it shoots where you look. **View aim**
@@ -333,16 +336,16 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Skip cutscenes | Skip cutscenes automatically (the start of the very first one cannot be skipped; off: hold dash, B on the weapon hand, to skip one) | Off |
 | Play position | Detect (sitting or standing, from your height), Sitting, Standing | Detect |
 | Eye height | The game's (the Slayer's, whatever your own), Your real height (needs a runtime with a floor level) | The game's |
-| Throw grenades | Throw with your off hand to fire the equipment launcher ([In the game](#in-the-game)) | Off |
+| Roll wrist | Turn your gun hand over and back quickly to switch the weapon mod ([In the game](#in-the-game)) | On |
 | Overhead swing | Swing your gun hand down from above your head for the Crucible or the Hammer ([In the game](#in-the-game)) | Off |
 | Jump with both hands | Throw both hands up above your head to jump; higher when sitting ([In the game](#in-the-game)) | Off |
 | Punch speed | Light, Medium, Hard, Very hard: how fast your hand must move toward where you look to punch | Hard |
 | Aim with | Weapon hand, Head, Mouse | Weapon hand |
 | Revenant aim with | Same as Aim with, Weapon hand, Head: what aims the Revenant's cannons while you pilot it in Cultist Base; Head keeps them out of the way when you walk around or turn in your room | Same as Aim with |
 | Melee aim with | Same as Aim with, Head, Off hand: what aims melee, Blood Punch, glory kills and use from the button. A real punch always aims where you look. Only when the weapon hand aims | Same as Aim with |
-| Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch (and a grenade throw), which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
+| Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch, which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
-| Show arms | On, Off: Off hides the Slayer's arms and leaves the weapon alone, for example with the weapon in the left hand, where the game still draws its right arm reaching across to the gun | On |
+| Show arms | Shown, Hidden, Hands only: Hidden hides the Slayer's arms and leaves the weapon alone, for example with the weapon in the left hand, where the game still draws its right arm reaching across to the gun. Hands only leaves the gloves and folds the arms behind them away: the off-hand glove sits on your off-hand controller wherever you reach, the gun hand's glove holds the gun. It needs the weapon hand to aim (Aim with), and while the game plays its own arm animations (a weapon switch, a melee, a glory kill) it draws the whole arms for that moment. | Shown |
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
@@ -384,7 +387,8 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Eye distance | The headset's, or your own in millimetres (50 to 80) | The headset's |
 | Desktop window | What the game's desktop window shows: the left eye, the right eye, or nothing | The left eye |
 | Cutscene view | Flat screen in front of you, Around you (immersive) | Flat screen |
-| Arms in cutscenes | On, Off: with cutscenes around you, Off keeps the game's own weapon view in them (it may keep the Slayer's arms out of sight; not checked in a headset yet), On keeps the VR one as before. Show arms off hides the arms anyway | Off |
+| Stereoscopic cutscenes | Cutscenes on the flat screen in 3D, drawn from two cameras a little apart, like a 3D movie. They cost about twice the graphics card's time while a cutscene plays. Only with the flat screen, in stereo, without Alternate eyes or Parallel Eye Rendering | On |
+| Arms in cutscenes | On, Off: with cutscenes around you, Off keeps the game's own weapon view in them (it may keep the Slayer's arms out of sight; not checked in a headset yet), On keeps the VR one as before. Show arms on Hidden hides the arms anyway; with Hands only, On draws the game's whole arms in those cutscenes | Off |
 | Motion controllers | Play with the headset's controllers; off for keyboard, mouse or a gamepad | On |
 | Shots come from | Your weapon hand, Your eyes (stops shots through thin walls) | Your weapon hand |
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
@@ -541,7 +545,7 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
 - **Actions:** `fire`, `weapon_mod`, `switch_weapon_mod`, `jump`, `dash`, `melee`, `chainsaw`,
   `flame_belch`, `equipment`, `switch_equipment`, `quick_switch`, `weapon_wheel`, `next_weapon`,
   `previous_weapon`, `weapon_slot_1` to `weapon_slot_8`, `crucible`, `pause`, `dossier`, `mission_info`,
-  `automap`, `recenter`.
+  `automap`, `recenter`, `use` (the use button on its own, without the melee swing).
 
 A file with a `thumbrest` line needs version 0.1.45 of the mod or a newer one, and a file with a touch line
 (`primary_touch`, `secondary_touch`, `stick_touch`, `trackpad_touch`, `trigger_touch`) needs 0.1.46 or a

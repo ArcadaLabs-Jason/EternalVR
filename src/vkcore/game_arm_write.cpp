@@ -79,7 +79,8 @@ bool writeArm(arm::ArmSide side,
               std::uint32_t zeroScale,
               const arm::ArmPoses* landing,
               const xr_math::JointMod* wrist,
-              const arm::GripOverrides* glove) {
+              const arm::GripOverrides* glove,
+              const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers) {
     Cache& c = cacheOf(side);
     if (detail::faulted() || hands != c.hands ||
         !offhand_mods::layerModsInPlace(c.node, c.base, idsOf(c, side))) {
@@ -119,9 +120,14 @@ bool writeArm(arm::ArmSide side,
                 return false;
             }
         }
-        const std::int32_t fingers = offhand_mods::armCount(side);
+        // The fingers: with `fingers` (the free off hand's hand poses) each an override in its parent's
+        // frame, its offset divided by the model scale (parent_frames.hpp); otherwise no change.
+        const std::int32_t fingerBase = offhand_mods::armCount(side);
+        const bool posed =
+            fingers && offhand_mods::fingerCount(side) == static_cast<std::int32_t>(fingers->size());
         for (std::int32_t k = 0; k < offhand_mods::fingerCount(side); ++k) {
-            if (!writeMod(side, hands, fingers + k, nullptr, scale, origin)) {
+            const xr_math::ModelPose* pose = posed ? &(*fingers)[static_cast<std::size_t>(k)] : nullptr;
+            if (!writeMod(side, hands, fingerBase + k, pose, scale, {}, arm::kFlagsParentOverride)) {
                 return false;
             }
         }

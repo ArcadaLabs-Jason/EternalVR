@@ -1,7 +1,10 @@
 #pragma once
 
 // The arms model the hands are given (ETERNALVR_ARM_MODEL, rig tests only; docs/VR_HANDS_HUD.md, "Arms
-// model"). Nothing is installed and nothing changes without the variable (the default is `game`).
+// model"). Nothing is installed and nothing changes without the variable (the default is `game`). For
+// players the model is the game's: the cosmetic skin they chose is the game's own to apply, and the layer
+// poses whatever model the hands have (DECISIONS T-148). The switch lets the rig sweep a skin its save does
+// not wear.
 //
 // The first-person arms are one model owned by the hands (idHands, idPlayer+0xD2C8): the render model at
 // idHands+0x370, its md6 decl at +0x4D0. The game sets it only through idHands::SetModel(hands, decl)
@@ -14,11 +17,6 @@
 // modifiers (and the layer's room among them, offhand_mods.hpp) and the kits, at the moment it would anyway.
 //
 //   game   no change
-//   base   the decl the game's inherits from whose name ends in fp_hands.md6 (the game's own,
-//          md6def/player/human/base/praetor.md6, has md6def/player/human/base/fp_hands.md6 as its parent
-//          on the rig): the base hands model, mesh md6/player/human/base/assets/mesh/arms.md6mesh (79
-//          joints, no blade or forearm device), found by following the decl's parent (+0xB8) up to four
-//          steps
 //   skin   a Slayer skin's first-person decl,
 //          md6def/customization/player/human/set<N>/base/praetor_set<N>.md6 (ETERNALVR_ARM_MODEL=skin:<N>,
 //          set 3 by default, which gameresources.resources always holds),

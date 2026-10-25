@@ -17,6 +17,7 @@
 #include "vkcore/game_arm.hpp"
 
 #include <cstddef>
+#include <cstdint>
 
 namespace evr::vkcore::controllers::arm_dump {
 
@@ -27,15 +28,18 @@ bool on();
 void noteView(const WorldHand& world, const ModelPlacement& model);
 
 // This tick's arm on `side`: the game's, with the layer's share `weight` (no poses), or the layer's, with
-// the solve's twist (radians), the read it started from, the poses written and the wrist target (none for
-// the weapon arm).
+// the solve's twist (radians), the read it started from, the poses written, the wrist target (none for
+// the weapon arm) and the joints written scaled to nothing (hands only, bit n for arm::ArmJoint n).
 void noteGameArm(arm::ArmSide side, float weight);
+// This tick's fingers of the layer's arm on `side` (the free off hand's hand poses), after noteLayerArm.
+void noteFingers(arm::ArmSide side, const arm::DumpFingers& fingers);
 void noteLayerArm(arm::ArmSide side,
                   float weight,
                   float twist,
                   const game_arm::ArmRead& read,
                   const arm::ArmPoses& written,
-                  const xr_math::ModelPose* target);
+                  const xr_math::ModelPose* target,
+                  std::uint32_t zeroScale);
 
 // After the hook ran for the tick's hands (`arms`, with the tick's arms' item): writes a line when 0.25 s
 // have passed since the last and a view was noted this tick, then forgets the tick's notes.
