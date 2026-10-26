@@ -7,12 +7,17 @@
 **Hell in your headset.** A free VR mod for DOOM Eternal on PC (Steam, Game Pass or Microsoft Store),
 through OpenXR.
 
+Most of the feedback and chat happens in the EternalVR thread on the Flat2VR Discord:
+**[join the Discord](https://discord.gg/ZFSCSDe)** and look for EternalVR.
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2S727LT47)
 
 ## Features
 
 - True stereo, with 6DoF head tracking, seated or standing.
-- Motion controllers with hand aiming: the gun goes where your hand points.
+- Motion controllers with hand aiming: the gun goes where your hand points, with its sights lined up.
+- Both arms follow your hands, with a free off hand. Left-handed play, and the arms shown, hidden or just the
+  hands.
 - Punch for real to melee, glory kill a staggered demon or Blood Punch.
 - Room-scale: walk around your room and the Slayer walks with you.
 - The weapon wheel on the right stick or by pointing with your hand, and every tutorial and popup action
@@ -20,9 +25,14 @@ through OpenXR.
 - Weapon switching from the thumb rest on Quest and Rift controllers: rest one thumb and pick with the
   other stick, flick toward a weapon, or play standing with the turn stick picking (off by default, on the
   Play tab).
-- Optional gestures (new, off by default): throw grenades with your off hand, swing down from above your
-  head for the Crucible or the Hammer, throw both hands up to jump.
-- The HUD and menus on panels in VR, with a laser pointer; cutscenes on a big screen.
+- Roll your weapon hand's wrist to switch the weapon mod.
+- Optional gestures (off by default): swing down from above your head for the Crucible or the Hammer, throw
+  both hands up to jump.
+- The HUD on a panel in front of you, or on your wrist or your weapon (experimental). Menus on a panel with a
+  laser pointer. Cutscenes on a big screen, in 3D.
+- Comfort options: smooth or snap turning, a vignette, and four ways to see glory kills (follow the camera, a
+  steady view, a fade, or a flat screen).
+- Every control can be changed in the launcher's controls editor, the thumb rests included.
 - Controller vibration for shots, punches, the game's own rumble and menu clicks.
 - bHaptics vest and sleeves (experimental): hits from the direction they came, glory kills, landings,
   portals and more.
@@ -39,12 +49,11 @@ through OpenXR.
 
 No dates yet:
 
-- **A more immersive VR HUD** (a priority): health, armour and ammo on your wrist or weapon instead of a
-  floating panel.
-- Full rigging for each arm: both arms follow your hands, with a free off hand and left-handed play.
+- **A more immersive VR HUD** (a priority): the wrist and weapon HUDs finished, so health, armour and ammo
+  live on you instead of a floating panel.
+- Two-handed grips for the bigger guns.
 - More VR interactions with the world, beyond punching.
 - Optimizations, especially on the processor side, for more frames on more PCs.
-- Every control fully remappable, including the thumb rests as buttons of their own.
 
 ## Headsets, and I need testers
 
@@ -55,10 +64,10 @@ SteamVR, with an RTX 4080 and an RTX 3080 Ti, and a tester has played it on a Pl
 
 Under SteamVR the left Menu button opens SteamVR's own dashboard, so **hold Y to pause** instead.
 
-Controllers with bindings: Quest (Touch) and Valve Index, plus HP Reverb G2, Windows Mixed Reality,
-HTC Vive Cosmos, HTC Vive wands and Pico 4. Only the Quest controllers have been tried so far; the rest
-are untested, so reports from anyone with them are especially welcome. Their layouts are in
-[`docs/release/CONTROLS.md`](docs/release/CONTROLS.md).
+Controllers with bindings: Quest (Touch) and Valve Index, plus Steam Frame, HP Reverb G2, Windows Mixed
+Reality, HTC Vive Cosmos, HTC Vive wands and Pico 4. I play with the Quest controllers, and players have
+been using Valve Index ones; the rest are untested, so reports from anyone with them are especially
+welcome. Their layouts are in [`docs/release/CONTROLS.md`](docs/release/CONTROLS.md).
 
 On AMD Radeon RX 5000 and 6000 cards (and with some newer AMD drivers) each eye renders at the size of the
 game's desktop window and looks soft. A virtual display shaped like a headset eye works around it today;
@@ -66,8 +75,9 @@ see "The picture is soft on an AMD graphics card" in
 [`docs/release/TROUBLESHOOTING.md`](docs/release/TROUBLESHOOTING.md).
 
 If you try it on anything else (another headset or runtime, an AMD or Intel graphics card), please
-tell me how it went, good or bad, in an [issue](../../issues/new/choose) or in
-[Discussions](../../discussions). Bug reports, ideas and pull requests are all welcome.
+tell me how it went, good or bad, on the [Discord](https://discord.gg/ZFSCSDe), in an
+[issue](../../issues/new/choose) or in [Discussions](../../discussions). Bug reports, ideas and pull
+requests are all welcome.
 
 See [`docs/release/KNOWN-ISSUES.md`](docs/release/KNOWN-ISSUES.md) for what does not work yet, and
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan.
@@ -101,7 +111,8 @@ controls the game could not use. See
 
 ## Reporting bugs
 
-Open a [GitHub issue](../../issues/new/choose) with the bug template. In the launcher, click
+Open a [GitHub issue](../../issues/new/choose) with the bug template, or post in the EternalVR thread
+on the [Discord](https://discord.gg/ZFSCSDe). In the launcher, click
 **Export report...** and attach the zip: it holds the launcher and mod logs with your user name and Steam
 account ID removed, and the dialog lists every file before you save it. Check
 [`docs/release/KNOWN-ISSUES.md`](docs/release/KNOWN-ISSUES.md) first.
@@ -116,7 +127,8 @@ these bugs the capture is what helps.
 
 ## Ideas and questions
 
-Use [GitHub Discussions](../../discussions) for ideas, questions and setups that work (or do not).
+Come say hi on the [Discord](https://discord.gg/ZFSCSDe), or use [GitHub Discussions](../../discussions) for
+ideas, questions and setups that work (or do not).
 
 ## Support
 
