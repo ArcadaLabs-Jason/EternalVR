@@ -8,7 +8,9 @@
 through OpenXR.
 
 Most of the feedback and chat happens in the EternalVR thread on the Flat2VR Discord:
-**[join the Discord](https://discord.gg/ZFSCSDe)** and look for EternalVR.
+**[join the Discord](https://discord.gg/ZFSCSDe)**, then
+**[go to the EternalVR thread](https://discord.com/channels/747967102895390741/1554248586126954527)**
+(that link works once you're in the server).
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X2S727LT47)
 
