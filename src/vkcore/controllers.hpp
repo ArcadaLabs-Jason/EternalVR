@@ -84,6 +84,9 @@ input::Hand dominantHand();
 // Which stick pans the Dossier's map (ETERNALVR_MAP_STICKS): the weapon hand's unless the player chose the
 // other one.
 input::MapSticks mapSticks();
+// Aim steadiness's strength (ETERNALVR_AIM_SMOOTHING, features/input/aim_smoothing.hpp): the gun's, and the
+// menu pointer's (features/menu/pointer_steady.hpp).
+float aimSmoothing();
 
 // What aims now: the main aim (ETERNALVR_AIM), or while piloting a demon the demon's (input::demonAimSource).
 input::AimSource activeAim();

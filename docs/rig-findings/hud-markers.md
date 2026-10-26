@@ -125,6 +125,20 @@ window was 8.5 to 123 us (the job thread descheduled inside it; the lease is rea
 hooks' own entry and exit (safetyhook saving and restoring the registers) come on top, two per game frame plus
 one per marker update.
 
+## 5a. The quad at its frame's head pose (T-174)
+
+In a headset (0.1.79, Quest 3 through Virtual Desktop) the markers sat on their targets but were "a bit
+jittery". The GUI image, the markers in it, is drawn for the head pose the frame was rendered with (the view
+record's pose, predicted for about when the frame will be shown), and the eye images are submitted with that
+pose, so the runtime corrects them for the head's motion until they are shown. The UI quad was submitted in
+VIEW space, at the head pose as shown: a marker then sat off its target by the head's turn between the two
+poses, which changes from frame to frame with the prediction's error and doubles for a frame the game repeats
+[code, inferred; the simulator predicts exactly, so the rig cannot show it]. The quad, its pieces around the
+hand HUDs and the weapon wheel are now submitted in LOCAL at the frame's head pose
+(`vkcore/presenter_hud_lock.hpp`), so the runtime moves them with the eye images; the HUD panel follows the head
+as the world does, by the same correction. Menus keep their world-locked panel, the hand quads their hand's
+space, the vignette and the fade VIEW.
+
 ## 6. Only a headset can confirm
 
 - The markers are drawn on the quad 1.5 m ahead; a target further away is seen with the eyes converged on it,

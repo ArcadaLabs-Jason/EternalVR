@@ -54,6 +54,13 @@ struct FlickOutput {
     // For tests and the log: the smoothed rates of this frame, degrees per second (roll signed).
     float rollDegrees = 0.0f;
     float swingDegrees = 0.0f;
+    // For the log of a flick: the weapon's pointing pitch (degrees, up positive), the hand's speed (metres
+    // per second) and the head's turn about the vertical (degrees per second, left positive; 0 without a head
+    // pose). A body turned with the weapon pointing steeply down reads as a roll (see above): these tell that
+    // from a wrist in a player's log.
+    float pitchDegrees = 0.0f;
+    float handSpeed = 0.0f;
+    float headTurnDegrees = 0.0f;
 };
 
 class WristFlick {
@@ -73,13 +80,14 @@ private:
 
     FlickSettings settings_;
     std::optional<Quat> previous_;
-    double previousSample_ = 0.0; // the previous frame's sample time (0: not known)
-    float roll_ = 0.0f;           // smoothed, degrees per second
-    float swing_ = 0.0f;          // smoothed, degrees per second
-    bool armed_ = true;           // quiet for kRearmQuietSeconds since the last flick
-    bool armedReturn_ = true;     // quiet for kReturnQuietSeconds since the last flick
-    float quiet_ = 0.0f;          // how long the roll has been quiet
-    float lastSign_ = 0.0f;       // the direction of the last flick's roll (0: none since the start)
+    std::optional<float> previousHeadYaw_; // radians
+    double previousSample_ = 0.0;          // the previous frame's sample time (0: not known)
+    float roll_ = 0.0f;                    // smoothed, degrees per second
+    float swing_ = 0.0f;                   // smoothed, degrees per second
+    bool armed_ = true;                    // quiet for kRearmQuietSeconds since the last flick
+    bool armedReturn_ = true;              // quiet for kReturnQuietSeconds since the last flick
+    float quiet_ = 0.0f;                   // how long the roll has been quiet
+    float lastSign_ = 0.0f;                // the direction of the last flick's roll (0: none since the start)
     float cooldown_ = 0.0f;
     Hand weaponHand_ = Hand::Right;
 };

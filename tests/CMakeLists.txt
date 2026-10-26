@@ -116,6 +116,7 @@ evr_add_test(evr_pacing_tests
         features/pacing/pace_policy_tests.cpp
         features/pacing/prediction_period_tests.cpp
         features/pacing/restart_budget_tests.cpp
+        features/pacing/runtime_hold_watch_tests.cpp
         features/pacing/slot_choice_tests.cpp
     DEPENDS evr_pacing)
 
@@ -290,6 +291,7 @@ if(TARGET evr_device_features)
             vkcore/clone_names_tests.cpp
             vkcore/clone_stencil_tests.cpp
             vkcore/code_refs_tests.cpp
+            vkcore/crash_note_seen_tests.cpp
             vkcore/debug_script_tests.cpp
             vkcore/device_features_tests.cpp
             vkcore/dump_format_tests.cpp
@@ -396,6 +398,7 @@ evr_add_test(evr_menu_tests
         features/menu/page_keys_tests.cpp
         features/menu/panel_follow_tests.cpp
         features/menu/panel_pointer_tests.cpp
+        features/menu/pointer_steady_tests.cpp
         features/menu/panel_reanchor_tests.cpp
         features/menu/wheel_cursor_tests.cpp
     DEPENDS evr_menu evr_roomscale evr_input)

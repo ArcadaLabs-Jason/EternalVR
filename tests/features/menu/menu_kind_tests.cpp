@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
 #include <cstdint>
 #include <limits>
 
@@ -217,4 +218,57 @@ TEST_CASE("chain: the pause menu's Settings stays the asked-for menu") {
     CHECK(step.kind == MenuKind::Screen);
     CHECK(chain.asked());
     CHECK_FALSE(chain.becomesPopup(MenuKind::Screen, true, true, 4));
+}
+
+TEST_CASE("the Dossier asked for right after another menu's cursor went opens as the Dossier") {
+    // A headset log (0.1.50): the pause menu closed at 581.36 s and Hold X asked for the Dossier at 582.06 s;
+    // its cursor came 0.72 s after the last one went and was taken for the pause menu on another screen, so
+    // the sticks scrolled and changed tabs instead of moving the map.
+    MenuKindInput in;
+    in.overGame = true;
+    in.playMap = true;
+    in.menuRequested = true;
+    in.dossierRequested = true;
+    in.hadMenu = true;
+    in.previous = MenuKind::Screen;
+    in.sinceCursorGone = 0.72;
+    CHECK(menuKindOnCursor(in) == MenuKind::Screen); // not asked since the cursor went: the same menu
+    in.dossierAskedSinceGone = true;
+    in.menuAskedSinceGone = true;
+    CHECK_FALSE(continuesMenu(in));
+    CHECK(menuKindOnCursor(in) == MenuKind::Dossier);
+    // After a popup too (a tutorial dismissed, then the map opened at once).
+    in.previous = MenuKind::Popup;
+    in.sinceCursorGone = 0.2;
+    CHECK(menuKindOnCursor(in) == MenuKind::Dossier);
+}
+
+TEST_CASE("a menu asked for right after a popup's cursor went is a screen, not the popup's next page") {
+    MenuKindInput in;
+    in.overGame = true;
+    in.playMap = true;
+    in.menuRequested = true;
+    in.hadMenu = true;
+    in.previous = MenuKind::Popup;
+    in.sinceCursorGone = 0.3;
+    CHECK(menuKindOnCursor(in) == MenuKind::Popup);
+    in.menuAskedSinceGone = true;
+    CHECK(menuKindOnCursor(in) == MenuKind::Screen);
+}
+
+TEST_CASE("chain: a menu asked for since the last cursor went begins a new chain, held panel or not") {
+    MenuChain chain;
+    chain.onCursor(cursorUp(true, true, false, MenuKind::Screen, -1.0), false, 2); // a popup nobody asked for
+    CHECK_FALSE(chain.asked());
+    MenuKindInput in = cursorUp(true, true, true, MenuKind::Popup, 0.3);
+    in.dossierRequested = true;
+    in.dossierAskedSinceGone = true;
+    in.menuAskedSinceGone = true;
+    for (const bool held : std::array<bool, 2>{false, true}) {
+        const MenuChain::Step step = chain.onCursor(in, held, 2);
+        CHECK_FALSE(step.continues);
+        CHECK_FALSE(step.keepsPanel);
+        CHECK(step.kind == MenuKind::Dossier);
+        CHECK(chain.asked());
+    }
 }

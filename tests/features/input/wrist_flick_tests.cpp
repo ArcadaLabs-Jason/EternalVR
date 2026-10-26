@@ -97,6 +97,28 @@ TEST_CASE("a fast roll about the pointing axis flicks once, and the roll back do
     CHECK(rig.run(-800.0f, 0.2f) == 0);
 }
 
+TEST_CASE("a flick carries its rates for the log: pointing pitch, hand speed and the head's turn") {
+    WristFlick flick(flickOn());
+    float roll = 0.0f;
+    float headYaw = 0.0f;
+    FlickOutput fired;
+    for (int i = 0; i < 30 && !fired.flicked; ++i) {
+        roll += 900.0f * kFrame;
+        headYaw += 120.0f * kFrame; // the player turning left
+        InputFrame frame = handAt(roll, 0.0f, -30.0f, {0.3f, 0.0f, 0.4f});
+        frame.head.poseValid = true;
+        frame.head.pose.orientation = Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, radians(headYaw));
+        const FlickOutput out = flick.update(frame, Hand::Right, kFrame);
+        if (out.flicked) {
+            fired = out;
+        }
+    }
+    REQUIRE(fired.flicked);
+    CHECK(fired.pitchDegrees == doctest::Approx(-30.0f).epsilon(0.01));
+    CHECK(fired.handSpeed == doctest::Approx(0.5f));
+    CHECK(fired.headTurnDegrees == doctest::Approx(120.0f).epsilon(0.01));
+}
+
 TEST_CASE("the roll is read in either direction") {
     Rig rig;
     CHECK(rig.run(-800.0f, 0.2f) == 1);

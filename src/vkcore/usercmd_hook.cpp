@@ -492,8 +492,17 @@ MappedInput runMapper() {
             jump = context.posture == posture::Posture::Seated ? " hands-up jump (seated height)"
                                                                : " hands-up jump";
         }
+        char flick[160] = "";
+        if (out.input.flicked) {
+            const input::FlickOutput& f = out.input.flick;
+            std::snprintf(
+                flick, sizeof(flick),
+                " roll wrist (roll %.0f deg/s, swing %.0f deg/s, pointing %.0f deg, hand %.2f m/s, head "
+                "turn %.0f deg/s)",
+                f.rollDegrees, f.swingDegrees, f.pitchDegrees, f.handSpeed, f.headTurnDegrees);
+        }
         EVR_LOG("%s: gesture:%s%s%s%s", kTag, out.input.swung ? " overhead swing" : "",
-                out.input.reached ? " reach" : "", out.input.flicked ? " roll wrist" : "", jump);
+                out.input.reached ? " reach" : "", flick, jump);
     }
     stageInputSummary(snapshot.frame, asked, out, dt, menuHold);
     s.viewQueue.add({0.0f, out.input.turnDegrees});

@@ -354,7 +354,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Face buttons as thumb rest | A thumb resting on A/B or X/Y counts as the thumb rest, on Index and Pico 4 controllers | Off |
 | Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open; the stick's own wheel always slows time | On |
 | Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap. The stick pushed straight down for the weapon wheel waits 0.1 s less (0.15 s at Medium, never under 0.1 s), since the game's own wheel delay comes on top | Medium |
-| Aim steadiness | Off, Low, Medium, High: steadies the gun against hand shake; higher trails your hand a little more | Medium |
+| Aim steadiness | Off, Low, Medium, High: steadies the gun and the menu pointer against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
 | Aim dot size | 0.2 to 5 degrees. Only with the Aim dot on | 1.0 |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |

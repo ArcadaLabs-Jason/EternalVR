@@ -438,7 +438,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   smoothed over about 25 ms, at 450 degrees per second or more in either direction (200 to 1500 with
   `ETERNALVR_FLICK_RATE`), at least twice the swing rate of the pointing direction, with the hand moving no faster
   than 1.5 m/s, presses `switch_weapon_mod` once; 0.6 s apart, and the roll has to stay below a quarter of the
-  minimum for 0.2 s before the next the same way, 0.8 s before one the other way (a flick's roll back). Log: `controllers: gesture: roll wrist` then `action switch_weapon_mod`.
+  minimum for 0.2 s before the next the same way, 0.8 s before one the other way (a flick's roll back). Log: `controllers: gesture: roll wrist (roll R deg/s, swing S deg/s, pointing P deg, hand V m/s, head turn H deg/s)` then `action switch_weapon_mod`: the smoothed rates the flick fired on, the weapon's pitch, the hand's speed and the head's turn about the vertical, so a log tells a wrist from a body turned with the weapon pointing down (a player found it switching mods as he turned in his playspace).
   Design: `docs/VR_INTERACTIONS.md` section 2.7.
 - The reach and Roll wrist start nothing, and start over, while the thumb-rest wheel would
   (`restWheelBlocked`: the game suppresses buttons, forces the view, plays a cutscene, or a demon is piloted), while
@@ -595,7 +595,8 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   ray. The strength runs from 0 (off) to 1 (strongest): the still cutoff falls from 8 Hz toward 0.5 Hz and
   the speed gain from 20 toward 10 Hz per radian per second. The default 0.3 (3.5 Hz, 16 Hz per rad/s) cuts
   a still hand's noise to about a third and lags 8 ms at 57 degrees per second, 3 ms in a quick flick
-  (`docs/rig-findings/aim-jitter.md`). The log's `controllers: on:` line shows the setting.
+  (`docs/rig-findings/aim-jitter.md`). The log's `controllers: on:` line shows the setting. The menu pointer
+  takes the same filter and strength, one per hand (`features/menu/pointer_steady.hpp`, docs/VR_MENUS.md).
 - **Reticle.** Under hand aim the dot is placed from the shown frame's own weapon ray (smoothed, at that
   frame's pose time), so it stays where the gun drawn in that frame points and its shots go
   (`src/vkcore/presenter_reticle.cpp`).

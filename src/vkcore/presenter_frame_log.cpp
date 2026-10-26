@@ -1,9 +1,10 @@
 // The XR worker's frame table (eternalvr-frames-<pid>.csv, docs/VR_HEAD_TRACKED.md), the display lead it
 // measures (xr_math/display_lead.hpp), the display period's watch (presenter_refresh.hpp), and the 10 s
-// lines, the present hook's copies among them.
+// lines, the present hook's copies and the runtime holding frames in xrEndFrame among them.
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "features/pacing/runtime_hold_watch.hpp"
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/presenter_result.hpp"
@@ -14,9 +15,41 @@
 #include <cstdint>
 #include <cstdio>
 #include <cwchar>
+#include <optional>
 #include <string>
 
 namespace evr::vkcore {
+
+namespace {
+
+// One per process, across sessions: a session restart that ends a hold shows as its end.
+pacing::RuntimeHoldWatch runtimeHold;
+// The watch's windows are the 10 s lines.
+constexpr int kHoldSeconds = pacing::RuntimeHoldWatch::kWindows * 10;
+
+// The 10 s window's xrEndFrame time to the watch (features/pacing/runtime_hold_watch.hpp): a line when the
+// runtime begins or stops holding the worker's frames.
+void noteRuntimeHold(const WaitStats& endFrame, double periodMs, std::uint64_t frames) {
+    const std::optional<pacing::RuntimeHold> hold =
+        runtimeHold.onWindow(endFrame.averageMs(), endFrame.count, periodMs, frames, qpcSeconds(qpcNow()));
+    if (!hold) {
+        return;
+    }
+    if (hold->began) {
+        EVR_LOG(
+            "xr: the runtime has held each frame in xrEndFrame for %.2f ms on average over %d s, a quarter "
+            "of the %.2f ms display period or more (%.2f ms at its lowest this session); XR %.1f frame(s)/s. "
+            "Virtual Desktop has done this in long sessions; a trip out of the game and back ends it "
+            "(docs/release/KNOWN-ISSUES.md)",
+            hold->endFrameMs, kHoldSeconds, hold->periodMs, hold->lowestMs, hold->framesPerSecond);
+    } else {
+        EVR_LOG("xr: the runtime no longer holds frames in xrEndFrame (%.2f ms on average over %d s, XR %.1f "
+                "frame(s)/s) after %.0f s",
+                hold->endFrameMs, kHoldSeconds, hold->framesPerSecond, hold->heldSeconds);
+    }
+}
+
+} // namespace
 
 void XrPresenter::Impl::openFrameLog() {
     const std::wstring dir = logDirectory();
@@ -109,6 +142,7 @@ void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
             inRuntime.waitFrame.averageMs(), inRuntime.waitFrame.maxMs, inRuntime.waitImage.averageMs(),
             inRuntime.waitImage.maxMs, static_cast<unsigned long long>(inRuntime.waitImage.count),
             inRuntime.endFrame.averageMs(), inRuntime.endFrame.maxMs);
+    noteRuntimeHold(inRuntime.endFrame, static_cast<double>(state.predictedDisplayPeriod) / 1e6, xrFrames);
     clock.gaps.newPeriod();
     inRuntime = {};
     poseAgeSum = 0.0;

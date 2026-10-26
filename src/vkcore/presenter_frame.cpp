@@ -2,6 +2,7 @@
 // head-tracked images and the cinema quad otherwise).
 
 #include "vkcore/fence_wait.hpp"
+#include "vkcore/presenter_hud_lock.hpp"
 #include "vkcore/presenter_impl.hpp"
 #include "vkcore/presenter_menu_release.hpp"
 
@@ -348,10 +349,16 @@ void XrPresenter::Impl::frame() {
                 } else if (menuHeld) {
                     // The cursor went but the menu's backdrop is still up: the panel stays, no pointer.
                     placeOnMenuPanel(uiQuad);
-                } else if (fillReticleQuad(reticleQuad)) {
-                    // Hand aim: the dot on the weapon hand's ray, after the UI quad.
-                    layers[layerCount++] =
-                        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&reticleQuad);
+                } else {
+                    for (std::uint32_t i = 0; i < hud; ++i) {
+                        lockToRenderedHead(hudQuads[i], viewSpace, localSpace, shownView.pose);
+                    }
+                    lockToRenderedHead(uiQuad, viewSpace, localSpace, shownView.pose);
+                    if (fillReticleQuad(reticleQuad)) {
+                        // Hand aim: the dot on the weapon hand's ray, after the UI quad.
+                        layers[layerCount++] =
+                            reinterpret_cast<const XrCompositionLayerBaseHeader*>(&reticleQuad);
+                    }
                 }
             }
             // The head in geometry fades the view to black, over everything (docs/VR_ROOMSCALE.md).

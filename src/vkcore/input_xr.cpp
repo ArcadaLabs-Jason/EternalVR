@@ -573,6 +573,10 @@ input::MapSticks mapSticks() {
     return settings().mapSticks;
 }
 
+float aimSmoothing() {
+    return settings().aimSmoothing;
+}
+
 input::Hand weaponHand() {
     return settings().handedness == game::Handedness::Right ? input::Hand::Right : input::Hand::Left;
 }

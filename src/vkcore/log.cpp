@@ -1,5 +1,7 @@
 #include "vkcore/log.hpp"
 
+#include "vkcore/crash_note.hpp"
+
 #include <windows.h>
 
 #include <cstdarg>
@@ -50,7 +52,9 @@ std::wstring logDirectory() {
     return dir;
 }
 
-void logOpen() {
+namespace {
+
+void openFile() {
     std::lock_guard lock(g_mutex);
     if (g_opened) {
         return;
@@ -85,6 +89,13 @@ void logOpen() {
     }
 }
 
+} // namespace
+
+void logOpen() {
+    openFile();
+    installCrashNote(); // after the lock: it logs a line
+}
+
 double logSeconds() {
     return static_cast<double>(GetTickCount64() - g_startTicks) / 1000.0;
 }
@@ -103,6 +114,23 @@ void logf(const char* format, ...) {
     if (g_file) {
         std::fputs(line, g_file);
         std::fflush(g_file);
+    }
+    OutputDebugStringA(line);
+}
+
+void logCrashLine(const char* message) {
+    char line[1400];
+    std::snprintf(line, sizeof(line), "[%9.3f] [%5lu] %s\n", logSeconds(), GetCurrentThreadId(), message);
+    bool locked = false;
+    for (int i = 0; i < 50 && !(locked = g_mutex.try_lock()); ++i) {
+        Sleep(2);
+    }
+    if (g_file) {
+        std::fputs(line, g_file);
+        std::fflush(g_file);
+    }
+    if (locked) {
+        g_mutex.unlock();
     }
     OutputDebugStringA(line);
 }

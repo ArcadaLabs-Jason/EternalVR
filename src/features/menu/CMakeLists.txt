@@ -14,7 +14,9 @@ evr_add_module(evr_menu
         panel_follow.cpp
         menu_router.cpp
         panel_pointer.cpp
+        pointer_steady.cpp
         wheel_cursor.cpp
     DEPENDS
         evr_common
-        evr_game_eternal)
+        evr_game_eternal
+        evr_input)

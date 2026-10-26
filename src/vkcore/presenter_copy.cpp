@@ -507,6 +507,8 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
         slot.hasView = viewForPresent(snapshot ? snapshot->view : 0, slot.view, gap);
         if (eyeCopy) {
             slot.view.showEyes = slot.hasView && slot.view.stereo; // the eye copy's two-eye ring
+            // A Parallel Eye pair, counted for the 10 s rates line (the launcher's game frame rate).
+            pairsPublished.fetch_add(slot.view.showEyes ? 1 : 0, std::memory_order_relaxed);
         }
         if (slot.hasView) {
             ++presentViews.withView;

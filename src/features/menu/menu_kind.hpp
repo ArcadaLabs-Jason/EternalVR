@@ -41,13 +41,18 @@ struct MenuKindInput {
     MenuKind previous = MenuKind::Screen;
     double sinceCursorGone = 0.0;
     bool mapLoadedSince = false; // a map load came since the previous menu began (MenuChain fills it in)
+    // The controllers asked for the Dossier, or for a menu screen, after the previous menu's cursor went:
+    // this cursor begins a new menu however short the gap (the pause menu closed, then the Dossier opened at
+    // once).
+    bool dossierAskedSinceGone = false;
+    bool menuAskedSinceGone = false;
 };
 
 // The longest gap in the cursor that still counts as the same menu changing screens.
 inline constexpr double kMenuContinueSeconds = 0.75;
 
 // The cursor continues the previous menu (the same menu on another screen): it came back within
-// `continueSeconds` and no map load came in between.
+// `continueSeconds`, no map load came in between and the controllers asked for no menu since it went.
 bool continuesMenu(const MenuKindInput& in, double continueSeconds = kMenuContinueSeconds);
 
 MenuKind menuKindOnCursor(const MenuKindInput& in, double continueSeconds = kMenuContinueSeconds);

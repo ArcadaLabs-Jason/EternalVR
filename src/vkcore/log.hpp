@@ -48,6 +48,10 @@ void logOpen();
 
 void logf(const char* format, ...);
 
+// One line from the crash note (crash_note.hpp), on a thread that took a fault: the fault may have struck
+// inside a log call, so it waits only a moment for the log's lock and then writes without it.
+void logCrashLine(const char* message);
+
 // Seconds since the log started: the time in front of every log line.
 double logSeconds();
 

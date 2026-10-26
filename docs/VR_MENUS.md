@@ -48,7 +48,9 @@ XR worker, every XR frame                                     game (message pump
   before, that frame jumped to the cinema screen for up to a second.
 - **The crosshair mask.** While the cursor is up, the panel shows or its hold lasts, the hand-aim mask of
   the game's crosshair is off, so menus never show a see-through square in their centre.
-- **The pointer.** Each hand's aim ray (the controller snapshot, with scripted input laid over it) is
+- **The pointer.** Each hand's aim ray (the controller snapshot, with scripted input laid over it), its
+  orientation steadied by the gun's Aim steadiness filter (`ETERNALVR_AIM_SMOOTHING`, one filter per hand,
+  `features/menu/pointer_steady.hpp`; a player's report: a hand held out shook the pointer, GitHub #34), is
   intersected with the panel (`features/menu/panel_pointer.hpp`). The snapshot is in room space (LOCAL
   under the recenter transform) and the panel in LOCAL, so each ray (and the head the beam faces) is taken
   back into LOCAL with the room transform the snapshot was located with (`InputFrame::roomFromLocal`,
@@ -208,7 +210,12 @@ the rig showed; the trigger clicks as usual. One menu changing screens hides the
 going keeps that menu's kind (`features/menu/menu_kind.hpp`; `menu: the cursor is back after 0.25 s: the same
 menu (screen) on another screen`); before that the Settings screen was taken for a popup, and holding the turn
 stick down there sent Q (the game's previous tab) and B also sent Left Shift. The Dossier comes back as a plain
-screen, since its page is not known then. The earlier fix (jump sends Space and melee E while the game
+screen, since its page is not known then. A menu the controllers asked for after the last cursor went is
+a new menu however short the gap: in a headset log (0.1.50) the pause menu closed and Hold X opened the
+Dossier 0.72 s later; its cursor was taken for the pause menu on another screen, so the sticks scrolled and
+changed tabs instead of moving the map until the Dossier was opened again. Now the Dossier asked for since
+the last cursor went opens on its map, and a menu asked for right after a popup is a screen, not the
+popup's next page (`MenuKindInput::dossierAskedSinceGone`, `menuAskedSinceGone`). The earlier fix (jump sends Space and melee E while the game
 suppresses the user command's buttons, `usercmd: popup key`) never fired on the headset: in menu mode the
 controllers' gameplay actions are held back before they reach it.
 

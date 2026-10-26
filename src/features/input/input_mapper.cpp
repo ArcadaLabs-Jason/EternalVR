@@ -286,6 +286,7 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         game::add(input.down, game::GameAction::SwitchWeaponMod);
     }
     input.flicked = flick.flicked;
+    input.flick = flick;
     input.swung = arms.swung;
     if (punch_.update(frame, arms.heldBack)) {
         input.meleeFromPunch = !game::contains(input.down, game::GameAction::Melee) &&

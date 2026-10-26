@@ -149,8 +149,8 @@ namespace EternalVR.Launcher.Core.Settings
                 "Time slows while the game's weapon wheel is open. Off keeps full speed when the wheel opens from the thumb "
                 + "rest; the stick-held wheel always slows time."),
             [Setting.AimSteadiness] = new Text("Aim steadiness",
-                "Steadies the gun and the aim dot against the small shake of a held hand. Higher is steadier but the gun "
-                + "follows your hand a little later.",
+                "Steadies the gun, the aim dot and the menu pointer against the small shake of a held hand. Higher is "
+                + "steadier but they follow your hand a little later.",
                 AimSteadiness.Names),
             [Setting.AimDot] = new Text("Aim dot",
                 "A dot where your weapon hand aims, in place of the game's crosshair."),

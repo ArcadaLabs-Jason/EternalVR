@@ -111,6 +111,7 @@ add_library(evr_layer SHARED
     key_inject.cpp
     layer_entry.cpp
     light_cull.cpp
+    crash_note.cpp
     log.cpp
     mirror_place.cpp
     keep_prev_hooks.cpp
@@ -154,6 +155,7 @@ add_library(evr_layer SHARED
     presenter_fov.cpp
     presenter_cutscene.cpp
     presenter_head.cpp
+    presenter_hud_lock.cpp
     presenter_latch.cpp
     presenter_ring.cpp
     presenter_seq.cpp

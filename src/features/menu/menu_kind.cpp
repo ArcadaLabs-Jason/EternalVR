@@ -5,8 +5,9 @@
 namespace evr::menu {
 
 bool continuesMenu(const MenuKindInput& in, double continueSeconds) {
-    return in.hadMenu && !in.mapLoadedSince && std::isfinite(in.sinceCursorGone) &&
-           in.sinceCursorGone >= 0.0 && in.sinceCursorGone < continueSeconds;
+    return in.hadMenu && !in.mapLoadedSince && !in.dossierAskedSinceGone && !in.menuAskedSinceGone &&
+           std::isfinite(in.sinceCursorGone) && in.sinceCursorGone >= 0.0 &&
+           in.sinceCursorGone < continueSeconds;
 }
 
 MenuKind menuKindOnCursor(const MenuKindInput& in, double continueSeconds) {
@@ -28,7 +29,7 @@ MenuChain::Step MenuChain::onCursor(MenuKindInput in, bool held, std::uint32_t m
     in.mapLoadedSince = started_ && mapLoads != loads_;
     Step step;
     step.afterLoad = in.mapLoadedSince;
-    if (held && !in.mapLoadedSince) {
+    if (held && !in.mapLoadedSince && !in.dossierAskedSinceGone && !in.menuAskedSinceGone) {
         // The same menu, its panel never down: everything stays as it was.
         step.kind = in.previous;
         step.continues = true;

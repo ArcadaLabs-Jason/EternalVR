@@ -8,8 +8,10 @@ them is worse for you than described here.
 - **The HUD is on a floating panel.** Health, armour, ammo and the rest of the HUD are shown on a flat
   panel in front of you that follows your head. "Health and ammo" on the launcher's Advanced tab can put
   health, armour and ammo on the inside of your off hand's wrist instead, or the ammo just above the back
-  of the gun in your weapon hand. Both are experimental and have not been tried in a headset yet. The ammo
-  sits in one place for every weapon, so on some guns it may float a little off the gun.
+  of the gun in your weapon hand. Both are experimental. In my headset the wrist worked, but it could come up
+  upside down (I had to turn my wrist to read it) and the palm side is an odd place to look; a better wrist HUD
+  is being worked on. The ammo sits in one place for every weapon, so on some guns it may float a little off
+  the gun.
 - **Glory kills keep the game's camera by default.** The game moves the camera during a glory kill; in VR
   the view follows it, facing the demon, and turns with your head from there. If camera motion bothers you,
   the Play tab's "Glory kills" setting keeps the view steady, shows the kill on a flat screen, or fades it
@@ -39,11 +41,14 @@ them is worse for you than described here.
   too: rolling more than a metre counts as walking and switches to standing.
 - **Only tested on NVIDIA here:** an RTX 4080 and an RTX 3080 Ti (12 GB). AMD and Intel graphics cards have
   not been tried here; what players with AMD cards have reported is under "Image and performance".
-- **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands, Pico 4 and Steam
-  Frame controllers are new and untested on real hardware.** Please report how they work. The Vive wands
-  have a reduced layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. The
-  Steam Frame has a layout of its own (see CONTROLS.md). Pimax and other
+- **Bindings for HP Reverb G2, Windows Mixed Reality, HTC Vive Cosmos, HTC Vive wands and Pico 4
+  controllers are untested on real hardware.** Please report how they work. The Vive wands have a reduced
+  layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. Pimax and other
   controllers get whatever layout their runtime maps them to.
+- **Valve Index controllers: the hands can sit at a wrong angle.** A player plays with them, but by default
+  the hands looked tilted and placed too high to him (GitHub #16); hand placement was tuned on Quest
+  controllers. I'm looking into it. Steam Frame controllers have their own layout (see CONTROLS.md) and work
+  for a player through SteamVR.
 - **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), the game carries on
   flat on your desktop and VR comes back by itself once the headset and its runtime are back, usually
   within a few seconds. This has been tested on a headset simulator, not yet with a real headset
@@ -52,10 +57,10 @@ them is worse for you than described here.
   If the graphics card is reset while you play, VR stays off until you start the game again; the
   launcher then says "the graphics card was reset".
 - **A DOOM Eternal update turns VR off** until EternalVR supports the new build; the game then runs flat.
-- **SteamVR has had one test**, with a Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the
-  left Menu button of Touch controllers opens SteamVR's dashboard, so hold Y to pause instead (B with
-  **Left (buttons and sticks)**), and take a screenshot by holding both sticks pressed and pulling a
-  trigger (instead of left Menu + trigger).
+- **SteamVR**: players use it with Index, Steam Frame and PSVR2 controllers; I have tested it once myself, with a
+  Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the left Menu button of Touch controllers opens
+  SteamVR's dashboard, so hold Y to pause instead (B with **Left (buttons and sticks)**), and take a screenshot by
+  holding both sticks pressed and pulling a trigger (instead of left Menu + trigger).
 - **SteamVR's dashboard can reset the graphics driver when video memory is nearly full.** A player's game
   used 97 to 99% of the video memory Windows gave it (a 12 GB card next to two large monitors); opening
   the dashboard over the game then reset the NVIDIA driver and SteamVR stopped showing the game. A lower
@@ -70,11 +75,18 @@ them is worse for you than described here.
   few others) check where your head looks. That was fixed in v0.1.4; before it they waited for the gun.
   Please tell me anywhere you get stuck.
 - **Mostly tested with a Quest 3 through Virtual Desktop (VDXR)**, plus the one SteamVR test above. Meta
-  Horizon Link, other runtimes and other headsets have not been tested here. The launcher lets you pick a runtime; please tell me what
-  happens.
+  Horizon Link, other runtimes and other headsets have not been tested here (players' reports on SteamVR are
+  above). The launcher lets you pick a runtime; please tell me what happens.
 
 ## Image and performance
 
+- **Long sessions on Virtual Desktop can slow down.** A player on a Quest 3 with Virtual Desktop saw 90 fps
+  fall to the low 70s over about an hour of play, and a trip out of the game and back (hold the headset's home
+  button, then return) brought 90 back. His logs show Virtual Desktop holding each frame longer and longer, not
+  the game working harder. Other players put it down to the stream's decoding on the headset; Virtual Desktop's
+  beta restarts its stream to avoid it. If it happens to you: try the Virtual Desktop beta, or step out of the
+  game and back in. The log names it (`xr: the runtime has held each frame in xrEndFrame ...`), so an export
+  shows it.
 - **Render resolution.** "Resolution" on the launcher's Play tab is a size times a number (0.50 to 2.00).
   Auto, the default, is the size your headset's runtime asks for, fitted within about 4.6 million pixels
   per eye: a Quest 3 at Virtual Desktop's High asks for 2496x2688 and renders 2056x2216 at 1.00, so 1.00 is
@@ -158,15 +170,15 @@ them is worse for you than described here.
 - **Demons flying far off can leave a trail.** In a headset test in Exultia, distant flying demons smeared
   the way anti-aliasing (TAA) can smear fast motion. Anti-aliasing Off on the Play tab avoids TAA's
   smearing, at the cost of some shimmer on edges.
-- **The HUD's markers are drawn at the HUD's distance.** Objective and other map markers now point at the
-  place they mark; before, they could sit well off it. I checked this on a test rig, not yet in a headset. They
-  are still drawn on the HUD panel, so while you look at a far-off spot its marker may look doubled (and the
-  other way round). A marker above or below the HUD panel waits at its top or bottom edge.
-- **The HUD's smallest text is hard to read.** The mission challenge names, the "PRESS [HOLD X] TO VIEW
-  CHALLENGE DETAILS" hint and the Demonic Corruption bar's title are small on the default HUD panel. A larger
-  HUD size (or a shorter HUD distance) on the Play tab makes them bigger, along with the rest of the HUD.
-- **The Plasma Rifle's Microwave Beam may not show its beam.** This is from one headset test and not
-  confirmed yet; if you see it, please tell me.
+- **The HUD's markers are drawn at the HUD's distance.** Objective and other map markers now point at the place
+  they mark; before, they could sit well off it. Since 0.1.84 they also stay on their spot while you turn your
+  head (tried in my headset). They are still drawn on the HUD panel, so while you look at a far-off spot its
+  marker may look doubled (and the other way round).
+  A marker above or below the HUD panel waits at its top or bottom edge.
+- **Below 90 fps the HUD panel can jitter a little as you look around.** Since 0.1.84 the panel is shown where
+  your head was when its frame was drawn, which is what keeps the markers on their targets; when the game runs
+  under the headset's rate, a frame is shown twice and the panel shifts a bit until the next one. Seen in my
+  headset at 60 to 75 fps. I'm looking into giving the markers their own layer so the panel can stay put.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
@@ -249,9 +261,11 @@ them is worse for you than described here.
   gives you the flat screen as before. It only works with the flat screen (Cutscene view), VR mode stereo,
   and neither Alternate eyes nor Parallel Eye Rendering. The two cameras are at most your eye distance apart (the
   launcher's setting, else 63 mm), closer together in shots with a narrow lens or with something near the camera
-  in the level. I set the amounts from numbers, not from wearing it, so some shots may feel flat or too deep.
+  in the level. In my headset they looked great, but I set the amounts from numbers, so some shots may still feel
+  flat or too deep.
   The mod cannot see the Slayer or a prop right at the lens, so in some close-ups (the opening cutscene has a
-  few) the picture pops out of the screen further than is comfortable. It doubles the GPU time of a cutscene
+  few) the picture pops out of the screen further than is comfortable, and a few subtitles and popup texts there
+  can be hard to focus on. It doubles the GPU time of a cutscene
   frame (4.9 to 9.9 ms on my RTX 3080 Ti at 2048x2208 per eye, where the headset's 90 Hz did not hold in the
   heavy shots). Foveated rendering is left off for these frames (its sharp centre follows the headset's
   view, not the screen), so they cost the full amount.
@@ -287,12 +301,6 @@ them is worse for you than described here.
 
 ## Controllers and aiming
 
-- **The Flame Belch now comes out over your left shoulder.** With Equipment aim set to Head (or Off hand),
-  the flames already went where you look, but they came out of a shoulder launcher that popped up in front
-  of your gun hand. Now the launcher pops up over your left shoulder, like on a flat screen, points where you
-  look (or where your off hand points), and the flames, their damage and your grenades all leave it from
-  there. The gun stays in your hand. With bHaptics, a quick tap of the Belch could play as gun kicks on your
-  right side; it's always the left shoulder now. Test rig only so far, not yet in a headset.
 - **With head aim the gun now sits in front of your face.** With motion controllers on and Aim with set to
   Head, your shots already went where you look, but the gun stayed in your hand, so with your hands down it
   pointed at the floor and you had to lift the controller to see it. Now it's placed like in gamepad mode: in
@@ -314,9 +322,8 @@ them is worse for you than described here.
   Ballista's kick by up to 15 cm for a frame); for that frame the arm moves with the gun, so the shoulder end
   can jump by up to about 17 cm for one frame with a Ballista shot. A stutter (one long frame) no longer hands
   your arms back to the game's pose for a moment either: on these two guns that slid the glove off the grip
-  and back over about half a second, and your left hand slid toward the game's own pose and back. All of
-  this was measured on the test rig, not yet in a headset; if a glove or a gun sits off your hand, please
-  tell me which one and roughly how far.
+  and back over about half a second. In my headset the hands felt right on every gun; if a glove or a gun
+  sits off your hand, please tell me which one and roughly how far.
 - **Floating at the water's surface** your hands now stay on your real hands. Up there the game keeps
   swimming with both arms and tucks the gun away out of view (it can't be fired either), even though it
   counts the gun as held. Before, the swimming hand sat about 30 cm off your hand, and with the weapon in
@@ -330,13 +337,13 @@ them is worse for you than described here.
   swimming hands now sit at your right hand too (before, about 25 cm ahead of it); the swim stroke still moves
   them around by up to about 10 cm. The Berserk fists and the Sentinel Hammer haven't been checked yet (I
   couldn't get either into the Slayer's hands on the test PC). Test rig only so far, not yet in a headset.
-- **Sights are lined up on every gun, but only checked on the test PC so far, not in a headset.** Every
-  gun points its sights where the shots go, and the Heavy Cannon follows the mod you have active: the
-  Precision Bolt's scope with the Bolt, the iron sights otherwise. The sights run parallel to the shot line,
-  about 9 to 20 cm above it, so up close they sit a bit above where the shots go. Guns with no sight parts
-  (Plasma Rifle, Rocket Launcher, Ballista, BFG 9000, Unmaykr) line up along the barrel, and the Chaingun
-  along its zoom axis. Shots always go along your controller's aim, and the Aim dot sits exactly on that line
-  at any distance.
+- **Sights are lined up on every gun.** In my headset they matched the shots on every gun except the Heavy Cannon
+  with Micro Missiles, which is a bit off. Every gun points its sights where the shots go, and the Heavy Cannon
+  follows the mod you have active: the Precision Bolt's scope with the Bolt, the iron sights otherwise. The sights
+  run parallel to the shot line, about 9 to 20 cm above it, so up close they sit a bit above where the shots go.
+  Guns with no sight parts (Plasma Rifle, Rocket Launcher, Ballista, BFG 9000, Unmaykr) line up along the barrel,
+  and the Chaingun along its zoom axis. Shots always go along your controller's aim, and the Aim dot sits exactly
+  on that line at any distance.
 - **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
   Aim dot shows where shots go.
@@ -349,14 +356,17 @@ them is worse for you than described here.
   bit is unchecked there; I have not tested it).
 - **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
   hand can cover it.
-- **One arms model.** The game's viewmodel holds both arms, so the left arm follows your gun hand. With the
-  weapon in your left hand the Slayer's left glove now holds the gun and his right arm is your off hand: it
-  holds the gun's front the way his left hand does for right-handed play, reflected, or follows your right
-  controller with the free off hand. The gun itself is not mirrored. So far this is checked on the test PC
+- **The arms.** The Slayer's other arm follows your off-hand controller, its fingers follow your grip, trigger
+  and thumb, and both arms bend by the new arm solve; there is no option for the old arms. While the game plays
+  an animation in which his left arm is the action (a melee, a glory kill, the chainsaw, a ledge grab, the Super
+  Shotgun loading its shells) the arm is the game's for that moment, easing there and back. A weapon switch or a
+  weapon mod switch leaves your off hand where it is. With head aim (Aim with: Head) or a gamepad the arms are
+  the game's, as before.
+  With the weapon in your left hand the Slayer's left glove holds the gun and his right arm is your off hand,
+  following your right controller. The gun itself is not mirrored. Left-handed play is checked on the test PC
   only, not in a headset, with the guns, the Unmaykr and the Crucible held, fired, switched and a melee and
-  the chainsaw: glory kills and the Sentinel Hammer have not been tried left-handed yet. The Chaingun's front
-  handle is only on its left side, so there your right hand follows your right controller instead of holding
-  the gun. While the game plays its own arm animations (a switch, a melee, a glory kill) the game's right
+  the chainsaw: glory kills and the Sentinel Hammer have not been tried left-handed yet. While the game plays
+  its own arm animations (a switch, a melee, a glory kill) the game's right
   glove holds the gun in your left hand about 2 cm from where it would sit for right-handers. The first time
   you bring out each weapon after starting the game the arms stay the game's for about half a second while
   the mod reads how the Slayer holds it, then the gun shifts by 1 to 2.5 cm into your hand; after that it
@@ -364,11 +374,6 @@ them is worse for you than described here.
   swung in from about 70 cm the first time). (Before, the Unmaykr could also hop around by about
   20 cm while it first came up, and a melee could throw the gun about half a metre for a moment; both fixed.)
   Show arms on Hidden (Play tab) hides both arms.
-  The Slayer's other arm now follows your off-hand controller, its fingers follow your grip, trigger and thumb, and
-  both arms bend by the new arm solve; there is no option for the old arms. While the game plays an animation in
-  which his left arm is the action (a melee, a glory kill, the chainsaw, a ledge grab, the Super Shotgun loading its
-  shells) the arm is the game's for that moment, easing there and back. A weapon switch or a weapon mod switch
-  leaves your off hand where it is.
 - **Hands only (Show arms, Play tab)** leaves the Slayer's gloves and folds the arms behind them away. In my first
   headset try the off-hand glove looked turned about 90 degrees from my hand; it now turns the way it does with the
   arms shown, which looked right. I checked that on the test PC, not yet in the headset. While the game plays its own
@@ -393,9 +398,9 @@ them is worse for you than described here.
   read; your own HUD Scale stays for the flat game. If you change HUD Scale in the game's menu during VR, your
   choice sticks for the rest of that session and is saved as your own setting, like in the flat game (picking
   Large changes nothing, since that's what VR already shows). To make the HUD bigger or smaller in VR without
-  touching the game's setting, change HUD distance or size on the Advanced tab. Two small texts are still a
-  little under the size I aim for: the hint under the mission challenges and the demonic corruption title.
-  Checked on the test PC, not tried in a headset yet.
+  touching the game's setting, change HUD distance or size on the Advanced tab. In my headset the hint under
+  the mission challenges, the demonic corruption title and the equipment labels read fine at the default HUD
+  distance.
 - **Health and ammo on the wrist or the gun** now follow where the game draws them, at any HUD Scale (checked
   on the test PC, not in a headset yet). When you start the game they show on the floating panel for a moment
   until the mod has found them; after that they stay on the wrist or the gun across levels. Something new in
@@ -447,7 +452,6 @@ them is worse for you than described here.
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
   your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
   pilot it, and at some angles you can see inside its shoulders.
-- **Index controllers** have bindings but have never been tried.
 - **Playing with a gamepad** (Motion controllers unticked on the Advanced tab): the recenter hold (both sticks
   pressed for 2 seconds; the game sees both clicks too, so the right one also melees), the comfort vignette
   (it follows your sticks), the Glory kills options, Room-scale and bHaptics now work as with motion

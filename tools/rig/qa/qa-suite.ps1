@@ -232,7 +232,8 @@ function Write-QaReport($Records, $Pending) {
     $skipped = @($Records | Where-Object { $_.Skipped }).Count
     if ($skipped -or @($Pending).Count) { $md.Add("($skipped skipped, $(@($Pending).Count) not run)") }
     Set-Content -LiteralPath (Join-Path $Out 'report.md') -Value $md -Encoding utf8
-    return "QA: $passed of $($ran.Count) scenarios passed"
+    # Scenarios not run are in the line, so '0 of 0' after a suite that ended early never reads as all passed.
+    return "QA: $passed of $($ran.Count) scenarios passed$(if (@($Pending).Count) { "; $(@($Pending).Count) not run" })"
 }
 
 $script:QaStarted = Get-Date
@@ -306,6 +307,10 @@ for ($i = 0; $i -lt $selected.Count; ++$i) {
         break
     }
 }
+} catch {
+    # An error out of a scenario's checks (not its run) ended the loop silently before: name it and fail the suite.
+    Write-QaLine "suite ends: FAIL $($_.Exception.Message) ($($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber))"
+    $exitCode = 2
 } finally {
     # Any other end (STOP-RIG, an error, Ctrl+C): the held restore finished, or on STOP-RIG left pending for the
     # next cleanup with the command named.

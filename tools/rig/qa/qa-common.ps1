@@ -351,6 +351,8 @@ function Restore-QaSave {
 }
 
 # Log assertions. Plain text by default; -Regex for a regular expression, -CaseSensitive with it.
+# A function's one-line result comes back as the string itself, not an array: callers wrap the call in @()
+# (with one match, $m[0] was its first character and .Trim() threw, which ended merge QA r104a's suite).
 function Get-QaMatches($Ctx, [string]$Pattern, [switch]$Regex, [switch]$CaseSensitive) {
     $lines = (Get-QaLogText $Ctx) -split "`r?`n"
     if (-not $Regex) { return @($lines | Where-Object { $_.Contains($Pattern) }) }
@@ -359,17 +361,17 @@ function Get-QaMatches($Ctx, [string]$Pattern, [switch]$Regex, [switch]$CaseSens
 }
 
 function Test-QaPresent($Ctx, [string]$Pattern, [switch]$Regex, [switch]$CaseSensitive) {
-    $m = Get-QaMatches $Ctx $Pattern -Regex:$Regex -CaseSensitive:$CaseSensitive
+    $m = @(Get-QaMatches $Ctx $Pattern -Regex:$Regex -CaseSensitive:$CaseSensitive)
     Add-QaResult $Ctx "present: $Pattern" ($m.Count -gt 0) "$($m.Count) line(s)"
 }
 
 function Test-QaAbsent($Ctx, [string]$Pattern, [switch]$Regex, [switch]$CaseSensitive) {
-    $m = Get-QaMatches $Ctx $Pattern -Regex:$Regex -CaseSensitive:$CaseSensitive
+    $m = @(Get-QaMatches $Ctx $Pattern -Regex:$Regex -CaseSensitive:$CaseSensitive)
     $first = if ($m.Count -gt 0) { ': ' + ($m[0].Trim() -replace '^(.{0,160}).*$', '$1') } else { '' }
     Add-QaResult $Ctx "absent: $Pattern" ($m.Count -eq 0) "$($m.Count) line(s)$first"
 }
 
 function Test-QaCount($Ctx, [string]$Pattern, [int]$Expected) {
-    $m = Get-QaMatches $Ctx $Pattern
+    $m = @(Get-QaMatches $Ctx $Pattern)
     Add-QaResult $Ctx "exactly $($Expected)x: $Pattern" ($m.Count -eq $Expected) "$($m.Count) line(s)"
 }

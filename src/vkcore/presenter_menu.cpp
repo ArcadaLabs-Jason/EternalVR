@@ -8,6 +8,7 @@
 #include "vkcore/presenter_menu_release.hpp"
 
 #include "features/menu/menu_kind.hpp"
+#include "features/menu/pointer_steady.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/keep_active.hpp"
@@ -35,6 +36,22 @@ namespace {
 // loads since (menu_kind.hpp; one presenter per process; kept here, not in PresenterImpl, which is at the
 // file size limit). And the cursors nobody asked for in a play map taken for a screen, for the log.
 menu::MenuChain g_menuChain;
+// The menu pointer, steadied as the gun's aim is (Aim steadiness, features/menu/pointer_steady.hpp). XR
+// worker.
+std::optional<menu::PointerSteady> g_pointerSteady;
+
+// A hand's pointer pose in LOCAL (the hand is located in room space, the panel lives in LOCAL), steadied; a
+// frame without a sample time passes through.
+Pose pointerAim(input::Hand hand, const input::HandState& h, const input::InputFrame& frame) {
+    const Pose aim = menu::localFromRoom(frame.roomFromLocal, h.aimPose);
+    if (frame.sampleSeconds <= 0.0) {
+        return aim;
+    }
+    if (!g_pointerSteady) {
+        g_pointerSteady.emplace(input::aimSmoothingParams(controllers::aimSmoothing()));
+    }
+    return g_pointerSteady->update(hand, aim, frame.sampleSeconds);
+}
 int g_unaskedScreens = 0;
 constexpr int kUnaskedScreenLines = 10;
 
@@ -224,7 +241,8 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
         // Tutorial and lore popups show the cursor over the game unasked; they wait for Space or E. The
         // Dossier the controllers asked for opens on its map page (the router follows its tabs). A cursor
         // back within moments of the last one going, or onto the held panel, is the same menu changing
-        // screens and keeps its kind, unless a map load came since that menu began (menu_kind.hpp).
+        // screens and keeps its kind, unless a map load came since that menu began or the controllers asked
+        // for a menu since that cursor went (menu_kind.hpp).
         menu::MenuKindInput kindIn;
         kindIn.overGame = panelContent && shownHasView;
         kindIn.playMap = mp_guard::inPlayMap();
@@ -235,6 +253,12 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                           : menuDossier ? menu::MenuKind::Dossier
                                         : menu::MenuKind::Screen;
         kindIn.sinceCursorGone = now - menuCursorGone;
+        if (kindIn.hadMenu && kindIn.sinceCursorGone >= 0.0) {
+            // Asked for since the last cursor went: a new menu, not that one on another screen.
+            const double gap = std::min(kMenuRequestSeconds, kindIn.sinceCursorGone);
+            kindIn.dossierAskedSinceGone = controllers::dossierRequestedWithin(gap);
+            kindIn.menuAskedSinceGone = controllers::menuRequestedWithin(gap);
+        }
         const menu::MenuChain::Step step = g_menuChain.onCursor(kindIn, wasHeld, mp_guard::mapLoads());
         if (step.keepsPanel) {
             EVR_LOG("menu: the cursor is back; the panel stays where it was");
@@ -358,8 +382,8 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                 r.trigger = 0.0f;
             }
             if (menuOn && h.poseValid) {
-                // The hand is located in room space; the panel lives in LOCAL.
-                r.hit = menu::intersectPanel(menuPanel, menu::localFromRoom(frame->roomFromLocal, h.aimPose));
+                // Steadied as the gun's aim is (pointerAim).
+                r.hit = menu::intersectPanel(menuPanel, pointerAim(hand, h, *frame));
                 r.onTabStrip = r.hit && r.hit->v < kTabStripV;
             }
         }
@@ -449,7 +473,7 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
         const input::HandState& h = frame->hand(out.pointerHand);
         const std::optional<menu::PanelHit>& hit = in.hands[static_cast<std::size_t>(out.pointerHand)].hit;
         if (h.poseValid) {
-            const Pose aim = menu::localFromRoom(frame->roomFromLocal, h.aimPose);
+            const Pose aim = pointerAim(out.pointerHand, h, *frame);
             menuPointer.visible = true;
             menuPointer.from = aim.position;
             // The beam turns to face the head (without a head pose: the panel's viewing position).

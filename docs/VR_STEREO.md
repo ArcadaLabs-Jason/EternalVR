@@ -1500,7 +1500,8 @@ cvars, each hook point with its RVA, `frame-end job wrapped`, then `Route S on`.
 Beside them (the 10 s blocks): `rates: game P present(s)/s, T tick(s)/s, S stereo pair(s)/s shown; XR F
 frame(s)/s, N new image(s)/s; copy wait A ms average, M ms longest; newest image wait W ms average, L ms
 longest`, the game's own rates next to the runtime's (a headset's frame counter shows the XR rate, not the
-game's), how long the XR worker waited for its copy between xrBeginFrame and xrEndFrame, and how long it waited
+game's; S counts the pairs of every stereo route, Parallel Eye's eye copy too: it once printed 0.0 there, so the
+launcher had no game frame rate for a Parallel Eye session), how long the XR worker waited for its copy between xrBeginFrame and xrEndFrame, and how long it waited
 for the newest image's frame to finish rendering (Which image a headset frame shows); the `xr:` line counts the
 repeats with no finished image to take (still rendering, or being written), the newest images taken and the waits
 for one; `window: last 10 s: A acquire(s), average/max ms; C present call(s),
@@ -1530,6 +1531,16 @@ runtime stalls show even when the average rate looks close to the display's. Aft
 last 10 s: xrWaitFrame A ms average, M ms longest; xrWaitSwapchainImage ... per call (N call(s)); xrEndFrame ...`
 gives the time the XR worker spent inside those calls (the swapchain waits are each call for the game's image and
 the UI image; xrWaitFrame normally blocks for most of a display period, which is the runtime's own pacing).
+
+**The runtime holding frames.** When xrEndFrame's average over three 10 s lines in a row is a quarter of the
+display period or more, `xr: the runtime has held each frame in xrEndFrame for A ms on average over 30 s, a
+quarter of the P ms display period or more (L ms at its lowest this session); XR F frame(s)/s ...` names it
+once, and `xr: the runtime no longer holds frames in xrEndFrame (A ms on average over 30 s, XR F frame(s)/s)
+after S s` its end after three lines under it (`features/pacing/runtime_hold_watch.hpp`, at most 10 lines a
+process). A player's Virtual Desktop logs (Quest 3, 90 Hz) showed xrEndFrame's average growing from ~0.4 ms to
+7-13 ms over an hour while xrWaitFrame shrank by as much, until frames were missed (79 a second); a trip out
+of the game and back (a focus change) brought both back. The layer only names it: the cause is on the runtime's
+side as far as the logs show, and ending the session to start a new one was not tried (T-177).
 
 The in-headset capture logs `capture: saved eye L/R + UI to <base>-*.png (+ .txt), capture N: S of F frame(s),
 T ms after the trigger pull` (F is 1, or a burst's frames; S of them were saved). With

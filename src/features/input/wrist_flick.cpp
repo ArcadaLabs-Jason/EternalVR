@@ -39,6 +39,7 @@ WristFlick::WristFlick(FlickSettings settings) : settings_(sanitized(settings)) 
 
 void WristFlick::reset() {
     previous_.reset();
+    previousHeadYaw_.reset();
     previousSample_ = 0.0;
     roll_ = 0.0f;
     swing_ = 0.0f;
@@ -76,6 +77,12 @@ FlickOutput WristFlick::update(const InputFrame& frame, Hand weaponHand, float d
     const Quat now = normalize(hand.aimPose.orientation);
     const std::optional<Quat> before = previous_;
     previous_ = now;
+    const std::optional<float> headYawBefore = previousHeadYaw_;
+    previousHeadYaw_.reset();
+    if (frame.head.poseValid && finiteQuat(frame.head.pose.orientation)) {
+        const Vec3 face = rotate(normalize(frame.head.pose.orientation), {0.0f, 0.0f, -1.0f});
+        previousHeadYaw_ = std::atan2(-face.x, -face.z);
+    }
     if (!before || !(step > 1e-4f)) {
         return out; // the first frame, or a gap too short (or backwards) to read a rate from
     }
@@ -106,6 +113,13 @@ FlickOutput WristFlick::update(const InputFrame& frame, Hand weaponHand, float d
     swing_ += (swing - swing_) * alpha;
     out.rollDegrees = roll_;
     out.swingDegrees = swing_;
+    out.pitchDegrees = std::asin(std::clamp(pointing.y, -1.0f, 1.0f)) * kRadiansToDegrees;
+    out.handSpeed = length(hand.linearVelocity);
+    if (headYawBefore && previousHeadYaw_) {
+        float turn = *previousHeadYaw_ - *headYawBefore;
+        turn = std::remainder(turn, 2.0f * std::numbers::pi_v<float>);
+        out.headTurnDegrees = turn / step * kRadiansToDegrees;
+    }
 
     const float rate = std::fabs(roll_);
     quiet_ = rate < settings_.minRollDegrees * 0.25f ? quiet_ + step : 0.0f;

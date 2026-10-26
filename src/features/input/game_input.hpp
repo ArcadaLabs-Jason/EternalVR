@@ -5,6 +5,7 @@
 
 #include "features/input/axis2.hpp"
 #include "features/input/rest_wheel_output.hpp"
+#include "features/input/wrist_flick.hpp"
 #include "game/eternal/game_action.hpp"
 
 #include <array>
@@ -39,8 +40,10 @@ struct GameInput {
     bool handsJumped = false;
     // A hand reached out and pressed use alone this frame (reach_use.hpp), for the log.
     bool reached = false;
-    // The weapon hand's wrist rolled and switched the weapon mod this frame (wrist_flick.hpp), for the log.
+    // The weapon hand's wrist rolled and switched the weapon mod this frame (wrist_flick.hpp), for the log
+    // with the flick's rates.
     bool flicked = false;
+    FlickOutput flick;
 };
 
 // Under hand aim this frame's melee-class press aims with the head (action_aim.hpp): a punch's melee, or a
