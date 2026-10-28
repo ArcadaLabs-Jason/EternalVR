@@ -151,6 +151,19 @@ EternalVR is free and stays free. If you want to support it:
 - `branding/`: the logo and the launcher icon
 - `THIRD_PARTY_NOTICES.md`: origins and licences of third-party code
 
+## Thanks
+
+To everyone who has played the test builds, sent exports, filed issues and told me what felt off in the
+headset: thank you, EternalVR is a lot better because of you.
+
+cocofr69-cmd, cyto, DamicsITA, Fye, genfgenfgenf-git, H-Bomb777, HansGruber45, HugeLarry, Immolation,
+JamimaPanAm, jmcglath, John2910, Lieuuutenant Dan, MalebolgiaXX, nm9512, nsmmm, ObtuseMulberry, sdd25,
+ShinChiller, SilentBang, STRiPEALiPE, thet0x1n, Twip, Ventofreddo, vinion, yodaui
+
+Extra thanks to vinion for the AMD and Intel foveated rendering (#33).
+
+Tested it and not on the list? Tell me on Discord or in an issue and I'll add you.
+
 ## Acknowledgements
 Thanks to the wider Flat2VR community. Any code adapted from other projects is listed in
 `THIRD_PARTY_NOTICES.md`.
