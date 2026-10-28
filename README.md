@@ -157,8 +157,8 @@ To everyone who has played the test builds, sent exports, filed issues and told 
 headset: thank you, EternalVR is a lot better because of you.
 
 cocofr69-cmd, cyto, DamicsITA, Fye, genfgenfgenf-git, H-Bomb777, HansGruber45, HugeLarry, Immolation,
-JamimaPanAm, jmcglath, John2910, Lieuuutenant Dan, MalebolgiaXX, nm9512, nsmmm, ObtuseMulberry, sdd25,
-ShinChiller, SilentBang, STRiPEALiPE, thet0x1n, Twip, Ventofreddo, vinion, yodaui
+JamimaPanAm, jmcglath, john2910_, Lieuuutenant Dan, MalebolgiaXX, nsmmm, ObtuseMulberry, SDD, ShinChiller,
+SilentBang, STRiPEALiPE, thet0x1n, Twip, Ventofreddo, vinion, yodaui
 
 Extra thanks to vinion for the AMD and Intel foveated rendering (#33).
 
