@@ -26,8 +26,9 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>The first DLSS the layer runs DLAA with; an older one (the game's 2.3 included) runs Quality instead.</summary>
         public static readonly Version FirstDlaaVersion = new Version(3, 1, 0, 0);
 
-        /// <summary>The preset choices (the layer's values), in the window's order: NVIDIA's pick, then the transformer model's letters.</summary>
-        public static readonly string[] PresetValues = { "default", "K", "J", "M", "L", "F" };
+        /// <summary>The preset choices (the layer's values), in the window's order: NVIDIA's pick, the transformer model's letters, then the
+        /// older model's.</summary>
+        public static readonly string[] PresetValues = { "default", "K", "J", "M", "L", "E", "F" };
 
         /// <summary>NVIDIA's own pick for each quality (the DLL's default).</summary>
         public const string AutomaticPreset = "default";
@@ -38,7 +39,7 @@ namespace EternalVR.Launcher.Core.Settings
         public static readonly string[] PresetNames =
         {
             "Automatic (NVIDIA's pick)", "K (recommended)", "J (transformer)", "M (transformer, Performance)", "L (transformer, Ultra Perf.)",
-            "F (older model)",
+            "E (older model, faster)", "F (older model)",
         };
 
         /// <summary>The Version list's order in the window: the newest first (recommended), then the game's, then a file.</summary>

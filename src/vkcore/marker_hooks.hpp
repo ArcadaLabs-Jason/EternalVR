@@ -32,9 +32,11 @@
 // the thunk by its shape, and the projector called before the off-frame test by its read of the thunk's
 // global. Anything missing installs nothing and logs why, once.
 
+#include "ui_layer/marker_boxes.hpp"
 #include "ui_layer/ui_settings.hpp"
 
 #include <cstdint>
+#include <vector>
 
 namespace evr::vkcore {
 
@@ -48,5 +50,11 @@ void noteMarkerQuad(bool headLocked,
                     const ui_layer::UiSettings& ui,
                     std::uint32_t width,
                     std::uint32_t height);
+
+// XR worker: the points of the markers the HUD drew on its frame (not the ones it pulled onto the frame's
+// edge) in the last few game frames, in band coordinates (ui_layer/marker_boxes.hpp), while the HUD's
+// projection is the quad's; empty otherwise (no quad, not installed, no game frame for the lease's time).
+// The GUI image the worker copies is one of those frames', so its markers are among these points.
+std::vector<ui_layer::MarkerSpot> markerSpots();
 
 } // namespace evr::vkcore

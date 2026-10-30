@@ -46,6 +46,10 @@ namespace EternalVR.Launcher
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
         private readonly ComboBox showArms = Choices(Setting.Arms);
+        private readonly NumericUpDown weaponHandAngle =
+            Number(LauncherSettings.MinControllerAngle, LauncherSettings.MaxControllerAngle, 5, 0);
+        private readonly NumericUpDown offHandAngle =
+            Number(LauncherSettings.MinControllerAngle, LauncherSettings.MaxControllerAngle, 5, 0);
         private readonly ComboBox vibration = Choices(Setting.Vibration);
         private readonly ComboBox punchSpeed = Choices(Setting.PunchSpeed);
         private readonly ComboBox holdTime = Choices(Setting.HoldTime);
@@ -123,6 +127,12 @@ namespace EternalVR.Launcher
                 Row(Setting.Arms, showArms,
                     s => showArms.SelectedIndex = (int)s.Arms,
                     s => s.Arms = (ArmsView)showArms.SelectedIndex),
+                Row(Setting.WeaponHandAngle, WithUnit(weaponHandAngle, "°"),
+                    s => weaponHandAngle.Value = Clamped(s.WeaponHandAngle, weaponHandAngle, LauncherSettings.DefaultControllerAngle),
+                    s => s.WeaponHandAngle = (double)weaponHandAngle.Value),
+                Row(Setting.OffHandAngle, WithUnit(offHandAngle, "°"),
+                    s => offHandAngle.Value = Clamped(s.OffHandAngle, offHandAngle, LauncherSettings.DefaultControllerAngle),
+                    s => s.OffHandAngle = (double)offHandAngle.Value),
                 Row(Setting.MoveToward, locomotion,
                     s => locomotion.SelectedIndex = (int)s.Locomotion,
                     s => s.Locomotion = (LocomotionMode)locomotion.SelectedIndex),

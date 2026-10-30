@@ -1,13 +1,13 @@
 #pragma once
 
-// CPU timing (ETERNALVR_CPU_TIMING=1, docs/VR_STEREO.md "CPU timing"): where the CPU time of a stereo
+// CPU timing (on by default, docs/VR_STEREO.md "CPU timing"): where the CPU time of a stereo
 // tick goes. A tick runs from the start of one frame-end job on the frontend thread to the next (the
 // stereo hooks mark it). Within it the frontend's wrapped stages (eye L's frame end, eye R's render, a
 // drain) and the Vulkan calls that can take CPU time or block (vkQueueSubmit, vkWaitForFences,
 // vkWaitSemaphores, vkQueuePresentKHR) are timed on the wall clock and on the calling thread's CPU time
 // (QueryThreadCycleTime). Every 10 s the log gets `cpu:` lines with the split per tick and the busiest
-// threads of the process. Off (no hook handed out, every entry point returns at once) unless
-// ETERNALVR_CPU_TIMING=1.
+// threads of the process, so a player's log says how busy the processor is. Off (no hook handed out, every
+// entry point returns at once) with ETERNALVR_CPU_TIMING=0.
 
 #include "gpu_timing/cpu_split.hpp"
 #include "vkcore/dispatch.hpp"
@@ -20,7 +20,7 @@ namespace evr::vkcore::cpu_timing {
 
 using Stage = ::evr::gpu_timing::CpuStage;
 
-// ETERNALVR_CPU_TIMING=1 (read once).
+// Not turned off by ETERNALVR_CPU_TIMING=0 (read once).
 bool enabled();
 
 void onDeviceCreated(DeviceData& data, bool isGame);

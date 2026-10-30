@@ -346,6 +346,8 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch, which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
 | Show arms | Shown, Hidden, Hands only: Hidden hides the Slayer's arms and leaves the weapon alone, for example with the weapon in the left hand, where the game still draws its right arm reaching across to the gun. Hands only leaves the gloves and folds the arms behind them away: the off-hand glove sits on your off-hand controller wherever you reach, the gun hand's glove holds the gun. It needs the weapon hand to aim (Aim with), and while the game plays its own arm animations (a weapon switch, a melee, a glory kill) it draws the whole arms for that moment. | Shown |
+| Weapon hand angle | -60 to 60 degrees: tilts the gun and the glove on your weapon hand's controller, like a controller offset in SteamVR. Below 0 tips the front down, for a gun that points higher than your hand. With Valve Index controllers try -20, with any SteamVR offsets set back to 0 | 0 |
+| Off hand angle | -60 to 60 degrees: the same for your other hand's glove and what it points with. With Valve Index controllers try -40 | 0 |
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
@@ -354,7 +356,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Face buttons as thumb rest | A thumb resting on A/B or X/Y counts as the thumb rest, on Index and Pico 4 controllers | Off |
 | Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open; the stick's own wheel always slows time | On |
 | Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap. The stick pushed straight down for the weapon wheel waits 0.1 s less (0.15 s at Medium, never under 0.1 s), since the game's own wheel delay comes on top | Medium |
-| Aim steadiness | Off, Low, Medium, High: steadies the gun and the menu pointer against hand shake; higher trails your hand a little more | Medium |
+| Aim steadiness | Off, Low, Medium, High, Very high, Maximum: steadies the gun and the menu pointer against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
 | Aim dot size | 0.2 to 5 degrees. Only with the Aim dot on | 1.0 |
 | Vibration | Off, Light, Medium, Strong: the controllers vibrate when you fire, punch, point at and click menus, and with the game's own rumble | Medium |
@@ -366,7 +368,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
 | Screen-space reflections | The game's setting (Reflections in its own video menu: off at Low, on from Medium; a change made in the menu during play is followed and kept), Off (off in VR, a little lighter on the graphics card; your flat game keeps its setting). Stereo only, not with Anti-aliasing Off (they are off then) | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive, Maximum: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Maximum the least. The game's menus and HUD stay at full rate, so their text stays sharp, and so do cutscenes on the cinema screen. On NVIDIA RTX, AMD Radeon RX 6000 or newer and Intel Arc cards (not yet tried on Intel); other cards ignore it. Stereo only | Off |
-| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
+| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"), New game frames only (experimental: the mod hands your headset each game frame once and your headset's runtime fills in between, as for a native game below your refresh rate). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
 | Parallel Eye Rendering (highly experimental) | Renders both eyes as two views of one game frame, their work at the same time, instead of one eye after the other (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Only on the Steam version this release supports. Stereo only (with TAA, DLSS or Off); Alternate eyes and Foveated rendering are greyed out while it is on | Off |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
@@ -375,8 +377,8 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 |---|---|---|
 | Quality | DLAA, Quality, Balanced, Performance, Ultra Performance: how small an image each eye renders before DLSS scales it up (the full size, two thirds of the size, 58%, half, a third). DLAA needs a newer DLSS than the game's (Version); with the game's it runs as Quality | Quality |
 | Version | NVIDIA's newest (shown as latest, used by default; **Download** fetches it once from NVIDIA's own GitHub after you accept NVIDIA's license, and keeps it in EternalVR's data folder), The game's (2.3), or Load file... (a `nvngx_dlss.dll` you downloaded yourself, used from where you keep it). Nothing is copied into the game folder | NVIDIA's newest |
-| Preset | Automatic (NVIDIA's pick), K (recommended: the transformer model at every quality, the sharpest), J, M, L (its variants) or F (the older model). Needs a newer DLSS than the game's | K |
-| In the headset | What will run in VR with these settings, for example "DLSS 310.9.1, preset K, Quality, both eyes". Until the newest is downloaded, the game's DLSS 2.3 runs | |
+| Preset | Automatic (NVIDIA's pick), K (recommended: the transformer model at every quality, the sharpest), J, M, L (its variants), or E or F (the older model; E costs the GPU less than K, on the test PC about 14% more frames at Quality, but smears more in motion). Needs a newer DLSS than the game's | K |
+| In the headset | What will run in VR with these settings, for example "DLSS 310.9.16, preset K, Quality, both eyes". Until a DLSS is downloaded, the game's DLSS 2.3 runs; one downloaded with an earlier launcher runs until you download the newest | |
 
 ### Advanced tab
 
@@ -397,6 +399,7 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |
 | Use the headset's graphics card | For a PC with two or more graphics cards: the game renders on the card your headset's runtime uses, when it would otherwise pick another one and VR could not start. Kept for this PC whichever VR settings profile is picked. Not yet tried on a two-GPU PC with a headset | Off |
+| Performance in the log | Every 10 seconds the mod notes how busy your processor and graphics card are in its log, so an Export report shows what holds your frame rate back (about half a percent of the frame rate on the test PC); off: no timing at all | On |
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |
 
 ### bHaptics

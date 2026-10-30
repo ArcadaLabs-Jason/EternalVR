@@ -114,6 +114,8 @@ void endRun(const XrPresenter::Impl& p, const char* why) {
 
 // While a glory kill is shown as a fade, the camera hook holds the view black this far ahead, each frame.
 constexpr double kGloryBlackRefreshSeconds = 0.1;
+// A glory kill on the flat screen in stereo: the nearest thing assumed (the Slayer's arms, the demon).
+constexpr float kGloryNearestMetres = 0.3f;
 
 } // namespace
 
@@ -126,7 +128,7 @@ bool flatScreenGameView(XrPresenter::Impl& p, std::byte* renderView, std::byte* 
     if (p.glory.frame(player, controllers::forcedView(), menu, now).started && p.glory.onScreen()) {
         p.replaceScreen.store(true, std::memory_order_release);
     }
-    if (p.glory.black()) {
+    if (p.glory.black() || p.glory.blinkAfterHold(now)) {
         p.room.holdBlack(now + kGloryBlackRefreshSeconds);
     }
     const bool flatScreen = (p.cutscene && p.settings.cutsceneCinema) || p.glory.onScreen();
@@ -138,19 +140,17 @@ bool flatScreenGameView(XrPresenter::Impl& p, std::byte* renderView, std::byte* 
     if (flatScreen) {
         // The cutscene (or glory kill) keeps the game's camera and view; its frames go to the flat screen
         // (kViewStaleSeconds, or at once for a glory kill: GloryKills::flat), as a stereo pair if wanted.
-        cinema3dGameView(p, renderView, player, p.cutscene && !p.glory.onScreen());
+        cinema3dGameView(p, renderView, player, true, p.glory.onScreen());
         return true;
     }
     return false;
 }
 
-bool cinema3dGameView(XrPresenter::Impl& p,
-                      std::byte* renderView,
-                      const std::byte* player,
-                      bool cutsceneOnScreen) {
+bool cinema3dGameView(
+    XrPresenter::Impl& p, std::byte* renderView, const std::byte* player, bool onScreen, bool gloryKill) {
     // The GUI goes on its own quad over the pair (eye R's render has none): the UI layer is needed, and
     // working (not off after a failed swapchain or GUI images that could not be made).
-    const bool wanted = p.settings.cutscene3D && cutsceneOnScreen && p.settings.cutsceneCinema &&
+    const bool wanted = p.settings.cutscene3D && onScreen && (gloryKill || p.settings.cutsceneCinema) &&
                         p.settings.ui.enabled && g_uiLayerWorks.load(std::memory_order_relaxed) &&
                         p.settings.stereo.sequential && p.seqActive.load(std::memory_order_acquire) &&
                         !seqAlternateEyes();
@@ -199,6 +199,11 @@ bool cinema3dGameView(XrPresenter::Impl& p,
     const float tanLens = std::tan(lensFovY * 0.5f * 0.017453292f);
     in.traceNearestMetres = g_nearConfirm.step(
         traceNearest(player, gameAxis, origin, tanX, tanLens, in.unitsPerMetre, hits), started || cut);
+    if (gloryKill) {
+        in.traceNearestMetres = in.traceNearestMetres > 0.0f
+                                    ? std::min(in.traceNearestMetres, kGloryNearestMetres)
+                                    : kGloryNearestMetres;
+    }
     if ((started || cut) && g_state.logged < kLoggedLines &&
         renderView[render_view::kUsesViewOriginOffset] != std::byte{0}) {
         // The traces start at vieworg; a view that renders from viewOriginOffset + localViewOrigin is
@@ -362,6 +367,18 @@ std::uint32_t cinemaEyeLayers(XrPresenter::Impl& p,
         ui.space = p.localSpace;
         ui.pose = p.quadPose;
         ui.size = {p.quadSize.width, p.quadSize.width * ui.size.height / ui.size.width};
+        // Nearer than the screen, at the same angular size: in front of what the pair shows within its
+        // comfort clamp, so a subtitle is not behind a shot that pops out of the screen (T-183).
+        if (const std::optional<Pose> head = p.locateHead(p.nextDisplayTime.load())) {
+            const float ipd = roomScaleSettings().ipdMetres;
+            const float k = xr_math::cinemaGuiDistanceScale(
+                p.quadSize.width,
+                ipd >= 0.04f && ipd <= 0.09f ? ipd : xr_math::kCinemaDefaultInteraxialMetres);
+            const Vec3 screen{p.quadPose.position.x, p.quadPose.position.y, p.quadPose.position.z};
+            const Vec3 gui = head->position + (screen - head->position) * k;
+            ui.pose.position = {gui.x, gui.y, gui.z};
+            ui.size = {ui.size.width * k, ui.size.height * k};
+        }
         layers[count++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&ui);
     } else {
         g_staleGuiFrames.fetch_add(1, std::memory_order_relaxed);

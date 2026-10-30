@@ -147,12 +147,30 @@ bool XrPresenter::Impl::fillReticleQuad(XrCompositionLayerQuad& quad) {
         return false;
     }
     const XrSpace aim = controllers::weaponAimSpace();
-    if (aim == XR_NULL_HANDLE) {
+    // Head aim with a scoped zoom: the game's crosshair is held off (its scope would ring the view, T-136),
+    // so the dot marks the middle of the view, where head-aimed shots go (T-182). Otherwise no dot under head
+    // aim.
+    const bool scopeDot = aim == XR_NULL_HANDLE && controllers::scopeZoomed();
+    if (aim == XR_NULL_HANDLE && !scopeDot) {
         return false;
     }
     if (!reticleSwapchain && !createReticle()) {
         reticleFailed = true;
         return false;
+    }
+    if (scopeDot) {
+        const float dotDistance = settings.ui.reticleDistanceMetres;
+        const float s = ui_layer::reticleSideMetres(dotDistance, settings.ui.reticleDegrees);
+        quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+        quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+        quad.subImage.swapchain = reticleSwapchain;
+        quad.subImage.imageRect = {
+            {0, 0}, {static_cast<std::int32_t>(kReticlePixels), static_cast<std::int32_t>(kReticlePixels)}};
+        quad.subImage.imageArrayIndex = 0;
+        quad.size = {s, s};
+        quad.space = viewSpace;
+        quad.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -dotDistance}};
+        return true;
     }
     // Where the ray meets the world (reticle_depth.hpp), else at the set distance; the same angular size.
     const bool traced = shownHasView && shownView.weaponAimValid && shownView.weaponAimHitMetres > 0.0f;

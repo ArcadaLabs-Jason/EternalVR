@@ -276,3 +276,16 @@ TEST_CASE("bad input gives no eyes") {
     CHECK_FALSE(cinemaStereo({std::nanf(""), 95.0f, 63.0f, 1.0f}).has_value());
     CHECK_FALSE(cinemaStereo({0.063f, std::nanf(""), 63.0f, 1.0f}).has_value());
 }
+
+TEST_CASE(
+    "the GUI over a stereo cutscene sits where its disparity is the comfort clamp's, in front of the shot") {
+    const float k = cinemaGuiDistanceScale(2.4f, 0.063f);
+    CHECK(k == doctest::Approx(0.546f).epsilon(0.01));
+    // Its crossed disparity against the screen (2.5 m): the eyes' separation over the two distances.
+    const float d = 2.5f * k;
+    const float crossed = 0.063f * (1.0f / d - 1.0f / 2.5f); // radians
+    const float clamp = kCinemaMaxCrossed * 2.4f / 2.5f;
+    CHECK(crossed == doctest::Approx(clamp).epsilon(0.001));
+    CHECK(cinemaGuiDistanceScale(0.0f, 0.063f) == 1.0f);
+    CHECK(cinemaGuiDistanceScale(2.4f, -1.0f) == 1.0f);
+}

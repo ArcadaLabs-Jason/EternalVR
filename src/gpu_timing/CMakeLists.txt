@@ -5,6 +5,7 @@ evr_add_module(evr_gpu_timing
     SOURCES
         cpu_split.cpp
         frame_gpu.cpp
+        present_hang.cpp
         present_stall.cpp
         query_ring.cpp
         stats.cpp

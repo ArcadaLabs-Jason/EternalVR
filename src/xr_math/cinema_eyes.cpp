@@ -107,4 +107,12 @@ std::optional<CinemaStereo> cinemaStereo(const CinemaStereoInput& input) {
     return out;
 }
 
+float cinemaGuiDistanceScale(float screenWidthMetres, float ipdMetres) {
+    if (!(screenWidthMetres > 0.0f) || !(ipdMetres > 0.0f) || !std::isfinite(screenWidthMetres) ||
+        !std::isfinite(ipdMetres)) {
+        return 1.0f;
+    }
+    return 1.0f / (1.0f + kCinemaMaxCrossed * screenWidthMetres / ipdMetres);
+}
+
 } // namespace evr::xr_math

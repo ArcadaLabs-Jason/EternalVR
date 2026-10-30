@@ -28,6 +28,7 @@
 #include "vkcore/controllers.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/gamepad_mode.hpp"
+#include "vkcore/head_sweep.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -113,6 +114,8 @@ bool belchFireInfo(const std::byte* hands) {
 constexpr float kMaxReachMetres = 1.0f;
 // A game fire position this far from the eye is the muzzle, not the view origin.
 constexpr float kMuzzleEpsilonMetres = 0.02f;
+// A shot's start at the hand past a wall goes back to this far short of the wall (T-181).
+constexpr float kWallClearMetres = 0.02f;
 
 std::atomic<const std::byte*> g_updateViewAnglesReturn{nullptr};
 // The idPlayer the camera hook last saw (the forced-view hook counts only its calls).
@@ -217,10 +220,13 @@ void logShotStats(State& s) {
     if (ticks - last < 10000 || !g_lastShotStats.compare_exchange_strong(last, ticks)) {
         return;
     }
-    EVR_LOG("%s: %llu shot(s), %llu from the hand; view-to-hand error over 0.5 deg in %llu, max %.2f deg",
-            kTag, static_cast<unsigned long long>(s.shots.load()),
-            static_cast<unsigned long long>(s.shotsRewritten.load()),
-            static_cast<unsigned long long>(s.shotsOverHalfDegree.load()), g_maxAimError.load());
+    EVR_LOG(
+        "%s: %llu shot(s), %llu from the hand (%llu taken back from behind a wall); view-to-hand error over "
+        "0.5 deg in %llu, max %.2f deg",
+        kTag, static_cast<unsigned long long>(s.shots.load()),
+        static_cast<unsigned long long>(s.shotsRewritten.load()),
+        static_cast<unsigned long long>(s.shotsBehindWall.load()),
+        static_cast<unsigned long long>(s.shotsOverHalfDegree.load()), g_maxAimError.load());
 }
 
 void onFire(const HookRegisters& regs) {
@@ -297,6 +303,21 @@ void onFire(const HookRegisters& regs) {
     }
     if (!shot || !mp_guard::allowsGameTouch()) {
         return;
+    }
+    // The way from the eye to the hand: a wall on it (or a demon) takes the start back to just short of it,
+    // so a gun pushed through a thin wall fires on the player's side and a demon in between is still hit.
+    if (!alternate && cfg.shotOrigin == input::ShotOrigin::Hand) {
+        bool inContact = false;
+        const float span = length(shot->origin - eye);
+        if (const auto hit = span > 0.0f ? sweepShot(owner, eye, shot->origin, inContact) : std::nullopt) {
+            const float back = kWallClearMetres * world.unitsPerMetre / span;
+            shot->origin = eye + (shot->origin - eye) * std::max(0.0f, *hit - back);
+            if (s.shotsBehindWall.fetch_add(1, std::memory_order_relaxed) < 5) {
+                EVR_LOG("%s: shot: the way from the eye to the hand meets something at %.2f m of %.2f m; "
+                        "the shot starts there",
+                        kTag, *hit * span / world.unitsPerMetre, span / world.unitsPerMetre);
+            }
+        }
     }
     const float pos[3] = {shot->origin.x, shot->origin.y, shot->origin.z};
     const float newAxis[9] = {shot->axis.forward.x, shot->axis.forward.y, shot->axis.forward.z,

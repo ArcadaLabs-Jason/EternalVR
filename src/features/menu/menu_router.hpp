@@ -81,6 +81,7 @@ struct PageChange {
         EndKept,    // a tab key (`key`) at the first or the last tab: not sent, the page stays
         EndForced,  // the same tab key kept back twice in RouterTuning::endRepeatWindow: sent, page not known
         TabClicked, // a click on the tab strip: which tab it opens is not known
+        GameShows,  // the game showed a Dossier screen (RouterInput::dossierShows): its page
         Closed,     // the menu closed
     };
     int from = -1;
@@ -132,8 +133,14 @@ struct RouterInput {
     // The menu is a popup the game raised by itself over the game (no pause, Dossier or mission information
     // was asked for): A / X taps Space instead of clicking, a stick click taps E instead of C.
     bool popup = false;
-    // The menu is the Dossier the controllers asked for (it opens on its map page).
+    // The menu is the Dossier the controllers asked for (taken to open on its map page until the game says
+    // which screen it shows).
     bool dossier = false;
+    // How many times the game has shown a Dossier screen (vkcore/dossier_screen_hook.hpp; 0 without the hook)
+    // and the page of the last one (dossier_screen.hpp). While a menu is up each new one sets the page:
+    // right when the Dossier opens elsewhere than its map (on Challenges after the HUD's challenges).
+    std::uint32_t dossierShows = 0;
+    int dossierShown = -1;
     std::array<RouterHand, 2> hands; // indexed by input::Hand
     // The gameplay actions the controllers hold now, as the control map maps them before a menu holds them
     // back. In a popup each one with a popupActionKey presses that key while it is held.
@@ -225,6 +232,8 @@ private:
     // Sends a tab key, counting the Dossier's pages; at either end of them the key is kept back.
     void tabKey(std::uint8_t key, double now, RouterOutput& out);
     void setPage(int page, PageChange::Why why, std::uint8_t key, RouterOutput& out);
+    // The page of the screen the game showed last, when it showed one since the page last followed it.
+    void followShownScreen(const RouterInput& in, RouterOutput& out);
     void moveCursor(const RouterInput& in, std::optional<CursorPixel> target, double now, RouterOutput& out);
     void mapSticks(const RouterInput& in, double now, RouterOutput& out);
     void menuSticks(const RouterInput& in, double now, RouterOutput& out);
@@ -261,6 +270,8 @@ private:
     // stops showing frames with the menu still up), and the map's drags. The last tab key kept back at an
     // end.
     int page_ = -1;
+    // RouterInput::dossierShows when the page last followed the game's screen, or when the menu last closed.
+    std::uint32_t shows_ = 0;
     std::uint8_t keptKey_ = 0;
     double keptAt_ = 0.0;
     MapDrag drag_;

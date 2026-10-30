@@ -1,6 +1,7 @@
 #include "features/input/controller_settings.hpp"
 
 #include "common/parse_float.hpp"
+#include "features/input/controller_tilt.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -267,6 +268,10 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
                                                                    {"eye", ShotOrigin::Eye}};
     r.choice("ETERNALVR_SHOT_ORIGIN", kShot, s.shotOrigin);
     r.range("ETERNALVR_AIM_SMOOTHING", 0.0f, 1.0f, s.aimSmoothing);
+    r.range("ETERNALVR_WEAPON_HAND_TILT", -kMaxControllerTiltDegrees, kMaxControllerTiltDegrees,
+            s.weaponHandTiltDegrees);
+    r.range("ETERNALVR_OFF_HAND_TILT", -kMaxControllerTiltDegrees, kMaxControllerTiltDegrees,
+            s.offHandTiltDegrees);
     r.range("ETERNALVR_HAPTICS", 0.0f, 1.0f, s.haptics);
     r.flag("ETERNALVR_BHAPTICS", s.bhaptics);
     r.range("ETERNALVR_BHAPTICS_INTENSITY", 0.0f, 1.0f, s.bhapticsIntensity);

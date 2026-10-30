@@ -41,6 +41,8 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.MeleeAimWith] = s => s.MeleeAim = ActionAimMode.Head,
             [Setting.EquipmentAimWith] = s => s.EquipmentAim = ActionAimMode.OffHand,
             [Setting.WeaponHand] = s => s.Hand = Handedness.Left,
+            [Setting.WeaponHandAngle] = s => s.WeaponHandAngle = -20,
+            [Setting.OffHandAngle] = s => s.OffHandAngle = -40,
             [Setting.Arms] = s => s.Arms = ArmsView.HandsOnly,
             [Setting.MoveToward] = s => s.Locomotion = LocomotionMode.RightHand,
             [Setting.XButton] = s => s.Dossier = DossierPress.Tap,
@@ -86,6 +88,8 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.MotionControllers] = s => s.Controllers = false,
             [Setting.ShotsFrom] = s => s.Shots = ShotOrigin.Eye,
             [Setting.MenuLaser] = s => s.MenuBeam = false,
+            [Setting.PerformanceLog] = s => s.PerfLog = false,
+            [Setting.PerformanceOverlay] = s => s.PerfOverlay = PerformanceOverlay.FrameRate,
             [Setting.ExtraArguments] = s => s.ExtraArguments = "+com_skipIntroVideo 1",
         };
 

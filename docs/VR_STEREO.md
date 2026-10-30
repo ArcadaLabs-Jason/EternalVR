@@ -535,7 +535,8 @@ screen, like a 3D movie. The code is `src/xr_math/cinema_eyes.*` (the eye math, 
 `presenter_head.cpp`, `presenter_frame.cpp`, `presenter_stereo.cpp` and `presenter_seq.cpp`.
 
 - Applies with Route S stereo and the UI layer (on by default) only: not with Parallel Eye Rendering or alternate eyes (the eyes must come from one
-  game frame; `ETERNALVR_ALTERNATE_EYES` off), not for a glory kill on the screen, not in the around-you cutscene view
+  game frame; `ETERNALVR_ALTERNATE_EYES` off), for a glory kill on the screen too (its nearest thing taken at 0.3 m or nearer: the demon and the Slayer's
+  arms at the lens, T-180), not in the around-you cutscene view
   (already two real eyes there). Anything else leaves the cutscene as it was: one render, the same image in both eyes.
 - Camera hook (`cinema3dGameView`): instead of returning at the flat screen, the hook records a `ViewRecord` with
   `stereo`, `cinema3D`, `cutscene` and `cutsceneArms` (the game's weapon FOV and matrices stay) set, the game's view axis
@@ -586,8 +587,12 @@ screen, like a 3D movie. The code is `src/xr_math/cinema_eyes.*` (the eye math, 
   the cutscene, or a frame without both eyes, shows the one both-eyes quad with the left half, as before. Eye R's
   render has no GUI (`docs/rig-findings/ui-layer.md`, section 3), so subtitles in the eye images would reach one eye
   only: for a pair the GUI is left out of both eye images (`ui_engine::setSkipComposite`) and shown on the UI layer's own
-  GUI image as a third quad over the screen, both eyes, at the screen's pose and width (the 16:9 band the game lays its
-  GUI out in), so it sits at the screen plane. The pair needs a working UI layer with the composite skip (it is not
+  GUI image as a third quad over the screen, both eyes, facing the head like the screen and as wide in the view (the
+  16:9 band the game lays its GUI out in). It sits nearer than the screen, at the fraction
+  `1 / (1 + kCinemaMaxCrossed * width / eye distance)` of the screen's distance (0.55: 1.37 m for the 2.5 m screen),
+  where its crossed disparity equals the comfort clamp's, so subtitles stay in front of what the pair shows within
+  the clamp (T-183; at the screen plane they sat behind shots that popped out of it and were hard to focus in the
+  owner's headset). Shots past the clamp (actors at the lens, which the traces miss) can still come in front of it. The pair needs a working UI layer with the composite skip (it is not
   rendered with the layer off, `ETERNALVR_UI_SKIP_COMPOSITE` off, or after the layer's GUI images or swapchain failed).
   A pair frame stays on its two eye quads while the GUI image is fresh or was within the last second, so the picture
   does not flip between 3D and flat as subtitles come and go; while the GUI image is stale the GUI quad is left out and
@@ -1293,6 +1298,22 @@ path raises it to at least 120, `docs/rig-findings/stereo-reentry.md`) on the co
 `+com_adaptiveTickMaxHz 90`. It caps the tick rate on the game's own clock, though, not in phase with the
 headset's frames and drifting against them, so the uneven pulldown would come back as a slow beat. Not tried.
 
+### New game frames only (`ETERNALVR_PACE=new`, experimental; T-193)
+
+The other way round: the game is not held, and the XR worker begins a headset frame only once the game has
+handed over an image not shown yet (`vkcore/new_frame_wait.*`: `publishSlot` sets an event, the worker waits on
+it before `xrWaitFrame`, at most `pacing::newFrameWaitSeconds`, two display periods and never over 50 ms), then
+for that image's drawing to finish on the shared fence (the same limit; an image is handed over at the game's
+present, before its GPU work is done, and a frame begun before it is drawn shows the previous one). Each
+image is then submitted once, the runtime sees the game's own rate, and between game frames it fills in itself
+(its reprojection, or Virtual Desktop's SSW, Meta's ASW, SteamVR's Motion Smoothing), as for a native game below
+the refresh rate. A wait that runs out (the game stalled, a loading screen) begins the frame anyway with the
+previous image, so the session's frames never stop. The worker's controller sync, haptics and menu pointer run
+with its frames, so at the game's rate in this mode. Every 10 s: `pace: new frames only, last 10 s: R headset
+frame(s) began with a new image ready, W after a wait for one (average A ms, longest L ms), T after the wait ran
+out (the previous image shown again)`. Overlays that count the frames handed to the runtime (fpsVR, SteamVR's
+own) then show the game's rate; with the other two modes they show the headset's.
+
 ## Headset refresh rate
 
 The runtime's `predictedDisplayPeriod` is 1/refresh, but several runtimes report a multiple of it while they
@@ -1351,6 +1372,78 @@ game device or instance the layer could not set up for the headset (no presenter
 the file, so it is tried up to 10 times with `Sleep(1)` between, and a write still lost is made again within a second
 (`status::flush()`, one move at most once a second, from the game's presents and the XR worker, so a lost
 `state=flat` is retried too; logged once per loss and once per recovery).
+
+## Performance overlay (the game's Performance Metrics; T-213, T-214)
+
+The launcher's Performance overlay (Advanced tab: Off, Frame rate, Detailed; off by default) shows the game's
+own Performance Metrics in VR. It passes the game's level on the command line (`+com_showFPS 3` for Frame rate,
+`+com_showFPS 2` for Detailed) and the same level to the layer (`ETERNALVR_PERF_OVERLAY`; 0 when off). Off passes
+no cvar, so the game keeps its own setting. The game does not save the cvar: after a rig run with it on, neither
+config file nor the decrypted `profile.bin` held `com_showFPS`, so nothing needs putting back.
+
+Where they are. The game draws its metrics only into its GUI target, not into the eye images, right-aligned in
+the top-right corner of the whole target, the first line 18 pixels from the top. The HUD quad shows only the
+16:9 band of the GUI target the HUD and menus are laid out in (`ETERNALVR_UI_CROP`), rows 512 to 1663 of a
+2048 x 2176 target, so on a near-square eye target the metrics were never seen, in any HUD mode. With
+`ETERNALVR_PERF_OVERLAY` set the layer shows that corner (`ui_layer/perf_metrics.hpp`: 320 pixels wide; 50 rows
+at level 3, 90 at level 1, 172 at level 2; never band rows) on a quad of its own from the same swapchain, its
+bottom edge on the HUD panel's top edge and its right edge on the panel's right edge (`vkcore/presenter_perf.hpp`),
+at the panel's scale up to a band 2048 pixels wide and at that band's scale above it (`kReferenceWidth`). It
+covers no part of the HUD and follows the panel's distance, size and height settings. It is shown with the
+head-locked HUD (all HUD modes), not on a menu's panel, and not while the GUI target holds a full-screen backdrop
+(`ui_layer::perfLevelShown`, the backdrop test the crosshair mask uses): at an immersive cutscene's start the game
+fills the whole target with opaque black, the corner too, and the quad stood above the panel as a black
+rectangle (rig, two GUI captures). With the change (rig, the same scene): three captures over the black backdrop
+without the quad, which came back once the backdrop test read the backdrop gone. A frame then has at most 16 layers, the number OpenXR guarantees; a frame
+without room leaves the quad out (`ui_layer::perfQuadFits`, logged once). The in-headset capture's `-HUD.png` draws it there too, and its text
+file names it. Log line, once: `ui: the game's Performance Metrics (com_showFPS 3) on their own quad above the
+HUD panel's top-right corner: GUI rect (1728, 0) 320 x 50 of 2048 x 2176, 0.312 x 0.049 m`.
+
+What the numbers mean in VR (rig, OpenXR-Simulator stereo at 90 Hz, e2m1 start, 2048 x 2176 per eye, pacing
+off, the 0.1.87 layer, compared with the layer's 10 s timing lines of the same runs):
+
+- `80fps - 12.25ms` (every level; level 3, the cvar's "retail version", shows this line alone): the game's
+  frames (ticks) a second and the time between them. It counts ticks, not presents: in the default stereo path
+  (Route S) each tick renders both eyes, eye R nested in eye L's frame end with a present of its own, and the
+  layer counted 76.3 to 77.3 ticks a second, 153 presents a second and the headset at 90 [rig]. So there it is the
+  number of new stereo pairs a second the headset gets, the number that matters when the headset's own counter
+  shows its full refresh rate while the game draws fewer (the layer shows the last pair again in between). The ms
+  is the time between frames, not the processor's or the graphics card's work: neither is shown on its own, nor
+  is the video memory. The layer's log has those (`cpu:`, `gpu:` and `vram:` lines).
+- The other render paths, from the code and not yet read against the layer's lines on the rig: with Parallel Eye
+  Rendering each tick is one render of both eyes as two views, and in mono one image a tick for both eyes, so the
+  count is again the new pictures a second. With Alternate eyes (`=1`, and `auto` while it alternates) each tick
+  renders one eye: the count is still ticks, but each eye gets a new picture at half of it.
+- `76avg` (level 2): the average frame rate; the layer's ticks a second for the same 10 s read 76.4 to 77.0.
+- `HDR: OFF`, `RT: ON`, `DLSS : OFF` (level 2): the game's own settings as it reports them.
+- `rs-off / 2048x2176` (levels 1 and 2): the game's dynamic resolution (off in VR) and the size of each eye's
+  image.
+- `Tick-Adaptive 81Hz` (levels 1 and 2): the game's tick mode and its own estimate of the rate it runs at.
+
+Under a menu the game draws the line on the menu's GUI image too (level 3 in the pause menu: `152fps - 6.75ms`,
+the layer 147.6 to 151.4 ticks a second); the menu panel shows the band only, so it is not seen there.
+
+Size. The game draws the lines in pixels of its own, the same at every render size: at 1448 x 1560 per eye the
+level 2 lines took rows 18..153 and 181 pixels across, as at 2048 x 2176. Each line is about 13 pixels tall: on
+the default panel (2.0 m wide at 1.5 m) that is 0.48 degrees at 2048 pixels per eye, and more at smaller render
+sizes. So that the text does not shrink at larger render sizes (0.36 degrees at 2768 per eye at the panel's own
+scale), the quad keeps the size it has on a 2048-wide band there, the game's pixels drawn larger. Whether 0.48
+degrees reads well is a headset question.
+
+Rig checks of the quad (this branch, Release, OpenXR-Simulator, the in-headset capture's `-HUD.png`): Frame rate,
+panel HUD, 2048 x 2176: `66fps - 15.09ms` just above the panel's top-right corner (the layer 68.3 to 69.0 ticks a
+second); Detailed at 1448 x 1560: the seven lines above the corner, 0.442 x 0.238 m; Detailed with the wrist HUD:
+above the head-locked part, the corner blocks cut to the wrist as before. No `xrEndFrame` failure in any of the
+runs.
+
+Cost. Detailed (the most text, and the larger quad) against Off, this branch's Release layer on the rig: e2m1
+start standing still, 2048 x 2176 per eye, pacing off, DLSS off, 80 s runs in the order Off, Detailed, Detailed,
+Off, from 20 s after the map's start, no build beside any run. Clocks free: Off 69.9 and 71.5 ticks a second,
+Detailed 70.8 and 71.7; GPU per tick 13.84 and 13.33 ms against 13.46 and 13.24. GPU clock locked at 900 MHz
+(GPU-bound): Off 41.3 and 42.2, Detailed 41.7 and 42.4; GPU per tick 23.65 and 22.60 ms against 23.38 and
+22.86. Video memory 8978 to 8995 MB in every run. Each difference is inside the spread between the two Off runs,
+so neither choice costs a measurable frame rate here. Frame rate draws one line of the same text, so it was not
+measured on its own.
 
 ## Render size (T-031)
 
@@ -1431,7 +1524,8 @@ axis).
 | `ETERNALVR_PARALLEL_EYES` | unset | `1` in stereo: Parallel Eye Rendering, both eyes as two views of one frame (section "Parallel Eye Rendering"), on Steam build 25216728 only; any other build, the UI layer off or DLSS with `ETERNALVR_PE_DLSS=0` keep Route S, and with a stereo experiment the experiment runs (logged). Async compute off, view 1's clones and the eye copy come with it. The launcher's "Parallel Eye Rendering (highly experimental)", off by default |
 | `ETERNALVR_PE_EXPOSURE` | `same` | under Parallel Eye Rendering, the auto-exposure image view 1 reads: `same` the one view 0 writes this frame, `prev` the one view 0 wrote the frame before, `engine` the engine's own index (the parity of view 1's last own update, image 0 until it runs one) and view 1's update skipped only where its eye pose was written (the rig's positive control); section "Parallel Eye Rendering", one auto exposure for both eyes |
 | `ETERNALVR_STEREO_EYE_POSES`, `_JITTER_COPY`, `ETERNALVR_TEST_WEAPON_FOV` | | experiments only (below) |
-| `ETERNALVR_GPU_TIMING` | 0 | `sample` (or `sampled`): GPU timestamps around the submit batches of 3 frames in every 45, each eye's GPU busy time in a 10 s line (below); `1`, `on` or `true`: every frame, with the full summary and CSV; anything else: off; any mode |
+| `ETERNALVR_GPU_TIMING` | sample | sampled (the default; anything but the values below): GPU timestamps around the submit batches of 3 frames in every 45, each eye's GPU busy time in a 10 s line (below); `1`, `on` or `true`: every frame, with the full summary and CSV; `0`, `off` or `false`: off; any mode |
+| `ETERNALVR_CPU_TIMING` | 1 | on (the default): the CPU split of a tick and the busiest threads in a 10 s line (below); `0`, `off` or `false`: off |
 
 ## Logs and counters
 
@@ -1667,11 +1761,13 @@ their difference: the displaced copy, and eye R), captures in `tmp-hg\stOn-eyes`
 ## GPU timing
 
 GPU timing measures the GPU with Vulkan timestamps, in any mode (flat, head-tracked, Route S), so
-performance work has numbers on the rig, where PresentMon records nothing without elevation. Off by
-default: the layer then hands out no extra hook and the present path returns at once.
-`ETERNALVR_GPU_TIMING=sample` samples: only the submits of 3 frames in every 45 (about 4 times a second
-under Route S) are bracketed, and the 10 s line is short. `ETERNALVR_GPU_TIMING=1` times every frame, with
-the full summary and the CSV below.
+performance work has numbers on the rig, where PresentMon records nothing without elevation, and a
+player's log says how busy the GPU is. Sampled by default (T-190): only the submits of 3 frames in every
+45 (about 4 times a second under Route S) are bracketed, and the 10 s line is short.
+`ETERNALVR_GPU_TIMING=1` times every frame, with the full summary and the CSV below.
+`ETERNALVR_GPU_TIMING=0` turns it off: the layer then hands out no extra hook and the present path returns
+at once. The launcher's "Performance in the log" (Advanced tab, on by default) turned off sets it and
+`ETERNALVR_CPU_TIMING` to 0.
 
 How it measures (`src/vkcore/gpu_timing*.cpp`, pure logic in `src/gpu_timing/`):
 
@@ -1707,7 +1803,7 @@ Logs, every 10 s from the present hook (all lines start with `gpu:`):
 
 - At start-up: `GPU timing requested (mode): timestamp period P ns, valid bits per queue family [...]`, then
   `GPU timing on` (or `off` and why), and `timing submits on queue family N` per family on first use.
-- Sampled (`ETERNALVR_GPU_TIMING=sample`): `last 10.0 s, 3 of every 45 frames timed: eye L GPU busy A ms
+- Sampled (the default): `last 10.0 s, 3 of every 45 frames timed: eye L GPU busy A ms
   average, M ms longest (n N); eye R GPU busy ...; stereo tick GPU busy ...; L frame(s) lost` (`mono` for
   frames outside Route S; a stereo tick is an eye L frame plus the eye R frame after it). Three frames in a
   row are sampled so each run holds such a pair. A submit racing the present that ends a sampled frame goes
@@ -1734,9 +1830,10 @@ of untimed batches in the 10 s line mean the numbers are incomplete.
 
 ## CPU timing
 
-`ETERNALVR_CPU_TIMING=1` splits the CPU side of a tick: where the wall time of one stereo tick goes and
-how busy the process's threads are. Off by default: no extra hook is handed out and every timer returns at
-once. It combines with GPU timing (`ETERNALVR_GPU_TIMING=1`); the two hooks of `vkQueueSubmit` chain.
+CPU timing splits the CPU side of a tick: where the wall time of one stereo tick goes and how busy the
+process's threads are, so a player's log says how busy the processor is. On by default (T-190);
+`ETERNALVR_CPU_TIMING=0` turns it off: no extra hook is handed out and every timer returns at once. It
+combines with GPU timing; the two hooks of `vkQueueSubmit` chain.
 
 How it measures (`src/vkcore/cpu_timing.cpp`, pure logic in `src/gpu_timing/cpu_split.cpp`):
 
@@ -1817,6 +1914,35 @@ process). Past the budget Windows pages memory out and back in, which stutters.
 Cost: four performance-counter reads and a dozen atomic exchanges per present; a map lookup and two counter
 reads per pipeline creation or allocation. The display rate query (Desktop window) and the VRAM reading run
 on the XR worker between its frames.
+
+## Hangs
+
+Always on, any mode (`src/vkcore/hang_note.*`; which gaps count in `src/gpu_timing/present_hang.*`; T-192).
+A stall line is written by the present that ends its gap, so a game that never presents again leaves no
+line. The XR worker keeps running then (the headset keeps the last image), and each pass of its loop asks
+the hang watch: no game present for 5 s in play (a game tick at most 250 ms before the last present, as for
+stalls; without the camera hook every gap counts) gets a note, the same gap at 20 s another, and a present
+after a noted gap one line. At most 3 gaps a process get notes.
+
+`hang: no game present for 5.0 s in play (the last game tick 5.0 s ago; hang 1, note 1 of 2): 61 thread(s),
+where each stands and the first return addresses on its stack in the game, the layer or a driver`, then one
+line per thread: `hang:   thread 9212 (start DOOMEternalx64vk.exe+0x1D2A40): at ntdll.dll+0x9F354; stack
+EternalVR.dll+0x8A1C2, DOOMEternalx64vk.exe+0x1E44B0, ...`; when the game comes back, `hang: the game
+presented again after 8.0 s (hang 1)`.
+
+- **at**: the instruction the thread stands at. A thread waiting stands in ntdll (a wait call); a thread
+  spinning or stuck in a loop stands in the module that loops, and stands elsewhere in the second note.
+- **start**: the thread's start address, which tells the game's threads apart (its render thread, its job
+  workers, the layer's own XR worker and window thread).
+- **stack**: the first 8 words in the top 16 KiB of the thread's stack that point into a module other than
+  ntdll, kernelbase and kernel32: a rough call chain, not an unwound one. `EternalVR.dll` in the render
+  thread's stack means the hang is in a layer hook; the driver's DLL means a wait inside the driver.
+
+Each thread is suspended alone while its context and stack top are copied, and resumed before the next;
+nothing allocates, logs or takes a lock meanwhile. Modules are named from a list the worker refreshes every
+60 s while the game presents, so a thread hung holding the loader's or the heap's lock cannot stall the
+worker too. Rig only: `ETERNALVR_TEST_HANG=<seconds>` holds one present that long, after 2000 presents in
+play, so a run shows the notes and the closing line.
 
 ## Live experiments (S1 to S5, stereo-routes.md section 2.10)
 

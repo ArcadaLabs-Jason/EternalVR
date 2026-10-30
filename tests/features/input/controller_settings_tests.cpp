@@ -144,6 +144,16 @@ TEST_CASE("aim smoothing is light by default, 0 turns it off, and it is kept wit
     CHECK(parse({{"ETERNALVR_AIM_SMOOTHING", "strong"}}).issues.size() == 1);
 }
 
+TEST_CASE("each controller's angle is 0 by default and kept within -60 to 60 degrees") {
+    CHECK(parse({}).settings.weaponHandTiltDegrees == 0.0f);
+    const auto set = parse({{"ETERNALVR_WEAPON_HAND_TILT", "-20"}, {"ETERNALVR_OFF_HAND_TILT", "-40"}});
+    CHECK(set.settings.weaponHandTiltDegrees == -20.0f);
+    CHECK(set.settings.offHandTiltDegrees == -40.0f);
+    const auto over = parse({{"ETERNALVR_OFF_HAND_TILT", "-75"}});
+    CHECK(over.issues.size() == 1);
+    CHECK(over.settings.offHandTiltDegrees == 0.0f);
+}
+
 TEST_CASE("vibration strength is 0 to 1, 0.6 by default") {
     CHECK(parse({}).settings.haptics == evr::input::kDefaultHapticStrength);
     CHECK(parse({{"ETERNALVR_HAPTICS", "0"}}).settings.haptics == 0.0f);

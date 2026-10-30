@@ -4,6 +4,7 @@
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "features/input/controller_tilt.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/gamepad_mode.hpp"
@@ -77,7 +78,9 @@ std::optional<WeaponAim> beginGameView(
             if (const auto pose = input::testHandPose(*test, hand, headTracking.position)) {
                 const auto i = static_cast<std::size_t>(hand);
                 poses.aimValid[i] = poses.gripValid[i] = true;
-                poses.aim[i] = poses.grip[i] = *pose;
+                // The controller angle, which the runtime gives the hand spaces (controller_tilt.hpp).
+                const float tilt = input::controllerTiltDegrees(settings(), hand, weaponHand());
+                poses.aim[i] = poses.grip[i] = compose(*pose, input::controllerTilt(tilt));
             }
         }
     }

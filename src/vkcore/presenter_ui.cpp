@@ -425,6 +425,10 @@ bool XrPresenter::Impl::createUiSwapchain() {
     }
     uiSwapchain = made;
     EVR_LOG("ui: UI swapchain %ux%u, %zu image(s)", uiExtent.width, uiExtent.height, uiXrImages.size());
+    if (settings.ui.hud == ui_layer::HudMode::Panel) {
+        hudMarkers.create(xr, session, xrSwapchains, d3dDevice.Get(), uiXrImages, uiExtent.width,
+                          uiExtent.height, kUiSwapchainFormat);
+    }
     if (settings.ui.removeWash) {
         const char* why = "";
         if (uiWash.create(d3dDevice.Get(), why)) {
@@ -492,6 +496,13 @@ void XrPresenter::Impl::recordUiXrCopy(RingSlot& slot) {
     src.pResource = filtered ? filtered : slot.ui.resource.Get();
     src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     d3dList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    // The HUD's markers onto their own image, outside menus, each eye's moved for its target's distance
+    // (presenter_markers.hpp).
+    hudMarkers.record(xr, d3dList.Get(), src.pResource, static_cast<std::uint32_t>(uiAcquired), target,
+                      ui_layer::wideContentRect(uiExtent.width, uiExtent.height),
+                      markerParallax(settings.ui, uiExtent.width, uiExtent.height, settings.unitsPerMetre),
+                      markerEyes(slot.hasView ? &slot.view : nullptr),
+                      !menuUp.load(std::memory_order_relaxed));
     for (auto& b : barriers) {
         std::swap(b.Transition.StateBefore, b.Transition.StateAfter);
     }
@@ -514,6 +525,7 @@ void XrPresenter::Impl::finishUiXrCopy() {
     uiCopyPending = false;
     XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xr.xrReleaseSwapchainImage(uiSwapchain, &release);
+    hudMarkers.release(xr);
     uiAcquired = -1;
     uiAcquiredWaited = false;
     if (!uiHasImage) {
@@ -567,12 +579,14 @@ XrSwapchain XrPresenter::Impl::detachUiSwapchain() {
     uiHasImage = false;
     uiFailed = false;
     uiWash.destroy();
+    hudMarkers.detach(xr, xrSwapchains);
     return swapchain;
 }
 
 void XrPresenter::Impl::destroyUiXrObjects() {
     XrSwapchain ui = detachUiSwapchain();
     xrSwapchains.destroy(xr, ui);
+    hudMarkers.destroy(xr, xrSwapchains);
     xrSwapchains.destroy(xr, reticleSwapchain);
     reticleFailed = false;
     destroyMenuXrObjects();

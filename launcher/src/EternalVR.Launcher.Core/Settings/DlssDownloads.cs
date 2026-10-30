@@ -45,7 +45,7 @@ namespace EternalVR.Launcher.Core.Settings
 
         public IReadOnlyList<DlssRelease> Releases { get; }
 
-        /// <summary>The release offered: the newest; null when the file lists none.</summary>
+        /// <summary>The release offered for download: the newest; null when the file lists none.</summary>
         public DlssRelease Newest => Releases.OrderByDescending(r => r.Version).FirstOrDefault();
 
         public static DlssDownloads Parse(string text)
@@ -84,6 +84,18 @@ namespace EternalVR.Launcher.Core.Settings
         public static bool Matches(string path, DlssRelease release) =>
             File.Exists(path) && new FileInfo(path).Length == release.Size
             && string.Equals(KnownBuilds.Sha256OfFile(path), release.Sha256, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// The newest listed release whose file is in <paramref name="dlssRoot"/> (with <paramref name="verify"/> its size and
+        /// SHA-256, else its size only), or null. A player who downloaded an older listed release keeps it until the newest is
+        /// downloaded too.
+        /// </summary>
+        public DlssRelease Present(string dlssRoot, bool verify) =>
+            Releases.OrderByDescending(r => r.Version).FirstOrDefault(r =>
+            {
+                var path = PathFor(dlssRoot, r);
+                return verify ? Matches(path, r) : HasSize(path, r);
+            });
 
         /// <summary>
         /// The release's file in <paramref name="dlssRoot"/>: the one already there when it matches, else downloaded and

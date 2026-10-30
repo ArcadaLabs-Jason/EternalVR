@@ -6,6 +6,7 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/frame_pacing.hpp"
+#include "vkcore/new_frame_wait.hpp"
 #include "vkcore/status_file.hpp"
 
 #include <algorithm>
@@ -458,7 +459,8 @@ void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value
     frameLogEyes.lastPresent.store(FrameRepeat::NoPresent); // until a present hands over none
     latest.store((value << 2) | slotIndex);
     ++framesCopied;
-    frame_pacing::onHandOver(); // the present hook waits for the headset's next frame under ETERNALVR_PACE
+    frame_pacing::onHandOver();    // the present hook waits for the headset's next frame under ETERNALVR_PACE
+    new_frame_wait::onPublished(); // ETERNALVR_PACE=new: the XR worker waits for this before its next frame
 }
 
 // The worker's slot for this frame, marked as being read (the choice: features/pacing/slot_choice.hpp). A
@@ -526,6 +528,31 @@ bool XrPresenter::Impl::takeRenderedSlot(std::uint32_t& slotIndex,
         }
         return false;
     }
+}
+
+void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
+                                     std::uint64_t value,
+                                     const ViewRecord& view,
+                                     bool hasView) {
+    frameLogEyes.shown = ring[slotIndex].eyes; // read before the slot is free again
+    frameLogEyes.repeat = FrameRepeat::New;
+    ring[slotIndex].state.store(kSlotFree);
+    lastConsumed = value;
+
+    XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    xr.xrReleaseSwapchainImage(xrSwapchain, &release);
+    acquiredIndex = -1;
+    acquiredWaited = false;
+    finishUiXrCopy();
+    if (!hasImage) {
+        EVR_LOG("xr: first game frame on the screen (timeline value %llu)",
+                static_cast<unsigned long long>(value));
+        status::reached("first_headset_frame");
+    }
+    hasImage = true;
+    shownView = view;
+    shownHasView = hasView && !view.cinema3D; // a stereo cutscene pair is shown on the screen quads
+    ++xrCopies;
 }
 
 void XrPresenter::Impl::setRingExtent(VkExtent2D game) {

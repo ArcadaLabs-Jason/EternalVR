@@ -50,14 +50,22 @@ bool parseEnabled(std::wstring_view value) {
     return value == L"1" || value == L"on" || value == L"true";
 }
 
+bool parseDisabled(std::wstring_view value) {
+    return value == L"0" || value == L"off" || value == L"false";
+}
+
 TimingMode parseMode(bool set, std::wstring_view value) {
     if (set && parseEnabled(value)) {
         return TimingMode::EveryFrame;
     }
-    if (set && (value == L"sample" || value == L"sampled")) {
-        return TimingMode::Sampled;
+    if (set && parseDisabled(value)) {
+        return TimingMode::Off;
     }
-    return TimingMode::Off;
+    return TimingMode::Sampled;
+}
+
+bool parseCpuTiming(bool set, std::wstring_view value) {
+    return !(set && parseDisabled(value));
 }
 
 } // namespace evr::gpu_timing

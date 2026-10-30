@@ -23,6 +23,7 @@
 
 #include "vkcore/presenter_wrist.hpp"
 
+#include "ui_layer/perf_metrics.hpp"
 #include "ui_layer/weapon_hud.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/log.hpp"
@@ -143,6 +144,11 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     view.panelWidth = ui.size.width;
     view.panelCentreY = ui.pose.position.y;
     view.pieces = {shown};
+    if (const auto perf = ui_layer::perfMetricsQuad(perfLevel, width, height, shown, ui.size.width)) {
+        view.metrics = perf->source;
+        view.metricsWidth = perf->width;
+        view.metricsHeight = perf->height;
+    }
     if (!hands && !wheelRect) {
         logWheel(wheel, settings, std::nullopt, 0);
         publish(view);

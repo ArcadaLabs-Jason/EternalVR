@@ -65,6 +65,8 @@
 //                                               cannot be installed (auto), instead of them (1), never (0)
 //   ETERNALVR_SHOT_ORIGIN    hand / eye         where shots start under hand aim
 //   ETERNALVR_AIM_SMOOTHING  0 to 1             hand-aim smoothing: 0 off, 1 the strongest (0.3)
+//   ETERNALVR_WEAPON_HAND_TILT  -60 to 60       the weapon hand's controller turned about its grip's sideways
+//   ETERNALVR_OFF_HAND_TILT     -60 to 60       axis, degrees, + lifts its front (0; controller_tilt.hpp)
 //   ETERNALVR_HAPTICS        0 to 1             controller vibration strength: 0 off (0.6;
 //                                               haptics_policy.hpp)
 //   ETERNALVR_BHAPTICS       1 / 0              bHaptics suits and sleeves through the bHaptics Player
@@ -209,8 +211,10 @@ struct ControllerSettings;
 // the gun, its right arm is the off hand.
 bool leftHandArms(const ControllerSettings& cfg);
 
-// Defaults of the off-hand arm (metres, degrees; the grip's or the head's forward, left, up).
-inline constexpr game::WeaponOffset kDefaultOffhandOffset{-0.08f, 0.035f, 0.0f, 0.0f, 0.0f, 0.0f};
+// Defaults of the off-hand arm (metres, degrees; the grip's or the head's forward, left, up). The wrist is
+// also turned 30 degrees about the grip's left axis (pitch), toward the little finger: the grip's forward
+// runs through the closed fist, which points that far toward the thumb from the back of the hand (T-179).
+inline constexpr game::WeaponOffset kDefaultOffhandOffset{-0.08f, 0.035f, 0.0f, 30.0f, 0.0f, 0.0f};
 inline constexpr game::WeaponOffset kDefaultOffhandShoulder{-0.08f, 0.18f, -0.24f, 0.0f, 0.0f, 0.0f};
 inline constexpr game::WeaponOffset kDefaultOffhandElbow{-0.2f, 0.6f, -1.0f, 0.0f, 0.0f, 0.0f};
 
@@ -267,8 +271,10 @@ struct ControllerSettings {
     InputPath path = InputPath::Auto;
     ShotOrigin shotOrigin = ShotOrigin::Hand;
     float aimSmoothing = kDefaultAimSmoothing; // aim_smoothing.hpp
-    float haptics = kDefaultHapticStrength;    // haptics_policy.hpp
-    bool bhaptics = false;                     // docs/BHAPTICS.md
+    float weaponHandTiltDegrees = 0.0f;        // controller_tilt.hpp
+    float offHandTiltDegrees = 0.0f;
+    float haptics = kDefaultHapticStrength; // haptics_policy.hpp
+    bool bhaptics = false;                  // docs/BHAPTICS.md
     float bhapticsIntensity = 1.0f;
     bool viewmodel = true;
     bool buttonPrompts = true;

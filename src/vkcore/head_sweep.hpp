@@ -28,7 +28,9 @@ bool headSweepAvailable();
 std::optional<float> sweepHead(const std::byte* player, Vec3 from, Vec3 to, float radius);
 
 // The same sweep with the weapon trace's shape and contents (monsters in, player clip out): what a shot hits,
-// for the aim dot. `startedInContact` is set when `from` is already touching something (nullopt is returned).
+// for the aim dot, and what lies between the eye and a shot's start at the hand (aim_hooks.cpp). Any of the
+// game's worker threads. `startedInContact` is set when `from` is already touching something (nullopt is
+// returned).
 std::optional<float> sweepShot(const std::byte* player, Vec3 from, Vec3 to, bool& startedInContact);
 
 } // namespace evr::vkcore

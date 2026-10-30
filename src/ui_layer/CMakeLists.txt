@@ -9,8 +9,10 @@ evr_add_module(evr_ui_layer
         hud_blocks.cpp
         hud_view.cpp
         hud_regions.cpp
+        marker_boxes.cpp
         layout_tracker.cpp
         motion_target.cpp
+        perf_metrics.cpp
         ui_settings.cpp
         weapon_hud.cpp
         weapon_wheel.cpp

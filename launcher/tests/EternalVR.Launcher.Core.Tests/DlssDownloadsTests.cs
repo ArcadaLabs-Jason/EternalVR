@@ -48,13 +48,13 @@ namespace EternalVR.Launcher.Core.Tests
         public void TheShippedListOffersNvidiasOwnFile()
         {
             var newest = DlssDownloads.Parse(TestData.Read("dlss-downloads.txt")).Newest;
-            Assert.Equal(new Version(310, 9, 1, 0), newest.Version);
+            Assert.Equal(new Version(310, 9, 16, 0), newest.Version);
             // NVIDIA's repository only, the release DLL (the dev one carries a watermark), over https.
             Assert.Equal("raw.githubusercontent.com", newest.Url.Host);
             Assert.StartsWith("/NVIDIA/DLSS/", newest.Url.AbsolutePath);
             Assert.Contains("/rel/nvngx_dlss.dll", newest.Url.AbsolutePath);
             Assert.Equal(58956912, newest.Size);
-            Assert.Equal("3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983", newest.Sha256);
+            Assert.Equal("d00b5b0ab29c3ca101b70c3a5ecb3a01b7ef33766a3383a28a18623083e6123e", newest.Sha256);
             Assert.Equal("github.com", newest.License.Host);
             Assert.EndsWith("LICENSE.txt", newest.License.AbsolutePath);
         }
@@ -69,6 +69,35 @@ namespace EternalVR.Launcher.Core.Tests
                 + $"dll | 310.9.1.0 | https://x/b.dll | 10 | {sha} | https://x/l\n");
             Assert.Equal(new Version(310, 10, 0, 0), list.Newest.Version);
             Assert.Null(DlssDownloads.Parse("# nothing\n").Newest);
+        }
+
+        [Fact]
+        public void AnOlderListedDownloadRunsUntilTheNewestIsDownloaded()
+        {
+            using (var t = new TempDir())
+            {
+                var older = Enumerable.Range(0, 10).Select(i => (byte)i).ToArray();
+                var newer = Enumerable.Range(0, 12).Select(i => (byte)(i + 50)).ToArray();
+                var list = DlssDownloads.Parse(
+                    $"dll | 310.9.1.0 | https://x/a.dll | {older.Length} | {Sha(older)} | https://x/l\n"
+                    + $"dll | 310.9.16.0 | https://x/b.dll | {newer.Length} | {Sha(newer)} | https://x/l\n");
+                var root = t.Combine("dlss");
+                Assert.Null(list.Present(root, verify: true));
+                var olderPath = DlssDownloads.PathFor(root, list.Releases.First(r => r.Version.Build == 1));
+                Directory.CreateDirectory(Path.GetDirectoryName(olderPath));
+                File.WriteAllBytes(olderPath, older);
+                Assert.Equal(new Version(310, 9, 1, 0), list.Present(root, verify: true).Version);
+                Assert.Equal(new Version(310, 9, 16, 0), list.Newest.Version);
+
+                var newerPath = DlssDownloads.PathFor(root, list.Newest);
+                Directory.CreateDirectory(Path.GetDirectoryName(newerPath));
+                // The newest's size but not its bytes: the quick check takes it, the launch's check falls back.
+                File.WriteAllBytes(newerPath, new byte[newer.Length]);
+                Assert.Equal(new Version(310, 9, 16, 0), list.Present(root, verify: false).Version);
+                Assert.Equal(new Version(310, 9, 1, 0), list.Present(root, verify: true).Version);
+                File.WriteAllBytes(newerPath, newer);
+                Assert.Equal(new Version(310, 9, 16, 0), list.Present(root, verify: true).Version);
+            }
         }
 
         [Theory]

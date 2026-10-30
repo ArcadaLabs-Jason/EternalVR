@@ -52,6 +52,7 @@ struct State {
 State& g_state = *new State;
 
 std::atomic<bool> g_on{false};
+std::atomic<bool> g_newFrames{false};      // ETERNALVR_PACE=new
 std::atomic<bool> g_unfocused{false};      // a runtime's menu is over the game (setUnfocused)
 std::atomic<std::uint64_t> g_handOvers{0}; // images handed to the XR worker (publishSlot)
 std::atomic<std::uint64_t> g_seen{0};      // the hand-overs the present hook has looked at
@@ -77,7 +78,7 @@ bool configure() {
             if (const auto parsed = pacing::parsePaceMode(text)) {
                 mode = *parsed;
             } else {
-                EVR_LOG("pace: ETERNALVR_PACE '%s' is not off or headset; off", text.c_str());
+                EVR_LOG("pace: ETERNALVR_PACE '%s' is not off, headset or new; off", text.c_str());
             }
         }
         // Adaptive alternate eyes switches by the game's tick rate, which pacing holds at the headset's: once
@@ -95,7 +96,14 @@ bool configure() {
             std::lock_guard lock(g_state.mutex);
             g_state.pacer = pacing::FramePacer(mode);
         }
-        if (mode == pacing::PaceMode::Headset) {
+        if (mode == pacing::PaceMode::NewFrames) {
+            EVR_LOG("pace: ETERNALVR_PACE=new: the game is not held; each headset frame begins only once the "
+                    "game "
+                    "has handed over a new image (at most %.0f display periods), so every image is shown "
+                    "once and "
+                    "the runtime fills the refreshes in between itself",
+                    pacing::kNewFrameWaitPeriods);
+        } else if (mode == pacing::PaceMode::Headset) {
             EVR_LOG(
                 "pace: ETERNALVR_PACE=headset: after each image it hands to the headset (a stereo pair) the "
                 "game's render thread waits until the headset begins its next frame, at most %.0f display "
@@ -107,9 +115,14 @@ bool configure() {
                 "(ETERNALVR_PACE=headset holds it to one per headset frame)");
         }
         g_on.store(mode == pacing::PaceMode::Headset, std::memory_order_release);
+        g_newFrames.store(mode == pacing::PaceMode::NewFrames, std::memory_order_release);
         return mode == pacing::PaceMode::Headset;
     }();
     return on;
+}
+
+bool newFramesOnly() {
+    return g_newFrames.load(std::memory_order_acquire);
 }
 
 void onHandOver() {

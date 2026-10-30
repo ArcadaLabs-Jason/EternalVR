@@ -5,6 +5,7 @@
 // and asks what the current option wants for this frame: the flat screen, a black view, or a steady
 // heading. Camera hook thread only, apart from flat(), which the XR worker reads.
 
+#include "common/vector.hpp"
 #include "features/comfort/glory_kill.hpp"
 
 #include <atomic>
@@ -46,6 +47,17 @@ public:
     // it turned during a kill is logged when the kill ends.
     void noteBody(float yaw);
 
+    // Steady: the place the view keeps while the kill runs (the game's eye the frame before it started), and
+    // for kHoldAfterSeconds after it while the view blinks (blinkAfterHold), so the move back to the game's
+    // eye happens in the dark; nullopt otherwise. Only the head moves the view from there (T-180).
+    [[nodiscard]] std::optional<Vec3> steadyEye(double seconds) const;
+    // Steady, as a kill shown steady ends: the view is held black (RoomScale::holdBlack) until this is false,
+    // when the game's eye ended the kill further than kBlinkMetres from the held place.
+    [[nodiscard]] bool blinkAfterHold(double seconds) const { return seconds < blinkUntil_; }
+    // Camera hook, each game view: the game's eye (world units), latched when a kill starts; how far it moved
+    // from the held place during a kill is logged when the kill ends.
+    void noteEye(const Vec3& eye, float unitsPerMetre);
+
     // XR worker: the game's frames go to the flat screen now (Screen during a kill), so no head-tracked view
     // is shown from the frames drawn just before.
     [[nodiscard]] bool flat() const { return flat_.load(std::memory_order_acquire); }
@@ -58,7 +70,12 @@ private:
     std::optional<float> lastBody_;
     std::optional<float> latched_;
     std::optional<float> killStartBody_; // the first body yaw of the running kill
-    float killTurn_ = 0.0f;              // the largest turn of the body from it during the kill (degrees)
+    std::optional<Vec3> lastEye_, heldEye_;
+    float eyeMoved_ = 0.0f; // the furthest the game's eye went from the held place during the kill (metres)
+    float unitsPerMetre_ = 0.0f;
+    double holdUntil_ = -1.0; // after a kill: the held place lasts until then, the blink to it too
+    double blinkUntil_ = -1.0;
+    float killTurn_ = 0.0f; // the largest turn of the body from it during the kill (degrees)
     double restoreUntil_ = -1.0;
     bool loggedRestore_ = false;
     unsigned timeouts_ = 0; // kills ended at the episode's maximum duration

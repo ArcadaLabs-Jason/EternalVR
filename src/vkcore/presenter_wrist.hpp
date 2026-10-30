@@ -30,8 +30,13 @@ public:
     // The head-locked pieces (2 or 3 in practice; up to 7 with the wheel centred, when the corner blocks'
     // tops differ as they do at the Large HUD Scale), the hand quads (3 on the wrist, 2 on the gun) and the
     // centred wheel that replace the UI quad. With the projection, the vignette, the reticle and the fade a
-    // frame then has at most 15 layers (OpenXR guarantees 16).
+    // frame then has at most 15 layers, 16 with the game's Performance Metrics quad (presenter_perf.hpp),
+    // which is left out of a frame it would take past the 16 OpenXR guarantees.
     static constexpr std::uint32_t kMaxQuads = 11;
+
+    // The game's Performance Metrics level the frame shows (0 while hidden; ui_layer::perfLevelShown), set by
+    // the frame before fill() for the capture's view of the HUD.
+    int perfLevel = 0;
 
     // XR_KHR_composition_layer_color_scale_bias is enabled (the quads fade); set at instance creation.
     bool colorScaleBias = false;

@@ -112,4 +112,12 @@ float cinemaLensFovY(float fovXDegrees, float fovYDegrees, double screenAspect);
 // separation, or anything not finite.
 std::optional<CinemaStereo> cinemaStereo(const CinemaStereoInput& input);
 
+// Where the GUI over a stereo cutscene's screen goes, as a fraction of the screen's distance from the head
+// (its size scaled by the same, so it keeps its angular size): its vergence is the screen's plus the
+// kCinemaMaxCrossed disparity, so subtitles sit in front of whatever the pair shows within the comfort clamp,
+// not at the screen behind a shot that pops out of it (hard to focus in the owner's headset, T-183). It does
+// not depend on the distance: 1 / (1 + kCinemaMaxCrossed * width / ipd). 1 for a non-positive or non-finite
+// input.
+float cinemaGuiDistanceScale(float screenWidthMetres, float ipdMetres);
+
 } // namespace evr::xr_math

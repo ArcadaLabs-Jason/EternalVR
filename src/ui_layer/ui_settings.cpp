@@ -1,5 +1,7 @@
 #include "ui_layer/ui_settings.hpp"
 
+#include "ui_layer/perf_metrics.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -216,6 +218,7 @@ UiSettings readUiSettings(const EnvLookup& env, std::vector<std::string>& warnin
     readSwitch(env, L"ETERNALVR_UI_WASH", s.removeWash, warnings);
     readWrist(env, s, warnings);
     readVignette(env, s.vignette, warnings);
+    s.perfOverlayLevel = readPerfOverlayLevel(env, warnings);
     return s;
 }
 

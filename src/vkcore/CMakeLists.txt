@@ -96,6 +96,7 @@ add_library(evr_layer SHARED
     eye_capture.cpp
     exposure_hooks.cpp
     frame_pacing.cpp
+    new_frame_wait.cpp
     game_build.cpp
     zoom_look.cpp
     game_code.cpp
@@ -112,6 +113,7 @@ add_library(evr_layer SHARED
     layer_entry.cpp
     light_cull.cpp
     crash_note.cpp
+    hang_note.cpp
     log.cpp
     mirror_place.cpp
     keep_prev_hooks.cpp
@@ -156,6 +158,8 @@ add_library(evr_layer SHARED
     presenter_cutscene.cpp
     presenter_head.cpp
     presenter_hud_lock.cpp
+    presenter_markers.cpp
+    presenter_perf.cpp
     presenter_latch.cpp
     presenter_ring.cpp
     presenter_seq.cpp
@@ -325,6 +329,7 @@ target_sources(evr_layer PRIVATE
     menu_cursor_hide.cpp
     menu_input.cpp
     menu_model_hook.cpp
+    dossier_screen_hook.cpp
     presenter_menu.cpp)
 target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_flares evr_foveation evr_input evr_menu evr_pacing evr_roomscale evr_tracking)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)

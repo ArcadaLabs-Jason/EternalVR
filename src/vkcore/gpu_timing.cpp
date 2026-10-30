@@ -304,8 +304,9 @@ void onDeviceCreated(DeviceData& data,
     if (isGame) {
         EVR_LOG("gpu: GPU timing requested (%s): timestamp period %.3f ns, valid bits per queue family [%s], "
                 "compute and graphics %s",
-                d->everyFrame ? "every frame, ETERNALVR_GPU_TIMING=1"
-                              : "sampled, ETERNALVR_GPU_TIMING=sample; =1 times every frame",
+                d->everyFrame
+                    ? "every frame, ETERNALVR_GPU_TIMING=1"
+                    : "sampled, the default; ETERNALVR_GPU_TIMING=1 times every frame, =0 turns it off",
                 static_cast<double>(d->periodNs), bits.c_str(),
                 properties.limits.timestampComputeAndGraphics ? "yes" : "no");
     }

@@ -29,6 +29,7 @@
 #include "vkcore/presenter_alt.hpp"
 #include "vkcore/presenter_cutscene.hpp"
 #include "vkcore/presenter_fade.hpp"
+#include "vkcore/presenter_markers.hpp"
 #include "vkcore/presenter_mirror.hpp"
 #include "vkcore/presenter_refresh.hpp"
 #include "vkcore/presenter_stereo.hpp"
@@ -101,8 +102,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t framesDropped = 0;
     bool loggedFirstCopy = false, loggedFirstPresent = false, loggedBlitUnsupported = false;
     std::uint32_t lastPresentFamily = UINT32_MAX;
-    ULONGLONG lastStatsTicks = 0;
-    ULONGLONG lastXrStatsTicks = 0;
+    ULONGLONG lastStatsTicks = 0, lastXrStatsTicks = 0;
     bool copyFailed = false;
 
     // Shared ring (written by the worker before ringReady is set, then read-only until shutdown).
@@ -383,12 +383,12 @@ struct XrPresenter::Impl final : ViewHookSink,
     XrSwapchain uiSwapchain = XR_NULL_HANDLE;
     XrSwapchainSet::Images uiXrImages;
     std::int64_t uiAcquired = -1;
-    bool uiAcquiredWaited = false, uiHasImage = false, uiFailed = false;
+    bool uiAcquiredWaited = false, uiHasImage = false, uiFailed = false, uiWashLogged = false;
     bool uiCopyPending = false; // a D3D12 copy into the acquired UI image is recorded
     LONGLONG uiShownQpc = 0;    // when the newest GUI image reached the UI swapchain
     std::uint64_t uiXrCopies = 0;
     UiWash uiWash; // ETERNALVR_UI_WASH: the additive wash taken out before the copy (off in menus)
-    bool uiWashLogged = false;
+    HudMarkerLayer hudMarkers; // the HUD's markers on their own quad (presenter_markers.hpp)
     XrSwapchain reticleSwapchain = XR_NULL_HANDLE; // hand aim: a static dot image
     bool reticleFailed = false;
     // Worker: locates the engine side (and the composite hook) once the guard is armed.

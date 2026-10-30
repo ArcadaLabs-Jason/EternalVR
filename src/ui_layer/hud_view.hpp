@@ -29,6 +29,11 @@ struct HudView {
     // The corner blocks cut for the hand HUDs (the hand quads show them while they face the head), where the
     // game drew them (hud_blocks.hpp).
     std::vector<PixelRect> handCuts;
+    // The game's Performance Metrics on their own quad just above the UI quad's top-right corner
+    // (perf_metrics.hpp): the GUI rect it shows, and its size in metres.
+    std::optional<PixelRect> metrics;
+    float metricsWidth = 0.0f;
+    float metricsHeight = 0.0f;
 };
 
 // An RGBA8 image (premultiplied), `width` x `height`.

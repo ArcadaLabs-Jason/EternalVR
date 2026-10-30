@@ -196,6 +196,7 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(1.0, DlssDll.QualityFactors[(int)DlssQuality.Dlaa]);
             Assert.Equal(DlssDll.PresetValues.Length, SettingTexts.For(Setting.DlssPreset).Choices.Count);
             Assert.Equal(1, DlssDll.PresetIndex("k"));
+            Assert.Equal("E", DlssDll.NormalisePreset("e"));
             Assert.Equal(0, DlssDll.PresetIndex("transformer"));
         }
 

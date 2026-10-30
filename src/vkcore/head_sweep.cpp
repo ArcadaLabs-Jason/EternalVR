@@ -91,7 +91,9 @@ PlayerAim g_player;
 std::atomic<bool> g_available{false};
 std::once_flag g_installOnce;
 
-// Camera hook only.
+// Under g_sweepMutex: the camera hook sweeps the head and the aim dot's ray, the fire hook a shot's start
+// (aim_hooks.cpp), on whichever of the game's worker threads runs them.
+std::mutex g_sweepMutex;
 const std::byte* g_cachedMapInstance = nullptr;
 std::byte* g_cachedCollision = nullptr;
 std::uint64_t g_calls = 0;
@@ -223,6 +225,7 @@ std::optional<float> sweep(const std::byte* player,
         !g_player.isPlayer(player)) {
         return std::nullopt;
     }
+    const std::lock_guard<std::mutex> lock(g_sweepMutex);
     const std::byte* mapInstance = nullptr;
     if (!copyGuarded(&mapInstance, g_mapInstanceGlobal, sizeof(mapInstance))) {
         return std::nullopt;

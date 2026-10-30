@@ -13,6 +13,7 @@ evr_add_module(evr_menu
         page_keys.cpp
         panel_follow.cpp
         menu_router.cpp
+        menu_router_pages.cpp
         panel_pointer.cpp
         pointer_steady.cpp
         wheel_cursor.cpp

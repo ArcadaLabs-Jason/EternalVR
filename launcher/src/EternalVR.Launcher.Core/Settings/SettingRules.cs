@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: gestures
         RollWrist, SwingGesture, HandsJump, PunchSpeed,
         // Play: controls
-        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
+        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, WeaponHandAngle, OffHandAngle, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
         Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
@@ -23,7 +23,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Advanced
         VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms, Cutscene3D,
         HudDistance, HudSize, HudHeight, HudPlace,
-        MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, AdapterSteer, ExtraArguments,
+        MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, AdapterSteer, PerformanceLog, PerformanceOverlay, ExtraArguments,
     }
 
     /// <summary>
@@ -77,6 +77,8 @@ namespace EternalVR.Launcher.Core.Settings
                     return null;
                 case Setting.Turning:
                 case Setting.WeaponHand:
+                case Setting.WeaponHandAngle:
+                case Setting.OffHandAngle:
                 case Setting.Arms:
                 case Setting.MoveToward:
                 case Setting.XButton:
@@ -199,8 +201,8 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>"Aim steadiness": named steps of the hand-aim smoothing (0 off to 1 the strongest).</summary>
     public static class AimSteadiness
     {
-        public static readonly string[] Names = { "Off", "Low", "Medium", "High" };
-        public static readonly double[] Values = { 0.0, 0.15, 0.3, 0.5 };
+        public static readonly string[] Names = { "Off", "Low", "Medium", "High", "Very high", "Maximum" };
+        public static readonly double[] Values = { 0.0, 0.15, 0.3, 0.5, 0.75, 1.0 };
 
         /// <summary>The step of <paramref name="smoothing"/>, or -1 for a value that is none of them (set in the file by hand).</summary>
         public static int IndexOf(double smoothing)

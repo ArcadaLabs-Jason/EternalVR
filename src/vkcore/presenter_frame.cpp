@@ -5,13 +5,16 @@
 #include "vkcore/presenter_hud_lock.hpp"
 #include "vkcore/presenter_impl.hpp"
 #include "vkcore/presenter_menu_release.hpp"
+#include "vkcore/presenter_perf.hpp"
 
 #include "features/comfort/vignette.hpp"
+#include "features/pacing/pace_policy.hpp"
 #include "game/eternal/game_action.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/debug_commands.hpp"
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
+#include "vkcore/hang_note.hpp"
 #include "vkcore/head_sweep.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
@@ -19,6 +22,7 @@
 #include "vkcore/marker_hooks.hpp"
 #include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/new_frame_wait.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
 #include "vkcore/test_keys.hpp"
@@ -185,31 +189,6 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     completeCopy(slotIndex, value, slotView, slotHasView);
 }
 
-void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
-                                     std::uint64_t value,
-                                     const ViewRecord& view,
-                                     bool hasView) {
-    frameLogEyes.shown = ring[slotIndex].eyes; // read before the slot is free again
-    frameLogEyes.repeat = FrameRepeat::New;
-    ring[slotIndex].state.store(kSlotFree);
-    lastConsumed = value;
-
-    XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-    xr.xrReleaseSwapchainImage(xrSwapchain, &release);
-    acquiredIndex = -1;
-    acquiredWaited = false;
-    finishUiXrCopy();
-    if (!hasImage) {
-        EVR_LOG("xr: first game frame on the screen (timeline value %llu)",
-                static_cast<unsigned long long>(value));
-        status::reached("first_headset_frame");
-    }
-    hasImage = true;
-    shownView = view;
-    shownHasView = hasView && !view.cinema3D; // a stereo cutscene pair is shown on the screen quads
-    ++xrCopies;
-}
-
 void XrPresenter::Impl::frame() {
     XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
     XrFrameState state{XR_TYPE_FRAME_STATE};
@@ -246,6 +225,7 @@ void XrPresenter::Impl::frame() {
     XrCompositionLayerQuad quadR{XR_TYPE_COMPOSITION_LAYER_QUAD}; // eye R's screen (stereo cutscenes)
     XrCompositionLayerQuad uiQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     XrCompositionLayerQuad reticleQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
+    std::array<XrCompositionLayerQuad, 2> markerQuads{reticleQuad, reticleQuad}; // the HUD's, one per eye
     XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     std::array<XrCompositionLayerProjectionView, 2> projectionViews{};
     XrCompositionLayerQuad fade{XR_TYPE_COMPOSITION_LAYER_QUAD};
@@ -255,10 +235,11 @@ void XrPresenter::Impl::frame() {
         q.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
     }
     std::array<XrCompositionLayerQuad, WristHud::kMaxQuads> hudQuads{}; // pieces, hand quads, the wheel
+    XrCompositionLayerQuad perfQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};    // the game's Performance Metrics
     // Back to front: the projection (or the cinema quad), the comfort vignette, the UI quad (or its
     // head-locked pieces, the hand quads and the centred weapon wheel), the reticle or the menu pointer
     // (beam, dot), then the fade on top. Entries are written as layers are added.
-    std::array<const XrCompositionLayerBaseHeader*, 5 + WristHud::kMaxQuads> layers{};
+    std::array<const XrCompositionLayerBaseHeader*, 6 + WristHud::kMaxQuads> layers{};
     layers[0] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
     std::uint32_t layerCount = 0;
     const auto addPointer = [&] {
@@ -329,6 +310,8 @@ void XrPresenter::Impl::frame() {
                 // The hand HUDs and the weapon wheel straight ahead (presenter_wrist.cpp): the UI quad's
                 // head-locked pieces, the hand quads and the wheel's quad; not while the UI quad is the menu
                 // panel.
+                wrist.perfLevel =
+                    ui_layer::perfLevelShown(settings.ui.perfOverlayLevel, uiBackdrop.backdrop());
                 const std::uint32_t hud =
                     menuOn || menuHeld
                         ? 0
@@ -350,10 +333,27 @@ void XrPresenter::Impl::frame() {
                     // The cursor went but the menu's backdrop is still up: the panel stays, no pointer.
                     placeOnMenuPanel(uiQuad);
                 } else {
-                    for (std::uint32_t i = 0; i < hud; ++i) {
-                        lockToRenderedHead(hudQuads[i], viewSpace, localSpace, shownView.pose);
+                    // The game's Performance Metrics just above the HUD panel (presenter_perf.hpp).
+                    // After it: the markers' two quads (below), the reticle and the fade.
+                    const bool perf = fillPerfMetricsQuad(
+                        wrist.perfLevel, uiExtent.width, uiExtent.height, uiQuad, layerCount,
+                        (hudMarkers.ready() && hud == 0 ? 2u : 0u) + 2u, perfQuad);
+                    if (perf) {
+                        layers[layerCount++] =
+                            reinterpret_cast<const XrCompositionLayerBaseHeader*>(&perfQuad);
                     }
-                    lockToRenderedHead(uiQuad, viewSpace, localSpace, shownView.pose);
+                    if (hudMarkers.ready() && hud == 0) {
+                        // The HUD stays head-locked, its markers on their own quads (one per eye) at the
+                        // frame's head pose.
+                        hudMarkers.fill(uiQuad, viewSpace, localSpace, shownView.pose, markerQuads,
+                                        layers.data(), layerCount);
+                    } else {
+                        for (std::uint32_t i = 0; i < hud; ++i) {
+                            lockToRenderedHead(hudQuads[i], viewSpace, localSpace, shownView.pose);
+                        }
+                        lockToRenderedHead(uiQuad, viewSpace, localSpace, shownView.pose);
+                        lockToRenderedHead(perfQuad, viewSpace, localSpace, shownView.pose);
+                    }
                     if (fillReticleQuad(reticleQuad)) {
                         // Hand aim: the dot on the weapon hand's ray, after the UI quad.
                         layers[layerCount++] =
@@ -558,8 +558,15 @@ void XrPresenter::Impl::runWorker() {
                 pollEvents();
                 refreshDisplayRate(); // between frames: xrWaitFrame has the slack
                 vram::poll();
-                status::flush(); // a status write lost while the launcher read the file
+                hang_note::check(); // the game stopped presenting in play: where its threads stand
+                status::flush();    // a status write lost while the launcher read the file
                 if (sessionRunning) {
+                    if (frame_pacing::newFramesOnly() && hasImage) { // ETERNALVR_PACE=new
+                        const double period = static_cast<double>(displayPeriod.load()) / 1e9;
+                        new_frame_wait::wait(latest, period, stop); // each image once, begun once it is drawn
+                        waitFenceFor(sharedFence.Get(), latest.load() >> 2, copyEvent,
+                                     pacing::newFrameWaitSeconds(period));
+                    }
                     frame();
                 } else {
                     Sleep(10);

@@ -14,6 +14,7 @@
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/controllers_input_logs.hpp"
 
+#include "features/input/controller_tilt.hpp"
 #include "features/input/usercmd_motion.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/body_follow.hpp"
@@ -405,6 +406,7 @@ MappedInput runMapper() {
                 frame.head.pose = s.poses.head;
             }
             input::applyTestInput(*test, frame);
+            input::tiltControllers(frame, weaponHand(), settings());
             const game::Controller controller = snapshot.controller;
             snapshot = {};
             snapshot.valid = true;

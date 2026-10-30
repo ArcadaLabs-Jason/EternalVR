@@ -5,6 +5,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/controller_family.hpp"
+#include "features/input/controller_tilt.hpp"
 #include "features/input/dashboard_pause.hpp"
 #include "features/input/dossier_press.hpp"
 #include "features/input/interaction_profiles.hpp"
@@ -158,7 +159,10 @@ bool createSpaces(XrInput& xr) {
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         XrActionSpaceCreateInfo info{XR_TYPE_ACTION_SPACE_CREATE_INFO};
         info.subactionPath = xr.handPaths[handIndex(hand)];
-        info.poseInActionSpace = identity;
+        // The controller angle (controller_tilt.hpp): the runtime turns both poses, for all that reads them.
+        const Quat q =
+            input::controllerTilt(input::controllerTiltDegrees(settings(), hand, weaponHand())).orientation;
+        info.poseInActionSpace = {{q.x, q.y, q.z, q.w}, {0.0f, 0.0f, 0.0f}};
         info.action = xr.actions[static_cast<std::size_t>(input::XrActionId::AimPose)];
         EVR_XR_TRY(xr.xrCreateActionSpace(xr.session, &info, &xr.aimSpaces[handIndex(hand)]));
         info.action = xr.actions[static_cast<std::size_t>(input::XrActionId::GripPose)];
@@ -410,7 +414,8 @@ bool attach(const XrContext& context) {
     EVR_LOG(
         "%s: on: aim %s, demon aim %s%s, melee aim %s, equipment aim %s%s, locomotion %s, "
         "turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
-        "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, Dossier on X %s, "
+        "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, controller angle "
+        "%.0f / %.0f deg (weapon / off hand), Dossier on X %s, "
         "Dossier map panned by the %s stick, weapon wheel by the %s, overhead swing %s, "
         "hands-up jump %s, punch at %.1f m/s, button hold %.2f s, thumb-rest wheel %s (picks with %s, face "
         "touch %s, slowdown %s, hold-over %.2f s)",
@@ -430,7 +435,8 @@ bool attach(const XrContext& context) {
         : cfg.aim == input::AimSource::Head ? "at the head (the game's view)"
                                             : "at the hand",
         cfg.weaponFov ? "on" : "off", cfg.shotOrigin == input::ShotOrigin::Hand ? "hand" : "eye",
-        cfg.aimSmoothing, s.aimFilter ? "" : " (off)", input::dossierPressName(cfg.dossier),
+        cfg.aimSmoothing, s.aimFilter ? "" : " (off)", cfg.weaponHandTiltDegrees, cfg.offHandTiltDegrees,
+        input::dossierPressName(cfg.dossier),
         cfg.mapSticks == input::MapSticks::OtherPans ? "other" : "weapon hand's",
         input::wheelSelectName(cfg.wheelSelect), cfg.swing.enabled ? "on" : "off",
         cfg.handsJump.enabled ? "on" : "off", cfg.punchSpeed, cfg.holdSeconds,
@@ -509,6 +515,7 @@ void sync(XrTime predictedDisplayTime, bool focused) {
                                                nullptr, nullptr, &next.frame.roomFromLocal);
         }
         input::applyTestInput(*test, next.frame);
+        input::tiltControllers(next.frame, weaponHand(), settings());
     }
     const std::uint64_t syncs = s.syncs.fetch_add(1) + 1;
     const bool familyCheck = syncs == 1 || syncs % kProfileCheckFrames == 0;

@@ -334,7 +334,7 @@ it as class 17 [U threshold].
 | DLSS | `r_antialiasing 2`, `r_dlssQuality`, `r_dlssSharpness` | Per doc 07 |
 | Ray-traced reflections | `r_raytracedReflections` | Allowed but default off (cost doubles with two views) [design] |
 | Texture Pool Size | `is_poolSize` | User choice; warn that stereo targets add VRAM use |
-| Performance Metrics | `com_showFPS` | Off in the headset; our overlay reports timing |
+| Performance Metrics | `com_showFPS` | Off by default. The launcher's Performance overlay passes level 3 (frame rate) or 2 (detailed) and the layer shows the corner the game draws it in just above the HUD panel (docs/VR_STEREO.md "Performance overlay", T-213) |
 | Colorblind modes, Loot Drop Brightness, Gamma | `r_colorBlind*`, `r_gamma` | Keep user choice |
 | HUD preset / element toggles | `g_setting_hud_preset`, `g_setting_*_info` | Keep user choice if we separate by typeinfo; **force a known preset** if we use region cutting (doc 04 Tier B) |
 | Reticle mode | `g_reticleMode` | Hide (2) when motion aiming; our reticle replaces it |

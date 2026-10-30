@@ -139,11 +139,74 @@ hand HUDs and the weapon wheel are now submitted in LOCAL at the frame's head po
 as the world does, by the same correction. Menus keep their world-locked panel, the hand quads their hand's
 space, the vignette and the fade VIEW.
 
+## 5b. The markers on their own quad (T-178)
+
+At the rendered pose the whole panel moved with the eye images, and when the game runs under the headset's rate
+the runtime shows a frame twice: the panel then stood still in the world for a refresh and jumped with the next
+new frame. In a headset (the 0.1.84 candidate, Quest 3 through Virtual Desktop, 60 to 75 new images a second at
+90 Hz in e1m1) the markers were steady but "the hud does jitter a bit looking around" [headset]. One GUI image
+cannot be locked both ways, so the markers are now cut out of it (`vkcore/presenter_markers.hpp`):
+
+- The POI update's hook (section 2) keeps the point of every marker it lets the HUD draw on its frame, while the
+  projection is the quad's (a marker pulled onto the frame's edge stays on the HUD: the edge is not where its
+  target is); the last three game frames' points are kept, the GUI image copied being one of those frames'.
+- With each GUI copy into the UI swapchain, while the panel HUD is up outside menus, a box about each point
+  (`ui_layer/marker_boxes.hpp`: in band fractions 0.025 each side, 0.03 above and 0.055 below, the diamond and
+  its distance in a 1280 x 720 band with room to spare; boxes that overlap merged) is copied into a swapchain of
+  its own and cleared out of the UI image.
+- The UI quad goes back to VIEW; the same quad over the marker image goes to LOCAL at the frame's head pose, as
+  the whole HUD did under T-174. The quad follows the image last released, so a copy still in flight shows the
+  one before (its holes and its markers together).
+
+The other world-attached pieces of the HUD (damage numbers, the character status text: section 2's other callers
+of the projector) do not pass the POI update and stay on the panel, so they ride with the view again as before
+T-174. The wrist and weapon HUDs keep T-174 for the whole HUD: their cuts around the corner blocks and the
+markers' boxes are not reconciled.
+
+## 5c. Each eye's markers at their targets' distance (T-186)
+
+On their own quad the markers still sat at the HUD's distance, 1.5 m ahead: looking at a target 100 m away, the
+eyes converge on the target and its marker is seen double; looking at the marker, the target is (section 6
+listed it as a headset question). The quad cannot take a depth per marker, but each eye can have its own image
+(`ui_layer/marker_boxes.hpp`, `vkcore/presenter_markers.hpp`):
+
+- The POI update's hook keeps, with each marker's point, its target's distance ahead of the HUD's view: the
+  marker's world point (its position plus the POI decl's offset, section 2) through the view matrix the HUD
+  matrix build read on that frame, in world units (metres at the default world scale).
+- The marker swapchain is twice as wide as the GUI target: the left eye's half, then the right's. With each GUI
+  copy each marker's box goes into each half moved by `s - r * D / d` on the quad (s: where that eye's image is
+  shown from, r: where the game rendered it, both to the right of the head's centre, taken from the frame's eye
+  poses and ETERNALVR_IPD; D: the quad's distance; d: the target's, in metres of the eyes' distance, no nearer
+  than 0.3 m), in band pixels (the band's width over the quad's width in metres). Boxes are copied one per
+  marker, not merged: two overlapping markers can be at different distances. The UI image loses the same merged
+  boxes as under T-178.
+- Two quads go out where the one marker quad went, the same quad over each half, with eye visibility left and
+  right. A mono frame (both eyes from the head's centre) moves nothing.
+
+At the rig's 64 mm and the default quad (2 m wide at 1.5 m, a 1280 px band: 640 px per metre), a target at 1.5
+m does not move, one 131 m away moves 0.032 x (1 - 1.5 / 131) x 640 = 20.2 px each way, one 0.75 m away 20.5 px
+the other way.
+
+Rig (QA `hud-markers` and a lab copy of it with simulator shots at yaw 7, 22, 37 and 45 of the second turn,
+when the triggered POIs are on the frame; the test log's markers (section 7) are mapped onto the composite
+through the health bar's place, and each diamond's yellow pixels found in both eyes):
+
+| In the composite (640 px per eye) | Offset between the eyes |
+|---|---|
+| HUD (health bar, ammo, a marker pulled onto the top edge) | -167.2 to -167.7 px |
+| Far scenery (the arch, the sky) | -155.0 to -155.4 px |
+| Markers 37 to 73 m ahead, T-186 | -155.5 to -158.0 px |
+| The same 40 m marker, T-178's layer | -167.7, -167.9 px |
+
+So a marker's two images now meet at its target's depth, as the scenery around it does, where before they met on
+the HUD. Within an eye the marker moved -6.0 px (left) and +6.4 px (right) against T-178's layer, for an expected
+5.5. The layer's 10 s lines give the right eye's mean shift (20.0 px at the gate); the scenario asserts it.
+
 ## 6. Only a headset can confirm
 
-- The markers are drawn on the quad 1.5 m ahead; a target further away is seen with the eyes converged on it,
-  so its marker may look doubled while the player looks at the target, and the other way round [inferred]. How
-  that feels at the default 1.5 m is a headset question.
+- Each eye's markers are moved to their targets' depth (5c), so a marker on a far target should look single
+  while the player looks at the target; whether it reads as on the target (it is still drawn over everything in
+  front of it, a wall included) is a headset question. Before T-186 the markers sat at the quad's 1.5 m.
 - Markers now spread over the whole quad (out to its edges) where they used to bunch toward the middle; on the
   wrist and weapon HUDs a marker drawn where a corner block is cut would go with that block [inferred, not
   seen on the rig].

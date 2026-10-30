@@ -18,6 +18,10 @@ constexpr double kRestoreSeconds = 0.5;
 constexpr unsigned long long kLoggedEpisodes = 30;
 // Kills ended at the episode's maximum duration (comfort::GloryTiming::maxSeconds) that are logged.
 constexpr unsigned kLoggedTimeouts = 5;
+// Steady: after a kill the view stays at the held place this long while it blinks (the room-scale blink is
+// black within 0.10 s), then moves back to the game's eye in the dark. Not for a move under kBlinkMetres.
+constexpr double kHoldAfterSeconds = 0.12;
+constexpr float kBlinkMetres = 0.25f;
 
 } // namespace
 
@@ -43,6 +47,10 @@ GloryKills::frame(const std::byte* player, bool forcedView, bool menu, double se
         episode_.update(sync, forcedView && view_ != comfort::GloryView::Screen, seconds, menu);
     if (step.started) {
         latched_ = view_ == comfort::GloryView::Steady ? lastBody_ : std::nullopt;
+        heldEye_ = view_ == comfort::GloryView::Steady ? lastEye_ : std::nullopt;
+        eyeMoved_ = 0.0f;
+        holdUntil_ = -1.0;
+        blinkUntil_ = -1.0;
         killStartBody_ = lastBody_; // the turn is measured from the body before the kill
         killTurn_ = 0.0f;
         restoreUntil_ = -1.0;
@@ -70,7 +78,20 @@ GloryKills::frame(const std::byte* player, bool forcedView, bool menu, double se
         } else if (episode_.episodes() <= kLoggedEpisodes) {
             EVR_LOG("glory: kill %llu ends; the view's body turned up to %.1f deg during it",
                     episode_.episodes(), killTurn_);
+            if (heldEye_) {
+                EVR_LOG("glory: kill %llu: the view held its place; the game's eye went up to %.2f m from it",
+                        episode_.episodes(), eyeMoved_);
+            }
         }
+        if (heldEye_) {
+            holdUntil_ = seconds + kHoldAfterSeconds;
+            const float back =
+                lastEye_ && unitsPerMetre_ > 0.0f ? length(*lastEye_ - *heldEye_) / unitsPerMetre_ : 0.0f;
+            blinkUntil_ = back >= kBlinkMetres ? holdUntil_ : -1.0;
+        }
+    }
+    if (!episode_.active() && heldEye_ && seconds >= holdUntil_) {
+        heldEye_.reset();
     }
     if (!episode_.active() && latched_ && seconds >= restoreUntil_) {
         latched_.reset();
@@ -81,6 +102,18 @@ GloryKills::frame(const std::byte* player, bool forcedView, bool menu, double se
 
 std::optional<float> GloryKills::steadyYaw() const {
     return episode_.active() ? latched_ : std::nullopt;
+}
+
+std::optional<Vec3> GloryKills::steadyEye(double seconds) const {
+    return episode_.active() || seconds < holdUntil_ ? heldEye_ : std::nullopt;
+}
+
+void GloryKills::noteEye(const Vec3& eye, float unitsPerMetre) {
+    unitsPerMetre_ = unitsPerMetre;
+    lastEye_ = eye;
+    if (episode_.active() && heldEye_ && unitsPerMetre > 0.0f) {
+        eyeMoved_ = std::max(eyeMoved_, length(eye - *heldEye_) / unitsPerMetre);
+    }
 }
 
 std::optional<float> GloryKills::restoreYaw(double seconds) const {

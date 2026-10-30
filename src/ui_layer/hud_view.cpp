@@ -39,11 +39,22 @@ composeHudView(const std::uint8_t* rgba, std::uint32_t width, std::uint32_t heig
     const double h = wheel ? view.wheelHeight * perMetre : 0.0;
     const double x0 = shown.width / 2.0 - w / 2.0;
     const double y0 = shown.height / 2.0 + view.panelCentreY * perMetre - h / 2.0;
-    // The canvas: the UI quad's area and the wheel's quad.
+    // The game's metrics: their quad's bottom-right corner on the UI quad's top-right corner.
+    const bool metrics = view.metrics && inside(*view.metrics, width, height) && view.metrics->width != 0 &&
+                         view.metrics->height != 0 && view.metricsWidth > 0.0f && view.metricsHeight > 0.0f;
+    const double mw = metrics ? view.metricsWidth * perMetre : 0.0;
+    const double mh = metrics ? view.metricsHeight * perMetre : 0.0;
+    const double mx0 = shown.width - mw;
+    const double my0 = -mh;
+    // The canvas: the UI quad's area, the metrics' quad and the wheel's quad.
     double left = 0.0;
     double top = 0.0;
     double right = shown.width;
     double bottom = shown.height;
+    if (metrics) {
+        left = std::min(left, std::floor(mx0));
+        top = std::min(top, std::floor(my0));
+    }
     if (wheel) {
         left = std::min(left, std::floor(x0));
         top = std::min(top, std::floor(y0));
@@ -75,31 +86,35 @@ composeHudView(const std::uint8_t* rgba, std::uint32_t width, std::uint32_t heig
             std::copy(src, src + std::size_t{p.width} * 4, dst);
         }
     }
-    if (!wheel) {
-        return c;
-    }
-    const PixelRect& r = *view.wheel;
-    for (std::uint32_t y = 0; y < c.image.height; ++y) {
-        const double v = (static_cast<double>(y) - c.panelY + 0.5 - y0) / h;
-        if (v < 0.0 || v >= 1.0) {
-            continue;
-        }
-        const auto sy = r.y + static_cast<std::int64_t>(v * r.height);
-        for (std::uint32_t x = 0; x < outW; ++x) {
-            const double u = (static_cast<double>(x) - c.panelX + 0.5 - x0) / w;
-            if (u < 0.0 || u >= 1.0) {
+    // A quad showing `r` over [qx, qx + qw) x [qy, qy + qh) of the UI quad's pixels, premultiplied "over".
+    const auto drawQuad = [&](const PixelRect& r, double qx, double qy, double qw, double qh) {
+        for (std::uint32_t y = 0; y < c.image.height; ++y) {
+            const double v = (static_cast<double>(y) - c.panelY + 0.5 - qy) / qh;
+            if (v < 0.0 || v >= 1.0) {
                 continue;
             }
-            const auto sx = r.x + static_cast<std::int64_t>(u * r.width);
-            const std::uint8_t* src =
-                rgba + (static_cast<std::size_t>(sy) * width + static_cast<std::size_t>(sx)) * 4;
-            std::uint8_t* dst = out + (std::size_t{y} * outW + x) * 4;
-            // Premultiplied "over".
-            const int keep = 255 - src[3];
-            for (int k = 0; k < 4; ++k) {
-                dst[k] = static_cast<std::uint8_t>(std::min(255, src[k] + (dst[k] * keep + 127) / 255));
+            const auto sy = r.y + static_cast<std::int64_t>(v * r.height);
+            for (std::uint32_t x = 0; x < outW; ++x) {
+                const double u = (static_cast<double>(x) - c.panelX + 0.5 - qx) / qw;
+                if (u < 0.0 || u >= 1.0) {
+                    continue;
+                }
+                const auto sx = r.x + static_cast<std::int64_t>(u * r.width);
+                const std::uint8_t* src =
+                    rgba + (static_cast<std::size_t>(sy) * width + static_cast<std::size_t>(sx)) * 4;
+                std::uint8_t* dst = out + (std::size_t{y} * outW + x) * 4;
+                const int keep = 255 - src[3];
+                for (int k = 0; k < 4; ++k) {
+                    dst[k] = static_cast<std::uint8_t>(std::min(255, src[k] + (dst[k] * keep + 127) / 255));
+                }
             }
         }
+    };
+    if (metrics) {
+        drawQuad(*view.metrics, mx0, my0, mw, mh);
+    }
+    if (wheel) {
+        drawQuad(*view.wheel, x0, y0, w, h);
     }
     return c;
 }
@@ -134,6 +149,12 @@ std::string describeHudView(const HudView& view) {
     }
     if (view.handQuads) {
         s += "; hand HUD quads shown too (not drawn)";
+    }
+    if (view.metrics) {
+        appendf(s,
+                "; the game's Performance Metrics above the UI quad's top-right corner: GUI rect (%lld, "
+                "%lld) %u x %u",
+                view.metrics->x, view.metrics->y, view.metrics->width, view.metrics->height);
     }
     return s + "\n";
 }

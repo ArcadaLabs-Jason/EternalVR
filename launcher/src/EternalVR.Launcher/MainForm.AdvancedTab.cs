@@ -39,6 +39,8 @@ namespace EternalVR.Launcher
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
         private readonly CheckBox adapterSteer = new CheckBox { AutoSize = true };
+        private readonly CheckBox perfLog = new CheckBox { AutoSize = true };
+        private readonly ComboBox perfOverlay = Choices(Setting.PerformanceOverlay);
         private readonly ComboBox runtime = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
         private readonly TextBox extraArgs = new TextBox { Width = 420 };
         /// <summary>One line, cut with an ellipsis; the whole path and where it came from are in its tooltip.</summary>
@@ -122,6 +124,8 @@ namespace EternalVR.Launcher
                 Row(Setting.Runtime, runtimeRow, s => { }, s => s.Runtime = (runtime.SelectedItem as RuntimeItem)?.Value ?? LauncherSettings.SystemRuntime,
                     preflight: true, fit: w => SetWidth(runtime, w - browse.Width - browse.Margin.Horizontal - runtime.Margin.Horizontal)),
                 Row(Setting.AdapterSteer, adapterSteer, s => adapterSteer.Checked = s.AdapterSteer, s => s.AdapterSteer = adapterSteer.Checked),
+                Row(Setting.PerformanceLog, perfLog, s => perfLog.Checked = s.PerfLog, s => s.PerfLog = perfLog.Checked),
+                Row(Setting.PerformanceOverlay, perfOverlay, s => perfOverlay.SelectedIndex = (int)s.PerfOverlay, s => s.PerfOverlay = (PerformanceOverlay)perfOverlay.SelectedIndex),
                 Row(Setting.ExtraArguments, extraArgs, s => extraArgs.Text = s.ExtraArguments, s => s.ExtraArguments = extraArgs.Text.Trim(), preflight: true));
 
             var reset = new Button { Text = "Reset to " + SettingsPresets.Recommended.Name + "...", Width = 170, Height = ButtonHeight, Margin = new Padding(9, 6, 3, 6) };

@@ -187,6 +187,11 @@ autosave (`KNOWN-ISSUES.md`). Every 10 s a `vram:` line shows how much video mem
 what Windows allows it; past 100% Windows moves memory out and back, which stutters (lower "Resolution" on
 the Play tab, or close other programs that use the graphics card).
 
+**The game froze for good (music still playing, the headset on the last picture).** Send an Export report
+(it holds the newest 5 sessions). When the game stops drawing new frames in play for 5
+seconds, the mod's log notes where each of the game's threads stands (`hang:` lines), again at 20 seconds,
+and says so if the game comes back. That helps tell a hang in the game, the graphics driver or the mod apart.
+
 **What frame rate am I really getting?** EternalVR hands your headset a frame at the headset's own rate (90 or
 120 a second, say). When the game has not finished a new pair of eye images yet, the newest pair is shown again,
 turned to follow your head, so looking around stays smooth, but moving things only update as often as the game
@@ -258,7 +263,7 @@ instead of both, which roughly halves the processor's work per frame. Each eye t
 rate, so fast motion can look doubled; see `KNOWN-ISSUES.md`. "Auto" does it only while the processor
 cannot keep up. Turn it off again if you do not like it.
 
-**Everything is blurry.** See "Render resolution" in `KNOWN-ISSUES.md`.
+**Everything is blurry.** See "Render resolution" under "What some settings do" below.
 
 **Controllers do nothing in game (SteamVR).** The headset works, but the trigger, buttons and sticks do
 nothing, there is no menu pointer and no hand aim. SteamVR keeps controller bindings per game, and every VR mod
@@ -288,6 +293,104 @@ game has exited (or the next time you open the launcher).
 **"The game was ended (exit code -1)".** The game did not crash: it was closed, by itself or by another
 program (often you, after it froze: the headset kept showing the last image). If it froze, send an Export
 report (above) and say how you closed it.
+
+## What some settings do
+
+How some settings and launcher steps behave, so you know what is normal.
+
+**Render resolution.** "Resolution" on the launcher's Play tab is a size times a number (0.50 to 2.00).
+Auto, the default, is the size your headset's runtime asks for, fitted within about 4.6 million pixels
+per eye: a Quest 3 at Virtual Desktop's High asks for 2496x2688 and renders 2056x2216 at 1.00, so 1.00 is
+not the headset's own size, and Virtual Desktop's High, Ultra and Godlike all render about the same.
+Choose "Virtual Desktop native" (or "SteamVR native", "Quest Link native"...) to make 1.00 exactly the size
+the runtime asks for, as in other OpenXR games; then Virtual Desktop's quality or SteamVR's resolution counts
+in full. "Quest 3 native" (named after your headset) makes 1.00 the headset's own panel, when the launcher
+knows the headset's model. Updating keeps your number
+on Auto, so nothing changes until you choose. The "Each eye" line shows the size and its percent of what
+the runtime asks for and of the panel. Raise the number for sharpness if your GPU has headroom, lower it if
+the frame rate drops below the headset's refresh rate. The mod's log says the size it used
+(`size: render size ...`). If the size cannot be set, the game renders at its small window's size and
+looks soft; the log says why.
+
+**Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
+player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?"
+above). Foveated rendering on the Play tab can help on NVIDIA RTX, AMD Radeon RX 6000 or
+newer and Intel Arc cards, but it is experimental and off by default.
+
+**DLSS is experimental.** It is offered on NVIDIA RTX cards and helps only when the graphics card, not
+the processor, is what holds the frame rate back; when the processor is, DLSS can be slower than TAA.
+Each eye gets its own DLSS history. Choose DLSS under "Anti-aliasing" on the launcher's Play tab, then its
+quality (DLAA, Quality, Balanced, Performance or Ultra Performance) in the DLSS group; DLAA needs a newer DLSS than the
+game's. In VR the game's own video menu shows the DLSS setting that is running (Ultra Performance shows as Performance and
+DLAA as Quality, which the menu does not have). With the
+launcher's DLSS or Off, changing DLSS in the game's menu has no effect in VR, and your saved game settings
+keep their own DLSS choice for flat play. With the launcher's TAA the game's own DLSS setting is used: if
+it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
+the mod switches to TAA (the log says `DLSS has no per-eye feature`) and the menu shows DLSS as off. The
+mod tries DLSS again by itself a few times (after 5, 10 and 20 seconds); choosing a DLSS quality in the
+game's menu tries it again at once.
+
+**A newer DLSS is experimental too.** The game ships DLSS 2.3. The DLSS group's "Version" offers NVIDIA's
+newest by default: **Download** fetches it once, straight from NVIDIA's GitHub after you accept NVIDIA's
+license (the mod does not include it), and until then the game's 2.3 runs. "Load file..." uses a
+`nvngx_dlss.dll` you downloaded yourself (NVIDIA's DLSS page on GitHub, `lib/Windows_x86_64/rel/nvngx_dlss.dll`).
+The file stays in EternalVR's data folder or where you keep it, and nothing is copied into the game folder.
+"In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
+why (lines starting with `dlss:`).
+
+**Foveated rendering (experimental) is less sharp toward the edges, by design.** Since 0.1.48 the sharp
+area is measured as an angle from where your head points, so a spot in the scene gets the same detail in
+both eyes (before, some detail off to the side could be sharp in one eye and blurry in the other). On
+headsets whose eye images aren't symmetric (Quest 3 for one) the blurrier band toward your nose and at
+the top is narrower than in 0.1.47 and more of it sits on the outer side. The bottom of the view is about
+as far from where your head points as the outer edges (on Quest 3, 55 degrees down against 44 up). A
+headset test showed floors there blocky and streaked with DLSS, because that band was shaded at the
+coarsest, quarter rate. I moved the quarter rate out to 56 degrees from where your head points for every
+setting: the bottom and the outer edges of a Quest 3's view now get half rate, and only the far corners of
+each eye keep quarter rate. Floors there can still look a little coarser than the middle, as half rate does,
+so tell me if they still bother you. Loading a checkpoint
+doesn't move it from one eye to the other: I measured each eye's pattern before and after map loads on my
+test PC and in captures from a headset session. If it looks different to you after a load, an in-headset
+capture before and one after it from the same spot (hold the left Menu button and pull a trigger) would
+help me a lot. It is off by default and off with Parallel Eye Rendering. Since 0.1.56 it also runs on AMD Radeon RX 6000 or newer and Intel Arc cards,
+through Vulkan's standard shading rate (a player's RX 6750 XT ran it; Intel Arc has not been tried, and
+my test PC has neither). If you use it, tell me how it looks to you.
+
+**Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
+(on by default) has the game load only the texture detail the current view needs, which gave about 8% more
+frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
+texture may look soft for a moment. Turn it off if that bothers you.
+
+**The CPU Saver is experimental.** Its checkboxes on the Play tab (all off by default) each turn down
+one of the game's detail settings that cost processor time: your own shadow, sun shadows near you, how far
+away models switch to simpler versions, and how far away marks, shadows and lights fade. Each one's tooltip
+says what it gained on the test rig and what it costs in the picture. The game's own settings are put back
+after you play.
+
+**The game's HUD Scale is Large in VR.** The mod sets the game's own HUD Scale to Large while you play in
+VR, so its small text (mission challenges, the demonic corruption bar, the equipment labels) is easier to
+read; your own HUD Scale stays for the flat game. If you change HUD Scale in the game's menu during VR, your
+choice sticks for the rest of that session and is saved as your own setting, like in the flat game (picking
+Large changes nothing, since that's what VR already shows). To make the HUD bigger or smaller in VR without
+touching the game's setting, change HUD distance or size on the Advanced tab. In my headset the hint under
+the mission challenges, the demonic corruption title and the equipment labels read fine at the default HUD
+distance.
+
+**SteamVR**: players use it with Index, Steam Frame and PSVR2 controllers; I have tested it once myself, with a
+Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the left Menu button of Touch controllers opens
+SteamVR's dashboard, so hold Y to pause instead (B with **Left (buttons and sticks)**), and take a screenshot by
+holding both sticks pressed and pulling a trigger (instead of left Menu + trigger).
+
+**Start the headset's runtime and connect the headset before Launch VR.** When the runtime reports no
+headset, or does not answer, the launcher asks before it starts the game.
+
+**Steam Cloud warning.** If the launcher warns that "Steam's cloud record is stale", start DOOM Eternal
+once normally through Steam, let it reach the main menu, quit, then use the launcher again.
+
+**A small game window sits on your desktop** during a VR session. That is normal. While the game is
+not the focused window, your mouse stays yours. Clicking into that window gives the mouse to the game,
+as when you play flat; Alt+Tab or the Windows key gives it back (up to 0.1.50 it stayed trapped in the
+game's window until the game quit, GitHub #30).
 
 ## Getting your settings back
 

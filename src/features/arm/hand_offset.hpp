@@ -16,7 +16,10 @@
 // translation along its forward, left and up, then a rotation (idAngles, degrees) about its own axes.
 // The default puts the wrist 8 cm behind the grip's centre and 3.5 cm toward the back of the hand; the
 // OpenXR grip's position is the centre of the fist [inferred from the OpenXR grip definition, to be
-// tuned in the headset].
+// tuned in the headset]. It also turns the hand 30 degrees about the grip's left axis (pitch 30), the
+// fingers toward the little finger's side: the grip's forward runs through the closed fist, which points
+// about that far toward the thumb from the back of the hand, and without the turn a hand held out flat
+// pointed about 30 degrees toward the thumb [headset, the owner's Quest 3 Touch controllers; T-179].
 
 #include "features/arm/arm_frames.hpp"
 #include "xr_math/head_aim.hpp"

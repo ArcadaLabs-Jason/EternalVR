@@ -114,6 +114,40 @@ struct Counters {
     std::atomic<int> testLines{0};
 } g_counters;
 
+// The markers drawn on the frame, for the marker layer (markerSpots): onPoi adds each one's point and its
+// target's distance ahead to the game frame's list, onMatrix starts the next frame's with the HUD's view (the
+// POI updates run on job threads, so under a lock).
+constexpr std::size_t kSpotFrames = 3;
+constexpr std::size_t kMaxSpots = 16; // per game frame; more markers on the frame than that stay on the HUD
+struct Spots {
+    std::mutex mutex;
+    std::array<std::array<ui_layer::MarkerSpot, kMaxSpots>, kSpotFrames> frames{};
+    std::array<std::size_t, kSpotFrames> counts{};
+    std::size_t current = 0;
+    std::uint64_t lastFrameMs = 0;
+    Matrix view{}; // the current frame's HUD view: rows right, up, back and the translation (world units)
+} g_spots;
+
+void startSpotFrame(const Matrix& view) {
+    const std::lock_guard<std::mutex> lock(g_spots.mutex);
+    g_spots.current = (g_spots.current + 1) % kSpotFrames;
+    g_spots.counts[g_spots.current] = 0;
+    g_spots.lastFrameMs = GetTickCount64();
+    g_spots.view = view;
+}
+
+// `world`: the marker's target (the POI's world position plus its decl's offset). Its distance ahead, in
+// world units, is minus the view's back axis applied to it.
+void addSpot(float x, float y, const std::array<float, 3>& world) {
+    const std::lock_guard<std::mutex> lock(g_spots.mutex);
+    std::size_t& n = g_spots.counts[g_spots.current];
+    if (n < kMaxSpots) {
+        const Matrix& v = g_spots.view;
+        const float ahead = -(v[8] * world[0] + v[9] * world[1] + v[10] * world[2] + v[11]);
+        g_spots.frames[g_spots.current][n++] = {x, y, std::isfinite(ahead) && ahead > 0.0f ? ahead : 0.0f};
+    }
+}
+
 std::array<float, 4> g_loggedFov{}; // the frustum last logged (degrees), on the game thread
 
 template <typename T>
@@ -280,6 +314,7 @@ void onMatrix(const HookRegisters& r) {
     report();
     const std::uint64_t start = ticksNow();
     g_frame.quad.store(false, std::memory_order_relaxed);
+    startSpotFrame(readAt<Matrix>(r.rbp + kViewFromRbp));
     if (!mp_guard::allowsGameTouch()) {
         return;
     }
@@ -321,6 +356,19 @@ void onPoi(HookRegisters& r) {
         if (off && !gameOff) {
             r.rdi = (r.rdi & ~std::uintptr_t{0xFF}) | 1u; // dil = 1: the game's off-frame path clamps it
             g_counters.movedOff.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    // A marker drawn on the frame of the quad's projection goes on the marker layer (one pulled onto the
+    // frame's edge stays on the HUD: the edge is not where its target is).
+    if (!off && g_frame.quad.load(std::memory_order_relaxed) && mp_guard::allowsGameTouch()) {
+        const auto drawn = readAt<std::array<float, 2>>(r.r14 + kPoiScreen);
+        const float width = readAt<float>(r.rsp + kFrameWidthFromRsp);
+        const float height = readAt<float>(r.rsp + kFrameHeightFromRsp);
+        if (width > 0.0f && height > 0.0f) {
+            const auto world = readAt<std::array<float, 3>>(r.r14);
+            const auto offset = readAt<std::array<float, 3>>(r.r15 + kDeclWorldOffset);
+            addSpot(drawn[0] / width, drawn[1] / height,
+                    {world[0] + offset[0], world[1] + offset[1], world[2] + offset[2]});
         }
     }
     addHookTime(start);
@@ -395,6 +443,22 @@ bool installMarkerHooks() {
                       : "");
     });
     return g_installed;
+}
+
+std::vector<ui_layer::MarkerSpot> markerSpots() {
+    std::vector<ui_layer::MarkerSpot> out;
+    if (!g_installed) {
+        return out;
+    }
+    const std::lock_guard<std::mutex> lock(g_spots.mutex);
+    if (GetTickCount64() - g_spots.lastFrameMs > kLeaseMs) {
+        return out;
+    }
+    for (std::size_t f = 0; f < kSpotFrames; ++f) {
+        out.insert(out.end(), g_spots.frames[f].begin(),
+                   g_spots.frames[f].begin() + static_cast<std::ptrdiff_t>(g_spots.counts[f]));
+    }
+    return out;
 }
 
 void noteMarkerQuad(bool headLocked,

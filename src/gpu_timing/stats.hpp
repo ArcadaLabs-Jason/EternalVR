@@ -28,11 +28,19 @@ std::string formatSummary(const Summary& s);
 // "1", "on" or "true" (ETERNALVR_TEST_CB_CHECK and the like); anything else is no.
 bool parseEnabled(std::wstring_view value);
 
-// GPU timing's mode: off (the default), a few frames in every second or every frame.
+// "0", "off" or "false": a switch that is on by default turned off.
+bool parseDisabled(std::wstring_view value);
+
+// GPU timing's mode: off, a few frames in every second (the default) or every frame.
 enum class TimingMode : std::uint8_t { Off, Sampled, EveryFrame };
 
-// ETERNALVR_GPU_TIMING: "1", "on" or "true" times every frame; "sample" or "sampled" times a few frames in
-// every second; unset (or anything else, "0" included) leaves GPU timing off.
+// ETERNALVR_GPU_TIMING: "1", "on" or "true" times every frame; "0", "off" or "false" turns GPU timing off;
+// unset or anything else ("sample" and "sampled" included) times a few frames in every second, so a
+// player's log says how busy the GPU is.
 TimingMode parseMode(bool set, std::wstring_view value);
+
+// ETERNALVR_CPU_TIMING: on unless set to "0", "off" or "false", so a player's log says how busy the
+// processor is.
+bool parseCpuTiming(bool set, std::wstring_view value);
 
 } // namespace evr::gpu_timing

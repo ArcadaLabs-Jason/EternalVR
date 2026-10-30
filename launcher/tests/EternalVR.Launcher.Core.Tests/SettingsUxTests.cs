@@ -209,7 +209,7 @@ namespace EternalVR.Launcher.Core.Tests
             var s = new LauncherSettings { Controllers = false };
             foreach (var setting in new[]
             {
-                Setting.Turning, Setting.TurnSpeed, Setting.WeaponHand, Setting.MoveToward,
+                Setting.Turning, Setting.TurnSpeed, Setting.WeaponHand, Setting.WeaponHandAngle, Setting.OffHandAngle, Setting.MoveToward,
                 Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.RollWrist, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
                 Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.RevenantAimWith,
                 Setting.MeleeAimWith, Setting.EquipmentAimWith,
@@ -333,7 +333,8 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void AimSteadinessStepsIncludeTheDefault()
         {
-            Assert.Equal(new[] { 0.0, 0.15, 0.3, 0.5 }, AimSteadiness.Values);
+            Assert.Equal(new[] { 0.0, 0.15, 0.3, 0.5, 0.75, 1.0 }, AimSteadiness.Values);
+            Assert.Equal(5, AimSteadiness.IndexOf(1.0)); // the layer's strongest (ETERNALVR_AIM_SMOOTHING 1)
             Assert.Equal(2, AimSteadiness.IndexOf(LauncherSettings.DefaultAimSmoothing));
             Assert.Equal(0, AimSteadiness.IndexOf(0.0));
             Assert.Equal(-1, AimSteadiness.IndexOf(0.42));

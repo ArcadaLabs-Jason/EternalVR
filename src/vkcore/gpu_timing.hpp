@@ -1,7 +1,8 @@
 #pragma once
 
-// GPU timing (docs/VR_STEREO.md "GPU timing"): off by default; ETERNALVR_GPU_TIMING=sample times 3 frames in
-// every 45 (a 10 s line of each eye's GPU busy time), =1 times every frame.
+// GPU timing (docs/VR_STEREO.md "GPU timing"): sampled by default, 3 frames in every 45 (a 10 s line of each
+// eye's GPU busy time, so a player's log says how busy the GPU is); ETERNALVR_GPU_TIMING=1 times every frame,
+// =0 turns it off.
 //
 // Every vkQueueSubmit batch of the game's device is bracketed with two timestamps from a ring of query
 // pairs: a command buffer before the batch's own writes one at the top of the pipe, one after them at the
@@ -10,7 +11,7 @@
 // (a frame whose results are not ready yet is tried again on the next present) and summarized every 10 s
 // in the log, per eye under Route S; timing every frame adds the full summary and a row per frame in
 // eternalvr-gpu-<pid>.csv next to the frames CSV. Sampled, the submits of the other frames pass straight on.
-// Off (no hook handed out, every entry point returns at once) unless ETERNALVR_GPU_TIMING=sample or =1.
+// Off (no hook handed out, every entry point returns at once) with ETERNALVR_GPU_TIMING=0.
 
 #include "stereo_seq/eye_tags.hpp"
 #include "vkcore/dispatch.hpp"
@@ -21,7 +22,7 @@
 
 namespace evr::vkcore::gpu_timing {
 
-// ETERNALVR_GPU_TIMING=sample or =1 (read once).
+// Not turned off by ETERNALVR_GPU_TIMING=0 (read once).
 bool enabled();
 
 void onDeviceCreated(DeviceData& data,

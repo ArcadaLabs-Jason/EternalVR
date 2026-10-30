@@ -43,6 +43,12 @@ void trackGameTicks(bool on);
 // window_timing::nowMicros() of the last game tick, 0 before the first (the loading screen's tips bar tells
 // play from its loading screen by it: prompt_load_tips.cpp).
 std::uint64_t lastGameTickMicros();
+// window_timing::nowMicros() at the entry of the game's last present, 0 before the first (the hang note's
+// watch: hang_note.hpp).
+std::uint64_t lastPresentMicros();
+// Whether gaps are told in play by the game's ticks, as the stall lines judge them: true until the XR worker
+// has said (trackGameTicks), then whether the ticks are seen.
+bool ticksJudged();
 
 // The game began saving a checkpoint (save_hook.cpp, on the game's thread): named in the stall line of the
 // gap it falls in and counted in the 10 s summary. Only adds to atomics.

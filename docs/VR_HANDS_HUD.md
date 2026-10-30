@@ -333,7 +333,10 @@ game):
   on the palm's normal). From the skeleton: the finger joints curl toward the hand's `-z`, the thumb sits on
   `+x`, the forearm lies along `-y`. The default offset puts the wrist joint 8 cm behind the grip's centre
   and 3.5 cm toward the back of the hand (`ETERNALVR_OFFHAND_OFFSET`, forward/left/up in the grip's frame,
-  then pitch/yaw/roll about its axes) [inferred from the OpenXR grip definition; tune in the headset].
+  then pitch/yaw/roll about its axes) [inferred from the OpenXR grip definition; tune in the headset], and
+  turns the hand 30 degrees toward the little finger (pitch 30): the grip's forward runs through the closed
+  fist, which points about that far toward the thumb from the back of the hand, and without the turn a left
+  hand held out flat pointed about 30 degrees toward the thumb [headset, Quest 3 Touch; T-179].
 - **The elbow** (`two_bone_ik.hpp`): two-bone IK from the shoulder to the wrist with the animated bone
   lengths, bending toward a pole (`ETERNALVR_OFFHAND_ELBOW`, default down, out to the left and a little
   back in the head's yaw frame). A controller beyond reach stops the wrist at 99.9 % of the arm's length on
@@ -1251,7 +1254,7 @@ cutscene around the player starts: the arms hidden, the weapon FOV the game's` /
 | `ETERNALVR_WEAPON_HUD_ANGLE` | 5..90 degrees (60) | Facing angle to show; hidden above it + 15 |
 | `ETERNALVR_WEAPON_HUD_VITALS` | 0 / 1 (0) | Health and armor on the gun too, beside the ammo |
 | `ETERNALVR_OFFHAND` | `game` / `free` / `probe` (`free`) | Who drives the game's left arm; the launcher sends `free` (with `ETERNALVR_ARM_SOLVE=bind`) while the weapon hand aims, `game` otherwise (T-160) |
-| `ETERNALVR_OFFHAND_OFFSET` | f,l,u[,pitch,yaw,roll] m, deg (-0.08,0.035,0) | The wrist (`LeftHand`) from the off-hand grip, in the grip's forward/left/up, then turned about its axes |
+| `ETERNALVR_OFFHAND_OFFSET` | f,l,u[,pitch,yaw,roll] m, deg (-0.08,0.035,0,30,0,0) | The wrist (`LeftHand`) from the off-hand grip, in the grip's forward/left/up, then turned about its axes |
 | `ETERNALVR_OFFHAND_SHOULDER` | `head` / `model` / f,l,u m (`head`: -0.08,0.18,-0.24) | Where the arm's IK starts: fixed to the head (f,l,u from the eyes in the head's yaw frame) or the game's animated shoulder |
 | `ETERNALVR_OFFHAND_ELBOW` | f,l,u (-0.2,0.6,-1) | The elbow's bend direction in the head's yaw frame |
 | `ETERNALVR_OFFHAND_PROBE` | f,l,u m (0.10,0,0) | Probe mode: added to the game's own left-hand modifier |

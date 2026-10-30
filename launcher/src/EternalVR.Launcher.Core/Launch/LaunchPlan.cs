@@ -41,7 +41,7 @@ namespace EternalVR.Launcher.Core.Launch
         public Extent? Panel { get; set; }
         /// <summary>The player's controls folder; its maps are used when it holds any (null: the built-in controls).</summary>
         public ControlsFolder Controls { get; set; }
-        /// <summary>NVIDIA's newest DLSS when the launcher has downloaded it (checked); null when it has not.</summary>
+        /// <summary>The newest listed DLSS the launcher has downloaded (checked; an older listed one until the newest is); null when none.</summary>
         public string NewestDlss { get; set; }
         /// <summary>The player's own <c>r_SSDO</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
         public string PlayerSsdo { get; set; }
@@ -179,6 +179,8 @@ namespace EternalVR.Launcher.Core.Launch
                         : IsAntiAliasing(cvar.Name) && stereo && s.AntiAliasing == AntiAliasingMode.Off ? NoAntiAliasing
                         : cvar.Value);
                 }
+            // The game's own Performance Metrics on the HUD (Performance overlay, off: nothing), before the extra arguments so those win.
+            args.AddRange(s.PerfOverlayArguments());
             args.AddRange(SplitArguments(s.ExtraArguments));
 
             var env = new List<KeyValuePair<string, string>>();
@@ -207,6 +209,8 @@ namespace EternalVR.Launcher.Core.Launch
             // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md), in
             // mono too: a menu over the game (pause, the Dossier, a tutorial popup) gets its panel and pointer from it.
             Set("ETERNALVR_UI_LAYER", "1");
+            // The game's Performance Metrics (Performance overlay) above the HUD panel, at the level passed as +com_showFPS; 0 when off.
+            Set("ETERNALVR_PERF_OVERLAY", (LauncherSettings.PerfOverlayLevel(s.PerfOverlay) ?? 0).ToString(CultureInfo.InvariantCulture));
             // The HUD on the off hand's wrist or the weapon needs the UI layer and the controllers (docs/VR_HANDS_HUD.md).
             Set("ETERNALVR_HUD", LauncherSettings.HudName(s.Controllers ? s.Hud : HudMode.Panel));
             Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
@@ -268,6 +272,8 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_HANDS_JUMP", s.HandsJump ? "1" : "0");
             Set("ETERNALVR_PUNCH_SPEED", Number(s.PunchSpeed, LauncherSettings.MinPunchSpeed, LauncherSettings.MaxPunchSpeed, LauncherSettings.DefaultPunchSpeed));
             Set("ETERNALVR_HOLD_SECONDS", Number(s.HoldTime, LauncherSettings.MinHoldTime, LauncherSettings.MaxHoldTime, LauncherSettings.DefaultHoldTime));
+            Set("ETERNALVR_WEAPON_HAND_TILT", Number(s.WeaponHandAngle, LauncherSettings.MinControllerAngle, LauncherSettings.MaxControllerAngle, LauncherSettings.DefaultControllerAngle));
+            Set("ETERNALVR_OFF_HAND_TILT", Number(s.OffHandAngle, LauncherSettings.MinControllerAngle, LauncherSettings.MaxControllerAngle, LauncherSettings.DefaultControllerAngle));
             // The player's own maps, each in place of the built-in one for its controllers (docs/release/CONTROLS.md).
             if (s.Controllers && inputs.Controls != null && inputs.Controls.HasPlayerMaps) Set("ETERNALVR_CONTROLLER_DATA", inputs.Controls.Dir);
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");
@@ -289,6 +295,12 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_CUTSCENE_3D", s.Cutscene3D ? "1" : "0");
             Set("ETERNALVR_SHOT_ORIGIN", LauncherSettings.ShotOriginName(s.Shots));
             Set("ETERNALVR_MENU_BEAM", s.MenuBeam ? "1" : "0");
+            // On is the layer's own default (sampled GPU timing, CPU timing), so a variable set by hand still applies.
+            if (!s.PerfLog)
+            {
+                Set("ETERNALVR_GPU_TIMING", "0");
+                Set("ETERNALVR_CPU_TIMING", "0");
+            }
             // The per-eye temporal set holds r_antialiasing at run time; it keeps DLSS (2) only when asked to (taa_hooks.cpp).
             if (stereo && s.AntiAliasing == AntiAliasingMode.Dlss)
             {
@@ -321,9 +333,9 @@ namespace EternalVR.Launcher.Core.Launch
             // Rendering (the layer turns it off there), absent when off.
             if (stereo && !parallel && s.Foveation != FoveationMode.Off)
                 Set("ETERNALVR_FOVEATION", LauncherSettings.FoveationName(s.Foveation));
-            // Frame pacing (docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset.
-            // Stereo only and not with adaptive alternate eyes (which Parallel Eye Rendering ignores); explicit either way
-            // (the layer's default may change).
+            // Frame pacing (docs/VR_STEREO.md): one pair of eye images per headset frame, timed to the headset, or each pair
+            // shown once (new). Stereo only and not with adaptive alternate eyes (which Parallel Eye Rendering ignores);
+            // explicit either way (the layer's default may change).
             var paced = stereo && (s.AlternateEyes != AlternateEyesMode.Auto || parallel) ? s.Pacing : FramePacing.Off;
             Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
             // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on

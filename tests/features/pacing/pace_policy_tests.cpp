@@ -22,7 +22,7 @@ HeadsetLoop loopAt(std::uint64_t frames, double lastFrame, double period = kPeri
 } // namespace
 
 TEST_CASE("pace mode: names parse back, any case and spacing") {
-    for (const PaceMode mode : {PaceMode::Off, PaceMode::Headset}) {
+    for (const PaceMode mode : {PaceMode::Off, PaceMode::Headset, PaceMode::NewFrames}) {
         const auto parsed = parsePaceMode(paceModeName(mode));
         REQUIRE(parsed.has_value());
         CHECK(*parsed == mode);
@@ -32,6 +32,23 @@ TEST_CASE("pace mode: names parse back, any case and spacing") {
     CHECK_FALSE(parsePaceMode("").has_value());
     CHECK_FALSE(parsePaceMode("on").has_value());
     CHECK_FALSE(parsePaceMode("headsets").has_value());
+    CHECK(parsePaceMode("NEW") == PaceMode::NewFrames);
+}
+
+TEST_CASE("pace mode new: the game is never held; the XR worker waits at most two periods for a new image") {
+    FramePacer pacer(PaceMode::NewFrames);
+    HeadsetLoop loop;
+    loop.frames = 10;
+    loop.lastFrameSeconds = 1.0;
+    loop.periodSeconds = 1.0 / 90.0;
+    CHECK_FALSE(pacer.afterHandOver(loop, 1.001).wait);
+    CHECK(pacer.counters().handOvers == 1);
+    CHECK(pacer.counters().waits == 0);
+    CHECK(evr::pacing::newFrameWaitSeconds(1.0 / 90.0) == doctest::Approx(2.0 / 90.0));
+    CHECK(evr::pacing::newFrameWaitSeconds(1.0 / 120.0) == doctest::Approx(2.0 / 120.0));
+    CHECK(evr::pacing::newFrameWaitSeconds(1.0 / 30.0) == doctest::Approx(0.05)); // capped
+    CHECK(evr::pacing::newFrameWaitSeconds(0.0) == doctest::Approx(2.0 / 90.0));  // not known yet
+    CHECK(evr::pacing::newFrameWaitSeconds(-1.0) == doctest::Approx(2.0 / 90.0));
 }
 
 TEST_CASE("pacer off: never waits, still counts the images handed over") {

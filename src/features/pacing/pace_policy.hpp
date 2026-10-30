@@ -12,6 +12,12 @@
 // game's does. The wait is bounded (FramePacer::kTimeoutPeriods display periods) and never happens while
 // the headset's loop is not running (not shown, lost, stopping), so the game never hangs on it.
 //
+// With `new` the game is not held at all; instead the headset's frame waits for the game: the XR worker
+// begins a frame only once the game has handed over an image not shown yet (at most newFrameWaitSeconds), so
+// every image is submitted once and the runtime sees the game's own rate, filling the refreshes in between
+// with its reprojection, as for a native game below the refresh rate. Nothing re-presents the previous image
+// except a wait that times out (the game stalled), which keeps the session's frames coming.
+//
 // FramePacer is the game thread's decision; Cadence counts, per headset frame, how many images were handed
 // over since the one before (one each when paced; a mix of one and two when the game runs faster than the
 // headset). No OpenXR or Windows here.
@@ -22,11 +28,18 @@
 
 namespace evr::pacing {
 
-enum class PaceMode { Off, Headset };
+enum class PaceMode { Off, Headset, NewFrames };
 
-// "off" or "headset", any case, surrounding spaces ignored; nullopt otherwise.
+// "off", "headset" or "new", any case, surrounding spaces ignored; nullopt otherwise.
 std::optional<PaceMode> parsePaceMode(std::string_view text);
 const char* paceModeName(PaceMode mode);
+
+// PaceMode::NewFrames: how long the XR worker waits for a new image before it begins a headset frame anyway
+// (kNewFrameWaitPeriods display periods, never more than kNewFrameMaxWaitSeconds; a period not known or not
+// positive counts as 1/90 s). A wait ends at once when the image comes.
+inline constexpr double kNewFrameWaitPeriods = 2.0;
+inline constexpr double kNewFrameMaxWaitSeconds = 0.05;
+double newFrameWaitSeconds(double periodSeconds);
 
 // The headset's frame loop as the XR worker last reported it.
 struct HeadsetLoop {

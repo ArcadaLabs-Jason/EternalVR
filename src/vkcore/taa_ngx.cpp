@@ -120,7 +120,8 @@ unsigned sizeKey(void* parameters, const char* name) {
     return g_getInt(parameters, name, &signedValue) == kNgxSuccess ? static_cast<unsigned>(signedValue) : 0u;
 }
 
-// For the failure log: the create keys eye R's feature was made from, as the parameter block holds them.
+// For the create logs: the create keys eye R's feature was made from, as the parameter block holds them
+// (the render and output sizes say what the DLSS quality renders at).
 std::string createKeys(void* parameters) {
     unsigned sizes[std::size(kSizeParameters)] = {};
     for (std::size_t i = 0; i < std::size(kSizeParameters); ++i) {
@@ -178,8 +179,8 @@ void createTwin(void* commandBuffer, const void* handle, void* parameters) {
     const bool recovered = !g_twins.anyFailed() && g_retry.created();
     g_twinFailed.store(g_retry.fallback());
     if (g_counters.logged.fetch_add(1) < 8 || recovered) {
-        EVR_LOG("%s: eye R's DLSS feature for the game's feature %u: created (%u, result 0x%X)%s", kTag,
-                handleId(handle), handleId(made), static_cast<unsigned>(r),
+        EVR_LOG("%s: eye R's DLSS feature for the game's feature %u: created (%u, result 0x%X; %s)%s", kTag,
+                handleId(handle), handleId(made), static_cast<unsigned>(r), createKeys(parameters).c_str(),
                 recovered ? ": DLSS per eye again after a failure" : "");
     }
 }

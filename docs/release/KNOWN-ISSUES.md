@@ -15,7 +15,8 @@ them is worse for you than described here.
 - **Glory kills keep the game's camera by default.** The game moves the camera during a glory kill; in VR
   the view follows it, facing the demon, and turns with your head from there. If camera motion bothers you,
   the Play tab's "Glory kills" setting keeps the view steady, shows the kill on a flat screen, or fades it
-  out instead. Steady view and Flat screen have been tried in a headset; Fade out showed nothing with "Fade in
+  out instead. Since 0.1.87 Steady view also holds the view's place, so only your head moves it, and Flat screen
+  shows the kill in 3D; neither change has been tried in a headset yet. Fade out showed nothing with "Fade in
   walls" off before this build and has not been tried in a headset since. Cutscenes play on a flat 16:9 screen in front of you
   with the game's own camera (Cutscene view on the Advanced tab, "Around you", puts you in the cutscene's
   camera instead).
@@ -45,10 +46,11 @@ them is worse for you than described here.
   controllers are untested on real hardware.** Please report how they work. The Vive wands have a reduced
   layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. Pimax and other
   controllers get whatever layout their runtime maps them to.
-- **Valve Index controllers: the hands can sit at a wrong angle.** A player plays with them, but by default
-  the hands looked tilted and placed too high to him (GitHub #16); hand placement was tuned on Quest
-  controllers. I'm looking into it. Steam Frame controllers have their own layout (see CONTROLS.md) and work
-  for a player through SteamVR.
+- **Valve Index controllers: set the hand angles.** Hand placement was tuned on Quest controllers, and with
+  Index controllers the hands looked tilted and placed too high to a player (GitHub #16). Since 0.1.87 Weapon
+  hand angle and Off hand angle (Play tab, Controls) tilt the gun and glove on each controller: try -20 for the
+  weapon hand and -40 for the off hand, with any SteamVR controller offsets set back to 0, and tell me what works
+  for you. Steam Frame controllers have their own layout (see CONTROLS.md) and work for a player through SteamVR.
 - **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), the game carries on
   flat on your desktop and VR comes back by itself once the headset and its runtime are back, usually
   within a few seconds. This has been tested on a headset simulator, not yet with a real headset
@@ -57,10 +59,6 @@ them is worse for you than described here.
   If the graphics card is reset while you play, VR stays off until you start the game again; the
   launcher then says "the graphics card was reset".
 - **A DOOM Eternal update turns VR off** until EternalVR supports the new build; the game then runs flat.
-- **SteamVR**: players use it with Index, Steam Frame and PSVR2 controllers; I have tested it once myself, with a
-  Quest 3 through Virtual Desktop's SteamVR mode. Under SteamVR the left Menu button of Touch controllers opens
-  SteamVR's dashboard, so hold Y to pause instead (B with **Left (buttons and sticks)**), and take a screenshot by
-  holding both sticks pressed and pulling a trigger (instead of left Menu + trigger).
 - **SteamVR's dashboard can reset the graphics driver when video memory is nearly full.** A player's game
   used 97 to 99% of the video memory Windows gave it (a 12 GB card next to two large monitors); opening
   the dashboard over the game then reset the NVIDIA driver and SteamVR stopped showing the game. A lower
@@ -71,12 +69,10 @@ them is worse for you than described here.
   asks you to log in to Bethesda.net, and clicking a text box opens Windows' own typing window on the
   desktop, which the headset does not show: what you type goes there and is entered when you press Enter.
   It is easier to log in once without VR, starting the game from the Xbox app, before the first VR session.
-- **Places that open when you look at them** (a ladder, the tram exit and a door in Doom Hunter Base, and a
-  few others) check where your head looks. That was fixed in v0.1.4; before it they waited for the gun.
-  Please tell me anywhere you get stuck.
-- **Mostly tested with a Quest 3 through Virtual Desktop (VDXR)**, plus the one SteamVR test above. Meta
-  Horizon Link, other runtimes and other headsets have not been tested here (players' reports on SteamVR are
-  above). The launcher lets you pick a runtime; please tell me what happens.
+- **Mostly tested with a Quest 3 through Virtual Desktop (VDXR)**, plus one test of my own through SteamVR
+  (players use SteamVR with Index, Steam Frame and PSVR2 controllers; its buttons are in TROUBLESHOOTING.md).
+  Meta Horizon Link, other runtimes and other headsets have not been tested here. The launcher lets you pick
+  a runtime; please tell me what happens.
 
 ## Image and performance
 
@@ -87,19 +83,6 @@ them is worse for you than described here.
   beta restarts its stream to avoid it. If it happens to you: try the Virtual Desktop beta, or step out of the
   game and back in. The log names it (`xr: the runtime has held each frame in xrEndFrame ...`), so an export
   shows it.
-- **Render resolution.** "Resolution" on the launcher's Play tab is a size times a number (0.50 to 2.00).
-  Auto, the default, is the size your headset's runtime asks for, fitted within about 4.6 million pixels
-  per eye: a Quest 3 at Virtual Desktop's High asks for 2496x2688 and renders 2056x2216 at 1.00, so 1.00 is
-  not the headset's own size, and Virtual Desktop's High, Ultra and Godlike all render about the same.
-  Choose "Virtual Desktop native" (or "SteamVR native", "Quest Link native"...) to make 1.00 exactly the size
-  the runtime asks for, as in other OpenXR games; then Virtual Desktop's quality or SteamVR's resolution counts
-  in full. "Quest 3 native" (named after your headset) makes 1.00 the headset's own panel, when the launcher
-  knows the headset's model. Updating keeps your number
-  on Auto, so nothing changes until you choose. The "Each eye" line shows the size and its percent of what
-  the runtime asks for and of the panel. Raise the number for sharpness if your GPU has headroom, lower it if
-  the frame rate drops below the headset's refresh rate. The mod's log says the size it used
-  (`size: render size ...`). If the size cannot be set, the game renders at its small window's size and
-  looks soft; the log says why.
 - **AMD Radeon RX 5000 and 6000 (and some newer AMD drivers): the picture renders at the window's
   size.** These drivers cannot scale the game's image into a smaller desktop window, so each eye renders
   at the size of the game's window on your desktop instead of the planned size, and looks soft. The mod
@@ -128,13 +111,6 @@ them is worse for you than described here.
   when you get hit" below). A few effects lose the smoothing they get
   over several frames, because the two eyes would share it: water reflections still show, only that
   smoothing is off. The picture looks slightly different from the flat game.
-- **Screen shake was left off in the flat game.** Before this version, playing in stereo turned DOOM's own
-  Screen Shake setting (Settings, Game) off in your profile, and it stayed off when you played without the
-  mod. VR sessions now leave the setting as you had it, and the first stereo session with this version turns
-  it back on once if a VR session had turned it off and one of the last 20 sessions was in stereo. This is
-  done once per PC: a second Steam account, or Steam and Game Pass on one PC, is not repaired after the first.
-  If you had turned screen shake off in DOOM's settings yourself, turn it off again. Changing that setting in
-  the game's menu during a VR session is not kept.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
   for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
   banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before
@@ -144,25 +120,6 @@ them is worse for you than described here.
 - **Pickup camera animations do not play.** At a pickup that moves the camera (the chainsaw, for
   example) the view holds still until the tutorial popup instead of playing the animation. The game
   carries on normally afterwards.
-- **DLSS is experimental.** It is offered on NVIDIA RTX cards and helps only when the graphics card, not
-  the processor, is what holds the frame rate back; when the processor is, DLSS can be slower than TAA.
-  Each eye gets its own DLSS history. Choose DLSS under "Anti-aliasing" on the launcher's Play tab, then its
-  quality (DLAA, Quality, Balanced, Performance or Ultra Performance) in the DLSS group; DLAA needs a newer DLSS than the
-  game's. In VR the game's own video menu shows the DLSS setting that is running (Ultra Performance shows as Performance and
-  DLAA as Quality, which the menu does not have). With the
-  launcher's DLSS or Off, changing DLSS in the game's menu has no effect in VR, and your saved game settings
-  keep their own DLSS choice for flat play. With the launcher's TAA the game's own DLSS setting is used: if
-  it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
-  the mod switches to TAA (the log says `DLSS has no per-eye feature`) and the menu shows DLSS as off. The
-  mod tries DLSS again by itself a few times (after 5, 10 and 20 seconds); choosing a DLSS quality in the
-  game's menu tries it again at once.
-- **A newer DLSS is experimental too.** The game ships DLSS 2.3. The DLSS group's "Version" offers NVIDIA's
-  newest by default: **Download** fetches it once, straight from NVIDIA's GitHub after you accept NVIDIA's
-  license (the mod does not include it), and until then the game's 2.3 runs. "Load file..." uses a
-  `nvngx_dlss.dll` you downloaded yourself (NVIDIA's DLSS page on GitHub, `lib/Windows_x86_64/rel/nvngx_dlss.dll`).
-  The file stays in EternalVR's data folder or where you keep it, and nothing is copied into the game folder.
-  "In the headset" says what will run. If the game cannot use the file, it keeps its own DLSS and the log says
-  why (lines starting with `dlss:`).
 - **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
   may smear briefly while you turn. Each eye now keeps its own history for the glass, and standing still
   both eyes match the flat game on a test rig; whether the brief blur while turning is gone has not been
@@ -170,15 +127,11 @@ them is worse for you than described here.
 - **Demons flying far off can leave a trail.** In a headset test in Exultia, distant flying demons smeared
   the way anti-aliasing (TAA) can smear fast motion. Anti-aliasing Off on the Play tab avoids TAA's
   smearing, at the cost of some shimmer on edges.
-- **The HUD's markers are drawn at the HUD's distance.** Objective and other map markers now point at the place
-  they mark; before, they could sit well off it. Since 0.1.84 they also stay on their spot while you turn your
-  head (tried in my headset). They are still drawn on the HUD panel, so while you look at a far-off spot its
-  marker may look doubled (and the other way round).
-  A marker above or below the HUD panel waits at its top or bottom edge.
-- **Below 90 fps the HUD panel can jitter a little as you look around.** Since 0.1.84 the panel is shown where
-  your head was when its frame was drawn, which is what keeps the markers on their targets; when the game runs
-  under the headset's rate, a frame is shown twice and the panel shifts a bit until the next one. Seen in my
-  headset at 60 to 75 fps. I'm looking into giving the markers their own layer so the panel can stay put.
+- **The HUD's markers wait at the panel's edge.** A marker above or below the HUD panel waits at its top or
+  bottom edge. Objective and other map markers point at the place they mark, and since 0.1.84 they stay on their
+  spot while you turn your head (tried in my headset). Since 0.1.87 each eye sees a marker at its target's
+  distance, so it should no longer look doubled while you look at the target. I checked that on my test PC, not
+  yet in a headset.
 - **Shadows can pop in** on some walls as you turn your head.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
@@ -190,10 +143,10 @@ them is worse for you than described here.
   eyes now also get the decals nearest to them in the view around both eyes, placed after the game's own list so
   the game's own decals keep drawing, on the Steam and Game Pass (1.0.56.0) versions of the game. On any other
   version they keep the game's own decal culling and the log says why (lines starting with `seq-decals:`). On my
-  test PC's captures the right eye's puddles match the flat game's brightness and the left eye's are about 8%
-  darker. I haven't tried it in a headset yet, nor on Game Pass. Through 0.1.79 the eyes got so many decals that
-  at some view directions the floor's own decals stopped drawing (I saw the grate in an Urdak tunnel turn into a
-  smooth panel). That's fixed too.
+  test PC's captures the left eye's puddles match the flat game's brightness; the right eye's are about 4% darker
+  where a puddle sits near that eye's inner edge. I haven't tried it in a headset yet, nor on Game Pass. Through
+  0.1.79 the eyes got so many decals that at some view directions the floor's own decals stopped drawing (I saw
+  the grate in an Urdak tunnel turn into a smooth panel). That's fixed too.
 - **Reflections in puddles and glossy floors with ray tracing off** (the screen-space reflections) pointed
   the wrong way in each eye: some puddles did not reflect at all except from certain spots, and then the two
   eyes showed different things (the round platform at the start of Urdak, for one). Each eye now marches its
@@ -212,41 +165,11 @@ them is worse for you than described here.
   replaced that filter, and on my test PC's captures the boxes are gone, but it hasn't been tried in a
   headset yet. If the HUD still looks wrong (squares, a red tint that stays, or anything else that wasn't
   there before), please tell me where it happened.
-- **Frame rate.** Stereo renders every frame twice. Slower cards than the tested RTX 4080 may struggle; a
-  player's RTX 3070 plays well with DLSS Performance and preset J (see "Which DLSS preset should I use?" in
-  `TROUBLESHOOTING.md`). Foveated rendering on the Play tab can help on NVIDIA RTX, AMD Radeon RX 6000 or
-  newer and Intel Arc cards, but it is experimental and off by default.
-- **Foveated rendering (experimental) is less sharp toward the edges, by design.** Since 0.1.48 the sharp
-  area is measured as an angle from where your head points, so a spot in the scene gets the same detail in
-  both eyes (before, some detail off to the side could be sharp in one eye and blurry in the other). On
-  headsets whose eye images aren't symmetric (Quest 3 for one) the blurrier band toward your nose and at
-  the top is narrower than in 0.1.47 and more of it sits on the outer side. The bottom of the view is about
-  as far from where your head points as the outer edges (on Quest 3, 55 degrees down against 44 up). A
-  headset test showed floors there blocky and streaked with DLSS, because that band was shaded at the
-  coarsest, quarter rate. I moved the quarter rate out to 56 degrees from where your head points for every
-  setting: the bottom and the outer edges of a Quest 3's view now get half rate, and only the far corners of
-  each eye keep quarter rate. Floors there can still look a little coarser than the middle, as half rate does,
-  so tell me if they still bother you. Loading a checkpoint
-  doesn't move it from one eye to the other: I measured each eye's pattern before and after map loads on my
-  test PC and in captures from a headset session. If it looks different to you after a load, an in-headset
-  capture before and one after it from the same spot (hold the left Menu button and pull a trigger) would
-  help me a lot. It is off by default and off with Parallel Eye Rendering. Since 0.1.56 it also runs on AMD Radeon RX 6000 or newer and Intel Arc cards,
-  through Vulkan's standard shading rate (a player's RX 6750 XT ran it; Intel Arc has not been tried, and
-  my test PC has neither). If you use it, tell me how it looks to you.
 - **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
   picture can stop for about half a second. That is the game's own checkpoint autosave, not the mod: the
   game holds everything while it writes the save. It happens in the flat game too, but in the headset a
   frozen picture stands out much more. The mod's log names it: the `stall:` line for that freeze ends with
   `the game saved a checkpoint in the gap`.
-- **Textures can sharpen a moment late.** "Texture streaming: Only what you see" on the launcher's Play tab
-  (on by default) has the game load only the texture detail the current view needs, which gave about 8% more
-  frames per second on the test rig. A still view looks the same, but after a fast turn or in a new area a
-  texture may look soft for a moment. Turn it off if that bothers you.
-- **The CPU Saver is experimental.** Its checkboxes on the Play tab (all off by default) each turn down
-  one of the game's detail settings that cost processor time: your own shadow, sun shadows near you, how far
-  away models switch to simpler versions, and how far away marks, shadows and lights fade. Each one's tooltip
-  says what it gained on the test rig and what it costs in the picture. The game's own settings are put back
-  after you play.
 - **Alternate eyes is new and not yet tried in a headset.** "Alternate eyes" on the launcher's Advanced tab
   (off by default) draws one eye per frame, taking turns, so a slower processor has about half the work per
   frame. Each eye then updates at half the rate: fast motion can look doubled or smeared, moving demons can
@@ -254,6 +177,11 @@ them is worse for you than described here.
   on TAA, fast-moving demons can smear a little more than without it; Off avoids that. "Auto" does this only
   while your processor cannot keep up with the headset and draws both eyes again once it can (the switch
   takes a second or a few). Turn it off if it does not help.
+- **New game frames only is experimental.** "Frame pacing" on the Play tab (Matched to the headset by default)
+  has it as a third choice: each game frame goes to the headset once, and when the game runs under the headset's
+  rate the headset's runtime fills in between frames itself. In that mode controller sync, vibration and the
+  menu pointer run at the game's rate, not the headset's. fpsVR and similar overlays then show the game's real
+  frame rate. It has only run on my test PC so far.
 - **Stereoscopic cutscenes cost about twice the graphics card's time while a cutscene plays.** "Stereoscopic
   cutscenes" on the launcher's Advanced tab (on by default) draws each cutscene on the flat screen from two cameras a
   little apart and shows the pair in 3D, like a 3D movie. On my RTX 3080 Ti it held 88.8 fps on average at 90 Hz
@@ -264,8 +192,9 @@ them is worse for you than described here.
   in the level. In my headset they looked great, but I set the amounts from numbers, so some shots may still feel
   flat or too deep.
   The mod cannot see the Slayer or a prop right at the lens, so in some close-ups (the opening cutscene has a
-  few) the picture pops out of the screen further than is comfortable, and a few subtitles and popup texts there
-  can be hard to focus on. It doubles the GPU time of a cutscene
+  few) the picture pops out of the screen further than is comfortable. Since 0.1.87 subtitles and popup texts sit
+  in front of the screen, also in those close-ups (checked on my test PC); tell me if one is still hard to focus
+  on. It doubles the GPU time of a cutscene
   frame (4.9 to 9.9 ms on my RTX 3080 Ti at 2048x2208 per eye, where the headset's 90 Hz did not hold in the
   heavy shots). Foveated rendering is left off for these frames (its sharp centre follows the headset's
   view, not the screen), so they cost the full amount.
@@ -346,14 +275,14 @@ them is worse for you than described here.
   on that line at any distance.
 - **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
-  Aim dot shows where shots go.
+  Aim dot shows where shots go. With head aim, since 0.1.87 the Aim dot sits in the middle of your view while
+  zoomed, where the shot goes (Steam version; not tried in a headset yet).
 - **Switching the Heavy Cannon's mod turns the gun by about 3 degrees.** The Precision Bolt's scope and the
   iron sights point about 3 degrees apart, so when you switch between the Bolt and the Micro Missiles the gun
   turns a little to put the sights you now have on your aim. Your hand stays where it is. I haven't tried it
   in a headset yet, so I don't know yet whether the turn bothers you.
-- **With head aim there is no crosshair or aim mark while the Precision Bolt is zoomed in.** Shots go to the
-  middle of your view. On the Game Pass version, head aim may still show the scope's ring (the zoom
-  bit is unchecked there; I have not tested it).
+- **On the Game Pass version, head aim may still show the Precision Bolt's scope ring** when zoomed in (the
+  zoom bit is unchecked there; I have not tested it).
 - **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
   hand can cover it.
 - **The arms.** The Slayer's other arm follows your off-hand controller, its fingers follow your grip, trigger
@@ -379,8 +308,9 @@ them is worse for you than described here.
   arms shown, which looked right. I checked that on the test PC, not yet in the headset. While the game plays its own
   arm animations (a melee, a glory kill) it draws the whole arms for that moment, and with head aim (Aim with: Head)
   the arms are the game's, so they show whole all the time.
-- **Shots can pass through thin walls** if you push the gun through one; the shot starts at your hand
-  and there is no wall check yet.
+- **Shots through thin walls should be fixed in 0.1.87.** Before, if you pushed the gun through a thin wall, the
+  shot started at your hand on the other side. It now starts on your side of the wall. I couldn't recreate the
+  wall case on my test PC, so if you still see a shot come out behind a wall, tell me.
 - **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
   strength and feel may change.
 - **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. On a real suit a player has felt
@@ -391,16 +321,7 @@ them is worse for you than described here.
   them.
 - **The weapon wheel** (hold the right stick down, then turn it) works in the headset; while it is open it is
   shown straight ahead, with motion controllers or a gamepad. The mod finds the wheel where the game drew
-  it, so a larger HUD layout no longer leaves the wheel's edges behind on the HUD; the very first time it
-  opens in a session it can sit at its usual place on the right for a frame or two.
-- **The game's HUD Scale is Large in VR.** The mod sets the game's own HUD Scale to Large while you play in
-  VR, so its small text (mission challenges, the demonic corruption bar, the equipment labels) is easier to
-  read; your own HUD Scale stays for the flat game. If you change HUD Scale in the game's menu during VR, your
-  choice sticks for the rest of that session and is saved as your own setting, like in the flat game (picking
-  Large changes nothing, since that's what VR already shows). To make the HUD bigger or smaller in VR without
-  touching the game's setting, change HUD distance or size on the Advanced tab. In my headset the hint under
-  the mission challenges, the demonic corruption title and the equipment labels read fine at the default HUD
-  distance.
+  it, so a larger HUD layout no longer leaves the wheel's edges behind on the HUD.
 - **Health and ammo on the wrist or the gun** now follow where the game draws them, at any HUD Scale (checked
   on the test PC, not in a headset yet). When you start the game they show on the floating panel for a moment
   until the mod has found them; after that they stay on the wrist or the gun across levels. Something new in
@@ -429,13 +350,6 @@ them is worse for you than described here.
   there without thinking, and a press is on even while your thumb only brushes past, so Tap is the easiest
   start. A controls file with a touch in it makes a version of the mod older than 0.1.46 use the built-in
   controls.
-- **Controls files from a newer version.** From 0.1.47 on, a button line a newer version wrote that this one
-  does not know is skipped and the rest of your controls are kept (the log names each skipped line; the
-  controls editor lists them as not used and keeps them). Versions before 0.1.47 still use the built-in
-  controls for such a file. An action a version does not know, on a button it does know, still makes it use
-  the built-in controls.
-- **Edit controls...** should open much faster now (it used to take several seconds and show "Not
-  Responding" first). If it still takes several seconds, tell me.
 - **The overhead swing** (Gestures on the Play tab, off by default) has had little headset time. How hard you
   need to swing may change. A swing you did not mean still spends a Crucible charge, so turn it off if it fires by
   mistake.
@@ -487,19 +401,18 @@ them is worse for you than described here.
 
 ## Launcher and settings
 
-- **Start the headset's runtime and connect the headset before Launch VR.** When the runtime reports no
-  headset, or does not answer, the launcher asks before it starts the game.
-- **Steam Cloud warning.** If the launcher warns that "Steam's cloud record is stale", start DOOM Eternal
-  once normally through Steam, let it reach the main menu, quit, then use the launcher again.
-- **A small game window sits on your desktop** during a VR session. That is normal. While the game is
-  not the focused window, your mouse stays yours. Clicking into that window gives the mouse to the game,
-  as when you play flat; Alt+Tab or the Windows key gives it back (up to 0.1.50 it stayed trapped in the
-  game's window until the game quit, GitHub #30).
 - **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
   in a headset; its strength may change.
 - **Use the headset's graphics card** (Advanced tab) is for a PC with two or more graphics cards where VR
   does not start because the game picked another card than the headset's. It is new, off by default, and
   not yet tried on such a PC with a headset; please tell me if you need it and how it went.
+- **Performance overlay** (Advanced tab) is new: it shows the game's own frame rate counter just above the top
+  right corner of the HUD panel (Detailed adds the game's average, each eye's resolution and its HDR, ray tracing
+  and DLSS settings). The number is the game's frames a second; each draws both eyes, so it is the one to watch
+  when your headset's counter shows its full refresh rate (with Alternate eyes each frame draws one eye, so each
+  eye gets a new picture at half that rate). I checked it on my test PC, not yet in a headset, so it may sit a little high or
+  read small, more so at large render sizes; please tell me if it does. The game has no separate processor or
+  graphics card time and no video memory figure; an Export report's log has those.
 - **Not code-signed.** Windows SmartScreen may warn the first time (`INSTALL.md`).
 
 ## The DLC (The Ancient Gods, parts one and two)

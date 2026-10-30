@@ -160,3 +160,27 @@ and memory scans while injecting mouse motion). All addresses are RVAs in this b
   the embedded MFC tools.
 - For the layer: an injected key is sent as its US-keyboard scan code (`src/platform/key_injection/
   us_scan_codes.hpp`). The layout's own scan code (`MapVirtualKeyW`) sent W as Z and A as Q on AZERTY.
+
+## 8. The Dossier's screens (idHUDMenu_Dossier) [static-verified, rig-verified]
+
+Type info (`tools/typeinfo/extract_typeinfo.py --class idHUDMenu_Dossier`), the MSVC RTTI and lab probes on
+the rig (2026-10-26, a player's report that the map's sticks changed tabs when the Dossier had opened on
+Challenges):
+
+- `idHUDMenu_Dossier : idMenu`, 0x1C0 bytes, vtable RVA 0x2D0A8C0 (16 slots): `previousDossierData` +0x108 and
+  `dossierData` +0x12C (`idHUDEvent_OpenDossier::openDossierPlayerData_t`: `desiredScreen` +0x0,
+  weapon / praetor / mastery / rune upgrade / sentinel battery points +0x4..+0x14, `campaignIndex` +0x18,
+  `bool pageIsAvailable[6]` +0x1C), `desiredScreen` +0x150 (the screen it opens on: it stays put while the
+  tabs change), `screenToTabIndexMapping` +0x158 (`idStaticList<int, 6>`; read on the rig: 0 1 -1 -1 2 3).
+- `dossierPage_t` (enum table .rdata RVA 0x409F4D0): `DOSSIER_PAGE_MAP` 0, `ARSENAL` 1, `SUIT` 2, `RUNES` 3,
+  `CODEX` 4, `CHALLENGES` 5, `NUM_DOSSIER_PAGES` 6. Four tabs show: Map, Arsenal, Codex, Challenges.
+- Slot 5, RVA 0xF39010, is ShowScreen: edx the `dossierPage_t` (kept in esi and sent on in a 0x23 event at
+  0xF3909E). On the rig it ran twice as the Dossier opened (the opening screen; the second call with r9 0) and
+  once for each tab key (E: 1, then 4, then 5). The Dossier's vtable is the only pointer to it. Slots 11 and 6
+  run on the open event, 9 on each tab change and about 90 times a second while a stick drags the map, 7 on
+  closing. Slot 12 (0xF388B0, `mov eax, [rcx+0x150]; ret`) is shared by many classes (identical code folded).
+- Changing ShowScreen's edx to 5 on both opening calls (lab) showed the Challenges screen with the Map tab
+  still highlighted: the tab bar keeps its own index. The layer only reads edx
+  (`vkcore/dossier_screen_hook.hpp`).
+- `idAutomap::Update` (0xA53CF0, called only from the render-view build 0x6A2C10, after the player's view)
+  ran about 90 times a second all through play, map page or not: no sign of the map page.

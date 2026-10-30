@@ -16,6 +16,7 @@ using evr::gpu_timing::FrameSample;
 using evr::gpu_timing::kSampleEvery;
 using evr::gpu_timing::kSampleRun;
 using evr::gpu_timing::measureFrame;
+using evr::gpu_timing::parseCpuTiming;
 using evr::gpu_timing::parseEnabled;
 using evr::gpu_timing::parseMode;
 using evr::gpu_timing::sampledFrame;
@@ -197,10 +198,10 @@ TEST_CASE("untimed frames count for the CPU only, and clearing starts a new peri
     CHECK(r.ticks == 0);
 }
 
-TEST_CASE("GPU timing is off unless ETERNALVR_GPU_TIMING asks for sampled or every frame") {
-    CHECK(parseMode(false, L"") == TimingMode::Off);
-    CHECK(parseMode(true, L"") == TimingMode::Off);
-    CHECK(parseMode(true, L"yes please") == TimingMode::Off);
+TEST_CASE("GPU timing samples unless ETERNALVR_GPU_TIMING turns it off or asks for every frame") {
+    CHECK(parseMode(false, L"") == TimingMode::Sampled);
+    CHECK(parseMode(true, L"") == TimingMode::Sampled);
+    CHECK(parseMode(true, L"yes please") == TimingMode::Sampled);
     CHECK(parseMode(true, L"0") == TimingMode::Off);
     CHECK(parseMode(true, L"off") == TimingMode::Off);
     CHECK(parseMode(true, L"false") == TimingMode::Off);
@@ -209,6 +210,16 @@ TEST_CASE("GPU timing is off unless ETERNALVR_GPU_TIMING asks for sampled or eve
     CHECK(parseMode(true, L"1") == TimingMode::EveryFrame);
     CHECK(parseMode(true, L"on") == TimingMode::EveryFrame);
     CHECK(parseMode(true, L"true") == TimingMode::EveryFrame);
+}
+
+TEST_CASE("CPU timing is on unless ETERNALVR_CPU_TIMING turns it off") {
+    CHECK(parseCpuTiming(false, L""));
+    CHECK(parseCpuTiming(true, L""));
+    CHECK(parseCpuTiming(true, L"1"));
+    CHECK(parseCpuTiming(true, L"yes please"));
+    CHECK_FALSE(parseCpuTiming(true, L"0"));
+    CHECK_FALSE(parseCpuTiming(true, L"off"));
+    CHECK_FALSE(parseCpuTiming(true, L"false"));
 }
 
 TEST_CASE("sampling takes the first three frames of every 45, so a run holds eye L then eye R") {

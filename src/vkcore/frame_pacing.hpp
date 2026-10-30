@@ -28,9 +28,13 @@
 
 namespace evr::vkcore::frame_pacing {
 
-// Reads ETERNALVR_PACE (off or headset) once and logs the choice; later calls return the same answer.
+// Reads ETERNALVR_PACE (off, headset or new) once and logs the choice; later calls return the same answer.
 // True for headset.
 bool configure();
+
+// ETERNALVR_PACE=new (after configure): the game is not held; the XR worker begins each headset frame only
+// once a new image has been handed over (presenter's waitForNewImage), so each image is submitted once.
+bool newFramesOnly();
 
 // Presenter, under its lock: an image was handed to the XR worker.
 void onHandOver();

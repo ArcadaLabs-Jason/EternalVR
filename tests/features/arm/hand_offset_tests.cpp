@@ -52,6 +52,15 @@ TEST_CASE("a rotation offset turns the hand about the grip's axes") {
     CHECK(approxEqual(wrist.axis.left, Vec3{1.0f, 0.0f, 0.0f})); // the fingers still point forward
 }
 
+TEST_CASE("a pitch offset turns the fingers away from the thumb, the palm staying where it faces") {
+    // The off hand's default turn (T-179): pitch 30 about the grip's left axis.
+    const ModelPose wrist = wristFromGrip({{}, {}}, {{}, IdAngles{30.0f, 0.0f, 0.0f}});
+    const Vec3 fingers = wrist.axis.left;                      // the hand's y
+    CHECK(fingers.z < -0.49f);                                 // away from the thumb (the grip's up)
+    CHECK(fingers.x > 0.86f);                                  // still mostly along the grip's forward
+    CHECK(approxEqual(wrist.axis.up, Vec3{0.0f, 1.0f, 0.0f})); // the back of the hand unchanged
+}
+
 TEST_CASE("wrist and grip round-trip through any offset") {
     const ModelPose grip{{0.3f, -0.1f, 1.2f}, axisFromAngles({-15.0f, 130.0f, 70.0f})};
     for (const HandOffset& offset : {HandOffset{}, HandOffset{{-0.08f, 0.035f, 0.0f}, {}},

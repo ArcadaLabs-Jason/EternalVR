@@ -25,12 +25,15 @@ bool flatScreenGameView(XrPresenter::Impl& p, std::byte* renderView, std::byte* 
 
 // Camera hook, game thread, every game view of a cutscene (or glory kill) shown on the flat screen, after the
 // cinema FOV is written into the view. True: the frame was recorded as a stereo pair (the caller leaves the
-// game's view as it is). False: not applicable (the setting is off, a glory kill, no Route S, alternate eyes,
-// an unusable FOV); the frame goes to the flat screen as it always did.
+// game's view as it is). False: not applicable (the setting is off, no Route S, alternate eyes, an unusable
+// FOV); the frame goes to the flat screen as it always did. A glory kill's pair (`gloryKill`) assumes the
+// nearest thing at kGloryNearestMetres or nearer: the demon and the Slayer's arms come right to the lens,
+// and the traces only see the rooms (T-180).
 bool cinema3dGameView(XrPresenter::Impl& p,
                       std::byte* renderView,
                       const std::byte* player,
-                      bool cutsceneOnScreen);
+                      bool onScreen,
+                      bool gloryKill = false);
 
 // Camera hook, game thread, from prepareEyes for the head-tracked frames: ends a pair run once the cutscene
 // is over, and true for the first few frames after a run ended (the shot changed back to the player: both

@@ -4,6 +4,7 @@
 #include "vkcore/stall_watch.hpp"
 
 #include "gpu_timing/present_stall.hpp"
+#include "vkcore/hang_note.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/vram_watch.hpp"
@@ -287,6 +288,7 @@ std::uint64_t presentEntered() {
     if (previous != 0 && now > previous && ms(now - previous) > gt::kStallGapMs) {
         onStall(ms(now - previous), previous, tickBefore, lastTick, spent);
     }
+    hang_note::testHangAtPresent(); // rig only (ETERNALVR_TEST_HANG): holds this present after its stamp
     return now;
 }
 
@@ -317,6 +319,14 @@ void onGameTick() {
 
 std::uint64_t lastGameTickMicros() {
     return g_lastTick.load(std::memory_order_relaxed);
+}
+
+std::uint64_t lastPresentMicros() {
+    return g_lastPresent.load(std::memory_order_relaxed);
+}
+
+bool ticksJudged() {
+    return !g_ticksDecided.load(std::memory_order_relaxed) || g_ticksKnown.load(std::memory_order_relaxed);
 }
 
 void trackGameTicks(bool on) {

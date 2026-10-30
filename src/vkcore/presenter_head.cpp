@@ -242,11 +242,18 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     if (settings.headPosition) {
         offset = xr_math::headOffsetInWorld(*body, roomHead.offset.offset, settings.unitsPerMetre);
     }
-    // The head swept from the game's eye: its depth in geometry fades the view, and shots start from the
-    // first contact (T-062).
     const Vec3 eye{origin[0], origin[1], origin[2]};
+    glory.noteEye(eye, settings.unitsPerMetre);
+    // A glory kill shown steady: the view also stays where the eye was before it (glory_view.hpp, T-180).
+    const std::optional<Vec3> held = glory.steadyEye(qpcSeconds(qpcNow()));
+    if (held) {
+        offset = offset + (*held - eye);
+    }
+    // The head swept from the game's eye: its depth in geometry fades the view, and shots start from the
+    // first contact (T-062). Not to a held place: the player stood there.
     std::optional<float> hit;
-    if (roomScaleSettings().collision && !cutscene && length(offset) > 0.01f * settings.unitsPerMetre) {
+    if (roomScaleSettings().collision && !cutscene && !held &&
+        length(offset) > 0.01f * settings.unitsPerMetre) {
         hit = sweepHead(player, eye, eye + offset, 0.16f * settings.unitsPerMetre);
     }
     const roomscale::ClearanceStep clear = room.clearance(offset, hit, settings.unitsPerMetre);

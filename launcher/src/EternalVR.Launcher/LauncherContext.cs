@@ -367,7 +367,7 @@ namespace EternalVR.Launcher
                 RuntimeProbe = probe,
                 Panel = probe != null && probe.Ok ? Identify(probe.RuntimeName, probe.SystemName).Known?.Panel : null,
                 Controls = Controls,
-                NewestDlss = NewestDlss(verify: true),
+                NewestDlss = PresentDlssPath(verify: true),
                 PlayerSsdo = GameLayout.PlayerCvar(g.Locations, "r_SSDO"),
                 PlayerSsr = GameLayout.PlayerCvar(g.Locations, "r_SSR"),
                 ParallelEyesGame = g.Facts.Build?.RunsParallelEyes == true,
@@ -416,17 +416,15 @@ namespace EternalVR.Launcher
         public string OpenXrLoader => Path.Combine(LayerDir, "openxr_loader.dll");
 
         /// <summary>
-        /// NVIDIA's newest listed DLSS (data\dlss-downloads.txt) when it is in the data folder's dlss folder, else null. With
-        /// <paramref name="verify"/> (at launch) its SHA-256 is checked too; without (the window's line) only its size.
+        /// The newest listed DLSS (data\dlss-downloads.txt) whose file is in the data folder's dlss folder, else null: the
+        /// newest itself once downloaded, an older listed one until then. With <paramref name="verify"/> (at launch) its SHA-256
+        /// is checked too; without (the window's line) only its size.
         /// </summary>
-        public string NewestDlss(bool verify)
+        public DlssRelease PresentDlss(bool verify)
         {
-            var release = Data.DlssDownloads?.Newest;
-            if (release == null) return null;
-            var path = DlssDownloads.PathFor(Paths.DlssFiles, release);
             try
             {
-                return (verify ? DlssDownloads.Matches(path, release) : DlssDownloads.HasSize(path, release)) ? path : null;
+                return Data.DlssDownloads?.Present(Paths.DlssFiles, verify);
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
@@ -434,6 +432,10 @@ namespace EternalVR.Launcher
                 return null;
             }
         }
+
+        /// <summary>The file of <see cref="PresentDlss"/>, or null.</summary>
+        public string PresentDlssPath(bool verify) =>
+            PresentDlss(verify) is DlssRelease r ? DlssDownloads.PathFor(Paths.DlssFiles, r) : null;
 
         /// <summary>
         /// Stereo with the render size on (or Detect again, or the read at start): asks the runtime the game will use (with the game's OpenXR

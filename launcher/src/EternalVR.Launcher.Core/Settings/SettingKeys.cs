@@ -49,6 +49,8 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.MeleeAimWith] = new[] { "melee_aim" },
             [Setting.EquipmentAimWith] = new[] { "equipment_aim" },
             [Setting.WeaponHand] = new[] { "handedness" },
+            [Setting.WeaponHandAngle] = new[] { "weapon_hand_angle" },
+            [Setting.OffHandAngle] = new[] { "off_hand_angle" },
             [Setting.Arms] = new[] { "show_arms" },
             [Setting.MoveToward] = new[] { "locomotion" },
             [Setting.XButton] = new[] { "dossier" },
@@ -94,6 +96,8 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.MotionControllers] = new[] { "controllers" },
             [Setting.ShotsFrom] = new[] { "shot_origin" },
             [Setting.MenuLaser] = new[] { "menu_beam" },
+            [Setting.PerformanceLog] = new[] { "perf_log" },
+            [Setting.PerformanceOverlay] = new[] { "perf_overlay" },
             [Setting.ExtraArguments] = new[] { "extra_args" },
         };
 

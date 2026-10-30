@@ -36,7 +36,7 @@ bool equalsNoCase(std::string_view a, std::string_view b) {
 
 std::optional<PaceMode> parsePaceMode(std::string_view text) {
     const std::string_view t = trim(text);
-    for (const PaceMode mode : {PaceMode::Off, PaceMode::Headset}) {
+    for (const PaceMode mode : {PaceMode::Off, PaceMode::Headset, PaceMode::NewFrames}) {
         if (equalsNoCase(t, paceModeName(mode))) {
             return mode;
         }
@@ -45,12 +45,25 @@ std::optional<PaceMode> parsePaceMode(std::string_view text) {
 }
 
 const char* paceModeName(PaceMode mode) {
-    return mode == PaceMode::Headset ? "headset" : "off";
+    switch (mode) {
+    case PaceMode::Headset:
+        return "headset";
+    case PaceMode::NewFrames:
+        return "new";
+    case PaceMode::Off:
+        break;
+    }
+    return "off";
+}
+
+double newFrameWaitSeconds(double periodSeconds) {
+    const double period = std::isfinite(periodSeconds) && periodSeconds > 0.0 ? periodSeconds : 1.0 / 90.0;
+    return std::min(kNewFrameWaitPeriods * period, kNewFrameMaxWaitSeconds);
 }
 
 PaceStep FramePacer::afterHandOver(const HeadsetLoop& loop, double nowSeconds) {
     ++counters_.handOvers;
-    if (mode_ == PaceMode::Off) {
+    if (mode_ != PaceMode::Headset) { // NewFrames holds the headset's frame instead (XR worker)
         return {};
     }
     const double period = loop.periodSeconds;

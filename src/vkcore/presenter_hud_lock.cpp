@@ -31,7 +31,7 @@ void lockToRenderedHead(XrCompositionLayerQuad& q,
     static bool logged = false; // XR worker only
     if (!logged) {
         logged = true;
-        EVR_LOG("ui: the head-locked HUD is shown at the head pose its frame was rendered with (LOCAL)");
+        EVR_LOG("ui: a head-locked quad is shown at the head pose its frame was rendered with (LOCAL)");
     }
 }
 

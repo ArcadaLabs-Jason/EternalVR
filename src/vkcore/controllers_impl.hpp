@@ -333,6 +333,7 @@ struct State {
     std::atomic<std::uint64_t> turnsApplied{0};
     std::atomic<std::uint64_t> shots{0};
     std::atomic<std::uint64_t> shotsRewritten{0};
+    std::atomic<std::uint64_t> shotsBehindWall{0}; // the hand's start was past a wall: taken back to it
     std::atomic<std::uint64_t> shotsOverHalfDegree{0};
     std::atomic<std::uint64_t> viewmodelWrites{0};
     std::atomic<std::uint64_t> offhandWrites{0};

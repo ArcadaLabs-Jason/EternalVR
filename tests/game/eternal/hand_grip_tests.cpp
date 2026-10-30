@@ -101,10 +101,14 @@ Vec3 placedWrist(const WeaponOffsetTable& table,
 
 } // namespace
 
-TEST_CASE("the rows' wrist is the off hand's wrist rule mirrored for the right glove") {
+TEST_CASE("the rows' wrist is the off hand's wrist point mirrored for the right glove") {
+    // Its place only: the off hand's turn toward the little finger (T-179) is its own, the gun glove's comes
+    // with each weapon's row.
     const WeaponOffset mirrored =
         evr::input::weaponArmOffsetFor(evr::input::kDefaultOffhandOffset, Handedness::Right);
-    CHECK(mirrored == evr::game::kRowsWrist);
+    CHECK(mirrored.forward == evr::game::kRowsWrist.forward);
+    CHECK(mirrored.left == evr::game::kRowsWrist.left);
+    CHECK(mirrored.up == evr::game::kRowsWrist.up);
     CHECK(kWrist.y < 0.0f); // toward the back of the right hand
 }
 

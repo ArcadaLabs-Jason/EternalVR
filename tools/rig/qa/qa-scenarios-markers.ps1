@@ -92,7 +92,7 @@ function Test-QaMarkerDirections($Ctx, $Quad) {
 $markerScenarios = @(
     @{
         Name = 'hud-markers'; Kind = 'game'
-        Proves = 'The HUD''s POI markers on the head-locked quad: drawn within 1 degree of their target''s direction inside the 16:9 band, off the frame (clamped to its edge) above and below it; the body turned a full circle twice at the e1m3 gate with the map''s POI targets triggered'
+        Proves = 'The HUD''s POI markers on the head-locked quad, on their own quads, one per eye, each marker moved for its target''s distance (T-178, T-186): drawn within 1 degree of their target''s direction inside the 16:9 band, off the frame (clamped to its edge) above and below it; the body turned a full circle twice at the e1m3 gate with the map''s POI targets triggered'
         Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
         Env = @('ETERNALVR_AIM=hand', 'ETERNALVR_RENDER_SIZE=auto', 'ETERNALVR_TEST_MARKER_LOG=1',
                 "ETERNALVR_DEBUG_COMMANDS=$script:QaMarkerSchedule")
@@ -110,9 +110,19 @@ $markerScenarios = @(
             param($c)
             Test-QaPresent $c 'hud-markers: the HUD matrix build hooked at RVA'
             Test-QaAbsent $c 'hud-markers: not installed'
+            # The markers on their own quad, the HUD head-locked (T-178).
+            Test-QaPresent $c 'ui: first HUD markers on their own quad'
             $quad = Get-QaMarkerQuad $c
             Add-QaResult $c 'the layer logged the quad the markers follow' ($null -ne $quad) ''
             if ($quad) { Test-QaMarkerDirections $c $quad }
+            # Each eye's markers moved for their targets' distance (T-186): the gate's targets are 75 to 130 m
+            # away, so the right eye's copies move about 20 px of the 1280 px band at the rig's 64 mm (2 m at 1.5 m:
+            # 0.032 * (1 - 1.5 / 100) * 640).
+            $moved = @(Get-QaMatches $c "the right eye's copies moved ([\d.]+) px on average" -Regex |
+                ForEach-Object { if ($_ -match "copies moved ([\d.]+) px on average") { [double]$Matches[1] } })
+            $best = ($moved | Measure-Object -Maximum).Maximum
+            Add-QaResult $c "each eye's markers are moved for their targets' distance" ($moved.Count -ge 1 -and $best -ge 15 -and $best -le 21) `
+                ('{0} 10 s line(s), the right eye''s mean shift at most {1:N1} px' -f $moved.Count, $best)
         }
     }
 )

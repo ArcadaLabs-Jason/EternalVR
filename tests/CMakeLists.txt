@@ -149,6 +149,7 @@ evr_add_test(evr_input_tests
         features/input/action_aim_punch_tests.cpp
         features/input/action_aim_tests.cpp
         features/input/aim_smoothing_tests.cpp
+        features/input/controller_tilt_tests.cpp
         features/input/analog_button_tests.cpp
         features/input/arm_gestures_tests.cpp
         features/input/arms_settings_tests.cpp
@@ -393,6 +394,7 @@ evr_add_test(evr_menu_tests
         features/menu/menu_router_map_tests.cpp
         features/menu/menu_router_popup_tests.cpp
         features/menu/menu_router_prompt_tests.cpp
+        features/menu/menu_router_screen_tests.cpp
         features/menu/menu_router_tests.cpp
         features/menu/model_camera_tests.cpp
         features/menu/page_keys_tests.cpp
@@ -426,7 +428,9 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/hud_view_tests.cpp
         ui_layer/hud_regions_tests.cpp
         ui_layer/layout_tracker_tests.cpp
+        ui_layer/marker_boxes_tests.cpp
         ui_layer/motion_target_tests.cpp
+        ui_layer/perf_metrics_tests.cpp
         ui_layer/ui_settings_tests.cpp
         ui_layer/weapon_hud_tests.cpp
         ui_layer/weapon_wheel_tests.cpp
@@ -439,6 +443,7 @@ evr_add_test(evr_gpu_timing_tests
         gpu_timing/cpu_split_tests.cpp
         gpu_timing/submit_census_tests.cpp
         gpu_timing/frame_stats_tests.cpp
+        gpu_timing/present_hang_tests.cpp
         gpu_timing/present_stall_tests.cpp
         gpu_timing/timestamps_tests.cpp
     DEPENDS evr_gpu_timing)

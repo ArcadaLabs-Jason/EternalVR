@@ -114,6 +114,10 @@ one; the `dev` one carries a watermark and must not be distributed). Release v31
 bytes, SHA-256 `3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983`, Authenticode valid (NVIDIA
 Corporation), file version 310.9.1.0, CompanyName `NVIDIA`:
 `https://raw.githubusercontent.com/NVIDIA/DLSS/v310.9.1/lib/Windows_x86_64/rel/nvngx_dlss.dll` (not Git LFS).
+Release v310.9.16 (2026-10-16): the same size, SHA-256 `d00b5b0ab29c3ca101b70c3a5ecb3a01b7ef33766a3383a28a18623083e6123e`, Authenticode valid (NVIDIA
+Corporation), file version 310.9.16.0; it is the one offered since the release after 0.1.85. The list keeps 310.9.1: a player who
+downloaded it keeps it (the launch passes the newest listed DLL that is downloaded and matches) until they download
+the newest, which the Download button offers meanwhile.
 
 The licence (`LICENSE.txt`, "NVIDIA RTX SDKs LICENSE", 2024-03-14) allows distributing SDK files "as incorporated
 in object code format into a software application" (1(c)) that has "material additional functionality" (2(a)),

@@ -595,8 +595,21 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   ray. The strength runs from 0 (off) to 1 (strongest): the still cutoff falls from 8 Hz toward 0.5 Hz and
   the speed gain from 20 toward 10 Hz per radian per second. The default 0.3 (3.5 Hz, 16 Hz per rad/s) cuts
   a still hand's noise to about a third and lags 8 ms at 57 degrees per second, 3 ms in a quick flick
-  (`docs/rig-findings/aim-jitter.md`). The log's `controllers: on:` line shows the setting. The menu pointer
+  (`docs/rig-findings/aim-jitter.md`). The launcher's steps are Off 0, Low 0.15, Medium 0.3, High 0.5, Very
+  high 0.75 and Maximum 1 (T-187). The log's `controllers: on:` line shows the setting. The menu pointer
   takes the same filter and strength, one per hand (`features/menu/pointer_steady.hpp`, docs/VR_MENUS.md).
+- **Controller angle** (`ETERNALVR_WEAPON_HAND_TILT`, `ETERNALVR_OFF_HAND_TILT`, -60 to 60 degrees, 0 by
+  default; `features/input/controller_tilt.hpp`). Each controller turned about its sideways axis, for hands
+  that sit at another angle on the controller than the mod assumes. The layer gives the turn to the runtime
+  as the pose in action space of the hand's aim and grip spaces (`createSpaces` in `src/vkcore/input_xr.cpp`),
+  so everything placed from them follows: the gun, the shots, the aim dot, the menu pointer, the glove and the
+  hand HUD. Each pose turns about its own centre (a SteamVR raw device offset turns the controller about its
+  tracking origin instead); the grip's and the aim's sideways axes are the same direction, so the aim keeps
+  its angle to the grip. Scripted rig poses take the same turn in the layer. A positive angle lifts the front.
+  A Valve Index player found their hands right with SteamVR offsets pitched -40 degrees (off hand) and -20
+  (weapon hand) (public issue #16); the angles are the player's, so there is no per-controller default yet.
+  The launcher's Weapon hand angle and Off hand angle (Play tab, Controls; `weapon_hand_angle`,
+  `off_hand_angle` in launcher.ini, 5-degree steps) set them. The log's `controllers: on:` line shows both angles.
 - **Reticle.** Under hand aim the dot is placed from the shown frame's own weapon ray (smoothed, at that
   frame's pose time), so it stays where the gun drawn in that frame points and its shots go
   (`src/vkcore/presenter_reticle.cpp`).
@@ -622,7 +635,12 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   projectiles; spread, the muzzle offset for tracers and the multiplayer copy are applied by the game
   afterwards. Each shot's angle between the game's own fire axis and the hand ray is counted (over 0.5
   degrees, and the maximum, logged every 10 s): the M5 aim-error criterion. `ETERNALVR_SHOT_ORIGIN=eye`
-  keeps the game's start and changes only the direction.
+  keeps the game's start and changes only the direction. The way from the eye to the hand's start is traced
+  with the weapon trace's shape and contents (`head_sweep.hpp` `sweepShot`, the aim dot's query; monsters in,
+  player clip out): when something is on it, the start goes back to 2 cm short of it, so a gun pushed
+  through a thin wall fires on the player's side and a demon between the eye and the hand is still hit
+  (T-181; `aim: shot: the way from the eye to the hand meets something ...`, the first 5, and the count in the
+  10 s `aim:` line).
 - **Viewmodel** (T-054, `src/vkcore/viewmodel_hook.cpp`). A mid-hook in `idHands::UpdatePosition` just
   before the render model's stores (RVA 0x13807EA; the eight structure displacements of those stores are
   checked). The final origin (`[rsp+0x48]`) becomes the grip position and the axis (`[rbp-0x30]`) the aim
@@ -1253,8 +1271,9 @@ scoped, the HUD included. Now:
   (`hud_reticle_styleOverride 0`, `ui_layer/crosshair.hpp`) under head aim too; under hand aim it is held
   anyway. Logged at each start and end (`zoom look: scoped zoom starts: the reticle style held at none (no
   scope ring)` / `... ends ...`, the first 20 together). Under head aim the game's crosshair is therefore off
-  while scoped and there is no aim mark at all (the layer's reticle quad is for hand aim); the Precision Bolt's
-  shot still goes to the middle of the view. The zoom flag is read on the Steam build only: on Game Pass its
+  while scoped, so the layer's aim dot (Aim dot on the Play tab) marks the middle of the view instead, where the
+  Precision Bolt's shot goes: the dot's quad head-locked (VIEW) at the set distance (T-182; before, there was
+  no aim mark at all). The zoom flag is read on the Steam build only: on Game Pass its
   bit is not checked yet, so there the hold stays off for a scoped zoom (logged once) and head aim shows the
   scope's ring as in 0.1.50; the decl writes should work there (the type info of every class read is the
   Steam build's), but no Game Pass run has checked them yet.
@@ -1345,9 +1364,6 @@ for seconds (below).
   that loop is verified live, already handles the game rewriting the delta around cutscenes, and keeps
   the body frame in one place. The turn does go through the accumulator. If hand aim lags or fights the
   game on the rig, the accumulator is the next step.
-- **No wall check for the shot start.** The shot starts at the hand (within 1 m of the eye) with no trace,
-  so a gun pushed through thin geometry can fire from behind it. T-062's "shots from the last valid head
-  position" needs a collision query; until then `ETERNALVR_SHOT_ORIGIN=eye` is the safe setting.
 - **Weapon wheel pointer** through the game's cursor (above) is found by static analysis and covered by
   unit tests; selection in the headset is still to be confirmed. The first version moved the accumulated
   angles, which the wheel does not read (the owner's Quest 3 session: the wheel opened, nothing could be

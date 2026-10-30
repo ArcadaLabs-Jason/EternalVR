@@ -165,9 +165,15 @@ yet).
   headset shows:
   - `follow` (default): as above, the view faces where the kill's camera points and turns with the head
     from there; the camera's own pitch and roll never reach the view.
-  - `steady`: the view stays on the kill's animated eye (the head's room offset eases out as for any driven
-    view, docs/VR_ROOMSCALE.md) but keeps the body yaw it had the frame before the kill, so only the head
-    turns it. When the kill ends, head aim turns the game's aim back to that heading (logged once per kill,
+  - `steady`: the view stays where the game's eye was the frame before the kill and keeps the body yaw it had
+    then, so only the head moves or turns it (T-180; before, it followed the kill's animated eye, which lunges
+    and moves with the Slayer: a player found the view "still moves around a fair amount"). The kill is then
+    seen from that place: the Slayer's arms and the demon can sit off where they would from the animated eye,
+    or cut into the view (accepted for the comfort, the player's own suggestion). No head sweep into geometry
+    while the place is held (the player stood there). When the kill ends the place is held 0.12 s more while
+    the view blinks (the room-scale blink, black within 0.10 s) if the game's eye ended 0.25 m or more from
+    it, so the view moves to the game's eye in the dark (`glory: kill N: the view held its place; the game's
+    eye went up to ... m from it`). When the kill ends, head aim turns the game's aim back to that heading (logged once per kill,
     `glory: the aim turned back ... deg`) for 0.5 s in case the game rewrites the aim as it lets go, so the
     view never turns on its own at either end. With `ETERNALVR_AIM=view` there is no head aim to turn the
     game's aim back, and the view takes the game's heading when the kill ends.
@@ -177,7 +183,9 @@ yet).
     `glory: kill N starts (fade)`, then `room: fade full N ms after a glory kill started (shown as a fade)`;
     the session's `room: fade layer ready` line shows the layer was made.
   - `screen`: the kill plays on the flat screen in front of the head, as a cutscene does (the same screen
-    shape and placement). The camera hook leaves the game's view alone for those frames, and the worker
+    shape and placement), as a stereo pair with "Stereoscopic cutscenes" on (docs/VR_STEREO.md; T-180), whose
+    comfort clamp takes the nearest thing at 0.3 m or nearer for a kill: the demon and the Slayer's arms come
+    to the lens, and the traces only see the rooms. The camera hook leaves the game's view alone for those frames, and the worker
     stops showing head-tracked views at once (`GloryKills::flat`), not after the 0.25 s a cutscene takes.
 - Window size: `ETERNALVR_WINDOW=x,y,width,height` moves the game window and sizes its client area in
   `vkCreateWin32SurfaceKHR`, before the first swapchain. The game clamps `r_windowWidth/Height` to the

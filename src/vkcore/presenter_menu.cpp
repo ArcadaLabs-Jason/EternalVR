@@ -11,6 +11,7 @@
 #include "features/menu/pointer_steady.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/dossier_screen_hook.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/menu_cursor.hpp"
@@ -138,7 +139,8 @@ void XrPresenter::Impl::startMenu() {
     menuInstalled = menu_cursor::install();
     if (menuInstalled) {
         menu_cursor_hide::install();
-        menu_model::install(); // a menu's 3D model on the panel (menu_model_hook.hpp)
+        menu_model::install();     // a menu's 3D model on the panel (menu_model_hook.hpp)
+        dossier_screen::install(); // the Dossier screen the game shows (dossier_screen_hook.hpp)
     }
     EVR_LOG("menu: pointer %s; panel %.2f m wide, %.2f m ahead, world-locked while a menu is up%s",
             menuInstalled ? "on" : "OFF (reason above)", settings.ui.menuWidthMetres,
@@ -329,6 +331,7 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     in.menuActive = menuOn;
     in.popup = menuOn && menuPopup;
     in.dossier = menuOn && menuDossier;
+    dossier_screen::readShown(in.dossierShows, in.dossierShown);
     in.actions = controllers::heldActions();
     in.pageKeys = controllers::currentPageKeys();
     in.width = gameExtent.width;
@@ -450,6 +453,7 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
                 menu::dossierPageName(c.to),
                 c.why == Why::Opened       ? "opened"
                 : c.why == Why::TabClicked ? "a tab clicked"
+                : c.why == Why::GameShows  ? "the game shows it"
                 : c.why == Why::Closed     ? "closed"
                                            : key,
                 c.why == Why::EndForced ? " asked again at the end: sent" : "");

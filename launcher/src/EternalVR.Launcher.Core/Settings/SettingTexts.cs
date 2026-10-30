@@ -48,10 +48,11 @@ namespace EternalVR.Launcher.Core.Settings
                 "Off", "Light", "Strong"),
             [Setting.GloryKills] = new Text("Glory kills",
                 "How a glory kill is shown. Follow the camera: your view goes with the game's camera through the kill "
-                + "and turns with your head from there. Steady view: you still see the kill up close, but the view never "
-                + "turns on its own, only when you turn your head, and you face the same way after it. Flat screen: the "
-                + "kill plays on a flat screen in front of you, like a cutscene. Fade out: the view goes dark for the kill "
-                + "and comes back when it ends.",
+                + "and turns with your head from there. Steady view: you watch the kill up close from where you stood, "
+                + "and the view never moves or turns on its own, only with your head; a short blink takes you to where the "
+                + "kill left you, facing the same way. Flat screen: the kill plays on a flat screen in front of you, like a "
+                + "cutscene (in 3D with Stereoscopic cutscenes). Fade out: the view goes dark for the kill and comes back "
+                + "when it ends.",
                 "Follow the camera (intense)", "Steady view", "Flat screen", "Fade out"),
             [Setting.WalkInRoom] = new Text("Room-scale",
                 "Walking around your room moves the Slayer with you. Off: you can still lean and peek about 60 cm from where "
@@ -104,6 +105,13 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.WeaponHand] = new Text("Weapon hand",
                 "The hand that holds the gun. Left swaps the buttons between the hands; the second left option also swaps the sticks.",
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),
+            [Setting.WeaponHandAngle] = new Text("Weapon hand angle",
+                "Tilts the gun and the glove on your weapon hand's controller, in degrees, like a controller offset in "
+                + "SteamVR. Below 0 tips the front down, for a gun that points higher than your hand. With Valve Index "
+                + "controllers try -20 here and -40 for the off hand, with any SteamVR offsets set back to 0."),
+            [Setting.OffHandAngle] = new Text("Off hand angle",
+                "Tilts the glove on your other hand's controller, and what that hand points with, in degrees. Below 0 tips "
+                + "the front down."),
             [Setting.Arms] = new Text("Show arms",
                 "Shown: the Slayer's arms as the game draws them. Hidden: no arms, the weapon alone; useful with the weapon in "
                 + "the left hand, where the game still draws its right arm reaching across to the gun. Hands only: the gloves "
@@ -218,8 +226,10 @@ namespace EternalVR.Launcher.Core.Settings
                 + "It helps when the game runs faster than your headset's refresh rate; below it nothing changes. "
                 + "If your headset's own smoothing takes over (Virtual Desktop's SSW, Meta's ASW, SteamVR's Motion Smoothing or "
                 + "throttling), your headset asks for half the frames and the game is matched to that half. "
-                + "Matched to the headset by default.",
-                "As fast as the game runs", "Matched to the headset (default)"),
+                + "New game frames only (experimental): the game is not held, and the mod hands your headset each game frame "
+                + "once instead of the newest one at every headset frame; between game frames your headset's runtime fills in "
+                + "itself, as for a native game below your refresh rate. Matched to the headset by default.",
+                "As fast as the game runs", "Matched to the headset (default)", "New game frames only (experimental)"),
             [Setting.TextureStreaming] = new Text("Texture streaming",
                 "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "
@@ -304,7 +314,8 @@ namespace EternalVR.Launcher.Core.Settings
                 "Newest from NVIDIA (recommended)", "The game's (2.3)", "Load file..."),
             [Setting.DlssPreset] = new Text("Preset",
                 "How the newer DLSS renders. K is the transformer model at every quality, the sharpest picture; J, M and L "
-                + "are its variants; F is the older model. Automatic lets NVIDIA pick for each quality.",
+                + "are its variants. E and F are the older model: E costs the GPU less than K (on the test PC about 14% "
+                + "more frames at Quality) but smears more in motion. Automatic lets NVIDIA pick for each quality.",
                 DlssDll.PresetNames),
             [Setting.DlssInHeadset] = new Text("In the headset",
                 "The DLSS that will run in VR with these settings, both eyes the same. The mod's log and Export report "
@@ -330,6 +341,18 @@ namespace EternalVR.Launcher.Core.Settings
                 + "it would otherwise pick another one and VR could not start. The mod changes only the order of the cards "
                 + "the game picks from. Off by default: the game picks its card as before. For this PC: kept when you switch "
                 + "VR settings profiles. Not yet tried on a two-GPU PC with a headset."),
+            [Setting.PerformanceLog] = new Text("Performance in the log",
+                "The mod notes how busy your processor and graphics card are in its log every 10 seconds, so an Export "
+                + "report shows what holds your frame rate back. On the test PC it cost about half a percent of the frame rate. "
+                + "Off: no timing at all."),
+            [Setting.PerformanceOverlay] = new Text("Performance overlay",
+                "Shows the game's own Performance Metrics just above the top right corner of the HUD panel. Frame rate: the game's "
+                + "frames a second and the time between them. Each game frame draws both eyes (one eye with Alternate eyes, so each "
+                + "eye then gets a new picture at half that rate). Your headset's own counter can show its full refresh rate while "
+                + "the game draws fewer: the mod shows the game's last frame again, turned with your head, until a new one is ready. "
+                + "Detailed: also the game's average frame rate, each eye's resolution and whether HDR, ray tracing and DLSS are on. "
+                + "Off by default: your flat game keeps its own setting.",
+                "Off", "Frame rate", "Detailed"),
             [Setting.ExtraArguments] = new Text("Extra game arguments",
                 "Extra command-line text for the game, for testing. Multiplayer arguments are refused."),
         };

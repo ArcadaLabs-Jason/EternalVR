@@ -14,7 +14,7 @@ namespace EternalVR.Launcher
     {
         private readonly ComboBox dlssQuality = Choices(Setting.DlssQuality);
         private readonly ComboBox dlssDll = Choices(Setting.DlssVersion);
-        /// <summary>Downloads NVIDIA's newest pinned DLL (data\dlss-downloads.txt); shown while it is chosen and not downloaded.</summary>
+        /// <summary>Downloads NVIDIA's newest pinned DLL (data\dlss-downloads.txt); shown while it is chosen and not yet downloaded.</summary>
         private readonly Button dlssDownload = new Button { Text = "Download...", Width = 150, Height = ButtonHeight };
         private readonly Button dlssChoose = new Button { Text = "Choose file...", Width = 110, Height = ButtonHeight };
         private readonly ComboBox dlssPreset = Choices(Setting.DlssPreset);
@@ -107,11 +107,13 @@ namespace EternalVR.Launcher
         {
             var s = ctx.Settings;
             var newest = ctx.Data.DlssDownloads?.Newest;
-            bool ready = ctx.NewestDlss(verify: false) != null;
-            dlssDownload.Visible = s.DlssDll == DlssDllChoice.Newest && newest != null && !ready;
+            // An older listed DLSS already downloaded runs until the newest is: the line names the one that runs.
+            var present = ctx.PresentDlss(verify: false);
+            bool ready = present != null;
+            dlssDownload.Visible = s.DlssDll == DlssDllChoice.Newest && newest != null && present?.Version != newest.Version;
             dlssChoose.Visible = s.DlssDll == DlssDllChoice.File;
             var file = s.DlssDll == DlssDllChoice.File && !string.IsNullOrWhiteSpace(s.DlssDllPath) ? DlssDll.Inspect(s.DlssDllPath) : null;
-            dlssRuns.Text = DlssDll.WhatRuns(s, newest, ready, file);
+            dlssRuns.Text = DlssDll.WhatRuns(s, present ?? newest, ready, file);
             // Green when the newer DLSS asked for will run, amber when the game's runs in its place, plain for the game's by choice.
             bool? newer = s.DlssDll == DlssDllChoice.Newest ? newest != null && ready
                 : s.DlssDll == DlssDllChoice.File ? file != null && file.Ok : (bool?)null;

@@ -67,9 +67,9 @@ namespace EternalVR.Launcher.Core.Settings
     /// recenter_hold) are optional in schema 2: a file without them takes the defaults, and an older launcher
     /// ignores them. The render size keys (render_size, render_scale) are optional the same way, and so are the controls keys
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
-    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, cutscene_3d, shot_origin, aim_dot_size, menu_beam, dossier, map_sticks,
+    /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, cutscene_3d, shot_origin, aim_dot_size, menu_beam, perf_log, perf_overlay, dossier, map_sticks,
     /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, roll_wrist, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, preset, profile_unsaved, profile_check and adapter_steer
+    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, weapon_hand_angle, off_hand_angle, preset, profile_unsaved, profile_check and adapter_steer
     /// (dlss_version replaced dlss_dll, which is still read once). skip_cutscenes (off by default) replaced skip_cinematics, which
     /// was on by default and written into every file: an old skip_cinematics line is not read, so the skip starts off once
     /// for everyone, and it is dropped on the next save. Keys of settings the launcher no longer has are not read and are dropped
@@ -222,6 +222,9 @@ namespace EternalVR.Launcher.Core.Settings
         public double AimDotSize { get; set; } = DefaultAimDotSize;
         /// <summary>The laser from the hand to the menu panel (the layer's <c>ETERNALVR_MENU_BEAM</c>); off keeps only the dot.</summary>
         public bool MenuBeam { get; set; } = true;
+        /// <summary>CPU and GPU timing in the mod's log (the layer's <c>ETERNALVR_GPU_TIMING</c> and <c>ETERNALVR_CPU_TIMING</c>, on
+        /// by default, T-190); off turns both off, for a PC where they might cost frames.</summary>
+        public bool PerfLog { get; set; } = true;
         /// <summary>
         /// The game renders on the headset's graphics card on a PC with two or more (the layer's <c>ETERNALVR_ADAPTER_STEER</c>,
         /// docs/rig-findings/adapter-steer.md); off by default. This machine's: never in a profile.
@@ -362,6 +365,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("vibration", out var vb)) s.Vibration = Number(vb, 0.0, 1.0, DefaultVibration);
             if (map.TryGetValue("punch_speed", out var ps)) s.PunchSpeed = Number(ps, MinPunchSpeed, MaxPunchSpeed, DefaultPunchSpeed);
             if (map.TryGetValue("hold_time", out var ht)) s.HoldTime = Number(ht, MinHoldTime, MaxHoldTime, DefaultHoldTime);
+            s.ReadControllerAngles(map);
             if (map.TryGetValue("bhaptics", out var bh)) s.Bhaptics = On(bh);
             if (map.TryGetValue("bhaptics_intensity", out var bi)) s.BhapticsIntensity = Number(bi, 0.0, 1.0, DefaultBhapticsIntensity);
             if (map.TryGetValue("hud_distance", out var hd2)) s.HudDistance = Number(hd2, MinHudDistance, MaxHudDistance, DefaultHudDistance);
@@ -374,6 +378,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("shot_origin", out var so)) s.Shots = Pick(so, ShotOrigin.Hand, ("eye", ShotOrigin.Eye));
             if (map.TryGetValue("aim_dot_size", out var ds)) s.AimDotSize = Number(ds, MinAimDotSize, MaxAimDotSize, DefaultAimDotSize);
             if (map.TryGetValue("menu_beam", out var mb)) s.MenuBeam = Flag(mb);
+            s.ReadPerformance(map);
             if (map.TryGetValue("mirror_display", out var md) && MirrorSettings.NormaliseDisplay(md) is string display) s.MirrorDisplay = display;
             if (map.TryGetValue("mirror_size", out var ms) && MirrorSettings.NormaliseSize(ms) is string size) s.MirrorSize = size;
             if (map.TryGetValue("mirror_crop", out var mc)) s.MirrorCrop = mc.Trim() == "16:9";
@@ -450,6 +455,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("vibration = " + Metres(Clamp(Vibration, 0.0, 1.0, DefaultVibration)));
             sb.AppendLine("punch_speed = " + Metres(Clamp(PunchSpeed, MinPunchSpeed, MaxPunchSpeed, DefaultPunchSpeed)));
             sb.AppendLine("hold_time = " + Metres(Clamp(HoldTime, MinHoldTime, MaxHoldTime, DefaultHoldTime)));
+            WriteControllerAngles(sb);
             sb.AppendLine("bhaptics = " + (Bhaptics ? "1" : "0"));
             sb.AppendLine("bhaptics_intensity = " + Metres(Clamp(BhapticsIntensity, 0.0, 1.0, DefaultBhapticsIntensity)));
             sb.AppendLine("hud_distance = " + Metres(Clamp(HudDistance, MinHudDistance, MaxHudDistance, DefaultHudDistance)));
@@ -462,6 +468,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("shot_origin = " + ShotOriginName(Shots));
             sb.AppendLine("aim_dot_size = " + Metres(Clamp(AimDotSize, MinAimDotSize, MaxAimDotSize, DefaultAimDotSize)));
             sb.AppendLine("menu_beam = " + (MenuBeam ? "1" : "0"));
+            WritePerformance(sb);
             sb.AppendLine("mirror_display = " + (MirrorSettings.NormaliseDisplay(MirrorDisplay) ?? MirrorSettings.DisplayAuto));
             sb.AppendLine("mirror_size = " + (MirrorSettings.NormaliseSize(MirrorSize) ?? MirrorSettings.DefaultSize));
             sb.AppendLine("mirror_crop = " + (MirrorCrop ? "16:9" : "full"));

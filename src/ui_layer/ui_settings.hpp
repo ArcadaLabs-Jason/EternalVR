@@ -124,6 +124,9 @@ struct UiSettings {
     // ETERNALVR_VIGNETTE (off, light, strong): the edges of the view darken while the stick moves or turns
     // the player or the game moves the camera (a dash, a glory kill); off by default.
     VignetteMode vignette = VignetteMode::Off;
+    // ETERNALVR_PERF_OVERLAY=1..3: the game's Performance Metrics, drawn at that com_showFPS level, on a quad
+    // of their own above the HUD panel (perf_metrics.hpp); 0, the default, shows none.
+    int perfOverlayLevel = 0;
 };
 
 // Looks up one environment variable: its text, or nullopt when unset.

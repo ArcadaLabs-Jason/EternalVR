@@ -344,10 +344,19 @@ maps, so the controls files cannot do this. The launcher's Play tab sets it (Con
 sticks"; `map_sticks` in `launcher.ini`). The choice is in the `controllers: on:` start-up line (`Dossier
 map panned by the weapon hand's stick`, or `by the other stick`).
 
-**Which page is up.** The game does not say. The router takes a menu that comes up within 1.5 s of the
-controllers' Dossier (or automap) action to be the Dossier on its map page (`controllers::
-dossierRequestedWithin`; logged `the game shows its cursor (the Dossier, on its map: ...)`), then counts
-the tab keys it sends (Map, Arsenal, Codex, Challenges). A tab key past either end is not sent (a grip or a
+**Which page is up.** The layer reads it from the game where it can: idHUDMenu_Dossier's ShowScreen
+(`vkcore/dossier_screen_hook.hpp`, `docs/rig-findings/menus.md` section 8) runs for the screen the Dossier
+opens on and for every tab change, however it came, and each call sets the router's page
+(`features/menu/dossier_screen.hpp`: Map, Arsenal, Codex, Challenges; the Praetor suit and rune screens have
+no tab: not known), logged `menu: Dossier page map -> challenges (the game shows it)`. The Dossier can open
+on Challenges (a player, 0.1.84: sometimes after the HUD's challenges); up to 0.1.84 the router took every
+Dossier to open on its map, so on the map reached by the tabs the sticks changed tabs. A screen shown while
+the menu is still coming up counts for it; one from a Dossier already closed does not. Without the hook
+(another game build; logged `menu: the Dossier's page is counted from its map`) and until the game's first
+screen arrives, the router takes a menu that comes up within 1.5 s of the controllers' Dossier (or automap)
+action to be the Dossier on its map page (`controllers::dossierRequestedWithin`; logged `the game shows its
+cursor (the Dossier, on its map: ...)`), and it always counts the tab keys it sends (Map, Arsenal, Codex,
+Challenges). A tab key past either end is not sent (a grip or a
 stick at the map going back, or at Challenges going on, does nothing): whether the game wraps there or stops
 is not known, and either way the count stays right. Up to 0.1.50 such a key made the page unknown, which
 turned the map's sticks off until the Dossier was opened again (Jason's 0.1.50 playtest: the sticks changed
@@ -359,8 +368,8 @@ only) and is dropped when the menu closes (`... -> not known (closed)`). A click
 it opens is not known), and a popup never counts. Every page change is logged (`menu: Dossier page map ->
 arsenal (E)`, `... (opened)`, `... (a tab clicked)`; a key kept back: `menu: Dossier page map: Q not sent at
 the first tab`, the first 20), as is the sticks' mode (`menu: the Dossier's map page: ...` / `not the
-Dossier's map page (or not known): ...`). The game's automap object has an `isActive` flag
-(`docs/rig-findings/menus.md` section 6) that could tell the map page directly; it is not read yet.
+Dossier's map page (or not known): ...`). The automap's own update runs all through play, map page or
+not (`docs/rig-findings/menus.md` section 8), so it cannot tell the page.
 | Arsenal: weapon choice | Yes | click the weapon's icon, or a stick left / right or a stick click (A / D, the page's inner tabs: above) |
 | Arsenal: a weapon's upgrade screen (Upgrades, Mastery) | Yes | click the mod; B returns to the Arsenal |
 | Arsenal: buy an upgrade | Clicks land on it; not seen bought (no weapon points in the save) | click |

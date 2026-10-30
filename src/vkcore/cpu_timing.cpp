@@ -146,7 +146,8 @@ double cyclesPerMs() {
 
 bool readEnabled() {
     std::wstring value;
-    return readEnv(L"ETERNALVR_CPU_TIMING", value) && gt::parseEnabled(value);
+    const bool set = readEnv(L"ETERNALVR_CPU_TIMING", value);
+    return gt::parseCpuTiming(set, value);
 }
 
 void start() {
