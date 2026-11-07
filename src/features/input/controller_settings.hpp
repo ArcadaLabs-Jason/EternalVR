@@ -244,6 +244,7 @@ enum class ArmFault : std::uint8_t {
     Twist,   // the whole wrist twist on the wrist joint
     Forearm, // hands only with the forearm left drawn
     Fingers, // the free off hand's fingers left the game's while they are posed (hand poses)
+    Trigger, // the weapon hand's index finger turned past the game's grip, into the trigger guard
 };
 
 struct ControllerSettings {

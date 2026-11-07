@@ -29,9 +29,10 @@
 // the weapon's sight line in the arms model's frame as the game animates it at idle (pitch positive down,
 // yaw counter-clockwise, degrees). The layer turns the model so that line runs parallel to the aim ray. Same
 // key rules, but no "default": a weapon without a row is not turned. A weapon mod that changes the sight
-// line (the Heavy Cannon's Precision Bolt draws a scope in place of the iron sights) has a row keyed by the
-// mod's own weapon decl, which the held weapon names while that mod is active (idWeapon's mod overrides):
-// "weapon/player/heavy_cannon_bolt_action". Such a row wins over the weapon's while its mod is active.
+// line can have a row keyed by the mod's own weapon decl, which the held weapon names while that mod is
+// active (idWeapon's mod overrides), as "weapon/player/heavy_cannon_bolt_action" for the Heavy Cannon's
+// Precision Bolt. Such a row wins over the weapon's while its mod is active. No built-in row is keyed by a
+// mod: the Bolt's scope and the Heavy Cannon's front sight ring share one line.
 //
 // [right_grip]: the weapons whose idle animations hold them by a handle turned well away from how a hand
 // holds a controller (the chaingun's and the ballista's rear top handle), and the game grip the weapon arm
@@ -50,7 +51,12 @@
 // item's first raise of a session) the row's wrist does instead: [forward, left, up], metres in the arms
 // model's frame as the game animates the item at idle. For an item whose left-handed placement differs much
 // from the right glove's row it is placed by before the read (the Crucible's, turned 59 degrees), so it does
-// not jump into the hand as its grip is read. Same key rules, no "default". There is no file IO here.
+// not jump into the hand as its grip is read. Same key rules, no "default".
+//
+// [trigger_finger]: the guns whose index finger follows the trigger (features/arm/trigger_finger.hpp), each
+// with its lift: the share, 0 to 1, the index finger opens from the game's grip toward straight while it is
+// off the trigger. Same key rules, no "default": an item without a row (the Crucible, the fists, the
+// chainsaw, the hammer) keeps the game's finger. There is no file IO here.
 
 #include <array>
 #include <map>
@@ -129,6 +135,7 @@ struct WeaponOffsetTable {
     std::map<std::string, RightGrip, std::less<>> rightGrips;
     std::map<std::string, LeftOffHand, std::less<>> leftOffHands;
     std::map<std::string, std::array<float, 3>, std::less<>> leftHandWrists;
+    std::map<std::string, float, std::less<>> triggerLifts;
     std::vector<std::string> issues; // one line per problem, with its line number
 
     [[nodiscard]] bool ok() const { return issues.empty(); }
@@ -149,12 +156,15 @@ struct WeaponOffsetTable {
     // The [left_hand_wrist] row for `declName` (metres, the arms model's frame), or nullopt for an item
     // without one (rules above).
     [[nodiscard]] std::optional<std::array<float, 3>> lookupLeftHandWrist(std::string_view declName) const;
+    // The [trigger_finger] row's lift for `declName`, or nullopt for an item without one (rules above).
+    [[nodiscard]] std::optional<float> lookupTriggerLift(std::string_view declName) const;
 };
 
 // Reads the table. Lines with problems are reported and skipped; the rest are kept. Offsets must be three
 // or six finite numbers, translations within 2 m and angles within 180 degrees; sights two angles within
 // 45 degrees; right grips a quoted grip name ("heavy_cannon"), alone or first in a list with three numbers
-// within 1 m; left-handed off hands "controller"; left-hand wrists three finite numbers within 2 m.
+// within 1 m; left-handed off hands "controller"; left-hand wrists three finite numbers within 2 m; trigger
+// fingers one number from 0 to 1.
 WeaponOffsetTable parseWeaponOffsets(std::string_view text);
 
 // The built-in table's text (data/weapons/viewmodel_offsets.toml).

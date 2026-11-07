@@ -75,8 +75,8 @@ bring your hand back toward the middle, the highlight stays where it was.
 
 **The weapon wheel from the thumb rest** (Quest and Rift controllers; off by default: turn it on with
 **Thumb-rest wheel** on the launcher's Play tab). Rest one thumb on its thumb rest, the flat spot beside
-the buttons, and within half a second push the other stick toward a weapon: the wheel opens and points
-where the stick points. Let the stick spring back to pick (once picking has started, lifting your thumb
+the buttons, for a moment (a quarter of a second), then within half a second push the other stick toward a
+weapon: the wheel opens and points where the stick points. Let the stick spring back to pick (once picking has started, lifting your thumb
 does not stop it). With the game's wheel, a quick flick that does not stay in one direction picks nothing
 (Weapon by direction, below, takes a flick), and a tick in the controller tells you when picking starts and
 when a weapon is picked. A thumb you leave on the rest does nothing on its own: after half a second the
@@ -84,8 +84,9 @@ other stick moves and turns you as usual, and the stick's own wheel (right stick
 To pick again, let the stick come back to the centre and push it again with your thumb still resting. Once
 the wheel is open it cannot be cancelled; it picks what is highlighted.
 
-The trade-off: for half a second after a thumb lands on a rest, the other stick's first push picks a weapon
-instead of moving or turning you. A thumb that comes straight from its own controls does not count: one that
+The trade-off: for half a second once a thumb has rested a quarter of a second, the other stick's first push
+picks a weapon instead of moving or turning you. A thumb that only brushes the rest, or that you start
+walking with at once, does not count. A thumb that comes straight from its own controls does not count: one that
 lands on the rest within 0.4 s of letting go of A or B (X or Y), or of its own stick, so jumping or turning
 and then resting the thumb leaves the other stick alone. If it still gets in the way, set **Thumb-rest
 wheel** to **Off** on the launcher's Play tab.
@@ -104,7 +105,7 @@ nearest neighbours, so with weapons on up, right, down and left only, each takes
 **Four directions** in that window sets exactly that. A quick flick all the way out counts at once, in the
 direction it ends up in; a smaller
 push has to stay in one direction for a moment. **Slow time on the thumb-rest wheel** off keeps the game at full speed while
-this wheel is open. **Face buttons as thumb rest** lets a thumb resting on A/B or X/Y count as the thumb
+this wheel is open (the wheel still works; the one held open with the stick always slows time). **Face buttons as thumb rest** lets a thumb resting on A/B or X/Y count as the thumb
 rest on Index and Pico 4 controllers, which have none. Nothing happens in menus, during cutscenes, while
 you pilot a demon, or while the game moves your view itself (glory kills, Meathook pulls, melee lunges):
 picking that has started is cancelled there, and a wheel already open closes and picks what is highlighted.
@@ -246,7 +247,7 @@ backing out with B or Y does not switch the weapon mod.
 | Either stick up / down | Scroll (on the Dossier map: see below) |
 | Either stick left / right | Previous / next tab (on the Dossier map: see below) |
 | Either stick click | Centre the Dossier map on you (the game's C key) |
-| X, Y or right stick click named in the hint bar at the bottom | That shortcut (the Dossier's Arsenal: customize weapon, equip or unequip the mod, customize the weapon wheel) |
+| X, Y or right stick click named in the hint bar at the bottom | That shortcut (the Dossier's Arsenal: customize weapon, equip or unequip the mod, customize the weapon wheel; the custom weapon wheel: change its size, reset it to default) |
 | Left Menu button, tap | Pause / resume |
 | Hold left Menu + pull a trigger | Save a screenshot of each eye for bug reports (no click) |
 | Hold both sticks pressed, then pull a trigger (under SteamVR, Touch controllers only) | The same screenshot (no click) |
@@ -273,8 +274,9 @@ the weapon hand's stick zooms and rotates. Pointing and clicking still works for
 map's buttons, and holding the trigger while you move the pointer still pans. In the
 Arsenal, click a weapon to select it and click a mod to open its upgrades. Its shortcuts are on the
 buttons its hints name: X customizes the weapon, Y equips or unequips the mod and a right stick click
-customizes the weapon wheel (Index: left A and left B; on Vive wands customize weapon and the mod have no
-button yet). B closes the Dossier.
+customizes the weapon wheel, where X changes the wheel's size and Y resets it to default (Index: left A and
+left B; Vive wands: the left trackpad click and the left Menu button; Windows Mixed Reality: the left
+trackpad click and the left Menu button). B closes the Dossier.
 
 **The Fortress's collectible viewer.** The grips show the previous and next item.
 
@@ -288,7 +290,7 @@ Default column in the tables below). A setting you changed from it has a dot (â€
 tooltip says so, and the line next to the profile list counts them ("Recommended with 3 changes").
 Right-click a marked setting's name for **Reset to Recommended**, which resets that one setting, or
 **Reset all to Recommended...**; the **Reset to Recommended...** button on the Advanced tab does the same.
-Resetting keeps the game folder, the layer folder, the OpenXR runtime, "Use the headset's graphics card" and your controls.
+Resetting keeps the game folder, the layer folder, the OpenXR runtime, "Use the headset's graphics card", "Get test builds" and your controls.
 
 **VR settings profiles.** The "VR settings profile" list above the tabs keeps more than one set of
 EternalVR settings, for example one per person. A profile is Recommended plus that person's changes:
@@ -354,7 +356,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Thumb-rest wheel | Touch, then push, While touched, Turn stick picks (standing), Off: the weapon wheel from a thumb rest, on Quest and Rift controllers ([In the game](#in-the-game)) | Off |
 | Thumb-rest picks | Weapon wheel, Weapon by direction: the game's wheel, or one weapon slot per stick direction | Weapon wheel |
 | Face buttons as thumb rest | A thumb resting on A/B or X/Y counts as the thumb rest, on Index and Pico 4 controllers | Off |
-| Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open; the stick's own wheel always slows time | On |
+| Slow time on the thumb-rest wheel | Off keeps full speed while the thumb-rest wheel holds the game's wheel open (it still works); the stick's own wheel always slows time | On |
 | Hold time | Short, Medium, Long, Very long: how long you hold a button before its hold action starts (the weapon wheel, the Dossier, the both-sticks chords); a shorter press is a tap. The stick pushed straight down for the weapon wheel waits 0.1 s less (0.15 s at Medium, never under 0.1 s), since the game's own wheel delay comes on top | Medium |
 | Aim steadiness | Off, Low, Medium, High, Very high, Maximum: steadies the gun and the menu pointer against hand shake; higher trails your hand a little more | Medium |
 | Aim dot | A dot where the weapon hand aims, on whatever it points at, so it matches your shots near and far | On |
@@ -401,6 +403,7 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Use the headset's graphics card | For a PC with two or more graphics cards: the game renders on the card your headset's runtime uses, when it would otherwise pick another one and VR could not start. Kept for this PC whichever VR settings profile is picked. Not yet tried on a two-GPU PC with a headset | Off |
 | Performance in the log | Every 10 seconds the mod notes how busy your processor and graphics card are in its log, so an Export report shows what holds your frame rate back (about half a percent of the frame rate on the test PC); off: no timing at all | On |
 | Extra game arguments | Extra game command-line arguments (multiplayer ones are refused) | None |
+| Get test builds (Updates) | Test builds are early versions of the next release, put out so you can try new fixes and features before everyone gets them. On: when the launcher looks for updates (at start with "Check for new EternalVR versions" on, or Check now on the Checks and log tab) it also looks for a newer test build and shows it on its own **Test build b...** button, with a link to its page. Nothing is downloaded or installed for you: you get the zip from the page and unzip it into a folder of its own, and your EternalVR folder stays as it is. The notes say what to try; post how it went in the Discord thread they link. Kept for this PC whichever VR settings profile is picked | Off |
 
 ### bHaptics
 

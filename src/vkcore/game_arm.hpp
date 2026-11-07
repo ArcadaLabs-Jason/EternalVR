@@ -123,8 +123,11 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
 // glove on a grip) every modifier of the arm, the wrist's, the six and the fingers', is an override in its
 // joint's parent's frame (arm::gloveWrites, features/arm/parent_frames.hpp), so the glove and the forearm
 // ride the gun's pose of the frame the game draws, and the next read is measured against `landing` carried by
-// the attach joint as read then; without `glove` the glove's modifiers are no change. False when the
-// modifiers are no longer in place or a write failed.
+// the attach joint as read then; without `glove` the glove's modifiers are no change. Without `glove`, the
+// finger modifiers of `fingers` (each in its parent's frame) are overrides where `fingerMask` has their bit
+// (bit k for finger modifier k, arm::kFingerMods order) and no change elsewhere: all fifteen for the free off
+// hand, the index finger's three for the weapon hand's finger on the trigger. False when the modifiers are no
+// longer in place or a write failed.
 bool writeArm(arm::ArmSide side,
               const std::byte* hands,
               const arm::ArmPoses& poses,
@@ -134,7 +137,8 @@ bool writeArm(arm::ArmSide side,
               const arm::ArmPoses* landing = nullptr,
               const xr_math::JointMod* wrist = nullptr,
               const arm::GripOverrides* glove = nullptr,
-              const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers = nullptr);
+              const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers = nullptr,
+              std::uint16_t fingerMask = 0x7FFF);
 
 // The weapon arm's glove as GetJointTransforms reads it this tick, after readArm: each of its joints
 // (arm::kRightHandJointNames) in its parent's frame.

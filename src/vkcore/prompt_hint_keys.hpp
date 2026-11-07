@@ -40,4 +40,11 @@ void updateHintKeys(menu::RouterInput& in);
 // Every key down goes up (the XR frames stop, VR ends).
 void releaseHintKeys();
 
+// Any thread: the game's pause is held back, since a hint bar shortcut has the left Menu button (a controller
+// without a left secondary button, input::PromptLabelSet::menuHintControls): while the bar shows it, through
+// a press begun then and for 0.5 s after its release, so the pause tap the release sends does not close the
+// menu (menu::MenuPauseHold). Never with the controllers off: no button names are published, so no shortcut
+// is on the Menu button.
+bool hintKeysHoldPause();
+
 } // namespace evr::vkcore::controllers

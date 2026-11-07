@@ -80,7 +80,8 @@ bool writeArm(arm::ArmSide side,
               const arm::ArmPoses* landing,
               const xr_math::JointMod* wrist,
               const arm::GripOverrides* glove,
-              const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers) {
+              const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers,
+              std::uint16_t fingerMask) {
     Cache& c = cacheOf(side);
     if (detail::faulted() || hands != c.hands ||
         !offhand_mods::layerModsInPlace(c.node, c.base, idsOf(c, side))) {
@@ -120,13 +121,16 @@ bool writeArm(arm::ArmSide side,
                 return false;
             }
         }
-        // The fingers: with `fingers` (the free off hand's hand poses) each an override in its parent's
-        // frame, its offset divided by the model scale (parent_frames.hpp); otherwise no change.
+        // The fingers: with `fingers` (the free off hand's hand poses, the weapon hand's index finger) each
+        // one `fingerMask` names an override in its parent's frame, its offset divided by the model scale
+        // (parent_frames.hpp); otherwise no change.
         const std::int32_t fingerBase = offhand_mods::armCount(side);
         const bool posed =
             fingers && offhand_mods::fingerCount(side) == static_cast<std::int32_t>(fingers->size());
         for (std::int32_t k = 0; k < offhand_mods::fingerCount(side); ++k) {
-            const xr_math::ModelPose* pose = posed ? &(*fingers)[static_cast<std::size_t>(k)] : nullptr;
+            const bool masked = ((fingerMask >> k) & 1u) != 0;
+            const xr_math::ModelPose* pose =
+                posed && masked ? &(*fingers)[static_cast<std::size_t>(k)] : nullptr;
             if (!writeMod(side, hands, fingerBase + k, pose, scale, {}, arm::kFlagsParentOverride)) {
                 return false;
             }

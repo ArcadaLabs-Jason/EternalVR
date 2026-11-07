@@ -141,6 +141,10 @@ void RestWheel::note(RestWheelOutput& out, RestWheelEvent event) {
     }
 }
 
+bool RestWheel::windowOpen(const Rest& r) const {
+    return r.sinceLanding >= 0.0f && r.sinceLanding <= settings_.windowSeconds;
+}
+
 bool RestWheel::restGone() const {
     const bool picking = route_ == Route::Pointing || route_ == Route::Open;
     if (settings_.mode == RestWheelMode::Extreme) {
@@ -210,6 +214,7 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         Rest& r = rests_[index(hand)];
         const Hand stick = otherHand(hand);
+        const bool settling = r.sinceLanding < 0.0f;
         if (landed[index(hand)]) {
             ++stats_.landings[index(hand)];
             if (r.touch.sinceLift() <= kQuickReturnSeconds) {
@@ -221,7 +226,16 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
                     ++stats_.stickOutRecent[index(hand)];
                 }
             }
-            r.sinceLanding = 0.0f;
+            // Edge: the window opens once the touch has settled (kRestDwellSeconds). A tap again after a
+            // forgiven gap goes on with a dwell under way (the gap is not counted) and, once it is over,
+            // opens the window at once: the thumb has been resting. Only a real lift gives a fresh dwell.
+            if (!r.retap) {
+                r.sinceLanding = -kRestDwellSeconds;
+                r.dwellPart = kRestDwellSeconds;
+            } else if (!settling) {
+                r.sinceLanding = 0.0f;
+                r.dwellPart = 0.0f;
+            }
             r.chainPending = false;
             // While touched: a flick begun with the touch picks once the route takes the stick (which may be
             // a frame later, after a down sweep the hold cancels).
@@ -242,18 +256,32 @@ RestWheelOutput RestWheel::update(const RestWheelFrame& frame, float dtSeconds) 
                 o.restHand = hand;
                 o.stickHand = stick;
             }
-        } else if (r.touch.touched()) {
-            r.sinceLanding += dt;
+        } else if (r.touch.touched() && (!settling || r.touch.raw())) {
+            r.sinceLanding += dt; // a dwell does not count the time the sensor is lost
         }
         if (lifted[index(hand)]) {
             r.landingValid = false;
             r.chainPending = false;
+        }
+        // Edge: a stick pushed out for kDwellSeconds while the touch is still settling (or still out as it
+        // ends) is a walk, not a pick: it uses the landing up, so stopping and walking again does not open
+        // the window. A graze shorter than the pick dwell, and a push under a menu, do not.
+        if (settings_.mode == RestWheelMode::Edge && settling && r.landingValid && !frame.blocked &&
+            out(stick) && outSeconds_[index(stick)] >= kDwellSeconds) {
+            r.landingValid = false;
+            if (route_ == Route::Idle && hasRole(stick)) {
+                note(o, RestWheelEvent::Voided);
+                o.voided = RestWheelVoid::Walk;
+                o.restHand = hand;
+                o.stickHand = stick;
+            }
         }
         // Picks in a row: the window opens again once the stick has come back to the centre.
         if (r.touch.touched() && r.chainPending && route_ == Route::Idle &&
             centredSeconds_[index(stick)] >= kRearmGapSeconds) {
             r.chainPending = false;
             r.sinceLanding = 0.0f;
+            r.dwellPart = 0.0f;
             r.landingValid = !out(hand);
         }
     }
@@ -380,14 +408,14 @@ void RestWheel::startRoute(const std::array<bool, 2>& crossed,
             Rest& r = rests_[index(hand)];
             const Hand stick = otherHand(hand);
             // A push held during the hold-over (fresh) picks once the touch is back.
-            if (r.touch.touched() && r.landingValid && r.sinceLanding <= settings_.windowSeconds &&
-                hasRole(stick) && (crossed[index(stick)] || fresh[index(stick)]) && !latched_[index(stick)] &&
+            if (r.touch.touched() && r.landingValid && windowOpen(r) && hasRole(stick) &&
+                (crossed[index(stick)] || fresh[index(stick)]) && !latched_[index(stick)] &&
                 !holdOver_[index(stick)]) {
                 r.landingValid = false;
                 restHand_ = hand;
                 stickHand_ = stick;
                 arm(out);
-                out.sinceTouch = r.sinceLanding;
+                out.sinceTouch = r.sinceLanding + r.dwellPart;
                 return;
             }
         }
@@ -397,9 +425,9 @@ void RestWheel::startRoute(const std::array<bool, 2>& crossed,
             const Hand stick = otherHand(hand);
             const Rest& r = rests_[index(hand)];
             // A brush while the stick turns or moves leaves it alone: a stick already out (not held with the
-            // touch) is taken only once the touch has been on the debounce (gaps not counted).
+            // touch) is taken only once the touch has settled, been on kRestDwellSeconds (gaps not counted).
             const bool brush =
-                this->out(stick) && !held_[index(stick)] && r.touch.onSeconds() < kRestDebounceSeconds;
+                this->out(stick) && !held_[index(stick)] && r.touch.onSeconds() < kRestDwellSeconds;
             if (r.touch.touched() && hasRole(stick) && !brush) {
                 restHand_ = hand;
                 stickHand_ = stick;

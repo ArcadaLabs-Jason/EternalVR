@@ -189,19 +189,24 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   presses or pushes), then without any of them (the family then has no rest for the session); the log says
   which was taken. Modes (off by default since 2026-10-09, after the first headset
   test; the launcher offers edge, full and, since 2026-10-10, `extreme` as "Turn stick picks (standing)"):
-  `edge`: a landing arms the other stick for 0.5 s (`ETERNALVR_THUMBREST_WINDOW`, 0.2 to 1); it counts only
-  with both sticks within 0.25 at that moment, so a thumb that lands while the other stick moves or turns does
-  nothing, and pushing the other stick past 0.25 in the window starts picking; a thumb left resting never
-  stops that stick. A thumb that comes straight from its own controls opens no window either: a landing within
+  `edge`: a thumb that has rested for 0.25 s (`kRestDwellSeconds`, T-223; a forgiven gap does not restart
+  the dwell and is not counted in it, only a lift past the hold-over gives a fresh one) arms the other stick for 0.5 s from
+  the end of that (`ETERNALVR_THUMBREST_WINDOW`, 0.2 to 1); the landing counts only with both sticks within
+  0.25 at that moment, so a thumb that lands while the other stick moves or turns does nothing, and pushing
+  the other stick past 0.25 in the window starts picking; a push made before the dwell is over (a brush at a
+  standstill, then walking off) is no pick, and one that keeps the stick out for 0.1 s (`kDwellSeconds`)
+  while the dwell runs, outside a menu, uses the landing up (logged as a walk), so stopping and walking
+  again does not open the window; a shorter graze does not; a thumb left resting never stops that stick. A thumb that comes straight from its own controls opens no window either: a landing within
   0.4 s of that hand's primary or secondary button going up (`kOwnButtonVoidSeconds`: jump or dash, then the
   thumb on the rest) or of its own stick being out of the centre (`kOwnStickVoidSeconds`: turn, rest, walk;
   walk, rest, turn). After a pick (never after a cancel, so snap flicks with a resting thumb are not taken one
-  after another) the window opens again once the stick has been back in the centre for 0.05 s. A forgiven gap
+  after another) the window opens again once the stick has been back in the centre for 0.05 s, with no
+  dwell (the thumb has been resting throughout). A forgiven gap
   of 0.06 s or more is a fresh landing (the window opens again, its voids checked again) when nothing is being
   picked, the other stick has been centred for 0.4 s and nothing was cancelled since the landing. `full`:
   while the thumb rests the other stick is the wheel's (it neither moves nor turns; a stick out when the thumb
-  lands stays the game's until the touch has been on 0.06 s (gaps not counted), so a brush while turning
-  leaves the turn alone, and then waits for the centre, except one that left the centre after the contact
+  lands stays the game's until the touch has been on 0.25 s (`kRestDwellSeconds`, gaps not counted), so a
+  brush while walking or turning leaves them alone, and then waits for the centre, except one that left the centre after the contact
   began or at most 0.1 s before (`kHeldLeadSeconds`): it picks once the touch registers, held from the game
   until then (a touch held back by the thumb elsewhere, gaps in the contact included, or a frame while the
   turn stick's own down sweep lets go), so a flick begun with the touch is not a turn or a quick switch; a
@@ -322,7 +327,9 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   Reality and the Vive wands the trackpad; Cosmos the stick; the Steam Frame A/B on the right (its left face
   buttons are a D-pad), the stick and the trigger; the G2 none. The primary and secondary touch is that of the
   A, B, X or Y button the family binds to primary and secondary (none where that is a trackpad or a D-pad).
-  The trigger's touch is a new OpenXR action, `trigger_touch`; no built-in data suggests a binding for it.
+  The trigger's touch is a new OpenXR action, `trigger_touch`; no built-in data suggests a binding for it, but
+  since DECISIONS T-222 the layer adds one on every family whose profile has the sensor, for the fingers (the off
+  hand's index finger resting on its trigger, the weapon hand's lifting off it; VR_HANDS_HUD.md).
   Semantics: a touch on a control is usually the start of using that control, so the thumb rest's elsewhere
   rules (a touch begun with the thumb on the stick waits, a lift with the thumb gone to a button is at once)
   do not apply. The same filter is used (`rest_touch_filter.hpp`: first-frame landing, gaps under the
@@ -431,14 +438,17 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   nothing in view it did nothing (docs/VR_INTERACTIONS.md section 2.3). Log: `controllers: gesture: reach` then
   `action use`.
 - **Roll wrist** (`ETERNALVR_WRIST_FLICK`, `ETERNALVR_FLICK_RATE`, `features/input/wrist_flick.hpp`; the launcher's
-  Play tab, Gestures; on by default, DECISIONS T-162; `ETERNALVR_FLICK_RATE` is an environment variable only, with no
-  launcher control).
+  Play tab, Gestures; on by default, DECISIONS T-162; over and back since T-202; `ETERNALVR_FLICK_RATE` is an
+  environment variable only, with no launcher control).
   The weapon hand's roll rate about its pointing axis, taken from its aim orientation between two samples over the
   samples' own times (`InputFrame::sampleSeconds`; a gap of 0.1 s or more is a stall and reads nothing) and
-  smoothed over about 25 ms, at 450 degrees per second or more in either direction (200 to 1500 with
-  `ETERNALVR_FLICK_RATE`), at least twice the swing rate of the pointing direction, with the hand moving no faster
-  than 1.5 m/s, presses `switch_weapon_mod` once; 0.6 s apart, and the roll has to stay below a quarter of the
-  minimum for 0.2 s before the next the same way, 0.8 s before one the other way (a flick's roll back). Log: `controllers: gesture: roll wrist (roll R deg/s, swing S deg/s, pointing P deg, hand V m/s, head turn H deg/s)` then `action switch_weapon_mod`: the smoothed rates the flick fired on, the weapon's pitch, the hand's speed and the head's turn about the vertical, so a log tells a wrist from a body turned with the weapon pointing down (a player found it switching mods as he turned in his playspace).
+  smoothed over about 25 ms, also added up to the angle turned. The hand turned over 90 degrees or more, the rate
+  reaching 450 degrees per second (200 to 1500 with `ETERNALVR_FLICK_RATE`) at least twice the swing rate of the
+  pointing direction with the hand moving no faster than 1.5 m/s, then back 60 degrees or more, the rate reaching
+  450 and the swing's, within 0.3 s of the turn, presses `switch_weapon_mod` once, in either direction; 0.6 s
+  apart, and the roll has to stay below a quarter of the minimum for 0.2 s before the next. A roll one way only
+  never fires (a player found it switching mods while turning in the play space: up to 0.1.87 one fast roll was
+  enough). Log: `controllers: gesture: roll wrist (over O deg, back B deg, roll R deg/s, swing S deg/s, pointing P deg, hand V m/s, head turn H deg/s)` then `action switch_weapon_mod`: how far the hand turned over and how far back when it fired, the smoothed rates of that frame, the weapon's pitch, the hand's speed and the head's turn about the vertical.
   Design: `docs/VR_INTERACTIONS.md` section 2.7.
 - The reach and Roll wrist start nothing, and start over, while the thumb-rest wheel would
   (`restWheelBlocked`: the game suppresses buttons, forces the view, plays a cutscene, or a demon is piloted), while
@@ -763,6 +773,22 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   hand while piloting, under head aim for the demon the game's crosshair stays. The `controllers: on:` line
   names it (`demon aim head (ETERNALVR_DEMON_AIM)`, or `(as aim)` when unset), and the first aimed update
   of each piloting stretch logs `demon aim: the demon follows the head` (or `hand`).
+  The Revenant's own first-person models, its shoulder cannons and its arms, are placed by the game against
+  the demon's camera every tick. On a flat screen that camera is the view, so the cannons are only ever
+  seen from the front. In the headset the eyes follow the head, and under hand aim the camera follows the
+  weapon hand: a hand turned away from where the head looked swung a cannon into the middle of the view
+  and the arms across it, showing their open ends at the shoulders. A mid-hook before each model's pose
+  stores (`src/vkcore/demon_models.cpp`, `xr_math/view_attached.hpp`, T-204) moves the game's pose onto the
+  view the eyes are built on: the camera's origin plus the head's offset, turned to the head on this tick's
+  body yaw. So the cannons and arms stay where a flat screen shows them, wherever the hand points. They are
+  placed in the demon's update from the view of the frame before, so they follow the head a game frame
+  late: in a fast head turn they trail the view by a few degrees until the head stops. The rockets still
+  follow the weapon hand (rig scenario revenant-rockets in `tools/rig/qa/qa-scenarios-demon.ps1`: volleys
+  with the hand left and right of the head burst at the same places as on 0.1.87); where they start was
+  not seen. The log has `demon cannons hook at RVA ...` and `demon arms hook
+  at RVA ...` at start and `demon cannons on the view: ...` for the first placements of each.
+  The Slayer's own hands are not updated while the demon is piloted: neither the viewmodel hook
+  (idHands::UpdatePosition) nor the off-hand hook runs then (T-205), so nothing of the layer's places them.
 
 ## Settings
 
@@ -795,7 +821,7 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_SWING` | `1`: the weapon hand's overhead swing presses the Crucible (above) | `0` |
 | `ETERNALVR_SWING_SPEED` | the swing's downward speed, 1 to 5 metres per second | 2.5 |
 | `ETERNALVR_REACH_USE` | `1`: a hand reached out ahead of the face and pulled back presses use alone (above); a developer switch for now | `0` |
-| `ETERNALVR_WRIST_FLICK` | `1`: a fast roll of the weapon hand's wrist presses the weapon mod switch (Roll wrist, above) | `1` |
+| `ETERNALVR_WRIST_FLICK` | `1`: the weapon hand turned over and back fast, rolling the wrist, presses the weapon mod switch (Roll wrist, above) | `1` |
 | `ETERNALVR_FLICK_RATE` | the flick's roll rate, 200 to 1500 degrees per second (no launcher control) | 450 |
 | `ETERNALVR_POSE_GUARD` | `1` / `0`: with `0` hand positions that jump further than a hand moves are used as they are, and so is any hand velocity (docs/VR_ROOMSCALE.md, Tracked positions that jump) | `1` |
 | `ETERNALVR_PUNCH_SPEED` | how fast a hand must move where the head looks to punch, 1 to 4 metres per second; the launcher's Punch speed: Light 1.6, Medium 2.2, Hard 2.8, Very hard 3.4 | 2.8 |
@@ -860,7 +886,7 @@ A value that cannot be used is logged with its name and the default is kept
 | A physical punch | Melee | as the stick click |
 | Weapon hand raised above the head, then swung down (`ETERNALVR_SWING=1`) | Crucible | as the left stick click |
 | A hand reached out ahead of the face and pulled back (`ETERNALVR_REACH_USE=1`) | Use (alone, no melee) | `_use` 0x8 |
-| Weapon hand rolled fast about its pointing axis (Roll wrist, `ETERNALVR_WRIST_FLICK`, on by default) | Switch weapon mod | as the Y tap |
+| Weapon hand turned over and back fast about its pointing axis (Roll wrist, `ETERNALVR_WRIST_FLICK`, on by default) | Switch weapon mod | as the Y tap |
 
 While a menu is up the controllers drive the menu instead (laser pointer, trigger clicks, B / Y back, the
 grips switch tabs, sticks scroll and switch tabs or move the Dossier map, a stick click centres it) and
@@ -1078,6 +1104,18 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   first ("X"), then holds ("Hold X"), then turn-stick gestures ("Right Stick Up", "Hold Right Stick
   Down"). It follows the handedness and a remapped control file. While piloting a demon, the demon's
   abilities name the buttons that press its bindings (the Revenant's rocket barrage is the weapon mod).
+- **Texts that name the move binds.** The game's texts name an action by its bind (the mods loading tip
+  names `_reload`); the four move binds are no action of ours, so the wall-climbing tutorial, which names
+  all four, showed W, A, S and D. The tooltip text gets the move stick's directions for them instead:
+  "Left Stick Up", "Left Stick Left", "Left Stick Down", "Left Stick Right" on Touch, the right stick in a
+  full mirror, "Left Trackpad ..." on Vive wands (`features/input/prompt_binds.hpp`; the game's action
+  table maps `_moveLeft`, `_moveRight`, `_moveForward` / `_forward` and `_moveBack` / `_back` to the user
+  command buttons 49 to 52). Every bind the campaign's English texts name now gets a button on Touch
+  (checked against the binds those texts name and the game's action table in `prompt_binds_tests.cpp`);
+  `_melee` and `_altattack`, which two texts name, are not in the game's action table, so neither the game
+  nor the layer has a key or button for them (what the game writes there is not yet seen). The mods loading
+  tip already named the button that swaps the mod ("[Y]" on Touch; a rig capture of it, 2026-10-17, had
+  been read at a small size as "[M]").
 - **How.** The game builds prompts from two lookups: an action's bind name to the keys bound to it, and a
   key to its text. The layer answers both for the tooltip text (tutorial popups, tips, hints) and the three
   HUD prompt helpers (blood punch and dash; the demon's ability list, weapon info and tutorial objectives;
@@ -1113,8 +1151,9 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   with the pointer just below the button, the screen stayed). Offline, both calls resolve the same way in
   the Game Pass 1.0.56.0 image (returns 0x15A1415 and 0x15A220F; Steam 0x159F095 and 0x159FE8F); not run on
   Game Pass. The game's key matching (the bar's `KeyNumToString` calls) is left alone. Hint keys the
-  controllers have no button for (R restore defaults, F apply, T and X in the Arsenal) keep the game's
-  keys.
+  controllers have no button for (the settings' R restore defaults, F apply) keep the game's keys; the
+  Arsenal's and the custom weapon wheel screen's shortcuts are sent and named by the buttons in the pad's
+  places (`docs/VR_MENUS.md`, the hint bar's shortcuts).
   A screen's own previous / next inside a tab, A and D, names the left and right sticks in short (LS,
   RS), since the sticks send A and D while such a screen is up (`docs/VR_MENUS.md`, Pages and tabs inside
   a tab): the mission-complete Rewards tab's page arrows ("A 1/2 D" reads "LS 1/2 RS"), whose two
@@ -1190,8 +1229,8 @@ grip's own frame (`xr_math::placeViewmodel`): on a headset the grip is turned fr
 the turn and the move it makes, 'the weapon hand's grip against its aim ray'), so the model is moved, not
 turned, until the glove's wrist sits where the real wrist is; the gun keeps the aim ray's orientation, so the
 sights and shots do not change. The rows are measured with the sights turn on; with `ETERNALVR_WEAPON_SIGHTS=0`
-(rig and debugging only) the wrist lands up to 0.5 cm off target (the 8.7 cm wrist offset turned by
-the sights row, at most 3.5 degrees). With the weapon in the left hand the arms model's left glove holds
+(rig and debugging only) the wrist lands up to 0.3 cm off target (the 8.7 cm wrist offset turned by
+the sights row, at most 2.2 degrees). With the weapon in the left hand the arms model's left glove holds
 the gun (the right glove's grip reflected across the gun's middle; the model is not mirrored): the model is
 placed by the right glove's row, its turn reflected (only the Crucible's row turns it), then moved, not
 turned, until the left glove's wrist sits on the left hand's wrist point in the grip's frame
@@ -1220,18 +1259,25 @@ on the controller, until that line runs parallel to the aim ray; a rotation in t
 `ETERNALVR_VIEWMODEL_OFFSET`) is then a deliberate turn away from parallel. The shots and the aim dot keep
 the controller's ray: the sights point where the shots go, a fixed distance beside the ray (the sights'
 height and side above the hand). A weapon without a row (there is no default) is not turned. A weapon mod
-that changes the sight line has its own row, keyed by the weapon decl the mod puts in the held weapon while
-it is active (`idWeapon`'s mod overrides, one per fire mode, read each update in `src/vkcore/weapon_mods.cpp`;
-the type info is the same on the Steam and the Game Pass builds): the Heavy Cannon's Precision Bolt
-(`weapon/player/heavy_cannon_bolt_action`) draws a scope 0.2 degrees above the bore where the gun's iron
-sights are 3.5 degrees above it. Such a row wins over the weapon's while its mod is active, from the next
-update after a mod switch (`WeaponOffsetTable::lookupSight` with the mods), and the gun turns about the
+that changes the sight line can have its own row, keyed by the weapon decl the mod puts in the held weapon
+while it is active (`idWeapon`'s mod overrides, one per fire mode, read each update in
+`src/vkcore/weapon_mods.cpp`; the type info is the same on the Steam and the Game Pass builds), as
+`weapon/player/heavy_cannon_bolt_action` for the Heavy Cannon's Precision Bolt. Such a row wins over the
+weapon's while its mod is active, from the next update after a mod switch (`WeaponOffsetTable::lookupSight` with the mods), and the gun turns about the
 glove's wrist instead of the grip under the turn it is placed with, the left hand's included (`arm::rowPlacement`;
 not with `ETERNALVR_VIEWMODEL_OFFSET`, used as given), so the hand stays where the weapon's
 offset row puts it; a weapon whose mods have no row of their own keeps its row. The held-item line logs the
-held weapon's mods, the row and how far it turns the model, and a mod switch logs `mods changed on held`. The
-rows are measured on the hands rig ([rig-findings/hands-rig.md](rig-findings/hands-rig.md), sections 6 and
-18).
+held weapon's mods, the row and how far it turns the model, and a mod switch logs `mods changed on held`. No
+built-in row is keyed by a mod now (DECISIONS T-206). The Heavy Cannon's front sight is a ring at the end of
+the barrel: from the eye point of the game's own zoom pose, 2 to 3 cm above the back of the receiver, its
+centre lies on the line the Precision Bolt's scope tube runs on, 0.2 degrees above the bore, and the rear
+sight sits about 2 degrees below that line, out of the picture. So one row serves no mod, the Bolt and the
+Micro Missiles, and a mod switch does not turn the gun. Before T-206 the iron sights were taken as the line
+from the rear sight to the ring's top bar, 3.5 degrees above the bore, with the Bolt on a row of its own:
+that line runs into the top of the receiver about 18 cm behind the rear sight, so no eye can sit on it, and
+looking through the ring with the Micro Missiles the shots went 3.3 degrees above where it pointed. The
+rows are measured on the hands rig ([rig-findings/hands-rig.md](rig-findings/hands-rig.md), sections 6, 18
+and 23).
 
 Zoomed weapons (T-136; `src/game/eternal/zoom_look.hpp`, `zoom_look_book.hpp`, `src/vkcore/zoom_look.cpp`): a
 weapon's zoom (`ironSightZoom` in its decl) can hide the hands and the gun at the zoom's start

@@ -11,8 +11,9 @@ namespace EternalVR.Launcher.Core.Update
     public sealed class AvailableRelease
     {
         public AvailableRelease(Version version, string title, Uri page, string zipName, Uri zipUrl, long zipSize, string zipSha256, Uri sha256Url,
-            string notes)
+            string notes, DateTimeOffset? published = null)
         {
+            Published = published;
             Version = version;
             Title = title;
             Page = page;
@@ -37,6 +38,8 @@ namespace EternalVR.Launcher.Core.Update
         public Uri Sha256Url { get; }
         /// <summary>The release notes (Markdown), as published.</summary>
         public string Notes { get; }
+        /// <summary>When it was published; null when GitHub gave no time.</summary>
+        public DateTimeOffset? Published { get; }
     }
 
     /// <summary>
@@ -77,7 +80,8 @@ namespace EternalVR.Launcher.Core.Update
                 if (sha == null && sumsUrl == null) continue;
                 Https(MiniJson.Get(r, "html_url") as string, out var page);
                 found.Add(new AvailableRelease(version, MiniJson.Get(r, "name") as string ?? ("EternalVR " + version), page ?? ReleasesPage,
-                    Name(zip), zipUrl, Number(MiniJson.Get(zip, "size")), sha, sumsUrl, MiniJson.Get(r, "body") as string ?? string.Empty));
+                    Name(zip), zipUrl, Number(MiniJson.Get(zip, "size")), sha, sumsUrl, MiniJson.Get(r, "body") as string ?? string.Empty,
+                    PublishedAt(MiniJson.Get(r, "published_at") as string)));
             }
             return found;
         }
@@ -112,6 +116,10 @@ namespace EternalVR.Launcher.Core.Update
 
         /// <summary>Major.minor.build only (the launcher's version may carry a revision of 0).</summary>
         public static Version Plain(Version v) => new Version(v.Major, v.Minor, Math.Max(0, v.Build));
+
+        private static DateTimeOffset? PublishedAt(string text) =>
+            DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var t)
+                ? t : (DateTimeOffset?)null;
 
         private static bool IsZip(string name) => Zip.IsMatch(name) && name.IndexOf("symbols", StringComparison.OrdinalIgnoreCase) < 0;
 

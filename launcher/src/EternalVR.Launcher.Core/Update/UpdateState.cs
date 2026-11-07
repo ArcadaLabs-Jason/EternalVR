@@ -8,7 +8,8 @@ namespace EternalVR.Launcher.Core.Update
 {
     /// <summary>
     /// The update check's own file, <c>updates\state.txt</c> in the data folder (not launcher.ini: it is this machine's
-    /// and no profile or Reset touches it): whether to check, a version the player chose to skip, and when it last asked.
+    /// and no profile or Reset touches it): whether to check, a version the player chose to skip, and when it last asked;
+    /// with "Get test builds" on, also the test build the last check found.
     /// </summary>
     public sealed class UpdateState
     {
@@ -20,6 +21,11 @@ namespace EternalVR.Launcher.Core.Update
         public Version Skipped { get; set; }
         /// <summary>The newer version the last check found; null for none (offered again until the next check).</summary>
         public Version Found { get; set; }
+        /// <summary>
+        /// The test build the last check found (<c>test_found = &lt;tag&gt; | &lt;version&gt; | &lt;published&gt;</c>), shown again
+        /// until the next check while "Get test builds" is on; null for none. Written only by a check with it on.
+        /// </summary>
+        public TestBuild TestFound { get; set; }
         /// <summary>When the launcher last asked (UTC); null for never.</summary>
         public DateTime? LastCheck { get; set; }
 
@@ -37,6 +43,7 @@ namespace EternalVR.Launcher.Core.Update
                 if (key == "check") s.Check = !string.Equals(value, "off", StringComparison.OrdinalIgnoreCase);
                 else if (key == "skip" && Version.TryParse(value, out var v)) s.Skipped = v;
                 else if (key == "found" && Version.TryParse(value, out var f)) s.Found = f;
+                else if (key == "test_found") s.TestFound = TestBuildFeed.FromState(value, DataFile.Field(r, 2), DataFile.Field(r, 3));
                 else if (key == "last_check" && DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t))
                     s.LastCheck = t;
             }
@@ -50,6 +57,9 @@ namespace EternalVR.Launcher.Core.Update
             sb.Append("check = ").Append(Check ? "on" : "off").Append('\n');
             if (Skipped != null) sb.Append("skip = ").Append(Skipped).Append('\n');
             if (Found != null) sb.Append("found = ").Append(Found).Append('\n');
+            if (TestFound != null)
+                sb.Append("test_found = ").Append(TestFound.Tag).Append(" | ").Append(ReleaseFeed.Plain(TestFound.Version)).Append(" | ")
+                    .Append(TestBuildFeed.TimeText(TestFound.Published)).Append('\n');
             if (LastCheck != null) sb.Append("last_check = ").Append(LastCheck.Value.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)).Append('\n');
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             FileUtil.WriteAllTextAtomic(path, sb.ToString());

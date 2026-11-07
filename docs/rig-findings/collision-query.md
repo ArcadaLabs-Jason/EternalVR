@@ -67,12 +67,67 @@ void Translation(idHavokCollision* hc,      // rcx  map instance + 0x99E68
 
 ### What the layer uses (`src/vkcore/head_sweep.cpp`)
 
-The synchronous Translation from the camera hook (the game-frame thread, where the game itself makes the
-same call for its cameras), with the 0.16 m sphere, contents 0x100009 (world and player clip, not
+The synchronous Translation with the 0.16 m sphere, contents 0x100009 (world and player clip, not
 monsters), the player's spawn id, an identity axis and a static name. The collision world comes from the
 map-instance global through vslot 0x370, checked to be `lea rax, [rcx+disp32]; ret` in `.text`. A fault in
 the call is caught and turns the sweep off for the session; a fraction of 0 (the eye itself in contact) is
-ignored.
+ignored. When the call is made is the next section.
+
+### When the world may be queried [static-verified unless marked]
+
+Up to 0.1.87 the camera hook called Translation synchronously. Players' logs show the call faulting inside
+the game's code (`room: the collision query faulted`: five sessions of four players' reports from 0.1.31 to
+0.1.83, and a 0.1.84 player's session), and a 0.1.84 report has the game die of reads at 0x50D326 on several
+of its threads at once: a collision-filter virtual reading `[body+0x90]` of a body the shape cast 0x25AF070
+found in the broadphase. The reason for the layer's faults is the frame's order:
+
+- `g_havokSyncOnSameFrame` (cvar object 0x45E1680, default 0, "Sync Havok task on the same frame before
+  render commit") and `g_havokUseJobs` (default 1). The physics step runs as jobs across the end of the
+  frame.
+- The step is synced in the next frame: the frame's job list (0x6DF770) adds, before its other entries,
+  0x50C790 (with map instance + 0x99C78 set and the byte at + 0x99CE1 set), which waits for the step's task
+  (physics object + 0x21208) and runs the post-step job 0x502F30. 0x502F30 clears the byte at physics object
+  + 0x21089 (set with + 0x21088 when the step starts) and runs and waits for its own jobs. 0x50C7D0 is the
+  same sync outside a job list (idMapInstanceLocal vslot 0x310 at 0x6DC2C0, the same-frame sync at 0x506CA5,
+  0x6E3960); a hook on vslot 0x310's call of it never ran in rig play [rig]. The physics object is map
+  instance + 0x78C58 (0x6E1B8D, 0x6DF7FF); Translation reads its Havok world through `*collision world`
+  (`mov r10, [rsi]; mov rax, [r10+0x21020]` at 0x4FC65F), the same +0x21020 the sync tests, and the layer
+  reads `*collision world` = map instance + 0x78C58 [rig].
+- The frame's phases are a job list (0x6DF770: 0x17E5FC0 adds an entry, 0x17E6020 runs each entry after the
+  previous one). Entry 0x3892B90 (0x6E1A50) answers the queued queries (0x4F4AC0 on the collision world) and
+  then starts the step (0x506B60 on map instance + 0x78C58, which sets +0x21088/+0x21089 to 1). The next
+  entry, 0x3892B98 (0x6E1D20), is the render-view build 0x6A2C10, where the camera hook (0x6A31B7) runs. So
+  the camera hook's queries ran while the step ran on other workers. Measured [rig, 2026-11-06, e1m3 under
+  hand aim]: the step's byte was set at every one of 4824 camera-hook asks in 40 s, and clear at all 4 shots
+  the fire hook swept.
+- The game's own synchronous queries are made in the frame's update (the third-person camera, the weapon's
+  view trace in `GetWeaponFireInfo`), after the sync. Its queued queries are answered in 0x6E1A50 before the
+  step starts; their window opens at 0x4FC050 (entry 0x3892B40, early in the frame), so a query queued from
+  the render-view build is outside the next window and its answer is not readable with 0x4F6E20.
+
+What the layer does since: a query is made only with the world at rest, the byte at physics object +
+0x21089 clear and the physics object's pending task (+0x21070, set by the step at 0x509D87, waited for by the
+post-step job through 0x50C910 and the deferred-trace reads at 0x4F62F1) absent or finished. 0x50C910 reads
+the task's state word (+0x24) and adds no waiter when its low three bits are 4: that is a finished task
+[static]. The camera hook (head, aim dot, a cutscene's ray fan) sweeps at once when the world is at rest there
+(no step this frame: a pause, `g_havokSyncOnSameFrame 1`), the same condition under which the frame's own
+update queries; with a step in flight it asks, a mid hook at the end of the post-step job (0x502F9C, after its
+own jobs were waited for; `rbx` = the physics object, checked to be `*collision world`) makes the asked sweeps
+there, and the camera hook uses the answers a game frame later (`features/roomscale/late_trace.hpp`). An answer
+is used while it lags at most three of its channel's asks (not a time: a slow frame keeps it) and its sweep
+started near the current start (the head: within its offset + 5 cm; a ray: 0.5 m), so a pit reset or a scripted
+move drops it. The fire hook (0x135D733, just after `GetWeaponFireInfo`'s own query) sweeps at once; held back
+(not expected) it logs `a shot's sweep ... was not made`. `room: collision queries last 10 s: ...` counts the
+camera hook's sweeps made at once and asked, the sweeps made after the sync, the post-steps that found the
+pending task unfinished (expected: none), their time, and the fire hook's sweeps made or held back. The rig QA
+scenario `head-sweep` (`tools/rig/qa/qa-scenarios-room.ps1`) checks them, the pause menu included.
+
+| Site | RVA | Signature |
+|---|---|---|
+| Step sync (`this` = physics object) | 0x50C7D0 | `40 53 B8 70 38 00 00 E8 ?? ?? ?? ?? 48 2B E0 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 60 38 00 00 48 8B D9 BA 01 00 00 00 48 8D 4C 24 20 E8 ?? ?? ?? ?? 48 83 BB ?? ?? ?? ?? 00 74 ?? 80 BB ?? ?? ?? ?? 00 74` (world disp at +0x36, step byte disp at +0x3F; at +0x57 `mov rdx, [rip+disp32]` loads the post-step job) |
+| Task wait (`r8` = task) | 0x50C910 | `48 89 74 24 10 57 48 83 EC 20 49 8B F8 48 8B F2 41 8B 40 ?? 8B C8 80 E1 07 80 F9 04 75` (checked at the post-step job's call at +0x5D; the state word's disp at +0x13) |
+| Post-step job (`this` = physics object) | 0x502F30 | `40 53 B8 70 38 00 00 E8 ?? ?? ?? ?? 48 2B E0 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 60 38 00 00 48 8B D9 33 D2 48 8D 4C 24 20 E8 ?? ?? ?? ?? 4C 8B 83 ?? ?? ?? ?? C6 83 ?? ?? ?? ?? 00 48 8B 05 ?? ?? ?? ?? 48 89 83 ?? ?? ?? ?? 4D 85 C0 74 ?? 48 8B 8B ?? ?? ?? ?? 48 8D 54 24 20 E8 ?? ?? ?? ?? 48 8D 4C 24 20 E8 ?? ?? ?? ?? 48 8B 8C 24 60 38 00 00` (the pending task's disp at +0x33, the byte's at +0x39, the task wait's call at +0x5D, hook at +0x6C) |
+| Translation's world load | 0x4FC65F (+0x5AF) | `49 8B 82 ?? ?? ?? ?? 48 8B 88` |
 
 ## 2. Eye height and the player's origin [static-verified]
 
@@ -130,10 +185,9 @@ the 0.16 m head sphere starts clear of it.
 
 ## 5. Risks and live checks
 
-1. Timing against the physics step [inferred]: the game calls 0x4FC0B0 synchronously on the game-frame
-   path (third-person and spring cameras, the weapon's view trace), so the call at 0x6A31B7 should be
-   legal; whether a Havok step can run at the same moment (`g_havokUseJobs`, `g_havokSyncOnSameFrame`) is
-   not confirmed. If the synchronous call faults, the deferred mode with 0x4F6E20 is the fallback.
+1. Timing against the physics step: the call at 0x6A31B7 is not legal; the step is in flight there
+   ("When the world may be queried" above). The deferred mode is no way out for the camera hook: its
+   queries fall outside the window 0x4F6E20 reads.
 2. Which eye path normal play takes: read `vieworg - origin` at the hook rather than rebuilding the eye.
 3. Always pass a valid `name`: the debug draw at 0x4FD0E0 reads it under `g_showCollisionQueryFilter`.
 4. `queryId` is always written: pass a writable qword.

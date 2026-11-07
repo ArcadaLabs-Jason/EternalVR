@@ -10,7 +10,7 @@ namespace EternalVR.Launcher
 {
     /// <summary>
     /// The Advanced tab: the view, the HUD panel, the controllers, the game folder, the runtime, the headset's graphics card and
-    /// the arguments, and Reset to Recommended.
+    /// the arguments, Get test builds, and Reset to Recommended.
     /// </summary>
     public sealed partial class MainForm
     {
@@ -133,8 +133,8 @@ namespace EternalVR.Launcher
             reset.MinimumSize = reset.Size;
             reset.Click += (s, e) => ResetToPreset();
             tips.SetToolTip(reset, "Puts every setting on the Play and Advanced tabs back to " + SettingsPresets.Recommended.Name + ", the launcher's defaults.\n"
-                + "The game folder, the layer folder, the runtime, the graphics card choice and your controls are kept.");
-            return Page("Advanced", null, new Control[] { view, reset }, new Control[] { hands, hud }, system);
+                + "The game folder, the layer folder, the runtime, the graphics card choice, Get test builds and your controls are kept.");
+            return Page("Advanced", null, new Control[] { view, reset }, new Control[] { hands, hud }, system, UpdatesGroup());
         }
 
         /// <summary>The game folder's line takes the room the buttons leave, its text level with theirs.</summary>

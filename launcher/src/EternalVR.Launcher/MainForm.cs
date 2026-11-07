@@ -258,7 +258,7 @@ namespace EternalVR.Launcher
             var github = ReportLinkButtons.GitHub(BarButtonHeight, tips, ctx.Log.Error);
             var discord = ReportLinkButtons.Discord(BarButtonHeight, tips, ctx.Log.Error);
             reportLinks = new[] { github, discord };
-            buttons.Controls.AddRange(new Control[] { launch, check, restoreSaves, exportReport, github, discord, updateButton, discardRestore, statusLabel, reportLinkPanel });
+            buttons.Controls.AddRange(new Control[] { launch, check, restoreSaves, exportReport, github, discord, updateButton, testBuildButton, discardRestore, statusLabel, reportLinkPanel });
             buttons.SetFlowBreak(discardRestore, true);
             // In a window too narrow for the bar's buttons with the links' words, the links move to the status line's right
             // end and show their marks alone (FitReportLinks).

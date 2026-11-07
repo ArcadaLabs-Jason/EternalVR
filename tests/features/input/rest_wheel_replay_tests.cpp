@@ -168,7 +168,7 @@ TEST_CASE("weapon by direction: a flick held in a gap and back before the touch 
 
     // Under edge too, inside the window.
     RestWheel edge = wheel(RestWheelMode::Edge, RestWheelPick::Slots);
-    feed(edge, frame(true, false, kCentre, kCentre), 8);
+    feed(edge, frame(true, false, kCentre, kCentre), frames(0.3f));
     feed(edge, frame(false, false, kCentre, kCentre), 2);
     feed(edge, frame(false, false, kCentre, kUp), 2);
     feed(edge, frame(false, false, kCentre, kCentre), 1);
@@ -242,7 +242,7 @@ TEST_CASE("a lift on the thumb's own controls cancels a pick that has only just 
 
     // A face button pressed (a jump) under edge does the same.
     RestWheel edge = wheel(RestWheelMode::Edge);
-    feed(edge, frame(true, false, kCentre, kCentre), 8);
+    feed(edge, frame(true, false, kCentre, kCentre), frames(0.3f));
     REQUIRE(feed(edge, frame(true, false, kCentre, kRight), 1).saw(RestWheelEvent::Armed));
     RestWheelFrame jump = frame(false, false, kCentre, kRight);
     jump.faceButtons = {true, false};

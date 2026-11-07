@@ -18,6 +18,8 @@ constexpr float kSmoothingSeconds = 0.025f;
 // A turn faster than this in one frame is no wrist: a tracking jump, which reads nothing. A fast flick of a
 // wrist peaks at about 1500 degrees per second.
 constexpr float kMaxPlausibleDegrees = 4000.0f;
+// A roll quiet this long starts the strokes over from where the hand is.
+constexpr float kSettleSeconds = 0.5f;
 
 FlickSettings sanitized(FlickSettings s) {
     const FlickSettings d;
@@ -44,9 +46,86 @@ void WristFlick::reset() {
     roll_ = 0.0f;
     swing_ = 0.0f;
     armed_ = true;
-    armedReturn_ = true;
     quiet_ = 0.0f;
-    lastSign_ = 0.0f;
+    restartStrokes();
+}
+
+void WristFlick::restartStrokes() {
+    clock_ = 0.0f;
+    angle_ = 0.0f;
+    stroke_ = {};
+    over_ = {};
+    previousStroke_.reset();
+    previousOver_ = {};
+}
+
+void WristFlick::turnStroke() {
+    const float size = std::fabs(stroke_.end - stroke_.start);
+    if (size < kMinStrokeDegrees && previousStroke_) {
+        // A wobble: the stroke before it goes on, and so does what came before that.
+        stroke_ = *previousStroke_;
+        over_ = previousOver_;
+        previousStroke_.reset();
+        return;
+    }
+    previousStroke_ = stroke_;
+    previousOver_ = over_;
+    over_ = {stroke_.overFast && size >= kFlickOverDegrees, size, stroke_.endTime};
+    Stroke next;
+    next.start = stroke_.end;
+    next.end = angle_;
+    next.heldEnd = angle_;
+    next.endTime = clock_;
+    next.direction = -stroke_.direction;
+    stroke_ = next;
+}
+
+bool WristFlick::strokes(float roll, float step, bool still, FlickOutput& out) {
+    if (quiet_ >= kSettleSeconds) {
+        restartStrokes();
+    }
+    const float before = angle_;
+    angle_ += roll * step;
+    clock_ += step;
+    Stroke& s = stroke_;
+    if (s.direction == 0.0f) {
+        if (std::fabs(angle_ - s.start) > kStrokeDegrees) {
+            s.direction = angle_ > s.start ? 1.0f : -1.0f;
+            s.end = angle_;
+            s.heldEnd = angle_;
+            s.endTime = clock_;
+        } else if (quiet_ > 0.0f) {
+            // Still: the first stroke starts from here, this frame's turn included (its rate may not have
+            // reached the quiet line yet).
+            s.start = before;
+        }
+    } else if ((angle_ - s.end) * s.direction > 0.0f) {
+        s.end = angle_;
+        if ((angle_ - s.heldEnd) * s.direction >= kHoldTremorDegrees) {
+            s.heldEnd = angle_;
+            s.endTime = clock_;
+        }
+    } else if ((s.end - angle_) * s.direction > kStrokeDegrees) {
+        turnStroke(); // this stroke ends where it went furthest, and the next one starts there
+    }
+    if (over_.done && clock_ - over_.endTime > kFlickBackSeconds) {
+        over_.done = false; // not back far enough in time: a hand turned over and held, or turned back slowly
+    }
+    const float rate = std::fabs(roll_);
+    const float sign = roll_ < 0.0f ? -1.0f : 1.0f;
+    if (stroke_.direction != 0.0f && sign == stroke_.direction && rate >= settings_.minRollDegrees) {
+        // The back's test: the rate, and more roll than swing. The over's: twice the swing, the hand still.
+        stroke_.backFast = stroke_.backFast || rate >= swing_;
+        stroke_.overFast = stroke_.overFast || (rate >= settings_.dominance * swing_ && still);
+    }
+    const float back = std::fabs(angle_ - stroke_.start);
+    if (!over_.done || !stroke_.backFast || back < kFlickBackDegrees || !armed_ || cooldown_ > 0.0f) {
+        return false;
+    }
+    out.overDegrees = over_.degrees;
+    out.backDegrees = back;
+    over_.done = false;
+    return true;
 }
 
 FlickOutput WristFlick::update(const InputFrame& frame, Hand weaponHand, float dtSeconds, bool blocked) {
@@ -73,9 +152,14 @@ FlickOutput WristFlick::update(const InputFrame& frame, Hand weaponHand, float d
         return out; // the same sample as last time: nothing new
     }
     const float step = sampled ? static_cast<float>(frame.sampleSeconds - previousSample_) : dt;
-    previousSample_ = frame.sampleSeconds;
     const Quat now = normalize(hand.aimPose.orientation);
     const std::optional<Quat> before = previous_;
+    if (before && !(step > 1e-4f)) {
+        // A gap too short (or backwards) to read a rate from: the last pose stays, so the turn since it is
+        // read with the next frame's time.
+        return out;
+    }
+    previousSample_ = frame.sampleSeconds;
     previous_ = now;
     const std::optional<float> headYawBefore = previousHeadYaw_;
     previousHeadYaw_.reset();
@@ -83,13 +167,14 @@ FlickOutput WristFlick::update(const InputFrame& frame, Hand weaponHand, float d
         const Vec3 face = rotate(normalize(frame.head.pose.orientation), {0.0f, 0.0f, -1.0f});
         previousHeadYaw_ = std::atan2(-face.x, -face.z);
     }
-    if (!before || !(step > 1e-4f)) {
-        return out; // the first frame, or a gap too short (or backwards) to read a rate from
+    if (!before) {
+        return out; // the first frame
     }
     if (step >= kMaxRateGapSeconds) {
-        // A stall: the turn across it is no rate, and the smoothing starts over from here.
+        // A stall: the turn across it is no rate, and the smoothing and the strokes start over from here.
         roll_ = 0.0f;
         swing_ = 0.0f;
+        restartStrokes();
         return out;
     }
 
@@ -121,20 +206,13 @@ FlickOutput WristFlick::update(const InputFrame& frame, Hand weaponHand, float d
         out.headTurnDegrees = turn / step * kRadiansToDegrees;
     }
 
-    const float rate = std::fabs(roll_);
-    quiet_ = rate < settings_.minRollDegrees * 0.25f ? quiet_ + step : 0.0f;
+    quiet_ = std::fabs(roll_) < settings_.minRollDegrees * 0.25f ? quiet_ + step : 0.0f;
     armed_ = armed_ || quiet_ >= kRearmQuietSeconds;
-    armedReturn_ = armedReturn_ || quiet_ >= kReturnQuietSeconds;
-    const float sign = roll_ < 0.0f ? -1.0f : 1.0f;
-    const bool returning = lastSign_ != 0.0f && sign != lastSign_;
     const bool still = length(hand.linearVelocity) <= settings_.maxHandSpeed;
-    if ((returning ? armedReturn_ : armed_) && cooldown_ <= 0.0f && rate >= settings_.minRollDegrees &&
-        rate >= settings_.dominance * swing_ && still) {
+    if (strokes(roll, step, still, out)) {
         out.flicked = true;
         armed_ = false;
-        armedReturn_ = false;
         quiet_ = 0.0f;
-        lastSign_ = sign;
         cooldown_ = settings_.cooldownSeconds;
     }
     return out;

@@ -38,6 +38,7 @@ enum class RestWheelVoid : std::uint8_t {
     StickOut,  // a stick was out of the centre
     OwnStick,  // the thumb came from its own stick (out of the centre just before)
     OwnButton, // the thumb came from its own face button (let go just before)
+    Walk,      // the other stick was pushed and kept out while the touch settled (edge): a walk, not a pick
 };
 
 struct RestWheelOutput {
@@ -60,8 +61,9 @@ struct RestWheelOutput {
     Hand restHand = Hand::Left;
     Hand stickHand = Hand::Right;
     WheelDirection direction = WheelDirection::None;
-    float sinceTouch = 0.0f; // Armed under edge: seconds from the thumb's landing
-    float peak = 0.0f;       // Picked or Cancelled: the furthest the stick was out in that pick
+    float sinceTouch =
+        0.0f;          // Armed under edge: seconds from the thumb's landing (from the re-arm, in a chain)
+    float peak = 0.0f; // Picked or Cancelled: the furthest the stick was out in that pick
 };
 
 } // namespace evr::input

@@ -145,6 +145,12 @@ void noteFingers(arm::ArmSide side, const arm::DumpFingers& fingers) {
     }
 }
 
+void noteTrigger(arm::ArmSide side, const arm::DumpTrigger& trigger) {
+    if (on()) {
+        g_arms[slot(side)].trigger = trigger;
+    }
+}
+
 void tick(const ArmsTick& arms) {
     const std::byte* hands = arms.hands;
     if (!on() || !g_viewNoted) {

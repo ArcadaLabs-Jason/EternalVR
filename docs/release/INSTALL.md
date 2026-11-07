@@ -54,6 +54,14 @@ dialog says so and its first button opens the release page instead. The check ca
 hand, on the **Checks and log** tab. You can always update by hand instead: unzip the new release over the old
 folder, or anywhere new.
 
+**Test builds.** Between releases I put out test builds of what's coming next, for anyone who wants to try it
+early and say how it went. Tick **Get test builds** on the Advanced tab (Updates) and the same check also
+looks at the test builds; a newer one than yours shows as **Test build b...** next to the other buttons, with a
+link to its page. The launcher never downloads or installs a test build: grab the zip from its page and unzip
+it into a folder of its own, so your normal EternalVR folder stays as it is and you can go back to it any time
+(both use the same settings in `%LOCALAPPDATA%\EternalVR\`). Each one's notes say what to try; post how it
+went in the Discord thread they link. Off by default; with it off the launcher asks only for releases.
+
 ## What the launcher changes, and puts back
 
 The launcher starts `DOOMEternalx64vk.exe` itself, directly, for one VR session.

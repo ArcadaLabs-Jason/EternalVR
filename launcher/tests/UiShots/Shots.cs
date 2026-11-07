@@ -86,6 +86,13 @@ namespace EternalVR.Launcher.UiShots
             tabs.SelectedIndex = 0;
             Reflect.Call(main, "ShowUpdateButton", new Version(0, 1, 14));
             Shoot(main, "main-update-button", () => Pump(300));
+            // With "Get test builds" on: a newer test build on its own button beside the update (from a stand-in feed).
+            Reflect.Call(main, "ShowTestBuild", TestBuildStub.Newest());
+            Shoot(main, "main-test-build-button", () => Pump(300));
+            // A batch number as long as a tag allows: the button grows to its text.
+            Reflect.Call(main, "ShowTestBuild", TestBuildStub.Variant("Test build (b123456789)", 123456789));
+            Shoot(main, "main-test-build-button-long", () => Pump(300));
+            Reflect.Call(main, "ShowTestBuild", new object[] { null });
             // The start watchdog's two longest warnings on the status line, both asking for a report (the button is marked): no
             // picture from the game in 5 minutes, and none in the headset.
             Shoot(main, "main-start-stuck", () =>
@@ -131,6 +138,10 @@ namespace EternalVR.Launcher.UiShots
                 f => UpdateStates.Failed(f, "Response status code does not indicate success: 404 (Not Found).", installed: false));
             yield return Update("update-installed-then-failed", release, programDir, updates, null,
                 f => UpdateStates.Failed(f, "Access to the path 'E:\\Games\\EternalVR\\updates\\0.1.14' is denied.", installed: true));
+            yield return Modal("test-build", () => new TestBuildDialog(TestBuildStub.Newest(), TestBuildStub.RunningVersion, _ => { }), null);
+            // A title with an ampersand, shown as it is (not taken for a keyboard shortcut).
+            yield return Modal("test-build-ampersand", () => new TestBuildDialog(
+                TestBuildStub.Variant("Test build: 0.1.85 & 0.1.86 & next batch (b189, ce6a983)", 189), TestBuildStub.RunningVersion, _ => { }), null);
 
             var dlss = new DlssRelease(new Version(310, 4, 0, 0), new Uri("https://github.com/NVIDIA/DLSS/raw/main/lib/nvngx_dlss.dll"), 30_000_000,
                 new string('0', 64), new Uri("https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt"));

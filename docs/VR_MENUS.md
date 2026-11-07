@@ -374,6 +374,7 @@ not (`docs/rig-findings/menus.md` section 8), so it cannot tell the page.
 | Arsenal: a weapon's upgrade screen (Upgrades, Mastery) | Yes | click the mod; B returns to the Arsenal |
 | Arsenal: buy an upgrade | Clicks land on it; not seen bought (no weapon points in the save) | click |
 | Arsenal: customize weapon (F), equip / unequip mod (X), customize weapon wheel (T) | Yes | the hint bar names X, Y and Right Stick Click (on Touch) and those buttons send F, X and T while it shows them (below); the bar itself takes no clicks |
+| Custom weapon wheel: change size (F), reset to default (R) | Yes | X and Y (on Touch), as the bar names them (below) |
 | Codex: categories, entries | Yes | click the category icon or entry; a stick up / down scrolls |
 | Challenges: Mission / Weekly | Yes | click |
 | Close | Yes | B (Escape) at any tab |
@@ -394,12 +395,38 @@ the right stick's click T, a key down on the press and up on the release; the ro
 buttons meanwhile (the trigger still clicks, B still goes back, a stick pushed left or right or the left
 stick's click still turns the weapon row). The bar names the button as it names the others: `[X] CUSTOMIZE
 WEAPON`, `[Right Stick Click] CUSTOMIZE WEAPON WHEEL`, `[Y] EQUIP MOD` (Index `Left A` / `Left B`). The same
-keys in the same slots elsewhere get the same buttons: the weapon skins' `[X] CLEAR SKIN`, the weapon wheel
-screen's `[X] CHANGE SIZE` (its R, reset to default, stays a key). Vive wands have no left primary or
-secondary button, so customize weapon and the mod keep F and X there. On the rig (2026-10-18, e1m2 on the
-simulator): Y turned UNEQUIP MOD into EQUIP MOD, X opened the weapon skins, the right stick's click the
-custom weapon wheel, B came back from each; logged `prompts: the hint bar names F (slot 2): [X]` and `menu:
-hint bar: X down` / `up`, `... shown` / `gone`.
+keys in the same slots elsewhere get the same buttons: the weapon skins' `[X] CLEAR SKIN` and the custom
+weapon wheel screen's `[X] CHANGE SIZE`. On the rig (2026-10-18, e1m2 on the simulator): Y turned UNEQUIP MOD
+into EQUIP MOD, X opened the weapon skins, the right stick's click the custom weapon wheel, B came back from
+each; logged `prompts: the hint bar names F (slot 2): [X]` and `menu: hint bar: X down` / `up`, `... shown` /
+`gone`.
+
+The custom weapon wheel screen's reset to default is R in slot 3, Y's place (its update at 0xFB2080 adds
+change size on 0x21 in slot 2 and reset on 0x13 in slot 3, read statically in build 25216728), so Y sends R
+there and the bar reads `[Y] RESET TO DEFAULT`. R in slot 3 is not only the wheel's: the game's code adds it
+there for two other screens too (show map groups, and an unequip), so R counts only on a bar button whose text
+id is the wheel's reset (`#str_cmd_weapon_wheel_reset`, the idStr at +0 of the button's data, which the bar's
+add assigns first); Y keeps its own job everywhere else. X (the Arsenal's equip mod) and R share the place:
+going from the Arsenal to the wheel screen both bar buttons' last updates can be fresh for a moment, and the
+one updated last has the place (a stamp newer than the XR worker's clock read counts as just updated), until
+a press latches it: the place stays with that shortcut until the button is let go, so one press sends one
+key. A controller without a left primary or secondary button has
+stand-ins in those places (`input::PromptLabelSet::menuHintControls`): the left stick's click for X's place
+and the left Menu button for Y's. On Vive wands that is the left trackpad's click (`[Left Trackpad Click]
+CUSTOMIZE WEAPON`, change size, clear skin) and the left Menu button (`[Left Menu] EQUIP MOD`, reset to
+default); Windows Mixed Reality controllers, whose trackpad click is the left primary, get the left Menu
+button for Y's place. Both are free there: the trackpad pushed left or right still turns the Arsenal's
+weapons (a click at the pad's left or right edge does both, as a touch there turns them), and the right
+Menu button goes back as the left one does. The left Menu button's pause (Escape,
+which would close the Dossier) is held back while a shortcut has the button, through a press begun then and
+for 0.5 s past its release, the pause tap the release sends (`menu::MenuPauseHold`, `hintKeysHoldPause`,
+`vkcore/usercmd_hook.cpp`); a shortcut that goes without a press ends the hold at once. With the controllers
+off no button is named, so no shortcut is ever on the Menu button. On the rig (2026-10-30, e1m2 on the
+simulator): the wheel screen's bar read `[Y] RESET TO DEFAULT` (`[R]` before) and Y sent R; R from Y and R
+from the keyboard did the same there, bringing up the weapon list's first weapon with `SWAP WEAPONS` in the
+bar. With the wand's layout on the simulator (a controller data file without left primary or secondary
+buttons) the left Menu button turned UNEQUIP MOD into EQUIP MOD and the Dossier stayed open, and the left
+trackpad's click opened the weapon skins.
 
 **The Fortress's collectible viewer** (the toy tables; `vkcore/prompt_viewer_keys.hpp`) shows its cursor, so
 the router takes it for a popup; the grips send Q and E there as everywhere, which turn its items. Its

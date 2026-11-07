@@ -164,6 +164,8 @@ const char* voidReason(input::RestWheelVoid why) {
         return "straight from its own stick";
     case input::RestWheelVoid::OwnButton:
         return "straight from its own face button";
+    case input::RestWheelVoid::Walk:
+        return "and the other stick was pushed before it had settled (a walk)";
     case input::RestWheelVoid::StickOut:
     case input::RestWheelVoid::None:
         break;

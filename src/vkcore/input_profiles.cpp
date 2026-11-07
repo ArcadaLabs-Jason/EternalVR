@@ -148,6 +148,8 @@ void logRefusedTouchButtons(const input::ControllerData& before, const input::Co
 // What a retry of a refused profile leaves out, for the log.
 std::string retryText(const input::ControllerData& data, const input::TouchRetryStep& step) {
     switch (step.retry) {
+    case input::TouchRetry::WithoutTriggerTouch:
+        return "the trigger's touch for the fingers";
     case input::TouchRetry::WithoutVeto:
         return "the stick, trackpad and face-button touch read as the thumb elsewhere";
     case input::TouchRetry::WithoutTouchButtons:
@@ -163,6 +165,9 @@ std::string retryText(const input::ControllerData& data, const input::TouchRetry
 // What a retry that went through costs, for the log.
 std::string retryCost(const input::TouchRetryStep& step) {
     switch (step.retry) {
+    case input::TouchRetry::WithoutTriggerTouch:
+        return "suggested without the trigger's touch; the thumb rests still count, the fingers see no touch "
+               "on the trigger (the weapon hand's index finger rests on it and does not lift off)";
     case input::TouchRetry::WithoutVeto:
         return "suggested without the touch beside the rest; the thumb rest still counts, a thumb on its "
                "stick or buttons only when it presses or pushes";
@@ -182,9 +187,10 @@ std::string retryCost(const input::TouchRetryStep& step) {
 
 // A refused profile is suggested again without the touch bindings the layer added
 // (rest_touch_bindings.hpp, input::touchRetries), in steps, and what was left out is dropped from `data`:
-// first without the sensors that only tell the thumb is elsewhere (the rests still count, a thumb on its
-// stick or buttons is seen only when pressed or pushed), then also without the touches bound like buttons
-// (each logged), then without any (that family has no thumb rest this session).
+// first without the trigger's touch for the fingers alone, then also without the sensors that only tell the
+// thumb is elsewhere (the rests still count, a thumb on its stick or buttons is seen only when pressed or
+// pushed), then also without the touches bound like buttons (each logged), then without any (that family has
+// no thumb rest this session).
 bool suggestBindings(XrInput& xr, input::ControllerData& data) {
     const char* names = "";
     XrResult r = suggestWithBumperNames(xr, data, names);
@@ -244,7 +250,8 @@ std::string currentProfile(const XrInput& xr, State& s, input::Hand hand) {
 // The touch bindings of the thumb-rest wheel a family's data lacks (a player's file from before it), added
 // for this session (rest_touch_bindings.hpp); with the wheel off, only to a family whose maps bind a thumb
 // rest like a button. Then the touches on controls its maps bind like buttons (touch_inputs.hpp): none for
-// a family whose maps bind none, which the built-in maps do not.
+// a family whose maps bind none, which the built-in maps do not. Last the trigger's touch, which the fingers
+// read, on every family whose profile has it.
 void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
     const bool wheelOn = settings.thumbRest.mode != input::RestWheelMode::Off;
     for (input::ControllerData& d : data) {
@@ -256,6 +263,10 @@ void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
         }
         if (const std::size_t added = input::addBoundTouchBindings(d); added > 0) {
             EVR_LOG("%s: %zu touch binding(s) for touches bound as buttons added to the %s data", kTag, added,
+                    d.profilePath.c_str());
+        }
+        if (const std::size_t added = input::addTriggerTouchBindings(d); added > 0) {
+            EVR_LOG("%s: %zu trigger touch binding(s) for the fingers added to the %s data", kTag, added,
                     d.profilePath.c_str());
         }
     }

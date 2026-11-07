@@ -144,7 +144,7 @@ Moves pushDuringHoldOver(RestWheelMode mode, Axis2 after, bool mixed) {
     for (int i = 0; i < 45; ++i) {
         step(false, kCentre);
     }
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 30; ++i) {
         step(true, kCentre);
     }
     for (int i = 0; i < 3; ++i) {

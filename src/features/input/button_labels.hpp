@@ -145,11 +145,22 @@ struct PromptLabelSet {
     std::string menuNextTab;
     std::string menuPreviousPage;
     std::string menuNextPage;
-    // The hint bar's shortcuts the controllers send (features/menu/hint_keys.hpp), in its HintButton order:
-    // the left controller's primary and secondary buttons (X and Y on Touch) and the right stick's click, as
-    // the bar names its other buttons ("[B] BACK", "[Right Trigger] SELECT"). Empty when the controller has
-    // no such button; the bar's key then stays and nothing sends it.
+    // The hint bar's shortcuts the controllers send (features/menu/hint_keys.hpp), in its HintButton order
+    // (the pad's X, Y and right stick click places): the control in each place, and its name as the bar
+    // names its other buttons ("[B] BACK", "[Right Trigger] SELECT"). The left controller's primary and
+    // secondary buttons (X and Y on Touch) and the right stick's click; a controller without a left primary
+    // or secondary button (the Vive wand) has the left stick's click (its trackpad's) and the left Menu
+    // button in their places, which the menus leave free there (the stick pushed left or right turns the
+    // Arsenal's weapons too, and the right Menu button goes back as the left one does). An empty name: the
+    // controller has no control for the place; the bar's key then stays and nothing sends it.
     std::array<std::string, 3> menuHints;
+    std::array<LabelKey, 3> menuHintControls{{{Hand::Left, LabelInput::Primary},
+                                              {Hand::Left, LabelInput::Secondary},
+                                              {Hand::Right, LabelInput::StickClick}}};
+    // The move stick pushed forward, left, back and right ("Left Stick Up", "Left Stick Left"), for the
+    // game's texts that name the move binds (the wall-climbing tutorial names all four;
+    // features/input/prompt_binds.hpp). Empty without a move stick or a name for it.
+    std::array<std::string, 4> moveText;
 
     friend bool operator==(const PromptLabelSet&, const PromptLabelSet&) = default;
 };

@@ -44,10 +44,12 @@ evr_add_test(evr_xr_math_tests
         xr_math/launcher_pose_tests.cpp
         xr_math/marker_projection_tests.cpp
         xr_math/offhand_pose_tests.cpp
+        xr_math/shield_pose_tests.cpp
         xr_math/weapon_pose_tests.cpp
         xr_math/projection_tests.cpp
         xr_math/stereo_view_tests.cpp
         xr_math/upright_space_tests.cpp
+        xr_math/view_attached_tests.cpp
     DEPENDS evr_xr_math)
 
 evr_add_test(evr_resolver_tests
@@ -98,6 +100,7 @@ evr_add_test(evr_roomscale_tests
         features/roomscale/follow_test_steps_tests.cpp
         features/roomscale/head_fade_tests.cpp
         features/roomscale/head_offset_tests.cpp
+        features/roomscale/late_trace_tests.cpp
         features/roomscale/long_press_tests.cpp
         features/roomscale/room_anchor_tests.cpp
         features/roomscale/roomscale_settings_tests.cpp
@@ -188,6 +191,7 @@ evr_add_test(evr_input_tests
         features/input/pad_watch_tests.cpp
         features/input/view_pose_clock_tests.cpp
         features/input/player_controller_data_tests.cpp
+        features/input/prompt_binds_tests.cpp
         features/input/prompt_keys_tests.cpp
         features/input/weapon_info_labels_tests.cpp
         features/input/punch_detector_tests.cpp
@@ -202,11 +206,13 @@ evr_add_test(evr_input_tests
         features/input/rest_wheel_holdover_tests.cpp
         features/input/rest_wheel_replay_tests.cpp
         features/input/rest_wheel_gap_tests.cpp
+        features/input/rest_wheel_dwell_tests.cpp
         features/input/stick_chord_tests.cpp
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp
         features/input/input_summary_tests.cpp
         features/input/test_input_tests.cpp
+        features/input/trigger_touch_bindings_tests.cpp
         features/input/touch_button_tests.cpp
         features/input/touch_control_button_tests.cpp
         features/input/touch_inputs_tests.cpp
@@ -220,6 +226,8 @@ evr_add_test(evr_input_tests
         features/input/weapon_directions_tests.cpp
         features/input/wheel_hand_tests.cpp
         features/input/wheel_mouse_tests.cpp
+        features/input/wrist_flick_recorded_tests.cpp
+        features/input/wrist_flick_stroke_tests.cpp
         features/input/wrist_flick_tests.cpp
         features/input/wheel_slowdown_tests.cpp
         features/input/xr_action_set_tests.cpp
@@ -251,13 +259,15 @@ evr_add_test(evr_arm_tests
         features/arm/hand_offset_tests.cpp
         features/arm/hand_pose_tests.cpp
         features/arm/hands_only_tests.cpp
+        features/arm/left_hand_rows_tests.cpp
         features/arm/left_hand_tests.cpp
         features/arm/mod_mix_tests.cpp
         features/arm/mod_room_tests.cpp
         features/arm/parent_frames_tests.cpp
+        features/arm/trigger_finger_tests.cpp
         features/arm/twist_fault_tests.cpp
         features/arm/two_bone_ik_tests.cpp
-    DEPENDS evr_arm)
+    DEPENDS evr_arm evr_game_eternal)
 
 evr_add_test(evr_layer_gate_tests
     SOURCES

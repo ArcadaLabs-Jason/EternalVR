@@ -25,12 +25,14 @@
 //   moved, not turned, until the left glove's wrist sits on the left hand's wrist point; the move stays while
 //   the game has the arms (a switch, a glory kill), so the gun stays on the left hand. The wrist is the one
 //   the game's grip gives, kept for the held item if that grip lapses (arm::LeftWristOnGun); before any is
-//   read, the item's [left_hand_wrist] row's (metres, at the world's scale).
+//   read, the item's [left_hand_wrist] row's (metres, at the world's scale; every gun has one).
 //
 // The grips are the game's own, read from each arm while the layer's overrides are off it (a clean read,
 // game_arm.hpp) once the read has held still for a few ticks (arm::SteadyPose: not while the gun comes up),
 // kept per held item: until both arms have one for the held item (the right's only with the free off hand)
-// the arms go back to the game, which the first switch to a weapon does anyway. The arm policy
+// the arms go back to the game, which the first switch to a weapon does anyway, and the hold before they are
+// taken back starts from the read: the still reads during it replace the grip while the gun settles (rig: the
+// level start's shotgun root still moving 5 mm over half a second after the first still read). The arm policy
 // (offhand_policy.hpp) decides for both as for the weapon arm, and the free off hand as for the off hand.
 //
 // Off-hand hook thread (the game thread running idHands::Update) only, but placement(), which any thread
@@ -65,6 +67,7 @@ struct Placement {
     Vec3 leftWrist;
     float weight = 0.0f;
     const std::byte* decl = nullptr;
+    bool active = false; // the arms are ticked (not given back for good)
 };
 Placement placement();
 

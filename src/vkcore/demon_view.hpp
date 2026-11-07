@@ -7,8 +7,10 @@
 // push the demon toward the head. The offsets were read on Steam build 25216728; they are used on the known
 // builds (checked through the idPlayer vtable, PlayerAim), the Game Pass one being the same code relinked.
 
+#include "common/vector.hpp"
 #include "game/eternal/game_action.hpp"
 #include "vkcore/player_aim.hpp"
+#include "xr_math/head_view.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -58,5 +60,13 @@ void notePilotAim(float pitch, float yaw);
 
 // Installs the detour on the demon's update; false (logged) on a build without the known functions.
 bool installDemonAimHook();
+
+// The demon's first-person models (demon_models.cpp): its shoulder cannons and arms stay on the view the eyes
+// are built on, as on a flat screen, instead of the game's camera (the weapon hand's aim under hand aim). The
+// camera hook publishes each piloted view: the body frame it was built on, the head's offset it added (world
+// units) and the view axis it wrote. The hooks are installed once; false (logged) on a build without the
+// sites.
+void notePilotView(const xr_math::IdViewAxis& body, Vec3 headOffset, const xr_math::IdViewAxis& view);
+bool installDemonModelHooks();
 
 } // namespace evr::vkcore::controllers

@@ -29,10 +29,12 @@
 //   the game as a fresh push, or to the wheel where the mode now gives it the stick.
 //
 // Modes (ETERNALVR_THUMBREST_WHEEL; off when unset, ControllerSettings):
-// - edge: touch, then push. A thumb landing on a rest arms the other stick for kEdgeWindowSeconds
-//   (ETERNALVR_THUMBREST_WINDOW): pushing that stick out of the centre in that time starts picking. A landing
-//   counts only when both sticks are centred at that moment, so a thumb that lands while the other stick
-//   moves or turns does nothing, and a thumb left resting does not stop the other stick turning or moving.
+// - edge: touch, then push. A thumb that has rested on a rest for kRestDwellSeconds arms the other stick
+//   for kEdgeWindowSeconds (ETERNALVR_THUMBREST_WINDOW) from the end of the dwell: pushing that stick out of
+//   the centre in that time starts picking, and a push made during the dwell (a brush, then walking off) is
+//   no pick. A landing counts only when both sticks are centred at that moment, so a thumb that lands while
+//   the other stick moves or turns does nothing, and a thumb left resting does not stop the other stick
+//   turning or moving.
 //   Nor does a thumb that comes straight from its own controls: a landing within kOwnButtonVoidSeconds of
 //   that hand's A/B (X/Y) going up (a jump or a dash), or within kOwnStickVoidSeconds of its own stick being
 //   out of the centre (turning or walking, then the thumb resting), opens no window. After a pick (not a
@@ -43,8 +45,8 @@
 //   registered), picks when the touch registers instead of waiting for the centre; while a touch is sensed
 //   but not registered yet (the thumb elsewhere), that stick is held back from the game, and when the contact
 //   lapses unregistered, the stick is the game's again. A stick already out otherwise is left to the game
-//   until the touch has been on kRestDebounceSeconds, gaps not counted (a brush while turning), then waits
-//   for the centre.
+//   until the touch has been on kRestDwellSeconds, gaps not counted (a brush while walking or turning), then
+//   waits for the centre.
 // - extreme: the turn stick is the wheel, for standing players who turn with their body (the owner's spec,
 //   2026-10-09/10). It picks weapons while neither thumb rests; resting the other thumb on its rest gives it
 //   back its turning, chainsaw and quick switch, and a pick in progress is cancelled once that touch has
@@ -96,6 +98,10 @@ inline constexpr float kTurnBeforeLiftSeconds = 0.05f;
 inline constexpr float kEdgeWindowSeconds = 0.5f;
 inline constexpr float kMinEdgeWindowSeconds = 0.2f;
 inline constexpr float kMaxEdgeWindowSeconds = 1.0f;
+// A touch counts as a resting thumb only once it has stayed on this long (DECISIONS T-223): under edge the
+// window opens at the end of it (touch, rest, then push), under full a stick already out is left to the game
+// until then. A brush while walking or turning is shorter than a thumb that settles.
+inline constexpr float kRestDwellSeconds = 0.25f;
 // Within this the stick counts as centred (the turn stick's centre radius and the snap re-arm).
 inline constexpr float kArmDeadzone = 0.25f;
 // A direction counts from this deflection (the wheel pointer's own threshold, wheel_mouse.hpp).
@@ -251,7 +257,13 @@ private:
     struct Rest {
         RestTouchFilter touch;
         bool cancelled = false; // a pick from this rest was cancelled since the landing (edge)
+        // Seconds since the window opened (edge): negative while the landing is still settling
+        // (kRestDwellSeconds, the time the sensor is lost not counted), 0 from the end of it, or from a
+        // pick's chain re-arm.
         float sinceLanding = 0.0f;
+        float dwellPart =
+            0.0f;           // the dwell in front of sinceLanding's 0 (none after a chain re-arm), for the log
+        bool retap = false; // this frame's landing is the thumb tapping again after a forgiven gap
         bool landingValid = false;
         bool chainPending = false; // a pick ended with the thumb still resting (edge)
     };
@@ -285,6 +297,8 @@ private:
     // `picked`: a weapon was picked, so under edge the window opens again for the next pick.
     void finishRoute(bool picked);
     [[nodiscard]] bool restGone() const;
+    // Edge: whether the landing's window is open (settled, and not past the window).
+    [[nodiscard]] bool windowOpen(const Rest& r) const;
     // Under extreme: the stick that picks now (the turn stick, the other stick while only the turn hand's
     // thumb rests, or none while the other thumb rests).
     [[nodiscard]] std::optional<Hand> extremeStick() const;

@@ -16,6 +16,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace evr::vkcore::controllers::left_hand_arms {
@@ -65,10 +66,16 @@ int g_keptLines = 0;
 const std::byte* g_keptDecl = nullptr; // the held item last logged as on kept grips
 // Hook thread only: the held item's [left_hand_wrist] row (the left glove's wrist on it at idle, model
 // space), which places the model until the game's grip is read, for the decl it was looked up for on these
-// hands.
+// hands; whether its use was logged.
 std::optional<const std::byte*> g_wristRowDecl;
 std::optional<Vec3> g_wristRow;
+bool g_wristRowLogged = false;
 int g_wristRowLines = 0;
+// The rows' distance from the wrist the read grip gives, logged as the grip replaces a row: lines so far per
+// held item, by name (a decl pointer can name another item on new hands), so one item's repeated reads cannot
+// use up the lines of the others.
+constexpr int kRowCheckLinesPerItem = 4;
+std::vector<std::pair<std::string, int>> g_rowCheckLines;
 // Hook thread only: the left glove's wrist on the held item the model is placed by.
 arm::LeftWristOnGun g_leftWrist;
 
@@ -192,17 +199,47 @@ bool offHandOnController(const std::byte* decl) {
 std::optional<Vec3> wristRow(const std::byte* decl) {
     if (decl != g_wristRowDecl) {
         g_wristRowDecl = decl;
+        g_wristRowLogged = false;
         const std::string name = decl ? itemDeclName(decl) : std::string{};
         const auto row = state().offsets.lookupLeftHandWrist(name);
         g_wristRow = row ? std::optional(Vec3{(*row)[0], (*row)[1], (*row)[2]}) : std::nullopt;
-        if (g_wristRow && g_wristRowLines < 20) {
-            ++g_wristRowLines;
-            EVR_LOG("%s: '%s': placed in the left hand by its [left_hand_wrist] row until the game's grip is "
-                    "read",
-                    kTag, name.c_str());
-        }
     }
     return g_wristRow;
+}
+
+// The row of `decl` as it places the model (metres), logged once per held item.
+std::optional<Vec3> placingRow(const std::byte* decl) {
+    const std::optional<Vec3> row = wristRow(decl);
+    if (row && !g_wristRowLogged && g_wristRowLines < 20) {
+        g_wristRowLogged = true;
+        ++g_wristRowLines;
+        EVR_LOG(
+            "%s: '%s': placed in the left hand by its [left_hand_wrist] row until the game's grip is read",
+            kTag, itemDeclName(decl).c_str());
+    }
+    return row;
+}
+
+// As the game's grip first places the held item: how far the wrist it gives (`wrist`, game units) sits from
+// the item's row, the step the model takes as the grip replaces the row (a row measured off the game's idle,
+// or a weapon mod's idle, shows here).
+void logRowCheck(const std::byte* decl, Vec3 wrist, float unitsPerMetre) {
+    const std::optional<Vec3> row = wristRow(decl);
+    if (!row) {
+        return;
+    }
+    const std::string name = itemDeclName(decl);
+    auto it = std::find_if(g_rowCheckLines.begin(), g_rowCheckLines.end(),
+                           [&name](const auto& entry) { return entry.first == name; });
+    if (it == g_rowCheckLines.end()) {
+        it = g_rowCheckLines.insert(g_rowCheckLines.end(), {name, 0});
+    }
+    if (it->second >= kRowCheckLinesPerItem) {
+        return;
+    }
+    ++it->second;
+    EVR_LOG("%s: '%s': the grip read puts the left glove's wrist %.1f mm from its [left_hand_wrist] row",
+            kTag, name.c_str(), static_cast<double>(length(wrist * (1.0f / unitsPerMetre) - *row) * 1000.0f));
 }
 
 // Hook thread only: the readiness last logged.
@@ -335,15 +372,20 @@ void tick(const std::byte* hands,
     // grip it stays for the held item if the grip lapses (a grip kept from a level before whose root no
     // longer holds); before the game's grip is read, where the item's row has it.
     const bool gripNow = rightOk && leftGrip;
-    const std::optional<Vec3> leftWrist = g_leftWrist.update(
-        decl, rightOk ? std::optional(rightOk->root) : std::nullopt, leftGrip,
-        gripNow || g_leftWrist.fromGrip(decl) ? std::nullopt : wristRow(decl), world.unitsPerMetre);
+    const bool hadGrip = g_leftWrist.fromGrip(decl);
+    const std::optional<Vec3> leftWrist =
+        g_leftWrist.update(decl, rightOk ? std::optional(rightOk->root) : std::nullopt, leftGrip,
+                           gripNow || hadGrip ? std::nullopt : placingRow(decl), world.unitsPerMetre);
+    if (!hadGrip && g_leftWrist.fromGrip(decl) && leftWrist) {
+        logRowCheck(decl, *leftWrist, world.unitsPerMetre);
+    }
     std::lock_guard lock(g_placementMutex);
     if (leftWrist) {
         g_placement.leftWrist = *leftWrist;
     }
     g_placement.decl = decl;
     g_placement.weight = leftWrist ? 1.0f : 0.0f;
+    g_placement.active = true;
 }
 
 void release(const std::byte* hands) {
@@ -352,6 +394,7 @@ void release(const std::byte* hands) {
     forgetGrips();
     std::lock_guard lock(g_placementMutex);
     g_placement.weight = 0.0f;
+    g_placement.active = false;
 }
 
 Placement placement() {

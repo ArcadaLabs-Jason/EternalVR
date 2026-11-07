@@ -125,9 +125,9 @@ headset.
    `data/weapons/viewmodel_offsets.toml`. Exit: on the rig, with the eye on the sight line, the sight
    line stays parallel to the aim ray within 0.25° for every weapon; the owner's headset look on two or
    three weapons. The owner decided after his headset look (2026-10-13): sights are on for everyone with
-   no option (T-135). On the rig every weapon meets the 0.25° exit (2026-10-22), the Heavy Cannon's row following
-   its active mod (the Precision Bolt's scope or the iron sights; rig-findings/hands-rig.md, section 18); the
-   headset look, and how the 3.3° turn at a Heavy Cannon mod switch feels, are still open. Scopes do not
+   no option (T-135). On the rig every weapon meets the 0.25° exit (2026-10-22); the Heavy Cannon has one row for
+   every mod, along the front ring and the Precision Bolt's scope (T-206, rig-findings/hands-rig.md, section 23),
+   so a mod switch no longer turns the gun. The headset look is still open. Scopes do not
    magnify for now; the owner agreed on 2026-10-16 that they need to eventually, as a scope lens after or at the end of
    the beta (a picture-in-picture scope is a separate feature, T-136).
 3. **Arm solve and model.** The arm solve fixed, with unit tests: the wrist's twist measured from the
@@ -145,7 +145,9 @@ headset.
    sensors. Exit: on the sweep captures every weapon's grip closes on the gun with no finger through
    it, and an open hand opens. On the rig (2026-10-24, hands-rig section 20): the free off hand's fingers follow
    its controller (open, the game's grip of a handle, index and thumb on their own sensors; the default since T-160); the
-   weapon hand keeps the game's grip on each gun, its index finger not yet on the trigger's sensor.
+   weapon hand keeps the game's grip on each gun, and its index finger follows the trigger: lifted off it, resting
+   on it, pulled to the game's grip (T-221; on the rig 2026-10-30, hands-rig section 24), with the trigger's touch
+   now bound on every controller that has it (T-222).
 5. **Two-handed grips and a virtual stock** (a Should item, M5). The off hand takes a per-weapon support
    point and the gun aims along the line between the hands. Exit: the sweep's two-handed holds pass;
    letting go returns to one-handed aim within one frame; the owner's headset look.

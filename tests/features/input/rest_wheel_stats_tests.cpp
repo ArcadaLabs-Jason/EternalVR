@@ -187,14 +187,16 @@ TEST_CASE("while touched: a touch held back by the thumb elsewhere registers whe
     CHECK(out.event == RestWheelEvent::Picked);
 }
 
-TEST_CASE("while touched: a stick turning when the thumb lands is taken once the landing has lasted the "
-          "debounce, and waits for the centre") {
+TEST_CASE("while touched: a stick turning when the thumb lands is taken once the touch has settled "
+          "(the dwell), and waits for the centre") {
     RestWheel w = wheel(RestWheelMode::Full, RestWheelPick::Slots);
     feed(w, frame(false, false, kCentre, kRight), frames(0.3f));
     // The touch registers on its first frame with the stick out for 0.3 s: a brush could be all it is, so the
-    // stick keeps turning until the landing is kRestDebounceSeconds old, then picks nothing until it has been
-    // back in the centre.
+    // stick keeps turning until the touch has settled (kRestDwellSeconds), then picks nothing until it has
+    // been back in the centre.
     CHECK_FALSE(w.update(frame(true, false, kCentre, kRight), kFrame).taken[kRightHand]);
+    CHECK_FALSE(w.update(frame(true, false, kCentre, kRight), kFrame).taken[kRightHand]);
+    feed(w, frame(true, false, kCentre, kRight), frames(0.2f));
     CHECK_FALSE(w.update(frame(true, false, kCentre, kRight), kFrame).taken[kRightHand]);
     feed(w, frame(true, false, kCentre, kRight), frames(0.06f));
     CHECK(w.update(frame(true, false, kCentre, kRight), kFrame).taken[kRightHand]);

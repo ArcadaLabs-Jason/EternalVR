@@ -87,6 +87,16 @@ TEST_CASE("debug script: the hands rig's level load passes the allow-list") {
     CHECK(script.steps[0].commands[0] == "map game/sp/e1m1_intro/e1m1_intro");
 }
 
+TEST_CASE("debug script: the Revenant rocket scenario's projectile drawing passes the allow-list") {
+    const auto script = parseDebugScript("3:god|6:setviewpos 160.5 20.8 -5.0 90|7:g_projectileDebug 1|"
+                                         "7.5:g_projectileDebugLifetime 10");
+    CHECK(script.error.empty());
+    CHECK(script.refused.empty());
+    REQUIRE(script.steps.size() == 4);
+    CHECK(script.steps[2].commands[0] == "g_projectileDebug 1");
+    CHECK(script.steps[3].commands[0] == "g_projectileDebugLifetime 10");
+}
+
 TEST_CASE("debug script: command names are matched without case, cvars take a value") {
     const auto script = parseDebugScript("1:GOD;SetViewPos 1 2 3 4|2:r_sharpening 2.5;give armor/sp_armor_5");
     CHECK(script.refused.empty());

@@ -9,8 +9,8 @@
 //   plus the held weapon's offset from the table (data/weapons/viewmodel_offsets.toml). A weapon with a
 //   [sights] row is then turned about the grip so its sight line runs parallel to the aim ray (on by default,
 //   T-135; ETERNALVR_WEAPON_SIGHTS=0 turns it off on the rig); the shot ray and the aim dot do not change.
-//   The weapon's active mod is read each update (weapon_mods.hpp): a mod's own row (the Precision Bolt's
-//   scope) replaces the weapon's from the next update on, turning the gun about the glove's wrist.
+//   The weapon's active mod is read each update (weapon_mods.hpp): a mod's own row, where the table has
+//   one, replaces the weapon's from the next update on, turning the gun about the glove's wrist.
 //   Last the model is moved, not turned, so the glove's wrist keeps the grip's own frame
 //   (xr_math::placeViewmodel). The game's own stores then carry it into both the deferred and the current
 //   render-model pose. Under head aim the game's own placement stays, moved by the rendered head's offset
@@ -96,6 +96,7 @@ bool g_cachedSeated = false;
 game::WeaponOffset g_cachedOffset;
 std::optional<game::WeaponSight> g_cachedSight;    // not with ETERNALVR_WEAPON_SIGHTS=0
 std::optional<game::WeaponSight> g_cachedOwnSight; // the weapon's own row, the mods not read
+std::optional<Vec3> g_cachedLeftWrist;             // its [left_hand_wrist] row (metres)
 ModDecls g_cachedMods{};                           // the held weapon's active mods (weapon_mods.hpp)
 bool g_cachedFists = false;                        // the held item is the fists of a melee or a Blood Punch
 // The held item's decl the swim check last saw (viewmodel hook thread only), and its answer (read by the
@@ -170,6 +171,9 @@ game::WeaponOffset offsetFor(const ArmsTick& arms) {
         g_cachedMods = mods;
         const std::string name = decl ? declName(decl) : std::string{};
         g_cachedFists = name.starts_with(kFistsPrefix);
+        const auto leftWrist = state().offsets.lookupLeftHandWrist(name);
+        g_cachedLeftWrist =
+            leftWrist ? std::optional(Vec3{(*leftWrist)[0], (*leftWrist)[1], (*leftWrist)[2]}) : std::nullopt;
         // ETERNALVR_VIEWMODEL_OFFSET replaces the table's offset; a sight row still applies on top of it.
         g_cachedOffset = cfg.viewmodelOffset
                              ? *cfg.viewmodelOffset
@@ -253,9 +257,11 @@ void onViewmodel(const HookRegisters& regs) {
     // The weapon in the left hand: once the left glove's wrist on the held item is known, the model moved
     // until it sits in the hand, also while the game has the arms (left_hand_arms.hpp); the rows are measured
     // for the right glove.
-    left_hand_arms::Placement lefty =
+    const left_hand_arms::Placement placedArms =
         offhand_mods::leftGlove() ? left_hand_arms::placement() : left_hand_arms::Placement{};
-    lefty.weight = lefty.decl == g_cachedDecl ? lefty.weight : 0.0f; // for the held item only
+    const arm::LeftPlacement lefty =
+        arm::leftPlacementFor(g_cachedDecl, placedArms.decl, placedArms.leftWrist, placedArms.weight,
+                              placedArms.active, g_cachedLeftWrist, world.unitsPerMetre);
     const std::optional<xr_math::IdAngles> sight = sightAngles(g_cachedSight);
     const game::WeaponOffset& w = game::kRowsWrist;
     // A mod's sight row turns the gun about the glove's wrist under the turn applied here; an
@@ -268,7 +274,7 @@ void onViewmodel(const HookRegisters& regs) {
                                 {w.forward, w.left, w.up}, world.unitsPerMetre);
     if (lefty.weight > 0.0f) {
         placed.offset =
-            placed.offset + arm::leftGloveShift(placed, lefty.leftWrist, world.grip.offset, world.gripAxis,
+            placed.offset + arm::leftGloveShift(placed, lefty.wrist, world.grip.offset, world.gripAxis,
                                                 {w.forward, -w.left, w.up}, world.unitsPerMetre) *
                                 lefty.weight;
     }

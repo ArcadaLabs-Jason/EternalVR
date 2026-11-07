@@ -52,8 +52,15 @@ struct ArmState {
     arm::WristTracker wrist;
     std::array<xr_math::ModelPose, arm::kHandJointCount> idleHand{};
     bool idleHandOk = false;
+    const std::byte* idleItem =
+        nullptr; // the arms' item `idleHand` was read with (the trigger finger's grip)
     const std::byte* gloveHands = nullptr;
     float gloveCurl = 0.0f; // the last tick's, for the trace
+    // The arm holds the gun (the weapon arm, or the left arm with the weapon in the left hand), and this
+    // tick's share its index finger opens from the grip by the trigger (weapon_finger.hpp), or none (the
+    // game's).
+    bool holdsWeapon = false;
+    std::optional<float> indexOpen;
     // The game's own grip of the arms' item `item` (the tick's) as the last clean read had it (capture()).
     std::optional<Capture> captured;
     const std::byte* item = nullptr;

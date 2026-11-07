@@ -6,6 +6,7 @@ evr_add_module(evr_roomscale
         follow_test_steps.cpp
         head_fade.cpp
         head_offset.cpp
+        late_trace.cpp
         long_press.cpp
         room_anchor.cpp
         roomscale_settings.cpp

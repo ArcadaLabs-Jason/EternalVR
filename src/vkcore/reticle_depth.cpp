@@ -23,7 +23,8 @@ float reticleHitMetres(const std::byte* player, Vec3 eye, float unitsPerMetre) {
     // The weapon trace's own shape and contents: the dot stops where a shot does.
     bool inContact = false;
     const std::optional<float> hit =
-        sweepShot(player, ray->origin, ray->origin + ray->direction * reach, inContact);
+        sweepShotLate(kLateReticle, player, ray->origin, ray->origin + ray->direction * reach,
+                      roomscale::kLateRaySlackMetres * unitsPerMetre, inContact);
     if (inContact) {
         // The hand is at a wall or in cover: the shot's line starts at it, not 100 m away.
         return kReticleNearestMetres;

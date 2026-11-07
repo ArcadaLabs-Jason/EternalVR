@@ -172,8 +172,9 @@ The launcher calls it Roll wrist (the Play tab's Gestures, on by default since t
 `ETERNALVR_FLICK_RATE`). The checkbox stays because a gesture can fire by accident.
 
 
-**Motion.** A fast roll of the weapon hand about its pointing axis, the controller turned over and back like a
-wrist, presses `switch_weapon_mod` (the Y tap) once. `features/input/wrist_flick.hpp`.
+**Motion.** The weapon hand turned over and back fast about its pointing axis, the controller rolled like a
+wrist, presses `switch_weapon_mod` (the Y tap) once. `features/input/wrist_flick.hpp`. Up to 0.1.87 one fast roll
+one way was enough, and that fired when players did not mean it (below, "Measured in play"; DECISIONS T-202).
 
 **Roll rate.** `HandState` has no angular velocity, so the mapper takes it from the aim orientation between two
 frames: the rotation between them as a rotation vector over the time between the two poses' samples
@@ -181,37 +182,73 @@ frames: the rotation between them as a rotation vector over the time between the
 roll) and the rest (the pointing direction swinging round), both smoothed over about 25 ms so one noisy frame is
 no flick. The mapper runs on the game's commands, not the headset's frames: the same sample read twice adds
 nothing, and a gap of 0.1 s or more between samples (a load, an alt-tab, the game stalled) reads no rate and
-starts the smoothing over, so a wrist that turned during a stall is no flick. (A first version took the mapper's
+starts over, so a wrist that turned during a stall is no flick. (A first version took the mapper's
 frame time, which the mapper caps at 0.1 s: a 5 s stall then read as 0.1 s and a 90 degree turn across it as
 900 degrees per second.)
 
-**Trigger.** The smoothed roll rate is 450 degrees per second or more (`ETERNALVR_FLICK_RATE`, 200 to 1500), in
-either direction, and at least twice the swing rate of the pointing direction, with the hand moving no faster than
-1.5 m/s. One press per flick: nothing fires within 0.6 s of a flick; the next flick the same way waits until the
-roll has stayed below a quarter of the minimum (about 110 degrees per second) for 0.2 s, and a roll the other way
-(the way a flick and back comes back) for 0.8 s. So the roll back of a flick does not fire, with or without a
-pause at the turn (the first rig version re-armed after any short pause and fired on a roll back that came 0.35 s
-later); turned over, held still for more than 0.8 s and turned back, the roll back is a flick of its own (the
-weapon mod switched back). A hand whose tracking is lost starts over. A turn of more
-than 4000 degrees per second in one frame is a tracking jump, not a wrist, and reads nothing. Nothing fires
+**Trigger.** The roll rate also adds up to the angle the hand has turned about its pointing axis, and the points
+where that angle turns round (10 degrees back from its furthest) split it into strokes. A flick is two strokes:
+
+- the over: 90 degrees or more one way, its smoothed roll rate reaching 450 degrees per second
+  (`ETERNALVR_FLICK_RATE`, 200 to 1500) at least twice the swing rate of the pointing direction, with the hand
+  moving no faster than 1.5 m/s, in the same frame;
+- the back: the other way, its rate reaching the same 450 and at least the swing's, and 60 degrees back, both
+  within 0.3 s of the over's furthest point. The press fires there: in the deliberate flicks measured, 35 to
+  55 ms after that point.
+
+A stroke under 20 degrees is no stroke: a wobble as the hand turns, or a hesitation in the middle of a roll,
+leaves the stroke before it going on, so it neither loses an over nor splits one under 90. The over's furthest
+point moves on for the 0.3 s only when the hand goes 2 degrees further, so a hand turned over and held with a
+tremor is still held. The frame a flick starts on counts towards the over.
+
+Either way round counts. One press per flick: nothing fires within 0.6 s of a flick, nor until the roll has stayed
+below a quarter of the minimum (about 110 degrees per second) for 0.2 s, so rolling on round after the back, or
+a wrist shaken over and back several times, is still the one press. A roll one way only never fires, however fast
+or far, and neither does a hand turned over and held, then turned back (the back comes too late), or turned
+back slowly; a roll quiet for 0.5 s starts the strokes over. A hand whose tracking is lost starts over. A turn of
+more than 4000 degrees per second in one frame is a tracking jump, not a wrist, and reads nothing. Nothing fires
 while the game holds the gestures back (section 3), the weapon wheel included, whose pointer can be the weapon
-hand.
+hand. Log: `controllers: gesture: roll wrist (over O deg, back B deg, roll R deg/s, swing S deg/s, pointing P
+deg, hand V m/s, head turn H deg/s)`.
 
 **Fast aiming.** Aiming swings the pointing direction, which is the part a flick does not have, and carries the
 hand. The unit tests turn the aim sideways at 900 degrees per second level and 45 degrees up and at 700 degrees
-per second 60 degrees up, and roll at 700 degrees per second while swinging the aim at 600: none flicks, and the same
-rates about the pointing axis do (rolls of 150, 300 and 400 do not). Measured on synthetic motion only. Looking
-nearly straight up, a fast turn of the body is mostly a roll of the controller and the swing of the pointing
-direction is small, so a very fast turn there (several hundred degrees a second) can flick; that is the case to try
-in a headset, with a fast body turn while aiming at a flier overhead.
+per second 60 degrees up, and roll over and back at 700 degrees per second while swinging the aim at 600: none
+flicks, and the same rates about the pointing axis do (rolls of 150, 300 and 400 do not). Looking nearly straight
+up, a fast turn of the body is mostly a roll of the controller, but it is one way: it makes an over at most.
 
-**Rig check** (2026-10-24, OpenXR-Simulator, mono, scripted aim orientation): a roll of 90 degrees over 3 s and an aim
-swept sideways at about 1600 degrees per second did not flick; a roll of 180 degrees at about 1200 degrees per
-second logged `gesture: wrist flick` (now `gesture: roll wrist`) and `action switch_weapon_mod` once, its roll back 0.5 s later logged nothing,
-and a second roll after a still second logged a second flick.
+**Measured in play** (2026-10-30, DECISIONS T-202). The frame table (`eternalvr-frames-<pid>.csv`,
+docs/VR_HEAD_TRACKED.md) holds the weapon hand's aim orientation at every shown view; replaying it through the
+detector reproduces the logged flicks (a player's 0.1.84 line, roll 460 deg/s and swing 195, replays as 457 and
+199; the owner's three flicks of 2026-10-24 replay within about 30 ms of their log lines). Hand speed is not in the
+table, so the replay leaves the 1.5 m/s test out and counts a little high.
 
-**Risks.** A false flick switches the weapon mod and a second one switches it back; nothing is spent. The
-threshold may want tuning in a headset (`ETERNALVR_FLICK_RATE`).
+| | Sessions | Hours | One-stroke flick (0.1.83 to 0.1.87) | Over and back (now) |
+|---|---|---|---|---|
+| Recorded play, Roll wrist off or not yet built (14 players, the owner) | 67 | 6.2 | 129 (21 an hour) | 0 |
+| The owner's deliberate flicks in a headset (2026-10-24) | 1 | | 3 of 3 | 3 of 3 |
+| A player's flick logged in 0.1.84 (`gesture: roll wrist`, roll 460, swing 195, head turn -30) | 1 | | fired | none |
+
+The 129 rolls the one-stroke flick took: rate 450 to 1360 degrees per second (median 510); the stroke they
+fired in 70 degrees at the median (135 at the 90th percentile); the roll back after it 26 degrees at the median
+and under 60 for 9 in 10; the head turning 14 degrees per second at the median and 60 or more in 19, steep aim
+(over 45 degrees up or down) in 4. So most were a forearm turning one way in play, not a body turn and not
+aiming up. The logged player flick was the forearm turning about 130 degrees one way over 0.8 s while the player
+turned, and back only 25. The deliberate flicks turned over 130 to 160 degrees at peaks of 800 to 2600 degrees
+per second and came straight back 70 to 140. A rate alone does not separate them (the accidental rolls reached
+1360); the back does. Another player's log has 40 flicks in 17 minutes, then Roll wrist off in every later
+session. `tests/features/input/wrist_flick_recorded_tests.cpp` replays the three deliberate flicks
+(`wrist_flick_recorded.hpp`) and models five of the players' rolls from their measured sizes, rates, swing and
+pitch (no player's motion is kept in the repository). Still to see in a headset: that a deliberate flick fires every time for players
+other than the owner (a smaller wrist turn than 90 degrees is no flick now), and that nothing fires by accident.
+
+**Rig check** (2026-10-24, the first version, OpenXR-Simulator, mono, scripted aim orientation): a roll of 90
+degrees over 3 s and an aim swept sideways at about 1600 degrees per second did not flick; a roll of 180 degrees
+at about 1200 degrees per second logged `gesture: wrist flick` and `action switch_weapon_mod` once.
+
+**Risks.** A false flick switches the weapon mod and a second one switches it back; nothing is spent. A player
+whose deliberate flick turns less than 90 degrees over or less than 60 back gets nothing, with nothing in the log:
+a report should say what they did.
 
 ### 2.8 Dash by a lean or a shove (not recommended)
 

@@ -1449,3 +1449,210 @@ arm's off glove against it (`ho-shown`): 0.00. Hands only's fold (the zero mask 
 hands-only checker's `aim` check (section 20: the off glove turned as its target within 2 degrees) now fails by design
 where the swing is limited (the glove follows the shown arm's limit, not the grip), so its reference is the shown
 arm's glove from here on; the rest of its checks are unchanged.
+
+## 23. The Heavy Cannon's front sight ring: one line for every mod (2026-10-30, OpenXR-Simulator)
+
+The owner's headset look found the sights on the shots on every gun except the Heavy Cannon with the Micro Missiles,
+"a bit off", while section 18's check put that row within 0.25 deg. That check turns a fixed weapon-space line by
+the dumped attach joint, so it cannot tell whether the line is the one an eye looks along; this section checks the
+line itself. DECISIONS T-206.
+
+**The sight parts** [static: the Heavy Cannon's md6mesh and md6skl, its animations, decoded with the sights survey's
+tools]. The front sight (`sight_front`, joint `barrel_part03_md`) is not a post but a ring: an A-shaped frame 4 mm
+thick at x 0.466 to 0.470 m, its outer top bar at z 0.145 and its opening from z 0.121 to 0.141 (centre 0.131), 7 to
+12 mm wide. The rear sight (`sight_middle_anim`, on `barrel_part02_md`, the barrel's joint) is a notch at x 0.070, its
+ears at z 0.121. The sight joints and the receiver sit at their bind pose in the weapon's idle animation and at the end
+of both mod-switch animations; `bburst_into` (the Micro Missiles' mod held) moves only the missile pods. The hands'
+idle node blends to `assaultrifles/heavy_cannon/zoomidle` by the zoom for the whole Heavy Cannon sub-web, so both mods
+zoom into the same pose.
+
+Rendered from the mesh (the bind pose; the scope hidden as with the Micro Missiles), three candidate eye lines:
+
+| Line (weapon space) | Pitch above the bore | What the eye sees |
+|---|---|---|
+| The zoom pose's eye (-0.190, 0, 0.128) along +0.20 deg (section 18's scope line) | 0.20 deg | the ring's opening centred on the line within 0.5 mm (0.05 deg); the rear sight about 2 deg below, the receiver below that: the ring frames the aim point alone |
+| The rear notch (0.070, 0.117) to the ring's centre (0.468, 0.1305) | 2.0 deg | an eye 3 mm over the receiver's top; the rear sight's ears and the rail cover the ring's lower half |
+| The rear notch (0.075, 0.117) to the ring's top bar (0.468, 0.141): sections 6 and 18's irons | 3.5 deg | runs into the receiver's top (z 0.107 at x -0.10) about 18 cm behind the rear sight: no eye can sit on it |
+
+So the line is the first: the game's own zoom view, the Precision Bolt's scope tube and the front ring are one line,
+and it serves no mod, the Bolt and the Micro Missiles. With the old irons row the ring's line pointed 3.3 deg below the
+ray (section 18's `s2-on1` dump rechecked with this line: the Micro Missiles' holds 3.298 deg median, 3.340 largest;
+the Bolt's 0.170 largest). The new row is the Bolt's, (-0.15, 0.15): the Micro Missiles' holds of `s2-off1` with this
+line centre on (-0.155, 0.146), the Bolt's on (-0.154, 0.146). With the row the same for every mod the offset row is
+the one the Bolt's wrist-keeping step put the gun at: (-0.2702, 0.1141, 0.2086), written (-0.270, 0.114, 0.209).
+
+**The rig check** (the sights sweep on the rig PC with two more plan steps: the five holds again with the right grip
+held, the weapon mod's button, and a ring view, one hold that puts the left eye on the ring's line behind the gun;
+runs `hcs-b1` and `hcs-b2` this branch, `hcs-main1` the 0.1.87 layer; the combat shotgun's holds as the control gun).
+The checker is section 18's with the Heavy Cannon's weapon-space line the ring's for every mod. Largest angle between
+the line and the ray:
+
+| Holds | Combat shotgun | Heavy Cannon, Precision Bolt | Heavy Cannon, Micro Missiles |
+|---|---|---|---|
+| idle, 0.1.87 (`hcs-main1`) | 0.161 deg | 0.166 deg | **3.336 deg** (median 3.296): SIGHTS FAIL |
+| idle, this branch (`hcs-b1`) | 0.158 deg | 0.170 deg | 0.168 deg: SIGHTS PASS |
+| mod button held, 0.1.87 | | 0.211 deg (zoomed: the line on the model's forward) | **3.339 deg** |
+| mod button held, this branch | | 0.211 deg | 0.165 deg: SIGHTS PASS |
+
+With the mod's button held the Precision Bolt zooms (the hands' zoom pose puts the ring's line on the model's forward,
+0.2 deg off the row, as section 18 said); the Micro Missiles do not move the gun (the line stays at its idle centre),
+so there is no zoomed case to cover for them. The glove (section 18's grip checker, the dumped row): the Heavy
+Cannon's wrist 0.1 / 0.2 cm (median / largest) from its target with either mod on this branch, against 0.1 / 0.3 with
+the Bolt and 0.5 / 0.7 with the Micro Missiles on 0.1.87 (GRIP PASS on both).
+
+**The ring views.** The rendered head on this rig sits 0.25 m above the game's eye (the dump's aim origin is the
+scripted controller position moved up 0.25 m), so the left eye is at (-0.032, 0, 0.25) m from it; the controller is
+placed so that eye is on the ring's line at the zoom pose's eye point. From the dump of each view: the eye 0.9 to 1.3
+mm off the line, and the ring's centre seen from it 0.01 to 0.02 deg from the ray's direction on this branch with
+either mod; on 0.1.87 with the Micro Missiles 3.26 deg below it. In the left eye's capture the ring (the A-shaped
+frame at the end of the barrel, with the rear sight's notch below it) frames the far end of the corridor straight
+ahead on this branch; on 0.1.87 it sits about 27 px (about 3 deg) lower, over the floor. Evidence: rig (the simulator
+and the scripted input), not a headset; how it looks and whether the shots land in the ring at a distance is for the
+owner's headset look.
+
+## 24. The weapon hand's index finger on the trigger (trigger-finger, 2026-10-30, OpenXR-Simulator)
+
+Feature step 4's open item (DECISIONS T-221; VR_HANDS_HUD.md, "The index finger on the trigger"). Every run is the
+branch's Release, Steam build 25216728. Evidence: rig (the simulator and the scripted input, which sets the trigger's
+value and touch directly), not a headset.
+
+**The sweep** (`tf-sweep.ps1`, made from the per-gun sweep of section 10: `give all` and `give weapon/player/unmaykr`,
+a touch tap per weapon slot, slot 8 twice for the Unmaykr and the BFG). Per gun, 2 s holds of the weapon hand's
+trigger states: rest (touched), half (touched, 0.5), pull (touched, 1) and lift (not touched) at the neutral hold,
+then views for a person to judge the finger against the gun (below). The rig's controls file leaves out the right
+trigger's press, so a pull fires nothing; the wrist flick is off (`ETERNALVR_WRIST_FLICK=0`: the first run's instant
+scripted roll was once read as a flick and switched the Ballista's mod, handing the arm to the game for that hold).
+Both eyes are kept for every pose.
+
+**The checker** (`tf_check.py`), per pose on the dump lines of the hold's last 0.75 s, the weapon arm's new `trigger`
+record (the sensors, the share written, the finger's three bones as quaternions in the game's grip, as written and
+as read): `posed` (the layer poses the arm and its finger on every line), `share` (the sensors' share within 0.02),
+`lands` (each bone as read within 5 degrees of its turn as written), `arc` (each bone as read on the arc from the
+game's grip to straight within 3 degrees: no sideways turn), `past` (no bone as read turned further than the game's
+grip turns it, more than 2 degrees: the finger never goes further into the gun than the game's own grip), `lifts`
+(off the trigger, the bone the grip bends most opened at least 0.8 of the gun's lift as read).
+
+| Run | | Result |
+|---|---|---|
+| `a-tf` | the default, 9 holds of 8 guns (slot 8's second press kept the BFG: no Unmaykr given) | TRIGGER FAIL 1/72: every hold but one passes; the one is the Ballista's rolled hold, where the scripted roll's flick switched the mod and the game had the arm (`posed`) |
+| `b-tf` | the default, the Unmaykr given, no flick, 9 guns | TRIGGER PASS 81/81: shares as wanted (0.000 off), as read 0.10 resting, 0.05 at half, 0.00 pulled, 0.67 lifted (0.70 on the chaingun and the Ballista, whose glove's fingers are written past the modifier weight); every bone within 2.71 degrees of its turn as written (the hands' modifier weight leaves 5 % of the game's finger), 0.00 degrees off the arc and 0.00 past the grip |
+| `b-tffault` | `ETERNALVR_TEST_ARM_FAULT=trigger` (positive control: the finger turned 1.6 times the grip's turn) | TRIGGER FAIL 81/81: `share`, `arc` and `past` (36.9 to 47.8 degrees past the grip) in every hold, `lifts` in the 27 lifted ones |
+| `c-tf` | the default, views with the gun pointed to the right across the face | the forearm hides the hand in every such view; on the Ballista's last rolled hold the weapon arm's landing guard tripped (`the layer's overrides do not land where written (0.101 away for 30 ticks); the weapon arm stays the game's`), so the arm was the game's for the rest of the run (34 holds fail `posed`). That guard measures the arm's six joints, not the fingers; `d-mainside` below runs origin/main's layer on the same views |
+| `d-tf` | the default, views with the gun pointed up in front of the face (pitch 70, and turned 35 degrees either way about the barrel), 9 guns | TRIGGER PASS 99/99, the figures of `b-tf` |
+| `e-tf` | the branch's head (the finger on the New arms path only), the views of `d-tf` | TRIGGER PASS 99/99, the figures of `b-tf`; the log names each gun's lift and when the trigger's touch is first sensed |
+| `e-tfanim` | `ETERNALVR_ARM_SOLVE=animated` (off the New arms path) | TRIGGER FAIL 99/99, every hold on `posed` alone: the finger is the game's, and the log says so per gun (`the index finger the game's (the free off hand and the bind solve only)`) |
+| `d-mainside` | origin/main's layer (0.1.87) on `c-tf`'s views | the same guard trips on the same Ballista hold, 0.101 away for 30 ticks: it comes with the pose (the Ballista's glove held across the face), not with the finger; a known limit to note for the arm work, not this item's |
+
+**Switches and firing** (2026-10-31, after the review fixes: the grip counted only for the item it was read with,
+and the dump's `trigger` record also while the finger is the game's, `posed` 0 with the finger as read). A second
+sweep (`tf-sweep2.ps1`, the right trigger's press bound to fire): the combat shotgun from its slot, then two switches
+by the weapon wheel (the turn stick held down, pointed right, then left, let go) and a quick switch (the stick tapped
+down), rest and lift after each; then 2 s of fire with the Heavy Cannon, the combat shotgun and the plasma rifle,
+with a rest before and after. Run twice: `f-sw` (the default) and `f-swanim` (`ETERNALVR_ARM_SOLVE=animated`: the
+finger the game's, its record `posed` 0).
+
+| Run | Result |
+|---|---|
+| `f-sw` | Shotgun, then by the wheel the Heavy Cannon and the rocket launcher, by the quick switch the Heavy Cannon again: every hold's finger opened from that gun's own grip (Index1 to Index3 at 29, 65, 64 degrees on the shotgun, 24, 46, 80 on the Heavy Cannon, 16, 80, 50 on the rocket launcher), read within 2.7 degrees of as written; no dump line with `posed` 0 (the wheel is a forced view, so the arm was the game's while it was up and the new gun's grip was read before the arm was taken back). Firing: the finger at the grip as pulled, 0.0 degrees from it |
+| `f-swanim` | The game's own finger in the same holds equals the grip `f-sw` opened from to 0.0 degrees on every gun, and through 2 s of fire (the Heavy Cannon's shots logged every 0.14 s) the game's index finger did not move (0.0 degrees over the hold, dump lines every 0.25 s): on these three guns the shot animation leaves the index finger where the idle has it, so the layer's override hides nothing there |
+| `g-tf` | The head's build on the trigger sweep: TRIGGER PASS 99/99, the figures of `b-tf` |
+
+The stale grip the review asked about (a grip read for another gun after a switch with no read since) did not happen
+in these switches; the layer now leaves the finger to the game in that case rather than open the old gun's grip
+(unit-tested; the dump would show it as `posed` 0).
+
+**The captures** (both eyes, every hold). From behind, as a player holds a gun, the hand's back and the gun hide the
+index finger on every gun: the neutral captures do not show it. Pointed up and turned,
+the finger shows on four guns. Combat shotgun, Heavy Cannon, rocket launcher and super shotgun: lifted, the finger
+lies straight along the gun's side ahead of the trigger guard; resting, it is the game's grip a few millimetres open;
+pulled, it is the game's own grip, curled into the guard. Where the gun's edge hides the finger's side, a capture
+cannot tell a finger lying against the gun from one a few millimetres into it. The plasma rifle, the Ballista, the
+chaingun, the Unmaykr and the BFG hide the hand from every scripted view, so their lifted finger is judged by the
+checker only (on the arc from the game's grip to straight, never past the grip). That is why the finger follows the
+trigger on the New arms path only (DECISIONS T-221), which is the players' default anyway.
+
+**Not run**: a headset (all of it: whether the lifted finger looks right and stays out of each gun, the real
+controllers' trigger touch, which the rig's scripted input sets directly: for the binding of DECISIONS T-222 the rig
+shows only that the layer adds it to the four families with the sensor and that the simulator's runtime takes the
+bindings without a retry); the weapon in the left hand (the left glove holds the gun and its finger follows the left
+trigger by the same code, not swept); firing on the other six guns and the Precision Bolt's and other mods' own
+animations (the mod switch hands the arm to the game); a skin's hand (only the game's model).
+
+## 25. Each gun's first raise with the weapon in the left hand (lefty-first-raise, 2026-10-30, OpenXR-Simulator)
+
+The left-handed sweep of section 19 (every slot's first raise of the session, then the Crucible's) with either off
+hand, on origin/main (0.1.87) and on three builds of this branch: build 1, a `[left_hand_wrist]` row for every gun
+and the Unmaykr (DECISIONS T-219) and the hold before the arms are taken back run while the grips are read; build
+2, also the switch's first tick placed by the new item's row (T-219); build 3, the final one, the hold from the
+grip read again (T-220). `first_raise.py` (rig tooling beside the sweep) gives, per gun, the model's largest step
+against the left grip between dump lines with the same input from the item's first line to 2 s after the arms are
+first posed on it, and from the layer log (the trace on) the seconds from the held item's change to the start of
+the hold. Evidence: rig, Steam build 25216728, the 3080 Ti PC; not a headset.
+
+**The rows.** Each is the posed left wrist's median over the gun's idle, read from the arm dumps of four left-handed
+sweeps of section 19 (`ab-b-lefty`, `ab-b-leftyd`, `ab-d-lefty`, `ab-d-leftyd`: two builds, both solves, both off
+hands), all four within 0.3 mm per gun, and origin/main's sweep of today (`lr-m-lefty`) within 0.5 mm of the rows.
+On the guns held by the game's own grip the game's right wrist reflected across the gun's root gives the same point
+to 0.0 mm (the chaingun and the ballista hold the `[right_grip]` row's grip, so only the posed wrist applies). The
+log's row check as a grip first places the item on an equip: 0.4 to 2.6 mm on every gun and the Crucible in all six
+runs on the branch. The combat shotgun read 6.0 to 6.2 mm at the level start's first still read in every run (its
+gun still settling, below); on its later equips 1.2 to 2.4 mm on build 3, 5.6 to 5.9 mm with the free off hand on
+builds 1 and 2.
+
+| Gun | First raise's largest step, origin/main, free / game's off hand (`lr-m-lefty`, `lr-m-leftyd`), cm | Build 3, free / game's (`lr-c-lefty`, `lr-c-leftyd`), cm |
+|---|---|---|
+| Heavy Cannon | 1.11 / 1.13 | 0.04 / 0.10 |
+| plasma rifle | 0.93 / 0.93 | 0.07 / 0.08 |
+| rocket launcher | 1.29 / 1.31 | 0.14 / 0.12 |
+| Super Shotgun | 2.45 / 2.46 | 0.13 / 0.09 |
+| ballista | 0.83 / 0.83 | 0.18 / 0.21 |
+| chaingun | 1.24 / 1.32 | 0.11 / 0.08 |
+| BFG | 1.02 / 1.03 | 0.20 / 0.18 |
+| Unmaykr | 0.55 / 0.58 | 0.21 / 0.20 |
+| Crucible (its row since T-146) | 0.15 / 0.24 | 0.24 / 0.11 |
+
+Builds 1 and 2 gave 0.04 to 0.25 cm on the same guns (`lr-a-lefty`, `lr-a-leftyd`, `lr-b-lefty`, `lr-b-leftyd`;
+two build-1 lines below). The combat shotgun is the level start's item, left out: there the model sits 4 to 5 cm
+lower for a line while the game has the arms before the player has control, on origin/main too (3.96 to 5.52 cm in
+eight of the nine runs; section 16's "Not explained").
+
+**The switch's first tick.** With the game's off hand (`lr-a-leftyd`, build 1) the first dump line after two of 14
+item changes (the Super Shotgun, the ballista) had the model at the right glove's row (2.3 and 0.8 cm from the left
+placement), the next line in the left hand; over the build-1 runs 2 of 27 changes, so about one tick of each
+switch: the viewmodel runs before the hands' update in a tick and on the first tick of a new item still had the
+last item's placement. On origin/main each first raise sat there until its grip was read (8 of 14 first lines,
+`lr-m-leftyd`). Builds 2 and 3 place that tick by the new item's row: 0 of 53 first lines after an item change at
+the right glove's row (`lr-b-*`, `lr-c-*`). The dump's lines are 0.25 s apart, so this samples the tick rather than
+seeing it; the unit test (`left_hand_tests.cpp`) holds the rule.
+
+**The hold, tried and taken back.** On origin/main the hold starts when both grips are read: 0.375 to 0.438 s after
+the held item's change on the guns with a 0.36 s raise (0.89 to 0.91 s on the rocket launcher and the ballista,
+1.063 on the Crucible; `lr-m-lefty`, `lr-m-leftyd`). Builds 1 and 2 ran it from the moment the arms' own rules give
+them back, 0.344 to 0.375 s after the change (0.859 to 0.875, 1.031), the moment an item with known grips has (0.359
+s on a later equip), with the grips read 15 to 63 ms after it (`grip being read` to `kept` in the log). But the still
+reads during the hold replace the first one while the gun settles, and the early hold ran out about as the grips
+were read: at the level start the combat shotgun's root kept moving 5 mm over half a second after its first still
+read (267.6 to 272.8 mm forward in the dump), and with the free off hand the left glove then sat 0.6 / 0.6 cm (median
+/ largest) from the left hand through the shotgun's holds in both builds (`lr-a-lefty`, `lr-b-lefty`), against
+0.2 / 0.3 on origin/main; the row check read 5.6 to 6.2 mm there. Build 3 starts the hold from the read again: the
+hold 0.375 to 0.422 s after the change (0.89, 1.063) as on origin/main, the shotgun's left glove 0.2 / 0.3 cm
+(`lr-c-lefty`), its later equips' row check 2.3 mm: the later still reads in the hold took the level start's
+grip back to the idle.
+
+**Build 3, both off hands.** LEFTY PASS, the left glove from the left hand 0.1 to 0.5 cm (median) and 0.2 to 0.6
+largest per gun, as on origin/main gun by gun (`lr-c-*` against `lr-m-*`, within 0.1 cm). SIGHTS: `lr-c-leftyd`
+fails only the chaingun's Energy Shell lines (6 lines, 2 holds, taken during the game's mod animation) exactly as
+origin/main's `lr-m-leftyd` does, and `lr-c-lefty` a Heavy Cannon mod switch the rig's scripted taps set off mid-run
+(also in `lr-b-lefty`; there the model turns 3.3 degrees with the sight row, the step of section 18); every other
+gun and mod passes. LANDED (the arms' own landing check) fails on the free right glove's hand-backs in the free off
+hand's runs on origin/main and this branch alike (8 or 9 of 24 to 26 item groups), and 1 of 24 with the game's off
+hand on both.
+
+**Right hand** (`lr-b-def`, the merge-QA hands sweep on build 2, whose right-handed code is origin/main's; build 3
+only takes the left-handed hold back): the same verdict and failed checks in every one of the 72 holds as 0.1.87's
+merge-QA sweeps `b189a` and `b189b`, which list the same 3 against the baseline (two-1 to two-3, L:flipped-wrist; the
+baseline predates the new arms default): 0 new.
+
+**Not run**: a headset; glory kills, the hammer and the Berserk's fists with the weapon in the left hand (as section
+16); a level load on this branch (the kept grips are unchanged code); the swim's fists, which get no row (their
+stroke moves the wrist by 6 to 11 cm; section 16).

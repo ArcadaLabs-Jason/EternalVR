@@ -369,3 +369,30 @@ TEST_CASE("the left glove's wrist taken from the game's grip stays for the held 
     CHECK(approxEqual(*wrist.update(&item, std::nullopt, std::nullopt, kCrucibleRow, 1.0f), kCrucibleRow,
                       1e-6f));
 }
+
+TEST_CASE("on a switch's first tick the new held item is placed by its row, not for the right glove") {
+    // The viewmodel runs before the hands' update in a tick: the arms' placement is still the last item's.
+    int shotgun = 0;
+    int crucible = 0;
+    const Vec3 shotgunWrist{10.1f, -8.1f, -22.7f};
+    const Vec3 crucibleRow{0.681f, -0.240f, -0.266f};
+    constexpr float kUnits = 100.0f;
+    const auto placed =
+        evr::arm::leftPlacementFor(&shotgun, &shotgun, shotgunWrist, 1.0f, true, std::nullopt, kUnits);
+    CHECK(approxEqual(placed.wrist, shotgunWrist));
+    CHECK(placed.weight == 1.0f);
+    // The switch's tick: the Crucible held, the arms still placed for the shotgun.
+    const auto first =
+        evr::arm::leftPlacementFor(&crucible, &shotgun, shotgunWrist, 1.0f, true, crucibleRow, kUnits);
+    CHECK(first.weight == 1.0f);
+    CHECK(approxEqual(first.wrist, crucibleRow * kUnits));
+    // No row (the fists of a melee): for the right glove, as before.
+    CHECK(evr::arm::leftPlacementFor(&crucible, &shotgun, shotgunWrist, 1.0f, true, std::nullopt, kUnits)
+              .weight == 0.0f);
+    // The arms given back for good: nothing of theirs, nor a row.
+    CHECK(evr::arm::leftPlacementFor(&crucible, &shotgun, shotgunWrist, 1.0f, false, crucibleRow, kUnits)
+              .weight == 0.0f);
+    // The arms' own placement of the held item wins over its row, also at weight 0 (no wrist known).
+    CHECK(evr::arm::leftPlacementFor(&crucible, &crucible, Vec3{}, 0.0f, true, crucibleRow, kUnits).weight ==
+          0.0f);
+}

@@ -28,6 +28,7 @@
 #include "vkcore/menu_input.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/prompt_hint_keys.hpp"
 #include "vkcore/room_scale.hpp"
 
 #include <algorithm>
@@ -475,8 +476,9 @@ MappedInput runMapper() {
     s.heldActionsQpc.store(now, std::memory_order_relaxed);
     if (menuHold) {
         // A menu is up (or a control is still held from one): the controllers drive the menu through the
-        // pointer (docs/VR_MENUS.md). Only the pause key goes through, so the Menu button still closes it.
-        const bool pause = game::contains(out.actions, game::GameAction::Pause);
+        // pointer (docs/VR_MENUS.md). Only the pause key goes through, so the Menu button still closes it,
+        // unless a hint bar shortcut has the left Menu button (prompt_hint_keys.hpp).
+        const bool pause = game::contains(out.actions, game::GameAction::Pause) && !hintKeysHoldPause();
         out.actions.reset();
         if (pause) {
             game::add(out.actions, game::GameAction::Pause);
@@ -494,14 +496,15 @@ MappedInput runMapper() {
             jump = context.posture == posture::Posture::Seated ? " hands-up jump (seated height)"
                                                                : " hands-up jump";
         }
-        char flick[160] = "";
+        char flick[224] = "";
         if (out.input.flicked) {
             const input::FlickOutput& f = out.input.flick;
             std::snprintf(
                 flick, sizeof(flick),
-                " roll wrist (roll %.0f deg/s, swing %.0f deg/s, pointing %.0f deg, hand %.2f m/s, head "
-                "turn %.0f deg/s)",
-                f.rollDegrees, f.swingDegrees, f.pitchDegrees, f.handSpeed, f.headTurnDegrees);
+                " roll wrist (over %.0f deg, back %.0f deg, roll %.0f deg/s, swing %.0f deg/s, pointing "
+                "%.0f deg, hand %.2f m/s, head turn %.0f deg/s)",
+                f.overDegrees, f.backDegrees, f.rollDegrees, f.swingDegrees, f.pitchDegrees, f.handSpeed,
+                f.headTurnDegrees);
         }
         EVR_LOG("%s: gesture:%s%s%s%s", kTag, out.input.swung ? " overhead swing" : "",
                 out.input.reached ? " reach" : "", flick, jump);

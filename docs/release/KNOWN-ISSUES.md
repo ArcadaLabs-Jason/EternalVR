@@ -197,7 +197,14 @@ them is worse for you than described here.
   on. It doubles the GPU time of a cutscene
   frame (4.9 to 9.9 ms on my RTX 3080 Ti at 2048x2208 per eye, where the headset's 90 Hz did not hold in the
   heavy shots). Foveated rendering is left off for these frames (its sharp centre follows the headset's
-  view, not the screen), so they cost the full amount.
+  view, not the screen), so they cost the full amount. I measured where it goes on my test PC (graphics card
+  slowed down on purpose so it is the limit): 18.6 ms per frame in 3D against 9.4 ms flat over two minutes of
+  the opening cutscene. The second eye costs about 80% of a flat frame, and about 80% of the whole cost grows
+  with the number of pixels. The cutscene is drawn at the full eye size although the screen only takes about
+  half of your view, so drawing it smaller is the fix I am after. That needs the game's own dynamic
+  resolution to work with the per-eye image history first, so it is not in this version. A cheaper trick I
+  tried (coarser shading for the rows the screen does not show) only saved 12%, not enough to be worth what
+  it changes for everyone.
 - **Parallel Eye Rendering is experimental and for testing.** It renders both eyes as two views of one game
   frame instead of one eye after the other: the Play tab's Parallel Eye Rendering (highly experimental),
   off by default (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Steam version only
@@ -253,6 +260,13 @@ them is worse for you than described here.
   your arms back to the game's pose for a moment either: on these two guns that slid the glove off the grip
   and back over about half a second. In my headset the hands felt right on every gun; if a glove or a gun
   sits off your hand, please tell me which one and roughly how far.
+- **Your gun hand's index finger now follows the trigger.** Lift your finger off the trigger and the Slayer's
+  finger lifts off it, rest it on the trigger and his rests there, pull and he pulls. It only ever closes as far
+  as the game's own grip of each gun, so it shouldn't go into the gun, but it's checked on my test PC with
+  scripted controllers, not in a headset yet. On controllers without a touch sensor on the trigger (Vive wands,
+  Reverb G2, Windows Mixed Reality, Vive Cosmos) the finger stays on the trigger and only pulls. Your off hand's
+  index finger now also rests on its trigger while you touch it; before, it only moved when you pulled. If a
+  finger goes through a gun or sits oddly, tell me which gun.
 - **Floating at the water's surface** your hands now stay on your real hands. Up there the game keeps
   swimming with both arms and tucks the gun away out of view (it can't be fired either), even though it
   counts the gun as held. Before, the swimming hand sat about 30 cm off your hand, and with the weapon in
@@ -267,8 +281,11 @@ them is worse for you than described here.
   them around by up to about 10 cm. The Berserk fists and the Sentinel Hammer haven't been checked yet (I
   couldn't get either into the Slayer's hands on the test PC). Test rig only so far, not yet in a headset.
 - **Sights are lined up on every gun.** In my headset they matched the shots on every gun except the Heavy Cannon
-  with Micro Missiles, which is a bit off. Every gun points its sights where the shots go, and the Heavy Cannon
-  follows the mod you have active: the Precision Bolt's scope with the Bolt, the iron sights otherwise. The sights
+  with Micro Missiles, which was a bit off. That one is fixed now, checked on my test PC but not yet in my
+  headset: the Heavy Cannon's front sight is a ring, and with the Micro Missiles (or no mod) it pointed about 3
+  degrees below the shots. Now you look through the ring at the end of the barrel with either mod, along the
+  same line as the Precision Bolt's scope, and switching mods no longer turns the gun. With no mod or the
+  Micro Missiles the gun now sits about 3 degrees more nose-up in your hand than before, as it did with the Bolt. The sights
   run parallel to the shot line, about 9 to 20 cm above it, so up close they sit a bit above where the shots go.
   Guns with no sight parts (Plasma Rifle, Rocket Launcher, Ballista, BFG 9000, Unmaykr) line up along the barrel,
   and the Chaingun along its zoom axis. Shots always go along your controller's aim, and the Aim dot sits exactly
@@ -277,14 +294,11 @@ them is worse for you than described here.
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
   Aim dot shows where shots go. With head aim, since 0.1.87 the Aim dot sits in the middle of your view while
   zoomed, where the shot goes (Steam version; not tried in a headset yet).
-- **Switching the Heavy Cannon's mod turns the gun by about 3 degrees.** The Precision Bolt's scope and the
-  iron sights point about 3 degrees apart, so when you switch between the Bolt and the Micro Missiles the gun
-  turns a little to put the sights you now have on your aim. Your hand stays where it is. I haven't tried it
-  in a headset yet, so I don't know yet whether the turn bothers you.
 - **On the Game Pass version, head aim may still show the Precision Bolt's scope ring** when zoomed in (the
   zoom bit is unchecked there; I have not tested it).
-- **The Chaingun's Energy Shield** is drawn where the game's flat view would put it, so the gun in your
-  hand can cover it.
+- **The Chaingun's Energy Shield** now goes up in front of the gun, along your aim, at the size the game
+  gives it in the world (before, it sat where the flat view puts it, so the gun in your hand covered it). I
+  checked it on my test PC, not in a headset yet, so I don't know yet whether its size and distance feel right.
 - **The arms.** The Slayer's other arm follows your off-hand controller, its fingers follow your grip, trigger
   and thumb, and both arms bend by the new arm solve; there is no option for the old arms. While the game plays
   an animation in which his left arm is the action (a melee, a glory kill, the chainsaw, a ledge grab, the Super
@@ -296,12 +310,15 @@ them is worse for you than described here.
   only, not in a headset, with the guns, the Unmaykr and the Crucible held, fired, switched and a melee and
   the chainsaw: glory kills and the Sentinel Hammer have not been tried left-handed yet. While the game plays
   its own arm animations (a switch, a melee, a glory kill) the game's right
-  glove holds the gun in your left hand about 2 cm from where it would sit for right-handers. The first time
-  you bring out each weapon after starting the game the arms stay the game's for about half a second while
-  the mod reads how the Slayer holds it, then the gun shifts by 1 to 2.5 cm into your hand; after that it
-  remembers, also across levels. The Crucible now sits in your left hand from its first raise too (before, it
-  swung in from about 70 cm the first time). (Before, the Unmaykr could also hop around by about
-  20 cm while it first came up, and a melee could throw the gun about half a metre for a moment; both fixed.)
+  glove holds the gun in your left hand about 2 cm from where it would sit for right-handers. Every weapon now
+  sits in your left hand from the first time you bring it out (checked on the test rig, not in a headset);
+  before, the first time you brought out each weapon after starting the game the gun sat 1 to 2.5 cm off and
+  then shifted into your hand. While a weapon comes up the arms are the game's, as for right-handers. The
+  first time only, they come back a few hundredths of a second later while the mod reads how the Slayer holds
+  the gun, and the gun can still move by a few millimetres then (up to about 6 on the Combat Shotgun).
+  (Before, the Crucible swung in from about 70 cm the first time, and the Unmaykr could also hop around by
+  about 20 cm while it first came up, and a melee could throw the gun about half a metre for a moment; all
+  fixed.)
   Show arms on Hidden (Play tab) hides both arms.
 - **Hands only (Show arms, Play tab)** leaves the Slayer's gloves and folds the arms behind them away. In my first
   headset try the off-hand glove looked turned about 90 degrees from my hand; it now turns the way it does with the
@@ -354,8 +371,10 @@ them is worse for you than described here.
   need to swing may change. A swing you did not mean still spends a Crucible charge, so turn it off if it fires by
   mistake.
 - **Roll wrist** (Gestures on the Play tab, on by default): turning your gun hand over and back quickly switches
-  the weapon mod. Turning fast while aiming almost straight up can look like a roll to the mod; if it switches your
-  weapon mod when you didn't mean it, you can turn it off there, and please tell me what you were doing.
+  the weapon mod. Up to 0.1.87 one quick roll one way was enough, so your arm turning inward as you turned around
+  in your play space could switch it when you didn't mean it. Now it takes the whole thing: the hand turned over
+  at least a quarter turn and straight back. If it still switches when you didn't mean it, or a roll you meant does
+  nothing, please tell me what you were doing (you can turn it off there meanwhile).
 - **Rumble by hand** (always on): the game does not say what a vibration is for, so the mod guesses from what you
   pressed in the last moments: a hit that lands late, or two things at once, can go to the wrong hand. Tell me if a
   vibration is on the wrong hand.
@@ -364,8 +383,14 @@ them is worse for you than described here.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
   or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where.
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
-  your weapon hand points (where you look, with head aim). The Slayer's left arm can stay in view while you
-  pilot it, and at some angles you can see inside its shoulders.
+  your weapon hand points (where you look, with head aim). Its cannons and arms used to follow your hand, so
+  pointing away from where you looked swung a cannon into the middle of the view and showed the inside of
+  its shoulders. They now stay where the flat game shows them, wherever your hand points: I checked on my
+  test PC that the cannons stay put, and that the rockets still land where your hand points, but not in a
+  headset yet. They follow your head a frame late, so in a fast head turn they may trail the view a little;
+  tell me if that feels wrong. On my test PC the Slayer's own arms don't move at all while you pilot,
+  so I think the "Slayer's arm" seen in the view was the Revenant's cannon; if you still see the Slayer's
+  arm, please tell me where you were looking and where your hands were.
 - **Playing with a gamepad** (Motion controllers unticked on the Advanced tab): the recenter hold (both sticks
   pressed for 2 seconds; the game sees both clicks too, so the right one also melees), the comfort vignette
   (it follows your sticks), the Glory kills options, Room-scale and bHaptics now work as with motion
@@ -386,10 +411,13 @@ them is worse for you than described here.
   to the front on your desktop (click its title bar or its taskbar button, or Alt+Tab to it) and press
   Space on the keyboard, then click **Export report...** after the session: the log now says which window
   was in front when the prompt came up.
-- A few screens still name a keyboard key instead of a controller button: tips whose text itself names a
-  key ("pressing [M]"), the custom weapon wheel screen's reset to default (R), and on Vive wands the
-  Arsenal's customize weapon and equip mod (F, X), which have no button there. The mission-complete
-  Rewards tab now reads "LS 1/2 RS" and the Dossier's weapon, Codex and challenge lists "LS" / "RS": push
+- A few screens still name a keyboard key instead of a controller button: the settings' restore defaults
+  (R), and on Vive wands the tips about swapping the weapon mod (F), since a wand has no button for it.
+  The custom weapon wheel screen now names Y for its reset to default, and Y does it. On Vive wands the
+  Arsenal's customize weapon and equip mod now name the left trackpad click and the left Menu button,
+  which do them (checked on my test PC with the wand's layout, not with real wands yet). The wall-climbing
+  tutorial names your move stick (Left Stick Up, Left Stick Left and so on) instead of W, A, S and D.
+  The mission-complete Rewards tab now reads "LS 1/2 RS" and the Dossier's weapon, Codex and challenge lists "LS" / "RS": push
   either stick left or right, or click the stick named, to turn them (in the Arsenal the right stick's
   click customizes the weapon wheel instead). The Arsenal's hints name X, Y and Right Stick Click, which do
   them; the Fortress's collectible viewer names the grips (LG / RG) that show the previous and next item;

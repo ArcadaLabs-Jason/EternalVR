@@ -11,6 +11,7 @@
 using evr::game::GameAction;
 using evr::input::Axis2;
 using evr::input::Hand;
+using evr::input::kRestDwellSeconds;
 using evr::input::RestWheel;
 using evr::input::RestWheelEvent;
 using evr::input::RestWheelFrame;
@@ -96,7 +97,7 @@ int frames(float seconds) {
 
 TEST_CASE("edge: a push during the hold-over waits, then picks if the touch comes back") {
     RestWheel w = wheel(RestWheelMode::Edge);
-    feed(w, frame(true, false, kCentre, kCentre), 8);
+    feed(w, frame(true, false, kCentre, kCentre), frames(0.3f));
     feed(w, frame(false, false, kCentre, kCentre), 3);
     // Pushed while the touch is lost: held from the game, as centred to its gestures, and nothing armed.
     const Run push = feed(w, frame(false, false, kCentre, kUp), 2);
@@ -113,7 +114,7 @@ TEST_CASE("edge: a push during the hold-over waits, then picks if the touch come
 
 TEST_CASE("edge: a push during the hold-over is the game's at once when the touch lifts") {
     RestWheel w = wheel(RestWheelMode::Edge);
-    feed(w, frame(true, false, kCentre, kCentre), 8);
+    feed(w, frame(true, false, kCentre, kCentre), frames(0.3f));
     feed(w, frame(false, false, kCentre, kCentre), 3);
     const Run run = feed(w, frame(false, false, kCentre, kUp), frames(0.2f));
     CHECK(run.events.empty());

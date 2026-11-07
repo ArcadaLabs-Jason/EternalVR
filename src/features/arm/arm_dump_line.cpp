@@ -129,6 +129,33 @@ void handInput(std::string& out, const std::optional<DumpHandInput>& hand) {
     out += '}';
 }
 
+void triggerRecord(std::string& out, const std::optional<DumpTrigger>& t) {
+    if (!t) {
+        out += "null";
+        return;
+    }
+    out += "{\"value\":";
+    number(out, t->value);
+    out += t->touch ? ",\"touch\":1" : ",\"touch\":0";
+    out += t->sensed ? ",\"sensed\":1" : ",\"sensed\":0";
+    out += t->posed ? ",\"posed\":1" : ",\"posed\":0";
+    out += ",\"lift\":";
+    number(out, t->lift);
+    out += ",\"open\":";
+    number(out, t->open);
+    out += ",\"game\":";
+    floats(out, t->game.data(), t->game.size());
+    out += ",\"want\":";
+    floats(out, t->want.data(), t->want.size());
+    out += ",\"read\":";
+    if (t->read) {
+        floats(out, t->read->data(), t->read->size());
+    } else {
+        out += "null";
+    }
+    out += '}';
+}
+
 void armRecord(std::string& out, const DumpArm& arm) {
     out += "{\"posing\":";
     text(out, arm.layer ? "layer" : "game");
@@ -174,6 +201,8 @@ void armRecord(std::string& out, const DumpArm& arm) {
     } else {
         out += "null";
     }
+    out += ",\"trigger\":";
+    triggerRecord(out, arm.trigger);
     out += '}';
 }
 

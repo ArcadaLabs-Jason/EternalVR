@@ -135,6 +135,22 @@ std::optional<Vec3> LeftWristOnGun::update(const void* item,
     return rowMetres ? std::optional(*rowMetres * unitsPerMetre) : std::nullopt;
 }
 
+LeftPlacement leftPlacementFor(const void* held,
+                               const void* placedItem,
+                               Vec3 placedWrist,
+                               float placedWeight,
+                               bool active,
+                               const std::optional<Vec3>& rowMetres,
+                               float unitsPerMetre) {
+    if (placedItem == held) {
+        return {placedWrist, placedWeight};
+    }
+    if (active && rowMetres) {
+        return {*rowMetres * unitsPerMetre, 1.0f};
+    }
+    return {};
+}
+
 Vec3 leftGloveShift(const xr_math::EyeRelativePose& placed,
                     Vec3 wristInModel,
                     Vec3 grip,

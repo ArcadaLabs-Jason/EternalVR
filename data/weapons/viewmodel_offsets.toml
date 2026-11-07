@@ -35,14 +35,14 @@
 # The layer keeps that wrist target in the controller grip's own frame while the gun keeps the aim ray's
 # orientation (on a headset the grip is turned from the aim ray; the simulator gives both one pose). The rows
 # are measured with the sights turn on: with ETERNALVR_WEAPON_SIGHTS=0 (rig and debugging only) the wrist lands
-# up to 0.5 cm off target (8.7 cm turned by at most 3.5 degrees). With the weapon in the left hand the same rows
+# up to 0.3 cm off target (8.7 cm turned by at most 2.2 degrees). With the weapon in the left hand the same rows
 # place the model, their turn reflected, then move it until the left glove's wrist sits in the left hand by the
 # same rule (docs/VR_HANDS_HUD.md, "The weapon in the left hand").
 
 [standing]
 "default" = [-0.25, 0.18, 0.22, 0, 0, 0]
 "weapon/player/shotgun" = [-0.183, 0.131, 0.223]
-"weapon/player/heavy_cannon" = [-0.270, 0.114, 0.204]
+"weapon/player/heavy_cannon" = [-0.270, 0.114, 0.209]
 "weapon/player/plasma_rifle" = [-0.025, 0.201, 0.362]
 "weapon/player/rocket_launcher" = [-0.344, 0.148, 0.215]
 "weapon/player/double_barrel" = [-0.195, 0.135, 0.225]
@@ -59,20 +59,21 @@
 # to the aim ray: the sights then point where the shots go, offset from the ray by the sights' fixed height
 # and side above the hand. Same key rules, but no "default": a weapon without a row is not turned (the BFG and
 # the Unmaykr, whose bores run within 0.06 degrees of the ray as the game holds them; the fists, chainsaw,
-# Crucible and hammer, which have no sights). A mod that changes the sight line has its own row, keyed by the
-# weapon decl the mod puts in the held weapon while it is active ("weapon/player/heavy_cannon_bolt_action":
-# the Precision Bolt); it wins over the weapon's row while that mod is active, from the next frame after a mod
-# switch, and turns the gun about the glove's wrist so the hand stays where the weapon's row above puts it.
+# Crucible and hammer, which have no sights). A mod that changes the sight line can have its own row, keyed by
+# the weapon decl the mod puts in the held weapon while it is active (as "weapon/player/heavy_cannon_bolt_action"
+# for the Precision Bolt); it wins over the weapon's row while that mod is active, from the next frame after a
+# mod switch, and turns the gun about the glove's wrist so the hand stays where the weapon's row above puts it.
+# No mod has one now: the Heavy Cannon's two mods share one sight line (DECISIONS T-206).
 # Each row is the sight line in the weapon's own frame (noted per row) turned by the idle pose the hands rig
 # measured: the centre of its spread over five held controller poses (docs/rig-findings/hands-rig.md, sections
 # 6 and 18), which keeps the idle sway's worst case smallest: about 0.15 to 0.2 degrees either side.
 [sights]
 # Receiver top to the bead; the idle pose toes the gun in about 2.2 degrees.
 "weapon/player/shotgun" = [0.21, 2.17]
-# The iron sights, 3.5 degrees above the bore (no mod, or the Micro Missiles).
-"weapon/player/heavy_cannon" = [-3.45, 0.19]
-# The Precision Bolt's scope, 0.2 degrees above the bore (its zoom pose's eye axis, on the scope's tube).
-"weapon/player/heavy_cannon_bolt_action" = [-0.15, 0.15]
+# The front sight is a ring; its centre seen from the eye point of the game's own zoom pose, 0.2 degrees above
+# the bore. The Precision Bolt's scope tube runs on the same line within 2 mm, so it is one row for every mod
+# (no mod, the Precision Bolt, the Micro Missiles).
+"weapon/player/heavy_cannon" = [-0.15, 0.15]
 # The zoom pose's eye axis.
 "weapon/player/chaingun" = [0.32, -0.01]
 # Rear sight top to the muzzle top (mesh fit, low confidence).
@@ -109,12 +110,40 @@
 
 # With the weapon in the left hand the model is placed so the left glove's wrist on the gun, where the game's own
 # grip of the held item reflected puts it, sits in the left hand (docs/VR_HANDS_HUD.md, "The weapon in the left
-# hand"). The grip is read from the game's arm once the item idles, so on an item's first raise of a session the
-# model sits by the right glove's row until then and moves into the left hand as the grip is read: by the rows'
-# difference on the guns (0.8 to 2.4 cm), but 68.6 cm and 59 degrees on the Crucible, whose row turns the model.
-# [forward, left, up], metres in the arms model's frame: the left glove's wrist on the item at idle as the game's
-# grip puts it, which places the model until the grip is read (measured on the hands rig: the Crucible's posed
-# left wrist, its median over a level's idle). Same key rules, no "default": an item without a row is placed for
-# the right glove until its grip is read.
+# hand"). That grip is read from the game's arm once the item idles, so on an item's first raise of a session
+# its row places the model until then (DECISIONS T-146, T-219). [forward, left, up], metres in the arms model's
+# frame: the left glove's wrist on the item at idle as the game's grip puts it (measured on the hands rig: the
+# posed left wrist's median over the item's idle, four runs within 0.3 mm). The read grip then replaces the row;
+# the log gives their distance. Without a row an item sits by the right glove's row until its grip is read and
+# then moves into the left hand (by 0.8 to 2.4 cm on the guns, 68.6 cm and 59 degrees on the Crucible, whose row
+# turns the model). Same key rules, no "default": an item without a row is placed for the right glove until its
+# grip is read.
 [left_hand_wrist]
+"weapon/player/shotgun" = [0.101, -0.081, -0.227]
+"weapon/player/heavy_cannon" = [0.190, -0.069, -0.211]
+"weapon/player/plasma_rifle" = [-0.055, -0.157, -0.362]
+"weapon/player/rocket_launcher" = [0.264, -0.101, -0.215]
+"weapon/player/double_barrel" = [0.115, -0.077, -0.227]
+"weapon/player/gauss_rifle" = [0.245, -0.132, -0.385]
+"weapon/player/chaingun" = [0.535, -0.122, -0.334]
+"weapon/player/bfg" = [0.275, -0.049, -0.383]
+"weapon/player/unmaykr" = [0.165, -0.154, -0.356]
 "weapon/player/crucible" = [0.681, -0.240, -0.266]
+
+# The weapon hand's index finger on the trigger (docs/VR_HANDS_HUD.md, "The index finger on the trigger"): the
+# guns whose index finger follows the weapon-hand controller's trigger while the layer poses the arm, each with
+# its lift, the share (0 to 1) the finger opens from the game's grip toward straight while it is off the trigger.
+# Touched, it rests a little open on the trigger; pulled, it closes to the game's own grip, so it never goes
+# further into the gun than the game's animation puts it. The chaingun and the ballista hold the Heavy Cannon's
+# grip ([right_grip]), so their finger opens from that grip. Same key rules, no "default": an item without a row
+# (the Crucible, the fists, the chainsaw, the hammer) keeps the game's finger.
+[trigger_finger]
+"weapon/player/shotgun" = 0.7
+"weapon/player/heavy_cannon" = 0.7
+"weapon/player/plasma_rifle" = 0.7
+"weapon/player/rocket_launcher" = 0.7
+"weapon/player/double_barrel" = 0.7
+"weapon/player/gauss_rifle" = 0.7
+"weapon/player/chaingun" = 0.7
+"weapon/player/bfg" = 0.7
+"weapon/player/unmaykr" = 0.7

@@ -111,6 +111,25 @@ Vec3 leftGloveShift(const xr_math::EyeRelativePose& placed,
                     Vec3 wristInGrip,
                     float unitsPerMetre);
 
+// The left glove's wrist the viewmodel places the held item `held` by this tick (model space, game units),
+// and how far it moves the model for it (0 or 1). `placed` is the arms' placement (its wrist, weight and
+// item, left_hand_arms.hpp), `active` whether the arms with the weapon in the left hand are running. The
+// viewmodel runs before the hands' update in a tick, so on the first tick of a new held item the arms'
+// placement is still the last item's: that tick the item is placed by its [left_hand_wrist] row `rowMetres`
+// (metres, at `unitsPerMetre`) instead of for the right glove, where it sat by the rows' difference (0.8
+// to 2.4 cm on the guns, 68 cm and 59 degrees on the Crucible) for one tick of each switch.
+struct LeftPlacement {
+    Vec3 wrist;
+    float weight = 0.0f;
+};
+LeftPlacement leftPlacementFor(const void* held,
+                               const void* placedItem,
+                               Vec3 placedWrist,
+                               float placedWeight,
+                               bool active,
+                               const std::optional<Vec3>& rowMetres,
+                               float unitsPerMetre);
+
 // The left glove's wrist on the held item's gun (model space, game units) that the model is placed by
 // (leftGloveShift), for one held item at a time.
 class LeftWristOnGun {

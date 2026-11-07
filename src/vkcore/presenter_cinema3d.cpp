@@ -13,8 +13,10 @@
 #include "xr_math/cinema_run.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
+#include <cstddef>
 
 namespace evr::vkcore {
 
@@ -44,25 +46,34 @@ struct State {
 };
 
 // The nearest hit of the fan of rays through the shot, in metres (0: none within reach), and how many rays
-// hit.
+// hit. The rays are answered a game frame late (head_sweep.hpp); `fresh` (a run's first frame, a camera
+// cut) drops the answers to the shot before.
 float traceNearest(const std::byte* player,
                    const xr_math::IdViewAxis& axis,
                    const float* origin,
                    float tanHalfX,
                    float tanHalfLens,
                    float unitsPerMetre,
+                   bool fresh,
                    unsigned& hits) {
     hits = 0;
     if (!player || !headSweepAvailable()) {
         return 0.0f;
     }
+    if (fresh) {
+        forgetLateSweeps(kLateCinemaFirst, kLateCinemaRays);
+    }
     const float reachUnits = xr_math::kCinemaTraceReachMetres * unitsPerMetre;
     const Vec3 from{origin[0], origin[1], origin[2]};
     float nearest = 0.0f;
-    for (const xr_math::CinemaRay& ray : xr_math::cinemaRayFan(tanHalfX, tanHalfLens)) {
-        const Vec3 direction = xr_math::cinemaRayDirection(axis, ray);
+    const auto fan = xr_math::cinemaRayFan(tanHalfX, tanHalfLens);
+    static_assert(std::tuple_size_v<decltype(fan)> == kLateCinemaRays, "one asked sweep per ray of the fan");
+    for (std::size_t i = 0; i < fan.size(); ++i) {
+        const Vec3 direction = xr_math::cinemaRayDirection(axis, fan[i]);
         bool inContact = false;
-        const std::optional<float> hit = sweepShot(player, from, from + direction * reachUnits, inContact);
+        const std::optional<float> hit =
+            sweepShotLate(kLateCinemaFirst + i, player, from, from + direction * reachUnits,
+                          roomscale::kLateRaySlackMetres * unitsPerMetre, inContact);
         if (inContact || !hit || !std::isfinite(*hit)) {
             continue; // in contact at the start: no use as a distance
         }
@@ -198,7 +209,8 @@ bool cinema3dGameView(
     const float tanX = std::tan(fov[0] * 0.5f * 0.017453292f);
     const float tanLens = std::tan(lensFovY * 0.5f * 0.017453292f);
     in.traceNearestMetres = g_nearConfirm.step(
-        traceNearest(player, gameAxis, origin, tanX, tanLens, in.unitsPerMetre, hits), started || cut);
+        traceNearest(player, gameAxis, origin, tanX, tanLens, in.unitsPerMetre, started || cut, hits),
+        started || cut);
     if (gloryKill) {
         in.traceNearestMetres = in.traceNearestMetres > 0.0f
                                     ? std::min(in.traceNearestMetres, kGloryNearestMetres)

@@ -22,6 +22,7 @@ namespace {
 constexpr std::string_view kThumbRestLeaf = "/input/thumbrest/touch";
 constexpr std::string_view kStickTouchLeaf = "/input/thumbstick/touch";
 constexpr std::string_view kTrackpadTouchLeaf = "/input/trackpad/touch";
+constexpr std::string_view kTriggerTouchLeaf = "/input/trigger/touch";
 constexpr std::string_view kFrameProfile = "/interaction_profiles/valve/frame_controller_valve";
 
 bool pathFree(const ControllerData& data, Hand hand, const std::string& path) {
@@ -169,6 +170,23 @@ std::size_t addBoundTouchBindings(ControllerData& data) {
     return added;
 }
 
+std::size_t addTriggerTouchBindings(ControllerData& data) {
+    const InteractionProfileInfo* profile = findInteractionProfile(data.profilePath);
+    if (!profile) {
+        return 0;
+    }
+    std::size_t added = 0;
+    for (const Hand hand : {Hand::Left, Hand::Right}) {
+        if (tryAdd(data, *profile, XrActionId::TriggerTouch, hand, std::string(kTriggerTouchLeaf))) {
+            ++added;
+        }
+    }
+    if (added > 0) {
+        sortSuggested(data);
+    }
+    return added;
+}
+
 ControllerData withoutRestTouch(ControllerData data) {
     std::erase_if(data.suggested, [](const SuggestedBinding& b) { return isRestTouchAction(b.action); });
     return data;
@@ -237,6 +255,14 @@ ControllerData withoutTouchButtons(ControllerData data) {
     return data;
 }
 
+ControllerData withoutTriggerTouch(ControllerData data) {
+    // The predicate reads the maps only, which the erase leaves alone.
+    std::erase_if(data.suggested, [&](const SuggestedBinding& b) {
+        return b.action == XrActionId::TriggerTouch && !boundAsButton(data, b.action, b.hand);
+    });
+    return data;
+}
+
 bool hasTouchButtonBindings(const ControllerData& data) {
     return std::ranges::any_of(data.suggested,
                                [&](const SuggestedBinding& b) { return isBoundTouch(data, b); });
@@ -252,9 +278,11 @@ std::vector<TouchRetryStep> touchRetries(const ControllerData& data) {
             steps.push_back({retry, std::move(candidate)});
         }
     };
-    add(TouchRetry::WithoutVeto, withoutVetoTouch(data));
-    add(TouchRetry::WithoutTouchButtons, withoutTouchButtons(data));
-    add(TouchRetry::WithoutRestTouch, withoutRestTouch(data));
+    const ControllerData fingersOff = withoutTriggerTouch(data);
+    add(TouchRetry::WithoutTriggerTouch, fingersOff);
+    add(TouchRetry::WithoutVeto, withoutVetoTouch(fingersOff));
+    add(TouchRetry::WithoutTouchButtons, withoutTouchButtons(fingersOff));
+    add(TouchRetry::WithoutRestTouch, withoutRestTouch(fingersOff));
     return steps;
 }
 

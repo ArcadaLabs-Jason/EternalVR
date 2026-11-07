@@ -86,6 +86,7 @@ add_library(evr_layer SHARED
     cvar_book.cpp
     debug_commands.cpp
     demon_aim.cpp
+    demon_models.cpp
     demon_view.cpp
     facing_hook.cpp
     flare_core.cpp
@@ -106,6 +107,7 @@ add_library(evr_layer SHARED
     gpu_timing.cpp
     gpu_timing_report.cpp
     head_sweep.cpp
+    head_sweep_sites.cpp
     import_patch.cpp
     keep_active.cpp
     cursor_guard.cpp
@@ -286,6 +288,7 @@ target_sources(evr_layer PRIVATE
     hands_surfaces.cpp
     head_gun.cpp
     launcher_place_hook.cpp
+    shield_place_hook.cpp
     left_hand_arms.cpp
     offhand_arm.cpp
     offhand_fingers.cpp
@@ -294,6 +297,7 @@ target_sources(evr_layer PRIVATE
     weapon_arm.cpp
     weapon_arm_row.cpp
     weapon_arm_trace.cpp
+    weapon_finger.cpp
     prompt_command_bar.cpp
     prompt_hint_keys.cpp
     prompt_hooks.cpp

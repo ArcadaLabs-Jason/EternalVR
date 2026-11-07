@@ -25,17 +25,29 @@ namespace EternalVR.Launcher.Core.Update
         /// <summary>The newest release after <paramref name="current"/> (and not <paramref name="skipped"/>); null when up to date.</summary>
         public static async Task<AvailableRelease> NewestAsync(HttpClient http, Version current, Version skipped, CancellationToken cancel)
         {
-            using (var request = new HttpRequestMessage(HttpMethod.Get, ReleaseFeed.ApiUrl))
+            var json = await ReleasesJsonAsync(http, ReleaseFeed.ApiUrl, cancel).ConfigureAwait(false);
+            return ReleaseFeed.Newest(ReleaseFeed.Parse(json), current, skipped);
+        }
+
+        /// <summary>How long the release list is given.</summary>
+        public static readonly TimeSpan FeedTimeout = TimeSpan.FromSeconds(20);
+
+        /// <summary>
+        /// The answer of GitHub's release list at <paramref name="api"/>, given <paramref name="timeout"/> (<see cref="FeedTimeout"/>
+        /// by default); an answer that is not a success (GitHub's rate limit is a 403 or a 429) throws <see cref="HttpRequestException"/>.
+        /// </summary>
+        public static async Task<string> ReleasesJsonAsync(HttpClient http, Uri api, CancellationToken cancel, TimeSpan? timeout = null)
+        {
+            using (var request = new HttpRequestMessage(HttpMethod.Get, api))
             {
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
                 using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel))
                 {
-                    cts.CancelAfter(TimeSpan.FromSeconds(20));
+                    cts.CancelAfter(timeout ?? FeedTimeout);
                     using (var response = await http.SendAsync(request, cts.Token).ConfigureAwait(false))
                     {
                         response.EnsureSuccessStatusCode();
-                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        return ReleaseFeed.Newest(ReleaseFeed.Parse(json), current, skipped);
+                        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     }
                 }
             }

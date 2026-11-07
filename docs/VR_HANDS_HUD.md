@@ -950,14 +950,25 @@ arms and the Heavy Cannon's grip).
   for a read on the new hands, both arms the game's until then. Taken from any clean read, a grip read while the gun was still coming back up
   after a melee put the gun 8 cm off the left hand until the next switch (rig `lf-hb1`, `lf-hb2`). Until both
   arms have one for the held item (the right arm's only with the free off hand) both arms are the game's (`no
-  grip read yet`); the first switch to a weapon hands both arms back anyway. Until then the gun sits at the
-  right glove's row: on each item's first equip of the session, the grips were read
-  0.38 to 0.42 s after the held item changed (rig `lf-hb3`), and the gun then moves at once by the difference
-  of the rows, 0.8 to 2.4 cm by gun, while the arms blend in; an item with a `[left_hand_wrist]` row (the
-  Crucible: its row turns the model, and it moved 68.7 cm and 59 degrees as its grip was read) is placed in the
-  left hand by that row from its first frame, the left glove's wrist on it at idle as measured on the rig (metres,
-  taken at the world's scale), and moves 0.1 to 0.2 cm when its grip is read (hands-rig.md, section 19;
-  DECISIONS T-146); once a grip has placed it, a grip kept from a level before that no longer holds (its root
+  grip read yet`); the first switch to a weapon hands both arms back anyway, and the hold before the arms are
+  taken back (0.25 s) starts from the read: the still reads during it replace the grip while the gun settles.
+  On a first raise the grips are taken 15 to 63 ms after the arm's own rules give the arms back, so the arms
+  come in that much later than on a later raise. Running the hold while the grips were read was tried and
+  taken back (DECISIONS T-220): it ran out about as the grips were read, and the level start's combat shotgun,
+  whose root kept moving 5 mm over half a second after its first still read, kept that read: the left glove
+  0.6 cm from the left hand with the free off hand (rig `lr-a-lefty`, `lr-b-lefty`; 0.2 cm on origin/main).
+  Until its grip is read each item is placed in the left hand by its
+  `[left_hand_wrist]` row (every gun, the Unmaykr and the Crucible; DECISIONS T-146, T-219), the left glove's
+  wrist on it at idle as measured on the rig (metres, taken at the world's scale), from its first frame;
+  as its grip is read the model moves by the row's distance from it, 0.4 to 2.6 mm on the guns and the Crucible
+  (the log's row check; up to 6.2 mm on the combat shotgun at the level start, whose gun is still settling;
+  through each gun's first raise the model's largest step 0.04 to 0.24 cm with either off hand, 0.83 to 2.46
+  cm on origin/main; hands-rig.md, section 25). The viewmodel runs
+  before the hands' update in a tick, so on a switch's first tick the arms' placement is still the last item's:
+  that tick the new item is placed by its row too (`arm::leftPlacementFor`), where it sat for the right glove
+  for a tick of every switch. Before, only the Crucible had a row: the guns sat at the right glove's row until their grip was
+  read and then moved by the difference of the rows, 0.8 to 2.4 cm by gun, and the Crucible, whose row turns
+  the model, 68.7 cm and 59 degrees (hands-rig.md, section 19). Once a grip has placed it, a grip kept from a level before that no longer holds (its root
   moved) leaves the held item where that grip put it, not on the row or back on the right glove's; after a level load the held items take their kept
   grips at once (rig `hc-d-lvl`: the Crucible's first raise on the reloaded level placed in the left hand from its
   first frame, 68.5 cm and 59 degrees on the level before; the combat shotgun's kept grip 0.5 cm from the one read
@@ -999,7 +1010,7 @@ arms and the Heavy Cannon's grip).
   in the right hand (a melee from the combat shotgun 9.4 cm). The Crucible's first raise of a session moved the
   model 68.6 cm and 59 degrees as its grip was read, 0.25 s before the arms blend in; its `[left_hand_wrist]`
   row now places it in the left hand from the first frame (0.1 to 0.2 cm as the grip is read; hands-rig.md,
-  sections 16 and 19).
+  sections 16 and 19), as every gun's row does since (section 25).
 - **Rig, the rest of the held items** (hands-rig.md, section 16; the default off hand). The left glove's wrist
   from the left hand's wrist point, median / largest: Unmaykr 0.2 / 0.3 cm, Crucible 0.2 / 0.5 (its row's turn
   reflected), chaingun 0.2 / 0.3, combat shotgun 0.1 / 0.2. At the water's surface with the gun in the slot the
@@ -1016,7 +1027,127 @@ arms and the Heavy Cannon's grip).
   grip of the game's for the held item yet ...` as that changes; the left arm's lines read `weapon arm (left
   glove): ...`, the off hand's `weapon arm: ...` as the weapon arm's did, both with the weapon arm's trace. On
   the chaingun with the default off hand, once per item: `left-handed arms: 'weapon/player/chaingun': the
-  game's left grip, reflected, holds nothing on this gun: the right glove follows the right controller`.
+  game's left grip, reflected, holds nothing on this gun: the right glove follows the right controller`. On an
+  item's first raise, `left-handed arms: '<item>': placed in the left hand by its [left_hand_wrist] row until
+  the game's grip is read`, and on each equip as a grip first places the item `left-handed arms: '<item>': the
+  grip read puts the left glove's wrist N mm from its [left_hand_wrist] row` (the step the gun takes as the grip replaces the row; a game update that
+  changed the item's idle would show here).
+
+## The Chaingun's Energy Shield (DECISIONS T-217)
+
+The Chaingun's Energy Shield mod (hold the weapon mod button) puts up a curved wall of energy in front of the
+player. The game draws it as the effect of an entity of its own, not as part of the gun (static RE, Steam
+build 25216728; `vkcore/shield_place.hpp`, `xr_math/shield_pose.hpp`):
+
+- The entity (`idEnergyShell`, spawned by the mod) thinks once a game tick (0xBC82A0). It puts itself at the
+  player's eye (`idPlayer::firstPersonViewOrigin`, through the owner's vslot 0x478) with an axis built from
+  the view angles, the yaw turned 90 degrees about up, then does what the shield does: the damage it absorbs
+  and the contact damage it deals are measured from the player (its in-shield test 0xBC97E0 reads the
+  owner's origin and angles, and its gather query a copy of the eye), never from the entity's own pose.
+- Its effect (`fx/weapon/chaingun/chaingun_1st_energy_shield`) asks for the entity's pose every frame: the
+  effect's actions track their entity (`FX_ORG_TRACK_POS`), so the effect's owner (vslot 0x18, 0xBD7370) asks
+  the entity's vslot 0x3A0 (idAnimatedEntity's, 0xB5B850), which answers with its physics object's origin and
+  axis, the eye. The entity also sends that pose to its effect at the end of each think (vslot 0x4E0,
+  0xB63430), which the tracking actions do not use.
+- The effect's first-person shield (`shield_gun_space`) is a small model, size 0.165, of a shield 2.47 m wide
+  and 1.23 m tall (its bounds), 0.25 m along the view, drawn with the hands' projection. On a flat screen it
+  fills the middle of the view in front of the gun. The effect's world-space shield (size 1.78, 1.45 m ahead
+  and 0.2 m up) is switched off in the first-person effect and on in the third-person one, which other
+  players see.
+
+In VR the gun sits in the hand and the chaingun reaches about 1.1 m past it, so the shield 0.25 m from the
+game's eye was inside the gun, and the gun was drawn over it (the owner's headset captures, 2026-10-13:
+"closer to me than the gun, but the gun occludes it").
+
+Now the shield is placed in front of the gun, along the ray the shots take: its centre on that ray 0.25 m
+past the chaingun's muzzle (the model reaches 0.18 m back from its centre at the world size, so all of it is
+past the muzzle), with the axis the game builds for a view along that ray (no roll, as the game's view has
+none). The ray is the weapon hand's aim ray under hand aim, with the muzzle where the viewmodel hook placed
+the gun this tick (its `fx_muzzle` tag, 1.045 m ahead of the weapon's root, is (1.750, -0.138, -0.193) m in
+the arms model's frame at idle, measured on the hands rig); under head aim it is the rendered head's ray
+along the view, with the gun the game's in front of the face (T-143). The shield is drawn at the size the
+game gives it in the world: the entity's own effect scale (idEntity's vslot 0xB80, 0xBE0E80) set to 1.78 /
+0.165 = 10.8 every think, so it is the third-person shield, 4.39 m wide and 2.19 m tall, about the size of
+the sphere it blocks damage in (radius 2.1 m round the player). The effect's offsets are not scaled, only
+its models' size.
+
+Four mid hooks do it, and only the effect's view of the shield changes:
+
+- the think's last call (RVA 0xBC9670: the shield in rsi, its owner in r13, the transform in rdx) works out
+  the placement, keeps it for the shield with the time of that think, moves the transform it sends and sends
+  the scale;
+- the three returns of idAnimatedEntity's effect pose (RVA 0xB5B8C2, 0xB5B9DC, 0xB5BB1C: the entity in rdi,
+  the origin out at rsi, the axis out at rbp) move the answer by the same move, only when all of these hold
+  (`xr_math::movesShieldPose`): the entity is the one the think placed and of the shield's class, that think
+  was within the last 0.1 s, and the effect itself is asking. vslot 0x3A0 is shared by many classes and any
+  of the game's code may ask the shield for its pose (the mastery's blast and the shield's sounds were not
+  traced), so the asker is checked: the effect's owner (vslot 0x18) tail-jumps to vslot 0x3A0, so the
+  return address at the exits (`[rsp+0x48]`) is that of the effect's own query, and it must be the one after
+  the tracking action's call (0x4DB890, in the action's update 0x4DB440) or after the action start's
+  (0x4D6923, in 0x4D66D0), both found by signature. Any other asker gets the game's answer, and its return
+  address is logged once. On the rig the shield takes the physics object's return, asked from 0x4DB893.
+
+The think's hook goes in first and does nothing until every hook is in, so a missing return hook leaves it
+inert and a missing think hook installs no return hooks. A dead shield (a weapon switch, the mod off, a
+death, a load, its time out) stops thinking, so within 0.1 s its placement is no longer used, also if another
+entity gets its address; a new player (a level load) starts without the last one's.
+
+The entity stays where the game puts it, so what the shield blocks does not change. A forced view (a glory
+kill, a cutscene), a hand that is not current, a gun the viewmodel hook did not place this tick, gamepad
+mode and a multiplayer session keep the game's shield. A think without a placement keeps drawing the last
+one for 3 thinks (`ShieldScale::kHoldThinks`), so one missed tick does not flick the shield between the two
+sizes; after that the game's scale 1 goes back once, so the game's small shield is not drawn at the world
+size by the eye. When the multiplayer guard refuses, nothing of the game's is touched and a world scale
+already sent is taken back at the next think the guard allows. The shield's class is checked once by its
+vtable's RTTI name (`.?AVidEnergyShell@@`).
+
+- **Rig** (OpenXR-Simulator, Steam build 25216728, e1m1 barge, `give all`, the chaingun with the Energy
+  Shield held 5.4 s: the hand ahead, then turned 35 degrees left and 15 down, then 25 right and 10 up; both
+  eyes captured every 8 frames). Before (origin/main): the game's small shield sits at the bottom of the view,
+  between the off hand and the gun, part of it behind the gun; the two eyes put its lines 0.25 m away. After:
+  the shield stands across the view in front of the gun, the barrels pointing into it, the gun drawn over it
+  only where the gun is nearer; the two eyes put its lines 1.9 m away (the log: its centre 1.38 m along the
+  hand's ray, the muzzle 1.13 m along it, the eye 0.4 m behind the hand); it turns with the hand. The log's
+  axis check: the game's axis is the one the convention rebuilds to 0.0000, the game's shield 0.0 degrees
+  from the hand's ray. An intermediate build that moved only the transform the think sends left the shield
+  at the eye (scaled), which is how the tracking actions' own query was found. Under head aim the same run
+  puts the shield 2.0 m along the head's ray (the game's gun in front of the face, its muzzle 1.75 m along
+  it), in front of the gun.
+- **Rig, the review round** (2026-10-31, the same rig, the gated hooks). Other askers of the shield's pose
+  turned up: 0xBE48AB (idEntity's effect transform message 0xBE4780, filling an empty transform) and 0xBE2E7A
+  (its render-parm message 0xBE2C80), both through 0xBD5630; they get the game's answer, and the effect still
+  draws the shield in front of the gun (its own query asked from 0x4D6926). With the shield up: a weapon
+  switch press makes the game drop the shield and stay on the chaingun, its sparks at the shield, nothing left
+  behind; a level load, then the shield raised again on the new level, placed in front of the gun as before;
+  three forced views of 30 to 50 ms (`setviewpos`) sent no scale 1 (the hold). `kill`, `hurt 1000` and
+  `damage 1000` did not kill the player on the rig, and no demon was in reach for a glory kill, so neither
+  was seen with the shield up. Cost on the hot path (e1m1, CPU timing on): 7300 to 9800 calls a second
+  through the three returns; the callback 24 to 50 cycles on average with no shield up and 40 to 150 with it
+  up (one call in 1024 timed with the time stamp counter, the timing itself included), and the mid hook's
+  own stub around it not counted; the tick period 12.08 ms before and 11.93 ms after, the whole process's CPU
+  per tick 35.0 and 38.2 ms, within the noise of the other runs on the PC.
+- **Not chosen.** (a) The shield kept where the flat view puts it relative to the gun (the gun's move from
+  the flat view to the hand applied to it): the chaingun's grip is 0.6 m ahead of the flat view's eye, so
+  the shield would sit 0.37 m behind the hand, by the shoulder. (b) The game's small shield moved past the
+  muzzle without its scale: 0.41 m wide and 0.20 m tall 1.4 m from the hand, a plate on the barrels, 14 cm
+  below them on the shot ray, which neither covers what you aim at nor reads as the shield the flat game
+  shows. (c) The entity itself moved: what it blocks does not read its pose, but other code of the game's
+  may (the mastery's blast on the way down was not traced), and the effect's view of it is all that is drawn.
+  (d) The shield turned with the controller's roll: the game's has none, and a wall 4.4 m wide rolling with
+  the wrist would swing a lot.
+- **Not verified.** In a headset (its size and distance, and whether it reads as the flat game's shield);
+  the shield with the weapon in the left hand, through a death and through a glory kill on the rig (a dead
+  shield stops thinking, so its placement goes stale within 0.1 s; a glory kill is a forced view, after the
+  hold the game's shield and scale); the Game Pass build (the hooks
+  are found by signature and stay off where one does not match); the short sparks when the shield goes up and
+  down are the game's own particles, not scaled with it.
+- **Logs.** `controllers: energy shield hook at RVA 0xBC9670 (effect scale at RVA 0xBE0E80, effect pose
+  returns at RVA ...)` and `energy shield on` in the game hooks line; while it is up, `energy shield: effect
+  (...) along (...) from the eye -> (...) along (...), scale 10.79; its centre N along the hand's ray from
+  (...), the muzzle M along it; the game's shield D deg from the ray, its axis A from the one the convention
+  rebuilds` (the first 6, then one every 2 s), `energy shield: its effect asked for the shield's pose (return
+  R: ...), given (...)` once, and `energy shield: back to the game's (scale 1)` when the layer stops placing
+  it.
 
 ## Hidden arms (ETERNALVR_ARMS)
 
@@ -1199,9 +1330,14 @@ last curls or the zeros of a controller that sends nothing, and ease in again wh
 without touch sensors (a Vive wand: no trigger touch, no thumb touch) moves only what it has: the index finger
 with the trigger alone, the thumb out; a digital grip closes the three fingers over the same 0.06 s ease. The
 finger state starts again on other hands and on every map load. The weapon hand's fingers stay the game's own grip on the gun
-(the chaingun's and the ballista's glove on its grip as before); its index finger does not follow the trigger
-yet. With the weapon in the left hand the off hand is the model's right arm, posed with the weapon arm's
-code; its fingers keep the game's left grip reflected, as before ("The weapon in the left hand").
+(the chaingun's and the ballista's glove on its grip as before), but for its index finger, which follows the
+trigger (below, "The index finger on the trigger"). With the weapon in the left hand the off hand is the model's
+right arm, posed with the weapon arm's code; its fingers keep the game's left grip reflected, as before ("The
+weapon in the left hand").
+
+The trigger's touch only reaches the layer since DECISIONS T-222: the built-in controller data suggested no
+binding for it, so before that the off hand's index finger never rested on its trigger in a headset (it stayed
+open until the trigger was pulled); the rig's scripted input sets the touch directly, so the rig did not show it.
 
 Rig: `tmp-vr\rs\armc\handpose-sweep.ps1` (the hands sweep's run, the off hand at four positions and turns, six
 sensor states each: open, half, grip, fist, point, thumb up; a rig controls file without the left trigger's and
@@ -1211,6 +1347,62 @@ turned more than 10 degrees). The dump's arm record gives `fingers` (the curls, 
 read). Positive control: `ETERNALVR_TEST_ARM_FAULT=fingers` (the fingers left the game's while the curls and
 the turns wanted are still computed and dumped) must fail it. Results: docs/rig-findings/hands-rig.md, section
 20.
+
+## The index finger on the trigger
+
+Feature step 4 of docs/ROADMAP.md (DECISIONS T-221). On the New arms path, as the off hand's fingers (the free off
+hand and the bind solve: the default with motion controllers while the weapon hand aims, T-160), while the layer
+poses the arm that holds the gun (the weapon arm, or the left arm with the weapon in the left hand), its index
+finger follows the weapon-hand controller's trigger (`features/arm/trigger_finger.hpp`, `vkcore/weapon_finger.cpp`):
+
+- off the trigger (not touched, not pulled): lifted, opened the held gun's lift of the way from the game's grip
+  toward straight;
+- touched: resting on the trigger, opened 0.1 of the way (on the Heavy Cannon's grip its tip about 7 mm forward
+  of where the game holds it);
+- pulled: closing from there to the game's own grip as the trigger goes down, the game's grip at a full pull.
+
+Each pose is the game's own grip of the held gun with the index finger's three bones (Index1 to Index3) turned
+back toward straight about their own axes: each bone's turn in its parent's frame scaled by one less the share,
+the finger root and every other finger as the game holds them. So the game's grip, the pose its animators put the
+finger on the trigger in, is the furthest the finger ever closes: it never goes further into the gun than the
+game puts it, and it moves along the finger's own bend, never sideways. The same scale works on the left hand,
+whose bones are the right's reflected, with no axis assumed. The share eases toward the sensors' over about
+0.06 s, as the off hand's fingers do.
+
+The grip it opens from: on the guns the game holds by their grip, the game's own hand as last read without the
+layer's overrides (taken while the game has the arm, so during every weapon switch), and only for the item it was
+read with: after a switch with no such read since, the finger stays the game's until there is one
+(`arm::indexChoice`). Only the finger's three bones are written, as overrides in their parents' frames, with the
+game's own animation left on every other finger. Those overrides hide what the game's animation does to the index
+finger itself, which on the rig was nothing while firing: the Heavy Cannon, the combat shotgun and the plasma rifle
+held their idle index finger to 0.0 degrees through 2 s of fire each (hands-rig section 24);
+on the chaingun and the ballista (the glove on a grip, "The glove on the grip"), the Heavy Cannon's grip the glove
+closes in. The share goes with the arm's weight, so the finger blends in and out with the arm, and the finger is
+the game's whenever the game has the arm (a weapon or mod switch, a melee, a glory kill, a forced view, the hands
+hidden). The weapon wheel is a forced view, so the arm and its finger are the game's while it is up.
+
+Which items: the held item's `[trigger_finger]` row in `data/weapons/viewmodel_offsets.toml` (the guns, each with
+its lift); an item without a row (the Crucible, the fists, the chainsaw, the hammer) keeps the game's finger. The
+log names each item once: `weapon arm: '<item>': the index finger follows the trigger (lifts 0.70 of the way
+straight off it)`, or `... the index finger the game's (no trigger finger row)`, or `(the free off hand and the bind
+solve only)` off the New arms path.
+
+A controller without a touch sensor on its trigger (the Vive wands, the Cosmos, the Reverb G2, Windows Mixed
+Reality) never reports a touch, so until the trigger's touch has been sensed since the controller was last
+tracked the finger rests on the trigger instead of lifting off it; on such a controller it rests and closes with
+the trigger, and never lifts. The log says when the touch is first sensed (`weapon arm: the weapon hand's trigger
+touch sensed: ...`) and when it is forgotten. The trigger's touch is bound on every family whose profile has the
+sensor (DECISIONS T-222).
+
+Rig: the trigger sweep (`tf-sweep.ps1`, the per-gun sweep of "The glove on the grip" with the weapon hand's
+trigger states per gun: rest, half, pull and lift at the neutral hold, lift and pull with the hand rolled 90
+degrees either way, both eyes kept for every pose, the right trigger's press left out of the rig's controls file
+so it fires nothing) and its checker (`tf_check.py`: per pose, the finger posed, the share the sensors', each bone
+as read within 5 degrees of its turn as written, on the arc from the game's grip to straight within 3 degrees,
+never turned further than the game's grip by more than 2 degrees, and lifted at least 0.8 of the gun's lift as
+read). The dump's arm record gives `trigger` (the sensors, the share, the finger's bones as quaternions in the
+grip, as written and as read). Positive control: `ETERNALVR_TEST_ARM_FAULT=trigger` (the finger turned 1.6 times
+the grip's turn, into the trigger guard) must fail it. Results: docs/rig-findings/hands-rig.md, section 24.
 
 ## Arms in cutscenes (ETERNALVR_CUTSCENE_ARMS)
 

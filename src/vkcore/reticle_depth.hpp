@@ -4,7 +4,7 @@
 // fixed distance lines up with the shots only at that distance: the eyes sit about 0.3 m from the hand, so
 // at 10 m a target 50 m away is about 1.4 degrees off the dot (a player's report with the Precision Bolt's
 // scope). The camera hook traces the ray through the world with the head sweep's collision query
-// (head_sweep.hpp) and the dot sits where it hits, at the same angular size.
+// (head_sweep.hpp, answered a game frame late) and the dot sits where it hits, at the same angular size.
 
 #include "common/vector.hpp"
 

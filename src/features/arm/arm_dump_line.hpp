@@ -22,10 +22,18 @@
 //           "fingers" (the free off hand's hand poses, features/arm/hand_pose.hpp: {"curl" [thumb, index,
 //           middle, ring, little] 0..1, "want" [15] each finger bone's turn in its parent's frame as written,
 //           degrees, in kFingerMods order, "read" [15] the same as GetJointTransforms gave it this tick, or
-//           null}; null while the arm's fingers are not posed)}. A pose set is an object of the eight joints
-//           by role: attach, hand, roll3, roll2, roll1, forearmroll, forearm (the elbow), upperarm (the
-//           shoulder); a pose is 12 numbers: position x y z, then the axis rows forward, left, up. Model
-//           space of the arms model, game units. Joint poses are null while the game poses the arm.
+//           null}; null while the arm's fingers are not posed), "trigger" (the weapon hand's index finger on
+//           the trigger, features/arm/trigger_finger.hpp: {"value" the trigger 0..1, "touch" and "sensed" 0
+//           or 1 (touched now; touched since the controller was tracked), "posed" 0 or 1 (0: the arm holds
+//           the gun but its finger is the game's this tick, off the New arms path or before the game's grip
+//           of the item held now was read; "open" 0, "want" the read, "game" the grip last read for any
+//           item or zeros), "lift" the gun's row, "open" the share written, "game" [12] the grip it opens
+//           from, "want" [12] as written, "read" [12] as GetJointTransforms gave it this tick or null: the
+//           index finger's three bones in their parents' frames, a quaternion x y z w each; null while the
+//           arm is not posed or does not hold the gun)}. A pose set is an object of the eight joints by role:
+//           attach, hand, roll3, roll2, roll1, forearmroll, forearm (the elbow), upperarm (the shoulder); a
+//           pose is 12 numbers: position x y z, then the axis rows forward, left, up. Model space of the arms
+//           model, game units. Joint poses are null while the game poses the arm.
 //   model   the arms model's placement: {"eye" [x y z] world, "offset" [x y z] from the eye, "axis" [9]};
 //           world = eye + offset + axis rows times the model-space position
 //   head    the rendered head's axis rows [9] (world), for mirroring in its yaw frame
@@ -65,6 +73,20 @@ struct DumpFingers {
     std::optional<std::array<float, 15>> read;
 };
 
+// The weapon hand's index finger on the trigger ("trigger"): the sensors, the share, and the finger's three
+// bones as quaternions (x y z w each) in the grip, as written and as read.
+struct DumpTrigger {
+    float value = 0.0f;
+    bool touch = false;
+    bool sensed = false;
+    bool posed = true; // false: the finger is the game's this tick ("want" is then the read)
+    float lift = 0.0f;
+    float open = 0.0f;
+    std::array<float, 12> game{};
+    std::array<float, 12> want{};
+    std::optional<std::array<float, 12>> read;
+};
+
 struct DumpArm {
     bool layer = false;  // the layer posed the arm this tick (else the game did)
     float weight = 0.0f; // the layer's share
@@ -78,6 +100,7 @@ struct DumpArm {
     std::optional<xr_math::ModelPose> root; // the skeleton's root (joint 0) as read with the poses
     std::uint32_t zeroScale = 0; // "zero": the joints written scaled to nothing (bit n: ArmJoint n)
     std::optional<DumpFingers> fingers;
+    std::optional<DumpTrigger> trigger;
 };
 
 struct ArmDumpRecord {

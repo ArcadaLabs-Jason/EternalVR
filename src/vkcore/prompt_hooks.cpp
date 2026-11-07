@@ -38,6 +38,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/button_labels.hpp"
+#include "features/input/prompt_binds.hpp"
 #include "features/input/prompt_keys.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/demon_view.hpp"
@@ -47,6 +48,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_command_bar.hpp"
 #include "vkcore/prompt_hint_keys.hpp"
+#include "vkcore/prompt_key_lists.hpp"
 #include "vkcore/prompt_key_log.hpp"
 #include "vkcore/prompt_load_tips.hpp"
 #include "vkcore/prompt_page_keys.hpp"
@@ -143,14 +145,6 @@ constexpr std::size_t kCacheKeyAdds = 2;
 
 constexpr std::size_t kIdStrSize = 0x30;
 
-struct IdList {
-    std::byte* data;
-    int num;
-    int size;
-    std::int64_t granularity;
-};
-static_assert(sizeof(IdList) == 0x18);
-
 using GetKeysFn = void (*)(IdList* lists, int device, int bindset, const char* action, bool localized);
 using KeyTextFn = void (*)(int keyNum, void* out);
 using StrAssignFn = void (*)(void* str, const char* text);
@@ -189,34 +183,23 @@ bool equalsIgnoreCase(std::string_view a, std::string_view b) {
            std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return (x | 0x20) == (y | 0x20); });
 }
 
-// Our action for a bind name under the current state, or nothing.
-std::optional<game::GameAction> actionForBind(const char* bind) {
+// The user command button of a bind name in the game's action table, or nothing.
+std::optional<int> buttonForBind(const char* bind) {
     const std::string_view name(bind);
-    for (const auto& [entry, index] : g_actionTable) {
-        if (!equalsIgnoreCase(entry, name)) {
-            continue;
-        }
-        if (auto demon = pilotedDemonAction(std::uint64_t{1} << index)) {
-            return demon;
-        }
-        return game::actionForUsercmdButton(index);
-    }
-    return std::nullopt;
+    const auto row = std::ranges::find_if(g_actionTable,
+                                          [name](const auto& r) { return equalsIgnoreCase(r.first, name); });
+    return row != g_actionTable.end() ? std::optional<int>(row->second) : std::nullopt;
 }
 
-// The first list with an entry, moved to the front, cut to that one entry; false when all three are empty.
-bool keepOneEntry(IdList* lists) {
-    for (int i = 0; i < 3; ++i) {
-        if (lists[i].data != nullptr && lists[i].num > 0 && lists[i].num <= lists[i].size) {
-            if (i != 0) {
-                std::swap(lists[0], lists[i]);
-            }
-            lists[0].num = 1;
-            lists[1].num = 0;
-            return true;
-        }
+// Our action for a user command button under the current state, or nothing.
+std::optional<game::GameAction> actionForButton(std::optional<int> button) {
+    if (!button) {
+        return std::nullopt;
     }
-    return false;
+    if (auto demon = pilotedDemonAction(std::uint64_t{1} << *button)) {
+        return demon;
+    }
+    return game::actionForUsercmdButton(*button);
 }
 
 void onGetKeys(IdList* lists, int device, int bindset, const char* action, bool localized) {
@@ -229,24 +212,23 @@ void onGetKeys(IdList* lists, int device, int bindset, const char* action, bool 
     }
     const std::size_t callerIndex = static_cast<std::size_t>(caller - g_callerReturns.begin());
     const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
-    const std::optional<game::GameAction> mapped = actionForBind(action);
-    const std::size_t index = mapped ? static_cast<std::size_t>(*mapped) : 0;
-    const bool named = labels && mapped && labels->slot[index] >= 0;
+    const std::optional<int> button = buttonForBind(action);
+    const std::optional<game::GameAction> mapped = actionForButton(button);
+    const bool text = localized && callerIndex == kTextCaller;
+    const input::BindAnswer named =
+        labels ? input::bindAnswer(mapped, button, text, *labels) : input::BindAnswer{};
     if (g_logged[callerIndex].fetch_add(1, std::memory_order_relaxed) < kLogPerCaller) {
         EVR_LOG("%s: %s asks for %s (bindset %d): %s", kTag, kCallers[callerIndex].name, action, bindset,
-                named ? labels->text[index].c_str()
-                      : (mapped ? "no button for it" : "not one of our actions; the game's keys"));
+                named.text != nullptr
+                    ? named.text->c_str()
+                    : (mapped ? "no button for it" : "not one of our actions; the game's keys"));
     }
-    if (!named) {
-        return;
-    }
-    const auto slot = static_cast<std::size_t>(labels->slot[index]);
-    const bool text = localized && callerIndex == kTextCaller;
-    if (!text && slot >= g_virtualKeys.size()) {
+    const auto slot = static_cast<std::size_t>(named.slot);
+    if (named.text == nullptr || (!text && (named.slot < 0 || slot >= g_virtualKeys.size()))) {
         return;
     }
     if (keepOneEntry(lists)) {
-        g_strAssign(lists[0].data, text ? labels->text[index].c_str() : g_virtualKeys[slot].second.c_str());
+        g_strAssign(lists[0].data, text ? named.text->c_str() : g_virtualKeys[slot].second.c_str());
     }
 }
 

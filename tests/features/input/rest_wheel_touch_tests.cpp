@@ -11,6 +11,7 @@
 
 using evr::input::Axis2;
 using evr::input::Hand;
+using evr::input::kRestDwellSeconds;
 using evr::input::RestWheel;
 using evr::input::RestWheelEvent;
 using evr::input::RestWheelFrame;
@@ -98,6 +99,7 @@ TEST_CASE("a touch registers on its first frame") {
     RestWheel edge = wheel(RestWheelMode::Edge);
     edge.update(frame(true, false), kFrame);
     CHECK(edge.stats().landings[kLeft] == 1);
+    feed(edge, frame(true, false), frames(kRestDwellSeconds) + 1);
     CHECK(edge.update(frame(true, false, kUp), kFrame).event == RestWheelEvent::Armed);
 
     // Under extreme the turn stick is given back on that frame (nothing was being picked).
@@ -119,7 +121,7 @@ TEST_CASE("a loss shorter than the hold-over neither lifts nor lands again") {
 
     // An open wheel stays open through it.
     RestWheel open = wheel(RestWheelMode::Edge);
-    feed(open, frame(true, false), 8);
+    feed(open, frame(true, false), frames(kRestDwellSeconds) + 1);
     REQUIRE(feed(open, frame(true, false, kUp), frames(0.5f)).last.wheelDown);
     const Run held = feed(open, frame(false, false, kUp), frames(0.1f));
     CHECK(held.wheelFrames == held.count);
@@ -128,7 +130,7 @@ TEST_CASE("a loss shorter than the hold-over neither lifts nor lands again") {
 
     // No new landing from a gap shorter than the debounce: after the window, the touch back opens none.
     RestWheel edge = wheel(RestWheelMode::Edge);
-    feed(edge, frame(true, false), frames(0.6f));
+    feed(edge, frame(true, false), frames(1.0f));
     feed(edge, frame(false, false), 3);
     feed(edge, frame(true, false), 2);
     CHECK(feed(edge, frame(true, false, kUp), 10).events.empty());
@@ -169,6 +171,7 @@ TEST_CASE("a touch begun with the thumb elsewhere waits until the thumb leaves, 
     CHECK(leaves.stats().vetoedLandings[kLeft] == 1);
     feed(leaves, frame(true, false), 1);
     CHECK(leaves.stats().landings[kLeft] == 1);
+    feed(leaves, frame(true, false), frames(kRestDwellSeconds) + 1);
     CHECK(leaves.update(frame(true, false, kUp), kFrame).event == RestWheelEvent::Armed);
 
     // A sensor that sees the resting thumb as on the stick too: the touch registers after the debounce.
@@ -293,7 +296,7 @@ TEST_CASE("the thumb going elsewhere while the touch is still sensed changes not
     CHECK(full.stats().cutLifts[kLeft] == 0);
 
     RestWheel open = wheel(RestWheelMode::Edge);
-    feed(open, frame(true, false), 8);
+    feed(open, frame(true, false), frames(kRestDwellSeconds) + 1);
     feed(open, frame(true, false, kUp), frames(0.5f));
     const Run held = feed(open, frame(true, true, kUp), frames(0.3f));
     CHECK(held.wheelFrames == held.count);
@@ -307,11 +310,12 @@ TEST_CASE("edge: a gap past the debounce is a fresh landing, with the other stic
     feed(w, frame(false, false), frames(0.1f));
     feed(w, frame(true, false), 2);
     CHECK(w.stats().landings[kLeft] == 2);
+    feed(w, frame(true, false), frames(kRestDwellSeconds) + 1);
     CHECK(w.update(frame(true, false, kUp), kFrame).event == RestWheelEvent::Armed);
 
     // Not after a cancel since the landing.
     RestWheel cancelled = wheel(RestWheelMode::Edge);
-    feed(cancelled, frame(true, false), 8);
+    feed(cancelled, frame(true, false), frames(kRestDwellSeconds) + 1);
     Run run = feed(cancelled, frame(true, false, kUp), 5);
     run = feed(cancelled, frame(true, false), frames(0.6f));
     REQUIRE(run.saw(RestWheelEvent::Cancelled));
@@ -323,7 +327,7 @@ TEST_CASE("edge: a gap past the debounce is a fresh landing, with the other stic
     // Nor with the other stick out of the centre less than kOwnStickVoidSeconds before (turning, then the
     // thumb's gap).
     RestWheel turning = wheel(RestWheelMode::Edge);
-    feed(turning, frame(true, false), frames(0.6f));
+    feed(turning, frame(true, false), frames(1.0f));
     feed(turning, frame(true, false, kRight), frames(0.2f));
     feed(turning, frame(true, false), frames(0.1f));
     feed(turning, frame(false, false), frames(0.1f));

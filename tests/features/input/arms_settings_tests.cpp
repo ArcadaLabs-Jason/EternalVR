@@ -141,6 +141,8 @@ TEST_CASE("the hands rig's planted faults: none, twist or forearm") {
     CHECK(std::string(evr::input::armFaultName(ArmFault::Forearm)) == "forearm");
     CHECK(parse({{"ETERNALVR_TEST_ARM_FAULT", "fingers"}}).settings.testArmFault == ArmFault::Fingers);
     CHECK(std::string(evr::input::armFaultName(ArmFault::Fingers)) == "fingers");
+    CHECK(parse({{"ETERNALVR_TEST_ARM_FAULT", "trigger"}}).settings.testArmFault == ArmFault::Trigger);
+    CHECK(std::string(evr::input::armFaultName(ArmFault::Trigger)) == "trigger");
     const auto bad = parse({{"ETERNALVR_TEST_ARM_FAULT", "sleeve"}});
     REQUIRE(bad.issues.size() == 1);
     CHECK(bad.settings.testArmFault == ArmFault::None);

@@ -2,13 +2,12 @@
 
 #include "features/input/input_frames.hpp"
 #include "features/input/input_mapper.hpp"
+#include "features/input/wrist_flick_rig.hpp"
 #include "support/quest_touch.hpp"
 
 #include <doctest/doctest.h>
 
-#include <cmath>
 #include <limits>
-#include <numbers>
 
 using evr::Quat;
 using evr::Vec3;
@@ -24,87 +23,83 @@ using evr::input::MapperSettings;
 using evr::input::WristFlick;
 using evr::test::questTouchProfile;
 using evr::test::restingFrame;
+using evr::test::wrist::flickOn;
+using evr::test::wrist::handAt;
+using evr::test::wrist::kFrame;
+using evr::test::wrist::radians;
+using evr::test::wrist::Rig;
 
 namespace {
 
-constexpr float kFrame = 1.0f / 90.0f;
-constexpr float kPi = std::numbers::pi_v<float>;
-
-float radians(float degrees) {
-    return degrees * kPi / 180.0f;
+// The right hand's roll at frame `i` of a flick at 800 degrees per second: 18 frames over (160 degrees), 18
+// back.
+float overAndBack(int i) {
+    return 800.0f * static_cast<float>(i <= 18 ? i : 36 - i) * kFrame;
 }
-
-FlickSettings flickOn() {
-    FlickSettings s;
-    s.enabled = true;
-    return s;
-}
-
-// The right hand pitched up by `pitchDegrees`, rolled by `rollDegrees` about its pointing axis and turned by
-// `yawDegrees` about the vertical, moving at `velocity`.
-InputFrame handAt(float rollDegrees, float yawDegrees = 0.0f, float pitchDegrees = 0.0f, Vec3 velocity = {}) {
-    InputFrame frame = restingFrame();
-    const Quat pitch = Quat::fromAxisAngle({1.0f, 0.0f, 0.0f}, radians(pitchDegrees));
-    const Quat roll = Quat::fromAxisAngle({0.0f, 0.0f, -1.0f}, radians(rollDegrees));
-    const Quat yaw = Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, radians(yawDegrees));
-    frame.right.aimPose.orientation = yaw * pitch * roll;
-    frame.right.linearVelocity = velocity;
-    return frame;
-}
-
-// A weapon hand moving continuously: its roll and yaw carry on from where the last run ended.
-struct Rig {
-    explicit Rig(FlickSettings settings = flickOn()) : flick(settings) { step(0.0f, 0.0f); }
-
-    FlickOutput step(float rollRate, float yawRate, float pitch = 0.0f, Vec3 velocity = {}) {
-        roll += rollRate * kFrame;
-        yaw += yawRate * kFrame;
-        return flick.update(handAt(roll, yaw, pitch, velocity), Hand::Right, kFrame);
-    }
-
-    // `seconds` of a constant roll rate and yaw rate (degrees per second); how many frames flicked.
-    int run(float rollRate, float seconds, float yawRate = 0.0f, float pitch = 0.0f, Vec3 velocity = {}) {
-        int count = 0;
-        const int frames = static_cast<int>(seconds / kFrame);
-        for (int i = 0; i < frames; ++i) {
-            count += step(rollRate, yawRate, pitch, velocity).flicked ? 1 : 0;
-        }
-        return count;
-    }
-
-    WristFlick flick;
-    float roll = 0.0f;
-    float yaw = 0.0f;
-};
 
 } // namespace
 
 TEST_CASE("the wrist flick (Roll wrist) is on by default, and off it reads nothing") {
     Rig rig{FlickSettings{}};
     CHECK(rig.flick.settings().enabled);
-    CHECK(rig.run(900.0f, 0.3f) == 1);
+    CHECK(rig.flickOverAndBack() == 1);
     FlickSettings off;
     off.enabled = false;
     Rig quiet{off};
     CHECK_FALSE(quiet.flick.settings().enabled);
-    CHECK(quiet.run(900.0f, 0.3f) == 0);
+    CHECK(quiet.flickOverAndBack() == 0);
 }
 
-TEST_CASE("a fast roll about the pointing axis flicks once, and the roll back does not flick again") {
+TEST_CASE("the hand turned over and straight back flicks once, on the way back") {
     Rig rig;
-    CHECK(rig.run(800.0f, 0.2f) == 1);
-    // Rolls back at once: still the one flick.
+    // Over 160 degrees: nothing yet.
+    CHECK(rig.run(800.0f, 0.2f) == 0);
+    // Back: the flick.
+    CHECK(rig.run(-800.0f, 0.2f) == 1);
+    // On round past where it started: no second flick.
     CHECK(rig.run(-800.0f, 0.2f) == 0);
 }
 
-TEST_CASE("a flick carries its rates for the log: pointing pitch, hand speed and the head's turn") {
+TEST_CASE("a roll one way only is no flick, however fast or far (DECISIONS T-202)") {
+    Rig rig;
+    CHECK(rig.run(1500.0f, 0.3f) == 0);
+    CHECK(rig.run(0.0f, 1.0f) == 0);
+    CHECK(rig.run(-600.0f, 0.4f) == 0);
+    // Turned over and held: the roll back comes too late to make one flick with it.
+    Rig held;
+    CHECK(held.run(800.0f, 0.2f) == 0);
+    CHECK(held.run(0.0f, 0.4f) == 0);
+    CHECK(held.run(-1200.0f, 0.15f) == 0);
+    // Positive control: the same over with a short pause at the turn (0.15 s) and the same back is a flick.
+    Rig paused;
+    CHECK(paused.run(800.0f, 0.2f) == 0);
+    CHECK(paused.run(0.0f, 0.15f) == 0);
+    CHECK(paused.run(-1200.0f, 0.15f) == 1);
+}
+
+TEST_CASE("the hand must turn over far enough and come back far enough") {
+    // 70 degrees over and back, fast: short of a hand turned over.
+    Rig shortOver;
+    CHECK(shortOver.flickOverAndBack(1000.0f, 70.0f) == 0);
+    // 135 degrees over, then 40 back fast and the rest slowly (40 degrees per second).
+    Rig shortBack;
+    CHECK(shortBack.run(900.0f, 0.15f) == 0);
+    CHECK(shortBack.run(-900.0f, 0.045f) == 0);
+    CHECK(shortBack.run(-40.0f, 1.5f) == 0);
+    // Positive control: 100 over and 100 back at the same rate.
+    Rig enough;
+    CHECK(enough.flickOverAndBack(1000.0f, 100.0f) == 1);
+}
+
+TEST_CASE(
+    "a flick carries its sizes and rates for the log: over, back, pointing pitch, hand speed, head turn") {
     WristFlick flick(flickOn());
     float roll = 0.0f;
     float headYaw = 0.0f;
     FlickOutput fired;
     for (int i = 0; i < 30 && !fired.flicked; ++i) {
-        roll += 900.0f * kFrame;
-        headYaw += 120.0f * kFrame; // the player turning left
+        roll += (i < 15 ? 900.0f : -900.0f) * kFrame; // 150 degrees over, then back
+        headYaw += 120.0f * kFrame;                   // the player turning left
         InputFrame frame = handAt(roll, 0.0f, -30.0f, {0.3f, 0.0f, 0.4f});
         frame.head.poseValid = true;
         frame.head.pose.orientation = Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, radians(headYaw));
@@ -114,6 +109,10 @@ TEST_CASE("a flick carries its rates for the log: pointing pitch, hand speed and
         }
     }
     REQUIRE(fired.flicked);
+    // The first frame reads no rate: over from 10 degrees to 150.
+    CHECK(fired.overDegrees == doctest::Approx(140.0f).epsilon(0.02));
+    CHECK(fired.backDegrees >= 60.0f);
+    CHECK(fired.backDegrees < 90.0f);
     CHECK(fired.pitchDegrees == doctest::Approx(-30.0f).epsilon(0.01));
     CHECK(fired.handSpeed == doctest::Approx(0.5f));
     CHECK(fired.headTurnDegrees == doctest::Approx(120.0f).epsilon(0.01));
@@ -121,16 +120,16 @@ TEST_CASE("a flick carries its rates for the log: pointing pitch, hand speed and
 
 TEST_CASE("the roll is read in either direction") {
     Rig rig;
-    CHECK(rig.run(-800.0f, 0.2f) == 1);
+    CHECK(rig.flickOverAndBack(-800.0f) == 1);
 }
 
 TEST_CASE("a flick has to be fast: a slow turn of the wrist is not one") {
     Rig rig;
-    CHECK(rig.run(150.0f, 1.0f) == 0);
-    CHECK(rig.run(300.0f, 1.0f) == 0);
-    CHECK(rig.run(400.0f, 1.0f) == 0);
+    CHECK(rig.flickOverAndBack(150.0f) == 0);
+    CHECK(rig.flickOverAndBack(300.0f) == 0);
+    CHECK(rig.flickOverAndBack(400.0f) == 0);
     // Positive control: past the minimum rate the same roll flicks.
-    CHECK(rig.run(700.0f, 0.2f) == 1);
+    CHECK(rig.flickOverAndBack(700.0f) == 1);
 }
 
 TEST_CASE("a fast turn of the pointing direction is aiming, not a flick") {
@@ -140,24 +139,30 @@ TEST_CASE("a fast turn of the pointing direction is aiming, not a flick") {
     CHECK(rig.run(0.0f, 0.4f, 900.0f, 0.0f) == 0);
     CHECK(rig.run(0.0f, 0.4f, 900.0f, 45.0f) == 0);
     CHECK(rig.run(0.0f, 0.4f, 700.0f, 60.0f) == 0);
-    // Positive control: the same rotation rate about the pointing axis is a flick.
+    CHECK(rig.run(0.0f, 0.4f, -900.0f, 0.0f) == 0);
+    // Positive control: the same rotation rate about the pointing axis, over and back, is a flick.
     Rig roll;
-    CHECK(roll.run(900.0f, 0.4f) == 1);
+    CHECK(roll.flickOverAndBack(900.0f) == 1);
 }
 
 TEST_CASE("a roll while the aim also swings fast is not a flick") {
     Rig rig;
-    CHECK(rig.run(700.0f, 0.3f, 600.0f) == 0);
+    CHECK(rig.run(700.0f, 0.2f, 600.0f) == 0);
+    CHECK(rig.run(-700.0f, 0.2f, -600.0f) == 0);
     // Positive control: the same roll with the aim still.
     Rig still;
-    CHECK(still.run(700.0f, 0.3f) == 1);
+    CHECK(still.run(700.0f, 0.2f) == 0);
+    CHECK(still.run(-700.0f, 0.2f) == 1);
 }
 
 TEST_CASE("a roll while the hand travels fast is not a flick") {
     Rig rig;
+    // The over with the hand travelling at 3 m/s, the back with it still.
     CHECK(rig.run(800.0f, 0.2f, 0.0f, 0.0f, Vec3{0.0f, 0.0f, -3.0f}) == 0);
+    CHECK(rig.run(-800.0f, 0.2f) == 0);
     Rig still;
-    CHECK(still.run(800.0f, 0.2f) == 1);
+    CHECK(still.run(800.0f, 0.2f) == 0);
+    CHECK(still.run(-800.0f, 0.2f) == 1);
 }
 
 TEST_CASE("a tracking jump is no flick") {
@@ -167,18 +172,18 @@ TEST_CASE("a tracking jump is no flick") {
     CHECK_FALSE(rig.flick.update(handAt(150.0f), Hand::Right, kFrame).flicked);
     // The hand is read again from where it is now.
     rig.roll = 150.0f;
-    CHECK(rig.run(800.0f, 0.2f) == 1);
+    CHECK(rig.flickOverAndBack(800.0f) == 1);
 }
 
 TEST_CASE("the second flick has to wait for the cooldown and for the roll to slow down") {
     Rig rig;
-    CHECK(rig.run(800.0f, 0.2f) == 1);
-    // Rolling straight on is no new flick, and neither is a faster roll the other way within the cooldown.
-    CHECK(rig.run(800.0f, 0.2f) == 0);
-    CHECK(rig.run(-800.0f, 0.2f) == 0);
-    // Still, for longer than the cooldown (0.6 s), then another flick.
+    CHECK(rig.flickOverAndBack(1200.0f) == 1);
+    // At once over and back again, and again: within the cooldown (0.6 s), no new flick.
+    CHECK(rig.flickOverAndBack(1200.0f) == 0);
+    CHECK(rig.flickOverAndBack(1200.0f) == 0);
+    // Still, for longer than the cooldown, then another flick.
     CHECK(rig.run(0.0f, 0.8f) == 0);
-    CHECK(rig.run(800.0f, 0.2f) == 1);
+    CHECK(rig.flickOverAndBack(1200.0f) == 1);
 }
 
 TEST_CASE("a hand that is not tracked starts over, and a stalled frame reads no rate") {
@@ -193,37 +198,30 @@ TEST_CASE("a hand that is not tracked starts over, and a stalled frame reads no 
     CHECK_FALSE(stalled.flick.update(handAt(180.0f), Hand::Right, 0.5f).flicked);
 }
 
-TEST_CASE("the roll back of a flick does not fire; held still a while, it is a flick of its own") {
-    // Rolled out fast, then on slowly (never quiet), then back fast after the cooldown: still the one flick.
+TEST_CASE("one flick and back is one press; a second needs the hand turned over and back again") {
+    // Over, back, and on round past where it started: one flick.
     Rig rig;
-    CHECK(rig.run(800.0f, 0.2f) == 1);
-    CHECK(rig.run(200.0f, 0.6f) == 0);
-    CHECK(rig.run(-1200.0f, 0.15f) == 0);
-    // Turned over, held a moment (0.35 s, past the cooldown with the roll back), turned back: one flick.
-    Rig paused;
-    CHECK(paused.run(800.0f, 0.2f) == 1);
-    CHECK(paused.run(0.0f, 0.35f) == 0);
-    CHECK(paused.run(-1200.0f, 0.3f) == 0);
-    // Held still for a second, then back fast: a second flick (the weapon mod switched back).
-    Rig held;
-    CHECK(held.run(800.0f, 0.2f) == 1);
-    CHECK(held.run(0.0f, 1.0f) == 0);
-    CHECK(held.run(-1200.0f, 0.15f) == 1);
-    // A second flick the same way needs only the short quiet (0.2 s) and the cooldown.
-    Rig again;
-    CHECK(again.run(800.0f, 0.2f) == 1);
-    CHECK(again.run(0.0f, 0.5f) == 0);
-    CHECK(again.run(1200.0f, 0.15f) == 1);
+    CHECK(rig.run(800.0f, 0.2f) == 0);
+    CHECK(rig.run(-800.0f, 0.4f) == 1);
+    // A second flick after a still moment, the other way round.
+    CHECK(rig.run(0.0f, 0.8f) == 0);
+    CHECK(rig.flickOverAndBack(800.0f) == 1);
+    // A roll back to where the hand started, after a still moment, is no flick of its own.
+    Rig back;
+    CHECK(back.flickOverAndBack(800.0f) == 1);
+    CHECK(back.run(0.0f, 1.0f) == 0);
+    CHECK(back.run(800.0f, 0.15f) == 0);
 }
 
 TEST_CASE("the rate comes from the poses' sample times, not from how often the mapper runs") {
     // The mapper runs twice per 90 Hz sample, the new sample 2 ms after the last read: from the mapper's time
-    // a 400 deg/s roll reads in spikes that add up past the minimum (450).
+    // a 400 deg/s roll reads in spikes that add up past the minimum (450). The hand turns over for 25 samples
+    // and back for 25.
     const auto rolled = [](float rate, bool sampleTimes) {
         WristFlick flick(flickOn());
         int count = 0;
-        for (int i = 0; i < 40; ++i) {
-            InputFrame frame = handAt(rate * static_cast<float>(i) * kFrame);
+        for (int i = 0; i < 50; ++i) {
+            InputFrame frame = handAt(rate * static_cast<float>(i <= 25 ? i : 50 - i) * kFrame);
             frame.sampleSeconds = sampleTimes ? 1.0 + static_cast<double>(i) * kFrame : 0.0;
             count += flick.update(frame, Hand::Right, 0.002f).flicked ? 1 : 0;
             count += flick.update(frame, Hand::Right, kFrame - 0.002f).flicked ? 1 : 0;
@@ -256,8 +254,8 @@ TEST_CASE("mapper: a stall (a load, five seconds) between two frames is no flick
         }
         // Positive control: a real flick afterwards.
         int presses = 0;
-        for (int i = 1; i <= 18; ++i) {
-            InputFrame frame = handAt(90.0f + 800.0f * static_cast<float>(i) * kFrame);
+        for (int i = 1; i <= 36; ++i) {
+            InputFrame frame = handAt(90.0f + overAndBack(i));
             frame.sampleSeconds = sampleTimes ? 16.0 + i * static_cast<double>(kFrame) : 0.0;
             presses +=
                 contains(mapper.update(frame, {}, kFrame).pressed, GameAction::SwitchWeaponMod) ? 1 : 0;
@@ -269,7 +267,8 @@ TEST_CASE("mapper: a stall (a load, five seconds) between two frames is no flick
 TEST_CASE("mapper: no flick while the game holds the gestures back or the weapon wheel is up") {
     MapperSettings settings;
     settings.flick.enabled = true;
-    for (const int reason : {0, 1, 2}) {
+    // Reason 3 holds nothing back: the positive control.
+    for (const int reason : {0, 1, 2, 3}) {
         CAPTURE(reason);
         InputMapper mapper(questTouchProfile(), settings);
         MapperContext context;
@@ -283,13 +282,14 @@ TEST_CASE("mapper: no flick while the game holds the gestures back or the weapon
             }
         }
         mapper.update(start, context, kFrame);
-        for (int i = 1; i <= 18; ++i) {
-            InputFrame frame = handAt(800.0f * static_cast<float>(i) * kFrame);
+        int presses = 0;
+        for (int i = 1; i <= 36; ++i) {
+            InputFrame frame = handAt(overAndBack(i));
             frame.right.stick = start.right.stick;
             const auto input = mapper.update(frame, context, kFrame);
-            CHECK_FALSE(input.flicked);
-            CHECK_FALSE(contains(input.pressed, GameAction::SwitchWeaponMod));
+            presses += input.flicked || contains(input.pressed, GameAction::SwitchWeaponMod) ? 1 : 0;
         }
+        CHECK(presses == (reason == 3 ? 1 : 0));
     }
 }
 
@@ -297,11 +297,11 @@ TEST_CASE("only the weapon hand's roll flicks") {
     for (const Hand weaponHand : {Hand::Right, Hand::Left}) {
         WristFlick flick(flickOn());
         int count = 0;
-        for (int i = 0; i <= 18; ++i) {
+        for (int i = 0; i <= 36; ++i) {
             InputFrame frame = restingFrame();
-            // The left hand rolls fast; the right hand is still.
+            // The left hand turns over and back; the right hand is still.
             frame.left.aimPose.orientation =
-                Quat::fromAxisAngle({0.0f, 0.0f, -1.0f}, radians(800.0f * static_cast<float>(i) * kFrame));
+                Quat::fromAxisAngle({0.0f, 0.0f, -1.0f}, radians(overAndBack(i)));
             count += flick.update(frame, weaponHand, kFrame).flicked ? 1 : 0;
         }
         // Only the left hand's roll counts, and only for a left-handed player.
@@ -333,8 +333,8 @@ TEST_CASE("mapper: a flick presses the weapon mod switch once") {
     InputMapper mapper(questTouchProfile(), settings);
     mapper.update(handAt(0.0f), {}, kFrame);
     int presses = 0;
-    for (int i = 1; i <= 18; ++i) {
-        const auto input = mapper.update(handAt(800.0f * static_cast<float>(i) * kFrame), {}, kFrame);
+    for (int i = 1; i <= 36; ++i) {
+        const auto input = mapper.update(handAt(overAndBack(i)), {}, kFrame);
         if (contains(input.pressed, GameAction::SwitchWeaponMod)) {
             ++presses;
             CHECK(input.flicked);
@@ -347,8 +347,8 @@ TEST_CASE("mapper: the flick is on with the default settings") {
     InputMapper mapper(questTouchProfile());
     mapper.update(handAt(0.0f), {}, kFrame);
     int presses = 0;
-    for (int i = 1; i <= 18; ++i) {
-        const auto input = mapper.update(handAt(800.0f * static_cast<float>(i) * kFrame), {}, kFrame);
+    for (int i = 1; i <= 36; ++i) {
+        const auto input = mapper.update(handAt(overAndBack(i)), {}, kFrame);
         presses += contains(input.pressed, GameAction::SwitchWeaponMod) ? 1 : 0;
     }
     CHECK(presses == 1);
@@ -359,8 +359,8 @@ TEST_CASE("mapper: with the flick off the same roll presses nothing") {
     settings.flick.enabled = false;
     InputMapper mapper(questTouchProfile(), settings);
     mapper.update(handAt(0.0f), {}, kFrame);
-    for (int i = 1; i <= 18; ++i) {
-        const auto input = mapper.update(handAt(800.0f * static_cast<float>(i) * kFrame), {}, kFrame);
+    for (int i = 1; i <= 36; ++i) {
+        const auto input = mapper.update(handAt(overAndBack(i)), {}, kFrame);
         CHECK_FALSE(contains(input.down, GameAction::SwitchWeaponMod));
         CHECK_FALSE(input.flicked);
     }

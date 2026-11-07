@@ -71,7 +71,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>
         /// Writes <paramref name="settings"/> as the profile <paramref name="name"/>: its preset and the settings that differ
         /// from it (<see cref="ProfileEdits.ProfileText"/>, CPU Saver items compared by <paramref name="saver"/>'s), without this
-        /// machine's folders, runtime, DLSS file and graphics card choice.
+        /// machine's folders, runtime, DLSS file, graphics card choice and test builds choice.
         /// </summary>
         public void Save(string name, LauncherSettings settings, Launch.CpuSaver saver = null)
         {
@@ -82,6 +82,7 @@ namespace EternalVR.Launcher.Core.Settings
             copy.Runtime = LauncherSettings.SystemRuntime;
             copy.DlssDllPath = string.Empty;
             copy.AdapterSteer = false;
+            copy.TestBuilds = false;
             copy.Profile = string.Empty;
             Directory.CreateDirectory(Dir);
             KeepOlderFile(n);
@@ -103,7 +104,7 @@ namespace EternalVR.Launcher.Core.Settings
         }
 
         /// <summary>
-        /// The profile <paramref name="name"/>'s settings with <paramref name="current"/>'s folders, runtime, DLSS file and graphics card, and
+        /// The profile <paramref name="name"/>'s settings with <paramref name="current"/>'s folders, runtime, DLSS file, graphics card and test builds choice, and
         /// <see cref="LauncherSettings.Profile"/> set to it; null when there is no such profile.
         /// </summary>
         public LauncherSettings Load(string name, LauncherSettings current)
@@ -115,6 +116,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.Runtime = current.Runtime;
             s.DlssDllPath = current.DlssDllPath;
             s.AdapterSteer = current.AdapterSteer;
+            s.TestBuilds = current.TestBuilds;
             s.Profile = n;
             return s;
         }

@@ -410,9 +410,24 @@ PromptLabelSet promptLabelSet(const BindingProfile& profile, const ButtonLabels&
     set.menuNextTab = printable(shortName(labels.name(Hand::Right, LabelInput::Grip)));
     set.menuPreviousPage = printable(shortName(labels.name(Hand::Left, LabelInput::Stick)));
     set.menuNextPage = printable(shortName(labels.name(Hand::Right, LabelInput::Stick)));
-    set.menuHints = {printable(labels.name(Hand::Left, LabelInput::Primary)),
-                     printable(labels.name(Hand::Left, LabelInput::Secondary)),
-                     printable(labels.name(Hand::Right, LabelInput::StickClick))};
+    // A place whose own control the controller lacks takes the stand-in (button_labels.hpp).
+    const auto place = [&labels](LabelInput input, LabelInput standIn) {
+        return LabelKey{Hand::Left, labels.name(Hand::Left, input).empty() ? standIn : input};
+    };
+    set.menuHintControls = {place(LabelInput::Primary, LabelInput::StickClick),
+                            place(LabelInput::Secondary, LabelInput::Menu),
+                            LabelKey{Hand::Right, LabelInput::StickClick}};
+    for (std::size_t i = 0; i < set.menuHints.size(); ++i) {
+        set.menuHints[i] =
+            printable(labels.name(set.menuHintControls[i].hand, set.menuHintControls[i].input));
+    }
+    if (profile.moveStick) {
+        const std::string& stick = labels.name(*profile.moveStick, LabelInput::Stick);
+        constexpr std::array<std::string_view, 4> kDirections{" Up", " Left", " Down", " Right"};
+        for (std::size_t i = 0; i < set.moveText.size() && !stick.empty(); ++i) {
+            set.moveText[i] = printable(stick + std::string(kDirections[i]));
+        }
+    }
     return set;
 }
 

@@ -12,6 +12,7 @@ using evr::game::GameAction;
 using evr::input::Axis2;
 using evr::input::Hand;
 using evr::input::kMinWheelHoldSeconds;
+using evr::input::kRestDwellSeconds;
 using evr::input::parseWeaponDirections;
 using evr::input::RestWheel;
 using evr::input::RestWheelEvent;
@@ -106,9 +107,9 @@ int frames(float seconds) {
     return static_cast<int>(std::ceil(seconds / kFrame));
 }
 
-// The left thumb rests (a few frames), both sticks centred.
+// The left thumb rests (long enough to settle, kRestDwellSeconds), both sticks centred.
 void landLeft(RestWheel& w) {
-    feed(w, frame(true, false, kCentre, kCentre), 8);
+    feed(w, frame(true, false, kCentre, kCentre), frames(kRestDwellSeconds) + 1);
 }
 
 } // namespace
@@ -144,7 +145,7 @@ TEST_CASE("touch, then push: the other stick opens the game's wheel and letting 
 
 TEST_CASE("the move stick picks when the right thumb rests") {
     RestWheel w = wheel();
-    feed(w, frame(false, true, kCentre, kCentre), 8);
+    feed(w, frame(false, true, kCentre, kCentre), frames(kRestDwellSeconds) + 1);
     const RestWheelOutput first = w.update(frame(false, true, kUp, kCentre), kFrame);
     CHECK(first.event == RestWheelEvent::Armed);
     CHECK(first.stickHand == Hand::Left);
@@ -154,21 +155,20 @@ TEST_CASE("the move stick picks when the right thumb rests") {
 
 TEST_CASE("after the window a resting thumb leaves the other stick alone") {
     RestWheel w = wheel();
-    feed(w, frame(true, false, kCentre, kCentre), frames(0.55f));
+    feed(w, frame(true, false, kCentre, kCentre), frames(kRestDwellSeconds + 0.55f));
     const Run run = feed(w, frame(true, false, kCentre, kRight), frames(0.5f));
     CHECK(run.events.empty());
     CHECK(run.takenFrames[kRightHand] == 0);
     CHECK(run.wheelFrames == 0);
 }
 
-TEST_CASE("a push inside the window arms; the window counts from the touch's first frame") {
+TEST_CASE("a push inside the window arms; the window opens once the touch has settled") {
     RestWheel w = wheel();
-    feed(w, frame(true, false, kCentre, kCentre), frames(0.4f));
+    feed(w, frame(true, false, kCentre, kCentre), frames(kRestDwellSeconds + 0.4f));
     CHECK(w.update(frame(true, false, kCentre, kRight), kFrame).event == RestWheelEvent::Armed);
-    // Just past the window from the first frame: nothing (it would still be open from a landing a debounce
-    // later).
+    // Just past the window from the end of the dwell: nothing.
     RestWheel late = wheel();
-    feed(late, frame(true, false, kCentre, kCentre), frames(0.52f));
+    feed(late, frame(true, false, kCentre, kCentre), frames(kRestDwellSeconds + 0.52f));
     CHECK(feed(late, frame(true, false, kCentre, kRight), 1).events.empty());
 }
 
@@ -192,9 +192,10 @@ TEST_CASE("a thumb landing while a stick is out does nothing until it lands agai
 }
 
 TEST_CASE("a touch lands on its first frame, and a brief lift does not end picking") {
-    // One frame of touch is a landing: a push on the next frame arms.
+    // One frame of touch is a landing: its dwell counts from that frame, so a push a dwell later arms.
     RestWheel w = wheel();
     w.update(frame(true, false, kCentre, kCentre), kFrame);
+    feed(w, frame(true, false, kCentre, kCentre), frames(kRestDwellSeconds));
     CHECK(w.update(frame(true, false, kCentre, kUp), kFrame).event == RestWheelEvent::Armed);
 
     RestWheel held = wheel();
@@ -440,7 +441,7 @@ TEST_CASE("while touched: a stick already out when the thumb lands waits for the
     RestWheel w = wheel(RestWheelMode::Full);
     // Out for a while before the touch (a flick that starts with the touch is held and picks instead).
     feed(w, frame(false, false, kCentre, kRight), frames(0.3f));
-    Run run = feed(w, frame(true, false, kCentre, kRight), 20);
+    Run run = feed(w, frame(true, false, kCentre, kRight), frames(kRestDwellSeconds) + 3);
     CHECK(run.last.taken[kRightHand]);
     CHECK(run.events.empty());
     feed(w, frame(true, false, kCentre, kCentre), 2);
@@ -457,7 +458,7 @@ TEST_CASE("with both thumbs resting the first push wins") {
     CHECK_FALSE(other.last.taken[kLeft]);
 
     RestWheel edge = wheel();
-    feed(edge, frame(true, true, kCentre, kCentre), 8);
+    feed(edge, frame(true, true, kCentre, kCentre), frames(kRestDwellSeconds) + 1);
     const RestWheelOutput armed = edge.update(frame(true, true, kUp, kCentre), kFrame);
     CHECK(armed.event == RestWheelEvent::Armed);
     CHECK(armed.stickHand == Hand::Left);

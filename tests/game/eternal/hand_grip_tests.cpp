@@ -11,6 +11,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 
 using evr::Vec3;
 using evr::game::builtinWeaponOffsets;
@@ -162,22 +163,28 @@ TEST_CASE("the Crucible's row turns the model so the glove holds the hilt as a g
     CHECK(turned <= 3.0f);
 }
 
-TEST_CASE("with the Precision Bolt's scope row the Heavy Cannon's glove stays where its row puts it") {
+TEST_CASE("a mod's sight row turns the gun about the glove's wrist, not the grip") {
     // The layer's placement for a mod's row (arm::rowPlacement, the right hand): the weapon's offset row,
     // its translation moved so the gun turns about the glove's wrist from the weapon's own sight turn to the
-    // mod's.
-    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    // mod's. No built-in row is keyed by a mod now, so the Heavy Cannon's rows as they were before its two
+    // mods shared one line stand in (DECISIONS T-206).
+    const WeaponOffsetTable table = parseWeaponOffsets(R"([standing]
+"weapon/player/heavy_cannon" = [-0.270, 0.114, 0.204]
+[sights]
+"weapon/player/heavy_cannon" = [-3.45, 0.19]
+"weapon/player/heavy_cannon_bolt_action" = [-0.15, 0.15]
+)");
     REQUIRE(table.ok());
     const Glove& cannon = kGloves[1];
     REQUIRE(std::string(cannon.weapon) == "weapon/player/heavy_cannon");
-    const std::optional<evr::game::SightRow> irons = table.lookupSight(cannon.weapon, {"", ""});
-    const std::optional<evr::game::SightRow> scope =
+    const std::optional<evr::game::SightRow> own = table.lookupSight(cannon.weapon, {"", ""});
+    const std::optional<evr::game::SightRow> mod =
         table.lookupSight(cannon.weapon, {"", "weapon/player/heavy_cannon_bolt_action"});
-    REQUIRE(irons.has_value());
-    REQUIRE(scope.has_value());
-    REQUIRE(scope->key != irons->key);
-    const IdAngles ironsTurn{irons->sight.pitch, irons->sight.yaw, 0.0f};
-    const IdAngles scopeTurn{scope->sight.pitch, scope->sight.yaw, 0.0f};
+    REQUIRE(own.has_value());
+    REQUIRE(mod.has_value());
+    REQUIRE(mod->key != own->key);
+    const IdAngles ownTurn{own->sight.pitch, own->sight.yaw, 0.0f};
+    const IdAngles modTurn{mod->sight.pitch, mod->sight.yaw, 0.0f};
     const WeaponOffset o = table.lookup(cannon.weapon, OffsetPosture::Standing);
     const Vec3 rowTranslation{o.forward, o.left, o.up};
     const IdAngles rotation{o.pitch, o.yaw, o.roll};
@@ -187,11 +194,56 @@ TEST_CASE("with the Precision Bolt's scope row the Heavy Cannon's glove stays wh
             placeViewmodel(grip, grip.axis, translation, rotation, turn, kWrist, 1.0f);
         return placed.offset + inFrame(placed.axis, cannon.wrist);
     };
-    const Vec3 withIrons = wristWith(rowTranslation, ironsTurn);
-    const Vec3 moved = translationKeepingWrist(rowTranslation, rotation, ironsTurn, scopeTurn, kWrist);
-    const Vec3 withScope = wristWith(moved, scopeTurn);
-    INFO("wrist with the scope's row (", withScope.x, " ", withScope.y, " ", withScope.z, ")");
-    CHECK(evr::length(withScope - withIrons) <= 0.001f);
+    const Vec3 withOwn = wristWith(rowTranslation, ownTurn);
+    const Vec3 moved = translationKeepingWrist(rowTranslation, rotation, ownTurn, modTurn, kWrist);
+    const Vec3 withMod = wristWith(moved, modTurn);
+    INFO("wrist with the mod's row (", withMod.x, " ", withMod.y, " ", withMod.z, ")");
+    CHECK(evr::length(withMod - withOwn) <= 0.001f);
     // Turned about the grip with the row's own translation, it would sit about 5 mm off.
-    CHECK(evr::length(wristWith(rowTranslation, scopeTurn) - withIrons) > 0.003f);
+    CHECK(evr::length(wristWith(rowTranslation, modTurn) - withOwn) > 0.003f);
+}
+
+TEST_CASE("the Heavy Cannon sits where the Precision Bolt's rig-checked placement put it, with every mod") {
+    // Before the two mods shared one line the Bolt's scope row turned the gun about the glove's wrist from
+    // the irons' turn: that placement was checked on the hands rig (docs/rig-findings/hands-rig.md, section
+    // 18: the scope 0.17 degrees from the ray, the glove's wrist 0.1 / 0.3 cm from its target). With no mod
+    // and with the Micro Missiles the gun now sits there too: the same turn, the glove within a millimetre.
+    const IdAngles ironsTurn{-3.45f, 0.19f, 0.0f};
+    const IdAngles scopeTurn{-0.15f, 0.15f, 0.0f};
+    const IdAngles noRotation{};
+    const EyeRelativePose grip{};
+    const Glove& cannon = kGloves[1];
+    REQUIRE(std::string(cannon.weapon) == "weapon/player/heavy_cannon");
+    const Vec3 boltTranslation =
+        translationKeepingWrist({-0.270f, 0.114f, 0.204f}, noRotation, ironsTurn, scopeTurn, kWrist);
+    const EyeRelativePose bolt =
+        placeViewmodel(grip, grip.axis, boltTranslation, noRotation, scopeTurn, kWrist, 1.0f);
+    const Vec3 boltWrist = bolt.offset + inFrame(bolt.axis, cannon.wrist);
+
+    const WeaponOffsetTable table = parseWeaponOffsets(builtinWeaponOffsets());
+    REQUIRE(table.ok());
+    const WeaponOffset o = table.lookup(cannon.weapon, OffsetPosture::Standing);
+    const std::optional<evr::game::SightRow> own = table.lookupSight(cannon.weapon, {"", ""});
+    REQUIRE(own.has_value());
+    const IdAngles ownTurn{own->sight.pitch, own->sight.yaw, 0.0f};
+    for (const evr::game::WeaponModDecls& mods :
+         {evr::game::WeaponModDecls{"", ""},
+          evr::game::WeaponModDecls{"", "weapon/player/heavy_cannon_bolt_action"},
+          evr::game::WeaponModDecls{"", "weapon/player/heavy_cannon_burst_detonate"},
+          evr::game::WeaponModDecls{"", "weapon/player/heavy_cannon_burst_detonate_mastery"}}) {
+        INFO(mods[1]);
+        const std::optional<evr::game::SightRow> row = table.lookupSight(cannon.weapon, mods);
+        REQUIRE(row.has_value());
+        const IdAngles turn{row->sight.pitch, row->sight.yaw, 0.0f};
+        const IdAngles rotation{o.pitch, o.yaw, o.roll};
+        const Vec3 translation =
+            translationKeepingWrist({o.forward, o.left, o.up}, rotation, ownTurn, turn, kWrist);
+        const EyeRelativePose placed =
+            placeViewmodel(grip, grip.axis, translation, rotation, turn, kWrist, 1.0f);
+        const Vec3 wrist = placed.offset + inFrame(placed.axis, cannon.wrist);
+        INFO("forward (", placed.axis.forward.x, " ", placed.axis.forward.y, " ", placed.axis.forward.z, ")");
+        CHECK(evr::length(placed.axis.forward - bolt.axis.forward) <= 1e-4f);
+        CHECK(evr::length(placed.axis.up - bolt.axis.up) <= 1e-4f);
+        CHECK(evr::length(wrist - boltWrist) <= 0.001f);
+    }
 }

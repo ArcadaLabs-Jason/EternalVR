@@ -170,9 +170,13 @@ head in LOCAL --> room anchor --> head in room space           runtime events: L
   black view and could not tell which way was out.
 - **Head in geometry** (T-062, R10 section 3.2 step 4; `src/vkcore/head_sweep.cpp`,
   `src/features/roomscale/head_fade.hpp`). Each game frame with an offset over 1 cm, the engine's own
-  collision query (`idHavokCollision::Translation`, synchronous, as the game calls it for its cameras)
-  sweeps the collision world's 0.16 m sphere from the game's eye to the rendered head, against the world
-  and player clip (not monsters), ignoring the player. From the first contact on, the rest of the way is
+  collision query (`idHavokCollision::Translation`, synchronous) sweeps the collision world's 0.16 m sphere
+  from the game's eye to the rendered head, against the world and player clip (not monsters), ignoring the
+  player. A query is made only with the world at rest. The camera hook usually runs while the game's
+  physics step is in flight: it then asks, the sweep is made just after the game syncs the step, and the
+  camera hook uses the answer a frame later; with no step in flight (the pause menu) it sweeps at once
+  (`docs/rig-findings/collision-query.md`, "When the world may be queried"). The aim dot's ray and a
+  cutscene's rays go the same way. From the first contact on, the rest of the way is
   the penetration depth. The camera is never pushed back:
   - the view fades to black by depth, 0 at the first touch and fully black 0.10 m further in (so it is
     black before the 0.06 m near plane reaches the wall), rising at most 0.10 s from clear to black and

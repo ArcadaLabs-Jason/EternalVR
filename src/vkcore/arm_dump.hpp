@@ -33,6 +33,9 @@ void noteView(const WorldHand& world, const ModelPlacement& model);
 void noteGameArm(arm::ArmSide side, float weight);
 // This tick's fingers of the layer's arm on `side` (the free off hand's hand poses), after noteLayerArm.
 void noteFingers(arm::ArmSide side, const arm::DumpFingers& fingers);
+// This tick's index finger on the trigger of the layer's arm on `side` that holds the gun, after
+// noteLayerArm.
+void noteTrigger(arm::ArmSide side, const arm::DumpTrigger& trigger);
 void noteLayerArm(arm::ArmSide side,
                   float weight,
                   float twist,

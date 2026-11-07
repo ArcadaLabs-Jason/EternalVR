@@ -16,9 +16,11 @@ evr_add_module(evr_xr_math
         launcher_pose.cpp
         marker_projection.cpp
         offhand_pose.cpp
+        shield_pose.cpp
         weapon_pose.cpp
         projection.cpp
         stereo_view.cpp
         upright_space.cpp
+        view_attached.cpp
     DEPENDS
         evr_common)

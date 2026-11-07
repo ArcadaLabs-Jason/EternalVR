@@ -69,7 +69,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, cutscene_3d, shot_origin, aim_dot_size, menu_beam, perf_log, perf_overlay, dossier, map_sticks,
     /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, roll_wrist, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, weapon_hand_angle, off_hand_angle, preset, profile_unsaved, profile_check and adapter_steer
+    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, weapon_hand_angle, off_hand_angle, preset, profile_unsaved, profile_check, adapter_steer and test_builds
     /// (dlss_version replaced dlss_dll, which is still read once). skip_cutscenes (off by default) replaced skip_cinematics, which
     /// was on by default and written into every file: an old skip_cinematics line is not read, so the skip starts off once
     /// for everyone, and it is dropped on the next save. Keys of settings the launcher no longer has are not read and are dropped
@@ -225,11 +225,6 @@ namespace EternalVR.Launcher.Core.Settings
         /// <summary>CPU and GPU timing in the mod's log (the layer's <c>ETERNALVR_GPU_TIMING</c> and <c>ETERNALVR_CPU_TIMING</c>, on
         /// by default, T-190); off turns both off, for a PC where they might cost frames.</summary>
         public bool PerfLog { get; set; } = true;
-        /// <summary>
-        /// The game renders on the headset's graphics card on a PC with two or more (the layer's <c>ETERNALVR_ADAPTER_STEER</c>,
-        /// docs/rig-findings/adapter-steer.md); off by default. This machine's: never in a profile.
-        /// </summary>
-        public bool AdapterSteer { get; set; } = false;
         /// <summary>The whole HUD on the panel (default), health, armor and ammo on the off hand's wrist, or the ammo on the weapon.</summary>
         public HudMode Hud { get; set; } = HudMode.Panel;
         /// <summary>Extra command-line text, checked by the argument policy.</summary>
@@ -241,11 +236,11 @@ namespace EternalVR.Launcher.Core.Settings
 
         public LauncherSettings Clone() => (LauncherSettings)MemberwiseClone();
 
-        /// <summary>The defaults, keeping this machine's settings (the folders, the runtime, the DLSS file, the headset's graphics card), the profile, its preset and the keys this launcher does not know.</summary>
+        /// <summary>The defaults, keeping this machine's settings (the folders, the runtime, the DLSS file, the headset's graphics card, test builds), the profile, its preset and the keys this launcher does not know.</summary>
         public LauncherSettings WithDefaults() => new LauncherSettings
         {
             GameDir = GameDir, LayerDir = LayerDir, Runtime = Runtime, UnknownKeys = UnknownKeys, Profile = Profile, DlssDllPath = DlssDllPath, Preset = Preset,
-            AdapterSteer = AdapterSteer,
+            AdapterSteer = AdapterSteer, TestBuilds = TestBuilds,
         };
 
         /// <summary><paramref name="v"/> within [min, max]; <paramref name="fallback"/> when it is not a number.</summary>
@@ -386,7 +381,7 @@ namespace EternalVR.Launcher.Core.Settings
             if (map.TryGetValue("hud", out var hu)) s.Hud = Pick(hu, HudMode.Panel, ("wrist", HudMode.Wrist), ("weapon", HudMode.Weapon));
             if (map.TryGetValue("extra_args", out var e)) s.ExtraArguments = e;
             if (map.TryGetValue("profile", out var pr)) s.Profile = ProfileStore.NormaliseName(pr) ?? string.Empty;
-            if (map.TryGetValue("adapter_steer", out var st)) s.AdapterSteer = On(st);
+            s.ReadThisPc(map);
             s.ReadPreset(map);
             s.UnknownKeys = order.Where(k => !KnownKeys.Contains(k) && !IsCpuSaverKey(k)).Select(k => new KeyValuePair<string, string>(k, map[k])).ToList();
             return s;
@@ -474,7 +469,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("mirror_crop = " + (MirrorCrop ? "16:9" : "full"));
             sb.AppendLine("cinema_aspect = " + MirrorSettings.CinemaName(Cinema));
             sb.AppendLine("hud = " + HudName(Hud));
-            sb.AppendLine("adapter_steer = " + (AdapterSteer ? "1" : "0"));
+            WriteThisPc(sb);
             sb.AppendLine("extra_args = " + OneLine(ExtraArguments));
             WritePreset(sb);
             if (Profile.Length > 0) sb.AppendLine("profile = " + OneLine(Profile));

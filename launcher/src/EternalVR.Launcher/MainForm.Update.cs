@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using EternalVR.Launcher.Core;
 using EternalVR.Launcher.Core.Update;
@@ -13,7 +14,8 @@ namespace EternalVR.Launcher
     /// if so, "Update to x.y.z..." appears next to the other buttons and offers to download and install it
     /// (<see cref="UpdateDialog"/>). The check can be turned off, and run by hand, on the Checks and log tab. A launcher
     /// that is not an unpacked release (a build or test folder: no BUILD-INFO.txt) is not checked at start; Check now
-    /// shows what is out and why it cannot install it.
+    /// shows what is out and why it cannot install it. With "Get test builds" on, the same check also looks for a newer test
+    /// build (MainForm.TestBuilds.cs).
     /// </summary>
     public sealed partial class MainForm
     {
@@ -41,6 +43,7 @@ namespace EternalVR.Launcher
             updateButton.Click += (s, e) => OfferUpdate();
             tips.SetToolTip(updateButton, "A newer EternalVR is out: see what is new, and download and install it.");
             tips.SetToolTip(updateCheck, "When the launcher starts, it asks GitHub (at most once an hour) whether a newer EternalVR release is out.");
+            WireTestBuilds();
             try
             {
                 if (UpdatePackage.RemoveOldFiles(ctx.ProgramDir) > 0) ctx.Log.Info("update: some files an update replaced are still in use; they are removed next time");
@@ -72,14 +75,22 @@ namespace EternalVR.Launcher
             {
                 // Asked less than an hour ago: what that check found is still offered.
                 if (state.Found != null && state.Found > Current && state.Found != state.Skipped) ShowUpdateButton(state.Found);
+                ShowFoundTestBuild(state);
                 return;
             }
             checkingUpdate = true;
             checkUpdateNow.Enabled = false;
+            // The test list's answer, while it is still to come: handled after the release's, which never waits for it.
+            Task<TestFeedOutcome> pendingTest = null;
+            AvailableRelease found = null;
+            var http = UpdateClient.NewHttp(Current);
             try
             {
-                using (var http = UpdateClient.NewHttp(Current))
-                    available = await UpdateClient.NewestAsync(http, Current, asked ? null : state.Skipped, CancellationToken.None);
+                bool tests = ctx.Settings.TestBuilds;
+                var run = UpdateCheck.Start(http, Current, asked ? null : state.Skipped, tests ? RunningBuild.Read(ctx.ProgramDir, Current) : null, tests,
+                    CancellationToken.None);
+                pendingTest = run.Test;
+                available = found = await run.Release;
                 state = LoadUpdateState();
                 state.LastCheck = DateTime.UtcNow;
                 state.Found = available?.Version;
@@ -88,11 +99,21 @@ namespace EternalVR.Launcher
                 {
                     updateButton.Visible = false;
                     ctx.Log.Info("update: EternalVR " + Current + " is the newest release");
-                    if (asked) MessageBox.Show(this, "You have the newest EternalVR (" + Current + ").", "EternalVR update", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    if (!asked) return;
+                    // Nothing to offer: Check now waits for the test list (at most UpdateCheck.TestTimeout) to say it all in one.
+                    var test = pendingTest == null ? null : await pendingTest;
+                    pendingTest = null;
+                    if (test != null) TakeTestBuild(test, null);
+                    if (test?.Build != null) OfferTestBuild();
+                    else
+                        MessageBox.Show(this, UpdateCheck.NewestMessage(Current, test != null, test?.Error), "EternalVR update", MessageBoxButtons.OK,
+                            test?.Error != null ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
                     return;
                 }
                 ctx.Log.Info($"update: EternalVR {available.Version} is out ({available.Page})");
                 ShowUpdateButton(available.Version);
+                checkingUpdate = false;
+                checkUpdateNow.Enabled = true;
                 if (asked) OfferUpdate();
             }
             catch (Exception e) when (e is HttpRequestException || e is OperationCanceledException || e is FormatException || e is IOException)
@@ -104,6 +125,8 @@ namespace EternalVR.Launcher
             {
                 checkingUpdate = false;
                 checkUpdateNow.Enabled = true;
+                if (pendingTest != null) FinishTestCheck(pendingTest, found, http);
+                else http.Dispose();
             }
         }
 

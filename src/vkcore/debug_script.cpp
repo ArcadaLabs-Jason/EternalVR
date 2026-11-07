@@ -63,7 +63,10 @@ constexpr std::string_view kAllowedCommands[] = {
     "r_refractionMaxUpdates",
     // The HUD Scale changed in play as the game's menu changes it (a write the layer did not make; the
     // hold yields to it: runtime_cvars_yield.cpp).
-    "swf_anchorProfile"};
+    "swf_anchorProfile",
+    // The piloted Revenant's rockets, their paths drawn (tools/rig/qa/qa-scenarios-demon.ps1,
+    // revenant-rockets).
+    "g_projectileDebug", "g_projectileDebugLifetime"};
 
 char lower(char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;

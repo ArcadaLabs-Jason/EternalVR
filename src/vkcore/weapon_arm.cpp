@@ -6,7 +6,9 @@
 #include "features/arm/arm_solve.hpp"
 #include "features/arm/arm_surfaces.hpp"
 #include "features/arm/grip_hand.hpp"
+#include "features/arm/hand_pose.hpp"
 #include "features/arm/mod_mix.hpp"
+#include "features/arm/trigger_finger.hpp"
 #include "features/arm/twist_fault.hpp"
 #include "vkcore/arm_dump.hpp"
 #include "vkcore/arm_solve_mode.hpp"
@@ -15,9 +17,11 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/weapon_arm_state.hpp"
+#include "vkcore/weapon_finger.hpp"
 #include "xr_math/offhand_pose.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -152,6 +156,7 @@ bool poseArm(ArmState& s,
         if (clean && game_arm::readHand(s.side, hands, hand)) {
             s.idleHand = hand.local;
             s.idleHandOk = true;
+            s.idleItem = s.item;
             if (input::leftHandArms(cfg)) {
                 noteCapture(s, hands, *read);
             }
@@ -192,12 +197,25 @@ bool poseArm(ArmState& s,
     for (std::size_t i = 0; i < arm::kArmJointCount; ++i) {
         mixed[i] = arm::blendPose(animated[i], ours->joints[i], weight);
     }
+    // The index finger on the trigger (weapon_finger.hpp, arm::indexChoice): opened from the glove's grip, or
+    // from the game's own grip of the item held now as last read clean (only the finger's three bones written
+    // then), by the arm's weight; the game's finger while that grip has not been read for this item.
+    const arm::IndexChoice choice =
+        arm::indexChoice(s.indexOpen, gloveIn.has_value(), s.idleHandOk && s.idleItem == s.item, weight);
+    std::optional<arm::GripPose> held;
+    std::optional<arm::HandLocal> indexHand;
+    if (gloveIn && choice.from == arm::IndexChoice::From::Glove) {
+        held = *gloveIn->grip;
+        held->hand = arm::openIndex(held->hand, choice.open);
+    } else if (choice.from == arm::IndexChoice::From::Grip) {
+        indexHand = arm::openIndex(s.idleHand, choice.open);
+    }
     if (gloveIn) {
         // The glove: its wrist where the arm's blend puts it, the fingers closed as far.
         s.gloveCurl = weight * gripWeight;
         glove =
             arm::gripOverrides(attach, gloveIn->wrist, arm::relative(attach, mixed[index(ArmJoint::Hand)]),
-                               s.idleHand, *gloveIn->grip, s.gloveCurl, gloveIn->modWeight);
+                               s.idleHand, held ? *held : *gloveIn->grip, s.gloveCurl, gloveIn->modWeight);
         glove->modelSpace = s.modelSpace;
         glove->modelShoulder = solve.modelShoulder;
     }
@@ -228,10 +246,20 @@ bool poseArm(ArmState& s,
             written[i] = arm::compose(glove->wrist, arm::relative(mixed[index(ArmJoint::Hand)], mixed[i]));
         }
     }
+    const std::optional<std::array<xr_math::ModelPose, arm::kFingerModCount>> indexWrites =
+        indexHand ? std::optional(arm::fingerWrites(*indexHand)) : std::nullopt;
     if (!mp_guard::allowsGameTouch() ||
         !game_arm::writeArm(s.side, hands, written, read->scale, read->origin, handsOnly.zeroScale, &mixed,
-                            nullptr, glove ? &*glove : nullptr)) {
+                            nullptr, glove ? &*glove : nullptr, indexWrites ? &*indexWrites : nullptr,
+                            choice.mask)) {
         return false;
+    }
+    if (indexHand) {
+        weapon_finger::noteDump(s.side, hands, choice.open, s.idleHand, *indexHand);
+    } else if (held && gloveIn) {
+        weapon_finger::noteDump(s.side, hands, choice.open, gloveIn->grip->hand, held->hand);
+    } else if (s.holdsWeapon) {
+        weapon_finger::noteGame(s.side, hands, s.idleHandOk ? &s.idleHand : nullptr);
     }
     if (glove) {
         s.wrist.wrote(attach, glove->wrist, s.gloveWeight.write);
@@ -322,6 +350,7 @@ void tickArm(ArmState& s,
         trace(s, decision, weight);
     }
     arm_dump::noteGameArm(s.side, weight);
+    s.indexOpen = s.holdsWeapon ? weapon_finger::update(s.side, s.item, dt, cfg) : std::nullopt;
     if (s.held) {
         s.activeGrip = *s.held;
         s.hasActive = true;
@@ -332,6 +361,7 @@ void tickArm(ArmState& s,
     s.gloveWeight = s.weights ? arm::gloveWeight(*s.weights) : arm::GloveWeight{};
     s.settleWeight = s.settle.update(s.weights && s.gloveWeight.settled, dt, cfg.offhandBlendSeconds);
     if (weight <= 0.0f) {
+        weapon_finger::release(s.side);
         giveBack(s, hands);
         if (input::leftHandArms(cfg)) {
             captureFrom(s, hands);
@@ -387,7 +417,9 @@ void logSettings() {
                 input::armFaultName(cfg.testArmFault),
                 cfg.testArmFault == input::ArmFault::Twist     ? "the whole twist on the wrist"
                 : cfg.testArmFault == input::ArmFault::Forearm ? "hands only with the forearm left drawn"
-                                                               : "the off hand's fingers left the game's");
+                : cfg.testArmFault == input::ArmFault::Trigger
+                    ? "the weapon hand's index finger turned past the game's grip, into the trigger guard"
+                    : "the off hand's fingers left the game's");
     }
 }
 
@@ -401,6 +433,7 @@ void tick(const std::byte* hands,
     g_right.item = arms.arms;
     g_right.held = rowGrip(arms.arms);
     g_right.modelSpace = false;
+    g_right.holdsWeapon = arm::holdsGun(true, arm::ArmSide::Right);
     tickArm(g_right, hands, input::decideWeaponArm(signals, cfg.weaponArm), world, model,
             {world.weaponShoulder, world.weaponElbow}, dt);
 }
@@ -415,6 +448,7 @@ void holding(arm::ArmSide side,
     s.held = hold.grip ? std::optional(*hold.grip) : std::nullopt;
     s.modelSpace = hold.modelSpace;
     s.item = hold.item;
+    s.holdsWeapon = arm::holdsGun(false, side); // the left glove holds the gun, the right one the off hand
     s.wristTarget = hold.grip ? hold.wrist : std::nullopt;
     tickArm(s, hands, hold.decision, world, model, {hold.shoulder, hold.elbow}, dt);
 }

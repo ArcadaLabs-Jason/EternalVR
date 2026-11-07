@@ -383,7 +383,8 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     static constexpr std::pair<const char*, ArmFault> kArmFault[] = {{"none", ArmFault::None},
                                                                      {"twist", ArmFault::Twist},
                                                                      {"forearm", ArmFault::Forearm},
-                                                                     {"fingers", ArmFault::Fingers}};
+                                                                     {"fingers", ArmFault::Fingers},
+                                                                     {"trigger", ArmFault::Trigger}};
     r.choice("ETERNALVR_TEST_ARM_FAULT", kArmFault, s.testArmFault);
     if (r.get("ETERNALVR_TEST_ARM_MOD_WEIGHT")) {
         float weight = -1.0f;
@@ -418,6 +419,8 @@ const char* armFaultName(ArmFault fault) {
         return "forearm";
     case ArmFault::Fingers:
         return "fingers";
+    case ArmFault::Trigger:
+        return "trigger";
     }
     return "none";
 }

@@ -136,8 +136,8 @@ namespace EternalVR.Launcher.Core.Settings
                 + "a weapon (a small turn of the wrist is enough) and let go to pick it.",
                 "Stick (default)", "Point with your hand"),
             [Setting.ThumbRestWheel] = new Text("Thumb-rest wheel",
-                "Rest a thumb on its thumb rest and the other stick picks weapons. Touch, then push: only a push within "
-                + "half a second of the touch. While touched: for as long as the thumb rests. Turn stick picks: for playing "
+                "Rest a thumb on its thumb rest and the other stick picks weapons. Touch, then push: rest the thumb for a "
+                + "moment (a quarter of a second), then push within half a second. If you flick the moment you touch, use While touched. While touched: for as long as the thumb rests. Turn stick picks: for playing "
                 + "standing, the turn stick always picks; rest the other thumb to turn with it. Needs a thumb-rest sensor "
                 + "(Quest and Rift controllers).",
                 "Touch, then push", "While touched", "Turn stick picks (standing)", "Off (default)"),
@@ -154,8 +154,8 @@ namespace EternalVR.Launcher.Core.Settings
                 "On controllers without a thumb rest (Index, Pico 4), a thumb resting on the A/B or X/Y buttons counts as "
                 + "one. Off by default: thumbs also brush them on the way to a press."),
             [Setting.ThumbRestSlowdown] = new Text("Slow time on the thumb-rest wheel",
-                "Time slows while the game's weapon wheel is open. Off keeps full speed when the wheel opens from the thumb "
-                + "rest; the stick-held wheel always slows time."),
+                "Time slows while the game's weapon wheel is open. Unticked, the thumb-rest wheel still works but keeps "
+                + "full speed; the wheel held open with the stick always slows time."),
             [Setting.AimSteadiness] = new Text("Aim steadiness",
                 "Steadies the gun, the aim dot and the menu pointer against the small shake of a held hand. Higher is "
                 + "steadier but they follow your hand a little later.",
@@ -355,6 +355,14 @@ namespace EternalVR.Launcher.Core.Settings
                 "Off", "Frame rate", "Detailed"),
             [Setting.ExtraArguments] = new Text("Extra game arguments",
                 "Extra command-line text for the game, for testing. Multiplayer arguments are refused."),
+            [Setting.TestBuilds] = new Text("Get test builds",
+                "Test builds are early versions of the next release, put out so players can try new fixes and features before "
+                + "everyone gets them. On: when the launcher looks for updates (when it starts, with \"Check for new EternalVR "
+                + "versions\" on, or with Check now on the Checks and log tab), it also looks for a newer test build and shows it "
+                + "on a button of its own, with a link to its page. Nothing is downloaded or installed for you: a test build is a "
+                + "zip you unzip into a folder of its own, and your EternalVR folder stays as it is. Each test build's notes say "
+                + "what to try; post how it went in the Discord thread they link. Off by default. For this PC: kept when you "
+                + "switch VR settings profiles."),
         };
 
         public static Text For(Setting setting) => Texts.TryGetValue(setting, out var t) ? t : null;

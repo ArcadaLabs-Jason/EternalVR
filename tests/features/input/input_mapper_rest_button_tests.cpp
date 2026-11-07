@@ -132,13 +132,13 @@ TEST_CASE("a bound rest leaves the thumb-rest wheel; the other rest still arms")
 
     // The left thumb lands and the right (turn) stick is pushed: no pick, the rest is a button.
     feed(mapper, restFrame(false), frames(0.5f), GameAction::WeaponWheel);
-    Run run = feed(mapper, restFrame(true), 3, GameAction::WeaponWheel);
+    Run run = feed(mapper, restFrame(true), frames(0.3f), GameAction::WeaponWheel);
     run = feed(mapper, restFrame(true, false, {}, {0.0f, 1.0f}), frames(0.4f), GameAction::WeaponWheel, run);
     CHECK(run.wheelFrames == 0);
     feed(mapper, restFrame(false), frames(0.6f), GameAction::WeaponWheel);
 
     // The right thumb lands and the left (move) stick is pushed: the wheel picks.
-    run = feed(mapper, restFrame(false, true), 3, GameAction::WeaponWheel);
+    run = feed(mapper, restFrame(false, true), frames(0.3f), GameAction::WeaponWheel);
     run = feed(mapper, restFrame(false, true, {1.0f, 0.0f}), frames(0.4f), GameAction::WeaponWheel, run);
     CHECK(run.wheelFrames > 0);
 }

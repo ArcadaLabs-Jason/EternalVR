@@ -16,7 +16,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// </summary>
         public static readonly IReadOnlyCollection<string> Machine = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "schema_version", "game_dir", "layer_dir", "runtime", "dlss_dll_path", "adapter_steer", "profile", "preset", "profile_unsaved", "profile_check",
+            "schema_version", "game_dir", "layer_dir", "runtime", "dlss_dll_path", "adapter_steer", "test_builds", "profile", "preset", "profile_unsaved", "profile_check",
         };
 
         /// <summary>Keys a profile carries that no row shows (set in the file by hand).</summary>
@@ -103,7 +103,7 @@ namespace EternalVR.Launcher.Core.Settings
 
         /// <summary>
         /// The keys of <paramref name="setting"/>'s row; none for a row that only shows something (the headset, Each eye, What
-        /// runs), this machine's (the game folder, the runtime, the headset's graphics card), the controls (kept per profile in their own folder) and the CPU
+        /// runs), this machine's (the game folder, the runtime, the headset's graphics card, test builds), the controls (kept per profile in their own folder) and the CPU
         /// Saver's rows (one key per item).
         /// </summary>
         public static IReadOnlyList<string> Of(Setting setting) => Keys.TryGetValue(setting, out var keys) ? keys : None;

@@ -3,27 +3,30 @@
 // Weapon mod switch by a wrist flick, Roll wrist in the launcher (docs/VR_INTERACTIONS.md section 2.7). On by
 // default.
 //
-// A fast roll of the weapon hand about its pointing axis, the controller turned over and back like a
-// wrist, presses the weapon mod switch (the game's `_reload`, the Y tap). The roll rate comes from the aim
-// orientation between two frames: the rotation between them, as a rotation vector over the time between the
-// frames' samples (InputFrame::sampleSeconds; the mapper's frame time when that is not known), split into the
-// part about the pointing axis (the roll) and the rest (the pointing direction swinging round). The same
-// sample read twice adds nothing, and a gap of kMaxRateGapSeconds or more (a load, a stall) reads no rate
-// and starts the smoothing over.
+// The weapon hand turned over and back, fast, about its pointing axis like a wrist, presses the weapon mod
+// switch (the game's `_reload`, the Y tap). The roll rate comes from the aim orientation between two frames:
+// the rotation between them, as a rotation vector over the time between the frames' samples
+// (InputFrame::sampleSeconds; the mapper's frame time when that is not known), split into the part about the
+// pointing axis (the roll) and the rest (the pointing direction swinging round). The same sample read twice
+// adds nothing, and a gap of kMaxRateGapSeconds or more (a load, a stall) reads no rate and starts over.
 //
-// A flick is a roll rate (smoothed over a few frames) of `minRollDegrees` per second or more, in either
-// direction, that is at least `dominance` times the rate at which the pointing direction swings, with the
-// hand not travelling faster than `maxHandSpeed`. Fast aiming swings the pointing direction and carries the
-// hand, so it is not a flick. One press per flick: nothing fires within `cooldownSeconds`; the next flick
-// the same way waits until the roll has stayed below a quarter of the minimum for kRearmQuietSeconds, and a
-// roll the other way, which is how a flick and back comes back, for kReturnQuietSeconds. A wrist turned over,
-// held a moment and turned back is one flick; held still longer than kReturnQuietSeconds, the roll back is a
-// flick of its own (the weapon mod switched back). A hand whose tracking is lost starts over, and a turn of
-// more than 4000 degrees per second in one frame is a tracking jump, not a wrist, and reads nothing.
-//
-// Looking at the pointing axis: with the weapon pointing steeply up or down a turn of the body about the
-// vertical is mostly a roll of the controller; the swing of the pointing direction it also has keeps that
-// from being a flick unless it is very fast.
+// The roll rate (smoothed over a few frames) also adds up to the angle the hand has turned, and its turning
+// points split that into strokes, one way then the other. A flick is two strokes:
+// - the over: kFlickOverDegrees or more one way, its roll rate reaching `minRollDegrees` per second at least
+//   `dominance` times the rate at which the pointing direction swings, with the hand not travelling faster
+//   than `maxHandSpeed`, in the same frame. Fast aiming swings the pointing direction and carries the hand.
+// - the back: the other way, its rate reaching the minimum and at least the swing's, and kFlickBackDegrees
+//   back, both within kFlickBackSeconds of the over's furthest point. The flick fires there.
+// A stroke shorter than kMinStrokeDegrees (a wobble at the turn, a hesitation in the middle of a roll) is no
+// stroke: the one before it goes on. The over's furthest point moves on for its timer only when the hand goes
+// kHoldTremorDegrees further, so a hand turned over and held with a tremor is still held, and its back comes
+// too late.
+// A roll one way only, however fast, is no flick: a forearm turning one way as the player turned in the room
+// switched the weapon mod in a player's session, and most rolls taken for a flick in recorded play went one
+// way (DECISIONS T-202). One press per flick: nothing fires within `cooldownSeconds`, nor until the roll has
+// stayed below a quarter of the minimum for kRearmQuietSeconds. A hand whose tracking is lost starts over,
+// and a turn of more than 4000 degrees per second in one frame is a tracking jump, not a wrist, and reads
+// nothing.
 
 #include "common/quat.hpp"
 #include "features/input/controller_state.hpp"
@@ -36,16 +39,27 @@ inline constexpr float kMinFlickDegreesPerSecond = 200.0f;
 inline constexpr float kMaxFlickDegreesPerSecond = 1500.0f;
 // A gap between two samples this long or longer is a stall, not a rotation rate worth reading.
 inline constexpr float kMaxRateGapSeconds = 0.1f;
-// How long the roll has to stay quiet (below a quarter of the minimum) before the next flick the same way,
-// and before a flick the other way (the way the last flick's roll comes back).
+// How long the roll has to stay quiet (below a quarter of the minimum) before the next flick.
 inline constexpr float kRearmQuietSeconds = 0.2f;
-inline constexpr float kReturnQuietSeconds = 0.8f;
+// The flick's two strokes: how far the hand turns over and how far back, in degrees, and how soon after the
+// over's furthest point the back must have come that far. Deliberate flicks in a headset turned over 130 to
+// 160 degrees and came back 70 to 140 within about 0.1 s; of the 129 rolls in six hours of recorded play that
+// the one-stroke flick up to 0.1.87 took for a flick, 9 in 10 came back less than 60 degrees, and these
+// strokes fire on none of them (docs/VR_INTERACTIONS.md section 2.7).
+inline constexpr float kFlickOverDegrees = 90.0f;
+inline constexpr float kFlickBackDegrees = 60.0f;
+inline constexpr float kFlickBackSeconds = 0.3f;
+// A stroke turns once the angle has come back this far from its furthest point; a stroke shorter than
+// kMinStrokeDegrees is a wobble in the stroke before it. A held hand's tremor is a degree or two.
+inline constexpr float kStrokeDegrees = 10.0f;
+inline constexpr float kMinStrokeDegrees = 2.0f * kStrokeDegrees;
+inline constexpr float kHoldTremorDegrees = 2.0f;
 
 struct FlickSettings {
     bool enabled = true;
     float minRollDegrees = 450.0f; // per second, about the pointing axis
-    float dominance = 2.0f;        // the roll must be this many times the swing of the pointing direction
-    float maxHandSpeed = 1.5f;     // metres per second
+    float dominance = 2.0f;    // the over's roll must be this many times the swing of the pointing direction
+    float maxHandSpeed = 1.5f; // metres per second, during the over
     float cooldownSeconds = 0.6f;
 };
 
@@ -54,10 +68,11 @@ struct FlickOutput {
     // For tests and the log: the smoothed rates of this frame, degrees per second (roll signed).
     float rollDegrees = 0.0f;
     float swingDegrees = 0.0f;
-    // For the log of a flick: the weapon's pointing pitch (degrees, up positive), the hand's speed (metres
-    // per second) and the head's turn about the vertical (degrees per second, left positive; 0 without a head
-    // pose). A body turned with the weapon pointing steeply down reads as a roll (see above): these tell that
-    // from a wrist in a player's log.
+    // For the log of a flick: how far the hand turned over and how far back when it fired (degrees), the
+    // weapon's pointing pitch (degrees, up positive), the hand's speed (metres per second) and the head's
+    // turn about the vertical (degrees per second, left positive; 0 without a head pose).
+    float overDegrees = 0.0f;
+    float backDegrees = 0.0f;
     float pitchDegrees = 0.0f;
     float handSpeed = 0.0f;
     float headTurnDegrees = 0.0f;
@@ -76,7 +91,29 @@ public:
     [[nodiscard]] const FlickSettings& settings() const { return settings_; }
 
 private:
+    // One stroke on the angle turned about the pointing axis (degrees; times on the strokes' clock).
+    struct Stroke {
+        float start = 0.0f;     // where it began (the last turning point)
+        float end = 0.0f;       // how far it has gone
+        float heldEnd = 0.0f;   // the furthest point its timer counts from (kHoldTremorDegrees steps)
+        float endTime = 0.0f;   // when it got there
+        float direction = 0.0f; // +1 or -1 once it has gone kStrokeDegrees, 0 before
+        bool backFast = false;  // its rate reached the minimum and the swing's (the back's test)
+        bool overFast = false;  // ... and twice the swing with a still hand (the over's test)
+    };
+    // What the stroke before the current one left: whether it was an over, so its back may fire.
+    struct Over {
+        bool done = false;
+        float degrees = 0.0f;
+        float endTime = 0.0f; // its furthest point (held)
+    };
+
     void reset();
+    void restartStrokes();
+    // The strokes after this frame's roll (`roll`, degrees per second unsmoothed, over `step` seconds); true
+    // when the flick fires.
+    bool strokes(float roll, float step, bool still, FlickOutput& out);
+    void turnStroke();
 
     FlickSettings settings_;
     std::optional<Quat> previous_;
@@ -85,11 +122,16 @@ private:
     float roll_ = 0.0f;                    // smoothed, degrees per second
     float swing_ = 0.0f;                   // smoothed, degrees per second
     bool armed_ = true;                    // quiet for kRearmQuietSeconds since the last flick
-    bool armedReturn_ = true;              // quiet for kReturnQuietSeconds since the last flick
     float quiet_ = 0.0f;                   // how long the roll has been quiet
-    float lastSign_ = 0.0f;                // the direction of the last flick's roll (0: none since the start)
     float cooldown_ = 0.0f;
     Hand weaponHand_ = Hand::Right;
+    float clock_ = 0.0f; // seconds since the strokes started over
+    float angle_ = 0.0f; // degrees turned about the pointing axis since then
+    Stroke stroke_;
+    Over over_;
+    // The stroke before this one and the over before that, to go back to when this one is a wobble.
+    std::optional<Stroke> previousStroke_;
+    Over previousOver_;
 };
 
 } // namespace evr::input

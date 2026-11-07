@@ -25,6 +25,7 @@ void RestWheel::debounce(const RestWheelFrame& frame,
     for (const Hand hand : {Hand::Left, Hand::Right}) {
         const std::size_t i = index(hand);
         Rest& r = rests_[i];
+        r.retap = false;
         // Hard evidence of the thumb elsewhere: a face button pressed, or its own stick out of the centre
         // (the thumb on it, on a runtime that reports no stick touch too).
         RestTouchStep step = r.touch.update(
@@ -36,6 +37,7 @@ void RestWheel::debounce(const RestWheelFrame& frame,
             step.lostSeconds >= kRestDebounceSeconds && !step.veto && route_ == Route::Idle && !r.cancelled &&
             centredSeconds_[index(otherHand(hand))] >= kOwnStickVoidSeconds) {
             r.touch.land();
+            r.retap = true;
             step.landed = true;
         }
         stats_.rawTouches[i] += step.rawTouch ? 1 : 0;
@@ -69,8 +71,7 @@ bool RestWheel::pushWaits(Hand rest, Hand stick) const {
     case RestWheelMode::Off:
         return false;
     case RestWheelMode::Edge:
-        return route_ == Route::Idle && hasRole(stick) && r.landingValid &&
-               r.sinceLanding <= settings_.windowSeconds;
+        return route_ == Route::Idle && hasRole(stick) && r.landingValid && windowOpen(r);
     case RestWheelMode::Full:
         return route_ == Route::Taken && stickHand_ == stick && restHand_ == rest;
     case RestWheelMode::Extreme: {

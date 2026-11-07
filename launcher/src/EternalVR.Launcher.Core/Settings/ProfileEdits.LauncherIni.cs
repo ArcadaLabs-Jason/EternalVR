@@ -68,6 +68,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.Runtime = ini.Runtime;
             s.DlssDllPath = ini.DlssDllPath;
             s.AdapterSteer = ini.AdapterSteer;
+            s.TestBuilds = ini.TestBuilds;
             s.Profile = ini.Profile;
             s.ProfileUnsaved = ini.ProfileUnsaved;
             s.ProfileCheck = ini.ProfileCheck;

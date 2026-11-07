@@ -221,6 +221,11 @@ std::optional<std::array<float, 3>> WeaponOffsetTable::lookupLeftHandWrist(std::
     return match ? std::optional<std::array<float, 3>>(*match) : std::nullopt;
 }
 
+std::optional<float> WeaponOffsetTable::lookupTriggerLift(std::string_view declName) const {
+    const float* match = specific(triggerLifts, declName);
+    return match ? std::optional<float>(*match) : std::nullopt;
+}
+
 WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     WeaponOffsetTable table;
     if (text.starts_with("\xEF\xBB\xBF")) {
@@ -231,6 +236,7 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     bool inGrips = false;
     bool inOffHands = false;
     bool inLeftWrists = false;
+    bool inTriggers = false;
     int lineNumber = 0;
     while (!text.empty()) {
         const std::size_t newline = text.find('\n');
@@ -249,6 +255,7 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
             inGrips = false;
             inOffHands = false;
             inLeftWrists = false;
+            inTriggers = false;
             if (line == "[standing]") {
                 section = &table.standing;
             } else if (line == "[seated]") {
@@ -265,14 +272,17 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
             } else if (line == "[left_hand_wrist]") {
                 section = nullptr;
                 inLeftWrists = true;
+            } else if (line == "[trigger_finger]") {
+                section = nullptr;
+                inTriggers = true;
             } else {
                 issue("unknown section (expected [standing], [seated], [sights], [right_grip], "
-                      "[left_handed_off_hand] or [left_hand_wrist])");
+                      "[left_handed_off_hand], [left_hand_wrist] or [trigger_finger])");
                 section = nullptr;
             }
             continue;
         }
-        if (!section && !inSights && !inGrips && !inOffHands && !inLeftWrists) {
+        if (!section && !inSights && !inGrips && !inOffHands && !inLeftWrists && !inTriggers) {
             continue; // entries of an unknown section were reported with its header
         }
         const std::size_t equals = line.find('=');
@@ -346,6 +356,19 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
                 issue("duplicate name; the first one is kept");
             } else {
                 table.leftHandWrists.emplace(std::string(key), std::array<float, 3>{v[0], v[1], v[2]});
+            }
+            continue;
+        }
+        if (inTriggers) {
+            const std::optional<float> lift = parseNumber(value);
+            if (key == "default") {
+                issue("[trigger_finger] has no \"default\": an item without a row keeps the game's finger");
+            } else if (!lift || *lift < 0.0f || *lift > 1.0f) {
+                issue("expected the lift: one number from 0 to 1");
+            } else if (table.triggerLifts.contains(key)) {
+                issue("duplicate name; the first one is kept");
+            } else {
+                table.triggerLifts.emplace(std::string(key), *lift);
             }
             continue;
         }

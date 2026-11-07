@@ -87,7 +87,7 @@ TEST_CASE("a flick of the turn stick right after a deliberate rest snaps nothing
         InputMapper mapper(questTouchProfile(), restSettings(turn));
         // The left thumb idle for more than kOwnStickVoidSeconds, then on its rest: a deliberate rest.
         feed(mapper, frame(false, false, kCentre, kCentre), 45);
-        feed(mapper, frame(true, false, kCentre, kCentre), 8);
+        feed(mapper, frame(true, false, kCentre, kCentre), 30);
         // From the centre to full right in one frame, held, then back.
         Run run = feed(mapper, frame(true, false, kCentre, kRight), 30);
         run = feed(mapper, frame(true, false, kCentre, kCentre), 30, run);
@@ -109,7 +109,7 @@ TEST_CASE("a thumb left resting does not stop the turn stick turning") {
 
 TEST_CASE("pointing up at the wheel is no chainsaw, and the wheel's pointer is the stick") {
     InputMapper mapper(questTouchProfile(), restSettings());
-    feed(mapper, frame(true, false, kCentre, kCentre), 8);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(true, false, kCentre, kUp), 30);
     CHECK_FALSE(contains(run.everDown, GameAction::Chainsaw));
     CHECK(contains(run.last.down, GameAction::WeaponWheel));
@@ -122,7 +122,7 @@ TEST_CASE("pointing up at the wheel is no chainsaw, and the wheel's pointer is t
 
 TEST_CASE("the move stick picks while the right thumb rests, and moves nothing until it is back") {
     InputMapper mapper(questTouchProfile(), restSettings());
-    feed(mapper, frame(false, true, kCentre, kCentre), 8);
+    feed(mapper, frame(false, true, kCentre, kCentre), 30);
     Run run = feed(mapper, frame(false, true, kUp, kCentre), 30);
     CHECK(run.moved == 0.0f);
     CHECK(contains(run.last.down, GameAction::WeaponWheel));
@@ -175,7 +175,7 @@ TEST_CASE("while touched: a down flick that starts with the touch picks, and is 
 
 TEST_CASE("nothing arms while a menu holds input or the game holds the wheel back") {
     InputMapper mapper(questTouchProfile(), restSettings());
-    feed(mapper, frame(true, false, kCentre, kCentre), 8);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     MapperContext blocked;
     blocked.restWheelBlocked = true;
     Run run = feed(mapper, frame(true, false, kCentre, kUp), 30, {}, blocked);
@@ -183,7 +183,7 @@ TEST_CASE("nothing arms while a menu holds input or the game holds the wheel bac
     CHECK_FALSE(run.last.restWheel.taken[1]);
 
     InputMapper menu(questTouchProfile(), restSettings());
-    feed(menu, frame(true, false, kCentre, kCentre), 8);
+    feed(menu, frame(true, false, kCentre, kCentre), 30);
     MapperContext held;
     held.menuHold = true;
     CHECK(feed(menu, frame(true, false, kCentre, kUp), 30, {}, held).last.restWheel.event ==
@@ -193,7 +193,7 @@ TEST_CASE("nothing arms while a menu holds input or the game holds the wheel bac
 TEST_CASE("weapon by direction presses the slot once, and the game's wheel never opens") {
     InputMapper mapper(questTouchProfile(),
                        restSettings(TurnMode::Smooth, RestWheelMode::Edge, RestWheelPick::Slots));
-    feed(mapper, frame(true, false, kCentre, kCentre), 8);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     Run run = feed(mapper, frame(true, false, kCentre, kRight), 20);
     run = feed(mapper, frame(true, false, kCentre, kCentre), 5, run);
     CHECK(run.wheelFrames == 0);
@@ -209,7 +209,7 @@ TEST_CASE("left-handed maps: the rest on the move-stick hand arms the turn stick
         const Hand turn = *profile.turnStick;
         const bool leftRest = turn == Hand::Right;
         InputMapper mapper(profile, restSettings(TurnMode::Snap));
-        feed(mapper, frame(leftRest, !leftRest, kCentre, kCentre), 8);
+        feed(mapper, frame(leftRest, !leftRest, kCentre, kCentre), 30);
         const Axis2 left = turn == Hand::Left ? kRight : kCentre;
         const Axis2 right = turn == Hand::Right ? kRight : kCentre;
         const Run run = feed(mapper, frame(leftRest, !leftRest, left, right), 30);
@@ -248,7 +248,7 @@ TEST_CASE("without a rest sensor the wheel does nothing") {
     MapperSettings settings = restSettings();
     settings.restSensors = {false, false};
     InputMapper mapper(questTouchProfile(), settings);
-    feed(mapper, frame(true, false, kCentre, kCentre), 8);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(true, false, kCentre, kRight), 30);
     CHECK(run.turned > 0.0f);
     CHECK(run.wheelFrames == 0);
@@ -260,7 +260,7 @@ TEST_CASE("a face button counts as the rest only with face touch on, and not whi
     InputMapper mapper(questTouchProfile(), settings);
     InputFrame touching = frame(false, false, kCentre, kCentre);
     touching.left.primaryTouch = true;
-    feed(mapper, touching, 8);
+    feed(mapper, touching, 30);
     touching.right.stick = kRight;
     CHECK(feed(mapper, touching, 30).wheelFrames > 0);
 
@@ -300,7 +300,7 @@ TEST_CASE("Touch: a rest's touch begun with the thumb on its face buttons or sti
     // The thumb only on the rest: the touch registers on its first frame, and the same push picks.
     InputMapper mapper(questTouchProfile(), settings);
     feed(mapper, frame(false, false, kCentre, kCentre), 45);
-    feed(mapper, frame(true, false, kCentre, kCentre), 3);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(true, false, kCentre, kRight), 30);
     CHECK(run.wheelFrames > 0);
     CHECK(run.turned == 0.0f);
@@ -517,7 +517,7 @@ TEST_CASE("a thumb that lands straight from a jump leaves the move stick moving"
     InputFrame jump = frame(false, false, kCentre, kCentre);
     jump.right.primaryButton = true;
     feed(mapper, jump, 10);
-    feed(mapper, frame(false, true, kCentre, kCentre), 8);
+    feed(mapper, frame(false, true, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(false, true, kUp, kCentre), 30);
     CHECK(run.moved > 0.0f);
     CHECK(run.wheelFrames == 0);
@@ -528,7 +528,7 @@ TEST_CASE("turning, then resting the thumb, then walking walks") {
     InputMapper mapper(questTouchProfile(), restSettings());
     feed(mapper, frame(false, false, kCentre, kRight), 20);
     feed(mapper, frame(false, false, kCentre, kCentre), 2);
-    feed(mapper, frame(false, true, kCentre, kCentre), 8);
+    feed(mapper, frame(false, true, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(false, true, kUp, kCentre), 30);
     CHECK(run.moved > 0.0f);
     CHECK(run.wheelFrames == 0);
@@ -538,7 +538,7 @@ TEST_CASE("walking, then resting the thumb, then a snap turns") {
     InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Snap));
     feed(mapper, frame(false, false, kUp, kCentre), 20);
     feed(mapper, frame(false, false, kCentre, kCentre), 2);
-    feed(mapper, frame(true, false, kCentre, kCentre), 8);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(true, false, kCentre, kRight), 30);
     CHECK(run.turned > 0.0f);
     CHECK(run.wheelFrames == 0);
@@ -551,7 +551,7 @@ TEST_CASE("a rest with the thumb idle for longer than the void time still opens 
     feed(mapper, jump, 10);
     // A let go, the thumb idle for half a second, then on its rest.
     feed(mapper, frame(false, false, kCentre, kCentre), 45);
-    feed(mapper, frame(false, true, kCentre, kCentre), 8);
+    feed(mapper, frame(false, true, kCentre, kCentre), 30);
     const Run run = feed(mapper, frame(false, true, kUp, kCentre), 30);
     CHECK(run.moved == 0.0f);
     CHECK(contains(run.last.down, GameAction::WeaponWheel));
@@ -559,7 +559,7 @@ TEST_CASE("a rest with the thumb idle for longer than the void time still opens 
 
 TEST_CASE("a cancelled flick does not reopen the window: the next flick turns") {
     InputMapper mapper(questTouchProfile(), restSettings(TurnMode::Snap));
-    feed(mapper, frame(true, false, kCentre, kCentre), 8);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30);
     // Shorter than the dwell: picking starts and is cancelled.
     Run run = feed(mapper, frame(true, false, kCentre, kRight), 4);
     run = feed(mapper, frame(true, false, kCentre, kCentre), 10, run);
@@ -575,7 +575,7 @@ TEST_CASE("the wheel is held for the game's open delay and its margin") {
     MapperContext slow;
     slow.restWheelHoldSeconds = evr::input::wheelHoldSeconds(500.0f);
     InputMapper mapper(questTouchProfile(), restSettings());
-    feed(mapper, frame(true, false, kCentre, kCentre), 8, {}, slow);
+    feed(mapper, frame(true, false, kCentre, kCentre), 30, {}, slow);
     Run run = feed(mapper, frame(true, false, kCentre, kUp), 11, {}, slow);
     run = feed(mapper, frame(true, false, kCentre, kCentre), 90, run, slow);
     // From the press (after the dwell) to the release: 0.5 s + 0.12 s.

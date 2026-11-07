@@ -14,6 +14,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/room_scale.hpp"
+#include "vkcore/shield_place.hpp"
 
 #include <mutex>
 #include <shared_mutex>
@@ -66,6 +67,7 @@ void install() {
         s.promptHooks = installPromptHooks();
     }
     bool launcherHook = false; // the shoulder launcher drawn at the head (launcher_place.hpp)
+    bool shieldHook = false;   // the Energy Shield in front of the gun (shield_place.hpp)
     if (knownBuild) {
         bool fire = false;
         s.setViewAnglesHook = installAimHooks(fire);
@@ -73,7 +75,12 @@ void install() {
         if (cfg.viewmodel) {
             s.viewmodelHook = installViewmodelHook();
         }
+        // The Chaingun's Energy Shield goes in front of the gun the viewmodel hook places.
+        if (s.viewmodelHook) {
+            shieldHook = shield_place::install();
+        }
         s.demonAimHook = installDemonAimHook();
+        installDemonModelHooks(); // the Revenant's cannons and arms on the view (logged)
         s.facingHook = installFacingHook();
         s.climbHook = installClimbHook();
         // The equipment launcher aims from its own joint, not the view: only for ETERNALVR_EQUIPMENT_AIM.
@@ -119,13 +126,15 @@ void install() {
     EVR_LOG(
         "%s: game hooks: user command %s, turn %s, virtual gamepad %s, forced view %s, shots %s, viewmodel "
         "%s, off hand %s (%s), weapon arm %s (%s), rumble %s, demon aim %s, look-at triggers %s, climbable "
-        "walls %s, button prompts %s, equipment launch %s, Flame Belch plume %s, shoulder launcher %s",
+        "walls %s, button prompts %s, equipment launch %s, Flame Belch plume %s, shoulder launcher %s, "
+        "energy shield %s",
         kTag, s.userCmdHook ? "on" : (command ? "body follow only" : "off"), onOff(s.angleHook),
         onOff(s.xinputActive.load()), onOff(s.setViewAnglesHook), onOff(s.fireHook), onOff(s.viewmodelHook),
         onOff(s.offhandHook && (cfg.offhand != input::OffhandMode::Game || cfg.offhandTrace)),
         input::offhandModeName(cfg.offhand), onOff(s.weaponArmHook), input::weaponArmModeName(cfg.weaponArm),
         onOff(s.rumbleHook), onOff(s.demonAimHook), onOff(s.facingHook), onOff(s.climbHook),
-        onOff(s.promptHooks), onOff(s.equipmentHook), onOff(s.belchAxisHook), onOff(launcherHook));
+        onOff(s.promptHooks), onOff(s.equipmentHook), onOff(s.belchAxisHook), onOff(launcherHook),
+        onOff(shieldHook));
     EVR_LOG("%s: hooks in use: %d of %d mid hooks, %d of %d inline hooks", kTag, midHookCount(), kMaxMidHooks,
             inlineHookCount(), kMaxInlineHooks);
     if (!s.userCmdHook && !s.xinputActive.load()) {
@@ -160,6 +169,7 @@ void installGamepadMode() {
     }
     if (use.demonAim) {
         s.demonAimHook = installDemonAimHook();
+        installDemonModelHooks();
     }
     if (use.bhaptics) {
         startBhaptics();

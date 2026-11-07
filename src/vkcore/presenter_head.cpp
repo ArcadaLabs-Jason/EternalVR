@@ -254,7 +254,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     std::optional<float> hit;
     if (roomScaleSettings().collision && !cutscene && !held &&
         length(offset) > 0.01f * settings.unitsPerMetre) {
-        hit = sweepHead(player, eye, eye + offset, 0.16f * settings.unitsPerMetre);
+        hit = sweepHead(player, eye, eye + offset,
+                        length(offset) + roomscale::kLateHeadSlackMetres * settings.unitsPerMetre);
     }
     const roomscale::ClearanceStep clear = room.clearance(offset, hit, settings.unitsPerMetre);
     const std::array<float, 9> written{view.forward.x, view.forward.y, view.forward.z,
@@ -277,6 +278,9 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
                           settings.unitsPerMetre},
                          gameFovX);
     controllers::endGameView(renderView, player, *body, eye, clear.validOffset, settings.unitsPerMetre);
+    if (controllers::pilotingDemon()) {
+        controllers::notePilotView(*body, offset, view); // the demon's models stay on this view
+    }
     if (settings.ui.reticle && record.weaponAimValid) {
         record.weaponAimHitMetres = reticleHitMetres(player, eye, settings.unitsPerMetre);
     }

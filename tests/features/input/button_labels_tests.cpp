@@ -439,16 +439,77 @@ TEST_CASE("the hint bar's shortcuts name the left primary and secondary and the 
         promptLabelSet(buildBindingProfile(index.maps.at(Handedness::Right)).profile, buttonLabelsFor(index));
     CHECK(knuckles.menuHints[0] == "Left A");
     CHECK(knuckles.menuHints[1] == "Left B");
-    // A wand has no primary or secondary button: those keys stay the game's (nothing sends them).
-    const ControllerData wand = builtin(Controller::ViveWand);
-    const PromptLabelSet wands =
-        promptLabelSet(buildBindingProfile(wand.maps.at(Handedness::Right)).profile, buttonLabelsFor(wand));
-    CHECK(wands.menuHints[0].empty());
-    CHECK(wands.menuHints[1].empty());
-    CHECK_FALSE(wands.menuHints[2].empty());
+    CHECK(right.menuHintControls[0] == LabelKey{Hand::Left, LabelInput::Primary});
+    CHECK(right.menuHintControls[1] == LabelKey{Hand::Left, LabelInput::Secondary});
+    CHECK(right.menuHintControls[2] == LabelKey{Hand::Right, LabelInput::StickClick});
+    CHECK(knuckles.menuHintControls == right.menuHintControls);
     const ControllerData bare = parseControllerData(kTouchHeader);
     const PromptLabelSet none = promptLabelSet(BindingProfile{}, buttonLabelsFor(bare));
     CHECK(none.menuHints[2].empty());
+}
+
+TEST_CASE(
+    "Vive wands: the left trackpad's click and the left Menu button stand in for X and Y in the hint bar") {
+    // A wand has no primary or secondary button on the left (its right Menu button is the right secondary):
+    // the Arsenal's F (customize weapon) and X (equip mod), and the wheel screen's R, had no button. The left
+    // trackpad's click and the left Menu button take the pad's X and Y places; the right trackpad's click
+    // keeps the right stick click's.
+    const ControllerData wand = builtin(Controller::ViveWand);
+    const ButtonLabels labels = buttonLabelsFor(wand);
+    for (const auto& [handedness, map] : wand.maps) {
+        const PromptLabelSet wands = promptLabelSet(buildBindingProfile(map).profile, labels);
+        CHECK(wands.menuHints[0] == "Left Trackpad Click");
+        CHECK(wands.menuHints[1] == "Left Menu");
+        CHECK(wands.menuHints[2] == "Right Trackpad Click");
+        CHECK(wands.menuHintControls[0] == LabelKey{Hand::Left, LabelInput::StickClick});
+        CHECK(wands.menuHintControls[1] == LabelKey{Hand::Left, LabelInput::Menu});
+        CHECK(wands.menuHintControls[2] == LabelKey{Hand::Right, LabelInput::StickClick});
+    }
+    // Windows Mixed Reality: the trackpad click is the left primary, there is no left secondary.
+    const ControllerData wmr = builtin(Controller::WindowsMixedReality);
+    const PromptLabelSet mixed =
+        promptLabelSet(buildBindingProfile(wmr.maps.at(Handedness::Right)).profile, buttonLabelsFor(wmr));
+    CHECK(mixed.menuHintControls[0] == LabelKey{Hand::Left, LabelInput::Primary});
+    CHECK(mixed.menuHintControls[1] == LabelKey{Hand::Left, LabelInput::Menu});
+    CHECK(mixed.menuHints[1] == "Left Menu");
+}
+
+TEST_CASE("every built-in family names a control in each of the hint bar's places") {
+    for (const Controller controller : kControllers) {
+        const ControllerData data = builtin(controller);
+        const PromptLabelSet set =
+            promptLabelSet(buildBindingProfile(data.maps.begin()->second).profile, buttonLabelsFor(data));
+        INFO(controllerName(controller));
+        for (const std::string& hint : set.menuHints) {
+            CHECK_FALSE(hint.empty());
+        }
+    }
+}
+
+TEST_CASE("the move binds name the move stick's directions") {
+    const ControllerData touch = builtin(Controller::OculusTouch);
+    const ButtonLabels labels = buttonLabelsFor(touch);
+    const PromptLabelSet right =
+        promptLabelSet(buildBindingProfile(touch.maps.at(Handedness::Right)).profile, labels);
+    CHECK(right.moveText[0] == "Left Stick Up");
+    CHECK(right.moveText[1] == "Left Stick Left");
+    CHECK(right.moveText[2] == "Left Stick Down");
+    CHECK(right.moveText[3] == "Left Stick Right");
+    // A full mirror moves with the right stick.
+    const PromptLabelSet mirror = promptLabelSet(
+        buildBindingProfile(touch.maps.at(Handedness::LeftButtonAndStickSwap)).profile, labels);
+    CHECK(mirror.moveText[0] == "Right Stick Up");
+    // The wand's trackpad.
+    const ControllerData wand = builtin(Controller::ViveWand);
+    const PromptLabelSet wands =
+        promptLabelSet(buildBindingProfile(wand.maps.at(Handedness::Right)).profile, buttonLabelsFor(wand));
+    CHECK(wands.moveText[3] == "Left Trackpad Right");
+    // No move stick: the game's keys stay.
+    BindingProfile still = buildBindingProfile(touch.maps.at(Handedness::Right)).profile;
+    still.moveStick.reset();
+    for (const std::string& text : promptLabelSet(still, labels).moveText) {
+        CHECK(text.empty());
+    }
 }
 
 TEST_CASE("every built-in family names the hint bar's buttons apart from its back and select") {

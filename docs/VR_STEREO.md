@@ -608,6 +608,36 @@ screen, like a 3D movie. The code is `src/xr_math/cinema_eyes.*` (the eye math, 
 - Cost: about twice the GPU time while a cutscene plays (two renders). In the owner's session on the project's RTX
   3080 Ti (2026-10-24, 90 Hz, the session's frames file): 88.8 fps on average over 65 s of stereo cutscene, the worst
   2.7 s window 83 fps.
+- Where the cost goes (rig, 2026-10-30, T-208: OpenXR simulator, RTX 3080 Ti with its clock locked at 900 MHz so the
+  GPU is the limit, 2048 x 2208 per eye, per-eye TAA, the 0.1.87 layer, `ETERNALVR_GPU_TIMING=1`; the opening
+  cutscene of `e1m1_intro` from 2 s to 128 s after its start, each run's GPU busy per game frame averaged over that
+  stretch by its time, so the same shots count the same in a fast run and a slow one):
+  - Stereo 18.6 ms per game frame, the flat screen (`ETERNALVR_CUTSCENE_3D=0`) 9.4 ms: 1.98 times.
+  - Eye R is about 80% of a flat frame: eye L costs about 1.75 ms more than eye R (work done once per game frame,
+    which eye R takes from eye L), and async compute is 2.6 ms in eye L against 1.8 ms in eye R.
+  - Pixels: with half the pixels per eye (1448 x 1562) the pair costs 11.2 ms, so about 80% of the pair's cost
+    scales with the pixel count and about 1.9 ms per eye does not.
+  - Only the screen's band is seen (rows 528 to 1680 of 2208 for 16:9, 52%); the other 48% of each eye image is
+    rendered and dropped (docs/VR_HEAD_TRACKED.md, "Cutscenes on the flat screen"), about 38% of the pair's cost.
+  - Shading rate: 4 x 4 on every render pass (`ETERNALVR_VRS_TEST=4x4`, the upper bound of what a shading rate
+    can save) takes off 24% (14.1 ms), so most of the pixel-bound work is in passes a shading rate does not reach
+    (compute and post-processing). A rig-only test that kept the band at full rate and shaded the dropped rows at
+    4 x 4 took off 12.5% (16.3 ms).
+  - The screen is 2.4 m wide at 2.5 m, 51 degrees. A Quest 3 eye (about 54 + 40 degrees across) at the render size
+    the launcher picks for it (2056 pixels wide) has about 890 pixels across that angle at its centre, and the
+    runtime's recommended size (2496) about 1080; the cutscene's band is 2048 pixels across, about twice either.
+  Not done yet (T-209): a cheaper pair. The shading-rate band is not kept: 12.5% off needs the shading-rate path on
+  for every NVIDIA player (the device extension, the palette on every pipeline, a bind before every render pass and
+  the command buffers' frame tracking, in play too), does nothing on other cards, and leaves the pair at 1.74 times
+  a flat frame. The lever is the pixel count: the engine's dynamic resolution scales its frame's images per frame
+  without making them again (`rs_enable`, a scale from 1.0 down to 0.5 in 32 steps), and the pair at 0.5 would cost
+  about 7.5 ms by the numbers above, less than the flat screen, still about as many pixels across the screen as the
+  headset's own eye image has there. It is off under Route S today because the per-eye histories (TAA, SSDO,
+  refraction, light scattering) keep eye R's images outside the engine's own, which it does not scale. A rig run
+  with `+rs_enable 1 +rs_forceResolution 0.5` on the command line (and the layer's `rs_enable 0` and
+  `forceFullResolution` left off) cost the same as without: the game's profile load set both cvars back to 0 about
+  20 s in, before the cutscene, so a test of the scale has to write them after the profile load, as the layer's own
+  cvar writes do.
 - Logs: `cinema3D: pair run started / camera cut / lens or separation changed: ...`, `cinema3D: the first stereo cutscene
   frame is on two screen quads`, `cinema3D: pair run ended (...)` with the frame, cut and clamp counts. The `seq:` pair line
   counts the cutscene's pairs as complete pairs (0 mono once the eye tags are in step).

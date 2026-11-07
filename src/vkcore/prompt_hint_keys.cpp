@@ -15,7 +15,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace evr::vkcore::controllers {
@@ -52,9 +56,59 @@ std::array<std::atomic<bool>, menu::kHintShortcuts.size()> g_named{};
 menu::HintKeys g_keys;                                      // XR worker only
 std::array<bool, menu::kHintShortcuts.size()> g_wasShown{}; // XR worker only
 int g_lines = 0;                                            // XR worker only
+bool g_leftMenu = false;                                    // XR worker only: the left Menu button's copy
+menu::MenuPauseHold g_pauseHold;                            // XR worker only
+// window_timing::nowMicros() until which the game's pause is held back (menu::MenuPauseHold), renewed every
+// XR frame while it holds, so a hold ends kPauseHoldStale after the XR frames stop (hintKeysHoldPause).
+std::atomic<std::uint64_t> g_pauseHeldUntil{0};
+constexpr std::uint64_t kPauseHoldStale = 100'000;
+// A bar button's data holds its text id as an idStr at +0 (its text at +8, its length at +0x10): the one
+// ef9350, the bar's add, assigns first.
+constexpr std::size_t kLabelText = 8;
+constexpr std::size_t kLabelLength = 0x10;
 
 std::size_t buttonIndex(menu::HintButton button) {
     return static_cast<std::size_t>(button);
+}
+
+// The text id in a bar button's data, read into `buffer`; empty when it cannot be read.
+std::string_view buttonLabel(const std::byte* data, std::array<char, 64>& buffer) {
+    const char* text = nullptr;
+    std::int32_t length = 0;
+    if (!safeRead(data + kLabelText, text) || !safeRead(data + kLabelLength, length) || text == nullptr ||
+        length <= 0 || static_cast<std::size_t>(length) >= buffer.size() ||
+        !safeCopy(buffer.data(), text, static_cast<std::size_t>(length))) {
+        return {};
+    }
+    return {buffer.data(), static_cast<std::size_t>(length)};
+}
+
+// The shortcut a bar button with this data, slot and key is, its text id read only where one is needed.
+std::optional<std::size_t> shortcutOf(const std::byte* data, std::int32_t slot, std::int32_t key) {
+    std::array<char, 64> buffer{};
+    const std::string_view label =
+        menu::hintShortcutWantsLabel(slot, key) ? buttonLabel(data, buffer) : std::string_view{};
+    return menu::hintShortcut(slot, key, label);
+}
+
+// The state of the control in a shortcut's place (input::PromptLabelSet::menuHintControls), as the router
+// sees it, so it can be cleared there while taken; the left Menu button's in a copy (the router has none).
+// nullptr for a control the shortcuts never use.
+bool* hintControlState(input::LabelKey control, menu::RouterInput& in, bool leftMenu) {
+    menu::RouterHand& hand = in.hands[static_cast<std::size_t>(control.hand)];
+    switch (control.input) {
+    case input::LabelInput::Primary:
+        return &hand.primary;
+    case input::LabelInput::Secondary:
+        return &hand.secondary;
+    case input::LabelInput::StickClick:
+        return &hand.stickClick;
+    case input::LabelInput::Menu:
+        g_leftMenu = control.hand == input::Hand::Left && leftMenu;
+        return &g_leftMenu;
+    default:
+        return nullptr;
+    }
 }
 
 // The token writer's call in GetKeyString: rsi the bar button, ecx its key, rdx the text. A shortcut the
@@ -62,11 +116,13 @@ std::size_t buttonIndex(menu::HintButton button) {
 // the call is GetKeyString's last before its epilogue, and its one caller does not read the result.
 void onKeyToken(HookRegisters& r) {
     std::int32_t slot = -1;
-    if (!mp_guard::allowsGameTouch() ||
-        !safeRead(reinterpret_cast<const std::byte*>(r.rsi) + g_slotField, slot)) {
+    const std::byte* data = nullptr;
+    const auto* button = reinterpret_cast<const std::byte*>(r.rsi);
+    if (!mp_guard::allowsGameTouch() || !safeRead(button + g_slotField, slot) ||
+        !safeRead(button + g_dataField, data) || data == nullptr) {
         return;
     }
-    const std::optional<std::size_t> shortcut = menu::hintShortcut(slot, static_cast<std::int32_t>(r.rcx));
+    const std::optional<std::size_t> shortcut = shortcutOf(data, slot, static_cast<std::int32_t>(r.rcx));
     const std::shared_ptr<const input::PromptLabelSet> labels = currentPromptLabels();
     if (!shortcut || !labels) {
         return;
@@ -99,7 +155,7 @@ void onButtonFrame(const HookRegisters& r) {
         !safeRead(data + g_keyField, key)) {
         return;
     }
-    if (const std::optional<std::size_t> shortcut = menu::hintShortcut(slot, key)) {
+    if (const std::optional<std::size_t> shortcut = shortcutOf(data, slot, key)) {
         g_shownAt[*shortcut].store(window_timing::nowMicros(), std::memory_order_relaxed);
     }
 }
@@ -216,12 +272,13 @@ void installHintKeyHooks(const GameImage& image,
         return;
     }
     g_installed.store(true, std::memory_order_release);
-    EVR_LOG("%s: hint bar: key token call at RVA 0x%X; button update at RVA 0x%X hooked at 0x%X (data +0x%X, "
-            "key +0x%X, slot +0x%X, sprite +0x%X visible +0x%X): F, X and T in slots 2, 3 and 7 are sent by "
-            "the left primary, the left secondary and the right stick's click",
-            tag, image.rva(call), image.rva(frame), image.rva(visible), static_cast<unsigned>(g_dataField),
-            static_cast<unsigned>(g_keyField), static_cast<unsigned>(g_slotField),
-            static_cast<unsigned>(g_spriteField), static_cast<unsigned>(g_visibleField));
+    EVR_LOG(
+        "%s: hint bar: key token call at RVA 0x%X; button update at RVA 0x%X hooked at 0x%X (data +0x%X, "
+        "key +0x%X, slot +0x%X, sprite +0x%X visible +0x%X): F in slot 2, X and R in slot 3 and T in slot 7 "
+        "are sent by the left primary, the left secondary and the right stick's click (or their stand-ins)",
+        tag, image.rva(call), image.rva(frame), image.rva(visible), static_cast<unsigned>(g_dataField),
+        static_cast<unsigned>(g_keyField), static_cast<unsigned>(g_slotField),
+        static_cast<unsigned>(g_spriteField), static_cast<unsigned>(g_visibleField));
 }
 
 namespace {
@@ -249,21 +306,29 @@ void updateHintKeys(menu::RouterInput& in) {
     hin.seconds = in.seconds;
     hin.menuUp = in.menuActive && !in.popup;
     hin.allowed = mp_guard::allowsGameTouch();
-    menu::RouterHand& left = in.hands[static_cast<std::size_t>(input::Hand::Left)];
-    menu::RouterHand& right = in.hands[static_cast<std::size_t>(input::Hand::Right)];
+    // The left Menu button stands in for a missing left secondary button (input::PromptLabelSet); the router
+    // does not read it, so it is read here.
+    bool leftMenu = false;
+    {
+        State& s = state();
+        std::lock_guard snapshotLock(s.snapshotMutex);
+        leftMenu = s.snapshot.valid && s.snapshot.frame.hand(input::Hand::Left).menuButton;
+    }
     std::array<bool*, menu::kHintShortcuts.size()> buttons{};
+    std::array<bool, menu::kHintShortcuts.size()> onMenu{};
     for (std::size_t i = 0; i < menu::kHintShortcuts.size(); ++i) {
-        const menu::HintButton button = menu::kHintShortcuts[i].button;
-        buttons[i] = button == menu::HintButton::LeftPrimary     ? &left.primary
-                     : button == menu::HintButton::LeftSecondary ? &left.secondary
-                                                                 : &right.stickClick;
-        hin.held[i] = *buttons[i];
+        const std::size_t place = buttonIndex(menu::kHintShortcuts[i].button);
+        const input::LabelKey control = labels ? labels->menuHintControls[place] : input::LabelKey{};
+        buttons[i] = hintControlState(control, in, leftMenu);
+        onMenu[i] = control.input == input::LabelInput::Menu;
+        hin.held[i] = buttons[i] != nullptr && *buttons[i];
         const std::uint64_t at = g_shownAt[i].load(std::memory_order_relaxed);
-        const bool named = labels && !labels->menuHints[buttonIndex(button)].empty();
-        hin.sinceShown[i] = named && at != 0 && now >= at ? static_cast<double>(now - at) * 1e-6 : -1.0;
+        const bool named = labels && buttons[i] != nullptr && !labels->menuHints[place].empty();
+        hin.sinceShown[i] = named ? menu::hintSinceShown(now, at) : -1.0;
     }
     const menu::HintKeysOutput out = g_keys.update(hin);
     sendKeys(out.keys);
+    bool menuTaken = false;
     for (std::size_t i = 0; i < menu::kHintShortcuts.size(); ++i) {
         const bool shown = g_keys.shown(i, hin);
         if (shown != g_wasShown[i] && g_lines < kLogLines) {
@@ -273,10 +338,17 @@ void updateHintKeys(menu::RouterInput& in) {
                     g_lines == kLogLines ? " (the last such line)" : "");
         }
         g_wasShown[i] = shown;
+        menuTaken = menuTaken || (out.taken[i] && onMenu[i]);
         if (out.taken[i]) {
             *buttons[i] = false;
         }
     }
+    const bool hold = g_pauseHold.update(in.seconds, menuTaken, leftMenu);
+    g_pauseHeldUntil.store(hold ? now + kPauseHoldStale : 0, std::memory_order_relaxed);
+}
+
+bool hintKeysHoldPause() {
+    return window_timing::nowMicros() < g_pauseHeldUntil.load(std::memory_order_relaxed);
 }
 
 void releaseHintKeys() {
