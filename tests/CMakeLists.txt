@@ -78,6 +78,7 @@ evr_add_test(evr_game_eternal_tests
         game/eternal/hand_grip_tests.cpp
         game/eternal/quest_touch_bindings_tests.cpp
         game/eternal/usercmd_buttons_tests.cpp
+        game/eternal/two_hand_rows_tests.cpp
         game/eternal/weapon_offsets_tests.cpp
         game/eternal/zoom_look_tests.cpp
         game/eternal/zoom_look_book_tests.cpp
@@ -116,11 +117,16 @@ evr_add_test(evr_pacing_tests
     SOURCES
         features/pacing/display_period_watch_tests.cpp
         features/pacing/frame_clock_watch_tests.cpp
+        features/pacing/hold_gate_tests.cpp
+        features/pacing/hold_switch_tests.cpp
+        features/pacing/late_image_tests.cpp
         features/pacing/pace_policy_tests.cpp
         features/pacing/prediction_period_tests.cpp
+        features/pacing/present_latency_tests.cpp
         features/pacing/restart_budget_tests.cpp
         features/pacing/runtime_hold_watch_tests.cpp
         features/pacing/slot_choice_tests.cpp
+        features/pacing/unseen_hold_tests.cpp
     DEPENDS evr_pacing)
 
 evr_add_test(evr_tracking_tests
@@ -165,6 +171,7 @@ evr_add_test(evr_input_tests
         features/input/capture_chord_tests.cpp
         features/input/controller_bindings_tests.cpp
         features/input/controller_family_tests.cpp
+        features/input/controller_fit_tests.cpp
         features/input/controller_settings_tests.cpp
         features/input/cutscene_skip_tests.cpp
         features/input/dashboard_pause_tests.cpp
@@ -172,10 +179,12 @@ evr_add_test(evr_input_tests
         features/input/forced_angles_tests.cpp
         features/input/forward_maps_tests.cpp
         features/input/gamepad_mode_tests.cpp
+        features/input/grip_curl_bindings_tests.cpp
         features/input/gun_placement_tests.cpp
         features/input/hands_jump_tests.cpp
         features/input/haptics_policy_tests.cpp
         features/input/input_mapper_stick_tests.cpp
+        features/input/input_mapper_stick_directions_tests.cpp
         features/input/input_mapper_chord_tests.cpp
         features/input/input_mapper_tests.cpp
         features/input/input_mapper_menu_tests.cpp
@@ -188,6 +197,7 @@ evr_add_test(evr_input_tests
         features/input/locomotion_direction_tests.cpp
         features/input/menu_release_latch_tests.cpp
         features/input/offhand_policy_tests.cpp
+        features/input/offhand_watch_tests.cpp
         features/input/pad_watch_tests.cpp
         features/input/view_pose_clock_tests.cpp
         features/input/player_controller_data_tests.cpp
@@ -208,6 +218,7 @@ evr_add_test(evr_input_tests
         features/input/rest_wheel_gap_tests.cpp
         features/input/rest_wheel_dwell_tests.cpp
         features/input/stick_chord_tests.cpp
+        features/input/stick_directions_tests.cpp
         features/input/stick_response_tests.cpp
         features/input/tap_hold_tests.cpp
         features/input/input_summary_tests.cpp
@@ -219,6 +230,10 @@ evr_add_test(evr_input_tests
         features/input/touch_keys_tests.cpp
         features/input/turn_policy_tests.cpp
         features/input/turn_stick_arbiter_tests.cpp
+        features/input/two_hand_capture_tests.cpp
+        features/input/two_hand_hold_tests.cpp
+        features/input/two_hand_smoothing_tests.cpp
+        features/input/two_hand_tests.cpp
         features/input/usercmd_hook_use_tests.cpp
         features/input/usercmd_injection_tests.cpp
         features/input/usercmd_motion_tests.cpp
@@ -254,6 +269,8 @@ evr_add_test(evr_arm_tests
         features/arm/arm_solve_tests.cpp
         features/arm/arm_surfaces_tests.cpp
         features/arm/arm_twist_tests.cpp
+        features/arm/drawn_wrist_tests.cpp
+        features/arm/frame_pin_tests.cpp
         features/arm/grip_book_tests.cpp
         features/arm/grip_hand_tests.cpp
         features/arm/hand_offset_tests.cpp

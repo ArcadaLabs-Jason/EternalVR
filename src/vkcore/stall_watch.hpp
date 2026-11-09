@@ -35,6 +35,10 @@ void addLockWait(std::uint64_t micros);
 void addDriverPresent(std::uint64_t micros);
 // A Route S drain held the game's frontend (seq_hooks.cpp).
 void addDrain(std::uint64_t micros);
+// Frame pacing held the game back on purpose after a present (behind a runtime's menu, or while nobody can
+// see the frames: frame_pacing.hpp): left out of the gap the next present closes, which is judged by the
+// game's own time (gpu_timing/present_stall.hpp).
+void addHeld(std::uint64_t micros);
 
 // The camera hook ran a game frame. trackGameTicks(true) once the hook is installed: only then are stalls
 // away from play (loading screens, menus) told apart; without it every stall gets a line.

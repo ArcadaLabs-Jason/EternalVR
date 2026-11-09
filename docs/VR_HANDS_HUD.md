@@ -37,7 +37,9 @@ XR worker, every XR frame (presenter_wrist.cpp)
   rings with it; with the hold (the default) the rings stay on the head-locked quad. In practice the rings
   show on the wrist only under head aim. Everything else on the GUI target stays on the
   head-locked quad: subtitles, prompts, pop-ups, boss and encounter bars, markers, the damage direction.
-  The corners are always cut from the head-locked quad in wrist mode, so they show only on the wrist.
+  With the HUD in front off (`ETERNALVR_HUD_FRONT=0`, what `ETERNALVR_HUD=wrist` alone means) the corners are
+  cut from the head-locked quad, so they show only on the wrist; with it on they stay there as well ("HUD
+  places" below).
 - **Where the crops come from** (`ui_layer/hud_regions.hpp`, `ui_layer/hud_blocks.hpp`). Each corner block
   is cut where the game drew it, measured from the GUI image ("Where the corner blocks are" below), and
   grown to the band's side and bottom edges it sits at; its hand quad shows that same rectangle. The band is
@@ -122,8 +124,43 @@ XR worker, every XR frame (presenter_wrist.cpp)
   cinematic such readings grew the ammo cut to 720 pixels wide and the health cut to 824, kept for the next
   8 readings. The hand quads fade in again from nothing after a cutscene. Loading screens
   and menus are unchanged.
-- **Head-locked HUD.** `ETERNALVR_HUD=panel` (the default; launcher: "Health and ammo" = On the HUD panel) is
-  the earlier behaviour, unchanged.
+- **Head-locked HUD.** `ETERNALVR_HUD=panel` with `ETERNALVR_HUD_FRONT=1` (the default; launcher: "HUD in
+  front of you" on, the others off) is the earlier behaviour, unchanged.
+
+## HUD places (T-150)
+
+Three switches, each its own launcher row on the Advanced tab (HUD) and its own variable for the layer:
+
+| Launcher row | Layer | Default | Means |
+|---|---|---|---|
+| HUD in front of you | `ETERNALVR_HUD_FRONT` | on | health, armor, ammo and equipment on the head-locked panel |
+| HUD on your wrist | `ETERNALVR_HUD=wrist` | off | the same blocks on the inside of the off hand's wrist (above) |
+| Ammo on your weapon | `ETERNALVR_HUD=weapon` | off | the ammo block above the gun (below); not with the wrist (the layer has one hand HUD at a time; the wrist wins in a file with both) |
+
+- **Which element is where.** The four readouts above are what the front switch and the hand HUDs move.
+  Subtitles, prompts, pop-ups, boss bars, markers and the damage direction are on the head-locked panel
+  whatever the switches say. With the front switch on and a hand HUD on, the panel stays whole and the hand
+  panel is an extra, shown while raised: both on means both show. With the front switch off and a hand HUD on,
+  the blocks are cut from the panel and show only on the hand, as `ETERNALVR_HUD=wrist` did up to 0.1.88. With
+  the front switch off and no hand HUD the blocks are cut and shown nowhere (the start-up line says so: `ui:
+  HUD panel, in front off (health, armor, ammo and equipment are hidden)`; the readouts are the player's to hide). Without motion
+  controllers the launcher turns the front switch on whatever it says (there is no hand), and the layer keeps
+  the whole HUD on the panel when the controllers are missing at run time, as before. The cuts need the corner
+  blocks measured (the readback, above), which also runs now with the front switch off in panel mode; until
+  they are, the HUD stays whole (so the readouts show for a moment at the start with the front off). With
+  the front off the HUD's markers stay in the GUI image on the cut panel (no marker quad, T-178), as with a
+  hand HUD. The start-up line says where the HUD is: `ui: HUD wrist (corner blocks on the
+  off hand's wrist), in front on; wrist: ...`.
+- **Migration.** A launcher.ini or profile from 0.1.88 and before holds `hud = panel|wrist|weapon` (the
+  "Health and ammo" row). With no `hud_front`, `hud_wrist` or `hud_weapon` in the file it is read as: panel =
+  front on; wrist = front off, wrist on; weapon = front off, weapon on (what they did). The next save writes the
+  three switches and, for a launcher of 0.1.88 or before after a downgrade, `hud` as the hand HUD (else
+  `panel`); a file with any switch in it is read by its switches only, and profiles leave `hud` out (it is not
+  a setting of its own). A profile that names another preset keeps its old `hud` choice (it is an older key of
+  the three). `ETERNALVR_HUD=wrist` or `weapon` without `ETERNALVR_HUD_FRONT` is read the same way.
+- **Rig QA.** `hud-front-wrist` (wrist and front on: the head-locked HUD in one piece, the hand HUD's crops
+  listed) and `hud-hidden` (front off, panel: the hidden line, the panel cut round the blocks), beside
+  `hand-hud-large` (the wrist alone, front off by the migration rule: the cuts against the GUI captures).
 
 ## The weapon HUD
 
@@ -291,6 +328,62 @@ instead of waiting 150 ms for a clean read with the game's arm drawn (a blink at
 the weapon in the left hand the right glove, the off hand there, follows the same rules (`left_hand_arms.cpp`,
 `weapon_arm.cpp`). The weapon arm's IK keeps the full rules: the gun moves in the switch animations, so its forearm
 goes to the game's for them, with the quick hand-over as before.
+
+### The arms and the gun in one frame (DECISIONS T-224)
+
+The layer poses both arms in the arms model's own space (the joint modifiers), and the game draws them under the
+placement the viewmodel hook gives the model at the weapon hand. Two things put the glove of a still off hand off
+its controller while the weapon hand moves (players' reports: the left hand jerks "like I am moving it" while only
+the right hand moves, with every gun), both measured with the per-tick record (`ETERNALVR_TEST_ARM_TICKS`) and
+16-frame captures (docs/rig-findings/hands-rig.md section 26):
+
+- **The off-hand hook runs first in a frame.** The off-hand hook (`idHands::Update`, through
+  `UpdateWeaponLagJointMods`) ran before the viewmodel hook (`idHands::UpdatePosition`) in 4894 of 4895 frames, the
+  viewmodel hook 0.3 to 0.6 ms after it and the camera hook last; both read the same hands snapshot (4775 of 4775
+  frames). So until 0.1.87 the arms were posed under the last frame's placement.
+- **The game draws the arm a frame after it is written.** The skeleton the game draws in a frame is built before
+  that frame's off-hand hook, from the modifiers written in the frame before: in 168 of 168 frames in which the
+  written wrist moved, `GetJointTransforms` still gave the last frame's write at the off-hand hook, the viewmodel hook
+  and the camera hook of the frame, and the new one only at the next frame's off-hand hook. That frame draws it under
+  its own placement.
+
+Together, every step of the weapon hand moved the still glove with the gun for two frames (the captures: the glove
+displaced for two frames per step). Now (`vkcore/frame_placement.hpp`, `features/arm/frame_pin.hpp`) the off-hand
+hook, in a frame whose placement the viewmodel hook has not written yet (idHands' own once-a-frame check,
+`vkcore/game_frame.hpp`), takes the placement the viewmodel hook gives the model in that frame itself, from the same
+hands snapshot (the viewmodel hook's own function, `viewmodelPlacement`), poses both arms under it and pins it with
+the inputs it was made from. The viewmodel hook still places the model itself every frame, as before (the gun
+never takes the pin), and checks the pin against its own placement: a 10 s line (`frame placement: last 10 s:
+...`) counts the frames the two were the same and why not (another held item, other hands, the left glove moved on
+the gun, the model not placed), and the first 20 differing frames are logged. In those frames alone the arms were
+posed under a placement the model did not get: on the rig one frame per weapon switch, and with the weapon in the
+left hand 22 to 24 frames per 10 s while the left glove's place on the gun settles after a raise (0.2 to 0.5 mm
+apart, 17 mm once), none once it has. Where the viewmodel hook ran first in a frame, its placement is the frame's
+already and nothing is pinned. Only the modes that pose an arm pin (the free off hand, the weapon arm's IK, the
+weapon in the left hand). The weapon arm's IK and, with the weapon in the left hand, the right glove on its
+controller are posed under the same placement. Without the game frame (its code not as expected) the arms are posed
+under the last frame's placement, as before. The two hooks run on different job threads in most frames (3309 of
+4683 on the rig), so the viewmodel hook's held-item caches are kept under a lock.
+
+**What is left.** The second cause stays: the arm written in a frame is drawn under the next frame's placement, so
+the glove still moves with the weapon hand's motion of one frame (a 15 degree step in one frame: up to 10 cm, for
+one frame instead of two; in a steady sweep half the offset of before). Taking it away needs the arms posed under
+the placement of the frame that draws them, which comes from hands the camera hook writes after the off-hand hook
+has run. Where the game builds that skeleton was looked for (docs/rig-findings/hands-rig.md section 26): its
+joint-modifier pass runs on a job thread before the camera hook in 85% of frames, and after the pass nothing the
+layer can reach changes the drawn arm, so there is no point to write it there. Solving the off arm alone under
+the placement extrapolated a frame ahead was measured and not kept: better in a smooth sweep, worse at every step
+and where a sweep stops (a frame of overshoot). Not done either: placing the gun a frame later to match (every gun
+and the weapon arm one frame further behind the controller), or one hands snapshot predicted a frame further for
+the arms and the gun (it changes how the gun follows the controller) (docs/DECISIONS.md T-224).
+
+The off hand's 10 s line in the log (`offhand: last 10 s: ...`, `vkcore/offhand_stats.hpp`, on by default, the
+weapon in the right hand) tells the arm policy's decisions and their reasons, the layer's share, the ticks refused,
+the off hand's untracked ticks and losses, how far from where the layer meant it the glove's wrist was drawn (the
+wrist the game read in a frame under that frame's placement, against the wrist written in the frame before under
+the placement it was posed under, `features/arm/drawn_wrist.hpp`), its largest step in a frame while its
+controller moved less than 2 mm, and the time between the hands it was posed from and its placement's (11 ms, a
+frame, before; 0 now).
 
 ### The whole arm (free mode)
 
@@ -1305,7 +1398,8 @@ wrist and every way shows the stretch above.
 
 Feature step 4 of docs/ROADMAP.md. With the free off hand and the bind solve (the default, DECISIONS T-160) the
 off hand's fingers follow its controller (`features/arm/hand_pose.hpp`, `vkcore/offhand_fingers.cpp`):
-the middle, ring and little fingers close with the grip's squeeze, the index finger with the trigger (a
+the middle, ring and little fingers close with the grip (on Valve Index controllers with how far the fingers wrap
+the handle, not with the squeeze that presses the grip; below), the index finger with the trigger (a
 little bent, 0.3 of the way, while it only rests on it), and the thumb lies down while it touches a face
 button, the stick, the trackpad or the thumb rest; each eased over about 0.06 s so a touch sensor that flips
 does not snap a finger. Closed is the game's own grip of a gun's handle (the Heavy Cannon idle's right hand,
@@ -1338,6 +1432,21 @@ weapon in the left hand").
 The trigger's touch only reaches the layer since DECISIONS T-222: the built-in controller data suggested no
 binding for it, so before that the off hand's index finger never rested on its trigger in a headset (it stayed
 open until the trigger was pulled); the rig's scripted input sets the touch directly, so the rig did not show it.
+
+The three fingers' grip (DECISIONS T-226, public issue #16): they close with the larger of the grip action's
+value and the grip's curl (`arm::fingerCurls`, `FingerSensors::gripCurl`), the `grip_curl` action the layer binds
+to `/input/squeeze/value` where the family's grip action reads another input of the squeeze
+(`input::addGripCurlBindings`, features/input/rest_touch_bindings.hpp). Only the Index's built-in data does:
+its grip action reads the squeeze's force, so a hand resting round the strapped controller presses nothing,
+and through 0.1.88 the fingers read that force too, so the off hand only closed with the squeeze that fires the
+Flame Belch (a player's report). SteamVR's Index squeeze value rises as the fingers wrap the handle, before any
+force, so the fingers now follow the hand and the Flame Belch still waits for the squeeze. On Touch, the Reverb
+G2, Pico 4 and the Steam Frame the grip action is the squeeze's value already (the fingers close with it, as
+before: Touch has no sensor for the fingers on the grip apart from the squeeze); Windows Mixed Reality, the Vive
+wands and the Cosmos have a click grip and no value, so their three fingers close with the click, as before. The
+log names the binding (`controllers: 2 grip curl binding(s) for the fingers added to the
+/interaction_profiles/valve/index_controller data ...`); the scripted input's `grip_curl` key sets it apart from
+`grip` (docs/VR_CONTROLLERS.md, "Scripted input for rig tests").
 
 Rig: `tmp-vr\rs\armc\handpose-sweep.ps1` (the hands sweep's run, the off hand at four positions and turns, six
 sensor states each: open, half, grip, fist, point, thumb up; a rig controls file without the left trigger's and
@@ -1404,6 +1513,120 @@ read). The dump's arm record gives `trigger` (the sensors, the share, the finger
 grip, as written and as read). Positive control: `ETERNALVR_TEST_ARM_FAULT=trigger` (the finger turned 1.6 times
 the grip's turn, into the trigger guard) must fail it. Results: docs/rig-findings/hands-rig.md, section 24.
 
+## Two-handed aim (ETERNALVR_TWO_HAND)
+
+Feature step 5 of docs/ROADMAP.md (DECISIONS T-156, T-158, T-195 to T-197). With the arms posed by the layer (the
+controllers on and the weapon hand aiming; the new arms are the arms, T-160) and the launcher's "Two-handed aim" on
+(Advanced tab, its own group, testing, off by default), the off hand can take the gun and the gun then aims along
+the line between the hands (`features/input/two_hand.hpp`, `vkcore/two_hand.cpp`).
+
+**The support point.** Each gun held with both hands has a `[two_hand]` row in
+`data/weapons/viewmodel_offsets.toml`: where the game's own idle holds its fore-end (the pump, the shroud, the
+front grip) with the left hand, as the off controller's grip would sit there: the game's left wrist under its
+attach joint, placed on the gun's root, with the off hand's wrist offset undone, from the weapon controller's
+grip in its aim frame. They are measured from the grip sweep's dumps (docs/rig-findings/hands-rig.md, section
+27): 16 cm ahead of the weapon hand on the Rocket Launcher to 76 cm on the Plasma Rifle, all within 1.5 cm of
+the gun's middle and from 0.4 cm below to 9.3 cm above the grip's line. The line from the weapon hand's grip
+through the support point is the gun's **support line**. With the weapon in the left hand the row is reflected
+(its left negated), which the left-handed sweep's reflected grips confirm to 0.6 cm (2.2 cm on the Heavy Cannon,
+whose idle sways that much). No row, no support grip: the Chaingun (the game's left hand holds a handle on its
+side, 37 cm left of the weapon hand and 75 degrees off the barrel: the line between the hands would roll the gun
+about its barrel instead of pointing it; left-handed the right glove does not hold it at all, T-141), the
+Crucible, the Sentinel Hammer, the chainsaw and the fists.
+
+**Taking it and letting go** (T-195). The off hand's grip squeezed (the same 0.65 to press, 0.40 to let go as
+every grip) with its controller's grip on the gun takes it: within 8 cm of the support line, from 12 cm along it
+to 8 cm past the support point, and within 15 degrees of it seen from the weapon hand's grip. So the gun can be
+taken anywhere along its front, not only where the game's own hand holds it: the Plasma Rifle's support point is
+76 cm ahead of the weapon hand, which no arm reaches with the other hand on the grip, and the 15 degrees keeps the
+turn at a grab to what 8 cm round the combat shotgun's fore-end gives (8 cm round the Rocket Launcher's, 16 cm
+from the grip, would turn it 26 degrees). The squeeze has to start there: a grip already held as the hand comes
+in, when the gate opens (after a weapon switch, a menu, a glory kill) or after a release takes nothing until it is
+let go and squeezed again. That way one squeeze is either the gun's or its binding's, never both: a squeeze away
+from the gun has already fired the Flame Belch, and only a squeeze made on the gun is held back from it (below).
+It holds while the grip is held, the off hand is no more than 16 cm past the support point along the line between
+the hands (it may slide along the gun, back toward the weapon hand too) and the hands stay at least 10 cm apart;
+anything else lets go. 16 cm past against 8 cm to take it, and 12 cm to start against 10 cm to end, so a hand on
+either edge does not take and drop the gun on alternate frames.
+
+**The aim.** While held, the weapon hand's aim is turned by the shortest turn that takes the gun's support line
+onto the line from the weapon controller's grip to the off controller's. So:
+- with the off hand on the support line, the grab moves nothing; elsewhere the gun turns at the grab by at most 15
+  degrees, then follows the off hand;
+- that turn eases in over 70 ms at the grab, and out over 70 ms at the release (`kTwoHandRampSeconds`, a
+  smoothstep from wherever the turn was, so a grab during a release's ease does not jump), so a trigger pulled
+  on either edge does not shoot along a sudden jump; the ease ends exactly on the two-handed aim, and exactly on
+  the weapon hand's own. Letting go hands control back in the frame that sees it (the hold ends, the off glove is
+  on its controller again and the grip's binding is the player's again; ROADMAP step 5's "within one frame"); the
+  aim, and the shots with it, take the ease's 70 ms (6 frames at 90 Hz) to be back on the weapon hand's own,
+  never past it;
+- the weapon hand keeps the gun's roll about that line (rolling the weapon hand rolls the gun);
+- the barrel keeps its own angle to the line between the hands, the gun's: the fore-end sits above or below the
+  grip's line by a few centimetres (1.4 to 17 degrees by gun, the combat shotgun 11);
+- the held aim is built from the weapon hand's aim as tracked and goes through the same filter as the one-handed
+  aim, with the player's Aim steadiness (`ETERNALVR_AIM_SMOOTHING`; T-195), started afresh at each grab; at Off
+  it is the line's own. Without it (round 1) the line came from the raw grip positions while the one-handed aim
+  was smoothed, so the player's setting did nothing to two-handed aim.
+The turned aim is the one-handed aim's own ray (`beginGameView`, after the aim smoothing), so the view angles under
+hand aim, the shots, the gun's placement and its sights, and the aim dot all follow it in the same frame.
+
+**The gloves.** While held the off glove sits on the gun as the game holds it: the free off hand's arm
+(`offhand_arm.cpp`) takes the game's own left grip on the gun (its wrist under the left attach joint, placed on
+the gun's root as read each tick, so it rides the gun's kick and animations) as its target, with the game's own
+fingers on the fore-end, moved back along the line between the hands to where the off hand is when that is short
+of the support point (`input::gloveSlide`; T-195); with the weapon in the left hand the right glove takes the
+game's left grip reflected, moved the same way (`left_hand_arms.cpp`). The glove is held there wherever the gun is,
+as the weapon arm's glove is on its grip: a grip further from the arm's head-fixed shoulder than the arm reaches
+moves the shoulder end along the line (T-197). The weapon glove keeps its own placement and roll. Let go, the off
+glove is on its controller again in the same tick (the aim's ease is the gun's, not the glove's).
+
+**What closes it.** Two-handed aim holds only under hand aim (not head or view aim, where the gun is at the head;
+not in gamepad mode, where there are no hands), and lets go and takes nothing while the player is dead (the health
+component's `isDead`, the flag bHaptics reads; until the respawn), in a cutscene, a forced view (a glory
+kill, the Meathook's pull, a melee lunge, a scripted camera), while piloting a demon, in a menu or popup, with the
+weapon wheel up, while swimming (the swim's fists), and while the gun is down or busy: a switch and its raise, a
+melee, a throw, a custom animation, a sync, hidden hands, the chainsaw (`input::gunUp`, the arm policy's own
+signals). A reload is not in it: the Super Shotgun reloads after every shot and the hands stay on the gun (the
+glove plays the game's reload while the aim keeps the line). The off-hand hook notes the gun's state each tick
+for the camera hook; a note older than 0.25 s counts as the gun down. The hold is dropped at once, with no
+ease and with the grip to be squeezed again, on a level load and on any frame the camera hook runs without the
+controllers (detached, gamepad mode), and the mapper and the off-hand hook stop reading it as held when the
+camera hook has not run for 0.25 s (a load's frames).
+
+**The off hand's grip button.** While two-handed aim can hold, the off hand's grip squeezed afresh on the gun (where
+a squeeze takes it, above), or holding the gun, is the hold and not its binding: the mapper holds the grip's
+bindings back (`MapperContext::supportHandOnWeapon`, which names the off hand of the hand the gun is in, whatever
+weapon hand a custom binding profile gives) from the frame it is pressed until it is let go. With the default maps
+that is the Flame Belch (Touch, Index, Windows Mixed Reality, HP Reverb G2, Vive Cosmos, Pico 4, Steam Frame; the
+right grip with the weapon in the left hand) and on the Vive wands the tap's switch equipment and the hold's
+Dossier. Away from the gun the grip does what it always did, so nothing is lost; on the Steam Frame the Flame
+Belch is on Y too. A player's own map that puts something else on that grip loses it the same way on the gun
+(docs/VR_CONTROLLERS.md).
+
+**No virtual stock.** The gun's rear is not anchored at a shoulder or cheek: T-196.
+
+Logs: `two-handed aim: on; the held aim smoothed as the one-handed aim is (<setting>)` once, `two-handed aim: held
+on '<weapon>' (the off hand N cm along the gun from the grip, N cm off its line; the support point at N cm; the gun
+turned N deg)`, `two-handed aim: let go (<why>): the weapon hand aims again`, once per weapon `'<item>' takes no
+support grip`; with `ETERNALVR_OFFHAND_TRACE=1` also the gate's changes (`can hold` / `blocked: <why>`) and,
+around every take and release, the frame before, the frames of the ease and the next three: `frame t=<the dump's
+clock> grip <0..1> held|free aim <deg> deg from the weapon hand's, the hold's <deg> deg` (the turn applied, and the
+hold's full turn while it holds); a hold dropped by a load or the controllers going is `the hold reset (<why>)`.
+The hands rig's dump gives `two` (whether it holds, the row in use and the aim's axis) with the setting on, and the
+frame table's `aim_two_handed` column marks the frames whose aim is two-handed aim's (docs/VR_HEAD_TRACKED.md).
+Positive controls: `ETERNALVR_TEST_ARM_FAULT=two_hand` turns the gun only half way to the line, leaves the off glove
+on its controller and keeps that half turn for 20 frames after a release with no ease (past the ease's end); the
+two-hand check must fail all three. `ETERNALVR_TEST_ARM_FAULT=two_hand_line` leaves the line unsmoothed whatever
+Aim steadiness says; the noise check must fail it. The scripted input's `noise` (docs/VR_CONTROLLERS.md, "Scripted
+input for rig tests") gives the rig's hands tracking noise. Rig: docs/rig-findings/hands-rig.md, sections 27 and
+28.
+
+**Not tried in a headset.** Whether 8 cm and 15 degrees feel right for taking the gun and 16 cm past the fore-end
+for letting go, how much two tracked hands wobble the line at arm's length (the frame table's `aim_two_handed`
+column and `tools/frames/aim_jitter.py` measure it from a session), how the turn at the grab and its ease feel,
+how the off arm looks reaching across to the gun, and whether the Flame Belch on the off grip is missed near the
+gun.
+
 ## Arms in cutscenes (ETERNALVR_CUTSCENE_ARMS)
 
 In a cutscene shown around the player (`ETERNALVR_CUTSCENES=immersive`) the game draws its own hands model
@@ -1455,7 +1678,9 @@ cutscene around the player starts: the arms hidden, the weapon FOV the game's` /
 | `ETERNALVR_WEAPON_ARM` | `ik` / `game` (`ik`) | Who poses the weapon arm's forearm, elbow and upper arm; the gun stays the game's, and so does the wrist but on the chaingun and the ballista, whose glove goes on a grip |
 | `ETERNALVR_WEAPON_ARM_TEST_SHOULDER` | f,l,u m (unset) | Rig tests: the weapon arm's shoulder at this point from the eyes (head's yaw frame), not mirrored |
 | `ETERNALVR_TEST_ARM_DUMP` | file (unset) | Rig tests: both arms' poses every 0.25 s as JSON lines for the hands rig ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) |
-| `ETERNALVR_TEST_ARM_FAULT` | `none` / `twist` / `forearm` / `fingers` (`none`) | Development only, the hands rig's positive controls: the whole wrist twist on the wrist joint, with `ETERNALVR_ARMS=hands` the forearm left drawn (only the upper arm folded), or the free off hand's fingers left the game's ("Hand poses" above) |
+| `ETERNALVR_TEST_ARM_TICKS` | file (unset) | Rig tests: a CSV row per camera hook, viewmodel placement and off-hand tick, with the game frame (`vkcore/arm_ticks.hpp`) |
+| `ETERNALVR_TEST_ARM_FAULT` | `none` / `twist` / `forearm` / `fingers` / `two_hand` / `two_hand_line` (`none`) | Development only, the hands rig's positive controls: the whole wrist twist on the wrist joint, with `ETERNALVR_ARMS=hands` the forearm left drawn (only the upper arm folded), the free off hand's fingers left the game's ("Hand poses" above), two-handed aim turned half way, its off glove left on the controller and its release three frames late, or two-handed aim's line left unsmoothed ("Two-handed aim" above) |
+| `ETERNALVR_TWO_HAND` | 0 / 1 (0) | Two-handed aim ("Two-handed aim" above); needs `ETERNALVR_OFFHAND=free` and `ETERNALVR_ARM_SOLVE=bind` (or `ETERNALVR_ARMS=hands`), else reported and off. The launcher's "Two-handed aim" (Advanced tab) sends it, 1 only with the new arms in use |
 | `ETERNALVR_ARMS` | `shown` / `hidden` / `hands` (`shown`) | Both first-person arms drawn, hidden with the weapon alone ("Hidden arms" above), or the gloves alone with the free off hand, the weapon arm's ik and the bind solve ("Hands only" above); the launcher's "Show arms" |
 | `ETERNALVR_ARM_SOLVE` | `animated` / `bind` (`bind`) | The arm solve's wrist twist measured from the game's animated hand (as in 0.1.82 and before) or from the bind pose, kept continuous and shared to the upper arm, the off hand's swing limited, and every joint written past its target by the hands' modifier weight so it lands there, the off hand's wrist taking the rest of a turn its attach joint cannot make ("The whole arm" and "Where an override lands" above) |
 | `ETERNALVR_TEST_ARM_MOD_WEIGHT` | 0..1 (unset) | Development only: the hands' joint-modifier weight held while the free off hand is posed, the weights found put back when the arm goes back to the game or the multiplayer guard trips; new hands (a new level's) start at the game's own ("Where an override lands" above) |
@@ -1474,21 +1699,22 @@ left hand keeps its thumb up and its fingers along the grip, so its palm faces o
 shoulder across the body and filled the lower view; lh1 (after): it comes from the lower right, the four
 scripted poses mirrored (`tmp-vr\rs\lh-drive.sh`), 0 rejected.
 
-The launcher has a row for it on the Advanced tab, in the HUD panel group ("Health and ammo": On the HUD
-panel / On your wrist / On your weapon, default the panel, `hud` in `launcher.ini`: `panel`, `wrist`,
-`weapon`); it always sends `ETERNALVR_HUD` (in mono too, where it also turns the UI layer on), `panel` when
-the controllers are off, and the row is greyed out without controllers. The tuning and off-hand variables are environment only.
+The launcher has rows for it on the Advanced tab, in the HUD group ("HUD in front of you", "HUD on your
+wrist", "Ammo on your weapon"; `hud_front`, `hud_wrist`, `hud_weapon` in `launcher.ini`, "HUD places" above);
+it always sends `ETERNALVR_HUD` and `ETERNALVR_HUD_FRONT` (in mono too, where it also turns the UI layer on),
+`panel` and front on when the controllers are off, and the wrist and weapon rows are greyed out without
+controllers (the weapon row also while the wrist is on). The tuning and off-hand variables are environment only.
 
 ## Live-test plan
 
 Run in stereo with the controllers (the launcher defaults) and the wrist turned on: launcher, Advanced tab,
-"Health and ammo" = On your wrist (or `ETERNALVR_HUD=wrist`). Read the layer's
+"HUD on your wrist" ticked and "HUD in front of you" unticked (or `ETERNALVR_HUD=wrist`). Read the layer's
 `eternalvr-<date>-<time>-<pid>.log`. Today's controls that matter here: recenter is both sticks held 2 s (or
 the headset's own recenter), the in-headset capture is the left Menu held + a trigger (under SteamVR with
 Touch controllers, both sticks held, then a trigger), the Dossier is on X (hold by default), pause is a left
 Menu tap (under SteamVR with Touch controllers, a Y hold; B in the full mirror).
 
-1. **Start-up.** Look for `ui: HUD wrist (corner blocks on the off hand's wrist); wrist: shown while
+1. **Start-up.** Look for `ui: HUD wrist (corner blocks on the off hand's wrist), in front off; wrist: shown while
    facing the head (facing 40/55 deg, gaze 40/55 deg), 0.16 m row ...` and whether it says `(colour scale)`
    (fades) or `(no colour scale: switched)`. `controllers: game hooks: ... off hand off (game), weapon arm on
    (ik)` by default (`off hand on (game)` with `ETERNALVR_OFFHAND_TRACE=1`: the hook then only logs for the
@@ -1512,10 +1738,10 @@ Menu tap (under SteamVR with Touch controllers, a Y hold; B in the full mirror).
 5. **Hiding.** A glory kill and a cutscene hide it; the pause menu (left Menu tap) and the Dossier (X hold)
    show the menu panel with no wrist quads, also while the panel stays for the menu's backdrop after the
    cursor goes; a loading screen is unchanged. The low-health red wash stays off the wrist as it does off
-   the panel. `ETERNALVR_HUD=panel` (or the launcher row back on the panel) gives back the whole head-locked
-   HUD.
-6. **Weapon HUD.** `ETERNALVR_HUD=weapon` (launcher: "Health and ammo" = On your weapon). Start-up:
-   `ui: HUD weapon (ammo above the gun in the weapon hand); ...` and `ui: weapon HUD: ammo (health and armor
+   the panel. `ETERNALVR_HUD_FRONT=1` (or "HUD in front of you" ticked again) gives back the whole
+   head-locked HUD with the wrist as an extra.
+6. **Weapon HUD.** `ETERNALVR_HUD=weapon` (launcher: "Ammo on your weapon" ticked, "HUD in front of you"
+   unticked). Start-up: `ui: HUD weapon (ammo above the gun in the weapon hand), in front off; ...` and `ui: weapon HUD: ammo (health and armor
    stay on the panel), 0.10 m wide at (0.000, 0.070, 0.050) in the gun's frame, tilted 45 deg, shown while
    facing the head (60/75 deg)`. In a level: the bottom-right block is gone from the head-locked HUD and
    health and armor are still there; with the gun held at the chest `ui: weapon HUD shown for the first time

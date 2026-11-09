@@ -16,11 +16,11 @@ using evr::Quat;
 using evr::transformDirection;
 using evr::Vec3;
 using evr::input::controllerTilt;
+using evr::input::fitScriptedHands;
 using evr::input::Hand;
 using evr::input::HandState;
 using evr::input::InputFrame;
 using evr::input::tiltController;
-using evr::input::tiltControllers;
 
 namespace {
 
@@ -122,12 +122,12 @@ TEST_CASE("no angle, a non-finite one, or no valid pose changes nothing") {
 TEST_CASE("each hand takes its own angle: the weapon hand's and the other's") {
     for (const Hand weapon : {Hand::Right, Hand::Left}) {
         InputFrame frame;
-        frame.left.gripValid = true;
-        frame.right.gripValid = true;
+        const auto script = evr::input::parseTestInput("left.aim = 0, 0\nright.aim = 0, 0\n");
+        evr::input::applyTestInput(script, frame);
         evr::input::ControllerSettings settings;
         settings.weaponHandTiltDegrees = -20.0f;
         settings.offHandTiltDegrees = -40.0f;
-        tiltControllers(frame, weapon, settings);
+        fitScriptedHands(frame, script, weapon, settings, {});
         const HandState& w = weapon == Hand::Right ? frame.right : frame.left;
         const HandState& o = weapon == Hand::Right ? frame.left : frame.right;
         CHECK(transformDirection(w.gripPose, {0.0f, 0.0f, -1.0f}).y ==

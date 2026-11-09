@@ -35,9 +35,21 @@
 // Windows Mixed Reality), on every family whatever its maps bind, so the off hand's index finger can rest on
 // its trigger and the weapon hand's lift off it (features/arm/hand_pose.hpp, trigger_finger.hpp). The
 // built-in data suggests no binding for it, and before these fingers nothing read it unless a map bound it
-// like a button. The first retry of a refused profile drops it alone (withoutTriggerTouch), so a runtime that
-// refuses only that path costs the fingers' touch and keeps the thumb-rest wheel; every later retry is
-// without it too.
+// like a button.
+//
+// The grip's curl for the fingers (addGripCurlBindings, DECISIONS T-226): /input/squeeze/value as the
+// grip_curl action on each hand whose profile lists it and whose grip action reads another input of the
+// squeeze. In the built-in data that is the Index alone: its grip action reads /input/squeeze/force, so a
+// hand resting round the handle presses nothing, and SteamVR's squeeze value there rises as the fingers wrap
+// the handle, before any force. The off hand's fingers close with it, so they follow the hand without the
+// squeeze that fires the grip's action (the Flame Belch). Where the grip action itself reads the value
+// (Touch, the Reverb G2, Pico 4, the Steam Frame) the path is that binding's and nothing is added: the
+// fingers read the grip. A controller without the value (Windows Mixed Reality, the Vive wands, the Cosmos)
+// gets nothing.
+//
+// The first retry of a refused profile drops both of the fingers' bindings, and only them
+// (withoutFingerBindings), so a runtime that refuses one of those paths costs the fingers that sensor and
+// keeps the thumb-rest wheel; every later retry is without them too.
 
 #include "features/input/binding_profile.hpp"
 #include "features/input/controller_bindings.hpp"
@@ -66,7 +78,7 @@ struct RestTouchOptions {
 // bound in one of its maps; face-button touch as the rest (`faceTouch`) only with the wheel on.
 RestTouchOptions restTouchOptions(const ControllerData& data, bool wheelOn, bool faceTouch);
 
-// True for the actions this file adds.
+// True for the touch actions this file adds (not the grip's curl, which is no touch).
 bool isRestTouchAction(XrActionId action);
 
 // Adds the rest-touch bindings `data` lacks (in the data's own order, by hand and action); a path another
@@ -80,6 +92,11 @@ std::size_t addBoundTouchBindings(ControllerData& data);
 // Adds the trigger's touch binding on each hand of `data` whose profile has the sensor, where the data lacks
 // it and no other binding of the hand uses its path. Returns how many were added.
 std::size_t addTriggerTouchBindings(ControllerData& data);
+
+// Adds the grip's curl (/input/squeeze/value) on each hand of `data` whose profile has it, where the data
+// lacks it and no other binding of the hand uses its path (on every built-in family but the Index the grip
+// action does). Returns how many were added.
+std::size_t addGripCurlBindings(ControllerData& data);
 
 // `data` without any rest-touch binding: the profile suggested again when the runtime refused it.
 ControllerData withoutRestTouch(ControllerData data);
@@ -97,10 +114,10 @@ ControllerData withoutVetoTouch(ControllerData data);
 // the rests kept: the second retry of a refused profile.
 ControllerData withoutTouchButtons(ControllerData data);
 
-// `data` without the trigger's touch the fingers read (addTriggerTouchBindings), except where a map binds it
-// like a button: the first retry of a refused profile, so a runtime that refuses only that path costs the
-// fingers' touch and nothing else.
-ControllerData withoutTriggerTouch(ControllerData data);
+// `data` without the bindings only the fingers read: the trigger's touch (addTriggerTouchBindings), except
+// where a map binds it like a button, and the grip's curl (addGripCurlBindings). The first retry of a refused
+// profile, so a runtime that refuses only one of those paths costs the fingers that sensor and nothing else.
+ControllerData withoutFingerBindings(ControllerData data);
 
 // Whether `data` suggests a touch on a control that one of its maps binds like a button.
 [[nodiscard]] bool hasTouchButtonBindings(const ControllerData& data);
@@ -108,7 +125,7 @@ ControllerData withoutTriggerTouch(ControllerData data);
 // The retries of a refused profile, in order (rest_touch_bindings.hpp above), each without what the one
 // before left out.
 enum class TouchRetry : std::uint8_t {
-    WithoutTriggerTouch, // without the trigger's touch for the fingers alone: everything else kept
+    WithoutFingers,      // without the fingers' trigger touch and grip curl alone: everything else kept
     WithoutVeto,         // ... and without the sensors that only tell the thumb is elsewhere
     WithoutTouchButtons, // ... and without the touches bound like buttons: the rests kept
     WithoutRestTouch,    // without any of the bindings this file adds

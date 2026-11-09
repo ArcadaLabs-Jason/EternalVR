@@ -57,7 +57,7 @@ struct MapCase {
 constexpr std::array kMapCases{
     MapCase{"left.futurebutton.tap", "weapon_slot_3", true},
     MapCase{"right.trigger.double_tap", "fire", true},
-    MapCase{"right.stick.up_left", "chainsaw", true},
+    MapCase{"right.stick.double_up", "chainsaw", true},
     MapCase{"left.trigger.hold.seconds", "0.4", true},
     MapCase{"right.futurepad.press", "future_action", true},
     MapCase{"left.trigger.squeeze", "fire", true},
@@ -132,7 +132,7 @@ const ButtonBinding kFire{Hand::Right, ButtonInput::Trigger, PressKind::WhileDow
 } // namespace
 
 TEST_CASE("a binding key of a later version is a hand and two or more lowercase names") {
-    for (const char* key : {"left.trigger.press", "left.futurebutton.tap", "right.stick.up_left",
+    for (const char* key : {"left.trigger.press", "left.futurebutton.tap", "right.stick.double_up",
                             "left.trigger.hold.seconds", "right.face5.tap", "left.a.b"}) {
         CAPTURE(key);
         CHECK(isLaterBindingKey(key));

@@ -477,6 +477,9 @@ TEST_CASE("the hands rig's dump and planted fault are off unless their test vari
     CHECK(on.issues.empty());
     CHECK(on.settings.testArmDumpPath == "C:/runs/arms.ndjson");
     CHECK(on.settings.testArmFault == evr::input::ArmFault::Twist);
+    CHECK(parse({}).settings.testArmTicksPath.empty());
+    CHECK(parse({{"ETERNALVR_TEST_ARM_TICKS", "C:/runs/ticks.csv"}}).settings.testArmTicksPath ==
+          "C:/runs/ticks.csv");
     CHECK(parse({{"ETERNALVR_TEST_ARM_FAULT", "none"}}).settings.testArmFault == evr::input::ArmFault::None);
     const auto bad = parse({{"ETERNALVR_TEST_ARM_FAULT", "wrap"}});
     REQUIRE(bad.issues.size() == 1);

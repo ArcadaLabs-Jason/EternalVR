@@ -48,6 +48,9 @@
 //   mods    the held weapon's active mods: the decl names of its two mod overrides ["" for none, ...]
 //           (vkcore/weapon_mods.hpp); sight the key of the [sights] row the viewmodel turns the weapon by, ""
 //           for none
+//   two     only with two-handed aim on (ETERNALVR_TWO_HAND): {"held" true / false, "row" the support row in
+//           use [forward left up] (metres, the weapon hand's aim frame) or null, "aim" the aim's axis rows
+//           [9] (world: the ray shots take, with its roll)}; the key is left out with the setting off
 
 #include "features/arm/arm_joints.hpp"
 #include "xr_math/weapon_pose.hpp"
@@ -103,6 +106,13 @@ struct DumpArm {
     std::optional<DumpTrigger> trigger;
 };
 
+// Two-handed aim ("two").
+struct DumpTwoHand {
+    bool held = false;
+    std::optional<std::array<float, 3>> row;
+    xr_math::IdViewAxis aim;
+};
+
 struct ArmDumpRecord {
     double seconds = 0.0;
     float unitsPerMetre = 1.0f;
@@ -125,6 +135,7 @@ struct ArmDumpRecord {
     std::optional<bool> handsSwim;
     std::array<std::string, 2> mods;
     std::string sightRow;
+    std::optional<DumpTwoHand> twoHand;
 };
 
 // The joint roles in a pose set, in ArmJoint order.

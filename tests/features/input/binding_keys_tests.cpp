@@ -43,6 +43,23 @@ TEST_CASE("keys parse into what they name") {
           "right.thumbrest.hold");
 }
 
+TEST_CASE("the turn stick's directions are keys (T-229)") {
+    CHECK(parseBindingKey("right.stick.down") == BindingKey{GestureKey{Hand::Right, StickGesture::Down}});
+    CHECK(parseBindingKey("right.stick.left") == BindingKey{GestureKey{Hand::Right, StickGesture::Left}});
+    CHECK(parseBindingKey("left.stick.right") == BindingKey{GestureKey{Hand::Left, StickGesture::Right}});
+    CHECK(parseBindingKey("right.stick.up_left") ==
+          BindingKey{GestureKey{Hand::Right, StickGesture::UpLeft}});
+    CHECK(parseBindingKey("right.stick.up_right") ==
+          BindingKey{GestureKey{Hand::Right, StickGesture::UpRight}});
+    CHECK(parseBindingKey("right.stick.down_left") ==
+          BindingKey{GestureKey{Hand::Right, StickGesture::DownLeft}});
+    CHECK(parseBindingKey("right.stick.down_right") ==
+          BindingKey{GestureKey{Hand::Right, StickGesture::DownRight}});
+    CHECK(formatBindingKey(GestureKey{Hand::Left, StickGesture::DownRight}) == "left.stick.down_right");
+    CHECK_FALSE(parseBindingKey("right.stick.up-left").has_value());
+    CHECK_FALSE(parseBindingKey("right.stick.left_tap").has_value());
+}
+
 TEST_CASE("unknown keys are rejected") {
     for (const char* key : {"", "weapon", "middle.trigger.press", "left.trigger", "left.trigger.squeeze",
                             "left.thumb.press", "left.stick.sideways", "left.trigger.press.extra",
@@ -60,8 +77,8 @@ TEST_CASE("every key formats back to the text it was parsed from") {
                 CHECK(parseBindingKey(formatBindingKey(key)) == key);
             }
         }
-        for (const StickGesture gesture : {StickGesture::Up, StickGesture::DownTap, StickGesture::DownHold}) {
-            const BindingKey key = GestureKey{hand, gesture};
+        for (int gesture = 0; gesture <= static_cast<int>(StickGesture::DownRight); ++gesture) {
+            const BindingKey key = GestureKey{hand, static_cast<StickGesture>(gesture)};
             CHECK(parseBindingKey(formatBindingKey(key)) == key);
         }
         const BindingKey role = StickRoleKey{hand};

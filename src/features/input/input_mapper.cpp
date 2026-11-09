@@ -93,6 +93,15 @@ bool gestureActive(StickGesture gesture, const TurnStickOutput& output) {
         return output.downTap;
     case StickGesture::DownHold:
         return output.downHold;
+    case StickGesture::Down:
+        return output.down;
+    case StickGesture::Left:
+    case StickGesture::Right:
+    case StickGesture::UpLeft:
+    case StickGesture::UpRight:
+    case StickGesture::DownLeft:
+    case StickGesture::DownRight:
+        return output.side == gestureDirection(gesture);
     }
     return false;
 }
@@ -135,9 +144,10 @@ bool bindsWheelRest(const BindingProfile& profile, const MapperSettings& setting
 }
 
 InputMapper::InputMapper(BindingProfile profile, MapperSettings settings)
-    : profile_(std::move(profile)), settings_(sanitized(settings, profile_)), turnStick_(settings_.turnStick),
-      turn_(settings_.turn), handsJump_(settings_.handsJump), armGestures_(settings_.swing),
-      reachUse_(settings_.reach), wristFlick_(settings_.flick), punch_(settings_.punch),
+    : profile_(std::move(profile)), settings_(sanitized(settings, profile_)),
+      turnStick_(settings_.turnStick, stickLayoutOf(profile_.stickGestures)), turn_(settings_.turn),
+      handsJump_(settings_.handsJump), armGestures_(settings_.swing), reachUse_(settings_.reach),
+      wristFlick_(settings_.flick), punch_(settings_.punch),
       captureChord_(settings_.trigger, settings_.captureButtons, settings_.buttonHoldSeconds),
       stickChord_(settings_.buttonHoldSeconds),
       restWheel_(settings_.restWheel, {settings_.restSensors, profile_.moveStick, profile_.turnStick}),
@@ -205,7 +215,7 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         // A grip steadying the weapon is holding it, not asking for an action. The suppression
         // outlasts the support until the grip is released, and covers the release frame itself so
         // that a tap binding does not fire on it.
-        const bool supporting = context.supportHandOnWeapon && hand != profile_.weaponHand;
+        const bool supporting = context.supportHandOnWeapon == hand;
         buttons.gripHeldForSupport = buttons.gripHeldForSupport || supporting;
         addButtonActions(hand, levels, buttons.gripHeldForSupport, chord.triggerHeldBack[handIndex(hand)],
                          input.down);
@@ -236,6 +246,11 @@ GameInput InputMapper::update(const InputFrame& raw, const MapperContext& contex
         turnStick_.update(gestureStick, dt, wheelFromButton || (restTakesTurn && !restDefersTurn));
     addStickGestureActions(gestures, input.down);
     input.turnDegrees = turn_.update(gestureStick, dt, gestures.turnAllowed);
+    // A stick split by direction (T-229) is centred to the virtual gamepad's look (no turn hook) outside a
+    // turn's sweep, as to the turn: a side bound to a weapon never turns the view.
+    if (turnStick_.layout().directions && !gestures.turnAllowed) {
+        turnStickRead_ = {};
+    }
     input.wheelPointer = restTakesTurn && !wheelFromButton ? Axis2{} : gestures.wheelPointer;
     if (rest.wheelDown) {
         game::add(input.down, game::GameAction::WeaponWheel);

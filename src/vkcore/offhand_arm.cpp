@@ -8,13 +8,18 @@
 #include "features/arm/hand_offset.hpp"
 #include "features/arm/mod_mix.hpp"
 #include "features/arm/twist_fault.hpp"
+#include "features/input/two_hand.hpp"
 #include "vkcore/arm_dump.hpp"
 #include "vkcore/arm_solve_mode.hpp"
+#include "vkcore/arm_ticks.hpp"
 #include "vkcore/game_arm.hpp"
 #include "vkcore/hands_surfaces.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/offhand_fingers.hpp"
+#include "vkcore/offhand_stats.hpp"
+#include "vkcore/two_hand.hpp"
+#include "vkcore/weapon_arm.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -101,6 +106,22 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     const arm::HandOffset offset{Vec3{o.forward, o.left, o.up} * upm, {o.pitch, o.yaw, o.roll}};
     arm::ArmTargets targets;
     targets.hand = arm::wristFromGrip(xr_math::inModelSpace(model.pose, world.offGrip), offset);
+    // Two-handed aim (two_hand.hpp): the glove on the gun's support point, the game's own left grip of the
+    // held item (the wrist under its attach joint, placed on the gun's root as read this tick), with the
+    // game's fingers on it.
+    const std::optional<xr_math::ModelPose> gun =
+        two_hand::gloveOnSupport() ? weapon_arm::attachRead(arm::ArmSide::Right) : std::nullopt;
+    if (gun) {
+        targets.hand = arm::compose(
+            *gun, arm::relative(animated[index(ArmJoint::Attach)], animated[index(ArmJoint::Hand)]));
+        // Moved along the gun to where the off hand holds it, short of the support point.
+        if (const std::optional<float> reach = two_hand::gloveSupportMetres()) {
+            targets.hand.position =
+                targets.hand.position +
+                input::gloveSlide(xr_math::inModelSpace(model.pose, world.grip).position,
+                                  xr_math::inModelSpace(model.pose, world.offGrip).position, *reach * upm);
+        }
+    }
     targets.shoulder =
         input::shoulderAnchorFor(cfg.offhandShoulder, cfg.handedness) == input::ShoulderAnchor::Model
             ? animated[index(ArmJoint::UpperArm)].position
@@ -109,8 +130,11 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     targets.lastTwist = g_lastTwist;
     targets.twistFrom = solve.twistFrom;
     targets.limitSwing = solve.limitSwing;
-    // Hands only draws the glove alone: on its target wherever it is, turned as the controller is.
-    targets = cfg.armsHandsOnly ? arm::handsOnlyTargets(targets) : targets;
+    // Hands only draws the glove alone: on its target wherever it is, turned as the controller is. The glove
+    // on the gun's support point is held there the same way, as the weapon arm's glove is on its grip: the
+    // fore-end can be further from the arm's shoulder than the arm reaches (the shoulder then moves along the
+    // line), and its turn is the game's own grip of it.
+    targets = cfg.armsHandsOnly || gun ? arm::handsOnlyTargets(targets) : targets;
     auto ours = arm::solveArm(animated, targets);
     if (!ours) {
         return std::nullopt;
@@ -150,7 +174,7 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
         length(mixed[index(ArmJoint::Hand)].position - animated[index(ArmJoint::Hand)].position);
     // The fingers from the controller (hand poses, the bind solve only; offhand_fingers.hpp).
     const offhand_fingers::FingerWrites* fingers =
-        offhand_fingers::pose(hands, read->landed < 0.0f, weight, cfg);
+        gun ? nullptr : offhand_fingers::pose(hands, read->landed < 0.0f, weight, cfg);
     // Hands only: a far controller still gets the glove, never the game's whole arm (arm::reachLimits).
     const arm::ReachLimits limit =
         arm::reachLimits(cfg.armsHandsOnly, wristMove, kMaxReachMetres * upm, kMaxAttachMetres * upm);
@@ -168,6 +192,11 @@ std::optional<xr_math::JointMod> pose(const std::byte* hands,
     hands_surfaces::update(arm::ArmSide::Left, hands, true);
     arm_dump::noteLayerArm(arm::ArmSide::Left, weight, ours->twist, *read, mixed, &targets.hand,
                            gloves.zeroScale);
+    offhand_stats::notePosed({read->read[index(ArmJoint::Hand)].position,
+                              mixed[index(ArmJoint::Hand)].position, model, world.qpc, upm});
+    arm_ticks::noteLeftWrist({targets.hand, mixed[index(ArmJoint::Hand)].position,
+                              read->read[index(ArmJoint::Hand)].position,
+                              animated[index(ArmJoint::Hand)].position, read->landed});
 
     if (!g_loggedBones) {
         g_loggedBones = true;

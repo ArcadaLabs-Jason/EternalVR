@@ -131,6 +131,36 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   (`TurnStickArbiter::update` with `wheelHeld`), the sweep in progress is cancelled, and a stick still out
   of the centre when the button is let go stays cancelled until it comes back, so pointing never turns,
   presses the chainsaw or ends in a quick switch.
+- **Turn stick directions** (DECISIONS T-229; `features/input/stick_directions.hpp`, `TurnStickArbiter` with a
+  `StickLayout`). Besides `up`, `down_tap` and `down_hold`, a map may bind the turn stick's `down`, `left`,
+  `right`, `up_left`, `up_right`, `down_left` and `down_right`, each active for as long as the stick is pushed
+  that way (for weapon slots on the stick: `weapon_slot_1` to `_8` press the game's `_weapN` bits). A map that
+  binds none of the sides and diagonals keeps the claim cones exactly (up and down within 30 degrees, turning
+  elsewhere; every built-in map). One that binds any of them splits the stick by direction: each of the eight
+  directions is owned by its gesture when bound (down by `down`, `down_tap` or `down_hold`), straight left and
+  right not bound by turning, and the stick belongs to the owned direction nearest its angle, so a direction
+  nobody owns is shared by its neighbours halfway each (all eight bound: 45 degrees each; up, down, left and
+  right: 90 each; up and down built in with the four diagonals: 45 each and turning only within 22.5 degrees
+  of straight left or right). The arbiter's one-intent-per-sweep rule is unchanged: a gesture's part claims at
+  0.75, turning's at 0.35 sideways, and the claim lasts until the stick is back within 0.25, so a bound
+  direction holds turning back for the whole of its own sweep and no other (a sweep claimed by turning that
+  rolls into a bound part keeps turning and presses nothing; a gesture's sweep that rolls into turning's part
+  keeps its action and never turns). Between the centre and 0.75 a gesture's part does nothing (no turn), so a
+  slow push toward a bound direction never turns first. Bind both `left` and `right` and the stick turns no
+  more. On a split stick the virtual gamepad's look without the turn hook reads the stick as centred outside a
+  turn's sweep (`InputMapper::turnStick`), as the turn does. `down` is a press for the whole down sweep, like
+  `up`: no tap, no hold, no stay cone; beside `down_tap` or `down_hold` it is a `PressWithTapOrHold` conflict
+  (`down` kept), as a button's `press` beside its `tap` or `hold`. `down` alone does not split the stick (it
+  claims in the down cone). The directions are the stick's, not mirrored: `left` is pushed left on either
+  hand (the game's wheel is not mirrored either), and the launcher moves them unchanged when the turn stick
+  changes sides; each map section (`[map.right]`, `[map.left_button_swap]`, `[map.left_full_mirror]`) has
+  its own lines. Gestures stay turn-stick only (`GestureOffTurnStick` on the move stick: a direction there
+  would stop moving that way). The weapon wheel's button, the thumb-rest wheel, a menu's hold and its
+  release latch cancel or hold back a side's sweep as they do up's and down's. Prompts: `Right Stick Left`,
+  `Right Stick Up Left` (`RS Up Left` in short); `down` is `Right Stick Down`. Log at the map's build, only
+  when split: `controllers: the turn stick is split by direction: up 90 deg, right 90 deg, down 90 deg, left
+  90 deg; turning only in the parts marked turn` (turning's parts marked `(turn)`). An older layer skips the
+  new keys (T-127: they have the later-version shape) and keeps the claim cones, so the stick turns there.
 - **Weapon wheel by the hand** (`ETERNALVR_WHEEL_SELECT=hand`, `features/input/wheel_hand.hpp`; the
   launcher's Play tab, Controls, "Weapon wheel"). The stick (or a button bound to `weapon_wheel`) only holds
   the wheel; the weapon hand's aim ray points. At the first command of a hold with the hand tracked the
@@ -329,7 +359,12 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   A, B, X or Y button the family binds to primary and secondary (none where that is a trackpad or a D-pad).
   The trigger's touch is a new OpenXR action, `trigger_touch`; no built-in data suggests a binding for it, but
   since DECISIONS T-222 the layer adds one on every family whose profile has the sensor, for the fingers (the off
-  hand's index finger resting on its trigger, the weapon hand's lifting off it; VR_HANDS_HUD.md).
+  hand's index finger resting on its trigger, the weapon hand's lifting off it; VR_HANDS_HUD.md). Since T-226 it
+  also adds the `grip_curl` action (a float, `/input/squeeze/value`) where the grip action reads another input of
+  the squeeze, which in the built-in data is the Index alone (its grip reads the force): the off hand's middle,
+  ring and little fingers close with it, so they follow the hand without the squeeze that fires the grip's
+  action. No control map binds it; a runtime that refuses a profile is asked again first without both of the
+  fingers' bindings (`withoutFingerBindings`).
   Semantics: a touch on a control is usually the start of using that control, so the thumb rest's elsewhere
   rules (a touch begun with the thumb on the stick waits, a lift with the thumb gone to a button is at once)
   do not apply. The same filter is used (`rest_touch_filter.hpp`: first-frame landing, gaps under the
@@ -385,7 +420,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   version (its editor, or its built-in file copied into the player's on the first save) keeps working.
   **Skipped, the rest of the file used:** a map key of the later-version shape (a hand, then two or more
   names of `a-z`, `0-9`, `_`, dot-separated: `left.futurebutton.tap`, `right.trigger.double_tap`,
-  `right.stick.up_left`, `left.trigger.hold.seconds`) that this version does not know, whatever its value; a
+  `right.stick.double_up`, `left.trigger.hold.seconds`) that this version does not know, whatever its value; a
   `[profile]` key `gameplay.<hand>.<name>` naming an action this version does not have (whatever its path;
   nothing is suggested for it); a `[labels]` key `<hand>.<name>` naming an input it does not know. Each is
   left out of the data, so the compiler and the mapper never see it, and logged once at load when the file
@@ -437,6 +472,27 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   with the head like a punch. Rig check: the use button alone opened the Fortress mission-select popup, and with
   nothing in view it did nothing (docs/VR_INTERACTIONS.md section 2.3). Log: `controllers: gesture: reach` then
   `action use`.
+- **Two-handed aim** (`ETERNALVR_TWO_HAND`, `features/input/two_hand.hpp`, `vkcore/two_hand.cpp`; the launcher's
+  Advanced tab, its own group, testing and off by default; with the controllers on and the weapon hand aiming, when the layer poses the arms).
+  The off hand's grip squeezed with that controller on the held gun takes it: within 8 cm of the gun's support
+  line (from the weapon hand's grip through its support point, the fore-end as the game's own idle holds it;
+  `[two_hand]` in the offsets table), from 12 cm along it to 8 cm past the support point, and within 15 degrees of
+  it seen from the weapon hand's grip (DECISIONS T-195). The weapon hand's aim is then turned so the support line
+  lies on the line between the two controllers' grips: the view angles, the shots, the gun and the aim dot follow
+  in the same frame, the turn eased in over 70 ms, and the held aim goes through Aim steadiness as one-handed aim
+  does. The squeeze must start there: a grip already held as the hand arrives, as the gate opens or after a
+  release takes nothing until squeezed again. Letting go of the grip, sliding more than 16 cm past the support
+  point, bringing the hands within 10 cm or any gate (death, a cutscene, a forced view, a demon, a menu, the weapon
+  wheel, a swim, a switch or melee) lets go, the aim easing back to the weapon hand's alone over 70 ms (the hold,
+  the glove and the grip's binding in the same frame). **What the grip no longer does:**
+  while two-handed aim can hold, that grip pressed on the gun, and until it is let go, never fires its
+  own binding (`MapperContext::supportHandOnWeapon`): with the default maps the Flame Belch (the left grip; the right
+  one with the weapon in the left hand) on Touch, Index, Windows Mixed Reality, HP Reverb G2, Vive Cosmos, Pico 4
+  and Steam Frame controllers, and on the Vive wands the grip's tap (switch equipment) and hold (the Dossier).
+  Squeezed away from the gun (more than 8 cm off its support line, or more than 15 degrees off it seen from the
+  weapon hand) it does what it always did, so nothing is lost; the Steam Frame also has the Flame Belch on Y. A player's own map that puts another action on the off
+  grip has it held back the same way near the gun. Design and rig: docs/VR_HANDS_HUD.md, "Two-handed aim";
+  DECISIONS T-156, T-158, T-195 to T-197.
 - **Roll wrist** (`ETERNALVR_WRIST_FLICK`, `ETERNALVR_FLICK_RATE`, `features/input/wrist_flick.hpp`; the launcher's
   Play tab, Gestures; on by default, DECISIONS T-162; over and back since T-202; `ETERNALVR_FLICK_RATE` is an
   environment variable only, with no launcher control).
@@ -610,16 +666,48 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   takes the same filter and strength, one per hand (`features/menu/pointer_steady.hpp`, docs/VR_MENUS.md).
 - **Controller angle** (`ETERNALVR_WEAPON_HAND_TILT`, `ETERNALVR_OFF_HAND_TILT`, -60 to 60 degrees, 0 by
   default; `features/input/controller_tilt.hpp`). Each controller turned about its sideways axis, for hands
-  that sit at another angle on the controller than the mod assumes. The layer gives the turn to the runtime
-  as the pose in action space of the hand's aim and grip spaces (`createSpaces` in `src/vkcore/input_xr.cpp`),
-  so everything placed from them follows: the gun, the shots, the aim dot, the menu pointer, the glove and the
-  hand HUD. Each pose turns about its own centre (a SteamVR raw device offset turns the controller about its
-  tracking origin instead); the grip's and the aim's sideways axes are the same direction, so the aim keeps
-  its angle to the grip. Scripted rig poses take the same turn in the layer. A positive angle lifts the front.
-  A Valve Index player found their hands right with SteamVR offsets pitched -40 degrees (off hand) and -20
-  (weapon hand) (public issue #16); the angles are the player's, so there is no per-controller default yet.
-  The launcher's Weapon hand angle and Off hand angle (Play tab, Controls; `weapon_hand_angle`,
-  `off_hand_angle` in launcher.ini, 5-degree steps) set them. The log's `controllers: on:` line shows both angles.
+  that sit at another angle on the controller than the mod assumes, on top of the controller's own fit (next
+  item). The layer gives the turn to the runtime as the pose in action space of the hand's aim and grip spaces
+  (`createSpaces` in `src/vkcore/input_spaces.cpp`), so everything placed from them follows: the gun, the
+  shots, the aim dot, the menu pointer, the glove and the hand HUD. Each pose turns about its own centre (a
+  SteamVR raw device offset turns the controller about its tracking origin instead); the grip's and the aim's
+  sideways axes are the same direction, so the aim keeps its angle to the grip. Scripted rig poses take the
+  same turn in the layer. A positive angle lifts the front. The launcher's Weapon hand angle and Off hand
+  angle (Play tab, Controls; `weapon_hand_angle`, `off_hand_angle` in launcher.ini, 5-degree steps) set them.
+  The log's `controllers: on:` line shows both angles; the fit's line (next item) shows them with the fit's.
+- **Controller fit** (T-225; `features/input/controller_fit.hpp`, `refitHand` in
+  `src/vkcore/input_spaces.cpp`). Each controller family can have a fit of its own: a move of the hand and
+  an angle per role (weapon hand, off hand), so the gun and the glove sit in the hand as they do on the Quest
+  Touch controllers the hands were tuned with. Only Valve Index controllers have one, and it is one player's
+  setup (public issue #16, 0.1.87, SteamVR): the launcher's angles at -20 (weapon hand) and -40 (off hand),
+  and SteamVR raw device offsets of 0.06 m along the controller's +Y and 0.06 m along its -Z on both hands.
+  SteamVR moves the controller's raw (tracking) pose in its own frame, and its OpenXR grip and aim for the
+  Index are the render model's `grip` (turned 15.392 degrees about the raw x axis) and `tip` (-40 degrees),
+  so the same move is (0, 4.2, -7.4) cm in the grip's frame and (0, 8.5, -0.7) cm in the aim's: 8.5 cm in the
+  room, the gun at the grip and the shots and aim dot from the aim moving together (with the aim level,
+  about 8.5 cm up). The numbers are SteamVR's poses, so the fit applies on SteamVR alone (the runtime's name;
+  `ETERNALVR_TEST_RUNTIME_NAME` stands in on the rig); on another runtime an Index gets none, and its line
+  says so. The fit is given to the runtime with the player's angle on top, as the spaces' pose in action
+  space: the move, then the two angles added, about each pose's own x axis. Each hand takes the fit of its
+  own controller, from the profile the runtime reports for that hand (the control map still takes one family
+  for both); a hand whose controller reports nothing keeps the fit it has. A hand's profile is known only
+  once the runtime reports it, so the hand spaces are made with no fit at attach and a hand's are made again
+  when its family has another fit; the spaces they replace stay valid until detach, since the presenter may
+  hold one for a frame's layer. A refused space is logged and tried again, at most 5 times 3 s apart
+  (`input::RefitRetry`). Scripted rig poses take their hand's fit and angle too, with the aim's move for both
+  (their grip is at the aim); a hand the script does not pose is the runtime's and keeps what its spaces give
+  it (before, scripted input turned it a second time). Log, once per hand and family: `controllers: the right
+  hand's valve_index controller (the weapon hand): its fit moves it 8.5 cm (grip frame 0.0 4.2 -7.4 cm, aim
+  frame 0.0 8.5 -0.7 cm) and turns it -20 deg; with the launcher's 0 deg, controller angle -20 deg`, `the left
+  hand's oculus_touch controller (the off hand): no fit of its own; controller angle 0 deg (the launcher's)`,
+  or on another runtime `... valve_index controller (...): no fit on this runtime (the fit is worked out from
+  SteamVR's poses); controller angle 0 deg (the launcher's) (runtime '<name>')`; a refusal: `the right hand's
+  spaces with its valve_index controller's fit were refused (<result>); they keep their previous fit, tried
+  again in a few seconds` (`; no more tries for this controller` after the last). The launcher sets 0.1.87's
+  advice, Weapon hand angle -20 with Off hand angle -40 exactly, back to 0 once, in launcher.ini and in every
+  VR settings profile, and says so in a message when it does (`IndexAngleMigration`; its marker
+  `index_angle_reset` in launcher.ini, this machine's, stops it running again; any other pair is kept). Index
+  players report how it sits; the numbers change with more of them.
 - **Reticle.** Under hand aim the dot is placed from the shown frame's own weapon ray (smoothed, at that
   frame's pose time), so it stays where the gun drawn in that frame points and its shots go
   (`src/vkcore/presenter_reticle.cpp`).
@@ -850,8 +938,11 @@ Environment variables for the game process (the rig passes them with `launch-ht.
 | `ETERNALVR_CONTROLLER_DATA` | a player's controller data file, or a folder whose `*.toml` files (not in subfolders) are read in name order; each replaces the built-in data of the profile it names, the later of two files for one profile wins, and a file with issues (its lines, or a control map that does not compile) is logged and the built-in data kept (`features/input/player_controller_data.hpp`). The launcher passes the controls folder of the VR settings profile in use (`<data>\controls` for none, `<data>\controls\profiles\<name>` for a profile) when it holds a map of the player's | built in |
 | `ETERNALVR_TEST_INPUT` | a scripted input file (below) | none |
 | `ETERNALVR_TEST_ARM_DUMP` | rig tests: a file the layer appends one JSON line to every 0.25 s with both arms' poses as written and read back, the scripted input as read, the arms model's placement, the held item, the weapon's root joint and the ray shots take; read by the hands rig's checker ([rig-findings/hands-rig.md](rig-findings/hands-rig.md)) | none |
-| `ETERNALVR_TEST_ARM_FAULT` | `twist`: development use only, the hands rig's positive control: the forearm's roll joints take none of the forearm's share of the wrist's twist, so it sits on the wrist joint (a candy wrapper the checker must fail); `forearm`, with `ETERNALVR_ARMS=hands`: the forearm left drawn, only the upper arm folded (the hands-only checks must fail it); `fingers`: the free off hand's fingers left the game's (the hand-pose check must fail it) | `none` |
-| `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Touch controllers' dashboard pause and stick capture) | none |
+| `ETERNALVR_TEST_ARM_TICKS` | rig tests: a CSV file the layer appends a row to for every camera hook, viewmodel placement and off-hand tick, with the game frame, the hands snapshots' stamps, the arms model's placement and the free off hand's wrist (`vkcore/arm_ticks.hpp`, [rig-findings/hands-rig.md](rig-findings/hands-rig.md)) | none |
+| `ETERNALVR_TWO_HAND` | `1`: two-handed aim (above), with `ETERNALVR_OFFHAND=free` and `ETERNALVR_ARM_SOLVE=bind` (or `ETERNALVR_ARMS=hands`) only, else reported and off; the launcher's Two-handed aim (Advanced tab, testing) sends `1` only with the new arms in use | `0` |
+| `ETERNALVR_TEST_ARM_FAULT` | `twist`: development use only, the hands rig's positive control: the forearm's roll joints take none of the forearm's share of the wrist's twist, so it sits on the wrist joint (a candy wrapper the checker must fail); `forearm`, with `ETERNALVR_ARMS=hands`: the forearm left drawn, only the upper arm folded (the hands-only checks must fail it); `fingers`: the free off hand's fingers left the game's (the hand-pose check must fail it); `two_hand`: two-handed aim turned half way to the hands' line, its off glove left on the controller and its release three frames late (the two-hand check must fail all three); `two_hand_line`: two-handed aim's line left unsmoothed whatever Aim steadiness says (the two-hand noise check must fail it) | `none` |
+| `ETERNALVR_TEST_RUNTIME_NAME` | a runtime name the input side takes instead of the real one (`SteamVR` on the simulator tests the Touch controllers' dashboard pause and stick capture, and the controller fit) | none |
+| `ETERNALVR_TEST_PROFILES` | rig tests: only these families' bindings are suggested (comma-separated data file names, such as `valve_index`); OpenXR-Simulator reports Touch whenever its bindings are suggested, else the first hand profile suggested, so this is how a rig run gets the Index profile (the QA suite's `fit-index`) | every family |
 | `ETERNALVR_LOOK_TRIGGERS` | `0`: look-at triggers test the game's view (the gun under hand aim) instead of the head, and the tests are only logged (above) | `1` |
 | `ETERNALVR_CLIMB_LOOK` | `0` (or `off`): on a climbable wall the game's wall-climb mechanic keeps the view and the jump follows the stick, as in the flat game (above) | `1` |
 | `ETERNALVR_DEMON_VIEW` | `0`: no handling for a piloted demon (above) | `1` |
@@ -887,6 +978,7 @@ A value that cannot be used is logged with its name and the default is kept
 | Weapon hand raised above the head, then swung down (`ETERNALVR_SWING=1`) | Crucible | as the left stick click |
 | A hand reached out ahead of the face and pulled back (`ETERNALVR_REACH_USE=1`) | Use (alone, no melee) | `_use` 0x8 |
 | Weapon hand turned over and back fast about its pointing axis (Roll wrist, `ETERNALVR_WRIST_FLICK`, on by default) | Switch weapon mod | as the Y tap |
+| Left grip held on the front of the gun (`ETERNALVR_TWO_HAND=1`) | Two-handed aim: the gun aims along the line between the hands; the grip's Flame Belch is held back there (above) | the layer's own |
 
 While a menu is up the controllers drive the menu instead (laser pointer, trigger clicks, B / Y back, the
 grips switch tabs, sticks scroll and switch tabs or move the Dossier map, a stick click centres it) and
@@ -1192,7 +1284,8 @@ re-reads it when its write time changes (every 10 game frames), so a script can 
 it. When the XR worker's snapshot is stale the mapper builds its frame from the file alone:
 
 ```
-right.trigger = 1          # 0..1 (also grip)
+right.trigger = 1          # 0..1 (also grip, and grip_curl: the fingers round the grip apart from its
+                           # press, as the Index's squeeze value; the off hand's fingers take the larger)
 left.stick = 0, 1          # x, y
 right.primary = 1          # primary, secondary, face3, face4, shoulder, click (stick click), menu
 left.thumbrest = 1         # touch sensors: thumbrest, primary_touch, secondary_touch, thumbstick_touch,
@@ -1201,6 +1294,11 @@ right.aim = 20, -10        # the right hand points 20 degrees left, 10 down (LOC
 left.aim = 0, 0, 90        # an optional roll, counter-clockwise as the user sees it: the left palm up
 right.position = 0.2, -0.35, -0.3   # metres from the head (default: the side's rest position)
 right.velocity = 0, 0, -3  # metres per second, LOCAL (default: still); the pose does not move with it
+right.sweep = 30, 0.25, 8  # the aim's yaw swept +-30 degrees, a sine of 0.25 s period, for 8 periods from when
+                           # the file first had this line (kept while other lines change), then still: smooth
+                           # motion each frame that stops at full speed
+left.noise = 0.1, 0.042    # tracking noise on the hand's pose at the camera hook, new every frame: millimetres
+                           # on each axis and degrees about each axis (Gaussian standard deviations)
 ```
 
 A hand given an aim is tracked there, with the grip at the same pose, still unless the file gives it a

@@ -302,13 +302,34 @@ TEST_CASE("the off-hand grip is Flame Belch only while the hand is free") {
 
     InputMapper supporting(questTouchProfile());
     MapperContext context;
-    context.supportHandOnWeapon = true;
+    context.supportHandOnWeapon = Hand::Left;
     CHECK_FALSE(contains(supporting.update(grip, context, kFrame).down, GameAction::FlameBelch));
 
     // The weapon hand's grip is unaffected by two-handed aiming.
     InputFrame weaponGrip = restingFrame();
     weaponGrip.right.grip = 1.0f;
     CHECK(contains(supporting.update(weaponGrip, context, kFrame).down, GameAction::WeaponMod));
+
+    // The hand held back is the one two-handed aim names (the off hand of the hand the gun is in), whatever
+    // weapon hand a custom binding profile gives.
+    BindingProfile otherWeaponHand = questTouchProfile();
+    otherWeaponHand.weaponHand = Hand::Left;
+    InputMapper custom(otherWeaponHand);
+    CHECK_FALSE(contains(custom.update(grip, context, kFrame).down, GameAction::FlameBelch));
+}
+
+TEST_CASE("the fingers' grip curl presses nothing: the Flame Belch waits for the grip's own squeeze") {
+    InputMapper mapper(questTouchProfile());
+    InputFrame wrapped = restingFrame();
+    wrapped.left.gripCurl = 1.0f;
+    wrapped.right.gripCurl = 1.0f;
+    for (int i = 0; i < 30; ++i) {
+        const GameInput input = mapper.update(wrapped, {}, kFrame);
+        CHECK_FALSE(contains(input.down, GameAction::FlameBelch));
+        CHECK_FALSE(contains(input.down, GameAction::WeaponMod));
+    }
+    wrapped.left.grip = 1.0f;
+    CHECK(contains(mapper.update(wrapped, {}, kFrame).down, GameAction::FlameBelch));
 }
 
 TEST_CASE("move is rotated from the head frame into the view frame") {
@@ -418,7 +439,7 @@ TEST_CASE("a grip held for support stays suppressed until it is released") {
     InputFrame grip = restingFrame();
     grip.left.grip = 1.0f;
     MapperContext supporting;
-    supporting.supportHandOnWeapon = true;
+    supporting.supportHandOnWeapon = Hand::Left;
     for (int i = 0; i < 10; ++i) {
         CHECK_FALSE(contains(mapper.update(grip, supporting, kFrame).down, GameAction::FlameBelch));
     }
@@ -442,7 +463,7 @@ left.grip.tap = "automap"
     InputFrame grip = restingFrame();
     grip.left.grip = 1.0f;
     MapperContext supporting;
-    supporting.supportHandOnWeapon = true;
+    supporting.supportHandOnWeapon = Hand::Left;
     mapper.update(grip, supporting, kFrame);
     mapper.update(grip, {}, kFrame);
     CHECK_FALSE(contains(mapper.update(restingFrame(), {}, kFrame).down, GameAction::Automap));

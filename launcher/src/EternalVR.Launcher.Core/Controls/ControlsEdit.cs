@@ -108,7 +108,8 @@ namespace EternalVR.Launcher.Core.Controls
 
         /// <summary>
         /// Gives a stick a role. The other stick, if it had that role, takes this stick's old one, so the two are never both
-        /// Move or both Turn; and when the turn stick changes sides its gestures (up, down tap, down hold) go with it.
+        /// Move or both Turn; and when the turn stick changes sides its gestures (every direction) go with it, each kept as it
+        /// is: left stays left, as on the game's weapon wheel.
         /// </summary>
         public void SetStickRole(Handedness hand, ControlHand stick, StickRole role)
         {
@@ -127,6 +128,30 @@ namespace EternalVR.Launcher.Core.Controls
                     File.Remove(section, BindingKey.StickGestureOf(oldTurn.Value, g.Gesture).ToString());
                 }
             }
+        }
+
+        /// <summary>
+        /// A note for the editor when the map binds the turn stick's sides or diagonals (T-229): the stick is then split by
+        /// direction, each bound direction doing its action for as long as the stick is pushed that way, and it turns only
+        /// where straight left and right are not bound (the layer's stick_directions.hpp). Null otherwise.
+        /// </summary>
+        public string StickDirectionsNote(Handedness hand)
+        {
+            var turn = TurnStick(hand);
+            if (!turn.HasValue) return null;
+            bool Bound(StickGesture g)
+            {
+                var action = Get(hand, BindingKey.StickGestureOf(turn.Value, g));
+                return action != null && action != ControlNames.Unbound;
+            }
+            if (!ControlNames.SideGestures.Any(Bound)) return null;
+            bool left = Bound(StickGesture.Left), right = Bound(StickGesture.Right);
+            var turning = left && right ? "no longer turns you: its left and right are both bound"
+                : left ? "turns you right only: its left is bound"
+                : right ? "turns you left only: its right is bound"
+                : "turns you only when pushed close to straight left or right";
+            return "The " + StickName(turn.Value).ToLowerInvariant() + " is split by direction: each bound direction does its action "
+                + "while you push the stick that way, and the stick " + turning + ".";
         }
 
         private void WriteRole(string section, ControlHand stick, StickRole role)

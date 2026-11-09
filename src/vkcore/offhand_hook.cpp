@@ -34,10 +34,14 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/offhand_policy.hpp"
+#include "features/input/two_hand.hpp"
 #include "vkcore/arm_dump.hpp"
 #include "vkcore/arm_signals.hpp"
 #include "vkcore/arm_solve_mode.hpp"
+#include "vkcore/arm_ticks.hpp"
+#include "vkcore/frame_placement.hpp"
 #include "vkcore/game_arm.hpp"
+#include "vkcore/game_frame.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
 #include "vkcore/left_hand_arms.hpp"
@@ -45,6 +49,8 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/offhand_arm.hpp"
+#include "vkcore/offhand_stats.hpp"
+#include "vkcore/two_hand.hpp"
 #include "vkcore/weapon_arm.hpp"
 #include "xr_math/offhand_pose.hpp"
 
@@ -93,7 +99,8 @@ constexpr std::size_t kAnimPositionFromRsp = 0x68;
 constexpr std::ptrdiff_t kAnimAxisFromRbp = 0x30;
 
 // Type info (build 25216728).
-constexpr std::size_t kHandsOwner = 0x358; // idHands::owner
+constexpr std::size_t kHandsOwner = 0x358;                // idHands::owner
+constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
 
 // Install time, then read-only: the weapon arm passed its checks.
 bool g_weaponArm = false;
@@ -117,6 +124,15 @@ TraceKey g_lastTrace;
 std::uint64_t g_traceLines = 0;
 bool g_tripReleased = false;
 std::atomic<std::uint64_t> g_rejected{0};
+// This tick of the player's hands as poseLeftHand saw it, for the rig's per-tick record: the view read and
+// the off hand's weight and reason (game, untracked and so on; the left-handed arms keep ModeGame).
+struct TickNote {
+    bool player = false;
+    TickView view;
+    float weight = 0.0f;
+    input::ArmReason reason = input::ArmReason::ModeGame;
+};
+TickNote g_tick;
 
 const std::byte* callTarget(const std::byte* call) {
     return call + 5 + readI32(call + 1);
@@ -216,9 +232,15 @@ void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
         return;
     }
-    const TickView view = tickView();
+    // Posed under the frame's own placement of the arms model, in the modes that pose an arm
+    // (frame_placement.hpp).
+    const bool posesArms =
+        offhand_mods::leftGlove() || g_weaponArm || cfg.offhand == input::OffhandMode::Free;
+    const TickView view = posesArms ? frame_placement::forArms(hands, arms, tickView()) : tickView();
     const WorldHand& world = view.world;
     const ModelPlacement& model = view.model;
+    g_tick.player = true;
+    g_tick.view = view;
     arm_dump::noteView(world, model);
     input::ArmSignals sig = readArmSignals(hands, owner);
     sig.forcedView = s.yielding.load();
@@ -226,6 +248,9 @@ void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     const LONGLONG now = nowQpc();
     const float dt = g_lastQpc ? static_cast<float>(secondsSince(g_lastQpc)) : 0.0f;
     g_lastQpc = now;
+    if (settings().twoHandAim) {
+        two_hand::noteHands(input::gunUp(sig), arms.arms); // two-handed aim's gate (two_hand.hpp)
+    }
     input::ArmSignals weaponSig = sig;
     weaponSig.offHandTracked = view.worldCurrent; // the weapon arm's: the head and the weapon hand
     sig.offHandTracked = view.worldCurrent && world.offValid;
@@ -241,6 +266,8 @@ void poseLeftHand(const HookRegisters& regs, const ArmsTick& arms) {
     const float weight =
         g_blend.updateOffHand(decision.controller, decision.reason == input::ArmReason::HandsHidden, dt,
                               cfg.offhandBlendSeconds, cfg.offhandHoldSeconds);
+    g_tick.weight = weight;
+    g_tick.reason = decision.reason;
     if (cfg.offhandTrace) {
         trace(sig, decision, weight);
     }
@@ -339,7 +366,16 @@ void onLeftHandMod(const HookRegisters& regs) {
     if (mp_guard::allowsGameTouch() && safeRead(hands + kHandsOwner, owner) && isPlayerSafe(owner)) {
         arms = armsTick(hands);
     }
+    g_tick = {};
     poseLeftHand(regs, arms);
+    float eye[3] = {};
+    if (g_tick.player && safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye))) {
+        arm_ticks::leftTick(hands, g_tick.view, {eye[0], eye[1], eye[2]}, g_tick.weight, g_tick.reason);
+        if (!offhand_mods::leftGlove()) {
+            offhand_stats::tick({g_tick.reason, g_tick.weight, g_tick.view.world.offValid},
+                                {eye[0], eye[1], eye[2]}, g_rejected.load(std::memory_order_relaxed));
+        }
+    }
     if (armSolveMode().writesPast) {
         noteAttachMod(regs);
     }
@@ -375,6 +411,12 @@ bool installOffhandHook(bool& weaponArmInstalled) {
             "hand stays the game's",
             kTag);
         return false;
+    }
+    // The arms are posed under the frame's own placement of the arms model, which needs the game frame
+    // (frame_placement.hpp); without it they are posed under the last placement, as before.
+    if (!game_frame::install(image)) {
+        EVR_LOG("%s: the game frame cannot be read; the arms are posed under the last frame's placement",
+                kTag);
     }
     const input::ControllerSettings& cfg = settings();
     // Free mode and the weapon arm pose whole arms and need the arms' own checks; probe and trace do not.

@@ -287,6 +287,19 @@ std::string armDumpLine(const ArmDumpRecord& r) {
     text(out, r.mods[1]);
     out += "],\"sight\":";
     text(out, r.sightRow);
+    if (r.twoHand) {
+        out += ",\"two\":{\"held\":";
+        out += r.twoHand->held ? "true" : "false";
+        out += ",\"row\":";
+        if (r.twoHand->row) {
+            floats(out, r.twoHand->row->data(), r.twoHand->row->size());
+        } else {
+            out += "null";
+        }
+        out += ",\"aim\":";
+        axis(out, r.twoHand->aim);
+        out += '}';
+    }
     out += "}\n";
     return out;
 }

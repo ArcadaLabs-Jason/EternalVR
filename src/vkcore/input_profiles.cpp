@@ -145,11 +145,27 @@ void logRefusedTouchButtons(const input::ControllerData& before, const input::Co
     }
 }
 
+// Whether `step` leaves out a binding of `action` that `data` has, on either hand.
+bool dropped(const input::ControllerData& data, const input::TouchRetryStep& step, input::XrActionId action) {
+    return std::ranges::any_of(std::array{input::Hand::Left, input::Hand::Right}, [&](input::Hand hand) {
+        return data.find(action, hand) != nullptr && step.data.find(action, hand) == nullptr;
+    });
+}
+
+// The fingers' bindings a retry leaves out, for the log: the trigger's touch, the grip's curl, or both.
+std::string fingersText(const input::ControllerData& data, const input::TouchRetryStep& step) {
+    const bool touch = dropped(data, step, input::XrActionId::TriggerTouch);
+    const bool curl = dropped(data, step, input::XrActionId::GripCurl);
+    return touch && curl ? "the trigger's touch and the grip's curl for the fingers"
+           : curl        ? "the grip's curl for the fingers"
+                         : "the trigger's touch for the fingers";
+}
+
 // What a retry of a refused profile leaves out, for the log.
 std::string retryText(const input::ControllerData& data, const input::TouchRetryStep& step) {
     switch (step.retry) {
-    case input::TouchRetry::WithoutTriggerTouch:
-        return "the trigger's touch for the fingers";
+    case input::TouchRetry::WithoutFingers:
+        return fingersText(data, step);
     case input::TouchRetry::WithoutVeto:
         return "the stick, trackpad and face-button touch read as the thumb elsewhere";
     case input::TouchRetry::WithoutTouchButtons:
@@ -163,11 +179,17 @@ std::string retryText(const input::ControllerData& data, const input::TouchRetry
 }
 
 // What a retry that went through costs, for the log.
-std::string retryCost(const input::TouchRetryStep& step) {
+std::string retryCost(const input::ControllerData& data, const input::TouchRetryStep& step) {
     switch (step.retry) {
-    case input::TouchRetry::WithoutTriggerTouch:
-        return "suggested without the trigger's touch; the thumb rests still count, the fingers see no touch "
-               "on the trigger (the weapon hand's index finger rests on it and does not lift off)";
+    case input::TouchRetry::WithoutFingers:
+        return "suggested without " + fingersText(data, step) + "; the thumb rests still count" +
+               (dropped(data, step, input::XrActionId::TriggerTouch)
+                    ? ", the fingers see no touch on the trigger (the weapon hand's index finger rests on it "
+                      "and does not lift off)"
+                    : "") +
+               (dropped(data, step, input::XrActionId::GripCurl)
+                    ? ", the off hand's fingers close only as the grip is pressed"
+                    : "");
     case input::TouchRetry::WithoutVeto:
         return "suggested without the touch beside the rest; the thumb rest still counts, a thumb on its "
                "stick or buttons only when it presses or pushes";
@@ -187,8 +209,8 @@ std::string retryCost(const input::TouchRetryStep& step) {
 
 // A refused profile is suggested again without the touch bindings the layer added
 // (rest_touch_bindings.hpp, input::touchRetries), in steps, and what was left out is dropped from `data`:
-// first without the trigger's touch for the fingers alone, then also without the sensors that only tell the
-// thumb is elsewhere (the rests still count, a thumb on its stick or buttons is seen only when pressed or
+// first without the fingers' trigger touch and grip curl alone, then also without the sensors that only tell
+// the thumb is elsewhere (the rests still count, a thumb on its stick or buttons is seen only when pressed or
 // pushed), then also without the touches bound like buttons (each logged), then without any (that family has
 // no thumb rest this session).
 bool suggestBindings(XrInput& xr, input::ControllerData& data) {
@@ -201,7 +223,7 @@ bool suggestBindings(XrInput& xr, input::ControllerData& data) {
                     data.profilePath.c_str(), xrText(r, text), retryText(data, step).c_str());
             r = suggestWithBumperNames(xr, step.data, names);
             if (XR_SUCCEEDED(r)) {
-                EVR_LOG("%s: %s: %s", kTag, data.profilePath.c_str(), retryCost(step).c_str());
+                EVR_LOG("%s: %s: %s", kTag, data.profilePath.c_str(), retryCost(data, step).c_str());
                 logRefusedTouchButtons(data, step.data);
                 data = std::move(step.data);
                 break;
@@ -250,8 +272,9 @@ std::string currentProfile(const XrInput& xr, State& s, input::Hand hand) {
 // The touch bindings of the thumb-rest wheel a family's data lacks (a player's file from before it), added
 // for this session (rest_touch_bindings.hpp); with the wheel off, only to a family whose maps bind a thumb
 // rest like a button. Then the touches on controls its maps bind like buttons (touch_inputs.hpp): none for
-// a family whose maps bind none, which the built-in maps do not. Last the trigger's touch, which the fingers
-// read, on every family whose profile has it.
+// a family whose maps bind none, which the built-in maps do not. Last what only the fingers read: the
+// trigger's touch, on every family whose profile has it, and the grip's curl where the grip action reads
+// another input (the Index's force).
 void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
     const bool wheelOn = settings.thumbRest.mode != input::RestWheelMode::Off;
     for (input::ControllerData& d : data) {
@@ -268,6 +291,11 @@ void addRestTouch(FamilyData& data, const input::ControllerSettings& settings) {
         if (const std::size_t added = input::addTriggerTouchBindings(d); added > 0) {
             EVR_LOG("%s: %zu trigger touch binding(s) for the fingers added to the %s data", kTag, added,
                     d.profilePath.c_str());
+        }
+        if (const std::size_t added = input::addGripCurlBindings(d); added > 0) {
+            EVR_LOG("%s: %zu grip curl binding(s) for the fingers added to the %s data (the squeeze's value, "
+                    "apart from the grip action's input)",
+                    kTag, added, d.profilePath.c_str());
         }
     }
 }
@@ -342,7 +370,14 @@ bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, FamilyData& 
     bool any = false;
     std::string suggested;
     std::string skipped;
-    for (input::ControllerData& d : data) {
+    std::string unlisted;
+    const std::string& listed = settings().testProfiles;
+    for (const game::Controller family : game::kControllers) {
+        input::ControllerData& d = data[static_cast<std::size_t>(family)];
+        if (!input::familyListed(listed, game::controllerName(family))) {
+            append(unlisted, d.profilePath);
+            continue;
+        }
         if (!profileAvailable(support, d)) {
             append(skipped, d.profilePath);
             continue;
@@ -355,11 +390,18 @@ bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, FamilyData& 
     }
     EVR_LOG("%s: bindings suggested for %s; skipped (extension missing): %s", kTag,
             suggested.empty() ? "none" : suggested.c_str(), skipped.empty() ? "none" : skipped.c_str());
+    if (!unlisted.empty()) {
+        EVR_LOG("%s: ETERNALVR_TEST_PROFILES='%s': not suggested: %s", kTag, listed.c_str(),
+                unlisted.c_str());
+    }
     return any;
 }
 
-game::Controller currentFamily(const XrInput& xr, State& s, game::Controller current) {
-    std::array<std::optional<game::Controller>, 2> families;
+game::Controller currentFamily(const XrInput& xr,
+                               State& s,
+                               game::Controller current,
+                               std::array<std::optional<game::Controller>, 2>& families) {
+    families = {};
     for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
         const auto index = static_cast<std::size_t>(hand);
         const std::string text = currentProfile(xr, s, hand);

@@ -14,12 +14,14 @@
 // HUD, and the head-locked quad is cut around it.
 //
 // Either way the rest of the 16:9 band the UI quad shows (subtitles, prompts, boss and encounter bars,
-// markers, damage) stays on the head-locked quad, cut into pieces around the blocks that moved. The blocks
-// are where the game drew them (measured from the image: ui_layer/hud_blocks.hpp); until they are measured
-// the hand HUD waits and the HUD stays whole on the head-locked quad. In a cutscene the HUD stays whole there
-// too: the hands are hidden then (the game owns the view), and the corner a block came from holds the
-// cinematic's skip prompt, which cut out would show nowhere. Every quad shows a sub-rectangle of the same UI
-// swapchain image, so there is no extra copy.
+// markers, damage) stays on the head-locked quad. The blocks a hand HUD shows stay there too with the HUD in
+// front on (ETERNALVR_HUD_FRONT, the default); with it off the quad is cut into pieces around them, and with
+// it off and no hand HUD (panel mode) they are cut out and shown nowhere. The blocks are where the game drew
+// them (measured from the image: ui_layer/hud_blocks.hpp); until they are measured the hand HUD waits and the
+// HUD stays whole on the head-locked quad. In a cutscene the HUD stays whole there too: the hands are hidden
+// then (the game owns the view), and the corner a block came from holds the cinematic's skip prompt, which
+// cut out would show nowhere. Every quad shows a sub-rectangle of the same UI swapchain image, so there is no
+// extra copy.
 
 #include "vkcore/presenter_wrist.hpp"
 
@@ -112,8 +114,10 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     const bool passOver = lastCutsceneSeconds_ > 0.0 && now - lastCutsceneSeconds_ < kCutscenePassOverSeconds;
     const ui_layer::CornerBlocks drawn =
         corners_.update(width, height, WheelProbe::latestCorners(), passOver);
+    // The corner blocks are measured for the hand HUDs, and for hiding them in front when nothing shows them.
+    const bool handHud = frame && space != XR_NULL_HANDLE;
     ui_layer::HandCuts cuts;
-    if (frame && space != XR_NULL_HANDLE) {
+    if (handHud || (settings.hud == ui_layer::HudMode::Panel && !settings.front)) {
         cuts = ui_layer::handCuts(weapon ? ui_layer::weaponMovedBlocks(settings.weapon)
                                          : std::vector<ui_layer::WristBlock>{ui_layer::WristBlock::Vitals,
                                                                              ui_layer::WristBlock::Weapon},
@@ -122,7 +126,12 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
     }
     // In a cutscene nothing is cut: the hand quads are hidden, and the skip prompt is in the ammo corner.
     // The hand quads are not drawn meanwhile: they fade in again from nothing after it.
-    const bool hands = cuts.complete && !cutsceneInImage;
+    const bool hands = handHud && cuts.complete && !cutsceneInImage;
+    // The blocks leave the head-locked quad when the front HUD is off (nowhere to see them but the hand
+    // HUD, or nowhere with the panel mode: the readouts are hidden); with a hand HUD asked for and no hand
+    // to show it, the HUD stays whole.
+    const bool cutFront = !settings.front && cuts.complete && !cutsceneInImage &&
+                          (handHud || settings.hud == ui_layer::HudMode::Panel);
     if (cutsceneInImage) {
         fade_.reset();
         facing_.reset();
@@ -149,14 +158,14 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
         view.metricsWidth = perf->width;
         view.metricsHeight = perf->height;
     }
-    if (!hands && !wheelRect) {
+    if (!hands && !cutFront && !wheelRect) {
         logWheel(wheel, settings, std::nullopt, 0);
         publish(view);
         return 0;
     }
-    const ui_layer::HeadLockedHud hud =
-        ui_layer::headLockedHud(shown, width, height, hands ? cuts.cuts : std::vector<ui_layer::PixelRect>{},
-                                wheelRect, settings.distanceMetres);
+    const ui_layer::HeadLockedHud hud = ui_layer::headLockedHud(
+        shown, width, height, cutFront ? cuts.cuts : std::vector<ui_layer::PixelRect>{}, wheelRect,
+        settings.distanceMetres);
     std::uint32_t n = 0;
     for (const ui_layer::PixelRect& r : hud.pieces) {
         // Room for the hand quads and the wheel after the pieces.
@@ -186,6 +195,8 @@ std::uint32_t WristHud::fill(const ui_layer::UiSettings& settings,
         const std::uint32_t pieces = n;
         n = addHandQuads(settings, width, height, cuts, *frame, space, ui, n, out);
         view.handQuads = n > pieces;
+    }
+    if (cutFront) {
         view.handCuts = cuts.cuts;
     }
     if (hud.wheel) {

@@ -33,7 +33,7 @@ float curlOf(const FingerCurls& c, int finger) {
 } // namespace
 
 FingerCurls fingerCurls(const FingerSensors& s) {
-    const float grip = clamp01(s.grip);
+    const float grip = std::max(clamp01(s.grip), clamp01(s.gripCurl));
     const float index = std::max(clamp01(s.trigger), s.triggerTouch ? kRestingIndexCurl : 0.0f);
     return {s.thumbTouch ? 1.0f : 0.0f, index, grip, grip, grip};
 }

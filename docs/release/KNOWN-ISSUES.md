@@ -6,9 +6,10 @@ them is worse for you than described here.
 ## The big ones
 
 - **The HUD is on a floating panel.** Health, armour, ammo and the rest of the HUD are shown on a flat
-  panel in front of you that follows your head. "Health and ammo" on the launcher's Advanced tab can put
-  health, armour and ammo on the inside of your off hand's wrist instead, or the ammo just above the back
-  of the gun in your weapon hand. Both are experimental. In my headset the wrist worked, but it could come up
+  panel in front of you that follows your head. "HUD on your wrist" on the launcher's Advanced tab can put
+  health, armour and ammo on the inside of your off hand's wrist too (forearm across your chest, palm up),
+  or "Ammo on your weapon" the ammo just above the back of the gun in your weapon hand; untick "HUD in front
+  of you" to have them only there. Both are experimental. In my headset the wrist worked, but it could come up
   upside down (I had to turn my wrist to read it) and the palm side is an odd place to look; a better wrist HUD
   is being worked on. The ammo sits in one place for every weapon, so on some guns it may float a little off
   the gun.
@@ -46,11 +47,18 @@ them is worse for you than described here.
   controllers are untested on real hardware.** Please report how they work. The Vive wands have a reduced
   layout (see CONTROLS.md), and a resting thumb on the trackpad moves or turns you. Pimax and other
   controllers get whatever layout their runtime maps them to.
-- **Valve Index controllers: set the hand angles.** Hand placement was tuned on Quest controllers, and with
-  Index controllers the hands looked tilted and placed too high to a player (GitHub #16). Since 0.1.87 Weapon
-  hand angle and Off hand angle (Play tab, Controls) tilt the gun and glove on each controller: try -20 for the
-  weapon hand and -40 for the off hand, with any SteamVR controller offsets set back to 0, and tell me what works
-  for you. Steam Frame controllers have their own layout (see CONTROLS.md) and work for a player through SteamVR.
+- **Valve Index controllers get their own fit, from one player's setup.** Hand placement was tuned on Quest
+  controllers, and with Index controllers the hands sat at the wrong angle and in the wrong place for a player
+  (GitHub #16). The mod now tilts and moves the gun and glove on Index controllers by itself, using the numbers
+  that player found: the weapon hand tipped down 20 degrees, the off hand 40, and both hands moved about 8 cm (on
+  SteamVR, where those numbers come from; on another runtime Index controllers get no fit yet). If your Weapon
+  hand angle and Off hand angle (Play tab, Controls) were -20 and -40, what 0.1.87 suggested, the launcher sets
+  them back to 0 once and tells you; if you set other angles for your Index, set them back to 0 yourself. Set
+  any SteamVR controller offsets for the game back to 0 too (SteamVR's controller binding for DOOM Eternal,
+  Controller Offsets); otherwise the correction counts twice. The angles are still there, on top of the fit, if
+  your hands want a little more. It's one player's numbers so far: if the gun or the glove sits off your real
+  hand with Index controllers, please tell me roughly how far and which way. Steam Frame controllers have their
+  own layout (see CONTROLS.md) and work for a player through SteamVR.
 - **If the headset disconnects** (a Wi-Fi drop, the headset's runtime restarting), the game carries on
   flat on your desktop and VR comes back by itself once the headset and its runtime are back, usually
   within a few seconds. This has been tested on a headset simulator, not yet with a real headset
@@ -64,6 +72,16 @@ them is worse for you than described here.
   the dashboard over the game then reset the NVIDIA driver and SteamVR stopped showing the game. A lower
   Texture Pool Size in the game's video settings fixed it. After a session that close to the limit the
   launcher says so ("The game used nearly all the video memory Windows gives it ...").
+- **VR needs more video memory than flat, and cards with 12 GB or less can run out.** Each eye gets its
+  own images at the headset's resolution, so the video settings you play flat with can be too much in VR. A
+  player's RTX 5060 (8 GB) needed a little more than the 6.6 GB Windows gave the game through most of his
+  sessions, and two of them crashed; with Texture Pool Size two steps lower and Shadow Quality one
+  step lower he has had few problems since. That does not prove it was the cause (a 27-minute session just as
+  full did not crash), but running over always costs: Windows moves memory out to the PC's own memory and
+  back, which stutters. After a session that was over for a tenth of it or more, the launcher's status line
+  is orange and starts with how far over it went and what to change, after the crash's own sentence when the
+  game crashed ("The game went about 220 MB over the 6.6 GB of video memory Windows gives it ..."). Change one
+  step at a time: it measures again after the next session.
 - **The Game Pass and Microsoft Store version has had one test**, on one PC with a Quest 3 through Virtual
   Desktop: a level and the Revenant in Cultist Base played as on Steam. On its first start that version
   asks you to log in to Bethesda.net, and clicking a text box opens Windows' own typing window on the
@@ -83,6 +101,20 @@ them is worse for you than described here.
   beta restarts its stream to avoid it. If it happens to you: try the Virtual Desktop beta, or step out of the
   game and back in. The log names it (`xr: the runtime has held each frame in xrEndFrame ...`), so an export
   shows it.
+- **While the headset is off or asleep the game slows to 8 frames a second.** So a laptop doesn't run hot
+  through a break: while the headset shows none of the game (asleep, off, or its home or another app in front),
+  or says nobody is wearing it, the game draws 8 frames a second, and it's back to full speed the moment the
+  headset shows it again. The window on your monitor shows those 8 frames too. Where it doesn't slow down yet:
+  - a game started while the headset is already asleep keeps full speed until you've had VR in the headset
+    once;
+  - after Virtual Desktop reconnects onto a headset that's asleep, the new session keeps full speed until you
+    put the headset on;
+  - a headset and runtime that keep the game "in focus" with the headset off and don't say whether anyone is
+    wearing it change nothing. Virtual Desktop may be one of them: whether a sleeping Quest tells the game
+    isn't known yet.
+
+  If your frame rate still drops step by step over a long session with breaks, an export after one shows what
+  the headset reported.
 - **AMD Radeon RX 5000 and 6000 (and some newer AMD drivers): the picture renders at the window's
   size.** These drivers cannot scale the game's image into a smaller desktop window, so each eye renders
   at the size of the game's window on your desktop instead of the planned size, and looks soft. The mod
@@ -120,19 +152,24 @@ them is worse for you than described here.
 - **Pickup camera animations do not play.** At a pickup that moves the camera (the chainsaw, for
   example) the view holds still until the tutorial popup instead of playing the animation. The game
   carries on normally afterwards.
-- **See-through surfaces can blur when you move.** Stained-glass windows and similar translucent surfaces
-  may smear briefly while you turn. Each eye now keeps its own history for the glass, and standing still
-  both eyes match the flat game on a test rig; whether the brief blur while turning is gone has not been
-  checked in a headset yet.
-- **Demons flying far off can leave a trail.** In a headset test in Exultia, distant flying demons smeared
-  the way anti-aliasing (TAA) can smear fast motion. Anti-aliasing Off on the Play tab avoids TAA's
-  smearing, at the cost of some shimmer on edges.
+- **See-through surfaces while you turn.** In an early headset test, stained-glass windows and similar glass
+  smeared while turning; back then the two eyes shared the glass's history. Each eye keeps its own now, and on
+  my test PC glass under head motion looks the same in both eyes and the same as in the flat game. Not
+  rechecked in a headset yet: if glass still smears for you, please tell me where.
+- **Demons flying far off can leave a trail with DLSS.** In a headset test in Exultia (with DLSS), small
+  flying demons in the distance left faint streaks behind them. On my test PC the flat game with DLSS draws
+  the same streaks and both eyes match, so it's DLSS on small, fast things rather than something VR adds. TAA
+  (the default) doesn't leave them, and neither does Anti-aliasing Off (some shimmer on edges).
 - **The HUD's markers wait at the panel's edge.** A marker above or below the HUD panel waits at its top or
   bottom edge. Objective and other map markers point at the place they mark, and since 0.1.84 they stay on their
   spot while you turn your head (tried in my headset). Since 0.1.87 each eye sees a marker at its target's
   distance, so it should no longer look doubled while you look at the target. I checked that on my test PC, not
   yet in a headset.
-- **Shadows can pop in** on some walls as you turn your head.
+- **A shadow popping in on a wall as you turn your head** was seen once in my headset, in a September build.
+  I haven't been able to make it happen on my test PC since, in the current build or in that one: turning in
+  the Cultist Base and on Reclaimed Earth, each eye's shadows match the flat game's, and what fills in over a
+  few frames after a fast turn (reflections, the shading in creases) does so the same way in the flat game. If
+  you see a shadow come in late, especially in one eye only, please tell me where.
 - **A lit spot can go dark from some places.** The game's own light culling can drop a light from
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
   Fortress of Doom are one place). A fix is on by default on the Steam and Game Pass (1.0.56.0) versions of
@@ -242,7 +279,7 @@ them is worse for you than described here.
   pointed at the floor and you had to lift the controller to see it. Now it's placed like in gamepad mode: in
   front of you, pointing where you look, and it follows your head when you lean or crouch. A few things come
   with that: both arms are the game's own (like the flat game), a punch, grenades and the Flame Belch go where
-  you look, the ammo on the gun ("Health and ammo") stays on your hand, and with the weapon in your left hand
+  you look, the ammo on the gun ("Ammo on your weapon") stays on your hand, and with the weapon in your left hand
   the gun still shows on the right. With some guns you may see the open end of the Slayer's left sleeve at
   the bottom of your view, same as in gamepad mode: the game's arms are made for a flat screen's narrower
   view. Hand aim is unchanged. Test rig only so far, not yet in a headset.
@@ -267,6 +304,11 @@ them is worse for you than described here.
   Reverb G2, Windows Mixed Reality, Vive Cosmos) the finger stays on the trigger and only pulls. Your off hand's
   index finger now also rests on its trigger while you touch it; before, it only moved when you pulled. If a
   finger goes through a gun or sits oddly, tell me which gun.
+- **On Valve Index controllers your off hand's fingers now close as you wrap them round the grip**, without
+  firing the Flame Belch. Before, they only closed with the hard squeeze that also belches. The Flame Belch and
+  the weapon mod still need that firm squeeze. Checked with tests on my PC, not in a headset with Index
+  controllers yet. If you made your own SteamVR controller binding for the game, it may not have the new
+  "Grip (fingers around it)" input: bind it to the grip's squeeze value (not its force) there, or go back to the default binding.
 - **Floating at the water's surface** your hands now stay on your real hands. Up there the game keeps
   swimming with both arms and tucks the gun away out of view (it can't be fired either), even though it
   counts the gun as held. Before, the swimming hand sat about 30 cm off your hand, and with the weapon in
@@ -305,6 +347,10 @@ them is worse for you than described here.
   Shotgun loading its shells) the arm is the game's for that moment, easing there and back. A weapon switch or a
   weapon mod switch leaves your off hand where it is. With head aim (Aim with: Head) or a gamepad the arms are
   the game's, as before.
+  Swinging your gun hand fast made the other glove jump along with the gun even with that hand held still. It now
+  follows the gun for one frame instead of two, so it moves about half as much. The rest comes from the game
+  drawing the arms a frame late, which the mod can't get in front of without making the gun lag. Checked on the
+  test PC, not yet in a headset.
   With the weapon in your left hand the Slayer's left glove holds the gun and his right arm is your off hand,
   following your right controller. The gun itself is not mirrored. Left-handed play is checked on the test PC
   only, not in a headset, with the guns, the Unmaykr and the Crucible held, fired, switched and a melee and
@@ -325,6 +371,18 @@ them is worse for you than described here.
   arms shown, which looked right. I checked that on the test PC, not yet in the headset. While the game plays its own
   arm animations (a melee, a glory kill) it draws the whole arms for that moment, and with head aim (Aim with: Head)
   the arms are the game's, so they show whole all the time.
+- **Two-handed aim is new and I haven't tried it in a headset yet.** "Two-handed aim" on the Advanced tab (off by
+  default) lets your off hand take the gun: squeeze that hand's grip anywhere along the front of the gun (the
+  pump, the shroud, the front grip, the barrel) and the gun aims along the line between your hands, let go and
+  your gun hand aims on its own again (the gun eases over in about 70 ms each way). Your off hand's glove stays
+  where your hand is on the gun, and Aim steadiness (Play tab) smooths two-handed aim the same as one-handed aim.
+  Near the gun that grip no longer fires the Flame Belch (squeeze it away from the gun for that); a grip you were
+  already holding when your hand got to the gun doesn't take it, squeeze again. Not on the Chaingun, the Crucible,
+  the hammer, the chainsaw or the fists. I checked it on the test PC only, with scripted hands, on every gun it
+  works with but the Unmaykr: how it feels at arm's length and how much real tracking wobbles the line between
+  your hands are still open. With "Ammo on your weapon" on (Advanced tab), the ammo readout stays
+  lined up with your gun hand's controller rather than the gun while you hold it with both hands, so it can sit
+  a little off the gun. There's no virtual stock (the gun resting on your shoulder).
 - **Shots through thin walls should be fixed in 0.1.87.** Before, if you pushed the gun through a thin wall, the
   shot started at your hand on the other side. It now starts on your side of the wall. I couldn't recreate the
   wall case on my test PC, so if you still see a shot come out behind a wall, tell me.
@@ -422,10 +480,14 @@ them is worse for you than described here.
   click customizes the weapon wheel instead). The Arsenal's hints name X, Y and Right Stick Click, which do
   them; the Fortress's collectible viewer names the grips (LG / RG) that show the previous and next item;
   the loading screen's tips read "[LG] PREVIOUS | [RG] NEXT" and the grips change the tip.
-- **In the weapon upgrade screen** the gun can ghost a little when you move your head.
+- **In the weapon upgrade screen** the gun can ghost a little when you move your head (seen once in my
+  headset, with DLSS). On my test PC the gun shows no ghost with TAA or DLSS, in either eye or in the flat
+  game, so it may come from how the headset shows the menu; if you see it, please tell me your headset and
+  your anti-aliasing setting.
 - **The Fortress of Doom** has a few rough spots: some outside surfaces look wrongly shaded, a canister can
-  show black without its texture, the old computer is hard to use, and the displays in the Slayer's office
-  can ghost.
+  show black without its texture, and the old computer is hard to use. The displays in the Slayer's office
+  looked ghosted in my headset (with DLSS); on my test PC their moving bars blur a little the same way in both
+  eyes and in the flat game, with TAA and with DLSS.
 
 ## Launcher and settings
 

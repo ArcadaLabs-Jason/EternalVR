@@ -165,17 +165,17 @@ namespace EternalVR.Launcher.Core.Tests
             var testHeld = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             bool testAskedFirst = false;
             var feeds = new Feeds { TestWait = c => testHeld.Task };
-            // The release list answers only once the test list has been asked (or after 3 s): asked one after the other, it waits.
+            // The release list answers only once the test list has been asked (or after 8 s): asked one after the other, it
+            // waits and testAskedFirst stays false. That proves both are asked at once without timing the answer, so a
+            // busy PC can't fail it.
             feeds.MainWait = async c =>
             {
                 var asked = feeds.TestAsked.Task;
-                testAskedFirst = await Task.WhenAny(asked, Task.Delay(3000, c)) == asked;
+                testAskedFirst = await Task.WhenAny(asked, Task.Delay(8000, c)) == asked;
             };
             var run = UpdateCheck.Start(new HttpClient(feeds) { Timeout = Timeout.InfiniteTimeSpan }, V083, null, On083, true, CancellationToken.None);
-            var watch = Stopwatch.StartNew();
-            Assert.Same(run.Release, await Task.WhenAny(run.Release, Task.Delay(10000)));
+            Assert.Same(run.Release, await Task.WhenAny(run.Release, Task.Delay(20000)));
             Assert.True(testAskedFirst, "the release list answered before the test list was asked");
-            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2.5), "the release took " + watch.Elapsed);
             Assert.Equal(new Version(0, 1, 84), (await run.Release).Version);
             // The test list has not answered: the release is there all the same.
             Assert.False(run.Test.IsCompleted);

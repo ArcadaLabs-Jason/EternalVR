@@ -8,6 +8,7 @@
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/new_frame_wait.hpp"
+#include "vkcore/present_latency.hpp"
 #include "vkcore/presenter_result.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/vram_watch.hpp"
@@ -64,10 +65,16 @@ void XrPresenter::Impl::openFrameLog() {
         // The shown view's head (LOCAL) and, under hand aim, the weapon hand's aim ray as used and as
         // tracked (all zero without one), for measuring aim jitter (docs/rig-findings/aim-jitter.md). Then
         // the frames of the eye images shown (Parallel Eye Rendering) and why the frame shows no new image.
+        // Last, under hand aim, the weapon hand's aim position and the off hand at the same time (LOCAL):
+        // whether it is tracked, its grip's position and orientation and its aim ray's orientation (zeros
+        // when not tracked), for the free off hand's motion against the weapon hand's; and whether the aim as
+        // used is two-handed aim's (1; two_hand.hpp).
         std::fputs("xr_frame,display_time_ns,period_ms,view,pose_age_ms,display_minus_pose_time_ms,lead_ms,"
                    "head_qx,head_qy,head_qz,head_qw,aim_qx,aim_qy,aim_qz,aim_qw,"
                    "aim_tracked_qx,aim_tracked_qy,aim_tracked_qz,aim_tracked_qw,"
-                   "eye0_frame,eye1_frame,eye1_view,repeat\n",
+                   "eye0_frame,eye1_frame,eye1_view,repeat,aim_px,aim_py,aim_pz,"
+                   "left_valid,left_grip_px,left_grip_py,left_grip_pz,left_grip_qx,left_grip_qy,left_grip_qz,"
+                   "left_grip_qw,left_aim_qx,left_aim_qy,left_aim_qz,left_aim_qw,aim_two_handed\n",
                    frameLog);
     }
 }
@@ -95,18 +102,26 @@ void XrPresenter::Impl::logFrame(const XrFrameState& state) {
     const XrQuaternionf head = shownHasView ? shownView.pose.orientation : none;
     const XrQuaternionf used = aim ? shownView.weaponAim.orientation : none;
     const XrQuaternionf tracked = aim ? shownView.weaponAimTracked : none;
+    const XrVector3f aimAt = aim ? shownView.weaponAim.position : XrVector3f{0.0f, 0.0f, 0.0f};
+    const bool left = aim && shownView.offHandValid;
+    const XrPosef leftGrip = left ? shownView.offHandGrip : XrPosef{none, {0.0f, 0.0f, 0.0f}};
+    const XrQuaternionf leftAim = left ? shownView.offHandAim : none;
     const EyeFrames& eyes = frameLogEyes.shown;
-    std::fprintf(frameLog,
-                 "%llu,%lld,%.3f,%llu,%.3f,%.3f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
-                 "%.6f,%llu,%llu,%llu,%s\n",
-                 static_cast<unsigned long long>(xrFrames),
-                 static_cast<long long>(state.predictedDisplayTime),
-                 static_cast<double>(state.predictedDisplayPeriod) / 1e6,
-                 static_cast<unsigned long long>(shownHasView ? shownView.seq : 0), age, poseAhead,
-                 static_cast<double>(displayLead.leadNs()) / 1e6, head.x, head.y, head.z, head.w, used.x,
-                 used.y, used.z, used.w, tracked.x, tracked.y, tracked.z, tracked.w,
-                 static_cast<unsigned long long>(eyes.eye0), static_cast<unsigned long long>(eyes.eye1),
-                 static_cast<unsigned long long>(eyes.eye1View), repeatName(frameLogEyes.repeat));
+    std::fprintf(
+        frameLog,
+        "%llu,%lld,%.3f,%llu,%.3f,%.3f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
+        "%.6f,%llu,%llu,%llu,%s,%.4f,%.4f,%.4f,%d,%.4f,%.4f,%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
+        "%.6f,%d\n",
+        static_cast<unsigned long long>(xrFrames), static_cast<long long>(state.predictedDisplayTime),
+        static_cast<double>(state.predictedDisplayPeriod) / 1e6,
+        static_cast<unsigned long long>(shownHasView ? shownView.seq : 0), age, poseAhead,
+        static_cast<double>(displayLead.leadNs()) / 1e6, head.x, head.y, head.z, head.w, used.x, used.y,
+        used.z, used.w, tracked.x, tracked.y, tracked.z, tracked.w,
+        static_cast<unsigned long long>(eyes.eye0), static_cast<unsigned long long>(eyes.eye1),
+        static_cast<unsigned long long>(eyes.eye1View), repeatName(frameLogEyes.repeat), aimAt.x, aimAt.y,
+        aimAt.z, left ? 1 : 0, leftGrip.position.x, leftGrip.position.y, leftGrip.position.z,
+        leftGrip.orientation.x, leftGrip.orientation.y, leftGrip.orientation.z, leftGrip.orientation.w,
+        leftAim.x, leftAim.y, leftAim.z, leftAim.w, aim && shownView.weaponAimTwoHanded ? 1 : 0);
     if (shownHasView) {
         gpu_timing::notePoseAge(age);
         poseAgeSum += age;
@@ -182,9 +197,10 @@ void XrPresenter::Impl::logRates() {
     copyWait = {};
     newestWait = {};
     lastRates = {presents, ticks, pairs, xrFrames, xrCopies, now};
-    checkGamePresents(*this);     // a line once the game stops presenting (presenter_result.hpp)
-    frame_pacing::logSummary();   // the headset's cadence, and ETERNALVR_PACE's waits
-    new_frame_wait::logSummary(); // ETERNALVR_PACE=new: the XR worker's waits for a new image
+    checkGamePresents(*this);      // a line once the game stops presenting (presenter_result.hpp)
+    frame_pacing::logSummary();    // the headset's cadence, and ETERNALVR_PACE's waits
+    new_frame_wait::logSummary();  // ETERNALVR_PACE=new or headset: the XR worker's waits for a new image
+    present_latency::logSummary(); // with CPU timing: release to present
     vram::logSummary();
     stall_watch::logSummary();
 }

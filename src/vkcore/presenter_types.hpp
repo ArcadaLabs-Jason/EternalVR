@@ -11,6 +11,7 @@
 #include "features/menu/enter_tick.hpp"
 #include "features/pacing/frame_clock_watch.hpp"
 #include "features/pacing/restart_budget.hpp"
+#include "features/pacing/unseen_hold.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/frame_repeat.hpp"
@@ -169,6 +170,11 @@ struct ViewRecord {
     bool weaponAimValid = false;
     XrPosef weaponAim{{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
     XrQuaternionf weaponAimTracked{0.0f, 0.0f, 0.0f, 1.0f};
+    // With it, the off hand at poseTime in LOCAL while tracked (controllers::WeaponAim), for the frame log.
+    bool offHandValid = false;
+    XrPosef offHandGrip{{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
+    XrQuaternionf offHandAim{0.0f, 0.0f, 0.0f, 1.0f};
+    bool weaponAimTwoHanded = false; // that ray is two-handed aim's (the frame log)
     // How far along that ray the world is hit, in metres (reticle_depth.hpp); 0 when not known.
     float weaponAimHitMetres = 0.0f;
     // The game's weapon wheel was up in this frame (controllers::wheelView after this frame's forced-view
@@ -194,11 +200,18 @@ struct HeldCopy {
 // session to start a new one, as often as the restart budget allows (restart_budget.hpp,
 // presenter_clock.cpp).
 struct ClockWatchState {
-    bool wasFocused = false; // FOCUSED since the session became READY
     pacing::FrameClockWatch watch;
     pacing::FrameGaps gaps; // the 10 s xr line's runtime gaps (presenter_frame_log.cpp)
     pacing::RestartBudget budget;
     bool loggedKept = false; // a stall the budget did not allow is in the log (again once one is earned)
+};
+
+// Who can see the game's frames (XR worker only; features/pacing/unseen_hold.hpp, T-228): the session's
+// states since READY and, where the runtime senses it, the user's presence; the present hook holds the game
+// back by its answer (frame_pacing::setBackgroundHold).
+struct ViewerState {
+    pacing::ViewerWatch watch;
+    bool presenceExtension = false; // XR_EXT_user_presence enabled on the instance
 };
 
 // Where a present's image goes in a ring slot (Route S rings hold two eye images side by side).

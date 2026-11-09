@@ -95,6 +95,13 @@ enum class PromptPress : std::uint8_t {
     StickUp,       // Push the stick up.
     StickDown,     // Push the stick down and let go.
     StickDownHold, // Push the stick down and keep it there.
+    // Push the stick that way (T-229).
+    StickLeft,
+    StickRight,
+    StickUpLeft,
+    StickUpRight,
+    StickDownLeft,
+    StickDownRight,
 };
 
 struct PromptControl {
@@ -108,8 +115,8 @@ struct PromptControl {
 // gestures, each in the profile's order. Empty when the action is unbound.
 std::vector<PromptControl> promptControls(game::GameAction action, const BindingProfile& profile);
 
-// "X", "Hold Y", "Right Trigger", "Right Stick Up", "Hold Right Stick Down". Empty when the
-// controller has no name for the input.
+// "X", "Hold Y", "Right Trigger", "Right Stick Up", "Hold Right Stick Down", "Right Stick Up Left". Empty
+// when the controller has no name for the input.
 std::string promptText(const PromptControl& control, const ButtonLabels& labels);
 
 // The same in a few letters, for the HUD's weapon info row (vkcore/prompt_weapon_info.hpp), whose label boxes

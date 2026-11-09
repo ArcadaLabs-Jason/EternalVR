@@ -49,12 +49,16 @@ void XrPresenter::Impl::startUi() {
                 ? "mask (the centre of the GUI copy cleared)"
                 : "hold (hud_reticle_styleOverride 0; the centre mask until the hold reads back)");
     const ui_layer::WristSettings& w = settings.ui.wrist;
-    EVR_LOG("ui: HUD %s%s; wrist: %s (facing %.0f/%.0f deg, gaze %.0f/%.0f deg), %.2f m row at (%.3f, %.3f, "
-            "%.3f), fade %.2f s %s, abilities %s",
+    EVR_LOG("ui: HUD %s%s, in front %s; wrist: %s (facing %.0f/%.0f deg, gaze %.0f/%.0f deg), %.2f m row "
+            "at (%.3f, %.3f, %.3f), fade %.2f s %s, abilities %s",
             ui_layer::hudModeName(settings.ui.hud),
             settings.ui.hud == ui_layer::HudMode::Wrist    ? " (corner blocks on the off hand's wrist)"
             : settings.ui.hud == ui_layer::HudMode::Weapon ? " (ammo above the gun in the weapon hand)"
                                                            : "",
+            settings.ui.front ? "on"
+            : settings.ui.hud == ui_layer::HudMode::Panel
+                ? "off (health, armor, ammo and equipment are hidden)"
+                : "off",
             w.always ? "always shown" : "shown while facing the head", w.showDegrees, w.hideDegrees,
             w.gazeShowDegrees, w.gazeHideDegrees, w.widthMetres, w.offset.x, w.offset.y, w.offset.z,
             w.fadeInSeconds, wrist.colorScaleBias ? "(colour scale)" : "(no colour scale: switched)",
@@ -345,10 +349,11 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
         mirror.keepPanel(dev, cb, family, image, uiExtent, panel->format, panel->extent);
     }
     uiBackdrop.record(dev, cb, image, uiExtent, ui_layer::kCrosshairMask);
-    // While the weapon wheel is up, where the game drew it; in wrist or weapon mode outside menus and
-    // full-screen backdrops, now and then, where it drew the corner blocks the hand HUDs show
-    // (wheel_probe.hpp); also while the game drives the view (a map's start camera, a glory kill).
-    const bool corners = settings.ui.hud != ui_layer::HudMode::Panel && !menu && !backdrop;
+    // While the weapon wheel is up, where the game drew it; outside menus and full-screen backdrops, now and
+    // then, where it drew the corner blocks a hand HUD shows or the panel hides (wheel_probe.hpp); also while
+    // the game drives the view (a map's start camera, a glory kill).
+    const bool corners =
+        (settings.ui.hud != ui_layer::HudMode::Panel || !settings.ui.front) && !menu && !backdrop;
     uiBackdrop.wheel.record(dev, cb, family, image, uiExtent, controllers::wheelView(), corners);
     if (const VkBuffer buffer = uiCapture.bufferFor(dev, uiCaptures, uiExtent)) {
         EyeCapture::record(dev, cb, image, uiExtent, buffer);
@@ -425,7 +430,7 @@ bool XrPresenter::Impl::createUiSwapchain() {
     }
     uiSwapchain = made;
     EVR_LOG("ui: UI swapchain %ux%u, %zu image(s)", uiExtent.width, uiExtent.height, uiXrImages.size());
-    if (settings.ui.hud == ui_layer::HudMode::Panel) {
+    if (settings.ui.hud == ui_layer::HudMode::Panel && settings.ui.front) {
         hudMarkers.create(xr, session, xrSwapchains, d3dDevice.Get(), uiXrImages, uiExtent.width,
                           uiExtent.height, kUiSwapchainFormat);
     }

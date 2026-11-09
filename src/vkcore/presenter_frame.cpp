@@ -63,8 +63,8 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
         completeCopy(heldCopy.slot, heldCopy.value, heldCopy.view, heldCopy.hasView);
         return;
     }
-    const std::uint64_t packed = latest.load();
-    frame_pacing::onHeadsetFrame(displayPeriod.load()); // the headset's frame began: a paced game goes on
+    const std::uint64_t packed = frame_pacing::awaitLateImage(latest, frameStart, stop);
+    frame_pacing::onHeadsetFrame(displayPeriod.load(), frameStart, inRuntime.waitFrame.lastMs);
     const std::uint64_t newest = packed >> 2;
     if (newest <= lastConsumed) {
         ++xrRepeats;
@@ -412,6 +412,7 @@ void XrPresenter::Impl::frame() {
     endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     endInfo.layerCount = layerCount;
     endInfo.layers = layerCount ? layers.data() : nullptr;
+    frame_pacing::beforeEndFrame();
     const XrResult r = timedCall(inRuntime.endFrame, xr.xrEndFrame, session, &endInfo);
     if (XR_FAILED(r) && !loseOnRuntimeFailure(r, "xrEndFrame")) {
         // Every frame can fail the same way: the first ones, then one line per 900 (10 s at 90 Hz).
@@ -433,7 +434,8 @@ void XrPresenter::Impl::destroyXrObjects() {
     trackingReady.store(false);
     controllers::detach();
     disableKeepActive();
-    frame_pacing::setUnfocused(false);
+    viewer.watch.state(pacing::SessionView::NotRunning);
+    frame_pacing::setBackgroundHold(viewer.watch.hold());
     std::unique_lock spaceLock(spaceMutex); // no camera hook is locating the head past this point
     // xrEndSession is only valid in STOPPING; destroying the session is valid in any state.
     if (session && sessionRunning && sessionState == XR_SESSION_STATE_STOPPING) {
@@ -561,7 +563,7 @@ void XrPresenter::Impl::runWorker() {
                 hang_note::check(); // the game stopped presenting in play: where its threads stand
                 status::flush();    // a status write lost while the launcher read the file
                 if (sessionRunning) {
-                    if (frame_pacing::newFramesOnly() && hasImage) { // ETERNALVR_PACE=new
+                    if (frame_pacing::newFramesOnly() && hasImage) { // ETERNALVR_PACE=new or headset
                         const double period = static_cast<double>(displayPeriod.load()) / 1e9;
                         new_frame_wait::wait(latest, period, stop); // each image once, begun once it is drawn
                         waitFenceFor(sharedFence.Get(), latest.load() >> 2, copyEvent,

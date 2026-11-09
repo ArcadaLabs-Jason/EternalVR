@@ -59,6 +59,9 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>Whether Parallel Eye Rendering ran in it, or fell back and why (<see cref="ParallelEyesRun.Text"/>), such as
         /// "off: not with DLSS"; null when the launch did not ask for it.</summary>
         public string SessionParallelEyes { get; set; }
+        /// <summary>True when the game needed more video memory than Windows gives it in that session for long enough that its
+        /// sentences name the settings to change (<see cref="VideoMemoryUse.Over"/>): the status line at start is a warning then.</summary>
+        public bool SessionMemoryOver { get; set; }
 
         public HeadsetFacts Clone() => (HeadsetFacts)MemberwiseClone();
     }
@@ -128,6 +131,7 @@ namespace EternalVR.Launcher.Core.Launch
                     case "session_summary": facts.SessionText = NullIfEmpty(value); break;
                     case "session_controls": facts.SessionControls = NullIfEmpty(value); break;
                     case "session_parallel_eyes": facts.SessionParallelEyes = NullIfEmpty(value); break;
+                    case "session_video_memory": facts.SessionMemoryOver = string.Equals(value, "over", StringComparison.OrdinalIgnoreCase); break;
                 }
             }
             facts.Limits = limits.Recommended.IsEmpty ? null : limits;
@@ -173,6 +177,7 @@ namespace EternalVR.Launcher.Core.Launch
             Add("session_summary", facts.SessionText);
             Add("session_controls", facts.SessionControls);
             Add("session_parallel_eyes", facts.SessionParallelEyes);
+            if (facts.SessionMemoryOver) Add("session_video_memory", "over");
             return sb.ToString();
         }
 
@@ -201,6 +206,7 @@ namespace EternalVR.Launcher.Core.Launch
             var cause = UnboundControls.ReportText(unbound);
             facts.SessionControls = summary.ControlsText() + (cause == null ? string.Empty : "; cause: " + cause);
             facts.SessionParallelEyes = summary.ParallelEyes.Text();
+            facts.SessionMemoryOver = summary.VideoMemory.Over;
             return facts;
         }
 

@@ -38,10 +38,17 @@ constexpr std::array<std::pair<PressKind, std::string_view>, 3> kPressNames{{
     {PressKind::Hold, "hold"},
 }};
 
-constexpr std::array<std::pair<StickGesture, std::string_view>, 3> kGestureNames{{
+constexpr std::array<std::pair<StickGesture, std::string_view>, 10> kGestureNames{{
     {StickGesture::Up, "up"},
     {StickGesture::DownTap, "down_tap"},
     {StickGesture::DownHold, "down_hold"},
+    {StickGesture::Down, "down"},
+    {StickGesture::Left, "left"},
+    {StickGesture::Right, "right"},
+    {StickGesture::UpLeft, "up_left"},
+    {StickGesture::UpRight, "up_right"},
+    {StickGesture::DownLeft, "down_left"},
+    {StickGesture::DownRight, "down_right"},
 }};
 
 constexpr std::array<std::pair<StickRole, std::string_view>, 3> kRoleNames{{

@@ -320,3 +320,23 @@ TEST_CASE("ui settings: the vignette is off by default, light or strong when ask
     CHECK(readUiSettings(envOf({{L"ETERNALVR_VIGNETTE", L"max"}}), warnings).vignette == VignetteMode::Off);
     CHECK(warnings.size() == 1);
 }
+
+TEST_CASE("hud places: front on by default; the earlier wrist and weapon values keep the blocks off it") {
+    std::vector<std::string> warnings;
+    CHECK(readUiSettings(envOf({}), warnings).front);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_HUD", L"panel"}}), warnings).front);
+    CHECK_FALSE(readUiSettings(envOf({{L"ETERNALVR_HUD", L"wrist"}}), warnings).front);
+    CHECK_FALSE(readUiSettings(envOf({{L"ETERNALVR_HUD", L"weapon"}}), warnings).front);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_HUD", L"wrist"}, {L"ETERNALVR_HUD_FRONT", L"1"}}), warnings)
+              .front);
+    CHECK(readUiSettings(envOf({{L"ETERNALVR_HUD", L"weapon"}, {L"ETERNALVR_HUD_FRONT", L"1"}}), warnings)
+              .front);
+    CHECK_FALSE(
+        readUiSettings(envOf({{L"ETERNALVR_HUD", L"panel"}, {L"ETERNALVR_HUD_FRONT", L"0"}}), warnings)
+            .front);
+    CHECK(warnings.empty());
+    const auto bad =
+        readUiSettings(envOf({{L"ETERNALVR_HUD", L"wrist"}, {L"ETERNALVR_HUD_FRONT", L"both"}}), warnings);
+    CHECK_FALSE(bad.front);
+    CHECK(warnings.size() == 1);
+}

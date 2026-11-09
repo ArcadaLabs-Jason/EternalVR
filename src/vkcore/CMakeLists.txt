@@ -98,6 +98,7 @@ add_library(evr_layer SHARED
     exposure_hooks.cpp
     frame_pacing.cpp
     new_frame_wait.cpp
+    present_latency.cpp
     game_build.cpp
     zoom_look.cpp
     game_code.cpp
@@ -275,9 +276,13 @@ target_sources(evr_layer PRIVATE
     gamepad_mode.cpp
     haptics_xr.cpp
     input_profiles.cpp
+    input_spaces.cpp
     input_watch.cpp
     input_xr.cpp
     arm_dump.cpp
+    arm_ticks.cpp
+    frame_placement.cpp
+    game_frame.cpp
     arm_model.cpp
     arm_signals.cpp
     arms_item.cpp
@@ -294,6 +299,8 @@ target_sources(evr_layer PRIVATE
     offhand_fingers.cpp
     offhand_hook.cpp
     offhand_mods.cpp
+    offhand_stats.cpp
+    two_hand.cpp
     weapon_arm.cpp
     weapon_arm_row.cpp
     weapon_arm_trace.cpp

@@ -76,3 +76,15 @@ Run with hand aim and `ETERNALVR_LOG_DIR`, hold the gun still on a target for a 
 `tools/frames/aim_jitter.py <eternalvr-frames-*.csv>`. The dot should look steady at rest and not trail in
 quick flicks; if it still shimmers, try `ETERNALVR_AIM_SMOOTHING=0.5`; if it drags, 0.15; 0 turns it off
 for comparison. For (B), compare a sweep at 50-60 frames per second with and without `ETERNALVR_POSE_LEAD=1`.
+
+## Two-handed aim (2026-10-30)
+
+Two-handed aim (docs/VR_HANDS_HUD.md) builds the aim from the line between the two controllers' grips, so its
+jitter is the grips' position noise over the line's length (2 sigma / L for sigma on each grip), not the weapon
+hand's turning. Since DECISIONS T-195 that aim goes through the same filter at the player's Aim steadiness. The
+frame table's `aim_two_handed` column marks the frames whose aim is two-handed aim's, and `aim_jitter.py` reports
+the aim as used one- and two-handed apart, so the next headset session with two-handed holds measures it. The
+one-handed figures of the owner's Quest sessions on the test PC (2026-10-13 to 10-25, five sessions, 100 ms still
+windows): the aim as tracked 0.038 to 0.086 degrees RMS at the median (p95 0.19 to 0.35), as used 0.018
+to 0.041 (p95 0.11 to 0.22), the head 0.025 to 0.032 (p95 0.07 to 0.10). The rig's scripted noise check is in
+docs/rig-findings/hands-rig.md, section 28.

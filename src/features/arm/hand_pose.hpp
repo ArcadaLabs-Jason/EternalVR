@@ -5,9 +5,11 @@
 // the controller is let go and closes as it is squeezed.
 //
 // Each finger has a curl from 0 (open) to 1 (closed) read from the controller's sensors: the middle, ring and
-// little fingers follow the grip's squeeze, the index finger the trigger (resting a little bent while it only
-// touches the trigger), and the thumb lies down while it touches a button, the stick or the thumb rest. The
-// curls are eased so a touch sensor that flips does not snap a finger (FingerEase).
+// little fingers follow the grip (the grip action's value, or how far the fingers wrap the grip where that is
+// read apart from it, whichever is more closed: DECISIONS T-226), the index finger the trigger (resting a
+// little bent while it only touches the trigger), and the thumb lies down while it touches a button, the
+// stick or the thumb rest. The curls are eased so a touch sensor that flips does not snap a finger
+// (FingerEase).
 //
 // The closed hand is the game's own grip of a gun's handle (the right hand of the Heavy Cannon's idle,
 // grip_hand.hpp, reflected for the left hand): the fingers close round a handle as they do round every gun,
@@ -31,10 +33,15 @@ using HandLocal = std::array<xr_math::ModelPose, kHandJointCount>;
 
 // The controller's sensors the fingers follow.
 struct FingerSensors {
-    float grip = 0.0f;    // 0..1
+    // 0..1, the grip action's value (the Index's squeeze force, a click on some controllers).
+    float grip = 0.0f;
     float trigger = 0.0f; // 0..1
     bool triggerTouch = false;
     bool thumbTouch = false; // a thumb on a face button, the stick, the trackpad or the thumb rest
+    // 0..1, how far the fingers wrap the grip, read apart from the grip action (input::HandState::gripCurl:
+    // the Index's squeeze value, which rises as the fingers close round the handle before any force); 0 where
+    // it is not read. The three fingers close with the larger of the two: a squeeze is a closed hand too.
+    float gripCurl = 0.0f;
 };
 
 // Each finger's curl, 0 open to 1 closed.

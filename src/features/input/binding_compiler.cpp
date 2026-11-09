@@ -185,6 +185,17 @@ private:
         }
     }
 
+    [[nodiscard]] const PendingGesture* downPress(Hand hand) const {
+        const auto it = std::ranges::find_if(collected_.gestures, [hand](const PendingGesture& pending) {
+            return pending.hand == hand && pending.binding.gesture == StickGesture::Down;
+        });
+        return it == collected_.gestures.end() ? nullptr : &*it;
+    }
+
+    static Side sideOf(const PendingGesture& pending) {
+        return {pending.key, std::string(game::gameActionName(pending.binding.action))};
+    }
+
     void addGestures(BindingProfile& profile) {
         for (const PendingGesture& pending : collected_.gestures) {
             if (profile.turnStick != pending.hand) {
@@ -198,6 +209,14 @@ private:
                     {roleKey, std::string(stickRoleName(collected_.roles[index]))},
                     "the " + std::string(handName(pending.hand)) +
                         " stick is not the turn stick, and stick gestures only work on the turn stick");
+                continue;
+            }
+            // `down` is the stick's press downwards: it fires on every down tap and hold beside it.
+            const bool tapOrHold = pending.binding.gesture == StickGesture::DownTap ||
+                                   pending.binding.gesture == StickGesture::DownHold;
+            if (const PendingGesture* press = tapOrHold ? downPress(pending.hand) : nullptr) {
+                reportConflict(BindingConflict::PressWithTapOrHold, sideOf(pending), sideOf(*press),
+                               "a press binding fires on every tap and hold");
                 continue;
             }
             profile.stickGestures.push_back(pending.binding);

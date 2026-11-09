@@ -16,7 +16,7 @@ namespace EternalVR.Launcher.Core.Settings
         /// </summary>
         public static readonly IReadOnlyCollection<string> Machine = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "schema_version", "game_dir", "layer_dir", "runtime", "dlss_dll_path", "adapter_steer", "test_builds", "profile", "preset", "profile_unsaved", "profile_check",
+            "schema_version", "game_dir", "layer_dir", "runtime", "dlss_dll_path", "adapter_steer", "test_builds", "index_angle_reset", "profile", "preset", "profile_unsaved", "profile_check",
         };
 
         /// <summary>Keys a profile carries that no row shows (set in the file by hand).</summary>
@@ -92,12 +92,15 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.HudDistance] = new[] { "hud_distance" },
             [Setting.HudSize] = new[] { "hud_width" },
             [Setting.HudHeight] = new[] { "hud_height" },
-            [Setting.HudPlace] = new[] { "hud" },
+            [Setting.HudFront] = new[] { "hud_front" },
+            [Setting.HudWrist] = new[] { "hud_wrist" },
+            [Setting.HudWeapon] = new[] { "hud_weapon" },
             [Setting.MotionControllers] = new[] { "controllers" },
             [Setting.ShotsFrom] = new[] { "shot_origin" },
             [Setting.MenuLaser] = new[] { "menu_beam" },
             [Setting.PerformanceLog] = new[] { "perf_log" },
             [Setting.PerformanceOverlay] = new[] { "perf_overlay" },
+            [Setting.TwoHandAim] = new[] { "two_hand_aim" },
             [Setting.ExtraArguments] = new[] { "extra_args" },
         };
 

@@ -14,6 +14,7 @@
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/controllers_input_logs.hpp"
 
+#include "features/input/controller_fit.hpp"
 #include "features/input/controller_tilt.hpp"
 #include "features/input/usercmd_motion.hpp"
 #include "game/eternal/usercmd_buttons.hpp"
@@ -30,6 +31,7 @@
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_hint_keys.hpp"
 #include "vkcore/room_scale.hpp"
+#include "vkcore/two_hand.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -407,13 +409,15 @@ MappedInput runMapper() {
                 frame.head.pose = s.poses.head;
             }
             input::applyTestInput(*test, frame);
-            input::tiltControllers(frame, weaponHand(), settings());
             const game::Controller controller = snapshot.controller;
+            const std::array<input::ControllerFit, 2> fits = snapshot.fits;
+            input::fitScriptedHands(frame, *test, weaponHand(), settings(), fits);
             snapshot = {};
             snapshot.valid = true;
             snapshot.qpc = now;
             snapshot.frame = frame;
             snapshot.controller = controller;
+            snapshot.fits = fits;
         }
     }
     if (!s.attached.load(std::memory_order_acquire) || !snapshot.valid ||
@@ -437,6 +441,7 @@ MappedInput runMapper() {
     context.posture = cfg.seated ? posture::Posture::Seated : roomPosture();
     const bool menuHold = menu_input::suppressGameplay();
     context.menuHold = menuHold;
+    context.supportHandOnWeapon = two_hand::supportsWeapon(); // its grip holds the gun (two_hand.hpp)
     context.restWheelBlocked = restWheelBlocked(s);
     context.restWheelHoldSeconds = restWheelHoldSeconds();
     out.input = s.mapper->update(snapshot.frame, context, dt);

@@ -51,6 +51,92 @@ TEST_CASE("pace mode new: the game is never held; the XR worker waits at most tw
     CHECK(evr::pacing::newFrameWaitSeconds(-1.0) == doctest::Approx(2.0 / 90.0));
 }
 
+namespace {
+
+// Feeds `sw` headset frames at `frameHz` for `seconds` from `start`, the game handing over `imageHz` images a
+// second (counted from `handOvers`); returns the time and hand-over count at the end, and how often it
+// switched.
+struct Fed {
+    double t = 0.0;
+    std::uint64_t handOvers = 0;
+    int changes = 0;
+};
+Fed feed(HoldSwitch& sw,
+         double start,
+         std::uint64_t handOvers,
+         double seconds,
+         double frameHz,
+         double imageHz,
+         double period = kPeriod) {
+    Fed f{start, handOvers, 0};
+    const int frames = static_cast<int>(seconds * frameHz);
+    for (int i = 1; i <= frames; ++i) {
+        f.t = start + i / frameHz;
+        f.handOvers = handOvers + static_cast<std::uint64_t>(i * imageHz / frameHz + 1e-9);
+        f.changes += sw.frame(f.t, f.handOvers, period) ? 1 : 0;
+    }
+    return f;
+}
+
+} // namespace
+
+TEST_CASE("hold switch: a game that keeps up with the headset stays held (T-194)") {
+    HoldSwitch sw;
+    CHECK(sw.held());
+    const Fed f = feed(sw, 1.0, 0, 5.0, 90.0, 90.0);
+    CHECK(f.changes == 0);
+    CHECK(sw.held());
+}
+
+TEST_CASE("hold switch: a held game that falls behind is let go, and held again once it keeps up (T-194)") {
+    HoldSwitch sw;
+    // 85 images a second at 90 Hz: about 5.6% of the headset frames repeat the previous image.
+    Fed f = feed(sw, 1.0, 0, 2.5, 90.0, 85.0);
+    CHECK(f.changes == 1);
+    CHECK_FALSE(sw.held());
+    CHECK(sw.switches() == 1);
+    // Let go, below the refresh: each headset frame waits for an image, so they come at the game's rate.
+    f = feed(sw, f.t, f.handOvers, 3.0, 85.0, 85.0);
+    CHECK(f.changes == 0);
+    CHECK_FALSE(sw.held());
+    // The game's own rate reaches the refresh rate (the headset's frames stay at 90): held again.
+    f = feed(sw, f.t, f.handOvers, 2.5, 90.0, 120.0);
+    CHECK(f.changes == 1);
+    CHECK(sw.held());
+    CHECK(sw.switches() == 2);
+}
+
+TEST_CASE("hold switch: a game fast on its own but repeating once held backs off its holds (T-194)") {
+    // Let go it hands over 105 images a second; held it repeats about 9% of the 90 Hz headset frames.
+    HoldSwitch sw;
+    std::uint64_t handOvers = 0;
+    double debt = 0.0;
+    int switches = 0;
+    for (int i = 1; i <= 90 * 120; ++i) {
+        const double t = 1.0 + i / 90.0;
+        debt += sw.held() ? 82.0 / 90.0 : 105.0 / 90.0;
+        while (debt >= 1.0) {
+            ++handOvers;
+            debt -= 1.0;
+        }
+        switches += sw.frame(t, handOvers, kPeriod) ? 1 : 0;
+    }
+    // Without the back-off it switched every window (about 120 in two minutes).
+    CHECK(switches <= 16);
+    CHECK(sw.backOffSeconds() == doctest::Approx(HoldSwitch::kMaxBackOffSeconds));
+}
+
+TEST_CASE("hold switch: up to 5% repeats stays held; no decision without a display period (T-194)") {
+    HoldSwitch sw;
+    feed(sw, 1.0, 0, 5.0, 90.0, 87.0); // about 3.3% repeats
+    CHECK(sw.held());
+    HoldSwitch unknown;
+    feed(unknown, 1.0, 0, 5.0, 90.0, 45.0, 0.0);
+    CHECK(unknown.held());
+    feed(unknown, 7.0, 500, 5.0, 90.0, 45.0, std::numeric_limits<double>::quiet_NaN());
+    CHECK(unknown.held());
+}
+
 TEST_CASE("pacer off: never waits, still counts the images handed over") {
     FramePacer pacer(PaceMode::Off);
     for (int i = 0; i < 5; ++i) {

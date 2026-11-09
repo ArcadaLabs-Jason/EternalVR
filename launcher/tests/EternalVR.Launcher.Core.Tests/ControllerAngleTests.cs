@@ -64,5 +64,21 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal("Weapon hand angle", SettingTexts.For(Setting.WeaponHandAngle).Label);
             Assert.Equal("Off hand angle", SettingTexts.For(Setting.OffHandAngle).Label);
         }
+
+        [Fact]
+        public void TheirTextsSayTheyAreOnTopOfTheControllersFitAndIndexStartsAtZero()
+        {
+            // The layer gives Index controllers their own fit (-20 / -40 and a move), so the old advice to set
+            // -20 / -40 here would now turn an Index player's hands twice.
+            foreach (var setting in new[] { Setting.WeaponHandAngle, Setting.OffHandAngle })
+            {
+                var tooltip = SettingTexts.For(setting).Tooltip;
+                Assert.Contains("on top of the mod's own fit for your controller", tooltip);
+                Assert.Contains("start at 0", tooltip);
+                Assert.DoesNotContain("-20", tooltip);
+                Assert.DoesNotContain("-40", tooltip);
+            }
+            Assert.Contains("set back to 0 once", SettingTexts.For(Setting.WeaponHandAngle).Tooltip);
+        }
     }
 }

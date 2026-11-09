@@ -15,6 +15,7 @@ evr_add_module(evr_input
         capture_chord.cpp
         controller_bindings.cpp
         controller_family.cpp
+        controller_fit.cpp
         controller_settings.cpp
         controller_tilt.cpp
         cutscene_skip.cpp
@@ -32,6 +33,7 @@ evr_add_module(evr_input
         interaction_profiles.cpp
         locomotion_direction.cpp
         offhand_policy.cpp
+        offhand_watch.cpp
         pad_watch.cpp
         player_controller_data.cpp
         punch_detector.cpp
@@ -42,6 +44,7 @@ evr_add_module(evr_input
         rumble_route.cpp
         rest_wheel_touch.cpp
         stick_chord.cpp
+        stick_directions.cpp
         stick_response.cpp
         tap_hold.cpp
         test_input.cpp
@@ -49,6 +52,7 @@ evr_add_module(evr_input
         touch_inputs.cpp
         turn_policy.cpp
         turn_stick_arbiter.cpp
+        two_hand.cpp
         wrist_flick.cpp
         usercmd_hook_use.cpp
         usercmd_injection.cpp

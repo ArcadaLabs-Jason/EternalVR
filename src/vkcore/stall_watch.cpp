@@ -71,6 +71,7 @@ struct Spent {
     std::uint64_t allocationBytes = 0;
     std::uint64_t allocationMicros = 0;
     std::uint64_t checkpointSaves = 0; // the game's own checkpoint saves begun (onCheckpointSave)
+    std::uint64_t heldMicros = 0;      // frame pacing held the game back on purpose (addHeld)
 };
 
 struct AtomicSpent {
@@ -86,6 +87,7 @@ struct AtomicSpent {
     std::atomic<std::uint64_t> allocationBytes{0};
     std::atomic<std::uint64_t> allocationMicros{0};
     std::atomic<std::uint64_t> checkpointSaves{0};
+    std::atomic<std::uint64_t> heldMicros{0};
 
     Spent take() {
         const auto t = [](std::atomic<std::uint64_t>& a) {
@@ -104,6 +106,7 @@ struct AtomicSpent {
         s.allocationBytes = t(allocationBytes);
         s.allocationMicros = t(allocationMicros);
         s.checkpointSaves = t(checkpointSaves);
+        s.heldMicros = t(heldMicros);
         return s;
     }
 };
@@ -139,16 +142,21 @@ void logStall(double gapMs, bool ticksKnown, std::uint32_t line, const Spent& s)
         std::snprintf(memory, sizeof(memory), "%.0f of %.0f MB", static_cast<double>(v.usage) / kMiB,
                       static_cast<double>(v.budget) / kMiB);
     }
+    char held[96] = "";
+    if (s.heldMicros > 0) {
+        std::snprintf(held, sizeof(held), "; frame pacing's hold (%.1f ms) left out of the gap",
+                      ms(s.heldMicros));
+    }
     EVR_LOG("stall: %.1f ms between game presents (%s, line %u of %u); in the gap: our present hook %.1f ms "
             "(lock wait %.1f ms, driver present %.1f ms), Route S drain %.1f ms; the game created %llu "
             "pipeline(s) in %llu call(s), %.1f ms (longest call %.1f ms), and made %llu allocation(s) of "
-            "%.1f MB in %.1f ms; VRAM %s%s",
+            "%.1f MB in %.1f ms; VRAM %s%s%s",
             gapMs, ticksKnown ? "in play" : "phase unknown", line, gt::kStallLinesLogged, ms(s.hookMicros),
             ms(s.lockMicros), ms(s.driverMicros), ms(s.drainMicros),
             static_cast<unsigned long long>(s.pipelines), static_cast<unsigned long long>(s.pipelineCalls),
             ms(s.pipelineMicros), ms(s.pipelineMaxMicros), static_cast<unsigned long long>(s.allocations),
             static_cast<double>(s.allocationBytes) / kMiB, ms(s.allocationMicros), memory,
-            gt::stallSaveNote(s.checkpointSaves).c_str());
+            gt::stallSaveNote(s.checkpointSaves).c_str(), held);
 }
 
 // A gap over the threshold: the gate decides whether it gets a line.
@@ -163,16 +171,18 @@ void onStall(double gapMs,
         !g_ticksDecided.load(std::memory_order_relaxed) || g_ticksKnown.load(std::memory_order_relaxed);
     gap.tickAgeAtStartMs = tickBefore != 0 && tickBefore <= gapStart ? ms(gapStart - tickBefore) : -1.0;
     gap.tickDuring = lastTick > tickBefore;
+    gap.heldMs = ms(spent.heldMicros);
     std::lock_guard lock(g_stalls.mutex);
     const gt::StallVerdict verdict = g_stalls.gate.onGap(gap);
-    if (verdict == gt::StallVerdict::OutsidePlay) {
+    if (verdict == gt::StallVerdict::None || verdict == gt::StallVerdict::OutsidePlay) {
         return;
     }
-    if (gapMs > g_stalls.windowLongestMs) {
-        g_stalls.windowLongestMs = gapMs;
+    const double ownMs = gt::ownGapMs(gap);
+    if (ownMs > g_stalls.windowLongestMs) {
+        g_stalls.windowLongestMs = ownMs;
     }
     if (verdict == gt::StallVerdict::Log || verdict == gt::StallVerdict::LastLog) {
-        logStall(gapMs, gap.ticksKnown, g_stalls.gate.counters().logged, spent);
+        logStall(ownMs, gap.ticksKnown, g_stalls.gate.counters().logged, spent);
     }
     if (verdict == gt::StallVerdict::LastLog) {
         EVR_LOG("stall: %u stall lines logged; later stalls are only counted in the 10 s stall summary",
@@ -306,6 +316,10 @@ void addDriverPresent(std::uint64_t micros) {
 
 void addDrain(std::uint64_t micros) {
     g_spent.drainMicros.fetch_add(micros, std::memory_order_relaxed);
+}
+
+void addHeld(std::uint64_t micros) {
+    g_spent.heldMicros.fetch_add(micros, std::memory_order_relaxed);
 }
 
 void onCheckpointSave() {

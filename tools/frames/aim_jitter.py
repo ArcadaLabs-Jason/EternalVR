@@ -7,7 +7,9 @@ Timing: how late each game view is first shown against the time its poses were p
 (display_minus_pose_time_ms), split by the game's view rate. Jitter (tables with the aim columns): the
 angular noise of the head's forward and of the weapon hand's aim ray, as tracked and as used (smoothed), in
 100 ms windows where the ray is roughly still: the RMS of each window's deviation from its own linear trend,
-in degrees, reported as the median and the 95th percentile over the windows. Needs numpy.
+in degrees, reported as the median and the 95th percentile over the windows. Tables with the aim_two_handed
+column also give the aim as used split into one-handed and two-handed windows (two-handed aim held, every
+frame of the window). Needs numpy.
 """
 import sys
 
@@ -23,14 +25,17 @@ def forward(q):
     return np.stack([-(2 * (x * z + w * y)), -(2 * (y * z - w * x)), -(1 - 2 * (x * x + y * y))], axis=1)
 
 
-def jitter(t, d):
-    """Per-window RMS deviation (degrees) of unit directions d at times t from a linear fit, still windows only."""
+def jitter(t, d, keep=None):
+    """Per-window RMS deviation (degrees) of unit directions d at times t from a linear fit, still windows only;
+    with `keep` (a mask), only windows whose every sample it keeps."""
     out = []
     start = t[0]
     while start < t[-1]:
         m = (t >= start) & (t < start + WINDOW_S)
         start += WINDOW_S
         if m.sum() < 5:
+            continue
+        if keep is not None and not keep[m].all():
             continue
         tw, dw = t[m] - t[m].mean(), d[m]
         mean = dw.mean(axis=0)
@@ -78,13 +83,17 @@ def main(path):
         print('no pose columns in this table: no jitter figures')
         return
     tf = t[first]
-    for name, prefix in [('head', 'head_q'), ('aim as tracked', 'aim_tracked_q'), ('aim as used', 'aim_q')]:
+    rows = [('head', 'head_q', None), ('aim as tracked', 'aim_tracked_q', None), ('aim as used', 'aim_q', None)]
+    if 'aim_two_handed' in v.dtype.names:
+        two = v[first]['aim_two_handed'] == 1
+        rows += [('aim as used, one-handed', 'aim_q', ~two), ('aim as used, two-handed', 'aim_q', two)]
+    for name, prefix, keep in rows:
         q = np.stack([v[first][prefix + c] for c in 'xyzw'], axis=1)
         ok = np.abs(np.linalg.norm(q, axis=1) - 1.0) < 1e-2
         if ok.sum() < 20:
             print(f'{name}: no samples')
             continue
-        j = jitter(tf[ok], forward(q[ok]))
+        j = jitter(tf[ok], forward(q[ok]), None if keep is None else keep[ok])
         if len(j) == 0:
             print(f'{name}: no still windows')
             continue

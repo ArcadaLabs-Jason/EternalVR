@@ -4,8 +4,14 @@
 
 namespace evr::gpu_timing {
 
+double ownGapMs(const PresentGap& gap) {
+    const double held = gap.heldMs > 0.0 ? gap.heldMs : 0.0;
+    return gap.gapMs > held ? gap.gapMs - held : 0.0;
+}
+
 StallVerdict StallGate::onGap(const PresentGap& gap) {
-    if (!(gap.gapMs > kStallGapMs)) {
+    const double gapMs = ownGapMs(gap);
+    if (!(gapMs > kStallGapMs)) {
         return StallVerdict::None;
     }
     if (gap.ticksKnown) {
@@ -16,8 +22,8 @@ StallVerdict StallGate::onGap(const PresentGap& gap) {
         }
     }
     ++counters_.inPlay;
-    if (gap.gapMs > counters_.longestMs) {
-        counters_.longestMs = gap.gapMs;
+    if (gapMs > counters_.longestMs) {
+        counters_.longestMs = gapMs;
     }
     if (counters_.logged >= kStallLinesLogged) {
         return StallVerdict::Count;

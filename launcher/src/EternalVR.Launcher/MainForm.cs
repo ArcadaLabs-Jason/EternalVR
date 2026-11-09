@@ -129,8 +129,11 @@ namespace EternalVR.Launcher
                 FitWindow();
                 ctx.Log.Info($"EternalVR launcher started; data folder {ctx.Paths.Root}; version {Current}, from {ctx.ProgramDir}");
                 // The last session's summary, until something newer is said.
-                if (HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) is string last) ShowStatus(StatusKind.Info, last);
+                if (HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) is string last) ShowStatus(HeadsetView.LastSessionKind(ctx.Headset), last);
                 GiveProfilesTheirControls();
+                // Once: the next start finds the reset's marker (IndexAngleMigration).
+                if (ctx.IndexAngleNotice != null)
+                    MessageBox.Show(this, ctx.IndexAngleNotice, "Hand angles reset", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 TryRecover();
                 RunPreflight();
                 ReadHeadsetAtStart();
@@ -363,7 +366,7 @@ namespace EternalVR.Launcher
             bool showing = shownBlock != null && statusLabel.Text == shownBlock;
             shownBlock = text;
             if (text != null) ShowStatus(StatusKind.Warning, text);
-            else if (showing) ShowStatus(StatusKind.Info, HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) ?? string.Empty);
+            else if (showing) ShowStatus(HeadsetView.LastSessionKind(ctx.Headset), HeadsetView.LastSessionStatus(ctx.Headset, DateTime.Now) ?? string.Empty);
         }
 
         private void StartSession()

@@ -21,8 +21,10 @@
 
 #include "features/arm/left_hand.hpp"
 #include "features/input/gun_placement.hpp"
+#include "vkcore/arm_ticks.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
+#include "vkcore/frame_placement.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
 #include "vkcore/head_gun.hpp"
@@ -31,6 +33,7 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/offhand_mods.hpp"
+#include "vkcore/offhand_stats.hpp"
 #include "vkcore/room_scale.hpp"
 #include "vkcore/weapon_mods.hpp"
 #include "xr_math/hand_aim.hpp"
@@ -208,51 +211,22 @@ game::WeaponOffset offsetFor(const ArmsTick& arms) {
     return g_cachedOffset;
 }
 
-void onViewmodel(const HookRegisters& regs) {
-    if (!mp_guard::allowsGameTouch()) {
-        return;
-    }
-    State& s = state();
+// The held item's caches above (offsetFor, g_cached*) and the fists' log count: the viewmodel hook and the
+// off-hand hook's viewmodelPlacement both use them, on whichever job threads run the hands' update.
+std::mutex g_cacheMutex;
+
+// The arms model's placement at the weapon hand from `world` under hand aim (relative to the eye), as this
+// hook writes it for the tick's arms' item, with the inputs it was made from; nullopt while the fists follow
+// the game's view. Reads the held item's rows (offsetFor). Under g_cacheMutex.
+std::optional<ViewmodelPlacement> handPlacement(const ArmsTick& arms, const WorldHand& world) {
     const input::ControllerSettings& cfg = settings();
-    const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
-    const std::byte* owner = nullptr;
-    if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
-        return;
-    }
-    // Every tick of the player's hands counts, the game's own included: the views' poses age by ticks
-    // (view_pose_clock.hpp).
-    const TickView view = handsTick();
-    const ArmsTick arms = noteArmsTick(hands); // the tick's arms' item, for every hook of the tick
-    if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load()) {
-        return; // forced views (glory kills, cutscenes) keep the game's own hands animation
-    }
-    noteZoomLookHands(hands, owner); // the gun stays in the hand while zoomed (zoom_look.cpp)
-    float eye[3];
-    const bool eyeRead = safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye)) &&
-                         std::isfinite(eye[0]) && std::isfinite(eye[1]) && std::isfinite(eye[2]);
-    // g_cachedFists is the last tick's until offsetFor() below reads this tick's item; under head aim the
-    // placement does not depend on it, and under hand aim the GameView test below reads it again after.
-    if (input::gunPlacement(cfg.aim, g_cachedFists, cfg.actionAim.melee) == input::GunPlacement::Head) {
-        // Head aim: the game's placement moved to the rendered head. The weapon hand is not needed, and with
-        // the arms model away from the hand both arms are the game's (gun_placement.hpp).
-        offsetFor(arms); // the held item's log line and the swim's fists
-        if (eyeRead) {
-            head_gun::moveToHead(hands, reinterpret_cast<std::byte*>(regs.rsp + kOriginFromRsp),
-                                 {eye[0], eye[1], eye[2]});
-        }
-        return;
-    }
-    const WorldHand& world = view.world;
-    if (!view.worldCurrent || !eyeRead) {
-        return;
-    }
     const game::WeaponOffset offset = offsetFor(arms);
     if (input::gunPlacement(cfg.aim, g_cachedFists, cfg.actionAim.melee) == input::GunPlacement::GameView) {
         if (g_loggedFists.fetch_add(1) == 0) {
             EVR_LOG("%s: viewmodel: the fists follow the game's view, on the melee aim's %s", kTag,
                     input::actionAimSourceName(cfg.actionAim.melee));
         }
-        return;
+        return std::nullopt;
     }
     // The weapon in the left hand: once the left glove's wrist on the held item is known, the model moved
     // until it sits in the hand, also while the game has the arms (left_hand_arms.hpp); the rows are measured
@@ -278,6 +252,58 @@ void onViewmodel(const HookRegisters& regs) {
                                                 {w.forward, -w.left, w.up}, world.unitsPerMetre) *
                                 lefty.weight;
     }
+    const arm::PinInputs inputs{arms.arms, static_cast<std::int64_t>(world.qpc), placedArms.decl,
+                                placedArms.weight, placedArms.leftWrist};
+    return ViewmodelPlacement{placed, inputs};
+}
+
+void onViewmodel(const HookRegisters& regs) {
+    if (!mp_guard::allowsGameTouch()) {
+        return;
+    }
+    State& s = state();
+    const input::ControllerSettings& cfg = settings();
+    const auto* hands = reinterpret_cast<const std::byte*>(regs.rdi);
+    const std::byte* owner = nullptr;
+    if (!safeRead(hands + kHandsOwner, owner) || !isPlayerSafe(owner)) {
+        return;
+    }
+    // This frame's pin, if the off-hand hook posed the arms under one: checked against the placement written
+    // below, or counted as not placed (frame_placement.hpp). The gun is this hook's own placement either way.
+    frame_placement::PinCheck pin(hands);
+    std::lock_guard cacheLock(g_cacheMutex);
+    // Every tick of the player's hands counts, the game's own included: the views' poses age by ticks
+    // (view_pose_clock.hpp).
+    const TickView view = handsTick();
+    const ArmsTick arms = noteArmsTick(hands); // the tick's arms' item, for every hook of the tick
+    if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load()) {
+        return; // forced views (glory kills, cutscenes) keep the game's own hands animation
+    }
+    noteZoomLookHands(hands, owner); // the gun stays in the hand while zoomed (zoom_look.cpp)
+    float eye[3];
+    const bool eyeRead = safeCopy(eye, owner + kPlayerFirstPersonOrigin, sizeof(eye)) &&
+                         std::isfinite(eye[0]) && std::isfinite(eye[1]) && std::isfinite(eye[2]);
+    // g_cachedFists is the last tick's until offsetFor() below reads this tick's item; under head aim the
+    // placement does not depend on it, and under hand aim the GameView test below reads it again after.
+    if (input::gunPlacement(cfg.aim, g_cachedFists, cfg.actionAim.melee) == input::GunPlacement::Head) {
+        // Head aim: the game's placement moved to the rendered head. The weapon hand is not needed, and with
+        // the arms model away from the hand both arms are the game's (gun_placement.hpp).
+        offsetFor(arms); // the held item's log line and the swim's fists
+        if (eyeRead) {
+            head_gun::moveToHead(hands, reinterpret_cast<std::byte*>(regs.rsp + kOriginFromRsp),
+                                 {eye[0], eye[1], eye[2]});
+        }
+        return;
+    }
+    if (!view.worldCurrent || !eyeRead) {
+        return;
+    }
+    const WorldHand& world = view.world;
+    const std::optional<ViewmodelPlacement> computed = handPlacement(arms, world);
+    if (!computed) {
+        return;
+    }
+    const xr_math::EyeRelativePose& placed = computed->pose;
     const Vec3 origin = xr_math::atEye({eye[0], eye[1], eye[2]}, placed);
     const float newOrigin[3] = {origin.x, origin.y, origin.z};
     const float newAxis[9] = {placed.axis.forward.x, placed.axis.forward.y, placed.axis.forward.z,
@@ -295,8 +321,11 @@ void onViewmodel(const HookRegisters& regs) {
     s.viewmodelWrites.fetch_add(1, std::memory_order_relaxed);
     {
         std::lock_guard lock(s.viewMutex);
-        s.model = {true, nowQpc(), placed}; // the off hand's joint is placed relative to this
+        s.model = {true, nowQpc(), placed, world.qpc}; // the off hand's joint is placed relative to this
     }
+    pin.placed(computed->inputs, placed);
+    arm_ticks::notePlacement(hands, world, {eye[0], eye[1], eye[2]}, placed);
+    offhand_stats::notePlacement({eye[0], eye[1], eye[2]}, placed);
     if (g_loggedPlacements.fetch_add(1) < 5) {
         EVR_LOG("%s: viewmodel: game origin (%.2f %.2f %.2f) -> hand (%.2f %.2f %.2f); eye (%.2f %.2f %.2f)",
                 kTag, gameOrigin[0], gameOrigin[1], gameOrigin[2], newOrigin[0], newOrigin[1], newOrigin[2],
@@ -317,6 +346,17 @@ bool viewmodelSiteChecks(const std::byte* site) {
 
 std::string itemDeclName(const std::byte* decl) {
     return declName(decl);
+}
+
+std::optional<ViewmodelPlacement> viewmodelPlacement(const ArmsTick& arms, const WorldHand& world) {
+    const input::ControllerSettings& cfg = settings();
+    const State& s = state();
+    std::lock_guard cacheLock(g_cacheMutex);
+    if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load() ||
+        input::gunPlacement(cfg.aim, g_cachedFists, cfg.actionAim.melee) == input::GunPlacement::Head) {
+        return std::nullopt;
+    }
+    return handPlacement(arms, world);
 }
 
 bool swimFistsHeld() {

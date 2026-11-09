@@ -5,7 +5,9 @@
 #include "features/arm/arm_frames.hpp"
 #include "features/arm/grip_book.hpp"
 #include "features/arm/left_hand.hpp"
+#include "features/input/two_hand.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/two_hand.hpp"
 #include "vkcore/weapon_arm.hpp"
 #include "xr_math/offhand_pose.hpp"
 
@@ -332,17 +334,28 @@ void tick(const std::byte* hands,
         leftGrip = arm::mirroredGrip(rightOk->grip);
     }
     // The right glove: on the right controller (its wrist placed each tick, its fingers the game's right
-    // hand's), or the game's left grip reflected.
+    // hand's), or the game's left grip reflected; that too while two-handed aim holds the gun with the free
+    // off hand (two_hand.hpp), the glove on the gun's support point.
     std::optional<arm::GripPose> rightGrip;
     std::optional<xr_math::ModelPose> rightWrist;
-    if (free && rightOk && world.offValid) {
+    const bool onSupport = free && leftOk && leftOnGun && two_hand::gloveOnSupport();
+    if ((!free || onSupport) && leftOk && leftOnGun) {
+        rightGrip = arm::mirroredGrip(arm::GripPose{*leftOnGun, leftOk->grip.hand});
+        // Held two-handed: moved along the gun to where the off hand holds it, short of the support point
+        // (in the gun's root frame, which the grip is in).
+        const std::optional<float> reach = onSupport ? two_hand::gloveSupportMetres() : std::nullopt;
+        if (reach && gunNow) {
+            const Vec3 slide = input::gloveSlide(xr_math::inModelSpace(model.pose, world.grip).position,
+                                                 xr_math::inModelSpace(model.pose, world.offGrip).position,
+                                                 *reach * world.unitsPerMetre);
+            rightGrip->wrist.position = rightGrip->wrist.position + arm::toLocal(gunNow->axis, slide);
+        }
+    } else if (free && rightOk && world.offValid) {
         const game::WeaponOffset o = cfg.offhandOffset;
         const arm::HandOffset offset{Vec3{o.forward, o.left, o.up} * world.unitsPerMetre,
                                      {o.pitch, o.yaw, o.roll}};
         rightWrist = arm::rightWristFromGrip(xr_math::inModelSpace(model.pose, world.offGrip), offset);
         rightGrip = rightOk->grip;
-    } else if (!free && leftOk && leftOnGun) {
-        rightGrip = arm::mirroredGrip(arm::GripPose{*leftOnGun, leftOk->grip.hand});
     }
 
     const input::ArmDecision noGrip{false, input::ArmReason::NoGrip};
@@ -351,8 +364,8 @@ void tick(const std::byte* hands,
     const input::ArmDecision offDecision = !ready ? noGrip
                                            : free ? input::decideOffHand(offSignals, offMode)
                                                   : weaponDecision;
-    weapon_arm::Hold rightHold{offDecision, rightGrip ? &*rightGrip : nullptr, free, world.rightShoulder,
-                               world.rightElbow};
+    weapon_arm::Hold rightHold{offDecision, rightGrip ? &*rightGrip : nullptr, free && !onSupport,
+                               world.rightShoulder, world.rightElbow};
     rightHold.wrist = rightWrist;
     rightHold.item = decl;
     weapon_arm::holding(arm::ArmSide::Right, hands, rightHold, world, model, dt);

@@ -1,6 +1,6 @@
-// OpenXR session events on the XR worker: session state changes (a failed xrBeginSession is made again), a
-// lost runtime or instance, a LOCAL space change (a recenter), a refresh rate change (presenter_refresh.hpp),
-// and placing the flat screen in front of the head.
+// OpenXR session events on the XR worker: session state changes (a failed xrBeginSession is made again), the
+// user's presence (XR_EXT_user_presence), a lost runtime or instance, a LOCAL space change (a recenter), a
+// refresh rate change (presenter_refresh.hpp), and placing the flat screen in front of the head.
 
 #include "vkcore/presenter_impl.hpp"
 
@@ -21,6 +21,20 @@ namespace {
 // change's time (pose_guards.hpp).
 constexpr XrDuration kGuardOpenNs = 1'000'000'000;
 
+// The session state as the hold behind a menu and while nobody looks reads it (unseen_hold.hpp).
+pacing::SessionView viewOf(XrSessionState state) {
+    switch (state) {
+    case XR_SESSION_STATE_SYNCHRONIZED:
+        return pacing::SessionView::Synchronized;
+    case XR_SESSION_STATE_VISIBLE:
+        return pacing::SessionView::Visible;
+    case XR_SESSION_STATE_FOCUSED:
+        return pacing::SessionView::Focused;
+    default:
+        return pacing::SessionView::NotRunning;
+    }
+}
+
 // The session ended: tracking stops and the worker leaves its frame loop, to reconnect when the loss allows
 // it (presenter_reconnect.cpp). The first cause is the one kept.
 void markLost(XrPresenter::Impl& p, xr_recovery::Loss kind, const char* what) {
@@ -40,7 +54,8 @@ void markLost(XrPresenter::Impl& p, xr_recovery::Loss kind, const char* what) {
     }
     p.trackingReady.store(false);
     disableKeepActive();
-    frame_pacing::setUnfocused(false);
+    p.viewer.watch.state(pacing::SessionView::NotRunning);
+    frame_pacing::setBackgroundHold(p.viewer.watch.hold());
     p.sessionRunning = false;
     p.loss.lost = true;
 }
@@ -125,16 +140,15 @@ void XrPresenter::Impl::pollEvents() {
             sessionFocused.store(sessionState == XR_SESSION_STATE_FOCUSED, std::memory_order_relaxed);
             EVR_LOG("xr: session state %d", static_cast<int>(sessionState));
             if (sessionState == XR_SESSION_STATE_READY) {
-                clock.wasFocused = false;
+                viewer.watch.ready();
                 clock.watch.reset();
                 clock.gaps.restart();
-            } else if (sessionState == XR_SESSION_STATE_FOCUSED) {
-                clock.wasFocused = true;
             }
-            // A runtime's menu or dashboard over the game, or the game hidden after it: keep-active keeps the
-            // game running, so it is held to the display rate meanwhile (public issue #19).
-            frame_pacing::setUnfocused(clock.wasFocused && (sessionState == XR_SESSION_STATE_VISIBLE ||
-                                                            sessionState == XR_SESSION_STATE_SYNCHRONIZED));
+            // A runtime's menu over the game (public issue #19), or nobody able to see it (asleep, off,
+            // another app; public issue #29): keep-active keeps the game running, so it is held back
+            // meanwhile (T-228).
+            viewer.watch.state(viewOf(sessionState));
+            frame_pacing::setBackgroundHold(viewer.watch.hold());
             if (sessionState == XR_SESSION_STATE_READY) {
                 loss.beginFailures = 0;
                 beginSession(*this);
@@ -149,6 +163,19 @@ void XrPresenter::Impl::pollEvents() {
             } else if (sessionState == XR_SESSION_STATE_LOSS_PENDING) {
                 markLost(*this, xr_recovery::Loss::Session, "session loss pending");
             }
+            break;
+        }
+        case XR_TYPE_EVENT_DATA_USER_PRESENCE_CHANGED_EXT: {
+            // Queued when the session begins, then on each change (only where the system senses the user; the
+            // watch ignores it otherwise).
+            const auto& presence = reinterpret_cast<const XrEventDataUserPresenceChangedEXT&>(event);
+            const bool present = presence.isUserPresent == XR_TRUE;
+            EVR_LOG("xr: user presence: %s (XR_EXT_user_presence)%s",
+                    present ? "present" : "not present (the headset is off)",
+                    viewer.watch.sensesPresence() ? ""
+                                                  : "; ignored: the system says it does not sense the user");
+            viewer.watch.presence(present);
+            frame_pacing::setBackgroundHold(viewer.watch.hold());
             break;
         }
         case XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB:

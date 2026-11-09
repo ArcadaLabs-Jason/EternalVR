@@ -22,8 +22,8 @@ namespace EternalVR.Launcher.Core.Settings
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
         VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms, Cutscene3D,
-        HudDistance, HudSize, HudHeight, HudPlace,
-        MotionControllers, ShotsFrom, MenuLaser, GameFolder, Runtime, AdapterSteer, PerformanceLog, PerformanceOverlay, ExtraArguments, TestBuilds,
+        HudDistance, HudSize, HudHeight, HudFront, HudWrist, HudWeapon,
+        MotionControllers, ShotsFrom, MenuLaser, TwoHandAim, GameFolder, Runtime, AdapterSteer, PerformanceLog, PerformanceOverlay, ExtraArguments, TestBuilds,
     }
 
     /// <summary>
@@ -33,6 +33,7 @@ namespace EternalVR.Launcher.Core.Settings
     public static class SettingRules
     {
         public const string NeedsControllers = "Needs motion controllers (Advanced tab).";
+        public const string NotWithWristHud = "Not with the HUD on your wrist on: there is one hand HUD at a time.";
         public const string NeedsStereo = "Only in stereo (VR mode on the Advanced tab).";
         public const string NeedsHandAim = "Only when the weapon hand aims (Aim with).";
         public const string NeedsHeadOrHandAim = "Only when the weapon hand or the head aims (Aim with).";
@@ -123,9 +124,13 @@ namespace EternalVR.Launcher.Core.Settings
                     if (!s.Controllers) return NeedsControllers;
                     if (!handAim) return NeedsHandAim;
                     return setting == Setting.AimDotSize && !s.AimDot ? "Only with the aim dot on." : null;
+                case Setting.TwoHandAim:
+                    return s.TwoHandWhyNot();
                 case Setting.MenuLaser:
-                case Setting.HudPlace:
+                case Setting.HudWrist:
                     return s.Controllers ? null : NeedsControllers;
+                case Setting.HudWeapon:
+                    return !s.Controllers ? NeedsControllers : s.HudWrist ? NotWithWristHud : null;
                 case Setting.Resolution:
                 case Setting.EachEye:
                 case Setting.AntiAliasing:

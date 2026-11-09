@@ -347,6 +347,11 @@ namespace EternalVR.Launcher.Core.Headsets
             return "Last session" + (facts.SessionAt.HasValue ? " (" + When(facts.SessionAt.Value, now) + ")" : string.Empty) + ": " + facts.SessionText;
         }
 
+        /// <summary>How the status line at start shows <see cref="LastSessionStatus"/>: a warning when the game needed more video
+        /// memory than Windows gives it (its sentences then name the settings to change), else plain.</summary>
+        public static StatusKind LastSessionKind(HeadsetFacts facts) =>
+            facts?.SessionText != null && facts.SessionMemoryOver ? StatusKind.Warning : StatusKind.Info;
+
         /// <summary>"at Launch VR", "by Detect again", "when the launcher opened".</summary>
         private static string ReadByText(HeadsetReadBy by) =>
             by == HeadsetReadBy.Detect ? "by Detect again" : by == HeadsetReadBy.Start ? "when the launcher opened" : "at Launch VR";

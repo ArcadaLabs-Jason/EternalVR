@@ -548,8 +548,9 @@ environment). Evidence `<workspace>\tmp-launcher\rs-live\L-rs`.
 
 - Checked with the simulator only: its head never moves by itself, so real head motion, the runtime's
   recenter event and a real floor height are headset items.
-- `XR_EXT_user_presence` is not used: without a presence signal the worn test is the only guard, as T-045
-  allows.
+- `XR_EXT_user_presence` is not used here: without a presence signal the worn test is the only guard, as
+  T-045 allows. Since T-228 the layer enables it where the runtime offers it, for frame pacing only
+  (docs/VR_STEREO.md "Frame pacing", While nobody looks).
 - The eye height used for Real height and the vertical clamps is the game's standing value (1.65735); the
   game's crouch and the animated camera are not read yet. `docs/rig-findings/collision-query.md` section 2
   has how to read the effective eye height at the hook (`vieworg.z - origin.z`) for a later logging pass.

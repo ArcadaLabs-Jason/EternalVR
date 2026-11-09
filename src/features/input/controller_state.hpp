@@ -26,6 +26,9 @@ constexpr Hand otherHand(Hand hand) {
 struct HandState {
     float trigger = 0.0f; // 0..1
     float grip = 0.0f;    // 0..1
+    // 0..1, how far the fingers wrap the grip, where it is read apart from the grip (XrActionId::GripCurl:
+    // the Index's squeeze value, its grip reading the force); 0 where it is not bound.
+    float gripCurl = 0.0f;
     Axis2 stick;
     bool stickClick = false;
     bool primaryButton = false;   // A on the right Touch controller, X on the left.

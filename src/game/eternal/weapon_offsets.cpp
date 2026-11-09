@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -226,6 +227,11 @@ std::optional<float> WeaponOffsetTable::lookupTriggerLift(std::string_view declN
     return match ? std::optional<float>(*match) : std::nullopt;
 }
 
+std::optional<std::array<float, 3>> WeaponOffsetTable::lookupTwoHand(std::string_view declName) const {
+    const std::array<float, 3>* match = specific(twoHand, declName);
+    return match ? std::optional<std::array<float, 3>>(*match) : std::nullopt;
+}
+
 WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     WeaponOffsetTable table;
     if (text.starts_with("\xEF\xBB\xBF")) {
@@ -235,8 +241,10 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
     bool inSights = false;
     bool inGrips = false;
     bool inOffHands = false;
-    bool inLeftWrists = false;
     bool inTriggers = false;
+    // [left_hand_wrist] and [two_hand]: three numbers per item, no "default".
+    std::map<std::string, std::array<float, 3>, std::less<>>* triples = nullptr;
+    const char* noDefault = "";
     int lineNumber = 0;
     while (!text.empty()) {
         const std::size_t newline = text.find('\n');
@@ -254,8 +262,8 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
             inSights = false;
             inGrips = false;
             inOffHands = false;
-            inLeftWrists = false;
             inTriggers = false;
+            triples = nullptr;
             if (line == "[standing]") {
                 section = &table.standing;
             } else if (line == "[seated]") {
@@ -271,18 +279,25 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
                 inOffHands = true;
             } else if (line == "[left_hand_wrist]") {
                 section = nullptr;
-                inLeftWrists = true;
+                triples = &table.leftHandWrists;
+                noDefault =
+                    "[left_hand_wrist] has no \"default\": an item without a row is placed for the right "
+                    "glove until its grip is read";
             } else if (line == "[trigger_finger]") {
                 section = nullptr;
                 inTriggers = true;
+            } else if (line == "[two_hand]") {
+                section = nullptr;
+                triples = &table.twoHand;
+                noDefault = "[two_hand] has no \"default\": an item without a row takes no support grip";
             } else {
                 issue("unknown section (expected [standing], [seated], [sights], [right_grip], "
-                      "[left_handed_off_hand], [left_hand_wrist] or [trigger_finger])");
+                      "[left_handed_off_hand], [left_hand_wrist], [trigger_finger] or [two_hand])");
                 section = nullptr;
             }
             continue;
         }
-        if (!section && !inSights && !inGrips && !inOffHands && !inLeftWrists && !inTriggers) {
+        if (!section && !inSights && !inGrips && !inOffHands && !triples && !inTriggers) {
             continue; // entries of an unknown section were reported with its header
         }
         const std::size_t equals = line.find('=');
@@ -342,20 +357,19 @@ WeaponOffsetTable parseWeaponOffsets(std::string_view text) {
             }
             continue;
         }
-        if (inLeftWrists) {
+        if (triples) {
             std::array<float, 6> v{};
             const bool list = value.size() >= 2 && value.front() == '[' && value.back() == ']';
             if (key == "default") {
-                issue("[left_hand_wrist] has no \"default\": an item without a row is placed for the right "
-                      "glove until its grip is read");
+                issue(noDefault);
             } else if (!list || parseList(value.substr(1, value.size() - 2), v) != 3 ||
                        std::fabs(v[0]) > kMaxTranslation || std::fabs(v[1]) > kMaxTranslation ||
                        std::fabs(v[2]) > kMaxTranslation) {
                 issue("expected [forward, left, up]: three finite numbers within 2 m");
-            } else if (table.leftHandWrists.contains(key)) {
+            } else if (triples->contains(key)) {
                 issue("duplicate name; the first one is kept");
             } else {
-                table.leftHandWrists.emplace(std::string(key), std::array<float, 3>{v[0], v[1], v[2]});
+                triples->emplace(std::string(key), std::array<float, 3>{v[0], v[1], v[2]});
             }
             continue;
         }

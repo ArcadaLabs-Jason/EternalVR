@@ -419,7 +419,8 @@ void logSettings() {
                 : cfg.testArmFault == input::ArmFault::Forearm ? "hands only with the forearm left drawn"
                 : cfg.testArmFault == input::ArmFault::Trigger
                     ? "the weapon hand's index finger turned past the game's grip, into the trigger guard"
-                    : "the off hand's fingers left the game's");
+                : cfg.testArmFault == input::ArmFault::Fingers ? "the off hand's fingers left the game's"
+                                                               : "two-handed aim's (its own log line)");
     }
 }
 

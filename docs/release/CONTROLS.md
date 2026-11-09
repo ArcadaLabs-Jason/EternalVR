@@ -9,7 +9,8 @@ Pico 4 controllers have the same layout. Windows Mixed Reality controllers and H
 buttons, and Steam Frame controllers more, each with a layout of its own
 ([Other controllers](#other-controllers)). Only Touch controllers have been
 tried; the others are untested. On Index the Menu button is a firm trackpad press, A and B on the left
-controller do the X and Y jobs, and the grip actions need a firm squeeze.
+controller do the X and Y jobs, and the grip actions need a firm squeeze (the Slayer's off-hand fingers close as
+soon as you wrap yours round the grip).
 
 ## In the game
 
@@ -348,8 +349,8 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Equipment aim with | Same as Aim with, Head, Off hand: what aims the equipment launcher and the Flame Belch, which sit on the Slayer's left shoulder. Only when the weapon hand aims | Same as Aim with |
 | Weapon hand | Right, Left (buttons swapped), Left (buttons and sticks) | Right |
 | Show arms | Shown, Hidden, Hands only: Hidden hides the Slayer's arms and leaves the weapon alone, for example with the weapon in the left hand, where the game still draws its right arm reaching across to the gun. Hands only leaves the gloves and folds the arms behind them away: the off-hand glove sits on your off-hand controller wherever you reach, the gun hand's glove holds the gun. It needs the weapon hand to aim (Aim with), and while the game plays its own arm animations (a weapon switch, a melee, a glory kill) it draws the whole arms for that moment. | Shown |
-| Weapon hand angle | -60 to 60 degrees: tilts the gun and the glove on your weapon hand's controller, like a controller offset in SteamVR. Below 0 tips the front down, for a gun that points higher than your hand. With Valve Index controllers try -20, with any SteamVR offsets set back to 0 | 0 |
-| Off hand angle | -60 to 60 degrees: the same for your other hand's glove and what it points with. With Valve Index controllers try -40 | 0 |
+| Weapon hand angle | -60 to 60 degrees: tilts the gun and the glove on your weapon hand's controller, like a controller offset in SteamVR, on top of the mod's own fit for your controller. Below 0 tips the front down, for a gun that points higher than your hand. Valve Index controllers already get their own fit (from a player's setup), so start at 0 there, with any SteamVR controller offsets for the game set back to 0 | 0 |
+| Off hand angle | -60 to 60 degrees: the same for your other hand's glove and what it points with, on top of the mod's own fit. With Valve Index controllers start at 0 | 0 |
 | Move toward | Where you look, Where your left hand points, Where your right hand points (whichever Weapon hand you pick) | Where you look |
 | Dossier map sticks | Weapon hand pans, Other hand pans: which stick pans the Dossier's map; the other stick zooms and rotates it ([In menus](#in-menus)) | Weapon hand pans |
 | Weapon wheel | Stick, Point with your hand: what picks a weapon on the weapon wheel ([In the game](#in-the-game)) | Stick |
@@ -370,7 +371,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Sharpening | The game's setting (the one from its own video menu), Off, Low, Medium, High: the game's sharpening filter on each eye's finished picture, with any anti-aliasing. The fixed strengths leave your flat game's setting as it was | The game's setting |
 | Screen-space reflections | The game's setting (Reflections in its own video menu: off at Low, on from Medium; a change made in the menu during play is followed and kept), Off (off in VR, a little lighter on the graphics card; your flat game keeps its setting). Stereo only, not with Anti-aliasing Off (they are off then) | The game's setting |
 | Foveated rendering (experimental) | Off, Subtle, Balanced, Aggressive, Maximum: shades the edges of each eye at a lower rate, where the lenses blur anyway, for more frames when the graphics card holds the frame rate back (about 16% with Balanced on the test rig). Subtle keeps the most of each eye at full detail, Maximum the least. The game's menus and HUD stay at full rate, so their text stays sharp, and so do cutscenes on the cinema screen. On NVIDIA RTX, AMD Radeon RX 6000 or newer and Intel Arc cards (not yet tried on Intel); other cards ignore it. Stereo only | Off |
-| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; it changes nothing while the game runs below the headset's rate; after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"), New game frames only (experimental: the mod hands your headset each game frame once and your headset's runtime fills in between, as for a native game below your refresh rate). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
+| Frame pacing | As fast as the game runs (each headset frame shows the newest game frame; when the game draws more frames than the headset shows, moving things advance in uneven steps), Matched to the headset (the game draws exactly one frame per headset frame, started at the same moment of each, as native VR games do; when the game keeps falling below the headset's rate during play (two seconds in a row) it runs at its own rate and each game frame is handed over once, as New game frames only does, while menus and loading screens stay matched (tried on the test rig, not yet on many headsets); after a session the choice names the refresh rate it ran at, "Matched to the headset (90 Hz last session)"), New game frames only (experimental: the mod hands your headset each game frame once and your headset's runtime fills in between, as for a native game below your refresh rate; above it the game is not held). Stereo only, not with Alternate eyes on Auto (except with Parallel Eye Rendering on) | Matched to the headset |
 | Parallel Eye Rendering (highly experimental) | Renders both eyes as two views of one game frame, their work at the same time, instead of one eye after the other (`README-ALPHA.md`, "Testing Parallel Eye Rendering"). Only on the Steam version this release supports. Stereo only (with TAA, DLSS or Off); Alternate eyes and Foveated rendering are greyed out while it is on | Off |
 
 The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
@@ -397,7 +398,9 @@ The **DLSS** group under Picture applies when Anti-aliasing is DLSS:
 | Shots come from | Your weapon hand, Your eyes (stops shots through thin walls) | Your weapon hand |
 | Menu laser | The laser from your hand to the menu panel; off keeps only the dot | On |
 | HUD distance, size, height | The HUD panel's distance (0.3 to 10 m), width (0.1 to 10 m) and height from eye level (-2 to 2 m). In VR the game's own HUD Scale is set to Large so its small text is easier to read; your own HUD Scale stays for the flat game (changing it in the game's menu during VR sticks and is saved), and these settings make the HUD bigger or smaller | 1.5 m, 2 m, 0 |
-| Health and ammo | On the HUD panel; On your wrist (experimental: health, armour and ammo on the inside of your off hand's wrist, shown when you turn it toward you); or On your weapon (experimental: the ammo just above the back of the gun in your weapon hand, health and armour stay on the panel). The wrist and the weapon need Motion controllers | On the HUD panel |
+| HUD in front of you | Health, armour, ammo and equipment on the HUD panel in front of you. Off, they are only where the wrist or the weapon shows them (nowhere with neither); subtitles, prompts and boss bars stay on the panel either way. Without Motion controllers the panel always shows them | On |
+| HUD on your wrist | Experimental: health, armour, ammo and equipment on the inside of your off hand's wrist. To read them, bring that forearm across your chest and twist the hand palm up (like checking a watch worn on the inside of the wrist), then look at it. With HUD in front of you on as well, they show in both places. Needs Motion controllers | Off |
+| Ammo on your weapon | Experimental: the ammo just above the back of the gun in your weapon hand, shown when the gun faces you; health and armour stay where they are. With HUD in front of you on as well, the ammo shows in both places. Not with HUD on your wrist; needs Motion controllers | Off |
 | Game folder | Found through Steam, or a folder you choose | Found through Steam |
 | OpenXR runtime | The system default, or a runtime you choose | System default |
 | Use the headset's graphics card | For a PC with two or more graphics cards: the game renders on the card your headset's runtime uses, when it would otherwise pick another one and VR could not start. Kept for this PC whichever VR settings profile is picked. Not yet tried on a two-GPU PC with a headset | Off |
@@ -481,15 +484,21 @@ of the launcher.
    (Index, Pico 4), A or B touched is that hand's rest for the wheel: give that touch an action and the
    wheel uses the other hand's rest, as with a thumb rest above, and the editor says so.
 4. **Sticks** sets each stick's **Role**: Move, Turn or None. When you give a stick the role the other
-   one has, the two swap. The turn stick's gestures (**Up**, **Down, tap**, **Down, hold**) follow it.
+   one has, the two swap. Below the roles are the turn stick's gestures, laid out the way you push the
+   stick: **Up**, **Down**, **Left**, **Right** and the four diagonals (**Up left**, **Up right**, **Down
+   left**, **Down right**), each active for as long as you push the stick that way, then **Down, tap** and
+   **Down, hold**. They follow the turn stick when it changes sides, each kept as it is (left stays left,
+   as on the game's weapon wheel). Giving a side or a diagonal an action splits the stick by direction,
+   and turning is lost where you do: see "Weapons on the turn stick" below.
 5. Press **Save**. Your controls are saved for the VR settings profile in use (the editor's title names
    it), and the game reads them the next time it starts. Beside the button on the Play tab, the launcher
    says **Using your own controls**. The editor saves straight away: the profile's **Save** button is only
    for the settings.
 
 If something would not work, the editor says what is wrong under the lists and marks the list at fault,
-and **Save** stays greyed out until it is fixed: for example a press and a tap on the same button, both
-sticks set to Move, or a stick gesture with no turn stick. The game would not use such controls at all.
+and **Save** stays greyed out until it is fixed: for example a press and a tap on the same button, **Down**
+together with **Down, tap** or **Down, hold** on the turn stick, both sticks set to Move, or a stick
+gesture with no turn stick. The game would not use such controls at all.
 
 **Reset to defaults** puts back the built-in controls for the controllers shown, for every Weapon hand.
 Nothing changes until you press **Save**; saving the built-in controls removes your file, so the game
@@ -497,6 +506,53 @@ uses its own again. **Close** asks before it drops changes you have not saved.
 
 Keep a Pause menu button. On Touch controllers the left Menu button is the only Menu button the game can
 read, so the editor does not list the right one.
+
+### Weapons on the turn stick
+
+You can put weapons (or any other action) on the turn stick's directions, for example all eight weapon
+slots where the game's weapon wheel shows them. In the editor, under **Sticks**: pick **Weapon slot 1** for
+**Up**, **Weapon slot 5** for **Up right**, **Weapon slot 2** for **Right**, **Weapon slot 7** for **Down
+right**, **Weapon slot 3** for **Down**, **Weapon slot 6** for **Down left**, **Weapon slot 4** for
+**Left** and **Weapon slot 8** for **Up left**, and **(none)** for **Down, tap** and **Down, hold** (the
+quick switch and the weapon wheel there by default: **Down** cannot share the stick's down with them). In
+a controls file these are the lines of the turn stick (the right one unless you swapped the sticks), with
+the `down_tap` and `down_hold` lines deleted:
+
+```
+"right.stick.up" = "weapon_slot_1"
+"right.stick.up_right" = "weapon_slot_5"
+"right.stick.right" = "weapon_slot_2"
+"right.stick.down_right" = "weapon_slot_7"
+"right.stick.down" = "weapon_slot_3"
+"right.stick.down_left" = "weapon_slot_6"
+"right.stick.left" = "weapon_slot_4"
+"right.stick.up_left" = "weapon_slot_8"
+```
+
+Push the stick toward a weapon to switch to it; let the stick come back to the middle before the next
+push. What a push does is decided once, as it leaves the middle, and kept until the stick is back: a push
+that rolls round to another direction does not switch twice.
+
+**Turning is lost on the directions you bind.** As soon as a side or a diagonal has an action, the stick
+is split by direction, and it turns you only straight left or right, and only on a side that has no
+action. With all eight bound, as above, the stick does not turn you at all: turn with your body (or put
+the quick switch, the wheel or turning elsewhere). Some layouts:
+
+- **All eight directions:** each has an eighth of the circle (45 degrees); no turning.
+- **Up, down, left and right only:** each has a quarter (90 degrees); no turning.
+- **Left only** (with the built-in up and down): the stick turns you right only.
+- **The four diagonals** (with the built-in up and down): turning stays on straight left and right, within
+  an eighth of the circle; a push more than about 22 degrees up or down from straight left or right is the
+  diagonal's.
+
+A direction you leave free is shared by its neighbours, half each. A push toward a bound direction does
+nothing until the stick is pushed most of the way (three quarters), so a slow push never turns you first.
+**Down** on its own (without a side or a diagonal) keeps the stick as it is: it only replaces the quick
+switch and the wheel on the stick's down. The editor says under **Sticks** when the stick is split and
+where it still turns.
+
+Versions of the mod from before these lines existed skip them (their log names each skipped line) and
+keep turning on the stick as before; the rest of your controls still work there.
 
 ### Editing the files by hand
 
@@ -547,7 +603,10 @@ A line of a map reads `"<hand>.<button>.<press>" = "<action>"`, for example:
 - **Press:** `press` (the action is held while the button is down), `tap` (a short press) or `hold` (held
   for a quarter of a second). A button can have a tap and a hold, but not a press together with either.
 - **Stick lines:** `"<hand>.stick.role"` is `move`, `turn` or `none`. The turn stick also takes
-  `"<hand>.stick.up"`, `"<hand>.stick.down_tap"` and `"<hand>.stick.down_hold"`.
+  `"<hand>.stick.up"`, `"<hand>.stick.down_tap"` and `"<hand>.stick.down_hold"`, and its other
+  directions `down`, `left`, `right`, `up_left`, `up_right`, `down_left` and `down_right` (active while
+  the stick is pushed that way; `down` not together with `down_tap` or `down_hold`; a side or a diagonal
+  takes turning away from that direction: see "Weapons on the turn stick" above).
 - **Actions:** `fire`, `weapon_mod`, `switch_weapon_mod`, `jump`, `dash`, `melee`, `chainsaw`,
   `flame_belch`, `equipment`, `switch_equipment`, `quick_switch`, `weapon_wheel`, `next_weapon`,
   `previous_weapon`, `weapon_slot_1` to `weapon_slot_8`, `crucible`, `pause`, `dossier`, `mission_info`,

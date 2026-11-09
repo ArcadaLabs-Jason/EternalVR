@@ -108,6 +108,7 @@ void refreshTestInput() {
     EVR_LOG("%s: test input '%s' read (%zu issue(s)) in %.1f ms", kTag, path.c_str(), parsed.issues.size(),
             secondsSince(start) * 1000.0);
     std::lock_guard lock(s.testMutex);
+    input::startSweeps(parsed, s.test ? &*s.test : nullptr, qpcToSeconds(nowQpc()));
     s.test = std::move(parsed);
 }
 

@@ -1284,16 +1284,90 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   does again: the game never hangs on the headset. Shorter stalls keep the game held: a streaming runtime
   whose encoder falls behind stalls its loop for 40-100 ms, and with three periods (before 0.1.32) the game
   ran free in every stall, rendering images nobody saw (a Virtual Desktop log: 186 in 10 s at 90 Hz).
-- **Behind a runtime's menu.** While the session is VISIBLE, or SYNCHRONIZED once hidden, after it had focus
-  (SteamVR's dashboard, Meta's menu), keep-active keeps the game running without input, so the present hook
-  holds it to one image per display period (clamped to 1/90 to 1/30 s; 1/72 s while no period is known; not fewer, as a session can stay VISIBLE while the game is what the player sees) on
-  its own clock, pacing on or off and whether or not the headset's frames come (`UnfocusedCap`; public issue
-  #19). Letting the game pause instead was not used: the dashboard does not take the window's focus, and a
-  posted deactivation would change the game's own state (its pause) where the cap only holds frames back. Log: `pace: a runtime menu is over the game: ...` and
-  `pace: the menu is gone; ...`.
+- **Behind a runtime's menu.** While the session is VISIBLE after it had focus (SteamVR's dashboard, Meta's
+  menu), keep-active keeps the game running without input, so the present hook holds it to one image per
+  display period (clamped to 1/90 to 1/30 s; 1/72 s while no period is known; not fewer, as the game still
+  shows behind the menu, and a session can stay VISIBLE while the game is what the player sees, as the
+  OpenXR simulator once its window is not in front) on its own clock, pacing on or off and whether or not
+  the headset's frames come (`UnfocusedCap`; public issue #19). Letting the game pause instead was not used:
+  the dashboard does not take the window's focus, and a posted deactivation would change the game's own
+  state (its pause) where the cap only holds frames back. Log: `pace: a runtime menu is over the game: ...`
+  and `pace: the menu is gone; ...`.
+- **While nobody looks** (T-228, `src/features/pacing/unseen_hold.*`; public issue #29). With the headset off,
+  asleep or showing something else the game would otherwise render as fast as it can for the whole break,
+  with nobody looking: heat and power on a laptop. So it is held to 8 images a second (the same clock as the
+  menu's cap, 125 ms apart) while either: the session is SYNCHRONIZED after it had focus (the runtime shows
+  none of the game's frames: asleep, off, the runtime's home or another app in front), or the runtime reports
+  the user not present (`XR_EXT_user_presence`, enabled where offered: SteamVR and Varjo list it, Virtual
+  Desktop's runtime and Meta's PC runtime do not; `xr: user presence: ...` at start-up says which) after it
+  reported the user present in that session, in any running state. A presence that never read "present"
+  is not trusted, so a sensor stuck at "not present" cannot hold a player in the headset, and neither is any
+  presence event from a system whose `XrSystemUserPresencePropertiesEXT` says it does not sense the user
+  (logged with `; ignored: ...`); READY forgets the last session's presence, so a stale "away" never holds a
+  new session; before the
+  session's first focus nothing is held (the game's start and first load), and nothing while the session
+  does not run (STOPPING, IDLE, lost: the game continues flat on its window, which is all there is to see,
+  and its rate there is the player's). 8 a second: well under the launcher's 10 pairs a second below which a
+  10 s window counts as a menu or a pause (`SessionRates.PlayThreshold`), so a break never reads as the
+  game's own rate in its summary, and high enough to keep the game's simulation and audio running as on a
+  slow PC [not measured: the rig's game is muted]. The wait is a condition variable's: a state or presence
+  change wakes the render thread at once, so the release takes no longer than the XR worker's next
+  `xrPollEvent`; every wait ends within its interval anyway, so nothing can hang on it. Held low, the hold
+  switch (Slower PCs below) decides nothing and keeps its state (`HoldSwitch::pause`: a game kept up at 90
+  would otherwise be let go by the hold's own 8 a second, and come back let go), the headset's frames do
+  not wait for new images (under `new` or let go each would wait up to two periods for one of the few
+  images, slowing the runtime's loop for nothing), a headset-paced game does not also wait for the headset's
+  next frame after the hold (a SYNCHRONIZED session may begin none, and each image would add that wait's
+  timeout; the 10 s `pace:` waits line counts them as `held low`), and the time held is left out of the stall
+  watch's gaps ("Stalls"). Where a session stays shown with the user away (FOCUSED or VISIBLE, not present), its headset
+  frames in that time repeat the few images, and the launcher's share of repeated frames, which is the
+  whole session's, counts them; a SYNCHRONIZED session renders no headset frames to count. Log: `pace: nobody can see the game's frames (<reason>): the game is held to 8 images a second
+  until they can again`, every 10 s `pace: held low for N s so far (<reason>); last 10 s: M image(s) handed
+  over` (also in SYNCHRONIZED, which has no headset frames for the cadence line), `pace: the low hold ends
+  after S s (N image(s) handed over, R a second); ...`, and about a second later `pace: in the 1.0 s after
+  the low hold the game handed N image(s) to the headset (R a second)`; the `xr: session state` and `xr: user
+  presence` lines before them say what the runtime reported. **Known gaps:** (1) a session that starts with
+  the headset already asleep or off, and so is never focused, is not held until it has had focus once; (2)
+  after Virtual Desktop reconnects (a new session) onto a sleeping headset the new session is not held either,
+  for the same reason; (3) a runtime that stays FOCUSED with the headset off and offers no user presence gets
+  no hold at all, which may be Virtual Desktop's (whether its runtime goes SYNCHRONIZED when the Quest
+  sleeps is not known yet [a player's export over a break will show it]). (1) and (2) are the price of never
+  holding the game's start and first load; a session that never had focus holds nothing. Not used: a head held still as the sign of a headset on the
+  table (the posture's worn test): a false "nobody looks" holds a player in the headset to 8 frames a second,
+  far worse than the heat, and the simulator's still head would hold every rig run. Rig: the QA scenario
+  `unseen-hold` (`ETERNALVR_TEST_UNSEEN_VISIBLE=1` takes the simulator's VISIBLE as nobody looking; the
+  scenario posts `WM_ACTIVATE` to the simulator's window, as an unelevated rig process cannot move the
+  desktop's foreground).
 - **Slower PCs.** A game that cannot keep up with the headset never waits (a headset frame always began while it
-  drew), so below the headset's rate nothing changes; the uneven cadence of a game just below the rate (an
-  occasional repeated frame) remains.
+  drew), and held, the previous image went out again at every refresh it missed (a player's 5070 Ti at 120 Hz
+  on SteamVR: 63 game frames a second against 74 at 90 Hz, the gap gone with `new`; Discord, 2026-10-29). Since
+  T-194 such a game is let go (`pacing::HoldSwitch`; T-201): a second in which, held, more than 5% of the
+  headset's frames have no new image is a bad window, and two bad windows in a row let it go (a single hitch
+  above the refresh, 50 ms or so, makes one bad window and no longer lets it go); let go, it runs as under New game
+  frames only below, each image submitted once and the runtime filling the refreshes in between, and its own rate
+  (images handed over per second) reaching the refresh rate holds it again. A game that runs faster than the
+  headset on its own but still repeats once held (its frame takes about one display period: rig, 105 game frames
+  a second let go, 85 held at 90 Hz) would switch over and over, so a hold that ends within 10 s doubles the time
+  before the next try (1, 2, 4 ... 32 s), and only a hold of 10 s or more starts it over at one. A second longer
+  than two windows (the headset's loop stopped: sleep, a session not running, a stalled copy) or with fewer than
+  30 headset frames decides nothing and breaks a run of bad windows. Away from play (menus, the title screen,
+  loading screens: no game ticks from the camera hook for 250 ms) the game is held and nothing is decided, so the
+  menu pointer and the loading screen stay at the headset's rate. Not both at once: a held game whose headset
+  frames also wait for its images falls into lock-step, each waiting for the other, and loses display slots (rig,
+  90 Hz, CPU-bound just under the refresh: 75 game frames a second against 85 held). Let go, the worker's
+  controller sync and haptics run at the game's rate, as under `new`. Log (the first 20 changes): `pace: the game
+  falls behind the headset: let go, new frames only (2 windows of 1 s in a row over 5% ..., the last S%; the game's
+  rate R images/s; it is held again once it reaches the refresh rate, B s from now at the earliest)`, `pace: the
+  game keeps up with the headset: held again (its own rate R images/s; S% ...; ... now B s)` and `pace: a menu or
+  a loading screen: held again ...`; the 10 s line names the state and counts the changes in those 10 s.
+  `ETERNALVR_TEST_PACE_REPEAT=1` (a rig A/B) keeps the game held, as before.
+- **Late images (rig test switches).** Held, the game's frame starts when a headset frame chooses its image
+  and its image is due when the next one chooses, one period later: a late image left that frame without a new
+  image. `ETERNALVR_TEST_LATE_WAIT=1` makes such a frame wait for it within its own time (until 6 ms before the
+  period ends; `pacing::lateImageWaitSeconds`, only while the game hands images over at about the headset's
+  rate); `ETERNALVR_TEST_HOLD_GATE=1` makes the hold switch let a game go only when most of its images took
+  longer than a period (a hitch above the refresh no longer lets it go). Both off by default; the rig A/B and
+  why: docs/rig-findings/present-latency.md and T-201.
 - **Pose.** The camera hook predicts the head and hands for `predictedDisplayTime` plus one period, plus the
   measured lead under `ETERNALVR_POSE_LEAD` (`xr_math/display_lead.hpp`). The period added is at most 1.5 times
   the headset's refresh period (the runtime's own refresh rate when it gives one, else the base of "Headset
@@ -1321,7 +1395,10 @@ or more (N image(s) never shown); X image(s) per headset frame; game frames show
 was predicted for, on average`: paced and keeping up, B is close to F, X is 1.00 and L settles near 0 once the
 lead has converged. Paced, a second line: `pace: last 10 s: H image(s) handed over; W wait(s) for the headset's
 next frame, average M ms, longest M ms; T timeout(s); G without a wait (a headset frame had begun), I with the
-headset not running`. A `stall:` line's hook time does not include the wait.
+headset not running`. A `stall:` line's hook time does not include the wait. While the game is let go (Slower PCs)
+the first line reads `pace: headset, let go (new frames only) (the hold switched N time(s) in these 10 s); ...`, the second is
+left out, and the worker's waits for a new image have their own line (`pace: new frames only, last 10 s: ...`,
+below).
 
 The game's own cap would be cheaper: `com_adaptiveTickMaxHz` ("max game hz", 1000 by default; the dormant VR
 path raises it to at least 120, `docs/rig-findings/stereo-reentry.md`) on the command line, for example
@@ -1342,7 +1419,43 @@ previous image, so the session's frames never stop. The worker's controller sync
 with its frames, so at the game's rate in this mode. Every 10 s: `pace: new frames only, last 10 s: R headset
 frame(s) began with a new image ready, W after a wait for one (average A ms, longest L ms), T after the wait ran
 out (the previous image shown again)`. Overlays that count the frames handed to the runtime (fpsVR, SteamVR's
-own) then show the game's rate; with the other two modes they show the headset's.
+own) then show the game's rate; with As fast as the game runs they show the headset's. Matched to the headset
+lets a game that falls behind run this way (T-194, above); above the refresh `new` differs, as it does not hold the
+game: the game draws frames the headset never shows, and their cadence is uneven as with pacing off.
+
+### Release-to-present timing (with the performance log)
+
+Where an image's time goes between the game's render thread going on and the runtime getting the image
+(`src/features/pacing/present_latency.*`, the bookkeeping; `src/vkcore/present_latency.*`, the glue). On with
+CPU timing (`ETERNALVR_CPU_TIMING`, the launcher's "Performance in the log"); off, every entry point returns at
+once. Per image handed over: the release (the present hook of the previous hand-over returned, after the hold's
+wait when there was one), the first present after it that handed nothing over (under Route S eye L's), the
+hand-over (`publishSlot`, eye R's present) and its present's return; on the XR worker, the headset frame that
+showed it (its copy finished): that frame's `xrWaitFrame` call and return, its choice of image (the hold's
+signal), the slot taken (after any wait for the game's GPU work on the shared fence), the copy, and the
+`xrEndFrame` call. Cost: a few performance counter reads and an uncontended lock at each step: one per present
+(two for the present that hands an image over) and up to four per headset frame (the choice, the slot taken, the
+copy, `xrEndFrame`); the sorting for the percentiles runs on the XR worker every 10 s. Only for the game's device
+with the XR presenter (not flat).
+
+Every 10 s after the `pace:` lines (ms, mean/p50/p95/p99/max):
+
+- `latency: game, ...: N image(s) handed over; release to the hand-over A (to the first present B, from it to
+  the hand-over C); hand-over to the present hook's return (the present and the hold) D; H released by a
+  headset frame: its choice to the release W, the next choice less the hand-over (min/p1/p5/p50) S, L late`.
+  A is the game's own time for an image, wherever its threads spent it. Held (`H`: the release ended a wait
+  for a headset frame), the image has to be handed over before the next headset frame chooses its image, one
+  display period after the release; S is how much earlier it was, and a late one (S negative) leaves that
+  headset frame without a new image.
+- `latency: headset, ...: N image(s) shown, F by the first headset frame after the hand-over, G later; X never
+  shown, Y not followed; hand-over to xrEndFrame T: before xrWaitFrame, in it, to the choice, the GPU fence,
+  the copy, to xrEndFrame; between two frames' choices I`. The parts add up to T: each counts from the later
+  of the hand-over and the part's start. "Later" is a headset frame in between that showed an older image (its
+  wait for the GPU fence ran out).
+
+`ETERNALVR_TEST_LATENCY_CSV=1` (a rig test) also writes every image's times to `eternalvr-latency-<pid>.csv`
+in the log folder (seconds on the performance counter, -1 for none; `log_s` is the time of the 10 s line the
+image was finished in).
 
 ## Headset refresh rate
 
@@ -1514,7 +1627,7 @@ axis).
 | `ETERNALVR_TEST_MARKER_LOG` | 0 | 1, a rig test: about once a second the HUD's marker projection and view and, for each marker the HUD updates, its world point and where the HUD draws it (`hud-markers: test log:` lines, at most 4000; docs/rig-findings/hud-markers.md); the QA scenario `hud-markers` measures from them; never set by the launcher |
 | `ETERNALVR_UI_CROSSHAIR` | hold | how the game's crosshair (which marks the head's ray) is taken out under hand aim: `hold` holds `hud_reticle_styleOverride 0` at run time (the game's own "no reticle" style; no profile or config field) and clears the centre square of the GUI copy only until it reads back; `mask` clears that square always, which also hides whatever else the game draws there (objective markers, the chainsaw's NO TARGET); head aim keeps the game's crosshair either way, except that `hold` also holds it while a weapon with a scope is zoomed, so no scope ring covers the view (T-136; docs/rig-findings/ui-layer.md, "The crosshair hold") |
 | `ETERNALVR_STEREO_RUNTIME_CVARS` | 1 | 0: do not hold `r_TAASafeMode 1` / `r_antialiasing 0` at run time; with Parallel Eye Rendering its anti-aliasing (`r_antialiasing 1`, or the Off set) is not held either (one `cvars: Parallel Eye Rendering's anti-aliasing is left as the game has it` line) |
-| `ETERNALVR_PACE` | off | `headset`: one image per headset frame, the game's render thread waiting after each pair for the headset's next frame (at most two display periods); the pose lead then defaults on (Frame pacing) |
+| `ETERNALVR_PACE` | off | `headset`: one image per headset frame, the game's render thread waiting after each pair for the headset's next frame (at most two display periods), a game that falls behind let go to run as with `new` until it keeps up (T-194); the pose lead then defaults on (Frame pacing). `new`: the game not held, each headset frame waiting for a new image (New game frames only) |
 | `ETERNALVR_CPU_SAVER` | unset | `name=value;...` held at run time like the stereo set: the cvars of the launcher's texture streaming and CPU Saver items that are on (`launcher/data/cpu-saver.txt`, docs/rig-findings/perf-cpu-cvars.md); a value `<=N` is a cap, written only while the cvar's float value is above N; a cvar the stereo sets hold keeps their value |
 | `ETERNALVR_STEREO_SSDO` | unset (= 1) | 1 or unset: `r_SSDO 1` held at run time under Route S (the launcher passes the player's own value from their config, 1 unless it sets 0). The game turns SSDO off itself after `r_TAASafeMode 1` (0x1C6FCC0), which Route S holds at start-up, so before this every Route S session ran without it and each eye's outer strip read 15 to 20% too bright against a mono reference in shadowed corners. SSDO's own temporal filter runs only with its history per eye (`ETERNALVR_STEREO_SSDO_TAA`), else it stays off (`r_SSDOTemporalAA 0`), so neither eye reads the other's history (with the filter off: sway ghost check, no cross-eye ghost; about +0.5 ms GPU per stereo pair on an RTX 3080 Ti at 2048x2208). 0: held at 0 the same way. Both follow the game's Directional Occlusion setting: a mid hook at its setter's entry (0x1420F20, called by the profile's load, the overall preset and the video menu's apply; level 0 writes `r_SSDO 0`, levels 1 to 6 `r_SSDO 1`) reads the level, and the hold takes it from then on (`cvars: the game's Directional Occlusion setting ran (level 3): r_SSDO 1`, `cvars: r_SSDO held at 0 from now on (the game's Directional Occlusion setting)`; without the setter found, `cvars: r_SSDO is held at its launch value ...`). The knock-on never calls the setter, so it is still written over. A change made in the game's menu during a VR session stays: the launcher's restore keeps the `r_SSDO` the game saves when the status file says `ssdo_follow=1` (the setter ran and per-eye TAA was on; not with anti-aliasing Off, where the knock-on writes 0 on every render against the hold) and the game saved the `ssdo_value` held (left out of the config: its default, 1), else puts it back as before (`LaunchPlan.KeptKeys`, `LayerStatusFile.Followed`). A setter not found in another build (`cvars: r_SSDO is held at its launch value, not at the game's Directional Occlusion setting ...`) leaves `ssdo_follow=0`, so a launch value never sticks in the config. off (rig use; the launcher passes only 0 or 1): held at 0 whatever the game's Directional Occlusion setting (`cvars: r_SSDO held at 0 whatever the game's Directional Occlusion setting (ETERNALVR_STEREO_SSDO=off)`), and the status file keeps `ssdo_follow=0`. Any other value: not held (one `cvars: r_SSDO is left as the game has it` line) |
 | `ETERNALVR_STEREO_SSR` | unset (= 1) | 1 or unset: `r_SSR 1` held while per-eye TAA or per-eye DLSS runs, by its per-tick check and only once its `r_TAASafeMode 0` holds (the launcher passes the player's own value from their config, 1 unless it sets 0, as Reflections Low does; `seq-taa: r_SSR held at 1 (ETERNALVR_STEREO_SSR=1; per-eye TAA; follows the game's Reflections setting)`, `=unset` without the variable); 0: held at 0 the same way. Both follow the game's Reflections setting (0x1421DC0), which writes `r_SSR` with `r_raytracedReflectionsTemporalUpscaleQuality` (Low: `r_SSR 0` with 3; Medium: `r_SSR 1` with 2; High and above: `r_SSR 1` with 1): the forced set holds that quality at 0 (from the command line's `+r_raytracedReflectionsTemporalUpscaleQuality 0`; its default 1 would read as Medium or higher until the profile's load), so the check reads it first on each tick, and a 1 to 3 there means the setting ran since the last tick (the profile's load before the first stereo tick, or the player's apply in the video menu); its `r_SSR` is held from then on (`seq-taa: r_SSR held at 0 from now on (the game's Reflections setting: off, Low)`). The safe mode knock-on writes only `r_SSR 0`, so it is still undone. A config without `r_SSR` cannot tell Low from Medium (both save `r_SSRQuality 0`), so the profile's load decides. off (the launcher's Screen-space reflections Off): held at 0 whatever the game's setting, under Parallel Eye Rendering too (its run-time set). The same knock-on as SSDO: the game writes `r_SSR 0` on every render while `r_TAASafeMode` is not 0 (0x1C6FCC0, 0x1C71630), so before this Route S sessions ran without screen-space reflections. SSR keeps no history of its own; it reads the last frame's colour through the TAA history selector (0x1CBB6C0), which per-eye TAA gives each eye's own (static reading, not rig-checked yet). Not held with per-eye TAA off (`ETERNALVR_STEREO_TAA=0`) or failed closed, where that colour would be shared (`seq-taa: r_SSR is not held: per-eye TAA is off (ETERNALVR_STEREO_TAA=0)` or `... failed closed`, and `seq-taa: r_SSR no longer held: per-eye TAA failed closed` when it fails closed later). A Reflections change made in the game's menu during a VR session stays: the hold follows it, and the launcher's restore keeps the `r_SSR` the game saves when the status file says `ssr_follow=1` (the hold followed the game's setting with per-eye TAA on; `LaunchPlan.KeptKeys`) and the game saved the `ssr_value` held (a key left out of the config counts as its default, 1), else puts it back as before: a launch or knock-on value saved before the follow, as after a crash, is put back. The upscale quality is read and written back to 0 in one step on each tick, apart from the rest of the forced set, so a menu apply landing between the two is not lost. Under Parallel Eye Rendering the layer reads the variable only for off (per-eye TAA is a Route S module); Parallel Eye Rendering does not hold `r_TAASafeMode 1` with its TAA, so the player's `r_SSR` stays there anyway. Any other value: not held (`seq-taa: r_SSR is left as the game has it (ETERNALVR_STEREO_SSR=...)`) |
@@ -1544,7 +1657,12 @@ axis).
 | `ETERNALVR_ALTERNATE_EYES` | 0 | 1: one eye per game tick, eye L then eye R; auto: only while the ticks fall behind the headset (section "Alternate eyes"; `docs/rig-findings/alternate-eye.md`) |
 | `ETERNALVR_FOVEATION` | unset | `subtle`, `balanced`, `aggressive` or `maximum` (the launcher's Foveated rendering, experimental): fixed foveated rendering through `VK_NV_shading_rate_image`, full rate within the region of 30, 24, 18 or 12 degrees around head-forward in each eye, half rate out to 56 degrees from head-forward for every preset, quarter rate outside (`src/vkcore/vrs_nv.cpp`; T-147). Up to 0.1.81 the half-rate region ended 16 degrees past the full-rate one (12 for `maximum`), so the quarter rate started at 24 to 46 degrees and covered the whole bottom and the temporal edge of a Quest 3 eye, where shiny floors showed 4x4 blocks with DLSS; 56 degrees is past those edges (54.3 and 54 degrees), so only the image corners reach quarter rate. A region is the cone of its angle around head-forward (the head's forward, also with canted displays): a rate texel is in it when the view ray of one of its pixels, through that eye's own projection, is within the angle, so a direction in the scene gets the same rate in both eyes (`src/features/foveation/foveation_region.cpp`, T-128). On an asymmetric eye FOV the cone sits off the image's centre, toward the nose and the top, and the image ends sooner there: on Quest 3 (eye L -54/40/44/-54.3 degrees) Balanced's 24 degree full-rate region sits toward eye L's nasal edge, so its reduced-rate band is on the temporal side and at the top and bottom. Up to 0.1.47 each region reached the same fraction of the way to every edge of its own eye's image instead; on that FOV eye L's full-rate region reached about 28 degrees to the left and eye R's about 18, and the eyes shaded the same surface at different rates (dam decals on Reclaimed Earth sharper in eye L). The share of the eye image at each rate is about the same as before (Balanced on the rig's 1188x1281 DLSS render size: 12.9% full, 31.2% half, 55.9% quarter, against 12.9/31.4/55.7; on canted displays about 1% to 3% more is shaded at full or half rate); `vrs: eye N, WxH: ...` logs each target's shares. Each eye's shape (its FOV and its orientation in the head) comes from stereo frames whose eyes pass the plausibility checks, the FOV check of `docs/VR_HEAD_TRACKED.md` among them (`ETERNALVR_FOV_CHECK`); a different shape that holds for 90 frames in a row replaces it and the rate images are made again, at most 8 times in a process (`src/features/foveation/eye_shape_latch.cpp`; `vrs: eye N's shape changed: ...`). Each render pass gets the pattern of the eye of the backend frame it is recorded for, and only where that frame is sure: the backend counter at the pass equals the counter the render-view job read for its render. Every other pass stays full rate. What its command buffer's recording since its `vkBeginCommandBuffer` or its parity (once two recordings in a row agreed two frames apart) would guess is counted, with the recordings a later agreement contradicts and the parity breaks, but not used: those guesses can name the other eye's frame (`src/stereo_seq/pass_frames.hpp`, `src/vkcore/vrs_command_buffers.cpp`; `vrs: render pass frames: ...` every 200,000 passes; on the rig every pass in the map agreed). A pass's eye so comes only from a frame its two counters agree on; with `ETERNALVR_TEST_VRS_PARITY=1` (a rig test) the guesses are used too. On a GPU without `VK_NV_shading_rate_image` (AMD RDNA 2 and later, Intel Arc) the same passes get the same patterns through `VK_KHR_fragment_shading_rate`'s shading rate attachment (`src/vkcore/vrs_khr.cpp`, T-137; rig-checked on an RTX 3080 Ti with `ETERNALVR_TEST_VRS_KHR=1`, not yet on an AMD or Intel GPU); a card with neither logs it and renders normally. Off with Parallel Eye Rendering (one line; "Parallel Eye Rendering", Known limits). Only render targets in the eye's space are foveated: the eye image and any copy of it scaled by one factor down to 1/8 (DLSS's smaller render size, the half size buffers; `src/features/foveation/eye_targets.cpp`); shadow maps and other targets stay full rate. Mono frames (the cinema screen, menus) stay full rate. The game's menus and HUD (render passes into its GUI target, found by the UI layer) stay at full rate too (`src/vkcore/vrs_gui.cpp`); without the UI layer they are foveated like the eye image. A map loaded again (the game's Load Checkpoint, chosen from the pause menu) keeps each eye's pattern: the rate images are not made again (same sizes, same eye shapes) and each pass still takes its eye from its own frame; the rig QA's `foveation-eyes-reload` scenario measures the eye test before and after one. On the rig (2026-10-21, RTX 3080 Ti, Balanced and the eye test, per-eye TAA and DLSS Balanced, three loads of the same map each, a fixed head) each eye measured the same in every stretch as before the first load, within the spread between captures, and a player's headset captures before and after a Load Checkpoint (DLSS Balanced) show 4x4 blocks at both eyes' outer edges and at the bottom and none at the centre in every pair |
 | `ETERNALVR_TEST_DLSS_TWIN_FAIL` | unset | test knob: a count from 1 to 100; eye R's first tries at its own DLSS feature fail without a create (result 0xBAD00000), to exercise the fallback to TAA, the tries after it and the menu's try (`docs/rig-findings/stereo-temporal.md`, Fail closed) |
-| `ETERNALVR_TEST_UNFOCUSED_CAP` | unset | test knob: `0` turns off the hold behind a runtime's menu ("Frame pacing", Behind a runtime's menu) for rig rate measurements: the OpenXR simulator's session is VISIBLE whenever its window is not in front, which otherwise holds every such run to one image per display period. Log: `pace: a runtime menu is over the game; not held (ETERNALVR_TEST_UNFOCUSED_CAP=0, a rig test)` once |
+| `ETERNALVR_TEST_UNFOCUSED_CAP` | unset | test knob: `0` turns off the hold behind a runtime's menu ("Frame pacing", Behind a runtime's menu) for rig rate measurements: the OpenXR simulator's session is VISIBLE whenever its window is not in front, which otherwise holds every such run to one image per display period. The low hold while nobody looks (SYNCHRONIZED, the user not present) stays; the simulator has neither. Log: `pace: a runtime menu is over the game; not held (ETERNALVR_TEST_UNFOCUSED_CAP=0, a rig test)` once |
+| `ETERNALVR_TEST_UNSEEN_VISIBLE` | unset | test knob: `1` takes the session VISIBLE after focus as nobody looking, so the OpenXR simulator (VISIBLE while its window is not the active one, never SYNCHRONIZED, no user presence) drives the low hold ("Frame pacing", While nobody looks) by its window's focus, from the game's first tick on (the start and the map's load run as in every rig run); the rig QA scenario `unseen-hold`. Wins over `ETERNALVR_TEST_UNFOCUSED_CAP=0`. Log: the low hold's lines with the reason `the session is VISIBLE, taken as nobody looking (ETERNALVR_TEST_UNSEEN_VISIBLE=1, a rig test)` |
+| `ETERNALVR_TEST_LATENCY_CSV` | unset | test knob: `1` writes every image's release-to-present times to `eternalvr-latency-<pid>.csv` in the log folder ("Release-to-present timing"); needs CPU timing on |
+| `ETERNALVR_TEST_HOLD_GATE` | unset | test knob: `1` with `ETERNALVR_PACE=headset` (the hold switch) lets a held game go only when more than half of a window's images took longer than a display period from their release to their hand-over ("Frame pacing", Slower PCs; docs/rig-findings/present-latency.md). Log: `pace: the hold lets the game go only when most of its images take longer than a display period ...` once |
+| `ETERNALVR_TEST_LATE_WAIT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` makes a headset frame that begins while the held game is still drawing its image wait for it, within the frame's own time ("Frame pacing", Late images). Log: `pace: held, a headset frame that begins while the game is still drawing its image waits for it ...` once, and every 10 s `pace: last 10 s: N headset frame(s) waited for a late image: ...` |
+| `ETERNALVR_TEST_PACE_REPEAT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` keeps the game held and submits the newest image at every headset frame, as before T-194 ("Frame pacing", Slower PCs), for a rig A/B. Log: `pace: the game is always held and the headset's frames do not wait for a new image (ETERNALVR_TEST_PACE_REPEAT=1, a rig test)` |
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end (under Parallel Eye Rendering once a render frame at its view dispatch), as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |
 | `ETERNALVR_STEREO_SCATTER_TAA` | 1 | the light scattering's temporal filter per eye (`docs/rig-findings/stereo-scatter.md`); 0: the filter held off in stereo |
@@ -1632,7 +1750,8 @@ for one; `window: last 10 s: A acquire(s), average/max ms; C present call(s),
 average/max ms` (the time the driver's acquire and present take); `window: ... present(s) to the window,
 ... of the other eye and ... too soon handed back; display H Hz; ... handed back, ... failed, ... held`;
 `mirror: the window shows left ...`; `pace:` (the headset's cadence and, with `ETERNALVR_PACE=headset`, the
-waits; Frame pacing); `xr: refresh summary:` every 60 s and `xr: display period A -> B ms at T s` at each
+waits; Frame pacing); with CPU timing, `latency: game, ...` and `latency: headset, ...` (each image's way from
+the game's release to `xrEndFrame`; Release-to-present timing); `xr: refresh summary:` every 60 s and `xr: display period A -> B ms at T s` at each
 change (Headset refresh rate); and `cvars:` for every run-time cvar write. Once no game present has come for 5 s or
 more while the headset runs (checked with the rates line), `present: the game has stopped presenting: no game
 present for N s ...` gives the newest failed present result and the images the window gate holds (or that
@@ -1903,7 +2022,10 @@ Always on, any mode (`src/vkcore/stall_watch.*`, `vram_watch.*`; which gaps coun
 more than 50 ms after the previous one is a stall. It counts as in play when the camera hook ran a game
 frame at most 250 ms before the gap began and another during it; menus and loading screens run no game
 frame, so their stalls (a map streaming in, the first frame after a load) are only counted. Without the
-camera hook (cinema mode) every stall counts. Each of the first 30 stalls in play gets one line:
+camera hook (cinema mode) every stall counts. A gap is judged by the game's own time: the time frame pacing
+held the game back on purpose in it (behind a runtime's menu, and the low hold while nobody looks, 125 ms
+an image) is left out, and a line that had any ends with `; frame pacing's hold (X ms) left out of the gap`.
+Each of the first 30 stalls in play gets one line:
 
 `stall: 1043.2 ms between game presents (in play, line 3 of 30); in the gap: our present hook 2.1 ms
 (lock wait 0.0 ms, driver present 1.4 ms), Route S drain 0.0 ms; the game created 12 pipeline(s) in 4
@@ -1940,6 +2062,20 @@ Every 10 s the XR worker also logs `vram: the process uses U MB of local video m
 last 10 s: peak K MB, O of R reading(s) over the budget` (`IDXGIAdapter3::QueryVideoMemoryInfo` on the
 runtime's adapter, which is the game's, read once a second by the worker; Windows counts the whole
 process). Past the budget Windows pages memory out and back in, which stutters.
+
+The launcher reads these lines after each session (`launcher/src/EternalVR.Launcher.Core/VideoMemoryUse.cs`,
+T-227). A window counts as over when most of its readings were. With at least 3 windows and a tenth of them over,
+the status line after the session is a warning and starts (after a crash's own sentence) with how far the peaks went
+past the budget (the median of the over windows) and what to change, from the layer's last complete `game settings:`
+line: Texture Pool Size one step lower unless `is_poolSize` is 1024 (Low), Shadow Quality to High when
+`r_shadowAtlasHeight` is 8192 (Ultra and above), then Resolution on the Play tab (alone when none of those can go
+down). When `r_useRayTracing` is 1, turning Raytracing off comes first and the texture pool's step is counted from
+what the menu shows after it, since the menu's texture pool setter picks `is_poolSize` by ray tracing too. A settings
+line counts only with as many whole entries as the start's `game settings cvars: N of M located` line found (a game
+killed mid-line leaves it short), and a value a later line lacks or could not read keeps the earlier line's. The
+launcher keeps the warning for the status line at its next start (`session_video_memory = over` in `headset.txt`)
+and logs the counts and the settings read in its `session refresh:` line. Without an over-budget session, at 95% of
+the budget or more for half the session it says a headset menu over the game can reset the driver (issue #19).
 
 Cost: four performance-counter reads and a dozen atomic exchanges per present; a map lookup and two counter
 reads per pipeline creation or allocation. The display rate query (Desktop window) and the VRAM reading run

@@ -3,6 +3,7 @@
 #include "vkcore/arm_dump.hpp"
 
 #include "vkcore/log.hpp"
+#include "vkcore/two_hand.hpp"
 #include "vkcore/weapon_mods.hpp"
 
 #include <array>
@@ -206,6 +207,9 @@ void tick(const ArmsTick& arms) {
     SightRowNote sights = sightRowNote(); // as the viewmodel hook last chose it
     r.mods = std::move(sights.mods);
     r.sightRow = std::move(sights.row);
+    if (const std::optional<two_hand::DumpState> two = two_hand::dumpState(); two && g_world.valid) {
+        r.twoHand = arm::DumpTwoHand{two->engaged, two->row, g_world.aim.axis};
+    }
     const arm::DumpArm& right = g_arms[slot(arm::ArmSide::Right)];
     if (right.readPoses) {
         r.weapon = (*right.readPoses)[arm::index(arm::ArmJoint::Attach)];

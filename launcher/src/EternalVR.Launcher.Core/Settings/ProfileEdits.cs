@@ -24,6 +24,7 @@ namespace EternalVR.Launcher.Core.Settings
         {
             ["dlss_dll"] = new[] { "dlss_version", "dlss_preset" },
             ["pace"] = new[] { "frame_pacing" },
+            ["hud"] = new[] { "hud_front", "hud_wrist", "hud_weapon" },
         };
 
         /// <summary>
@@ -35,6 +36,7 @@ namespace EternalVR.Launcher.Core.Settings
         {
             var map = LauncherSettings.ReadMap(s.Serialize());
             foreach (var key in SettingKeys.Machine) map.Remove(key);
+            map.Remove("hud"); // written for an older launcher from the HUD switches, not a setting of its own
             if (saver != null && saver.Items.Count > 0)
             {
                 foreach (var key in map.Keys.Where(k => IsListed(k, saver)).ToList()) map.Remove(key);

@@ -19,7 +19,7 @@ enum class BindingIssueKind : std::uint8_t {
 // Which rule a Conflict breaks (T-106: one unit test per kind).
 enum class BindingConflict : std::uint8_t {
     None,
-    PressWithTapOrHold,  // `press` and `tap`/`hold` on one input: the press fires on every tap and hold.
+    PressWithTapOrHold,  // `press` and `tap`/`hold` on one input, or `down` with `down_tap`/`down_hold`.
     SharedStickRole,     // Both sticks given the same role.
     GestureOffTurnStick, // A stick gesture on a stick that is not the turn stick.
     SharedInput,         // Two OpenXR actions of one set on one physical input (controller_bindings.hpp).

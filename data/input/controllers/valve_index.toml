@@ -4,7 +4,8 @@
 # between controllers keeps the same layout; the differences are in [profile]:
 #   - Index has A and B on both hands, so the left A/B take the X/Y roles (R06 section 4.3).
 #   - Grip reads the squeeze force, not the squeeze value, so a relaxed hand around a strapped
-#     controller does not hold the grip action down.
+#     controller does not hold the grip action down. The off hand's fingers follow the squeeze value
+#     (how far they wrap the handle) through a grip_curl binding the layer adds; none is needed here.
 #   - Index has no Menu button an application can read (System belongs to SteamVR), so the menu
 #     input is a firm press on the left trackpad.
 

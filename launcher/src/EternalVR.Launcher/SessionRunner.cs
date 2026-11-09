@@ -308,8 +308,13 @@ namespace EternalVR.Launcher
                 ctx.RememberSession(summary, id, DateTime.Now, unbound);
             }
             var controlsText = UnboundControls.StatusText(unbound);
-            var summaryText = summary?.Describe();
-            var ratesText = !string.IsNullOrEmpty(summaryText) ? " " + summaryText : rates != null ? " " + rates.Describe() : string.Empty;
+            // Video memory over the budget leads the line, after a crash's own sentence (T-227); the summary's other sentences
+            // follow how the session ended.
+            var lead = summary?.Lead ?? string.Empty;
+            var rest = summary?.Rest();
+            var ratesText = !string.IsNullOrEmpty(summary?.Describe())
+                ? (string.IsNullOrEmpty(rest) ? string.Empty : " " + rest)
+                : rates != null ? " " + rates.Describe() : string.Empty;
             // Whether Parallel Eye Rendering ran, or fell back and why: in the summary's sentences, else (no headset frame
             // logged) said here.
             var parallel = summary?.ParallelEyes ?? ParallelEyesRun.FromLines(layerLines);
@@ -328,9 +333,11 @@ namespace EternalVR.Launcher
                 Log.Warn("each eye rendered at " + cap.Real + ", " + cap.Percent + "% of the planned " + cap.Planned + " (the window's size)");
                 ratesText += " " + cap.Warning();
             }
-            // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended.
+            // A problem shown during the session (a refusal, VR off) stays on screen; otherwise say how it ended. Video memory
+            // over the budget makes it a warning.
             if (lastStatus == null || lastStatus.Kind != StatusKind.Problem)
-                Report(restored && exitText.Length == 0 && !capped && controlsText.Length == 0 && !parallel.FellBack ? StatusKind.Good : StatusKind.Warning, exitText + (restored
+                Report(restored && exitText.Length == 0 && !capped && controlsText.Length == 0 && !parallel.FellBack && lead.Length == 0 ? StatusKind.Good : StatusKind.Warning,
+                    exitText + (lead.Length == 0 ? string.Empty : lead + " ") + (restored
                     ? "The game has exited and your settings were restored."
                     : "The game has exited, but the settings restore is not complete yet; it is retried (see the log).")
                     + (controlsText.Length == 0 ? string.Empty : " " + controlsText) + ratesText);

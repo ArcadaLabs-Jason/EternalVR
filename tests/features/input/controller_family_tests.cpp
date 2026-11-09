@@ -46,3 +46,16 @@ TEST_CASE("controller family: no control map ahead of gameplay before a controll
     CHECK_FALSE(buildControlMapAhead(false, true, false));
     CHECK_FALSE(buildControlMapAhead(false, true, true));
 }
+
+TEST_CASE("controller family: the rig's list of families whose bindings are suggested") {
+    using evr::input::familyListed;
+    for (const char* list : {"", " ", ",", " , "}) {
+        CHECK(familyListed(list, "oculus_touch"));
+    }
+    CHECK(familyListed("valve_index", "valve_index"));
+    CHECK_FALSE(familyListed("valve_index", "oculus_touch"));
+    CHECK(familyListed("htc_vive_wand, valve_index ", "valve_index"));
+    CHECK(familyListed(" valve_index ,pico4", "pico4"));
+    CHECK_FALSE(familyListed("valve_index,pico4", "valve"));
+    CHECK_FALSE(familyListed("valve_index_x", "valve_index"));
+}

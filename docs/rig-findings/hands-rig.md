@@ -1656,3 +1656,367 @@ baseline predates the new arms default): 0 new.
 **Not run**: a headset; glory kills, the hammer and the Berserk's fists with the weapon in the left hand (as section
 16); a level load on this branch (the kept grips are unchanged code); the swim's fists, which get no row (their
 stroke moves the wrist by 6 to 11 cm; section 16).
+
+## 26. The free off hand while the weapon hand moves (offhand-jerk, 2026-11-06, OpenXR-Simulator)
+
+Players' reports (0.1.84, 0.1.87, one on an Index): with the left controller held still and the right hand moving,
+the left glove jerked "like I am moving it", with every gun. The holds of the sections above never move the weapon
+hand between two frames, so they could not show it.
+
+**The record.** `ETERNALVR_TEST_ARM_TICKS=<file>` (`vkcore/arm_ticks.hpp`, rig use only) appends a CSV row per
+camera hook (`W`), viewmodel placement (`V`) and off-hand tick of the player's hands (`L`): the game frame (idHands'
+own once-a-frame check, `vkcore/game_frame.hpp`), the thread, the stamps of the hands snapshot read and of the one
+the placement read came from, the placement, the off hand's grip and the wrist's target, written pose, read-back
+and animated pose. `tmp-vr\rs\offhand-jerk\oj_h1.py` places the wrist read at a frame's off-hand hook by that
+frame's placement (the pairing measured below) against where the controller wanted it; `oj_ticks.py` gives the
+order of the hooks; frames blending with the game's arm are left out.
+
+**The run** (`oj-run.sh`): `e1m2_battle`, god mode, the combat shotgun, mono 1440x1584, the left controller still
+and in view; the right hand steps once per change of the scripted input file (the layer reads it every 10 camera
+frames, about 9 times a second at 88 frames a second): aim yaw 0 and 15 degrees in turn (8 to 12 s), its position
+2 cm forward and back (13 to 17 s), both (18 to 22 s), then a yaw sweep 0 to 30 degrees in 5 degree steps (24 to 30
+s); a 16-frame burst capture in each of the first three (`ETERNALVR_CAPTURE_BURST=16`); `oj_dark.py` follows the
+glove's dark pixels in each burst frame. Each at aim smoothing 0, 0.3 (the default) and 0.75 with controller angles
+-20 / -40 degrees (one player's settings); the arm solve the default `bind`.
+
+**The order of the hooks** (`oj-p1-def2`): the off-hand hook ran first in 4894 of 4895 frames (the hands last placed
+the frame before), the viewmodel hook 0.3 to 0.6 ms after it, the camera hook after both (`LVW` in 4775 frames, `LW`
+in the 110 of the forced view at the start). Both hooks read the same hands snapshot in every frame both ran (4775
+of 4775); the placement the off hand was posed under came from the hands of the frame before (11.1 ms median). The
+hooks run on 8 or 9 worker threads each, one after the other within a frame.
+
+**When the game draws the arm** (`oj-pr2-s0`, a probe build reading the left wrist with GetJointTransforms also at
+the viewmodel and camera hooks; not kept): in 168 of 168 frames in which the written wrist moved, the read at the
+off-hand hook, the viewmodel hook and the camera hook of the frame gave the last frame's write, and only the next
+frame's off-hand hook read the new one. So the skeleton drawn in a frame carries the arm written in the frame
+before and is the one read at that frame's off-hand hook; the frame draws it under its own placement. The captures
+agree (below). The writes land: read-back 0.03 to 0.08 cm from the write in every run, so the blend's share of the
+game's weapon lag (mod_mix.hpp) is not the cause.
+
+**Before** (dev main's arms with the record and the line; frames with the still glove drawn over 1 cm from its
+controller, of those at full weight):
+
+| Aim smoothing | Over 1 cm | 95th percentile | Largest |
+|---|---|---|---|
+| 0 (`oj-p1-s0`) | 312 of 4634 | 2.00 cm | 10.08 cm |
+| 0.3 (`oj-p1-def2`) | 506 of 4739 | 2.90 cm | 9.15 cm |
+| 0.75, angles -20 / -40 (`oj-p1-ply`) | 567 of 4709 | 2.46 cm | 8.11 cm |
+
+The captures at smoothing 0: the glove displaced for two frames at every step of the gun (its pixels' centroid
+moved 13.3 px, 1.3, then 13.8 back; 18.6, 0.3, 18.9), still in between (0.1 to 0.4 px).
+
+**After** (the frame's placement pinned, `vkcore/frame_placement.hpp`; `oj-f1-*`, `oj-f2-s0`):
+
+| Aim smoothing | Over 1 cm | 95th percentile | Largest |
+|---|---|---|---|
+| 0 (`oj-f1-s0`, `oj-f2-s0`) | 156 of 4788, 156 of 4796 | 0.01 cm | 10.08 cm |
+| 0.3 (`oj-f1-def`) | 304 of 4808 | 1.25 cm | 6.84 cm |
+| 0.75, angles -20 / -40 (`oj-f1-ply`) | 317 of 4768 | 1.43 cm | 5.72 cm |
+
+The captures at smoothing 0: the glove displaced for one frame per step (13.2 px and 14.4 back; 18.4 and 18.6),
+still in between. The arm posed under the placement written in its own frame in every frame (0.03 cm at most; the
+hands 0.00 ms apart, from 11 ms). The layer's line in the stepping windows: `drawn from where it was meant ... at
+most 100.8 mm`, `largest step in a frame with the controller still 100.8 mm`; 0.1 mm in the still ones.
+
+So half: the glove of a still off hand moves with the gun for one frame per frame of the weapon hand's motion
+instead of two, by the same amount each frame (in a steady sweep, half the offset). The rest is the game's own
+drawing of the arm a frame after it is written, under the next frame's placement (docs/VR_HANDS_HUD.md, "The arms
+and the gun in one frame"; DECISIONS T-224).
+
+**Where the game builds the skeleton it draws** (probe builds, not kept; `oj-pr3`, `oj-pr4-*`, `oj-pr5`), to write the
+arm there under the drawing frame's own placement:
+
+- The joint-modifier pass (RVA 0x19E1040, called from the animator's frame build at 0x19E8310 on the job threads)
+  runs once a frame for the player's hands, with the hands' modifier list of that frame (the list matched the
+  node's own list pointer in 4558 of 4558 frames, 47 modifiers), after the off-hand and viewmodel hooks: its result
+  is what the next frame's off-hand hook reads and what the next frame draws. In 3860 of 4558 frames it ran before
+  the camera hook of the frame (`LVBW`) and in 698 after it (`LVWB`): the pass 0.42 ms before the camera hook at the
+  median, 1.03 before at the 5th percentile, 1.15 after at the 95th. The camera hook writes the hands the next
+  frame's placement comes from, so in 85% of frames the skeleton of the next frame is built before those hands
+  exist.
+- After the pass nothing the layer can reach moves the drawn arm: every joint of the animator's joint buffer
+  (`[animator + 0x380]`, the one GetJointTransforms reads, which alternates between two arrays from frame to frame)
+  moved up 10 cm right after the viewmodel hook placed the model moved the gun (its attach joint is read from there
+  later) and not the gloves; the same on `[animator + 0x378]` moved nothing. No other copy of the wrist's joint
+  matrix or its translation lay within 16 KiB of any pointer in the first 2 KiB of the render model or the animator,
+  nor one pointer further (3 scans): the skinning's joints go somewhere the layer does not see, built with the pass.
+- Holding the pass for the camera hook would block a job thread on another thread's view setup, which may itself
+  wait on the entities' updates: not tried.
+
+So there is no point after the camera hook and before the arm's skeleton is built in most frames: the rest of the
+offset cannot be taken away there (DECISIONS T-224).
+
+**The off arm solved under a predicted placement, tried and not kept** (`oj-c-*`, aim smoothing 0, a build with
+it and the same code without it). The free off hand was solved under the arms model's placement extrapolated one
+frame at a constant velocity from the last two pinned placements (the turn and the move, each held to 25 degrees
+and 8 cm a frame, none after a jump of 60 degrees or 30 cm, a gap over 50 ms or a skipped frame); the gun kept the
+pinned placement. Frames with the still glove drawn over 1 cm off, of those at full weight:
+
+| Input | Pin only | Predicted |
+|---|---|---|
+| The steps above (`oj-run.sh`) | 156 of 4692, largest 10.08 cm | 310 of 4678, largest 11.38 cm |
+| Sweeps (`SCHED=sweep`: `right.sweep = 30, 0.25, 8`, up to 754 degrees a second; `20, 0.5, 4`; `30, 0.25, 8`) | 426 of 4726, 95th percentile 2.68 cm, largest 8.91 cm | 228 of 4769, 0.96 cm, 5.63 cm |
+| The frame after a sweep stops at full speed (`oj_stops.py`, 2 stops each) | 0.01 cm | 1.61 and 4.55 cm |
+
+Better in a sweep, worse at every step (the step's frame as before, then a frame of overshoot) and worse where a
+sweep stops (a frame of overshoot by the last frame's motion, where the pin is still at once): not kept. The
+sweep's own motion is uneven on the rig (0.2 to 12.6 degrees from one frame to the next within a sweep, the camera
+hook's times varying), as a real hand's would be too.
+
+**Nothing else moves** (aim smoothing 0.3, this branch against dev main's arms with the record): the Heavy Cannon
+(given and the shotgun taken at the start, `oj-reg-hc` / `oj-regm-hc`): frames over 1 cm 338 of 4771 against 535 of
+4735, the largest 9.1 cm against 9.4; `ETERNALVR_ARM_SOLVE=animated` (`oj-reg-anim` / `oj-regm-anim`): the same
+on both, the read wrist 20.8 cm from the written one at the median in every frame (the animated solve's change
+applied to the pose without modifiers, mod_mix.hpp; the layer's line now shows it); the weapon in the left hand
+(`oj-reg-left` / `oj-regm-left`): the same log lines on both, the grips read and kept, no refusal but the start's.
+
+**The viewmodel hook's own placement every frame, the pin checked** (`oj-d-*`; the first version wrote the pin,
+which on a switch's first frame put the old item's rows on the new gun). The viewmodel hook places the model as it
+did before the pin and checks the pin against it (`frame placement: last 10 s:`):
+
+- Two weapon switches during the steps (the Heavy Cannon given, the shotgun taken, and back; `oj-d-sw`, aim
+  smoothing 0): 4431 of 4433 frames the same, 1 frame per switch from another held item (the off-hand hook still
+  knows the item the viewmodel hook read the frame before; 9.4 cm apart); frames with the still glove over 1 cm
+  off 246 of 4646, the largest 11.7 cm (a switch's own step of the placement).
+- Aim smoothing 0.3, no switch (`oj-d-def`): 4390 of 4390 the same; 302 of 4755 over 1 cm, the largest 7.8 cm, as
+  the pinned build before (304 to 308, 6.8 cm).
+- The weapon in the left hand, one switch (`oj-d-left`): 46 frames from the left glove moving on the gun, all in the
+  first 20 s while the grips are read and the glove settles after each raise (0.2 to 0.5 mm apart, 16.9 mm once), 1
+  from the switch, then none (2609 of 2609 the same); no refusal but the start's.
+- The hooks ran on different job threads in 3309 of 4683 frames (the viewmodel hook's held-item caches are under a
+  lock now).
+
+**Not run**: a headset; the guns but the combat shotgun and the Heavy Cannon (the placement is the same code for
+all); the right glove's offset with the weapon in the left hand (the record follows the left arm only); continuous
+hand motion (the scripted input
+moves in steps; a sweep's offset follows from the per-frame motion).
+
+## 27. Two-handed aim (feature step 5, 2026-10-24, OpenXR-Simulator)
+
+Two-handed aim behind its own toggle (`ETERNALVR_TWO_HAND`, docs/VR_HANDS_HUD.md "Two-handed aim"; DECISIONS
+T-156 to T-158). Evidence: rig (the simulator and the scripted input), Steam build 25216728; not a headset.
+
+**The support points** (`[two_hand]` in `data/weapons/viewmodel_offsets.toml`), from dumps already on the rig PC:
+the grip sweep's neutral holds (the weapon controller at yaw, pitch and roll 0, the last 0.75 s of each hold), per
+line the game's left wrist under its left attach joint as animated, placed on the gun's root (the weapon arm's
+attach joint as read), the off hand's default wrist offset undone (the grip's centre 8 cm along the wrist's
+fingers and 3.5 cm toward its palm), less the weapon controller's grip, in the controller's aim frame (forward
+along the aim, up the world's up at roll 0). The median per gun:
+
+| Gun | Row (forward, left, up), m | From the grip | From the aim | `ab-b-gripd` against `ab-c-gripd` | Left-handed (`ab-d-leftyd`), reflected, against the row |
+|---|---|---|---|---|---|
+| combat shotgun | 0.296, 0.006, 0.057 | 30.1 cm | 11.0 deg | 0.1 cm | 0.6 cm |
+| super shotgun | 0.287, 0.004, 0.048 | 29.1 cm | 9.5 deg | 0.0 cm | 0.5 cm |
+| Heavy Cannon | 0.388, -0.003, 0.014 | 38.8 cm | 2.1 deg | 1.3 cm (its idle sway: 2.8 cm within a run) | 2.2 cm |
+| Plasma Rifle | 0.756, -0.015, 0.093 | 76.2 cm | 7.1 deg | 0.1 cm | 0.1 cm |
+| Rocket Launcher | 0.163, 0.003, -0.004 | 16.3 cm | 1.8 deg | 0.0 cm | 0.3 cm |
+| Ballista | 0.224, 0.011, 0.068 | 23.4 cm | 17.1 deg | 0.1 cm | 0.3 cm |
+| BFG | 0.319, 0.002, 0.050 | 32.3 cm | 8.9 deg | 0.0 cm | 0.2 cm |
+| Unmaykr | 0.307, -0.003, 0.007 | 30.7 cm | 1.4 deg | 0.0 cm | 0.2 cm |
+
+The bind run of the same day (`ab-b-grip`) gives the same points to 0.1 cm on every gun, so the read does not
+depend on the solve. Every row is within 1.5 cm of the gun's middle: grip centres, not wrists. The line
+between the two wrists instead runs 15 degrees to the left of the combat shotgun's barrel (each wrist sits on its
+own side of the gun), which is why the rows go between the grips. The left-handed column is the sweep with the
+game's off hand, whose right glove holds the game's left grip reflected: the right wrist with the right hand's
+wrist offset undone, less the left controller's grip, in its aim frame, against the row with its left negated.
+The Chaingun's left hand holds a handle on its side: 10 cm forward, 37 cm left and 10 cm above the weapon
+glove's grip, 75 degrees off the barrel; no row (T-156). Scripts: `tmp-vr\rs\twohand\support.py` and
+`support2.py`.
+
+**The sweep** (`tmp-vr\rs\twohand\two-sweep.ps1`, the hand-pose sweep's run: e1m1_intro, the combat shotgun, a
+controls file without the left trigger's and grip's presses so a squeeze fires nothing; `-Lefty` mirrors every hold
+onto the other hands with `ETERNALVR_HANDEDNESS=left` and leaves out the right trigger's and grip's presses too).
+The new arms (`ETERNALVR_OFFHAND=free`, `ETERNALVR_ARM_SOLVE=bind`) and `ETERNALVR_TWO_HAND=1`; sixteen 1.5 s holds,
+the positions from the shotgun's row (`make_two_poses.py`): `free-near` (the off hand 3.6 cm from the support
+point, the grip not held), `free-far` (12 cm off, the grip held), `two-a` to `two-f` (held: 3.6 cm off; moved 5.8
+cm while held; the weapon hand turned 20 degrees left and 10 down; turned 15 right, 15 up and rolled 30; slid 12
+cm along the gun), `rel-grip-1` to `-3` (the grip let go), `rel-slide` (slid 22 cm along, past the release radius),
+`free-back` (back to 12 cm with the grip still held: not taken again), and two lead-ins that let go far away.
+
+**The checker** (`tmp-vr\rs\twohand\check_two.py`), per hold on its last 0.75 s: `held` (the dump's `two.held` on
+every line of a held hold, on none of the others); `glove` (the off glove's wrist as written from the game's own
+grip of the fore-end, recomputed from the dump: the left wrist under its attach joint as animated, placed on the
+gun's root; within 10 mm, the reach check's limit); `line` (the angle between the gun's support line, the row in
+the dumped aim axis, and the line between the controllers' grips; within 0.25 degrees, the sights check's limit;
+the gun's forward against that line is reported); `one` (the free and released holds: the aim on the weapon
+controller's pointing within 0.25 degrees); and from the layer log's trace, every release: the frame before
+held and turned, the release frame and the two after it 0.000 degrees from the weapon hand's aim, a release by the
+grip reading the grip below 0.40 in that frame (the release check before the review's ease; the eases' check is
+below). A self-test on made-up holds built from a real dump line
+(`selftest_two.py`: the bind run's shotgun neutral line): the good hold and release pass; the glove 3 cm off, the
+support line 2 cm off the hands' line, a held flag missing, a turned one-handed aim, a release two frames late and
+no release traced each fail.
+
+**Results** (the branch's Release, Steam build 25216728; every run 16 of 16 holds, about 257 dump lines):
+
+| Run | | Result |
+|---|---|---|
+| `th2-on` | before the glove's reach fix | the aim, the held flags and the four releases pass; the glove FAILS in all seven held holds, 15 to 27 cm from the support point while its target was on it to 0.02 mm: the off arm's IK clamped (reach 1.28 to 1.46: the shotgun's fore-end 0.80 m from the head-fixed shoulder, the arm 0.74 m), so the glove stayed where the game animates it. Fixed by holding the glove on the support point wherever it is, as the weapon arm's glove on its grip (the shoulder moved along the line) |
+| `th4-on` | the new arms, `ETERNALVR_TWO_HAND=1` | TWO-HAND PASS: the glove 0.00 to 0.01 mm from the game's grip of the fore-end in all seven held holds (its target too); the support line 0.00 degrees from the hands' line, the barrel 10.96 degrees from it (the shotgun's own angle); the free and released holds' aim 0.00 degrees from the weapon controller's pointing, `free-back` (12 cm off with the grip held) not taken again; four releases (three by the grip, one past the release radius), each frame before turned 2.7 to 7.8 degrees, the release frame and the two after it 0.000 degrees, the grip 0.00 in the release frame |
+| `th4-fault` | the same with `ETERNALVR_TEST_ARM_FAULT=two_hand` (positive control) | TWO-HAND FAIL 11/18: the glove 156 to 291 mm off in all seven held holds, the support line 1.36 to 3.88 degrees off the hands' line in all seven, every release still turned 1.36 to 3.88 degrees in its release frame and the two after it |
+| `th4-lefty` | the same, `-Lefty` (`ETERNALVR_HANDEDNESS=left`) | TWO-HAND PASS: the right glove 0.01 to 0.02 mm from the game's left grip reflected, the support line 0.00 degrees, the releases as `th4-on` |
+| `th4-def` | the default hands sweep (the toggle off) | 0 regressions against the baseline; the roll-R+150 known-bistable warns only |
+| `th4-hands` | hands only (`ETERNALVR_ARMS=hands`) with `ETERNALVR_TWO_HAND=1` | TWO-HAND PASS: the glove 0.00 to 0.01 mm, the line 0.00 degrees, the releases as `th4-on`; the captures show the glove alone on the shotgun's fore-end |
+| `th4-bindon` | the hands sweep with the new arms and the toggle on (its holds press no grip) | 0 regressions against the baseline; one known-bistable warn (reach-L-across035's left wrist flips, 13 at its limit), as `e-bind` (section 20) |
+
+Captures (both eyes) in `tmp-vr\rs\hands\runs\<run>\captures` on the rig PC, for `two-a` to `two-f`, `rel-grip-1` and
+`free-near`. In `th4-on` the off forearm reaches across to the shotgun's fore-end with the glove under the gun,
+mostly hidden behind it from these eyes; the upper arm, pulled forward along the line for the reach, shows large
+in front of the eye. In `th4-lefty` the right sleeve's edge shows as a flat flap in front of the right eye in
+`two-a`. The sweep's holds keep the weapon hand 0.40 m ahead of the head, so the fore-end is further than a
+two-handed hold usually puts it; how the shoulder end looks in a headset at a natural hold is open.
+
+**Unit and launcher tests, and their positive control** (`tmp-vr\rs\twohand\th-ctl.sh` with `ctl.py`: the code the
+new tests cover put back to the behaviour without the feature, the test executables deleted so they relink):
+`two_hand_tests.cpp` 12 of its 13 cases fail (the one that passes checks that a hand on the support point changes
+nothing, which no feature also does), `two_hand_rows_tests.cpp` 2 of 2, the dump line's `two` case 1 of 1; the
+launcher's `TwoHandTests` 8 of 8 cases fail, with the settings UX default rule and two of the profile-edit tests.
+With the feature: evr_input, evr_game_eternal and evr_arm tests pass on both presets; the launcher 1175 of 1175.
+
+**After the review (2026-10-24): the ease, the fresh squeeze, the resets, the death gate.** The turn now eases in
+and out over 70 ms, a hold starts only on a squeeze made at the support point with the hands 12 cm apart, and the
+gate closes on the player's `isDead`. `check_two.py` was changed to match: every grab must reach the hold's full
+turn (to 0.001 degrees) within 70 ms (15 ms margin) and never pass it, every release must never turn back toward
+the line and be back on the weapon hand (0.000 degrees) within the same time, staying there; the trace line gives
+the hold's full turn beside the turn applied. Its self-test (`selftest_two.py`, 14 cases) fails a grab that only
+gets half way, a grab or release eased over 220 ms, a release that keeps a half turn for 9, 20 or 40 frames and one
+that turns back.
+
+| Run | | Result |
+|---|---|---|
+| `th5-on` / `th6-on` | the new arms, `ETERNALVR_TWO_HAND=1` (before and after the death gate) | TWO-HAND PASS: glove and line as `th4-on`; four grabs on the hold's turn 61 to 69 ms after the grab frame (3.8 to 6.7 degrees), four releases back on the weapon hand 60 to 69 ms after the release frame, every step toward it; `free-back` (the grip still held from `rel-slide`) not taken |
+| `th5-fault` / `th6-fault` | the same with the planted fault (now: half the turn while held, kept 20 frames after a release with no ease) | TWO-HAND FAIL 15/22: the glove and the line in all seven held holds, all four grabs never on the hold's turn, all four releases back 221 to 236 ms after the release |
+| `th5-lefty` / `th6-lefty` | the same, `-Lefty` | TWO-HAND PASS: glove 0.00 to 0.02 mm, line 0.00 degrees; grabs on the hold 60 to 70 ms, releases back 56 to 70 ms |
+| `th5-def` / `th6-def` | the default hands sweep (the toggle off) | 0 regressions against the baseline; the roll-R+150 known-bistable warns only |
+| `th5-death`, `th5b-death`, `th5c-death`, `th5d-death` | a grab held through 12 holds, with `kill` (and `damage 1000`, `hurt 1000`, `health 0`, `kill player1`) in the debug schedule mid-hold (`two-sweep.ps1 -Death`) | the player did not die at the sweep's spot in the intro map (with and without `god` before; no gate change, the captures show the gun still held), so the death gate is unit tested only; the hold itself ran through all 12 holds with no stray release |
+
+Unit tests (`two_hand_hold_tests.cpp`, 9 cases): the eases' ends exactly on the hold's aim and on the weapon
+hand's, a grab during the release's ease without a jump, the hover at 9.5 to 10.5 cm on the Rocket Launcher's row
+letting go once and never taking it again, no hold-back where a hold cannot start, a grip held through a closed
+gate or into the radius taking nothing, the reset, inputs that are not numbers. With three planted changes (the
+ease restarting from no turn, no 12 cm start line, the fresh squeeze not cleared) 6 of the 9 fail.
+
+**Not run**: a headset (everything about feel: the radii, the turn at a grab and its ease, jitter of two tracked
+hands, the upper arm's look at the reach); a death during a hold (above); other guns than the combat shotgun on the rig (their rows come from the grip
+sweeps' dumps, not from a two-handed hold); a weapon switch, melee or glory kill during a hold (the gate is unit
+tested and logged); the Flame Belch held back near the gun (the rig's controls file has no left grip binding;
+the mapper's support grip is unit tested).
+
+## 28. Two-handed aim, round 2: along the gun, every gun, the events, the line's noise (2026-10-30, OpenXR-Simulator)
+
+The round-1 review's open items and the rig items section 27 left (DECISIONS T-195 to T-197). Evidence: rig (the
+simulator and the scripted input), Steam build 25216728, and the owner's headset frame tables for the one-handed
+jitter; not a headset.
+
+**The upper arm in front of the eye, from section 27's dumps.** `check_two2.py` (below) on `th6-on`: the off arm's
+shoulder, from where the head-fixed anchor puts it (-0.08 forward, 0.18 left, -0.24 up from the eye, the eye taken
+from the off hand's rest holds), moved 15 to 27 cm in the seven held holds, 14 to 24 cm of it ahead, so the upper arm
+came forward past the eye; with the off hand at the same spot one-handed (`free-near`) it did not move (the arm
+stretched to 0.55 m, shoulder to wrist, and the glove stopped short of the controller). The sweep's weapon hand was
+0.40 m ahead of the head, which put the shotgun's fore-end 0.87 m from that shoulder: further than a person reaches
+holding the grip there too. So the look came from where the sweep held the gun, and the arm reaches the held gun by
+moving its shoulder as far as the grip is beyond it.
+
+**The sweep** (`tmp-vr\rs\twohand2\two2-sweep.ps1` with the steps of `make_steps.py`; `th2-chain.sh` runs it under
+the shared rig lock, not elevated): e1m1_intro with `give all`, the new arms, `ETERNALVR_TWO_HAND=1`,
+Aim steadiness at the default Medium (`ETERNALVR_AIM_SMOOTHING=0.3`, where section 27's sweeps had 0), the
+off-hand trace, the arm dump, the frame table, both eyes captured every 30 frames and one pair kept per hold. The
+controls file is the built-in Touch data with a touch tap per weapon slot, and keeps the Flame Belch on the left
+grip. The weapon hand at a natural two-handed spot: 0.12 m right, 0.32 m below and 0.22 m ahead of the head,
+pointing ahead. Per gun with a row (slot taps 1 to 6 and 8 twice): the off hand at its rest; on the gun's support
+line 30 cm along it (or at the support point, the shorter guns), 2 cm aside, not squeezed (`near`, the free off hand
+there); squeezed there (`two`); moved 3 cm left and 2 cm down (`steer`); slid back along the held line to 16 cm
+from the weapon hand (`slide`); let go (`rel`); and for the rows longer than 31 cm (Heavy Cannon, Plasma Rifle, BFG)
+the same at the support point itself (`front`). The Chaingun: squeezed in front of it, nothing held. On the combat
+shotgun also: the grip squeezed 12 cm off the gun's line (`fb-far`: its Flame Belch must fire), a hold during which
+the slot 5 touch switches to the super shotgun (`ev-switch`) and the grip stays held for 3 s after (`ev-sw-after`),
+a fresh squeeze on the super shotgun, a melee (right stick click) during that hold with the same 3 s after, and the
+noise holds: both hands' poses with 0.1 mm per axis and 0.042 degrees about each axis of Gaussian noise every frame
+(`left.noise` / `right.noise`; 0.042 degrees per axis is the 0.06 degrees of the owner's tracked one-handed aim,
+below), one-handed for 3 s and two-handed for 3 s, on the combat shotgun and the Rocket Launcher.
+
+**The checker** (`check_two2.py`), per hold on its last 0.75 s: `held` (the dump's `two.held` on every line of a held
+hold and the held item the gun's; on none of the others); `glove` (the off glove's wrist as written against the
+game's own grip of the support point moved along the hands' line to the off hand, `gloveSlide`, within 10 mm);
+`line` (the gun's support line on the controllers' line within 0.25 degrees); `one` (free and released holds: the
+aim on the weapon controller within 0.25 degrees); from the layer log: every grab on the hold's turn within 70 ms
+(+15) and never past it, every release back on the weapon hand within the same and never turning back; the Flame
+Belch action at least once in `fb-far` and never in a held hold; a let-go with the gate closed between each event's
+tap and the end of the 3 s after it, and nothing held at the end; from the frame table, the noise: the aim as used
+in 100 ms still windows after the hold's first second (RMS off the window's linear trend, as
+`tools/frames/aim_jitter.py`), one-handed against the aim as tracked (the filter's ratio r1), two-handed against the
+jitter the noise gives an unsmoothed line (2 sigma / L, times sqrt(7/9) for the window's linear fit), which must be
+at most max(0.6, 1.3 r1); and, reported only, the off arm's look (the eye to the upper arm and the forearm, how far
+the shoulder moved, the shoulder to the wrist). Self-test on section 27's `th6-on`: the glove check fails the three
+holds there whose off hand was short of the support point (24 to 38 mm: round 1's glove stayed on the fore-end).
+
+**Results** (the branch's Release, Steam build 25216728; `tmp-vr\rs\hands\runs\<run>` on the rig PC, the checker's
+output beside it as `two2.txt`):
+
+| Run | | Result |
+|---|---|---|
+| `r2a-on` | the new arms, `ETERNALVR_TWO_HAND=1`, Aim steadiness Medium | TWO2 PASS (5 holds skipped, below): 80 holds; every held hold of the eight guns raised held, the glove 0.00 to 0.02 mm from the game's grip of the support point moved to the hand, the support line 0.00 degrees from the hands' line; the Plasma Rifle taken 30 cm along its line (46 cm short of its support point) and slid back to 16 cm (60 cm short), the glove on the hand both times; the Heavy Cannon, the Plasma Rifle and the BFG also at their support points; free and released holds on the weapon controller (0.00 to 0.02 degrees); the Chaingun's squeeze held nothing and fired its Flame Belch; 16 grabs on the hold within the ease, 16 releases back on the weapon hand within it and never turning back; `fb-far` fired the Flame Belch once and no held hold fired it; the weapon switch and the melee each let go with the gate closed, the grip still held 3 s after took nothing, and a fresh squeeze took the super shotgun; the noise (below) |
+| `r2a-lfault` | the same with `ETERNALVR_TEST_ARM_FAULT=two_hand_line` (the line unsmoothed: positive control of the noise check) | TWO2 FAIL 2/116: the two noise holds and nothing else |
+| `r2a-fault` | the same with `ETERNALVR_TEST_ARM_FAULT=two_hand` (positive control of the glove, line and ease checks) | TWO2 FAIL 59/116: the glove 39 to 373 mm off in all 27 held holds, the support line 0.75 to 3.88 degrees off the hands' line in all 27, all 16 grabs never on the hold's turn and all 16 releases still turned 87 to 97 ms after (the noise, the events and the Flame Belch pass, as they should: the fault is in the turn, the glove and the release) |
+| `r2a-lefty` | the same left-handed | TWO2 PASS (the Unmaykr's 5 holds skipped): the right glove 0.01 to 1.55 mm from the game's left grip reflected and moved to the hand, the line 0.00 degrees, 16 grabs and 16 releases within the ease, the switch, the melee and the Flame Belch as `r2a-on`, the noise 0.18 and 0.19 of the line's (one-handed 0.17, 0.20) |
+| `r2a-death` | e1m2_battle, a grab held through the debug schedule's `kill` | not run: the release's QA held the rig for the rest of the day (the death gate stays unit tested, as in section 27) |
+| `r2a-def` | the default hands sweep (the toggle off) | HANDS-RIG: 0 regressions against the baseline; one known-bistable warn (reach-L-across035's left wrist flips, 13 at its limit) |
+
+The five skipped holds are the Unmaykr's: the second slot 8 press kept the BFG in both full runs (the grip sweeps of
+section 18 reached the Unmaykr from another gun), so its row has no held hold on the rig yet; the checker reports a
+hold whose gun the game did not raise and does not count it. One grab in a first full run (`r2a-on`'s BFG) reached
+its turn 126 ms after the grab frame because no frame came between 34 and 126 ms (another agent's build ran on the PC);
+the ease check now judges every frame later than 85 ms, not the first frame on the hold, and the planted fault of
+section 27 (`th6-fault`) still fails all four grabs and releases under it.
+
+**The line's noise.** With both hands' poses given 0.1 mm per axis and 0.042 degrees about each axis of noise every
+frame, at Aim steadiness Medium:
+
+| Hold | Aim as tracked | Aim as used | Against |
+|---|---|---|---|
+| combat shotgun, one-handed (`r2a-on`, `r2a-lfault`) | 0.048, 0.050 deg | 0.0085, 0.0091 deg | 0.18 of the tracked |
+| Rocket Launcher's spot, one-handed | 0.051, 0.046 deg | 0.0079, 0.0092 deg | 0.16, 0.20 of the tracked |
+| combat shotgun, two-handed (30.1 cm line) | 0.052 deg | 0.0059 deg; unsmoothed (`r2a-lfault`) 0.0311 | 0.17 of the line's 0.0336 deg (2 sigma / L); unsmoothed 0.92 |
+| Rocket Launcher, two-handed (16.4 cm line) | 0.048 deg | 0.0116 deg; unsmoothed 0.0558 | 0.19 of the line's 0.0615 deg; unsmoothed 0.91 |
+
+The unsmoothed line measured within 10% of 2 sigma / L, and smoothed it is cut as much as the one-handed aim is (to
+0.16 to 0.20 on this white noise; the owner's real tracked aim was cut to about half, docs/rig-findings/aim-jitter.md,
+because tremor is slower than the noise scripted here). Two hands' grips with this noise jitter the Rocket
+Launcher's line as much as the tracked one-handed aim; whether a headset's grips jitter that much is open (the frame
+table's `aim_two_handed` column measures it from a session).
+
+**The off arm's look** (`look` in `two2.txt`; the shoulder moved from its head-fixed place, cm): at the natural
+holds the shoulder moved 0 to 6.5 cm on every gun (0 for the Rocket Launcher and the Ballista, whose grips are within
+the arm's reach; 3 to 6.5 for the others), and 0 once slid back; the eye 28.7 to 31.0 cm from the upper arm, against
+26.9 to 30.9 for the free off hand one-handed at the same spot. Only the support points beyond an arm's reach moved it
+far: the Heavy Cannon's 13.8, the BFG's 7.2, the Plasma Rifle's 48.8 (76 cm ahead of the weapon hand, which only the
+rig's hands reach). Section 27's holds moved it 15 to 27 cm. The captures (both eyes, every hold, `r2a-on\captures`)
+show the off forearm reaching from below to the glove on the gun and the upper arm out of view at the natural holds.
+Left-handed (`r2a-lefty`) the right arm's shoulder moved 1 to 5 cm at the natural holds (11.6 and 46.7 at the Heavy Cannon's and the Plasma Rifle's support points), and the captures of the natural holds show no sleeve flap: the forearm comes up from below to the glove, as the free off hand's does one-handed at the same spot (`shotgun-near`). Section 27's flap in front of the right eye (`th4-lefty`, `two-a`) showed in its one-handed `free-near` hold at the same far spot too: it is how the free off hand's sleeve looks reaching that far across, not something two-handed aim adds.
+
+**Unit tests and their positive control** (`th2-ctl.sh` with `ctl2.py` on a freshly linked Debug test binary:
+origin/vr-preview's logic put back: the capture a sphere of 8 cm round the support point, the release 16 cm either
+side of it, the held aim built from the smoothed one-handed aim with no filter, no glove slide, no scripted noise,
+the line fault not parsed): 9 of the 29 two-handed and noise cases fail (capture along the gun, the 15 degree cap, the
+slide back, the glove slide, the still hold's smoothing, the moving line's lag, the held aim built from the tracked
+aim, the line fault's name, the scripted noise); the 20 that pass are round 1's, the helper `onGun` and the filter's
+restart at each grab, which hold on either code. With the change: evr_input_tests 859 of 859 (Debug), every test
+binary on both presets, the launcher 1171 of 1171, clang-tidy 0 new findings.
+
+**Again on main** (2026-11-07, the two-hand-r3 branch: round 1 and round 2 on main's newer arms, the same Steam
+build 25216728; the sweep and the checker as above, from `tmp-vrs	wohand3`, the runs as `r3a-*`):
+
+| Run | Result |
+|---|---|
+| `r3a-on` | TWO2 PASS (the Unmaykr's 5 holds skipped, as before): the glove 0.00 to 0.02 mm, the line 0.00 degrees, 16 grabs and 16 releases within the ease, the Flame Belch in `fb-far` and `chaingun-two` only, the switch and the melee let go; the noise 0.15 (combat shotgun) and 0.20 (Rocket Launcher) of the line's, one-handed 0.19 and 0.19 |
+| `r3a-fault` | TWO2 FAIL 61/116: the glove 37.5 to 302 mm off in all 27 held holds, the line 0.75 to 3.88 degrees off in all 27, all 16 grabs and all 16 releases; and two released holds (`nz-shotgun-rel` 1.87 degrees, `plasma_rifle-frel` 0.75) whose last 0.75 s still had the fault's 20 frames of half turn (`r2a-fault` had 59) |
+| `r3a-lfault` | TWO2 FAIL 2/116: the two noise holds only (1.11 and 1.00 of the line's) |
+| `r3a-lefty` | TWO2 PASS (the Unmaykr skipped): the right glove 0.01 to 1.36 mm, the line 0.00 degrees, 16 grabs and 16 releases, the events and the Flame Belch as `r3a-on`, the noise 0.19 and 0.17 |
+| `r3a-death`, `r3a-death2`, `r3a-death3` | not judged: the debug schedule's `kill` never killed the player. One `kill` in e1m2_battle, five 4 s apart there, and nine 3 s apart in e1m1_intro after `god` was turned off again: no death screen and no checkpoint load in any, the hold held through them and was let go by the grip at the end. The e1m2 load spawns an extra lives layer (`extralives_many`; the rig plays from a 100% save), and each `kill` seems to take an extra life instead (not proven). The death gate stays unit tested |
+| `r3a-def` | HANDS-RIG: 0 regressions against the baseline (2026-11-06) and no known-bistable warn; its verdict line (FAIL 72/72, every pose on the right arm's reach check) is the baseline's own and that of the other default runs on main since |
+
+**Not run**: a headset (the feel of taking the gun along its front, the glove on the barrel, real two-handed jitter
+at Medium, the arm reaching across to the gun); the Unmaykr's hold (above); a glory kill during a hold (needs a
+staggered demon: the gate's forced view is the same one a melee lunge closes, unit tested); a death during a hold
+(the schedule's `kill` does not kill the rig's player, above).

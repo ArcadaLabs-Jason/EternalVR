@@ -1,4 +1,4 @@
-// The XR worker's wait for a new image under ETERNALVR_PACE=new (new_frame_wait.hpp).
+// The XR worker's wait for a new image under ETERNALVR_PACE=new and headset (new_frame_wait.hpp).
 
 #include "vkcore/new_frame_wait.hpp"
 
@@ -75,6 +75,12 @@ void wait(const std::atomic<std::uint64_t>& latest, double periodSeconds, const 
     g_counters.longestSeconds = std::max(g_counters.longestSeconds, took);
     ++(got ? g_counters.waited : g_counters.timedOut);
     g_begun = latest.load(std::memory_order_acquire) >> 2;
+}
+
+void waitPublished(double seconds) {
+    if (const HANDLE e = event(); e && seconds > 0.0) {
+        WaitForSingleObject(e, static_cast<DWORD>(std::max(1.0, std::ceil(seconds * 1000.0))));
+    }
 }
 
 void logSummary() {

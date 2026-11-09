@@ -113,10 +113,16 @@ void installGameHooks();
 void setRoomFromLocal(const Pose& roomFromLocal);
 
 // The weapon hand's aim ray at a game view's pose time, in LOCAL: as tracked, and as the gun, the shots
-// and the reticle use it (smoothed, features/input/aim_smoothing.hpp).
+// and the reticle use it (smoothed, features/input/aim_smoothing.hpp). With it, for the frame log, the off
+// hand at the same time in LOCAL while tracked: its grip (the pose the free off hand's wrist follows; the aim
+// ray's without a grip pose) and its aim ray (the grip's without one).
 struct WeaponAim {
     Pose tracked;
     Pose used;
+    bool offValid = false;
+    Pose offGrip;
+    Pose offAim;
+    bool twoHanded = false; // `used` is two-handed aim's (held, or easing in or out; two_hand.hpp)
 };
 
 // Camera hook, once per game frame after the head pose is known: the controllers at the same time, and

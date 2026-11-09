@@ -23,12 +23,12 @@ constexpr std::string_view kThumbRestLeaf = "/input/thumbrest/touch";
 constexpr std::string_view kStickTouchLeaf = "/input/thumbstick/touch";
 constexpr std::string_view kTrackpadTouchLeaf = "/input/trackpad/touch";
 constexpr std::string_view kTriggerTouchLeaf = "/input/trigger/touch";
+constexpr std::string_view kSqueezeValueLeaf = "/input/squeeze/value";
 constexpr std::string_view kFrameProfile = "/interaction_profiles/valve/frame_controller_valve";
 
-bool pathFree(const ControllerData& data, Hand hand, const std::string& path) {
+bool pathFree(const ControllerData& data, Hand hand, const std::string& path, XrActionKind kind) {
     return std::ranges::none_of(data.suggested, [&](const SuggestedBinding& b) {
-        return b.hand == hand &&
-               bindingsOverlap(b.path, xrAction(b.action).kind, path, XrActionKind::Boolean);
+        return b.hand == hand && bindingsOverlap(b.path, xrAction(b.action).kind, path, kind);
     });
 }
 
@@ -60,12 +60,13 @@ bool tryAdd(ControllerData& data,
             XrActionId action,
             Hand hand,
             const std::optional<std::string>& leaf) {
+    const XrActionKind kind = xrAction(action).kind;
     if (!leaf || data.find(action, hand) || !profileHasPath(profile, hand, *leaf) ||
-        !pathSuitsAction(profile, hand, *leaf, XrActionKind::Boolean)) {
+        !pathSuitsAction(profile, hand, *leaf, kind)) {
         return false;
     }
     const std::string path = std::string(handPath(hand)) + *leaf;
-    if (!pathFree(data, hand, path)) {
+    if (!pathFree(data, hand, path, kind)) {
         return false;
     }
     data.suggested.push_back({action, hand, path});
@@ -170,14 +171,17 @@ std::size_t addBoundTouchBindings(ControllerData& data) {
     return added;
 }
 
-std::size_t addTriggerTouchBindings(ControllerData& data) {
+namespace {
+
+// Adds `leaf` as `action` on both hands where tryAdd allows it: the fingers' bindings.
+std::size_t addOnBothHands(ControllerData& data, XrActionId action, std::string_view leaf) {
     const InteractionProfileInfo* profile = findInteractionProfile(data.profilePath);
     if (!profile) {
         return 0;
     }
     std::size_t added = 0;
     for (const Hand hand : {Hand::Left, Hand::Right}) {
-        if (tryAdd(data, *profile, XrActionId::TriggerTouch, hand, std::string(kTriggerTouchLeaf))) {
+        if (tryAdd(data, *profile, action, hand, std::string(leaf))) {
             ++added;
         }
     }
@@ -185,6 +189,16 @@ std::size_t addTriggerTouchBindings(ControllerData& data) {
         sortSuggested(data);
     }
     return added;
+}
+
+} // namespace
+
+std::size_t addTriggerTouchBindings(ControllerData& data) {
+    return addOnBothHands(data, XrActionId::TriggerTouch, kTriggerTouchLeaf);
+}
+
+std::size_t addGripCurlBindings(ControllerData& data) {
+    return addOnBothHands(data, XrActionId::GripCurl, kSqueezeValueLeaf);
 }
 
 ControllerData withoutRestTouch(ControllerData data) {
@@ -255,10 +269,11 @@ ControllerData withoutTouchButtons(ControllerData data) {
     return data;
 }
 
-ControllerData withoutTriggerTouch(ControllerData data) {
+ControllerData withoutFingerBindings(ControllerData data) {
     // The predicate reads the maps only, which the erase leaves alone.
     std::erase_if(data.suggested, [&](const SuggestedBinding& b) {
-        return b.action == XrActionId::TriggerTouch && !boundAsButton(data, b.action, b.hand);
+        return b.action == XrActionId::GripCurl ||
+               (b.action == XrActionId::TriggerTouch && !boundAsButton(data, b.action, b.hand));
     });
     return data;
 }
@@ -278,8 +293,8 @@ std::vector<TouchRetryStep> touchRetries(const ControllerData& data) {
             steps.push_back({retry, std::move(candidate)});
         }
     };
-    const ControllerData fingersOff = withoutTriggerTouch(data);
-    add(TouchRetry::WithoutTriggerTouch, fingersOff);
+    const ControllerData fingersOff = withoutFingerBindings(data);
+    add(TouchRetry::WithoutFingers, fingersOff);
     add(TouchRetry::WithoutVeto, withoutVetoTouch(fingersOff));
     add(TouchRetry::WithoutTouchButtons, withoutTouchButtons(fingersOff));
     add(TouchRetry::WithoutRestTouch, withoutRestTouch(fingersOff));

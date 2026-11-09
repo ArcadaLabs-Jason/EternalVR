@@ -8,13 +8,31 @@
 
 # Seconds on the schedule's clock: the pause menu opens at $script:QaReloadMenuAt, the schedule loads the map again at
 # $script:QaReloadAt (Load Checkpoint is chosen from that menu in the game). Each stretch is long enough for
-# $script:QaEyeMinPairs captures every $script:QaEyeCaptureEvery pairs (49 pairs in 40 s on the rig).
-$script:QaReloadMenuAt = 45
-$script:QaReloadAt = 47
+# $script:QaEyeMinPairs captures every $script:QaEyeCaptureEvery pairs (49 pairs in 40 s on the rig). The timeline
+# starts only once launch-ht.ps1 returns, which waits for the game's audio session: up to 104 s after the launch on
+# the rig, while the schedule's clock can start 25 s after it, so the pause comes at 110 s (45 s missed it once).
+$script:QaReloadMenuAt = 110
+$script:QaReloadAt = 112
 $script:QaReloadSettle = 8
 $script:QaReloadAfter = 45
 # A checkpoint in play (e1m2's start opens a menu after its load, which the eye test cannot measure).
 $script:QaReloadMap = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+
+# Waits until $Seconds on the schedule's clock: the layer's log start plus the log time of the line that starts the
+# clock. The timeline itself starts some seconds into the schedule (4 to 19 s on the rig), so counting from it put
+# the pause after the map load. $false when that moment has already passed or the log has no clock yet.
+function Wait-QaScheduleSeconds($Ctx, [double]$Seconds) {
+    $text = Get-QaLogText $Ctx
+    $start = [regex]::Match($text, 'log start (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+) local')
+    $clock = [regex]::Match($text, '(?m)^\[\s*([\d.]+)\][^\r\n]*the schedule''s clock starts')
+    if (-not $start.Success -or -not $clock.Success) { return $false }
+    $at = [datetime]::ParseExact($start.Groups[1].Value, 'yyyy-MM-dd HH:mm:ss.fff', $null).AddSeconds(
+        [double]::Parse($clock.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture) + $Seconds)
+    $left = ($at - (Get-Date)).TotalSeconds
+    if ($left -lt 0) { return $false }
+    Wait-QaSeconds $Ctx $left
+    return $true
+}
 
 $foveationScenarios = @(
     @{
@@ -28,7 +46,9 @@ $foveationScenarios = @(
         Input = $script:QaRestPose
         Timeline = {
             param($c)
-            Wait-QaSeconds $c ($script:QaReloadMenuAt - 0.5)
+            if (-not (Wait-QaScheduleSeconds $c ($script:QaReloadMenuAt - 0.5))) {
+                Add-QaNote $c 'the timeline started after the pause was due on the schedule''s clock'; return
+            }
             $c.ReloadBefore = Get-Date
             Write-QaInput $c ($script:QaRestPose + 'left.menu = 1'); Wait-QaSeconds $c 0.3
             Write-QaInput $c $script:QaRestPose
@@ -47,6 +67,12 @@ $foveationScenarios = @(
             Test-QaPresent $c "eye test: eye L's left half and eye R's right half at 4x4"
             Test-QaPresent $c "eye R's DLSS feature for the game's feature"
             Test-QaCount $c "mp guard: map load 'game/sp/e1m3_cult/e1m3_cult' (single-player)" 2
+            # The map is loaded from the pause menu: the pause comes before the schedule's map command.
+            $text = Get-QaLogText $c
+            $pause = [regex]::Match($text, 'controllers: action pause')
+            $load = [regex]::Match($text, 'debug-commands: [\d.]+ s: map ')
+            Add-QaResult $c 'the pause menu was up before the map load' ($pause.Success -and $load.Success -and $pause.Index -lt $load.Index) `
+                $(if (-not $pause.Success) { 'no pause' } elseif (-not $load.Success) { 'no map load' } elseif ($pause.Index -gt $load.Index) { 'the pause came after the map load' } else { '' })
             if ($c.ReloadBefore -and $c.ReloadAfter) {
                 Test-QaEyeTestHalves $c $null $c.ReloadBefore 'before the map load'
                 Test-QaEyeTestHalves $c $c.ReloadAfter $null 'after the map load'

@@ -56,7 +56,12 @@
 // [trigger_finger]: the guns whose index finger follows the trigger (features/arm/trigger_finger.hpp), each
 // with its lift: the share, 0 to 1, the index finger opens from the game's grip toward straight while it is
 // off the trigger. Same key rules, no "default": an item without a row (the Crucible, the fists, the
-// chainsaw, the hammer) keeps the game's finger. There is no file IO here.
+// chainsaw, the hammer) keeps the game's finger.
+//
+// [two_hand]: the off glove's grip on the gun for two-handed aim (features/input/two_hand.hpp): [forward,
+// left, up], metres in the weapon controller's aim frame from its grip, where the game's own idle holds the
+// gun's fore-end or shroud with the off hand (the weapon in the right hand; reflected for the left). Same key
+// rules, no "default": an item without a row takes no support grip. There is no file IO here.
 
 #include <array>
 #include <map>
@@ -136,6 +141,7 @@ struct WeaponOffsetTable {
     std::map<std::string, LeftOffHand, std::less<>> leftOffHands;
     std::map<std::string, std::array<float, 3>, std::less<>> leftHandWrists;
     std::map<std::string, float, std::less<>> triggerLifts;
+    std::map<std::string, std::array<float, 3>, std::less<>> twoHand;
     std::vector<std::string> issues; // one line per problem, with its line number
 
     [[nodiscard]] bool ok() const { return issues.empty(); }
@@ -158,13 +164,16 @@ struct WeaponOffsetTable {
     [[nodiscard]] std::optional<std::array<float, 3>> lookupLeftHandWrist(std::string_view declName) const;
     // The [trigger_finger] row's lift for `declName`, or nullopt for an item without one (rules above).
     [[nodiscard]] std::optional<float> lookupTriggerLift(std::string_view declName) const;
+    // The [two_hand] row for `declName` (metres, the weapon hand's aim frame), or nullopt for an item that
+    // takes no support grip (rules above).
+    [[nodiscard]] std::optional<std::array<float, 3>> lookupTwoHand(std::string_view declName) const;
 };
 
 // Reads the table. Lines with problems are reported and skipped; the rest are kept. Offsets must be three
 // or six finite numbers, translations within 2 m and angles within 180 degrees; sights two angles within
 // 45 degrees; right grips a quoted grip name ("heavy_cannon"), alone or first in a list with three numbers
-// within 1 m; left-handed off hands "controller"; left-hand wrists three finite numbers within 2 m; trigger
-// fingers one number from 0 to 1.
+// within 1 m; left-handed off hands "controller"; left-hand wrists and two-hand rows three finite numbers
+// within 2 m; trigger fingers one number from 0 to 1.
 WeaponOffsetTable parseWeaponOffsets(std::string_view text);
 
 // The built-in table's text (data/weapons/viewmodel_offsets.toml).

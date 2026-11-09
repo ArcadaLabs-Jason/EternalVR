@@ -169,6 +169,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     XrSessionState sessionState = XR_SESSION_STATE_UNKNOWN;
     bool sessionRunning = false;
     ClockWatchState clock; // presenter_types.hpp
+    ViewerState viewer;    // presenter_types.hpp
     XrLossState loss;      // presenter_types.hpp
     std::int64_t acquiredIndex = -1;
     bool acquiredWaited = false;
@@ -192,8 +193,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     bool shownHasView = false;
     FrameLogEyes frameLogEyes;   // the frames table's eye and repeat columns (presenter_types.hpp)
     tracking::FovWatch fovWatch; // the headset's FOV, read again during the session (presenter_fov.cpp)
-    bool loggedFirstProjection = false;
-    bool loggedGuardCinema = false; // XR worker only
+    bool loggedFirstProjection = false, loggedGuardCinema = false; // XR worker only
     XrViewConfigurationType viewConfig = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
     std::FILE* frameLog = nullptr;
     xr_math::DisplayLead displayLead; // worker only (ETERNALVR_POSE_LEAD)

@@ -63,6 +63,11 @@ enum class XrActionId : std::uint8_t {
     ThumbstickTouch,
     TrackpadTouch,
     TriggerTouch,
+    // How far the fingers wrap the grip, for the off hand's fingers (features/arm/hand_pose.hpp): the
+    // squeeze's value where the grip action reads something else (the Index's force), so the fingers close
+    // without the squeeze that presses the grip. No built-in data suggests it; rest_touch_bindings.hpp adds
+    // it.
+    GripCurl,
     Count,
 };
 

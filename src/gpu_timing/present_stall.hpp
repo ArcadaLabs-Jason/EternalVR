@@ -7,7 +7,9 @@
 // the game's ticks (the camera hook runs once per game frame in play, never in menus or on loading
 // screens) a stall counts as in play only if a tick came shortly before it began and another during it
 // (the frame that ends it). Without ticks every stall is logged. The first kStallLinesLogged stalls in
-// play get a line each; later ones are only counted, so a bad session cannot flood the log.
+// play get a line each; later ones are only counted, so a bad session cannot flood the log. A gap is judged
+// by the game's own time in it: the time the layer held the game back on purpose after a present (frame
+// pacing's hold behind a runtime's menu or while nobody can see the frames, T-228) is left out.
 
 #include <cstdint>
 #include <string>
@@ -24,7 +26,11 @@ struct PresentGap {
     bool ticksKnown = false;      // the layer sees the game's ticks (the camera hook is installed)
     double tickAgeAtStartMs = -1; // from the last tick to the gap's start; negative: no tick yet
     bool tickDuring = false;      // a tick came during the gap
+    double heldMs = 0.0;          // the part of the gap the layer held the game back on purpose
 };
+
+// The gap without the layer's hold (never below 0).
+double ownGapMs(const PresentGap& gap);
 
 enum class StallVerdict : std::uint8_t {
     None,        // not a stall

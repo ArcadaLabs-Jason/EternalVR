@@ -132,7 +132,66 @@ function Test-QaHandCutCaptures($Ctx, [switch]$Large) {
     }
 }
 
+# The in-headset capture (left Menu held, then a trigger), then the text it wrote: what the head-locked HUD
+# was composed of.
+function Invoke-QaHudCapture($Ctx) {
+    Write-QaInput $Ctx @('left.menu = 1'); Wait-QaSeconds $Ctx 0.3
+    Write-QaInput $Ctx @('left.menu = 1', 'left.trigger = 1'); Wait-QaSeconds $Ctx 0.3
+    Write-QaInput $Ctx @(); Wait-QaSeconds $Ctx 3
+}
+
+function Get-QaHudCaptureText($Ctx) {
+    $dir = Join-Path $Ctx.LogsDir 'captures'
+    $txt = @(Get-ChildItem -LiteralPath $dir -Filter 'capture-*.txt' -ErrorAction SilentlyContinue) | Select-Object -Last 1
+    if ($txt) { return Read-QaShared $txt.FullName }
+    return ''
+}
+
 $hudScenarios = @(
+    @{
+        Name = 'hud-front-wrist'; Kind = 'game'
+        Proves = 'The HUD in front kept with the wrist HUD on (launcher: HUD in front of you and HUD on your wrist both ticked): the start-up line says in front on, the corner blocks are measured for the wrist, and the head-locked HUD stays whole (the in-headset capture: one piece, nothing cut for the hand HUD)'
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        Env = @('ETERNALVR_HUD=wrist', 'ETERNALVR_HUD_FRONT=1')
+        UiCaptures = 10
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 14
+            Save-QaXrShot $c 'both'
+            Invoke-QaHudCapture $c
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'ui: HUD wrist (corner blocks on the off hand''s wrist), in front on;'
+            Test-QaPresent $c 'HUD cuts the corner blocks where the game drew them'
+            Test-QaAbsent $c 'equipment are hidden'
+            $text = Get-QaHudCaptureText $c
+            Add-QaResult $c 'the head-locked HUD stays whole with the wrist HUD on' ($text -match 'hud as composed.*; 1 piece\(s\):' -and $text -notmatch 'cut for the hand HUD') ''
+        }
+    },
+    @{
+        Name = 'hud-hidden'; Kind = 'game'
+        Proves = 'The HUD in front off with no hand HUD: the log says the readouts are hidden, the corner blocks are still measured, and the head-locked HUD is cut round them (the in-headset capture: more than one piece)'
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        Env = @('ETERNALVR_HUD=panel', 'ETERNALVR_HUD_FRONT=0')
+        UiCaptures = 10
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 14
+            Save-QaXrShot $c 'hidden'
+            Invoke-QaHudCapture $c
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'ui: HUD panel, in front off (health, armor, ammo and equipment are hidden);'
+            Test-QaAbsent $c 'ui: HUD marker swapchain'
+            Test-QaPresent $c 'HUD cuts the corner blocks where the game drew them'
+            $text = Get-QaHudCaptureText $c
+            Add-QaResult $c 'the head-locked HUD is cut round the hidden blocks' ($text -match 'hud as composed.*; ([2-9]|\d\d+) piece\(s\):') ''
+        }
+    },
     @{
         Name = 'hand-hud-large'; Kind = 'game'
         Proves = 'In VR the game''s HUD Scale is held at Large (swf_anchorProfile 2) and stays out of profile.bin (the profile check); on the wrist HUD the corner blocks of the Large HUD (the extra lives row, the equipment row) are cut where the game drew them: in the last GUI captures no drawn shape lies across a cut''s edge; an in-headset capture names the cuts'

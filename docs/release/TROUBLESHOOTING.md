@@ -184,8 +184,9 @@ went without a new frame, and what took the time meanwhile (the mod's own work, 
 or allocating video memory, or the game saving a checkpoint). A freeze of about half a second right after a
 fight or before a cutscene whose line ends with `the game saved a checkpoint in the gap` is the game's own
 autosave (`KNOWN-ISSUES.md`). Every 10 s a `vram:` line shows how much video memory the game uses against
-what Windows allows it; past 100% Windows moves memory out and back, which stutters (lower "Resolution" on
-the Play tab, or close other programs that use the graphics card).
+what Windows allows it; past 100% Windows moves memory out and back, which stutters (a lower Texture Pool Size
+in the game's video settings, or close other programs that use the graphics card; see "The launcher says the
+game went over the video memory" below).
 
 **The game froze for good (music still playing, the headset on the last picture).** Send an Export report
 (it holds the newest 5 sessions). When the game stops drawing new frames in play for 5
@@ -218,11 +219,23 @@ until it can. If you set SteamVR's per-game throttling or forced Motion Smoothin
 at half the rate all the time. Virtual Desktop's SSW set to Always does the same. A refresh rate that changed
 during play is said too ("The headset ran at 144 Hz, and at 90 Hz for about 2 minutes").
 
-**The launcher says the game used more video memory than your graphics card had free.** Each eye's images, at a
-high "Resolution", and the game's ray tracing all take video memory; past what Windows gives the game, it slows
-down and the runtime throttles it. The mod's log has a `vram:` line every 10 s with the use against that budget,
-and the launcher says so after the session when it was over for a tenth of the session or more. Lower
-"Resolution" on the Play tab, or turn ray tracing off in the game's settings.
+**The launcher says the game went over the video memory Windows gives it.** VR renders two images at your
+headset's resolution, so it needs more video memory than flat, and the settings you play flat with can be too much
+on a card with 12 GB or less. Past what Windows gives the game, Windows moves memory out to the PC's own memory and
+back, which stutters, and running out can crash the game. The mod's log has a `vram:` line every 10 s with the use
+against that budget. When the game was over it for a tenth of the session or more, the launcher's status line after
+the session is orange and starts with how far over it went and what to change, from the settings the session ran
+with (when the game crashed, the crash's own sentence comes first): "The game went about 220 MB over the 6.6 GB of
+video memory Windows gives it for 93% of the session, which can make it stutter or crash: in the game's video
+settings set Texture Pool Size one step lower and Shadow Quality to High; if this shows again after your next
+session, lower Resolution on the Play tab." It names Texture Pool Size unless it is at Low already, Shadow Quality
+when it is Ultra or above (those have a shadow map twice as tall as High's), and Raytracing when it is on. With
+ray tracing on it says to turn it off first and then set Texture Pool Size one step lower than it shows after that:
+the game picks the texture pool by ray tracing too, so turning ray tracing off can raise it (at Ultra Nightmare from
+4096 to 4608). The same sentence leads the status line when the launcher next starts. Change one step at a time and
+play again: the launcher measures every session, and the sentence goes away once the game fits. A player with an
+8 GB card has had few problems since he set Texture Pool Size two steps lower and Shadow Quality one step lower. The
+launcher never changes these settings itself.
 
 **Moving things look less smooth than in other VR games.** When the game draws more frames than your headset
 shows (say 140 a second on a 90 Hz headset) and each headset frame shows the newest one, the world, your gun

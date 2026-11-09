@@ -44,6 +44,8 @@ namespace EternalVR.Launcher
         public LauncherSettings ActiveProfileSaved { get; private set; }
         /// <summary>A profile rename is still not finished after this start's try (<see cref="ProfileRename"/>): the window holds the profile strip.</summary>
         public bool RenameUnfinished { get; private set; }
+        /// <summary>The one-time notice of this start's reset of the old Index hand angles (<see cref="IndexAngleMigration"/>); null for none.</summary>
+        public string IndexAngleNotice { get; private set; }
         /// <summary>The headset as the last runtime probe that answered read it (<see cref="LastHeadset"/>); its limits are null before the first.</summary>
         public HeadsetFacts Headset { get; private set; } = new HeadsetFacts();
         /// <summary>The headset SteamVR last saw (steamvr.vrsettings), read at start, at each probe and after each session; null when none.</summary>
@@ -79,6 +81,7 @@ namespace EternalVR.Launcher
             if (!options.FinishSession)
             {
                 ctx.FinishProfileRename();
+                ctx.ResetOldIndexAngles();
                 ctx.TakeActiveProfile();
             }
             ctx.Headset = LastHeadset.Read(ctx.Paths.HeadsetFile);
@@ -96,6 +99,30 @@ namespace EternalVR.Launcher
         {
             var rename = new ProfileRename(new ProfileStore(Paths.Profiles), ControlSets);
             RenameUnfinished = rename.FinishAtStart(Settings, () => Settings.Save(Paths.SettingsFile), Log.Info, Log.Warn);
+        }
+
+        /// <summary>
+        /// The one-time reset of 0.1.87's Index hand angles (<see cref="IndexAngleMigration"/>), before the active profile is
+        /// read: launcher.ini is saved when its angles were reset, and the window shows <see cref="IndexAngleNotice"/>.
+        /// </summary>
+        private void ResetOldIndexAngles()
+        {
+            var result = IndexAngleMigration.Run(Settings, new ProfileStore(Paths.Profiles), Data.CpuSaver, Log.Warn);
+            if (!result.Ran) return;
+            if (result.LauncherIni)
+            {
+                try { Settings.Save(Paths.SettingsFile); }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is SettingsException)
+                {
+                    Log.Warn("launcher.ini with the hand angles reset could not be saved: " + e.Message);
+                }
+            }
+            Log.Info("Index hand angles: " + (result.AnyReset
+                ? "0.1.87's -20 / -40 set back to 0 in " + (result.LauncherIni ? "launcher.ini" : string.Empty)
+                    + (result.LauncherIni && result.Profiles.Count > 0 ? " and " : string.Empty)
+                    + (result.Profiles.Count > 0 ? "profile(s) " + string.Join(", ", result.Profiles) : string.Empty)
+                : "nothing to reset") + "; not checked again");
+            IndexAngleNotice = IndexAngleMigration.Notice(result);
         }
 
         /// <summary>

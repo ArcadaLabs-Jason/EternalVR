@@ -1,6 +1,6 @@
 // Motion controllers at the camera hook (controllers.hpp): the hands at the time the head was predicted for,
-// and the weapon hand's aim smoothing (features/input/aim_smoothing.hpp), so the gun, the shots and the
-// reticle share one ray.
+// the weapon hand's aim smoothing (features/input/aim_smoothing.hpp) and two-handed aim (two_hand.hpp), so
+// the gun, the shots and the reticle share one ray.
 
 #include "vkcore/controllers_impl.hpp"
 
@@ -8,8 +8,11 @@
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/gamepad_mode.hpp"
+#include "vkcore/two_hand.hpp"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -18,14 +21,15 @@ namespace evr::vkcore::controllers {
 
 namespace {
 
+Pose roomFromLocalOf(State& s) {
+    std::lock_guard lock(s.roomMutex);
+    return s.roomFromLocal;
+}
+
 // Smooths the weapon hand's aim orientation in LOCAL (a recenter changes room space, not the hand), and
 // returns the ray as tracked and as used, both in LOCAL.
 WeaponAim smoothWeaponAim(State& s, XrTime poseTime, Pose& roomAim) {
-    Pose roomFromLocal;
-    {
-        std::lock_guard lock(s.roomMutex);
-        roomFromLocal = s.roomFromLocal;
-    }
+    const Pose roomFromLocal = roomFromLocalOf(s);
     WeaponAim aim;
     aim.tracked = compose(inverse(roomFromLocal), roomAim);
     aim.used = aim.tracked;
@@ -53,17 +57,21 @@ std::optional<WeaponAim> beginGameView(
             noteBhapticsFrame(player);
             notePilotedDemon(isPilotedDemon(player, s.player));
         }
+        two_hand::reset("no controllers");
         return std::nullopt;
     }
     updateForcedView(player, cutscene, cameraAnimation, wallClimb);
     noteBhapticsFrame(player);
     refreshTestInput();
     GameViewPoses poses;
+    std::array<input::ControllerFit, 2> fits{};
     {
         std::shared_lock lock(s.xrMutex);
         if (!s.attached.load()) {
+            two_hand::reset("no controllers");
             return std::nullopt;
         }
+        fits = s.xr.fits;
         // Each hand's positions through their guards (pose_guards.hpp), as at the worker's sync.
         using pose_guards::Slot;
         for (std::size_t i = 0; i < 2; ++i) {
@@ -74,13 +82,18 @@ std::optional<WeaponAim> beginGameView(
         }
     }
     if (const auto test = testInput()) {
+        static std::uint64_t noiseFrame = 0; // the scripted hands' noise, new every frame (camera hook only)
+        ++noiseFrame;
         for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
-            if (const auto pose = input::testHandPose(*test, hand, headTracking.position)) {
+            if (const auto pose =
+                    input::testHandPose(*test, hand, headTracking.position, qpcToSeconds(nowQpc()))) {
                 const auto i = static_cast<std::size_t>(hand);
                 poses.aimValid[i] = poses.gripValid[i] = true;
-                // The controller angle, which the runtime gives the hand spaces (controller_tilt.hpp).
-                const float tilt = input::controllerTiltDegrees(settings(), hand, weaponHand());
-                poses.aim[i] = poses.grip[i] = compose(*pose, input::controllerTilt(tilt));
+                // The fit and the controller angle, which the runtime gives the hand spaces
+                // (controller_tilt.hpp).
+                poses.aim[i] = poses.grip[i] = input::testHandNoise(
+                    *test, hand, input::scriptedHandPose(*pose, fits[i], settings(), hand, weaponHand()),
+                    noiseFrame);
             }
         }
     }
@@ -90,9 +103,19 @@ std::optional<WeaponAim> beginGameView(
     const auto hand = static_cast<std::size_t>(weaponHand());
     if (activeAim() == input::AimSource::Hand && poses.aimValid[hand]) {
         weapon = smoothWeaponAim(s, poseTime, poses.aim[hand]);
+        // The off hand as endGameView takes it (its grip, else its aim ray), for the frame log.
+        const std::size_t off = 1 - hand;
+        weapon->offValid = poses.gripValid[off] || poses.aimValid[off];
+        if (weapon->offValid) {
+            const Pose localFromRoom = inverse(roomFromLocalOf(s));
+            weapon->offGrip = compose(localFromRoom, poses.gripValid[off] ? poses.grip[off] : poses.aim[off]);
+            weapon->offAim = compose(localFromRoom, poses.aimValid[off] ? poses.aim[off] : poses.grip[off]);
+        }
     } else if (s.aimFilter) {
         s.aimFilter->reset();
     }
+    // The off hand on the gun's support point turns that ray to the line between the hands (two_hand.hpp).
+    two_hand::aim(s, player, poses, weapon);
     poses.valid = true;
     poses.head = headTracking;
     std::lock_guard viewLock(s.viewMutex);

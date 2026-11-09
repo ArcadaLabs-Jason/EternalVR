@@ -30,6 +30,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <string>
 
 namespace evr::input {
@@ -113,11 +114,12 @@ struct MapperContext {
     // Yaw of the game's view in the tracking space, in radians (horizontalYaw convention). Under
     // decoupled aim this is the weapon's aim yaw (R13 section 6.1).
     float viewYawRadians = 0.0f;
-    // True while the off hand holds the weapon's fore-grip for two-handed aiming. Its grip bindings
-    // are suppressed meanwhile, and until that grip is next released, which is how the off-hand grip
-    // can mean "support" near the weapon and its bound action away from it (R06 section 4.1). Nothing
-    // sets it yet: no support grip is detected.
-    bool supportHandOnWeapon = false;
+    // The hand holding the weapon's fore-grip for two-handed aiming, or within reach of it with two-handed
+    // aim able to hold (vkcore/two_hand.hpp, the off hand of the hand the gun is in), so a grip pressed there
+    // never fires its binding. Its grip bindings are suppressed meanwhile, and until that grip is next
+    // released, which is how the off-hand grip can mean "support" near the weapon and its bound action away
+    // from it (R06 section 4.1).
+    std::optional<Hand> supportHandOnWeapon;
     // A menu holds the controllers' gameplay input back this frame (the caller drops the actions). The
     // mapper still reads every input, for the menu's own uses of it (the pause, the capture, a popup's
     // keys); one still held when the hold ends stays out of gameplay until it is let go
@@ -146,7 +148,8 @@ public:
     // An input held through the end of a menu's hold is still kept out of gameplay.
     [[nodiscard]] bool heldFromMenu() const { return menuRelease_.anyLatched(); }
     // The turn stick as the last update read it: centred while it is held from a menu, while the thumb-rest
-    // wheel holds it, or with no turn stick.
+    // wheel holds it, or with no turn stick; on a stick split by direction (stick_directions.hpp), whenever
+    // its sweep is not a turn.
     [[nodiscard]] Axis2 turnStick() const { return turnStickRead_; }
     [[nodiscard]] const RestWheel& restWheel() const { return restWheel_; }
     // The thumb rest of `hand` read like a button (counted for the log whether bound or not).

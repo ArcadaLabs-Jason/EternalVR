@@ -21,9 +21,15 @@
 // Off (the default) nothing waits; the counters still run, so the 10 s `pace:` line shows the cadence the
 // headset got either way.
 //
-// Behind a runtime's menu (setUnfocused, pace_policy.hpp's UnfocusedCap) the same present hook holds the game
-// to one image per display period on its own clock, whether pacing is on or off.
+// Behind a runtime's menu (setBackgroundHold, pace_policy.hpp's UnfocusedCap) the same present hook holds the
+// game to one image per display period on its own clock, whether pacing is on or off; while nobody can see
+// the frames (features/pacing/unseen_hold.hpp, T-228) to a few images a second. Either wait ends at once when
+// the hold changes. Held low, the hold switch decides nothing and the headset's frames do not wait for new
+// images.
 
+#include "features/pacing/unseen_hold.hpp"
+
+#include <atomic>
 #include <cstdint>
 
 namespace evr::vkcore::frame_pacing {
@@ -32,28 +38,45 @@ namespace evr::vkcore::frame_pacing {
 // True for headset.
 bool configure();
 
-// ETERNALVR_PACE=new (after configure): the game is not held; the XR worker begins each headset frame only
-// once a new image has been handed over (presenter's waitForNewImage), so each image is submitted once.
+// ETERNALVR_PACE=new, or headset while the game is let go (T-194; read at each headset frame, it can change):
+// the XR worker begins each headset frame only once a new image has been handed over (presenter's
+// waitForNewImage), so each image is submitted once. Never while the game is held low.
 bool newFramesOnly();
 
 // Presenter, under its lock: an image was handed to the XR worker.
 void onHandOver();
 
 // XR worker, once per headset frame it renders, when it chooses the newest image: the headset began a frame
-// with this display period (nanoseconds).
-void onHeadsetFrame(std::int64_t periodNs);
+// with this display period (nanoseconds); its xrWaitFrame returned at `frameStartQpc`
+// (QueryPerformanceCounter) after `waitFrameMs` (release-to-present timing, present_latency.hpp, notes the
+// choice first).
+void onHeadsetFrame(std::int64_t periodNs, long long frameStartQpc, double waitFrameMs);
+
+// XR worker, right before xrEndFrame (release-to-present timing).
+void beforeEndFrame();
+
+// XR worker, when a headset frame begins (before updateImage chooses), its xrWaitFrame having returned at
+// `frameStartQpc` (QueryPerformanceCounter): held, waits for the image the game is still drawing, within the
+// frame's own time (features/pacing/late_image.hpp; ETERNALVR_TEST_LATE_WAIT=1, a rig test); at once
+// otherwise. Returns `latest` (the presenter's newest image, timeline value << 2 | slot) as read after it.
+std::uint64_t awaitLateImage(const std::atomic<std::uint64_t>& latest,
+                             long long frameStartQpc,
+                             const std::atomic<bool>& stop);
 
 // XR worker, after xrEndFrame: the frame showed game frame `seq` (0: none) `lateNs` after the time its pose
 // was predicted for.
 void noteShown(std::uint64_t seq, std::int64_t lateNs);
 
 // The layer's present hook, after the present and outside every lock: waits for the headset's next frame
-// when this present handed an image over and pacing is on, and holds the game to the cap while unfocused.
-void afterPresent();
+// when this present handed an image over and pacing is on, and holds the game to the background hold's rate
+// (setBackgroundHold). True when it waited for a headset frame and that frame began.
+bool afterPresent();
 
-// XR worker, on session state changes and when the session ends: whether a runtime's menu is over the game
-// (the session VISIBLE, or SYNCHRONIZED once hidden, after it had focus). Logged when it changes.
-void setUnfocused(bool unfocused);
+// XR worker, on session state and user presence changes and when the session ends: how far the game is held
+// back while it has no viewer (pacing::ViewerWatch's answer; the rig knobs ETERNALVR_TEST_UNFOCUSED_CAP=0 and
+// ETERNALVR_TEST_UNSEEN_VISIBLE=1 apply here). A change wakes a held render thread and is logged; the low
+// hold's end line gives its length and rate, and a line about a second later the images handed over since.
+void setBackgroundHold(pacing::UnseenHold hold);
 
 // XR worker, every 10 s with the rates line: the `pace:` line.
 void logSummary();

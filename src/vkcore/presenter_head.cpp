@@ -186,6 +186,13 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
                             {a.position.x, a.position.y, a.position.z}};
         const Quat& q = weapon->tracked.orientation;
         record.weaponAimTracked = {q.x, q.y, q.z, q.w};
+        record.offHandValid = weapon->offValid;
+        const Pose& g = weapon->offGrip;
+        record.offHandGrip = {{g.orientation.x, g.orientation.y, g.orientation.z, g.orientation.w},
+                              {g.position.x, g.position.y, g.position.z}};
+        const Quat& o = weapon->offAim.orientation;
+        record.offHandAim = {o.x, o.y, o.z, o.w};
+        record.weaponAimTwoHanded = weapon->twoHanded;
     }
     // The weapon wheel in this frame, from the forced-view gate beginGameView just updated.
     record.weaponWheel = controllers::wheelView();

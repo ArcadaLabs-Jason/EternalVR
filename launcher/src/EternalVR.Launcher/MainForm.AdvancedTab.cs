@@ -34,7 +34,9 @@ namespace EternalVR.Launcher
         private readonly NumericUpDown hudDistance = Number(LauncherSettings.MinHudDistance, LauncherSettings.MaxHudDistance, 0.1, 2);
         private readonly NumericUpDown hudWidth = Number(LauncherSettings.MinHudWidth, LauncherSettings.MaxHudWidth, 0.1, 2);
         private readonly NumericUpDown hudHeight = Number(LauncherSettings.MinHudHeight, LauncherSettings.MaxHudHeight, 0.05, 2);
-        private readonly ComboBox hudPlace = Choices(Setting.HudPlace);
+        private readonly CheckBox hudFront = new CheckBox { AutoSize = true };
+        private readonly CheckBox hudWrist = new CheckBox { AutoSize = true };
+        private readonly CheckBox hudWeapon = new CheckBox { AutoSize = true };
         private readonly CheckBox controllers = new CheckBox { AutoSize = true };
         private readonly ComboBox shots = Choices(Setting.ShotsFrom);
         private readonly CheckBox menuBeam = new CheckBox { AutoSize = true };
@@ -85,7 +87,7 @@ namespace EternalVR.Launcher
                     s => s.Cinema = (CinemaShape)cinemaShape.SelectedIndex),
                 Row(Setting.Cutscene3D, cutscene3D, s => cutscene3D.Checked = s.Cutscene3D, s => s.Cutscene3D = cutscene3D.Checked),
                 Row(Setting.CutsceneArms, cutsceneArms, s => cutsceneArms.Checked = s.CutsceneArms, s => s.CutsceneArms = cutsceneArms.Checked));
-            var hud = Group("HUD panel",
+            var hud = Group("HUD",
                 Row(Setting.HudDistance, WithUnit(hudDistance, "m"),
                     s => hudDistance.Value = Clamped(s.HudDistance, hudDistance, LauncherSettings.DefaultHudDistance),
                     s => s.HudDistance = (double)hudDistance.Value),
@@ -95,9 +97,9 @@ namespace EternalVR.Launcher
                 Row(Setting.HudHeight, WithUnit(hudHeight, "m"),
                     s => hudHeight.Value = Clamped(s.HudHeight, hudHeight, 0.0),
                     s => s.HudHeight = (double)hudHeight.Value),
-                Row(Setting.HudPlace, hudPlace,
-                    s => hudPlace.SelectedIndex = (int)s.Hud,
-                    s => s.Hud = (HudMode)hudPlace.SelectedIndex));
+                Row(Setting.HudFront, hudFront, s => hudFront.Checked = s.HudFront, s => s.HudFront = hudFront.Checked),
+                Row(Setting.HudWrist, hudWrist, s => hudWrist.Checked = s.HudWrist, s => s.HudWrist = hudWrist.Checked),
+                Row(Setting.HudWeapon, hudWeapon, s => hudWeapon.Checked = s.HudWeapon, s => s.HudWeapon = hudWeapon.Checked));
             var hands = Group("Controllers",
                 Row(Setting.MotionControllers, controllers,
                     s => controllers.Checked = s.Controllers,
@@ -134,7 +136,7 @@ namespace EternalVR.Launcher
             reset.Click += (s, e) => ResetToPreset();
             tips.SetToolTip(reset, "Puts every setting on the Play and Advanced tabs back to " + SettingsPresets.Recommended.Name + ", the launcher's defaults.\n"
                 + "The game folder, the layer folder, the runtime, the graphics card choice, Get test builds and your controls are kept.");
-            return Page("Advanced", null, new Control[] { view, reset }, new Control[] { hands, hud }, system, UpdatesGroup());
+            return Page("Advanced", null, new Control[] { view, reset }, new Control[] { hands, TwoHandGroup(), hud }, system, UpdatesGroup());
         }
 
         /// <summary>The game folder's line takes the room the buttons leave, its text level with theirs.</summary>

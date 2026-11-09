@@ -59,11 +59,21 @@ struct ButtonBinding {
 };
 
 // Deliberate directional gestures on the turn stick. What counts as deliberate is decided by the
-// turn-stick arbiter (turn_stick_arbiter.hpp), not by the bindings.
+// turn-stick arbiter (turn_stick_arbiter.hpp), not by the bindings. The ones after DownHold (T-229) are the
+// stick's other directions, each active for the whole sweep: binding left, right or a diagonal splits the
+// stick into the parts of stick_directions.hpp, and turning keeps only the left and right that are not
+// bound.
 enum class StickGesture : std::uint8_t {
     Up,       // Active for the whole up sweep.
     DownTap,  // One frame, when a short down sweep returns to the centre.
     DownHold, // Active from the hold time until the stick returns to the centre.
+    Down,     // Active for the whole down sweep (instead of the tap and the hold).
+    Left,
+    Right,
+    UpLeft,
+    UpRight,
+    DownLeft,
+    DownRight,
 };
 
 struct StickGestureBinding {
@@ -74,8 +84,8 @@ struct StickGestureBinding {
 };
 
 struct BindingProfile {
-    // The hand holding the weapon. The other hand's grip bindings would be held back while it steadies
-    // the weapon (MapperContext::supportHandOnWeapon), but no support grip is detected yet.
+    // The hand holding the weapon (the wrist flick and the reach gestures read it). Two-handed aim names
+    // the steadying hand itself (MapperContext::supportHandOnWeapon).
     Hand weaponHand = Hand::Right;
     std::optional<Hand> moveStick;
     std::optional<Hand> turnStick;

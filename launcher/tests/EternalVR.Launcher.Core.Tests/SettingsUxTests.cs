@@ -211,7 +211,7 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.WeaponHand, Setting.WeaponHandAngle, Setting.OffHandAngle, Setting.MoveToward,
                 Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.RollWrist, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
-                Setting.MenuLaser, Setting.HudPlace, Setting.Vibration, Setting.RevenantAimWith,
+                Setting.MenuLaser, Setting.HudWrist, Setting.HudWeapon, Setting.Vibration, Setting.RevenantAimWith,
                 Setting.MeleeAimWith, Setting.EquipmentAimWith,
             })
                 Assert.Equal(SettingRules.NeedsControllers, SettingRules.WhyNot(setting, s));
@@ -283,7 +283,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             // The UI layer runs in mono too, so its settings apply.
             foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime, Setting.HudDistance,
-                                            Setting.HudSize, Setting.HudHeight, Setting.MenuLaser, Setting.HudPlace })
+                                            Setting.HudSize, Setting.HudHeight, Setting.MenuLaser, Setting.HudFront, Setting.HudWrist, Setting.HudWeapon })
                 Assert.Null(SettingRules.WhyNot(setting, mono));
         }
 
@@ -324,7 +324,6 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<MirrorMode>(Setting.DesktopWindow);
             Choices<CutsceneView>(Setting.CutsceneView);
             Choices<ShotOrigin>(Setting.ShotsFrom);
-            Choices<HudMode>(Setting.HudPlace);
             Assert.Equal(AimSteadiness.Values.Length, SettingTexts.For(Setting.AimSteadiness).Choices.Count);
             Assert.Equal(Vibration.Values.Length, SettingTexts.For(Setting.Vibration).Choices.Count);
             Assert.Contains("cannot be skipped", SettingTexts.For(Setting.SkipCutscenes).Tooltip);

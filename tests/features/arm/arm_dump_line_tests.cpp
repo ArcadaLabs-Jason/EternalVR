@@ -216,3 +216,25 @@ TEST_CASE("a dump line escapes the item's name and writes null for what is not k
     CHECK(contains(line, "\"weapon\":null,\"aim\":null,\"grip\":null,\"offgrip\":null,\"arms_item\":\"\","
                          "\"hstate\":null,\"hswim\":null,\"mods\":[\"\",\"\"],\"sight\":\"\"}"));
 }
+
+TEST_CASE("a dump line gives two-handed aim only with it on: the hold, the row in use and the aim's axis") {
+    ArmDumpRecord r = sample();
+    std::string line = armDumpLine(r);
+    CHECK_FALSE(contains(line, "\"two\""));
+    evr::arm::DumpTwoHand two;
+    two.held = true;
+    two.row = std::array<float, 3>{0.296f, -0.006f, 0.057f};
+    r.twoHand = two;
+    line = armDumpLine(r);
+    CHECK(balanced(line));
+    CHECK(contains(line,
+                   "\"sight\":\"weapon/player/heavy_cannon_bolt_action\",\"two\":{\"held\":true,"
+                   "\"row\":[0.29600,-0.00600,0.05700],\"aim\":[1.00000,0.00000,0.00000,0.00000,1.00000,"
+                   "0.00000,0.00000,0.00000,1.00000]}}\n"));
+    two.held = false;
+    two.row.reset();
+    r.twoHand = two;
+    line = armDumpLine(r);
+    CHECK(balanced(line));
+    CHECK(contains(line, "\"two\":{\"held\":false,\"row\":null,\"aim\":["));
+}

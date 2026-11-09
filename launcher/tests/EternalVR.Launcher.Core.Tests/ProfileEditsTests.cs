@@ -84,12 +84,15 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.HudDistance] = s => s.HudDistance = 2.0,
             [Setting.HudSize] = s => s.HudWidth = 3.0,
             [Setting.HudHeight] = s => s.HudHeight = 0.5,
-            [Setting.HudPlace] = s => s.Hud = HudMode.Wrist,
+            [Setting.HudFront] = s => s.HudFront = false,
+            [Setting.HudWrist] = s => s.HudWrist = true,
+            [Setting.HudWeapon] = s => { s.HudWeapon = true; s.HudWrist = false; },
             [Setting.MotionControllers] = s => s.Controllers = false,
             [Setting.ShotsFrom] = s => s.Shots = ShotOrigin.Eye,
             [Setting.MenuLaser] = s => s.MenuBeam = false,
             [Setting.PerformanceLog] = s => s.PerfLog = false,
             [Setting.PerformanceOverlay] = s => s.PerfOverlay = PerformanceOverlay.FrameRate,
+            [Setting.TwoHandAim] = s => s.TwoHandAim = true,
             [Setting.ExtraArguments] = s => s.ExtraArguments = "+com_skipIntroVideo 1",
         };
 
@@ -230,11 +233,11 @@ namespace EternalVR.Launcher.Core.Tests
                 var store = new ProfileStore(t.Combine("profiles"));
                 var s = OnThisMachine();
                 OneChange[Setting.Turning](s);
-                OneChange[Setting.HudPlace](s);
+                OneChange[Setting.HudWrist](s);
                 s.SetCpuSaverChoices(Shipped.Items.Select(i => new KeyValuePair<string, bool>(i.Id, i.DefaultOn)));
                 store.Save("Riley", s, Shipped);
                 var lines = File.ReadAllLines(t.Combine("profiles", "Riley.ini")).Where(l => !l.StartsWith("#")).ToList();
-                Assert.Equal(new[] { "schema_version = 2", "preset = recommended", "turn = snap", "hud = wrist" }, lines);
+                Assert.Equal(new[] { "schema_version = 2", "preset = recommended", "turn = snap", "hud_wrist = 1" }, lines);
                 var loaded = store.Load("Riley", new LauncherSettings { GameDir = @"D:\Other" });
                 Assert.Equal(ProfileEdits.Values(s, Shipped), ProfileEdits.Values(loaded, Shipped));
                 Assert.Equal(@"D:\Other", loaded.GameDir);
@@ -343,6 +346,23 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Equal(new[] { Setting.Vignette }, Marked(ProfileEdits.Changed(s, comfort.Values(), Shipped)));
             // An older key the file has (pace) gives the newer one (frame_pacing), not the preset.
             Assert.Equal(FramePacing.Headset, ProfileEdits.FromProfileText("schema_version = 2\npreset = comfort\npace = headset\n", presets).Pacing);
+        }
+
+        [Fact]
+        public void AnOlderProfilesHudChoiceIsNotReplacedByThePresetsHudSwitches()
+        {
+            // A profile from up to 0.1.88 names its HUD place as hud = wrist (the blocks on the wrist instead of in front). Another
+            // preset's hud_* switches must not take it over.
+            var comfort = new SettingsPreset("comfort", "Comfort", () => new LauncherSettings { Turn = TurnMode.Snap });
+            Func<string, SettingsPreset> presets = id => id == "comfort" ? comfort : SettingsPresets.Find(id);
+            var s = ProfileEdits.FromProfileText("schema_version = 2\npreset = comfort\nhud = wrist\n", presets);
+            Assert.False(s.HudFront);
+            Assert.True(s.HudWrist);
+            Assert.Equal(TurnMode.Snap, s.Turn);
+            // Without the old key the preset's own values (the defaults here) stand.
+            var plain = ProfileEdits.FromProfileText("schema_version = 2\npreset = comfort\n", presets);
+            Assert.True(plain.HudFront);
+            Assert.False(plain.HudWrist);
         }
     }
 }

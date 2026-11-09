@@ -18,6 +18,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <optional>
@@ -154,44 +155,8 @@ bool createActions(XrInput& xr) {
     return true;
 }
 
-bool createSpaces(XrInput& xr) {
-    const XrPosef identity{{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
-    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
-        XrActionSpaceCreateInfo info{XR_TYPE_ACTION_SPACE_CREATE_INFO};
-        info.subactionPath = xr.handPaths[handIndex(hand)];
-        // The controller angle (controller_tilt.hpp): the runtime turns both poses, for all that reads them.
-        const Quat q =
-            input::controllerTilt(input::controllerTiltDegrees(settings(), hand, weaponHand())).orientation;
-        info.poseInActionSpace = {{q.x, q.y, q.z, q.w}, {0.0f, 0.0f, 0.0f}};
-        info.action = xr.actions[static_cast<std::size_t>(input::XrActionId::AimPose)];
-        EVR_XR_TRY(xr.xrCreateActionSpace(xr.session, &info, &xr.aimSpaces[handIndex(hand)]));
-        info.action = xr.actions[static_cast<std::size_t>(input::XrActionId::GripPose)];
-        EVR_XR_TRY(xr.xrCreateActionSpace(xr.session, &info, &xr.gripSpaces[handIndex(hand)]));
-    }
-    XrReferenceSpaceCreateInfo view{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
-    view.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
-    view.poseInReferenceSpace = identity;
-    EVR_XR_TRY(xr.xrCreateReferenceSpace(xr.session, &view, &xr.viewSpace));
-    return true;
-}
-
 void destroyHandles(XrInput& xr) {
-    for (XrSpace& space : xr.aimSpaces) {
-        if (space) {
-            xr.xrDestroySpace(space);
-            space = XR_NULL_HANDLE;
-        }
-    }
-    for (XrSpace& space : xr.gripSpaces) {
-        if (space) {
-            xr.xrDestroySpace(space);
-            space = XR_NULL_HANDLE;
-        }
-    }
-    if (xr.viewSpace) {
-        xr.xrDestroySpace(xr.viewSpace);
-        xr.viewSpace = XR_NULL_HANDLE;
-    }
+    destroySpaces(xr);
     // Destroying a set destroys its actions.
     for (XrActionSet& set : xr.sets) {
         if (set) {
@@ -295,6 +260,7 @@ input::HandState readHand(const XrInput& xr, input::Hand hand, XrTime time, cons
     input::HandState h;
     h.trigger = readFloat(xr, input::XrActionId::Trigger, path);
     h.grip = readFloat(xr, input::XrActionId::Grip, path);
+    h.gripCurl = readFloat(xr, input::XrActionId::GripCurl, path);
     h.stick = readStick(xr, path);
     h.stickClick = readBool(xr, input::XrActionId::ThumbstickClick, path);
     h.primaryButton = readBool(xr, input::XrActionId::Primary, path);
@@ -415,7 +381,7 @@ bool attach(const XrContext& context) {
         "%s: on: aim %s, demon aim %s%s, melee aim %s, equipment aim %s%s, locomotion %s, "
         "turn %s (%.0f deg/s, snap %.0f deg), handedness %d, "
         "input %s, viewmodel %s, weapon FOV %s, shots from the %s, aim smoothing %.2f%s, controller angle "
-        "%.0f / %.0f deg (weapon / off hand), Dossier on X %s, "
+        "%.0f / %.0f deg (weapon / off hand, on top of the controller's fit), Dossier on X %s, "
         "Dossier map panned by the %s stick, weapon wheel by the %s, overhead swing %s, "
         "hands-up jump %s, punch at %.1f m/s, button hold %.2f s, thumb-rest wheel %s (picks with %s, face "
         "touch %s, slowdown %s, hold-over %.2f s)",
@@ -515,15 +481,17 @@ void sync(XrTime predictedDisplayTime, bool focused) {
                                                nullptr, nullptr, &next.frame.roomFromLocal);
         }
         input::applyTestInput(*test, next.frame);
-        input::tiltControllers(next.frame, weaponHand(), settings());
+        input::fitScriptedHands(next.frame, *test, weaponHand(), settings(), xr.fits);
     }
+    next.fits = xr.fits;
     const std::uint64_t syncs = s.syncs.fetch_add(1) + 1;
     const bool familyCheck = syncs == 1 || syncs % kProfileCheckFrames == 0;
+    std::array<std::optional<game::Controller>, 2> handFamilies;
     {
         std::lock_guard snapshotLock(s.snapshotMutex);
         next.controller = s.snapshot.controller;
         if (next.valid && familyCheck) {
-            const game::Controller family = currentFamily(xr, s, next.controller);
+            const game::Controller family = currentFamily(xr, s, next.controller, handFamilies);
             if (family != next.controller) {
                 EVR_LOG("%s: the runtime reports %s controllers", kTag,
                         std::string(game::controllerName(family)).c_str());
@@ -538,7 +506,17 @@ void sync(XrTime predictedDisplayTime, bool focused) {
     // control map is built here for their prompts (control_map.cpp), outside the XR lock (attach takes the
     // mapper's lock under it).
     const bool profileReported = !s.handProfiles[0].empty() || !s.handProfiles[1].empty();
+    // Each hand's fit for its spaces (input_spaces.cpp), from its own controller once the runtime reports it.
+    std::array<bool, 2> refit{};
+    for (std::size_t i = 0; i < refit.size(); ++i) {
+        refit[i] = handFamilies[i] && xr.fitFamilies[i] != handFamilies[i];
+    }
     lock.unlock();
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        if (const auto& family = handFamilies[handIndex(hand)]; refit[handIndex(hand)] && family) {
+            refitHand(s, hand, *family);
+        }
+    }
     if (familyCheck && input::buildControlMapAhead(next.valid, profileReported, test.has_value())) {
         prepareControlMap(next.controller);
     }

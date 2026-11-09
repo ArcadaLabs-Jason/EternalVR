@@ -15,6 +15,7 @@
 #include "features/input/dashboard_pause.hpp"
 #include "features/input/dossier_press.hpp"
 #include "features/input/family_touch_settings.hpp"
+#include "features/input/stick_directions.hpp"
 #include "features/input/touch_inputs.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/room_scale.hpp"
@@ -280,6 +281,13 @@ bool ensureMapper(State& s, game::Controller controller, const char* when) {
                     kTag, stick.earlyHoldSeconds, stick.earlyConeDegrees, stick.holdSeconds);
         } else {
             EVR_LOG("%s: the turn stick's down hold: %.2f s", kTag, stick.holdSeconds);
+        }
+        // A map that binds the stick's sides splits it by direction (stick_directions.hpp, T-229).
+        const std::string directions =
+            input::stickLayoutText(input::stickLayoutOf(s.mapper->profile().stickGestures));
+        if (!directions.empty()) {
+            EVR_LOG("%s: the turn stick is split by direction: %s; turning only in the parts marked turn",
+                    kTag, directions.c_str());
         }
     }
     logRestButtons(*s.mapper, mapperSettings.restSensors);

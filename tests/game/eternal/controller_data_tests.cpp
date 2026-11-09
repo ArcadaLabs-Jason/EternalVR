@@ -97,13 +97,13 @@ std::string_view expectedProfile(Controller controller) {
 bool expectedUnbound(Controller controller, XrActionId action, Hand hand) {
     // Only Touch controllers have a thumb rest. The face buttons', the stick's, the trackpad's and the
     // trigger's touch are added by the layer, only with the wheel on or a map binding them
-    // (rest_touch_bindings.hpp).
+    // (rest_touch_bindings.hpp), and the grip's curl for the fingers where the grip reads another input.
     if (action == XrActionId::ThumbRest) {
         return controller != Controller::OculusTouch;
     }
     if (action == XrActionId::PrimaryTouch || action == XrActionId::SecondaryTouch ||
         action == XrActionId::ThumbstickTouch || action == XrActionId::TrackpadTouch ||
-        action == XrActionId::TriggerTouch) {
+        action == XrActionId::TriggerTouch || action == XrActionId::GripCurl) {
         return true;
     }
     // The Frame has every button on both hands: four face buttons, a bumper and a Menu or View button.

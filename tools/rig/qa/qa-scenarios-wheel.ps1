@@ -177,7 +177,7 @@ $wheelScenarios = @(
             param($c)
             Wait-QaSeconds $c 12
             # Out of the centre (0.25) but short of a direction (0.5): armed, then cancelled.
-            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.3
+            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.5
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 0, 0.4'); Wait-QaSeconds $c 0.6
             Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 1
             Save-QaShot $c 'after-push'
@@ -222,7 +222,7 @@ $wheelScenarios = @(
         Timeline = {
             param($c)
             Wait-QaSeconds $c 12
-            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.3
+            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.5
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 0, 0.4'); Wait-QaSeconds $c 0.4
             Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.3
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 1, 0'); Wait-QaSeconds $c 0.6
@@ -245,8 +245,8 @@ $wheelScenarios = @(
         Timeline = {
             param($c)
             Wait-QaSeconds $c 12
-            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.3
-            # Past the 0.1 s dwell even with the file seen a sixth of a second late.
+            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.5
+            # Past the 0.25 s rest dwell (T-223) even with the file seen a sixth of a second late.
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 1, 0'); Wait-QaSeconds $c 0.2
             Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 1.5
             Save-QaShot $c 'after'
@@ -301,7 +301,7 @@ $wheelScenarios = @(
         Timeline = {
             param($c)
             Wait-QaSeconds $c 12
-            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.3
+            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.5
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 1, 0'); Wait-QaSeconds $c 0.6
             Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 1.5
             Save-QaShot $c 'after'
@@ -326,7 +326,7 @@ $wheelScenarios = @(
             Write-QaInput $c @('left.menu = 1'); Wait-QaSeconds $c 0.2
             Write-QaInput $c @(); Wait-QaSeconds $c 2
             Save-QaShot $c 'menu'
-            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.3
+            Write-QaInput $c $script:QaRestLeft; Wait-QaSeconds $c 0.5
             Write-QaInput $c ($script:QaRestLeft + 'right.stick = 0, 1'); Wait-QaSeconds $c 1
             Write-QaInput $c @(); Wait-QaSeconds $c 1
             Write-QaInput $c @('left.menu = 1'); Wait-QaSeconds $c 0.2

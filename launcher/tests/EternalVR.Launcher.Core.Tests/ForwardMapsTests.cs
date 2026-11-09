@@ -37,7 +37,7 @@ namespace EternalVR.Launcher.Core.Tests
         {
             ("left.futurebutton.tap", "weapon_slot_3", true, false),
             ("right.trigger.double_tap", "fire", true, false),
-            ("right.stick.up_left", "chainsaw", true, false),
+            ("right.stick.double_up", "chainsaw", true, false),
             ("left.trigger.hold.seconds", "0.4", true, false),
             ("right.futurepad.press", "future_action", true, false),
             ("left.trigger.squeeze", "fire", true, false),
@@ -101,7 +101,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void LaterKeysAreAHandAndTwoOrMoreLowercaseNames()
         {
-            foreach (var key in new[] { "left.trigger.press", "left.futurebutton.tap", "right.stick.up_left", "left.trigger.hold.seconds", "right.face5.tap", "left.a.b" })
+            foreach (var key in new[] { "left.trigger.press", "left.futurebutton.tap", "right.stick.double_up", "left.trigger.hold.seconds", "right.face5.tap", "left.a.b" })
                 Assert.True(BindingKey.IsLaterKey(key), key);
             foreach (var key in new[] { null, "", "weapon_hand", "weapon_hands", "left", "left.trigger", "Left.trigger.press", "left.Trigger.press", "both.trigger.press",
                          "left..press", "left.trigger.", "left.trigger-touch.press", "left.trigger press.tap", "wheel.mode.edge", "trigger.left.press" })
@@ -140,7 +140,7 @@ namespace EternalVR.Launcher.Core.Tests
             text = ReplaceFirst(text, "\"gameplay.right.thumbrest\" = \"/input/thumbrest/touch\"\n",
                 "\"gameplay.right.thumbrest\" = \"/input/thumbrest/touch\"\n\"gameplay.left.trigger_force\" = \"/input/trigger/force\"   # newer\n");
             text = ReplaceFirst(text, "\"right.stick.down_hold\" = \"weapon_wheel\"\n",
-                "\"right.stick.down_hold\" = \"weapon_wheel\"\n'left.futurebutton.tap' = 'weapon_slot_3'\n\"right.stick.up_left\" = \"chainsaw\"  # a gesture of a later version\n");
+                "\"right.stick.down_hold\" = \"weapon_wheel\"\n'left.futurebutton.tap' = 'weapon_slot_3'\n\"right.stick.double_up\" = \"chainsaw\"  # a gesture of a later version\n");
             text += "\n[labels]\n\"left.trigger_force\" = \"Force\"\n";
             return text.Replace("\n", newline);
         }
@@ -160,7 +160,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.Equal(path, edit.PlayerFile);
                 Assert.Empty(edit.Problems());
                 var notUsed = edit.NotUsed();
-                Assert.Equal(new[] { "gameplay.left.trigger_force", "left.trigger_force", "left.futurebutton.tap", "right.stick.up_left" }, notUsed.Select(i => i.Key));
+                Assert.Equal(new[] { "gameplay.left.trigger_force", "left.trigger_force", "left.futurebutton.tap", "right.stick.double_up" }, notUsed.Select(i => i.Key));
                 Assert.All(notUsed, i => Assert.Equal(ControlIssueKind.UnknownKey, i.Kind));
                 Assert.Equal("map.right", notUsed[2].Section);
 
@@ -181,7 +181,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.NotEqual(original, expected);
                 Assert.Equal(expected, saved);
                 foreach (var later in new[] { "\"gameplay.left.trigger_force\" = \"/input/trigger/force\"   # newer", "'left.futurebutton.tap' = 'weapon_slot_3'",
-                             "\"right.stick.up_left\" = \"chainsaw\"  # a gesture of a later version", "\"left.trigger_force\" = \"Force\"" })
+                             "\"right.stick.double_up\" = \"chainsaw\"  # a gesture of a later version", "\"left.trigger_force\" = \"Force\"" })
                     Assert.Single(saved.Split(new[] { newline }, StringSplitOptions.None), l => l == later);
 
                 // Read back: the same lines still not used, nothing else.
@@ -214,7 +214,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void AMapOfOnlyLaterLinesStopsTheSaveAndOneKnownBindingIsEnough()
         {
-            var later = new Dictionary<string, string> { ["left.futurebutton.tap"] = "weapon_slot_3", ["right.trigger.double_tap"] = "fire", ["right.stick.up_left"] = "chainsaw" };
+            var later = new Dictionary<string, string> { ["left.futurebutton.tap"] = "weapon_slot_3", ["right.trigger.double_tap"] = "fire", ["right.stick.double_up"] = "chainsaw" };
             var issues = ControlMapRules.Check(later, "map.right");
             Assert.Equal(4, issues.Count);
             Assert.Contains("bind at least one control", Assert.Single(issues, i => !i.Skipped).Message);

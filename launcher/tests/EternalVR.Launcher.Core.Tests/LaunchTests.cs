@@ -113,7 +113,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void MonoKeepsTheGameWindowAndTheStereoCvarsOut()
         {
-            var p = LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono, Aim = AimMode.Head, Hud = HudMode.Wrist }));
+            var p = LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono, Aim = AimMode.Head, HudWrist = true }));
             var env = Env(p);
             Assert.False(env.ContainsKey("ETERNALVR_MODE"));
             Assert.False(env.ContainsKey("ETERNALVR_WINDOW"));
@@ -138,21 +138,14 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void WristHudNeedsTheControllers()
         {
-            Assert.Equal("wrist", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Wrist })))["ETERNALVR_HUD"]);
-            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Wrist, Controllers = false })))["ETERNALVR_HUD"]);
-            Assert.Equal("weapon", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Weapon })))["ETERNALVR_HUD"]);
-            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Weapon, Controllers = false })))["ETERNALVR_HUD"]);
-            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Hud = HudMode.Panel })))["ETERNALVR_HUD"]);
-            Assert.Equal(HudMode.Panel, LauncherSettings.Parse(new LauncherSettings { Hud = HudMode.Panel }.Serialize()).Hud);
-            Assert.Equal(HudMode.Wrist, LauncherSettings.Parse(new LauncherSettings { Hud = HudMode.Wrist }.Serialize()).Hud);
-            Assert.Equal(HudMode.Weapon, LauncherSettings.Parse(new LauncherSettings { Hud = HudMode.Weapon }.Serialize()).Hud);
-            Assert.Contains("hud = weapon", new LauncherSettings { Hud = HudMode.Weapon }.Serialize());
-            Assert.Equal(HudMode.Weapon, LauncherSettings.Parse("hud = Weapon").Hud);
-            // The row's choices in the enum's order.
-            Assert.Equal(new[] { "On the HUD panel", "On your wrist", "On your weapon" }, SettingTexts.For(Setting.HudPlace).Choices);
-            // A file from before the key, or a value this version does not know: the default (the panel).
-            Assert.Equal(HudMode.Panel, LauncherSettings.Parse("schema_version = 2\nworld_scale = 1.10\n").Hud);
-            Assert.Equal(HudMode.Panel, LauncherSettings.Parse("hud = elbow").Hud);
+            Assert.Equal("wrist", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { HudWrist = true })))["ETERNALVR_HUD"]);
+            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { HudWrist = true, Controllers = false })))["ETERNALVR_HUD"]);
+            Assert.Equal("weapon", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { HudWeapon = true })))["ETERNALVR_HUD"]);
+            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { HudWeapon = true, Controllers = false })))["ETERNALVR_HUD"]);
+            Assert.Equal("panel", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings())))["ETERNALVR_HUD"]);
+            // One hand HUD at a time: the wrist wins, in the file and in the plan.
+            Assert.Equal("wrist", Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { HudWrist = true, HudWeapon = true })))["ETERNALVR_HUD"]);
+            Assert.False(LauncherSettings.Parse("hud_wrist = 1\nhud_weapon = 1\n").HudWeapon);
         }
 
         [Fact]

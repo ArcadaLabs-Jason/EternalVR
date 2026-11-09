@@ -14,7 +14,7 @@ namespace EternalVR.Launcher
     /// Edit controls: which button does what, for one kind of controller and one weapon hand at a time. A thin view over
     /// <see cref="ControlsEdit"/>, which reads, checks and saves the player's controller file.
     /// </summary>
-    internal sealed class ControlsDialog : Form
+    internal sealed partial class ControlsDialog : Form
     {
         /// <summary>A list's width at 96 DPI: the longest action, "Quick switch (last weapon)", shows whole.</summary>
         private const int ActionWidth = 190;
@@ -47,6 +47,8 @@ namespace EternalVR.Launcher
         private readonly Dictionary<ControlHand, (Label Name, ComboBox Role)> stickRows = new Dictionary<ControlHand, (Label, ComboBox)>();
         private readonly Label gestureName = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
         private readonly ComboBox[] gestures = AllGestures.Select(g => ActionList()).ToArray();
+        /// <summary>The turn stick split by direction (<see cref="ControlsEdit.StickDirectionsNote"/>).</summary>
+        private readonly Label stickNote = new Label { AutoSize = true, Margin = new Padding(3, 6, 3, 3), MaximumSize = new Size(ActionWidth * 3 + 120, 0) };
 
         /// <summary>The button and stick grids, held still while their rows are made and refilled.</summary>
         private readonly List<TableLayoutPanel> grids = new List<TableLayoutPanel>();
@@ -206,51 +208,6 @@ namespace EternalVR.Launcher
                 }
             grid.ResumeLayout(true);
             return Box("Buttons", grid);
-        }
-
-        private GroupBox SticksGroup()
-        {
-            var grid = Grid();
-            grid.SuspendLayout();
-            grid.Controls.Add(new Label { AutoSize = true });
-            grid.Controls.Add(Heading("Role", "Move walks you where the Move toward setting says; Turn turns you and takes the "
-                + "stick gestures below. The other stick swaps roles when you pick one it has."));
-            grid.SetColumnSpan(grid.Controls[grid.Controls.Count - 1], 3);
-            foreach (var h in Hands)
-            {
-                var name = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
-                var role = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = ActionWidth, Anchor = AnchorStyles.Left, Margin = CellMargin };
-                foreach (StickRole r in new[] { StickRole.Move, StickRole.Turn, StickRole.None }) role.Items.Add(new RoleItem(r));
-                var stick = h;
-                role.SelectionChangeCommitted += (s, e) =>
-                {
-                    if (edit == null || !(role.SelectedItem is RoleItem item)) return;
-                    edit.SetStickRole(WeaponHand, stick, item.Role);
-                    ShowControls();
-                };
-                stickRows[h] = (name, role);
-                grid.Controls.Add(name);
-                grid.Controls.Add(role);
-                grid.SetColumnSpan(role, 3);
-            }
-            grid.Controls.Add(new Label { AutoSize = true });
-            grid.Controls.Add(Heading("Up", "Pushing the turn stick up: active for as long as it is pushed."));
-            grid.Controls.Add(Heading("Down, tap", "A short push down on the turn stick."));
-            grid.Controls.Add(Heading("Down, hold", "The turn stick held down: active until it springs back."));
-            grid.Controls.Add(gestureName);
-            for (int i = 0; i < gestures.Length; i++)
-            {
-                var gesture = AllGestures[i];
-                var box = gestures[i];
-                box.SelectionChangeCommitted += (s, e) =>
-                {
-                    var turn = edit?.TurnStick(WeaponHand);
-                    if (turn.HasValue) Bind(BindingKey.StickGestureOf(turn.Value, gesture), box);
-                };
-                grid.Controls.Add(box);
-            }
-            grid.ResumeLayout(true);
-            return Box("Sticks", grid);
         }
 
         private TableLayoutPanel Grid()
@@ -434,6 +391,9 @@ namespace EternalVR.Launcher
                     gestures[i].Enabled = turn.HasValue;
                     ShowAction(gestures[i], turn.HasValue ? edit.Get(weaponHand, BindingKey.StickGestureOf(turn.Value, AllGestures[i])) : null);
                 }
+                var note = edit.StickDirectionsNote(weaponHand);
+                stickNote.Text = note ?? string.Empty;
+                stickNote.Visible = note != null;
                 ShowState();
             }
             finally

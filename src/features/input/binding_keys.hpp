@@ -14,7 +14,7 @@
 //             on its left; shoulder: the bumper; thumbrest: the thumb rest's touch; the *_touch inputs:
 //             the touch sensors on those controls, touch_inputs.hpp; touches are read by touch_button.hpp)
 //   <press>   press (while down), tap, hold
-//   <gesture> up, down_tap, down_hold
+//   <gesture> up, down_tap, down_hold; down, left, right, up_left, up_right, down_left, down_right (T-229)
 //   <action>  a game::gameActionName(), e.g. "fire", "weapon_wheel"
 //
 // Keys are written as quoted TOML keys ("left.trigger.press"), which TOML reads as one key; see
@@ -67,7 +67,7 @@ std::string formatBindingKey(const BindingKey& key);
 bool isKeyName(std::string_view text);
 
 // The shape every binding key of this and later versions keeps to (T-127): a hand, then two or more names,
-// dot-separated ("left.trigger.press", "left.futurebutton.tap", "right.stick.up_left"). A map entry with a
+// dot-separated ("left.trigger.press", "left.futurebutton.tap", "right.stick.double_up"). A map entry with a
 // key of this shape that this version does not know (an input, press kind or stick gesture added later) is
 // one input's binding, so a player's file leaves it out and keeps the rest; a key of any other shape
 // ("weapon_hands", "Left.trigger.press", "left.trigger") still makes the file unusable.

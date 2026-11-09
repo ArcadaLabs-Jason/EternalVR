@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <cstdint>
 #include <ostream>
 
 using evr::Vec3;
@@ -35,6 +36,19 @@ left.menu = 0
     CHECK_FALSE(frame.left.menuButton);
     CHECK(frame.right.grip == 0.7f);
     CHECK(frame.right.secondaryButton);
+}
+
+TEST_CASE("the grip's curl is scripted apart from the grip's press") {
+    const auto input = parseTestInput("left.grip_curl = 1\nright.grip_curl = 1.5\n");
+    CHECK(input.issues.empty());
+    InputFrame frame;
+    frame.left.grip = 0.3f;
+    applyTestInput(input, frame);
+    CHECK(frame.left.gripCurl == 1.0f);
+    CHECK(frame.left.grip == 0.3f); // the press is left as it is
+    CHECK(frame.right.gripCurl == 1.0f);
+    CHECK(frame.right.grip == 0.0f);
+    CHECK(parseTestInput("left.grip_curl = 0.5, 1\n").issues.size() == 1);
 }
 
 TEST_CASE("the extra face buttons and the bumper can be pressed") {
@@ -160,4 +174,83 @@ right.trigger = on
     CHECK(input.issues.size() == 7);
     CHECK(input.issues.front().starts_with("line 2:"));
     CHECK(input.hand(Hand::Right).trigger == 1.0f);
+}
+
+namespace {
+
+// The aim's yaw (degrees, counter-clockwise from above) of a pose testHandPose gave: the hand points along
+// -Z.
+float yawOfPose(const evr::Pose& pose) {
+    const Vec3 forward = rotate(pose.orientation, Vec3{0.0f, 0.0f, -1.0f});
+    return std::atan2(-forward.x, -forward.z) * 180.0f / 3.14159265f;
+}
+
+} // namespace
+
+TEST_CASE("a sweep turns the aim's yaw back and forth for its periods, from when the file first had it") {
+    auto input = parseTestInput("right.aim = 10, 0\nright.sweep = 30, 0.25, 2\n");
+    REQUIRE(input.issues.empty());
+    evr::input::startSweeps(input, nullptr, 100.0);
+    const auto at = [&](double t) {
+        return yawOfPose(*testHandPose(input, Hand::Right, {}, t));
+    };
+    CHECK(at(100.0) == doctest::Approx(10.0f).epsilon(1e-3));
+    CHECK(at(100.0625) == doctest::Approx(40.0f).epsilon(1e-3));  // a quarter period: the amplitude
+    CHECK(at(100.1875) == doctest::Approx(-20.0f).epsilon(1e-3)); // three quarters: the other way
+    CHECK(at(100.6) == doctest::Approx(10.0f).epsilon(1e-3));     // after its two periods: still at the aim
+    CHECK(at(99.9) == doctest::Approx(10.0f).epsilon(1e-3));
+    // The file read again with the same sweep (a capture's buttons added): it goes on from its start.
+    auto again = parseTestInput("right.aim = 10, 0\nright.sweep = 30, 0.25, 2\nleft.trigger = 1\n");
+    evr::input::startSweeps(again, &input, 100.1);
+    CHECK(yawOfPose(*testHandPose(again, Hand::Right, {}, 100.0625)) == doctest::Approx(40.0f).epsilon(1e-3));
+    // Another sweep starts when it is read.
+    auto other = parseTestInput("right.aim = 10, 0\nright.sweep = 20, 0.5, 1\n");
+    evr::input::startSweeps(other, &input, 100.2);
+    CHECK(yawOfPose(*testHandPose(other, Hand::Right, {}, 100.325)) == doctest::Approx(30.0f).epsilon(1e-3));
+}
+
+TEST_CASE("a sweep the file gets wrong is an issue and no sweep") {
+    for (const char* line : {"right.sweep = 30, 0.25", "right.sweep = 120, 0.25, 2",
+                             "right.sweep = 30, 0.01, 2", "right.sweep = 30, 0.25, 0"}) {
+        const auto input = parseTestInput(line);
+        CHECK(input.issues.size() == 1);
+        CHECK_FALSE(input.hand(Hand::Right).sweep.has_value());
+    }
+}
+
+TEST_CASE("a hand's noise: new each frame, the same for the same frame, Gaussian of the given size") {
+    const auto input = parseTestInput("left.aim = 0, 0\nleft.noise = 0.5, 0.1\nright.aim = 0, 0\n");
+    CHECK(input.issues.empty());
+    const evr::Pose pose = *testHandPose(input, Hand::Left, {});
+    // No noise on the right hand: its pose as given.
+    const evr::Pose right = *testHandPose(input, Hand::Right, {});
+    CHECK(evr::input::testHandNoise(input, Hand::Right, right, 3).position == right.position);
+    CHECK(evr::input::testHandNoise(input, Hand::Right, right, 3).orientation == right.orientation);
+    // The same frame, the same noise; another frame, another.
+    const evr::Pose a = evr::input::testHandNoise(input, Hand::Left, pose, 7);
+    CHECK(a.position == evr::input::testHandNoise(input, Hand::Left, pose, 7).position);
+    CHECK_FALSE(a.position == evr::input::testHandNoise(input, Hand::Left, pose, 8).position);
+    // Over many frames: each axis's position about 0.5 mm, the turn about 0.1 degrees per axis.
+    double sum = 0.0;
+    double sumSquares = 0.0;
+    double angleSquares = 0.0;
+    constexpr int kFrames = 4000;
+    for (int n = 0; n < kFrames; ++n) {
+        const evr::Pose p = evr::input::testHandNoise(input, Hand::Left, pose, static_cast<std::uint64_t>(n));
+        const Vec3 d = p.position - pose.position;
+        sum += d.x;
+        sumSquares +=
+            static_cast<double>(d.x) * d.x + static_cast<double>(d.y) * d.y + static_cast<double>(d.z) * d.z;
+        const evr::Quat q = p.orientation * evr::conjugate(pose.orientation);
+        const double angle = 2.0 * std::atan2(evr::length(Vec3{q.x, q.y, q.z}), std::fabs(q.w));
+        angleSquares += angle * angle;
+    }
+    CHECK(std::fabs(sum / kFrames) < 0.00003);
+    CHECK(std::sqrt(sumSquares / (3.0 * kFrames)) == doctest::Approx(0.0005).epsilon(0.05));
+    CHECK(std::sqrt(angleSquares / (3.0 * kFrames)) * 180.0 / 3.14159265 ==
+          doctest::Approx(0.1).epsilon(0.05));
+    // Out of range or not two numbers: reported.
+    CHECK(parseTestInput("left.noise = 60, 0\n").issues.size() == 1);
+    CHECK(parseTestInput("left.noise = 1\n").issues.size() == 1);
+    CHECK(parseTestInput("left.noise = -1, 0\n").issues.size() == 1);
 }

@@ -97,9 +97,13 @@ pose(const std::byte* hands, bool clean, float armWeight, const input::Controlle
     }
     const input::HandState& h =
         frame->hand(cfg.handedness == game::Handedness::Right ? input::Hand::Left : input::Hand::Right);
-    const arm::FingerSensors sensors{h.grip, h.trigger, h.triggerTouch,
-                                     h.primaryTouch || h.secondaryTouch || h.stickTouch || h.trackpadTouch ||
-                                         h.thumbRest};
+    const arm::FingerSensors sensors{
+        .grip = h.grip,
+        .trigger = h.trigger,
+        .triggerTouch = h.triggerTouch,
+        .thumbTouch = h.primaryTouch || h.secondaryTouch || h.stickTouch || h.trackpadTouch || h.thumbRest,
+        .gripCurl = h.gripCurl,
+    };
     const LONGLONG now = nowQpc();
     const float dt = g.last != 0 ? static_cast<float>(secondsSince(g.last)) : 0.0f;
     g.last = now;

@@ -21,8 +21,12 @@ namespace EternalVR.Launcher.Core.Controls
     /// <summary>How a button is pressed: held down, a short tap, or held for a quarter of a second.</summary>
     public enum PressKind { Press, Tap, Hold }
 
-    /// <summary>The turn stick's gestures.</summary>
-    public enum StickGesture { Up, DownTap, DownHold }
+    /// <summary>
+    /// The turn stick's gestures (the layer's <c>StickGesture</c>, features/input/binding_profile.hpp). The ones after
+    /// <see cref="DownHold"/> (T-229) are its other directions, each active for as long as the stick is pushed that way:
+    /// binding a side or a diagonal splits the stick by direction, and turning keeps only the left and right not bound.
+    /// </summary>
+    public enum StickGesture { Up, DownTap, DownHold, Down, Left, Right, UpLeft, UpRight, DownLeft, DownRight }
 
     public enum StickRole { None, Move, Turn }
 
@@ -166,7 +170,14 @@ namespace EternalVR.Launcher.Core.Controls
         internal static readonly string[] PressNames = { "press", "tap", "hold" };
         /// <summary>The inputs a <c>[labels]</c> key names: every button input, and a whole stick.</summary>
         internal static readonly string[] LabelInputNames = InputNames.Append("stick").ToArray();
-        internal static readonly string[] GestureNames = { "up", "down_tap", "down_hold" };
+        internal static readonly string[] GestureNames =
+            { "up", "down_tap", "down_hold", "down", "left", "right", "up_left", "up_right", "down_left", "down_right" };
+
+        /// <summary>The stick's sides and diagonals: binding any of them splits the turn stick by direction (T-229).</summary>
+        public static readonly IReadOnlyList<StickGesture> SideGestures = new[]
+        {
+            StickGesture.Left, StickGesture.Right, StickGesture.UpLeft, StickGesture.UpRight, StickGesture.DownLeft, StickGesture.DownRight,
+        };
         internal static readonly string[] RoleNames = { "none", "move", "turn" };
 
         /// <summary>The OpenXR action of each button in a <c>[profile]</c> section (<c>gameplay.&lt;hand&gt;.&lt;action&gt;</c>).</summary>
@@ -244,8 +255,16 @@ namespace EternalVR.Launcher.Core.Controls
 
         public static string PressLabel(PressKind press) => press == PressKind.Press ? "press" : press == PressKind.Tap ? "tap" : "hold";
 
-        public static string GestureLabel(StickGesture gesture) =>
-            gesture == StickGesture.Up ? "up" : gesture == StickGesture.DownTap ? "down, tap" : "down, hold";
+        public static string GestureLabel(StickGesture gesture)
+        {
+            switch (gesture)
+            {
+                case StickGesture.Up: return "up";
+                case StickGesture.DownTap: return "down, tap";
+                case StickGesture.DownHold: return "down, hold";
+                default: return GestureNames[(int)gesture].Replace('_', ' ');
+            }
+        }
 
         public static string RoleLabel(StickRole role) => role == StickRole.Move ? "Move" : role == StickRole.Turn ? "Turn" : "None";
 

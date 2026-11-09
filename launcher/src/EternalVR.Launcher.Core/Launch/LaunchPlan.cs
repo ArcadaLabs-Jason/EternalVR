@@ -211,8 +211,10 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_UI_LAYER", "1");
             // The game's Performance Metrics (Performance overlay) above the HUD panel, at the level passed as +com_showFPS; 0 when off.
             Set("ETERNALVR_PERF_OVERLAY", (LauncherSettings.PerfOverlayLevel(s.PerfOverlay) ?? 0).ToString(CultureInfo.InvariantCulture));
-            // The HUD on the off hand's wrist or the weapon needs the UI layer and the controllers (docs/VR_HANDS_HUD.md).
-            Set("ETERNALVR_HUD", LauncherSettings.HudName(s.Controllers ? s.Hud : HudMode.Panel));
+            // The HUD on the off hand's wrist or the weapon needs the UI layer and the controllers (docs/VR_HANDS_HUD.md); the panel
+            // in front is its own switch (with no hand to show them the panel keeps the blocks).
+            Set("ETERNALVR_HUD", s.HudPlaceName());
+            Set("ETERNALVR_HUD_FRONT", s.HudFrontShown() ? "1" : "0");
             Set("ETERNALVR_CONTROLLERS", s.Controllers ? "1" : "0");
             // Hand aim needs the controllers; without them the head aims.
             Set("ETERNALVR_AIM", LauncherSettings.AimName(s.Aim == AimMode.Hand && !s.Controllers ? AimMode.Head : s.Aim));
@@ -256,6 +258,7 @@ namespace EternalVR.Launcher.Core.Launch
             // game's off hand and the animated solve, as before.
             Set("ETERNALVR_OFFHAND", s.OffhandName());
             Set("ETERNALVR_ARM_SOLVE", s.ArmSolveName());
+            Set("ETERNALVR_TWO_HAND", s.TwoHandName()); // two-handed aim, only with the new arms
             Set("ETERNALVR_LOCOMOTION", LauncherSettings.LocomotionName(s.Locomotion));
             Set("ETERNALVR_DOSSIER", LauncherSettings.DossierName(s.Dossier));
             Set("ETERNALVR_MAP_STICKS", LauncherSettings.MapSticksName(s.MapSticks));

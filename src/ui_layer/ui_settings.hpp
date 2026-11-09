@@ -19,7 +19,8 @@ namespace evr::ui_layer {
 // quad. `Wrist`: the corner blocks (health, armor, ammo, equipment) under the off hand's wrist while it
 // faces the head, the rest (subtitles, prompts, boss bars, markers, damage) on the head-locked quad.
 // `Weapon`: the ammo block (ammo, equipment, flame belch; with ETERNALVR_WEAPON_HUD_VITALS=1 health and
-// armor too) above the gun in the weapon hand, the rest on the head-locked quad.
+// armor too) above the gun in the weapon hand, the rest on the head-locked quad. With UiSettings::front on
+// the blocks a hand HUD shows stay on the head-locked quad as well.
 enum class HudMode : std::uint8_t { Panel, Wrist, Weapon };
 
 const char* hudModeName(HudMode mode);
@@ -119,6 +120,14 @@ struct UiSettings {
     // ETERNALVR_HUD=panel|wrist|weapon (panel by default). The wrist and the weapon need the controllers:
     // without them the whole HUD stays on the head-locked quad.
     HudMode hud = HudMode::Panel;
+    // ETERNALVR_HUD_FRONT=0|1 (on by default): the corner blocks (health, armor, ammo, equipment) are on
+    // the head-locked quad in front of the player. Off, they are cut from it and show only where `hud` puts
+    // them (nowhere with `Panel`: the readouts are hidden); everything else on the GUI target (subtitles,
+    // prompts, boss bars, markers, damage) is on that quad whatever this is. With the wrist or the weapon
+    // also on, the blocks show in both places. ETERNALVR_HUD=wrist or weapon without ETERNALVR_HUD_FRONT is
+    // the earlier behaviour: the blocks leave the head-locked quad (front off). With the front cut the HUD's
+    // markers stay in the GUI image (no marker quad, T-178), as with a hand HUD.
+    bool front = true;
     WristSettings wrist;
     WeaponHudSettings weapon;
     // ETERNALVR_VIGNETTE (off, light, strong): the edges of the view darken while the stick moves or turns

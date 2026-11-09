@@ -8,6 +8,7 @@
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/input/gun_placement.hpp"
+#include "vkcore/arm_ticks.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/hands_surfaces.hpp"
@@ -237,6 +238,7 @@ void endGameView(std::byte* renderView,
     world.qpc = nowQpc();
     world.valid = true;
     s.world = world;
+    arm_ticks::noteWorld(world, eye);
     noteActionPressView(s, player, body);
     if (cfg.trace) {
         static ULONGLONG lastTrace = 0;

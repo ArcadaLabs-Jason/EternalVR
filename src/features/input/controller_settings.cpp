@@ -377,14 +377,23 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     if (const auto path = lookup("ETERNALVR_TEST_ARM_DUMP"); path && !path->empty()) {
         s.testArmDumpPath = *path;
     }
+    if (const auto path = lookup("ETERNALVR_TEST_ARM_TICKS"); path && !path->empty()) {
+        s.testArmTicksPath = *path;
+    }
+    if (const auto list = lookup("ETERNALVR_TEST_PROFILES"); list && !list->empty()) {
+        s.testProfiles = *list;
+    }
     static constexpr std::pair<const char*, HandsCuff> kCuff[] = {
         {"fold", HandsCuff::Fold}, {"stub", HandsCuff::Stub}, {"ring", HandsCuff::Ring}};
     r.choice("ETERNALVR_TEST_HANDS_CUFF", kCuff, s.handsCuff);
-    static constexpr std::pair<const char*, ArmFault> kArmFault[] = {{"none", ArmFault::None},
-                                                                     {"twist", ArmFault::Twist},
-                                                                     {"forearm", ArmFault::Forearm},
-                                                                     {"fingers", ArmFault::Fingers},
-                                                                     {"trigger", ArmFault::Trigger}};
+    static constexpr std::pair<const char*, ArmFault> kArmFault[] = {
+        {"none", ArmFault::None},
+        {"twist", ArmFault::Twist},
+        {"forearm", ArmFault::Forearm},
+        {"fingers", ArmFault::Fingers},
+        {"trigger", ArmFault::Trigger},
+        {"two_hand", ArmFault::TwoHand},
+        {"two_hand_line", ArmFault::TwoHandLine}};
     r.choice("ETERNALVR_TEST_ARM_FAULT", kArmFault, s.testArmFault);
     if (r.get("ETERNALVR_TEST_ARM_MOD_WEIGHT")) {
         float weight = -1.0f;
@@ -395,6 +404,12 @@ ControllerSettingsResult parseControllerSettings(const SettingLookup& lookup) {
     }
     if (s.armsHandsOnly) {
         handsOnlyArms(r, s);
+    }
+    r.flag("ETERNALVR_TWO_HAND", s.twoHandAim);
+    if (s.twoHandAim && (s.offhand != OffhandMode::Free || s.armSolve != ArmSolve::Bind)) {
+        r.report("ETERNALVR_TWO_HAND", "two-handed aim needs the new arms (ETERNALVR_OFFHAND=free and "
+                                       "ETERNALVR_ARM_SOLVE=bind): off");
+        s.twoHandAim = false;
     }
     return result;
 }
@@ -421,6 +436,10 @@ const char* armFaultName(ArmFault fault) {
         return "fingers";
     case ArmFault::Trigger:
         return "trigger";
+    case ArmFault::TwoHand:
+        return "two_hand";
+    case ArmFault::TwoHandLine:
+        return "two_hand_line";
     }
     return "none";
 }

@@ -73,6 +73,26 @@ TEST_CASE("present stall: lines stop at the limit, the count goes on") {
     CHECK(gate.counters().longestMs == doctest::Approx(1043.0));
 }
 
+TEST_CASE("present stall: the layer's own hold is left out of the gap (T-228)") {
+    StallGate gate;
+    // The low hold while nobody can see the frames: 8 images a second, the game's own 11 ms each.
+    PresentGap held = inPlay(125.0);
+    held.heldMs = 114.0;
+    CHECK(evr::gpu_timing::ownGapMs(held) == doctest::Approx(11.0));
+    CHECK(gate.onGap(held) == StallVerdict::None);
+    // A real stall inside a held gap still counts, by the game's own time.
+    PresentGap stalled = inPlay(300.0);
+    stalled.heldMs = 114.0;
+    CHECK(gate.onGap(stalled) == StallVerdict::Log);
+    CHECK(gate.counters().longestMs == doctest::Approx(186.0));
+    // A hold longer than the gap (clocks read apart) leaves nothing.
+    PresentGap odd = inPlay(60.0);
+    odd.heldMs = 80.0;
+    CHECK(evr::gpu_timing::ownGapMs(odd) == 0.0);
+    CHECK(gate.onGap(odd) == StallVerdict::None);
+    CHECK(gate.counters().inPlay == 1);
+}
+
 TEST_CASE("present stall: a checkpoint save in the gap is named in the line") {
     CHECK(stallSaveNote(0).empty());
     CHECK(stallSaveNote(1) == "; the game saved a checkpoint in the gap");

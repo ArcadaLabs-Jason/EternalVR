@@ -83,6 +83,7 @@ namespace EternalVR.Launcher.Core.Settings
             copy.DlssDllPath = string.Empty;
             copy.AdapterSteer = false;
             copy.TestBuilds = false;
+            copy.IndexAngleReset = false;
             copy.Profile = string.Empty;
             Directory.CreateDirectory(Dir);
             KeepOlderFile(n);
@@ -117,6 +118,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.DlssDllPath = current.DlssDllPath;
             s.AdapterSteer = current.AdapterSteer;
             s.TestBuilds = current.TestBuilds;
+            s.IndexAngleReset = current.IndexAngleReset;
             s.Profile = n;
             return s;
         }

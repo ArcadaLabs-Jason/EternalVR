@@ -9,6 +9,7 @@
 #include "game/eternal/controller_data.hpp"
 
 #include <optional>
+#include <string_view>
 
 namespace evr::input {
 
@@ -27,5 +28,11 @@ game::Controller pickControllerFamily(std::optional<game::Controller> left,
 // and a controller is known (`profileReported`: a hand reports an interaction profile; `scripted`: scripted
 // input stands in for one), for the family in use; the builder does nothing when that family's map is built.
 bool buildControlMapAhead(bool synced, bool profileReported, bool scripted);
+
+// Whether `familyName` (a data file's base name, game::controllerName) is in `list`, comma-separated names
+// with spaces allowed around them (ETERNALVR_TEST_PROFILES, rig tests only); every family is in an empty
+// list. OpenXR-Simulator reports Touch whenever its bindings are suggested, else the first hand profile
+// suggested: leaving Touch out of the list is how a rig run gets an Index profile.
+bool familyListed(std::string_view list, std::string_view familyName);
 
 } // namespace evr::input

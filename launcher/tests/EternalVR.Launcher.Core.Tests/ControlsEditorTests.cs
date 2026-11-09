@@ -260,7 +260,7 @@ namespace EternalVR.Launcher.Core.Tests
                 Assert.True(BindingKey.TryParse(text, out var key));
                 Assert.Equal(text, key.ToString());
             }
-            foreach (var text in new[] { "", "left", "left.trigger", "left.trigger.press.extra", "Left.trigger.press", "both.trigger.press", "left.stick.down", "left.stick.press" })
+            foreach (var text in new[] { "", "left", "left.trigger", "left.trigger.press.extra", "Left.trigger.press", "both.trigger.press", "left.stick.sideways", "left.stick.press" })
                 Assert.False(BindingKey.TryParse(text, out _));
         }
 

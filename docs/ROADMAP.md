@@ -150,7 +150,15 @@ headset.
    now bound on every controller that has it (T-222).
 5. **Two-handed grips and a virtual stock** (a Should item, M5). The off hand takes a per-weapon support
    point and the gun aims along the line between the hands. Exit: the sweep's two-handed holds pass;
-   letting go returns to one-handed aim within one frame; the owner's headset look.
+   letting go returns to one-handed aim within one frame; the owner's headset look. On the rig (2026-10-24,
+   hands-rig section 27): two-handed aim behind its own Advanced-tab toggle (testing, off; needs the arms
+   posed, T-156, T-160), support points for the eight guns held with both hands, the off glove on the game's own grip of the
+   fore-end while held, the off grip's binding held back near the gun (T-158). Round 2 (2026-10-30, hands-rig
+   section 28): the gun taken anywhere along its front and the off glove where the hand is (the Plasma Rifle's
+   support point is out of an arm's reach), the held aim through Aim steadiness, every gun with a row but the
+   Unmaykr and a switch and a melee during a hold on the rig; letting go hands control back in the frame (the hold,
+   the glove, the grip's binding) and the aim within the 70 ms ease (T-195); still no virtual stock (T-196). The
+   owner's headset look is open.
 
 ## M0: Research and design (done)
 

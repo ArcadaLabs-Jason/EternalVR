@@ -107,11 +107,14 @@ namespace EternalVR.Launcher.Core.Settings
                 "Right", "Left (buttons swapped)", "Left (buttons and sticks)"),
             [Setting.WeaponHandAngle] = new Text("Weapon hand angle",
                 "Tilts the gun and the glove on your weapon hand's controller, in degrees, like a controller offset in "
-                + "SteamVR. Below 0 tips the front down, for a gun that points higher than your hand. With Valve Index "
-                + "controllers try -20 here and -40 for the off hand, with any SteamVR offsets set back to 0."),
+                + "SteamVR, on top of the mod's own fit for your controller. Below 0 tips the front down, for a gun that "
+                + "points higher than your hand. Valve Index controllers already get their own fit (from a player's setup), "
+                + "so start at 0 there, with any SteamVR controller offsets for the game set back to 0. The angles the last "
+                + "version suggested for Index controllers were set back to 0 once, when this version first started."),
             [Setting.OffHandAngle] = new Text("Off hand angle",
-                "Tilts the glove on your other hand's controller, and what that hand points with, in degrees. Below 0 tips "
-                + "the front down."),
+                "Tilts the glove on your other hand's controller, and what that hand points with, in degrees, on top of "
+                + "the mod's own fit for your controller. Below 0 tips the front down. With Valve Index controllers start "
+                + "at 0."),
             [Setting.Arms] = new Text("Show arms",
                 "Shown: the Slayer's arms as the game draws them. Hidden: no arms, the weapon alone; useful with the weapon in "
                 + "the left hand, where the game still draws its right arm reaching across to the gun. Hands only: the gloves "
@@ -223,12 +226,16 @@ namespace EternalVR.Launcher.Core.Settings
                 + "but when the game draws more frames than the headset shows, moving things (the world, your gun, the "
                 + "Slayer's movement) advance by uneven steps. Matched to the headset: the game draws exactly one frame for "
                 + "each headset frame, started at the same moment of each, as native VR games do, so motion advances evenly. "
-                + "It helps when the game runs faster than your headset's refresh rate; below it nothing changes. "
+                + "It helps when the game runs faster than your headset's refresh rate. When the game keeps falling below it "
+                + "during play (two seconds in a row), the mod lets it run at its own rate and hands your headset each game frame "
+                + "once, as New game frames only does; menus and loading screens stay matched (tried on the test rig, not yet "
+                + "on many headsets). "
                 + "If your headset's own smoothing takes over (Virtual Desktop's SSW, Meta's ASW, SteamVR's Motion Smoothing or "
                 + "throttling), your headset asks for half the frames and the game is matched to that half. "
                 + "New game frames only (experimental): the game is not held, and the mod hands your headset each game frame "
                 + "once instead of the newest one at every headset frame; between game frames your headset's runtime fills in "
-                + "itself, as for a native game below your refresh rate. Matched to the headset by default.",
+                + "itself, as for a native game below your refresh rate. Above your refresh rate the game is not held, so it "
+                + "draws frames your headset never shows. Matched to the headset by default.",
                 "As fast as the game runs", "Matched to the headset (default)", "New game frames only (experimental)"),
             [Setting.TextureStreaming] = new Text("Texture streaming",
                 "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
@@ -296,11 +303,18 @@ namespace EternalVR.Launcher.Core.Settings
                 "How wide the HUD panel is, in metres. The menus take the same size."),
             [Setting.HudHeight] = new Text("HUD height",
                 "Moves the HUD panel up or down from eye level, in metres (negative is lower)."),
-            [Setting.HudPlace] = new Text("Health and ammo",
-                "Where health, armour and ammo are shown: on the HUD panel with the rest; on the inside of your off hand's "
-                + "wrist, shown when you turn it toward you; or on your weapon, where the ammo sits just above the back of the "
-                + "gun and health and armour stay on the panel. The wrist and the weapon are experimental.",
-                "On the HUD panel", "On your wrist", "On your weapon"),
+            [Setting.HudFront] = new Text("HUD in front of you",
+                "Health, armour, ammo and equipment on the HUD panel in front of you. Off, they are only where the wrist or the "
+                + "weapon shows them below (nowhere with neither). Subtitles, prompts and boss bars stay on the panel either way. "
+                + "Without motion controllers the panel always shows them."),
+            [Setting.HudWrist] = new Text("HUD on your wrist",
+                "Health, armour, ammo and equipment on the inside of your off hand's wrist. To read them, bring that forearm "
+                + "across your chest and twist the hand palm up, as if checking a watch worn on the inside of the wrist, then "
+                + "look at it: they fade in. With the HUD in front of you on as well, they show in both places. Experimental."),
+            [Setting.HudWeapon] = new Text("Ammo on your weapon",
+                "The ammo just above the back of the gun in your weapon hand, shown when the gun faces you (raise it toward your "
+                + "eyes like a sight). Health and armour stay where they are. With the HUD in front of you on as well, the ammo "
+                + "shows in both places. Not with the HUD on your wrist. Experimental."),
             [Setting.DlssQuality] = new Text("Quality",
                 "How large the image DLSS scales up from: DLAA renders each eye at its full size, Quality at two thirds, "
                 + "Balanced at 58%, Performance at half and Ultra Performance at a third. The smaller, the faster and the softer. "
@@ -330,6 +344,13 @@ namespace EternalVR.Launcher.Core.Settings
                 "How big the aim dot looks, in degrees of your view (1.0 is about the width of a finger at arm's length)."),
             [Setting.MenuLaser] = new Text("Menu laser",
                 "A laser from your hand to the menu panel. Off keeps only the dot on the panel."),
+            [Setting.TwoHandAim] = new Text("Two-handed aim (testing)",
+                "Off by default. On: squeeze your off hand's grip anywhere along the front of the gun (the pump, the "
+                + "barrel shroud, the front grip) and the gun aims along the line between your hands, the way you steady "
+                + "a real one; let go and the weapon hand aims on its own again. Aim steadiness smooths it as it does "
+                + "one-handed aim. While the off hand holds the gun its grip button does "
+                + "not do its usual job (the Flame Belch by default): squeeze it away from the gun for that. Not on the "
+                + "chaingun, the Crucible, the hammer, the chainsaw or the fists. New, not tried in a headset yet."),
             [Setting.GameFolder] = new Text("Game folder",
                 "Where DOOM Eternal is installed. The launcher finds it through Steam or Game Pass; choose the folder yourself only if "
                 + "that fails (the one with DOOMEternalx64vk.exe; for Game Pass, its Content folder)."),

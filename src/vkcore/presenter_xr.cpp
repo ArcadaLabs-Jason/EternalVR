@@ -184,6 +184,13 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
     if (refresh.extension) {
         extensions.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
     }
+    // Optional: the user's presence, the surest sign that nobody sees the frames (unseen_hold.hpp, T-228).
+    viewer.presenceExtension = std::any_of(props.begin(), props.end(), [](const XrExtensionProperties& p) {
+        return std::strcmp(p.extensionName, XR_EXT_USER_PRESENCE_EXTENSION_NAME) == 0;
+    });
+    if (viewer.presenceExtension) {
+        extensions.push_back(XR_EXT_USER_PRESENCE_EXTENSION_NAME);
+    }
     for (const std::string& name : controllerProfiles.extensions) {
         extensions.push_back(name.c_str());
     }
@@ -210,6 +217,7 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
         perfCounterTime = false;
         wrist.colorScaleBias = false;
         refresh.extension = false;
+        viewer.presenceExtension = false;
         info.enabledExtensionCount = 1;
         r = xr.xrCreateInstance(&info, &instance);
     }
@@ -246,10 +254,20 @@ bool XrPresenter::Impl::waitForSystem() {
         const XrResult r = xr.xrGetSystem(instance, &info, &systemId);
         if (XR_SUCCEEDED(r)) {
             XrSystemProperties sp{XR_TYPE_SYSTEM_PROPERTIES};
+            XrSystemUserPresencePropertiesEXT presence{XR_TYPE_SYSTEM_USER_PRESENCE_PROPERTIES_EXT};
+            if (viewer.presenceExtension) {
+                sp.next = &presence;
+            }
             xr.xrGetSystemProperties(instance, systemId, &sp);
+            viewer.watch.sensesPresence(viewer.presenceExtension && presence.supportsUserPresence != 0);
             EVR_LOG("xr: system '%s', max swapchain %ux%u", sp.systemName,
                     sp.graphicsProperties.maxSwapchainImageWidth,
                     sp.graphicsProperties.maxSwapchainImageHeight);
+            EVR_LOG("xr: user presence: %s", !viewer.presenceExtension
+                                                 ? "not offered by the runtime (XR_EXT_user_presence)"
+                                             : presence.supportsUserPresence != 0
+                                                 ? "sensed by this headset (XR_EXT_user_presence)"
+                                                 : "offered by the runtime, not sensed by this headset");
             maxSwapchainWidth = sp.graphicsProperties.maxSwapchainImageWidth;
             maxSwapchainHeight = sp.graphicsProperties.maxSwapchainImageHeight;
             reportViewLimits();

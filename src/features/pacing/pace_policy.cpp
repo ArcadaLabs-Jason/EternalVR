@@ -61,9 +61,14 @@ double newFrameWaitSeconds(double periodSeconds) {
     return std::min(kNewFrameWaitPeriods * period, kNewFrameMaxWaitSeconds);
 }
 
-PaceStep FramePacer::afterHandOver(const HeadsetLoop& loop, double nowSeconds) {
+PaceStep FramePacer::afterHandOver(const HeadsetLoop& loop, double nowSeconds, bool heldLow) {
     ++counters_.handOvers;
     if (mode_ != PaceMode::Headset) { // NewFrames holds the headset's frame instead (XR worker)
+        return {};
+    }
+    if (heldLow) {
+        ++counters_.unseen;
+        released_ = loop.frames;
         return {};
     }
     const double period = loop.periodSeconds;
@@ -117,10 +122,20 @@ double UnfocusedCap::interval(double periodSeconds) {
 }
 
 double UnfocusedCap::afterHandOver(double periodSeconds, double nowSeconds) {
-    if (!std::isfinite(nowSeconds)) {
+    return afterHandOverEvery(interval(periodSeconds), nowSeconds);
+}
+
+void UnfocusedCap::releasedAt(double nowSeconds) {
+    if (std::isfinite(nowSeconds)) {
+        release_ = nowSeconds;
+    }
+}
+
+double UnfocusedCap::afterHandOverEvery(double intervalSeconds, double nowSeconds) {
+    if (!std::isfinite(nowSeconds) || !std::isfinite(intervalSeconds) || intervalSeconds <= 0.0) {
         return 0.0;
     }
-    const double next = release_ ? *release_ + interval(periodSeconds) : nowSeconds;
+    const double next = release_ ? *release_ + intervalSeconds : nowSeconds;
     if (nowSeconds >= next) {
         release_ = nowSeconds;
         return 0.0;
@@ -146,6 +161,112 @@ void Cadence::frame(std::uint64_t handOvers) {
         ++counters_.several;
         counters_.notShown += n - 1;
     }
+}
+
+void HoldSwitch::noteGameTime(double seconds) {
+    if (!std::isfinite(seconds) || seconds < 0.0 || !held_) {
+        return;
+    }
+    ++gameTimes_;
+    if (lastPeriod_ > 0.0 && seconds > lastPeriod_) {
+        ++slowGameTimes_;
+    }
+}
+
+bool HoldSwitch::frame(double nowSeconds, std::uint64_t handOvers, double periodSeconds, bool inPlay) {
+    if (!std::isfinite(nowSeconds)) {
+        return false;
+    }
+    const bool periodKnown = std::isfinite(periodSeconds) && periodSeconds > 0.0;
+    if (periodKnown) {
+        lastPeriod_ = periodSeconds;
+    }
+    const bool newImage = !lastHandOvers_ || handOvers > *lastHandOvers_;
+    lastHandOvers_ = handOvers;
+    const auto restart = [&] {
+        windowStart_ = nowSeconds;
+        windowHandOvers_ = handOvers;
+        frames_ = 0;
+        repeats_ = 0;
+        gameTimes_ = 0;
+        slowGameTimes_ = 0;
+    };
+    const auto change = [&](Change why) {
+        held_ = !held_;
+        ++switches_;
+        changedAt_ = nowSeconds;
+        lastChange_ = why;
+        badWindows_ = 0;
+    };
+    if (!windowStart_) {
+        restart();
+        changedAt_ = nowSeconds;
+        return false;
+    }
+    if (!inPlay) {
+        // A menu or a loading screen: held, nothing decided. Not a hold the back-off judges.
+        const bool changed = !held_;
+        if (changed) {
+            change(Change::LeftPlay);
+            holdTried_ = false;
+        }
+        badWindows_ = 0;
+        restart();
+        return changed;
+    }
+    ++frames_;
+    if (!newImage) {
+        ++repeats_;
+    }
+    const double elapsed = nowSeconds - *windowStart_;
+    if (elapsed < kWindowSeconds) {
+        return false;
+    }
+    bool changed = false;
+    if (periodKnown && elapsed <= kMaxWindowSeconds && frames_ >= kMinWindowFrames) {
+        lastRepeatShare_ = static_cast<double>(repeats_) / static_cast<double>(frames_);
+        lastRate_ = static_cast<double>(handOvers - windowHandOvers_) / elapsed;
+        if (held_) {
+            bool bad = static_cast<double>(repeats_) > kLetGoRepeatShare * static_cast<double>(frames_);
+            if (bad && latencyGate_ && gameTimes_ > 0 && 2 * slowGameTimes_ <= gameTimes_) {
+                bad = false; // the game draws its images within the period: the repeats were hitches
+            }
+            badWindows_ = bad ? badWindows_ + 1 : 0;
+            if (badWindows_ >= kBadWindowsToLetGo) {
+                if (holdTried_) {
+                    const bool lasted = nowSeconds - changedAt_ >= kLastingHoldSeconds;
+                    backOff_ = lasted ? kWindowSeconds : std::min(2.0 * backOff_, kMaxBackOffSeconds);
+                }
+                change(Change::FellBehind);
+                changed = true;
+            }
+        } else if (nowSeconds - changedAt_ >= backOff_ && lastRate_ >= kHoldRateShare / periodSeconds) {
+            change(Change::KeptUp);
+            holdTried_ = true;
+            changed = true;
+        }
+    } else {
+        badWindows_ = 0; // a gap or too few frames: no decision, and no run of bad windows across it
+    }
+    restart();
+    return changed;
+}
+
+void HoldSwitch::pause(double nowSeconds, std::uint64_t handOvers) {
+    if (!std::isfinite(nowSeconds)) {
+        return;
+    }
+    if (!windowStart_) {
+        changedAt_ = nowSeconds; // as frame()'s first frame
+    }
+    lastHandOvers_ = handOvers;
+    windowStart_ = nowSeconds;
+    windowHandOvers_ = handOvers;
+    frames_ = 0;
+    repeats_ = 0;
+    gameTimes_ = 0;
+    slowGameTimes_ = 0;
+    badWindows_ = 0;
 }
 
 void Cadence::shown(std::uint64_t seq, double lateSeconds) {

@@ -224,8 +224,46 @@ std::string pressText(PromptPress press, const std::string& name) {
         return name + " Down";
     case PromptPress::StickDownHold:
         return "Hold " + name + " Down";
+    case PromptPress::StickLeft:
+        return name + " Left";
+    case PromptPress::StickRight:
+        return name + " Right";
+    case PromptPress::StickUpLeft:
+        return name + " Up Left";
+    case PromptPress::StickUpRight:
+        return name + " Up Right";
+    case PromptPress::StickDownLeft:
+        return name + " Down Left";
+    case PromptPress::StickDownRight:
+        return name + " Down Right";
     }
     return name;
+}
+
+// How a prompt asks for a turn-stick gesture.
+PromptPress gesturePress(StickGesture gesture) {
+    switch (gesture) {
+    case StickGesture::Up:
+        return PromptPress::StickUp;
+    case StickGesture::Down:
+    case StickGesture::DownTap:
+        return PromptPress::StickDown;
+    case StickGesture::DownHold:
+        return PromptPress::StickDownHold;
+    case StickGesture::Left:
+        return PromptPress::StickLeft;
+    case StickGesture::Right:
+        return PromptPress::StickRight;
+    case StickGesture::UpLeft:
+        return PromptPress::StickUpLeft;
+    case StickGesture::UpRight:
+        return PromptPress::StickUpRight;
+    case StickGesture::DownLeft:
+        return PromptPress::StickDownLeft;
+    case StickGesture::DownRight:
+        return PromptPress::StickDownRight;
+    }
+    return PromptPress::StickUp;
 }
 
 // The first control bound to `action` that the controller has a name for.
@@ -356,13 +394,7 @@ std::vector<PromptControl> promptControls(game::GameAction action, const Binding
             if (binding.action != action) {
                 continue;
             }
-            PromptPress press = PromptPress::StickUp;
-            if (binding.gesture == StickGesture::DownTap) {
-                press = PromptPress::StickDown;
-            } else if (binding.gesture == StickGesture::DownHold) {
-                press = PromptPress::StickDownHold;
-            }
-            controls.push_back({*profile.turnStick, LabelInput::Stick, press});
+            controls.push_back({*profile.turnStick, LabelInput::Stick, gesturePress(binding.gesture)});
         }
     }
     return controls;

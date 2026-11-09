@@ -176,10 +176,13 @@ namespace EternalVR.Launcher.Core.Tests
             var lines = Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100));
             for (int i = 0; i < 10; i++) lines.Add(Vram(20 + 10 * i, i < 8 ? 10 : 2, 10, i < 8 ? 129 : 95));
             var s = SessionSummary.FromLines(lines);
-            Assert.Equal(10, s.VramWindows);
-            Assert.Equal(0.8, s.VramOverShare, 6);
-            Assert.EndsWith("The game used more video memory than your graphics card had free for 80% of the session: a lower Resolution, "
-                + "or ray tracing off in the game, makes it smoother.", s.Describe());
+            Assert.Equal(10, s.VideoMemory.Windows);
+            Assert.Equal(0.8, s.VideoMemory.OverShare, 6);
+            // It leads the sentences (T-227): it is the one that asks for a change.
+            Assert.True(s.VideoMemory.Over);
+            Assert.StartsWith("The game went about 2.5 GB over the 8.7 GB of video memory Windows gives it for 80% of the session, which "
+                + "can make it stutter or crash: in the game's video settings set Texture Pool Size one step lower; if this shows "
+                + "again after your next session, lower Resolution on the Play tab. The game drew about 100 new frames", s.Describe());
             Assert.Contains("video memory over the budget in 8 of 10 window(s)", s.LogText());
             // Now and then over the budget, or too few windows: nothing said.
             var rare = Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100));
@@ -189,7 +192,7 @@ namespace EternalVR.Launcher.Core.Tests
             short_.Add(Vram(20, 10, 10, 129));
             Assert.DoesNotContain("video memory", SessionSummary.FromLines(short_).Describe());
             // No vram line (an older layer): nothing said, none counted.
-            Assert.Equal(0, SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100))).VramWindows);
+            Assert.Equal(0, SessionSummary.FromLines(Session(Steam, "SteamVR/OpenXR : cv", 8.33, Repeat(10, 8.33, 100))).VideoMemory.Windows);
         }
 
         private static string VramUse(double t, int use, int budget) => FormattableString.Invariant(
@@ -203,8 +206,8 @@ namespace EternalVR.Launcher.Core.Tests
             var lines = Session(Steam, "SteamVR/OpenXR : oculus", 11.11, Repeat(10, 11.11, 62));
             for (int i = 0; i < 10; i++) lines.Add(VramUse(20 + 10 * i, 8742, i < 9 ? 8926 : 9900));
             var s = SessionSummary.FromLines(lines);
-            Assert.Equal(0.0, s.VramOverShare, 6);
-            Assert.Equal(0.9, s.VramNearShare, 6);
+            Assert.Equal(0.0, s.VideoMemory.OverShare, 6);
+            Assert.Equal(0.9, s.VideoMemory.NearShare, 6);
             Assert.EndsWith("The game used nearly all the video memory Windows gives it for 90% of the session, so a headset menu "
                 + "opening over it (like SteamVR's dashboard) can reset the graphics driver: a lower Texture Pool Size in the game's "
                 + "video settings makes room.", s.Describe());

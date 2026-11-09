@@ -147,3 +147,25 @@
 "weapon/player/chaingun" = 0.7
 "weapon/player/bfg" = 0.7
 "weapon/player/unmaykr" = 0.7
+# Two-handed aim (docs/VR_HANDS_HUD.md, "Two-handed aim"; DECISIONS T-156): the support point, where the off
+# glove's grip sits on the gun as the game's own idle holds the fore-end or the shroud with the left hand.
+# [forward, left, up], metres in the weapon controller's aim frame from its grip: the game's left wrist on the gun
+# (its pose under the left attach joint, placed on the gun's root) with the off hand's wrist offset undone, less
+# the controller's grip, the median over the grip sweep's neutral holds (docs/rig-findings/hands-rig.md, section
+# 27; two runs within 1.3 cm, the Heavy Cannon's idle sway, and within 0.1 cm on every other gun). With the
+# weapon in the left hand the row is reflected (left negated): the left-handed sweep's right glove on the
+# reflected grip gives the same points within 0.6 cm (the Heavy Cannon 2.2 cm, its sway). Same key rules, no
+# "default": an item without a row takes no support grip. Not here: the chaingun (the game's left hand holds a
+# handle on its side, 37 cm left of the weapon glove and 75 degrees from the barrel: the line between the hands
+# would roll the gun about its barrel, not point it; with the weapon in the left hand that handle is not under
+# the right hand at all, DECISIONS T-141), and the items held in one hand or swung: the Crucible, the Sentinel
+# Hammer, the chainsaw and the fists (the Berserk's, a melee's and the swim's).
+[two_hand]
+"weapon/player/shotgun" = [0.296, 0.006, 0.057]
+"weapon/player/double_barrel" = [0.287, 0.004, 0.048]
+"weapon/player/heavy_cannon" = [0.388, -0.003, 0.014]
+"weapon/player/plasma_rifle" = [0.756, -0.015, 0.093]
+"weapon/player/rocket_launcher" = [0.163, 0.003, -0.004]
+"weapon/player/gauss_rifle" = [0.224, 0.011, 0.068]
+"weapon/player/bfg" = [0.319, 0.002, 0.050]
+"weapon/player/unmaykr" = [0.307, -0.003, 0.007]

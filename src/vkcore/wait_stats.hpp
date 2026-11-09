@@ -10,9 +10,11 @@ namespace evr::vkcore {
 struct WaitStats {
     double sumMs = 0.0;
     double maxMs = 0.0;
+    double lastMs = 0.0;
     std::uint64_t count = 0;
 
     void add(double ms) {
+        lastMs = ms;
         sumMs += ms;
         maxMs = std::max(maxMs, ms);
         ++count;

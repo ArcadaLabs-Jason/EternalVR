@@ -8,6 +8,7 @@
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/present_latency.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
@@ -168,7 +169,11 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInf
     }
     // ETERNALVR_PACE=headset: a present that handed an image to the headset waits here for the headset's next
     // frame, after the hook's own timing and with no lock held (frame_pacing.hpp).
-    frame_pacing::afterPresent();
+    // With CPU timing and the presenter: the game's release after the hold (present_latency.hpp).
+    const bool held = frame_pacing::afterPresent();
+    if (data->presenter) {
+        present_latency::afterPresent(held);
+    }
     return result;
 }
 

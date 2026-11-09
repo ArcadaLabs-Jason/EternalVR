@@ -86,6 +86,12 @@
 //   ETERNALVR_TEST_INPUT        path            scripted controller input for rig tests (test_input.hpp)
 //   ETERNALVR_TEST_ARM_DUMP     path            rig tests: both arms' poses, one JSON line every 0.25 s
 //                                               (docs/rig-findings/hands-rig.md)
+//   ETERNALVR_TEST_ARM_TICKS    path            rig tests: a CSV row per camera hook, viewmodel placement
+//                                               and off-hand tick (vkcore/arm_ticks.hpp)
+//   ETERNALVR_TEST_PROFILES     names           rig tests: only these families' bindings are suggested
+//                                               (comma-separated data file names, valve_index,...), so
+//                                               OpenXR-Simulator reports another profile than Touch
+//                                               (familyListed, controller_family.hpp)
 //   ETERNALVR_TEST_ARM_MOD_WEIGHT  0..1         rig tests, development only: the hands' joint-modifier
 //                                               weight held while the free off hand is posed, put back
 //                                               when the arm goes back to the game or the multiplayer
@@ -245,6 +251,10 @@ enum class ArmFault : std::uint8_t {
     Forearm, // hands only with the forearm left drawn
     Fingers, // the free off hand's fingers left the game's while they are posed (hand poses)
     Trigger, // the weapon hand's index finger turned past the game's grip, into the trigger guard
+    // Two-handed aim held only half way to the hands' line, the off glove left on its controller, and the
+    // release three frames late (the two-hand checks' positive control).
+    TwoHand,
+    TwoHandLine, // two-handed aim's line left unsmoothed (the jitter check's positive control)
 };
 
 struct ControllerSettings {
@@ -288,6 +298,8 @@ struct ControllerSettings {
     // Rig tests (docs/rig-findings/hands-rig.md): the arms dump's file, and the planted fault (development
     // use only, features/arm/twist_fault.hpp).
     std::string testArmDumpPath;
+    std::string testArmTicksPath; // the per-tick record's file (ETERNALVR_TEST_ARM_TICKS)
+    std::string testProfiles;     // ETERNALVR_TEST_PROFILES; empty for every family
     ArmFault testArmFault = ArmFault::None;
     // Development only (ETERNALVR_TEST_ARM_MOD_WEIGHT, 0 to 1): the weight the hands' joint-modifier node is
     // mixed in with, held while the free off hand is posed and put back when it goes back to the game or the
@@ -326,6 +338,10 @@ struct ControllerSettings {
     // The arms hidden while a cutscene plays around the player (ETERNALVR_CUTSCENE_ARMS, hidden by default),
     // with the game's own weapon FOV kept for its hands model.
     bool cutsceneArmsHidden = true;
+    // Two-handed aim (ETERNALVR_TWO_HAND, features/input/two_hand.hpp): the off hand on the gun's support
+    // point aims it along the line between the hands. It needs the new arms (the free off hand and the bind
+    // solve): without them it is reported and stays off.
+    bool twoHandAim = false;
 };
 
 struct SettingsIssue {

@@ -24,10 +24,21 @@
 // the stick points at the wheel as it does after a down hold: the sweep in progress is cancelled, and
 // one still out of the centre when the button is let go stays cancelled until it comes back, so
 // pointing at the wheel never turns, fires a gesture or ends in a quick switch.
+//
+// A map that binds the stick's sides (left, right or a diagonal, T-229) splits it by direction instead of the
+// claim cones (stick_directions.hpp): the part a sweep is in when it qualifies decides its intent, a
+// gesture's part at `gestureEngage`, turning's (straight left and right not bound) at `turnClaim`
+// sideways, and the sweep keeps that intent as above. A side's sweep is active for as long as it lasts, as
+// up's; up and down keep their own behaviour within their parts.
+//
+// A map that binds `down` (T-229) has a down sweep active for as long as it lasts, as up's: no tap, no hold
+// and no stay cone.
 
 #include "features/input/axis2.hpp"
+#include "features/input/stick_directions.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace evr::input {
 
@@ -74,23 +85,28 @@ enum class SweepIntent : std::uint8_t {
     Turn,
     Up,
     Down,
+    Side, // A side of the stick (left, right or a diagonal; side()).
     Cancelled,
 };
 
 struct TurnStickOutput {
     bool turnAllowed = false;
-    bool up = false;       // For the whole up sweep.
+    bool up = false; // For the whole up sweep.
+    // For the whole down sweep, when the layout's down is a press (StickLayout::downPress).
+    bool down = false;
     bool downTap = false;  // One frame, when a short down sweep ends.
     bool downHold = false; // From the hold time until the sweep ends.
-    Axis2 wheelPointer;    // The stick, while downHold is active or a button holds the wheel.
+    // For the whole sweep of a side: its direction (left, right or a diagonal).
+    std::optional<StickDirection> side;
+    Axis2 wheelPointer; // The stick, while downHold is active or a button holds the wheel.
 };
 
 class TurnStickArbiter {
 public:
     // Settings that are not finite, out of range or inconsistent with each other (the centre radius
     // must be the smallest deflection, the stay cone at least the claim cone) fall back to the
-    // defaults as a whole.
-    explicit TurnStickArbiter(TurnStickSettings settings = {});
+    // defaults as a whole. `layout`: the map's gestures (stickLayoutOf); the default is the claim cones.
+    explicit TurnStickArbiter(TurnStickSettings settings = {}, StickLayout layout = {});
 
     // `dtSeconds` must be finite and non-negative. A non-finite stick (a lost action state) is
     // treated as the last finite position with no time passing, so a glitch neither ends a sweep,
@@ -103,15 +119,22 @@ public:
     void cancelSweep();
 
     [[nodiscard]] SweepIntent intent() const { return intent_; }
+    // The side of a Side sweep (meaningless for other intents).
+    [[nodiscard]] StickDirection side() const { return side_; }
     [[nodiscard]] const TurnStickSettings& settings() const { return settings_; }
+    [[nodiscard]] const StickLayout& layout() const { return layout_; }
 
 private:
-    SweepIntent claim(Axis2 stick) const;
+    SweepIntent claim(Axis2 stick);
+    SweepIntent claimByCones(Axis2 stick) const;
+    SweepIntent claimByDirection(Axis2 stick);
     TurnStickOutput continueDown(Axis2 stick);
     TurnStickOutput pointAtWheel(Axis2 stick);
 
     TurnStickSettings settings_;
+    StickLayout layout_;
     SweepIntent intent_ = SweepIntent::None;
+    StickDirection side_ = StickDirection::Right;
     float downSeconds_ = 0.0f;
     bool holdReached_ = false;
     Axis2 lastStick_;

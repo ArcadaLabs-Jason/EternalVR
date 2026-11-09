@@ -85,7 +85,7 @@ TEST_CASE("a refused profile drops the trigger's touch alone first: the thumb re
     const auto steps = touchRetries(touch);
     REQUIRE(steps.size() == 3);
     // First: the two trigger touch bindings and nothing else; the wheel's rests and the veto sensors kept.
-    CHECK(steps[0].retry == TouchRetry::WithoutTriggerTouch);
+    CHECK(steps[0].retry == TouchRetry::WithoutFingers);
     CHECK(steps[0].data.suggested.size() == all - 2);
     CHECK(steps[0].data.find(XrActionId::ThumbRest, Hand::Left) != nullptr);
     CHECK(steps[0].data.find(XrActionId::ThumbRest, Hand::Right) != nullptr);
@@ -109,8 +109,8 @@ TEST_CASE("a trigger touch a map binds like a button stays through the first ret
     addTriggerTouchBindings(data);
     const auto steps = touchRetries(data);
     REQUIRE_FALSE(steps.empty());
-    CHECK(steps[0].retry == TouchRetry::WithoutTriggerTouch);
+    CHECK(steps[0].retry == TouchRetry::WithoutFingers);
     CHECK(steps[0].data.find(XrActionId::TriggerTouch, Hand::Left) == nullptr);
     CHECK(steps[0].data.find(XrActionId::TriggerTouch, Hand::Right) != nullptr);
-    CHECK(evr::input::withoutTriggerTouch(data).suggested.size() == data.suggested.size() - 1);
+    CHECK(evr::input::withoutFingerBindings(data).suggested.size() == data.suggested.size() - 1);
 }

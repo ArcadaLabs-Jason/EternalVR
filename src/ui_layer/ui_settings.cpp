@@ -132,6 +132,9 @@ void readWrist(const EnvLookup& env, UiSettings& s, std::vector<std::string>& wa
             warnings.push_back("ETERNALVR_HUD is not panel, wrist or weapon; the default is kept");
         }
     }
+    // The earlier ETERNALVR_HUD=wrist and weapon took the corner blocks off the head-locked quad.
+    s.front = s.hud == HudMode::Panel;
+    readSwitch(env, L"ETERNALVR_HUD_FRONT", s.front, warnings);
     WristSettings& w = s.wrist;
     readSwitch(env, L"ETERNALVR_WRIST_ALWAYS", w.always, warnings);
     readNumber(env, L"ETERNALVR_WRIST_ANGLE", 5.0f, 90.0f, w.showDegrees, warnings);

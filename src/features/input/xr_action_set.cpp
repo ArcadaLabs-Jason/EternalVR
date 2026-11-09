@@ -41,6 +41,8 @@ constexpr std::array<XrActionDef, kXrActionCount> kActions{{
      XrActionKind::Boolean},
     {XrActionId::TriggerTouch, XrActionSetId::Gameplay, "trigger_touch", "Trigger (touch)",
      XrActionKind::Boolean},
+    {XrActionId::GripCurl, XrActionSetId::Gameplay, "grip_curl", "Grip (fingers around it)",
+     XrActionKind::Float},
 }};
 
 } // namespace

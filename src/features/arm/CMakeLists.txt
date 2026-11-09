@@ -6,6 +6,8 @@ evr_add_module(evr_arm
         arm_solve.cpp
         arm_surfaces.cpp
         arm_twist.cpp
+        drawn_wrist.cpp
+        frame_pin.cpp
         grip_hand.cpp
         hand_offset.cpp
         hand_pose.cpp

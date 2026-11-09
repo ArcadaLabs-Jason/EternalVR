@@ -7,6 +7,7 @@
 
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/new_frame_wait.hpp"
+#include "vkcore/present_latency.hpp"
 #include "vkcore/status_file.hpp"
 
 #include <algorithm>
@@ -459,8 +460,10 @@ void XrPresenter::Impl::publishSlot(std::uint32_t slotIndex, std::uint64_t value
     frameLogEyes.lastPresent.store(FrameRepeat::NoPresent); // until a present hands over none
     latest.store((value << 2) | slotIndex);
     ++framesCopied;
+    // With CPU timing (release-to-present), before the XR worker can take it.
+    present_latency::onHandOver(value);
     frame_pacing::onHandOver();    // the present hook waits for the headset's next frame under ETERNALVR_PACE
-    new_frame_wait::onPublished(); // ETERNALVR_PACE=new: the XR worker waits for this before its next frame
+    new_frame_wait::onPublished(); // ETERNALVR_PACE=new or headset: the XR worker's next frame waits for it
 }
 
 // The worker's slot for this frame, marked as being read (the choice: features/pacing/slot_choice.hpp). A
@@ -482,6 +485,7 @@ bool XrPresenter::Impl::takeRenderedSlot(std::uint32_t& slotIndex,
         }
         slotIndex = index;
         value = packed >> 2;
+        present_latency::onTaken(value);
         return true;
     };
     double waitSeconds = pacing::newestWaitSeconds(static_cast<double>(displayPeriod.load()) / 1e9,
@@ -538,6 +542,7 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
     frameLogEyes.repeat = FrameRepeat::New;
     ring[slotIndex].state.store(kSlotFree);
     lastConsumed = value;
+    present_latency::onCopied(value);
 
     XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xr.xrReleaseSwapchainImage(xrSwapchain, &release);

@@ -223,7 +223,7 @@ namespace EternalVR.Launcher.Core.Controls
         }
 
         /// <summary>The layer's gameplay actions (features/input/xr_action_set.cpp), every one a <c>[profile]</c> key may name.</summary>
-        internal static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "aim_pose", "grip_pose", "haptic", "thumbrest", "primary_touch", "secondary_touch", "thumbstick_touch", "trackpad_touch", "trigger_touch" };
+        internal static readonly string[] GameplayActions = { "trigger", "grip", "thumbstick", "thumbstick_click", "primary", "secondary", "face3", "face4", "shoulder", "menu", "aim_pose", "grip_pose", "haptic", "thumbrest", "primary_touch", "secondary_touch", "thumbstick_touch", "trackpad_touch", "trigger_touch", "grip_curl" };
 
         /// <summary>
         /// The shape of the <c>[profile]</c> entries. The layer also checks each path against the controller's inputs; the

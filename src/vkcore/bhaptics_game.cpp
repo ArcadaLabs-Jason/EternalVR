@@ -417,6 +417,11 @@ void linkMain(float intensity) {
 
 } // namespace
 
+bool playerDead(const std::byte* player) {
+    bool dead = false;
+    return isPlayerSafe(player) && safeRead(player + kPlayerHealth + kHealthIsDead, dead) && dead;
+}
+
 void startBhaptics() {
     const input::ControllerSettings& cfg = settings();
     if (!cfg.bhaptics) {

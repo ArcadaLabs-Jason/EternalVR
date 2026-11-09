@@ -51,7 +51,7 @@ void resetSessionState(XrPresenter::Impl& p) {
     p.sessionState = XR_SESSION_STATE_UNKNOWN;
     p.sessionRunning = false;
     p.sessionFocused.store(false, std::memory_order_relaxed);
-    p.clock.wasFocused = false;
+    p.viewer.watch.ready();
     p.clock.watch.reset();
     p.clock.gaps.restart();
     p.acquiredIndex = -1;

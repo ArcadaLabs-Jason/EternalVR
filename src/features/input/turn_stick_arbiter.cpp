@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <numbers>
+#include <optional>
 
 namespace evr::input {
 
@@ -42,7 +44,8 @@ float wheelStickHoldSeconds(float buttonHoldSeconds) {
                       kMinWheelStickHoldSeconds, kMaxHoldSeconds);
 }
 
-TurnStickArbiter::TurnStickArbiter(TurnStickSettings settings) : settings_(sanitized(settings)) {}
+TurnStickArbiter::TurnStickArbiter(TurnStickSettings settings, StickLayout layout)
+    : settings_(sanitized(settings)), layout_(layout) {}
 
 TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds, bool wheelHeld) {
     if (isFinite(stick)) {
@@ -58,7 +61,7 @@ TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds, bool whee
 
     if (magnitude(stick) <= settings_.centreRadius) {
         TurnStickOutput output;
-        output.downTap = intent_ == SweepIntent::Down && !holdReached_;
+        output.downTap = intent_ == SweepIntent::Down && !holdReached_ && !layout_.downPress;
         intent_ = SweepIntent::None;
         downSeconds_ = 0.0f;
         holdReached_ = false;
@@ -69,7 +72,7 @@ TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds, bool whee
         intent_ = claim(stick);
         // The claim frame is time zero, like a button press.
         downSeconds_ = 0.0f;
-    } else if (intent_ == SweepIntent::Down) {
+    } else if (intent_ == SweepIntent::Down && !layout_.downPress) {
         downSeconds_ += dtSeconds;
     }
 
@@ -82,7 +85,14 @@ TurnStickOutput TurnStickArbiter::update(Axis2 stick, float dtSeconds, bool whee
         output.up = true;
         break;
     case SweepIntent::Down:
+        if (layout_.downPress) {
+            output.down = true;
+            break;
+        }
         return continueDown(stick);
+    case SweepIntent::Side:
+        output.side = side_;
+        break;
     case SweepIntent::None:
     case SweepIntent::Cancelled:
         break;
@@ -98,7 +108,11 @@ void TurnStickArbiter::cancelSweep() {
     holdReached_ = false;
 }
 
-SweepIntent TurnStickArbiter::claim(Axis2 stick) const {
+SweepIntent TurnStickArbiter::claim(Axis2 stick) {
+    return layout_.directions ? claimByDirection(stick) : claimByCones(stick);
+}
+
+SweepIntent TurnStickArbiter::claimByCones(Axis2 stick) const {
     const bool upCone = inVerticalCone(stick, 1.0f, settings_.claimConeDegrees);
     const bool downCone = inVerticalCone(stick, -1.0f, settings_.claimConeDegrees);
     const bool engaged = magnitude(stick) >= settings_.gestureEngage;
@@ -112,6 +126,28 @@ SweepIntent TurnStickArbiter::claim(Axis2 stick) const {
         return SweepIntent::Turn;
     }
     return SweepIntent::None;
+}
+
+SweepIntent TurnStickArbiter::claimByDirection(Axis2 stick) {
+    const std::optional<StickDirection> direction = ownedDirectionAt(stick, layout_);
+    if (!direction) {
+        return SweepIntent::None;
+    }
+    if (layout_.owners[static_cast<std::size_t>(*direction)] == DirectionOwner::Turn) {
+        return std::fabs(stick.x) >= settings_.turnClaim ? SweepIntent::Turn : SweepIntent::None;
+    }
+    if (magnitude(stick) < settings_.gestureEngage) {
+        return SweepIntent::None;
+    }
+    switch (*direction) {
+    case StickDirection::Up:
+        return SweepIntent::Up;
+    case StickDirection::Down:
+        return SweepIntent::Down;
+    default:
+        side_ = *direction;
+        return SweepIntent::Side;
+    }
 }
 
 TurnStickOutput TurnStickArbiter::pointAtWheel(Axis2 stick) {

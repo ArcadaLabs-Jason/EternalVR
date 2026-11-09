@@ -44,7 +44,7 @@ namespace EternalVR.Launcher.Core.Controls
     /// <summary>
     /// The checks the layer makes on a control map before using it (features/input/binding_compiler.cpp): every key known,
     /// every value an action (or a hand, or a stick role), no <c>press</c> together with a <c>tap</c> or <c>hold</c> on one
-    /// button, the two sticks not given one role, and stick gestures only on the turn stick. A tap and a hold on one button
+    /// button (nor the stick's <c>down</c> with <c>down_tap</c> or <c>down_hold</c>), the two sticks not given one role, and stick gestures only on the turn stick. A tap and a hold on one button
     /// are fine, and so is one action on several buttons. The layer drops the faulty binding and, for a player's file, uses
     /// the built-in controls instead; the editor refuses to save. A key of a later version (<see cref="BindingKey.IsLaterKey"/>)
     /// is reported as <see cref="ControlIssue.Skipped"/>: the game leaves it out and uses the rest, and the editor saves. A
@@ -153,15 +153,26 @@ namespace EternalVR.Launcher.Core.Controls
                     + "because a press also fires on every tap and hold; clear one of them"));
             }
 
-            // Gestures only on the turn stick.
+            // Gestures only on the turn stick; and down (the stick's press downwards, T-229) not with a down tap or hold, which
+            // it would fire on every one of. Down is kept.
             foreach (var g in gestures)
             {
-                if (turnStick == g.Parsed.Hand) continue;
                 var hand = g.Parsed.Hand;
-                var roleKey = roleKeys[(int)hand] ?? BindingKey.Role(hand).ToString();
-                issues.Add(Conflict(ControlConflict.GestureOffTurnStick, section, g.Key, g.Action, roleKey, ControlNames.RoleName(roles[(int)hand]),
-                    Where(g.Parsed, inputName, stickName) + " (" + ControlNames.ActionLabel(g.Action) + ") only works on the turn stick, and the " + stickName(hand).ToLowerInvariant()
-                    + " is set to " + ControlNames.RoleLabel(roles[(int)hand])));
+                if (turnStick != hand)
+                {
+                    var roleKey = roleKeys[(int)hand] ?? BindingKey.Role(hand).ToString();
+                    issues.Add(Conflict(ControlConflict.GestureOffTurnStick, section, g.Key, g.Action, roleKey, ControlNames.RoleName(roles[(int)hand]),
+                        Where(g.Parsed, inputName, stickName) + " (" + ControlNames.ActionLabel(g.Action) + ") only works on the turn stick, and the " + stickName(hand).ToLowerInvariant()
+                        + " is set to " + ControlNames.RoleLabel(roles[(int)hand])));
+                    continue;
+                }
+                if (g.Parsed.Gesture != StickGesture.DownTap && g.Parsed.Gesture != StickGesture.DownHold) continue;
+                var down = gestures.FirstOrDefault(d => d.Parsed.Hand == hand && d.Parsed.Gesture == StickGesture.Down);
+                if (down.Key == null) continue;
+                issues.Add(Conflict(ControlConflict.PressWithTapOrHold, section, g.Key, g.Action, down.Key, down.Action,
+                    stickName(hand) + ": " + ControlNames.ActionLabel(down.Action) + " (down) and " + ControlNames.ActionLabel(g.Action) + " ("
+                    + ControlNames.GestureLabel(g.Parsed.Gesture) + ") cannot share the stick's down, because down also fires on every tap "
+                    + "and hold; clear one of them"));
             }
             return issues;
         }

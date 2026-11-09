@@ -78,6 +78,37 @@ TEST_CASE(
     CHECK(odd.index == 0.0f);
 }
 
+TEST_CASE("the three fingers close as they wrap the grip, without the squeeze that presses it (T-226)") {
+    // The Index: the grip action reads the force (the Flame Belch at 0.65), the curl the squeeze's value,
+    // which rises as the fingers wrap the handle before any force.
+    FingerSensors wrapped;
+    wrapped.gripCurl = 1.0f;
+    const FingerCurls closed = fingerCurls(wrapped);
+    CHECK(closed.middle == 1.0f);
+    CHECK(closed.ring == 1.0f);
+    CHECK(closed.pinky == 1.0f);
+    CHECK(closed.index == 0.0f); // the index finger stays the trigger's
+    CHECK(closed.thumb == 0.0f);
+    FingerSensors partly;
+    partly.gripCurl = 0.6f;
+    partly.grip = 0.2f;
+    CHECK(fingerCurls(partly).middle == 0.6f);
+    // A squeeze is a closed hand too: the larger of the two, so a controller without the curl (a click grip,
+    // a Touch controller whose grip is the value) closes with its grip as before.
+    FingerSensors squeezed;
+    squeezed.grip = 1.0f;
+    CHECK(fingerCurls(squeezed).ring == 1.0f);
+    squeezed.gripCurl = 0.3f;
+    CHECK(fingerCurls(squeezed).ring == 1.0f);
+    // Out of range or not a number: clamped like the grip.
+    FingerSensors odd;
+    odd.grip = 0.4f;
+    odd.gripCurl = std::nanf("");
+    CHECK(fingerCurls(odd).middle == 0.4f);
+    odd.gripCurl = 3.0f;
+    CHECK(fingerCurls(odd).middle == 1.0f);
+}
+
 TEST_CASE("the curls are eased: a touch that flips moves the finger over a few frames, not at once") {
     FingerEase ease;
     CHECK(ease.update({1.0f, 0.0f, 0.0f, 0.0f, 0.0f}, 0.011f).thumb == 1.0f); // the first update as it is

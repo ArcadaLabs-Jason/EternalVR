@@ -20,6 +20,7 @@
 #include "features/input/aim_smoothing.hpp"
 #include "features/input/binding_watch.hpp"
 #include "features/input/controller_bindings.hpp"
+#include "features/input/controller_fit.hpp"
 #include "features/input/controller_settings.hpp"
 #include "features/input/controller_state.hpp"
 #include "features/input/cutscene_skip.hpp"
@@ -107,6 +108,13 @@ struct XrInput {
     std::array<XrPath, 2> handPaths{}; // indexed by input::Hand
     std::array<XrSpace, 2> aimSpaces{};
     std::array<XrSpace, 2> gripSpaces{};
+    // Each hand's fit (controller_fit.hpp), by input::Hand: the one its spaces have, the family it was
+    // decided for (none until the runtime reports that hand's controller) and the tries after a refusal; hand
+    // spaces replaced by a new fit, kept until detach (input_spaces.cpp).
+    std::array<input::ControllerFit, 2> fits{};
+    std::array<std::optional<game::Controller>, 2> fitFamilies{};
+    std::array<input::RefitRetry, 2> refitRetries{};
+    std::vector<XrSpace> retiredSpaces;
 };
 
 // The controllers as the XR worker last synced them.
@@ -115,6 +123,8 @@ struct Snapshot {
     LONGLONG qpc = 0;
     input::InputFrame frame; // buttons, sticks, aim poses and velocities, head (tracking space)
     game::Controller controller = game::Controller::OculusTouch;
+    // Each hand's fit as its spaces had it (by input::Hand), for scripted hands read without the XR lock.
+    std::array<input::ControllerFit, 2> fits{};
 };
 
 // What happened for the vibration since the XR worker's last sync (haptics_xr.cpp).
@@ -176,6 +186,7 @@ struct ModelPlacement {
     bool valid = false;
     LONGLONG qpc = 0;
     xr_math::EyeRelativePose pose;
+    LONGLONG worldQpc = 0; // the stamp of the hands (WorldHand::qpc) it was placed from
 };
 
 // The view's hand poses as one tick of the game reads them (view_poses.cpp): copied under viewMutex, each
@@ -367,7 +378,20 @@ bool suggestAllBindings(XrInput& xr, const ProfileSupport& support, FamilyData& 
 // The family whose control map is used, from the profiles the runtime reports for both hands
 // (controller_family.hpp; `current` when neither has one we have data for). The profile of each hand is kept
 // in handProfiles and logged when it changes, a profile without data once. XR worker only.
-game::Controller currentFamily(const XrInput& xr, State& s, game::Controller current);
+// `families` gets each hand's own family (none for no controller or a profile without data), for its fit.
+game::Controller currentFamily(const XrInput& xr,
+                               State& s,
+                               game::Controller current,
+                               std::array<std::optional<game::Controller>, 2>& families);
+
+// The hands' aim and grip spaces (with the fit they have) and the view space (input_spaces.cpp), created
+// after the action sets are attached and destroyed with them. XR worker, under the unique xrMutex.
+bool createSpaces(XrInput& xr);
+void destroySpaces(XrInput& xr);
+// `hand`'s spaces created again with its controller family's fit when that differs from theirs (on SteamVR
+// only, controller_fit.hpp), and the fit logged, once per family; a refusal is logged and tried again later,
+// a few times (input::RefitRetry). XR worker, takes the unique xrMutex.
+void refitHand(State& s, input::Hand hand, game::Controller family);
 
 // Whether the runtime binds our actions (input_watch.cpp). XR worker, inside sync under the shared xrMutex:
 // feeds the watch what this sync saw (before any scripted input; the time and the profiles are filled in)
@@ -524,6 +548,8 @@ void noteZoomLookHands(const std::byte* hands, const std::byte* player);
 // already filtered). The ammo hooks (bhaptics_ammo.cpp, the same): the player picked up ammo. All only note;
 // nothing waits on the network.
 void startBhaptics();
+// The player's health component says dead (its `isDead`, the offsets bHaptics reads); false when unreadable.
+bool playerDead(const std::byte* player);
 void noteBhapticsShot(const std::byte* hands, bool belch);
 void noteBhapticsFrame(const std::byte* player);
 void noteBhapticsPortal();
