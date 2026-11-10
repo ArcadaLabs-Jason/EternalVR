@@ -2,6 +2,7 @@
 
 #include "stereo_seq/fx_sync.hpp"
 #include "vkcore/fx_gpu_stages.hpp"
+#include "vkcore/fx_rt_mask.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -167,6 +168,7 @@ std::atomic<bool> g_live{false};
 stereo_seq::FxSyncMode g_mode = stereo_seq::FxSyncMode::On;
 bool g_gpuStages = true; // ETERNALVR_STEREO_FX_SYNC_GPU not 0: eye R binds and generates GPU-staged systems
 bool g_gpuFound = false; // fx_gpu::locate checked out: GPU instances are seen (and with g_gpuStages handled)
+bool g_rtMask = true;    // ETERNALVR_STEREO_FX_SYNC_RT not 0: eye R keeps eye L's ray-traced particle mask
 SlotOpenFn g_openSlot = nullptr;
 std::uintptr_t g_prepareResume = 0;
 std::uintptr_t g_particleResume = 0;
@@ -234,12 +236,18 @@ void report() {
         take(g_counters.particlesGpuOwn), take(g_counters.gpuStages), take(g_counters.particlesGpu),
         take(g_counters.particles[0]), take(g_counters.effects[0]), take(g_counters.particles[1]),
         take(g_counters.effects[1]), take(g_counters.advanced[0]), take(g_counters.advanced[1]),
-        fx_gpu::takeStepReadout().c_str(), gpu,
+        (fx_gpu::takeStepReadout() + fx_rt::takeReadout()).c_str(), gpu,
         g_mode == stereo_seq::FxSyncMode::Count ? " (ETERNALVR_STEREO_FX_SYNC=count: nothing reused)" : "");
 }
 
 FxAction actionNow(stereo_seq::Eye eye) {
     return stereo_seq::fxActionFor(g_mode, eye, mp_guard::allowsGameTouch());
+}
+
+// The render running now, for the ray-traced particle mask's clear (fx_rt_mask.hpp): the engine's code until
+// the four hooks are in.
+FxAction renderNow() {
+    return g_live.load(std::memory_order_acquire) ? actionNow(seqChainEye()) : FxAction::Run;
 }
 
 template <typename T>
@@ -383,6 +391,7 @@ struct Sites {
     const std::byte* effect = nullptr; // the effect generation (the hook)
     const std::byte* effectExit = nullptr;
     const std::byte* opener = nullptr;
+    const std::byte* effectUpdate = nullptr; // the effect update (0x19511E0)
 };
 
 bool fail(const char* what) {
@@ -440,6 +449,7 @@ bool locate(const GameImage& image, Sites& s) {
     s.effect = generate;
     s.effectExit = exit;
     s.opener = opener;
+    s.effectUpdate = effect;
     g_prepareResume = reinterpret_cast<std::uintptr_t>(prepare + kPrepareResume);
     g_poolResume = reinterpret_cast<std::uintptr_t>(pool + kPoolResume);
     g_particleResume = reinterpret_cast<std::uintptr_t>(particle + kParticleResume);
@@ -455,9 +465,9 @@ bool installFxSyncHooks() {
         const std::string value = requestedValue(L"ETERNALVR_STEREO_FX_SYNC");
         g_mode = stereo_seq::fxSyncMode(value);
         if (g_mode == stereo_seq::FxSyncMode::Off) {
-            EVR_LOG("%s: off (ETERNALVR_STEREO_FX_SYNC=%s; =1 turns it on): eye L is a tick behind on CPU "
+            EVR_LOG("%s: off (ETERNALVR_STEREO_FX_SYNC=%s; on by default): eye L is a tick behind on CPU "
                     "particles",
-                    kTag, value.empty() ? "unset" : value.c_str());
+                    kTag, value.c_str());
             return;
         }
         if (!mp_guard::allowsGameTouch()) {
@@ -501,6 +511,11 @@ bool installFxSyncHooks() {
         // Read-only, and only once the four are in, so a failed install leaves no readout hook behind either;
         // no readout when it does not check out. Before g_live, whose store publishes it to the 10 s line.
         const bool readout = fx_gpu::installStepReadout(image, kTag);
+        // Also only once the four are in; without it eye L's particles are missing from eye R's ray-traced
+        // reflections (logged), the rest of the sync is unchanged.
+        g_rtMask = stereo_seq::fxRtMask(requestedValue(L"ETERNALVR_STEREO_FX_SYNC_RT"));
+        const bool rtMask =
+            g_rtMask && fx_rt::install(image, sites.bind, sites.effectUpdate, &renderNow, kTag);
         g_installed = true;
         g_live.store(true, std::memory_order_release);
         EVR_LOG(
@@ -524,6 +539,17 @@ bool installFxSyncHooks() {
                 : !g_gpuStages ? "left to eye L like the rest (ETERNALVR_STEREO_FX_SYNC_GPU=0)"
                                : bound,
                 readout ? hooked : "off");
+        char rtWhere[24] = "";
+        if (const unsigned rva = fx_rt::foundRva()) {
+            std::snprintf(rtWhere, sizeof(rtWhere), " (RVA 0x%X)", rva);
+        }
+        EVR_LOG("%s: ray-traced particle mask: %s%s", kTag,
+                !g_rtMask ? "the engine's clear in eye R (ETERNALVR_STEREO_FX_SYNC_RT=0)"
+                : !rtMask ? "not hooked; eye L's particles may be missing from eye R's ray-traced reflections"
+                : g_mode == stereo_seq::FxSyncMode::Count
+                    ? "clear hooked, counting only"
+                    : "eye R keeps eye L's, so eye L's particles are in eye R's ray-traced reflections",
+                rtWhere);
     });
     return g_installed;
 }

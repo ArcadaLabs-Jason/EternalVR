@@ -26,18 +26,22 @@ std::string normalized(std::string_view value) {
 
 FxSyncMode fxSyncMode(std::string_view value) {
     const std::string lower = normalized(value);
-    if (lower == "1" || lower == "on" || lower == "true" || lower == "yes") {
-        return FxSyncMode::On;
+    if (lower == "0" || lower == "off" || lower == "false" || lower == "no") {
+        return FxSyncMode::Off;
     }
     if (lower == "count") {
         return FxSyncMode::Count;
     }
-    return FxSyncMode::Off;
+    return FxSyncMode::On;
 }
 
 bool fxGpuStages(std::string_view value) {
     const std::string lower = normalized(value);
     return !(lower == "0" || lower == "off" || lower == "false" || lower == "no");
+}
+
+bool fxRtMask(std::string_view value) {
+    return fxGpuStages(value); // the same switch values
 }
 
 FxAction fxActionFor(FxSyncMode mode, Eye eye, bool gameTouchAllowed) {
@@ -49,6 +53,13 @@ FxAction fxActionFor(FxSyncMode mode, Eye eye, bool gameTouchAllowed) {
 
 FxAction fxPoolResetFor(std::optional<FxAction> ringAdvance) {
     return ringAdvance.value_or(FxAction::Run);
+}
+
+FxAction fxRtMaskClearFor(FxAction render, bool worldHasRing) {
+    if (!worldHasRing || render == FxAction::BindGpuThenRun) {
+        return FxAction::Run;
+    }
+    return render;
 }
 
 FxAction fxGenerationFor(FxAction render, std::uint32_t stamp, std::uint32_t ringFrame, bool gpuStaged) {

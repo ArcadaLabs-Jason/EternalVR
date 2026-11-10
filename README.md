@@ -149,7 +149,7 @@ EternalVR is free and stays free. If you want to support it:
 - `src/`, `tests/`, `tools/`, `launcher/`: the layer, its tests, rig tools and the launcher (see `CONTRIBUTING.md` to build and test)
 - `docs/release/`: the alpha's install, controls, known issues and troubleshooting
 - `branding/`: the logo and the launcher icon
-- `THIRD_PARTY_NOTICES.md`: origins and licences of third-party code
+- `THIRD_PARTY_NOTICES.md`: origins and licences of the third-party libraries and files in the release
 
 ## Thanks
 

@@ -146,10 +146,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## JsonCpp (built into `openxr_loader.dll` by Khronos)
+## JsonCpp 1.9.6 (built into `openxr_loader.dll` by Khronos)
 
 - Origin: https://github.com/open-source-parsers/jsoncpp, the copy bundled in the OpenXR-SDK loader
-  sources (`src/external/jsoncpp`); not modified by us.
+  sources (`src/external/jsoncpp`, `JSONCPP_VERSION_STRING` "1.9.6" in the OpenXR-SDK release-1.1.63 tag); not
+  modified by us. The other directories under the SDK's `src/external` (jnipp, android-jni-wrappers,
+  sanitizers-cmake) are for Android or build checks and are not in the Windows DLL.
 - Licence: public domain where recognised, otherwise MIT. Its licence file in full:
 
 ```
@@ -298,9 +300,12 @@ The launcher's icon and header strip are the EternalVR logo, which is not covere
 ## Not redistributed
 
 - The launcher uses only .NET Framework 4.8, which is part of Windows.
+- The Windows system DLLs the layer loads (`d3d12.dll`, `dxgi.dll`, `d3dcompiler_47.dll`, `version.dll`,
+  `vulkan-1.dll` from the graphics driver) come with Windows or the driver; none is in the zip.
 - NVIDIA's DLSS DLL (`nvngx_dlss.dll`) is not shipped: on the player's request the launcher downloads it
   from NVIDIA's GitHub repository after the player accepts NVIDIA's licence
-  (`launcher/data/dlss-downloads.txt` names each file, its SHA-256 and its licence).
+  (`launcher/data/dlss-downloads.txt` names each file, its SHA-256 and its licence). The layer only loads the
+  file the player chose; the zip holds no DLSS code, and the game's own copy stays in the game folder.
 
 ## Apache License 2.0
 

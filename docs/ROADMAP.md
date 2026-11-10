@@ -774,7 +774,9 @@ fixed: players have finished the base game and both DLCs on the alphas. The beta
 - the uninstall check has run on a clean machine (the Windows Sandbox check), and the uninstall criterion
   below is met or reworded;
 - the notices audit and a clang-tidy check are done, and the code-signing choice (open question 7) is
-  made (an unsigned beta with the SmartScreen steps in INSTALL.md is acceptable);
+  made (an unsigned beta with the SmartScreen steps in INSTALL.md is acceptable). Status 2026-11-09: the notices
+  audit is done (`docs/release/notices-audit.md`) and the beta ships unsigned (open question 7); the clang-tidy
+  check runs as the merge QA gate (no new finding on any merge), with 96 older findings still in its baseline;
 - the legibility protocol (foundation step 5) is written and passed at default settings;
 - the playthrough log (foundation step 4) is met by players' full runs of the base game and both DLCs;
 - the owner has looked at the beta build in a headset;
@@ -806,7 +808,7 @@ Required for v1
       the one function signature taken from DE Advanced Options now credited with its BSD 2-Clause text;
       safetyhook, Zydis, Zycore, the OpenXR loader with JsonCpp, Vulkan-Headers and the static MSVC runtime
       listed with their licences; `make-release.ps1` refuses an unlisted third-party binary and copies the
-      file into the zip, where the v0.1.75 zip has it)
+      file into the zip, where the v0.1.75 zip has it; re-audited at v0.1.89, done 2026-11-09, docs/release/notices-audit.md)
 - [ ] Uninstall (T-093): on a clean machine (T-105), after install, VR sessions and the launcher's uninstall
       action, the layer registry key and the game folder listing match a pre-install snapshot, and the
       flat settings equal the pre-VR snapshot. 2026-10-13: the default route writes no registry value; the

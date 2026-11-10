@@ -24,15 +24,21 @@ enum class FxSyncMode {
     On,    // eye R reuses eye L's particle ring, light pool and generation
 };
 
-// ETERNALVR_STEREO_FX_SYNC: "1"/"on"/"true"/"yes" On, "count" Count, anything else (or unset) Off. Off by
-// default since 0.1.35: in 0.1.34 eye R drew snow and some effects as tiles of their whole sprite sheet in
-// e1m3 (a player's headset captures), which the storm deck A/B never showed.
+// ETERNALVR_STEREO_FX_SYNC: "0"/"off"/"false"/"no" Off, "count" Count, anything else (or unset) On. On by
+// default again since T-230; 0.1.35 to T-230 had it off: in 0.1.34 eye R drew snow and some effects as tiles
+// of their whole sprite sheet in e1m3 (a player's headset captures), the particle systems with GPU particles
+// that fxGenerationFor now has eye R bind and generate itself.
 FxSyncMode fxSyncMode(std::string_view value);
 
 // ETERNALVR_STEREO_FX_SYNC_GPU: "0"/"off"/"false"/"no" leave the particle systems with GPU particles to eye L
 // like every other (0.1.34, for A/B); anything else (or unset) has eye R bind their GPU particle stages and
 // generate them itself (fxGenerationFor).
 bool fxGpuStages(std::string_view value);
+
+// ETERNALVR_STEREO_FX_SYNC_RT: "0"/"off"/"false"/"no" leave eye R's ray-traced particle mask to the engine's
+// clear (for A/B: eye L's particles missing from eye R's ray-traced reflections); anything else (or unset)
+// keeps eye L's mask in eye R (fxRtMaskClearFor).
+bool fxRtMask(std::string_view value);
 
 enum class FxAction {
     Run,        // the engine's code
@@ -54,6 +60,12 @@ FxAction fxActionFor(FxSyncMode mode, Eye eye, bool gameTouchAllowed);
 // eye L's count and eye R shows eye L's lights. nullopt: no ring hook acted in this prepare (a world without
 // a ring, or the hooks not live yet): the engine's reset.
 FxAction fxPoolResetFor(std::optional<FxAction> ringAdvance);
+
+// The clear of the world's ray-traced particle mask, from a job of every render before the binds. With ray
+// tracing on each bind sets its model's bit, and the blended acceleration structure takes only the models
+// with a bit: eye R, which skips the binds of what eye L generated, keeps eye L's mask (UseEyeL) and its own
+// binds add to it. A world without a particle ring gets the engine's clear.
+FxAction fxRtMaskClearFor(FxAction render, bool worldHasRing);
 
 // One particle system's or effect's generation in a render whose answer is `render`, from the model's stamp
 // (the ring frame of its last generation) and the ring's frame now. Eye R uses eye L's work only for a model

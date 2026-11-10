@@ -13,6 +13,8 @@ using evr::stereo_seq::fxGenerationFor;
 using evr::stereo_seq::fxGpuStages;
 using evr::stereo_seq::fxPoolResetFor;
 using evr::stereo_seq::fxPreviousSlot;
+using evr::stereo_seq::fxRtMask;
+using evr::stereo_seq::fxRtMaskClearFor;
 using evr::stereo_seq::FxSyncMode;
 using evr::stereo_seq::fxSyncMode;
 
@@ -24,13 +26,16 @@ TEST_CASE("fx sync: the switch") {
     CHECK(fxSyncMode("yes") == FxSyncMode::On);
     CHECK(fxSyncMode("Count") == FxSyncMode::Count);
     CHECK(fxSyncMode("\tcount\n") == FxSyncMode::Count);
-    // Unset and anything else is off.
-    CHECK(fxSyncMode("") == FxSyncMode::Off);
     CHECK(fxSyncMode("0") == FxSyncMode::Off);
     CHECK(fxSyncMode("off") == FxSyncMode::Off);
-    CHECK(fxSyncMode("2") == FxSyncMode::Off);
-    CHECK(fxSyncMode("o n") == FxSyncMode::Off);
-    CHECK(fxSyncMode("counting") == FxSyncMode::Off);
+    CHECK(fxSyncMode(" OFF ") == FxSyncMode::Off);
+    CHECK(fxSyncMode("false") == FxSyncMode::Off);
+    CHECK(fxSyncMode("no") == FxSyncMode::Off);
+    // On by default: unset and anything else.
+    CHECK(fxSyncMode("") == FxSyncMode::On);
+    CHECK(fxSyncMode("2") == FxSyncMode::On);
+    CHECK(fxSyncMode("o f f") == FxSyncMode::On);
+    CHECK(fxSyncMode("counting") == FxSyncMode::On);
 }
 
 TEST_CASE("fx sync: only eye R leaves the ring and the generation to eye L") {
@@ -94,6 +99,25 @@ TEST_CASE("fx sync: the GPU stage switch") {
     CHECK_FALSE(fxGpuStages(" Off"));
     CHECK_FALSE(fxGpuStages("FALSE"));
     CHECK_FALSE(fxGpuStages("no\n"));
+}
+
+TEST_CASE("fx sync: the ray-traced particle mask follows the render") {
+    // Eye R keeps eye L's mask: its binds of what eye L generated are skipped, eye L's set those bits.
+    CHECK(fxRtMaskClearFor(FxAction::UseEyeL, true) == FxAction::UseEyeL);
+    CHECK(fxRtMaskClearFor(FxAction::RunCounted, true) == FxAction::RunCounted);
+    CHECK(fxRtMaskClearFor(FxAction::Run, true) == FxAction::Run);
+    // A world without a particle ring has no particle bits to keep.
+    CHECK(fxRtMaskClearFor(FxAction::UseEyeL, false) == FxAction::Run);
+    CHECK(fxRtMaskClearFor(FxAction::RunCounted, false) == FxAction::Run);
+    // A model's answer is never a render's; taken as the engine's.
+    CHECK(fxRtMaskClearFor(FxAction::BindGpuThenRun, true) == FxAction::Run);
+}
+
+TEST_CASE("fx sync: the ray-traced particle mask switch") {
+    CHECK(fxRtMask(""));
+    CHECK(fxRtMask("1"));
+    CHECK_FALSE(fxRtMask("0"));
+    CHECK_FALSE(fxRtMask(" OFF "));
 }
 
 TEST_CASE("fx sync: counting, eye R's render advanced the ring") {

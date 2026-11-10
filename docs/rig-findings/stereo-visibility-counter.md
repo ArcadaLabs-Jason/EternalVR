@@ -86,8 +86,56 @@ hooks were kept.
 
 - The surface-spawned particle slots compare `[model + 0x4AC]` with worldData + 0xBFD8 minus 1 (0x18DA66D) and
   reset every tick under Route S.
-- Effects (particles, flares, beams, ribbons) one eye sees are not drawn there, as before 0.1.22: a wall glow at
-  the strip edge can be missing in that eye.
+- Effects (particles, flares, beams, ribbons) one eye sees are not drawn there, as before 0.1.22. Section 5 has
+  what that does in play with the particle sync on.
 - Which type values ordinary models carry was checked only for the e1m1 shells (type 4).
 
 Full notes in the analysis write-up.
+
+## 5. Effects at the strip edge with the particle sync on (rig, 2026-11-08)
+
+A second test PC (RTX 3080 Ti, OpenXR-Simulator, 2048 x 2208 per eye, eye L -54/+40 and eye R -40/+54 degrees), the
+particle sync on (T-230, `origin/batch-0200` 3f2129ab), static head through `setviewpos` yaw steps, foveation off.
+Runs `tmp-vr/rs/edgefx-*`, scripts and checks in `tmp-vr/rs/edgefx/` (`chain1.sh` to `chain7.sh`, `sweep.py`,
+`stripstat.py`).
+
+**The gate.** A build of this tree with the gate's 10 s line split by effect type (held back for one eye: a hit
+the engine's test restarted that the two-render test would have continued, with a first-visible delay above 0):
+
+- Particle systems are held back for one eye in every scene tried: median 2,700 to 6,600 gate hits per 10 s (up to
+  15,000) in e1m3 (six spots, twelve yaws each), the e1m1_intro first arena and while firing there, a few to about
+  ten systems per render. All at the main gather (0x1C775E4), none with flag bit 8 (with it the main gather goes on
+  all the same, 0x1C77670). Batch-0200's own layer logs the same scale (`N of them effects, not widened`, 900 to
+  13,800).
+- Flares, beams and ribbons: 0 or 1 per run. No scene tried had a flare in a strip, so they are untested.
+- No effect type had a first-visible delay of 0 (the main gather draws those whatever the count).
+
+**What it shows.** The same sweeps with particle systems widened as models are (a test build: widened only while
+the particle sync shares one ring step per tick, so the one eye that draws a system binds the slot its last
+generation wrote; patch kept at `tmp-vr/rs/edgefx/particle-widening.patch`): the held count went to 0 and up to
+14,600 particle-system counts a 10 s window went on through the other eye's render, yet the pictures did
+not change. Pixels differing by more than 16 between the off and the widened run, over the poses both have, in
+each eye's outer strip against a centre band of the same width (upper 70% of the image):
+
+| Scene (poses) | Eye R strip / centre | Eye L strip / centre | Noise: batch-0200 against the off run |
+|---|---|---|---|
+| e1m3 spots 1-2 (23) | 0.41% / 0.68% | 0.35% / 0.68% | 0.35% / 1.18%, 0.42% / 1.26% |
+| e1m3 spots 3-4 (24) | 0.50% / 1.14% | 0.89% / 0.76% | |
+| e1m3 spots 5-6 (24) | 0.02% / 0.38% | 0.02% / 0.02% | |
+| e1m3 lava pit with steam, 2-degree yaw steps (22) | 0.24% / 1.15% | 0.34% / 1.12% | |
+| e1m1_intro arena (7) | 0.87% / 1.13% | 0.30% / 0.19% | 1.68% / 3.17%, 1.09% / 0.92% |
+
+The strip differences stay about at or under the centre band's and the batch-0200 repeat's, and every strip
+difference looked at (the hologram at the Praetor token, the lava's surface, a moving arm, a swinging cage) is animation that
+differs between runs, not something one run lacks. Shotgun impacts aimed 47 degrees to each side (into one eye's
+strip; on the left partly in both) left the same decals and glowing holes in both runs and no spark or puff in
+either run's captures, which came 0.3 s or more after a shot.
+The storm deck (e4m1_rig, two spots) is dominated by rain and lightning differences between runs and says nothing.
+
+So with the particle sync on, the particle systems the gate holds back at the strip edges are, in every scene
+tried, ones that drew nothing these captures show; no effect was seen missing in one eye. Not tried: lens flares at a
+strip edge, effects in a headset, other maps. The widening was not kept: no visible gain to set against a change
+of what the engine draws. Not checked by the test build either: whether the update lists a render consumes are the
+gather's of the same render or of the one before (the issue #18 write-up infers the one before); with the one
+before, a widened GPU-staged system one eye sees would be drawn in that eye without its GPU draw list entries (the
+0.1.34 tiles); no tiles showed in the 93 widened e1m3 poses.

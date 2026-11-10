@@ -129,11 +129,12 @@ them is worse for you than described here.
   switches size a few seconds in; on graphics cards
   with 12 GB or less that switch can fail with "Failed to allocate video memory". Launch again with the
   headset connected.
-- **Smoke, sparks, blood and other sprite effects are one frame behind in the left eye.** The left eye
-  draws them as they were a frame earlier than the right eye; the scenery is not affected.
-  0.1.34 fixed this, but the fix drew snow and some ice effects in the right eye as tiles in one mission, so
-  0.1.35 turned it off. 0.1.36 fixes the cause of the tiles but keeps the fix off until it has had more
-  testing.
+- **Smoke, sparks, blood and other sprite effects are back in step between the eyes, not yet tried in a
+  headset.** Until now the left eye drew them a frame behind the right eye. 0.1.34 fixed that, but the fix
+  drew snow and some ice effects in the right eye as tiles in one mission, so 0.1.35 turned it off. The tiles'
+  cause is fixed and the fix is on again; on my test PC both eyes now show the same effects in that mission and
+  others, and particles also show in the right eye's ray-traced reflections. If you see squares, flicker or an
+  effect in one eye only, please tell me.
 - **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
@@ -191,8 +192,10 @@ them is worse for you than described here.
   both eyes' reflections are now much more alike across the view; at the far left and right edges (past about 40
   degrees, where only one eye sees) these reflections fade out sooner than in the flat game. With ray tracing on,
   some spots can still differ between the eyes. Not tried in a headset yet, nor on Game Pass.
-- **An effect at the very edge of one eye's view** (a glow, a spark) can be missing in that eye while the
-  other eye shows it.
+- **An effect at the far edge of one eye's view** (past about 40 degrees to the side, where only that eye sees)
+  may not be drawn there. On my test PC I couldn't find a spot where this shows: smoke, steam, sparks and other
+  effects at the edges looked the same with and without drawing them. Lens flares at the edge I couldn't test.
+  If a glow or effect at the side of your view only appears once you turn toward it, please tell me.
 - **Fog and light shafts** can differ a little between the eyes in a few places (a hallway in the second
   mission, for example).
 - **HDR output is off** during VR sessions.
