@@ -7,10 +7,12 @@
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 #include <string>
 
@@ -81,7 +83,7 @@ bool locate() {
     }
     constexpr float kWhite[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     std::memcpy(rgba, colour, sizeof(rgba));
-    if (std::memcmp(rgba, kWhite, sizeof(rgba)) != 0) {
+    if (!std::equal(std::begin(rgba), std::end(rgba), std::begin(kWhite))) {
         EVR_LOG("%s: the cursor's draw colour is not (1, 1, 1, 1); the cursor stays shown on map drags",
                 kTag);
         return false;

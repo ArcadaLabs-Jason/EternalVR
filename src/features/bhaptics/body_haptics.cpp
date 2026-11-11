@@ -319,6 +319,7 @@ void BodyHaptics::shot(std::vector<Frame>& out, const BodySignals& signals) {
     const Kick kick = kickOf(signals.weapon);
     const bool right = signals.weaponHand == input::Hand::Right;
     std::vector<Dot> sleeve;
+    sleeve.reserve(std::size_t{kSleeveMotors});
     for (int i = 0; i < kSleeveMotors; ++i) {
         sleeve.push_back({static_cast<std::uint8_t>(i), scaled(kick.sleeve)});
     }
@@ -388,6 +389,7 @@ void BodyHaptics::landing(std::vector<Frame>& out, const BodySignals& signals) {
         std::min(kLandingHard, kLandingLight + (landed->drop - kLandingDrop) * kLandingPerUnit);
     for (const Device side : {Device::VestFront, Device::VestBack}) {
         std::vector<Dot> dots;
+        dots.reserve(std::size_t{kVestColumns});
         for (int wearerColumn = 0; wearerColumn < kVestColumns; ++wearerColumn) {
             dots.push_back({dotIndex(side, wearerColumn, kVestRows - 1), scaled(intensity)});
         }
@@ -519,12 +521,14 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         }
         if (signals.sync && !sync_ && !signals.dead && signals.syncKind == SyncKind::GloryKill) {
             std::vector<Dot> front;
+            front.reserve(std::size_t{kVestMotors});
             for (int i = 0; i < kVestMotors; ++i) {
                 front.push_back({static_cast<std::uint8_t>(i), scaled(kGloryKill)});
             }
             add(out, Effect::GloryKill, Device::VestFront, kGloryKillMillis, std::move(front));
             for (const Device sleeve : {Device::ForearmL, Device::ForearmR}) {
                 std::vector<Dot> dots;
+                dots.reserve(std::size_t{kSleeveMotors});
                 for (int i = 0; i < kSleeveMotors; ++i) {
                     dots.push_back({static_cast<std::uint8_t>(i), scaled(kGloryKill)});
                 }
@@ -534,6 +538,7 @@ std::vector<Frame> BodyHaptics::update(const BodySignals& signals) {
         if (signals.dead && !dead_) {
             for (const Device side : {Device::VestFront, Device::VestBack}) {
                 std::vector<Dot> dots;
+                dots.reserve(std::size_t{kVestMotors});
                 for (int i = 0; i < kVestMotors; ++i) {
                     dots.push_back({static_cast<std::uint8_t>(i), scaled(kDeath)});
                 }

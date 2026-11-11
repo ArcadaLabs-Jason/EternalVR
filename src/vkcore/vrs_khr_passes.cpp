@@ -1,12 +1,15 @@
 // Foveated rendering through VK_KHR_fragment_shading_rate (vrs_khr.hpp): the game's render passes get the
 // shading rate attachment, and the pipelines made for them the rate state that takes the attachment's rate.
 
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/vrs_khr_impl.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <vector>
 
@@ -15,6 +18,11 @@ namespace evr::vkcore::vrs_khr {
 namespace {
 
 constexpr std::uint32_t kLoggedKept = 10;
+
+// Inside the game's calls no exception may go (hook_guard.hpp): a pass or a pipeline whose copy finds no
+// memory is made as the game asked, at full rate.
+HookGuard g_passGuard("vkCreateRenderPass (foveated rendering)");
+HookGuard g_pipelineGuard("vkCreateGraphicsPipelines (foveated rendering, KHR)");
 
 } // namespace
 
@@ -28,6 +36,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device,
                                                 const VkAllocationCallbacks* pAllocator,
                                                 VkRenderPass* pRenderPass) {
     VrsDevice* d = vrs_nv::deviceOf(vrs_nv::keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkCreateRenderPass>(device, "vkCreateRenderPass");
+        return next ? next(device, pCreateInfo, pAllocator, pRenderPass) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!d->khr) {
         return d->createRenderPass(device, pCreateInfo, pAllocator, pRenderPass);
     }
@@ -46,8 +58,12 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device,
         }
         return d->createRenderPass(device, pCreateInfo, pAllocator, pRenderPass);
     }
-    const PromotedPass promoted(*pCreateInfo, d->texel);
-    const VkResult result = d->createRenderPass2(device, &promoted.info(), pAllocator, pRenderPass);
+    std::optional<PromotedPass> promoted;
+    if (!g_passGuard.run([&] { promoted.emplace(*pCreateInfo, d->texel); }) || !promoted) {
+        k.passesKept.fetch_add(1, std::memory_order_relaxed);
+        return d->createRenderPass(device, pCreateInfo, pAllocator, pRenderPass);
+    }
+    const VkResult result = d->createRenderPass2(device, &promoted->info(), pAllocator, pRenderPass);
     if (result != VK_SUCCESS) {
         // Made as the game asked instead: a pass without the attachment, whose framebuffers and pipelines
         // are then left as they are (full rate).
@@ -58,9 +74,15 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device,
             static_cast<int>(result), pCreateInfo->attachmentCount);
         return d->createRenderPass(device, pCreateInfo, pAllocator, pRenderPass);
     }
-    {
-        std::unique_lock lock(k.mutex);
-        k.promoted.insert(handleKey(*pRenderPass));
+    // Its framebuffers take the rate image only once it is known as promoted: a pass that cannot be noted is
+    // made again as the game asked (the game gets the one pass it asked for).
+    if (!g_passGuard.run([&] {
+            std::unique_lock lock(k.mutex);
+            k.promoted.insert(handleKey(*pRenderPass));
+        })) {
+        d->destroyRenderPass(device, *pRenderPass, pAllocator);
+        k.passesKept.fetch_add(1, std::memory_order_relaxed);
+        return d->createRenderPass(device, pCreateInfo, pAllocator, pRenderPass);
     }
     if (k.passesPromoted.fetch_add(1, std::memory_order_relaxed) == 0) {
         EVR_LOG("vrs: first render pass made with the shading rate attachment (vkCreateRenderPass to "
@@ -74,6 +96,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyRenderPass(VkDevice device,
                                              VkRenderPass renderPass,
                                              const VkAllocationCallbacks* pAllocator) {
     VrsDevice* d = vrs_nv::deviceOf(vrs_nv::keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkDestroyRenderPass>(device, "vkDestroyRenderPass")) {
+            next(device, renderPass, pAllocator);
+        }
+        return;
+    }
     if (d->khr && renderPass != VK_NULL_HANDLE) {
         std::unique_lock lock(d->khrState->mutex);
         d->khrState->promoted.erase(handleKey(renderPass));
@@ -91,8 +119,14 @@ VkResult createGraphicsPipelines(VrsDevice& d,
     KhrDevice& k = *d.khrState;
     // Pipelines of a promoted pass: 1x1, and the attachment's rate replaces it (the neutral image's 1x1 or
     // the eye's rate image). Other pipelines, of a pass without the attachment, are left as they are.
-    std::vector<VkGraphicsPipelineCreateInfo> infos(pInfos, pInfos + count);
-    std::vector<VkPipelineFragmentShadingRateStateCreateInfoKHR> rates(count);
+    std::vector<VkGraphicsPipelineCreateInfo> infos;
+    std::vector<VkPipelineFragmentShadingRateStateCreateInfoKHR> rates;
+    if (!g_pipelineGuard.run([&] {
+            infos.assign(pInfos, pInfos + count);
+            rates.resize(count);
+        })) {
+        return d.createGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
+    }
     std::uint64_t changed = 0;
     std::uint64_t other = 0;
     std::uint64_t noPass = 0;

@@ -1,5 +1,7 @@
 #include "game/eternal/zoom_look_book.hpp"
 
+#include <exception>
+
 namespace evr::game {
 
 ZoomPatchBook::Entry* ZoomPatchBook::find(const void* decl) {
@@ -71,8 +73,17 @@ ZoomPatchBook::Restored ZoomPatchBook::restore(ZoomDeclIo& io) {
     stopped_ = true;
     Restored r;
     r.total = static_cast<int>(entries_.size());
+    // Each decl on its own: one whose name cannot be read (no memory for it) cannot be checked, so it is left
+    // as it is, and the others still go back. A trip runs this from the game's hook.
     for (const Entry& e : entries_) {
-        if (io.name(e.decl) != e.name) {
+        bool same = false;
+        try {
+            same = io.name(e.decl) == e.name;
+        } catch (const std::exception&) {
+            ++r.failed;
+            continue;
+        }
+        if (!same) {
             continue; // freed or reused: not the layer's to write
         }
         ZoomDeclFields now;

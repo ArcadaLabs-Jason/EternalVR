@@ -3,8 +3,10 @@
 #include "ui_layer/layout_tracker.hpp"
 #include "ui_layer/motion_target.hpp"
 #include "ui_layer/ui_settings.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/presenter_eyes.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/view_snapshot.hpp"
@@ -59,10 +61,37 @@ std::atomic<std::uint64_t> g_watchChanges{0};
 // The one image whose layout is followed: the GUI target the game uses now (set from the present hook).
 std::atomic<ui_layer::LayoutTracker::Handle> g_watched{0};
 
-const UiDevice* deviceOf(DispatchKey key) {
-    std::shared_lock lock(g_devicesMutex);
-    const auto it = g_devices.find(key);
-    return it == g_devices.end() ? nullptr : &it->second;
+// The hooks run inside the game's Vulkan calls, where an exception must not go (hook_guard.hpp): an image or
+// a barrier that cannot be recorded is not followed, a submit whose copies cannot be planned goes as the game
+// gave it (the copies given back), and a device whose record cannot be made turns the hooks off (they would
+// find no next function for it).
+HookGuard g_settingsGuard("the UI layer's settings");
+HookGuard g_deviceGuard("the UI layer's device record");
+HookGuard g_imageGuard("vkCreateImage (the UI layer's image record)");
+HookGuard g_layoutGuard("the UI layer's layout tracking");
+HookGuard g_submitGuard("vkQueueSubmit (the UI layer)");
+std::atomic<bool> g_failed{false};
+
+// The device's record; for a device without one (no memory for it), the next layer's functions, passed
+// straight through. A function the layer cannot find either is null: the hook then does nothing (or reports
+// no memory).
+template <typename Handle>
+UiDevice deviceOf(Handle handle) {
+    {
+        std::shared_lock lock(g_devicesMutex);
+        const auto it = g_devices.find(keyOf(handle));
+        if (it != g_devices.end()) {
+            return it->second;
+        }
+    }
+    UiDevice d;
+    d.createImage = nextFunction<PFN_vkCreateImage>(handle, "vkCreateImage");
+    d.destroyImage = nextFunction<PFN_vkDestroyImage>(handle, "vkDestroyImage");
+    d.cmdPipelineBarrier = nextFunction<PFN_vkCmdPipelineBarrier>(handle, "vkCmdPipelineBarrier");
+    d.beginCommandBuffer = nextFunction<PFN_vkBeginCommandBuffer>(handle, "vkBeginCommandBuffer");
+    d.cmdExecuteCommands = nextFunction<PFN_vkCmdExecuteCommands>(handle, "vkCmdExecuteCommands");
+    d.queueSubmit = nextFunction<PFN_vkQueueSubmit>(handle, "vkQueueSubmit");
+    return d;
 }
 
 bool readEnabled() {
@@ -79,13 +108,32 @@ bool readEnabled() {
     return s.enabled;
 }
 
+// The record of an image made with TRANSFER_SRC added.
+void recordImage(VkImage image, const VkImageCreateInfo& info) {
+    ui_layer::ImageRecord record;
+    record.format = info.format;
+    record.width = info.extent.width;
+    record.height = info.extent.height;
+    record.usage = info.usage;
+    record.sharingMode = info.sharingMode;
+    if (info.sharingMode == VK_SHARING_MODE_CONCURRENT && info.pQueueFamilyIndices) {
+        record.queueFamilies.assign(info.pQueueFamilyIndices,
+                                    info.pQueueFamilyIndices + info.queueFamilyIndexCount);
+    }
+    std::lock_guard lock(g_recordsMutex);
+    g_records[image] = record;
+}
+
 // ---- Hooks ---------------------------------------------------------------------------------------------
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
                                            const VkImageCreateInfo* pCreateInfo,
                                            const VkAllocationCallbacks* pAllocator,
                                            VkImage* pImage) {
-    const UiDevice* d = deviceOf(keyOf(device));
+    const UiDevice d = deviceOf(device);
+    if (!d.createImage) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     ui_layer::ImageCreateDesc desc;
     desc.imageType = pCreateInfo->imageType;
     desc.format = pCreateInfo->format;
@@ -96,7 +144,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
     desc.arrayLayers = pCreateInfo->arrayLayers;
     desc.samples = pCreateInfo->samples;
     desc.usage = pCreateInfo->usage;
-    const bool touch = d->isGame && mp_guard::allowsGameTouch();
+    const bool touch = d.isGame && mp_guard::allowsGameTouch();
     std::optional<std::uint32_t> usage = touch ? ui_layer::candidateUsage(desc) : std::nullopt;
     // The motion-vector capture: every image that could be a velocity target is prepared and followed.
     const bool motion = !usage && touch && motionCaptureRequested() && ui_layer::motionCandidateUsage(desc);
@@ -108,27 +156,17 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
         usage = ui_layer::eyeCopyCandidateUsage(desc);
     }
     if (!usage) {
-        return d->createImage(device, pCreateInfo, pAllocator, pImage);
+        return d.createImage(device, pCreateInfo, pAllocator, pImage);
     }
     VkImageCreateInfo info = *pCreateInfo;
     info.usage = *usage;
-    const VkResult result = d->createImage(device, &info, pAllocator, pImage);
+    const VkResult result = d.createImage(device, &info, pAllocator, pImage);
     if (result != VK_SUCCESS) {
         return result;
     }
-    ui_layer::ImageRecord record;
-    record.format = info.format;
-    record.width = info.extent.width;
-    record.height = info.extent.height;
-    record.usage = info.usage;
-    record.sharingMode = info.sharingMode;
-    if (info.sharingMode == VK_SHARING_MODE_CONCURRENT && info.pQueueFamilyIndices) {
-        record.queueFamilies.assign(info.pQueueFamilyIndices,
-                                    info.pQueueFamilyIndices + info.queueFamilyIndexCount);
-    }
-    {
-        std::lock_guard lock(g_recordsMutex);
-        g_records[*pImage] = record;
+    // The image is made: one whose record finds no memory is only not followed.
+    if (!g_imageGuard.run([&] { recordImage(*pImage, info); })) {
+        return result;
     }
     if (motion) {
         // Followed only once the capture finds it bound as velocity (follow()): the game makes many such
@@ -153,7 +191,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
 VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device,
                                         VkImage image,
                                         const VkAllocationCallbacks* pAllocator) {
-    const UiDevice* d = deviceOf(keyOf(device));
+    const UiDevice d = deviceOf(device);
     if (image != VK_NULL_HANDLE) {
         bool known = false;
         {
@@ -166,7 +204,9 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device,
             g_watched.compare_exchange_strong(expected, 0);
         }
     }
-    d->destroyImage(device, image, pAllocator);
+    if (d.destroyImage) {
+        d.destroyImage(device, image, pAllocator);
+    }
 }
 
 VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier(VkCommandBuffer commandBuffer,
@@ -181,17 +221,19 @@ VKAPI_ATTR void VKAPI_CALL CmdPipelineBarrier(VkCommandBuffer commandBuffer,
                                               const VkImageMemoryBarrier* pImageMemoryBarriers) {
     // The eye snapshots follow barriers with Parallel Eye Rendering only: Route S pays one cached check.
     const bool snapshots = view_snapshot::enabled();
-    for (std::uint32_t i = 0; i < imageMemoryBarrierCount; ++i) {
-        g_tracker.onBarrier(handleValue(commandBuffer), handleValue(pImageMemoryBarriers[i].image),
-                            pImageMemoryBarriers[i].newLayout);
-        if (snapshots) {
-            view_snapshot::noteBarrier(commandBuffer, pImageMemoryBarriers[i]);
+    g_layoutGuard.run([&] { // the tracker's lists grow; the barrier itself goes on
+        for (std::uint32_t i = 0; i < imageMemoryBarrierCount; ++i) {
+            g_tracker.onBarrier(handleValue(commandBuffer), handleValue(pImageMemoryBarriers[i].image),
+                                pImageMemoryBarriers[i].newLayout);
+            if (snapshots) {
+                view_snapshot::noteBarrier(commandBuffer, pImageMemoryBarriers[i]);
+            }
         }
+    });
+    if (const auto next = deviceOf(commandBuffer).cmdPipelineBarrier) {
+        next(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers,
+             bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
     }
-    deviceOf(keyOf(commandBuffer))
-        ->cmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount,
-                             pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers,
-                             imageMemoryBarrierCount, pImageMemoryBarriers);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer commandBuffer,
@@ -200,41 +242,56 @@ VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer commandBuffer,
     if (view_snapshot::enabled()) {
         view_snapshot::noteBegin(commandBuffer);
     }
-    return deviceOf(keyOf(commandBuffer))->beginCommandBuffer(commandBuffer, pBeginInfo);
+    const auto next = deviceOf(commandBuffer).beginCommandBuffer;
+    return next ? next(commandBuffer, pBeginInfo) : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer commandBuffer,
                                               std::uint32_t commandBufferCount,
                                               const VkCommandBuffer* pCommandBuffers) {
-    std::vector<ui_layer::LayoutTracker::Handle> secondaries(commandBufferCount);
-    for (std::uint32_t i = 0; i < commandBufferCount; ++i) {
-        secondaries[i] = handleValue(pCommandBuffers[i]);
+    g_layoutGuard.run([&] {
+        std::vector<ui_layer::LayoutTracker::Handle> secondaries(commandBufferCount);
+        for (std::uint32_t i = 0; i < commandBufferCount; ++i) {
+            secondaries[i] = handleValue(pCommandBuffers[i]);
+        }
+        g_tracker.onExecute(handleValue(commandBuffer), secondaries.data(), secondaries.size());
+    });
+    if (const auto next = deviceOf(commandBuffer).cmdExecuteCommands) {
+        next(commandBuffer, commandBufferCount, pCommandBuffers);
     }
-    g_tracker.onExecute(handleValue(commandBuffer), secondaries.data(), secondaries.size());
-    deviceOf(keyOf(commandBuffer))->cmdExecuteCommands(commandBuffer, commandBufferCount, pCommandBuffers);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            std::uint32_t submitCount,
                                            const VkSubmitInfo* pSubmits,
                                            VkFence fence) {
-    const UiDevice* d = deviceOf(keyOf(queue));
+    const UiDevice d = deviceOf(queue);
+    if (!d.queueSubmit) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     // With a frame's view 0 or view 1 screen pass in one of the batches, a batch after them copies its
-    // image (view_snapshot.hpp).
-    std::optional<view_snapshot::Append> copy = d->isGame && view_snapshot::enabled()
-                                                    ? view_snapshot::submitted(queue, submitCount, pSubmits)
+    // image (view_snapshot.hpp). The copy's batches are planned before the one submit: a plan that throws
+    // gives its copies back, and the game's batches go as they are.
+    std::optional<view_snapshot::Append> copy;
+    const std::array<VkPipelineStageFlags, 3> stages{
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT};
+    std::vector<VkSubmitInfo> batches;
+    std::vector<VkSemaphore> signals;
+    std::vector<std::uint64_t> values;
+    std::vector<VkTimelineSemaphoreSubmitInfo> kept;
+    VkTimelineSemaphoreSubmitInfo timeline{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+    const bool planned = g_submitGuard.run([&] {
+        copy = d.isGame && view_snapshot::enabled() ? view_snapshot::submitted(queue, submitCount, pSubmits)
                                                     : std::nullopt;
-    VkResult result = VK_SUCCESS;
-    if (copy) {
-        const std::array<VkPipelineStageFlags, 3> stages{
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT};
-        std::vector<VkSubmitInfo> batches(pSubmits, pSubmits + submitCount);
-        std::vector<VkSemaphore> signals(copy->signals.begin(), copy->signals.begin() + copy->signalCount);
-        std::vector<std::uint64_t> values(copy->signalValues.begin(),
-                                          copy->signalValues.begin() + copy->signalCount);
+        if (!copy) {
+            return;
+        }
+        batches.assign(pSubmits, pSubmits + submitCount);
+        signals.assign(copy->signals.begin(), copy->signals.begin() + copy->signalCount);
+        values.assign(copy->signalValues.begin(), copy->signalValues.begin() + copy->signalCount);
         // With an eye 0 copy the game's signals from `moveFrom` on go after it (view_snapshot.hpp): each such
         // batch keeps its waits and command buffers, and its timeline info (if any) its wait values.
-        std::vector<VkTimelineSemaphoreSubmitInfo> kept(submitCount);
+        kept.resize(submitCount);
         for (std::uint32_t s = copy->moveFrom; s < submitCount; ++s) {
             const auto* own = static_cast<const VkTimelineSemaphoreSubmitInfo*>(batches[s].pNext);
             for (std::uint32_t i = 0; i < batches[s].signalSemaphoreCount; ++i) {
@@ -251,7 +308,6 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                 batches[s].pNext = &kept[s];
             }
         }
-        VkTimelineSemaphoreSubmitInfo timeline{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
         timeline.waitSemaphoreValueCount = copy->waitCount;
         timeline.pWaitSemaphoreValues = copy->waitValues.data();
         timeline.signalSemaphoreValueCount = static_cast<std::uint32_t>(values.size());
@@ -264,20 +320,29 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
         after.pCommandBuffers = copy->cbs.data();
         after.signalSemaphoreCount = static_cast<std::uint32_t>(signals.size());
         after.pSignalSemaphores = signals.data();
-        result = d->queueSubmit(queue, static_cast<std::uint32_t>(batches.size()), batches.data(), fence);
-        view_snapshot::copiesSubmitted(*copy, result == VK_SUCCESS);
+    });
+    if (!planned && copy) {
+        g_submitGuard.run([&] { view_snapshot::copiesSubmitted(*copy, false); });
+        copy.reset();
+    }
+    VkResult result = VK_SUCCESS;
+    if (copy) {
+        result = d.queueSubmit(queue, static_cast<std::uint32_t>(batches.size()), batches.data(), fence);
+        g_submitGuard.run([&] { view_snapshot::copiesSubmitted(*copy, result == VK_SUCCESS); });
         copy.reset(); // the next copies may take their timeline values now
     } else {
-        result = d->queueSubmit(queue, submitCount, pSubmits, fence);
+        result = d.queueSubmit(queue, submitCount, pSubmits, fence);
     }
     if (result == VK_SUCCESS) {
-        std::vector<ui_layer::LayoutTracker::Handle> cbs;
-        for (std::uint32_t s = 0; s < submitCount; ++s) {
-            for (std::uint32_t i = 0; i < pSubmits[s].commandBufferCount; ++i) {
-                cbs.push_back(handleValue(pSubmits[s].pCommandBuffers[i]));
+        g_layoutGuard.run([&] {
+            std::vector<ui_layer::LayoutTracker::Handle> cbs;
+            for (std::uint32_t s = 0; s < submitCount; ++s) {
+                for (std::uint32_t i = 0; i < pSubmits[s].commandBufferCount; ++i) {
+                    cbs.push_back(handleValue(pSubmits[s].pCommandBuffers[i]));
+                }
             }
-        }
-        g_tracker.onSubmit(handleValue(queue), cbs.data(), cbs.size());
+            g_tracker.onSubmit(handleValue(queue), cbs.data(), cbs.size());
+        });
     }
     return result;
 }
@@ -285,20 +350,28 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
 } // namespace
 
 bool enabled() {
-    static const bool on = readEnabled();
+    static const bool on = [] {
+        bool value = false; // off when the settings cannot be read
+        g_settingsGuard.run([&] { value = readEnabled(); });
+        return value;
+    }();
     return on;
 }
 
 bool motionCaptureRequested() {
     static const bool on = [] {
-        std::wstring value;
-        return readEnv(L"ETERNALVR_CAPTURE_MOTION", value) && !value.empty();
+        bool value = false;
+        g_settingsGuard.run([&] {
+            std::wstring text;
+            value = readEnv(L"ETERNALVR_CAPTURE_MOTION", text) && !text.empty();
+        });
+        return value;
     }();
     return on;
 }
 
 void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr, bool isGame) {
-    if (!enabled()) {
+    if (!enabled() || g_failed.load()) {
         return;
     }
     UiDevice d;
@@ -323,9 +396,13 @@ void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcA
         EVR_LOG("ui: a device function is missing; this device is not changed or followed");
         d.isGame = false;
     }
-    {
-        std::unique_lock lock(g_devicesMutex);
-        g_devices[keyOf(device)] = d;
+    if (!g_deviceGuard.run([&] {
+            std::unique_lock lock(g_devicesMutex);
+            g_devices[keyOf(device)] = d;
+        })) {
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG("ui: the UI layer's hooks are off from here (a device could not be recorded)");
+        return;
     }
     if (d.isGame) {
         EVR_LOG("ui: UI layer on: images created like the GUI target get TRANSFER_SRC, their layouts are "
@@ -339,12 +416,12 @@ void onDeviceDestroyed(VkDevice device) {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
-    if (!enabled()) {
+    if (!enabled() || g_failed.load(std::memory_order_acquire)) {
         return nullptr;
     }
 #define EVR_UI_HOOK(fn)                                                                                      \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_UI_HOOK(CreateImage)
     EVR_UI_HOOK(DestroyImage)

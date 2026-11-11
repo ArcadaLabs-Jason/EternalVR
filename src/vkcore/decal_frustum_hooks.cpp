@@ -2,6 +2,7 @@
 
 #include "stereo_seq/decal_frustum.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -287,6 +288,11 @@ void choosePairDecals(std::byte* params) {
             }));
 }
 
+// The choice allocates (its candidates, the chosen list): without the memory the view gets the engine's
+// list alone, its stale set already dropped.
+HookGuard g_gatherGuard("the decal gather's detour");
+HookGuard g_sortGuard("the decal sorting job's detour");
+
 void gatherHook(std::byte* params, void* arg) {
     report();
     if (params && g_active.load(std::memory_order_acquire)) {
@@ -296,7 +302,7 @@ void gatherHook(std::byte* params, void* arg) {
             }
         }
         if (mp_guard::allowsGameTouch()) {
-            choosePairDecals(params);
+            g_gatherGuard.run([&] { choosePairDecals(params); });
         }
     }
     g_gather(params, arg);
@@ -376,10 +382,12 @@ void appendChosen(std::byte* params) {
     }
 }
 
+// Everything that allocates in appendChosen comes before its first write to the engine's list and count: one
+// that throws leaves the engine's sorted list as it is.
 void sortHook(std::byte* params) {
     g_sort(params);
     if (params && g_active.load(std::memory_order_acquire) && mp_guard::allowsGameTouch()) {
-        appendChosen(params);
+        g_sortGuard.run([&] { appendChosen(params); });
     }
 }
 

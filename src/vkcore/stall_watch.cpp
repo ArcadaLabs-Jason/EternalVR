@@ -5,7 +5,9 @@
 
 #include "gpu_timing/present_stall.hpp"
 #include "vkcore/hang_note.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/vram_watch.hpp"
 #include "vkcore/vrs_nv.hpp"
@@ -44,10 +46,30 @@ struct Next {
 std::shared_mutex& g_devicesMutex = *new std::shared_mutex;
 auto& g_devices = *new std::unordered_map<DispatchKey, Next>;
 
-Next nextOf(DispatchKey key) {
-    std::shared_lock lock(g_devicesMutex);
-    const auto it = g_devices.find(key);
-    return it == g_devices.end() ? Next{} : it->second;
+// An exception must not leave the present hook or a device's creation (hook_guard.hpp): a stall line that
+// cannot be written is skipped, and a device whose record cannot be made turns the hooks off (they would find
+// no next function for it).
+HookGuard g_deviceGuard("the stall watch's device record");
+HookGuard g_stallLineGuard("a stall line");
+HookGuard g_summaryLineGuard("the stall watch's 10 s summary");
+std::atomic<bool> g_failed{false};
+
+// The device's record; for a device without one (no memory for it), the next layer's functions, not timed.
+Next nextOf(VkDevice device) {
+    {
+        std::shared_lock lock(g_devicesMutex);
+        const auto it = g_devices.find(keyOf(device));
+        if (it != g_devices.end()) {
+            return it->second;
+        }
+    }
+    Next next;
+    next.createGraphicsPipelines =
+        nextFunction<PFN_vkCreateGraphicsPipelines>(device, "vkCreateGraphicsPipelines");
+    next.createComputePipelines =
+        nextFunction<PFN_vkCreateComputePipelines>(device, "vkCreateComputePipelines");
+    next.allocateMemory = nextFunction<PFN_vkAllocateMemory>(device, "vkAllocateMemory");
+    return next;
 }
 
 void raiseMax(std::atomic<std::uint64_t>& max, std::uint64_t value) {
@@ -196,7 +218,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
                                                        const VkGraphicsPipelineCreateInfo* pInfos,
                                                        const VkAllocationCallbacks* pAllocator,
                                                        VkPipeline* pPipelines) {
-    const Next next = nextOf(keyOf(device));
+    const Next next = nextOf(device);
+    if (!next.createGraphicsPipelines) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!next.game) {
         return next.createGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     }
@@ -217,7 +242,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device,
                                                       const VkComputePipelineCreateInfo* pInfos,
                                                       const VkAllocationCallbacks* pAllocator,
                                                       VkPipeline* pPipelines) {
-    const Next next = nextOf(keyOf(device));
+    const Next next = nextOf(device);
+    if (!next.createComputePipelines) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!next.game) {
         return next.createComputePipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     }
@@ -235,7 +263,10 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateMemory(VkDevice device,
                                               const VkMemoryAllocateInfo* pAllocateInfo,
                                               const VkAllocationCallbacks* pAllocator,
                                               VkDeviceMemory* pMemory) {
-    const Next next = nextOf(keyOf(device));
+    const Next next = nextOf(device);
+    if (!next.allocateMemory) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!next.game) {
         return next.allocateMemory(device, pAllocateInfo, pAllocator, pMemory);
     }
@@ -261,15 +292,25 @@ PFN_vkVoidFunction chained(DeviceData& data, const char* name) {
 } // namespace
 
 void onDeviceCreated(DeviceData& data, bool isGame) {
-    Next next;
-    next.game = isGame;
-    next.createGraphicsPipelines =
-        reinterpret_cast<PFN_vkCreateGraphicsPipelines>(chained(data, "vkCreateGraphicsPipelines"));
-    next.createComputePipelines =
-        reinterpret_cast<PFN_vkCreateComputePipelines>(chained(data, "vkCreateComputePipelines"));
-    next.allocateMemory = reinterpret_cast<PFN_vkAllocateMemory>(chained(data, "vkAllocateMemory"));
-    std::unique_lock lock(g_devicesMutex);
-    g_devices[keyOf(data.device)] = next;
+    if (g_failed.load()) {
+        return;
+    }
+    const bool recorded = g_deviceGuard.run([&] {
+        Next next;
+        next.game = isGame;
+        next.createGraphicsPipelines =
+            reinterpret_cast<PFN_vkCreateGraphicsPipelines>(chained(data, "vkCreateGraphicsPipelines"));
+        next.createComputePipelines =
+            reinterpret_cast<PFN_vkCreateComputePipelines>(chained(data, "vkCreateComputePipelines"));
+        next.allocateMemory = reinterpret_cast<PFN_vkAllocateMemory>(chained(data, "vkAllocateMemory"));
+        std::unique_lock lock(g_devicesMutex);
+        g_devices[keyOf(data.device)] = next;
+    });
+    if (!recorded) {
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG(
+            "stall: the pipeline and allocation hooks are off from here (a device could not be recorded)");
+    }
 }
 
 void onDeviceDestroyed(VkDevice device) {
@@ -278,9 +319,12 @@ void onDeviceDestroyed(VkDevice device) {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
+    if (g_failed.load(std::memory_order_acquire)) {
+        return nullptr;
+    }
 #define EVR_HOOK(fn)                                                                                         \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_HOOK(CreateGraphicsPipelines)
     EVR_HOOK(CreateComputePipelines)
@@ -296,7 +340,7 @@ std::uint64_t presentEntered() {
     const std::uint64_t tickBefore = g_tickAtPresent.exchange(lastTick, std::memory_order_relaxed);
     const Spent spent = g_spent.take();
     if (previous != 0 && now > previous && ms(now - previous) > gt::kStallGapMs) {
-        onStall(ms(now - previous), previous, tickBefore, lastTick, spent);
+        g_stallLineGuard.run([&] { onStall(ms(now - previous), previous, tickBefore, lastTick, spent); });
     }
     hang_note::testHangAtPresent(); // rig only (ETERNALVR_TEST_HANG): holds this present after its stamp
     return now;
@@ -359,11 +403,14 @@ void logSummary() {
     const std::uint64_t outside = c.outsidePlay - g_stalls.summaryOutsidePlay;
     const std::uint64_t saves = g_summarySaves.exchange(0, std::memory_order_relaxed);
     if (inPlay != 0 || outside != 0 || saves != 0) {
-        EVR_LOG("stall: last 10 s: %llu stall(s) in play (longest %.1f ms), %llu on loading screens or in "
+        g_summaryLineGuard.run([&] { // the save note is a string
+            EVR_LOG(
+                "stall: last 10 s: %llu stall(s) in play (longest %.1f ms), %llu on loading screens or in "
                 "menus; %llu in play in total, %u logged%s",
                 static_cast<unsigned long long>(inPlay), g_stalls.windowLongestMs,
                 static_cast<unsigned long long>(outside), static_cast<unsigned long long>(c.inPlay), c.logged,
                 gt::summarySaveNote(saves).c_str());
+        });
     }
     g_stalls.summaryInPlay = c.inPlay;
     g_stalls.summaryOutsidePlay = c.outsidePlay;

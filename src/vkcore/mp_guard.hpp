@@ -61,7 +61,8 @@ using TripListener = mp_policy::TripListeners::Listener;
 bool addTripListener(TripListener listener);
 
 // Reads the main menu's current and next screen and trips on an online one. Cheap; the layer calls it
-// on every present. Also fires the development test trip (ETERNALVR_GUARD_TEST_TRIP_MS).
-void poll();
+// on every present. Also fires the development test trip (ETERNALVR_GUARD_TEST_TRIP_MS). Never throws: a
+// poll that fails trips the guard (fail closed).
+void poll() noexcept;
 
 } // namespace evr::vkcore::mp_guard

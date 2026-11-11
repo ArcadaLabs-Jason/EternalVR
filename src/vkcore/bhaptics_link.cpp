@@ -2,6 +2,8 @@
 
 #include "vkcore/bhaptics_link.hpp"
 
+#include "vkcore/hook_guard.hpp"
+
 #include <windows.h>
 
 #include <winhttp.h>
@@ -45,7 +47,7 @@ constexpr std::size_t kReplyLogChars = 300;
 
 template <typename T>
 void load(HMODULE module, const char* name, T& out, bool& ok) {
-    out = reinterpret_cast<T>(reinterpret_cast<void*>(GetProcAddress(module, name)));
+    out = reinterpret_cast<T>(GetProcAddress(module, name));
     ok = ok && out != nullptr;
 }
 
@@ -95,8 +97,14 @@ struct WebSocketLink::Impl {
     mutable std::mutex replyMutex;
     std::string firstReply;
 
+    // An exception must not leave the thread (it would end the game): without the memory for a reply the
+    // link reads as lost, and the sender connects again.
     static DWORD WINAPI readerMain(void* self) {
-        static_cast<Impl*>(self)->read();
+        static HookGuard reader("the bHaptics link's reader");
+        auto* impl = static_cast<Impl*>(self);
+        if (!reader.run([impl] { impl->read(); })) {
+            impl->open.store(false);
+        }
         return 0;
     }
 

@@ -1,8 +1,9 @@
 #pragma once
 
-// Parallel Eye Rendering: what view_clones.cpp (the clones and their map), view_clone_binds.cpp (view 1's
-// passes store and bind the clones) and view_one_passes.cpp (view 1's own screen pass, environment, light
-// scattering wait, shadow atlas skip and tile list pool) share. Build 25216728 (RVAs).
+// Parallel Eye Rendering: what view_clones.cpp and view_clone_build.cpp (the clones and their map),
+// view_clone_binds.cpp (view 1's passes store and bind the clones) and view_one_passes.cpp (view 1's own
+// screen pass, environment, light scattering wait, shadow atlas skip and tile list pool) share. Build
+// 25216728 (RVAs).
 
 #include "vkcore/clone_census.hpp"
 #include "vkcore/clone_stencil.hpp"

@@ -12,6 +12,8 @@
 //
 // Pure: no Vulkan. Unit tested (tests/vkcore/readback_worker_tests.cpp).
 
+#include "common/finishes.hpp"
+
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -213,7 +215,9 @@ private:
             }
             lock.lock();
             measuring_ = false;
-            results_.push_back(std::move(result));
+            // Without the memory to keep it the result is dropped (an exception must not leave the thread);
+            // the slot is released all the same.
+            finishes([&] { results_.push_back(std::move(result)); });
             if (job.slot != kNoSlot) {
                 // Released only once the measurement no longer reads the slot.
                 busy_.fetch_and(~(1u << job.slot), std::memory_order_release);

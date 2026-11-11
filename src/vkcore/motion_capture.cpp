@@ -1,5 +1,6 @@
 #include "vkcore/motion_capture.hpp"
 
+#include "common/finishes.hpp"
 #include "ui_layer/motion_target.hpp"
 #include "vkcore/eye_capture.hpp"
 #include "vkcore/log.hpp"
@@ -15,6 +16,7 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace evr::vkcore {
@@ -326,68 +328,87 @@ void MotionCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
         std::string note;
         std::vector<std::uint8_t> bytes;
     };
-    auto outs = std::make_shared<std::array<Out, 2>>();
-    for (std::size_t e = 0; e < 2; ++e) {
-        Eye& eye = eyes_[e];
-        Out& out = (*outs)[e];
-        out.taken = eye.taken;
-        out.note = eye.note;
-        if (!eye.taken) {
-            continue;
+    // An exception must not leave the present hook or the writer thread (it would end the game): without the
+    // memory for the copies or their names this capture is skipped, as the eye capture skips a pair, and
+    // without the memory for the writer's text it is not fully written.
+    std::shared_ptr<std::array<Out, 2>> outs;
+    std::wstring base;
+    bool once = false;
+    const bool copied = finishes([&] {
+        outs = std::make_shared<std::array<Out, 2>>();
+        for (std::size_t e = 0; e < 2; ++e) {
+            Eye& eye = eyes_[e];
+            Out& out = (*outs)[e];
+            out.taken = eye.taken;
+            out.note = eye.note;
+            if (!eye.taken) {
+                continue;
+            }
+            if (!eye.coherent) {
+                VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+                range.memory = eye.memory;
+                range.size = VK_WHOLE_SIZE;
+                dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
+            }
+            out.format = eye.format;
+            out.extent = eye.extent;
+            const std::size_t size =
+                std::size_t{eye.extent.width} * eye.extent.height * ui_layer::motionBytesPerPixel(eye.format);
+            out.bytes.resize(size);
+            std::memcpy(out.bytes.data(), eye.mapped, size);
         }
-        if (!eye.coherent) {
-            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
-            range.memory = eye.memory;
-            range.size = VK_WHOLE_SIZE;
-            dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
+        base = currentBase_;
+        once = !base.empty();
+        if (once) {
+            base += L"-MV";
+        } else {
+            wchar_t name[96];
+            swprintf_s(name, L"\\mv-%lu-p%06llu", GetCurrentProcessId(),
+                       static_cast<unsigned long long>(index_));
+            base = directory_ + name;
         }
-        out.format = eye.format;
-        out.extent = eye.extent;
-        const std::size_t size =
-            std::size_t{eye.extent.width} * eye.extent.height * ui_layer::motionBytesPerPixel(eye.format);
-        out.bytes.resize(size);
-        std::memcpy(out.bytes.data(), eye.mapped, size);
-    }
+    });
     state_ = State::Idle;
-    std::wstring base = currentBase_;
     currentBase_.clear();
-    const bool once = !base.empty();
-    if (once) {
-        base += L"-MV";
-    } else {
-        wchar_t name[96];
-        swprintf_s(name, L"\\mv-%lu-p%06llu", GetCurrentProcessId(), static_cast<unsigned long long>(index_));
-        base = directory_ + name;
+    if (!copied) {
+        EVR_LOG("%s: no memory for capture %llu; not saved", kTag, static_cast<unsigned long long>(index_));
+        return;
     }
     const bool logIt = once || ++written_ <= 10;
     const std::uint64_t index = index_;
     writerBusy_->store(true);
-    const auto write = [busy = writerBusy_, outs, base, logIt, index] {
-        std::string text;
-        bool ok = true;
-        const char* names[2] = {"L", "R"};
-        for (std::size_t e = 0; e < 2; ++e) {
-            const Out& out = (*outs)[e];
-            text += std::string("eye ") + names[e] + ": " + out.note + "\n";
-            if (!out.taken) {
-                text += std::string("eye ") + names[e] + ": NOT copied\n";
-                continue;
+    const auto write = [busy = writerBusy_, outs, base = std::move(base), logIt, index] {
+        const bool finished = finishes([&] {
+            std::string text;
+            bool ok = true;
+            const char* names[2] = {"L", "R"};
+            for (std::size_t e = 0; e < 2; ++e) {
+                const Out& out = (*outs)[e];
+                text += std::string("eye ") + names[e] + ": " + out.note + "\n";
+                if (!out.taken) {
+                    text += std::string("eye ") + names[e] + ": NOT copied\n";
+                    continue;
+                }
+                const std::wstring path = base + (e == 0 ? L"-L.raw" : L"-R.raw");
+                ok = writeFile(path, out.bytes.data(), out.bytes.size()) && ok;
+                text += format("eye %s: %s, VkFormat %d, %ux%u, %zu bytes\n", names[e], narrow(path).c_str(),
+                               out.format, out.extent.width, out.extent.height, out.bytes.size());
+                const std::optional<ui_layer::MotionStats> s = ui_layer::motionStats(
+                    out.bytes.data(), out.bytes.size(), out.extent.width, out.extent.height, out.format);
+                if (s) {
+                    text += std::string("eye ") + names[e] + " stats: " + ui_layer::describe(*s) + "\n";
+                }
             }
-            const std::wstring path = base + (e == 0 ? L"-L.raw" : L"-R.raw");
-            ok = writeFile(path, out.bytes.data(), out.bytes.size()) && ok;
-            text += format("eye %s: %s, VkFormat %d, %ux%u, %zu bytes\n", names[e], narrow(path).c_str(),
-                           out.format, out.extent.width, out.extent.height, out.bytes.size());
-            const std::optional<ui_layer::MotionStats> s = ui_layer::motionStats(
-                out.bytes.data(), out.bytes.size(), out.extent.width, out.extent.height, out.format);
-            if (s) {
-                text += std::string("eye ") + names[e] + " stats: " + ui_layer::describe(*s) + "\n";
+            const std::wstring txt = base + L".txt";
+            ok = writeFile(txt, text.data(), text.size()) && ok;
+            if (logIt || !ok) {
+                EVR_LOG("%s: capture %llu %s: %s", kTag, static_cast<unsigned long long>(index),
+                        ok ? "written" : "NOT fully written", narrow(txt).c_str());
             }
-        }
-        const std::wstring txt = base + L".txt";
-        ok = writeFile(txt, text.data(), text.size()) && ok;
-        if (logIt || !ok) {
-            EVR_LOG("%s: capture %llu %s: %s", kTag, static_cast<unsigned long long>(index),
-                    ok ? "written" : "NOT fully written", narrow(txt).c_str());
+        });
+        if (!finished) {
+            EVR_LOG("%s: no memory to write capture %llu; NOT fully written", kTag,
+                    static_cast<unsigned long long>(index));
         }
         busy->store(false);
     };

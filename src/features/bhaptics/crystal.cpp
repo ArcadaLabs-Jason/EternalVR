@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -110,6 +111,7 @@ void BodyHaptics::crystal(std::vector<Frame>& out, double seconds) {
     }
     for (const Device sleeve : {Device::ForearmL, Device::ForearmR}) {
         std::vector<Dot> dots;
+        dots.reserve(std::size_t{kSleeveMotors});
         for (int i = 0; i < kSleeveMotors; ++i) {
             dots.push_back({static_cast<std::uint8_t>(i),
                             scaled(kCrystalSleevePeak * sleeveShare * randomLevel(kCrystalFlicker, 1.0f))});

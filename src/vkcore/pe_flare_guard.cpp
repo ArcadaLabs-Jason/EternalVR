@@ -59,9 +59,8 @@ bool marksCover(int view, std::int32_t first, std::int32_t words) {
         return false;
     }
     const std::span<std::uint32_t> bits = pendingWords();
-    for (std::int32_t i = 0; i < words; ++i) {
-        snapshot[static_cast<std::size_t>(i)] =
-            std::atomic_ref<std::uint32_t>(bits[static_cast<std::size_t>(first + i)]).load();
+    for (std::size_t i = 0; i < static_cast<std::size_t>(words); ++i) {
+        snapshot[i] = std::atomic_ref<std::uint32_t>(bits[static_cast<std::size_t>(first) + i]).load();
     }
     const std::span<const std::uint32_t> scanned(snapshot.data(), static_cast<std::size_t>(words));
     std::uint32_t unmarked = 0;

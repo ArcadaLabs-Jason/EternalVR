@@ -28,33 +28,35 @@ bool g_listening = false;
 
 // The trip listener, on the thread that tripped, once. The one write after a trip: each cvar the layer wrote
 // goes back to its value before the layer's first write, so a player who carries on flat (and may go online)
-// does not keep the layer's values.
+// does not keep the layer's values. Each cvar is written back before its log line is made, and one whose
+// text finds no memory does not keep the others from going back (mp_policy::giveBack).
 void restoreOnTrip() {
     std::lock_guard lock(g_mutex);
-    std::size_t restored = 0;
-    std::size_t left = 0;
-    for (const auto& e : g_saved.takeAll()) {
-        const std::string now = valueText(e.target.object);
-        if (const char* why = mp_policy::cvarLeftOnTrip(e.name)) {
-            ++left;
-            EVR_LOG("%s: %s left at %s, not set back to %s (the multiplayer guard tripped; %s)", kTag,
-                    e.name.c_str(), now.c_str(), e.value.c_str(), why);
-            continue;
-        }
-        ++restored;
-        const std::string& back = e.trip ? *e.trip : e.value;
-        if (now != back) {
-            e.target.set(e.target.object, back.c_str(), true);
-        }
-        EVR_LOG("%s: %s %s -> %s, %s (the multiplayer guard tripped; reads %s)", kTag, e.name.c_str(),
-                now.c_str(), back.c_str(),
-                e.trip ? "the player's value from the profile's load"
-                       : "its value before the layer's first write",
-                valueText(e.target.object).c_str());
-    }
+    using Entry = mp_policy::SavedCvars<Target>::Entry;
+    const auto entries = g_saved.takeAll(); // moved out: no allocation
+    const mp_policy::GiveBack done = mp_policy::giveBack(
+        entries, [](const Entry& e) { return valueText(e.target.object); },
+        [](const Entry& e, const std::string& back) { e.target.set(e.target.object, back.c_str(), true); },
+        [](const Entry& e, const std::string* now, const char* left) {
+            const std::string& back = e.trip ? *e.trip : e.value;
+            if (left) {
+                EVR_LOG("%s: %s left at %s, not set back to %s (the multiplayer guard tripped; %s)", kTag,
+                        e.name.c_str(), now ? now->c_str() : "?", e.value.c_str(), left);
+                return;
+            }
+            EVR_LOG("%s: %s %s -> %s, %s (the multiplayer guard tripped; reads %s)", kTag, e.name.c_str(),
+                    now ? now->c_str() : "?", back.c_str(),
+                    e.trip ? "the player's value from the profile's load"
+                           : "its value before the layer's first write",
+                    valueText(e.target.object).c_str());
+        });
     EVR_LOG("%s: the multiplayer guard tripped: %zu cvar(s) the layer wrote set back, %zu left as they are; "
             "cvars the launcher set on the command line keep the command line's values",
-            kTag, restored, left);
+            kTag, done.restored, done.left);
+    if (done.failed > 0) {
+        EVR_LOG("%s: %zu read(s) or line(s) found no memory; every cvar was still given back", kTag,
+                done.failed);
+    }
 }
 
 } // namespace

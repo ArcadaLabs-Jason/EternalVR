@@ -5,35 +5,23 @@
 // creates it) and hands presents to the XR presenter, which copies the presented image into a ring
 // shared with its own D3D12 device and shows it in the headset (head-tracked or on a flat screen).
 
+#include "common/finishes.hpp"
 #include "platform/layer_gate/layer_gate.hpp"
 #include "vkcore/adapter_steer.hpp"
-#include "vkcore/cb_check.hpp"
-#include "vkcore/cpu_timing.hpp"
-#include "vkcore/device_augment.hpp"
 #include "vkcore/dispatch.hpp"
-#include "vkcore/dlss_dll.hpp"
-#include "vkcore/gpu_timing.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/keep_active.hpp"
+#include "vkcore/layer_entry_impl.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/profile_hooks.hpp"
-#include "vkcore/queue_entry.hpp"
-#include "vkcore/shader_dump.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
-#include "vkcore/ssr_fade_hooks.hpp"
-#include "vkcore/stall_watch.hpp"
 #include "vkcore/status_file.hpp"
-#include "vkcore/stereo_hooks.hpp"
 #include "vkcore/stereo_present.hpp"
 #include "vkcore/surface_entry.hpp"
-#include "vkcore/swapchain_entry.hpp"
 #include "vkcore/taa_hooks.hpp"
-#include "vkcore/ui_vulkan.hpp"
-#include "vkcore/view_async.hpp"
 #include "vkcore/view_slots.hpp"
-#include "vkcore/view_snapshot.hpp"
 #include "vkcore/virtual_client.hpp"
-#include "vkcore/vrs_nv.hpp"
 #include "vkcore/xr_presenter.hpp"
 
 #include <windows.h>
@@ -52,17 +40,7 @@
 
 namespace evr::vkcore {
 
-namespace {
-
-// ---------------------------------------------------------------------------------------------------
-// Dispatch maps, keyed by the loader's dispatch key (the first pointer inside a dispatchable handle).
-
-using DispatchKey = void*;
-
-template <typename Handle>
-DispatchKey keyOf(Handle handle) {
-    return *reinterpret_cast<void**>(handle);
-}
+namespace layer_entry_detail {
 
 // Allocated once and never destroyed. The game usually exits without vkDestroyDevice, and destructors
 // run from DLL_PROCESS_DETACH would tear the presenter down under the loader lock after its threads
@@ -71,32 +49,76 @@ std::shared_mutex& g_mapMutex = *new std::shared_mutex;
 auto& g_instances = *new std::unordered_map<DispatchKey, std::unique_ptr<InstanceData>>;
 auto& g_devices = *new std::unordered_map<DispatchKey, std::unique_ptr<DeviceData>>;
 
-std::atomic<bool> g_processTerminating{false};
-
 // Set on threads that run our own OpenXR calls, so a VkInstance a runtime creates from inside them
 // passes straight through (T-082).
 thread_local bool t_passThrough = false;
 
-template <typename Handle>
-InstanceData* findInstance(Handle handle) {
-    std::shared_lock lock(g_mapMutex);
-    const auto it = g_instances.find(keyOf(handle));
-    return it == g_instances.end() ? nullptr : it->second.get();
-}
+} // namespace layer_entry_detail
 
-template <typename Handle>
-DeviceData* findDevice(Handle handle) {
-    std::shared_lock lock(g_mapMutex);
-    const auto it = g_devices.find(keyOf(handle));
-    return it == g_devices.end() ? nullptr : it->second.get();
-}
+using namespace layer_entry_detail;
+
+namespace {
+
+std::atomic<bool> g_processTerminating{false};
+
+// The loader's entry points catch what the layer's own work throws (hook_guard.hpp).
+HookGuard g_createInstanceGuard("vkCreateInstance");
+// One per install, so the log names the one that threw.
+HookGuard g_mpGuardInstall("the multiplayer guard's install (vkCreateInstance)");
+HookGuard g_viewSlotsInstall("Parallel Eye Rendering's early install (vkCreateInstance)");
+HookGuard g_taaInstall("per-eye TAA's early install (vkCreateInstance)");
+HookGuard g_ssdoMenuInstall("the SSDO menu hook's install (vkCreateInstance)");
+HookGuard g_profileInstall("the profile hooks' install (vkCreateInstance)");
+HookGuard g_instanceProcAddrGuard("a vkGetInstanceProcAddr lookup");
+HookGuard g_deviceProcAddrGuard("a vkGetDeviceProcAddr lookup");
+HookGuard g_negotiateGuard("vkNegotiateLoaderLayerInterfaceVersion");
 
 // ---------------------------------------------------------------------------------------------------
 // Instance
 
-VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreateInfo,
-                                              const VkAllocationCallbacks* pAllocator,
-                                              VkInstance* pInstance) {
+// How far the game's vkCreateInstance got when the layer's part of it threw (CreateInstance).
+struct InstanceProgress {
+    VkLayerInstanceCreateInfo* link = nullptr;
+    VkLayerInstanceLink* savedLink = nullptr;
+    PFN_vkGetInstanceProcAddr nextGipa = nullptr;
+    PFN_vkCreateInstance nextCreate = nullptr;
+    bool created = false; // the next layer made the instance and it is not recorded yet
+};
+
+// The next layer's functions the layer calls, with the KHR aliases for a 1.0 instance.
+void loadInstanceFunctions(InstanceData& data) {
+    const VkInstance instance = data.instance;
+    const PFN_vkGetInstanceProcAddr nextGipa = data.nextGetInstanceProcAddr;
+#define EVR_LOAD_INSTANCE_FN(name)                                                                           \
+    data.vk.name = reinterpret_cast<PFN_vk##name>(nextGipa(instance, "vk" #name));
+    EVR_INSTANCE_FUNCTIONS(EVR_LOAD_INSTANCE_FN)
+#undef EVR_LOAD_INSTANCE_FN
+    data.nextSurfaceCapabilities2 = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR>(
+        nextGipa(instance, "vkGetPhysicalDeviceSurfaceCapabilities2KHR"));
+    if (!data.vk.GetPhysicalDeviceProperties2) {
+        data.vk.GetPhysicalDeviceProperties2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+            nextGipa(instance, "vkGetPhysicalDeviceProperties2KHR"));
+    }
+    if (!data.vk.GetPhysicalDeviceFeatures2) {
+        data.vk.GetPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+            nextGipa(instance, "vkGetPhysicalDeviceFeatures2KHR"));
+    }
+    if (!data.vk.GetPhysicalDeviceImageFormatProperties2) {
+        data.vk.GetPhysicalDeviceImageFormatProperties2 =
+            reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties2>(
+                nextGipa(instance, "vkGetPhysicalDeviceImageFormatProperties2KHR"));
+    }
+    if (!data.vk.GetPhysicalDeviceExternalSemaphoreProperties) {
+        data.vk.GetPhysicalDeviceExternalSemaphoreProperties =
+            reinterpret_cast<PFN_vkGetPhysicalDeviceExternalSemaphoreProperties>(
+                nextGipa(instance, "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"));
+    }
+}
+
+VkResult createInstance(const VkInstanceCreateInfo* pCreateInfo,
+                        const VkAllocationCallbacks* pAllocator,
+                        VkInstance* pInstance,
+                        InstanceProgress& progress) {
     auto* link = findLayerCreateInfo<VkLayerInstanceCreateInfo>(
         pCreateInfo->pNext, VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO, VK_LAYER_LINK_INFO);
     if (!link || !link->u.pLayerInfo) {
@@ -109,6 +131,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     if (!nextCreate) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    progress = {link, savedLink, nextGipa, nextCreate, false};
 
     const VkApplicationInfo* app = pCreateInfo->pApplicationInfo;
     const char* appName = app && app->pApplicationName ? app->pApplicationName : "";
@@ -187,12 +210,14 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
         modified.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
         modified.ppEnabledExtensionNames = extensions.data();
         result = nextCreate(augmented || surfaceMaintenance ? &modified : pCreateInfo, pAllocator, pInstance);
+        progress.created = result == VK_SUCCESS;
     }
     if (result != VK_SUCCESS && augmented) {
         EVR_LOG("vkCreateInstance with added extensions failed (%d); retrying the game's own create info",
                 result);
         link->u.pLayerInfo = savedLink;
         result = nextCreate(pCreateInfo, pAllocator, pInstance);
+        progress.created = result == VK_SUCCESS;
         augmented = false;
     }
     if (result != VK_SUCCESS) {
@@ -212,43 +237,89 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreat
     data->surfaceMaintenance1 = data->isGame && surfaceMaintenance && result == VK_SUCCESS;
     data->surfaceMaintenance1Khr = data->surfaceMaintenance1 && surfaceKhr;
     data->surfaceMaintenance1Ext = data->surfaceMaintenance1 && surfaceExt;
-#define EVR_LOAD_INSTANCE_FN(name)                                                                           \
-    data->vk.name = reinterpret_cast<PFN_vk##name>(nextGipa(*pInstance, "vk" #name));
-    EVR_INSTANCE_FUNCTIONS(EVR_LOAD_INSTANCE_FN)
-#undef EVR_LOAD_INSTANCE_FN
-    data->nextSurfaceCapabilities2 = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR>(
-        nextGipa(*pInstance, "vkGetPhysicalDeviceSurfaceCapabilities2KHR"));
-    // KHR aliases for a 1.0 instance.
-    if (!data->vk.GetPhysicalDeviceProperties2) {
-        data->vk.GetPhysicalDeviceProperties2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
-            nextGipa(*pInstance, "vkGetPhysicalDeviceProperties2KHR"));
-    }
-    if (!data->vk.GetPhysicalDeviceFeatures2) {
-        data->vk.GetPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-            nextGipa(*pInstance, "vkGetPhysicalDeviceFeatures2KHR"));
-    }
-    if (!data->vk.GetPhysicalDeviceImageFormatProperties2) {
-        data->vk.GetPhysicalDeviceImageFormatProperties2 =
-            reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties2>(
-                nextGipa(*pInstance, "vkGetPhysicalDeviceImageFormatProperties2KHR"));
-    }
-    if (!data->vk.GetPhysicalDeviceExternalSemaphoreProperties) {
-        data->vk.GetPhysicalDeviceExternalSemaphoreProperties =
-            reinterpret_cast<PFN_vkGetPhysicalDeviceExternalSemaphoreProperties>(
-                nextGipa(*pInstance, "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"));
-    }
+    loadInstanceFunctions(*data);
 
-    // The multiplayer guard goes in before the game can reach its menus: every later feature asks it.
+    // The multiplayer guard goes in before the game can reach its menus: every later feature asks it. An
+    // install that throws leaves its own feature off and the others still go in; without the guard (unarmed)
+    // every feature stays off.
     if (data->isGame) {
-        mp_guard::install();
-        installViewSlotsEarly(); // Parallel Eye Rendering: before the renderer sizes its views
-        installTaaEarly();       // per-eye TAA: eye R's images are built with the device context, after this
-        installSsdoMenuHook();   // Route S's r_SSDO hold follows the game's setting from the profile's load
-        installProfileHooks();   // held cvars stay out of the player's profile.bin, from the profile's load
+        if (!g_mpGuardInstall.run([] { mp_guard::install(); })) {
+            finishes(
+                [] { status::flat("the multiplayer guard could not be installed (details in the log)"); });
+        }
+        // Parallel Eye Rendering: before the renderer sizes its views.
+        g_viewSlotsInstall.run([] { installViewSlotsEarly(); });
+        // Per-eye TAA: eye R's images are built with the device context, after this.
+        g_taaInstall.run([] { installTaaEarly(); });
+        // Route S's r_SSDO hold follows the game's setting from the profile's load.
+        g_ssdoMenuInstall.run([] { installSsdoMenuHook(); });
+        // Held cvars stay out of the player's profile.bin, from the profile's load.
+        g_profileInstall.run([] { installProfileHooks(); });
     }
     std::unique_lock lock(g_mapMutex);
     g_instances[keyOf(*pInstance)] = std::move(data);
+    progress.created = false; // recorded
     return VK_SUCCESS;
+}
+
+// After the layer's part of vkCreateInstance threw: the instance the game asked for, made now from its own
+// create info if it was not made yet, recorded to pass through (no presenter: the game runs flat). When not
+// even that record can be made, the instance is destroyed and the game gets VK_ERROR_OUT_OF_HOST_MEMORY, a
+// result vkCreateInstance may return.
+VkResult passThroughInstance(const VkInstanceCreateInfo* pCreateInfo,
+                             const VkAllocationCallbacks* pAllocator,
+                             VkInstance* pInstance,
+                             const InstanceProgress& progress) {
+    if (!progress.nextCreate) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (!progress.created) {
+        progress.link->u.pLayerInfo = progress.savedLink;
+        const VkResult result = progress.nextCreate(pCreateInfo, pAllocator, pInstance);
+        if (result != VK_SUCCESS) {
+            EVR_LOG("vkCreateInstance with the game's own create info failed: %d", result);
+            return result;
+        }
+    }
+    const VkApplicationInfo* app = pCreateInfo->pApplicationInfo;
+    const bool recorded = finishes([&] {
+        auto data = std::make_unique<InstanceData>();
+        data->instance = *pInstance;
+        data->nextGetInstanceProcAddr = progress.nextGipa;
+        data->apiVersion = app && app->apiVersion ? app->apiVersion : VK_API_VERSION_1_0;
+        loadInstanceFunctions(*data);
+        std::unique_lock lock(g_mapMutex);
+        g_instances[keyOf(*pInstance)] = std::move(data);
+    });
+    if (!recorded) {
+        if (const auto destroy =
+                reinterpret_cast<PFN_vkDestroyInstance>(progress.nextGipa(*pInstance, "vkDestroyInstance"))) {
+            destroy(*pInstance, pAllocator);
+        }
+        EVR_LOG(
+            "vkCreateInstance: no memory to record the instance; destroyed (VK_ERROR_OUT_OF_HOST_MEMORY)");
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    EVR_LOG("vkCreateInstance: the instance passes through the layer (no VR on it)");
+    const bool game = !t_passThrough && app && app->pApplicationName && app->pEngineName &&
+                      std::strcmp(app->pApplicationName, "DOOMEternal") == 0 &&
+                      std::strcmp(app->pEngineName, "idTech") == 0;
+    if (game) {
+        finishes([] { status::flat("the game's Vulkan instance could not be set up for the headset"); });
+    }
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo* pCreateInfo,
+                                              const VkAllocationCallbacks* pAllocator,
+                                              VkInstance* pInstance) {
+    InstanceProgress progress;
+    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+    if (g_createInstanceGuard.run(
+            [&] { result = createInstance(pCreateInfo, pAllocator, pInstance, progress); })) {
+        return result;
+    }
+    return passThroughInstance(pCreateInfo, pAllocator, pInstance, progress);
 }
 
 VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) {
@@ -267,207 +338,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocati
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Device
-
-PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name);
-
-VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physicalDevice,
-                                            const VkDeviceCreateInfo* pCreateInfo,
-                                            const VkAllocationCallbacks* pAllocator,
-                                            VkDevice* pDevice) {
-    InstanceData* inst = findInstance(physicalDevice);
-    auto* link = findLayerCreateInfo<VkLayerDeviceCreateInfo>(
-        pCreateInfo->pNext, VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO, VK_LAYER_LINK_INFO);
-    if (!inst || !link || !link->u.pLayerInfo) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    const PFN_vkGetInstanceProcAddr nextGipa = link->u.pLayerInfo->pfnNextGetInstanceProcAddr;
-    const PFN_vkGetDeviceProcAddr nextGdpa = link->u.pLayerInfo->pfnNextGetDeviceProcAddr;
-    link->u.pLayerInfo = link->u.pLayerInfo->pNext;
-    VkLayerDeviceLink* const savedLink = link->u.pLayerInfo;
-    auto nextCreate = reinterpret_cast<PFN_vkCreateDevice>(nextGipa(inst->instance, "vkCreateDevice"));
-    if (!nextCreate) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    auto* loaderData = findLayerCreateInfo<VkLayerDeviceCreateInfo>(
-        pCreateInfo->pNext, VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO, VK_LOADER_DATA_CALLBACK);
-
-    VkPhysicalDeviceProperties props{};
-    inst->vk.GetPhysicalDeviceProperties(physicalDevice, &props);
-    EVR_LOG("vkCreateDevice on '%s' (api %s), %u extension(s), %u queue create info(s)", props.deviceName,
-            versionString(props.apiVersion).c_str(), pCreateInfo->enabledExtensionCount,
-            pCreateInfo->queueCreateInfoCount);
-    for (std::uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; ++i) {
-        EVR_LOG("  queue family %u x%u", pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex,
-                pCreateInfo->pQueueCreateInfos[i].queueCount);
-    }
-
-    DeviceAugment plan;
-    if (inst->isGame && !t_passThrough) {
-        planDeviceAugment(plan, *inst, physicalDevice, *pCreateInfo);
-    }
-
-    VkDeviceCreateInfo modified = *pCreateInfo;
-    if (plan.ok) {
-        modified.enabledExtensionCount = static_cast<std::uint32_t>(plan.extensions.size());
-        modified.ppEnabledExtensionNames = plan.extensions.data();
-        modified.pNext = plan.head();
-    }
-
-    VkResult result = nextCreate(physicalDevice, plan.ok ? &modified : pCreateInfo, pAllocator, pDevice);
-    if (result != VK_SUCCESS && plan.releaseImages) {
-        EVR_LOG("vkCreateDevice with %s failed (%d); retrying without it", plan.maintenance1, result);
-        link->u.pLayerInfo = savedLink;
-        plan.dropRelease();
-        modified.enabledExtensionCount = static_cast<std::uint32_t>(plan.extensions.size());
-        modified.ppEnabledExtensionNames = plan.extensions.data();
-        modified.pNext = plan.head();
-        result = nextCreate(physicalDevice, &modified, pAllocator, pDevice);
-    }
-    bool interop = plan.ok;
-    if (result != VK_SUCCESS && plan.ok) {
-        EVR_LOG("vkCreateDevice with the interop additions failed (%d); retrying the game's own create info, "
-                "presenter off",
-                result);
-        link->u.pLayerInfo = savedLink;
-        result = nextCreate(physicalDevice, pCreateInfo, pAllocator, pDevice);
-        interop = false;
-    }
-    if (result != VK_SUCCESS) {
-        EVR_LOG("vkCreateDevice failed: %d", result);
-        return result;
-    }
-
-    auto data = std::make_unique<DeviceData>();
-    data->device = *pDevice;
-    data->physicalDevice = physicalDevice;
-    data->instance = inst;
-    data->nextGetDeviceProcAddr = nextGdpa;
-    data->setDeviceLoaderData = loaderData ? loaderData->u.pfnSetDeviceLoaderData : nullptr;
-    data->interopEnabled = interop && data->setDeviceLoaderData;
-    if (inst->isGame && !t_passThrough && !data->interopEnabled) {
-        // No presenter on this device: the game runs flat; the launcher must not wait for a first present.
-        status::flat("the game's graphics device could not be set up for the headset (details in the log)");
-    }
-#define EVR_LOAD_DEVICE_FN(name)                                                                             \
-    data->vk.name = reinterpret_cast<PFN_vk##name>(nextGdpa(*pDevice, "vk" #name));
-    EVR_DEVICE_FUNCTIONS(EVR_LOAD_DEVICE_FN)
-#undef EVR_LOAD_DEVICE_FN
-    if (interop && plan.releaseImages) {
-        data->releaseSwapchainImages = reinterpret_cast<PFN_vkReleaseSwapchainImagesKHR>(nextGdpa(
-            *pDevice, std::strcmp(plan.maintenance1, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME) == 0
-                          ? "vkReleaseSwapchainImagesEXT"
-                          : "vkReleaseSwapchainImagesKHR"));
-    }
-
-    std::uint32_t familyCount = 0;
-    inst->vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &familyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> families(familyCount);
-    inst->vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &familyCount, families.data());
-    for (const VkQueueFamilyProperties& family : families) {
-        data->queueFamilyFlags.push_back(family.queueFlags);
-    }
-
-    if (inst->vk.GetPhysicalDeviceProperties2) {
-        VkPhysicalDeviceIDProperties id{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
-        VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &id};
-        inst->vk.GetPhysicalDeviceProperties2(physicalDevice, &props2);
-        data->luidValid = id.deviceLUIDValid == VK_TRUE;
-        std::memcpy(data->luid, id.deviceLUID, VK_LUID_SIZE);
-        std::uint32_t low = 0;
-        std::int32_t high = 0;
-        std::memcpy(&low, id.deviceLUID, 4);
-        std::memcpy(&high, id.deviceLUID + 4, 4);
-        EVR_LOG("device created: LUID %s %08x:%08x, interop %s", data->luidValid ? "valid" : "invalid",
-                static_cast<unsigned>(high), low, data->interopEnabled ? "enabled" : "off");
-    }
-
-    if (inst->isGame && !t_passThrough) {
-        viewAsyncOnDevice(*pCreateInfo, data->queueFamilyFlags); // Parallel Eye Rendering: async compute off
-        startStereoHooksEarly(); // stereo mode only; before the first map loads
-        installDlssDll();        // ETERNALVR_DLSS_DLL; the game initialises NGX right after this returns
-        virtual_client::onGameDevice(*inst, physicalDevice, interop && plan.releaseImages);
-    }
-
-    // The shader dump (a rig tool, ETERNALVR_DUMP_SHADERS) only observes Vulkan calls, no game memory, so it
-    // is not gated on the multiplayer guard: it keeps recording after a trip.
-    shader_dump::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);
-    ssr_fade::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);       // the SSR fade patch
-    ui_vulkan::onDeviceCreated(*pDevice, nextGdpa, inst->isGame && !t_passThrough);      // ETERNALVR_UI_LAYER
-    gpu_timing::onDeviceCreated(*data, props, families, inst->isGame && !t_passThrough); // _GPU_TIMING
-    cpu_timing::onDeviceCreated(*data, inst->isGame && !t_passThrough);  // ETERNALVR_CPU_TIMING, after GPU
-    stall_watch::onDeviceCreated(*data, inst->isGame && !t_passThrough); // always on, after the dump
-    // ETERNALVR_VRS_TEST, innermost of the chain; vrs_khr's path where planned (VK_KHR_fragment_shading_rate)
-    vrs_nv::onDeviceCreated(*data, interop && plan.shadingRate, interop && plan.shadingRateKhr);
-    // ETERNALVR_TEST_CB_CHECK, a Parallel Eye Rendering rig tool: last, it chains to every hook above.
-    cb_check::onDeviceCreated(*data, inst->isGame && !t_passThrough, &findDeviceHookAfterCheck);
-
-    std::unique_lock lock(g_mapMutex);
-    g_devices[keyOf(*pDevice)] = std::move(data);
-    return VK_SUCCESS;
-}
-
-VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) {
-    DeviceData* data = findDevice(device);
-    if (!data) {
-        return;
-    }
-    EVR_LOG("vkDestroyDevice");
-    if (data->presenter) {
-        data->presenter->shutdown();
-        data->presenter.reset();
-    }
-    view_snapshot::onDeviceDestroyed(*data);
-    shader_dump::onDeviceDestroyed(device);
-    ssr_fade::onDeviceDestroyed(device);
-    ui_vulkan::onDeviceDestroyed(device);
-    gpu_timing::onDeviceDestroyed(device);
-    cpu_timing::onDeviceDestroyed(device);
-    stall_watch::onDeviceDestroyed(device);
-    cb_check::onDeviceDestroyed(device);
-    const PFN_vkDestroyDevice destroy = data->vk.DestroyDevice;
-    destroy(device, pAllocator);
-    std::unique_lock lock(g_mapMutex);
-    g_devices.erase(keyOf(device));
-}
-
-// ---------------------------------------------------------------------------------------------------
 // Proc address lookups
 
-PFN_vkVoidFunction findDeviceHookAfterCheck(const char* name) {
-#define EVR_HOOK(fn)                                                                                         \
-    if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
-    }
-    EVR_HOOK(DestroyDevice)
-#undef EVR_HOOK
-    if (const PFN_vkVoidFunction queue = findQueueHook(name)) {
-        return queue;
-    }
-    if (const PFN_vkVoidFunction swapchain = findSwapchainHook(name)) {
-        return swapchain;
-    }
-    if (const PFN_vkVoidFunction stall = stall_watch::findHook(name)) { // chains to the shader dump's
-        return stall;
-    }
-    const PFN_vkVoidFunction cpu = cpu_timing::findHook(name); // chains to the GPU timing's, UI's or dump's
-    const PFN_vkVoidFunction timing = gpu_timing::findHook(name); // chains to the UI layer's where both hook
-    const PFN_vkVoidFunction ui = ui_vulkan::findHook(name); // chains to the shader dump's where both hook
-    const PFN_vkVoidFunction dump = shader_dump::findHook(name); // chains to the VRS experiment's
-    const PFN_vkVoidFunction fade = ssr_fade::findHook(name); // before the dump's: a dump records the patch
-    return fade ? fade : cpu ? cpu : timing ? timing : ui ? ui : dump ? dump : vrs_nv::findHook(name);
-}
-
-// The command buffer check (a Parallel Eye Rendering rig tool, off by default: then null) goes before every
-// other hook of the same function, for the game's device only (`device` null: an instance lookup).
-PFN_vkVoidFunction findDeviceHook(VkDevice device, const char* name) {
-    const PFN_vkVoidFunction check = cb_check::findHook(device, name); // chains to findDeviceHookAfterCheck's
-    return check ? check : findDeviceHookAfterCheck(name);
-}
-
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, const char* pName);
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance instance, const char* pName);
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance instance, const char* pName) {
+PFN_vkVoidFunction instanceProcAddr(VkInstance instance, const char* pName) {
     if (std::strcmp(pName, "vkGetInstanceProcAddr") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(&GetInstanceProcAddr);
     }
@@ -499,7 +375,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance instance
     return data ? data->nextGetInstanceProcAddr(instance, pName) : nullptr;
 }
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, const char* pName) {
+PFN_vkVoidFunction deviceProcAddr(VkDevice device, const char* pName) {
     if (std::strcmp(pName, "vkGetDeviceProcAddr") == 0) {
         return reinterpret_cast<PFN_vkVoidFunction>(&GetDeviceProcAddr);
     }
@@ -513,6 +389,38 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, cons
         return data->nextGetDeviceProcAddr(device, pName) ? hook : nullptr;
     }
     return data->nextGetDeviceProcAddr(device, pName);
+}
+
+// A hook's lookup can throw the first time a feature reads its setting (its environment variable, a thread
+// it starts); that feature's function is then not hooked and the next layer's goes to the game. The layer's
+// own lifecycle hooks (findLifecycleHook) are still handed out, so a create is never hooked while its destroy
+// is not.
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance instance, const char* pName) {
+    PFN_vkVoidFunction function = nullptr;
+    if (g_instanceProcAddrGuard.run([&] { function = instanceProcAddr(instance, pName); })) {
+        return function;
+    }
+    InstanceData* data = instance ? findInstance(instance) : nullptr;
+    if (!data) {
+        return nullptr;
+    }
+    const PFN_vkVoidFunction next = data->nextGetInstanceProcAddr(instance, pName);
+    const PFN_vkVoidFunction lifecycle = next ? findLifecycleHook(pName) : nullptr;
+    return lifecycle ? lifecycle : next;
+}
+
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, const char* pName) {
+    PFN_vkVoidFunction function = nullptr;
+    if (g_deviceProcAddrGuard.run([&] { function = deviceProcAddr(device, pName); })) {
+        return function;
+    }
+    DeviceData* data = findDevice(device);
+    if (!data) {
+        return nullptr;
+    }
+    const PFN_vkVoidFunction next = data->nextGetDeviceProcAddr(device, pName);
+    const PFN_vkVoidFunction lifecycle = next ? findLifecycleHook(pName) : nullptr;
+    return lifecycle ? lifecycle : next;
 }
 
 layer_gate::Decision gateDecision() {
@@ -535,6 +443,31 @@ layer_gate::Decision gateDecision() {
     return layer_gate::decide(std::wstring_view(path.data(), path.size()),
                               hasEnable ? std::optional<std::wstring_view>(enable) : std::nullopt,
                               hasDisable ? std::optional<std::wstring_view>(disable) : std::nullopt);
+}
+
+VkResult negotiate(VkNegotiateLayerInterface* pVersionStruct, bool& started) {
+    const layer_gate::Decision decision = gateDecision();
+    if (decision != layer_gate::Decision::Enable) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (!pVersionStruct || pVersionStruct->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT ||
+        pVersionStruct->loaderLayerInterfaceVersion < 2) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    logOpen();
+    status::starting(); // after logOpen, which holds the log's lock while it runs
+    started = true;
+    // Single-player only (T-109): a multiplayer argument on the command line keeps the layer out.
+    if (!mp_guard::screenCommandLine()) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    EVR_LOG("EternalVR layer loaded (interface %u offered)", pVersionStruct->loaderLayerInterfaceVersion);
+    logLoaderVersion();
+    pVersionStruct->loaderLayerInterfaceVersion = 2;
+    pVersionStruct->pfnGetInstanceProcAddr = &GetInstanceProcAddr;
+    pVersionStruct->pfnGetDeviceProcAddr = &GetDeviceProcAddr;
+    pVersionStruct->pfnGetPhysicalDeviceProcAddr = nullptr;
+    return VK_SUCCESS;
 }
 
 } // namespace
@@ -573,28 +506,16 @@ BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID reserved) {
 // vk_layer.h declares this without dllexport, so it is exported through the linker.
 #pragma comment(linker, "/EXPORT:vkNegotiateLoaderLayerInterfaceVersion")
 
+// The gate, the log and the multiplayer screen allocate: when one throws the layer stays out of the process
+// and the game runs without it (the multiplayer screen is never skipped).
 extern "C" VKAPI_ATTR VkResult VKAPI_CALL
 vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* pVersionStruct) {
     using namespace evr::vkcore;
-    const evr::layer_gate::Decision decision = gateDecision();
-    if (decision != evr::layer_gate::Decision::Enable) {
-        return VK_ERROR_INITIALIZATION_FAILED;
+    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+    bool started = false; // the status file reads "starting"
+    if (!g_negotiateGuard.run([&] { result = negotiate(pVersionStruct, started); }) && started) {
+        evr::finishes(
+            [] { status::flat("the mod could not start (details in the log); the game runs without it"); });
     }
-    if (!pVersionStruct || pVersionStruct->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT ||
-        pVersionStruct->loaderLayerInterfaceVersion < 2) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    logOpen();
-    status::starting(); // after logOpen, which holds the log's lock while it runs
-    // Single-player only (T-109): a multiplayer argument on the command line keeps the layer out.
-    if (!mp_guard::screenCommandLine()) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    EVR_LOG("EternalVR layer loaded (interface %u offered)", pVersionStruct->loaderLayerInterfaceVersion);
-    logLoaderVersion();
-    pVersionStruct->loaderLayerInterfaceVersion = 2;
-    pVersionStruct->pfnGetInstanceProcAddr = &GetInstanceProcAddr;
-    pVersionStruct->pfnGetDeviceProcAddr = &GetDeviceProcAddr;
-    pVersionStruct->pfnGetPhysicalDeviceProcAddr = nullptr;
-    return VK_SUCCESS;
+    return result;
 }

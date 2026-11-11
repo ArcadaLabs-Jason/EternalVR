@@ -1,5 +1,8 @@
 #include "vkcore/mid_hook.hpp"
 
+#include "common/finishes.hpp"
+#include "vkcore/log.hpp"
+
 #include <safetyhook.hpp>
 
 #include <windows.h>
@@ -7,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <utility>
 
@@ -24,16 +28,39 @@ int g_count = 0;
 std::array<safetyhook::InlineHook*, kMaxInlineHooks> g_inlineHooks{};
 int g_inlineCount = 0;
 
+// The game's code each slot hooks, and how often its callback threw (hook_guard.hpp).
+std::array<std::atomic<void*>, kMaxMidHooks> g_targets{};
+std::array<std::atomic<std::uint64_t>, kMaxMidHooks> g_failures{};
+
+// A callback that throws is caught here: the exception would unwind into the game's code. The game resumes
+// as if the callback had not run (an edit callback's registers are not written back); the first failure of
+// each hook is logged, then every 1000th.
+void callbackFailed(int slot, const char* what) noexcept {
+    const auto index = static_cast<std::size_t>(slot);
+    const std::uint64_t n = g_failures[index].fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n == 1 || n % 1000 == 0) {
+        EVR_LOG(
+            "guard: mid hook %d (game code %p) threw (%s); the game's code ran without it (%llu time(s) so "
+            "far)",
+            slot, g_targets[index].load(std::memory_order_relaxed), what, static_cast<unsigned long long>(n));
+    }
+}
+
 template <int N>
 void thunk(safetyhook::Context& ctx) {
     HookRegisters registers{ctx.rax, ctx.rbx, ctx.rcx, ctx.rdx, ctx.rsi, ctx.rdi, ctx.rbp, ctx.rsp,
                             ctx.r8,  ctx.r9,  ctx.r10, ctx.r11, ctx.r12, ctx.r13, ctx.r14, ctx.r15};
+    const auto failed = [](const char* what) {
+        callbackFailed(N, what);
+    };
     if (const MidHookCallback callback = g_callbacks[N].load(std::memory_order_acquire)) {
-        callback(registers);
+        finishes([&] { callback(registers); }, failed);
         return;
     }
     if (const MidHookEditCallback edit = g_editCallbacks[N].load(std::memory_order_acquire)) {
-        edit(registers);
+        if (!finishes([&] { edit(registers); }, failed)) {
+            return;
+        }
         ctx.rax = registers.rax;
         ctx.rbx = registers.rbx;
         ctx.rcx = registers.rcx;
@@ -136,6 +163,7 @@ bool install(void* target, MidHookCallback callback, MidHookEditCallback edit, s
         return false;
     }
     const int slot = g_count;
+    g_targets[static_cast<std::size_t>(slot)].store(target, std::memory_order_relaxed);
     g_callbacks[slot].store(callback, std::memory_order_release);
     g_editCallbacks[slot].store(edit, std::memory_order_release);
     auto created = safetyhook::MidHook::create(target, kThunks[static_cast<std::size_t>(slot)]);

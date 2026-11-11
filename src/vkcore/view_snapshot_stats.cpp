@@ -1,5 +1,6 @@
 #include "vkcore/view_snapshot_impl.hpp"
 
+#include "common/finishes.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/view_slots.hpp"
 
@@ -11,7 +12,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
-#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -153,18 +153,20 @@ std::vector<std::string> traceLines() {
     return lines;
 }
 
-// On a thread of its own: each line is a synchronous write, too many for the present hook.
+// On a thread of its own: each line is a synchronous write, too many for the present hook. Without the memory
+// for the lines or a thread the trace is not logged; nothing throws into the present hook.
 void logTrace() {
-    auto write = [lines = traceLines()] {
-        for (const std::string& l : lines) {
-            EVR_LOG("%s", l.c_str());
-        }
-    };
-    try {
+    const bool started = finishes([] {
+        auto write = [lines = traceLines()] {
+            for (const std::string& l : lines) {
+                EVR_LOG("%s", l.c_str());
+            }
+        };
         // The DLL is pinned by the XR worker, so the thread's code outlives any unload of the layer.
         std::thread(std::move(write)).detach();
-    } catch (const std::system_error&) {
-        EVR_LOG("%s: no thread for the trace; not logged", kTag);
+    });
+    if (!started) {
+        EVR_LOG("%s: no memory or thread for the trace; not logged", kTag);
     }
 }
 

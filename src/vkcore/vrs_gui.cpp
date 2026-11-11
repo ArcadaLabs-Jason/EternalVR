@@ -4,7 +4,9 @@
 
 #include "features/foveation/attachment_images.hpp"
 #include "vkcore/dump_format.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/vrs_nv.hpp"
 
@@ -48,6 +50,10 @@ struct GuiDevice {
 std::shared_mutex& g_devicesMutex = *new std::shared_mutex;
 auto& g_devices = *new std::unordered_map<DispatchKey, GuiDevice*>;
 
+// Inside the game's call no exception may go (hook_guard.hpp): a view or framebuffer that cannot be followed
+// is treated as an eye pass's, as one past the followed limit is.
+HookGuard g_followGuard("foveated rendering's GUI target views");
+
 GuiDevice* deviceOf(DispatchKey key) {
     std::shared_lock lock(g_devicesMutex);
     const auto it = g_devices.find(key);
@@ -59,14 +65,21 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device,
                                                const VkAllocationCallbacks* pAllocator,
                                                VkImageView* pView) {
     GuiDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkCreateImageView>(device, "vkCreateImageView");
+        return next ? next(device, pCreateInfo, pAllocator, pView) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->createImageView(device, pCreateInfo, pAllocator, pView);
     if (result == VK_SUCCESS && d->follow) {
         std::unique_lock lock(d->mutex);
-        if (!d->attachments.addView(handleValue(*pView), handleValue(pCreateInfo->image)) && !d->viewsFull) {
-            d->viewsFull = true;
-            EVR_LOG("vrs: %zu image views followed; render passes into newer ones count as eye passes",
-                    d->attachments.viewCount());
-        }
+        g_followGuard.run([&] {
+            if (!d->attachments.addView(handleValue(*pView), handleValue(pCreateInfo->image)) &&
+                !d->viewsFull) {
+                d->viewsFull = true;
+                EVR_LOG("vrs: %zu image views followed; render passes into newer ones count as eye passes",
+                        d->attachments.viewCount());
+            }
+        });
     }
     return result;
 }
@@ -75,6 +88,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyImageView(VkDevice device,
                                             VkImageView view,
                                             const VkAllocationCallbacks* pAllocator) {
     GuiDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkDestroyImageView>(device, "vkDestroyImageView")) {
+            next(device, view, pAllocator);
+        }
+        return;
+    }
     if (d->follow && view != VK_NULL_HANDLE) {
         std::unique_lock lock(d->mutex);
         d->attachments.removeView(handleValue(view));
@@ -87,21 +106,27 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateFramebuffer(VkDevice device,
                                                  const VkAllocationCallbacks* pAllocator,
                                                  VkFramebuffer* pFramebuffer) {
     GuiDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkCreateFramebuffer>(device, "vkCreateFramebuffer");
+        return next ? next(device, pCreateInfo, pAllocator, pFramebuffer) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->createFramebuffer(device, pCreateInfo, pAllocator, pFramebuffer);
     // An imageless framebuffer has no views yet: each render pass names them (drawsGuiTarget).
     if (result != VK_SUCCESS || !d->follow || (pCreateInfo->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT)) {
         return result;
     }
-    std::vector<Handle> views(pCreateInfo->attachmentCount);
-    for (std::uint32_t i = 0; i < pCreateInfo->attachmentCount; ++i) {
-        views[i] = handleValue(pCreateInfo->pAttachments[i]);
-    }
-    std::unique_lock lock(d->mutex);
-    if (!d->attachments.addFramebuffer(handleValue(*pFramebuffer), views) && !d->framebuffersFull) {
-        d->framebuffersFull = true;
-        EVR_LOG("vrs: %zu framebuffers followed; render passes into newer ones count as eye passes",
-                d->attachments.framebufferCount());
-    }
+    g_followGuard.run([&] {
+        std::vector<Handle> views(pCreateInfo->attachmentCount);
+        for (std::uint32_t i = 0; i < pCreateInfo->attachmentCount; ++i) {
+            views[i] = handleValue(pCreateInfo->pAttachments[i]);
+        }
+        std::unique_lock lock(d->mutex);
+        if (!d->attachments.addFramebuffer(handleValue(*pFramebuffer), views) && !d->framebuffersFull) {
+            d->framebuffersFull = true;
+            EVR_LOG("vrs: %zu framebuffers followed; render passes into newer ones count as eye passes",
+                    d->attachments.framebufferCount());
+        }
+    });
     return result;
 }
 
@@ -109,6 +134,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyFramebuffer(VkDevice device,
                                               VkFramebuffer framebuffer,
                                               const VkAllocationCallbacks* pAllocator) {
     GuiDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkDestroyFramebuffer>(device, "vkDestroyFramebuffer")) {
+            next(device, framebuffer, pAllocator);
+        }
+        return;
+    }
     if (d->follow && framebuffer != VK_NULL_HANDLE) {
         std::unique_lock lock(d->mutex);
         d->attachments.removeFramebuffer(handleValue(framebuffer));
@@ -168,7 +199,7 @@ PFN_vkVoidFunction findHook(const char* name) {
     }
 #define EVR_VRS_GUI_HOOK(fn)                                                                                 \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_VRS_GUI_HOOK(CreateImageView)
     EVR_VRS_GUI_HOOK(DestroyImageView)

@@ -365,6 +365,7 @@ std::optional<double> LaunchSizeWatch::onSwapchain(SwapchainSize size,
 std::vector<CvarOnCommandLine> cvarsOnCommandLine(std::string_view commandLine,
                                                   const std::vector<CvarExpectation>& expected) {
     std::vector<CvarOnCommandLine> result;
+    result.reserve(expected.size());
     for (const CvarExpectation& e : expected) {
         result.push_back({std::string(e.name), std::string(e.value), std::nullopt});
     }

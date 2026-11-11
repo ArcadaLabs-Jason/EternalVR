@@ -5,6 +5,7 @@
 // rules can be tested without the game.
 
 #include <cstddef>
+#include <exception>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -89,5 +90,48 @@ private:
     std::vector<Entry> entries_;
     bool taken_ = false;
 };
+
+struct GiveBack {
+    std::size_t restored = 0; // given back (written, or read as the value already)
+    std::size_t left = 0;     // left as the layer set them (cvarLeftOnTrip)
+    std::size_t failed = 0;   // a read or a report that threw (no memory for its text)
+};
+
+// A trip's give-back of `entries` (SavedCvars::takeAll), on the thread that tripped. For each entry not left
+// as the layer set it, `write(entry, value)` gives back its trip value or its value before the layer's first
+// write, unless `read(entry)` (the value's text now) shows it there already. Each entry stands alone and its
+// write comes first: a read that throws still writes, and `report(entry, now, left)` (the log line; `now`
+// null when the read failed, `left` the reason it stays or null) runs after the write and may throw without
+// keeping a later entry from going back. `write` must not throw (the engine's setter).
+template <typename Entry, typename Read, typename Write, typename Report>
+GiveBack giveBack(const std::vector<Entry>& entries, Read&& read, Write&& write, Report&& report) noexcept {
+    GiveBack out;
+    for (const Entry& e : entries) {
+        const char* const left = cvarLeftOnTrip(e.name);
+        std::string now;
+        bool known = false;
+        try {
+            now = read(e);
+            known = true;
+        } catch (const std::exception&) {
+            ++out.failed;
+        }
+        if (left) {
+            ++out.left;
+        } else {
+            const std::string& back = e.trip ? *e.trip : e.value;
+            if (!known || now != back) {
+                write(e, back);
+            }
+            ++out.restored;
+        }
+        try {
+            report(e, known ? &now : nullptr, left);
+        } catch (const std::exception&) {
+            ++out.failed;
+        }
+    }
+    return out;
+}
 
 } // namespace evr::mp_policy

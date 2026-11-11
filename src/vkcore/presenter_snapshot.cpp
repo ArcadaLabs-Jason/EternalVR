@@ -5,6 +5,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "common/finishes.hpp"
 #include "vkcore/bug_capture.hpp"
 #include "vkcore/taa_hooks.hpp"
 #include "vkcore/view_snapshot.hpp"
@@ -290,12 +291,16 @@ void XrPresenter::Impl::captureCopied(VkBuffer buffer, std::uint64_t value, bool
     // leave the first one's result.
     if (OneShot* shot = capture.once(); shot && capture.frame() == 0) {
         shot->ui = settings.ui.enabled && !uiCapture.disarmOnce();
-        if (!settings.ui.enabled) {
-            shot->uiNote = "the UI layer is off: the HUD is in the eye images";
-        } else if (!shot->ui) {
-            shot->uiNote = std::string("the GUI target was not copied with this frame, last check: ") +
-                           ui_layer::toString(uiLastCheck);
-        }
+        // After the copy's submit nothing may throw into the present (present()): without the memory for the
+        // note the text file goes without it.
+        finishes([&] {
+            if (!settings.ui.enabled) {
+                shot->uiNote = "the UI layer is off: the HUD is in the eye images";
+            } else if (!shot->ui) {
+                shot->uiNote = std::string("the GUI target was not copied with this frame, last check: ") +
+                               ui_layer::toString(uiLastCheck);
+            }
+        });
     }
     if (complete) {
         capture.submitted(value, gameTicks.load()); // one present held all of it

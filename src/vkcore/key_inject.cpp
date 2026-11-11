@@ -1,5 +1,6 @@
 #include "vkcore/key_inject.hpp"
 
+#include "common/finishes.hpp"
 #include "platform/key_injection/injected_keys.hpp"
 #include "platform/key_injection/us_scan_codes.hpp"
 #include "vkcore/cursor_guard.hpp"
@@ -10,6 +11,7 @@
 
 #include <windows.h>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -274,23 +276,30 @@ HWND registeredKeyboardWindow() {
 }
 
 // The guard's trip listener: new key-downs are already refused (the latch is closed), so post one release
-// for each key the layer holds; the game's key state goes back to the real keyboard's.
+// for each key the layer holds; the game's key state goes back to the real keyboard's. Nothing on the way
+// allocates but the look-up of the keyboard's window, which falls back to the game's window.
 void releaseHeldKeysOnTrip() {
-    const std::vector<std::uint8_t> released = g_held.releaseAll();
-    HWND target = registeredKeyboardWindow();
+    std::array<std::uint8_t, 256> keys{};
+    const std::size_t count = g_held.releaseAll(keys);
+    HWND target = nullptr;
+    finishes([&] { target = registeredKeyboardWindow(); });
     if (!target) {
         target = gameWindow();
     }
-    for (const std::uint8_t vk : released) {
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::uint8_t vk = keys[i];
         const auto handle = key_injection::encodeHandle(KeyEvent{vk, false});
         const bool posted =
             target && PostMessageW(target, WM_INPUT, RIM_INPUT, static_cast<LPARAM>(handle)) != FALSE;
-        EVR_LOG("keys: multiplayer guard tripped: released the held key 0x%02x%s", vk,
-                posted ? ""
-                       : " (posting the release failed; the game sees it up on the next real key event)");
+        finishes([&] { // a log line that fails must not stop the releases after it
+            EVR_LOG("keys: multiplayer guard tripped: released the held key 0x%02x%s", vk,
+                    posted ? ""
+                           : " (posting the release failed; the game sees it up on the next real key event)");
+        });
     }
-    EVR_LOG("keys: key injection off for the rest of this process (%zu held key(s) released)",
-            released.size());
+    finishes([&] {
+        EVR_LOG("keys: key injection off for the rest of this process (%zu held key(s) released)", count);
+    });
 }
 
 } // namespace

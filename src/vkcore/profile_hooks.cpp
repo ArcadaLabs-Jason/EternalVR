@@ -3,6 +3,7 @@
 #include "platform/mp_policy/profile_cvars.hpp"
 #include "vkcore/cvar_book.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -166,9 +167,9 @@ void afterLoad() {
     }
 }
 
-// Under heldMutex, before the save: the player's values in.
-std::vector<Swap> beforeSave(std::string& list) {
-    std::vector<Swap> swapped;
+// Under heldMutex, before the save: the player's values in. Each swap is listed in `swapped` before its
+// write, so a throw part way leaves every value that went in listed for afterSave to put back.
+void beforeSave(std::vector<Swap>& swapped, std::string& list) {
     for (ProfileCvar& c : g_cvars) {
         const std::string live = cvar_book::valueText(c.object);
         // A choice the player made in the game's menu while the layer held it: theirs from now on.
@@ -180,38 +181,52 @@ std::vector<Swap> beforeSave(std::string& list) {
         if (!w.swap) {
             continue;
         }
-        g_set(c.object, w.value.c_str(), true);
         swapped.push_back(Swap{&c, live});
+        g_set(c.object, w.value.c_str(), true);
         list += (list.empty() ? "" : ", ") + std::string(c.name) + " " + w.value + " (held " + live + "; " +
                 w.source + ")";
     }
-    return swapped;
 }
+
+HookGuard g_putBackGuard("a held value put back after the profile's save");
+HookGuard g_saveLineGuard("the profile save's log line");
+HookGuard g_repairReportGuard("the one-time repair's report");
 
 // Under heldMutex, after the save: the held values back, through the book (after a trip the player's value
 // stays). `since`: when the player's values went in; how long they were live is logged (the save runs on a
 // thread of the game's own while it goes on drawing, so a frame drawn meanwhile sees the player's values).
+// Each put-back on its own (one without the memory for its book entry keeps the player's value live, the
+// others still go back), then the log line, then the repair's report: one that throws skips no other.
 void afterSave(const std::vector<Swap>& swapped,
                const std::string& list,
                bool log,
                std::chrono::steady_clock::time_point since) {
     for (const Swap& s : swapped) {
-        cvar_book::write(s.cvar->name, s.cvar->object, g_set, s.held.c_str());
+        g_putBackGuard.run([&] { cvar_book::write(s.cvar->name, s.cvar->object, g_set, s.held.c_str()); });
     }
     if (log) {
-        const double us =
-            std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - since).count();
-        const std::string what = list.empty() ? "no held value in it"
-                                              : "the player's values went in: " + list + " (live for " +
-                                                    std::to_string(static_cast<long long>(us)) + " us)";
-        EVR_LOG("%s: the game saved the profile: %s", kTag, what.c_str());
+        g_saveLineGuard.run([&] {
+            const double us =
+                std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - since).count();
+            const std::string what = list.empty() ? "no held value in it"
+                                                  : "the player's values went in: " + list + " (live for " +
+                                                        std::to_string(static_cast<long long>(us)) + " us)";
+            EVR_LOG("%s: the game saved the profile: %s", kTag, what.c_str());
+        });
     }
     if (g_repair == mp_policy::ProfileRepair::Repair && g_repairWritten) {
-        EVR_LOG("%s: one-time repair saved: view_skipShakes 0 in the profile", kTag);
-        reportRepair(true);
+        g_repairReportGuard.run([] {
+            EVR_LOG("%s: one-time repair saved: view_skipShakes 0 in the profile", kTag);
+            reportRepair(true);
+        });
         g_repair = mp_policy::ProfileRepair::NotNeeded; // reported once; later saves are ordinary
     }
 }
+
+// The values and log texts allocate. A throw before the game's serializer leaves the values swapped in so far
+// listed (the rest as they were); one after it skips what is left of putting them back and of the log. The
+// game's serializer runs once either way.
+HookGuard g_serializeGuard("the profile serializer's detour");
 
 // The game's code never runs under heldMutex: the lock is held only to set up and to finish, and while the
 // serializer runs, the profile I/O flag keeps apply() off these cvars (runtime_cvars::setProfileIo).
@@ -229,21 +244,25 @@ void onSerialize(void* settings, std::uint8_t* context, std::uintptr_t flag, std
     {
         std::lock_guard lock(runtime_cvars::heldMutex());
         io.begin();
-        if (save) {
-            log = logCall();
-            swapped = beforeSave(list);
-            since = std::chrono::steady_clock::now();
-        } else {
-            beforeLoad();
-        }
+        g_serializeGuard.run([&] {
+            if (save) {
+                log = logCall();
+                beforeSave(swapped, list);
+                since = std::chrono::steady_clock::now();
+            } else {
+                beforeLoad();
+            }
+        });
     }
     g_original(settings, context, flag, r9);
     std::lock_guard lock(runtime_cvars::heldMutex());
-    if (save) {
-        afterSave(swapped, list, log, since);
-    } else {
-        afterLoad();
-    }
+    g_serializeGuard.run([&] {
+        if (save) {
+            afterSave(swapped, list, log, since);
+        } else {
+            afterLoad();
+        }
+    });
     io.end();
 }
 

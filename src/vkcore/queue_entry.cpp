@@ -2,6 +2,7 @@
 
 #include "vkcore/queue_entry.hpp"
 
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/swapchain_entry.hpp"
 
 #include <cstdint>
@@ -12,9 +13,15 @@ namespace evr::vkcore {
 
 namespace {
 
+HookGuard g_recordGuard("vkGetDeviceQueue (queue family record)");
+
+// Without memory for the record the queue stays unknown: its presents go straight to the window, not copied
+// (presentOnce).
 void recordQueue(DeviceData& data, VkQueue queue, std::uint32_t family) {
-    std::lock_guard lock(data.queueMutex);
-    data.queueFamilies[queue] = family;
+    g_recordGuard.run([&] {
+        std::lock_guard lock(data.queueMutex);
+        data.queueFamilies[queue] = family;
+    });
 }
 
 VKAPI_ATTR void VKAPI_CALL GetDeviceQueue(VkDevice device,

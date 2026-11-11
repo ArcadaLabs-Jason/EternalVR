@@ -64,9 +64,9 @@ public:
     // +0, which the sink may rewrite), `firstViewG` the first screen view's renderView_t (its TAA jitter
     // index is the one the engine set this frame). Runs on a render job thread.
     virtual void onEyeView(std::byte* renderView, int viewIndex, const std::byte* firstViewG) = 0;
-    // The latch built this idRenderView's matrices from what onEyeView left. Route S repairs the centred
-    // matrix here (presenter_seq.cpp); everything else only reads.
-    virtual void onEyeLatched(std::byte* renderView, int viewIndex) = 0;
+    // The latch built screen view `screenView`'s idRenderView matrices from what onEyeView left. Route S
+    // repairs the centred matrix here (presenter_seq.cpp); everything else only reads.
+    virtual void onEyeLatched(std::byte* renderView, int screenView) = 0;
 };
 
 // ETERNALVR_MODE=stereo only runs as one of the live experiments of docs/rig-findings/stereo-reentry.md,

@@ -75,7 +75,7 @@ void apply(bool stereo);
 std::uint64_t writes();
 
 // The layer holds `name` at exactly `value` (found in the game, not a cap): Parallel Eye Rendering's clones
-// leave out what that cvar turns off (view_clones.cpp). Never waits: false while apply() runs.
+// leave out what that cvar turns off (view_clone_build.cpp). Never waits: false while apply() runs.
 bool holds(std::string_view name, std::string_view value);
 
 // The per-eye temporal module (per-eye TAA) reports that it is active: from then on the stereo set follows

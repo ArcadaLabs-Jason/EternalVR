@@ -2,6 +2,7 @@
 
 #include "features/dlss_dll/dlss_dll.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -107,6 +108,13 @@ std::atomic<int> g_redirects{0};
 std::atomic<int> g_dlaaWrites{0};
 std::atomic<bool> g_dlaaOtherLogged{false};
 
+// NGX and the game call these; what they add can throw (the joined search path, the DLL checks, the log
+// texts). Without it NGX gets the game's own arguments and nothing is logged.
+HookGuard g_ngxLogGuard("the NGX log callback");
+HookGuard g_initGuard("the NGX Init detour");
+HookGuard g_setIntGuard("the NGX SetI detour (DLAA)");
+HookGuard g_createGuard("the NGX CreateFeature detour");
+
 std::string narrow(std::wstring_view text) {
     std::string out;
     for (const wchar_t c : text) {
@@ -204,14 +212,16 @@ void ngxLog(const char* message, int level, int sourceComponent) {
         EVR_LOG("ngx: (further NGX log lines are dropped)");
         return;
     }
-    std::string text = message ? message : "";
-    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
-        text.pop_back();
-    }
-    if (text.size() > 1800) {
-        text.resize(1800);
-    }
-    EVR_LOG("ngx[%d/%d]: %s", level, sourceComponent, text.c_str());
+    g_ngxLogGuard.run([&] {
+        std::string text = message ? message : "";
+        while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
+            text.pop_back();
+        }
+        if (text.size() > 1800) {
+            text.resize(1800);
+        }
+        EVR_LOG("ngx[%d/%d]: %s", level, sourceComponent, text.c_str());
+    });
 }
 
 // The redirect route: every load of a file named nvngx_dlss.dll (NGX's, from any folder) takes the chosen
@@ -242,9 +252,14 @@ int initHook(unsigned long long appId,
     // never freed.
     const std::vector<const wchar_t*>* paths = &g_searchPath;
     if (info && info->pathList.path && info->pathList.length) {
-        auto* joined = new std::vector<const wchar_t*>(g_searchPath);
-        joined->insert(joined->end(), info->pathList.path, info->pathList.path + info->pathList.length);
-        paths = joined;
+        const bool joined = g_initGuard.run([&] {
+            auto* list = new std::vector<const wchar_t*>(g_searchPath);
+            list->insert(list->end(), info->pathList.path, info->pathList.path + info->pathList.length);
+            paths = list;
+        });
+        if (!joined) { // NGX starts as the game asked
+            return g_init(appId, dataPath, instance, physicalDevice, device, info, version);
+        }
     }
     FeatureCommonInfo mine{};
     mine.pathList = {paths->data(), static_cast<unsigned>(paths->size())};
@@ -262,7 +277,7 @@ int initHook(unsigned long long appId,
             g_searchPath.empty() ? L"" : g_folder.c_str(), info ? "given" : "none",
             static_cast<unsigned>(version), static_cast<unsigned>(result));
     if (ngxSucceeded(result)) {
-        logLoadedDlls("after Init");
+        g_initGuard.run([] { logLoadedDlls("after Init"); });
         return result;
     }
     // 0xBAD0000C (out of date): the driver's NGX has no Init_Ext and takes no search path. Initialised again
@@ -307,12 +322,15 @@ bool dlaaActive() {
 // (the game renders at it) and every DLSS feature, the game's and eye R's twin (made from the same block), is
 // created as DLAA.
 void setIntHook(void* parameters, const char* name, int value) {
-    if (name && value != dlss_dll::kPerfQualityDlaa && std::strcmp(name, kQualityParameter) == 0 &&
-        dlaaActive()) {
-        if (g_dlaaWrites.fetch_add(1) < 8) {
-            EVR_LOG("%s: DLAA: PerfQualityValue %d -> %d", kTag, value, dlss_dll::kPerfQualityDlaa);
+    if (name && value != dlss_dll::kPerfQualityDlaa && std::strcmp(name, kQualityParameter) == 0) {
+        bool dlaa = false;
+        g_setIntGuard.run([&] { dlaa = dlaaActive(); }); // without it, the game's value
+        if (dlaa) {
+            if (g_dlaaWrites.fetch_add(1) < 8) {
+                EVR_LOG("%s: DLAA: PerfQualityValue %d -> %d", kTag, value, dlss_dll::kPerfQualityDlaa);
+            }
+            value = dlss_dll::kPerfQualityDlaa;
         }
-        value = dlss_dll::kPerfQualityDlaa;
     }
     g_setInt(parameters, name, value);
 }
@@ -330,16 +348,18 @@ int createHook(void* commandBuffer, int feature, void* parameters, void** handle
     const int result = g_create(commandBuffer, feature, parameters, handle);
     if (dlss) {
         const int n = g_creates.fetch_add(1);
-        if (n < 16) {
-            const unsigned id = handle && *handle ? *static_cast<const unsigned*>(*handle) : 0u;
-            EVR_LOG("%s: DLSS feature create #%d: result 0x%08X, feature %u, preset %s%s", kTag, n + 1,
-                    static_cast<unsigned>(result), id,
-                    preset ? dlss_dll::presetName(g_decision.preset).c_str() : "the DLL's own",
-                    dlaaActive() ? ", DLAA" : "");
-        }
-        if (n < 2) {
-            logLoadedDlls(n == 0 ? "first DLSS feature" : "second DLSS feature");
-        }
+        g_createGuard.run([&] { // the log lines only: the feature is the game's either way
+            if (n < 16) {
+                const unsigned id = handle && *handle ? *static_cast<const unsigned*>(*handle) : 0u;
+                EVR_LOG("%s: DLSS feature create #%d: result 0x%08X, feature %u, preset %s%s", kTag, n + 1,
+                        static_cast<unsigned>(result), id,
+                        preset ? dlss_dll::presetName(g_decision.preset).c_str() : "the DLL's own",
+                        dlaaActive() ? ", DLAA" : "");
+            }
+            if (n < 2) {
+                logLoadedDlls(n == 0 ? "first DLSS feature" : "second DLSS feature");
+            }
+        });
     }
     return result;
 }

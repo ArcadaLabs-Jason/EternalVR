@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <new>
 #include <thread>
 #include <vector>
 
@@ -30,6 +31,10 @@ constexpr std::array<TripListeners::Listener, kCount> kListeners{
     &listener<0>, &listener<1>, &listener<2>, &listener<3>, &listener<4>,
     &listener<5>, &listener<6>, &listener<7>, &listener<8>,
 };
+
+void throwing() {
+    throw std::bad_alloc();
+}
 
 void resetCalls() {
     for (std::atomic<int>& c : g_calls) {
@@ -62,6 +67,19 @@ TEST_CASE("a trip listener added after the trip is called at once, and only then
     CHECK(g_order == std::vector<int>{3});
     list.fire();
     CHECK(g_order == std::vector<int>{3});
+}
+
+TEST_CASE("a trip listener that throws is counted and the later ones still run") {
+    g_order.clear();
+    TripListeners list;
+    CHECK(list.add(&ordered<0>));
+    CHECK(list.add(&throwing));
+    CHECK(list.add(&ordered<2>));
+    list.fire();
+    CHECK(g_order == std::vector<int>{0, 2});
+    CHECK(list.failures() == 1);
+    CHECK(list.add(&throwing)); // after the trip: called at once by add, and caught there too
+    CHECK(list.failures() == 2);
 }
 
 TEST_CASE("the trip listener list has a fixed room and refuses a null listener") {

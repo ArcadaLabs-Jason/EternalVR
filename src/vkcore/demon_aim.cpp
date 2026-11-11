@@ -15,6 +15,7 @@
 
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -107,21 +108,23 @@ bool readDelta(const void* demon, float (&delta)[3]) {
            std::isfinite(delta[0]) && std::isfinite(delta[1]) && std::isfinite(delta[2]);
 }
 
-void onUpdate(void* demon, const void* previous, const void* current) {
+// The command the demon's update is handed: the game's own, or `command` with the aim's angles once the
+// demon's view and basis have been set from the aim.
+const void* aimedCommand(void* demon,
+                         const void* previous,
+                         const void* current,
+                         std::array<std::byte, kCommandSize>& command) {
     const double now = nowSeconds();
     if (!mp_guard::allowsGameTouch() || !pilotingDemon() || !previous || !current ||
         reinterpret_cast<std::uintptr_t>(demon) != pilotedDemon() ||
         now - g_aimSeconds.load() > kFreshSeconds) {
-        g_update(demon, previous, current);
-        return;
+        return current;
     }
-    std::array<std::byte, kCommandSize> command{};
     float delta[3] = {};
     if (!safeCopy(command.data(), current, command.size()) || command[kCommandInhibited] != std::byte{0} ||
         !readDelta(demon, delta)) {
         g_offsetDemon = 0; // taken again when the command is the player's
-        g_update(demon, previous, current);
-        return;
+        return current;
     }
     std::int16_t angles[3] = {};
     std::memcpy(angles, command.data() + kCommandAngles, sizeof(angles));
@@ -141,8 +144,7 @@ void onUpdate(void* demon, const void* previous, const void* current) {
                               xr_math::normalize180(bodyYaw + aimYaw), 0.0f};
     g_setView(demon, desired, true);
     if (!readDelta(demon, delta)) {
-        g_update(demon, previous, current);
-        return;
+        return current;
     }
     for (int i = 0; i < 3; ++i) {
         angles[i] = degreesToShort(desired[i] - delta[i]);
@@ -159,7 +161,18 @@ void onUpdate(void* demon, const void* previous, const void* current) {
         EVR_LOG("%s: demon aim: first aimed update (body yaw %.1f, aim pitch %.1f yaw %.1f)", kTag, bodyYaw,
                 desired[0], desired[1]);
     }
-    g_update(demon, previous, command.data());
+    return command.data();
+}
+
+// What can throw (the first reads of the settings) comes before the demon's view is set: on a failure the
+// update gets the game's own command.
+HookGuard g_updateGuard("the demon update's detour (demon aim)");
+
+void onUpdate(void* demon, const void* previous, const void* current) {
+    std::array<std::byte, kCommandSize> command{};
+    const void* use = current;
+    g_updateGuard.run([&] { use = aimedCommand(demon, previous, current, command); });
+    g_update(demon, previous, use);
 }
 
 template <std::size_t N>

@@ -293,6 +293,10 @@ void restoreZoomLook(const char* why) {
     if (r.total > 0) {
         EVR_LOG("%s: the game's values back in %d of %d weapon decl(s) (%s)", kTag, r.back, r.total, why);
     }
+    if (r.failed > 0) {
+        EVR_LOG("%s: %d weapon decl(s) could not be checked (no memory for the name); left as they are", kTag,
+                r.failed);
+    }
 }
 
 } // namespace evr::vkcore::controllers

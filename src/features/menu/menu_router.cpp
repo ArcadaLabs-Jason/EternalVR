@@ -429,14 +429,10 @@ RouterOutput MenuRouter::update(const RouterInput& in) {
     const RouterHand& hand = in.hands[p];
 
     // The cursor: one move in flight at a time, the next once the game shows the last one.
-    if (movePending_) {
-        if (in.gameCursor && *in.gameCursor == expected_) {
-            movePending_ = false;
-            landedAt_ = now;
-        } else if (now - movedAt_ > tuning_.moveTimeout) {
-            movePending_ = false;
-            landedAt_ = now;
-        }
+    if (movePending_ &&
+        ((in.gameCursor && *in.gameCursor == expected_) || now - movedAt_ > tuning_.moveTimeout)) {
+        movePending_ = false;
+        landedAt_ = now;
     }
 
     // The sticks: on the map page they move the map (a drag owns the cursor while it lasts), elsewhere they

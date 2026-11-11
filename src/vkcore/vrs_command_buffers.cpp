@@ -6,6 +6,9 @@
 
 #include "vkcore/vrs_nv_impl.hpp"
 
+#include "vkcore/hook_guard.hpp"
+#include "vkcore/next_function.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -21,18 +24,29 @@ std::uint64_t handleOf(Handle handle) {
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(handle));
 }
 
+// Inside the game's call no exception may go (hook_guard.hpp): buffers whose pool cannot be noted keep their
+// frame records past a reset of the pool (their next begin starts them again).
+HookGuard g_poolGuard("vkAllocateCommandBuffers (foveated rendering's pools)");
+
 VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffers(VkDevice device,
                                                       const VkCommandBufferAllocateInfo* pAllocateInfo,
                                                       VkCommandBuffer* pCommandBuffers) {
     VrsDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkAllocateCommandBuffers>(device, "vkAllocateCommandBuffers");
+        return next ? next(device, pAllocateInfo, pCommandBuffers) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->allocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
     if (result == VK_SUCCESS && d->followsFrames) {
         std::lock_guard lock(d->framesMutex);
-        std::vector<std::uint64_t>& buffers = d->poolBuffers[handleOf(pAllocateInfo->commandPool)];
-        for (std::uint32_t i = 0; i < pAllocateInfo->commandBufferCount; ++i) {
-            d->frames.forget(handleOf(pCommandBuffers[i])); // a freed buffer's handle, if its free was missed
-            buffers.push_back(handleOf(pCommandBuffers[i]));
-        }
+        g_poolGuard.run([&] {
+            std::vector<std::uint64_t>& buffers = d->poolBuffers[handleOf(pAllocateInfo->commandPool)];
+            for (std::uint32_t i = 0; i < pAllocateInfo->commandBufferCount; ++i) {
+                // A freed buffer's handle, if its free was missed.
+                d->frames.forget(handleOf(pCommandBuffers[i]));
+                buffers.push_back(handleOf(pCommandBuffers[i]));
+            }
+        });
     }
     return result;
 }
@@ -42,6 +56,12 @@ VKAPI_ATTR void VKAPI_CALL FreeCommandBuffers(VkDevice device,
                                               std::uint32_t commandBufferCount,
                                               const VkCommandBuffer* pCommandBuffers) {
     VrsDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkFreeCommandBuffers>(device, "vkFreeCommandBuffers")) {
+            next(device, commandPool, commandBufferCount, pCommandBuffers);
+        }
+        return;
+    }
     if (d->followsFrames) {
         std::lock_guard lock(d->framesMutex);
         const auto pool = d->poolBuffers.find(handleOf(commandPool));
@@ -61,6 +81,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyCommandPool(VkDevice device,
                                               VkCommandPool commandPool,
                                               const VkAllocationCallbacks* pAllocator) {
     VrsDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkDestroyCommandPool>(device, "vkDestroyCommandPool")) {
+            next(device, commandPool, pAllocator);
+        }
+        return;
+    }
     if (d->followsFrames) {
         std::lock_guard lock(d->framesMutex);
         if (const auto pool = d->poolBuffers.find(handleOf(commandPool)); pool != d->poolBuffers.end()) {
@@ -77,6 +103,10 @@ VKAPI_ATTR VkResult VKAPI_CALL ResetCommandPool(VkDevice device,
                                                 VkCommandPool commandPool,
                                                 VkCommandPoolResetFlags flags) {
     VrsDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkResetCommandPool>(device, "vkResetCommandPool");
+        return next ? next(device, commandPool, flags) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (d->followsFrames) {
         std::lock_guard lock(d->framesMutex);
         if (const auto pool = d->poolBuffers.find(handleOf(commandPool)); pool != d->poolBuffers.end()) {
@@ -91,6 +121,10 @@ VKAPI_ATTR VkResult VKAPI_CALL ResetCommandPool(VkDevice device,
 VKAPI_ATTR VkResult VKAPI_CALL ResetCommandBuffer(VkCommandBuffer commandBuffer,
                                                   VkCommandBufferResetFlags flags) {
     VrsDevice* d = deviceOf(keyOf(commandBuffer));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkResetCommandBuffer>(commandBuffer, "vkResetCommandBuffer");
+        return next ? next(commandBuffer, flags) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (d->followsFrames) {
         std::lock_guard lock(d->framesMutex);
         d->frames.reset(handleOf(commandBuffer));
@@ -101,6 +135,10 @@ VKAPI_ATTR VkResult VKAPI_CALL ResetCommandBuffer(VkCommandBuffer commandBuffer,
 VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer commandBuffer,
                                                   const VkCommandBufferBeginInfo* pBeginInfo) {
     VrsDevice* d = deviceOf(keyOf(commandBuffer));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkBeginCommandBuffer>(commandBuffer, "vkBeginCommandBuffer");
+        return next ? next(commandBuffer, pBeginInfo) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (d->followsFrames) {
         std::lock_guard lock(d->framesMutex);
         d->frames.begin(handleOf(commandBuffer));
@@ -127,7 +165,7 @@ void loadCommandBufferFunctions(VrsDevice& d) {
 PFN_vkVoidFunction findCommandBufferHook(const char* name) {
 #define EVR_VRS_CB_HOOK(fn)                                                                                  \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_VRS_CB_HOOK(AllocateCommandBuffers)
     EVR_VRS_CB_HOOK(FreeCommandBuffers)

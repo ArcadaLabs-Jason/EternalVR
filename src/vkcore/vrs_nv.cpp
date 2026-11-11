@@ -5,7 +5,9 @@
 
 #include "features/foveation/eye_targets.hpp"
 #include "features/foveation/rate_pattern.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/vrs_gui.hpp"
 #include "vkcore/vrs_khr.hpp"
@@ -47,6 +49,14 @@ std::atomic<bool> g_followsFrames{false};
 VkPhysicalDeviceShadingRateImageFeaturesNV g_feature{
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV};
 
+// The hooks run inside the game's Vulkan calls, where an exception must not go (hook_guard.hpp): pipelines
+// whose copies cannot be made are made as the game asked, a pass whose rate image cannot be had keeps full
+// rate, and a device whose record cannot be made turns foveated rendering's hooks off.
+HookGuard g_deviceGuard("foveated rendering's device record");
+HookGuard g_pipelineGuard("vkCreateGraphicsPipelines (foveated rendering)");
+HookGuard g_passGuard("vkCmdBeginRenderPass (foveated rendering)");
+std::atomic<bool> g_failed{false};
+
 VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
                                                        VkPipelineCache cache,
                                                        std::uint32_t count,
@@ -54,6 +64,11 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
                                                        const VkAllocationCallbacks* pAllocator,
                                                        VkPipeline* pPipelines) {
     VrsDevice* d = deviceOf(keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkCreateGraphicsPipelines>(device, "vkCreateGraphicsPipelines");
+        return next ? next(device, cache, count, pInfos, pAllocator, pPipelines)
+                    : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (d->khr) {
         return vrs_khr::createGraphicsPipelines(*d, device, cache, count, pInfos, pAllocator, pPipelines);
     }
@@ -61,9 +76,10 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
         return d->createGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     }
     // Copies with a shading rate state chained into each viewport state; reserved so no pointer moves.
-    std::vector<VkGraphicsPipelineCreateInfo> infos(pInfos, pInfos + count);
-    std::vector<VkPipelineViewportStateCreateInfo> viewports(count);
-    std::vector<VkPipelineViewportShadingRateImageStateCreateInfoNV> states(count);
+    // Without memory for them the pipelines are made as the game asked (full rate).
+    std::vector<VkGraphicsPipelineCreateInfo> infos;
+    std::vector<VkPipelineViewportStateCreateInfo> viewports;
+    std::vector<VkPipelineViewportShadingRateImageStateCreateInfoNV> states;
     std::uint32_t most = 0;
     for (std::uint32_t i = 0; i < count; ++i) {
         if (pInfos[i].pViewportState) {
@@ -71,7 +87,15 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
         }
     }
     const VkShadingRatePaletteNV palette{static_cast<std::uint32_t>(std::size(kPalette)), kPalette};
-    const std::vector<VkShadingRatePaletteNV> palettes(std::max(most, 1u), palette);
+    std::vector<VkShadingRatePaletteNV> palettes;
+    if (!g_pipelineGuard.run([&] {
+            infos.assign(pInfos, pInfos + count);
+            viewports.resize(count);
+            states.resize(count);
+            palettes.assign(std::max(most, 1u), palette);
+        })) {
+        return d->createGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
+    }
     std::uint64_t changed = 0;
     for (std::uint32_t i = 0; i < count; ++i) {
         const VkPipelineViewportStateCreateInfo* original = pInfos[i].pViewportState;
@@ -98,6 +122,12 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
                                               const VkRenderPassBeginInfo* pRenderPassBegin,
                                               VkSubpassContents contents) {
     VrsDevice* d = deviceOf(keyOf(commandBuffer));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkCmdBeginRenderPass>(commandBuffer, "vkCmdBeginRenderPass")) {
+            next(commandBuffer, pRenderPassBegin, contents);
+        }
+        return;
+    }
     if (d->khr) {
         vrs_khr::cmdBeginRenderPass(*d, commandBuffer, *pRenderPassBegin, contents);
         return;
@@ -109,7 +139,9 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
         // the other eye. Mono frames (the cinema screen, menus), eye frames without their view, untagged
         // frames (tags out of step) and passes whose frame is not known keep full rate unless every eye gets
         // the same image.
-        const int eye = settings().mode == Mode::Uniform ? 0 : passEye(*d, commandBuffer);
+        // An eye, a rate image or a size note that finds no memory leaves the pass at full rate.
+        int eye = kNoEye;
+        g_passGuard.run([&] { eye = settings().mode == Mode::Uniform ? 0 : passEye(*d, commandBuffer); });
         VkImageView view = VK_NULL_HANDLE;
         if (eye != kNoEye && extent.width >= kMinTarget && extent.height >= kMinTarget &&
             pRenderPassBegin->renderArea.offset.x == 0 && pRenderPassBegin->renderArea.offset.y == 0) {
@@ -123,9 +155,9 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
                                                      static_cast<std::uint32_t>(size)};
                 if (settings().mode == Mode::Uniform ||
                     foveation::isEyeSpaceTarget({extent.width, extent.height}, eyeImage)) {
-                    view = viewFor(*d, commandBuffer, extent, eye);
+                    g_passGuard.run([&] { view = viewFor(*d, commandBuffer, extent, eye); });
                 } else if (eyeImage.width != 0) {
-                    noteOtherTarget(*d, extent, eyeImage);
+                    g_passGuard.run([&] { noteOtherTarget(*d, extent, eyeImage); });
                 }
             } else {
                 d->eyeSize.store(packed(extent), std::memory_order_relaxed);
@@ -220,10 +252,10 @@ planDevice(InstanceData& inst, VkPhysicalDevice physicalDevice, std::vector<cons
     return &g_feature;
 }
 
-void onDeviceCreated(DeviceData& data, bool enabled, bool khr) {
-    if (!wanted()) {
-        return;
-    }
+namespace {
+
+// onDeviceCreated's work, under its guard.
+void addDevice(DeviceData& data, bool enabled, bool khr) {
     if (khr) {
         vrs_khr::onDeviceCreated(data);
         return;
@@ -288,6 +320,21 @@ void onDeviceCreated(DeviceData& data, bool enabled, bool khr) {
     g_devices[keyOf(data.device)] = d;
 }
 
+} // namespace
+
+void onDeviceCreated(DeviceData& data, bool enabled, bool khr) {
+    if (!wanted() || g_failed.load()) {
+        return;
+    }
+    // A device without its record would reach the hooks with no next functions: they are not handed out from
+    // then on (a chain another hook took before still reaches them, which go straight to the next layer
+    // then).
+    if (!g_deviceGuard.run([&] { addDevice(data, enabled, khr); })) {
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG("vrs: foveated rendering's hooks are off from here (a device could not be recorded)");
+    }
+}
+
 void onDeviceDestroyed(VkDevice device) {
     std::unique_lock lock(g_devicesMutex);
     g_devices.erase(keyOf(device));
@@ -305,7 +352,7 @@ void noteSwapchain(VkDevice device, VkExtent2D extent) {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
-    if (!wanted()) {
+    if (!wanted() || g_failed.load(std::memory_order_acquire)) {
         return nullptr;
     }
     if (const PFN_vkVoidFunction khr = vrs_khr::findHook(name)) {

@@ -524,7 +524,8 @@ MappedInput runMapper() {
     s.motionQpc.store(now, std::memory_order_relaxed);
     if (cfg.trace && out.input.turnDegrees != 0.0f) {
         static std::uint64_t turns = 0;
-        if (++turns <= 5 || turns % 50 == 0) {
+        ++turns;
+        if (turns <= 5 || turns % 50 == 0) {
             EVR_LOG("%s: trace: mapper turn %.3f deg (%llu)", kTag, out.input.turnDegrees,
                     static_cast<unsigned long long>(turns));
         }

@@ -1,5 +1,7 @@
 #include "platform/mp_policy/trip_listeners.hpp"
 
+#include <exception>
+
 namespace evr::mp_policy {
 
 bool TripListeners::add(Listener listener) {
@@ -31,7 +33,11 @@ void TripListeners::fire() {
 void TripListeners::callOnce(std::size_t slot) {
     const Listener listener = slots_[slot].load();
     if (listener && !called_[slot].exchange(true)) {
-        listener();
+        try {
+            listener();
+        } catch (const std::exception&) {
+            failures_.fetch_add(1);
+        }
     }
 }
 

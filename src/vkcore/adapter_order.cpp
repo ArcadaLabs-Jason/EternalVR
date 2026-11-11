@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 namespace evr::vkcore::adapter_order {
 
@@ -72,7 +73,7 @@ Plan plan(const std::vector<Device>& devices, std::optional<std::size_t> target,
     }
     if (gamePick(moved) == 0) {
         result.action = Action::Reordered;
-        result.order = order;
+        result.order = std::move(order);
         return result;
     }
     if (!allowCut) {

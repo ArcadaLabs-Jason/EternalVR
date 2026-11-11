@@ -6,6 +6,7 @@
 #include "features/pacing/present_latency.hpp"
 #include "gpu_timing/stats.hpp"
 #include "vkcore/cpu_timing.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 
 #include <windows.h>
@@ -84,6 +85,11 @@ std::string lowEnd(const std::vector<double>& samples) {
     return text;
 }
 
+// The game's present hook calls in after its copy's submit and after the present, where nothing may throw: an
+// image without the memory for its record is left out of the statistics.
+HookGuard g_handOverGuard("the latency record of a hand-over");
+HookGuard g_presentGuard("the latency record of a present");
+
 double cell(double t) {
     return std::isnan(t) ? -1.0 : t;
 }
@@ -134,20 +140,24 @@ void onHandOver(std::uint64_t value) {
     if (!enabled()) {
         return;
     }
-    State& s = state();
-    const double t = now();
-    std::lock_guard lock(s.mutex);
-    s.latency.handOver(value, t);
+    g_handOverGuard.run([value] {
+        State& s = state();
+        const double t = now();
+        std::lock_guard lock(s.mutex);
+        s.latency.handOver(value, t);
+    });
 }
 
 void afterPresent(bool held) {
     if (!enabled()) {
         return;
     }
-    State& s = state();
-    const double t = now();
-    std::lock_guard lock(s.mutex);
-    s.latency.presentReturned(t, held);
+    g_presentGuard.run([held] {
+        State& s = state();
+        const double t = now();
+        std::lock_guard lock(s.mutex);
+        s.latency.presentReturned(t, held);
+    });
 }
 
 void onChoice(long long waitReturnedQpc, double waitFrameMs) {

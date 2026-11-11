@@ -82,6 +82,8 @@ public:
     // Clears every held key and returns the ones that were held, in key order. Each key is returned by
     // exactly one call, however many threads race, so each gets exactly one release.
     std::vector<std::uint8_t> releaseAll();
+    // The same into `keys` without allocating (the multiplayer guard's trip listener): how many it holds.
+    std::size_t releaseAll(std::array<std::uint8_t, 256>& keys);
 
 private:
     std::array<std::atomic<bool>, 256> down_{};

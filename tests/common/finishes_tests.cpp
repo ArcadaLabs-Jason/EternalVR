@@ -5,6 +5,7 @@
 #include <atomic>
 #include <new>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 #include <thread>
 
@@ -28,6 +29,22 @@ TEST_CASE("finishes keeps the work the body did before it threw") {
         throw std::bad_alloc();
     }));
     CHECK(done == 1);
+}
+
+TEST_CASE("finishes hands the message of what the body threw to the failure callback") {
+    int failures = 0;
+    bool named = false;
+    CHECK(evr::finishes([] {}, [&](const char*) { ++failures; }));
+    CHECK(failures == 0);
+    CHECK_FALSE(evr::finishes([] { throw std::runtime_error("no slot"); },
+                              [&](const char* what) {
+                                  ++failures;
+                                  named = std::string_view(what) == "no slot";
+                              }));
+    CHECK(failures == 1);
+    CHECK(named);
+    CHECK_FALSE(evr::finishes([] { throw std::bad_alloc(); }, [&](const char*) { ++failures; }));
+    CHECK(failures == 2);
 }
 
 TEST_CASE("finishes starts a detached thread") {

@@ -108,6 +108,7 @@ void XrSwapchainSet::hold(XrSwapchain swapchain,
                           const std::vector<ID3D12Resource*>& images,
                           const char* what) {
     std::vector<std::uintptr_t> textures;
+    textures.reserve(images.size());
     for (const ID3D12Resource* image : images) {
         textures.push_back(key(image));
     }

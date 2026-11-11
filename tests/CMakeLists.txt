@@ -325,6 +325,7 @@ if(TARGET evr_device_features)
             vkcore/dump_format_tests.cpp
             vkcore/frame_repeat_tests.cpp
             vkcore/game_settings_line_tests.cpp
+            vkcore/hook_guard_tests.cpp
             vkcore/job_nodes_tests.cpp
             vkcore/light_cull_tests.cpp
             vkcore/log_cap_tests.cpp

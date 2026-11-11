@@ -3,7 +3,9 @@
 
 #include "vkcore/shader_dump.hpp"
 
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/shader_dump_impl.hpp"
 #include "vkcore/vrs_nv.hpp"
 
@@ -41,14 +43,31 @@ struct Config {
     std::wstring dir;
 };
 
+// The dump runs inside the game's Vulkan calls and on its writer thread: an exception leaves neither
+// (hook_guard.hpp). A line that cannot be made is lost; a device that cannot be recorded turns the dump's
+// hooks off (they would find no next function for it).
+HookGuard g_configGuard("the shader dump's settings");
+HookGuard g_deviceGuard("the shader dump's device record");
+HookGuard g_moduleLine("the shader dump's module line");
+HookGuard g_graphicsLine("the shader dump's graphics pipeline lines");
+HookGuard g_computeLine("the shader dump's compute pipeline lines");
+HookGuard g_layoutLine("the shader dump's pipeline layout line");
+HookGuard g_setLayoutLine("the shader dump's set layout line");
+HookGuard g_allocateLine("the shader dump's descriptor set lines");
+HookGuard g_updateLine("the shader dump's descriptor update lines");
+HookGuard g_writerGuard("the shader dump's writer");
+std::atomic<bool> g_failed{false};
+
 const Config& config() {
     static const Config value = [] {
-        Config c;
-        std::wstring dir;
-        if (readEnv(L"ETERNALVR_DUMP_SHADERS", dir) && !dir.empty()) {
-            c.on = true;
-            c.dir = dir;
-        }
+        Config c; // off when the variable cannot be read
+        g_configGuard.run([&] {
+            std::wstring dir;
+            if (readEnv(L"ETERNALVR_DUMP_SHADERS", dir) && !dir.empty()) {
+                c.dir = dir;
+                c.on = true;
+            }
+        });
         return c;
     }();
     return value;
@@ -79,21 +98,32 @@ public:
 private:
     void run() {
         for (;;) {
-            std::deque<std::pair<Stream, std::string>> batch;
-            {
-                std::unique_lock lock(mutex_);
-                wake_.wait(lock, [this] { return !queue_.empty(); });
-                batch.swap(queue_);
+            // An exception must not leave the thread: the lines queued then are dropped (once there are some,
+            // so a writer short of memory does not spin).
+            if (g_writerGuard.run([this] { writeQueued(); })) {
+                continue;
             }
-            for (auto& [stream, text] : batch) {
-                if (std::FILE* f = files_[static_cast<int>(stream)]) {
-                    std::fwrite(text.data(), 1, text.size(), f);
-                }
+            std::unique_lock lock(mutex_);
+            wake_.wait(lock, [this] { return !queue_.empty(); });
+            queue_.clear();
+        }
+    }
+
+    void writeQueued() {
+        std::deque<std::pair<Stream, std::string>> batch;
+        {
+            std::unique_lock lock(mutex_);
+            wake_.wait(lock, [this] { return !queue_.empty(); });
+            batch.swap(queue_);
+        }
+        for (auto& [stream, text] : batch) {
+            if (std::FILE* f = files_[static_cast<int>(stream)]) {
+                std::fwrite(text.data(), 1, text.size(), f);
             }
-            for (std::FILE* f : files_) {
-                if (f) {
-                    std::fflush(f);
-                }
+        }
+        for (std::FILE* f : files_) {
+            if (f) {
+                std::fflush(f);
             }
         }
     }
@@ -161,9 +191,11 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device,
     DumpDevice* d = deviceOf(device);
     const VkResult result = d->CreateShaderModule(device, pCreateInfo, pAllocator, pModule);
     if (result == VK_SUCCESS && d->isGame && pCreateInfo->pCode) {
-        const std::uint64_t hash = storeModule(pCreateInfo->pCode, pCreateInfo->codeSize);
-        std::lock_guard lock(g_modulesMutex);
-        g_moduleHashes[handleValue(*pModule)] = hash;
+        g_moduleLine.run([&] {
+            const std::uint64_t hash = storeModule(pCreateInfo->pCode, pCreateInfo->codeSize);
+            std::lock_guard lock(g_modulesMutex);
+            g_moduleHashes[handleValue(*pModule)] = hash;
+        });
     }
     return result;
 }
@@ -198,7 +230,7 @@ void appendStage(std::string& out, const VkPipelineShaderStageCreateInfo& stage)
         }
         out += "],\"data\":\"" + (spec->pData ? dump::hexBytes(spec->pData, spec->dataSize) : "") + "\"}";
     }
-    out += "}";
+    out += '}';
 }
 
 void appendLibraries(std::string& out, const void* pNext) {
@@ -211,7 +243,7 @@ void appendLibraries(std::string& out, const void* pNext) {
     for (std::uint32_t i = 0; i < libs->libraryCount; ++i) {
         out += (i ? ",\"" : "\"") + handleText(handleValue(libs->pLibraries[i])) + "\"";
     }
-    out += "]";
+    out += ']';
 }
 
 template <typename Info>
@@ -230,12 +262,12 @@ void logPipelines(const char* kind, std::uint32_t count, const Info* infos, cons
         } else {
             for (std::uint32_t s = 0; s < info.stageCount; ++s) {
                 if (s) {
-                    lines += ",";
+                    lines += ',';
                 }
                 appendStage(lines, info.pStages[s]);
             }
         }
-        lines += "]";
+        lines += ']';
         appendLibraries(lines, info.pNext);
         lines += "}\n";
     }
@@ -251,7 +283,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
     DumpDevice* d = deviceOf(device);
     const VkResult result = d->CreateGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     if (result >= VK_SUCCESS && d->isGame) {
-        logPipelines("graphics", count, pInfos, pPipelines);
+        g_graphicsLine.run([&] { logPipelines("graphics", count, pInfos, pPipelines); });
     }
     return result;
 }
@@ -265,7 +297,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device,
     DumpDevice* d = deviceOf(device);
     const VkResult result = d->CreateComputePipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     if (result >= VK_SUCCESS && d->isGame) {
-        logPipelines("compute", count, pInfos, pPipelines);
+        g_computeLine.run([&] { logPipelines("compute", count, pInfos, pPipelines); });
     }
     return result;
 }
@@ -277,19 +309,21 @@ VKAPI_ATTR VkResult VKAPI_CALL CreatePipelineLayout(VkDevice device,
     DumpDevice* d = deviceOf(device);
     const VkResult result = d->CreatePipelineLayout(device, pInfo, pAllocator, pLayout);
     if (result == VK_SUCCESS && d->isGame) {
-        std::string line =
-            "{\"pipelineLayout\":\"" + handleText(handleValue(*pLayout)) + "\",\"setLayouts\":[";
-        for (std::uint32_t i = 0; i < pInfo->setLayoutCount; ++i) {
-            line += (i ? ",\"" : "\"") + handleText(handleValue(pInfo->pSetLayouts[i])) + "\"";
-        }
-        line += "],\"pushRanges\":[";
-        for (std::uint32_t i = 0; i < pInfo->pushConstantRangeCount; ++i) {
-            const VkPushConstantRange& r = pInfo->pPushConstantRanges[i];
-            line += (i ? ",[" : "[") + std::to_string(r.stageFlags) + "," + std::to_string(r.offset) + "," +
-                    std::to_string(r.size) + "]";
-        }
-        line += "]}\n";
-        write(Stream::Layouts, std::move(line));
+        g_layoutLine.run([&] {
+            std::string line =
+                "{\"pipelineLayout\":\"" + handleText(handleValue(*pLayout)) + "\",\"setLayouts\":[";
+            for (std::uint32_t i = 0; i < pInfo->setLayoutCount; ++i) {
+                line += (i ? ",\"" : "\"") + handleText(handleValue(pInfo->pSetLayouts[i])) + "\"";
+            }
+            line += "],\"pushRanges\":[";
+            for (std::uint32_t i = 0; i < pInfo->pushConstantRangeCount; ++i) {
+                const VkPushConstantRange& r = pInfo->pPushConstantRanges[i];
+                line += (i ? ",[" : "[") + std::to_string(r.stageFlags) + "," + std::to_string(r.offset) +
+                        "," + std::to_string(r.size) + "]";
+            }
+            line += "]}\n";
+            write(Stream::Layouts, std::move(line));
+        });
     }
     return result;
 }
@@ -301,15 +335,18 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorSetLayout(VkDevice device,
     DumpDevice* d = deviceOf(device);
     const VkResult result = d->CreateDescriptorSetLayout(device, pInfo, pAllocator, pLayout);
     if (result == VK_SUCCESS && d->isGame) {
-        std::string line = "{\"setLayout\":\"" + handleText(handleValue(*pLayout)) +
-                           "\",\"flags\":" + std::to_string(pInfo->flags) + ",\"bindings\":[";
-        for (std::uint32_t i = 0; i < pInfo->bindingCount; ++i) {
-            const VkDescriptorSetLayoutBinding& b = pInfo->pBindings[i];
-            line += (i ? ",[" : "[") + std::to_string(b.binding) + "," + std::to_string(b.descriptorType) +
-                    "," + std::to_string(b.descriptorCount) + "," + std::to_string(b.stageFlags) + "]";
-        }
-        line += "]}\n";
-        write(Stream::Layouts, std::move(line));
+        g_setLayoutLine.run([&] {
+            std::string line = "{\"setLayout\":\"" + handleText(handleValue(*pLayout)) +
+                               "\",\"flags\":" + std::to_string(pInfo->flags) + ",\"bindings\":[";
+            for (std::uint32_t i = 0; i < pInfo->bindingCount; ++i) {
+                const VkDescriptorSetLayoutBinding& b = pInfo->pBindings[i];
+                line += (i ? ",[" : "[") + std::to_string(b.binding) + "," +
+                        std::to_string(b.descriptorType) + "," + std::to_string(b.descriptorCount) + "," +
+                        std::to_string(b.stageFlags) + "]";
+            }
+            line += "]}\n";
+            write(Stream::Layouts, std::move(line));
+        });
     }
     return result;
 }
@@ -320,13 +357,15 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device,
     DumpDevice* d = deviceOf(device);
     const VkResult result = d->AllocateDescriptorSets(device, pInfo, pSets);
     if (result == VK_SUCCESS && d->isGame && g_setLines.load(std::memory_order_relaxed) < kMaxSetLines) {
-        std::string lines;
-        for (std::uint32_t i = 0; i < pInfo->descriptorSetCount; ++i) {
-            lines += "{\"set\":\"" + handleText(handleValue(pSets[i])) + "\",\"layout\":\"" +
-                     handleText(handleValue(pInfo->pSetLayouts[i])) + "\"}\n";
-        }
-        g_setLines.fetch_add(pInfo->descriptorSetCount, std::memory_order_relaxed);
-        write(Stream::Sets, std::move(lines));
+        g_allocateLine.run([&] {
+            std::string lines;
+            for (std::uint32_t i = 0; i < pInfo->descriptorSetCount; ++i) {
+                lines += "{\"set\":\"" + handleText(handleValue(pSets[i])) + "\",\"layout\":\"" +
+                         handleText(handleValue(pInfo->pSetLayouts[i])) + "\"}\n";
+            }
+            g_setLines.fetch_add(pInfo->descriptorSetCount, std::memory_order_relaxed);
+            write(Stream::Sets, std::move(lines));
+        });
     }
     return result;
 }
@@ -346,35 +385,37 @@ VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device,
     if (!d->isGame || g_setLines.load(std::memory_order_relaxed) >= kMaxSetLines) {
         return;
     }
-    std::string lines;
-    std::uint32_t n = 0;
-    for (std::uint32_t i = 0; i < writeCount; ++i) {
-        const VkWriteDescriptorSet& w = pWrites[i];
-        if (!isBufferDescriptor(w.descriptorType) || !w.pBufferInfo) {
-            continue;
+    g_updateLine.run([&] {
+        std::string lines;
+        std::uint32_t n = 0;
+        for (std::uint32_t i = 0; i < writeCount; ++i) {
+            const VkWriteDescriptorSet& w = pWrites[i];
+            if (!isBufferDescriptor(w.descriptorType) || !w.pBufferInfo) {
+                continue;
+            }
+            lines += "{\"write\":\"" + handleText(handleValue(w.dstSet)) +
+                     "\",\"binding\":" + std::to_string(w.dstBinding) +
+                     ",\"element\":" + std::to_string(w.dstArrayElement) +
+                     ",\"type\":" + std::to_string(w.descriptorType) + ",\"ranges\":[";
+            for (std::uint32_t b = 0; b < w.descriptorCount; ++b) {
+                const VkDescriptorBufferInfo& info = w.pBufferInfo[b];
+                lines += (b ? ",[\"" : "[\"") + handleText(handleValue(info.buffer)) + "\"," +
+                         std::to_string(info.offset) + "," + std::to_string(info.range) + "]";
+            }
+            lines += "]}\n";
+            ++n;
         }
-        lines += "{\"write\":\"" + handleText(handleValue(w.dstSet)) +
-                 "\",\"binding\":" + std::to_string(w.dstBinding) +
-                 ",\"element\":" + std::to_string(w.dstArrayElement) +
-                 ",\"type\":" + std::to_string(w.descriptorType) + ",\"ranges\":[";
-        for (std::uint32_t b = 0; b < w.descriptorCount; ++b) {
-            const VkDescriptorBufferInfo& info = w.pBufferInfo[b];
-            lines += (b ? ",[\"" : "[\"") + handleText(handleValue(info.buffer)) + "\"," +
-                     std::to_string(info.offset) + "," + std::to_string(info.range) + "]";
+        if (n) {
+            g_setLines.fetch_add(n, std::memory_order_relaxed);
+            write(Stream::Sets, std::move(lines));
         }
-        lines += "]}\n";
-        ++n;
-    }
-    if (n) {
-        g_setLines.fetch_add(n, std::memory_order_relaxed);
-        write(Stream::Sets, std::move(lines));
-    }
+    });
 }
 
 PFN_vkVoidFunction findCreateHook(const char* name) {
 #define EVR_DUMP_HOOK(fn)                                                                                    \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_DUMP_HOOK(CreateShaderModule)
     EVR_DUMP_HOOK(CreateGraphicsPipelines)
@@ -394,7 +435,7 @@ bool enabled() {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
-    if (!enabled()) {
+    if (!enabled() || g_failed.load(std::memory_order_acquire)) {
         return nullptr;
     }
     if (PFN_vkVoidFunction hook = findCreateHook(name)) {
@@ -404,9 +445,21 @@ PFN_vkVoidFunction findHook(const char* name) {
 }
 
 DumpDevice* deviceOf(void* dispatchable) {
-    std::shared_lock lock(g_devicesMutex);
-    const auto it = g_devices.find(keyOf(dispatchable));
-    return it == g_devices.end() ? nullptr : it->second;
+    {
+        std::shared_lock lock(g_devicesMutex);
+        const auto it = g_devices.find(keyOf(dispatchable));
+        if (it != g_devices.end()) {
+            return it->second;
+        }
+    }
+    // A device without a record (no memory for it, onDeviceCreated): the next layer's functions, not dumped.
+    // Per thread, so no allocation and no lock; filled again on each such call.
+    thread_local DumpDevice t_passThrough;
+    t_passThrough = DumpDevice{};
+#define EVR_DUMP_NEXT_FN(name) t_passThrough.name = nextFunction<PFN_vk##name>(dispatchable, "vk" #name);
+    EVR_DUMP_FUNCTIONS(EVR_DUMP_NEXT_FN)
+#undef EVR_DUMP_NEXT_FN
+    return &t_passThrough;
 }
 
 void write(Stream stream, std::string lines) {
@@ -415,11 +468,15 @@ void write(Stream stream, std::string lines) {
     }
 }
 
-void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr, bool isGame) {
-    if (!enabled()) {
-        return;
-    }
+namespace {
+
+// onDeviceCreated's work, under its guard; `made` is the record once allocated.
+void addDevice(VkDevice device,
+               PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr,
+               bool isGame,
+               DumpDevice*& made) {
     auto* d = new DumpDevice; // freed with the device; the loader keeps no pointer to it
+    made = d;
     d->device = device;
     // The VRS experiment's hooks sit between this one and the next layer where both hook a function.
     const auto next = [&](const char* name) {
@@ -458,6 +515,21 @@ void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcA
     }
     std::unique_lock lock(g_devicesMutex);
     g_devices[keyOf(device)] = d;
+}
+
+} // namespace
+
+void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr, bool isGame) {
+    if (!enabled() || g_failed.load()) {
+        return;
+    }
+    DumpDevice* made = nullptr;
+    const bool recorded = g_deviceGuard.run([&] { addDevice(device, nextGetDeviceProcAddr, isGame, made); });
+    if (!recorded) {
+        delete made; // not in the registry: the insert is the last step
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG("shader dump: off from here (a device could not be recorded)");
+    }
 }
 
 void onDeviceDestroyed(VkDevice device) {

@@ -90,6 +90,18 @@ TEST_CASE("turning injection off releases each held key once, then delivers only
     }
 }
 
+TEST_CASE("the held keys can be released into a fixed list, without allocating") {
+    HeldKeys held;
+    held.set('R', true);
+    held.set(0x10, true);
+    std::array<std::uint8_t, 256> keys{};
+    REQUIRE(held.releaseAll(keys) == 2);
+    CHECK(keys[0] == 0x10);
+    CHECK(keys[1] == 'R');
+    CHECK_FALSE(held.isDown('R'));
+    CHECK(held.releaseAll(keys) == 0);
+}
+
 TEST_CASE("each held key is released by exactly one of several racing calls") {
     HeldKeys held;
     for (int vk = 0; vk < 256; vk += 3) {

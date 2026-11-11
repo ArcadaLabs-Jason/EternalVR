@@ -385,13 +385,16 @@ std::uintptr_t Builder::cloneImage(std::uintptr_t image, const std::string& part
         name = text;
     }
     std::uintptr_t c = stableNames ? reuse(name, image, options) : 0;
-    if (!c && stableNames && (c = reuse(clone_names::besideName(name), image, options)) != 0) {
-        // Made beside by an earlier build: kept; the one of its name waits for releaseClones.
-        if (allocated(findImage(name))) {
-            wait(name);
+    if (!c && stableNames) {
+        c = reuse(clone_names::besideName(name), image, options);
+        if (c) {
+            // Made beside by an earlier build: kept; the one of its name waits for releaseClones.
+            if (allocated(findImage(name))) {
+                wait(name);
+            }
+            name = clone_names::besideName(name);
+            names.push_back(name);
         }
-        name = clone_names::besideName(name);
-        names.push_back(name);
     }
     if (!c) {
         // An image of that name without memory is allocated again (its purge frees nothing).

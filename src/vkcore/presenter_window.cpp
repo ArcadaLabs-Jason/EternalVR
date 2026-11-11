@@ -35,6 +35,8 @@ constexpr ULONGLONG kRefreshQueryMs = 3000;
 bool XrPresenter::Impl::decideWindow(const VkPresentInfoKHR* info, stereo_seq::PresentKind kind) {
     windowHold = false;
     if (!windowGateChecked) {
+        // holdImage runs after the copy's submit, where nothing may throw: it never needs more room.
+        heldImages.reserve(kMaxHeldImages);
         windowGateChecked = true;
         windowGate = dev.releaseSwapchainImages != nullptr && windowGateForDevice(dev);
         EVR_LOG("window: %s",
@@ -67,6 +69,8 @@ stereo_seq::MirrorStep XrPresenter::Impl::windowMirrorStep(std::uint32_t eye, bo
 }
 
 void XrPresenter::Impl::holdImage(VkSwapchainKHR swapchain, std::uint32_t image, std::uint64_t value) {
+    // Does not allocate: decideWindow holds an image only while fewer than kMaxHeldImages are held, and
+    // reserved that many (the erases keep the capacity).
     heldImages.push_back(HeldImage{swapchain, image, value});
 }
 

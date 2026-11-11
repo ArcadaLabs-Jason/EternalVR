@@ -140,7 +140,7 @@ public:
 
     // `dtSeconds` is the time since the previous frame; non-finite or negative values count as zero
     // and values above kMaxFrameSeconds count as kMaxFrameSeconds.
-    GameInput update(const InputFrame& frame, const MapperContext& context, float dtSeconds);
+    GameInput update(const InputFrame& raw, const MapperContext& context, float dtSeconds);
 
     [[nodiscard]] const BindingProfile& profile() const { return profile_; }
     // The settings in use, after invalid values were replaced by defaults.

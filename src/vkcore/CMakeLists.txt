@@ -92,6 +92,7 @@ add_library(evr_layer SHARED
     flare_core.cpp
     flare_views.cpp
     device_augment.cpp
+    device_entry.cpp
     dlss_dll.cpp
     dlss_menu_hooks.cpp
     eye_capture.cpp
@@ -135,6 +136,7 @@ add_library(evr_layer SHARED
     presenter_alt.cpp
     presenter_cinema3d.cpp
     presenter_copy.cpp
+    presenter_copy_record.cpp
     presenter_fade.cpp
     presenter_mirror.cpp
     presenter_reticle.cpp
@@ -156,6 +158,7 @@ add_library(evr_layer SHARED
     fence_wait.cpp
     presenter_frame.cpp
     presenter_frame_log.cpp
+    presenter_worker.cpp
     presenter_clock.cpp
     pose_guards.cpp
     presenter_fov.cpp
@@ -170,6 +173,7 @@ add_library(evr_layer SHARED
     presenter_snapshot.cpp
     presenter_stereo.cpp
     presenter_ui.cpp
+    presenter_ui_xr.cpp
     presenter_wrist.cpp
     presenter_reconnect.cpp
     presenter_refresh.cpp
@@ -208,6 +212,7 @@ add_library(evr_layer SHARED
     swapchain_entry.cpp
     taa_env.cpp
     taa_debug_cvars.cpp
+    taa_eye_slot.cpp
     taa_hooks.cpp
     taa_ssr.cpp
     taa_locate.cpp
@@ -224,6 +229,7 @@ add_library(evr_layer SHARED
     view_binning.cpp
     view_block.cpp
     view_clone_binds.cpp
+    view_clone_build.cpp
     view_clone_census.cpp
     view_clone_make.cpp
     view_clone_map.cpp
@@ -251,6 +257,7 @@ add_library(evr_layer SHARED
     view_updates.cpp
     view_water.cpp
     view_water_sites.cpp
+    view_water_view1.cpp
     present_scaling.cpp
     virtual_client.cpp
     virtual_client_settings.cpp
@@ -342,7 +349,8 @@ target_sources(evr_layer PRIVATE
     menu_input.cpp
     menu_model_hook.cpp
     dossier_screen_hook.cpp
-    presenter_menu.cpp)
+    presenter_menu.cpp
+    presenter_menu_update.cpp)
 target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_flares evr_foveation evr_input evr_menu evr_pacing evr_roomscale evr_tracking)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
 target_compile_features(evr_layer PRIVATE cxx_std_20)

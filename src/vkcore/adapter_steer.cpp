@@ -5,6 +5,7 @@
 
 #include "vkcore/adapter_order.hpp"
 #include "vkcore/dispatch.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/surface_entry.hpp"
 #include "vkcore/xr_presenter.hpp"
@@ -150,16 +151,26 @@ void askRuntime(Probe& out) {
     }
 }
 
+// This thread runs the layer's own OpenXR calls until the scope ends, however it ends (an exception
+// included): a VkInstance the runtime makes in them is not the game's.
+struct PassThroughScope {
+    bool was = passThroughThread();
+    PassThroughScope() { setPassThroughThread(true); }
+    ~PassThroughScope() { setPassThroughThread(was); }
+    PassThroughScope(const PassThroughScope&) = delete;
+    PassThroughScope& operator=(const PassThroughScope&) = delete;
+};
+
 Probe probeOnce() {
     static std::optional<Probe> cached;
     if (!cached) {
         LARGE_INTEGER start{};
         QueryPerformanceCounter(&start);
         Probe probe;
-        const bool wasPassThrough = passThroughThread();
-        setPassThroughThread(true); // a VkInstance the runtime makes in here is not the game's
-        askRuntime(probe);
-        setPassThroughThread(wasPassThrough);
+        {
+            const PassThroughScope ownCalls;
+            askRuntime(probe);
+        }
         probe.ms = millisecondsSince(start);
         cached = probe;
     }
@@ -427,16 +438,24 @@ VkResult handOut(const std::vector<T>& items,
     return n < order.size() ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL EnumeratePhysicalDevices(VkInstance instance,
-                                                        std::uint32_t* pPhysicalDeviceCount,
-                                                        VkPhysicalDevice* pPhysicalDevices) {
-    InstanceData* inst = findInstanceData(instance);
-    if (!inst) {
-        return VK_ERROR_INITIALIZATION_FAILED;
+// Inside the game's calls no exception may go (hook_guard.hpp). The hooks' own work (lists, lines, the
+// runtime's answer) throws only before anything is handed to the game: then the game gets the next layer's
+// answer, and steering stays off for the instance (its later calls agree).
+HookGuard g_enumerateGuard("vkEnumeratePhysicalDevices (adapter steering)");
+HookGuard g_groupsGuard("vkEnumeratePhysicalDeviceGroups (adapter steering)");
+
+void stopSteering(VkInstance instance) {
+    std::lock_guard lock(g_mutex);
+    if (const auto it = g_steers.find(instance); it != g_steers.end()) {
+        it->second.decided = true;
+        it->second.active = false;
     }
-    if (!inst->isGame || passThroughThread()) {
-        return inst->vk.EnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices);
-    }
+}
+
+VkResult steerDevices(InstanceData* inst,
+                      VkInstance instance,
+                      std::uint32_t* pPhysicalDeviceCount,
+                      VkPhysicalDevice* pPhysicalDevices) {
     std::lock_guard lock(g_mutex);
     Steer& steer = g_steers[instance];
     Listed listed;
@@ -456,6 +475,25 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumeratePhysicalDevices(VkInstance instance,
                    [](VkPhysicalDevice& to, VkPhysicalDevice from) { to = from; });
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL EnumeratePhysicalDevices(VkInstance instance,
+                                                        std::uint32_t* pPhysicalDeviceCount,
+                                                        VkPhysicalDevice* pPhysicalDevices) {
+    InstanceData* inst = findInstanceData(instance);
+    if (!inst) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (!inst->isGame || passThroughThread()) {
+        return inst->vk.EnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices);
+    }
+    VkResult result = VK_SUCCESS;
+    if (g_enumerateGuard.run(
+            [&] { result = steerDevices(inst, instance, pPhysicalDeviceCount, pPhysicalDevices); })) {
+        return result;
+    }
+    stopSteering(instance);
+    return inst->vk.EnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices);
+}
+
 PFN_vkEnumeratePhysicalDeviceGroups nextGroups(const InstanceData& inst) {
     return inst.vk.EnumeratePhysicalDeviceGroups
                ? inst.vk.EnumeratePhysicalDeviceGroups
@@ -463,17 +501,11 @@ PFN_vkEnumeratePhysicalDeviceGroups nextGroups(const InstanceData& inst) {
                      inst.nextGetInstanceProcAddr(inst.instance, "vkEnumeratePhysicalDeviceGroupsKHR"));
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL EnumeratePhysicalDeviceGroups(VkInstance instance,
-                                                             std::uint32_t* pGroupCount,
-                                                             VkPhysicalDeviceGroupProperties* pGroups) {
-    InstanceData* inst = findInstanceData(instance);
-    const PFN_vkEnumeratePhysicalDeviceGroups next = inst ? nextGroups(*inst) : nullptr;
-    if (!next) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    if (!inst->isGame || passThroughThread()) {
-        return next(instance, pGroupCount, pGroups);
-    }
+VkResult steerGroups(InstanceData* inst,
+                     PFN_vkEnumeratePhysicalDeviceGroups next,
+                     VkInstance instance,
+                     std::uint32_t* pGroupCount,
+                     VkPhysicalDeviceGroupProperties* pGroups) {
     std::lock_guard lock(g_mutex);
     Steer& steer = g_steers[instance];
     if (!steer.decided) {
@@ -517,6 +549,25 @@ VKAPI_ATTR VkResult VKAPI_CALL EnumeratePhysicalDeviceGroups(VkInstance instance
                                  std::begin(to.physicalDevices));
                        to.subsetAllocation = from.subsetAllocation;
                    });
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL EnumeratePhysicalDeviceGroups(VkInstance instance,
+                                                             std::uint32_t* pGroupCount,
+                                                             VkPhysicalDeviceGroupProperties* pGroups) {
+    InstanceData* inst = findInstanceData(instance);
+    const PFN_vkEnumeratePhysicalDeviceGroups next = inst ? nextGroups(*inst) : nullptr;
+    if (!next) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (!inst->isGame || passThroughThread()) {
+        return next(instance, pGroupCount, pGroups);
+    }
+    VkResult result = VK_SUCCESS;
+    if (g_groupsGuard.run([&] { result = steerGroups(inst, next, instance, pGroupCount, pGroups); })) {
+        return result;
+    }
+    stopSteering(instance);
+    return next(instance, pGroupCount, pGroups);
 }
 
 } // namespace

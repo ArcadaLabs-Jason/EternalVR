@@ -5,6 +5,7 @@
 
 #include "stereo_seq/ngx_twin_retry.hpp"
 #include "vkcore/game_code.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/taa_hooks.hpp"
@@ -272,6 +273,11 @@ void releaseLostView1() {
             parallelEyesTouch() ? "the clones are off" : "the multiplayer guard tripped");
 }
 
+// The engine's call has run when these throw (a log text, the fallback's next-try text): what is left of the
+// layer's bookkeeping is skipped and the engine's result returned.
+HookGuard g_createGuard("the DLSS create detour (Parallel Eye Rendering)");
+HookGuard g_evaluateGuard("the DLSS evaluate detour (Parallel Eye Rendering)");
+
 void createHook(void* context, const std::int32_t* renderSize, const std::int32_t* outputSize) {
     const auto lock = lockEngine();
     const int view = viewOf(context);
@@ -288,11 +294,13 @@ void createHook(void* context, const std::int32_t* renderSize, const std::int32_
         g_counters.creates[view].fetch_add(1, std::memory_order_relaxed);
     }
     if (g_counters.loggedCreates.fetch_add(1) < kLoggedCreates || !after) {
-        const std::string made =
-            after ? "created: " + std::to_string(featureId(after)) : "could not be created";
-        EVR_LOG("%s: view %d's DLSS feature %s (%dx%d -> %dx%d)", kTag, view, made.c_str(),
-                renderSize ? renderSize[0] : 0, renderSize ? renderSize[1] : 0,
-                outputSize ? outputSize[0] : 0, outputSize ? outputSize[1] : 0);
+        g_createGuard.run([&] {
+            const std::string made =
+                after ? "created: " + std::to_string(featureId(after)) : "could not be created";
+            EVR_LOG("%s: view %d's DLSS feature %s (%dx%d -> %dx%d)", kTag, view, made.c_str(),
+                    renderSize ? renderSize[0] : 0, renderSize ? renderSize[1] : 0,
+                    outputSize ? outputSize[0] : 0, outputSize ? outputSize[1] : 0);
+        });
     }
 }
 
@@ -306,14 +314,16 @@ bool evaluateHook(void* context, const void* inputs, void* output) {
     t_view = view;
     const bool ok = g_evaluate(context, inputs, output);
     t_view = -1;
-    noteResult(view, ok);
-    if (view == 1) {
-        g_view0SinceView1 = 0;
-    } else {
-        ++g_view0SinceView1;
-        releaseLostView1();
-    }
-    logCounts(nowMs());
+    g_evaluateGuard.run([&] {
+        noteResult(view, ok);
+        if (view == 1) {
+            g_view0SinceView1 = 0;
+        } else {
+            ++g_view0SinceView1;
+            releaseLostView1();
+        }
+        logCounts(nowMs());
+    });
     return ok;
 }
 

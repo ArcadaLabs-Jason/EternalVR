@@ -2,6 +2,7 @@
 
 #include "vkcore/surface_entry.hpp"
 
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
@@ -21,6 +22,11 @@ bool isGameInstance(const InstanceData* data) {
     return data && data->isGame && !passThroughThread();
 }
 
+// Inside the game's call no exception may go (hook_guard.hpp): the window's placement (its settings) and the
+// render size's record of the surface allocate. Whatever of them fails, the surface is made as the game
+// asked.
+HookGuard g_surfaceGuard("vkCreateWin32SurfaceKHR (the game's window)");
+
 // The game's window: the presenter keeps the game active while VR runs, and the render size answers its
 // client area.
 VKAPI_ATTR VkResult VKAPI_CALL CreateWin32SurfaceKHR(VkInstance instance,
@@ -38,19 +44,25 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateWin32SurfaceKHR(VkInstance instance,
     }
     const bool game = isGameInstance(data);
     if (game) {
-        placeGameWindow(pCreateInfo->hwnd);
+        g_surfaceGuard.run([&] { placeGameWindow(pCreateInfo->hwnd); });
     }
     const VkResult result = next(instance, pCreateInfo, pAllocator, pSurface);
     if (result == VK_SUCCESS && game) {
         EVR_LOG("vkCreateWin32SurfaceKHR: game window %p", static_cast<void*>(pCreateInfo->hwnd));
         setGameWindow(pCreateInfo->hwnd);
-        virtual_client::onGameSurface(*data, pCreateInfo->hwnd, *pSurface);
-        if (mp_guard::allowsGameTouch()) {
-            mirror_place::bringToFrontOnce(pCreateInfo->hwnd); // after the placement, in the same order
-        }
+        g_surfaceGuard.run([&] {
+            virtual_client::onGameSurface(*data, pCreateInfo->hwnd, *pSurface);
+            if (mp_guard::allowsGameTouch()) {
+                mirror_place::bringToFrontOnce(pCreateInfo->hwnd); // after the placement, in the same order
+            }
+        });
     }
     return result;
 }
+
+HookGuard g_destroyedGuard("vkDestroySurfaceKHR (the render size's surface list)");
+HookGuard g_capsGuard("vkGetPhysicalDeviceSurfaceCapabilitiesKHR (the render size)");
+HookGuard g_caps2Guard("vkGetPhysicalDeviceSurfaceCapabilities2KHR (the render size)");
 
 VKAPI_ATTR void VKAPI_CALL DestroySurfaceKHR(VkInstance instance,
                                              VkSurfaceKHR surface,
@@ -60,7 +72,8 @@ VKAPI_ATTR void VKAPI_CALL DestroySurfaceKHR(VkInstance instance,
         return;
     }
     if (isGameInstance(data)) {
-        virtual_client::onSurfaceDestroyed(surface);
+        // The render size's setting is read on its first use; without it the surface is only not forgotten.
+        g_destroyedGuard.run([surface] { virtual_client::onSurfaceDestroyed(surface); });
     }
     auto next = reinterpret_cast<PFN_vkDestroySurfaceKHR>(
         data->nextGetInstanceProcAddr(instance, "vkDestroySurfaceKHR"));
@@ -77,8 +90,8 @@ VKAPI_ATTR VkResult VKAPI_CALL GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysica
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     const VkResult result = data->vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, pCaps);
-    if (result == VK_SUCCESS && isGameInstance(data)) {
-        virtual_client::adjustCapabilities(surface, *pCaps);
+    if (result == VK_SUCCESS && isGameInstance(data)) { // without the setting: the driver's capabilities
+        g_capsGuard.run([&] { virtual_client::adjustCapabilities(surface, *pCaps); });
     }
     return result;
 }
@@ -93,7 +106,8 @@ GetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice,
     }
     const VkResult result = data->nextSurfaceCapabilities2(physicalDevice, pSurfaceInfo, pCaps);
     if (result == VK_SUCCESS && isGameInstance(data)) {
-        virtual_client::adjustCapabilities(pSurfaceInfo->surface, pCaps->surfaceCapabilities);
+        g_caps2Guard.run(
+            [&] { virtual_client::adjustCapabilities(pSurfaceInfo->surface, pCaps->surfaceCapabilities); });
     }
     return result;
 }

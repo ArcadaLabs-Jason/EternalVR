@@ -110,7 +110,7 @@ private:
     }
     // Hands the one-shot's images to a writer thread, which reads them from the mapped buffers (nothing
     // writes them until it is done: bufferFor waits for the writer; destroy stops it first).
-    void writeOnce(OneShot shot);
+    void writeOnce(const OneShot& shot);
     // The pool of a burst (hundreds of MB) is freed once its frames are written and no copy is pending.
     void freeBurstPool(DeviceData& dev, std::uint64_t completedTimeline);
 

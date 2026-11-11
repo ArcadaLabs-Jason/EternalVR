@@ -4,6 +4,7 @@
 
 #include "vkcore/mp_guard.hpp"
 
+#include "common/finishes.hpp"
 #include "vkcore/game_build.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
@@ -14,6 +15,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -61,12 +63,18 @@ mp_policy::TripListeners g_tripListeners;
 
 void tripWith(Signal signal, const char* detail) {
     if (g_latch.trip(signal)) {
-        EVR_LOG(
-            "%s: TRIPPED by %s (%s): the game keeps running; camera writes, head aim and key injection are "
-            "off for the rest of this process and the headset shows the flat screen; relaunch without VR "
-            "for multiplayer",
-            kTag, mp_policy::toString(signal), detail);
+        // The listeners first: a log line that fails must not keep the game's state from coming back.
         g_tripListeners.fire();
+        finishes([&] {
+            EVR_LOG(
+                "%s: TRIPPED by %s (%s): the game keeps running; camera writes, head aim and key injection "
+                "are off for the rest of this process and the headset shows the flat screen; relaunch "
+                "without VR for multiplayer",
+                kTag, mp_policy::toString(signal), detail);
+            if (const std::size_t failed = g_tripListeners.failures()) {
+                EVR_LOG("%s: %zu trip listener(s) threw; the others ran", kTag, failed);
+            }
+        });
     }
 }
 
@@ -129,8 +137,9 @@ void onMapLoad(const HookRegisters& regs) {
     const mp_policy::MapClass mapClass = mp_policy::classifyMap(name);
     EVR_LOG("%s: map load '%s' (%s)", kTag, name, mp_policy::toString(mapClass));
     if (mapClass != mp_policy::MapClass::SinglePlayer) {
-        std::string detail = "map '" + std::string(name) + "', " + mp_policy::toString(mapClass);
-        tripWith(Signal::MapLoad, detail.c_str());
+        char detail[300];
+        std::snprintf(detail, sizeof(detail), "map '%s', %s", name, mp_policy::toString(mapClass));
+        tripWith(Signal::MapLoad, detail);
     }
 }
 
@@ -180,6 +189,16 @@ void onMenuTransition(const HookRegisters& regs) {
     }
 }
 
+// Fail closed: a check that throws (no memory for the map's name or its class on the way) trips the guard
+// with its own signal instead of letting the game go on unchecked; the mid hook thunk would otherwise only
+// log it. tripWith closes the latch before anything that allocates.
+template <Signal S, MidHookCallback Check>
+void failClosed(const HookRegisters& regs) noexcept {
+    if (!finishes([&] { Check(regs); })) {
+        tripWith(S, "its check threw (no memory); tripped to be safe");
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Detection points
 
@@ -220,7 +239,7 @@ bool installMapLoad(const GameImage& image) {
     if (stringAt(image, ripTarget(image, at + 26, at + 30)) != "----------- LoadMap(%s) ------------\n") {
         return fail(kName, "the format string is not LoadMap's");
     }
-    return hookAt(image, kName, at + 23, &onMapLoad);
+    return hookAt(image, kName, at + 23, &failClosed<Signal::MapLoad, &onMapLoad>);
 }
 
 // idSteamOnlineSessionInviteProvider registers its Steam callbacks (RVA 0x1BC3AB6): id 333
@@ -265,8 +284,10 @@ bool installSteamJoin(const GameImage& image) {
         return fail(kName, "the rich presence join handler does not parse +connect_lobby");
     }
     // Both hooks are attempted so the log names every failure.
-    const bool lobbyHooked = hookAt(image, "Steam lobby join", lobby, &onSteamLobbyJoin);
-    const bool richHooked = hookAt(image, "Steam rich presence join", rich, &onSteamRichPresenceJoin);
+    const bool lobbyHooked =
+        hookAt(image, "Steam lobby join", lobby, &failClosed<Signal::SteamLobbyJoin, &onSteamLobbyJoin>);
+    const bool richHooked = hookAt(image, "Steam rich presence join", rich,
+                                   &failClosed<Signal::SteamRichPresenceJoin, &onSteamRichPresenceJoin>);
     return lobbyHooked && richHooked;
 }
 
@@ -315,8 +336,10 @@ bool installXboxJoin(const GameImage& image) {
     }
     // Both hooks are attempted so the log names every failure. The decode hook goes after its first
     // instruction (a jne rel32 on the event type), where every invitation event passes.
-    const bool eventHooked = hookAt(image, "Xbox invite callback", callback, &onXboxInviteEvent);
-    const bool decodeHooked = hookAt(image, "Xbox invite decode", decode + 8, &onXboxInviteDecoded);
+    const bool eventHooked = hookAt(image, "Xbox invite callback", callback,
+                                    &failClosed<Signal::XboxInviteEvent, &onXboxInviteEvent>);
+    const bool decodeHooked = hookAt(image, "Xbox invite decode", decode + 8,
+                                     &failClosed<Signal::XboxInviteDecoded, &onXboxInviteDecoded>);
     return eventHooked && decodeHooked;
 }
 
@@ -341,7 +364,7 @@ bool installInviteConsumed(const GameImage& image) {
                    "48 33 C4")) {
         return fail(kName, "the function using the log string does not start as expected");
     }
-    return hookAt(image, kName, start, &onInviteConsumed);
+    return hookAt(image, kName, start, &failClosed<Signal::InviteConsumed, &onInviteConsumed>);
 }
 
 // The idLobbyUISessionCasualBattleArena constructor (RVA 0x101BC40): the lobby UI session of BATTLEMODE
@@ -357,7 +380,7 @@ bool installLobbySession(const GameImage& image) {
     if (!vtableIs(image, at + 20, ".?AVidLobbyUISessionCasualBattleArena@@")) {
         return fail(kName, "the constructor does not install idLobbyUISessionCasualBattleArena's vtable");
     }
-    return hookAt(image, kName, at, &onLobbySession);
+    return hookAt(image, kName, at, &failClosed<Signal::LobbySession, &onLobbySession>);
 }
 
 // idBattleModePlayState creates the idBattleArenaGameSession (factory RVA 0x1514629, constructor RVA
@@ -385,7 +408,7 @@ bool installBattleArenaSession(const GameImage& image) {
         !vtableIs(image, ctor + 120, ".?AVidBattleArenaGameSession@@")) {
         return fail(kName, "the constructor called is not idBattleArenaGameSession's");
     }
-    return hookAt(image, kName, ctor, &onBattleArenaSession);
+    return hookAt(image, kName, ctor, &failClosed<Signal::BattleArenaSession, &onBattleArenaSession>);
 }
 
 // The idMainMenu singleton (getter RVA 0x174EF70, global RVA 0x46AE140) and the screen change in
@@ -430,7 +453,8 @@ bool installMainMenu(const GameImage& image) {
     }
     g_mainMenuSlot.store(reinterpret_cast<const std::byte* const*>(slot), std::memory_order_release);
     EVR_LOG("%s: main menu pointer at RVA 0x%X", kTag, image.rva(slot));
-    return hookAt(image, "menu screen change", change + 18, &onMenuTransition);
+    return hookAt(image, "menu screen change", change + 18,
+                  &failClosed<Signal::MenuTransition, &onMenuTransition>);
 }
 
 void readTestTrip() {
@@ -536,7 +560,9 @@ bool inPlayMap() {
     return g_playMap.load(std::memory_order_acquire);
 }
 
-void poll() {
+namespace {
+
+void pollMenu() {
     if (g_latch.state() == GuardState::Tripped) {
         return;
     }
@@ -551,6 +577,15 @@ void poll() {
     if (menu && safeRead(menu + kMenuActiveScreen, active) && safeRead(menu + kMenuNextScreen, next)) {
         checkScreen(Signal::MenuPoll, active, "active");
         checkScreen(Signal::MenuPoll, next, "next");
+    }
+}
+
+} // namespace
+
+void poll() noexcept {
+    // Fail closed, as the hook callbacks: a poll that throws trips the guard.
+    if (!finishes(pollMenu)) {
+        tripWith(Signal::MenuPoll, "the menu poll threw (no memory); tripped to be safe");
     }
 }
 

@@ -86,12 +86,15 @@ GloryEpisode::Step GloryEpisode::update(bool sync, bool forcedView, double secon
             runSeconds_ = 0.0;
             step.started = true;
             ++episodes_;
-        } else if ((runSeconds_ += paused ? 0.0 : dt) >= timing_.maxSeconds) {
-            active_ = false;
-            syncSeen_ = false;
-            timedOut_ = true;
-            step.ended = true;
-            step.timedOut = true;
+        } else {
+            runSeconds_ += paused ? 0.0 : dt;
+            if (runSeconds_ >= timing_.maxSeconds) {
+                active_ = false;
+                syncSeen_ = false;
+                timedOut_ = true;
+                step.ended = true;
+                step.timedOut = true;
+            }
         }
     } else if (!active_) {
         timedOut_ = false;

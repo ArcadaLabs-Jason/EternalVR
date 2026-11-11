@@ -5,6 +5,7 @@
 #include "features/render_size/mirror_window.hpp"
 
 #include "vkcore/frame_pacing.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/ui_engine.hpp"
@@ -169,14 +170,23 @@ void XrPresenter::Impl::shutdown() {
     }
     setViewHookSink(nullptr); // no camera hook callback runs past this point
     setStereoHookSink(nullptr);
-    controllers::restoreClimbCvars("the layer shuts down"); // the game's own wall climbing again
-    controllers::noteImmersiveCutscene(false);              // no cutscene keeps the arms hidden
-    ui_engine::setSkipComposite(false);                     // the game composites its own GUI again
-    requestTwoViews(false);                                 // the game goes back to its own single view
-    controllers::restoreWheelSlowdown("the layer shuts down");
-    controllers::restoreZoomLook("the layer shuts down");
+    // The game's own settings back (cvars and decl text). This runs in vkDestroyDevice: each restore on its
+    // own, so one that throws skips no other, and the worker's stop below still happens.
+    static HookGuard climbGuard("the presenter's shutdown (wall climbing's cvars back)");
+    static HookGuard cutsceneGuard("the presenter's shutdown (the arms after a cutscene)");
+    static HookGuard wheelGuard("the presenter's shutdown (the weapon wheel's slowdown back)");
+    static HookGuard zoomGuard("the presenter's shutdown (the zoom look's decls back)");
+    static HookGuard skipKeyGuard("the presenter's shutdown (the held skip key released)");
+    // The game's own wall climbing again; no cutscene keeps the arms hidden; the game composites its own GUI
+    // again and goes back to its own single view.
+    climbGuard.run([] { controllers::restoreClimbCvars("the layer shuts down"); });
+    cutsceneGuard.run([] { controllers::noteImmersiveCutscene(false); });
+    ui_engine::setSkipComposite(false);
+    requestTwoViews(false);
+    wheelGuard.run([] { controllers::restoreWheelSlowdown("the layer shuts down"); });
+    zoomGuard.run([] { controllers::restoreZoomLook("the layer shuts down"); });
     if (cutsceneTrack.skipHolding) {
-        injectKey(kSkipKey, false, gameWindow());
+        skipKeyGuard.run([] { injectKey(kSkipKey, false, gameWindow()); });
         cutsceneTrack.skipHolding = false;
     }
     disableKeepActive();

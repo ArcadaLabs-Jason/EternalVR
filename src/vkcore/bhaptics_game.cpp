@@ -31,10 +31,12 @@
 
 #include "vkcore/controllers_impl.hpp"
 
+#include "common/finishes.hpp"
 #include "features/bhaptics/bhaptics_message.hpp"
 #include "features/bhaptics/body_haptics.hpp"
 #include "vkcore/bhaptics_link.hpp"
 #include "vkcore/body_follow.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/menu_input.hpp"
 
@@ -307,7 +309,7 @@ void logSummary(const bhaptics::BodyHaptics& body,
         static_cast<unsigned long long>(failed));
 }
 
-void linkMain(float intensity) {
+void linkLoop(float intensity) {
     bhaptics::BodyHaptics body(intensity);
     WebSocketLink link;
     const std::string path = bhaptics::feedbackPath();
@@ -415,6 +417,16 @@ void linkMain(float intensity) {
     }
 }
 
+// An exception must not leave the thread (it would end the game): without the memory for a message (or the
+// link's strings), bHaptics goes off for the rest of the session and the hooks stop noting.
+void linkMain(float intensity) {
+    static HookGuard link("the bHaptics link");
+    if (!link.run([intensity] { linkLoop(intensity); })) {
+        g_running.store(false);
+        EVR_LOG("%s: off for the rest of the session", kTag);
+    }
+}
+
 } // namespace
 
 bool playerDead(const std::byte* player) {
@@ -444,7 +456,12 @@ void startBhaptics() {
             "for the bHaptics Player on port %d",
             kTag, cfg.bhapticsIntensity, bhaptics::kPlayerPort);
         g_running.store(true);
-        std::thread(linkMain, cfg.bhapticsIntensity).detach();
+        const float intensity = cfg.bhapticsIntensity;
+        if (!finishes([intensity] { std::thread(linkMain, intensity).detach(); })) {
+            g_running.store(false);
+            EVR_LOG("%s: off: no thread for the link", kTag);
+            return;
+        }
         if (!installBhapticsPortalHooks()) {
             EVR_LOG("%s: no portal hooks: going through a portal plays nothing", kTag);
         }

@@ -61,7 +61,8 @@ PlayerAim::Sample PlayerAim::read(const std::byte* player) const {
     std::int16_t cmd[3];
     std::memcpy(cmd, player + kCommandAngles, sizeof(cmd));
     constexpr float kShortToDegrees = 360.0f / 65536.0f;
-    s.command = {cmd[0] * kShortToDegrees, cmd[1] * kShortToDegrees, cmd[2] * kShortToDegrees};
+    s.command = {static_cast<float>(cmd[0]) * kShortToDegrees, static_cast<float>(cmd[1]) * kShortToDegrees,
+                 static_cast<float>(cmd[2]) * kShortToDegrees};
     return s;
 }
 

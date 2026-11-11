@@ -1,5 +1,6 @@
 #include "platform/key_injection/injected_keys.hpp"
 
+#include <array>
 #include <cstddef>
 
 namespace evr::key_injection {
@@ -84,13 +85,19 @@ void HeldKeys::mergeKeyboardState(std::uint8_t* keys256) const {
 }
 
 std::vector<std::uint8_t> HeldKeys::releaseAll() {
-    std::vector<std::uint8_t> released;
+    std::array<std::uint8_t, 256> keys{};
+    const std::size_t count = releaseAll(keys);
+    return {keys.begin(), keys.begin() + static_cast<std::ptrdiff_t>(count)};
+}
+
+std::size_t HeldKeys::releaseAll(std::array<std::uint8_t, 256>& keys) {
+    std::size_t count = 0;
     for (int vk = 0; vk < 256; ++vk) {
         if (down_[static_cast<std::size_t>(vk)].exchange(false, std::memory_order_acq_rel)) {
-            released.push_back(static_cast<std::uint8_t>(vk));
+            keys[count++] = static_cast<std::uint8_t>(vk);
         }
     }
-    return released;
+    return count;
 }
 
 } // namespace evr::key_injection

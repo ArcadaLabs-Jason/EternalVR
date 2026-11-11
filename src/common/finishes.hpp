@@ -19,4 +19,17 @@ bool finishes(Body&& body) noexcept {
     }
 }
 
+// The same, and `failed` gets the exception's message while it is still alive (inside the catch). `failed`
+// must not throw: a log line, a counter.
+template <class Body, class Failed>
+bool finishes(Body&& body, Failed&& failed) noexcept {
+    try {
+        std::forward<Body>(body)();
+        return true;
+    } catch (const std::exception& e) {
+        std::forward<Failed>(failed)(e.what());
+        return false;
+    }
+}
+
 } // namespace evr

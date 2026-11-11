@@ -43,6 +43,7 @@
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -202,43 +203,56 @@ std::optional<game::GameAction> actionForButton(std::optional<int> button) {
     return game::actionForUsercmdButton(*button);
 }
 
+// What the answers read on the way (the demon's state, its settings at their first read) is guarded: on a
+// failure the prompt keeps the game's text.
+HookGuard g_getKeysGuard("the GetKeysForAction detour (prompts)");
+HookGuard g_keyTextGuard("the LocalizedKeyName detour (prompts)");
+HookGuard g_keyNameTextGuard("the KeyNameText detour (prompts)");
+
 void onGetKeys(IdList* lists, int device, int bindset, const char* action, bool localized) {
     g_getKeys(lists, device, bindset, action, localized);
     const auto returnAddress = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    const auto caller = std::ranges::find(g_callerReturns, returnAddress);
-    if (caller == g_callerReturns.end() || device != 0 || lists == nullptr || action == nullptr ||
-        !mp_guard::allowsGameTouch()) {
-        return;
-    }
-    const std::size_t callerIndex = static_cast<std::size_t>(caller - g_callerReturns.begin());
-    const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
-    const std::optional<int> button = buttonForBind(action);
-    const std::optional<game::GameAction> mapped = actionForButton(button);
-    const bool text = localized && callerIndex == kTextCaller;
-    const input::BindAnswer named =
-        labels ? input::bindAnswer(mapped, button, text, *labels) : input::BindAnswer{};
-    if (g_logged[callerIndex].fetch_add(1, std::memory_order_relaxed) < kLogPerCaller) {
-        EVR_LOG("%s: %s asks for %s (bindset %d): %s", kTag, kCallers[callerIndex].name, action, bindset,
-                named.text != nullptr
-                    ? named.text->c_str()
-                    : (mapped ? "no button for it" : "not one of our actions; the game's keys"));
-    }
-    const auto slot = static_cast<std::size_t>(named.slot);
-    if (named.text == nullptr || (!text && (named.slot < 0 || slot >= g_virtualKeys.size()))) {
-        return;
-    }
-    if (keepOneEntry(lists)) {
-        g_strAssign(lists[0].data, text ? named.text->c_str() : g_virtualKeys[slot].second.c_str());
-    }
+    g_getKeysGuard.run([&] {
+        const auto caller = std::ranges::find(g_callerReturns, returnAddress);
+        if (caller == g_callerReturns.end() || device != 0 || lists == nullptr || action == nullptr ||
+            !mp_guard::allowsGameTouch()) {
+            return;
+        }
+        const std::size_t callerIndex = static_cast<std::size_t>(caller - g_callerReturns.begin());
+        const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
+        const std::optional<int> button = buttonForBind(action);
+        const std::optional<game::GameAction> mapped = actionForButton(button);
+        const bool text = localized && callerIndex == kTextCaller;
+        const input::BindAnswer named =
+            labels ? input::bindAnswer(mapped, button, text, *labels) : input::BindAnswer{};
+        if (g_logged[callerIndex].fetch_add(1, std::memory_order_relaxed) < kLogPerCaller) {
+            EVR_LOG("%s: %s asks for %s (bindset %d): %s", kTag, kCallers[callerIndex].name, action, bindset,
+                    named.text != nullptr
+                        ? named.text->c_str()
+                        : (mapped ? "no button for it" : "not one of our actions; the game's keys"));
+        }
+        const auto slot = static_cast<std::size_t>(named.slot);
+        if (named.text == nullptr || (!text && (named.slot < 0 || slot >= g_virtualKeys.size()))) {
+            return;
+        }
+        if (keepOneEntry(lists)) {
+            g_strAssign(lists[0].data, text ? named.text->c_str() : g_virtualKeys[slot].second.c_str());
+        }
+    });
 }
 
 void onKeyText(int keyNum, void* out) {
-    const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
-    if (labels && out != nullptr && mp_guard::allowsGameTouch()) {
+    const auto at = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    bool answered = false; // set once `out` has our text
+    g_keyTextGuard.run([&] {
+        const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
+        if (!labels || out == nullptr || !mp_guard::allowsGameTouch()) {
+            return;
+        }
         for (std::size_t slot = 0; slot < g_virtualKeys.size() && slot < labels->distinct.size(); ++slot) {
             if (g_virtualKeys[slot].first == keyNum) {
-                const auto at = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
                 g_strAssign(out, hudKeyAnswer(slot, at, g_hudKeyCallers, *labels, kTag).c_str());
+                answered = true;
                 return;
             }
         }
@@ -251,30 +265,37 @@ void onKeyText(int keyNum, void* out) {
                             input::kLayerKeyNames[index].data(), text.c_str());
                 }
                 g_strAssign(out, text.c_str());
+                answered = true;
                 return;
             }
         }
+    });
+    if (!answered) {
+        g_keyText(keyNum, out);
     }
-    g_keyText(keyNum, out);
 }
 
 // The set stays alive (g_retiredLabels) after it is replaced, so the text handed out outlives the call.
 const char* onKeyNameText(int keyNum) {
     const auto returnAddress = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    const input::KeyNameAnswer answer = mp_guard::allowsGameTouch()
-                                            ? input::keyNameAnswer(returnAddress, g_keyNameCallers)
-                                            : input::KeyNameAnswer::Game;
-    if (answer != input::KeyNameAnswer::Game) {
+    const char* ours = nullptr;
+    g_keyNameTextGuard.run([&] {
+        const input::KeyNameAnswer answer = mp_guard::allowsGameTouch()
+                                                ? input::keyNameAnswer(returnAddress, g_keyNameCallers)
+                                                : input::KeyNameAnswer::Game;
+        if (answer == input::KeyNameAnswer::Game) {
+            return;
+        }
         const auto key = std::ranges::find(g_keyNames, keyNum, &std::pair<int, std::string_view>::first);
         const std::shared_ptr<const input::PromptLabelSet> labels = g_labels.load(std::memory_order_acquire);
         const std::string* text =
             key != g_keyNames.end() && labels ? input::keyNameLabel(answer, key->second, *labels) : nullptr;
         if (text != nullptr && !text->empty()) {
             logKeyName(answer, key->second, *text);
-            return text->c_str();
+            ours = text->c_str();
         }
-    }
-    return g_keyNameText(keyNum);
+    });
+    return ours != nullptr ? ours : g_keyNameText(keyNum);
 }
 
 // The return address of the single `call target` within kCallerSpan bytes of `function`, or 0.

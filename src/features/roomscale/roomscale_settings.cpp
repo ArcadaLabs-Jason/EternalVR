@@ -80,9 +80,7 @@ public:
             return;
         }
         const auto n = parseFloat(*v);
-        if (n && off && *n == *off) {
-            out = *n;
-        } else if (n && *n >= min && *n <= max) {
+        if (n && ((off && *n == *off) || (*n >= min && *n <= max))) {
             out = *n;
         } else {
             report(name, "expected a number from " + std::to_string(min) + " to " + std::to_string(max) +

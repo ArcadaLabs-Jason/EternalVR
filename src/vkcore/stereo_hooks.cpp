@@ -1,6 +1,7 @@
 #include "vkcore/stereo_hooks.hpp"
 
 #include "vkcore/game_code.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/import_patch.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -485,8 +486,14 @@ StereoHookStatus installStereoHooks(StereoHookSink* sink, bool twoViews) {
             EVR_LOG("stereo: the game module has no readable .text; stereo hooks off");
             return;
         }
-        g_status.eyeView = installEyeHooks(text);
-        g_status.twoViews = g_status.eyeView && twoViews && installTwoViewHooks(text);
+        // Called from a thread of the layer's own (the early start, the XR worker): an exception must not
+        // leave it. An install without the memory it needs leaves the hooks off, as a failed one does, and
+        // the install is not tried again.
+        static HookGuard guard("the stereo hooks' install");
+        guard.run([&text] { g_status.eyeView = installEyeHooks(text); });
+        guard.run([&text, twoViews] {
+            g_status.twoViews = g_status.eyeView && twoViews && installTwoViewHooks(text);
+        });
         EVR_LOG("stereo: per-eye hooks %s, two views %s", g_status.eyeView ? "on" : "OFF",
                 g_status.twoViews ? "on" : (twoViews ? "OFF (hooks missing)" : "not asked for"));
     });
@@ -521,14 +528,18 @@ void startStereoHooksEarly() {
     HMODULE self = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                        reinterpret_cast<LPCWSTR>(&startStereoHooksEarly), &self);
-    std::thread([two] {
-        if (!mp_guard::allowsGameTouch()) {
-            EVR_LOG("stereo: the multiplayer guard is not armed; the two-view experiment stays off");
-            return;
-        }
-        const StereoHookStatus status = installStereoHooks(nullptr, two);
-        requestTwoViews(two && status.twoViews);
-    }).detach();
+    // From vkCreateDevice: without a thread (it would throw into the loader's call) the experiment stays off.
+    static HookGuard start("the stereo hooks' early thread");
+    start.run([two] {
+        std::thread([two] {
+            if (!mp_guard::allowsGameTouch()) {
+                EVR_LOG("stereo: the multiplayer guard is not armed; the two-view experiment stays off");
+                return;
+            }
+            const StereoHookStatus status = installStereoHooks(nullptr, two);
+            requestTwoViews(two && status.twoViews);
+        }).detach();
+    });
 }
 
 void setStereoHookSink(StereoHookSink* sink) {

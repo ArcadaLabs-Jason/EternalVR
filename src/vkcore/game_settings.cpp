@@ -2,6 +2,7 @@
 
 #include "vkcore/game_settings_line.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/runtime_cvars.hpp"
@@ -118,10 +119,19 @@ void poll() {
     if (const Locate state = g_locate.load(std::memory_order_acquire); state != Locate::Done) {
         if (state == Locate::NotStarted) {
             g_locate.store(Locate::Running, std::memory_order_relaxed);
-            std::thread([] {
-                locate();
-                g_locate.store(Locate::Done, std::memory_order_release);
-            }).detach();
+            // An exception must not leave the thread or this present hook (it would end the game). A scan
+            // without the memory it needs finds nothing (every cvar is left out of the line); without a
+            // thread the scan stays Running and no line is logged.
+            static HookGuard scan("the game settings scan");
+            static HookGuard start("the game settings scan's thread");
+            start.run([] {
+                std::thread([] {
+                    if (!scan.run(locate)) {
+                        g_objects.clear();
+                    }
+                    g_locate.store(Locate::Done, std::memory_order_release);
+                }).detach();
+            });
         }
         return;
     }

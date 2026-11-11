@@ -66,8 +66,9 @@ struct FollowRequest {
 
 // The controller: the request that closes the horizontal gap `gapRoom` (the head's position relative to
 // the body, room axes) given the body's speed toward the head `speedToward` (room metres per second).
-// Starts beyond the deadzone, stops within 40 % of it (`wasEngaged` carries the state).
-FollowRequest followRequest(Vec3 gapRoom, float speedToward, bool wasEngaged, const BodyFollowSettings& s);
+// Starts beyond the deadzone, stops within 40 % of it (`wasEngaged` carries the state). `raw` is the
+// settings as read; they are sanitized first.
+FollowRequest followRequest(Vec3 gapRoom, float speedToward, bool wasEngaged, const BodyFollowSettings& raw);
 
 // A world displacement (id Tech axes, game units) in room axes (metres), through the body frame the head
 // offset is composed with (headOffsetInWorld): `bodyForward` and `bodyLeft` are its id Tech rows.

@@ -1,9 +1,9 @@
 #pragma once
 
-// Parallel Eye Rendering: how view_clones.cpp's builds make view 1's clones (view_clone_make.cpp): an image
-// clone through the engine's ScratchImage with the engine image's options, a render target clone through the
-// engine's constructor and attach over the image clones, and the checks that tell a target from an image and
-// find a clone the engine freed. Build 25216728 (RVAs).
+// Parallel Eye Rendering: how the builds (view_clone_build.cpp) make view 1's clones (view_clone_make.cpp):
+// an image clone through the engine's ScratchImage with the engine image's options, a render target clone
+// through the engine's constructor and attach over the image clones, and the checks that tell a target from
+// an image and find a clone the engine freed. Build 25216728 (RVAs).
 //
 // An image clone keeps its name from build to build (clone_names.hpp), so a rebuild (a resize, ray tracing
 // turned on or off) does not leave the old set allocated beside the new one until the next map load.

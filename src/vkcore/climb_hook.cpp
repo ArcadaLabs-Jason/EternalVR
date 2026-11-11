@@ -232,6 +232,7 @@ bool installClimbHook() {
         return false;
     }
     std::vector<std::string_view> names;
+    names.reserve(input::kClimbLookCvars.size() + 1);
     for (const input::ClimbCvar& c : input::kClimbLookCvars) {
         names.push_back(c.name);
     }

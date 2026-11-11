@@ -1,5 +1,5 @@
 // Parallel Eye Rendering: the helpers view_clone_map.hpp declares for the clone files (the map's lookup,
-// view 1's command contexts, the hooks' install). The clones and their map are made in view_clones.cpp.
+// view 1's command contexts, the hooks' install). The clones and their map are made in view_clone_build.cpp.
 
 #include "vkcore/view_clone_map.hpp"
 

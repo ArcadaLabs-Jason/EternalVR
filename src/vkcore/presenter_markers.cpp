@@ -48,7 +48,7 @@ ui_layer::MarkerParallax markerParallax(const ui_layer::UiSettings& ui,
                                         std::uint32_t width,
                                         std::uint32_t height,
                                         float unitsPerMetre) {
-    // The content fillUiQuad (presenter_ui.cpp) spreads over the quad's width.
+    // The content fillUiQuad (presenter_ui_xr.cpp) spreads over the quad's width.
     const ui_layer::PixelRect content =
         ui.wideCrop ? ui_layer::wideContentRect(width, height) : ui_layer::PixelRect{0, 0, width, height};
     ui_layer::MarkerParallax out;

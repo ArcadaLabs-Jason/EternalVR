@@ -15,6 +15,7 @@
 
 #include "features/input/virtual_gamepad.hpp"
 #include "vkcore/gamepad_mode.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/import_patch.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -59,6 +60,11 @@ XINPUT_GAMEPAD toXInput(const input::PadState& p) {
     return g;
 }
 
+// The mapper allocates (its control map on a first build, its lists): on a failure the game gets XInput's own
+// answer for that read; out is written only once the merged pad is made.
+HookGuard g_getStateGuard("the XInputGetState replacement (virtual gamepad)");
+HookGuard g_watchGuard("the XInputGetState watch (gamepad mode)");
+
 DWORD WINAPI hookedGetState(DWORD user, XINPUT_STATE* out) {
     const GetStateFn original = g_original.load(std::memory_order_acquire);
     const DWORD result = original ? original(user, out) : static_cast<DWORD>(ERROR_DEVICE_NOT_CONNECTED);
@@ -72,40 +78,44 @@ DWORD WINAPI hookedGetState(DWORD user, XINPUT_STATE* out) {
     }
     // Pad 0 stays connected while the controllers are attached, even while their input is stale (the
     // headset taken off), so the game never sees the pad come and go.
-    const MappedInput mapped = runMapper();
-    InputSummaryCommit summary{true}; // the pad below carries what the mapper made
-    s.padReads.fetch_add(1, std::memory_order_relaxed);
-    const bool connected = result == ERROR_SUCCESS;
-    const input::PadState real = connected ? fromXInput(out->Gamepad) : input::PadState{};
-    input::Axis2 look;
-    if (game::contains(mapped.input.down, game::GameAction::WeaponWheel)) {
-        look = mapped.input.wheelPointer;
-    } else if (!s.angleHook) {
-        look.x = mapped.turnStick.x; // no turn hook: turn through the game's own stick look
-    }
-    const input::PadState ours =
-        mapped.live ? input::padStateFor(mapped.actions, mapped.input.move, look) : input::PadState{};
-    const input::PadState merged = input::mergePads(real, ours);
-    DWORD packets = 0;
-    {
-        // Our own counter, moved on whenever the merged state or the real pad's packet changes, so the
-        // number never goes back when a real pad comes or goes.
-        std::lock_guard lock(g_padMutex);
-        const DWORD realPacket = connected ? out->dwPacketNumber : 0;
-        if (!(merged == g_lastPad) || realPacket != g_lastRealPacket) {
-            g_lastPad = merged;
-            g_lastRealPacket = realPacket;
-            ++g_ourPackets;
+    bool answered = false;
+    g_getStateGuard.run([&] {
+        const MappedInput mapped = runMapper();
+        InputSummaryCommit summary{true}; // the pad below carries what the mapper made
+        s.padReads.fetch_add(1, std::memory_order_relaxed);
+        const bool connected = result == ERROR_SUCCESS;
+        const input::PadState real = connected ? fromXInput(out->Gamepad) : input::PadState{};
+        input::Axis2 look;
+        if (game::contains(mapped.input.down, game::GameAction::WeaponWheel)) {
+            look = mapped.input.wheelPointer;
+        } else if (!s.angleHook) {
+            look.x = mapped.turnStick.x; // no turn hook: turn through the game's own stick look
         }
-        packets = g_ourPackets;
-    }
-    out->dwPacketNumber = packets;
-    out->Gamepad = toXInput(merged);
-    if (!g_loggedFirst.exchange(true)) {
-        EVR_LOG("%s: the virtual gamepad answers the game's first read (a real pad is %s)", kTag,
-                connected ? "connected" : "not connected");
-    }
-    return ERROR_SUCCESS;
+        const input::PadState ours =
+            mapped.live ? input::padStateFor(mapped.actions, mapped.input.move, look) : input::PadState{};
+        const input::PadState merged = input::mergePads(real, ours);
+        DWORD packets = 0;
+        {
+            // Our own counter, moved on whenever the merged state or the real pad's packet changes, so the
+            // number never goes back when a real pad comes or goes.
+            std::lock_guard lock(g_padMutex);
+            const DWORD realPacket = connected ? out->dwPacketNumber : 0;
+            if (!(merged == g_lastPad) || realPacket != g_lastRealPacket) {
+                g_lastPad = merged;
+                g_lastRealPacket = realPacket;
+                ++g_ourPackets;
+            }
+            packets = g_ourPackets;
+        }
+        out->dwPacketNumber = packets;
+        out->Gamepad = toXInput(merged);
+        answered = true;
+        if (!g_loggedFirst.exchange(true)) {
+            EVR_LOG("%s: the virtual gamepad answers the game's first read (a real pad is %s)", kTag,
+                    connected ? "connected" : "not connected");
+        }
+    });
+    return answered ? static_cast<DWORD>(ERROR_SUCCESS) : result;
 }
 
 // Gamepad mode's watch: the game's call goes to XInput, and XInput's answer back to the game as it is.
@@ -113,8 +123,10 @@ DWORD WINAPI watchedGetState(DWORD user, XINPUT_STATE* out) {
     const GetStateFn original = g_original.load(std::memory_order_acquire);
     const DWORD result = original ? original(user, out) : static_cast<DWORD>(ERROR_DEVICE_NOT_CONNECTED);
     if (out) {
-        notePadRead(static_cast<unsigned>(user),
-                    result == ERROR_SUCCESS ? std::optional(fromXInput(out->Gamepad)) : std::nullopt);
+        g_watchGuard.run([&] {
+            notePadRead(static_cast<unsigned>(user),
+                        result == ERROR_SUCCESS ? std::optional(fromXInput(out->Gamepad)) : std::nullopt);
+        });
     }
     return result;
 }

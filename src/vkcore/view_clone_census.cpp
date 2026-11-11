@@ -100,6 +100,7 @@ std::vector<clone_census::Entry> entriesOf(const std::vector<Clone>& clones,
 
 std::vector<std::pair<std::uintptr_t, std::uint32_t>> indexOf(const std::vector<Clone>& records) {
     std::vector<std::pair<std::uintptr_t, std::uint32_t>> index;
+    index.reserve(records.size());
     for (std::size_t i = 0; i < records.size(); ++i) {
         index.emplace_back(records[i].image, static_cast<std::uint32_t>(i));
     }

@@ -3,6 +3,7 @@
 #include "vkcore/keep_active.hpp"
 
 #include "vkcore/cursor_guard.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
@@ -109,6 +110,10 @@ bool subclass(HWND hwnd) {
     return true;
 }
 
+// Giving the mouse back and taking it again read the raw input registrations into a list: without the memory
+// the cursor stays as it is for that message.
+HookGuard g_cursorGuard("the game window's procedure (keep active)");
+
 LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     const Subclass* record = findSubclass(hwnd);
     const WNDPROC original = record ? record->original.load(std::memory_order_acquire) : nullptr;
@@ -132,7 +137,7 @@ LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
             // The game never lets go of the mouse it took in front (it never sees this), so the layer
             // gives it back here, on the window's own thread (the mouse capture is the thread's).
             if (leavesForeground(message, wParam, lParam)) {
-                releaseGameCursor();
+                g_cursorGuard.run([] { releaseGameCursor(); });
             }
             return 0;
         }
@@ -144,7 +149,8 @@ LRESULT CALLBACK keepActiveWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                            message == WM_SETFOCUS ||
                            (message == WM_SIZE && (wParam == SIZE_RESTORED || wParam == SIZE_MAXIMIZED));
     if (kept && activated) {
-        restoreGameCursor(); // in front again: what was given back returns, unless the game took it itself
+        // In front again: what was given back returns, unless the game took it itself.
+        g_cursorGuard.run([] { restoreGameCursor(); });
     }
     return result;
 }

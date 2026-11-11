@@ -6,7 +6,9 @@
 #include "gpu_timing/stats.hpp"
 #include "gpu_timing/submit_census.hpp"
 #include "vkcore/gpu_timing.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/ui_vulkan.hpp"
 
@@ -17,6 +19,7 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <condition_variable>
 #include <cstring>
 #include <memory>
@@ -121,6 +124,18 @@ std::int64_t g_calibrationTicks = 0;
 std::uint64_t g_calibrationTsc = 0;
 double g_probeUs = 0.0;
 
+// The hooks and the frontend's tick run inside the game's calls, the reporter on its own thread: an exception
+// leaves none of them (hook_guard.hpp). What fails is skipped: a submit not counted, a tick or a summary
+// lost.
+HookGuard g_setUpGuard("CPU timing's set-up");
+HookGuard g_deviceGuard("CPU timing's device record");
+HookGuard g_submitGuard("vkQueueSubmit (CPU timing's submit census)");
+HookGuard g_tickGuard("CPU timing's frontend tick");
+HookGuard g_reportGuard("CPU timing's 10 s summary");
+// A device's record could not be made: it would reach the hooks without its next functions, so none is handed
+// out from then on.
+std::atomic<bool> g_failed{false};
+
 std::int64_t nowTicks() {
     LARGE_INTEGER t;
     QueryPerformanceCounter(&t);
@@ -189,7 +204,7 @@ std::string narrow(const wchar_t* text) {
 std::vector<gt::ThreadCycles> snapshotThreads() {
     using DescribeFn = HRESULT(WINAPI*)(HANDLE, PWSTR*);
     static const auto describe = reinterpret_cast<DescribeFn>(
-        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetThreadDescription")));
+        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetThreadDescription"));
     std::vector<gt::ThreadCycles> threads;
     const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (snap == INVALID_HANDLE_VALUE) {
@@ -251,7 +266,7 @@ void logWindow(Reporter& rep, const Window& w, std::uint64_t dropped) {
     double total = 0.0;
     const std::vector<gt::ThreadShare> top =
         gt::rankThreads(rep.threads, threads, cyclesPerMs(), threadMs,
-                        static_cast<std::uint64_t>(ticks + 0.5), kTopThreads, total);
+                        static_cast<std::uint64_t>(std::llround(ticks)), kTopThreads, total);
     EVR_LOG("cpu: last %.1f s: %llu tick(s), %llu with both frame-end jobs on one thread; tick period %s; "
             "timer overhead about %.3f ms per tick; the last summary took %.2f ms on its own thread%s",
             w.ms / 1000.0, static_cast<unsigned long long>(r.ticks),
@@ -289,12 +304,12 @@ void logWindow(Reporter& rep, const Window& w, std::uint64_t dropped) {
 
 void reporterMain() {
     using SetDescriptionFn = HRESULT(WINAPI*)(HANDLE, PCWSTR);
-    if (const auto set = reinterpret_cast<SetDescriptionFn>(reinterpret_cast<void*>(
-            GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription")))) {
+    if (const auto set = reinterpret_cast<SetDescriptionFn>(
+            GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription"))) {
         set(GetCurrentThread(), L"EternalVR CPU timing");
     }
     Reporter& rep = g_reporter;
-    rep.threads = snapshotThreads();
+    g_reportGuard.run([&] { rep.threads = snapshotThreads(); });
     rep.threadsAt = nowTicks();
     for (;;) {
         std::unique_ptr<Window> w;
@@ -305,7 +320,7 @@ void reporterMain() {
             w = std::move(rep.pending);
             dropped = std::exchange(rep.dropped, 0);
         }
-        logWindow(rep, *w, dropped);
+        g_reportGuard.run([&] { logWindow(rep, *w, dropped); });
     }
 }
 
@@ -333,10 +348,22 @@ void handOff(Frontend& f, std::int64_t now) {
 
 // ---- Vulkan call hooks ----
 
-Next nextOf(DispatchKey key) {
-    std::shared_lock lock(g_devicesMutex);
-    const auto it = g_devices.find(key);
-    return it == g_devices.end() ? Next{} : it->second;
+// The device's record; for a device without one (no memory for it), the next layer's functions, untimed.
+template <typename Handle>
+Next nextOf(Handle handle) {
+    {
+        std::shared_lock lock(g_devicesMutex);
+        const auto it = g_devices.find(keyOf(handle));
+        if (it != g_devices.end()) {
+            return it->second;
+        }
+    }
+    Next next;
+    next.queueSubmit = nextFunction<PFN_vkQueueSubmit>(handle, "vkQueueSubmit");
+    next.waitForFences = nextFunction<PFN_vkWaitForFences>(handle, "vkWaitForFences");
+    next.waitSemaphores = nextFunction<PFN_vkWaitSemaphores>(handle, "vkWaitSemaphores");
+    next.waitSemaphoresKhr = nextFunction<PFN_vkWaitSemaphores>(handle, "vkWaitSemaphoresKHR");
+    return next;
 }
 
 void recordSubmit(VkQueue queue, std::uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
@@ -359,11 +386,12 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            std::uint32_t submitCount,
                                            const VkSubmitInfo* pSubmits,
                                            VkFence fence) {
-    const Next next = nextOf(keyOf(queue));
+    const Next next = nextOf(queue);
     if (!next.game) {
-        return next.queueSubmit(queue, submitCount, pSubmits, fence);
+        return next.queueSubmit ? next.queueSubmit(queue, submitCount, pSubmits, fence)
+                                : VK_ERROR_OUT_OF_HOST_MEMORY;
     }
-    recordSubmit(queue, submitCount, pSubmits, fence);
+    g_submitGuard.run([&] { recordSubmit(queue, submitCount, pSubmits, fence); });
     Scope scope(CpuStage::Submit);
     return next.queueSubmit(queue, submitCount, pSubmits, fence);
 }
@@ -373,7 +401,10 @@ VKAPI_ATTR VkResult VKAPI_CALL WaitForFences(VkDevice device,
                                              const VkFence* pFences,
                                              VkBool32 waitAll,
                                              std::uint64_t timeout) {
-    const Next next = nextOf(keyOf(device));
+    const Next next = nextOf(device);
+    if (!next.waitForFences) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!next.game || timeout == 0) {
         return next.waitForFences(device, fenceCount, pFences, waitAll, timeout);
     }
@@ -384,7 +415,10 @@ VKAPI_ATTR VkResult VKAPI_CALL WaitForFences(VkDevice device,
 VKAPI_ATTR VkResult VKAPI_CALL WaitSemaphores(VkDevice device,
                                               const VkSemaphoreWaitInfo* pWaitInfo,
                                               std::uint64_t timeout) {
-    const Next next = nextOf(keyOf(device));
+    const Next next = nextOf(device);
+    if (!next.waitSemaphores) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!next.game || timeout == 0) {
         return next.waitSemaphores(device, pWaitInfo, timeout);
     }
@@ -395,7 +429,10 @@ VKAPI_ATTR VkResult VKAPI_CALL WaitSemaphores(VkDevice device,
 VKAPI_ATTR VkResult VKAPI_CALL WaitSemaphoresKHR(VkDevice device,
                                                  const VkSemaphoreWaitInfo* pWaitInfo,
                                                  std::uint64_t timeout) {
-    const Next next = nextOf(keyOf(device));
+    const Next next = nextOf(device);
+    if (!next.waitSemaphoresKhr) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!next.game || timeout == 0) {
         return next.waitSemaphoresKhr(device, pWaitInfo, timeout);
     }
@@ -421,7 +458,8 @@ PFN_vkVoidFunction chained(DeviceData& data, const char* name) {
 
 bool enabled() {
     static const bool on = [] {
-        const bool value = readEnabled();
+        bool value = false; // off when the variable cannot be read (no memory for its value)
+        g_setUpGuard.run([&] { value = readEnabled(); });
         if (value) {
             start();
         }
@@ -431,21 +469,27 @@ bool enabled() {
 }
 
 void onDeviceCreated(DeviceData& data, bool isGame) {
-    if (!enabled()) {
+    if (!enabled() || g_failed.load()) {
         return;
     }
-    Next next;
-    next.game = isGame;
-    next.queueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(chained(data, "vkQueueSubmit"));
-    next.waitForFences = reinterpret_cast<PFN_vkWaitForFences>(chained(data, "vkWaitForFences"));
-    next.waitSemaphores = reinterpret_cast<PFN_vkWaitSemaphores>(chained(data, "vkWaitSemaphores"));
-    next.waitSemaphoresKhr = reinterpret_cast<PFN_vkWaitSemaphores>(chained(data, "vkWaitSemaphoresKHR"));
-    if (isGame) {
-        EVR_LOG("cpu: timing vkQueueSubmit, vkWaitForFences and vkWaitSemaphores%s on the game's device",
-                next.waitSemaphoresKhr ? " (and the KHR alias)" : "");
+    const bool recorded = g_deviceGuard.run([&] {
+        Next next;
+        next.game = isGame;
+        next.queueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(chained(data, "vkQueueSubmit"));
+        next.waitForFences = reinterpret_cast<PFN_vkWaitForFences>(chained(data, "vkWaitForFences"));
+        next.waitSemaphores = reinterpret_cast<PFN_vkWaitSemaphores>(chained(data, "vkWaitSemaphores"));
+        next.waitSemaphoresKhr = reinterpret_cast<PFN_vkWaitSemaphores>(chained(data, "vkWaitSemaphoresKHR"));
+        if (isGame) {
+            EVR_LOG("cpu: timing vkQueueSubmit, vkWaitForFences and vkWaitSemaphores%s on the game's device",
+                    next.waitSemaphoresKhr ? " (and the KHR alias)" : "");
+        }
+        std::unique_lock lock(g_devicesMutex);
+        g_devices[keyOf(data.device)] = next;
+    });
+    if (!recorded) {
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG("cpu: CPU timing's hooks are off from here (a device could not be recorded)");
     }
-    std::unique_lock lock(g_devicesMutex);
-    g_devices[keyOf(data.device)] = next;
 }
 
 void onDeviceDestroyed(VkDevice device) {
@@ -457,12 +501,12 @@ void onDeviceDestroyed(VkDevice device) {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
-    if (!enabled()) {
+    if (!enabled() || g_failed.load(std::memory_order_acquire)) {
         return nullptr;
     }
 #define EVR_HOOK(fn)                                                                                         \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_HOOK(QueueSubmit)
     EVR_HOOK(WaitForFences)
@@ -472,10 +516,11 @@ PFN_vkVoidFunction findHook(const char* name) {
     return nullptr;
 }
 
-void onFrontendTick() {
-    if (!enabled()) {
-        return;
-    }
+namespace {
+
+// onFrontendTick's work, under its guard: the window's lists grow, the reporter's thread starts on the first
+// tick.
+void frontendTick() {
     Frontend& f = g_frontend;
     const std::int64_t now = nowTicks();
     const std::uint64_t cycles = threadCycles();
@@ -522,6 +567,15 @@ void onFrontendTick() {
     if (ticksToMs(now - f.windowStart) >= kReportSeconds * 1000.0) {
         handOff(f, now);
     }
+}
+
+} // namespace
+
+void onFrontendTick() {
+    if (!enabled()) {
+        return;
+    }
+    g_tickGuard.run([] { frontendTick(); });
 }
 
 Scope::Scope(CpuStage stage) : stage_(stage), on_(enabled()) {

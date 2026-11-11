@@ -5,9 +5,12 @@
 
 #include "gpu_timing/stats.hpp"
 #include "vkcore/gpu_timing_impl.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/ui_vulkan.hpp"
 
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -38,6 +41,16 @@ struct ClosedFrame {
 };
 thread_local ClosedFrame t_closed;
 
+// The submit hook and the present's frame close run inside the game's calls: an exception leaves neither
+// (hook_guard.hpp). A submit that cannot be planned goes untimed, a frame that cannot be closed or read is
+// lost, and a device whose record cannot be made turns GPU timing off (its hook would find no record).
+HookGuard g_modeGuard("GPU timing's mode");
+HookGuard g_deviceGuard("GPU timing's device record");
+HookGuard g_submitGuard("vkQueueSubmit (GPU timing)");
+HookGuard g_presentGuard("GPU timing's frame close at the present");
+HookGuard g_poseGuard("GPU timing's pose age");
+std::atomic<bool> g_failed{false};
+
 TimingDevice* deviceOf(DispatchKey key) {
     std::shared_lock lock(g_devicesMutex);
     const auto it = g_devices.find(key);
@@ -46,9 +59,13 @@ TimingDevice* deviceOf(DispatchKey key) {
 
 gt::TimingMode mode() {
     static const gt::TimingMode m = [] {
-        std::wstring value;
-        const bool set = readEnv(L"ETERNALVR_GPU_TIMING", value);
-        return gt::parseMode(set, value);
+        gt::TimingMode read = gt::TimingMode::Off; // off when the variable cannot be read
+        g_modeGuard.run([&] {
+            std::wstring value;
+            const bool set = readEnv(L"ETERNALVR_GPU_TIMING", value);
+            read = gt::parseMode(set, value);
+        });
+        return read;
     }();
     return m;
 }
@@ -165,15 +182,23 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            const VkSubmitInfo* pSubmits,
                                            VkFence fence) {
     TimingDevice* d = deviceOf(keyOf(queue));
+    if (!d) { // no record (no memory for it): the next layer's submit, untimed
+        const auto next = nextFunction<PFN_vkQueueSubmit>(queue, "vkQueueSubmit");
+        return next ? next(queue, submitCount, pSubmits, fence) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!d->active || submitCount == 0 || !d->sampling.load(std::memory_order_relaxed)) {
         return d->fn.queueSubmit(queue, submitCount, pSubmits, fence);
     }
     std::vector<std::uint32_t> planned; // the pairs of the timed batches
-    std::vector<VkSubmitInfo> infos(pSubmits, pSubmits + submitCount);
+    std::vector<VkSubmitInfo> infos;
     std::vector<VkCommandBuffer> buffers;
     std::uint32_t family = 0;
     bool resetsPool = false;
-    {
+    // Everything the plan allocates comes before its first pair is taken (`planned` and `buffers` reserved),
+    // so a plan that throws has taken none: the game's batches then go as they are, untimed.
+    const bool ready = g_submitGuard.run([&] {
+        planned.reserve(submitCount);
+        infos.assign(pSubmits, pSubmits + submitCount);
         std::lock_guard lock(d->mutex);
         const std::optional<std::uint32_t> f = familyOf(*d, queue);
         FamilyTimer* t = f && *f < d->validBits.size() && d->validBits[*f] ? timerFor(*d, *f) : nullptr;
@@ -223,18 +248,23 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
             infos[i].pCommandBuffers = buffers.data() + first;
             planned.push_back(*pair);
         }
-    }
-    if (planned.empty()) {
+    });
+    if (!ready || planned.empty()) {
         return d->fn.queueSubmit(queue, submitCount, pSubmits, fence);
     }
     const VkResult result = d->fn.queueSubmit(queue, submitCount, infos.data(), fence);
     std::lock_guard lock(d->mutex);
-    for (const std::uint32_t pair : planned) {
-        if (result == VK_SUCCESS) {
-            d->open.batches.push_back({pair, family});
-        } else {
-            d->ring.release(pair);
-        }
+    std::size_t recorded = 0;
+    if (result == VK_SUCCESS) {
+        // Submitted once only: a batch whose record finds no memory gives its pair back below.
+        g_submitGuard.run([&] {
+            for (; recorded < planned.size(); ++recorded) {
+                d->open.batches.push_back({planned[recorded], family});
+            }
+        });
+    }
+    for (std::size_t i = recorded; i < planned.size(); ++i) {
+        d->ring.release(planned[i]);
     }
     if (result != VK_SUCCESS && resetsPool) {
         d->poolReset = false;
@@ -261,13 +291,13 @@ bool enabled() {
     return mode() != gt::TimingMode::Off;
 }
 
-void onDeviceCreated(DeviceData& data,
-                     const VkPhysicalDeviceProperties& properties,
-                     const std::vector<VkQueueFamilyProperties>& families,
-                     bool isGame) {
-    if (!enabled()) {
-        return;
-    }
+namespace {
+
+// onDeviceCreated's work, under its guard.
+void addDevice(DeviceData& data,
+               const VkPhysicalDeviceProperties& properties,
+               const std::vector<VkQueueFamilyProperties>& families,
+               bool isGame) {
     auto d = std::make_unique<TimingDevice>();
     d->device = data.device;
     d->data = &data;
@@ -335,6 +365,22 @@ void onDeviceCreated(DeviceData& data,
     g_devices[keyOf(data.device)] = std::move(d);
 }
 
+} // namespace
+
+void onDeviceCreated(DeviceData& data,
+                     const VkPhysicalDeviceProperties& properties,
+                     const std::vector<VkQueueFamilyProperties>& families,
+                     bool isGame) {
+    if (!enabled() || g_failed.load()) {
+        return;
+    }
+    const bool recorded = g_deviceGuard.run([&] { addDevice(data, properties, families, isGame); });
+    if (!recorded) {
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG("gpu: GPU timing's hook is off from here (a device could not be recorded)");
+    }
+}
+
 void onDeviceDestroyed(VkDevice device) {
     if (!enabled()) {
         return;
@@ -357,7 +403,7 @@ void onDeviceDestroyed(VkDevice device) {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
-    if (!enabled() || std::strcmp(name, "vkQueueSubmit") != 0) {
+    if (!enabled() || g_failed.load(std::memory_order_acquire) || std::strcmp(name, "vkQueueSubmit") != 0) {
         return nullptr;
     }
     return reinterpret_cast<PFN_vkVoidFunction>(&QueueSubmit);
@@ -373,19 +419,21 @@ void onPresent(VkQueue queue) {
     }
     const Clock::time_point now = Clock::now();
     std::lock_guard lock(d->mutex);
-    Frame frame = std::move(d->open);
-    d->open = Frame{};
-    frame.id = ++d->presents;
-    if (frame.id > 1) {
-        frame.cpuMs = std::chrono::duration<double, std::milli>(now - d->lastPresent).count();
-    }
-    d->lastPresent = now;
-    d->closed.push_back(std::move(frame));
-    d->open.timed = d->everyFrame || gt::sampledFrame(d->presents + 1);
-    d->sampling.store(d->open.timed, std::memory_order_relaxed);
-    t_closed = ClosedFrame{keyOf(queue), d->presents};
-    resolveFrames(*d);
-    reportIfDue(*d, now);
+    g_presentGuard.run([&] { // the closed list grows, the reads and the summary allocate
+        Frame frame = std::move(d->open);
+        d->open = Frame{};
+        frame.id = ++d->presents;
+        if (frame.id > 1) {
+            frame.cpuMs = std::chrono::duration<double, std::milli>(now - d->lastPresent).count();
+        }
+        d->lastPresent = now;
+        d->closed.push_back(std::move(frame));
+        d->open.timed = d->everyFrame || gt::sampledFrame(d->presents + 1);
+        d->sampling.store(d->open.timed, std::memory_order_relaxed);
+        t_closed = ClosedFrame{keyOf(queue), d->presents};
+        resolveFrames(*d);
+        reportIfDue(*d, now);
+    });
 }
 
 void tagEye(stereo_seq::Eye eye) {
@@ -414,7 +462,8 @@ void notePoseAge(double ms) {
         if (d->active) {
             std::lock_guard lock(d->mutex);
             if (d->poseAges.size() < 100000) {
-                d->poseAges.push_back(ms);
+                std::vector<double>& ages = d->poseAges;
+                g_poseGuard.run([&] { ages.push_back(ms); });
             }
         }
     }

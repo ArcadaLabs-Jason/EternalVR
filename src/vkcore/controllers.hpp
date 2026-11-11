@@ -64,7 +64,7 @@ struct XrContext {
 // extension is missing is skipped, and one the runtime refuses does not stop the others) and creates the
 // pose spaces. False (logged) when controllers are off or anything fails; the game then runs with the
 // keyboard, mouse and pad only.
-bool attach(const XrContext& xr);
+bool attach(const XrContext& context);
 
 // XR worker, before the session or the LOCAL space is destroyed. Waits for the camera hook's locates.
 void detach();

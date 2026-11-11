@@ -491,8 +491,8 @@ begun just before engine frame N is built):
 
 The table below is the original plan (shape 1, T-022). The code runs `xrWaitFrame`, `xrBeginFrame`,
 `xrLocateViews`, the D3D12 copy out of the ring and `xrEndFrame` on a dedicated XR worker thread
-(presenter_frame.cpp: runWorker and frame); the present hook only copies the game's images into a free
-ring slot and publishes it. The snapshot, render-side and record rows below still hold.
+(presenter_worker.cpp: runWorker; presenter_frame.cpp: frame); the present hook only copies the game's
+images into a free ring slot and publishes it. The snapshot, render-side and record rows below still hold.
 
 | Call | Call site | Thread |
 |---|---|---|
@@ -1241,6 +1241,13 @@ Standards (the clean-code rule; `CONTRIBUTING.md` has the working details):
   `game/eternal`. Features stay generic and take game data as plain values. A CI check enforces this
   from M4.5.
 - Names over comments; comments explain why.
+- No C++ exception leaves a function the game or the Vulkan loader calls into: a layer entry point, a detour of a
+  game function or an import, a hook callback, a window procedure, a thread the layer starts. Neither unwinds one,
+  so it ends the game. Where the layer's own work there can throw (memory for a list or a string, a thread), it
+  runs through `HookGuard` (`vkcore/hook_guard.hpp`) or `evr::finishes`, and the boundary goes on without it:
+  the next layer's or the game's own function still runs once with the game's arguments, the frame's extra work
+  is skipped, or the feature stays off. The mid hook thunk (`vkcore/mid_hook.cpp`) guards every mid hook
+  callback.
 - Every hook and resolver has a unit-testable policy part.
 
 Libraries:

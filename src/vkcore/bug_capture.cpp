@@ -108,7 +108,7 @@ std::wstring directory() {
         }
         return {};
     }
-    const std::wstring dir = log + L"\\captures";
+    std::wstring dir = log + L"\\captures"; // not const: returned by move
     if (!CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
         if (!g_loggedNoFolder.exchange(true)) {
             EVR_LOG("capture: cannot create the captures folder; captures are not saved");

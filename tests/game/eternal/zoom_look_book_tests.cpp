@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <map>
+#include <new>
 #include <string>
 
 using evr::game::kScopeGuiNone;
@@ -47,8 +48,12 @@ struct FakeIo final : ZoomDeclIo {
     int writesBeforeFailure = -1; // -1: never fails
     int partialsLeft = 1;         // failed writes that still land their first field
     int writes = 0;
+    const void* nameThrows = nullptr; // a decl whose name finds no memory
 
     std::string name(const void* decl) override {
+        if (decl == nameThrows) {
+            throw std::bad_alloc();
+        }
         const auto it = names.find(decl);
         return it == names.end() ? std::string() : it->second;
     }
@@ -154,6 +159,24 @@ TEST_CASE("zoom book: the restore writes back only decls that still have their n
         CHECK(book.restore(io).back == 0);
         CHECK(io.fields[kBolt] == other);
     }
+}
+
+TEST_CASE("zoom book: a decl whose name cannot be read is left as it is and the others still go back") {
+    FakeIo io = memory();
+    int otherDecl = 3;
+    const void* const kOther = &otherDecl;
+    io.names[kOther] = "weapon/player/heavy_cannon_bolt_action_copy";
+    io.fields[kOther] = bolt();
+    ZoomPatchBook book;
+    REQUIRE(patchNow(book, io, kBolt) == ZoomPatch::Written);
+    REQUIRE(patchNow(book, io, kOther) == ZoomPatch::Written);
+    io.nameThrows = kBolt; // the first on record
+    const ZoomPatchBook::Restored r = book.restore(io);
+    CHECK(r.total == 2);
+    CHECK(r.failed == 1);
+    CHECK(r.back == 1);
+    CHECK(io.fields[kOther] == bolt());
+    CHECK(io.fields[kBolt].scopeGuiNum == kScopeGuiNone); // still the layer's: it could not be checked
 }
 
 TEST_CASE("zoom book: after the restore nothing is written again") {

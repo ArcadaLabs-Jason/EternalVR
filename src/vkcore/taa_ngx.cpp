@@ -6,6 +6,7 @@
 #include "stereo_seq/ngx_twin_retry.hpp"
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/game_text.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -251,10 +252,13 @@ int evaluate(void* commandBuffer, const void* feature, const void* parameters, v
     return result;
 }
 
-int evaluateHook(void* commandBuffer, const void* handle, const void* parameters, void* callback) {
-    if (!g_active.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch()) {
-        return g_evaluate(commandBuffer, handle, parameters, callback);
-    }
+// The feature this evaluation runs (the game's or eye R's twin) and whether its history is reset.
+struct EvaluatePlan {
+    const void* feature = nullptr;
+    bool reset = false;
+};
+
+EvaluatePlan planEvaluate(void* commandBuffer, const void* handle, const void* parameters) {
     const std::optional<stereo_seq::RenderTag> tag = pickEye(parameters).tag;
     if (!tag || tag->eye != stereo_seq::Eye::Right) {
         ++g_counters.evaluates[0];
@@ -263,7 +267,7 @@ int evaluateHook(void* commandBuffer, const void* handle, const void* parameters
         if (reset) {
             ++g_counters.leftResets;
         }
-        return evaluate(commandBuffer, handle, parameters, callback, reset);
+        return {handle, reset};
     }
     std::uintptr_t twin = 0;
     bool reset = false;
@@ -285,13 +289,25 @@ int evaluateHook(void* commandBuffer, const void* handle, const void* parameters
     reset = takeReset(*tag) || reset;
     if (!twin) {
         ++g_counters.evaluatesNoTwin;
-        return g_evaluate(commandBuffer, handle, parameters, callback);
+        return {handle, false};
     }
     ++g_counters.evaluates[1];
     if (reset) {
         ++g_counters.twinResets;
     }
-    return evaluate(commandBuffer, reinterpret_cast<const void*>(twin), parameters, callback, reset);
+    return {reinterpret_cast<const void*>(twin), reset};
+}
+
+// The twin's bookkeeping and its log lines allocate: without them this evaluation is the game's own.
+HookGuard g_evaluateGuard("the NGX EvaluateFeature detour (per-eye DLSS)");
+
+int evaluateHook(void* commandBuffer, const void* handle, const void* parameters, void* callback) {
+    if (!g_active.load(std::memory_order_acquire) || !mp_guard::allowsGameTouch()) {
+        return g_evaluate(commandBuffer, handle, parameters, callback);
+    }
+    EvaluatePlan plan{handle, false};
+    g_evaluateGuard.run([&] { plan = planEvaluate(commandBuffer, handle, parameters); });
+    return evaluate(commandBuffer, plan.feature, parameters, callback, plan.reset);
 }
 
 int releaseHook(void* handle) {

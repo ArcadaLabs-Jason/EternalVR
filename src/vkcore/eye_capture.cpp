@@ -1,5 +1,6 @@
 #include "vkcore/eye_capture.hpp"
 
+#include "common/finishes.hpp"
 #include "stereo_seq/png_writer.hpp"
 #include "vkcore/bug_capture.hpp"
 #include "vkcore/log.hpp"
@@ -293,28 +294,37 @@ void EyeCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     }
     const VkDeviceSize size = VkDeviceSize{extent_.width} * extent_.height * 4;
     if (!coherent_) {
-        std::vector<VkMappedMemoryRange> ranges(memory_.size());
-        for (std::size_t i = 0; i < ranges.size(); ++i) {
-            ranges[i].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-            ranges[i].memory = memory_[i];
-            ranges[i].size = VK_WHOLE_SIZE;
+        // One buffer at a time: a list of ranges would allocate on the present hook.
+        for (const VkDeviceMemory memory : memory_) {
+            VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+            range.memory = memory;
+            range.size = VK_WHOLE_SIZE;
+            dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
         }
-        dev.vk.InvalidateMappedMemoryRanges(dev.device, static_cast<std::uint32_t>(ranges.size()),
-                                            ranges.data());
     }
     state_ = State::Idle;
+    // An exception must not leave the present hook (or the writer thread): it would end the game.
     if (once_) {
         OneShot shot = std::move(*once_);
         once_.reset();
-        writeOnce(std::move(shot));
+        try {
+            writeOnce(shot); // allocates the frame list, the guard and the writer's copy of the shot
+        } catch (const std::exception&) {
+            writerBusy_->store(false);
+            EVR_LOG("capture: no memory for capture %u; not saved", shot.number);
+        }
         return;
     }
-    // An exception must not leave the present hook (or the writer thread): it would end the game.
     std::shared_ptr<std::vector<std::uint8_t>> left;
     std::shared_ptr<std::vector<std::uint8_t>> right;
+    std::wstring base; // the pair's path without the eye's suffix
     try {
         left = std::make_shared<std::vector<std::uint8_t>>(static_cast<std::size_t>(size));
         right = std::make_shared<std::vector<std::uint8_t>>(static_cast<std::size_t>(size));
+        wchar_t stem[96];
+        swprintf_s(stem, L"\\eyes-%lu-p%06llu-t%llu", GetCurrentProcessId(),
+                   static_cast<unsigned long long>(pairIndex_), static_cast<unsigned long long>(tick_));
+        base = directory_ + stem;
     } catch (const std::exception&) {
         EVR_LOG("capture: no memory for eye pair %llu; skipped", static_cast<unsigned long long>(pairIndex_));
         return;
@@ -322,16 +332,13 @@ void EyeCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     std::memcpy(left->data(), mapped_[0], left->size());
     std::memcpy(right->data(), mapped_[1], right->size());
     writerBusy_->store(true);
-    wchar_t stem[96];
-    swprintf_s(stem, L"\\eyes-%lu-p%06llu-t%llu", GetCurrentProcessId(),
-               static_cast<unsigned long long>(pairIndex_), static_cast<unsigned long long>(tick_));
-    const std::wstring base = directory_ + stem;
     const auto layout = *stereo_seq::pixelLayoutOfVkFormat(static_cast<std::int32_t>(format_));
     const VkExtent2D extent = extent_;
     const bool logIt = ++written_ <= 10;
     const std::uint64_t pair = pairIndex_;
     // The DLL is pinned by the XR worker, so the thread's code outlives any unload of the layer.
-    const auto write = [busy = writerBusy_, left, right, base, layout, extent, logIt, pair] {
+    const auto write = [busy = writerBusy_, left, right, base = std::move(base), layout, extent, logIt,
+                        pair] {
         bool ok = true;
         stereo_seq::AlphaStats alpha;
         const std::pair<const std::vector<std::uint8_t>*, const wchar_t*> eyes[] = {{left.get(), L"-L.png"},
@@ -370,7 +377,7 @@ void EyeCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     }
 }
 
-void EyeCapture::writeOnce(OneShot shot) {
+void EyeCapture::writeOnce(const OneShot& shot) {
     LARGE_INTEGER frequency;
     QueryPerformanceFrequency(&frequency);
     const double seconds = 1.0 / static_cast<double>(frequency.QuadPart);
@@ -439,13 +446,15 @@ void EyeCapture::writeOnce(OneShot shot) {
         LARGE_INTEGER done;
         QueryPerformanceCounter(&done);
         const double afterMs = static_cast<double>(done.QuadPart - shot.requestQpc) * seconds * 1000.0;
+        std::string where; // without the memory for it, the line goes without the path (and busy is cleared)
+        finishes([&] { where = narrow(shot.base); });
         EVR_LOG("capture: %s %s%s to %s-*.png (+ .txt), capture %u: %u of %u frame(s), %.0f ms after the "
                 "trigger pull",
                 stopped ? "NOT all saved (stopped at shutdown)"
                 : ok    ? "saved"
                         : "NOT saved (write failed)",
-                images == 1 ? "mono frame (both eyes)" : "eye L/R", shot.ui ? " + UI" : "",
-                narrow(shot.base).c_str(), shot.number, saved, frames, afterMs);
+                images == 1 ? "mono frame (both eyes)" : "eye L/R", shot.ui ? " + UI" : "", where.c_str(),
+                shot.number, saved, frames, afterMs);
         busy->store(false);
     };
     try {

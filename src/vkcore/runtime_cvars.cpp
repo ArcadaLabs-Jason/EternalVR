@@ -306,6 +306,7 @@ void start(bool stereo) {
     // The trip gives back what the layer writes (cvar_book.hpp); registered now so a trip logs it either way.
     cvar_book::listen();
     std::vector<const std::byte*> names;
+    names.reserve(g_held.size());
     std::vector<int> found(g_held.size(), 0);
     for (const Held& h : g_held) {
         names.push_back(findUniqueString(image, h.name));

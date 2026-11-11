@@ -1,7 +1,9 @@
 #include "vkcore/ssr_fade_hooks.hpp"
 
 #include "vkcore/dump_format.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/shader_dump.hpp"
 #include "vkcore/ssr_fade_patch.hpp"
 
@@ -51,17 +53,13 @@ void breakCoherence(const char* what, std::uint64_t hash, const std::string& why
         kTag, what, static_cast<unsigned long long>(hash), why.empty() ? "" : ": ", why.c_str());
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device,
-                                                  const VkShaderModuleCreateInfo* pCreateInfo,
-                                                  const VkAllocationCallbacks* pAllocator,
-                                                  VkShaderModule* pModule) {
-    const Device d = deviceOf(device);
-    if (!d.next) {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-    if (!d.game || !pCreateInfo || !pCreateInfo->pCode || pCreateInfo->codeSize % 4 != 0) {
-        return d.next(device, pCreateInfo, pAllocator, pModule);
-    }
+// The game's module checked for the SSR fade and patched where it is a known one. Every throw (the module's
+// parse, the patched words, a line's text) comes before the one call that makes the module it returns.
+VkResult createChecked(const Device& d,
+                       VkDevice device,
+                       const VkShaderModuleCreateInfo* pCreateInfo,
+                       const VkAllocationCallbacks* pAllocator,
+                       VkShaderModule* pModule) {
     const std::span<const std::uint32_t> code(pCreateInfo->pCode, pCreateInfo->codeSize / 4);
     const std::uint64_t hash = dump::fnv1a64(code.data(), code.size_bytes());
     const std::optional<std::size_t> index = knownIndex(code);
@@ -98,15 +96,50 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device,
     return result;
 }
 
+HookGuard g_createGuard("vkCreateShaderModule (the SSR fade patch)");
+HookGuard g_deviceGuard("the SSR fade patch's device record");
+std::atomic<bool> g_failed{false}; // a device could not be recorded: the hook is not handed out from then on
+
+VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device,
+                                                  const VkShaderModuleCreateInfo* pCreateInfo,
+                                                  const VkAllocationCallbacks* pAllocator,
+                                                  VkShaderModule* pModule) {
+    const Device d = deviceOf(device);
+    if (!d.next) { // no record (no memory for it): the next layer's create, not patched
+        const auto next = nextFunction<PFN_vkCreateShaderModule>(device, "vkCreateShaderModule");
+        return next ? next(device, pCreateInfo, pAllocator, pModule) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    if (!d.game || !pCreateInfo || !pCreateInfo->pCode || pCreateInfo->codeSize % 4 != 0) {
+        return d.next(device, pCreateInfo, pAllocator, pModule);
+    }
+    // An exception must not reach the game (hook_guard.hpp): a module that cannot be checked or patched is
+    // made as the game gave it, and the reflections keep the game's fade for the rest of the session.
+    VkResult result = VK_SUCCESS;
+    if (g_createGuard.run([&] { result = createChecked(d, device, pCreateInfo, pAllocator, pModule); })) {
+        return result;
+    }
+    g_broken.store(true, std::memory_order_release);
+    return d.next(device, pCreateInfo, pAllocator, pModule);
+}
+
 } // namespace
 
 void onDeviceCreated(VkDevice device, PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr, bool isGame) {
+    if (g_failed.load()) {
+        return;
+    }
     const PFN_vkVoidFunction dump = shader_dump::findHook("vkCreateShaderModule");
     const auto next = reinterpret_cast<PFN_vkCreateShaderModule>(
         dump ? dump : nextGetDeviceProcAddr(device, "vkCreateShaderModule"));
-    {
-        std::lock_guard lock(g_mutex);
-        g_devices.push_back(Device{device, next, isGame});
+    // Without its record the device's shader modules would all fail (the hook finds no next function): the
+    // hook is handed out no more, and a device that gets none patches nothing (coherent() stays false).
+    if (!g_deviceGuard.run([&] {
+            std::lock_guard lock(g_mutex);
+            g_devices.push_back(Device{device, next, isGame});
+        })) {
+        g_failed.store(true, std::memory_order_release);
+        EVR_LOG("%s: the hook is off from here (a device could not be recorded)", kTag);
+        return;
     }
     if (isGame) {
         EVR_LOG("%s: watching the game's shader modules for the %zu known SSR modules", kTag, kKnownModules);
@@ -119,7 +152,7 @@ void onDeviceDestroyed(VkDevice device) {
 }
 
 PFN_vkVoidFunction findHook(const char* name) {
-    if (std::strcmp(name, "vkCreateShaderModule") != 0) {
+    if (g_failed.load(std::memory_order_acquire) || std::strcmp(name, "vkCreateShaderModule") != 0) {
         return nullptr;
     }
     return reinterpret_cast<PFN_vkVoidFunction>(&CreateShaderModule);

@@ -24,19 +24,19 @@ struct CenteredDepth {
     float b = 0.0f; // projection [2][3]
 };
 
-// The depth row of the projection behind a centred view-projection matrix; nullopt when row 3 has no
+// The depth row of the projection behind a centred view-projection matrix `m`; nullopt when row 3 has no
 // usable element (not a perspective product) or the rows disagree.
-std::optional<CenteredDepth> centeredDepthOf(const Matrix4& centeredViewProjection);
+std::optional<CenteredDepth> centeredDepthOf(const Matrix4& m);
 
-// Rewrites row 2 of a centred view-projection matrix for the depth row `depth`.
-void setCenteredDepth(Matrix4& centeredViewProjection, const CenteredDepth& depth);
+// Rewrites row 2 of a centred view-projection matrix `m` for the depth row `depth`.
+void setCenteredDepth(Matrix4& m, const CenteredDepth& depth);
 
 // The hands-and-guns matrices (customViewProjectionMatrix and its variants) are always built from the
 // symmetric weapon FOV. Under stereo each eye has to draw them with its own frustum, as
 // inhibitModelFovScale asks ("hands and weapons use the main projection"): rows 0 and 1 of the product
-// are replaced by the eye projection's rows 0 and 1 applied to the same view. The view rows are recovered
-// from the product itself (rows 0 and 1 of a symmetric projection scale one view row each; row 3 is
-// -view row 2). False, and nothing written, when `viewProjection` is not such a product.
-bool retargetViewProjection(Matrix4& viewProjection, const Matrix4& eyeProjection);
+// are replaced by the eye projection's (`eye`) rows 0 and 1 applied to the same view. The view rows are
+// recovered from the product itself (rows 0 and 1 of a symmetric projection scale one view row each;
+// row 3 is -view row 2). False, and nothing written, when `m` is not such a product.
+bool retargetViewProjection(Matrix4& m, const Matrix4& eye);
 
 } // namespace evr::stereo_seq

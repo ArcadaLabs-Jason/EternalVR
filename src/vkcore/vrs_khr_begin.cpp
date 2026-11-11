@@ -2,7 +2,9 @@
 // render passes, and the begins that take the eye's rate image.
 
 #include "features/foveation/eye_targets.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/next_function.hpp"
 #include "vkcore/ui_vulkan.hpp"
 #include "vkcore/vrs_gui.hpp"
 #include "vkcore/vrs_khr_impl.hpp"
@@ -20,6 +22,12 @@ namespace evr::vkcore::vrs_khr {
 namespace {
 
 using vrs_nv::Mode;
+
+// Inside the game's calls no exception may go (hook_guard.hpp). A promoted pass's framebuffer is valid only
+// with its rate image, so one whose image or record finds no memory fails as the driver's would without
+// memory; a begin whose eye rate image finds none takes the game's framebuffer (full rate).
+HookGuard g_framebufferGuard("vkCreateFramebuffer (foveated rendering, KHR)");
+HookGuard g_beginGuard("vkCmdBeginRenderPass (foveated rendering, KHR)");
 
 // The game's framebuffer with `rateView` for its rate image, made with the begin's own render pass (the one
 // the game made the framebuffer with may be gone; any pass it begins is compatible with it). `base` itself
@@ -166,6 +174,32 @@ VkFramebuffer framebufferFor(VrsDevice& d,
     return framebuffer;
 }
 
+// framebufferFor, or the game's framebuffer (its full-rate image cleared where needed) when that throws.
+VkFramebuffer framebufferOrGame(VrsDevice& d,
+                                VkCommandBuffer commandBuffer,
+                                const VkRenderPassBeginInfo& begin,
+                                bool secondary,
+                                bool v2) {
+    VkFramebuffer framebuffer = begin.framebuffer;
+    if (g_beginGuard.run([&] { framebuffer = framebufferFor(d, commandBuffer, begin, secondary, v2); })) {
+        return framebuffer;
+    }
+    KhrDevice& k = *d.khrState;
+    std::uint64_t neutralKey = 0;
+    bool promoted = false;
+    {
+        std::shared_lock lock(k.mutex);
+        if (const auto it = k.framebuffers.find(handleKey(begin.framebuffer)); it != k.framebuffers.end()) {
+            neutralKey = it->second.neutralKey;
+            promoted = true;
+        }
+    }
+    if (promoted) {
+        prepareNeutral(d, commandBuffer, neutralKey); // a second time in one command buffer does nothing
+    }
+    return begin.framebuffer;
+}
+
 } // namespace
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateFramebuffer(VkDevice device,
@@ -173,34 +207,50 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateFramebuffer(VkDevice device,
                                                  const VkAllocationCallbacks* pAllocator,
                                                  VkFramebuffer* pFramebuffer) {
     VrsDevice* d = vrs_nv::deviceOf(vrs_nv::keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        const auto next = nextFunction<PFN_vkCreateFramebuffer>(device, "vkCreateFramebuffer");
+        return next ? next(device, pCreateInfo, pAllocator, pFramebuffer) : VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (!d->khr || !isPromoted(*d->khrState, pCreateInfo->renderPass)) {
         return d->createFramebuffer(device, pCreateInfo, pAllocator, pFramebuffer);
     }
     // Not imageless: planDevice leaves the path off where the game enables imageless framebuffers.
     const VkExtent2D extent{pCreateInfo->width, pCreateInfo->height};
     const VkExtent2D texels = rateTexels(extent, d->texel);
-    const VkImageView neutral = neutralView(*d, texels);
+    VkImageView neutral = VK_NULL_HANDLE;
+    if (!g_framebufferGuard.run([&] { neutral = neutralView(*d, texels); })) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     if (neutral == VK_NULL_HANDLE) {
         // The pass has one more attachment than the game gives: without a rate image no framebuffer of it is
         // valid, so this create fails as the driver's would without memory.
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
-    std::vector<VkImageView> views(pCreateInfo->pAttachments,
-                                   pCreateInfo->pAttachments + pCreateInfo->attachmentCount);
-    views.push_back(neutral);
+    std::vector<VkImageView> views;
+    if (!g_framebufferGuard.run([&] {
+            views.assign(pCreateInfo->pAttachments, pCreateInfo->pAttachments + pCreateInfo->attachmentCount);
+            views.push_back(neutral);
+        })) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     VkFramebufferCreateInfo info = *pCreateInfo;
     info.attachmentCount = static_cast<std::uint32_t>(views.size());
     info.pAttachments = views.data();
     const VkResult result = d->createFramebuffer(device, &info, pAllocator, pFramebuffer);
-    if (result == VK_SUCCESS) {
-        views.pop_back();
-        KhrFramebuffer entry;
-        entry.extent = extent;
-        entry.layers = pCreateInfo->layers;
-        entry.attachments = std::move(views);
-        entry.neutralKey = vrs_nv::packed(texels);
-        std::unique_lock lock(d->khrState->mutex);
-        d->khrState->framebuffers[handleKey(*pFramebuffer)] = std::move(entry);
+    // Its begins clear the rate image only once it is recorded: one that cannot be is given back.
+    if (result == VK_SUCCESS && !g_framebufferGuard.run([&] {
+            views.pop_back();
+            KhrFramebuffer entry;
+            entry.extent = extent;
+            entry.layers = pCreateInfo->layers;
+            entry.attachments = std::move(views);
+            entry.neutralKey = vrs_nv::packed(texels);
+            std::unique_lock lock(d->khrState->mutex);
+            d->khrState->framebuffers[handleKey(*pFramebuffer)] = std::move(entry);
+        })) {
+        d->destroyFramebuffer(device, *pFramebuffer, pAllocator);
+        *pFramebuffer = VK_NULL_HANDLE;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     return result;
 }
@@ -209,13 +259,27 @@ VKAPI_ATTR void VKAPI_CALL DestroyFramebuffer(VkDevice device,
                                               VkFramebuffer framebuffer,
                                               const VkAllocationCallbacks* pAllocator) {
     VrsDevice* d = vrs_nv::deviceOf(vrs_nv::keyOf(device));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next = nextFunction<PFN_vkDestroyFramebuffer>(device, "vkDestroyFramebuffer")) {
+            next(device, framebuffer, pAllocator);
+        }
+        return;
+    }
     std::vector<VkFramebuffer> variants;
     if (d->khr && framebuffer != VK_NULL_HANDLE) {
         std::unique_lock lock(d->khrState->mutex);
         if (const auto it = d->khrState->framebuffers.find(handleKey(framebuffer));
             it != d->khrState->framebuffers.end()) {
-            for (const auto& [view, variant] : it->second.variants) {
-                variants.push_back(variant);
+            if (!g_framebufferGuard.run([&] {
+                    for (const auto& [view, variant] : it->second.variants) {
+                        variants.push_back(variant);
+                    }
+                })) {
+                // No memory for the list: they go here, under the lock.
+                for (const auto& [view, variant] : it->second.variants) {
+                    d->destroyFramebuffer(device, variant, nullptr);
+                }
+                variants.clear();
             }
             d->khrState->framebuffers.erase(it);
         }
@@ -231,8 +295,8 @@ void cmdBeginRenderPass(VrsDevice& d,
                         const VkRenderPassBeginInfo& begin,
                         VkSubpassContents contents) {
     VkRenderPassBeginInfo copy = begin;
-    copy.framebuffer = framebufferFor(d, commandBuffer, begin,
-                                      contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, false);
+    copy.framebuffer = framebufferOrGame(d, commandBuffer, begin,
+                                         contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, false);
     d.cmdBeginRenderPass(commandBuffer, &copy, contents);
 }
 
@@ -240,14 +304,21 @@ VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
                                                const VkRenderPassBeginInfo* pRenderPassBegin,
                                                const VkSubpassBeginInfo* pSubpassBeginInfo) {
     VrsDevice* d = vrs_nv::deviceOf(vrs_nv::keyOf(commandBuffer));
+    if (!d) { // no record (no memory for it): the next layer's, untouched
+        if (const auto next =
+                nextFunction<PFN_vkCmdBeginRenderPass2>(commandBuffer, "vkCmdBeginRenderPass2")) {
+            next(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
+        }
+        return;
+    }
     if (!d->khr) {
         d->cmdBeginRenderPass2(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
         return;
     }
     VkRenderPassBeginInfo copy = *pRenderPassBegin;
     copy.framebuffer =
-        framebufferFor(*d, commandBuffer, *pRenderPassBegin,
-                       pSubpassBeginInfo->contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, true);
+        framebufferOrGame(*d, commandBuffer, *pRenderPassBegin,
+                          pSubpassBeginInfo->contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, true);
     d->cmdBeginRenderPass2(commandBuffer, &copy, pSubpassBeginInfo);
 }
 

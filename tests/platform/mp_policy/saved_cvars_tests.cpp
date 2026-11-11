@@ -3,6 +3,8 @@
 #include <doctest/doctest.h>
 
 #include <cstdlib>
+#include <map>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -10,6 +12,41 @@ using evr::mp_policy::cvarLeftOnTrip;
 using evr::mp_policy::cvarValueText;
 using evr::mp_policy::sameCvarName;
 using evr::mp_policy::SavedCvars;
+
+TEST_CASE("a trip gives every cvar back even when a read or a log line runs out of memory") {
+    SavedCvars<int> saved;
+    saved.beforeWrite("r_antialiasing", "1", 0);
+    saved.beforeWrite("pm_noBob", "0", 1);
+    saved.beforeWrite("r_windowWidth", "1920", 2); // left as the layer set it
+    saved.beforeWrite("r_TAASafeMode", "0", 3);
+    saved.setTripValue("pm_noBob", "1");
+    std::map<int, std::string> live{{0, "2"}, {1, "0"}, {2, "2560"}, {3, "0"}};
+    std::vector<int> reported;
+    using Entry = SavedCvars<int>::Entry;
+    const auto done = evr::mp_policy::giveBack(
+        saved.takeAll(),
+        [&](const Entry& e) -> std::string {
+            if (e.target == 1) {
+                throw std::bad_alloc(); // its read finds no memory: written anyway
+            }
+            return live[e.target];
+        },
+        [&](const Entry& e, const std::string& value) { live[e.target] = value; },
+        [&](const Entry& e, const std::string*, const char*) {
+            reported.push_back(e.target);
+            if (e.target == 0) {
+                throw std::bad_alloc(); // its log line finds no memory: the later ones still go back
+            }
+        });
+    CHECK(live[0] == "1");
+    CHECK(live[1] == "1"); // its trip value
+    CHECK(live[2] == "2560");
+    CHECK(live[3] == "0"); // already there: not written, counted as given back
+    CHECK(done.restored == 3);
+    CHECK(done.left == 1);
+    CHECK(done.failed == 2);
+    CHECK(reported == std::vector<int>{0, 1, 2, 3});
+}
 
 TEST_CASE("the first value before the layer's writes is kept, and handed back once") {
     SavedCvars<int> saved;

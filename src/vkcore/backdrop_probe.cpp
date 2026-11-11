@@ -3,10 +3,10 @@
 #include "vkcore/log.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
-#include <vector>
 
 namespace evr::vkcore {
 
@@ -122,16 +122,18 @@ void BackdropProbe::cancel() {
 
 void BackdropProbe::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     wheel.poll(dev, completedTimeline);
-    std::vector<std::uint32_t> done;
+    // A fixed list: this runs on every present, in the present hook, where an allocation could throw.
+    std::array<std::uint32_t, kReadings> done{};
+    std::uint32_t count = 0;
     for (std::uint32_t i = 0; i < kReadings; ++i) {
         if (slots_[i].state == State::Submitted && slots_[i].value <= completedTimeline) {
-            done.push_back(i);
+            done[count++] = i;
         }
     }
-    if (done.empty() || !mapped_) {
+    if (count == 0 || !mapped_) {
         return;
     }
-    std::sort(done.begin(), done.end(),
+    std::sort(done.begin(), done.begin() + count,
               [this](std::uint32_t a, std::uint32_t b) { return slots_[a].value < slots_[b].value; });
     if (!coherent_) {
         VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
@@ -139,7 +141,8 @@ void BackdropProbe::poll(DeviceData& dev, std::uint64_t completedTimeline) {
         range.size = VK_WHOLE_SIZE;
         dev.vk.InvalidateMappedMemoryRanges(dev.device, 1, &range);
     }
-    for (const std::uint32_t i : done) {
+    for (std::uint32_t k = 0; k < count; ++k) {
+        const std::uint32_t i = done[k];
         slots_[i].state = State::Idle;
         std::array<std::uint8_t, kReadingBytes> rgba{};
         std::memcpy(rgba.data(), static_cast<const std::uint8_t*>(mapped_) + kReadingBytes * i, rgba.size());

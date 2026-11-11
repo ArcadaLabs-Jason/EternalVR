@@ -2,6 +2,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "common/finishes.hpp"
 #include "stereo_seq/present_watch.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/presenter_result.hpp"
@@ -70,9 +71,14 @@ void readKnob() {
             *seconds);
 }
 
-// The test knob: true for the one present it turns into out of date.
+// The test knob: true for the one present it turns into out of date. Read after the present, where nothing
+// may throw into the game (present()): without the memory to read it the knob stays off.
 bool knobDue() {
-    std::call_once(g_knobOnce, readKnob);
+    std::call_once(g_knobOnce, [] {
+        if (!finishes(readKnob)) {
+            EVR_LOG("test: no memory to read ETERNALVR_TEST_PRESENT_OUT_OF_DATE; off");
+        }
+    });
     if (!g_knobArmed.load(std::memory_order_acquire)) {
         return false;
     }
@@ -243,7 +249,10 @@ void logStop(XrPresenter::Impl& p, std::uint64_t presents, stereo_seq::StopScene
 
 void firstGamePresent() {
     EVR_LOG("presenter: first game present");
-    status::reached("first_present");
+    // In the present hook: without the memory for the status file's line the launcher misses this step only.
+    if (!finishes([] { status::reached("first_present"); })) {
+        EVR_LOG("presenter: no memory to note the first present in the status file");
+    }
 }
 
 void checkGamePresents(XrPresenter::Impl& p) {

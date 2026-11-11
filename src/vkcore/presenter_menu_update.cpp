@@ -1,0 +1,435 @@
+// Menus in VR, every rendered frame (presenter_menu.cpp, docs/VR_MENUS.md): whether a menu is up and which
+// kind, the panel's placement, the pointer's rays and steadying, and the router's events into the game.
+
+#include "vkcore/presenter_impl.hpp"
+
+#include "features/menu/menu_kind.hpp"
+#include "features/menu/pointer_steady.hpp"
+#include "game/eternal/usercmd_buttons.hpp"
+#include "vkcore/controllers.hpp"
+#include "vkcore/dossier_screen_hook.hpp"
+#include "vkcore/keep_active.hpp"
+#include "vkcore/menu_cursor.hpp"
+#include "vkcore/menu_cursor_hide.hpp"
+#include "vkcore/menu_input.hpp"
+#include "vkcore/mp_guard.hpp"
+#include "vkcore/prompt_hint_keys.hpp"
+#include "vkcore/prompt_load_tips.hpp"
+#include "vkcore/prompt_page_keys.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <string_view>
+#include <utility>
+
+namespace evr::vkcore {
+
+namespace {
+
+// Worker only: the chain of screens the menu up belongs to, whether the controllers asked for it and the map
+// loads since (menu_kind.hpp; one presenter per process; kept here, not in PresenterImpl, which is at the
+// file size limit). And the cursors nobody asked for in a play map taken for a screen, for the log.
+menu::MenuChain g_menuChain;
+// The menu pointer, steadied as the gun's aim is (Aim steadiness, features/menu/pointer_steady.hpp). XR
+// worker.
+std::optional<menu::PointerSteady> g_pointerSteady;
+
+// A hand's pointer pose in LOCAL (the hand is located in room space, the panel lives in LOCAL), steadied; a
+// frame without a sample time passes through.
+Pose pointerAim(input::Hand hand, const input::HandState& h, const input::InputFrame& frame) {
+    const Pose aim = menu::localFromRoom(frame.roomFromLocal, h.aimPose);
+    if (frame.sampleSeconds <= 0.0) {
+        return aim;
+    }
+    if (!g_pointerSteady) {
+        g_pointerSteady.emplace(input::aimSmoothingParams(controllers::aimSmoothing()));
+    }
+    return g_pointerSteady->update(hand, aim, frame.sampleSeconds);
+}
+int g_unaskedScreens = 0;
+constexpr int kUnaskedScreenLines = 10;
+
+// The pointer's drawing (presenter_menu.cpp has the beam's thickness and the images): the beam's length when
+// it misses the panel, the dot's angular size and its offset.
+constexpr float kBeamMissMetres = 1.0f;
+constexpr float kDotDegrees = 0.9f;
+constexpr float kDotOffsetMetres = 0.004f; // in front of the panel
+constexpr double kPanelGraceSeconds = 0.5;
+constexpr double kMenuHoldSeconds = 1.0;
+// A menu over the game that comes up this long after the controllers asked for one (the pause key, the
+// Dossier) is taken for a popup the game raised by itself. The rig saw the pause menu's cursor 0.05 s after
+// the key and the Dossier's 0.03 s after its button.
+constexpr double kMenuRequestSeconds = 1.5;
+// The strip at the top of the menu's 16:9 band where tabbed screens (the Dossier, settings) have their tabs.
+constexpr float kTabStripV = 0.08f;
+// The room transform moved by more than this while a panel is up: a re-anchor (a recenter, the runtime's
+// or ours, or the height after standing up or sitting down); the panel is placed in front of the head again.
+constexpr float kReanchorMetres = 0.05f;
+constexpr float kReanchorDegrees = 3.0f;
+
+bool reanchored(const Pose& a, const Pose& b) {
+    const float dot = std::fabs(a.orientation.x * b.orientation.x + a.orientation.y * b.orientation.y +
+                                a.orientation.z * b.orientation.z + a.orientation.w * b.orientation.w);
+    const float degrees = 2.0f * std::acos(std::min(1.0f, dot)) * 57.29578f;
+    return length(a.position - b.position) > kReanchorMetres || degrees > kReanchorDegrees;
+}
+
+// How the sticks moved the Dossier map last frame (map_drag.hpp), for the log: each change for the first
+// kMapGestureLines changes (worker only).
+struct MapGesture {
+    menu::MapPanBy pan = menu::MapPanBy::None;
+    bool rotate = false;
+    int logged = 0;
+};
+MapGesture g_mapGesture;
+constexpr int kMapGestureLines = 60;
+
+void logMapGesture(menu::MapPanBy pan, bool rotate) {
+    MapGesture& g = g_mapGesture;
+    if (pan == g.pan && rotate == g.rotate) {
+        return;
+    }
+    g.pan = pan;
+    g.rotate = rotate;
+    if (g.logged >= kMapGestureLines) {
+        return;
+    }
+    ++g.logged;
+    const char* panText = pan == menu::MapPanBy::Drag   ? "pans with the left button held"
+                          : pan == menu::MapPanBy::Keys ? "pans with W A S D"
+                                                        : "does not pan";
+    EVR_LOG("menu: map sticks: the pan stick %s, the other stick %s%s", panText,
+            rotate ? "rotates with the right button held" : "does not rotate",
+            g.logged == kMapGestureLines ? " (the last such line)" : "");
+}
+
+menu::RouterHand routerHand(const input::HandState& h) {
+    menu::RouterHand r;
+    r.trigger = h.trigger;
+    r.grip = h.grip;
+    r.stick = h.stick;
+    r.primary = h.primaryButton;
+    r.secondary = h.secondaryButton;
+    r.stickClick = h.stickClick;
+    return r;
+}
+
+} // namespace
+
+void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
+    const std::optional<menu_cursor::CursorState> cursor =
+        menuInstalled ? menu_cursor::read() : std::optional<menu_cursor::CursorState>{};
+    const bool allowed = menuInstalled && mp_guard::allowsGameTouch();
+    // A frame or two without a panel (a GUI capture a little late) does not end menu mode: the panel
+    // keeps its place and the router its state for up to kPanelGraceSeconds.
+    const double now = qpcSeconds(qpcNow());
+    if (panelContent) {
+        menuPanelSeen = now;
+    }
+    const bool showing = panelContent || ((menuOn || menuHeld) && now - menuPanelSeen < kPanelGraceSeconds);
+    if (!menuRouter) {
+        menuRouter.emplace(controllers::dominantHand(), controllers::mapSticks());
+    }
+    // A cursor the game shows for the weapon wheel is not a menu: the stick selects and gameplay input stays
+    // on (wheel_cursor.hpp).
+    menu::WheelCursorInput wheelIn;
+    wheelIn.seconds = now;
+    wheelIn.cursorShown = allowed && cursor && cursor->active;
+    wheelIn.menuUp = menuOn || menuHeld;
+    wheelIn.wheelHeld = game::contains(controllers::heldActions(), game::GameAction::WeaponWheel);
+    const menu::WheelCursorOutput wheel = menuRouter->wheelCursor().update(wheelIn);
+    if (wheel.started) {
+        EVR_LOG("menu: the weapon wheel is up: the game shows its cursor at %d, %d; no panel or pointer, the "
+                "stick selects and gameplay input stays on",
+                cursor->x, cursor->y);
+    } else if (wheel.ended) {
+        EVR_LOG("menu: the weapon wheel's cursor is gone%s",
+                wheelIn.cursorShown ? "; the cursor stays: a menu" : "");
+    }
+    const bool cursorActive = wheelIn.cursorShown && !wheel.owned;
+    const bool active = cursorActive && showing;
+    const std::optional<input::InputFrame> frame = controllers::latestFrame();
+    // The cursor can go while its menu stays up (the pause menu logged "the cursor is gone" 0.12 s after it
+    // opened). While the backdrop test (backdrop_probe.hpp) still sees the menu's full-screen backdrop, the
+    // panel keeps its place for up to kMenuHoldSeconds; the pointer and the router's hold on gameplay end
+    // with the cursor. A cursor back within the hold finds the panel where it was.
+    if (!active && menuOn) {
+        menuCursorGone = now;
+    }
+    const bool wasHeld = menuHeld;
+    menuHeld = !active && (menuOn || menuHeld) && allowed && showing && uiBackdrop.backdrop() &&
+               now - menuCursorGone < kMenuHoldSeconds;
+    if (menuHeld && !wasHeld && !shownHasView) {
+        EVR_LOG("menu: the panel keeps the whole frame while the backdrop shows (no head-tracked frame)");
+    }
+    if (wasHeld && !menuHeld && !active) {
+        EVR_LOG("menu: the panel is down (held %.2f s)", now - menuCursorGone);
+    }
+
+    // A cursor nobody asked for in a play map came up this frame (for the log below).
+    bool unaskedInPlayMap = false;
+    if (active && !menuOn) {
+        // Tutorial and lore popups show the cursor over the game unasked; they wait for Space or E. The
+        // Dossier the controllers asked for opens on its map page (the router follows its tabs). A cursor
+        // back within moments of the last one going, or onto the held panel, is the same menu changing
+        // screens and keeps its kind, unless a map load came since that menu began or the controllers asked
+        // for a menu since that cursor went (menu_kind.hpp).
+        menu::MenuKindInput kindIn;
+        kindIn.overGame = panelContent && shownHasView;
+        kindIn.playMap = mp_guard::inPlayMap();
+        kindIn.menuRequested = controllers::menuRequestedWithin(kMenuRequestSeconds);
+        kindIn.dossierRequested = controllers::dossierRequestedWithin(kMenuRequestSeconds);
+        kindIn.hadMenu = menuCursorGone > 0.0;
+        kindIn.previous = menuPopup     ? menu::MenuKind::Popup
+                          : menuDossier ? menu::MenuKind::Dossier
+                                        : menu::MenuKind::Screen;
+        kindIn.sinceCursorGone = now - menuCursorGone;
+        if (kindIn.hadMenu && kindIn.sinceCursorGone >= 0.0) {
+            // Asked for since the last cursor went: a new menu, not that one on another screen.
+            const double gap = std::min(kMenuRequestSeconds, kindIn.sinceCursorGone);
+            kindIn.dossierAskedSinceGone = controllers::dossierRequestedWithin(gap);
+            kindIn.menuAskedSinceGone = controllers::menuRequestedWithin(gap);
+        }
+        const menu::MenuChain::Step step = g_menuChain.onCursor(kindIn, wasHeld, mp_guard::mapLoads());
+        if (step.keepsPanel) {
+            EVR_LOG("menu: the cursor is back; the panel stays where it was");
+        } else {
+            if (step.continues) {
+                EVR_LOG("menu: the cursor is back after %.2f s: the same menu (%s) on another screen",
+                        kindIn.sinceCursorGone, menu::menuKindName(step.kind));
+            } else if (step.afterLoad) {
+                EVR_LOG("menu: a map load came since the last menu began: this cursor begins a new one");
+            }
+            menuPopup = step.kind == menu::MenuKind::Popup;
+            menuDossier = step.kind == menu::MenuKind::Dossier;
+            // A menu came up: its panel goes in front of the head (yaw only) at the UI quad's height.
+            placeMenuPanel(time);
+            menuReplace.store(false, std::memory_order_relaxed);
+            menuRoom.reset();
+            const ui_layer::PixelRect content = menuContent();
+            if (const auto size =
+                    ui_layer::panelSize(settings.ui.menuWidthMetres, content.width, content.height)) {
+                menuPanel.width = size->width;
+                menuPanel.height = size->height;
+            }
+            EVR_LOG("menu: the game shows its cursor (%s): panel %.2f x %.2f m at (%.2f, %.2f, %.2f)%s",
+                    menuPopup ? "a popup over the game, not asked for: A / X sends Space, a stick click E, Y "
+                                "Left Alt, the gameplay buttons their actions' keys"
+                    : menuDossier                  ? "the Dossier, on its map: the sticks move the map"
+                    : panelContent && shownHasView ? "a menu over the game"
+                                                   : "a menu screen",
+                    menuPanel.width, menuPanel.height, menuPanel.pose.position.x, menuPanel.pose.position.y,
+                    menuPanel.pose.position.z, frame ? "" : "; no controllers");
+            unaskedInPlayMap = kindIn.playMap && !kindIn.menuRequested && !kindIn.dossierRequested;
+            if (unaskedInPlayMap && !step.continues) {
+                // The desktop's keyboard reaches the game only while its window is in front (key_inject.hpp).
+                const ForegroundWindow front = foregroundWindow();
+                EVR_LOG("menu: nobody asked for this cursor (a play map%s); in front: %s%s",
+                        kindIn.overGame ? "" : ", no head-tracked frame behind it", front.who.c_str(),
+                        front.game ? "" : " (the desktop's keyboard and mouse do not reach the game)");
+            }
+        }
+    } else if (!active && menuOn) {
+        EVR_LOG("menu: the cursor is gone; %s",
+                menuHeld ? "the pointer is down, the panel stays while the menu's backdrop shows"
+                         : "the panel and the pointer are down");
+    }
+    menuOn = active && menuPanelPlaced && menuPanel.width > 0.0f;
+    const menu::MenuKind menuKind = menuDossier ? menu::MenuKind::Dossier
+                                    : menuPopup ? menu::MenuKind::Popup
+                                                : menu::MenuKind::Screen;
+    const bool overGame = panelContent && shownHasView;
+    if (menuOn && g_menuChain.becomesPopup(menuKind, overGame, mp_guard::inPlayMap(), mp_guard::mapLoads())) {
+        menuPopup = true;
+        EVR_LOG("menu: the screen %s and nobody asked for it: a popup (A / X sends Space, a stick click E, Y "
+                "Left Alt, the gameplay buttons their actions' keys)",
+                overGame ? "shows over the game now" : "is up in a play map");
+    } else if (menuOn && unaskedInPlayMap && !menuPopup && g_unaskedScreens < kUnaskedScreenLines) {
+        // It continues a menu the controllers asked for (the pause menu's Settings, a Dossier screen).
+        ++g_unaskedScreens;
+        EVR_LOG("menu: a cursor nobody asked for in a play map is taken for a screen of the menu asked for "
+                "before (A / X clicks, no Space)%s",
+                g_unaskedScreens == kUnaskedScreenLines ? " (the last such line)" : "");
+    }
+    menuHeld = menuHeld && menuPanelPlaced && menuPanel.width > 0.0f;
+    menuUp.store(cursorActive || menuOn || menuHeld, std::memory_order_relaxed);
+    controllers::updateLoadTipsKeys(frame, now, cursorActive || menuOn || menuHeld, shownHasView);
+
+    menu::RouterInput in;
+    in.seconds = now;
+    in.menuActive = menuOn;
+    in.popup = menuOn && menuPopup;
+    in.dossier = menuOn && menuDossier;
+    dossier_screen::readShown(in.dossierShows, in.dossierShown);
+    in.actions = controllers::heldActions();
+    in.pageKeys = controllers::currentPageKeys();
+    in.width = gameExtent.width;
+    in.height = gameExtent.height;
+    if (cursor) {
+        in.gameCursor = menu::CursorPixel{cursor->x, cursor->y};
+    }
+    // A re-anchor while the panel is up (the runtime moved LOCAL, or the room transform jumped: a recenter or
+    // the height after standing up or sitting down): the panel goes in front of the head again. The panel
+    // and the rays are both in LOCAL, so they agree either way; this keeps the panel where the player is.
+    // So does turning away from the panel for a while (ETERNALVR_MENU_FOLLOW, panel_follow.hpp).
+    if ((menuOn || menuHeld) && frame) {
+        const bool runtimeMoved = menuReplace.exchange(false, std::memory_order_relaxed);
+        bool turnedAway = false;
+        if (settings.ui.menuFollow) {
+            if (const std::optional<Pose> head = locateHead(time)) {
+                turnedAway = menuFollow.update(menu::horizontalAngleTo(*head, menuPanel.pose.position), now);
+            }
+        }
+        if (runtimeMoved || turnedAway || (menuRoom && reanchored(*menuRoom, frame->roomFromLocal))) {
+            if (placeMenuPanel(time)) {
+                EVR_LOG("menu: %s; the panel is placed again in front of the head at (%.2f, %.2f, %.2f)",
+                        runtimeMoved ? "the runtime moved LOCAL"
+                        : turnedAway ? "the head turned away from the panel"
+                                     : "the room was re-anchored",
+                        menuPanel.pose.position.x, menuPanel.pose.position.y, menuPanel.pose.position.z);
+            }
+        }
+        menuRoom = frame->roomFromLocal;
+    } else {
+        menuRoom.reset();
+    }
+
+    if (frame) {
+        // Left Menu held + a trigger is the in-headset capture (the mapper asks for it; under SteamVR with
+        // Touch controllers both sticks held too): no click meanwhile. The chord's buttons follow the runtime
+        // and the family in use, as the mapper's do.
+        if (const input::CaptureButtons buttons = controllers::captureButtons();
+            menuChord.buttons() != buttons) {
+            menuChord = input::CaptureChord(input::kTriggerThresholds, buttons);
+        }
+        // The time since the chord last ran, at most 0.1 s: a stall is not time the sticks were held.
+        const double last = std::exchange(menuPointerKept.chordSeconds, now);
+        const float chordDt = last > 0.0 ? static_cast<float>(std::clamp(now - last, 0.0, 0.1)) : 0.0f;
+        const input::CaptureChordOutput chord = menuChord.update(*frame, chordDt);
+        for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+            const input::HandState& h = frame->hand(hand);
+            menu::RouterHand& r = in.hands[static_cast<std::size_t>(hand)];
+            r = routerHand(h);
+            if (chord.triggerHeldBack[static_cast<std::size_t>(hand)]) {
+                r.trigger = 0.0f;
+            }
+            if (menuOn && h.poseValid) {
+                // Steadied as the gun's aim is (pointerAim).
+                r.hit = menu::intersectPanel(menuPanel, pointerAim(hand, h, *frame));
+                r.onTabStrip = r.hit && r.hit->v < kTabStripV;
+            }
+        }
+    }
+    // The hint bar's shortcuts: their buttons send its keys and the router does not see them (hint_keys.hpp).
+    controllers::updateHintKeys(in);
+    // The panel shows the GUI's 16:9 band (menuContent): the router takes the hits on the whole image.
+    menu::RouterInput routed = in;
+    const ui_layer::PixelRect content = menuContent();
+    for (menu::RouterHand& r : routed.hands) {
+        if (r.hit) {
+            const ui_layer::ImageUv uv =
+                ui_layer::contentToImage(r.hit->u, r.hit->v, content, in.width, in.height);
+            r.hit->u = uv.u;
+            r.hit->v = uv.v;
+        }
+    }
+    const menu::RouterOutput out = menuRouter->update(routed);
+    // Vibration: a light tick on the pointing hand as its ray comes onto the panel (enter_tick.hpp: a frame
+    // without controller data is not a miss), and on a click.
+    for (const input::Hand hand : {input::Hand::Left, input::Hand::Right}) {
+        menu::EnterTick& enter = menuPointerKept.enterTicks[static_cast<std::size_t>(hand)];
+        if (!menuOn) {
+            // While the panel is only held (the cursor went a moment), the ray is off it: a cursor that
+            // flickers back does not tick again. A closed menu starts afresh.
+            if (menuHeld) {
+                enter.update(false, now);
+            } else {
+                enter.reset();
+            }
+            continue;
+        }
+        std::optional<bool> hit;
+        if (frame && frame->hand(hand).poseValid) {
+            hit = in.hands[static_cast<std::size_t>(hand)].hit.has_value();
+        }
+        if (enter.update(hit, now) && hand == out.pointerHand) {
+            controllers::noteMenuHaptic(hand, input::MenuTick::Enter);
+        }
+    }
+    for (const menu::RouterEvent& e : out.events) {
+        if (e.kind == menu::RouterEvent::Kind::ButtonDown) {
+            controllers::noteMenuHaptic(out.pointerHand, input::MenuTick::Click);
+        }
+    }
+    for (const menu::PopupActionKey& k : out.popupKeys) {
+        const std::string_view action = game::gameActionName(k.action);
+        const std::string_view key = game::keyName(k.key);
+        EVR_LOG("menu: popup: %.*s sends %.*s (0x%02x)", static_cast<int>(action.size()), action.data(),
+                static_cast<int>(key.size()), key.data(), k.key);
+    }
+    static std::uint32_t endsKept = 0; // the XR worker's thread only
+    for (const menu::PageChange& c : out.pageChanges) {
+        if (c.why == menu::PageChange::Why::EndKept) {
+            if (++endsKept <= 20) {
+                EVR_LOG("menu: Dossier page %s: %c not sent at the %s tab", menu::dossierPageName(c.from),
+                        static_cast<char>(c.key), c.from == 0 ? "first" : "last");
+            }
+            continue;
+        }
+        using Why = menu::PageChange::Why;
+        const char key[2] = {static_cast<char>(c.key), '\0'};
+        EVR_LOG("menu: Dossier page %s -> %s (%s%s)", menu::dossierPageName(c.from),
+                menu::dossierPageName(c.to),
+                c.why == Why::Opened       ? "opened"
+                : c.why == Why::TabClicked ? "a tab clicked"
+                : c.why == Why::GameShows  ? "the game shows it"
+                : c.why == Why::Closed     ? "closed"
+                                           : key,
+                c.why == Why::EndForced ? " asked again at the end: sent" : "");
+    }
+    menu_input::send(out.events);
+    // A stick dragging the map moves the game's cursor about: hidden meanwhile (drag_cursor_hide.hpp).
+    menu_cursor_hide::setHidden(allowed && menuOn && out.hideCursor);
+    menu_input::setSuppressGameplay(out.suppressGameplay);
+    if (out.mapPage != menuMapPage) {
+        menuMapPage = out.mapPage;
+        EVR_LOG("menu: %s", menuMapPage ? "the Dossier's map page: the sticks pan, zoom and rotate the map"
+                                        : "not the Dossier's map page (or not known): the sticks scroll and "
+                                          "change tabs");
+    }
+
+    logMapGesture(out.mapPan, out.mapRotate);
+
+    // What the pointer looks like this frame.
+    menuPointer = {};
+    if (menuOn && out.pointerVisible && frame) {
+        const input::HandState& h = frame->hand(out.pointerHand);
+        const std::optional<menu::PanelHit>& hit = in.hands[static_cast<std::size_t>(out.pointerHand)].hit;
+        if (h.poseValid) {
+            const Pose aim = pointerAim(out.pointerHand, h, *frame);
+            menuPointer.visible = true;
+            menuPointer.from = aim.position;
+            // The beam turns to face the head (without a head pose: the panel's viewing position).
+            menuPointer.eye =
+                frame->head.poseValid
+                    ? menu::localFromRoom(frame->roomFromLocal, frame->head.pose).position
+                    : transformPoint(menuPanel.pose, Vec3{0.0f, 0.0f, settings.ui.menuDistanceMetres});
+            if (hit) {
+                menuPointer.hit = true;
+                menuPointer.to = hit->point;
+                menuPointer.dot = menu::dotPose(menuPanel, hit->u, hit->v, kDotOffsetMetres);
+                menuPointer.dotSide =
+                    ui_layer::reticleSideMetres(length(hit->point - menuPointer.eye), kDotDegrees);
+            } else {
+                menuPointer.to = aim.position + rotate(aim.orientation, Vec3{0.0f, 0.0f, -kBeamMissMetres});
+            }
+        }
+    }
+    if (menuOn) {
+        ++menuFrames;
+    }
+    logMenuStats();
+}
+
+} // namespace evr::vkcore

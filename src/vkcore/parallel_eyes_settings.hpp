@@ -46,8 +46,8 @@ enum ViewPart : std::uint32_t {
     kScreen = 1u << 7,  // screen: view 1's screen pass writes its own image
 };
 
-// View 1's clones left out (ETERNALVR_TEST_VIEW_CLONE_SKIP=<item>,<item>...; view_clones.cpp): view 1 then
-// uses the engine's object. Unset or empty: slot0. Set: exactly the items it lists, "none" for none.
+// View 1's clones left out (ETERNALVR_TEST_VIEW_CLONE_SKIP=<item>,<item>...; view_clone_build.cpp): view 1
+// then uses the engine's object. Unset or empty: slot0. Set: exactly the items it lists, "none" for none.
 enum CloneSkipGroup : std::uint32_t {
     kSkipSlot0 = 1u << 0,  // slot0: slot 0's TAA targets (device context +0x60..+0x78); view 1 has slot 1's
     kSkipDof = 1u << 1,    // dof: the depth of field targets, only while the layer holds r_dof 0

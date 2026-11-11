@@ -1072,7 +1072,7 @@ renders view 0 alone for the session, as after a guard trip, shown as mono (one 
 - Which of Route S's fixes run here. The per-eye bundle (`installSeqEyeFixes`, installed with Route S's hooks) is
   not installed as a bundle. Three pieces run in every mode or are installed by Parallel Eye Rendering itself: the
   bin tile hook (`view_install.cpp`; each view's lights binned in its own frustum), the SSR screen-edge fade patch
-  (device level) and the light frustum second opinion (`presenter_frame.cpp`). The SSR view-rotation shear is
+  (device level) and the light frustum second opinion (`presenter_worker.cpp`). The SSR view-rotation shear is
   installed by `view_install.cpp`: each view's hook line shows its own projection (`seq-ssr-view: projection [2]
   -0.2425 ... shear x -0.2686` for view 0, `+0.2425 ... +0.2686` from another thread for view 1), and the
   screen-space reflections match Route S's in the rig (`docs/rig-findings/stereo-screen-space.md`, section 5). The

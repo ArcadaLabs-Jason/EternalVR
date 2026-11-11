@@ -55,8 +55,9 @@ public:
     const ZoomDeclFields* gameValues(const void* decl) const;
 
     struct Restored {
-        int back = 0;  // decls whose game values were written back
-        int total = 0; // decls on record
+        int back = 0;   // decls whose game values were written back
+        int total = 0;  // decls on record
+        int failed = 0; // decls whose check threw (no memory for the name): left as they are
     };
     Restored restore(ZoomDeclIo& io);
 

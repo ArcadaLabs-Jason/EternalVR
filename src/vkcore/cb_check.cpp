@@ -4,6 +4,7 @@
 
 #include "gpu_timing/stats.hpp"
 #include "vkcore/cb_view_skip.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/view_slots.hpp"
 
@@ -100,14 +101,24 @@ struct Shard {
 };
 std::array<Shard, kShards> g_shards;
 
-State& stateOf(VkCommandBuffer cb) {
-    Shard& shard = g_shards[(reinterpret_cast<std::uintptr_t>(cb) >> 4) % kShards];
-    std::lock_guard lock(shard.mutex);
-    std::unique_ptr<State>& s = shard.states[cb];
-    if (!s) {
-        s = std::make_unique<State>();
-    }
-    return *s;
+// The hooks below run inside the game's Vulkan calls, where an exception must not go (hook_guard.hpp): a
+// buffer whose state finds no memory goes unchecked (null), and the call itself goes on.
+HookGuard g_stateGuard("the command buffer check's state");
+HookGuard g_reportGuard("a command buffer check report");
+HookGuard g_drawGuard("the command buffer check's draw knobs");
+
+State* stateOf(VkCommandBuffer cb) noexcept {
+    State* state = nullptr;
+    g_stateGuard.run([&] {
+        Shard& shard = g_shards[(reinterpret_cast<std::uintptr_t>(cb) >> 4) % kShards];
+        std::lock_guard lock(shard.mutex);
+        std::unique_ptr<State>& s = shard.states[cb];
+        if (!s) {
+            s = std::make_unique<State>();
+        }
+        state = s.get();
+    });
+    return state;
 }
 
 // ---- Reports ----
@@ -147,12 +158,14 @@ int findContext(VkCommandBuffer cb) {
 
 namespace {
 
-void report(
-    Kind kind, VkCommandBuffer cb, const char* call, void* from, std::uint32_t otherThread, void* otherFrom) {
-    const std::uint64_t n = g_counts[kind].fetch_add(1, std::memory_order_relaxed) + 1;
-    if (n > (kind == kHandoff ? kHandoffLines : kLinesPerKind)) {
-        return;
-    }
+// One report's line (`n`: its number), under report's guard: the chain of frames is a string.
+void logReport(Kind kind,
+               VkCommandBuffer cb,
+               const char* call,
+               void* from,
+               std::uint32_t otherThread,
+               void* otherFrom,
+               std::uint64_t n) {
     char here[32];
     char there[32];
     describeAddress(from, here, sizeof(here));
@@ -185,38 +198,62 @@ void report(
             GetCurrentThreadId(), static_cast<unsigned long>(otherThread), there, chain.c_str());
 }
 
+void report(
+    Kind kind, VkCommandBuffer cb, const char* call, void* from, std::uint32_t otherThread, void* otherFrom) {
+    const std::uint64_t n = g_counts[kind].fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n > (kind == kHandoff ? kHandoffLines : kLinesPerKind)) {
+        return;
+    }
+    g_reportGuard.run([&] { logReport(kind, cb, call, from, otherThread, otherFrom, n); });
+}
+
+// The rig knobs of a draw or dispatch (cb_view_skip.hpp), which allocate: true when it is dropped. Knobs that
+// throw keep the draw.
+bool dropDraw(VkCommandBuffer cb, const char* call) noexcept {
+    bool drop = false;
+    g_drawGuard.run([&] {
+        noteCaller(cb, call);
+        drop = skipDraw(cb);
+    });
+    return drop;
+}
+
 // ---- The guard around each call ----
 
 class Guard {
 public:
     Guard(VkCommandBuffer cb, const char* call, void* from, bool records) : state_(stateOf(cb)) {
+        if (!state_) {
+            return;
+        }
         const std::uint32_t self = GetCurrentThreadId();
         std::uint32_t expected = 0;
-        if (state_.inCall.compare_exchange_strong(expected, self, std::memory_order_acq_rel)) {
-            state_.inCallFrom.store(from, std::memory_order_relaxed);
+        if (state_->inCall.compare_exchange_strong(expected, self, std::memory_order_acq_rel)) {
+            state_->inCallFrom.store(from, std::memory_order_relaxed);
             owned_ = true;
         } else if (expected != self) {
-            report(kOverlap, cb, call, from, expected, state_.inCallFrom.load(std::memory_order_relaxed));
+            report(kOverlap, cb, call, from, expected, state_->inCallFrom.load(std::memory_order_relaxed));
         }
         if (records) {
-            const std::uint32_t before = state_.recorder.exchange(self, std::memory_order_acq_rel);
-            void* beforeFrom = state_.recorderFrom.exchange(from, std::memory_order_relaxed);
-            if (before && before != self && state_.recording.load(std::memory_order_acquire)) {
+            const std::uint32_t before = state_->recorder.exchange(self, std::memory_order_acq_rel);
+            void* beforeFrom = state_->recorderFrom.exchange(from, std::memory_order_relaxed);
+            if (before && before != self && state_->recording.load(std::memory_order_acquire)) {
                 report(kHandoff, cb, call, from, before, beforeFrom);
             }
         }
     }
     ~Guard() {
         if (owned_) {
-            state_.inCall.store(0, std::memory_order_release);
+            state_->inCall.store(0, std::memory_order_release);
         }
     }
     Guard(const Guard&) = delete;
     Guard& operator=(const Guard&) = delete;
-    State& state() { return state_; }
+    // Null when the buffer's state found no memory: the call is not checked.
+    State* state() { return state_; }
 
 private:
-    State& state_;
+    State* state_;
     bool owned_ = false;
 };
 
@@ -225,27 +262,32 @@ private:
 VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cb, const VkCommandBufferBeginInfo* info) {
     void* from = _ReturnAddress();
     Guard guard(cb, "vkBeginCommandBuffer", from, false);
-    State& s = guard.state();
-    if (s.recording.exchange(true, std::memory_order_acq_rel)) {
-        report(kBeginRecording, cb, "vkBeginCommandBuffer", from, 0,
-               s.beganFrom.load(std::memory_order_relaxed));
+    if (State* s = guard.state()) {
+        if (s->recording.exchange(true, std::memory_order_acq_rel)) {
+            report(kBeginRecording, cb, "vkBeginCommandBuffer", from, 0,
+                   s->beganFrom.load(std::memory_order_relaxed));
+        }
+        s->beganFrom.store(from, std::memory_order_relaxed);
+        s->recorder.store(GetCurrentThreadId(), std::memory_order_release);
+        s->recorderFrom.store(from, std::memory_order_relaxed);
     }
-    s.beganFrom.store(from, std::memory_order_relaxed);
-    s.recorder.store(GetCurrentThreadId(), std::memory_order_release);
-    s.recorderFrom.store(from, std::memory_order_relaxed);
     return g_next.beginCommandBuffer(cb, info);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL EndCommandBuffer(VkCommandBuffer cb) {
     Guard guard(cb, "vkEndCommandBuffer", _ReturnAddress(), true);
     const VkResult result = g_next.endCommandBuffer(cb);
-    guard.state().recording.store(false, std::memory_order_release);
+    if (State* s = guard.state()) {
+        s->recording.store(false, std::memory_order_release);
+    }
     return result;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL ResetCommandBuffer(VkCommandBuffer cb, VkCommandBufferResetFlags flags) {
     Guard guard(cb, "vkResetCommandBuffer", _ReturnAddress(), false);
-    guard.state().recording.store(false, std::memory_order_release);
+    if (State* s = guard.state()) {
+        s->recording.store(false, std::memory_order_release);
+    }
     return g_next.resetCommandBuffer(cb, flags);
 }
 
@@ -286,8 +328,7 @@ VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cb,
                                    std::uint32_t firstVertex,
                                    std::uint32_t firstInstance) {
     Guard guard(cb, "vkCmdDraw", _ReturnAddress(), true);
-    noteCaller(cb, "vkCmdDraw");
-    if (!skipDraw(cb)) {
+    if (!dropDraw(cb, "vkCmdDraw")) {
         g_next.cmdDraw(cb, vertices, instances, firstVertex, firstInstance);
     }
 }
@@ -299,8 +340,7 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cb,
                                           std::int32_t vertexOffset,
                                           std::uint32_t firstInstance) {
     Guard guard(cb, "vkCmdDrawIndexed", _ReturnAddress(), true);
-    noteCaller(cb, "vkCmdDrawIndexed");
-    if (!skipDraw(cb)) {
+    if (!dropDraw(cb, "vkCmdDrawIndexed")) {
         g_next.cmdDrawIndexed(cb, indices, instances, firstIndex, vertexOffset, firstInstance);
     }
 }
@@ -310,8 +350,7 @@ VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cb,
                                        std::uint32_t y,
                                        std::uint32_t z) {
     Guard guard(cb, "vkCmdDispatch", _ReturnAddress(), true);
-    noteCaller(cb, "vkCmdDispatch");
-    if (!skipDraw(cb)) {
+    if (!dropDraw(cb, "vkCmdDispatch")) {
         g_next.cmdDispatch(cb, x, y, z);
     }
 }
@@ -319,8 +358,7 @@ VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cb,
 VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(
     VkCommandBuffer cb, VkBuffer buffer, VkDeviceSize offset, std::uint32_t count, std::uint32_t stride) {
     Guard guard(cb, "vkCmdDrawIndirect", _ReturnAddress(), true);
-    noteCaller(cb, "vkCmdDrawIndirect");
-    if (!skipDraw(cb)) {
+    if (!dropDraw(cb, "vkCmdDrawIndirect")) {
         g_next.cmdDrawIndirect(cb, buffer, offset, count, stride);
     }
 }
@@ -328,16 +366,14 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(
 VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(
     VkCommandBuffer cb, VkBuffer buffer, VkDeviceSize offset, std::uint32_t count, std::uint32_t stride) {
     Guard guard(cb, "vkCmdDrawIndexedIndirect", _ReturnAddress(), true);
-    noteCaller(cb, "vkCmdDrawIndexedIndirect");
-    if (!skipDraw(cb)) {
+    if (!dropDraw(cb, "vkCmdDrawIndexedIndirect")) {
         g_next.cmdDrawIndexedIndirect(cb, buffer, offset, count, stride);
     }
 }
 
 VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cb, VkBuffer buffer, VkDeviceSize offset) {
     Guard guard(cb, "vkCmdDispatchIndirect", _ReturnAddress(), true);
-    noteCaller(cb, "vkCmdDispatchIndirect");
-    if (!skipDraw(cb)) {
+    if (!dropDraw(cb, "vkCmdDispatchIndirect")) {
         g_next.cmdDispatchIndirect(cb, buffer, offset);
     }
 }
@@ -365,15 +401,18 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
     for (std::uint32_t i = 0; i < count; ++i) {
         for (std::uint32_t j = 0; j < submits[i].commandBufferCount; ++j) {
             const VkCommandBuffer cb = submits[i].pCommandBuffers[j];
-            State& s = stateOf(cb);
-            if (s.recording.load(std::memory_order_acquire)) {
-                report(kSubmitRecording, cb, "vkQueueSubmit", from,
-                       s.recorder.load(std::memory_order_relaxed),
-                       s.recorderFrom.load(std::memory_order_relaxed));
+            State* s = stateOf(cb);
+            if (!s) {
+                continue;
             }
-            if (const std::uint32_t t = s.inCall.load(std::memory_order_acquire)) {
+            if (s->recording.load(std::memory_order_acquire)) {
+                report(kSubmitRecording, cb, "vkQueueSubmit", from,
+                       s->recorder.load(std::memory_order_relaxed),
+                       s->recorderFrom.load(std::memory_order_relaxed));
+            }
+            if (const std::uint32_t t = s->inCall.load(std::memory_order_acquire)) {
                 report(kSubmitInCall, cb, "vkQueueSubmit", from, t,
-                       s.inCallFrom.load(std::memory_order_relaxed));
+                       s->inCallFrom.load(std::memory_order_relaxed));
             }
         }
     }
@@ -383,7 +422,12 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
 } // namespace
 
 void onDeviceCreated(DeviceData& data, bool isGame, LayerHookFn layerHook) {
-    if (!isGame || !viewSlotsActive() || g_on.load() || !readEnabled()) {
+    if (!isGame || !viewSlotsActive() || g_on.load()) {
+        return;
+    }
+    bool wanted = false; // the check stays off when its variable cannot be read
+    g_stateGuard.run([&] { wanted = readEnabled(); });
+    if (!wanted) {
         return;
     }
     Next& n = g_next;
@@ -425,7 +469,7 @@ PFN_vkVoidFunction findHook(VkDevice device, const char* name) {
     }
 #define EVR_HOOK(fn)                                                                                         \
     if (std::strcmp(name, "vk" #fn) == 0) {                                                                  \
-        return reinterpret_cast<PFN_vkVoidFunction>(&fn);                                                    \
+        return reinterpret_cast<PFN_vkVoidFunction>(&(fn));                                                  \
     }
     EVR_HOOK(BeginCommandBuffer)
     EVR_HOOK(EndCommandBuffer)
