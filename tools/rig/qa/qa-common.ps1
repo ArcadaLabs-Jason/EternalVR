@@ -33,6 +33,14 @@ $script:QaSaveDurationBytes = 958137
 $script:QaMap = 'game/sp/e1m2_battle/e1m2_battle'
 # In the map: the schedule's line needs ETERNALVR_DEBUG_COMMANDS; head aim comes on in every run.
 $script:QaPlayMarker = "the schedule's clock starts|aim: head aim on"
+# A late start: a scenario's timeline begins once launch-ht.ps1 returns, but the layer's own timers count from the game's
+# start or from the map (ETERNALVR_DEBUG_COMMANDS' schedule, ETERNALVR_GUARD_TEST_TRIP_MS), so a launch that returns
+# minutes late runs the input after them (merge QA b202a crosshair-hold-head, b204a mp-guard-trip). A timeline that
+# starts more than this many seconds after the layer log's in-map line is a harness timing failure, and the suite runs
+# the scenario once more. On time it starts 2.5 to 7.2 s after that line (about 200 runs of four suites); the tightest
+# schedule, crosshair-hold-head's kill at 50 s with its input from the 11 s line on, breaks at about 15 s.
+$script:QaLateStartSec = 12
+$script:QaTestLateStartSec = 0 # qa-suite.ps1 -TestLateStartSec: the first run's timeline held back to test the above
 $script:QaGameProcess = 'DOOMEternalx64vk'
 $script:QaExtraEnv = @() # NAME=VALUE pairs for every game scenario (qa-suite.ps1 -DlssDll)
 
@@ -93,6 +101,7 @@ function New-QaContext($Scenario, [string]$Out) {
         Stage = $null; LogsDir = $null; RunDir = $null; InputPath = $null; Vdd = $null; DumpWatch = $null; Env = @()
         Shots = New-Object System.Collections.ArrayList; Results = New-Object System.Collections.ArrayList
         Notes = New-Object System.Collections.ArrayList; Stopped = $false; Abort = $false; Skipped = $false; CloudRestore = $false
+        Try = 1; Timing = $null; LateBy = $null
     }
 }
 
@@ -233,6 +242,60 @@ function Wait-QaLog($Ctx, [string]$Pattern, [int]$TimeoutSeconds) {
         Wait-QaSeconds $Ctx 0.5
     }
     return [bool]((Get-QaLogText $Ctx) -match $Pattern)
+}
+
+# The wall-clock time of the layer log's first line matching $Pattern: the log's 'log start <date> <time> local' line
+# plus that line's seconds; $null without either.
+function Get-QaLogLineTime([string]$Text, [string]$Pattern) {
+    if ($Text -notmatch 'log start (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}) local') { return $null }
+    $anchor = [datetime]::ParseExact($Matches[1], 'yyyy-MM-dd HH:mm:ss.fff', [Globalization.CultureInfo]::InvariantCulture)
+    foreach ($line in ($Text -split "`r?`n")) {
+        if ($line -notmatch $Pattern) { continue }
+        if ($line -notmatch '^\[\s*(\d+(\.\d+)?)\]') { return $null }
+        return $anchor.AddSeconds([double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture))
+    }
+    return $null
+}
+
+# How many seconds after the layer log's in-map line $Start is (below 0 when the timeline was there first), or $null.
+function Get-QaLateStart([string]$Text, [datetime]$Start) {
+    $inMap = Get-QaLogLineTime $Text $script:QaPlayMarker
+    if ($null -eq $inMap) { return $null }
+    return ($Start - $inMap).TotalSeconds
+}
+
+# Called as the timeline is about to start: $true when it is late (QaLateStartSec), with the harness timing failure
+# recorded (on a first run without a FAIL line: the suite runs it once more if nothing else fails). Every start's
+# distance from the in-map line goes into qa.log.
+function Test-QaLateStart($Ctx, [datetime]$Start = (Get-Date)) {
+    $late = Get-QaLateStart (Get-QaLogText $Ctx) $Start
+    if ($null -eq $late) { Write-QaLine '  timeline start: no in-map time in the layer log; not checked'; return $false }
+    Write-QaLine ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '  timeline start: {0:N1} s after the game was in the map', $late))
+    if ($late -le $script:QaLateStartSec) { return $false }
+    $Ctx.LateBy = [int][Math]::Round($late)
+    $Ctx.Timing = 'TIMING: the driver started {0} s after the game was in the map (more than {1} s)' -f $Ctx.LateBy, $script:QaLateStartSec
+    if ($Ctx.Try -gt 1) {
+        Add-QaResult $Ctx $Ctx.Timing $false
+    } else {
+        [void]$Ctx.Results.Add([pscustomobject]@{ Name = $Ctx.Timing; Ok = $false; Detail = '' })
+        Write-QaLine "  $($Ctx.Timing); the timeline and the scenario's checks are skipped (a harness timing failure)"
+    }
+    return $true
+}
+
+# A run whose late start is all that failed is run once more; one that also failed a check of its own, was stopped,
+# or could not put the cloud files back is not, and neither is a rerun.
+function Test-QaTimingRerun($Ctx) {
+    if (-not $Ctx.Timing -or $Ctx.Try -gt 1 -or $Ctx.Stopped -or $Ctx.Abort) { return $false }
+    return @($Ctx.Results | Where-Object { -not $_.Ok -and $_.Name -ne $Ctx.Timing }).Count -eq 0
+}
+
+# The suite's line for its reruns, next to 'QA: N of M scenarios passed' (which the merge scripts match as it is).
+function Format-QaRerunLine($Reruns) {
+    $r = @($Reruns)
+    if ($r.Count -eq 0) { return 'QA: 0 reruns after a late start' }
+    $what = ($r | ForEach-Object { "$($_.Name) ($($_.LateBy) s late)" }) -join ', '
+    return "QA: $($r.Count) rerun$(if ($r.Count -gt 1) { 's' }) after a late start: $what"
 }
 
 # Screenshots at a named checkpoint: the virtual display (what vddshot.ps1 takes) and the OpenXR Simulator's

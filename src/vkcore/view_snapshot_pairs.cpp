@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <optional>
 #include <string>
 #include <vector>
@@ -273,31 +274,39 @@ std::optional<Append> pairCopies(DeviceData& dev,
         sh.count[Count::Unordered0] += count;
         count = 0;
     }
-    for (std::size_t i = 0; i < count; ++i) {
-        // The swapchain image the frame's view 0 command buffer moved to PRESENT_SRC, where it is left.
-        bool released = false;
-        const VkImage image = frameOf(view0[i].cb, &released);
-        const std::uint32_t number = imageNumber(image);
-        if (number == 0) {
-            ++sh.count[Count::NotSwapchain0];
-        } else if (released) {
-            ++sh.count[Count::Released0]; // another queue family reads it next: not on this one
-        } else if (ensure(dev, 0, family, sh.swapFormat, sh.swapExtent) &&
-                   addCopy(dev, 0, view0[i].frame, view0[i].view, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, a,
-                           waits)) {
-            copied[0] = true;
+    // The submit hook catches what the copies throw (a ring remade without the memory for it, view 1's image
+    // record): the halves recorded before that are given back as never submitted, or their command buffers
+    // and pair slots would wait for a copy that never runs.
+    try {
+        for (std::size_t i = 0; i < count; ++i) {
+            // The swapchain image the frame's view 0 command buffer moved to PRESENT_SRC, where it is left.
+            bool released = false;
+            const VkImage image = frameOf(view0[i].cb, &released);
+            const std::uint32_t number = imageNumber(image);
+            if (number == 0) {
+                ++sh.count[Count::NotSwapchain0];
+            } else if (released) {
+                ++sh.count[Count::Released0]; // another queue family reads it next: not on this one
+            } else if (ensure(dev, 0, family, sh.swapFormat, sh.swapExtent) &&
+                       addCopy(dev, 0, view0[i].frame, view0[i].view, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                               a, waits)) {
+                copied[0] = true;
+            }
         }
-    }
-    if (view1.frame != 0) {
-        const std::optional<ui_layer::ImageRecord> record = ui_vulkan::recordOf(view1.clone);
-        if (!record) {
-            ++sh.count[Count::Unknown];
-        } else if (ensure(dev, 1, family, static_cast<VkFormat>(record->format),
-                          VkExtent2D{record->width, record->height})) {
-            // View 1's image stays in GENERAL: its screen pass writes it as a storage image.
-            copied[1] =
-                addCopy(dev, 1, view1.frame, view1.view, view1.clone, VK_IMAGE_LAYOUT_GENERAL, a, waits);
+        if (view1.frame != 0) {
+            const std::optional<ui_layer::ImageRecord> record = ui_vulkan::recordOf(view1.clone);
+            if (!record) {
+                ++sh.count[Count::Unknown];
+            } else if (ensure(dev, 1, family, static_cast<VkFormat>(record->format),
+                              VkExtent2D{record->width, record->height})) {
+                // View 1's image stays in GENERAL: its screen pass writes it as a storage image.
+                copied[1] =
+                    addCopy(dev, 1, view1.frame, view1.view, view1.clone, VK_IMAGE_LAYOUT_GENERAL, a, waits);
+            }
         }
+    } catch (const std::exception&) {
+        pairsSubmitted(a, false);
+        throw;
     }
     if (a.cbCount == 0) {
         return std::nullopt;

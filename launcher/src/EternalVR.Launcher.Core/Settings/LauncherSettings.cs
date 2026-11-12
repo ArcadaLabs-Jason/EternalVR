@@ -66,7 +66,7 @@ namespace EternalVR.Launcher.Core.Settings
     /// (turn, snap_degrees, turn_rate, handedness, locomotion, aim_dot) and anti_aliasing, and so are body_follow,
     /// aim_smoothing, hud_distance, hud_width, hud_height, mirror, cutscene_view, cutscene_arms, cutscene_3d, shot_origin, aim_dot_size, menu_beam, perf_log, perf_overlay, dossier, map_sticks,
     /// wheel_select, thumb_rest_wheel, thumb_rest_pick, thumb_rest_face_touch, thumb_rest_slowdown, weapon_directions, roll_wrist, swing_gesture, mirror_display, mirror_size, mirror_crop, cinema_aspect, hud, vibration, vignette, alternate_eyes, profile,
-    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, weapon_hand_angle, off_hand_angle, index_angle_reset, preset, profile_unsaved, profile_check, adapter_steer and test_builds
+    /// revenant_aim, melee_aim, equipment_aim, bhaptics, bhaptics_intensity, foveation, glory_kills, pickup_camera, dlss_version, sharpening, resolution_base, parallel_eyes, punch_speed, hold_time, weapon_hand_angle, off_hand_angle, index_angle_reset, preset, profile_unsaved, profile_check, adapter_steer and test_builds
     /// (dlss_version replaced dlss_dll, which is still read once). skip_cutscenes (off by default) replaced skip_cinematics, which
     /// was on by default and written into every file: an old skip_cinematics line is not read, so the skip starts off once
     /// for everyone, and it is dropped on the next save. Keys of settings the launcher no longer has are not read and are dropped
@@ -333,6 +333,7 @@ namespace EternalVR.Launcher.Core.Settings
                 s.TurnRate = ClampTurnRate(rate);
             if (map.TryGetValue("vignette", out var vg)) s.Vignette = Pick(vg, VignetteMode.Off, ("light", VignetteMode.Light), ("strong", VignetteMode.Strong));
             if (map.TryGetValue("glory_kills", out var gk)) s.GloryKills = ParseGloryKills(gk);
+            if (map.TryGetValue("pickup_camera", out var pc)) s.PickupCamera = ParsePickupCamera(pc);
             if (map.TryGetValue("handedness", out var hd)) s.Hand = Pick(hd, Handedness.Right, ("left", Handedness.Left), ("left_mirror", Handedness.LeftMirrored));
             if (map.TryGetValue("show_arms", out var sa)) s.Arms = ParseArms(sa);
             if (map.TryGetValue("aim_dot", out var ad)) s.AimDot = !(ad == "0" || string.Equals(ad, "false", StringComparison.OrdinalIgnoreCase));
@@ -427,6 +428,7 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("turn_rate = " + ClampTurnRate(TurnRate).ToString("0", CultureInfo.InvariantCulture));
             sb.AppendLine("vignette = " + VignetteName(Vignette));
             sb.AppendLine("glory_kills = " + GloryKillName(GloryKills));
+            sb.AppendLine("pickup_camera = " + PickupCameraName(PickupCamera));
             sb.AppendLine("handedness = " + HandednessName(Hand));
             sb.AppendLine("show_arms = " + ArmsFileValue(Arms));
             WriteLocomotion(sb);

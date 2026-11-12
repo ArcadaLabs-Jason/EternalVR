@@ -211,7 +211,7 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
         // under this lock): images held from the window still go back once their copies are done, or the
         // game's swapchain would run out of images.
         std::uint64_t done = 0;
-        if (!heldImages.empty() && ringReady.load() &&
+        if (held_images::handsBackUncopied(!heldImages.empty(), ringReady.load()) &&
             dev.vk.GetSemaphoreCounterValueKHR(dev.device, timeline, &done) == VK_SUCCESS) {
             handBackImages(done);
         }

@@ -105,7 +105,9 @@ add_library(evr_layer SHARED
     game_code.cpp
     game_settings.cpp
     game_text.cpp
+    body_jump_watch.cpp
     glory_view.cpp
+    pickup_view.cpp
     gpu_timing.cpp
     gpu_timing_report.cpp
     head_sweep.cpp

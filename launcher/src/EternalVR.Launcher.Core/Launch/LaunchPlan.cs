@@ -252,6 +252,7 @@ namespace EternalVR.Launcher.Core.Launch
             Set("ETERNALVR_TURN_RATE", LauncherSettings.ClampTurnRate(s.TurnRate).ToString("0", CultureInfo.InvariantCulture));
             Set("ETERNALVR_VIGNETTE", LauncherSettings.VignetteName(s.Vignette));
             Set("ETERNALVR_GLORY_KILLS", LauncherSettings.GloryKillName(s.GloryKills));
+            Set("ETERNALVR_PICKUP_CAMERA", LauncherSettings.PickupCameraName(s.PickupCamera));
             Set("ETERNALVR_HANDEDNESS", LauncherSettings.HandednessName(s.Hand));
             Set("ETERNALVR_ARMS", s.ArmsEnvironment());
             // The arms: the off hand on its controller and the bind pose's solve while the weapon hand aims (T-160); otherwise the

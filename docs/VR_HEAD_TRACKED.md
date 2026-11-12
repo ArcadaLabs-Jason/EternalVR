@@ -97,6 +97,24 @@ yet).
   the way the game adds it, fading in from 5 to 10 degrees, while aim and the body see the game's view
   without it and the controllers treat it as a forced view. Every forced view also logs how far the rendered
   view left the player's view angles (`camera: forced view N: ...`).
+- Pickup cameras (docs/rig-findings/camera-animations.md section 6): a pickup's sync animation (`interact/...`:
+  a Praetor token, a Sentinel Crystal, a rune, the automap station) drives the game's camera for a few seconds.
+  By default (`ETERNALVR_PICKUP_CAMERA=still`) the head replaces its rotation as in play, the eye follows it,
+  and its yaw turns the view only past 15 degrees (`drivenCamera`), as for any camera the game drives; the hands
+  play the animation in front of the head. With `play` (the launcher's "Pickup animations: Camera moves") the
+  camera's smooth motion since the pickup took the view goes on top of the head-tracked view and the stereo
+  eyes (`xr_math::CameraTurn`): its turn from one game frame to the next, summed, with a step over 5 degrees
+  in one frame (the cut to the animation's own start) left out and each angle held within 45 degrees; the view
+  keeps the player's heading meanwhile (no 15-degree follow, under a menu either), and what is left of the turn
+  eases out over 0.3 s when the pickup's forced view ends (`pickup: camera turn N starts / ends ...`). Every
+  `interact/...` sync counts, also one that picks nothing up (the automap station). Without head aim (`ETERNALVR_AIM=view`,
+  or before its check passed) the body is the game's yaw, which already holds the camera's, so only the turn's
+  pitch and roll go on top (`xr_math::turnOnBody`). Not in a cutscene shown around the player. Under head aim
+  (the controllers aiming with the head, or gamepad mode) skipping the 15-degree follow also means head aim
+  goes on writing the player's view angles in a pickup whose camera leaves them by more than 15 degrees, where
+  it wrote nothing before (the game holds its view through the pickup and sets the angles itself at its end;
+  only the token, under 15 degrees, was run on the rig). Off by default: a new view motion, not yet seen in a
+  headset.
 - Cutscenes: `renderView_t.inCutscene` (+0x15) changes are logged (`game: cutscene starts / ends`). With
   `ETERNALVR_SKIP_CINEMATICS=1` the layer holds the skip key (R) while a cutscene plays, 2.5 s at a time,
   without depending on desktop focus: the exe's `GetRawInputData` import is replaced, and a key event is
@@ -218,6 +236,8 @@ yet).
 | `ETERNALVR_CAMERA_ANIMATIONS` | 0 | 1 plays a hands animation's camera rotation (5 degrees or more) on top of the head-tracked view |
 | `ETERNALVR_CAMERA_ANIM_MIN` | 5 | degrees (0.5 to 45): where the camera animation ramp starts (full at twice), for rig tests |
 | `ETERNALVR_GLORY_KILLS` | follow | how glory kills are shown: `follow`, `steady`, `fade` or `screen` (Glory kills, above) |
+| `ETERNALVR_PICKUP_CAMERA` | still | how a pickup animation's camera is shown: `still` (the head replaces its rotation) or `play` (its motion on top of the head; Pickup cameras, above) |
+| `ETERNALVR_TEST_CAMERA_TRACE` | unset | `1`: every game view of a forced view and the 120 after it logs the game's camera, the player's view angles, the view written and the game's eye (`camera: trace N: ...`, at most 4000 lines), for rig measurements |
 | `ETERNALVR_TEST_GLORY` | unset | `start,duration` (seconds on the `ETERNALVR_DEBUG_COMMANDS` clock): a glory kill is taken to run then, whatever the game does, to check each option on the rig without a staggered demon |
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
 | `ETERNALVR_ADAPTER_STEER` | 0 | `1` (or `on`): on a PC with two or more GPUs the game is steered to the headset's GPU where the order of its Vulkan devices decides (ARCHITECTURE section 6, Adapter match); experimental, not yet tried with a headset on a two-GPU PC; the runtime is asked at most once, at the game's first device enumeration, and not when exactly one discrete GPU is listed; the launcher's "Use the headset's graphics card" (Advanced tab) |

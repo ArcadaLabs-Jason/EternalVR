@@ -5,9 +5,9 @@
 // again when the held weapon or one of its decls changes, and every kRecheckUpdates updates (a level load may
 // load a decl again). The record of what was written is game::ZoomPatchBook. The game's values go back when
 // the multiplayer guard trips (its trip listener, at once), when the presenter sees the guard stopped game
-// touches, and when the layer shuts down. Not when the game leaves VR without the layer shutting down: the
-// gun then stays and no scope GUI shows in the flat game for the rest of that run (the controllers stay
-// attached once attached).
+// touches, and when the layer shuts down; a decl one of them could not check goes back at the next. Not when
+// the game leaves VR without the layer shutting down: the gun then stays and no scope GUI shows in the flat
+// game for the rest of that run (the controllers stay attached once attached).
 
 #include "vkcore/controllers.hpp"
 #include "vkcore/controllers_impl.hpp"
@@ -285,8 +285,8 @@ bool scopeZoomed() {
 void restoreZoomLook(const char* why) {
     std::lock_guard lock(g_mutex);
     g_scopeZoomed.store(false, std::memory_order_relaxed);
-    if (g_book.stopped()) {
-        return;
+    if (g_book.stopped() && g_book.size() == 0) {
+        return; // restored already, nothing left on record
     }
     LayerDeclIo io;
     const game::ZoomPatchBook::Restored r = g_book.restore(io);
@@ -294,8 +294,10 @@ void restoreZoomLook(const char* why) {
         EVR_LOG("%s: the game's values back in %d of %d weapon decl(s) (%s)", kTag, r.back, r.total, why);
     }
     if (r.failed > 0) {
-        EVR_LOG("%s: %d weapon decl(s) could not be checked (no memory for the name); left as they are", kTag,
-                r.failed);
+        EVR_LOG(
+            "%s: %d weapon decl(s) could not be checked (no memory for the name); tried again at the next "
+            "restore",
+            kTag, r.failed);
     }
 }
 

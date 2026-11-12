@@ -9,7 +9,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: headset (what the launcher found; nothing to set)
         Headset, NativePanel, HeadsetAsks, Refresh,
         // Play: comfort
-        Turning, TurnSpeed, SnapAngle, Vignette, GloryKills, WalkInRoom, HeadFade, RecenterHold, SkipCutscenes,
+        Turning, TurnSpeed, SnapAngle, Vignette, GloryKills, PickupCamera, WalkInRoom, HeadFade, RecenterHold, SkipCutscenes,
         // Play: body
         PlayPosition, EyeHeight,
         // Play: gestures
@@ -73,6 +73,7 @@ namespace EternalVR.Launcher.Core.Settings
                 // these, never changing the game's input (docs/VR_CONTROLLERS.md "Gamepad mode").
                 case Setting.Vignette:
                 case Setting.GloryKills:
+                case Setting.PickupCamera:
                 case Setting.RecenterHold:
                 case Setting.Bhaptics:
                     return null;

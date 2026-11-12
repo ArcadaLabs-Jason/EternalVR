@@ -10,7 +10,8 @@
 // - A write that fails part way is rolled back to the game's values; if that fails too the decl is kept as
 //   partial, and the restore writes the game's values without checking for the layer's.
 // - restore: stops every later patch, then writes the game's values back only into a decl that still has its
-//   name and the layer's values (not loaded again, not freed and reused).
+//   name and the layer's values (not loaded again, not freed and reused). A decl whose name cannot be read
+//   (no memory for it) stays on record, unwritten, and the next restore checks it again.
 
 #include "game/eternal/zoom_look.hpp"
 
@@ -57,7 +58,7 @@ public:
     struct Restored {
         int back = 0;   // decls whose game values were written back
         int total = 0;  // decls on record
-        int failed = 0; // decls whose check threw (no memory for the name): left as they are
+        int failed = 0; // decls whose check threw (no memory for the name): kept for the next restore
     };
     Restored restore(ZoomDeclIo& io);
 

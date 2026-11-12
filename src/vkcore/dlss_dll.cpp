@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -253,9 +254,10 @@ int initHook(unsigned long long appId,
     const std::vector<const wchar_t*>* paths = &g_searchPath;
     if (info && info->pathList.path && info->pathList.length) {
         const bool joined = g_initGuard.run([&] {
-            auto* list = new std::vector<const wchar_t*>(g_searchPath);
+            // Owned until it is whole: a list whose insert finds no memory is freed, not left behind.
+            auto list = std::make_unique<std::vector<const wchar_t*>>(g_searchPath);
             list->insert(list->end(), info->pathList.path, info->pathList.path + info->pathList.length);
-            paths = list;
+            paths = list.release();
         });
         if (!joined) { // NGX starts as the game asked
             return g_init(appId, dataPath, instance, physicalDevice, device, info, version);

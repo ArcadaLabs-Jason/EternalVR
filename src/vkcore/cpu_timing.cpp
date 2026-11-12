@@ -555,10 +555,10 @@ void frontendTick() {
         }
         f.window.add(tick);
     } else {
+        std::thread(reporterMain).detach(); // first: with no thread, nothing starts and the next tick retries
         f.started = true;
         f.windowStart = now;
         f.probes = g_totals.probes.load(std::memory_order_relaxed);
-        std::thread(reporterMain).detach();
     }
     f.processCycles = process;
     f.thread = thread;

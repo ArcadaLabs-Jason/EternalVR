@@ -7,6 +7,7 @@
 #include "vkcore/exposure_hooks.hpp"
 #include "vkcore/game_build.hpp"
 #include "vkcore/game_code.hpp"
+#include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/pe_flares.hpp"
@@ -98,17 +99,25 @@ std::optional<std::wstring> envValue(std::wstring_view name) {
     return value;
 }
 
+// Read on the first use, which can be inside a Vulkan call outside any other guard (the UI layer's image and
+// command buffer hooks ask for the eye copy): settings that find no memory are the defaults, Parallel Eye
+// Rendering off, for the rest of the process.
+HookGuard g_settingsGuard("Parallel Eye Rendering's settings");
+
 } // namespace
 
 const parallel_eyes::Settings& parallelEyesSettings() {
     static const parallel_eyes::Settings settings = [] {
-        parallel_eyes::Settings s = parallel_eyes::readSettings(&envValue, &ui_vulkan::enabled);
-        if (!s.why.empty()) {
-            EVR_LOG("%s: off: %s; the standard renderer", kTag, s.why.c_str());
-        }
-        for (const std::string& w : s.warnings) {
-            EVR_LOG("%s: %s", kTag, w.c_str());
-        }
+        parallel_eyes::Settings s;
+        g_settingsGuard.run([&] {
+            s = parallel_eyes::readSettings(&envValue, &ui_vulkan::enabled);
+            if (!s.why.empty()) {
+                EVR_LOG("%s: off: %s; the standard renderer", kTag, s.why.c_str());
+            }
+            for (const std::string& w : s.warnings) {
+                EVR_LOG("%s: %s", kTag, w.c_str());
+            }
+        });
         return s;
     }();
     return settings;

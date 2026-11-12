@@ -100,7 +100,11 @@ game resets its profile at the next launch (`docs/rig-findings/launcher-live.md`
 
 If a run is killed while the game's session is muted, Windows remembers that mute for the exe; the run
 records "mute may persist", and the next muted run of the same exe knows the mute is ours and puts it
-back to unmuted when it stops.
+back to unmuted when it stops. The runs that may have left such a mute are found before the start: the scan
+reads every run folder (seconds with thousands of them, minutes while the game loads), and the launch
+watch has to begin as the game starts. Any step of `run.ps1` that takes more than 5 s (the cleanup of earlier
+runs, the settings check, that scan, each step of the launch watch, the guard start) leaves a
+`slow step: <step> took N s` `WARN` line in `rig.log`.
 
 ## Paths
 

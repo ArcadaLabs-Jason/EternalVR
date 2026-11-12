@@ -131,10 +131,19 @@ no held value saved into `profile.bin`, no crash dump, and the multiplayer
 guard (REQ-16): `mp guard: armed`, a `mp guard: map load '...' (single-player)` line, and (but in `mp-guard-trip`) no
 `mp guard: TRIPPED` or `REFUSED` line.
 
+A scenario's timeline starts once `launch-ht.ps1` returns, while the layer's own timers count from the game's start or
+the map (`ETERNALVR_DEBUG_COMMANDS`' schedule, `ETERNALVR_GUARD_TEST_TRIP_MS`). When the timeline starts more than 12 s
+after the layer log's in-map line (`qa.log` has the distance of every start as `timeline start: N s after the game
+was in the map`; on time 2.5 to 7.2 s, and crosshair-hold-head's schedule breaks at about 15 s), the run is a harness
+timing failure, `TIMING: the driver started N s after the game was in the map`: its timeline and the scenario's own
+checks are skipped and, if nothing else failed, the scenario runs once more and the rerun's result is its result (the
+first run's files move to `<Out>\<scenario>-try1`). A late rerun fails. `-TestLateStartSec N` holds every first run's
+timeline back N s, to see the check and the rerun work.
+
 ## Output
 
 `<Out>\report.md` (one row per scenario, every check, screenshots, run folder, duration, and
-`QA: N of M scenarios passed`), `<Out>\qa.log`, `<Out>\<scenario>-<checkpoint>.png` (virtual display) and
+`QA: N of M scenarios passed`, then `QA: N rerun(s) after a late start` on its own line), `<Out>\qa.log`, `<Out>\<scenario>-<checkpoint>.png` (virtual display) and
 `-sim.png` (simulator window), `<Out>\<scenario>\` with `eternalvr.log`, `launch.txt`, `stop.txt`.
 
 ## The block measure

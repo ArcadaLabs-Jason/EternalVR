@@ -1,5 +1,7 @@
 #include "xr_math/cinema_run.hpp"
 
+#include <algorithm>
+
 namespace evr::xr_math {
 
 CinemaPairStep CinemaRun::pair(bool cutByte, double nowSeconds) {
@@ -56,6 +58,29 @@ CinemaLayerPlan cinemaLayerPlan(bool pair, bool guiFresh, double secondsSinceGui
     plan.gui = guiFresh;
     plan.skipComposite = true;
     return plan;
+}
+
+float CinemaGuiDepth::step(float nearScale, bool backdrop, double seconds) {
+    const float target = backdrop ? 1.0f : 0.0f;
+    towardScreen_ = backdrop;
+    if (atScreen_ < 0.0f || !(seconds >= 0.0) || seconds > kCinemaRunGapSeconds) {
+        atScreen_ = target;
+    } else {
+        const double frame = std::min(seconds, 0.1);
+        if (target > atScreen_) {
+            atScreen_ = std::min(target, atScreen_ + static_cast<float>(frame / kCinemaGuiToScreenSeconds));
+        } else {
+            atScreen_ = std::max(target, atScreen_ - static_cast<float>(frame / kCinemaGuiMoveSeconds));
+        }
+    }
+    // The two ends exactly: at the screen the quad has the screen's own distance and size.
+    if (atScreen_ >= 1.0f) {
+        return 1.0f;
+    }
+    if (atScreen_ <= 0.0f) {
+        return nearScale;
+    }
+    return nearScale + (1.0f - nearScale) * atScreen_;
 }
 
 } // namespace evr::xr_math

@@ -93,21 +93,33 @@ std::atomic<bool> g_uiLayerWorks{false};        // XR worker -> camera hook (cin
 std::atomic<std::uint64_t> g_runFirstSeq{0};    // the latest run's first game frame (ViewRecord::seq)
 std::atomic<std::uint64_t> g_runEndSeq{0};      // the first game frame after it (0: still running)
 
+// XR worker only: the GUI quad's place over a pair (at the screen for a full-screen backdrop), its last
+// frame's time, the pair frames with the GUI at the screen and the moves logged.
+xr_math::CinemaGuiDepth g_guiDepth;
+LONGLONG g_guiDepthQpc = 0;
+std::atomic<std::uint64_t> g_guiAtScreenFrames{0};
+bool g_guiDepthLogged = false;
+int g_guiDepthLines = 0;
+constexpr int kGuiDepthLines = 40;
+
 XrFovf toXr(const xr_math::Fov& f) {
     return {f.angleLeft, f.angleRight, f.angleUp, f.angleDown};
 }
 
 void logRunEnd(const char* why, std::uint64_t latestSeq) {
     g_runEndSeq.store(latestSeq + 1, std::memory_order_release);
-    EVR_LOG("cinema3D: pair run ended (%s): %llu frame(s), %llu camera cut(s), comfort clamp on %llu "
-            "frame(s); %llu stereo frame(s) shown on two quads since the start, %llu of them without a fresh "
-            "GUI image; %llu on the mono quad (no GUI image within %.1f s)",
-            why, static_cast<unsigned long long>(g_state.frames),
-            static_cast<unsigned long long>(g_state.cuts), static_cast<unsigned long long>(g_state.clamped),
-            static_cast<unsigned long long>(g_pairQuadFrames.load(std::memory_order_relaxed)),
-            static_cast<unsigned long long>(g_staleGuiFrames.load(std::memory_order_relaxed)),
-            static_cast<unsigned long long>(g_monoPairFrames.load(std::memory_order_relaxed)),
-            xr_math::kCinemaGuiHoldSeconds);
+    EVR_LOG(
+        "cinema3D: pair run ended (%s): %llu frame(s), %llu camera cut(s), comfort clamp on %llu "
+        "frame(s); %llu stereo frame(s) shown on two quads since the start, %llu of them without a fresh "
+        "GUI image, %llu with the GUI at the screen for a full-screen backdrop; %llu on the mono quad (no "
+        "GUI image within %.1f s)",
+        why, static_cast<unsigned long long>(g_state.frames), static_cast<unsigned long long>(g_state.cuts),
+        static_cast<unsigned long long>(g_state.clamped),
+        static_cast<unsigned long long>(g_pairQuadFrames.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_staleGuiFrames.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_guiAtScreenFrames.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_monoPairFrames.load(std::memory_order_relaxed)),
+        xr_math::kCinemaGuiHoldSeconds);
     if (g_state.traceFrames > 0) {
         EVR_LOG("cinema3D: traces: %llu frame(s) of 15 rays, %.1f rays hit per frame, %.0f us per frame on "
                 "average, %.0f us at most",
@@ -380,12 +392,35 @@ std::uint32_t cinemaEyeLayers(XrPresenter::Impl& p,
         ui.pose = p.quadPose;
         ui.size = {p.quadSize.width, p.quadSize.width * ui.size.height / ui.size.width};
         // Nearer than the screen, at the same angular size: in front of what the pair shows within its
-        // comfort clamp, so a subtitle is not behind a shot that pops out of the screen (T-183).
+        // comfort clamp, so a subtitle is not behind a shot that pops out of the screen (T-183). At the
+        // screen while the GUI holds a full-screen backdrop, which would leave a strip of the pair uncovered
+        // at one edge in each eye in front of it (xr_math::CinemaGuiDepth).
         if (const std::optional<Pose> head = p.locateHead(p.nextDisplayTime.load())) {
             const float ipd = roomScaleSettings().ipdMetres;
-            const float k = xr_math::cinemaGuiDistanceScale(
-                p.quadSize.width,
-                ipd >= 0.04f && ipd <= 0.09f ? ipd : xr_math::kCinemaDefaultInteraxialMetres);
+            const LONGLONG now = qpcNow();
+            const bool backdrop = p.uiBackdrop.backdrop();
+            // A new pair run takes its place at once (CinemaGuiDepth): its first frame is logged only when
+            // that place is the screen, not as a move back from the last run's.
+            if (g_guiDepthQpc == 0 || qpcSeconds(now - g_guiDepthQpc) > xr_math::kCinemaRunGapSeconds) {
+                g_guiDepthLogged = false;
+            }
+            const float k = g_guiDepth.step(
+                xr_math::cinemaGuiDistanceScale(
+                    p.quadSize.width,
+                    ipd >= 0.04f && ipd <= 0.09f ? ipd : xr_math::kCinemaDefaultInteraxialMetres),
+                backdrop, g_guiDepthQpc != 0 ? qpcSeconds(now - g_guiDepthQpc) : -1.0);
+            g_guiDepthQpc = now;
+            if (backdrop) {
+                g_guiAtScreenFrames.fetch_add(1, std::memory_order_relaxed);
+            }
+            if (backdrop != g_guiDepthLogged && g_guiDepthLines < kGuiDepthLines) {
+                ++g_guiDepthLines;
+                EVR_LOG("cinema3D: the GUI %s (%s)%s",
+                        backdrop ? "moves to the screen" : "moves back in front of the screen",
+                        backdrop ? "a full-screen backdrop is up" : "no full-screen backdrop",
+                        g_guiDepthLines == kGuiDepthLines ? " (later moves are not logged)" : "");
+            }
+            g_guiDepthLogged = backdrop;
             const Vec3 screen{p.quadPose.position.x, p.quadPose.position.y, p.quadPose.position.z};
             const Vec3 gui = head->position + (screen - head->position) * k;
             ui.pose.position = {gui.x, gui.y, gui.z};

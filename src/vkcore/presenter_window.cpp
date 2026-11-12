@@ -77,15 +77,11 @@ void XrPresenter::Impl::holdImage(VkSwapchainKHR swapchain, std::uint32_t image,
 void XrPresenter::Impl::handBackImages(std::uint64_t completed) {
     // An image goes back only once the device is done with it: the game's rendering (its present's wait
     // semaphores) and the ring copy that waited for it, both behind the copy's timeline value.
-    for (auto it = heldImages.begin(); it != heldImages.end();) {
-        if (it->value > completed) {
-            ++it;
-            continue;
-        }
+    held_images::handBack(heldImages, completed, [this](const HeldImage& held) {
         VkReleaseSwapchainImagesInfoKHR release{VK_STRUCTURE_TYPE_RELEASE_SWAPCHAIN_IMAGES_INFO_KHR};
-        release.swapchain = it->swapchain;
+        release.swapchain = held.swapchain;
         release.imageIndexCount = 1;
-        release.pImageIndices = &it->image;
+        release.pImageIndices = &held.image;
         const VkResult r = dev.releaseSwapchainImages(dev.device, &release);
         if (r == VK_SUCCESS) {
             ++imagesHandedBack;
@@ -93,11 +89,10 @@ void XrPresenter::Impl::handBackImages(std::uint64_t completed) {
             // The game took the image as presented and does not know it is still acquired; the swapchain gets
             // it back only when it is destroyed.
             EVR_LOG("window: handing image %u of swapchain %p back failed (%d, %llu failure(s) so far)",
-                    it->image, reinterpret_cast<void*>(it->swapchain), r,
+                    held.image, reinterpret_cast<void*>(held.swapchain), r,
                     static_cast<unsigned long long>(handBackFailures));
         }
-        it = heldImages.erase(it);
-    }
+    });
 }
 
 void XrPresenter::Impl::dropHeldImages(VkSwapchainKHR swapchain) {

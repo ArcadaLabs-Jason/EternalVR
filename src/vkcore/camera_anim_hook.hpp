@@ -45,5 +45,18 @@ void noteForcedView(bool forcedView,
                     const xr_math::IdViewAxis& gameAxis,
                     const xr_math::IdAngles& viewAngles);
 
+// Whether ETERNALVR_TEST_CAMERA_TRACE=1 is on (traceView logs anything); set once at install.
+bool tracing();
+
+// ETERNALVR_TEST_CAMERA_TRACE=1 (rig tests, docs/rig-findings/camera-animations.md section 6): camera hook,
+// each head-tracked game view of a forced view and the 120 after it, one log line with the game's camera, the
+// player's view angles (the ones noteForcedView was given in this game view, `none` when head aim read none),
+// the view written (as pitch, yaw, roll) and the game's eye. At most 4000 lines; nothing without the
+// variable.
+void traceView(bool forcedView,
+               const xr_math::IdViewAxis& gameAxis,
+               const xr_math::IdViewAxis& written,
+               const Vec3& eye);
+
 } // namespace camera_anim
 } // namespace evr::vkcore

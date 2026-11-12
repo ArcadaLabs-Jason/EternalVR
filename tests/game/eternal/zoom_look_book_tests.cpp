@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <new>
+#include <set>
 #include <string>
 
 using evr::game::kScopeGuiNone;
@@ -48,10 +49,10 @@ struct FakeIo final : ZoomDeclIo {
     int writesBeforeFailure = -1; // -1: never fails
     int partialsLeft = 1;         // failed writes that still land their first field
     int writes = 0;
-    const void* nameThrows = nullptr; // a decl whose name finds no memory
+    std::set<const void*> nameThrows; // decls whose name finds no memory
 
     std::string name(const void* decl) override {
-        if (decl == nameThrows) {
+        if (nameThrows.count(decl) != 0) {
             throw std::bad_alloc();
         }
         const auto it = names.find(decl);
@@ -161,22 +162,92 @@ TEST_CASE("zoom book: the restore writes back only decls that still have their n
     }
 }
 
-TEST_CASE("zoom book: a decl whose name cannot be read is left as it is and the others still go back") {
+TEST_CASE("zoom book: a decl whose name cannot be read stays on record and goes back at the next restore") {
     FakeIo io = memory();
     int otherDecl = 3;
+    int thirdDecl = 4;
     const void* const kOther = &otherDecl;
+    const void* const kThird = &thirdDecl;
     io.names[kOther] = "weapon/player/heavy_cannon_bolt_action_copy";
     io.fields[kOther] = bolt();
+    io.names[kThird] = "weapon/player/heavy_cannon_bolt_action_third";
+    io.fields[kThird] = bolt();
     ZoomPatchBook book;
     REQUIRE(patchNow(book, io, kBolt) == ZoomPatch::Written);
     REQUIRE(patchNow(book, io, kOther) == ZoomPatch::Written);
-    io.nameThrows = kBolt; // the first on record
-    const ZoomPatchBook::Restored r = book.restore(io);
-    CHECK(r.total == 2);
-    CHECK(r.failed == 1);
-    CHECK(r.back == 1);
+    REQUIRE(patchNow(book, io, kThird) == ZoomPatch::Written);
+    io.nameThrows = {kOther}; // between two that go back
+    const ZoomPatchBook::Restored first = book.restore(io);
+    CHECK(first.total == 3);
+    CHECK(first.failed == 1);
+    CHECK(first.back == 2);
+    CHECK(io.fields[kBolt] == bolt());
+    CHECK(io.fields[kThird] == bolt());
+    CHECK(io.fields[kOther].scopeGuiNum == kScopeGuiNone); // still the layer's: it could not be checked
+    CHECK(book.size() == 1);                               // never dropped unrestored
+    CHECK(book.stopped());
+
+    io.nameThrows.clear(); // the memory is back
+    const ZoomPatchBook::Restored second = book.restore(io);
+    CHECK(second.total == 1);
+    CHECK(second.failed == 0);
+    CHECK(second.back == 1);
     CHECK(io.fields[kOther] == bolt());
-    CHECK(io.fields[kBolt].scopeGuiNum == kScopeGuiNone); // still the layer's: it could not be checked
+    CHECK(book.size() == 0);
+    CHECK(patchNow(book, io, kOther) == ZoomPatch::Stopped);
+}
+
+TEST_CASE("zoom book: decls whose names cannot be read stay on record wherever they sit in the book") {
+    FakeIo io = memory();
+    int secondDecl = 3;
+    int thirdDecl = 4;
+    const void* const kSecond = &secondDecl;
+    const void* const kThird = &thirdDecl;
+    io.names[kSecond] = "weapon/player/heavy_cannon_bolt_action_copy";
+    io.fields[kSecond] = bolt();
+    io.names[kThird] = "weapon/player/heavy_cannon_bolt_action_third";
+    io.fields[kThird] = bolt();
+    ZoomPatchBook book;
+    REQUIRE(patchNow(book, io, kBolt) == ZoomPatch::Written);
+    REQUIRE(patchNow(book, io, kSecond) == ZoomPatch::Written);
+    REQUIRE(patchNow(book, io, kThird) == ZoomPatch::Written);
+
+    std::set<const void*> failing;
+    SUBCASE("the first") {
+        failing = {kBolt};
+    }
+    SUBCASE("the last") {
+        failing = {kThird};
+    }
+    SUBCASE("the first and the last") {
+        failing = {kBolt, kThird};
+    }
+    SUBCASE("all of them") {
+        failing = {kBolt, kSecond, kThird};
+    }
+    io.nameThrows = failing;
+    const ZoomPatchBook::Restored first = book.restore(io);
+    CHECK(first.total == 3);
+    CHECK(first.failed == static_cast<int>(failing.size()));
+    CHECK(first.back == 3 - static_cast<int>(failing.size()));
+    CHECK(book.size() == failing.size()); // never dropped unrestored
+    for (const void* decl : {kBolt, kSecond, kThird}) {
+        if (failing.count(decl) != 0) {
+            CHECK(io.fields[decl].scopeGuiNum == kScopeGuiNone); // still the layer's
+        } else {
+            CHECK(io.fields[decl] == bolt());
+        }
+    }
+
+    io.nameThrows.clear(); // the memory is back
+    const ZoomPatchBook::Restored second = book.restore(io);
+    CHECK(second.total == static_cast<int>(failing.size()));
+    CHECK(second.failed == 0);
+    CHECK(second.back == static_cast<int>(failing.size()));
+    CHECK(book.size() == 0);
+    for (const void* decl : {kBolt, kSecond, kThird}) {
+        CHECK(io.fields[decl] == bolt());
+    }
 }
 
 TEST_CASE("zoom book: after the restore nothing is written again") {

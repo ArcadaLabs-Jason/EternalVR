@@ -84,6 +84,9 @@ void logDispatch(VkCommandBuffer cb, const char* event, const std::string& field
 
 VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cb, const VkCommandBufferBeginInfo* pInfo) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->BeginCommandBuffer) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY; // no next function (deviceOf's pass-through)
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             {
@@ -101,6 +104,9 @@ VKAPI_ATTR void VKAPI_CALL CmdBindPipeline(VkCommandBuffer cb,
                                            VkPipelineBindPoint bindPoint,
                                            VkPipeline pipeline) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdBindPipeline) {
+        return; // no next function (deviceOf's pass-through): the safest no-op
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             {
@@ -128,6 +134,9 @@ VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer cb,
                                                  std::uint32_t dynamicCount,
                                                  const std::uint32_t* pDynamicOffsets) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdBindDescriptorSets) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             std::string line = head(cb, "sets") + ",\"bp\":" + std::to_string(bindPoint) + ",\"layout\":\"" +
@@ -153,6 +162,9 @@ VKAPI_ATTR void VKAPI_CALL CmdPushConstants(VkCommandBuffer cb,
                                             std::uint32_t size,
                                             const void* pValues) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdPushConstants) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             emit(head(cb, "push") + ",\"layout\":\"" + handleText(handleValue(layout)) +
@@ -170,6 +182,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cb,
                                    std::uint32_t firstVertex,
                                    std::uint32_t firstInstance) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDraw) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             logDraw(cb, "draw",
@@ -186,6 +201,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cb,
                                           std::int32_t vertexOffset,
                                           std::uint32_t firstInstance) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDrawIndexed) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             logDraw(cb, "drawIndexed",
@@ -198,6 +216,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cb,
 VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(
     VkCommandBuffer cb, VkBuffer buffer, VkDeviceSize offset, std::uint32_t count, std::uint32_t stride) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDrawIndirect) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] { logDraw(cb, "drawIndirect", ",\"count\":" + std::to_string(count)); });
     }
@@ -207,6 +228,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(
 VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(
     VkCommandBuffer cb, VkBuffer buffer, VkDeviceSize offset, std::uint32_t count, std::uint32_t stride) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDrawIndexedIndirect) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] { logDraw(cb, "drawIndexedIndirect", ",\"count\":" + std::to_string(count)); });
     }
@@ -221,6 +245,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cb,
                                                 std::uint32_t maxCount,
                                                 std::uint32_t stride) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDrawIndirectCount) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] { logDraw(cb, "drawIndirectCount", ",\"max\":" + std::to_string(maxCount)); });
     }
@@ -235,6 +262,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cb,
                                                        std::uint32_t maxCount,
                                                        std::uint32_t stride) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDrawIndexedIndirectCount) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run(
             [&] { logDraw(cb, "drawIndexedIndirectCount", ",\"max\":" + std::to_string(maxCount)); });
@@ -247,6 +277,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cb,
                                        std::uint32_t y,
                                        std::uint32_t z) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDispatch) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             logDispatch(cb, "dispatch",
@@ -259,6 +292,9 @@ VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cb,
 
 VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer cb, VkBuffer buffer, VkDeviceSize offset) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdDispatchIndirect) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] { logDispatch(cb, "dispatchIndirect", ""); });
     }
@@ -269,6 +305,9 @@ VKAPI_ATTR void VKAPI_CALL CmdExecuteCommands(VkCommandBuffer cb,
                                               std::uint32_t count,
                                               const VkCommandBuffer* pBuffers) {
     DumpDevice* d = deviceOf(cb);
+    if (!d->CmdExecuteCommands) {
+        return;
+    }
     if (logging(d)) {
         g_recordGuard.run([&] {
             std::string line = head(cb, "exec") + ",\"cbs\":[";

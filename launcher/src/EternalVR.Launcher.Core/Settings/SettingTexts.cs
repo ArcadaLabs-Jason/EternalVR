@@ -54,6 +54,13 @@ namespace EternalVR.Launcher.Core.Settings
                 + "cutscene (in 3D with Stereoscopic cutscenes). Fade out: the view goes dark for the kill and comes back "
                 + "when it ends.",
                 "Follow the camera (intense)", "Steady view", "Flat screen", "Fade out"),
+            [Setting.PickupCamera] = new Text("Pickup animations",
+                "How the view moves while you pick up a Praetor token, a Sentinel Crystal, a rune and the like. Still view: "
+                + "the view stays with your head and only turns with the game's camera when that swings far to the side; "
+                + "the hands play the animation in front of you. Camera moves: the view also tilts and turns the way the "
+                + "game's camera does during the animation, on top of your head, then eases back. New, not yet tried in "
+                + "a headset.",
+                "Still view", "Camera moves (intense)"),
             [Setting.WalkInRoom] = new Text("Room-scale",
                 "Walking around your room moves the Slayer with you. Off: you can still lean and peek about 60 cm from where "
                 + "you recentered; past that the view fades until you step back or recenter."),
@@ -140,7 +147,8 @@ namespace EternalVR.Launcher.Core.Settings
                 "Stick (default)", "Point with your hand"),
             [Setting.ThumbRestWheel] = new Text("Thumb-rest wheel",
                 "Rest a thumb on its thumb rest and the other stick picks weapons. Touch, then push: rest the thumb for a "
-                + "moment (a quarter of a second), then push within half a second. If you flick the moment you touch, use While touched. While touched: for as long as the thumb rests. Turn stick picks: for playing "
+                + "moment (a quarter of a second), then push within half a second. If you flick the moment you touch, use While touched. While touched: for as long as either thumb rests, the other stick picks weapons and does not "
+                + "move or turn, so a thumb left on the turn hand's rest stops you walking. Turn stick picks: for playing "
                 + "standing, the turn stick always picks; rest the other thumb to turn with it. Needs a thumb-rest sensor "
                 + "(Quest and Rift controllers).",
                 "Touch, then push", "While touched", "Turn stick picks (standing)", "Off (default)"),

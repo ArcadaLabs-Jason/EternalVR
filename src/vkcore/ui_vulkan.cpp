@@ -72,11 +72,12 @@ HookGuard g_layoutGuard("the UI layer's layout tracking");
 HookGuard g_submitGuard("vkQueueSubmit (the UI layer)");
 std::atomic<bool> g_failed{false};
 
-// The device's record; for a device without one (no memory for it), the next layer's functions, passed
-// straight through. A function the layer cannot find either is null: the hook then does nothing (or reports
-// no memory).
+// The device's record (an entry of g_devices keeps its address until its device is destroyed); for a device
+// without one (no memory for it), the next layer's functions, passed straight through, in a record per thread
+// that is filled again on each such call (no hook asks for a second device while it uses the first). A
+// function the layer cannot find either is null: the hook then does nothing (or reports no memory).
 template <typename Handle>
-UiDevice deviceOf(Handle handle) {
+const UiDevice& deviceOf(Handle handle) {
     {
         std::shared_lock lock(g_devicesMutex);
         const auto it = g_devices.find(keyOf(handle));
@@ -84,7 +85,9 @@ UiDevice deviceOf(Handle handle) {
             return it->second;
         }
     }
-    UiDevice d;
+    thread_local UiDevice t_passThrough;
+    UiDevice& d = t_passThrough;
+    d = UiDevice{};
     d.createImage = nextFunction<PFN_vkCreateImage>(handle, "vkCreateImage");
     d.destroyImage = nextFunction<PFN_vkDestroyImage>(handle, "vkDestroyImage");
     d.cmdPipelineBarrier = nextFunction<PFN_vkCmdPipelineBarrier>(handle, "vkCmdPipelineBarrier");
@@ -130,7 +133,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
                                            const VkImageCreateInfo* pCreateInfo,
                                            const VkAllocationCallbacks* pAllocator,
                                            VkImage* pImage) {
-    const UiDevice d = deviceOf(device);
+    const UiDevice& d = deviceOf(device);
     if (!d.createImage) {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -191,7 +194,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
 VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device,
                                         VkImage image,
                                         const VkAllocationCallbacks* pAllocator) {
-    const UiDevice d = deviceOf(device);
+    const UiDevice& d = deviceOf(device);
     if (image != VK_NULL_HANDLE) {
         bool known = false;
         {
@@ -265,7 +268,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
                                            std::uint32_t submitCount,
                                            const VkSubmitInfo* pSubmits,
                                            VkFence fence) {
-    const UiDevice d = deviceOf(queue);
+    const UiDevice& d = deviceOf(queue);
     if (!d.queueSubmit) {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }

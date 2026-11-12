@@ -29,6 +29,7 @@ evr_add_test(evr_xr_math_tests
     SOURCES
         xr_math/aim_check_tests.cpp
         xr_math/camera_anim_tests.cpp
+        xr_math/camera_turn_tests.cpp
         xr_math/cinema_eyes_tests.cpp
         xr_math/cinema_run_tests.cpp
         xr_math/cinema_quad_tests.cpp
@@ -110,6 +111,7 @@ evr_add_test(evr_roomscale_tests
 evr_add_test(evr_comfort_tests
     SOURCES
         features/comfort/glory_kill_tests.cpp
+        features/comfort/pickup_camera_tests.cpp
         features/comfort/vignette_tests.cpp
     DEPENDS evr_comfort)
 
@@ -325,6 +327,7 @@ if(TARGET evr_device_features)
             vkcore/dump_format_tests.cpp
             vkcore/frame_repeat_tests.cpp
             vkcore/game_settings_line_tests.cpp
+            vkcore/held_images_tests.cpp
             vkcore/hook_guard_tests.cpp
             vkcore/job_nodes_tests.cpp
             vkcore/light_cull_tests.cpp

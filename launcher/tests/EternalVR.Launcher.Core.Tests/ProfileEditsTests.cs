@@ -26,6 +26,7 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.SnapAngle] = s => s.SnapDegrees = 30,
             [Setting.Vignette] = s => s.Vignette = VignetteMode.Strong,
             [Setting.GloryKills] = s => s.GloryKills = GloryKillView.Steady,
+            [Setting.PickupCamera] = s => s.PickupCamera = PickupCameraView.Play,
             [Setting.WalkInRoom] = s => s.BodyFollow = false,
             [Setting.HeadFade] = s => s.HeadFade = false,
             [Setting.RecenterHold] = s => s.RecenterLongPress = false,

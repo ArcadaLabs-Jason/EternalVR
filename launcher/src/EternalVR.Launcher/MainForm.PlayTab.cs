@@ -18,6 +18,7 @@ namespace EternalVR.Launcher
         private readonly NumericUpDown snapDegrees = Number(LauncherSettings.MinSnapDegrees, LauncherSettings.MaxSnapDegrees, 15, 0);
         private readonly ComboBox vignette = Choices(Setting.Vignette);
         private readonly ComboBox gloryKills = Choices(Setting.GloryKills);
+        private readonly ComboBox pickupCamera = Choices(Setting.PickupCamera);
         private readonly CheckBox bodyFollow = new CheckBox { AutoSize = true };
         private readonly CheckBox headFade = new CheckBox { AutoSize = true };
         private readonly CheckBox recenter = new CheckBox { AutoSize = true };
@@ -92,6 +93,9 @@ namespace EternalVR.Launcher
                 Row(Setting.GloryKills, gloryKills,
                     s => gloryKills.SelectedIndex = (int)s.GloryKills,
                     s => s.GloryKills = (GloryKillView)gloryKills.SelectedIndex),
+                Row(Setting.PickupCamera, pickupCamera,
+                    s => pickupCamera.SelectedIndex = (int)s.PickupCamera,
+                    s => s.PickupCamera = (PickupCameraView)pickupCamera.SelectedIndex),
                 Row(Setting.WalkInRoom, bodyFollow, s => bodyFollow.Checked = s.BodyFollow, s => s.BodyFollow = bodyFollow.Checked),
                 Row(Setting.HeadFade, headFade, s => headFade.Checked = s.HeadFade, s => s.HeadFade = headFade.Checked),
                 Row(Setting.RecenterHold, recenter, s => recenter.Checked = s.RecenterLongPress, s => s.RecenterLongPress = recenter.Checked),

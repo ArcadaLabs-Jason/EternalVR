@@ -16,7 +16,9 @@
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/frame_repeat.hpp"
 #include "vkcore/glory_view.hpp"
+#include "vkcore/held_images.hpp"
 #include "vkcore/log.hpp"
+#include "vkcore/pickup_view.hpp"
 #include "vkcore/presenter_stereo.hpp"
 #include "vkcore/view_snapshot.hpp"
 #include "vkcore/wait_stats.hpp"
@@ -97,6 +99,9 @@ struct Settings {
     // ETERNALVR_GLORY_KILLS: how glory kills are shown, follow (default), steady, fade or screen
     // (features/comfort/glory_kill.hpp).
     comfort::GloryView gloryKills = comfort::GloryView::Follow;
+    // ETERNALVR_PICKUP_CAMERA: how a pickup animation's camera is shown, still (default) or play
+    // (features/comfort/pickup_camera.hpp).
+    comfort::PickupCamera pickupCamera = comfort::PickupCamera::Still;
     // ETERNALVR_TEST_GLORY=start,duration: a glory kill forced for rig tests (GloryKills);
     // a negative start is none.
     double testGloryStart = -1.0;
@@ -364,13 +369,6 @@ struct PresentViews {
     std::uint64_t withView = 0;
     std::uint64_t seqGapSum = 0;
     std::uint64_t withoutView = 0;
-};
-
-// A game swapchain image whose present was handed back instead of reaching the window (presenter_window.cpp).
-struct HeldImage {
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-    std::uint32_t image = 0;
-    std::uint64_t value = 0; // the ring copy that last used it
 };
 
 struct FamilyCommands {

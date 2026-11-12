@@ -5,6 +5,7 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/body_follow.hpp"
+#include "vkcore/body_jump_watch.hpp"
 #include "vkcore/camera_anim_hook.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/debug_commands.hpp"
@@ -20,7 +21,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <optional>
 
@@ -28,33 +28,11 @@ namespace evr::vkcore {
 
 namespace {
 
-// The body yaw turning more than 90 degrees in one game frame (a stick turn never does): logged with what
-// drove the view, to find the rare half turn seen once in a seated glory kill (2026-09-28; camera hook only).
-struct BodyJumpWatch {
-    std::optional<float> lastYaw;
-    std::uint64_t jumps = 0;
-};
-BodyJumpWatch g_bodyJump;
-
 // Whether the view under a menu faces a camera the game drives (aimWithHead), for the log's changes.
 struct MenuCameraWatch {
     bool on = false;
     int lines = 0;
 } g_menuCamera;
-
-void watchBodyYaw(float yaw, bool headAimed, bool forcedView, bool cutscene, bool menuUp) {
-    if (g_bodyJump.lastYaw) {
-        const float turn = xr_math::normalize180(yaw - *g_bodyJump.lastYaw);
-        if (std::fabs(turn) > 90.0f && ++g_bodyJump.jumps <= 20) {
-            EVR_LOG("aim: the body turned %.1f deg in one game frame (%.1f -> %.1f); %s, forced view %s, "
-                    "cutscene %s, menu %s (jump %llu)",
-                    turn, *g_bodyJump.lastYaw, yaw, headAimed ? "head aim" : "the game's yaw",
-                    forcedView ? "yes" : "no", cutscene ? "yes" : "no", menuUp ? "yes" : "no",
-                    static_cast<unsigned long long>(g_bodyJump.jumps));
-        }
-    }
-    g_bodyJump.lastYaw = yaw;
-}
 
 } // namespace
 
@@ -98,6 +76,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     // The hands animation's camera (camera_anim_hook.hpp): off the game's view for the body and head aim, and
     // (ETERNALVR_CAMERA_ANIMATIONS=1) back on top of the head below.
     const camera_anim::Frame anim = camera_anim::frame(player, gameAxis, cutscene, controllers::forcedView());
+    pickup.frame(player, cutscene, menuUp.load(std::memory_order_relaxed), gameAxis);
     ViewRecord record;
     record.gameOriginValid = true;
     record.gameOrigin = {origin[0], origin[1], origin[2]};
@@ -223,9 +202,12 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     glory.noteBody(xr_math::anglesFromAxis(*body).yaw);
     watchBodyYaw(xr_math::anglesFromAxis(*body).yaw, headAimed, roomIn.forcedView, cutscene,
                  menuUp.load(std::memory_order_relaxed));
-    if (anim.active) {
-        // Aim and the body above follow the head; the view and the eyes turn by the animation on top of it.
-        headId = xr_math::headWithCameraAnim(*body, headId, anim.applied);
+    // Aim and the body above follow the head; the view and the eyes turn by the game's camera on top of it (a
+    // pickup's turn or the hands animation's, pickup_view.hpp).
+    if (const std::optional<Quat> turned =
+            headWithGameCamera(pickup, anim, *body, headId, gameAxis, headAimed, roomIn.forcedView,
+                               {origin[0], origin[1], origin[2]})) {
+        headId = *turned;
         headGame = xr_math::idTechToOpenXr(headId);
     }
     const xr_math::IdViewAxis view = xr_math::composeHeadAxis(*body, headId);
@@ -466,7 +448,8 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
     // body keeps the yaw it had when the menu came up, so the world stays put while the head looks around
     // (the owner's Quest 3, 2026-09-27: the view seemed to turn the wrong way in a tutorial popup). Under a
     // camera the game drives with the menu up (the Fortress's collectible viewer), the view faces the
-    // camera's heading instead (xr_math::menuBodyYaw).
+    // camera's heading instead (xr_math::menuBodyYaw), except under a pickup's camera played on top of the
+    // head (pickup_view.hpp), which keeps the player's heading as below.
     const xr_math::IdViewAxis angleAxis = xr_math::axisFromAngles({sample.view.pitch, sample.view.yaw, 0.0f});
     if (menuUp.load(std::memory_order_relaxed) && aimMenuBody) {
         if (aimMenuFrames++ == 0) {
@@ -475,8 +458,9 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
                 *aimMenuBody);
         }
         controllers::noteAimPaused();
-        const float yaw = xr_math::menuBodyYaw(aimState, *aimMenuBody, angleAxis, gameAxis);
-        const bool camera = xr_math::drivenCamera(angleAxis, gameAxis);
+        const xr_math::IdViewAxis& rendered = pickup.turn() ? angleAxis : gameAxis;
+        const float yaw = xr_math::menuBodyYaw(aimState, *aimMenuBody, angleAxis, rendered);
+        const bool camera = xr_math::drivenCamera(angleAxis, rendered);
         if (camera != g_menuCamera.on && g_menuCamera.lines++ < 40) {
             EVR_LOG("aim: under the menu the view %s (body yaw %.1f, held %.1f; game view yaw %.1f)",
                     camera ? "faces the camera the game drives" : "is the player's own again", yaw,
@@ -488,9 +472,10 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
 
     // Only while the view is the player's own (not a cinematic or scripted camera). In a cutscene shown
     // around the player, with its cuts re-based, every frame is the camera's: a camera within 15 degrees of
-    // the player's angles does not turn head aim back on mid-cutscene.
+    // the player's angles does not turn head aim back on mid-cutscene. A pickup's camera played on top of the
+    // head (pickup_view.hpp) keeps the player's heading.
     const bool cutsceneCamera = cutscene && !settings.cutsceneCinema && settings.cutsceneCutRebase;
-    if (cutsceneCamera || xr_math::drivenCamera(angleAxis, gameAxis)) {
+    if (cutsceneCamera || (!pickup.turn() && xr_math::drivenCamera(angleAxis, gameAxis))) {
         // A scripted camera (a glory kill's): nothing is written, and the view faces the camera's heading
         // while the head is where it was when the camera took over (not the camera plus the head's whole
         // yaw in the room, which faces backwards for a player turned round in the room).

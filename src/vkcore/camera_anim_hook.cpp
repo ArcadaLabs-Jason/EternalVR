@@ -10,10 +10,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <mutex>
 #include <numbers>
+#include <optional>
 #include <string>
 
 namespace evr::vkcore::camera_anim {
@@ -76,6 +78,19 @@ struct Sample {
 bool g_apply = false;           // ETERNALVR_CAMERA_ANIMATIONS=1, set once at install
 xr_math::CameraAnimRamp g_ramp; // ETERNALVR_CAMERA_ANIM_MIN=<degrees> (rig tests): start there, full at twice
 
+// ETERNALVR_TEST_CAMERA_TRACE=1 (traceView): set once at install; the lines so far and the game views since
+// the last forced one (camera hook thread only). 120 game views after a forced view cover what eases out
+// after it (a pickup's turn, 0.3 s) at any frame rate up to about 400 a second.
+bool g_trace = false;
+constexpr std::uint64_t kTraceLines = 4000;
+constexpr std::uint64_t kTraceAfter = 120;
+std::uint64_t g_traceLines = 0;
+std::uint64_t g_traceSince = kTraceAfter;
+
+// The player's view angles head aim read in this game view, for the trace (noteForcedView; frame() clears
+// them). Kept only while tracing.
+std::optional<xr_math::IdAngles> g_viewAngles; // camera hook thread only
+
 bool plausible(float v) {
     return std::isfinite(v) && std::fabs(v) <= kMaxDegrees;
 }
@@ -126,6 +141,13 @@ void noteFrame(float weight, float size, bool applied, bool forcedView) {
 bool install(const GameImage& image) {
     std::wstring value;
     g_apply = readEnv(L"ETERNALVR_CAMERA_ANIMATIONS", value) && value == L"1";
+    g_trace = readEnv(L"ETERNALVR_TEST_CAMERA_TRACE", value) && value == L"1";
+    if (g_trace) {
+        EVR_LOG(
+            "%s: trace on (ETERNALVR_TEST_CAMERA_TRACE): every game view of a forced view and the %llu after "
+            "it, at most %llu lines",
+            kTag, static_cast<unsigned long long>(kTraceAfter), static_cast<unsigned long long>(kTraceLines));
+    }
     if (readEnv(L"ETERNALVR_CAMERA_ANIM_MIN", value) && !value.empty()) {
         const float least = std::wcstof(value.c_str(), nullptr);
         if (std::isfinite(least) && least >= 0.5f && least <= 45.0f) {
@@ -158,6 +180,9 @@ bool install(const GameImage& image) {
 
 Frame frame(const std::byte* player, const xr_math::IdViewAxis& gameAxis, bool cutscene, bool forcedView) {
     Frame f{gameAxis, {}, false};
+    if (g_trace) {
+        g_viewAngles.reset();
+    }
     Sample sample;
     {
         std::lock_guard lock(g_shared.mutex);
@@ -179,6 +204,9 @@ Frame frame(const std::byte* player, const xr_math::IdViewAxis& gameAxis, bool c
 void noteForcedView(bool forcedView,
                     const xr_math::IdViewAxis& gameAxis,
                     const xr_math::IdAngles& viewAngles) {
+    if (g_trace) {
+        g_viewAngles = viewAngles;
+    }
     ForcedGap& g = g_forced;
     if (forcedView) {
         if (!g.on) {
@@ -210,6 +238,34 @@ void noteForcedView(bool forcedView,
                     g.largest.roll);
         }
     }
+}
+
+bool tracing() {
+    return g_trace;
+}
+
+void traceView(bool forcedView,
+               const xr_math::IdViewAxis& gameAxis,
+               const xr_math::IdViewAxis& written,
+               const Vec3& eye) {
+    if (!g_trace) {
+        return;
+    }
+    g_traceSince = forcedView ? 0 : g_traceSince + 1;
+    if (g_traceSince > kTraceAfter || g_traceLines >= kTraceLines) {
+        return;
+    }
+    ++g_traceLines;
+    const xr_math::IdAngles game = xr_math::anglesFromAxis(gameAxis);
+    const xr_math::IdAngles view = xr_math::anglesFromAxis(written);
+    char own[64] = "none";
+    if (g_viewAngles) {
+        std::snprintf(own, sizeof(own), "%.2f %.2f", g_viewAngles->pitch, g_viewAngles->yaw);
+    }
+    EVR_LOG(
+        "%s: trace %llu: game (%.2f %.2f %.2f) angles (%s) written (%.2f %.2f %.2f) eye (%.2f %.2f %.2f)%s",
+        kTag, static_cast<unsigned long long>(g_traceLines), game.pitch, game.yaw, game.roll, own, view.pitch,
+        view.yaw, view.roll, eye.x, eye.y, eye.z, forcedView ? " forced" : "");
 }
 
 } // namespace evr::vkcore::camera_anim

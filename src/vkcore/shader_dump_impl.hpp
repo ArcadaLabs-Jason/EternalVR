@@ -45,7 +45,9 @@ struct DumpDevice {
 
 #undef EVR_DUMP_DECLARE_FN
 
-// The registered device for any handle dispatched through it (device, queue, command buffer).
+// The registered device for any handle dispatched through it (device, queue, command buffer); never null. For
+// a device without a record, the next layer's functions, any of which may be null: a hook calls its function
+// only when it is set, and otherwise returns VK_ERROR_OUT_OF_HOST_MEMORY or does nothing (next_function.hpp).
 DumpDevice* deviceOf(void* dispatchable);
 
 enum class Stream { Pipelines, Layouts, Sets, DrawLog };

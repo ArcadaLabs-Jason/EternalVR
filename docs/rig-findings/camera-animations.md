@@ -100,3 +100,47 @@ set off) the pickup below moved the rendered view no more than with 1.
 | cs18 | mono, controllers and viewmodel off | joint exactly 0 through the pickup |
 | cs20 | `ETERNALVR_CAMERA_ANIMATIONS=1`, `ETERNALVR_CAMERA_ANIM_MIN=1.5`, three melee punches, the pickup | each punch logged and played on top of the head (1.6 to 2.9 deg, 2 to 5 game frames, hand aim yields); the pickup: no camera animation, forced view gap 0.9 deg |
 | cs21 | default build, three melee punches, the pickup | no camera animation line (the punches stay under 5 deg) and no forced view from them; the pickup: `camera: forced view 2: 1404 game frame(s); the rendered view left the player's view angles by up to 0.9 deg` |
+
+## 6. A pickup the rig reaches: the Praetor Suit token (2026-11-11)
+
+The chainsaw pickup still cannot be reached the normal way, and `teleport barge_pickup_weapon_chainsaw_1` after
+the intro (skipped with `ETERNALVR_SKIP_CINEMATICS=1`) only moved the player this time: no pickup, no forced view
+past the teleport's own (run m2). The Praetor Suit token at `game/sp/e1m3_cult/e1m3_cult -checkpoint
+cp_03_shoot_gate` is reached the normal way (the `token-pickup` scenario's spot and Use): its sync animation
+`interact/preator_suit_token/preator_suit_token_sync` is a pickup animation of the same kind as the Sentinel
+Crystal, rune, mod bot and automap ones (`comfort::isKillSync` false). `ETERNALVR_TEST_CAMERA_TRACE=1` logs every
+game view of a forced view: the game's camera (the render view before the layer writes it: what the flat game
+shows), the player's view angles, the view written and the eye. The `pickup-camera` scenarios
+(`tools/rig/qa/qa-scenarios-pickup.ps1`) run it under hand aim with the weapon hand 15 degrees down.
+
+- The pickup is a forced view (`view inhibited; inhibit 0x1F87F`) of about 3.1 s (132 to 135 game frames) from
+  the sync's start; the hands camera joint does not move (no `camera animation` line): the camera is the sync
+  animation's own. [rig, log]
+- The game's camera, pitch in degrees (down positive), yaw 45 and roll 0 all along: the player's 15 (the weapon
+  hand's aim), then in one frame 5.6 (a cut to the animation's start, 9.4 degrees), 5.6 to 11.4 over 1.3 s
+  (about 4.5 degrees a second), held 1.3 s, 11.3 to 2.2 over 0.45 s (about 20 degrees a second, at most 0.65 in
+  one frame), then the game sets the player's view angles to the camera's 2.2 (SetViewAngles from RVA 0xB4567C)
+  and the forced view ends; hand aim puts the angles back on the hand. The eye moves under 0.2 units. [rig, log]
+- So the flat game's own view cuts at the start, turns 6 degrees down at the token in the hands and 9 up, and
+  leaves the player looking where the camera ended. The rotation never leaves the player's yaw here.
+- What the headset shows today (the default): the view written stays on the head (pitch 0 in the trace, the
+  simulator's head still), only the eye follows the camera. The hands play the animation in front of the head:
+  the eye captures show both hands holding the token up in front of the view and the ghostly Praetor suit behind
+  it, then the HUD's Praetor Suit Point notice. The camera's 6 and 9 degree turns are not seen; nothing freezes.
+  (the eye captures of run m1 during the pickup.) [rig]
+- `ETERNALVR_PICKUP_CAMERA=play` (launcher: Pickup animations, Camera moves) plays the camera's motion since the
+  pickup took the view on top of the head (`xr_math::CameraTurn`): the cut at the start is left out (a step over
+  5 degrees in one frame), so the view goes 5.8 degrees down and 9.4 up from where the head was (in run m2 the
+  camera went from 11.4 down to 2.0 at the end, 9.4; run m1's 11.3 to 2.2 is 9.1), at most 0.65
+  degrees in one game frame, and the 3.6 degrees left when the forced view ends ease out over 0.3 s. A first
+  version that played the camera's gap from the player's view angles jumped 9.4 degrees at the start and 12.7
+  at the end (run m1): under hand aim the angles are the hand's, not the head's. [rig, log]
+
+What this says about the known issue: in this pickup the animation plays in the headset; what the layer leaves
+out is the camera's small turn. The chainsaw report (a view held still until the tutorial popup, 2026-09-28) came
+before a later headset session in which the chainsaw pickup played; no log covers a natural chainsaw pickup.
+
+| Run | What | Result |
+|---|---|---|
+| m1 | `pickup-camera` and a first `pickup-camera-play` (the gap from the view angles) | default: camera as above, view on the head; play: steps of 9.4 and 12.7 degrees at the start and end |
+| m2 | `pickup-camera`, `pickup-camera-play` (the summed motion), the chainsaw by teleport | default unchanged; play: written pitch -3.6 to 5.8, largest step 0.65, back on the head 0.3 s after; chainsaw: no pickup ran |

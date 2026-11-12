@@ -144,6 +144,7 @@ struct XrPresenter::Impl final : ViewHookSink,
 
     // Cutscenes and glory kills (camera hook thread only; the worker reads glory.flat()).
     GloryKills glory{settings.gloryKills, settings.testGloryStart, settings.testGloryDuration};
+    PickupView pickup{settings.pickupCamera}; // a pickup animation's camera (pickup_view.hpp)
     bool cutscene = false;
     CutsceneTrack cutsceneTrack; // changes, the skip key's hold, the cuts' re-base (presenter_cutscene.hpp)
 

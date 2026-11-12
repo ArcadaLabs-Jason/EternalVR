@@ -175,9 +175,12 @@ bool wheelView();
 // savedSyncEntity, else idPlayer::syncMaster (docs/BHAPTICS.md). A pickup's animation is a sync too.
 const std::byte* syncEntity(const std::byte* player);
 // Camera hook: whether `player` (the view's object) is the idPlayer and a glory kill runs: a sync entity
-// that is not a pickup's animation (comfort::isKillSync). False for any other object, and while the
-// controllers are off.
+// that is not a pickup's animation (comfort::isKillSync). False for any other object, and while neither the
+// controllers nor gamepad mode read the game (the forced-view gate is not live).
 bool syncKillActive(const std::byte* player);
+// Camera hook: the same for a pickup's animation: any `interact/...` sync (comfort::isKillSync false), which
+// includes interactions that pick nothing up (the automap station, for one).
+bool syncPickupActive(const std::byte* player);
 
 // Writes back the game's own values of the wall-climb cvars the layer held (climb_hook.cpp), once; nothing
 // if it wrote none or gave them back already. The camera hook when the multiplayer guard has stopped game

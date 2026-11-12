@@ -1,6 +1,8 @@
 #include "game/eternal/zoom_look_book.hpp"
 
+#include <cstddef>
 #include <exception>
+#include <utility>
 
 namespace evr::game {
 
@@ -73,14 +75,21 @@ ZoomPatchBook::Restored ZoomPatchBook::restore(ZoomDeclIo& io) {
     stopped_ = true;
     Restored r;
     r.total = static_cast<int>(entries_.size());
-    // Each decl on its own: one whose name cannot be read (no memory for it) cannot be checked, so it is left
-    // as it is, and the others still go back. A trip runs this from the game's hook.
-    for (const Entry& e : entries_) {
+    // Each decl on its own: one whose name cannot be read (no memory for it) cannot be checked yet, so it is
+    // not written (it may have been freed) and stays on record for the next restore, and the others still go
+    // back. A trip runs this from the game's hook.
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < entries_.size(); ++i) {
+        const Entry& e = entries_[i];
         bool same = false;
         try {
             same = io.name(e.decl) == e.name;
         } catch (const std::exception&) {
             ++r.failed;
+            if (kept != i) {
+                entries_[kept] = std::move(entries_[i]); // a move: no allocation
+            }
+            ++kept;
             continue;
         }
         if (!same) {
@@ -94,7 +103,7 @@ ZoomPatchBook::Restored ZoomPatchBook::restore(ZoomDeclIo& io) {
             ++r.back;
         }
     }
-    entries_.clear();
+    entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
     return r;
 }
 

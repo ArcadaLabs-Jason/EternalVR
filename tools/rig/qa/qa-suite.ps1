@@ -17,6 +17,11 @@ in GAME-AUTOSAVE0 then (it is copied in before the first run when the slot holds
 end leaves the restore pending for the next cleanup; on STOP-RIG it is left so, with the command in qa.log
 and the report. See tools\rig\qa\README.md.
 
+A timeline that starts more than 12 s after the layer log's in-map line (launch-ht.ps1 returned late, while the
+layer's own timers ran) is a harness timing failure: its timeline and the scenario's checks are skipped and, when
+nothing else failed, the scenario runs once more and the rerun's result is its result (the first run's files in
+<Out>\<scenario>-try1). The reruns are on the 'QA: N rerun(s) after a late start' line after the summary.
+
 Before every scenario: <workspace>\tmp-vr\STOP-RIG ends the suite at once (the owner is using
 the PC; it is also checked during every wait), and a running DOOMEternalx64vk.exe refuses it.
 
@@ -49,6 +54,10 @@ suite once without and once with it before a release or a headset package.
 .PARAMETER GameEnv
 NAME=VALUE pairs for every game scenario, after -DlssDll's (a test knob such as
 ETERNALVR_TEST_HIDE_KHR_MAINTENANCE=1).
+
+.PARAMETER TestLateStartSec
+A test of the late-start check: each game scenario's first run waits this many seconds in the map before its
+timeline, so the check fails it as a harness timing failure and the scenario runs once more (without the wait).
 #>
 param(
     [string]$LayerSrc = '',
@@ -56,7 +65,8 @@ param(
     [string[]]$Only = @(),
     [string]$LauncherBin = '',
     [string]$DlssDll = '',
-    [string[]]$GameEnv = @()
+    [string[]]$GameEnv = @(),
+    [int]$TestLateStartSec = 0
 )
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-common.ps1')
@@ -74,7 +84,9 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios-fit.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-unseen.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-fxsync.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-pickup.ps1')
 
+$script:QaTestLateStartSec = $TestLateStartSec
 if (-not $LayerSrc) { $LayerSrc = Join-Path $script:QaRepo 'build\windows-msvc\src\vkcore' }
 if (-not $Out) { $Out = "E:\Code\resources\Testing\QA-$((Get-Date).ToString('yyyyMMdd-HHmm'))" }
 New-Item -ItemType Directory -Force $Out | Out-Null
@@ -122,7 +134,14 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
         Add-QaResult $Ctx 'in the map' $inMap "layer log matches '$script:QaPlayMarker' within 200 s"
         # A scenario that never gets there keeps what was on screen (a popup nobody asked for kept the aim check
         # waiting in seated-jump, merge QA r60b and r61b, and nothing showed which one).
-        if ($inMap) { & $Scenario.Timeline $Ctx } else { Save-QaShot $Ctx 'not-in-map' }
+        if ($inMap) {
+            if ($script:QaTestLateStartSec -gt 0 -and $Ctx.Try -eq 1) {
+                Write-QaLine "  test: the timeline starts $script:QaTestLateStartSec s late (-TestLateStartSec)"
+                Wait-QaSeconds $Ctx $script:QaTestLateStartSec
+            }
+            # A timeline that starts long after the map runs its input after the layer's own timers: not run.
+            if (-not (Test-QaLateStart $Ctx)) { & $Scenario.Timeline $Ctx }
+        } else { Save-QaShot $Ctx 'not-in-map' }
     } catch [OperationCanceledException] {
         $Ctx.Stopped = $true
         Add-QaResult $Ctx 'not stopped by STOP-RIG' $false $_.Exception.Message
@@ -140,7 +159,8 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
     if ($log) {
         Copy-Item -LiteralPath $log (Join-Path $Ctx.Dir 'eternalvr.log') -ErrorAction SilentlyContinue
         Add-QaNote $Ctx "layer log $log"
-        & $Scenario.Asserts $Ctx
+        # A late start's checks would only report what its timeline did not do.
+        if (-not $Ctx.Timing) { & $Scenario.Asserts $Ctx }
         # Every scenario: a full hook pool turns a feature off with only this line to show for it.
         Test-QaAbsent $Ctx 'no free (inline )?hook slot' -Regex
         # Every scenario: the multiplayer guard armed, the map loaded as single-player, and (but for the
@@ -155,6 +175,47 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
     if (Test-Path -LiteralPath $script:QaProcDump) {
         Add-QaResult $Ctx 'no crash dump' ($dumps.Count -eq 0) "$($dumps.Count) in $($Ctx.Stage)-dumps"
     }
+}
+
+# A run that left more than the fields the game rewrites every run: the next game run starts from the cloud files as
+# they were before the suite, as the first one did (the restore finished, then held again).
+function Invoke-QaCloudBetween($Ctx) {
+    $r = Invoke-QaCloudRestore (Join-Path $Ctx.Dir 'cloud-restore.txt')
+    Add-QaResult $Ctx 'Steam Cloud files back as before the suite for the next scenario' $r.Ok $r.Detail
+    if ($r.Ok) {
+        $hold = Start-QaCloudHold (Join-Path $Ctx.Dir 'cloud-restore.txt')
+        if (-not $hold.Ok) { Add-QaResult $Ctx 'Steam Cloud files held again' $false $hold.Detail; $Ctx.Abort = $true }
+    } else { $Ctx.Abort = $true }
+}
+
+# The one rerun of a scenario whose first run started late (Test-QaTimingRerun): the first run's folder moves to
+# <scenario>-try1 and the rerun's result is the scenario's. Returns the context that counts.
+function Invoke-QaRerun($Scenario, $First) {
+    try { Assert-QaCanStart } catch [OperationCanceledException] {
+        $First.Stopped = $true
+        return $First
+    } catch {
+        Add-QaResult $First 'the rerun after the late start can begin' $false $_.Exception.Message
+        return $First
+    }
+    $tryDir = "$($First.Dir)-try1"
+    # The first run's files are the late start's evidence: when they cannot be kept apart, there is no rerun
+    # (it would write over them) and the scenario fails on the late start.
+    try {
+        if (Test-Path -LiteralPath $tryDir) { Remove-Item -LiteralPath $tryDir -Recurse -Force -ErrorAction Stop }
+        Move-Item -LiteralPath $First.Dir -Destination $tryDir -ErrorAction Stop
+    } catch {
+        Add-QaResult $First "the first run's files kept in $tryDir for the rerun" $false $_.Exception.Message
+        return $First
+    }
+    foreach ($s in @($First.Shots)) { Move-Item -LiteralPath $s -Destination $tryDir -ErrorAction SilentlyContinue }
+    Write-QaLine "scenario $($Scenario.Name): $($First.Timing); its files are in $tryDir; running it once more"
+    $ctx = New-QaContext $Scenario $Out
+    $ctx.Try = 2
+    Add-QaNote $ctx "rerun after a late start: the first run ($($First.RunDir)) started its timeline $($First.LateBy) s after the game was in the map; its files are in $tryDir"
+    # Whatever a timeline leaves in the output stream must not become part of the context returned.
+    $null = Invoke-QaGameScenario $Scenario $ctx
+    return $ctx
 }
 
 # The launcher's end-to-end suite against a Release build (no game; nothing outside -Root is written).
@@ -184,6 +245,8 @@ function Format-QaCell([string]$Text) { return ($Text -replace '\|', '\|' -repla
 
 # The suite's own checks (the cloud files and the save after the last game run), for the report.
 $script:QaSuiteResults = New-Object System.Collections.ArrayList
+# The scenarios run once more after a late start (Invoke-QaRerun).
+$script:QaReruns = New-Object System.Collections.ArrayList
 
 # The held cloud restore finished (qa-cloud.ps1 Complete-QaCloud), its results in qa.log.
 function Complete-QaSuiteCloud {
@@ -208,6 +271,7 @@ function Write-QaReport($Records, $Pending) {
     $md.Add('|---|---|---|---|---|')
     foreach ($r in $Records) {
         $result = if ($r.Skipped) { 'SKIP' } elseif ($r.Pass) { 'PASS' } else { 'FAIL' }
+        if ($r.Ctx.Try -gt 1) { $result += ' (rerun)' }
         $shots = (@($r.Ctx.Shots) | ForEach-Object { Split-Path -Leaf $_ }) -join ', '
         $run = if ($r.Ctx.RunDir) { Split-Path -Leaf $r.Ctx.RunDir } else { '' }
         $md.Add("| $($r.Ctx.Name) | $result | $([int]$r.Seconds) s | $run | $shots |")
@@ -236,6 +300,8 @@ function Write-QaReport($Records, $Pending) {
     $md.Add("QA: $passed of $($ran.Count) scenarios passed")
     $skipped = @($Records | Where-Object { $_.Skipped }).Count
     if ($skipped -or @($Pending).Count) { $md.Add("($skipped skipped, $(@($Pending).Count) not run)") }
+    $md.Add('')
+    $md.Add((Format-QaRerunLine $script:QaReruns))
     Set-Content -LiteralPath (Join-Path $Out 'report.md') -Value $md -Encoding utf8
     # Scenarios not run are in the line, so '0 of 0' after a suite that ended early never reads as all passed.
     return "QA: $passed of $($ran.Count) scenarios passed$(if (@($Pending).Count) { "; $(@($Pending).Count) not run" })"
@@ -288,22 +354,26 @@ for ($i = 0; $i -lt $selected.Count; ++$i) {
     $watch = [Diagnostics.Stopwatch]::StartNew()
     if ($sc.Kind -eq 'game') {
         Invoke-QaGameScenario $sc $ctx
-        # A run that left more than the fields the game rewrites every run: the next scenario starts from the
-        # cloud files as they were before the suite, as the first one did (the restore finished, then held again).
-        if ($ctx.CloudRestore -and $i -ne $lastGame -and -not $ctx.Stopped -and -not (Test-QaStopRequested)) {
-            $r = Invoke-QaCloudRestore (Join-Path $ctx.Dir 'cloud-restore.txt')
-            Add-QaResult $ctx 'Steam Cloud files back as before the suite for the next scenario' $r.Ok $r.Detail
-            if ($r.Ok) {
-                $hold = Start-QaCloudHold (Join-Path $ctx.Dir 'cloud-restore.txt')
-                if (-not $hold.Ok) { Add-QaResult $ctx 'Steam Cloud files held again' $false $hold.Detail; $ctx.Abort = $true }
-            } else { $ctx.Abort = $true }
+        $cloudDone = $false
+        # A late start and nothing else failed: run once more (the rerun is the next game run for the cloud files).
+        if ((Test-QaTimingRerun $ctx) -and -not (Test-QaStopRequested)) {
+            if ($ctx.CloudRestore) { Invoke-QaCloudBetween $ctx; $cloudDone = $true }
+            if (Test-QaTimingRerun $ctx) {
+                $first = $ctx
+                $ctx = Invoke-QaRerun $sc $first
+                if (-not [object]::ReferenceEquals($ctx, $first)) { $cloudDone = $false; [void]$script:QaReruns.Add([pscustomobject]@{ Name = $sc.Name; LateBy = $first.LateBy }) }
+            }
+        }
+        if (-not $cloudDone -and $ctx.CloudRestore -and $i -ne $lastGame -and -not $ctx.Stopped -and -not (Test-QaStopRequested)) {
+            Invoke-QaCloudBetween $ctx
         }
     }
     elseif ($sc.Kind -eq 'standin') { Invoke-QaStandInScenario $sc $ctx $LayerSrc }
     else { Invoke-QaE2eScenario $ctx }
     $pass = -not $ctx.Skipped -and $ctx.Results.Count -gt 0 -and @($ctx.Results | Where-Object { -not $_.Ok }).Count -eq 0
     [void]$records.Add([pscustomobject]@{ Ctx = $ctx; Pass = $pass; Skipped = $ctx.Skipped; Seconds = $watch.Elapsed.TotalSeconds; Proves = $sc.Proves })
-    Write-QaLine ("scenario {0}: {1} in {2:N0} s" -f $sc.Name, $(if ($ctx.Skipped) { 'SKIP' } elseif ($pass) { 'PASS' } else { 'FAIL' }), $watch.Elapsed.TotalSeconds)
+    Write-QaLine ("scenario {0}: {1} in {2:N0} s{3}" -f $sc.Name, $(if ($ctx.Skipped) { 'SKIP' } elseif ($pass) { 'PASS' } else { 'FAIL' }), $watch.Elapsed.TotalSeconds,
+        $(if ($ctx.Try -gt 1) { ' (the rerun after a late start)' } else { '' }))
     if ($i -eq $lastGame) { Complete-QaSuiteCloud }
     [void](Write-QaReport $records @($selected | Select-Object -Skip ($i + 1)))
     if ($ctx.Stopped -or $ctx.Abort) {
@@ -324,6 +394,7 @@ for ($i = 0; $i -lt $selected.Count; ++$i) {
 if (@($script:QaSuiteResults | Where-Object { -not $_.Ok }).Count -gt 0) { $exitCode = 2 }
 $summary = Write-QaReport $records @($selected | Where-Object { $n = $_.Name; -not ($records | Where-Object { $_.Ctx.Name -eq $n }) })
 Write-QaLine $summary
+Write-QaLine (Format-QaRerunLine $script:QaReruns)
 Write-QaLine "report: $(Join-Path $Out 'report.md')"
 if ($exitCode -eq 0 -and @($records | Where-Object { -not $_.Skipped -and -not $_.Pass }).Count -gt 0) { $exitCode = 1 }
 exit $exitCode

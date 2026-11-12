@@ -7,6 +7,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -34,16 +35,21 @@ std::string narrow(const std::wstring& text) {
 
 } // namespace
 
-bool readEnv(const wchar_t* name, std::wstring& value) {
+bool readEnv(const wchar_t* name, std::wstring& value) noexcept {
     const DWORD size = GetEnvironmentVariableW(name, nullptr, 0);
     if (size == 0) {
         value.clear();
         return GetLastError() != ERROR_ENVVAR_NOT_FOUND;
     }
-    std::vector<wchar_t> buffer(size);
-    const DWORD written = GetEnvironmentVariableW(name, buffer.data(), size);
-    value.assign(buffer.data(), written);
-    return true;
+    try {
+        std::vector<wchar_t> buffer(size);
+        const DWORD written = GetEnvironmentVariableW(name, buffer.data(), size);
+        value.assign(buffer.data(), written);
+        return true;
+    } catch (const std::exception&) {
+        value.clear(); // no memory for the value: read as unset, the setting's default
+        return false;
+    }
 }
 
 std::wstring logDirectory() {

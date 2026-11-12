@@ -226,7 +226,7 @@ namespace EternalVR.Launcher.Core.Tests
             // mode"), so they stay available, in mono too.
             foreach (var s in new[] { new LauncherSettings { Controllers = false }, new LauncherSettings { Controllers = false, Mode = VrMode.Mono } })
             {
-                foreach (var setting in new[] { Setting.Vignette, Setting.GloryKills, Setting.RecenterHold, Setting.Bhaptics, Setting.WalkInRoom })
+                foreach (var setting in new[] { Setting.Vignette, Setting.GloryKills, Setting.PickupCamera, Setting.RecenterHold, Setting.Bhaptics, Setting.WalkInRoom })
                     Assert.Null(SettingRules.WhyNot(setting, s));
             }
             // Room-scale still does not apply while sitting, with the controllers or without.
@@ -302,6 +302,7 @@ namespace EternalVR.Launcher.Core.Tests
             Choices<TurnMode>(Setting.Turning);
             Choices<VignetteMode>(Setting.Vignette);
             Choices<GloryKillView>(Setting.GloryKills);
+            Choices<PickupCameraView>(Setting.PickupCamera);
             Choices<PostureMode>(Setting.PlayPosition);
             Choices<HeightMode>(Setting.EyeHeight);
             Choices<AimMode>(Setting.AimWith);

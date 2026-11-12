@@ -66,6 +66,15 @@ function Exit-Rig([int]$Code, [string]$Message, [string]$Level = 'ERROR') {
     Exit-RigScript $Code
 }
 
+# A step that takes longer than this is named in the log: a launch of minutes with nothing in its log between the
+# start and the mute left no trace of what it waited on.
+$script:SlowStepSec = 5
+function Write-RigSlowStep([string]$Step, [Diagnostics.Stopwatch]$Watch) {
+    if ($Watch.Elapsed.TotalSeconds -gt $script:SlowStepSec) {
+        Write-RigLog ([string]::Format([Globalization.CultureInfo]::InvariantCulture, 'slow step: {0} took {1:N1} s', $Step, $Watch.Elapsed.TotalSeconds)) 'WARN'
+    }
+}
+
 try {
     $cfg = Get-RigConfig
 } catch {
@@ -133,7 +142,9 @@ if ($pending.Count -gt 0) {
 }
 # Completes pending runs whose processes are gone (never stops a live run, never touches an owner run);
 # removes a display only when an earlier session left it.
+$stepWatch = [Diagnostics.Stopwatch]::StartNew()
 $clean = Invoke-RigCleanup $cfg -Session $session
+Write-RigSlowStep 'the cleanup of earlier runs' $stepWatch
 if ($clean.Failed -or $clean.Pending.Count -gt 0) {
     foreach ($p in $clean.Pending) { Write-RigLog "pending: $($p.Reason)" 'ERROR' }
     Exit-Rig 2 'REFUSED: a pending run could not be cleaned up (see above, its cleanup.json and rig.log). Report it to the owner if a restore failed.'
@@ -142,6 +153,7 @@ if ($clean.Failed -or $clean.Pending.Count -gt 0) {
 # Settings must match the last verified restore (before the first one: the pre-development backups);
 # an unexplained difference is reported, never adopted.
 $baseline = $null
+$stepWatch.Restart()
 # The last restore is the latest cleanup, not the latest folder: a held cloud restore (cleanup.ps1
 # -HoldCloudRestore) is made before the runs it is finished after.
 $lastRestored = @(Get-RigRunDirs $cfg | ForEach-Object {
@@ -199,6 +211,7 @@ if ($bLocations) {
         Write-RigLog ("settings differences {0}: {1}" -f $how, ($differences -join '; ')) 'WARN'
     }
 }
+Write-RigSlowStep 'the settings check against the last restore' $stepWatch
 
 # Steam's record of the cloud files must match them, or the game may reset its profile at this launch
 # (T-115). Reported, not refused: the rig wrote no cloud file.
@@ -278,6 +291,21 @@ try {
     $argString = $argList -join ' '
     $run.args = $argString
 
+    # The runs that may have left the session muted (see the mute below), found before the start: the scan reads
+    # every run folder, which took 14 s with about 10,000 of them on an idle PC and, by the launch logs, up to about
+    # 3 minutes while the game loaded, and the launch watch only began after it (the mute, the window placement and the return all minutes
+    # late, while the game's own timers ran). Only a run.json that says so is parsed.
+    $leakedMutes = @()
+    if ($muteSession) {
+        $stepWatch.Restart()
+        $leakedMutes = @(Get-RigRunDirs $cfg | Where-Object {
+                $f = Join-Path $_ 'run.json'
+                (Test-Path -LiteralPath $f) -and ([IO.File]::ReadAllText($f) -match '"muteMayPersist"\s*:\s*true') -and
+                ($r = Read-RigJson $f) -and (Get-RigProp $r 'muteMayPersist' $false) -and $r.exe.path -eq $exePath
+            })
+        Write-RigSlowStep 'the scan of earlier runs for a mute they left' $stepWatch
+    }
+
     $before = @{}
     foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) { $before[$p.Id] = $true }
     Initialize-RigNative
@@ -321,24 +349,24 @@ try {
     $handoff = $false
     $moved = @{}
     $muteDone = -not $muteSession
-    $leakedMutes = @()
     if ($muteSession) {
         $run.sessionMute = [ordered]@{ requested = $true; applied = $false; priorMuted = $null; restored = $false; pids = @(); leakFrom = $null }
-        $leakedMutes = @(Get-RigRunDirs $cfg | Where-Object {
-                $r = Read-RigJson (Join-Path $_ 'run.json')
-                $r -and (Get-RigProp $r 'muteMayPersist' $false) -and $r.exe.path -eq $exePath
-            })
     }
     $watchEnd = $launch.AddSeconds($cfg.WatchSec)
     $windowEnd = $launch.AddSeconds([Math]::Max($cfg.WatchSec, $cfg.WindowWaitSec))
     $muteEnd = $launch.AddSeconds([Math]::Max($cfg.WatchSec, $cfg.MuteWaitSec))
+    # Each step of the watch is timed: one that blocks is named in the log (see Write-RigSlowStep).
     while ($true) {
         $now = Get-Date
+        $stepWatch.Restart()
         $alive = @($tracked | Where-Object { -not $_.HasExited })
+        Write-RigSlowStep 'the check of the game processes' $stepWatch
         if ($alive.Count -eq 0) {
             if (-not $exitedAt) { $exitedAt = $now; Write-RigLog "pid $($proc.Id) exited after $([int]($now - $launch).TotalSeconds) s; looking for a hand-off" 'WARN' }
             $names = @($cfg.GameProcesses) + @($exeName) | Select-Object -Unique
+            $stepWatch.Restart()
             $new = @(Get-Process -Name $names -ErrorAction SilentlyContinue | Where-Object { -not $before.ContainsKey($_.Id) } | Where-Object { $id = $_.Id; -not @($tracked | Where-Object { $_.Id -eq $id }).Count })
+            Write-RigSlowStep 'the search for a hand-off process' $stepWatch
             if ($new.Count -gt 0) {
                 foreach ($p in $new) {
                     $path = $null; try { $path = $p.Path } catch { }
@@ -364,7 +392,9 @@ try {
         } else {
             $pids = [int[]]@($alive | ForEach-Object { $_.Id })
             if (-not $muteDone) {
+                $stepWatch.Restart()
                 try {
+                    Invoke-RigAbortPoint $cfg 'watch-mute'
                     $sessions = @([EvrRig.Audio]::Query($pids))
                     if ($sessions.Count -gt 0) {
                         # The prior state is recorded before the change, so every stop path can put it back.
@@ -389,8 +419,10 @@ try {
                     Write-RigLog "audio session mute failed: $($_.Exception.Message)" 'WARN'
                     $muteDone = $true
                 }
+                Write-RigSlowStep 'the audio session query and mute' $stepWatch
             }
             if ($rect) {
+                $stepWatch.Restart()
                 foreach ($w in @([EvrRig.Windows]::TopLevel($pids) | Where-Object { $_.Visible })) {
                     $inside = ($w.X -ge $rect.x -and $w.Y -ge $rect.y -and $w.X -lt ($rect.x + $rect.width) -and $w.Y -lt ($rect.y + $rect.height))
                     if (-not $inside) {
@@ -399,13 +431,16 @@ try {
                     }
                     $moved[[string]$w.Handle] = $true
                 }
+                Write-RigSlowStep 'the window placement' $stepWatch
             }
             # The game must not keep the owner's keyboard and mouse: give the foreground back.
+            $stepWatch.Restart()
             if (-not $Owner -and -not $KeepFocus -and $fgBefore -ne 0 -and $run.foreground.handedBack -lt 10 -and $pids -contains [EvrRig.Windows]::ForegroundPid()) {
                 $ok = [EvrRig.Windows]::RestoreForeground($fgBefore)
                 $run.foreground.handedBack++
                 Write-RigLog "the game took the foreground; handed it back to the previous window (ok=$ok)"
             }
+            Write-RigSlowStep 'the foreground hand-back' $stepWatch
         }
         $windowsDone = (-not $rect) -or ($moved.Count -gt 0)
         if ($now -ge $watchEnd -and $alive.Count -gt 0 -and
@@ -413,10 +448,12 @@ try {
         Start-Sleep -Milliseconds 250
     }
 
+    $stepWatch.Restart()
     $pids = [int[]]@($tracked | Where-Object { -not $_.HasExited } | ForEach-Object { $_.Id })
     $run.windows = @([EvrRig.Windows]::TopLevel($pids) | Where-Object { $_.Visible } | ForEach-Object {
             [ordered]@{ pid = $_.Pid; title = $_.Title; className = $_.ClassName; x = $_.X; y = $_.Y; width = $_.Width; height = $_.Height }
         })
+    Write-RigSlowStep 'the window record' $stepWatch
     if ($rect -and $moved.Count -eq 0) { $run.warnings += 'WINDOW_NOT_PLACED'; Write-RigLog 'WARNING: no game window appeared to place on the virtual display' 'WARN' }
     if ($muteSession -and -not $run.sessionMute.applied) { $run.warnings += 'SESSION_MUTE_NOT_APPLIED'; Write-RigLog 'WARNING: no audio session appeared to mute; the game may be audible' 'WARN' }
     # The game's window appears late and it can take the foreground again at any time: guard.ps1 keeps
@@ -426,6 +463,7 @@ try {
             '-RunDir', ('"{0}"' -f $runDir), '-Foreground', $fgBefore)
         if ($rect) { $guardArgs += @('-Rect', ('{0},{1},{2},{3}' -f $rect.x, $rect.y, $rect.width, $rect.height)) }
         if ($KeepFocus) { $guardArgs += '-NoFocus' }
+        $stepWatch.Restart()
         try {
             $guard = Start-Process -FilePath 'powershell.exe' -ArgumentList $guardArgs -WindowStyle Hidden -PassThru
             $run.guard = [ordered]@{ pid = $guard.Id; startFileTimeUtc = (Get-RigProcessStartFileTime $guard) }
@@ -433,6 +471,7 @@ try {
             $run.warnings += 'GUARD_NOT_STARTED'
             Write-RigLog "WARNING: the window and focus guard did not start: $($_.Exception.Message)" 'WARN'
         }
+        Write-RigSlowStep 'the guard start' $stepWatch
     }
     $run.phase = 'running'
     Save-Run

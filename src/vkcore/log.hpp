@@ -61,8 +61,10 @@ std::wstring logDirectory();
 // Logs the file version of the vulkan-1.dll the game loaded (T-079).
 void logLoaderVersion();
 
-// Reads an environment variable; false when it is not set.
-bool readEnv(const wchar_t* name, std::wstring& value);
+// Reads an environment variable; false when it is not set. Never throws: the settings read on their first use
+// inside a hook (a function-local static) go through it, so a value that finds no memory reads as unset (the
+// setting's default; hook_guard.hpp).
+bool readEnv(const wchar_t* name, std::wstring& value) noexcept;
 
 } // namespace evr::vkcore
 

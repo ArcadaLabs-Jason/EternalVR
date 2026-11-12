@@ -2,6 +2,8 @@
 
 #include <doctest/doctest.h>
 
+#include <limits>
+
 using namespace evr::xr_math;
 
 TEST_CASE("a run's first frames and a cut's drop the history, the frames between keep it") {
@@ -145,4 +147,74 @@ TEST_CASE("a trace hit nearer than the confirm distance counts on the second fra
     // A near hit on a run's first frame or a cut counts at once.
     confirm.reset();
     CHECK(confirm.step(0.3f, true) == doctest::Approx(0.3f));
+}
+
+TEST_CASE("the GUI quad stays in front of the screen without a full-screen backdrop") {
+    CinemaGuiDepth depth;
+    CHECK(depth.step(0.55f, false, -1.0) == doctest::Approx(0.55f));
+    for (int i = 0; i < 100; ++i) {
+        CHECK(depth.step(0.55f, false, 0.011) == doctest::Approx(0.55f));
+    }
+    CHECK_FALSE(depth.towardScreen());
+    // The near place follows the screen's width and the eye distance each frame.
+    CHECK(depth.step(0.6f, false, 0.011) == doctest::Approx(0.6f));
+}
+
+TEST_CASE("a full-screen backdrop takes the GUI quad to the screen and back, gliding") {
+    CinemaGuiDepth depth;
+    CHECK(depth.step(0.55f, false, -1.0) == doctest::Approx(0.55f));
+    // On its way to the screen: a third of the way after a third of its (shorter) move time.
+    const float third = depth.step(0.55f, true, kCinemaGuiToScreenSeconds / 3.0);
+    CHECK(depth.towardScreen());
+    CHECK(third == doctest::Approx(0.55f + 0.45f / 3.0f).epsilon(1e-4));
+    float k = third;
+    for (int i = 0; i < 100; ++i) {
+        const float next = depth.step(0.55f, true, 0.011);
+        CHECK(next >= k);
+        CHECK(next <= 1.0f);
+        k = next;
+    }
+    // At the screen: the quad covers the pair exactly in both eyes.
+    CHECK(k == 1.0f);
+    // The backdrop gone: back in front of the screen over the same time, a quarter of the way after a
+    // quarter of it.
+    const float back = depth.step(0.55f, false, kCinemaGuiMoveSeconds / 4.0);
+    CHECK_FALSE(depth.towardScreen());
+    CHECK(back == doctest::Approx(0.55f + 0.45f * 0.75f).epsilon(1e-4));
+    for (int i = 0; i < 100; ++i) {
+        k = depth.step(0.55f, false, 0.011);
+    }
+    CHECK(k == doctest::Approx(0.55f));
+}
+
+TEST_CASE("the GUI quad's first frame and a new run take their place at once") {
+    // A cutscene that starts on a backdrop (the opening's sigil): at the screen from the first frame.
+    CinemaGuiDepth first;
+    CHECK(first.step(0.55f, true, -1.0) == 1.0f);
+    // A frame long after the last (a new pair run) does not glide from where the last run left it.
+    CHECK(first.step(0.55f, false, kCinemaRunGapSeconds + 0.1) == doctest::Approx(0.55f));
+    CHECK(first.step(0.55f, true, kCinemaRunGapSeconds + 0.1) == 1.0f);
+    // A long frame within a run moves at most 0.1 s worth: all the way to the screen, a third of the way
+    // back.
+    CinemaGuiDepth slow;
+    CHECK(slow.step(0.55f, false, -1.0) == doctest::Approx(0.55f));
+    CHECK(slow.step(0.55f, true, 0.4) == 1.0f);
+    CHECK(
+        slow.step(0.55f, false, 0.4) ==
+        doctest::Approx(0.55f + 0.45f * static_cast<float>(1.0 - 0.1 / kCinemaGuiMoveSeconds)).epsilon(1e-4));
+}
+
+TEST_CASE("the GUI quad turns back from where it is when the backdrop goes mid-move") {
+    CinemaGuiDepth depth;
+    CHECK(depth.step(0.55f, false, -1.0) == doctest::Approx(0.55f));
+    // Half way to the screen, then the backdrop is gone: it heads back from half way, without a jump.
+    const float half = depth.step(0.55f, true, kCinemaGuiToScreenSeconds / 2.0);
+    CHECK(half == doctest::Approx(0.55f + 0.45f * 0.5f).epsilon(1e-4));
+    const float turned = depth.step(0.55f, false, 0.011);
+    CHECK(turned < half);
+    CHECK(turned ==
+          doctest::Approx(half - 0.45f * static_cast<float>(0.011 / kCinemaGuiMoveSeconds)).epsilon(1e-4));
+    // A frame time that is not a number, or negative, takes the place at once instead of gliding.
+    CHECK(depth.step(0.55f, true, std::numeric_limits<double>::quiet_NaN()) == 1.0f);
+    CHECK(depth.step(0.55f, false, -0.5) == doctest::Approx(0.55f));
 }

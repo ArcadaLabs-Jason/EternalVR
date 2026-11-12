@@ -72,6 +72,18 @@ Settings readSettings() {
                     value.c_str());
         }
     }
+    if (readEnv(L"ETERNALVR_PICKUP_CAMERA", value) && !value.empty()) {
+        std::string narrow;
+        for (const wchar_t c : value) {
+            narrow.push_back(c < 0x80 ? static_cast<char>(c) : '?');
+        }
+        if (const auto camera = comfort::parsePickupCamera(narrow)) {
+            s.pickupCamera = *camera;
+            EVR_LOG("pickup: ETERNALVR_PICKUP_CAMERA=%s", comfort::pickupCameraName(*camera));
+        } else {
+            EVR_LOG("pickup: ETERNALVR_PICKUP_CAMERA '%ls' is not still or play; still", value.c_str());
+        }
+    }
     if (readEnv(L"ETERNALVR_TEST_GLORY", value) && !value.empty()) {
         double start = -1.0, duration = 0.0;
         if (swscanf_s(value.c_str(), L"%lf,%lf", &start, &duration) == 2 && std::isfinite(start) &&

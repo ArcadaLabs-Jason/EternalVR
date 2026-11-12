@@ -93,7 +93,8 @@ and then resting the thumb leaves the other stick alone. If it still gets in the
 wheel** to **Off** on the launcher's Play tab.
 
 On the launcher's Play tab, **Thumb-rest wheel** chooses how it works: **Touch, then push** (above), **While touched** (the other stick picks weapons for as long as the thumb rests, and does not move
-or turn you meanwhile), **Turn stick picks (standing)** or **Off**. Turn stick picks is for playing standing,
+or turn you meanwhile; this works from either thumb rest, so a thumb left resting on the turn hand's rest (the right
+one, unless you swapped the sticks) while you walk turns the walking stick into the picker until you lift it), **Turn stick picks (standing)** or **Off**. Turn stick picks is for playing standing,
 turning with your body: the turn stick (the right one, unless you swapped them) always picks weapons; rest your
 other thumb on its rest to turn with it, use the chainsaw or quick switch (resting it in the middle of a pick
 cancels it, unless the game's wheel is already open: then it takes the highlighted weapon), or rest the turn
@@ -333,6 +334,7 @@ it now (with SteamVR as the runtime it starts SteamVR). The box says when the va
 | Snap angle | Snap turning's step, 15 to 90 degrees | 45 |
 | Vignette | Off, Light, Strong: darkens the edges of your view while the stick moves or turns you (and during a dash or a glory kill), which helps if stick motion makes you feel sick; moving your head never shows it | Off |
 | Glory kills | Follow the camera (intense: your view goes with the game's camera through the kill), Steady view (you see the kill up close but the view only turns when you turn your head, and you face the same way afterwards), Flat screen (the kill plays on a flat screen in front of you, like a cutscene), Fade out (the view goes dark for the kill, with Fade in walls on or off) | Follow the camera (intense) |
+| Pickup animations | Still view (while you pick up a Praetor token, a Sentinel Crystal, a rune and the like, the view stays with your head and only turns with the game's camera when that swings far to the side; your hands play the animation in front of you), Camera moves (intense: the view also tilts and turns the way the game's camera does during the animation, then eases back; new, not tried in a headset yet) | Still view |
 | Room-scale | Walking around your room moves you in the game; off, you can lean about 60 cm before the view fades | On |
 | Fade in walls | The view fades to black when your head goes into a wall or too far from your body; after a second and a half of black you are moved back onto your body | On |
 | Recenter hold | Hold both sticks pressed for 2 seconds to recenter | On |

@@ -70,4 +70,30 @@ struct CinemaLayerPlan {
 };
 CinemaLayerPlan cinemaLayerPlan(bool pair, bool guiFresh, double secondsSinceGui);
 
+// The GUI quad sits nearer than the screen (cinemaGuiDistanceScale) at the screen's angular size, so each eye
+// sees it shifted against the screen by half its crossed disparity: a GUI that covers the whole screen (the
+// black of a cinematic's fade, the opening's Slayer sigil) leaves a strip of the scene behind it uncovered at
+// one edge in each eye, the left edge in the left eye and the right edge in the right. While the GUI holds
+// such a full-screen backdrop it goes to the screen instead, where it covers the pair exactly in both eyes;
+// it moves between the two places, so subtitles over a fade glide instead of jumping: to the screen over
+// kCinemaGuiToScreenSeconds (quickly: the backdrop test reports a backdrop a few frames after it appears, and
+// until the quad arrives the strip shows), back in front of it over kCinemaGuiMoveSeconds.
+inline constexpr double kCinemaGuiToScreenSeconds = 0.1;
+inline constexpr double kCinemaGuiMoveSeconds = 0.3;
+
+// XR worker only.
+class CinemaGuiDepth {
+public:
+    // The GUI quad's distance as a fraction of the screen's for a frame `seconds` after the last one, with
+    // `nearScale` the place in front of the screen and `backdrop` the full-screen backdrop up. The first
+    // frame, and one more than kCinemaRunGapSeconds after the last (a new pair run), takes its place at once.
+    float step(float nearScale, bool backdrop, double seconds);
+    // Whether the last step had the GUI at the screen or on its way there.
+    [[nodiscard]] bool towardScreen() const { return towardScreen_; }
+
+private:
+    float atScreen_ = -1.0f; // 0: in front of the screen, 1: at it; negative: no frame yet
+    bool towardScreen_ = false;
+};
+
 } // namespace evr::xr_math

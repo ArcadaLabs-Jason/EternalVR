@@ -729,6 +729,21 @@ Test-Case 'audio-session-mute-is-the-default-and-restores-the-prior-state' {
     [void](Invoke-Rig 'stop.ps1' @('-EndBlock'))
 }
 
+Test-Case 'a-slow-launch-step-is-named-in-the-log' {
+    # A launch that sat silent for minutes between the start and the mute named nothing it waited on.
+    $t = New-TestEnv 'slow-step'
+    Set-TestVar 'EVR_RIG_TEST_SLEEP_AT' 'watch-mute:6'
+    $s = Start-TestRun $t
+    Set-TestVar 'EVR_RIG_TEST_SLEEP_AT' ''
+    Check ($s.Code -eq 0) "run exit code $($s.Code): $($s.Output)"
+    $line = '\[WARN\] slow step: the audio session query and mute took [6-9]\.\d s'
+    Check ($s.Output -match $line) "no slow step line: $($s.Output)"
+    if ($s.Dir) { Check ([IO.File]::ReadAllText((Join-Path $s.Dir 'rig.log')) -match $line) 'the slow step is not in the run''s rig.log' }
+    # The sleep is in every pass of the watch that still looks for the session; no other step is slow.
+    Check ($s.Output -notmatch 'slow step: (?!the audio session query and mute)') "another step was reported as slow: $($s.Output)"
+    Check ((Invoke-Rig 'stop.ps1' @('-EndBlock')).Code -eq 0) 'stop failed'
+}
+
 Test-Case 'args-and-env-arrive-comma-joined-via-file' {
     $t = New-TestEnv 'comma-args'
     # What "powershell -File run.ps1 -Args "+logFile 2","--exit-now"" hands the script: one joined string.
@@ -1490,6 +1505,78 @@ Test-Case 'qa-suite-end-on-stop-rig-leaves-the-restore-pending' {
     Check (Test-Path -LiteralPath (Join-Path $held 'CLEANUP_PENDING')) 'the restore was finished under STOP-RIG'
     Check (-not (Test-Path -LiteralPath (Join-Path $held 'resync.json')) -and (Get-TestResyncProcesses $helper).Count -eq 0) 'a resync launch started under STOP-RIG'
     $script:QaStopFile = Join-Path $t.Root 'STOP-RIG-gone'
+}
+
+# --- The rig QA suite's late-start check (tools/rig/qa/qa-common.ps1) -------------------------------------
+# A layer log as the layer writes it: the anchor line, then '[seconds] [thread] text'.
+function New-TestLayerLog([string]$Name, [string[]]$Lines) {
+    $dir = Join-Path $SuiteRoot "qa-$Name"
+    $ctx = New-QaContext @{ Name = $Name } $dir
+    $ctx.LogsDir = Join-Path $dir 'logs'
+    $ctx.RunDir = Join-Path $dir 'run'
+    Write-TestFile (Join-Path $ctx.LogsDir 'eternalvr-20261111-032703-15848.log') ((@('[    0.000] log start 2026-11-11 03:27:03.754 local') + $Lines) -join "`r`n")
+    return $ctx
+}
+
+$script:TestInMapLines = @('[   10.968] [15800] controllers: test input read (0 issue(s))',
+    "[   18.437] [ 8368] debug-commands: the player is in the map; the schedule's clock starts",
+    '[   18.437] [ 8368] aim: head aim on through the state deltaViewAngles')
+$script:TestInMap = [datetime]::new(2026, 11, 11, 3, 27, 22, 191)
+
+Test-Case 'qa-late-start-the-in-map-time-is-read-from-the-layer-log' {
+    $text = (@('[    0.000] log start 2026-11-11 03:27:03.754 local') + $script:TestInMapLines) -join "`n"
+    $at = Get-QaLogLineTime $text $script:QaPlayMarker
+    Check ($at -eq $script:TestInMap) "in-map time $at, expected $script:TestInMap (the anchor plus 18.437 s)"
+    Check ($null -eq (Get-QaLogLineTime ($script:TestInMapLines -join "`n") $script:QaPlayMarker)) 'a time without the log start line'
+    Check ($null -eq (Get-QaLogLineTime $text 'no such line')) 'a time for a line that is not there'
+    Check ([Math]::Abs((Get-QaLateStart $text $script:TestInMap.AddSeconds(154)) - 154) -lt 0.01) 'the distance from the in-map line'
+    Check ((Get-QaLateStart $text $script:TestInMap.AddSeconds(-3)) -lt 0) 'a timeline before the in-map line is not below 0'
+}
+
+Test-Case 'qa-late-start-on-time-runs-the-timeline' {
+    $c = New-TestLayerLog 'on-time' $script:TestInMapLines
+    Check (-not (Test-QaLateStart $c $script:TestInMap.AddSeconds(7.2))) 'a start 7.2 s after the map (on time on the rig) taken as late'
+    Check (-not (Test-QaLateStart $c $script:TestInMap.AddSeconds($script:QaLateStartSec))) 'a start at the margin taken as late'
+    Check (-not $c.Timing -and $c.Results.Count -eq 0) "on time, yet: $($c.Timing) $(@($c.Results | ForEach-Object { $_.Name }) -join '; ')"
+    Check (-not (Test-QaTimingRerun $c)) 'a rerun on time'
+    $none = New-TestLayerLog 'no-map' @('[    5.000] [ 1] status: waiting for the game')
+    Check (-not (Test-QaLateStart $none $script:TestInMap.AddSeconds(300))) 'a log without the in-map line taken as late'
+}
+
+Test-Case 'qa-late-start-past-the-margin-is-a-timing-failure-rerun-once' {
+    $c = New-TestLayerLog 'late' $script:TestInMapLines
+    Check (Test-QaLateStart $c $script:TestInMap.AddSeconds(154)) 'a start 154 s after the map not taken as late'
+    Check ($c.Timing -eq "TIMING: the driver started 154 s after the game was in the map (more than $script:QaLateStartSec s)") "message: $($c.Timing)"
+    Check ($c.LateBy -eq 154 -and @($c.Results | Where-Object { -not $_.Ok -and $_.Name -eq $c.Timing }).Count -eq 1) 'the timing failure not recorded as a failed result'
+    Check (Test-QaTimingRerun $c) 'a late start with nothing else failed is not run once more'
+    # Any other failure, a stop, a cloud abort or a second late start: no rerun.
+    $other = New-TestLayerLog 'late-and-failed' $script:TestInMapLines
+    [void](Test-QaLateStart $other $script:TestInMap.AddSeconds(60))
+    Add-QaResult $other 'no crash dump' $false '1 in the dumps folder'
+    Check (-not (Test-QaTimingRerun $other)) 'a run that also failed another check is run once more'
+    foreach ($k in 'Stopped', 'Abort') {
+        $s = New-TestLayerLog "late-$k" $script:TestInMapLines
+        [void](Test-QaLateStart $s $script:TestInMap.AddSeconds(60))
+        $s[$k] = $true
+        Check (-not (Test-QaTimingRerun $s)) "a late run with $k is run once more"
+    }
+    $again = New-TestLayerLog 'late-rerun' $script:TestInMapLines
+    $again.Try = 2
+    Check (Test-QaLateStart $again $script:TestInMap.AddSeconds(60)) 'a late rerun not taken as late'
+    Check (-not (Test-QaTimingRerun $again)) 'a late rerun is run again'
+}
+
+Test-Case 'qa-late-start-reruns-line-leaves-the-summary-line-alone' {
+    $none = Format-QaRerunLine @()
+    $one = Format-QaRerunLine @([pscustomobject]@{ Name = 'mp-guard-trip'; LateBy = 154 })
+    $two = Format-QaRerunLine @([pscustomobject]@{ Name = 'a'; LateBy = 20 }, [pscustomobject]@{ Name = 'b'; LateBy = 81 })
+    Check ($none -eq 'QA: 0 reruns after a late start') "no reruns: $none"
+    Check ($one -eq 'QA: 1 rerun after a late start: mp-guard-trip (154 s late)') "one rerun: $one"
+    Check ($two -eq 'QA: 2 reruns after a late start: a (20 s late), b (81 s late)') "two reruns: $two"
+    # The merge scripts take the suite as passed on 'QA: N of N scenarios passed' with no 'not run' and no ' FAIL'.
+    foreach ($l in $none, $one, $two) {
+        Check ($l -notmatch 'QA: ([1-9][0-9]*) of \1 scenarios passed' -and $l -notmatch 'not run' -and $l -notmatch 'FAIL') "the merge scripts misread: $l"
+    }
 }
 
 Test-Case 'test-seams-are-ignored-outside-test-mode' {

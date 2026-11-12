@@ -478,9 +478,15 @@ const std::byte* syncEntity(const std::byte* player) {
     return safeRead(player + kPlayerSyncMaster, sync) ? sync : nullptr;
 }
 
-bool syncKillActive(const std::byte* player) {
+namespace {
+
+// Whether the sync animation `player` (the idPlayer) is in is a kill (comfort::isKillSync); nullopt for none,
+// another object, or while the forced-view gate is not live (neither the controllers nor gamepad mode). The
+// kind is cached by the sync entity's address: a sync entity freed and another made at the same address while
+// no frame saw it change would keep the old kind (not seen; a frame without a sync between two clears it).
+std::optional<bool> syncKind(const std::byte* player) {
     if (!gateLive() || !isPlayerSafe(player)) {
-        return false;
+        return std::nullopt;
     }
     const std::byte* sync = syncEntity(player);
     // The camera hook runs on any of the game's worker threads: the kind is read once per sync entity.
@@ -498,7 +504,18 @@ bool syncKillActive(const std::byte* player) {
             }
         }
     }
-    return g_syncKill;
+    return sync ? std::optional<bool>(g_syncKill) : std::nullopt;
+}
+
+} // namespace
+
+bool syncKillActive(const std::byte* player) {
+    return syncKind(player).value_or(false);
+}
+
+bool syncPickupActive(const std::byte* player) {
+    const std::optional<bool> kill = syncKind(player);
+    return kill.has_value() && !*kill;
 }
 
 std::optional<xr_math::IdAngles> aimAngles(const xr_math::IdAngles& head) {

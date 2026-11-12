@@ -150,9 +150,11 @@ them is worse for you than described here.
   0.1.31; they now get their motion in both eyes, which has not been checked in a headset yet. If one eye
   still looks different on a moving shape, please report where. The launcher's "Anti-aliasing" setting can
   switch to Off (sharp, with some shimmer on edges) or DLSS.
-- **Pickup camera animations do not play.** At a pickup that moves the camera (the chainsaw, for
-  example) the view holds still until the tutorial popup instead of playing the animation. The game
-  carries on normally afterwards.
+- **Pickup animations keep your view still.** At a pickup that moves the game's camera (a Praetor token,
+  for example) your hands play the animation in front of you, but the view stays where your head points
+  instead of tilting with the camera. "Pickup animations: Camera moves" on the Play tab tilts the view with
+  it; that one is new and not tried in a headset yet. If the view freezes at a pickup instead (it did at the
+  chainsaw in an early test), please tell me which one.
 - **See-through surfaces while you turn.** In an early headset test, stained-glass windows and similar glass
   smeared while turning; back then the two eyes shared the glass's history. Each eye keeps its own now, and on
   my test PC glass under head motion looks the same in both eyes and the same as in the flat game. Not
@@ -412,8 +414,10 @@ them is worse for you than described here.
   and has not been tried in a headset yet.
 - **The weapon wheel from the thumb rest** (Quest and Rift controllers; Thumb-rest wheel on the Play tab, off
   by default) is new and has had a few headset tests. Touch, then push is hard to get right and picking with
-  the game's wheel is slow to open; While touched with Weapon by direction works best so far. Weapon by
-  direction follows the game's own wheel (the rocket launcher left, the heavy cannon right, and so on):
+  the game's wheel is slow to open; While touched with Weapon by direction works best so far, with one catch: it
+  works from either thumb rest, so a thumb resting on the turn hand's rest (the right one, unless you swapped
+  the sticks) while you walk makes the walking stick pick weapons instead (with Weapon by direction no wheel
+  shows, so it feels like the stick stopped). Lift the thumb and the stick walks again. Weapon by direction follows the game's own wheel (the rocket launcher left, the heavy cannon right, and so on):
   **Weapon directions...** on the Play tab changes it. If nothing happens when you rest a thumb, your VR
   runtime may not report the thumb rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
   in a headset yet, nor has the thumb rest's new touch handling (0.1.41: a touch counts at once, a short loss

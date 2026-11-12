@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -81,10 +82,22 @@ public:
     void start(const std::wstring& dir) {
         static const wchar_t* const names[] = {L"\\pipelines.jsonl", L"\\layouts.jsonl", L"\\sets.jsonl",
                                                L"\\drawlog.jsonl"};
-        for (int i = 0; i < 4; ++i) {
-            files_[i] = _wfsopen((dir + names[i]).c_str(), L"wb", _SH_DENYWR);
+        // A path or the thread that finds no memory (the dump then goes off, onDeviceCreated) closes the
+        // files opened so far: none stays open, and locked, for the rest of the process.
+        try {
+            for (int i = 0; i < 4; ++i) {
+                files_[i] = _wfsopen((dir + names[i]).c_str(), L"wb", _SH_DENYWR);
+            }
+            std::thread([this] { run(); }).detach();
+        } catch (const std::exception&) {
+            for (std::FILE*& f : files_) {
+                if (f) {
+                    std::fclose(f);
+                    f = nullptr;
+                }
+            }
+            throw;
         }
-        std::thread([this] { run(); }).detach();
     }
 
     void push(Stream stream, std::string lines) {
@@ -189,6 +202,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device,
                                                   const VkAllocationCallbacks* pAllocator,
                                                   VkShaderModule* pModule) {
     DumpDevice* d = deviceOf(device);
+    if (!d->CreateShaderModule) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY; // no next function (deviceOf's pass-through)
+    }
     const VkResult result = d->CreateShaderModule(device, pCreateInfo, pAllocator, pModule);
     if (result == VK_SUCCESS && d->isGame && pCreateInfo->pCode) {
         g_moduleLine.run([&] {
@@ -281,6 +297,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
                                                        const VkAllocationCallbacks* pAllocator,
                                                        VkPipeline* pPipelines) {
     DumpDevice* d = deviceOf(device);
+    if (!d->CreateGraphicsPipelines) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->CreateGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     if (result >= VK_SUCCESS && d->isGame) {
         g_graphicsLine.run([&] { logPipelines("graphics", count, pInfos, pPipelines); });
@@ -295,6 +314,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device,
                                                       const VkAllocationCallbacks* pAllocator,
                                                       VkPipeline* pPipelines) {
     DumpDevice* d = deviceOf(device);
+    if (!d->CreateComputePipelines) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->CreateComputePipelines(device, cache, count, pInfos, pAllocator, pPipelines);
     if (result >= VK_SUCCESS && d->isGame) {
         g_computeLine.run([&] { logPipelines("compute", count, pInfos, pPipelines); });
@@ -307,6 +329,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreatePipelineLayout(VkDevice device,
                                                     const VkAllocationCallbacks* pAllocator,
                                                     VkPipelineLayout* pLayout) {
     DumpDevice* d = deviceOf(device);
+    if (!d->CreatePipelineLayout) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->CreatePipelineLayout(device, pInfo, pAllocator, pLayout);
     if (result == VK_SUCCESS && d->isGame) {
         g_layoutLine.run([&] {
@@ -333,6 +358,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorSetLayout(VkDevice device,
                                                          const VkAllocationCallbacks* pAllocator,
                                                          VkDescriptorSetLayout* pLayout) {
     DumpDevice* d = deviceOf(device);
+    if (!d->CreateDescriptorSetLayout) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->CreateDescriptorSetLayout(device, pInfo, pAllocator, pLayout);
     if (result == VK_SUCCESS && d->isGame) {
         g_setLayoutLine.run([&] {
@@ -355,6 +383,9 @@ VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(VkDevice device,
                                                       const VkDescriptorSetAllocateInfo* pInfo,
                                                       VkDescriptorSet* pSets) {
     DumpDevice* d = deviceOf(device);
+    if (!d->AllocateDescriptorSets) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     const VkResult result = d->AllocateDescriptorSets(device, pInfo, pSets);
     if (result == VK_SUCCESS && d->isGame && g_setLines.load(std::memory_order_relaxed) < kMaxSetLines) {
         g_allocateLine.run([&] {
@@ -381,6 +412,9 @@ VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device,
                                                 std::uint32_t copyCount,
                                                 const VkCopyDescriptorSet* pCopies) {
     DumpDevice* d = deviceOf(device);
+    if (!d->UpdateDescriptorSets) {
+        return; // no next function: the safest no-op
+    }
     d->UpdateDescriptorSets(device, writeCount, pWrites, copyCount, pCopies);
     if (!d->isGame || g_setLines.load(std::memory_order_relaxed) >= kMaxSetLines) {
         return;
@@ -453,12 +487,22 @@ DumpDevice* deviceOf(void* dispatchable) {
         }
     }
     // A device without a record (no memory for it, onDeviceCreated): the next layer's functions, not dumped.
-    // Per thread, so no allocation and no lock; filled again on each such call.
+    // Per thread, so no allocation and no lock; filled again on each such call. Any of them can be null (the
+    // layer has no record of the device either): every hook checks its function before the call.
     thread_local DumpDevice t_passThrough;
     t_passThrough = DumpDevice{};
 #define EVR_DUMP_NEXT_FN(name) t_passThrough.name = nextFunction<PFN_vk##name>(dispatchable, "vk" #name);
     EVR_DUMP_FUNCTIONS(EVR_DUMP_NEXT_FN)
 #undef EVR_DUMP_NEXT_FN
+    // The KHR names, as addDevice falls back to them (a Vulkan 1.1 device with the extension).
+    if (!t_passThrough.CmdDrawIndirectCount) {
+        t_passThrough.CmdDrawIndirectCount =
+            nextFunction<PFN_vkCmdDrawIndirectCount>(dispatchable, "vkCmdDrawIndirectCountKHR");
+    }
+    if (!t_passThrough.CmdDrawIndexedIndirectCount) {
+        t_passThrough.CmdDrawIndexedIndirectCount =
+            nextFunction<PFN_vkCmdDrawIndexedIndirectCount>(dispatchable, "vkCmdDrawIndexedIndirectCountKHR");
+    }
     return &t_passThrough;
 }
 

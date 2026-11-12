@@ -34,6 +34,7 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.SnapAngle] = new[] { "snap_degrees" },
             [Setting.Vignette] = new[] { "vignette" },
             [Setting.GloryKills] = new[] { "glory_kills" },
+            [Setting.PickupCamera] = new[] { "pickup_camera" },
             [Setting.WalkInRoom] = new[] { "body_follow" },
             [Setting.HeadFade] = new[] { "head_fade" },
             [Setting.RecenterHold] = new[] { "recenter_hold" },

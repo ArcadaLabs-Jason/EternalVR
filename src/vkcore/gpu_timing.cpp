@@ -18,6 +18,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace evr::vkcore::gpu_timing {
 
@@ -40,6 +41,16 @@ struct ClosedFrame {
     std::uint64_t id = 0;
 };
 thread_local ClosedFrame t_closed;
+
+// A timed submit's lists (QueueSubmit), kept for each submitting thread so their memory is reused from one
+// frame to the next. A thread plans one submit at a time: the next layer's submit, which reads them, returns
+// before the same thread plans again (no layer below calls this hook).
+struct SubmitLists {
+    std::vector<std::uint32_t> planned; // the pairs of the timed batches
+    std::vector<VkSubmitInfo> infos;
+    std::vector<VkCommandBuffer> buffers;
+};
+thread_local SubmitLists t_lists;
 
 // The submit hook and the present's frame close run inside the game's calls: an exception leaves neither
 // (hook_guard.hpp). A submit that cannot be planned goes untimed, a frame that cannot be closed or read is
@@ -189,13 +200,16 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
     if (!d->active || submitCount == 0 || !d->sampling.load(std::memory_order_relaxed)) {
         return d->fn.queueSubmit(queue, submitCount, pSubmits, fence);
     }
-    std::vector<std::uint32_t> planned; // the pairs of the timed batches
-    std::vector<VkSubmitInfo> infos;
-    std::vector<VkCommandBuffer> buffers;
+    std::vector<std::uint32_t>& planned = t_lists.planned;
+    std::vector<VkSubmitInfo>& infos = t_lists.infos;
+    std::vector<VkCommandBuffer>& buffers = t_lists.buffers;
+    planned.clear(); // the capacity stays
+    buffers.clear();
     std::uint32_t family = 0;
     bool resetsPool = false;
-    // Everything the plan allocates comes before its first pair is taken (`planned` and `buffers` reserved),
-    // so a plan that throws has taken none: the game's batches then go as they are, untimed.
+    // Everything the plan allocates comes before its first pair is taken (`planned` and `buffers` reserved,
+    // which allocates nothing once this thread's lists have the room), so a plan that throws has taken none:
+    // the game's batches then go as they are, untimed.
     const bool ready = g_submitGuard.run([&] {
         planned.reserve(submitCount);
         infos.assign(pSubmits, pSubmits + submitCount);
