@@ -273,6 +273,28 @@ std::optional<std::pair<int, std::uint64_t>> readSetMember(std::uint64_t set) {
     return std::make_pair(static_cast<int>(index), static_cast<std::uint64_t>(image));
 }
 
+std::optional<std::uint64_t> readUpscaledDepth() {
+    if (!g_located || !mp_guard::allowsGameTouch()) {
+        return std::nullopt;
+    }
+    using namespace ui_layer::engine;
+    const std::byte* renderSystem = g_slot - kRenderSystemGuiTarget;
+    std::uintptr_t gui = 0;
+    std::uintptr_t depth = 0;
+    ui_layer::GuiImageFields fields;
+    // `_gui` beside it must be the GUI target's colour image, or the offsets are not this build's.
+    if (!readPointer(renderSystem + kRenderSystemGuiImage, gui) || gui == 0 || gui != currentGuiImage() ||
+        !readPointer(renderSystem + kRenderSystemUpscaledDepth, depth) || !plausible(depth) ||
+        !readImageFields(depth, fields) || fields.vkImage == 0) {
+        return std::nullopt;
+    }
+    if ((fields.flags & kImageSetFlag) == 0) {
+        return fields.vkImage;
+    }
+    const auto member = readSetMember(fields.vkImage);
+    return member ? std::optional<std::uint64_t>(member->second) : std::nullopt;
+}
+
 std::optional<ui_layer::GuiImageFields> readTarget() {
     if (!g_located || !mp_guard::allowsGameTouch()) {
         return std::nullopt;

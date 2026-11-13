@@ -15,6 +15,9 @@ namespace evr::ui_layer {
 namespace engine {
 // idRenderSystemLocal (0x66E2C30): the GUI render target (color `_gui`, depth `_upscaledOpaqueDepth`).
 inline constexpr std::uint32_t kRenderSystemGuiTarget = 0x5C8;
+// Its `_gui` image and `_upscaledOpaqueDepth` (the scene depth at the output size, the GUI target's depth).
+inline constexpr std::uint32_t kRenderSystemGuiImage = 0x3A0;
+inline constexpr std::uint32_t kRenderSystemUpscaledDepth = 0x3A8;
 // Render target object (0x230 bytes): width, height, override width, override height, then the color
 // image.
 inline constexpr std::uint32_t kTargetColorImage = 0x10;
@@ -78,6 +81,7 @@ struct ImageRecord {
     std::uint32_t usage = 0;
     std::int32_t sharingMode = 0;
     std::vector<std::uint32_t> queueFamilies; // for concurrent sharing
+    std::uint64_t serial = 0; // the layer's count of the images it recorded: a reused handle is a new image
 };
 
 // The fields read from the game's idImage.

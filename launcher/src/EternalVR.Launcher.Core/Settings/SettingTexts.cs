@@ -245,6 +245,14 @@ namespace EternalVR.Launcher.Core.Settings
                 + "itself, as for a native game below your refresh rate. Above your refresh rate the game is not held, so it "
                 + "draws frames your headset never shows. Matched to the headset by default.",
                 "As fast as the game runs", "Matched to the headset (default)", "New game frames only (experimental)"),
+            [Setting.DepthLayer] = new Text("Depth for headset smoothing (experimental)",
+                "Hands your headset each eye's depth along with its picture. When the frame rate drops, your headset's own "
+                + "smoothing (Meta's ASW, Virtual Desktop's SSW, SteamVR's Motion Smoothing on headsets whose driver takes depth) "
+                + "can then shift the picture by how far things are as your head moves, instead of turning it as one flat "
+                + "picture. Your gun and hands are handed over no nearer than 25 cm. Where a runtime makes poor use of it, edges "
+                + "(your gun, doorways, enemies) can warp while frames drop; unticked, the headset smooths the picture as "
+                + "before. Only in stereo, without Alternate eyes; sent to any runtime that lists support for depth, "
+                + "whether it uses it or not. Off by default. Experimental: not yet tried in a headset."),
             [Setting.TextureStreaming] = new Text("Texture streaming",
                 "How the game loads texture detail as you play. Only what you see loads the detail the current view needs "
                 + "instead of also caching extra detail ahead of time, which saves the processor a lot of work in VR (about 8% "

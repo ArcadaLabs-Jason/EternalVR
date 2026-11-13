@@ -16,14 +16,19 @@ $script:QaStageRoot = Join-Path $script:QaWorkspace 'tmp-vr\rs'
 $script:QaSimJson = Join-Path $script:QaWorkspace 'tools\bin\openxr-simulator\openxr_simulator_rig.json'
 $script:QaProcDump = Join-Path $script:QaWorkspace 'tools\bin\procdump\procdump64.exe'
 $script:QaRunsRoot = if ($env:EVR_RIG_RUNS_ROOT) { $env:EVR_RIG_RUNS_ROOT } else { Join-Path $script:QaWorkspace 'runs' }
-# The 100% save, signed for the rig's Steam account: EVR_QA_SAVE_SOURCE (another PC's account), else the rig's copy.
+# The 100% save, signed for the rig's Steam account: EVR_QA_SAVE_SOURCE (another PC's account), else the path in the
+# rig's own tmp-vr\qa-save-source.txt, else the rig's copy. A save signed for another account is corrupt for the game
+# (the main menu's save list says so, which a menu-started scenario reads); the variable does not reach a suite started
+# through tools/unelevated.sh (a scheduled task's environment), the file does.
 $script:QaSaveSource = $env:EVR_QA_SAVE_SOURCE
+$sourceFile = Join-Path $script:QaWorkspace 'tmp-vr\qa-save-source.txt'
+if (-not $script:QaSaveSource -and (Test-Path $sourceFile)) { $script:QaSaveSource = "$(Get-Content $sourceFile -First 1)".Trim() }
 if (-not $script:QaSaveSource) { $script:QaSaveSource = Join-Path $script:QaWorkspace 'tmp-release\save100\resigned-jason' }
 # The game's first save slot the 100% save goes back to: EVR_QA_SAVE_TARGET, else the path in the rig's own
 # tmp-vr\qa-save-target.txt (the save is signed for one Steam account), else the account that played last.
 $script:QaSaveTarget = $env:EVR_QA_SAVE_TARGET
 $targetFile = Join-Path $script:QaWorkspace 'tmp-vr\qa-save-target.txt'
-if (-not $script:QaSaveTarget -and (Test-Path $targetFile)) { $script:QaSaveTarget = (Get-Content $targetFile -First 1).Trim() }
+if (-not $script:QaSaveTarget -and (Test-Path $targetFile)) { $script:QaSaveTarget = "$(Get-Content $targetFile -First 1)".Trim() }
 if (-not $script:QaSaveTarget) {
     $remote = Get-ChildItem 'C:\Program Files (x86)\Steam\userdata\*\782330\remote' -Directory -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -175,18 +180,20 @@ function Find-QaRunDir($Ctx) {
 # virtual display (as armbisect.ps1 and rsrun.ps1 do). Returns once launch-ht.ps1 does (the game runs on).
 function Start-QaGame($Ctx, $Scenario) {
     $gameEnv = @($Scenario.Env) + @($Ctx.Env) + @($script:QaExtraEnv)
-    if ($null -ne $Scenario.Input) { $gameEnv += "ETERNALVR_TEST_INPUT=$($Ctx.InputPath)" }
+    # A menu-started scenario points at the menus through the input file (qa-menu.ps1).
+    if ($null -ne $Scenario.Input -or $Scenario.MenuMission) { $gameEnv += "ETERNALVR_TEST_INPUT=$($Ctx.InputPath)" }
     if ($Scenario.EyeCaptures) { $gameEnv += "ETERNALVR_CAPTURE_EYES=$($Ctx.Stage)-eyes,$($Scenario.EyeCaptures)" }
     if ($Scenario.UiCaptures) { $gameEnv += "ETERNALVR_CAPTURE_UI=$($Ctx.Stage)-ui,$($Scenario.UiCaptures)" }
     $Ctx.Vdd = Get-QaVddRect
     if ($Ctx.Vdd) { $gameEnv += "ETERNALVR_MIRROR_WINDOW=$($Ctx.Vdd.x),$($Ctx.Vdd.y),1280,720" }
     Set-QaSimWindow $Ctx
-    $map = if ($Scenario.Map) { $Scenario.Map } else { $script:QaMap }
+    # A menu-started scenario starts at the title screen (no +map) and goes to its mission through the menus.
+    $map = if ($Scenario.MenuMission) { '' } elseif ($Scenario.Map) { $Scenario.Map } else { $script:QaMap }
     $gameArgs = if ($Scenario.Args) { @($Scenario.Args) } else { @() }
     $p = @{ Layer = $Ctx.Stage; Label = $Ctx.Label; DisplayWidth = 2560; DisplayHeight = 1440; XrRuntimeJson = $script:QaSimJson
             ExtraEnv = $gameEnv; ExtraArgs = $gameArgs; WatchSeconds = 20; WindowSize = '1280x720'; Map = $map; Stereo = $true
             AcknowledgeSettingsChange = $true }
-    Write-QaLine "  launch: $map; $($gameEnv -join '; ')$(if ($gameArgs.Count) { '; ' + ($gameArgs -join ' ') })"
+    Write-QaLine "  launch: $(if ($map) { $map } else { "the title screen (then $($Scenario.MenuMission) from the menus)" }); $($gameEnv -join '; ')$(if ($gameArgs.Count) { '; ' + ($gameArgs -join ' ') })"
     $out = & (Join-Path $script:QaRig 'launch-ht.ps1') @p 2>&1 | ForEach-Object { "$_" }
     $code = $LASTEXITCODE
     Set-Content -LiteralPath (Join-Path $Ctx.Dir 'launch.txt') -Value $out -Encoding utf8

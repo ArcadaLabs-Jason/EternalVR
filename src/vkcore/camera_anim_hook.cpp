@@ -83,13 +83,18 @@ xr_math::CameraAnimRamp g_ramp; // ETERNALVR_CAMERA_ANIM_MIN=<degrees> (rig test
 // after it (a pickup's turn, 0.3 s) at any frame rate up to about 400 a second.
 bool g_trace = false;
 constexpr std::uint64_t kTraceLines = 4000;
+constexpr std::uint64_t kSyncTraceLines =
+    4000; // `sync trace` lines (a sync's or a menu's views), their own cap
 constexpr std::uint64_t kTraceAfter = 120;
 std::uint64_t g_traceLines = 0;
+std::uint64_t g_syncTraceLines = 0;
+std::uint64_t g_traceNumber = 0; // both kinds, so consecutive game views have consecutive numbers
 std::uint64_t g_traceSince = kTraceAfter;
 
 // The player's view angles head aim read in this game view, for the trace (noteForcedView; frame() clears
 // them). Kept only while tracing.
 std::optional<xr_math::IdAngles> g_viewAngles; // camera hook thread only
+std::optional<TraceAim> g_traceAim;            // noteTraceAim's, for this game view's line
 
 bool plausible(float v) {
     return std::isfinite(v) && std::fabs(v) <= kMaxDegrees;
@@ -145,8 +150,11 @@ bool install(const GameImage& image) {
     if (g_trace) {
         EVR_LOG(
             "%s: trace on (ETERNALVR_TEST_CAMERA_TRACE): every game view of a forced view and the %llu after "
-            "it, at most %llu lines",
-            kTag, static_cast<unsigned long long>(kTraceAfter), static_cast<unsigned long long>(kTraceLines));
+            "it, at most %llu lines; every other game view of a pickup's sync or of a menu once head aim is "
+            "on, "
+            "at most %llu lines",
+            kTag, static_cast<unsigned long long>(kTraceAfter), static_cast<unsigned long long>(kTraceLines),
+            static_cast<unsigned long long>(kSyncTraceLines));
     }
     if (readEnv(L"ETERNALVR_CAMERA_ANIM_MIN", value) && !value.empty()) {
         const float least = std::wcstof(value.c_str(), nullptr);
@@ -182,6 +190,7 @@ Frame frame(const std::byte* player, const xr_math::IdViewAxis& gameAxis, bool c
     Frame f{gameAxis, {}, false};
     if (g_trace) {
         g_viewAngles.reset();
+        g_traceAim.reset();
     }
     Sample sample;
     {
@@ -252,20 +261,41 @@ void traceView(bool forcedView,
         return;
     }
     g_traceSince = forcedView ? 0 : g_traceSince + 1;
-    if (g_traceSince > kTraceAfter || g_traceLines >= kTraceLines) {
+    // A sync's views, and a menu's once head aim gave the body (not the main menu's): `sync trace` lines,
+    // which the forced-view scenarios' patterns leave out.
+    const bool aimed = g_traceAim && (g_traceAim->sync || (g_traceAim->menu && g_traceAim->headAimed));
+    const bool sync = g_traceSince > kTraceAfter;
+    std::uint64_t& lines = sync ? g_syncTraceLines : g_traceLines;
+    if ((sync && !aimed) || lines >= (sync ? kSyncTraceLines : kTraceLines)) {
         return;
     }
-    ++g_traceLines;
+    ++lines;
     const xr_math::IdAngles game = xr_math::anglesFromAxis(gameAxis);
     const xr_math::IdAngles view = xr_math::anglesFromAxis(written);
     char own[64] = "none";
     if (g_viewAngles) {
         std::snprintf(own, sizeof(own), "%.2f %.2f", g_viewAngles->pitch, g_viewAngles->yaw);
     }
-    EVR_LOG(
-        "%s: trace %llu: game (%.2f %.2f %.2f) angles (%s) written (%.2f %.2f %.2f) eye (%.2f %.2f %.2f)%s",
-        kTag, static_cast<unsigned long long>(g_traceLines), game.pitch, game.yaw, game.roll, own, view.pitch,
-        view.yaw, view.roll, eye.x, eye.y, eye.z, forcedView ? " forced" : "");
+    char aim[128] = "";
+    if (const std::optional<TraceAim>& a = g_traceAim) {
+        char injected[24] = "none";
+        if (a->injected) {
+            std::snprintf(injected, sizeof(injected), "%.2f", a->injectedYaw);
+        }
+        std::snprintf(aim, sizeof(aim), "; body %.2f head (%.2f %.2f) held %s%s%s", a->bodyYaw, a->head.pitch,
+                      a->head.yaw, injected, a->menu ? " menu" : "", a->sync ? " sync" : "");
+    }
+    EVR_LOG("%s: %strace %llu: game (%.2f %.2f %.2f) angles (%s) written (%.2f %.2f %.2f) eye (%.2f %.2f "
+            "%.2f)%s%s",
+            kTag, sync ? "sync " : "", static_cast<unsigned long long>(++g_traceNumber), game.pitch, game.yaw,
+            game.roll, own, view.pitch, view.yaw, view.roll, eye.x, eye.y, eye.z, forcedView ? " forced" : "",
+            aim);
+}
+
+void noteTraceAim(const TraceAim& aim) {
+    if (g_trace) {
+        g_traceAim = aim;
+    }
 }
 
 } // namespace evr::vkcore::camera_anim

@@ -191,6 +191,7 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
     if (viewer.presenceExtension) {
         extensions.push_back(XR_EXT_USER_PRESENCE_EXTENSION_NAME);
     }
+    depthLayer.addExtension(props, extensions); // the depth layer, when on and listed (presenter_depth.hpp)
     for (const std::string& name : controllerProfiles.extensions) {
         extensions.push_back(name.c_str());
     }
@@ -218,6 +219,7 @@ bool XrPresenter::Impl::createXrInstance(bool quiet) {
         wrist.colorScaleBias = false;
         refresh.extension = false;
         viewer.presenceExtension = false;
+        depthLayer.extensionRefused();
         info.enabledExtensionCount = 1;
         r = xr.xrCreateInstance(&info, &instance);
     }

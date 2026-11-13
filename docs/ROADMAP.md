@@ -371,8 +371,11 @@ Required for v1
 - [x] Each eye renders at the size the launcher's Resolution setting gives: the runtime's recommended size,
       fitted within 2064 x 2208 pixels per eye under Auto, times the render scale (near-square); the UI
       shows its centred 16:9 band (T-031; `docs/rig-findings/render-size.md` sections 5, 6 and 9)
-- [ ] Depth layer (T-057, T-080): depth crosses as `R32_FLOAT`, is submitted with `nearZ` and `farZ` in
-      metres (game units divided by unit scale times world size), and is accepted by VDXR and Meta
+- [ ] Depth layer (T-057, T-080, T-231): built, off by default (`ETERNALVR_DEPTH_LAYER`, the launcher's "Depth for
+      headset smoothing (experimental)"): each Route S eye's depth from `_upscaledOpaqueDepth` through a shared
+      buffer into a `D32_FLOAT` depth swapchain, `nearZ` / `farZ` in metres (game units divided by the world size),
+      reversed; accepted by OpenXR-Simulator with the read-back's distances sane (`docs/rig-findings/presenter.md`,
+      "Depth"). Open: accepted by VDXR and Meta
       Link; [owner] a head-shake test shows no depth-induced warping at world size 0.85 and 1.2, after a
       planted fault (depth scaled by 2) was seen to warp in the same procedure; the depth copy is added
       to the presenter record (`docs/rig-findings/presenter.md`, M3)
@@ -754,7 +757,7 @@ v1 if time allows
       (a) a "submit new frames only" XR pacing setting (launcher Advanced, off by default): today the XR loop
       resubmits the last image each headset frame, which leaves third-party OpenXR frame generators such as
       OFXR Bridge nothing to interpolate; (b) give the runtime the per-eye depth the layer already makes
-      (`XR_KHR_composition_layer_depth`, listed by VDXR; no depth is submitted today), then measure the
+      (`XR_KHR_composition_layer_depth`, listed by VDXR; the depth layer, T-231, submits it when switched on), then measure the
       runtime's own reprojection and space warp with and without it in the headset; (c) an offline rig spike
       that extrapolates real frame N to frame N+1's pose and time from colour alone (as runtime space warp
       does) and from the game's per-eye motion vectors and depth, scored against the real N+1, so the

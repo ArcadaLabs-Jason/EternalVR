@@ -68,13 +68,16 @@ void XrPresenter::Impl::openFrameLog() {
         // Last, under hand aim, the weapon hand's aim position and the off hand at the same time (LOCAL):
         // whether it is tracked, its grip's position and orientation and its aim ray's orientation (zeros
         // when not tracked), for the free off hand's motion against the weapon hand's; and whether the aim as
-        // used is two-handed aim's (1; two_hand.hpp).
+        // used is two-handed aim's (1; two_hand.hpp). Then whether the frame has the GUI quad (the HUD or its
+        // pieces, the menu panel, a stereo cutscene's GUI) and the age of the newest GUI image when the frame
+        // was composed, before xrEndFrame (-1: none).
         std::fputs("xr_frame,display_time_ns,period_ms,view,pose_age_ms,display_minus_pose_time_ms,lead_ms,"
                    "head_qx,head_qy,head_qz,head_qw,aim_qx,aim_qy,aim_qz,aim_qw,"
                    "aim_tracked_qx,aim_tracked_qy,aim_tracked_qz,aim_tracked_qw,"
                    "eye0_frame,eye1_frame,eye1_view,repeat,aim_px,aim_py,aim_pz,"
                    "left_valid,left_grip_px,left_grip_py,left_grip_pz,left_grip_qx,left_grip_qy,left_grip_qz,"
-                   "left_grip_qw,left_aim_qx,left_aim_qy,left_aim_qz,left_aim_qw,aim_two_handed\n",
+                   "left_grip_qw,left_aim_qx,left_aim_qy,left_aim_qz,left_aim_qw,aim_two_handed,ui_shown,"
+                   "gui_age_ms\n",
                    frameLog);
     }
 }
@@ -107,21 +110,22 @@ void XrPresenter::Impl::logFrame(const XrFrameState& state) {
     const XrPosef leftGrip = left ? shownView.offHandGrip : XrPosef{none, {0.0f, 0.0f, 0.0f}};
     const XrQuaternionf leftAim = left ? shownView.offHandAim : none;
     const EyeFrames& eyes = frameLogEyes.shown;
-    std::fprintf(
-        frameLog,
-        "%llu,%lld,%.3f,%llu,%.3f,%.3f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
-        "%.6f,%llu,%llu,%llu,%s,%.4f,%.4f,%.4f,%d,%.4f,%.4f,%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
-        "%.6f,%d\n",
-        static_cast<unsigned long long>(xrFrames), static_cast<long long>(state.predictedDisplayTime),
-        static_cast<double>(state.predictedDisplayPeriod) / 1e6,
-        static_cast<unsigned long long>(shownHasView ? shownView.seq : 0), age, poseAhead,
-        static_cast<double>(displayLead.leadNs()) / 1e6, head.x, head.y, head.z, head.w, used.x, used.y,
-        used.z, used.w, tracked.x, tracked.y, tracked.z, tracked.w,
-        static_cast<unsigned long long>(eyes.eye0), static_cast<unsigned long long>(eyes.eye1),
-        static_cast<unsigned long long>(eyes.eye1View), repeatName(frameLogEyes.repeat), aimAt.x, aimAt.y,
-        aimAt.z, left ? 1 : 0, leftGrip.position.x, leftGrip.position.y, leftGrip.position.z,
-        leftGrip.orientation.x, leftGrip.orientation.y, leftGrip.orientation.z, leftGrip.orientation.w,
-        leftAim.x, leftAim.y, leftAim.z, leftAim.w, aim && shownView.weaponAimTwoHanded ? 1 : 0);
+    std::fprintf(frameLog,
+                 "%llu,%lld,%.3f,%llu,%.3f,%.3f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
+                 "%.6f,%llu,%llu,%llu,%s,%.4f,%.4f,%.4f,%d,%.4f,%.4f,%.4f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
+                 "%.6f,%d,%d,%.3f\n",
+                 static_cast<unsigned long long>(xrFrames),
+                 static_cast<long long>(state.predictedDisplayTime),
+                 static_cast<double>(state.predictedDisplayPeriod) / 1e6,
+                 static_cast<unsigned long long>(shownHasView ? shownView.seq : 0), age, poseAhead,
+                 static_cast<double>(displayLead.leadNs()) / 1e6, head.x, head.y, head.z, head.w, used.x,
+                 used.y, used.z, used.w, tracked.x, tracked.y, tracked.z, tracked.w,
+                 static_cast<unsigned long long>(eyes.eye0), static_cast<unsigned long long>(eyes.eye1),
+                 static_cast<unsigned long long>(eyes.eye1View), repeatName(frameLogEyes.repeat), aimAt.x,
+                 aimAt.y, aimAt.z, left ? 1 : 0, leftGrip.position.x, leftGrip.position.y,
+                 leftGrip.position.z, leftGrip.orientation.x, leftGrip.orientation.y, leftGrip.orientation.z,
+                 leftGrip.orientation.w, leftAim.x, leftAim.y, leftAim.z, leftAim.w,
+                 aim && shownView.weaponAimTwoHanded ? 1 : 0, uiQuadShown ? 1 : 0, uiQuadAgeMs);
     if (shownHasView) {
         gpu_timing::notePoseAge(age);
         poseAgeSum += age;
@@ -167,6 +171,7 @@ void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
     logRates();
     logSizeStats();
     vignette.logStats(settings.ui.vignette);
+    depthLayer.logStats();
     if (frameLog) {
         std::fflush(frameLog);
     }

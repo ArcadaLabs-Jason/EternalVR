@@ -55,6 +55,11 @@ suite once without and once with it before a release or a headset package.
 NAME=VALUE pairs for every game scenario, after -DlssDll's (a test knob such as
 ETERNALVR_TEST_HIDE_KHR_MAINTENANCE=1).
 
+.PARAMETER TestMenuTitleTimeout
+A test of the menu path's environment skip: the title step of every menu-started scenario waits this many seconds
+(one try) for the main menu after its click, short of Bethesda.net's connection, so the scenario is skipped as the
+environment's (README, Menu-started scenarios).
+
 .PARAMETER TestLateStartSec
 A test of the late-start check: each game scenario's first run waits this many seconds in the map before its
 timeline, so the check fails it as a harness timing failure and the scenario runs once more (without the wait).
@@ -66,10 +71,12 @@ param(
     [string]$LauncherBin = '',
     [string]$DlssDll = '',
     [string[]]$GameEnv = @(),
-    [int]$TestLateStartSec = 0
+    [int]$TestLateStartSec = 0,
+    [double]$TestMenuTitleTimeout = 0
 )
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-common.ps1')
+. (Join-Path $PSScriptRoot 'qa-menu.ps1')
 . (Join-Path $PSScriptRoot 'qa-cloud.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-wheel.ps1')
@@ -85,8 +92,13 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios-unseen.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-fxsync.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-pickup.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-depth.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-menu.ps1')
 
 $script:QaTestLateStartSec = $TestLateStartSec
+$script:QaMenuTitleTimeout = $TestMenuTitleTimeout
+# The game runs started so far (a menu-started scenario after one checks the first slot's save first).
+$script:QaGameRuns = 0
 if (-not $LayerSrc) { $LayerSrc = Join-Path $script:QaRepo 'build\windows-msvc\src\vkcore' }
 if (-not $Out) { $Out = "E:\Code\resources\Testing\QA-$((Get-Date).ToString('yyyyMMdd-HHmm'))" }
 New-Item -ItemType Directory -Force $Out | Out-Null
@@ -97,7 +109,8 @@ $script:QaLogFile = Join-Path $Out 'qa.log'
 $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $names = @($script:QaScenarios | ForEach-Object { $_.Name })
 foreach ($n in $Only) { if ($names -notcontains $n) { throw "unknown scenario '$n' (scenarios: $($names -join ', '))" } }
-$selected = @($script:QaScenarios | Where-Object { $Only.Count -eq 0 -or $Only -contains $_.Name })
+# A scenario marked OnlyByName (a measurement, not a check of every merge) runs only when -Only names it.
+$selected = @($script:QaScenarios | Where-Object { ($Only.Count -eq 0 -and -not $_.OnlyByName) -or $Only -contains $_.Name })
 
 # The stand-in scenario loads the layer build too, without the game.
 $needsGame = @($selected | Where-Object { $_.Kind -eq 'game' -or $_.Kind -eq 'standin' }).Count -gt 0
@@ -121,6 +134,15 @@ if ($needsGame) {
 # One simulator run; the stop and the check of the cloud files it left always happen once the launch was attempted.
 function Invoke-QaGameScenario($Scenario, $Ctx) {
     $launched = $false
+    # A menu-started scenario picks the first slot's save from the main menu: after an earlier game run's autosave
+    # there (the rerun after a late start included), the cloud files go back as the suite started (the 100% save with
+    # the profile that lists it) first.
+    if ($Scenario.MenuMission -and $script:QaGameRuns -gt 0 -and -not (Test-QaSaveInPlace)) {
+        Write-QaLine '  the first slot holds an earlier run''s autosave: the cloud files back as the suite started'
+        Invoke-QaCloudBetween $Ctx
+        if ($Ctx.Abort) { Add-QaResult $Ctx 'the 100% save in the first slot for the menus' $false 'see cloud-restore.txt'; return }
+    }
+    $script:QaGameRuns++
     try {
         New-QaStage $Ctx $LayerSrc
         if ($null -ne $Scenario.Input) { Write-QaInput $Ctx @($Scenario.Input) }
@@ -130,8 +152,16 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
         $launched = $true
         Start-QaGame $Ctx $Scenario
         Write-QaLine "  run: $($Ctx.RunDir)"
-        $inMap = Wait-QaLog $Ctx $script:QaPlayMarker 200
-        Add-QaResult $Ctx 'in the map' $inMap "layer log matches '$script:QaPlayMarker' within 200 s"
+        # A menu-started scenario goes from the title screen to its mission through the game's menus first
+        # (qa-menu.ps1); one that does not get there is not waited for in the map.
+        $menu = 'ok'
+        if ($Scenario.MenuMission) { $menu = Invoke-QaMenuMission $Ctx $Scenario }
+        # The title's click taken and no main menu (Bethesda.net's connection or sign-in): the environment's, a skip.
+        if ($menu -eq 'skip') { $Ctx.Skipped = $true }
+        $inMap = $menu -eq 'ok' -and (Wait-QaLog $Ctx $script:QaPlayMarker 200)
+        if ($menu -ne 'skip') {
+            Add-QaResult $Ctx 'in the map' $inMap $(if ($menu -eq 'ok') { "layer log matches '$script:QaPlayMarker' within 200 s" } else { 'the menu path did not load the mission' })
+        }
         # A scenario that never gets there keeps what was on screen (a popup nobody asked for kept the aim check
         # waiting in seated-jump, merge QA r60b and r61b, and nothing showed which one).
         if ($inMap) {
@@ -141,7 +171,7 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
             }
             # A timeline that starts long after the map runs its input after the layer's own timers: not run.
             if (-not (Test-QaLateStart $Ctx)) { & $Scenario.Timeline $Ctx }
-        } else { Save-QaShot $Ctx 'not-in-map' }
+        } elseif ($menu -ne 'skip') { Save-QaShot $Ctx 'not-in-map' }
     } catch [OperationCanceledException] {
         $Ctx.Stopped = $true
         Add-QaResult $Ctx 'not stopped by STOP-RIG' $false $_.Exception.Message
@@ -160,7 +190,7 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
         Copy-Item -LiteralPath $log (Join-Path $Ctx.Dir 'eternalvr.log') -ErrorAction SilentlyContinue
         Add-QaNote $Ctx "layer log $log"
         # A late start's checks would only report what its timeline did not do.
-        if (-not $Ctx.Timing) { & $Scenario.Asserts $Ctx }
+        if (-not $Ctx.Timing -and -not $Ctx.Skipped) { & $Scenario.Asserts $Ctx }
         # Every scenario: a full hook pool turns a feature off with only this line to show for it.
         Test-QaAbsent $Ctx 'no free (inline )?hook slot' -Regex
         # Every scenario: the multiplayer guard armed, the map loaded as single-player, and (but for the
@@ -270,7 +300,7 @@ function Write-QaReport($Records, $Pending) {
     $md.Add('| Scenario | Result | Duration | Run folder | Screenshots |')
     $md.Add('|---|---|---|---|---|')
     foreach ($r in $Records) {
-        $result = if ($r.Skipped) { 'SKIP' } elseif ($r.Pass) { 'PASS' } else { 'FAIL' }
+        $result = if ($r.Skipped -and $r.Ctx.SkipReason) { 'SKIP (environment)' } elseif ($r.Skipped) { 'SKIP' } elseif ($r.Pass) { 'PASS' } else { 'FAIL' }
         if ($r.Ctx.Try -gt 1) { $result += ' (rerun)' }
         $shots = (@($r.Ctx.Shots) | ForEach-Object { Split-Path -Leaf $_ }) -join ', '
         $run = if ($r.Ctx.RunDir) { Split-Path -Leaf $r.Ctx.RunDir } else { '' }
@@ -297,14 +327,16 @@ function Write-QaReport($Records, $Pending) {
         if ($r.Ctx.RunDir) { $md.Add("- run folder: ``$($r.Ctx.RunDir)``") }
     }
     $md.Add('')
-    $md.Add("QA: $passed of $($ran.Count) scenarios passed")
+    $md.Add("QA: $passed of $($ran.Count) scenarios passed$(if (@($Records | Where-Object { $_.Skipped -and $_.Ctx.SkipReason }).Count) { ", $(@($Records | Where-Object { $_.Skipped -and $_.Ctx.SkipReason }).Count) skipped (environment)" })")
     $skipped = @($Records | Where-Object { $_.Skipped }).Count
     if ($skipped -or @($Pending).Count) { $md.Add("($skipped skipped, $(@($Pending).Count) not run)") }
     $md.Add('')
     $md.Add((Format-QaRerunLine $script:QaReruns))
     Set-Content -LiteralPath (Join-Path $Out 'report.md') -Value $md -Encoding utf8
     # Scenarios not run are in the line, so '0 of 0' after a suite that ended early never reads as all passed.
-    return "QA: $passed of $($ran.Count) scenarios passed$(if (@($Pending).Count) { "; $(@($Pending).Count) not run" })"
+    # An environment skip (the menus' Bethesda.net connection) is named after the count, which leaves it out.
+    $environment = @($Records | Where-Object { $_.Skipped -and $_.Ctx.SkipReason }).Count
+    return "QA: $passed of $($ran.Count) scenarios passed$(if ($environment) { ", $environment skipped (environment)" })$(if (@($Pending).Count) { "; $(@($Pending).Count) not run" })"
 }
 
 $script:QaStarted = Get-Date
@@ -322,7 +354,7 @@ if ($lastGame -ge 0) {
     # The save the suite's cloud restore returns to: the 100% save, copied in first when the slot holds another.
     if (-not (Test-QaSaveInPlace)) {
         $save = Restore-QaSave
-        Write-QaLine "the 100% save copied into $($script:QaSaveTarget) before the first game run: $($save.Detail)"
+        Write-QaLine "the 100% save copied from $($script:QaSaveSource) into $($script:QaSaveTarget) before the first game run: $($save.Detail)"
         if (-not $save.Ok) { Write-QaLine 'suite ends: the save restore failed; check GAME-AUTOSAVE0 by hand'; exit 2 }
     }
     # The cloud restore held before any game run: what an earlier suite left pending is finished first, and any
@@ -354,6 +386,12 @@ for ($i = 0; $i -lt $selected.Count; ++$i) {
     $watch = [Diagnostics.Stopwatch]::StartNew()
     if ($sc.Kind -eq 'game') {
         Invoke-QaGameScenario $sc $ctx
+        # An environment skip whose run failed a check of its own (the stop, the cloud files, the guard) is a failure.
+        if ($ctx.Skipped -and @($ctx.Results | Where-Object { -not $_.Ok }).Count -gt 0) {
+            Add-QaNote $ctx 'not skipped: a check of the run failed'
+            $ctx.Skipped = $false
+            Add-QaResult $ctx "skip: $($ctx.SkipReason)" $false ''
+        }
         $cloudDone = $false
         # A late start and nothing else failed: run once more (the rerun is the next game run for the cloud files).
         if ((Test-QaTimingRerun $ctx) -and -not (Test-QaStopRequested)) {
@@ -372,7 +410,9 @@ for ($i = 0; $i -lt $selected.Count; ++$i) {
     else { Invoke-QaE2eScenario $ctx }
     $pass = -not $ctx.Skipped -and $ctx.Results.Count -gt 0 -and @($ctx.Results | Where-Object { -not $_.Ok }).Count -eq 0
     [void]$records.Add([pscustomobject]@{ Ctx = $ctx; Pass = $pass; Skipped = $ctx.Skipped; Seconds = $watch.Elapsed.TotalSeconds; Proves = $sc.Proves })
-    Write-QaLine ("scenario {0}: {1} in {2:N0} s{3}" -f $sc.Name, $(if ($ctx.Skipped) { 'SKIP' } elseif ($pass) { 'PASS' } else { 'FAIL' }), $watch.Elapsed.TotalSeconds,
+    # An environment skip names its reason on the scenario's line (no PASS or FAIL in it).
+    $skipText = if ($ctx.SkipReason) { "SKIP (environment: $(($ctx.SkipReason -split ';')[0]))" } else { 'SKIP' }
+    Write-QaLine ("scenario {0}: {1} in {2:N0} s{3}" -f $sc.Name, $(if ($ctx.Skipped) { $skipText } elseif ($pass) { 'PASS' } else { 'FAIL' }), $watch.Elapsed.TotalSeconds,
         $(if ($ctx.Try -gt 1) { ' (the rerun after a late start)' } else { '' }))
     if ($i -eq $lastGame) { Complete-QaSuiteCloud }
     [void](Write-QaReport $records @($selected | Select-Object -Skip ($i + 1)))

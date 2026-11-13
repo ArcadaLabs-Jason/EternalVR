@@ -97,6 +97,9 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     const ViewRecord slotView = slot.view;
     const bool slotHasView = slot.hasView;
     const bool slotUi = slot.ui.written && acquireUiXrImage(); // UI layer: the GUI image goes along
+    // The depth layer: both eyes' depth goes along when the slot holds it (presenter_depth.hpp).
+    const bool slotDepth = depthLayer.slotComplete(slotIndex) &&
+                           depthLayer.acquire(xr, session, xrSwapchains, inRuntime.waitImage);
     // Our own reference since the swapchain was made (presenter_swapchains.hpp): valid even if the runtime
     // lets go of the image early.
     ID3D12Resource* target = xrImages[static_cast<std::size_t>(acquiredIndex)].Get();
@@ -131,6 +134,9 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     if (slotUi) {
         recordUiXrCopy(slot);
     }
+    if (slotDepth) {
+        depthLayer.recordXrCopy(d3dList.Get(), slotIndex);
+    }
     const HRESULT closed = d3dList->Close();
     if (FAILED(closed)) {
         // A list that failed to close must never be executed (the device would be removed).
@@ -143,6 +149,10 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
                     static_cast<long long>(acquiredIndex), xrImages.size());
         }
         slot.state.store(kSlotFree);
+        // Nothing was copied into the UI image either: it stays acquired, and the next copy records into it
+        // again, so a later image without a GUI copy is never taken for one with it (finishUiXrCopy).
+        uiCopyPending = false;
+        depthLayer.copyAbandoned();
         return;
     }
 
@@ -219,6 +229,8 @@ void XrPresenter::Impl::frame() {
     std::array<XrCompositionLayerQuad, 2> markerQuads{reticleQuad, reticleQuad}; // the HUD's, one per eye
     XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     std::array<XrCompositionLayerProjectionView, 2> projectionViews{};
+    std::array<XrCompositionLayerDepthInfoKHR, 2> depthInfos{}; // chained to them by the depth layer
+    bool depthChained = false;
     XrCompositionLayerQuad fade{XR_TYPE_COMPOSITION_LAYER_QUAD};
     XrCompositionLayerQuad vignetteQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     std::array<XrCompositionLayerQuad, 2> pointerQuads{};
@@ -247,6 +259,7 @@ void XrPresenter::Impl::frame() {
         if (settings.mode == Mode::HeadTracked && fovWatch.due(qpcSeconds(frameStart))) {
             updateTargetFov(state.predictedDisplayTime);
         }
+        const LONGLONG imageBefore = uiImageQpc;
         updateImage(frameStart);
         // Once the multiplayer guard is off the game's image is shown only on the flat cinema quad,
         // never as a head-tracked projection (the camera hook no longer writes the view).
@@ -268,6 +281,9 @@ void XrPresenter::Impl::frame() {
             // Mono: both eyes get the whole image with the head pose and FOV it was rendered with. Stereo:
             // each eye gets its half with its own pose and FOV (presenter_stereo.cpp).
             fillProjectionViews(projectionViews);
+            if (settings.depthLayer) {
+                depthChained = depthLayer.fill(projectionViews, depthInfos); // each eye's depth, if any
+            }
             projection.layerFlags = 0;
             projection.space = localSpace;
             projection.viewCount = static_cast<std::uint32_t>(projectionViews.size());
@@ -389,9 +405,14 @@ void XrPresenter::Impl::frame() {
         // The HUD's world-attached markers follow the head-locked quad (marker_hooks.hpp).
         noteMarkerQuad(headTracked && uiShown && !menuOn && !menuHeld, settings.ui, uiExtent.width,
                        uiExtent.height);
+        if (hasImage) {
+            noteUiGap(imageBefore, frameLogEyes.repeat == FrameRepeat::New, headTracked && uiShown);
+        }
     } else {
         releaseMenuInput(*this, "the headset is not showing frames");
     }
+    uiQuadShown = uiShown;
+    uiQuadAgeMs = uiHasImage ? qpcSeconds(qpcNow() - uiShownQpc) * 1000.0 : -1.0; // as composed
     // The GUI leaves the eye images only while the quad shows it; menus and loading screens keep it.
     if (settings.ui.enabled) {
         ui_engine::setSkipComposite(settings.ui.skipComposite && uiShown);
@@ -405,6 +426,15 @@ void XrPresenter::Impl::frame() {
     endInfo.layers = layerCount ? layers.data() : nullptr;
     frame_pacing::beforeEndFrame();
     const XrResult r = timedCall(inRuntime.endFrame, xr.xrEndFrame, session, &endInfo);
+    // A runtime refusing the depth would refuse every frame: on a result that names the layers (not a loss of
+    // the session or the runtime, which take their own path below) the depth goes and the next frames are
+    // colour only. ETERNALVR_TEST_DEPTH_REFUSE=fake takes a frame with depth as refused with
+    // XR_ERROR_VALIDATION_FAILURE.
+    const auto depthResult =
+        depthLayer.fakeRefusal() ? static_cast<int>(XR_ERROR_VALIDATION_FAILURE) : static_cast<int>(r);
+    if (depthChained && depth::refusesDepth(depthResult)) {
+        depthLayer.refused(depthResult);
+    }
     if (XR_FAILED(r) && !loseOnRuntimeFailure(r, "xrEndFrame")) {
         // Every frame can fail the same way: the first ones, then one line per 900 (10 s at 90 Hz).
         ++endFrameFailures;

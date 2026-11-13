@@ -31,6 +31,11 @@ void onDeviceDestroyed(VkDevice device);
 // TRANSFER_SRC and are followed from their creation (ui_layer/motion_target.hpp). Needs the UI layer on.
 bool motionCaptureRequested();
 
+// ETERNALVR_DEPTH_LAYER is on (read once): images that can be the game's scene depth get a record (and
+// SAMPLED, features/depth/depth_layer.hpp) when the game makes them, for the depth layer
+// (presenter_depth.hpp).
+bool depthLayerRequested();
+
 // The layer's hook for `name`, or nullptr (always nullptr when the UI layer is off).
 PFN_vkVoidFunction findHook(const char* name);
 
@@ -56,12 +61,26 @@ struct ImageState {
 // The layout a candidate image is in once all submitted work has run; nullopt when unknown.
 std::optional<ImageState> stateOf(VkImage image);
 
+// The depth layer (presenter_depth.hpp): the game's next submit on every queue but `except` first waits for
+// `timeline` to reach `value` (one wait batch ahead of its own), so the game's work submitted after this call
+// on another queue does not write the depth image before the layer's read of it on `except` has run (a submit
+// made before the call is not ordered). Each call raises the value; a queue waits once per value.
+// stopHolding() ends it; holdWaits() counts the batches added.
+void holdQueues(VkQueue except, VkSemaphore timeline, std::uint64_t value);
+void stopHolding();
+std::uint64_t holdWaits();
+
+// The depth layer's source image: takeDestroyed() is true once after the game destroyed it.
+void watchDestroy(VkImage image);
+bool takeDestroyed();
+
 struct Counters {
     std::uint64_t candidates = 0; // images prepared (TRANSFER_SRC added)
     std::uint64_t candidatesNotFollowed = 0;
     std::uint64_t watchChanges = 0;      // times the followed GUI target changed
     std::uint64_t motionCandidates = 0;  // images prepared for the motion-vector capture
     std::uint64_t motionNotFollowed = 0; // follow() found no free place
+    std::uint64_t depthCandidates = 0;   // images recorded as a possible scene depth (depth layer)
 };
 Counters counters();
 

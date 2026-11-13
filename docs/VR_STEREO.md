@@ -1463,6 +1463,53 @@ Every 10 s after the `pace:` lines (ms, mean/p50/p95/p99/max):
 in the log folder (seconds on the performance counter, -1 for none; `log_s` is the time of the 10 s line the
 image was finished in).
 
+## Depth layer (`ETERNALVR_DEPTH_LAYER=1`, off by default, experimental)
+
+The launcher's "Depth for headset smoothing (experimental)" (Play tab, Picture). Each eye's depth goes to the
+runtime with its projection view (`XR_KHR_composition_layer_depth`), so a runtime that reprojects a late frame
+(Meta's ASW, Virtual Desktop's SSW, SteamVR's Motion Smoothing where its driver takes depth) can move the picture
+by distance as the head moves. What is copied where, the format, the units and the reversed planes are in
+docs/ARCHITECTURE.md section 6 ("Depth"); what was measured is in `docs/rig-findings/presenter.md` ("Depth").
+
+- **Which frames.** Route S pairs only: each eye's depth with that eye's colour, from the same present, with the
+  planes of that eye's game tick. Route S's mono frames, Alternate eyes (on or auto: the layer stays off), Parallel
+  Eye Rendering, mono head tracking and everything on the cinema screen (menus, loading screens, cutscenes on the
+  screen, the flat fallback) have no depth; neither has any quad (HUD, menus, reticle, markers). Every copy without
+  depth clears its ring slot's, so an older pair's depth never goes out with new colour.
+- **Ordering.** The game's next submit on every queue other than the present's, after the depth copy's own
+  submit, waits for the copy's timeline value (one wait batch ahead of the game's, `ui_vulkan::holdQueues`); the
+  10 s line counts them. A submit the game made before that on another thread is not ordered by it, and where the
+  game presents from its compute queue the first graphics submit after each present waits (unmeasured).
+  `vkQueueSubmit2` is not hooked; a game asking for it is logged.
+- **Repeats.** A repeated image keeps its depth (the depth swapchain's last image is the one the runtime uses);
+  a new image without depth (a check failed) is submitted without, never with an older image's depth.
+- **Off** (the default): no extension requested, no image record, no buffer, nothing recorded or submitted; the
+  start-up line says off and why (`depth: depth layer off (...)`).
+
+Logs (all lines start with `depth:`): at start-up `depth layer on: <format> swapchain of WxH ..., 4 shared
+buffer(s) of N MiB ...` or `depth layer off (<reason>)` with whether the runtime lists the extension; with the
+first image recorded as a possible scene depth `image ... recorded as a possible scene depth`; `first copy:
+_upscaledOpaqueDepth is image ...` (its size, format, layout, the queue families, the depth row and the planes in
+metres); `depth swapchain WxH ...`; `first frame submitted with depth`; every 10 s `last 10 s: F of P projection
+frame(s) with depth; N new image(s) with depth, M without; eyes copied C, not copied X (last reason: ...); copy GPU
+time A ms average, B ms longest (n copies timed); nearZ ... m, farZ ... m; source layout shader read-only R,
+depth read-only D, attachment A; waits added to other queues W in all`. A failure that turns it off for the game
+is one line ending `the depth layer is off for this game (the headset gets colour only)`: the runtime refusing a
+frame with depth (`xrEndFrame failed (<result>) on a frame with depth`, for a result that names the layers:
+validation failure, layer invalid, swapchain rect invalid, format unsupported; a lost session or runtime takes the
+normal loss path and the depth comes back with the new session), holding the depth image through 5
+waits in a row (the first such wait is logged), a new instance without the extension, or the swapchain, shader or
+import failing.
+
+Rig switches: `ETERNALVR_TEST_DEPTH_READBACK=1` copies the depth swapchain's image of one shown image (as the
+runtime gets it) back every 10 s and logs `read back from the depth swapchain image (every 8 texel(s)): eye L: S% far (sky), N% at the nearest value, I invalid; a to b m, median m m,
+centre c m; eye R: ...; the eyes hold the same value in E% of the texels outside the sky (the eyes differ)`;
+`ETERNALVR_TEST_DEPTH_FAULT=1` is the planted fault (eye R's copy also into eye L's half), which that line shows as
+`THE SAME depth in both eyes`; `=<folder>` also writes the first three read-backs there as grey images
+(`depth-<pid>-<n>.pgm`). `ETERNALVR_TEST_DEPTH_REFUSE=1` chains an invalid depth info (minDepth above maxDepth) and
+`=fake` takes the first frame with depth as refused by the runtime: the planted refusals of the fall-back. QA: the
+`depth-layer` and `depth-layer-dlss` scenarios (`tools/rig/qa/qa-scenarios-depth.ps1`).
+
 ## Headset refresh rate
 
 The runtime's `predictedDisplayPeriod` is 1/refresh, but several runtimes report a multiple of it while they
@@ -1623,6 +1670,10 @@ axis).
 | `ETERNALVR_MIRROR` | left | what the game's window shows during stereo pairs: `left`, `right` (one tick late) or `off` (black); while a menu is up over the game, the menu panel's image (Desktop window, Menus in the window) |
 | `ETERNALVR_RENDER_SIZE` | off (launcher: auto) | `auto`: each eye at the runtime's recommended size (budget 2064 x 2208 pixels) times the scale; `WxH`: that size; `off`: the window's size (docs/rig-findings/render-size.md) |
 | `ETERNALVR_RENDER_SCALE` | 1.0 | 0.5 to 2.0, multiplies the `auto` size (above 1 past the budget) |
+| `ETERNALVR_DEPTH_LAYER` | 0 | 1: each eye's depth to the runtime with its projection view (Depth layer; the launcher's Depth for headset smoothing) |
+| `ETERNALVR_TEST_DEPTH_READBACK` | 0 | 1 (rig): with the depth layer, one shown image's depth read back every 10 s and its distances logged |
+| `ETERNALVR_TEST_DEPTH_FAULT` | 0 | 1 (rig): the depth layer's planted fault, eye R's depth copied into eye L's half too |
+| `ETERNALVR_TEST_DEPTH_REFUSE` | unset | `1` (rig): an invalid depth info chained; `fake`: the first frame with depth taken as refused (the fall-back's test) |
 | `ETERNALVR_MIRROR_WINDOW` | unset | `x,y,width,height`: the game window's client area once the render size is on (the desktop mirror); `ETERNALVR_WINDOW` is where it goes before and when the render size turns off |
 | `ETERNALVR_MIRROR_DISPLAY` | launcher | with the render size: the display the mirror window goes on, centred in its work area: `primary`, a number (`1` = the first display Windows lists; the log lists them as `mirror: display N ...`) or a desktop point `x,y` (the display holding it); `launcher` keeps `ETERNALVR_MIRROR_WINDOW` as it is |
 | `ETERNALVR_MIRROR_SIZE` | launcher's | with the render size: the mirror window's client area, `WxH` (64 to 8192) or a scale of the launcher's size (0.25 to 4); fitted to its display. `fill`: the window covers the whole display `ETERNALVR_MIRROR_DISPLAY` names (its full area, taskbar included; `launcher` means the display holding the launcher's rectangle) without a frame, for others watching; the image is stretched into it: the whole eye image with `ETERNALVR_MIRROR_CROP=full` (visibly squashed, the eye image is taller than a monitor), the crop's band with `16:9` (exact on a 16:9 monitor, slightly stretched on another shape). Never raised above the taskbar or activated, so the taskbar can stay on top on a display that has one. Log: `mirror: window fills display N at x,y WxH (borderless, stretched\|cropped)` |
@@ -2116,7 +2167,9 @@ Each thread is suspended alone while its context and stack top are copied, and r
 nothing allocates, logs or takes a lock meanwhile. Modules are named from a list the worker refreshes every
 60 s while the game presents, so a thread hung holding the loader's or the heap's lock cannot stall the
 worker too. Rig only: `ETERNALVR_TEST_HANG=<seconds>` holds one present that long, after 2000 presents in
-play, so a run shows the notes and the closing line.
+play, so a run shows the notes and the closing line; `<milliseconds>ms` holds it that many milliseconds, and
+`@<seconds>` after either holds the first present in play that many seconds after the player is in the map
+(`700ms@20`: a checkpoint save's stall at a known time, as the `hud-stall` QA scenario uses it).
 
 ## Live experiments (S1 to S5, stereo-routes.md section 2.10)
 

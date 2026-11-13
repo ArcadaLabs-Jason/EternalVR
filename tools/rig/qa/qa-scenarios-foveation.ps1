@@ -8,7 +8,8 @@
 
 # Seconds on the schedule's clock: the pause menu opens at $script:QaReloadMenuAt, the schedule loads the map again at
 # $script:QaReloadAt (Load Checkpoint is chosen from that menu in the game). Each stretch is long enough for
-# $script:QaEyeMinPairs captures every $script:QaEyeCaptureEvery pairs (49 pairs in 40 s on the rig). The timeline
+# $script:QaEyeMinPairs captures every $script:QaEyeCaptureEvery pairs: the one after the load runs at least
+# $script:QaReloadAfter seconds and then until it has them (Wait-QaEyeCaptures, at most $script:QaEyeMaxSeconds). The timeline
 # starts only once launch-ht.ps1 returns, which waits for the game's audio session: up to 104 s after the launch on
 # the rig, while the schedule's clock can start 25 s after it, so the pause comes at 110 s (45 s missed it once).
 $script:QaReloadMenuAt = 110
@@ -59,7 +60,7 @@ $foveationScenarios = @(
             }
             Wait-QaSeconds $c $script:QaReloadSettle
             $c.ReloadAfter = Get-Date
-            Wait-QaSeconds $c $script:QaReloadAfter
+            Wait-QaEyeCaptures $c $script:QaReloadAfter $c.ReloadAfter
             Save-QaShot $c 'end'
         }
         Asserts = {

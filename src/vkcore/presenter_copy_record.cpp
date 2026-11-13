@@ -117,6 +117,21 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     } else if (!target.keepOther) {
         slot.ui.written = false;
     }
+    // The depth layer: this eye's depth into the slot's shared buffer, in this command buffer
+    // (presenter_depth.hpp).
+    // Any other copy (alternate eyes, mono, Parallel Eye Rendering) leaves its slot, and a carry slot,
+    // without depth, so an older pair's depth never goes out with this colour.
+    if (depthLayer.active()) {
+        const auto slotIndex = static_cast<std::uint32_t>(&slot - ring.data());
+        depthLayer.beginSlot(slotIndex, target.keepOther && target.depth);
+        if (target.depth) {
+            depthLayer.record(dev, cb, family, slotIndex, slotIndex * 2 + (target.keepOther ? 1 : 0),
+                              target.firstEye, target.eyeCount, target.depthTick);
+        }
+        if (target.carrySlot < kRingSize) {
+            depthLayer.beginSlot(target.carrySlot, false);
+        }
+    }
     // The motion-vector capture: with eye R's copy, both eyes of the pair have rendered.
     motionCapture.record(dev, cb, family, target.kind == stereo_seq::PresentKind::EyeR);
     // The desktop mirror, after the eye is in the ring: keep this eye, or put the kept one in its place.
@@ -169,6 +184,7 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
         uiCapture.cancel();
         uiBackdrop.cancel();
         motionCapture.cancel();
+        depthLayer.submitted(static_cast<std::uint32_t>(buffer), 0, queue, timeline);
         return 0;
     }
     const std::uint64_t value = timelineValue + 1;
@@ -212,6 +228,7 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
         uiCapture.cancel();
         uiBackdrop.cancel();
         motionCapture.cancel();
+        depthLayer.submitted(static_cast<std::uint32_t>(buffer), 0, queue, timeline);
         copyFailed = true;
         EVR_LOG("presenter: vkQueueSubmit failed (%d); copies off, presents pass through", submitted);
         return 0;
@@ -223,6 +240,7 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
         uiBackdrop.submitted(value);
     }
     motionCapture.submitted(value); // only after a record
+    depthLayer.submitted(static_cast<std::uint32_t>(buffer), value, queue, timeline);
     fc.lastValue[buffer] = value;
     slot.value.store(value);
     if (target.carrySlot < kRingSize) {

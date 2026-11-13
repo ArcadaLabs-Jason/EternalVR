@@ -54,6 +54,9 @@ std::atomic<std::uint32_t> g_mapLoads{0};
 std::mutex g_lastMapMutex;
 std::string g_lastMap;              // under g_lastMapMutex
 std::atomic<bool> g_playMap{false}; // the last map loaded is one the player plays in
+// The main menu's screen the poll logged last (the first 200 changes; the QA suite's menu path waits on it).
+std::atomic<std::int32_t> g_loggedScreen{-1};
+std::atomic<std::uint32_t> g_screenLines{0};
 
 // ---------------------------------------------------------------------------------------------------
 // Tripping
@@ -577,6 +580,10 @@ void pollMenu() {
     if (menu && safeRead(menu + kMenuActiveScreen, active) && safeRead(menu + kMenuNextScreen, next)) {
         checkScreen(Signal::MenuPoll, active, "active");
         checkScreen(Signal::MenuPoll, next, "next");
+        if (g_loggedScreen.exchange(active, std::memory_order_relaxed) != active &&
+            g_screenLines.fetch_add(1, std::memory_order_relaxed) < 200) { // a failed line never trips
+            finishes([&] { EVR_LOG("%s: main menu screen %d (next %d)", kTag, active, next); });
+        }
     }
 }
 

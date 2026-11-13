@@ -32,6 +32,48 @@ function Get-QaThrowPose([string]$Y) {
 # least $script:QaEyeMinPairs of them (one whole cycle) average over the phases: 49 pairs in 40 s there.
 $script:QaEyeCaptureEvery = 81
 $script:QaEyeMinPairs = 32
+# The captures qa-blockiness.ps1 leaves out at the start (its -Skip).
+$script:QaEyeSkip = 3
+# How long the eye test's timeline runs: at least $script:QaEyeMinSeconds, then until the captures hold
+# $script:QaEyeMinPairs measured pairs and the log has a `vrs: render pass frames:` line (every 200,000 passes,
+# about 60 s into the log on the rig), at most $script:QaEyeMaxSeconds. A fixed 40 s gave 31 and 28 pairs in an hour
+# the rig ran a few percent slower (merge QA b207a, 61 to 64 pairs a second) and missed that line once.
+$script:QaEyeMinSeconds = 40
+$script:QaEyeMaxSeconds = 75
+
+# The capture pairs (an eye L file with its eye R file) in the scenario's eye folder, written at or after $Since if
+# given, as qa-blockiness.ps1 picks them (before its -Skip).
+function Get-QaEyePairCount($Ctx, $Since = $null) {
+    $pairs = @(Get-ChildItem -LiteralPath "$($Ctx.Stage)-eyes" -Filter '*-L.png' -File -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path -LiteralPath ($_.FullName -replace '-L\.png$', '-R.png') } |
+        Where-Object { $null -eq $Since -or $_.LastWriteTime -ge $Since })
+    return $pairs.Count
+}
+
+# The eye test's wait: $MinSeconds, then until $script:QaEyeMinPairs pairs past the skipped ones were written (since
+# $Since if given) and a `vrs: render pass frames:` line is in the log, in all at most $script:QaEyeMaxSeconds. The
+# asserts stay as they are: a run that is still short at the cap fails them.
+function Wait-QaEyeCaptures($Ctx, [double]$MinSeconds = $script:QaEyeMinSeconds, $Since = $null) {
+    $start = Get-Date
+    Wait-QaSeconds $Ctx $MinSeconds
+    $want = $script:QaEyeMinPairs + $script:QaEyeSkip
+    while ($true) {
+        $pairs = Get-QaEyePairCount $Ctx $Since
+        $line = (Get-QaLogText $Ctx) -match 'vrs: render pass frames:'
+        $waited = ((Get-Date) - $start).TotalSeconds
+        if ($pairs -ge $want -and $line) {
+            Write-QaLine ('  eye captures: {0} pair(s) and a render pass frames line after {1:N0} s' -f $pairs, $waited)
+            return
+        }
+        if ($waited -ge $script:QaEyeMaxSeconds) {
+            Add-QaNote $Ctx ('eye captures: {0} of {1} pair(s), render pass frames line {2}, at the {3} s cap' -f $pairs, $want,
+                $(if ($line) { 'logged' } else { 'not logged' }), $script:QaEyeMaxSeconds)
+            return
+        }
+        Wait-QaSeconds $Ctx ([Math]::Min(1.0, $script:QaEyeMaxSeconds - $waited))
+    }
+}
+
 function Test-QaEyeTestBlocks($Ctx) {
     Test-QaEyeTestHalves $Ctx
     Test-QaPassFrames $Ctx
@@ -345,7 +387,7 @@ $script:QaScenarios = @(
         Name = 'foveation-eyes'; Kind = 'game'
         Proves = "Each eye's render passes get that eye's rate image (eye test, the suite's TAA): eye L's left half and eye R's right half of the captures are coarse, the other halves not"
         Env = @('ETERNALVR_VRS_TEST=eyetest'); EyeCaptures = $script:QaEyeCaptureEvery
-        Timeline = { param($c) Wait-QaSeconds $c 40; Save-QaShot $c 'end' }
+        Timeline = { param($c) Wait-QaEyeCaptures $c; Save-QaShot $c 'end' }
         Asserts = {
             param($c)
             Test-QaPresent $c "eye test: eye L's left half and eye R's right half at 4x4"
@@ -358,7 +400,7 @@ $script:QaScenarios = @(
         Env = @('ETERNALVR_VRS_TEST=eyetest', 'ETERNALVR_STEREO_DLSS=1', 'ETERNALVR_STEREO_DLSS_QUALITY=quality')
         EyeCaptures = $script:QaEyeCaptureEvery
         Args = @('+r_antialiasing 2')
-        Timeline = { param($c) Wait-QaSeconds $c 40; Save-QaShot $c 'end' }
+        Timeline = { param($c) Wait-QaEyeCaptures $c; Save-QaShot $c 'end' }
         Asserts = {
             param($c)
             Test-QaPresent $c "eye R's DLSS feature for the game's feature"

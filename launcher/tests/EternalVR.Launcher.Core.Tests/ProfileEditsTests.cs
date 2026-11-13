@@ -66,6 +66,7 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.ScreenReflections] = s => s.Reflections = ReflectionsMode.Off,
             [Setting.Foveation] = s => s.Foveation = FoveationMode.Balanced,
             [Setting.FramePacing] = s => s.Pacing = FramePacing.Off,
+            [Setting.DepthLayer] = s => s.DepthLayer = true,
             [Setting.ParallelEyes] = s => s.ParallelEyes = true,
             [Setting.DlssQuality] = s => s.Dlss = DlssQuality.Balanced,
             [Setting.DlssVersion] = s => s.DlssDll = DlssDllChoice.Game,

@@ -217,6 +217,9 @@ void XrPresenter::Impl::onSeqEyeView(std::byte* renderView) {
             return; // no usable projection: nothing written, the tick stays mono
         }
         noteWritten(index, *projection);
+        if (settings.depthLayer) { // the depth layer's planes for this tick (presenter_depth.hpp)
+            depthLayer.noteRows(record.seq, (*projection)[10], (*projection)[11]);
+        }
     }
     const auto setFlag = [renderView](bool on, std::size_t offset) {
         if (on) {
@@ -361,11 +364,17 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
         const VkBuffer buffer =
             pairCaptureBuffer(sc, completed, pairing.stats().pairsStarted, match.tag.tick);
         const bool toWindow = decideWindow(info, stereo_seq::PresentKind::EyeL);
+        CopyTarget left{0,
+                        1,
+                        false,
+                        settings.ui.enabled,
+                        windowMirrorStep(0, toWindow),
+                        toWindow,
+                        stereo_seq::PresentKind::EyeL};
+        left.depth = true; // the depth layer, when on (presenter_depth.hpp), with this tick's planes
+        left.depthTick = match.tag.tick;
         const std::uint64_t value =
-            submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex,
-                       CopyTarget{0, 1, false, settings.ui.enabled, windowMirrorStep(0, toWindow), toWindow,
-                                  stereo_seq::PresentKind::EyeL},
-                       buffer);
+            submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex, left, buffer);
         if (value == 0) {
             ring[slotIndex].state.store(kSlotFree);
             pairing.leftNotStored();
@@ -384,12 +393,13 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
                                     ? capture.bufferFor(dev, 1, 0, sc.format, sc.extent, completed)
                                     : VK_NULL_HANDLE;
         const bool toWindow = slotIndex >= kRingSize || decideWindow(info, stereo_seq::PresentKind::EyeR);
-        const std::uint64_t value =
-            slotIndex < kRingSize ? submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex,
-                                               CopyTarget{1, 1, true, false, windowMirrorStep(1, toWindow),
-                                                          toWindow, stereo_seq::PresentKind::EyeR},
-                                               buffer)
-                                  : 0;
+        CopyTarget right{
+            1, 1, true, false, windowMirrorStep(1, toWindow), toWindow, stereo_seq::PresentKind::EyeR};
+        right.depth = true;
+        right.depthTick = match.tag.tick;
+        const std::uint64_t value = slotIndex < kRingSize ? submitCopy(queue, family, info, sc, imageIndex,
+                                                                       fc, slotIndex, right, buffer)
+                                                          : 0;
         if (value == 0) {
             if (slotIndex < kRingSize) {
                 ring[slotIndex].state.store(kSlotFree);
@@ -430,9 +440,8 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
     }
     const bool toWindow = decideWindow(info, stereo_seq::PresentKind::Mono);
     const VkBuffer buffer = monoCaptureBuffer(sc, completed);
-    const std::uint64_t value = submitCopy(
-        queue, family, info, sc, imageIndex, fc, slotIndex,
-        CopyTarget{0, 2, false, settings.ui.enabled, stereo_seq::MirrorStep::None, toWindow}, buffer);
+    CopyTarget both{0, 2, false, settings.ui.enabled, stereo_seq::MirrorStep::None, toWindow};
+    const std::uint64_t value = submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex, both, buffer);
     captureCopied(buffer, value, true);
     if (value == 0) {
         ring[slotIndex].state.store(kSlotFree);

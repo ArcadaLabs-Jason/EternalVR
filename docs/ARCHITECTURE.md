@@ -339,16 +339,63 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       forced off while VR is active (`r_hdrDisplay 0`), because a PQ or scRGB final image would break
       this path.
       Two kinds of image cross: each eye's colour, and the UI target for the UI layers (section 8).
-      Depth was planned to cross as well (the depth layer below, T-056); it was not built, and no depth
-      layer is submitted. Allocating the final stereo target as exportable, which would save the first
-      colour copy, is a later experiment.
-    - **Depth (T-057, not built).** The plan, kept for reference: `vkCmdCopyImage` cannot copy the depth aspect of a D32S8 image into another
-      format, and D3D12 compute cannot write a depth swapchain. Depth therefore crosses as `R32_FLOAT`:
-      a Vulkan shader copies it into the shared image, and a D3D12 draw writes it into the depth
-      swapchain image. `nearZ` and `farZ` are submitted in metres, which are game units divided by
-      (unit scale × world size), since game units = metres × `world_scale` × world size (R10 section
-      2.1; T-080); they match the eye projection `P_e`'s near plane. Reversed-Z: for an infinite far
-      plane `nearZ = +inf` and `farZ` is the near plane (R01 section 7 D10).
+      With the depth layer on (off by default, below), each eye's depth crosses as well. Allocating the final
+      stereo target as exportable, which would save the first colour copy, is a later experiment.
+    - **Depth (T-057, T-080, T-231; off by default).** `ETERNALVR_DEPTH_LAYER=1`, the launcher's "Depth for
+      headset smoothing (experimental)" (`vkcore/presenter_depth.hpp`, the plain parts in
+      `features/depth/depth_layer.hpp`). Each eye's depth goes to the runtime with its projection view
+      (`XR_KHR_composition_layer_depth`, enabled only when the runtime lists it), so a runtime that reprojects
+      a late frame can move it by depth. As built (T-231; the plan of T-057 changed in two places):
+      - *Source:* the game's `_upscaledOpaqueDepth` (render system + 0x3A8, the GUI target's depth: the
+        scene depth at the output size, which is the eye image's size), read at each eye's present, in the
+        present hook's command buffer that copies that eye's colour into its ring slot. The depth is thus of
+        the same game frame, eye and slot as the colour, and covered by the same timeline value; its planes are
+        those of that eye's own game tick. The read is ordered against the game's later writes of the image:
+        the present's wait semaphores order it after this eye's work, its own barrier orders later work on the
+        same queue after it, and the game's next submit on every other queue after the copy's own submit first
+        waits for the copy's timeline value (a wait batch the UI layer's `vkQueueSubmit` hook puts ahead of the
+        game's, `ui_vulkan::holdQueues`; the wait is registered after the copy's submit, so a game submit on
+        another queue made before that, on another thread, is not ordered by it). Where the game presents from
+        its compute queue (a level on the first test PC) that wait falls on the first graphics submit after each
+        eye's present, at ALL_COMMANDS: not measured there, it may take away some overlap of the eyes' work;
+        `vkQueueSubmit2` is not hooked (a game asking for it is logged). Only the layouts expected of a finished depth are read (shader read-only or
+        depth read-only in place; the attachment layout, moved there and back, on a graphics queue only), the
+        image must have the eye image's size, and the layer never changes a game image's usage (the image is
+        made `SAMPLED` by the game).
+      - *Vulkan:* a compute shader (`presenter_depth_shader.hpp`) samples the depth aspect and writes floats
+        into the slot's shared buffer (a D3D12 committed buffer with an NT handle, imported as a `VkBuffer`)
+        at the D3D12 placed footprint of the depth swapchain's image, both eyes side by side as in the colour
+        image. Not a copy: in a level the game presents from its compute queue, and Vulkan allows depth-aspect
+        copies only on graphics queues. A value that is not above 0 (or not a number) is written as 0. The
+        GLSL is `src/vkcore/shaders/depth_copy.comp`; `tools/depth_shader.py` makes the SPIR-V words and checks
+        them.
+      - *D3D12:* one `CopyTextureRegion` from the buffer's footprint into the depth swapchain's image (the
+        whole subresource, as a depth-stencil copy must be), in the colour copy's command list (DEPTH_WRITE to
+        COPY_DEST and back). No draw is needed: a buffer-to-depth copy is valid where compute into a depth
+        swapchain is not.
+      - *OpenXR:* a depth swapchain of the colour image's size, `D32_FLOAT` else `D32_FLOAT_S8X24_UINT`
+        (the shader writes 32-bit floats; 24- and 16-bit depth is not taken; the `D32_FLOAT_S8X24_UINT`
+        fallback is not tried on a runtime yet); each view's
+        `XrCompositionLayerDepthInfoKHR` has the view's own rectangle, `minDepth` 0, `maxDepth` 1, and `nearZ` /
+        `farZ` in metres from the depth row the eye was drawn with. The game stores reversed depth (1 minus the
+        standard matrix's depth, `d = 1 + m10 - m11 / D`) with a finite far plane (about 8000 units), so
+        `nearZ` is the far plane and `farZ` the near plane (`nearZ > farZ`); an infinite far plane, which R01
+        section 7 D10 gives as `nearZ = +inf`, is handed over as 100 km (`depth::kMaxPlaneMetres`), a finite
+        value every runtime takes. Metres are game units divided by the world size
+        (`ETERNALVR_WORLD_SCALE`): this game's unit scale is 1 (`docs/rig-findings/presenter.md`, "Depth").
+      - The first-person models are drawn squeezed toward the near plane (under 0.11 m), so the shader writes
+        nothing nearer than 0.25 m (`depth::kNearestMetres`); a runtime would otherwise move the gun as if a
+        few centimetres from the eye.
+      - Only Route S pairs carry depth; Route S's mono frames, alternate eyes (on or auto), Parallel Eye
+        Rendering, mono head tracking, the cinema screen and every quad layer (HUD, menus, reticle) have none,
+        and a copy without depth clears its slot's, so an older pair's depth never goes with new colour. A
+        frame whose source fails a check has no depth (counted in the 10 s line). The extension or a format
+        missing, the swapchain, the shader's objects or the buffer import failing, the runtime refusing a frame
+        with depth (`xrEndFrame` returning a result that names the layers; a lost session or runtime takes
+        the normal loss path) and the runtime holding the depth image through 5 waits in a row stop
+        the layer for the game with one log line: the projection is colour-only from the next frame. Shared
+        buffers that cannot be made leave it off for that ring only. Off, nothing is made, recorded or
+        submitted.
     - **Ownership.** The shared images and both fences are created on the D3D12 side with shared NT
       handles and imported into Vulkan (D3D12 resource and D3D12 fence handle types; the fences become
       Vulkan timeline semaphores), as R01 D1 describes. Vulkan does not guarantee that D3D12 can open
@@ -359,8 +406,9 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
       The `VkImage` is created with `VkExternalMemoryImageCreateInfo` and the same format, extent, mip
       count, layer count and optimal tiling as the D3D12 resource. Every usage is checked first with
       `vkGetPhysicalDeviceImageFormatProperties2` plus `VkPhysicalDeviceExternalImageFormatInfo`:
-      `TRANSFER_DST` for colour, `STORAGE` or `COLOR_ATTACHMENT` for the `R32_FLOAT` depth, and the D3D12
-      resource carries the matching `ALLOW_UNORDERED_ACCESS` or `ALLOW_RENDER_TARGET` flag.
+      `TRANSFER_DST` for colour, and the D3D12 resource carries the matching `ALLOW_RENDER_TARGET` flag. The
+      depth layer's shared buffers are imported the same way as `VkBuffer`s (dedicated, `STORAGE_BUFFER`), the
+      D3D12 buffers made with `ALLOW_UNORDERED_ACCESS`.
     - **Ownership transfer (T-081).** Each frame, on DOOM's queue: an acquire barrier from
       `VK_QUEUE_FAMILY_EXTERNAL` to the graphics family before writing the slot (`oldLayout`
       `UNDEFINED`, since the slot is overwritten), then after the copy or shader write a release
@@ -470,8 +518,8 @@ The 7-step rig test (about 2 hours) is in R15 section 6.
   to the worker.
 - **Spaces:** see section 6.2, which also covers `ReferenceSpaceChangePending` (T-045, T-063).
 - **Layers:**
-  - One projection layer, colour only. No depth layer is submitted (`XR_KHR_composition_layer_depth` is
-    not used).
+  - One projection layer. With the depth layer on (off by default; "Depth" above), each of its views carries
+    the eye's depth (`XR_KHR_composition_layer_depth`); otherwise it is colour only.
   - UI, reticle, vignette, fade and wrist panels on quad layers. Cylinder layers are not used.
 - **Input** uses the action system with one action set, `gameplay`; the menus read the same actions
   (`docs/VR_MENUS.md`). Suggested bindings for every major profile come from one data file per controller

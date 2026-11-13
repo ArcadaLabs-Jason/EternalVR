@@ -17,6 +17,9 @@
 
 namespace evr::vkcore {
 
+// idHavokPhysics_Player::viewAngles in the idPlayer (the layout above): pitch, yaw, roll in degrees.
+inline constexpr std::size_t kPlayerViewAngles = 0x8A50 + 0x3F10;
+
 class PlayerAim {
 public:
     // Decides once, from the loaded exe, whether the layout above applies. Logs the reason when not.

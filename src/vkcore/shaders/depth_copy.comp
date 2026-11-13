@@ -1,0 +1,27 @@
+#version 450
+// The depth layer's copy (src/vkcore/presenter_depth_shader.hpp holds its SPIR-V; tools/depth_shader.py makes and
+// checks it): one eye of the game's depth image into the shared buffer, row after row at the D3D12 footprint's
+// pitch. A value is written as read, at most `nearest` (the first-person models), and 0 (the far plane) when it
+// is not above 0 or not a number; never outside 0..1.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D depthImage;
+layout(set = 0, binding = 1, std430) writeonly buffer Out { float texels[]; } outBuffer;
+layout(push_constant) uniform Params {
+    uint width;      // the eye's size in the buffer
+    uint height;
+    uint srcWidth;   // the source image's size (the eye's: checked before the copy)
+    uint srcHeight;
+    uint rowTexels;  // the footprint's row pitch in floats
+    uint firstTexel; // the eye's first texel (eye R: the eye's width)
+    float nearest;   // the largest value written
+} p;
+void main() {
+    uvec2 id = gl_GlobalInvocationID.xy;
+    if (id.x >= p.width || id.y >= p.height) {
+        return;
+    }
+    uvec2 src = (id * uvec2(p.srcWidth, p.srcHeight)) / uvec2(p.width, p.height);
+    float d = texelFetch(depthImage, ivec2(src), 0).r;
+    d = (d > 0.0) ? clamp(min(d, p.nearest), 0.0, 1.0) : 0.0; // a NaN fails d > 0.0
+    outBuffer.texels[p.firstTexel + id.y * p.rowTexels + id.x] = d;
+}

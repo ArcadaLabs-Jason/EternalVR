@@ -30,7 +30,9 @@ argument screening, map classes, menu screens, the latch; tested in `tests/platf
 - **When.** The command line is screened in `vkNegotiateLoaderLayerInterfaceVersion`; a refused argument
   makes the negotiation fail, so the loader leaves the layer out and the game runs untouched. The
   detection points are installed when the game creates its `VkInstance`, before its first frame and so
-  before any menu; `poll()` runs on every present.
+  before any menu; `poll()` runs on every present. The poll logs each change of the main menu's active screen
+  (`mp guard: main menu screen N (next M)`, the first 200 changes; a line that fails to log never trips): the
+  QA suite's menu path waits on these lines (`tools/rig/qa/qa-menu.ps1`).
 - **All features, not some.** Every feature writes into the local player's game state, and every online
   context exposes all of them, so there is no feature a missing detection point leaves safe: any missing
   point refuses them all.

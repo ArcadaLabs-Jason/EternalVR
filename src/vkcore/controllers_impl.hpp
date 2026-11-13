@@ -548,8 +548,6 @@ void noteZoomLookHands(const std::byte* hands, const std::byte* player);
 // already filtered). The ammo hooks (bhaptics_ammo.cpp, the same): the player picked up ammo. All only note;
 // nothing waits on the network.
 void startBhaptics();
-// The player's health component says dead (its `isDead`, the offsets bHaptics reads); false when unreadable.
-bool playerDead(const std::byte* player);
 void noteBhapticsShot(const std::byte* hands, bool belch);
 void noteBhapticsFrame(const std::byte* player);
 void noteBhapticsPortal();

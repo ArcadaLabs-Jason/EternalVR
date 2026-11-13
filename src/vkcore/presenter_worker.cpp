@@ -40,6 +40,7 @@ void XrPresenter::Impl::destroyXrObjects() {
     xrSwapchains.destroy(xr, xrSwapchain);
     xrImages.clear();
     destroyUiXrObjects();
+    depthLayer.destroyXr(xr, xrSwapchains);
     xrSwapchains.forget(fadeLayer.swapchain());
     fadeLayer.destroy(xr);
     for (const XrSwapchain level : vignette.swapchains()) {

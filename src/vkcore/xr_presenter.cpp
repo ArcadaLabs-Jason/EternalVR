@@ -9,6 +9,7 @@
 #include "vkcore/keep_active.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/ui_engine.hpp"
+#include "vkcore/ui_vulkan.hpp"
 
 #include <cmath>
 #include <cwchar>
@@ -137,6 +138,8 @@ Settings readSettings() {
             s.swayBaseYaw = base;
         }
     }
+    s.depthLayer =
+        ui_vulkan::depthLayerRequested(); // ETERNALVR_DEPTH_LAYER (read once, as the image hook does)
     return s;
 }
 
@@ -220,6 +223,7 @@ void XrPresenter::Impl::shutdown() {
     setStereoHookSink(nullptr);
     std::lock_guard lock(mutex);
     ringReady.store(false);
+    ui_vulkan::stopHolding(); // no game submit waits on the timeline destroyed below
     dev.vk.DeviceWaitIdle(dev.device);
     destroyVulkanObjects();
     if (workerLeftBehind) {

@@ -147,7 +147,103 @@ function Get-QaHudCaptureText($Ctx) {
     return ''
 }
 
+# The frames table's longest gap of 400 ms or more in the game's images (rows whose `repeat` is not `new`) that
+# began on a head-tracked image (a view: the map's load has none and is often longer), with the new rows around
+# it; $null without a table or such a gap. The longest, so a real save's shorter stall elsewhere in the run is
+# never the one checked.
+function Get-QaFramesGap($Ctx) {
+    $csv = @(Get-ChildItem -LiteralPath $Ctx.LogsDir -Filter 'eternalvr-frames-*.csv' -ErrorAction SilentlyContinue | Sort-Object Length) | Select-Object -Last 1
+    if (-not $csv) { return $null }
+    $rows = @(Import-Csv -LiteralPath $csv.FullName)
+    $best = $null; $start = -1
+    for ($i = 1; $i -lt $rows.Count; $i++) {
+        $isNew = $rows[$i].repeat -eq 'new'
+        if (-not $isNew -and $start -lt 0) { $start = $i }
+        if ($isNew -and $start -gt 0) {
+            $ms = ([double]$rows[$i].display_time_ns - [double]$rows[$start - 1].display_time_ns) / 1e6
+            if ($ms -ge 400 -and $rows[$start - 1].view -ne '0' -and (-not $best -or $ms -gt $best.Ms)) { $best = [pscustomobject]@{ Ms = $ms; Before = $rows[$start - 1]; Rows = @($rows[$start..($i - 1)]); After = $rows[$i] } }
+            $start = -1
+        }
+    }
+    if ($best) { $best | Add-Member -NotePropertyName File -NotePropertyValue $csv.Name }
+    return $best
+}
+
+# A simulator burst (OpenXR-Simulator's burst_command.json): the next $Frames composed frames (64 at most)
+# written as burst_NNN.bmp with a manifest; Save-QaXrBurst moves what it wrote into the scenario's folder.
+function Start-QaXrBurst([int]$Frames) {
+    $dir = Join-Path $env:LOCALAPPDATA 'OpenXR-Simulator'
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter 'burst_*' -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
+    $cmd = Join-Path $dir 'burst_command.json'
+    try {
+        # Without the simulator's folder (another runtime) there is nothing to ask: Save-QaXrBurst notes it.
+        Set-Content -LiteralPath "$cmd.tmp" -Value "{`"frames`": $Frames}" -Encoding ascii -ErrorAction Stop
+        Move-Item -LiteralPath "$cmd.tmp" -Destination $cmd -Force -ErrorAction Stop
+    } catch {
+        Remove-Item -LiteralPath "$cmd.tmp" -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Save-QaXrBurst($Ctx) {
+    $dir = Join-Path $env:LOCALAPPDATA 'OpenXR-Simulator'
+    $end = (Get-Date).AddSeconds(30)
+    while ((Get-Date) -lt $end -and -not (Test-Path -LiteralPath (Join-Path $dir 'burst_done.json'))) { Start-Sleep -Milliseconds 250 }
+    $files = @(Get-ChildItem -LiteralPath $dir -Filter 'burst_*' -ErrorAction SilentlyContinue)
+    if (-not (Test-Path -LiteralPath (Join-Path $dir 'burst_done.json'))) {
+        # A command the simulator never took would start a burst in a later run.
+        Remove-Item -LiteralPath (Join-Path $dir 'burst_command.json') -Force -ErrorAction SilentlyContinue
+        Add-QaNote $Ctx "simulator burst: not done in 30 s ($($files.Count) file(s))"
+        return
+    }
+    $out = Join-Path $Ctx.Dir 'burst'
+    New-Item -ItemType Directory -Force $out | Out-Null
+    foreach ($f in $files) { Move-Item -LiteralPath $f.FullName -Destination $out -Force }
+    Add-QaNote $Ctx "simulator burst: $($files.Count) file(s) in $out"
+}
+
 $hudScenarios = @(
+    @{
+        Name = 'hud-stall'; Kind = 'game'
+        Proves = 'A stall of the game (one present held 700 ms 20 s into the map, as a checkpoint save holds the game''s thread) keeps the HUD up: the headset repeats the last image at the head pose it was rendered with, every frame of the gap has the GUI quad (the frames table''s ui_shown), the layer''s gap line counts no frame without it, and the first new image after the gap is head-tracked'
+        Map = 'game/sp/e1m3_cult/e1m3_cult -checkpoint cp_03_shoot_gate'
+        Env = @('ETERNALVR_TEST_HANG=700ms@20')
+        Input = @()
+        Timeline = {
+            param($c)
+            # The hold is due 20 s after the head aim's line. The simulator records at most 64 frames and holds its
+            # frame loop while it writes them out, so the burst starts 0.3 s in (past the 250 ms the quad used to
+            # go at) and is written after the hold.
+            $at = Get-QaLogLineTime (Get-QaLogText $c) 'aim: head aim on'
+            if ($at) {
+                $wait = ($at.AddSeconds(20.3) - (Get-Date)).TotalSeconds
+                if ($wait -gt 0) { Wait-QaSeconds $c $wait }
+                Start-QaXrBurst 64
+            }
+            Wait-QaSeconds $c 6
+            Save-QaXrBurst $c
+            Save-QaXrShot $c 'after'
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'hang note: ETERNALVR_TEST_HANG: holding this present 700 ms'
+            Test-QaPresent $c 'stall: [\d.]+ ms between game presents' -Regex
+            $gap = Get-QaFramesGap $c
+            if (-not $gap) { Add-QaResult $c 'the frames table has a gap' $false 'no table or no gap'; return }
+            Add-QaResult $c 'the frames table has a gap of 600 ms or more' ($gap.Ms -ge 600) ("{0:N0} ms, {1} frame(s), {2}" -f $gap.Ms, $gap.Rows.Count, $gap.File)
+            $b = $gap.Before
+            $moved = @($gap.Rows | Where-Object { $_.view -ne $b.view -or $_.head_qx -ne $b.head_qx -or $_.head_qy -ne $b.head_qy -or $_.head_qz -ne $b.head_qz -or $_.head_qw -ne $b.head_qw })
+            Add-QaResult $c 'the gap repeats the last image at its rendered head pose' ($b.view -ne '0' -and $moved.Count -eq 0) "view $($b.view); $($moved.Count) frame(s) with another view or head"
+            $without = @($gap.Rows | Where-Object { $_.ui_shown -ne '1' })
+            $oldest = ($gap.Rows | ForEach-Object { [double]$_.gui_age_ms } | Measure-Object -Maximum).Maximum
+            Add-QaResult $c 'the HUD stays up through the gap' ($b.ui_shown -eq '1' -and $without.Count -eq 0) ("{0} of {1} frame(s) without the GUI quad, the GUI image up to {2:N0} ms old" -f $without.Count, $gap.Rows.Count, $oldest)
+            Add-QaResult $c 'the first new image after the gap is head-tracked' ($gap.After.view -ne '0') "view $($gap.After.view), ui_shown $($gap.After.ui_shown)"
+            # The longest gap's line, as with the table.
+            $line = @(Get-QaMatches $c "ui: a \d+ ms gap in the game's images" -Regex) |
+                Sort-Object { if ($_ -match 'ui: a (\d+) ms gap') { [int]$Matches[1] } else { 0 } } |
+                Select-Object -Last 1
+            Add-QaResult $c 'the gap line counts no frame without the GUI quad' ($line -match 'past 250 ms .*, left out of 0') "$line"
+        }
+    },
     @{
         Name = 'hud-front-wrist'; Kind = 'game'
         Proves = 'The HUD in front kept with the wrist HUD on (launcher: HUD in front of you and HUD on your wrist both ticked): the start-up line says in front on, the corner blocks are measured for the wrist, and the head-locked HUD stays whole (the in-headset capture: one piece, nothing cut for the hand HUD)'

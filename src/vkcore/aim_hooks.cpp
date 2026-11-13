@@ -88,8 +88,6 @@ constexpr std::size_t kHandsOwner = 0x358; // idHands::owner
 constexpr std::size_t kHandsStartFxAxis = 0x8E3C;
 constexpr std::size_t kPlayerInhibitFlags = 0x87FC;       // idPlayer::inhibitFlags
 constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
-// idHavokPhysics_Player::viewAngles (player_aim.cpp): the view before SetViewAngles sets it.
-constexpr std::size_t kPlayerViewAngles = 0x8A50 + 0x3F10;
 // A foreign SetViewAngles turns the view when its pitch or yaw leaves the player's by more than this.
 constexpr float kTurnDegrees = 0.01f;
 

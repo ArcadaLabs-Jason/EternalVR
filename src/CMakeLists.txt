@@ -21,6 +21,7 @@ add_subdirectory(features/dlss_dll)
 add_subdirectory(features/pacing)
 add_subdirectory(features/tracking)
 add_subdirectory(features/flares)
+add_subdirectory(features/depth)
 add_subdirectory(engine/eternal/resolver)
 
 if(EVR_BUILD_LAYER)

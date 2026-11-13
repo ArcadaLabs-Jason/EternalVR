@@ -13,7 +13,7 @@ namespace evr::vkcore {
 namespace {
 
 // After a kill shown steady, how long head aim keeps turning the game's aim back to the steady heading.
-constexpr double kRestoreSeconds = 0.5;
+constexpr double kRestoreSeconds = comfort::kHeadingRestoreSeconds;
 // Episodes logged at their start and end.
 constexpr unsigned long long kLoggedEpisodes = 30;
 // Kills ended at the episode's maximum duration (comfort::GloryTiming::maxSeconds) that are logged.

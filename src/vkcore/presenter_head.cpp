@@ -76,7 +76,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     // The hands animation's camera (camera_anim_hook.hpp): off the game's view for the body and head aim, and
     // (ETERNALVR_CAMERA_ANIMATIONS=1) back on top of the head below.
     const camera_anim::Frame anim = camera_anim::frame(player, gameAxis, cutscene, controllers::forcedView());
-    pickup.frame(player, cutscene, menuUp.load(std::memory_order_relaxed), gameAxis);
+    pickup.frame(player, cutscene, menuUp.load(std::memory_order_relaxed), gameAxis,
+                 {origin[0], origin[1], origin[2]}, settings.unitsPerMetre);
     ViewRecord record;
     record.gameOriginValid = true;
     record.gameOrigin = {origin[0], origin[1], origin[2]};
@@ -178,7 +179,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     rebaseAfterCutscene(headId); // the first frame after a cutscene shown around the player
     std::optional<xr_math::IdViewAxis> body;
     if (settings.headAim) {
-        body = aimWithHead(player, anim.gameAxis, headId);
+        body = aimWithHead(player, pickup.followed(anim.gameAxis), headId); // a pickup's lone flick left out
     }
     const bool headAimed = body.has_value();
     if (!body) {
@@ -188,9 +189,8 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         ++gameViewsSkipped;
         return;
     }
-    if (const std::optional<float> steady = glory.steadyYaw()) {
-        // A glory kill shown steady: the view stays on the kill's eye with the heading it had before it.
-        body = xr_math::axisFromAngles({0.0f, *steady, 0.0f});
+    if (const auto kept = keptBodyYaw(glory, pickup, headAimed, qpcSeconds(qpcNow()))) {
+        body = xr_math::axisFromAngles({0.0f, *kept, 0.0f}); // a glory kill or pickup keeps its heading
     }
     // A cutscene shown around the player: its cuts keep the new shot's forward where the head looks.
     const float bodyYaw = xr_math::anglesFromAxis(*body).yaw;
@@ -200,8 +200,15 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
         body = xr_math::axisFromAngles({0.0f, cutYaw, 0.0f});
     }
     glory.noteBody(xr_math::anglesFromAxis(*body).yaw);
+    pickup.noteBody(xr_math::anglesFromAxis(*body).yaw, headAimed && aimBodyOwn);
     watchBodyYaw(xr_math::anglesFromAxis(*body).yaw, headAimed, roomIn.forcedView, cutscene,
                  menuUp.load(std::memory_order_relaxed));
+    if (camera_anim::tracing()) {
+        camera_anim::noteTraceAim({xr_math::anglesFromAxis(*body).yaw, xr_math::headAngles(headId),
+                                   aimState.injected, aimState.injectedYaw,
+                                   menuUp.load(std::memory_order_relaxed),
+                                   !cutscene && controllers::syncPickupActive(player), headAimed});
+    }
     // Aim and the body above follow the head; the view and the eyes turn by the game's camera on top of it (a
     // pickup's turn or the hands animation's, pickup_view.hpp).
     if (const std::optional<Quat> turned =
@@ -325,6 +332,7 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
 
 std::optional<xr_math::IdViewAxis>
 XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gameAxis, Quat headInIdTech) {
+    aimBodyOwn = false; // set where head aim's own step gives the body (the end)
     if (aimPhase == AimPhase::Off) {
         const ULONGLONG ticks = GetTickCount64();
         if (ticks - lastAimStatsTicks >= 10000) {
@@ -532,14 +540,15 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
         return std::nullopt;
     }
     xr_math::HeadAimStep step = xr_math::headAimStep(aimState, game, current.yaw, head, rewrote);
-    if (const std::optional<float> steady = glory.restoreYaw(qpcSeconds(qpcNow()))) {
-        // After a glory kill shown steady the view still has the heading it kept, while the game's aim
-        // ended where the kill left it: the aim turns back to the view instead of the view to the aim.
-        const float turn = xr_math::normalize180(*steady - step.bodyYaw);
+    // After a glory kill shown steady or a pickup played on top of the head: the aim turns back to the view's
+    // heading instead of the view to the aim (pickup_view.hpp; a stick turn in that window is overridden).
+    const double now = qpcSeconds(qpcNow());
+    if (const std::optional<float> back = turnBackYaw(glory, pickup, now)) {
+        const float turn = xr_math::normalize180(*back - step.bodyYaw);
         if (std::fabs(turn) > 0.05f) {
             step.deltaYaw = xr_math::normalize180(step.deltaYaw + turn);
-            step.bodyYaw = *steady;
-            glory.noteRestored(turn);
+            step.bodyYaw = *back;
+            noteTurnedBack(glory, pickup, now, turn);
         }
     }
     if (step.restoredWrite) {
@@ -574,6 +583,7 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
                 static_cast<unsigned long long>(aimRewrites), static_cast<unsigned long long>(aimRestores),
                 step.bodyYaw, head.yaw, head.pitch, sample.view.pitch, sample.view.yaw);
     }
+    aimBodyOwn = true;
     return xr_math::axisFromAngles({0.0f, step.bodyYaw, 0.0f});
 }
 

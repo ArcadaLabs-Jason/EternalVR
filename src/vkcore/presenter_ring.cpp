@@ -232,6 +232,7 @@ void XrPresenter::Impl::destroyVulkanObjects() {
     capture.destroy(dev);
     mirror.destroy(dev);
     destroyUiImages();
+    depthLayer.destroyBuffers(dev, true);
 }
 
 bool XrPresenter::Impl::createRing() {
@@ -293,7 +294,8 @@ bool XrPresenter::Impl::createRing() {
     const bool ok = !stop.load() && importRing(handles, fenceHandle);
     closeHandles();
     if (ok) {
-        createUiImages(); // UI layer (without it the ring alone serves)
+        createUiImages();     // UI layer (without it the ring alone serves)
+        createDepthBuffers(); // the depth layer, when on (presenter_depth.hpp)
     }
     return ok;
 }
@@ -339,6 +341,7 @@ void XrPresenter::Impl::recreateRing() {
             slot.hasView = false;
         }
         destroyUiImages();
+        depthLayer.destroyBuffers(dev, false);
         // A Route S pair half-written into the old ring is gone with it.
         if (pairing.pending()) {
             pairing.leftNotStored();
@@ -360,6 +363,7 @@ void XrPresenter::Impl::recreateRing() {
     xrSwapchain = XR_NULL_HANDLE;
     xrImages.clear();
     XrSwapchain oldUi = detachUiSwapchain();
+    XrSwapchain oldDepth = depthLayer.detachSwapchain(); // made again for the new size on first use
     acquiredIndex = -1;
     acquiredWaited = false;
     heldCopy.stalled = false;
@@ -375,6 +379,7 @@ void XrPresenter::Impl::recreateRing() {
         // then (the simulator numbers them by how many it holds), and one short of memory for both sizes at
         // once has theirs back.
         xrSwapchains.destroy(xr, oldUi);
+        xrSwapchains.destroy(xr, oldDepth);
         xrSwapchains.destroy(xr, oldSwapchain);
         made = createXrSwapchain();
     }
@@ -383,6 +388,7 @@ void XrPresenter::Impl::recreateRing() {
         uiFailed = true; // UI layer off until the next rebuild, as when acquireUiXrImage makes it
     }
     xrSwapchains.destroy(xr, oldUi);
+    xrSwapchains.destroy(xr, oldDepth);
     xrSwapchains.destroy(xr, oldSwapchain); // valid with an image still acquired
     // The reticle and the menu beam stay over a rebuild; one that failed is made again when next needed, as
     // when the rebuild destroyed them.
@@ -549,6 +555,7 @@ void XrPresenter::Impl::completeCopy(std::uint32_t slotIndex,
     acquiredIndex = -1;
     acquiredWaited = false;
     finishUiXrCopy();
+    depthLayer.finish(xr); // the depth that came with this image, or none
     if (!hasImage) {
         EVR_LOG("xr: first game frame on the screen (timeline value %llu)",
                 static_cast<unsigned long long>(value));

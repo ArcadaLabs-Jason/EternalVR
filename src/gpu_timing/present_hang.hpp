@@ -14,6 +14,8 @@
 // gap counts.
 
 #include <cstdint>
+#include <optional>
+#include <string_view>
 
 namespace evr::gpu_timing {
 
@@ -41,6 +43,17 @@ struct HangResult {
     double tickAgeMs = -1.0; // FirstNote, SecondNote: since the last game tick; negative: none
     std::uint32_t hang = 0;  // which noted gap of this process (1 = the first)
 };
+
+// ETERNALVR_TEST_HANG (rig only, vkcore/hang_note.hpp): how long the one held present is held, and when.
+// "<seconds>" or "<milliseconds>ms", then optionally "@<seconds>": the first present in play that many
+// seconds (a fraction allowed) after the player is in the map; without it, the first present in play after
+// a couple of thousand. Examples: "30" (30 s), "700ms@20" (700 ms, 20 s into the map). Nothing for an empty,
+// zero, malformed or over 10-minute value.
+struct TestHang {
+    std::uint32_t ms = 0;
+    double atSecondsInMap = -1.0; // negative: after a count of presents in play
+};
+std::optional<TestHang> parseTestHang(std::wstring_view value);
 
 class HangWatch {
 public:

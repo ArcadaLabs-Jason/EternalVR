@@ -1,5 +1,6 @@
 #include "vkcore/ui_vulkan.hpp"
 
+#include "features/depth/depth_layer.hpp"
 #include "ui_layer/layout_tracker.hpp"
 #include "ui_layer/motion_target.hpp"
 #include "ui_layer/ui_settings.hpp"
@@ -9,6 +10,7 @@
 #include "vkcore/next_function.hpp"
 #include "vkcore/presenter_eyes.hpp"
 #include "vkcore/shader_dump.hpp"
+#include "vkcore/ui_vulkan_hold.hpp"
 #include "vkcore/view_snapshot.hpp"
 #include "vkcore/vrs_nv.hpp"
 
@@ -55,6 +57,8 @@ auto& g_records = *new std::unordered_map<VkImage, ui_layer::ImageRecord>;
 ui_layer::LayoutTracker& g_tracker = *new ui_layer::LayoutTracker;
 std::atomic<std::uint64_t> g_candidates{0};
 std::atomic<std::uint64_t> g_motionCandidates{0};
+std::atomic<std::uint64_t> g_depthCandidates{0};
+std::atomic<std::uint64_t> g_recordSerial{0};
 std::atomic<std::uint64_t> g_motionNotFollowed{0};
 std::atomic<std::uint64_t> g_notFollowed{0};
 std::atomic<std::uint64_t> g_watchChanges{0};
@@ -119,6 +123,7 @@ void recordImage(VkImage image, const VkImageCreateInfo& info) {
     record.height = info.extent.height;
     record.usage = info.usage;
     record.sharingMode = info.sharingMode;
+    record.serial = ++g_recordSerial;
     if (info.sharingMode == VK_SHARING_MODE_CONCURRENT && info.pQueueFamilyIndices) {
         record.queueFamilies.assign(info.pQueueFamilyIndices,
                                     info.pQueueFamilyIndices + info.queueFamilyIndexCount);
@@ -153,6 +158,30 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device,
     const bool motion = !usage && touch && motionCaptureRequested() && ui_layer::motionCandidateUsage(desc);
     if (motion) {
         usage = ui_layer::motionCandidateUsage(desc);
+    }
+    // The depth layer: every image that can be the game's scene depth gets a record, so the one the render
+    // system names can be followed (presenter_depth.hpp). The image is made exactly as the game asks.
+    if (!usage && touch && depthLayerRequested()) {
+        depth::ImageDesc dd;
+        dd.imageType = desc.imageType;
+        dd.format = desc.format;
+        dd.width = desc.width;
+        dd.height = desc.height;
+        dd.depth = desc.depth;
+        dd.mipLevels = desc.mipLevels;
+        dd.arrayLayers = desc.arrayLayers;
+        dd.samples = desc.samples;
+        dd.usage = desc.usage;
+        if (depth::isCandidate(dd)) {
+            const VkResult made = d.createImage(device, pCreateInfo, pAllocator, pImage);
+            if (made == VK_SUCCESS && g_imageGuard.run([&] { recordImage(*pImage, *pCreateInfo); }) &&
+                ++g_depthCandidates <= 8) {
+                EVR_LOG("depth: image %p (%ux%u, format %d, usage 0x%X) recorded as a possible scene depth",
+                        reinterpret_cast<void*>(*pImage), pCreateInfo->extent.width,
+                        pCreateInfo->extent.height, pCreateInfo->format, pCreateInfo->usage);
+            }
+            return made;
+        }
     }
     // Parallel Eye Rendering's eye copy reads each view's image (presenter_eyes.hpp).
     if (!usage && touch && eyeCopyRequested()) {
@@ -205,6 +234,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device,
             g_tracker.removeCandidate(handleValue(image));
             auto expected = handleValue(image);
             g_watched.compare_exchange_strong(expected, 0);
+            noteDestroyed(image); // the depth layer's source: its view goes (ui_vulkan_hold.cpp)
         }
     }
     if (d.destroyImage) {
@@ -328,8 +358,43 @@ VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue,
         g_submitGuard.run([&] { view_snapshot::copiesSubmitted(*copy, false); });
         copy.reset();
     }
+    // The depth layer's hold (holdQueues): the first submit on this queue after a depth read on another one
+    // waits for that read's timeline value first, in a batch of its own ahead of the game's.
+    VkTimelineSemaphoreSubmitInfo holdValue{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+    VkSubmitInfo hold{VK_STRUCTURE_TYPE_SUBMIT_INFO, &holdValue};
+    const VkPipelineStageFlags holdStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    VkSemaphore holdSemaphore = VK_NULL_HANDLE;
+    std::uint64_t holdWait = 0;
+    if (d.isGame) {
+        g_submitGuard.run([&] {
+            if (const std::optional<HoldWait> w = holdFor(queue)) {
+                holdSemaphore = w->timeline;
+                holdWait = w->value;
+            }
+        });
+    }
+    if (holdSemaphore != VK_NULL_HANDLE) {
+        holdValue.waitSemaphoreValueCount = 1;
+        holdValue.pWaitSemaphoreValues = &holdWait;
+        hold.waitSemaphoreCount = 1;
+        hold.pWaitSemaphores = &holdSemaphore;
+        hold.pWaitDstStageMask = &holdStage;
+        const bool added = g_submitGuard.run([&] {
+            if (!copy) {
+                batches.assign(pSubmits, pSubmits + submitCount);
+            }
+            batches.insert(batches.begin(), hold);
+        });
+        if (added) {
+            noteHoldAdded(queue, HoldWait{holdSemaphore, holdWait});
+        } else if (!copy) {
+            batches.clear(); // no memory for the batch: the submit goes as the game gave it
+        }
+    }
     VkResult result = VK_SUCCESS;
-    if (copy) {
+    if (holdSemaphore != VK_NULL_HANDLE && !batches.empty() && !copy) {
+        result = d.queueSubmit(queue, static_cast<std::uint32_t>(batches.size()), batches.data(), fence);
+    } else if (copy) {
         result = d.queueSubmit(queue, static_cast<std::uint32_t>(batches.size()), batches.data(), fence);
         g_submitGuard.run([&] { view_snapshot::copiesSubmitted(*copy, result == VK_SUCCESS); });
         copy.reset(); // the next copies may take their timeline values now
@@ -356,6 +421,24 @@ bool enabled() {
     static const bool on = [] {
         bool value = false; // off when the settings cannot be read
         g_settingsGuard.run([&] { value = readEnabled(); });
+        return value;
+    }();
+    return on;
+}
+
+bool depthLayerRequested() {
+    static const bool on = [] {
+        bool value = false;
+        g_settingsGuard.run([&] {
+            std::wstring text;
+            if (readEnv(L"ETERNALVR_DEPTH_LAYER", text)) {
+                std::string narrow;
+                for (const wchar_t c : text) {
+                    narrow.push_back(c < 0x80 ? static_cast<char>(c) : '?');
+                }
+                value = depth::parseSwitch(narrow).value_or(false);
+            }
+        });
         return value;
     }();
     return on;
@@ -433,6 +516,18 @@ PFN_vkVoidFunction findHook(const char* name) {
     EVR_UI_HOOK(CmdExecuteCommands)
     EVR_UI_HOOK(QueueSubmit)
 #undef EVR_UI_HOOK
+    // vkQueueSubmit2 is not hooked: its submits would pass the depth layer's queue hold and the layout
+    // tracking.
+    if (depthLayerRequested() &&
+        (std::strcmp(name, "vkQueueSubmit2") == 0 || std::strcmp(name, "vkQueueSubmit2KHR") == 0)) {
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true)) {
+            EVR_LOG("depth: the game asked for %s, which the layer does not hook: submits through it are not "
+                    "held "
+                    "for the depth layer's reads",
+                    name);
+        }
+    }
     return nullptr;
 }
 
@@ -491,8 +586,8 @@ std::optional<ImageState> stateOf(VkImage image) {
 }
 
 Counters counters() {
-    return Counters{g_candidates.load(), g_notFollowed.load(), g_watchChanges.load(),
-                    g_motionCandidates.load(), g_motionNotFollowed.load()};
+    return Counters{g_candidates.load(),       g_notFollowed.load(),       g_watchChanges.load(),
+                    g_motionCandidates.load(), g_motionNotFollowed.load(), g_depthCandidates.load()};
 }
 
 } // namespace evr::vkcore::ui_vulkan

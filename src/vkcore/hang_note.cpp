@@ -4,6 +4,7 @@
 
 #include "gpu_timing/present_hang.hpp"
 #include "gpu_timing/present_stall.hpp"
+#include "vkcore/debug_commands.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/window_timing.hpp"
@@ -20,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cwchar>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -68,7 +70,8 @@ struct State {
 };
 State& g_state = *new State;
 
-std::atomic<unsigned long> g_testHangSeconds{0};
+std::atomic<std::uint32_t> g_testHangMs{0};
+std::atomic<double> g_testHangAtSeconds{-1.0}; // in the map; negative: after kTestHangPresentsInPlay
 std::atomic<std::uint32_t> g_testPresentsInPlay{0};
 std::atomic<bool> g_testHangDone{false};
 
@@ -152,9 +155,22 @@ void install() {
     }
     std::wstring value;
     if (readEnv(L"ETERNALVR_TEST_HANG", value)) {
-        const unsigned long seconds = std::wcstoul(value.c_str(), nullptr, 10);
-        g_testHangSeconds.store(seconds, std::memory_order_relaxed);
-        EVR_LOG("hang note: ETERNALVR_TEST_HANG: one present in play is held %lu s", seconds);
+        if (const std::optional<gt::TestHang> hang = gt::parseTestHang(value)) {
+            g_testHangAtSeconds.store(hang->atSecondsInMap, std::memory_order_relaxed);
+            g_testHangMs.store(hang->ms, std::memory_order_relaxed);
+            if (hang->atSecondsInMap >= 0.0) {
+                EVR_LOG(
+                    "hang note: ETERNALVR_TEST_HANG: one present in play is held %u ms, %.1f s into the map",
+                    hang->ms, hang->atSecondsInMap);
+            } else {
+                EVR_LOG("hang note: ETERNALVR_TEST_HANG: one present in play is held %u ms", hang->ms);
+            }
+        } else {
+            EVR_LOG(
+                "hang note: ETERNALVR_TEST_HANG='%ls' is not <seconds> or <milliseconds>ms[@<seconds>]; no "
+                "present is held",
+                value.c_str());
+        }
     }
     EVR_LOG("hang note: no game present for %.0f s in play gets the threads' places (again at %.0f s, for at "
             "most %u gaps)",
@@ -295,8 +311,8 @@ void check() {
 }
 
 void testHangAtPresent() {
-    const unsigned long seconds = g_testHangSeconds.load(std::memory_order_relaxed);
-    if (seconds == 0 || g_testHangDone.load(std::memory_order_relaxed)) {
+    const std::uint32_t holdMs = g_testHangMs.load(std::memory_order_relaxed);
+    if (holdMs == 0 || g_testHangDone.load(std::memory_order_relaxed)) {
         return;
     }
     const std::uint64_t tick = stall_watch::lastGameTickMicros();
@@ -304,12 +320,15 @@ void testHangAtPresent() {
     if (tick == 0 || now < tick || static_cast<double>(now - tick) / 1000.0 > gt::kInPlayTickMs) {
         return; // not in play
     }
-    if (g_testPresentsInPlay.fetch_add(1, std::memory_order_relaxed) + 1 < kTestHangPresentsInPlay ||
-        g_testHangDone.exchange(true)) {
+    const double atSeconds = g_testHangAtSeconds.load(std::memory_order_relaxed);
+    const bool due = atSeconds >= 0.0 ? secondsInMap() >= atSeconds
+                                      : g_testPresentsInPlay.fetch_add(1, std::memory_order_relaxed) + 1 >=
+                                            kTestHangPresentsInPlay;
+    if (!due || g_testHangDone.exchange(true)) {
         return;
     }
-    EVR_LOG("hang note: ETERNALVR_TEST_HANG: holding this present %lu s", seconds);
-    Sleep(seconds * 1000);
+    EVR_LOG("hang note: ETERNALVR_TEST_HANG: holding this present %u ms", holdMs);
+    Sleep(holdMs);
 }
 
 } // namespace evr::vkcore::hang_note

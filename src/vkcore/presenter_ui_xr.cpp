@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 namespace evr::vkcore {
@@ -140,6 +141,8 @@ void XrPresenter::Impl::recordUiXrCopy(RingSlot& slot) {
 }
 
 void XrPresenter::Impl::finishUiXrCopy() {
+    uiImageQpc = qpcNow(); // with the game image's copy (completeCopy)
+    uiWithImage = uiCopyPending;
     if (!uiCopyPending) {
         return;
     }
@@ -157,13 +160,31 @@ void XrPresenter::Impl::finishUiXrCopy() {
     ++uiXrCopies;
 }
 
+void XrPresenter::Impl::noteUiGap(LONGLONG imageBefore, bool newImage, bool shown) {
+    constexpr std::uint32_t kGapLines = 20;
+    const LONGLONG now = qpcNow();
+    const double sinceImage = imageBefore != 0 ? qpcSeconds(now - imageBefore) : 0.0;
+    const double guiAge = uiHasImage ? qpcSeconds(now - uiShownQpc) : -1.0;
+    const std::optional<ui_layer::GuiGapTally::Gap> gap = uiGaps.onFrame(newImage, sinceImage, guiAge, shown);
+    if (!gap || uiGapLines >= kGapLines) {
+        return;
+    }
+    ++uiGapLines;
+    EVR_LOG("ui: a %.0f ms gap in the game's images: the GUI quad in %u headset frame(s) past %.0f ms (its "
+            "image up to %.0f ms old), left out of %u%s",
+            gap->gapMs, gap->shown, ui_layer::kGuiFreshSeconds * 1000.0, gap->lastShownAgeMs, gap->left,
+            uiGapLines == kGapLines ? "; later gaps are not logged" : "");
+}
+
 bool XrPresenter::Impl::uiFresh() const {
-    return uiHasImage && uiSwapchain && qpcSeconds(qpcNow() - uiShownQpc) <= kViewStaleSeconds;
+    return uiHasImage && uiSwapchain &&
+           ui_layer::guiImageShown(qpcSeconds(qpcNow() - uiShownQpc), uiWithImage);
 }
 
 bool XrPresenter::Impl::fillUiQuad(XrCompositionLayerQuad& quad) {
     // Only a fresh GUI image: a capture that stopped (menus, a failed check) hides the quad, and the
-    // composite comes back with it.
+    // composite comes back with it. A game that is late keeps the quad up with the image the headset repeats,
+    // for up to a second (ui_layer/gui_hold.hpp).
     if (!uiFresh()) {
         return false;
     }
@@ -198,6 +219,8 @@ XrSwapchain XrPresenter::Impl::detachUiSwapchain() {
     uiAcquiredWaited = false;
     uiCopyPending = false;
     uiHasImage = false;
+    uiWithImage = false;
+    uiGaps = ui_layer::GuiGapTally{}; // a gap across a new swapchain is not one the GUI quad could bridge
     uiFailed = false;
     uiWash.destroy();
     hudMarkers.detach(xr, xrSwapchains);

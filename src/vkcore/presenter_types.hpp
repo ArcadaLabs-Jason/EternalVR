@@ -124,6 +124,9 @@ struct Settings {
     // ETERNALVR_TEST_XR_LOSS_REMOVE=1: that loss also removes the presenter's D3D12 device, as a graphics
     // card reset would (ID3D12Device5::RemoveDevice).
     bool testLossRemovesDevice = false;
+    // ETERNALVR_DEPTH_LAYER=1: each eye's depth goes to the runtime with its projection view
+    // (presenter_depth.hpp). Off by default.
+    bool depthLayer = false;
 };
 
 // The session ended, and why (XR worker only; presenter_reconnect.cpp brings VR back when it can).
@@ -243,6 +246,10 @@ struct CopyTarget {
     // or with both, each eye from its frame's copy of its own view's image (null: from the image itself);
     // the copy waits for each.
     std::array<view_snapshot::Copy, 2> snapshots{};
+    // The depth layer: this Route S pair eye's depth goes along, with the planes of game tick `depthTick`
+    // (presenter_depth.hpp). Every other copy clears the slot's depth.
+    bool depth = false;
+    std::uint64_t depthTick = 0;
 };
 
 // What an in-headset capture holds (the text file's kind line).

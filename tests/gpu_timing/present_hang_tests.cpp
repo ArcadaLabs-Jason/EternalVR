@@ -10,6 +10,7 @@ using evr::gpu_timing::HangWatch;
 using evr::gpu_timing::kHangFirstNoteMs;
 using evr::gpu_timing::kHangSecondNoteMs;
 using evr::gpu_timing::kHangsNoted;
+using evr::gpu_timing::parseTestHang;
 
 namespace {
 
@@ -101,4 +102,28 @@ TEST_CASE("present hang: at most kHangsNoted gaps a process are noted") {
         CHECK(watch.onCheck(at(0.001, present)).action == HangAction::Resumed);
     }
     CHECK(watch.onCheck(at(30.0, present)).action == HangAction::None);
+}
+
+TEST_CASE("present hang: the test hang's value") {
+    const auto seconds = parseTestHang(L"30");
+    REQUIRE(seconds);
+    CHECK(seconds->ms == 30000);
+    CHECK(seconds->atSecondsInMap < 0.0);
+    const auto ms = parseTestHang(L"700ms");
+    REQUIRE(ms);
+    CHECK(ms->ms == 700);
+    CHECK(ms->atSecondsInMap < 0.0);
+    const auto at = parseTestHang(L"700ms@20.5");
+    REQUIRE(at);
+    CHECK(at->ms == 700);
+    CHECK(at->atSecondsInMap == doctest::Approx(20.5));
+    const auto atWhole = parseTestHang(L"2@15");
+    REQUIRE(atWhole);
+    CHECK(atWhole->ms == 2000);
+    CHECK(atWhole->atSecondsInMap == doctest::Approx(15.0));
+    for (const wchar_t* bad : {L"", L"0", L"0ms", L"ms", L"x", L"700 ms", L"-5", L"700ms@", L"700ms@x",
+                               L"700ms@1.", L"601", L"600001ms", L"1.5"}) {
+        CHECK_FALSE(parseTestHang(bad));
+    }
+    CHECK(parseTestHang(L"600")->ms == 600000);
 }

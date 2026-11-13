@@ -150,11 +150,24 @@ them is worse for you than described here.
   0.1.31; they now get their motion in both eyes, which has not been checked in a headset yet. If one eye
   still looks different on a moving shape, please report where. The launcher's "Anti-aliasing" setting can
   switch to Off (sharp, with some shimmer on edges) or DLSS.
-- **Pickup animations keep your view still.** At a pickup that moves the game's camera (a Praetor token,
-  for example) your hands play the animation in front of you, but the view stays where your head points
-  instead of tilting with the camera. "Pickup animations: Camera moves" on the Play tab tilts the view with
-  it; that one is new and not tried in a headset yet. If the view freezes at a pickup instead (it did at the
-  chainsaw in an early test), please tell me which one.
+- **Pickup animations keep your view still.** At a pickup that moves the game's camera (a Praetor token or
+  an automap station) your hands play the animation in front of you, but the view stays where your head
+  points instead of tilting with the camera. A gore nest is different: its camera swings far to the side, so
+  the view turns toward the nest in one go, follows that swing and stays facing that way after. "Pickup
+  animations: Camera moves" on the Play tab tilts and turns the view with the camera and then brings it back
+  to where you were facing; that one is new and not tried in a headset yet. It follows the camera's smooth
+  motion only, up to 45 degrees in any direction, and leaves out the game's jumps: when a gore nest's camera
+  jumps around to the nest's far side, your view doesn't. On my test PC I checked the token, the automap
+  station, gore nests and the Slayer Gate's nest with both settings (after the Slayer Gate's nest the game
+  moves you into the gate's arena and turns you to face it, the same with either setting); I couldn't get a
+  rune, a mod bot or the chainsaw pickup to run there, so those aren't checked yet. A Sentinel Crystal does run
+  there now (no headset yet, aiming with the hand): its upgrade menu comes up in front of you and works with the
+  pointer. On my test PC (one save, about 60 frames a second), once you pick an upgrade your hands
+  crush the crystal in front of you with either setting and you keep facing the same way after: the view no
+  longer flicks about 10 degrees and back as the menu closes, and with "Camera moves" it no longer turns as the
+  crush ends. Other frame rates haven't been checked yet. If you look away from the crystal while your hand points
+  at it, the crush plays where the hand pointed, so you'd have to turn your head to see it. If the view freezes or
+  jumps at a pickup (the chainsaw froze in an early test), please tell me which one.
 - **See-through surfaces while you turn.** In an early headset test, stained-glass windows and similar glass
   smeared while turning; back then the two eyes shared the glass's history. Each eye keeps its own now, and on
   my test PC glass under head motion looks the same in both eyes and the same as in the flat game. Not
@@ -210,7 +223,9 @@ them is worse for you than described here.
 - **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
   picture can stop for about half a second. That is the game's own checkpoint autosave, not the mod: the
   game holds everything while it writes the save. It happens in the flat game too, but in the headset a
-  frozen picture stands out much more. The mod's log names it: the `stall:` line for that freeze ends with
+  frozen picture stands out much more. During the freeze the world stays steady while you turn your head, and
+  the HUD now stays up with it instead of blinking off a quarter of a second in (checked on my test PC, not
+  in a headset yet). The mod's log names it: the `stall:` line for that freeze ends with
   `the game saved a checkpoint in the gap`.
 - **Alternate eyes is new and not yet tried in a headset.** "Alternate eyes" on the launcher's Advanced tab
   (off by default) draws one eye per frame, taking turns, so a slower processor has about half the work per
@@ -224,6 +239,16 @@ them is worse for you than described here.
   rate the headset's runtime fills in between frames itself. In that mode controller sync, vibration and the
   menu pointer run at the game's rate, not the headset's. fpsVR and similar overlays then show the game's real
   frame rate. It has only run on my test PC so far.
+- **Depth for headset smoothing is experimental and not tried in a headset yet.** "Depth for headset smoothing
+  (experimental)" on the Play tab (Picture, off by default) hands your headset each eye's depth with its picture,
+  so when the frame rate drops its own smoothing (Meta's ASW, Virtual Desktop's SSW, SteamVR's Motion Smoothing
+  where the headset's driver takes depth) can shift things by how far away they are instead of turning the whole
+  picture flat. It has only run on the OpenXR simulator on my test PC so far, which takes the depth but does not
+  use it, so nobody knows yet whether it looks better or worse in a headset. There it cost about 0.3 ms of graphics
+  card time a frame and 250 to 370 MB of video memory at 2048 x 2208 per eye. If you see warping
+  around edges (your gun, doorways, enemies) while frames drop, turn it off, and tell me which headset and app you
+  use. Your gun and hands are handed over no nearer than 25 cm (the game draws them squeezed against your eyes).
+  Only in stereo, and not with Alternate eyes (on or Auto) or Parallel Eye Rendering.
 - **Stereoscopic cutscenes cost about twice the graphics card's time while a cutscene plays.** "Stereoscopic
   cutscenes" on the launcher's Advanced tab (on by default) draws each cutscene on the flat screen from two cameras a
   little apart and shows the pair in 3D, like a 3D movie. On my RTX 3080 Ti it held 88.8 fps on average at 90 Hz

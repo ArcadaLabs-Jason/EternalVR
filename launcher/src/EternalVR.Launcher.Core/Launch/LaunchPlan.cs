@@ -342,6 +342,10 @@ namespace EternalVR.Launcher.Core.Launch
             // explicit either way (the layer's default may change).
             var paced = stereo && (s.AlternateEyes != AlternateEyesMode.Auto || parallel) ? s.Pacing : FramePacing.Off;
             Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
+            // Each eye's depth for the headset's reprojection (src/vkcore/presenter_depth.hpp): the standard renderer's
+            // eye pairs only (not with Alternate eyes, on or auto), the same rule as the window's greying; explicit
+            // either way.
+            Set("ETERNALVR_DEPTH_LAYER", LauncherSettings.DepthLayerOn(s, inputs.ParallelEyesGame) ? "1" : "0");
             // The CPU Saver (docs/rig-findings/perf-cpu-cvars.md): the layer holds the cvars of the items that are on
             // at run time, in stereo only (it holds none in mono). Not without a settings location, since the restore could
             // not undo them there. Absent when no item is on.

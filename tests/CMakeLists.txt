@@ -29,6 +29,7 @@ evr_add_test(evr_xr_math_tests
     SOURCES
         xr_math/aim_check_tests.cpp
         xr_math/camera_anim_tests.cpp
+        xr_math/camera_heading_hold_tests.cpp
         xr_math/camera_turn_tests.cpp
         xr_math/cinema_eyes_tests.cpp
         xr_math/cinema_run_tests.cpp
@@ -130,6 +131,11 @@ evr_add_test(evr_pacing_tests
         features/pacing/slot_choice_tests.cpp
         features/pacing/unseen_hold_tests.cpp
     DEPENDS evr_pacing)
+
+evr_add_test(evr_depth_tests
+    SOURCES
+        features/depth/depth_layer_tests.cpp
+    DEPENDS evr_depth)
 
 evr_add_test(evr_tracking_tests
     SOURCES
@@ -454,6 +460,7 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/additive_wash_tests.cpp
         ui_layer/backdrop_tests.cpp
         ui_layer/crosshair_tests.cpp
+        ui_layer/gui_hold_tests.cpp
         ui_layer/gui_target_tests.cpp
         ui_layer/hud_blocks_tests.cpp
         ui_layer/hud_view_tests.cpp

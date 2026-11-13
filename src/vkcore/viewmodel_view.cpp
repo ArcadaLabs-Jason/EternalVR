@@ -33,8 +33,7 @@ namespace {
 constexpr const char* kTag = "controllers";
 
 // Type info (build 25216728).
-constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580;  // idPlayer::firstPersonViewOrigin
-constexpr std::size_t kPlayerViewAngles = 0x8A50 + 0x3F10; // idHavokPhysics_Player::viewAngles
+constexpr std::size_t kPlayerFirstPersonOrigin = 0x16580; // idPlayer::firstPersonViewOrigin
 constexpr std::size_t kPlayerViewYaw = kPlayerViewAngles + 4;
 // renderView_t
 constexpr std::size_t kFovX = 0x28;

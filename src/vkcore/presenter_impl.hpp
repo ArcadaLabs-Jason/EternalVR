@@ -9,9 +9,9 @@
 // pairs in the ring), presenter_ui.cpp and presenter_ui_xr.cpp (the UI layer: the game's GUI target on its
 // own quad), presenter_reticle.cpp (the hand-aim dot and static images), presenter_menu.cpp and
 // presenter_menu_update.cpp (menus), presenter_window.cpp (which presents reach the game's window, the render
-// size's statistics) and keep_active.cpp. The plain types they share are in presenter_types.hpp; the state of
-// some parts (the D3D12 and OpenXR objects, Route S, the UI layer, menus, the window) is in
-// presenter_impl_state.hpp.
+// size's statistics), presenter_depth_glue.cpp (the depth layer's start, presenter_depth.hpp) and
+// keep_active.cpp. The plain types they share are in presenter_types.hpp; the state of some parts (the D3D12
+// and OpenXR objects, Route S, the UI layer, menus, the window) is in presenter_impl_state.hpp.
 
 #include "common/retire_queue.hpp"
 #include "stereo_seq/centered_matrix.hpp"
@@ -21,6 +21,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/player_aim.hpp"
 #include "vkcore/presenter_cutscene.hpp"
+#include "vkcore/presenter_depth.hpp"
 #include "vkcore/presenter_impl_state.hpp"
 #include "vkcore/presenter_stereo.hpp"
 #include "vkcore/presenter_types.hpp"
@@ -157,6 +158,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     xr_math::IdAngles aimLastDelta;
     bool aimWritten = false;
     std::optional<float> aimMenuBody; // the body yaw held while a menu is up (aimWithHead); nullopt: none
+    bool aimBodyOwn =
+        false; // aimWithHead's last body came from head aim's own step (not a camera, menu, hold)
     std::uint64_t aimMenuFrames = 0;
     bool loggedNotPlayer = false;
     xr_math::AimCheck aimCheck; // Verifying: the start-up check and its later tries
@@ -233,6 +236,13 @@ struct XrPresenter::Impl final : ViewHookSink,
     // Worker: the projection layer's views for the shown image; false when it has no view.
     bool fillProjectionViews(std::array<XrCompositionLayerProjectionView, 2>& views);
 
+    // ---- The depth layer (presenter_depth.hpp, presenter_depth_glue.cpp)
+    // ------------------------------------
+
+    DepthLayer depthLayer{settings.depthLayer, settings.unitsPerMetre};
+    // Worker, while the ring is built (no present copies): whether the depth layer runs, its shared buffers.
+    void createDepthBuffers();
+
     // ---- Route S (presenter_seq.cpp) ---------------------------------------------------------------
 
     // Per-eye hook (render job threads) for Route S: the chain's eye gets its view and flags.
@@ -291,6 +301,9 @@ struct XrPresenter::Impl final : ViewHookSink,
     bool acquireUiXrImage();
     void recordUiXrCopy(RingSlot& slot);
     void finishUiXrCopy();
+    // Worker, every rendered frame after its layers: a gap in the game's images that ends with this frame's
+    // new image gets one line (ui_layer::GuiGapTally). `imageBefore`: uiImageQpc before this frame's image.
+    void noteUiGap(LONGLONG imageBefore, bool newImage, bool shown);
     // Worker: the head-locked quad with the newest GUI image; false when there is none (or it is stale).
     bool fillUiQuad(XrCompositionLayerQuad& quad);
     // Worker: the reticle quad on the weapon hand's ray under hand aim; false when there is none.

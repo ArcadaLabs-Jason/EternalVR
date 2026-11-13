@@ -19,8 +19,10 @@ namespace evr::vkcore::hang_note {
 void check();
 
 // The game's present hook (stall_watch::presentEntered), on the game's thread. Rig only:
-// ETERNALVR_TEST_HANG=<seconds> (never set by the launcher) holds one present that long once the game has
-// been in play for a while, so a run shows the notes of a real hang and the line when it ends.
+// ETERNALVR_TEST_HANG=<seconds> or <milliseconds>ms (never set by the launcher) holds one present that long
+// once the game has been in play for a while (with "@<seconds>", the first present in play that long after
+// the player is in the map: gpu_timing::parseTestHang), so a run shows the notes of a real hang and the line
+// when it ends, or a short stall such as a checkpoint save's at a known time.
 void testHangAtPresent();
 
 } // namespace evr::vkcore::hang_note

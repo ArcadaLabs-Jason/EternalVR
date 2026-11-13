@@ -5,6 +5,7 @@ evr_add_module(evr_ui_layer
         additive_wash.cpp
         backdrop.cpp
         crosshair.cpp
+        gui_hold.cpp
         gui_target.cpp
         hud_blocks.cpp
         hud_view.cpp

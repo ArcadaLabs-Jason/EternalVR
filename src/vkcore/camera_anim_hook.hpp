@@ -51,12 +51,27 @@ bool tracing();
 // ETERNALVR_TEST_CAMERA_TRACE=1 (rig tests, docs/rig-findings/camera-animations.md section 6): camera hook,
 // each head-tracked game view of a forced view and the 120 after it, one log line with the game's camera, the
 // player's view angles (the ones noteForcedView was given in this game view, `none` when head aim read none),
-// the view written (as pitch, yaw, roll) and the game's eye. At most 4000 lines; nothing without the
-// variable.
+// the view written (as pitch, yaw, roll) and the game's eye. At most 4000 lines (and 4000 `sync trace` lines,
+// below); nothing without the variable.
 void traceView(bool forcedView,
                const xr_math::IdViewAxis& gameAxis,
                const xr_math::IdViewAxis& written,
                const Vec3& eye);
+
+// What head aim made of this game view, for the trace (noteTraceAim before traceView, while tracing): the
+// body yaw, the head's angles, the head (or weapon hand) yaw the game's yaw holds, whether a menu is up and
+// whether a pickup's sync runs. Each trace line ends with them; a game view in a sync, or under a menu once
+// head aim gave the body, is traced too (`camera: sync trace N:`), forced view or not.
+struct TraceAim {
+    float bodyYaw = 0.0f;
+    xr_math::IdAngles head;
+    bool injected = false;
+    float injectedYaw = 0.0f;
+    bool menu = false;
+    bool sync = false;
+    bool headAimed = false;
+};
+void noteTraceAim(const TraceAim& aim);
 
 } // namespace camera_anim
 } // namespace evr::vkcore

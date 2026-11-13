@@ -74,7 +74,7 @@ constexpr std::size_t kItemDamage = 0x0;
 constexpr std::size_t kItemSelfDamage = 0x28;
 constexpr std::size_t kItemImpactDir = 0x38;
 constexpr std::size_t kItemAddedTime = 0x70;
-constexpr std::size_t kPlayerViewYaw = 0x8A50 + 0x3F10 + 4;
+constexpr std::size_t kPlayerViewYaw = kPlayerViewAngles + 4;
 
 // Readings outside this are not health.
 constexpr float kMaxPlausible = 10000.0f;

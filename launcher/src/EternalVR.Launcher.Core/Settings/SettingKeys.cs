@@ -74,6 +74,7 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.ScreenReflections] = new[] { "screen_reflections" },
             [Setting.Foveation] = new[] { "foveation" },
             [Setting.FramePacing] = new[] { "frame_pacing" },
+            [Setting.DepthLayer] = new[] { "depth_layer" },
             [Setting.ParallelEyes] = new[] { "parallel_eyes" },
             [Setting.DlssQuality] = new[] { "dlss_quality" },
             [Setting.DlssVersion] = new[] { "dlss_version" },

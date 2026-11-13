@@ -11,6 +11,7 @@
 #include "features/tracking/fov_watch.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "stereo_seq/eye_pairing.hpp"
+#include "ui_layer/gui_hold.hpp"
 #include "ui_layer/gui_target.hpp"
 #include "vkcore/backdrop_probe.hpp"
 #include "vkcore/cinema_view.hpp"
@@ -157,8 +158,14 @@ struct PresenterUiState {
     XrSwapchainSet::Images uiXrImages;
     std::int64_t uiAcquired = -1;
     bool uiAcquiredWaited = false, uiHasImage = false, uiFailed = false, uiWashLogged = false;
-    bool uiCopyPending = false; // a D3D12 copy into the acquired UI image is recorded
-    LONGLONG uiShownQpc = 0;    // when the newest GUI image reached the UI swapchain
+    bool uiCopyPending = false;   // a D3D12 copy into the acquired UI image is recorded
+    LONGLONG uiShownQpc = 0;      // when the newest GUI image reached the UI swapchain
+    LONGLONG uiImageQpc = 0;      // when the newest game image reached the headset's swapchain
+    bool uiWithImage = false;     // the newest GUI image came with that game image (ui_layer::guiImageShown)
+    bool uiQuadShown = false;     // this frame has the GUI quad (the frames table)
+    double uiQuadAgeMs = -1.0;    // ... and the newest GUI image's age then (-1: none)
+    ui_layer::GuiGapTally uiGaps; // a gap in the game's images: frames with and without the GUI quad
+    std::uint32_t uiGapLines = 0;
     std::uint64_t uiXrCopies = 0;
     UiWash uiWash; // ETERNALVR_UI_WASH: the additive wash taken out before the copy (off in menus)
     HudMarkerLayer hudMarkers; // the HUD's markers on their own quad (presenter_markers.hpp)

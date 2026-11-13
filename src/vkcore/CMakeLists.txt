@@ -139,6 +139,11 @@ add_library(evr_layer SHARED
     presenter_cinema3d.cpp
     presenter_copy.cpp
     presenter_copy_record.cpp
+    presenter_depth_glue.cpp
+    presenter_depth_setup.cpp
+    presenter_depth_vk.cpp
+    presenter_depth_xr.cpp
+    ui_vulkan_hold.cpp
     presenter_fade.cpp
     presenter_mirror.cpp
     presenter_reticle.cpp
@@ -353,7 +358,7 @@ target_sources(evr_layer PRIVATE
     dossier_screen_hook.cpp
     presenter_menu.cpp
     presenter_menu_update.cpp)
-target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_flares evr_foveation evr_input evr_menu evr_pacing evr_roomscale evr_tracking)
+target_link_libraries(evr_layer PRIVATE evr_arm evr_bhaptics evr_comfort evr_depth evr_flares evr_foveation evr_input evr_menu evr_pacing evr_roomscale evr_tracking)
 set_target_properties(evr_layer PROPERTIES OUTPUT_NAME EternalVR)
 target_compile_features(evr_layer PRIVATE cxx_std_20)
 target_compile_definitions(evr_layer PRIVATE

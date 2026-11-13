@@ -17,7 +17,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: controls
         AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, WeaponHandAngle, OffHandAngle, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, TextureStreaming, ParallelEyes, CpuSaver,
+        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, DepthLayer, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
@@ -173,6 +173,12 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.FramePacing:
                     if (!stereo) return NeedsStereo;
                     return s.AlternateEyes == AlternateEyesMode.Auto && !parallel ? NotWithAutoEyes : null;
+                case Setting.DepthLayer:
+                    // Each eye's depth goes with the standard renderer's eye pairs only (src/vkcore/presenter_depth.hpp);
+                    // Alternate eyes' images (on or auto) pair eyes of different presents and carry none.
+                    if (!stereo) return NeedsStereo;
+                    if (parallel) return NotWithParallelEyes;
+                    return s.AlternateEyes == AlternateEyesMode.Off ? null : NotWithAlternateEyes;
                 case Setting.CutsceneShape:
                     if (!stereo) return NeedsStereo;
                     return s.Cutscenes == CutsceneView.Cinema ? null : NeedsCinema;

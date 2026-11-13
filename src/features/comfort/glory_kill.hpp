@@ -31,6 +31,10 @@ bool isKillSync(std::string_view entityDefName);
 std::optional<GloryView> parseGloryView(std::string_view text);
 const char* gloryViewName(GloryView view);
 
+// After a glory kill shown steady, or a pickup whose camera was played on top of the head (PickupHeading),
+// how long head aim keeps turning the game's aim back to the heading the view kept.
+inline constexpr double kHeadingRestoreSeconds = 0.5;
+
 struct GloryTiming {
     // After the sync flag clears, the episode lasts while the game still forces the view (its camera eases
     // back to the player's), at most this long.

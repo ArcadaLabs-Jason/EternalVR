@@ -36,6 +36,12 @@ bool skipHookInstalled();
 // a pointer on the way is null or unreadable.
 std::optional<ui_layer::GuiImageFields> readTarget();
 
+// The VkImage of `_upscaledOpaqueDepth` (render system + 0x3A8: the scene depth at the output size, the GUI
+// target's depth) as the game holds it now (an image set's member in use); nullopt when not located, the
+// guard is off, `_gui` beside it (+0x3A0) is not the GUI target's colour image (the offsets would not be this
+// build's), or a pointer on the way is unreadable. Reads only; used by the depth layer (presenter_depth.hpp).
+std::optional<std::uint64_t> readUpscaledDepth();
+
 // An engine pointer that is either a render target (width and height first, its colour image at +0x10) or an
 // image, resolved to the image's fields; `viaTarget` says which it was. Nullopt when neither reads as one.
 // Reads only; used by the motion-vector capture.

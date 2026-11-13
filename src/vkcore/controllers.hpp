@@ -181,6 +181,9 @@ bool syncKillActive(const std::byte* player);
 // Camera hook: the same for a pickup's animation: any `interact/...` sync (comfort::isKillSync false), which
 // includes interactions that pick nothing up (the automap station, for one).
 bool syncPickupActive(const std::byte* player);
+// The player's health component says dead (its `isDead`, the offsets bHaptics reads); false when unreadable.
+// Safe reads only (bhaptics_game.cpp).
+bool playerDead(const std::byte* player);
 
 // Writes back the game's own values of the wall-climb cvars the layer held (climb_hook.cpp), once; nothing
 // if it wrote none or gave them back already. The camera hook when the multiplayer guard has stopped game

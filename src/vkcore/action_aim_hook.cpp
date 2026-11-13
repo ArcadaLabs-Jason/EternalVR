@@ -36,8 +36,6 @@ namespace {
 
 constexpr const char* kTag = "controllers";
 
-// idHavokPhysics_Player::viewAngles (player_aim.hpp): the angles the game's last view update made.
-constexpr std::size_t kPlayerViewAngles = 0x8A50 + 0x3F10;
 // Game frames logged after a held-back press went out: the one that takes the press and the next.
 constexpr int kPressFrames = 2;
 

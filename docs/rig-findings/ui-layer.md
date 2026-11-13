@@ -158,7 +158,11 @@ instead, and eye R's missing GUI stops mattering.
 The presenter shows every frame without a fresh head-tracked view (main menu, loading) on the cinema
 screen. The UI layer keeps it that way: the quad and the composite skip apply only while the projection layer
 is shown with a fresh GUI capture (under 0.25 s old), so the main menu and loading screens keep the game's own
-composite on the cinema screen (live U5). **The SP pause menu is different** (live U5): the camera hook keeps
+composite on the cinema screen (live U5). A game that is only late (no new image at all since the last GUI
+capture, as in a checkpoint save's half-second stall) keeps the quad up with the image the headset repeats for up
+to 1 s (`ui_layer/gui_hold.hpp`): before that, the HUD went 250 ms into each such stall and came back with the
+next frame (rig, a 700 ms held present: 42 of the gap's 64 headset frames without the HUD; 0 of 63 with the
+hold; QA scenario `hud-stall`). **The SP pause menu is different** (live U5): the camera hook keeps
 running while paused, so the frame stays head-tracked, the world behind the menu is cleared to black (the
 `HACK_clearViewPreViewGuis` path) and the pause menu lands on the head-locked UI quad, readable, with the
 projection black around it. That is the M6 menu panel in its simplest form. Loading screens are a full-screen,
