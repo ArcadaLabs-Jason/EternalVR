@@ -59,7 +59,7 @@ struct PinInputs {
     std::int64_t worldStamp = 0;
     const void* leftItem = nullptr;
     float leftWeight = 0.0f;
-    Vec3 leftWrist;
+    Vec3 leftWrist{};
 };
 
 enum class PinCheck : std::uint8_t {

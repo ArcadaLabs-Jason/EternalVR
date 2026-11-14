@@ -97,6 +97,19 @@ TEST_CASE("debug script: the Revenant rocket scenario's projectile drawing passe
     CHECK(script.steps[3].commands[0] == "g_projectileDebugLifetime 10");
 }
 
+TEST_CASE("debug script: the glory kill scenarios' stagger cvars and demon teleports pass the allow-list") {
+    const auto script =
+        parseDebugScript("3:god;g_setting_tutorials 0;ai_alwaysStagger 1;ai_sync_onlyDieFromGK 1|"
+                         "20:nextActiveAI;ai_teleportToPlayer trace");
+    CHECK(script.error.empty());
+    CHECK(script.refused.empty());
+    REQUIRE(script.steps.size() == 2);
+    REQUIRE(script.steps[0].commands.size() == 4);
+    CHECK(script.steps[0].commands[2] == "ai_alwaysStagger 1");
+    CHECK(script.steps[0].commands[3] == "ai_sync_onlyDieFromGK 1");
+    CHECK(script.steps[1].commands[1] == "ai_teleportToPlayer trace");
+}
+
 TEST_CASE("debug script: command names are matched without case, cvars take a value") {
     const auto script = parseDebugScript("1:GOD;SetViewPos 1 2 3 4|2:r_sharpening 2.5;give armor/sp_armor_5");
     CHECK(script.refused.empty());

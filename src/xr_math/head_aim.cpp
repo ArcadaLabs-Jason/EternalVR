@@ -102,11 +102,16 @@ bool drivenCamera(const IdViewAxis& playerView, const IdViewAxis& rendered) {
     return dot(playerView.forward, rendered.forward) < kDrivenCameraCos;
 }
 
+bool cameraDrivesView(bool pickupFollow, const IdViewAxis& playerView, const IdViewAxis& rendered) {
+    return pickupFollow || drivenCamera(playerView, rendered);
+}
+
 float menuBodyYaw(const HeadAimState& state,
                   float heldYaw,
                   const IdViewAxis& playerView,
-                  const IdViewAxis& rendered) {
-    if (!drivenCamera(playerView, rendered)) {
+                  const IdViewAxis& rendered,
+                  bool pickupFollow) {
+    if (!cameraDrivesView(pickupFollow, playerView, rendered)) {
         return heldYaw;
     }
     const std::optional<IdViewAxis> camera = yawOnly(rendered);
@@ -172,6 +177,16 @@ Quat headTurn(float yawDegrees, float pitchDegrees) {
     const Quat yaw = Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, yawDegrees * kRadiansPerDegree);
     const Quat pitch = Quat::fromAxisAngle({1.0f, 0.0f, 0.0f}, pitchDegrees * kRadiansPerDegree);
     return yaw * pitch;
+}
+
+Quat headSwayAround(float baseYaw,
+                    float basePitch,
+                    float yawDegrees,
+                    float pitchDegrees,
+                    float periodSeconds,
+                    double seconds) {
+    return headTurn(baseYaw, 0.0f) * headSway(yawDegrees, pitchDegrees, periodSeconds, seconds) *
+           headTurn(0.0f, basePitch);
 }
 
 } // namespace evr::xr_math

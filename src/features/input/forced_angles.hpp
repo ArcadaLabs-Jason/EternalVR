@@ -145,6 +145,8 @@ public:
     // Frames on a wall, and how many separate climbs began.
     [[nodiscard]] std::uint64_t frames() const { return frames_; }
     [[nodiscard]] std::uint64_t climbs() const { return climbs_; }
+    // Frames on the wall in the climb now running, or in the last one once it ended (for the log).
+    [[nodiscard]] std::uint64_t climbFrames() const { return climbFrames_; }
 
 private:
     int holdFrames_;
@@ -152,6 +154,7 @@ private:
     bool onWall_ = false;
     std::uint64_t frames_ = 0;
     std::uint64_t climbs_ = 0;
+    std::uint64_t climbFrames_ = 0;
 };
 
 } // namespace evr::input

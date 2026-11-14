@@ -82,9 +82,11 @@ xr_math::CameraAnimRamp g_ramp; // ETERNALVR_CAMERA_ANIM_MIN=<degrees> (rig test
 // the last forced one (camera hook thread only). 120 game views after a forced view cover what eases out
 // after it (a pickup's turn, 0.3 s) at any frame rate up to about 400 a second.
 bool g_trace = false;
+bool g_traceAll = false; // ETERNALVR_TEST_CAMERA_TRACE=all: every head-tracked game view (`sync trace` lines)
 constexpr std::uint64_t kTraceLines = 4000;
 constexpr std::uint64_t kSyncTraceLines =
     4000; // `sync trace` lines (a sync's or a menu's views), their own cap
+constexpr std::uint64_t kAllTraceLines = 40000; // with `all`: about 8 minutes at 85 game views a second
 constexpr std::uint64_t kTraceAfter = 120;
 std::uint64_t g_traceLines = 0;
 std::uint64_t g_syncTraceLines = 0;
@@ -146,8 +148,14 @@ void noteFrame(float weight, float size, bool applied, bool forcedView) {
 bool install(const GameImage& image) {
     std::wstring value;
     g_apply = readEnv(L"ETERNALVR_CAMERA_ANIMATIONS", value) && value == L"1";
-    g_trace = readEnv(L"ETERNALVR_TEST_CAMERA_TRACE", value) && value == L"1";
-    if (g_trace) {
+    g_traceAll = readEnv(L"ETERNALVR_TEST_CAMERA_TRACE", value) && value == L"all";
+    g_trace = g_traceAll || value == L"1";
+    if (g_traceAll) {
+        EVR_LOG(
+            "%s: trace on for every head-tracked game view (ETERNALVR_TEST_CAMERA_TRACE=all), at most %llu "
+            "lines",
+            kTag, static_cast<unsigned long long>(kAllTraceLines + kTraceLines));
+    } else if (g_trace) {
         EVR_LOG(
             "%s: trace on (ETERNALVR_TEST_CAMERA_TRACE): every game view of a forced view and the %llu after "
             "it, at most %llu lines; every other game view of a pickup's sync or of a menu once head aim is "
@@ -263,10 +271,11 @@ void traceView(bool forcedView,
     g_traceSince = forcedView ? 0 : g_traceSince + 1;
     // A sync's views, and a menu's once head aim gave the body (not the main menu's): `sync trace` lines,
     // which the forced-view scenarios' patterns leave out.
-    const bool aimed = g_traceAim && (g_traceAim->sync || (g_traceAim->menu && g_traceAim->headAimed));
+    const bool aimed =
+        g_traceAll || (g_traceAim && (g_traceAim->sync || (g_traceAim->menu && g_traceAim->headAimed)));
     const bool sync = g_traceSince > kTraceAfter;
     std::uint64_t& lines = sync ? g_syncTraceLines : g_traceLines;
-    if ((sync && !aimed) || lines >= (sync ? kSyncTraceLines : kTraceLines)) {
+    if ((sync && !aimed) || lines >= (sync ? (g_traceAll ? kAllTraceLines : kSyncTraceLines) : kTraceLines)) {
         return;
     }
     ++lines;

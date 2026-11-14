@@ -95,6 +95,16 @@ float drivenBodyYaw(const HeadAimState& state, float gameYaw, float deltaYaw, bo
 // more than 15 degrees from theirs (a glory kill's camera, the Fortress's collectible viewer).
 bool drivenCamera(const IdViewAxis& playerView, const IdViewAxis& rendered);
 
+// Head aim's choice for one view: the game drives it (the view faces the camera's heading, nothing is
+// written) for a camera past drivenCamera's 15 degrees, and for every view of a pickup's camera shown with
+// Still view
+// (`pickupFollow`). Decided per view by the 15 degrees alone, a pickup's camera that swings across them
+// turned the view to its heading and back: under head aim the player's view angles are the head's, and the
+// Sentinel Crystal's camera, 121 to 160 degrees of yaw about the player's 130, took the view 9.5 degrees in
+// one frame as it passed the line and 8.6 back (rig, 2026-11-12, run pa3). Under hand aim the hand's angles
+// were far enough from that camera for it to drive every view of the pickup.
+bool cameraDrivesView(bool pickupFollow, const IdViewAxis& playerView, const IdViewAxis& rendered);
+
 // The body yaw while a menu or popup is up and head aim writes nothing. Over the player's own view (the pause
 // menu, the Dossier, a tutorial popup) it is `heldYaw`, the body yaw from when the menu came up, so the world
 // stays put while the head looks around. Under a camera the game drives with the menu up (the Fortress's
@@ -102,10 +112,12 @@ bool drivenCamera(const IdViewAxis& playerView, const IdViewAxis& rendered);
 // from the player's heading for the toys' close-up), it is the camera's heading without the head yaw the
 // game's yaw holds (drivenBodyYaw): the view faces what the camera shows while the head is where it was when
 // the menu came up.
+// `pickupFollow`: a pickup's camera shown with Still view, which drives every view (cameraDrivesView).
 float menuBodyYaw(const HeadAimState& state,
                   float heldYaw,
                   const IdViewAxis& playerView,
-                  const IdViewAxis& rendered);
+                  const IdViewAxis& rendered,
+                  bool pickupFollow = false);
 
 // Records the delta yaw just written (after the step's deltaYaw was added) with the head yaw it carries.
 void noteWritten(HeadAimState& state, float writtenDeltaYaw);
@@ -117,5 +129,15 @@ Quat headSway(float yawDegrees, float pitchDegrees, float periodSeconds, double 
 
 // A constant test head turn in the same axes (the sway's value at its quarter-period peak).
 Quat headTurn(float yawDegrees, float pitchDegrees);
+
+// ETERNALVR_TEST_HEAD_SWAY's whole turn: the sway around a held view of `baseYaw` and `basePitch` (degrees,
+// as headTurn): yaw base * sway * pitch base, so a yaw sway turns about the vertical with the head held
+// tilted. Applied as turn * head.
+Quat headSwayAround(float baseYaw,
+                    float basePitch,
+                    float yawDegrees,
+                    float pitchDegrees,
+                    float periodSeconds,
+                    double seconds);
 
 } // namespace evr::xr_math

@@ -86,8 +86,14 @@ yet).
   degrees from the view angles: glory-kill and cutscene cameras) and forced-view frames are not aimed;
   their body is the camera's heading, or the game's yaw, without the head yaw it holds (`drivenBodyYaw`),
   so the view faces where the game points it and turns with the head from there, instead of the camera
-  plus the head's yaw in the room. If the layout is not this build's, or the last try of the check fails,
-  head aim stays off for the session and the log says so every 10 s. Roll is render-only.
+  plus the head's yaw in the room. Near straight up or down the camera's heading comes from its up vector
+  (`xr_math::yawOnly`: from 75 degrees off the horizon the two headings' unit vectors are weighted over to the
+  up's, all of it from 85; vectors, not angles, so a roll through upside down turns no jump): the death camera,
+  86 to 89 degrees down and rolling, swung its forward's heading round by up to 100 degrees a game frame while
+  its image hardly turned, and the view with it until 2026-11-12 (rig; 26 degrees a game frame at most since, as
+  it rises through 80 degrees down and its heading turns from the up's to the forward's). If the layout is not
+  this build's, or the last try of the check fails, head aim stays off for the session and the log says so
+  every 10 s. Roll is render-only.
   `ETERNALVR_AIM=view` keeps the game's aim (the first build's behaviour).
 - Hands camera animations (docs/rig-findings/camera-animations.md): a hands animation's `camera` joint turns
   the first-person view (`p_applyAnimatedCamera`, in `idPlayer::CalculateViewWithoutUpdates`); the rotation
@@ -96,26 +102,46 @@ yet).
   `ETERNALVR_CAMERA_ANIMATIONS=1` their rotation goes on top of the head-tracked view (and the stereo eyes)
   the way the game adds it, fading in from 5 to 10 degrees, while aim and the body see the game's view
   without it and the controllers treat it as a forced view. Every forced view also logs how far the rendered
-  view left the player's view angles (`camera: forced view N: ...`).
-- Pickup cameras (docs/rig-findings/camera-animations.md sections 6 and 7): a pickup's sync animation
+  view left the player's view angles (`camera: forced view N: ...`). The death camera has no handling of its own
+  (its pitch and roll stay out as for any camera the game drives); a death and the living player after it are
+  logged (`game: the player died (death N): ...`, `game: a living player is back X s after death N`, the first 20).
+  Every camera-takeover state of R12 against the code: docs/rig-findings/camera-takeovers.md.
+- Pickup cameras (docs/rig-findings/camera-animations.md sections 6 to 8): a pickup's sync animation
   (`interact/...`: a Praetor token, a Sentinel Crystal, a rune, the automap station, a gore nest) drives the
   game's camera for a few seconds. By default (`ETERNALVR_PICKUP_CAMERA=still`) the head replaces its rotation
-  as in play, the eye follows it, and its yaw turns the view only past 15 degrees (`drivenCamera`), as for any
-  camera the game drives (a gore nest's: the view turns to the nest's side in one frame, then follows its
-  camera's side-to-side swing, and keeps that heading after); the hands play the animation in front of the
-  head. During a pickup a jump of the camera's yaw from the player's view angles (over 5 degrees and over 240 a
-  second, out of a nearly still camera, in a view whose view angles did not move) holds the heading until the
-  camera comes back, goes on that way, or for two game views at most (`xr_math::CameraHeadingHold`): a flick (the
-  Sentinel Crystal's sync shows its camera about 10 degrees off for its first frame) is never seen, a cut that stays
-  comes two game views later, and a steady motion is never held; not after 10 s of one pickup. In the crystal's
+  as in play, the eye follows it, and its yaw drives the view in every game view of the pickup
+  (`xr_math::cameraDrivesView`, `PickupView::followsCamera`; under a menu over the pickup too): the view faces the
+  camera's heading with the head where it was when the pickup began, and turns with the head from there (a gore
+  nest's: the view turns to the nest's side once, then follows its camera's side-to-side swing, and keeps that
+  heading after); the hands play the animation in front of the head (logged as each pickup starts and ends,
+  `pickup: pickup N starts (Still view: ...)` and `pickup: pickup N ends after F game frame(s)`, the first 30: the
+  sync flag, then the forced view settling, as a glory kill's episode). So Still view follows the camera's heading
+  (its yaw, never its pitch or roll) and leaves the player facing where the camera ended, while Camera moves (below)
+  keeps the player's own heading and plays the camera's motion on top of it. Until 2026-11-12 Still followed only a
+  camera past 15 degrees from the player's view angles (`drivenCamera`), decided per view: under hand aim the hand's
+  angles were that far from every pickup camera measured, but under head aim and in gamepad mode the angles are the
+  head's, the crystal's and the rune's cameras swung across the line, and the view jumped to the camera's heading
+  and back (9.8 and 18.4 degrees in one frame on the rig); where the camera stayed within the line (the mod bot's)
+  head aim wrote the head into angles the game held, and the game's own set as the pickup ended turned the view by
+  the head's turn in it (13.4 degrees). During a pickup a jump of the camera's yaw from the player's view angles
+  (over 5 degrees and over 240 a second, out of a nearly still camera, in a view whose view angles did not move)
+  holds the heading until the camera comes back, goes on that way, or for two game views at most
+  (`xr_math::CameraHeadingHold`): a flick (the Sentinel Crystal's sync shows its camera about 10 degrees off for its
+  first frame) is never seen, a cut that stays comes two game views later, and a steady motion is never held; not
+  after 10 s of one pickup. In the crystal's
   sync the view angles stayed put through a fast hand, snap turns and a swaying head (rig); a view in which they
   move starts no hold and ends one.
 - With `play` (the launcher's "Pickup animations: Camera moves") the camera's smooth motion since the pickup
   took the view goes on top of the head-tracked view and the stereo eyes (`CameraTurn`): its turn from
   one game frame to the next, summed and played a frame late (once the next step is known), with each angle
   held within 45 degrees. A step over 20 degrees is a cut and left out; so is a lone step over 5 degrees (the
-  cut to the animation's own start: the steps before and after it under a quarter of it); a fast motion is
-  played (a gore nest's heart pull, 6 degrees in a frame). The view keeps the player's heading meanwhile (no
+  cut to the animation's own start: the steps before and after it under a quarter of it), and so are the pickup's
+  first two steps when they are that cut spread over two frames (the step after them under a quarter of their sum,
+  and either each at least a quarter of the other and together over 5 degrees: the rune's 4.0 then 5.6 degrees of
+  yaw for a player 9.6 degrees off its heading; or the first over 5 and the second over 20: the crystal's first
+  frame 15.7 degrees off a player's heading, then 21.1 back to its own; the first step then waits a frame more); a
+  fast motion is played (a gore
+  nest's heart pull, 6 degrees in a frame). The view keeps the player's heading meanwhile (no
   15-degree follow, under a menu either: the body keeps the yaw it had before the pickup, `comfort::PickupHeading`;
   a menu just before it, the Sentinel Crystal's upgrade menu, keeps the yaw from before the menu), and what is
   left of the turn eases out over 0.3 s when the pickup's forced view ends (`pickup: camera turn N starts / ends
@@ -137,11 +163,32 @@ yet).
 - Every `interact/...` sync counts, also one that picks nothing up (the automap station). Without head aim
   (`ETERNALVR_AIM=view`, or before its check passed) the body is the game's yaw, which already holds the
   camera's, so only the turn's pitch and roll go on (`xr_math::turnOnBody`). Not in a cutscene shown around
-  the player. Under head aim (the controllers aiming with the head, or gamepad mode) skipping the 15-degree
-  follow also means head aim goes on writing the player's view angles in a pickup whose camera leaves them by
-  more than 15 degrees, where it wrote nothing before (the game holds its view through the pickup and sets the
-  angles itself at its end; on the rig only hand aim was run, at the token, the automap station and gore
-  nests). Off by default: a new view motion, not yet seen in a headset.
+  the player. Under view aim nothing writes the player's angles, so no heading is kept with either setting: a cut of
+  the camera's heading (a gore nest's) is shown once, two game views late, and the view faces where the camera ended,
+  as in the flat game; a flick of its heading is left out of that yaw with either setting (`PickupView::withoutFlick`:
+  the crystal's and the rune's turned the view about 10 degrees and back in one frame each on the rig before,
+  docs/rig-findings/camera-animations.md section 9). Under head aim (the controllers aiming with the head, or gamepad mode) the camera never drives the
+  view in a pickup played on top of the head, so head aim writes the player's view angles all through it (the game
+  holds its view and sets the angles itself at its end; the token, a gore nest, the crystal, the rune and the mod
+  bot ran so on the rig, docs/rig-findings/camera-animations.md section 8). Off by default: a new view motion, not
+  yet seen in a headset.
+- Gamepad mode's menus: with a pad the game navigates its menus by the pad and keeps its cursor hidden (the
+  crystal's, the rune's and the mod bot's menus on the rig), so the layer saw no menu: head aim went on through
+  them while the game held its view, and the pad's look stick turned the world behind the menu, the view coming
+  back by that much in one frame as the menu closed (60 and 175 degrees). In gamepad mode a menu over the game
+  without a cursor is now the GUI's full-screen backdrop over a head-tracked frame for half a second
+  (`menu::padMenuOverGame`, `menu::PadMenuWatch`: a shorter fade is left out, a map load starts the wait again, and
+  after 300 s the hold ends, logged; `menu: a menu over the game without a cursor ...` / `... is gone`): head aim
+  holds the body under it as under any menu (`menuOverGame`; never in a cutscene, whose fades are such a backdrop
+  too), and the pickups and the trace take it for one. The menu itself stays on the HUD quad. The mod bot's menu
+  shows the weapon's model in its middle, so no backdrop: there the menu's 3D model placed every tick counts instead
+  (`menu_model::modelShown`, the weapon mod screen's `idMenuWidget_3D_Stand::UpdatePosition` hook; `menu: a menu's
+  3D model is placed every tick ...` / `... no menu's 3D model placed any more`), and the look stick no longer turns
+  the world behind it (rig, camera-animations.md section 9). The Dossier's map page (the 3D automap) and its CODEX
+  page (a black frame) show neither: there the Dossier's own open and close count (`menu::padDossierOverGame`,
+  `menu::dossierOpen`: its vtable's open and close, hooked in `dossier_screen_hook.hpp`; a map load ends it;
+  `menu: the Dossier opens ...` / `... is closed`), at once rather than after the half second, since no fade
+  looks like it, and without the 300 s cap.
 - Cutscenes: `renderView_t.inCutscene` (+0x15) changes are logged (`game: cutscene starts / ends`). With
   `ETERNALVR_SKIP_CINEMATICS=1` the layer holds the skip key (R) while a cutscene plays, 2.5 s at a time,
   without depending on desktop focus: the exe's `GetRawInputData` import is replaced, and a key event is
@@ -209,7 +256,11 @@ yet).
   kill N still running after 10 s; taken as ended`), and a fade or the flat screen never stays. What the
   headset shows:
   - `follow` (default): as above, the view faces where the kill's camera points and turns with the head
-    from there; the camera's own pitch and roll never reach the view.
+    from there; the camera's own pitch and roll never reach the view. The camera drives every game view of
+    the kill (`comfort::killCameraDrivesView`, as a Still pickup's does): until 2026-11-12 only while it was
+    more than 15 degrees from the player's view angles, and the view switched between the two as the camera
+    crossed that line (up to 25 degrees in one game frame on the rig). Checked on the rig with 5 real kills under
+    hand aim (the launcher's default) and under head aim (`glory-follow`, `glory-follow-head`).
   - `steady`: the view stays where the game's eye was the frame before the kill and keeps the body yaw it had
     then, so only the head moves or turns it (T-180; before, it followed the kill's animated eye, which lunges
     and moves with the Slayer: a player found the view "still moves around a fair amount"). The kill is then
@@ -264,7 +315,7 @@ yet).
 | `ETERNALVR_CAMERA_ANIM_MIN` | 5 | degrees (0.5 to 45): where the camera animation ramp starts (full at twice), for rig tests |
 | `ETERNALVR_GLORY_KILLS` | follow | how glory kills are shown: `follow`, `steady`, `fade` or `screen` (Glory kills, above) |
 | `ETERNALVR_PICKUP_CAMERA` | still | how a pickup animation's camera is shown: `still` (the head replaces its rotation) or `play` (its motion on top of the head; Pickup cameras, above) |
-| `ETERNALVR_TEST_CAMERA_TRACE` | unset | `1`: every game view of a forced view and the 120 after it logs the game's camera, the player's view angles, the view written and the game's eye (`camera: trace N: ...`, at most 4000 lines), for rig measurements; also every game view of a pickup's sync and of a menu once head aim is on (`camera: sync trace N: ...`, at most 4000 lines of their own), and each line ends with the body yaw, the head's angles, the yaw the game's aim holds (`held`) and the menu and sync flags |
+| `ETERNALVR_TEST_CAMERA_TRACE` | unset | `1`: every game view of a forced view and the 120 after it logs the game's camera, the player's view angles, the view written and the game's eye (`camera: trace N: ...`, at most 4000 lines), for rig measurements; also every game view of a pickup's sync and of a menu once head aim is on (`camera: sync trace N: ...`, at most 4000 lines of their own), and each line ends with the body yaw, the head's angles, the yaw the game's aim holds (`held`) and the menu and sync flags; `all`: every head-tracked game view besides (as `sync trace` lines, at most 40000), for a menu the layer does not see |
 | `ETERNALVR_TEST_GLORY` | unset | `start,duration` (seconds on the `ETERNALVR_DEBUG_COMMANDS` clock): a glory kill is taken to run then, whatever the game does, to check each option on the rig without a staggered demon |
 | `ETERNALVR_CINEMA_ASPECT` | 16:9 | the flat screen's shape during a cutscene: `16:9`, `16:10` (or any `W:H` from 1:1 to 4:1), drawn as a flat display of that shape shows it; `full` shows the eye image as the game draws it (tall) |
 | `ETERNALVR_ADAPTER_STEER` | 0 | `1` (or `on`): on a PC with two or more GPUs the game is steered to the headset's GPU where the order of its Vulkan devices decides (ARCHITECTURE section 6, Adapter match); experimental, not yet tried with a headset on a two-GPU PC; the runtime is asked at most once, at the game's first device enumeration, and not when exactly one discrete GPU is listed; the launcher's "Use the headset's graphics card" (Advanced tab) |
@@ -272,7 +323,7 @@ yet).
 | `ETERNALVR_WINDOW` | unset | `x,y,width,height` of the game window's client area before its first swapchain |
 | `ETERNALVR_TEST_XR_LOSS` | unset | seconds: once the session has run this long, it is taken as lost (as if the headset had gone away) and the worker reconnects (ARCHITECTURE section 6, session state) |
 | `ETERNALVR_TEST_XR_LOSS_REMOVE` | unset | `1`: that test loss also removes the presenter's D3D12 device, as a graphics card reset would; the worker then stops reconnecting and the status says the graphics card was reset |
-| `ETERNALVR_TEST_HEAD_SWAY` | unset | `yaw,pitch,period[,base]` (degrees, seconds): a sinusoidal head turn added to the tracked pose, for checking head tracking and head aim without a moving headset; `base` turns the head by that much yaw first, and a zero amplitude holds that view (`0,0,30,180`), so runs can be compared at one view (with a non-zero amplitude the view was seen to ignore the base: use the held form) |
+| `ETERNALVR_TEST_HEAD_SWAY` | unset | `yaw,pitch,period[,base[,tilt]]` (degrees, seconds): a sinusoidal head turn added to the tracked pose, for checking head tracking and head aim without a moving headset; `base` turns the head by that much yaw first, and a zero amplitude holds that view (`0,0,30,180`), so runs can be compared at one view (with a non-zero amplitude the view was seen to ignore the base: use the held form); `tilt` holds the head pitched by that much (up positive) with the sway turning about the vertical from there (`8,0,3,0,-60`: looking down at a gore nest while the head sweeps) |
 
 ## Render size
 

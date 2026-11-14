@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Tests
         /// <summary>A Report.wer as WER writes it (UTF-16 with a byte order mark, CRLF), last written at <paramref name="written"/>.</summary>
         private static string Wer(TempDir t, string folder, string app, DateTime written)
         {
-            var path = t.Combine(@"wer\ReportArchive", folder, "Report.wer");
+            var path = t.Combine("wer", "ReportArchive", folder, "Report.wer");
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, "Version=1\r\nEventType=APPCRASH\r\nSig[0].Name=Application Name\r\nSig[0].Value=" + app
                 + "\r\nSig[6].Name=Exception Code\r\nSig[6].Value=c0000005\r\nLoadedModule[0]=C:\\Users\\Tester\\Desktop\\ETERNALVR\\layer\\EternalVR.dll\r\n",

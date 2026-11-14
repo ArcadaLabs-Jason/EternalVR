@@ -184,3 +184,8 @@ Challenges):
   (`vkcore/dossier_screen_hook.hpp`).
 - `idAutomap::Update` (0xA53CF0, called only from the render-view build 0x6A2C10, after the player's view)
   ran about 90 times a second all through play, map page or not: no sign of the map page.
+- Slot 6 (0xF38450: the base menu's call, two of the Dossier's own, then the HUD event 0x21 through
+  `[this+0x40]`'s vtable +0x90) and slot 7 (0xF38560: the base menu's call, then event 0x22 the same way) are
+  the Dossier's open and close; the Dossier's vtable is the only pointer to either. The layer hooks both
+  (2026-11-13, `vkcore/dossier_screen_hook.hpp`) for gamepad mode, where the map and CODEX pages show nothing
+  else it could tell a menu by (camera-animations.md section 9).

@@ -93,7 +93,10 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios-fxsync.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-pickup.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-depth.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-coexist.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-takeover.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-menu.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-padmodel.ps1')
 
 $script:QaTestLateStartSec = $TestLateStartSec
 $script:QaMenuTitleTimeout = $TestMenuTitleTimeout
@@ -150,6 +153,8 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
         if ($Scenario.Prepare) { $Ctx.Env = @(& $Scenario.Prepare $Ctx) }
         Start-QaDumpWatch $Ctx
         $launched = $true
+        # A gamepad-mode scenario's virtual pad, plugged in before the game starts (qa-common.ps1 Start-QaPad).
+        if ($Scenario.Pad) { Start-QaPad $Ctx }
         Start-QaGame $Ctx $Scenario
         Write-QaLine "  run: $($Ctx.RunDir)"
         # A menu-started scenario goes from the title screen to its mission through the game's menus first
@@ -180,6 +185,7 @@ function Invoke-QaGameScenario($Scenario, $Ctx) {
     } finally {
         if ($launched) {
             try { Stop-QaGame $Ctx } catch { Add-QaResult $Ctx 'stopped and cleaned up' $false $_.Exception.Message }
+            Stop-QaPad $Ctx
             try { Test-QaCloudState $Ctx } catch { Add-QaResult $Ctx 'profile.bin: no held value saved' $false $_.Exception.Message; $Ctx.CloudRestore = $true }
             Stop-QaDumpWatch $Ctx
         }

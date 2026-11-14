@@ -89,7 +89,7 @@ float XrPresenter::Impl::cutsceneBodyYaw(float bodyYaw,
     f.seconds = qpcSeconds(qpcNow());
     // A menu over the cutscene: the offset stays and nothing is detected. Once head aim has written, the
     // body under a menu is the one it holds for the menu (aimWithHead), which takes no offset.
-    const bool menu = menuUp.load(std::memory_order_relaxed);
+    const bool menu = menuOverGame();
     const bool menuBody = menu && settings.headAim && aimPhase == AimPhase::Active && aimMenuBody;
     f.menu = menu;
     const xr_math::CutStep step = xr_math::cutRebaseStep(t.cuts, f);

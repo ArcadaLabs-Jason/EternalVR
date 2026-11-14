@@ -278,7 +278,9 @@ TEST_CASE("only the nearest decals up to the limit are chosen") {
     const auto distance2 = [](std::size_t i) {
         return static_cast<float>(i);
     };
-    const auto indices = nearestDecals(visible, kCount, kPairCandidates, all, all, distance2);
+    // In no order (nth_element): libstdc++ leaves them in another order than MSVC's library.
+    auto indices = nearestDecals(visible, kCount, kPairCandidates, all, all, distance2);
+    std::sort(indices.begin(), indices.end());
     REQUIRE(indices.size() == kPairCandidates);
     for (std::size_t i = 0; i < indices.size(); ++i) {
         REQUIRE(indices[i] == i);

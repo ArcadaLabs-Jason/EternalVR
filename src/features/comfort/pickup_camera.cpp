@@ -98,15 +98,16 @@ void PickupHeading::step(const Frame& f) {
     }
 }
 
-void PickupHeading::noteBody(float yaw, bool own) {
+bool PickupHeading::noteBody(float yaw, bool own, bool menu) {
     if (running_ || held_) {
-        return; // the pickup's views and the restore window's: the game's turn, not the player's
+        return false; // the pickup's views and the restore window's: the game's turn, not the player's
     }
-    if (menuNow_ && !own) {
-        return; // a menu holds the heading the player had when it came up (or faces a camera): kept as it was
+    if ((menuNow_ || menu) && !own) {
+        return !menuNow_; // a menu holds the heading the player had when it came up (or faces a camera)
     }
     last_ = own && std::isfinite(yaw) ? std::optional<float>(yaw) : std::nullopt;
     lastMapLoads_ = mapLoadsNow_;
+    return false;
 }
 
 std::optional<float> PickupHeading::restore(double seconds) const {

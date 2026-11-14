@@ -2,7 +2,7 @@
 
 ## At a glance
 
-Status as of 2026-11-11 (v0.1.91). The order of the work left is under "Plan from v0.1.49".
+Status as of 2026-11-13 (v0.1.93). The order of the work left is under "Plan from v0.1.49".
 
 | Milestone | What a player sees or plays | Needs a person? | Status |
 |---|---|---|---|
@@ -13,11 +13,11 @@ Status as of 2026-11-11 (v0.1.91). The order of the work left is under "Plan fro
 | **M3 First head-tracked view** | **Looking around inside the game in the Quest 3 (mono, gamepad or mouse to play); optional debug stereo peek** | Wears the headset | Done |
 | M4 Stereo | The game in 3D in the headset, head position tracked | Wears the headset | Done (per-eye TAA and DLSS, room-scale; the room-scale head check no longer crashes the game, v0.1.88; smoke, sparks and blood in step between the eyes again and particles in the right eye's ray-traced reflections, v0.1.90, not yet seen in a headset) |
 | **M5 First playable** | **Playing with motion controllers: aim from the hand, move, turn, punch, seated** | Plays | Done (played in the headset; bindings for eight controller families, `docs/VR_CONTROLLERS.md`); the gloves hold the weapons at the real hand (v0.1.62 to v0.1.67); the sights line up on every gun (v0.1.76); the off arm follows the off-hand controller, fingers included, with Roll wrist and rumble by hand (v0.1.83); a controller angle per hand and two stronger Aim steadiness steps (v0.1.87, not yet seen in a headset); the left glove placed in the same frame as the gun (v0.1.89); in v0.1.88 and v0.1.89, not yet seen in a headset: the index finger follows the trigger on controllers with a touch sensor there, Roll wrist takes the whole over-and-back, one Heavy Cannon sight line with either mod, the Chaingun's Energy Shield in front of the gun, left-handed guns in the left hand from the first raise, a fit of its own for Valve Index controllers, weapons on the turn stick's directions, and two-handed aim as an option |
-| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (v0.1.12); the wrist and weapon HUDs are options that follow where the game draws health and ammo (v0.1.77), the wrist one tried in the headset with a better one in the works; the weapon wheel straight ahead with the HUD cut around it (v0.1.55), following the game's HUD scale (v0.1.75); the HUD at the game's Large scale in VR (v0.1.77); objective markers on their targets (v0.1.79) and steady as the head turns (v0.1.84), each eye seeing them at their targets' distance (v0.1.87, not yet seen in a headset); the HUD in front, on the wrist and on the weapon as separate switches (v0.1.89, not yet seen in a headset); button names in the wall-climbing tutorial, the weapon wheel screen and the Vive wand Arsenal (v0.1.88); the legibility protocol written (v0.1.57), its headset reading still open |
-| M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen (in 3D by default since v0.1.83), around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12); in v0.1.87, not yet seen in a headset: the steady glory kill view holds its place, the flat-screen kill plays in 3D and cutscene subtitles sit in front of the screen; in v0.1.88, not yet seen in a headset: the piloted Revenant's cannons and arms stay where the flat game shows them |
+| M6 VR UI | Menus on a panel with a laser pointer; HUD on the wrist; readable subtitles and messages | Reads the legibility checks | Mostly done: HUD panel, menus with a laser pointer, world GUIs in both eyes (`docs/VR_MENUS.md`), tutorial and HUD prompts that name the controller's buttons (v0.1.12); the wrist and weapon HUDs are options that follow where the game draws health and ammo (v0.1.77), the wrist one tried in the headset with a better one in the works; the weapon wheel straight ahead with the HUD cut around it (v0.1.55), following the game's HUD scale (v0.1.75); the HUD at the game's Large scale in VR (v0.1.77); objective markers on their targets (v0.1.79) and steady as the head turns (v0.1.84), each eye seeing them at their targets' distance (v0.1.87, not yet seen in a headset); the HUD in front, on the wrist and on the weapon as separate switches (v0.1.89, not yet seen in a headset); button names in the wall-climbing tutorial, the weapon wheel screen and the Vive wand Arsenal (v0.1.88); the legibility protocol written (v0.1.57), its headset reading still open; the HUD stays up through a game stall of up to 1 s, such as a checkpoint save (v0.1.93, not yet seen in a headset) |
+| M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen (in 3D by default since v0.1.83), around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12); in v0.1.87, not yet seen in a headset: the steady glory kill view holds its place, the flat-screen kill plays in 3D and cutscene subtitles sit in front of the screen; in v0.1.88, not yet seen in a headset: the piloted Revenant's cannons and arms stay where the flat game shows them; pickup animations with a Still view or Camera moves choice (v0.1.92) and pickups under head aim and with a gamepad (v0.1.93), not yet seen in a headset |
 | M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles (Recommended plus the player's changes, marked in the window), each with its own controls, the controls editor, preflight, update alerts with in-place updates, an Export report for bug reports, and a start watchdog that tells a slow start from one that stalls (v0.1.50); the log notes a crash (v0.1.84) or a freeze and carries CPU and GPU timing (v0.1.87); test builds offered from the launcher as an option (v0.1.88); a warning after a session that ran over the card's video memory budget (v0.1.89); an error inside the mod stays inside the mod and the log says what turned off, a stricter multiplayer guard, and the flat game gets its screen images back when VR stops mid-session (v0.1.91, not yet seen in a headset) |
-| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL (310.9.16 since v0.1.87), downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6), gentler toward the edges (v0.1.82), and on AMD and Intel through the KHR path since v0.1.56 (a contributor's change; a player's RX 6750 XT runs it, Intel Arc not tried yet); frame pacing to the headset (on by default), with New game frames only as an experimental choice (v0.1.87), each new frame shown once when the PC falls below the headset's rate (v0.1.89) and the game drawing 8 frames a second while nobody wears the headset (v0.1.89, not yet seen in a headset); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
-| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.91; v0.2.0 is the first beta |
+| M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL (310.9.16 since v0.1.87), downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6), gentler toward the edges (v0.1.82), and on AMD and Intel through the KHR path since v0.1.56 (a contributor's change; a player's RX 6750 XT runs it, Intel Arc not tried yet); frame pacing to the headset (on by default), with New game frames only as an experimental choice (v0.1.87), each new frame shown once when the PC falls below the headset's rate (v0.1.89) and the game drawing 8 frames a second while nobody wears the headset (v0.1.89, not yet seen in a headset); each eye's depth handed to the headset's runtime for its smoothing, an experimental option (v0.1.93, not yet seen in a headset); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.93; v0.2.0 is the first beta |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
 
 The Status column says what has shipped. The boxes in the milestones below are ticked only when a
@@ -418,7 +418,8 @@ Required for v1
       injected guard signals of M2, the fail-closed guard, the anti-cheat checks with their negative
       test, environment containment, and a hashed listing of the game folder (excluding the two files
       the idTechLauncher rewrites) unchanged by a launcher session, including a DLSS DLL choice (T-094).
-      Mandatory before every external build. The real-invite test is not run (D-043)
+      Mandatory before every external build. The real-invite test is not run (D-043). The game folder listing
+      also stands for the M10 Uninstall box's game folder clause (moved here 2026-11-12); no record shows it run yet
 - [ ] Launcher v0 launches the game with the layer via per-process environment and the chosen OpenXR
       runtime (default: the system's active runtime; SteamVR found through the Steam libraries and the
       other discovery paths of T-110, checked on the rig; the refusal names the runtime and how to
@@ -427,17 +428,37 @@ Required for v1
       environment, `LaunchPlan.cs`; HKCU registration is the `--register-hkcu` flag of T-113), checks that the runtime and headset are up, and restores
       everything on exit; a hand-off to a Steam relaunch gives a named error, never a silent flat
       launch (T-109). The registration path is tested on a clean machine (T-105) or on the rig (a
-      reversible registry value, D-045)
-- [ ] Crash safety (T-093): with the launcher killed mid-session, its next start removes the stale
+      reversible registry value, D-045). Checked 2026-11-12: the launcher e2e with a stand-in game (sections 1, 5, 9
+      and 10: the layer by the game's environment only, the system's runtime or the chosen one in `XR_RUNTIME_JSON`, a
+      missing chosen runtime refused by name, the headset probe before a stereo launch, everything restored on exit,
+      the Steam hand-off reported by name; passed in the merge QA of 2e09f658), `PreflightTests` (Steam running and
+      logged in, the runtime refusals' wording), `SteamTests` (the Steam libraries read), `HkcuLayerRegistrationTests`
+      (the HKCU route registered and removed with the keys it created, on the real registry under a scratch key) and
+      the Windows Sandbox run (`docs/rig-findings/uninstall.md`). Still open: SteamVR found through the Steam
+      libraries on a PC that has it, which no record shows yet
+- [x] Crash safety (T-093): with the launcher killed mid-session, its next start removes the stale
       registration and completes the pending restore; a stale registration never outlives a launcher
-      start
+      start. Checked 2026-11-12: the launcher e2e, section 2 (a stand-in game; the launcher killed mid-session, the
+      next start waits while the game runs, then restores the forced keys and removes the marker; passed in the
+      merge QA of 2e09f658), and `HkcuLayerRegistrationTests` (the HKCU registration a killed launcher left is
+      removed by the next start with the keys it created, on the real registry under a scratch key);
+      `SessionRunner.Recover` removes a stale registration first at every start (the window, the headless runs and
+      the session finisher). The default route writes no registration at all (T-113)
 - [ ] Settings and saves (T-036, T-092): the launcher snapshots the game's config files before launch
       and restores the forced keys after exit; killing the game mid-session and reopening the launcher
       restores them; **and** with the game killed and then launched flat from Steam without the
       launcher, the saved profile carries none of the forced values (the save-point defence). The config
       files are found by the discovery rule of ARCHITECTURE section 4, checked on a clean machine or
       recorded as untested (T-105). Save slots are backed up before each VR launch and "Restore saves"
-      works
+      works. Checked 2026-11-12 without the game: the snapshot and the key restore after a normal exit, after a
+      killed launcher and by the session finisher, the save backup and "Restore saves" with and without Steam's
+      record (the launcher e2e with a stand-in game, sections 1 to 4c, passed in the merge QA of 2e09f658;
+      `RecoveryTests`). The save-point defence as built is the layer's profile hooks (`vkcore/profile_hooks.hpp`,
+      `profile_cvars_tests`): every profile save the game makes writes the player's values of the cvars the layer
+      holds, so a session killed after a save leaves them too; on the rig after normal quits only
+      (2026-10-12, `docs/rig-findings/profile-leak.md`). Still open: the run as worded (the game killed mid-session,
+      then launched flat from Steam, and its profile read), which needs the game, and the discovery rule on a clean
+      machine, not recorded yet
 - [ ] Adapter steering (T-111): on a two-GPU machine the game's device is steered to the HMD adapter by
       LUID in `vkEnumeratePhysicalDevices` and `vkEnumeratePhysicalDeviceGroups`; tested on the rig
       with the per-application GPU preference cleared. Built, off by default (`ETERNALVR_ADAPTER_STEER=1`
@@ -449,24 +470,43 @@ Required for v1
       program folder under `Program Files` only warns, T-106), HAGS on (T-021), anti-cheat components
       in the game process or folder (T-109), conflicting layers (Virtual Desktop's OpenXR API layer disabled
       when another runtime is chosen, T-110)
-- [ ] Coexistence (T-095): one stereo session each with RTSS, OBS game capture and ReShade's Vulkan
+- [x] Coexistence (T-095): one stereo session each with RTSS, OBS game capture and ReShade's Vulkan
       layer installed, each either working or named and disabled by preflight; the known-bad list is
-      data
+      data. Rig, 0.1.94 on the simulator (`coexist` QA scenario, 2026-11-13): RTSS works (its counter in
+      both eyes; a frame limit in it halves the headset's rate, so preflight warns), OBS game capture works
+      and records the desktop window (no warning), ReShade stays out (the launcher's switch and the game's
+      own layer blacklist; forced in with `+r_allowBlackListedLayers 1` VR still works and ReShade reaches
+      only the desktop window). Not yet in a headset
 - [x] "Export report" (T-095): the zip matches its documented manifest, including the HAGS state
       (T-085); a test report shows the user profile path and the Steam account ID redacted, no memory dump
       (v1 crash data is the logged faulting module and offset, exit code and log tail, T-112), and the
       file list and size shown before saving; the GitHub issue
       template asks for it
-- [ ] User data and updates (T-093): all user data under `%LOCALAPPDATA%\EternalVR\`; install version
+- [x] User data and updates (T-093): all user data under `%LOCALAPPDATA%\EternalVR\`; install version
       N, create profiles and bindings, extract N+1 over the old folder, and the profiles and bindings
       survive intact; an older settings file is migrated with a backup; a settings file with a higher
       `schema_version` is refused with a message and left unmodified (unit test, T-106); a launcher and
-      layer version mismatch is refused with a message
+      layer version mismatch is refused with a message. Checked 2026-11-12 by `UserDataTests`: a profile, its
+      controls and the shared controls are the same byte for byte after N+1 is extracted over the old folder and
+      N+2 installed by the launcher's update, and read back the same (the built-in copies refreshed, the player's
+      maps kept); an older `launcher.ini` (schema 1, or none) is kept as `launcher.ini.schema<n>.bak` the first time
+      it is saved over (since 2026-11-12); a newer schema is refused with a message, the file unchanged and not
+      copied (also in the launcher e2e, section 3); the layer of another version is refused by the `version` check
+      (`PreflightTests`, `VersionTests`)
 - [ ] CI (REQ-18): the clang-format check stays green; the rig-script suite runs on `windows-latest`
       (T-108); a clang-tidy job (clang-cl preset, changed files)
       passes with zero warnings under the checks configured in `.clang-tidy`; a check fails on any source
       file over 600 lines and on engine internals or game data outside `src/vkcore`,
-      `src/engine/eternal` and `src/game/eternal`
+      `src/engine/eternal` and `src/game/eternal`. As built (2026-11-12): CI (`.github/workflows/ci.yml`) runs
+      clang-format 18.1.8, the 600-line check and the standard-header includes check (Linux), the portable build and
+      tests (Linux, macOS), and on `windows-latest` the MSVC build and tests, the rig-script suite (since
+      2026-11-12), the release sources check and the launcher's tests (Linux too). clang-tidy is a gate of every
+      merge QA rather than a CI job: `tools/run_clang_tidy.py` (all of `src/`, the windows-msvc build's compile
+      commands, clang-tidy 23.1.2) fails on any finding not in its baseline, which holds 40 older findings in 32
+      entries (`tools/clang_tidy_baseline.txt`). No CI run passed from 2026-10-03 to 2026-11-12: launcher tests that
+      held only on Windows, then the portable build on GCC and Clang (a printf format, members left out of brace
+      initialisers, a switch); fixed 2026-11-12. Still open: no tool checks that engine internals and game data stay
+      in their folders (SCOPE, REQ-18)
 - [ ] No stall or deadlock (T-023): in a 30-minute simulator soak and an [owner] 30-minute headset
       session, the frame log shows no `xrEndFrame` gap over 1 s outside loading, and the run ends
       cleanly through `stop.ps1` (the simulator half passed on v0.1.49, 2026-10-13, and again on v0.1.75, 2026-10-22:
@@ -557,24 +597,32 @@ Required for v1
       pointer that works in every menu screen in the R12 inventory. Done on the rig (T-116,
       `docs/VR_MENUS.md`): the GUI target on its own quad, menus on a flat world-locked panel with a laser
       pointer through the game's own cursor, checked from the title screen through settings, a new game,
-      pause and quit; still open: a curved panel, the rest of the R12 inventory, the headset
+      pause and quit, and played in the owner's headset sessions since (the weapon upgrade screen's ghost was seen
+      there, KNOWN-ISSUES.md); still open: a curved panel (the next box) and the rest of the R12 inventory checked
+      screen by screen
 - [ ] HUD split onto the wrist panel and the message panel (T-077); the body-locked HUD with look-down
       reveal is available as an option. Built, unit-tested and checked on the rig with OpenXR-Simulator
       (shown at a watch glance, hidden with the hand down or turned away, hidden under the pause menu;
       `docs/VR_HANDS_HUD.md`): the corner blocks on the off hand's wrist, or the ammo block above the gun
       in the weapon hand, the rest on the head-locked quad; both are options (the launcher's "Health and
-      ammo"), and the whole head-locked HUD stays the default. The wrist HUD needs the free off hand
-      (`ETERNALVR_OFFHAND=free`) before it can become a default; both wait for a headset test, and glory
+      ammo"), and the whole head-locked HUD stays the default. Built since: the free off hand is the default
+      (T-160), the wrist and weapon blocks follow where the game draws them at any HUD scale (v0.1.77, not yet seen
+      in a headset), and the HUD in front, on the wrist and on the weapon are separate switches (v0.1.89, not yet seen
+      in a headset). The wrist HUD was tried in the owner's headset: it worked, could come up upside down, and the
+      palm side is an odd place to look, so a better one is in the works before it can become a default; glory
       kills, cutscenes and respawns with the wrist HUD are untested
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere
 - [ ] The UI image joins the presenter's shared-image slots (`src/vkcore/presenter_copy.cpp`), and its
       copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3)
-- [ ] Screen-projected markers (T-058, T-145): the HUD's objective and POI markers and damage numbers follow
+- [x] Screen-projected markers (T-058, T-145): the HUD's objective and POI markers and damage numbers follow
       the head-locked quad, those above or below the 16:9 band clamped to its edge; built and measured on the
       rig with OpenXR-Simulator (docs/rig-findings/hud-markers.md: 6 to 23 degrees off before, under 1 after;
-      QA scenario `hud-markers`); the interact prompt is not world-projected. Waits for a headset look
+      QA scenario `hud-markers`, passed in the merge QA of 2e09f658, 2026-11-12); the interact prompt is not
+      world-projected. Seen in the owner's headset at v0.1.84: the markers on their targets and steady as the head
+      turns (KNOWN-ISSUES.md); each eye seeing them at the target's distance (v0.1.87) is not yet seen in a headset
 - [ ] [owner] Legibility protocol written in a new `docs/test-protocols/ui-legibility.md` (T-077); each of
-      the following passes it at default settings, read by the owner and one tester where available:
+      the following passes it at default settings, read by the owner and one tester where available (the
+      protocol is written, v0.1.57; its readings in a headset are still to come):
   - wrist-glance HUD: health, armor and ammo read correctly on 10 of 10 prompted glances during the
     combat benchmark route
   - subtitles: 10 of 10 lines read completely
@@ -599,11 +647,28 @@ looks (v0.1.12, `src/vkcore/climb_hook.cpp`); not yet tried in a headset.
 
 Required for v1
 - [ ] Every camera-takeover state in the R12 inventory has a feature that handles it and logs its entry
-      and exit (T-132); a state with none is listed in `docs/release/KNOWN-ISSUES.md`
-- [ ] Glory kills: for each of the four views (follow the camera, steady, fade out, flat screen), 5
+      and exit (T-132); a state with none is listed in `docs/release/KNOWN-ISSUES.md`. Walked against the code
+      on 2026-11-12 (`docs/rig-findings/camera-takeovers.md`, one row per state): 23 handled, by a feature of
+      their own or by the general rule (the game camera's pitch and roll never reach the headset), 1 in part
+      (row 4, the Hammer's slam: the Crucible's kill is handled, the slam is not) and 3 not handled (jump pads,
+      scripted rides, photo mode); the slam and the 3 are listed. Lines were added for the
+      handled states that logged none (pickups with Still view, climbs, deaths, the cinema screen's runs, which
+      cover loading screens); still without a line of their own: a teleport seated with bHaptics off and a turn
+      under 90 degrees, and a camera only head aim's 15 degrees sees. The rig (2026-11-12, the `takeover-qa`
+      scenarios) showed the added lines of Still pickups, deaths and the screen's runs, glory kills in all four
+      views, a cutscene in both Cutscene views and swimming, each by its scenario; still awaiting the rig: the
+      climbs' lines (no climbable wall reached on the rig), the teleport, and the rows whose recognition is
+      inferred (Seek and Destroy, the Crucible, monkey bars, ledges, scripted first-person shots, boss intros,
+      the extra life, videos)
+- [x] Glory kills: for each of the four views (follow the camera, steady, fade out, flat screen), 5
       glory kills log the takeover state on entry and exit (T-132), and with the steady view the
       logged render rotation change during the kill equals the head's alone. [owner] Default chosen by
-      playtest (follow the camera stayed the default after the v0.1.15 headset tries)
+      playtest (follow the camera stayed the default after the v0.1.15 headset tries). Rig, 2026-11-12
+      (`glory-follow`, `glory-steady`, `glory-fade`, `glory-screen`; runs tq4, tq5, tq7; simulator, not a
+      headset), all under hand aim (the launcher's default): 5 real kills in each view, each with its start and
+      end lines, and with steady the view less the head's angles kept within 0.00 degrees through every kill
+      (docs/rig-findings/camera-takeovers.md row 1). Under head aim follow and steady passed the same checks
+      (`glory-follow-head`, `glory-steady-head`, run tq7); fade and flat screen were not run under head aim
 - [ ] Cutscenes and videos presented per policy. Third-person cutscenes never move the player's view
       rotation
 - [ ] Vignette with event pulses, off by default (D-048); Comfortable, Recommended, Advanced and Intense
@@ -612,7 +677,10 @@ Required for v1
       blocker (as defined above, T-105); each mission logged in a new
       `docs/test-protocols/playthrough-log.md` with build hash, date and issues, with a frame log to
       which the 250 ms gate applies (T-075); the campaign pass is played seated (REQ-05). Master Levels
-      and Horde Mode played through, with any remaining issues documented as known issues (T-076)
+      and Horde Mode played through, with any remaining issues documented as known issues (T-076). For the beta
+      (the owner's decision, 2026-10-13, M10) players' full runs of the base game and both DLCs on the alphas stand
+      in for it, as players reported them; no mission is logged yet (`playthrough-log.md` is not written), so the
+      per-mission log with its build and frame log, the seated pass, Master Levels and Horde Mode stay for v1
 
 Experiments and targets
 - [ ] Missed-frame fade (T-091, T-111): after the starting 45 repeats, the view fades to a static dim
@@ -656,9 +724,24 @@ Required for v1
 - [ ] Game builds (REQ-08, T-094): on a build the layer does not know (a patched or renamed exe, an unknown
       hash), the launcher keeps Launch VR off and names the supported builds (`Preflight.cs`); on a known
       build with a core feature forced unresolved (camera hook, present path, BATTLEMODE guard) VR is
-      refused with a message naming the feature
-- [ ] "Untested on this hardware" notice (T-076, T-095): for each untested matrix entry the launcher can
-      detect (GPU vendor and generation, OpenXR runtime), the notice appears
+      refused with a message naming the feature. Checked 2026-11-12: the launcher half by `GameBuildsTests` (a
+      patched exe is refused with its hash and build 25216728 named and the status line says Launch VR is off; a
+      renamed one is refused as missing) and `GamePassTests` (an unknown Game Pass version); the layer refuses VR
+      on an exe it does not know, naming the supported builds (the package QA's `mp-guard-standin`, every guard
+      point `MISSING`, passed on 2e09f658). On a known build as built: a missing guard point turns VR off with
+      the points named (`mp_policy::guardRefusalReason`, `guard_refusal_tests`); without the camera hook the
+      game shows on the flat screen and the launcher says VR runs in mono because the camera hook is missing
+      (`presenter_seq.cpp`); a present path that cannot start turns VR off with its own reason (the OpenXR
+      loader, Direct3D 12, the images for the headset). Still open: a run on the known build with each of the
+      three forced unresolved, which needs the game and a test switch the layer does not have yet
+- [x] "Untested on this hardware" notice (T-076, T-095): for each untested matrix entry the launcher can
+      detect (GPU vendor and generation, OpenXR runtime), the notice appears. Built 2026-11-12
+      (`Preflight/UntestedHardware.cs`, a warning on the "Checks and log" tab): a main graphics card that is not
+      NVIDIA RTX (AMD by Radeon generation, RDNA to RDNA 4; Intel Arc and other Intel; NVIDIA without RTX), and a
+      route other than VDXR or SteamVR with a Quest (Meta Horizon Link, Pimax Play, Varjo Base, any other runtime,
+      SteamVR with an Index, a PlayStation VR2 or another headset it can name); one acceptance test per entry and
+      none for the tested ones (`UntestedHardwareTests`). Not detectable: a gaze-capable headset, and the headset
+      on SteamVR when SteamVR names none the launcher knows
 - [ ] Health notice and comfort defaults (T-096, D-048; once the comfort options are settled): the
       first-launch health notice appears; a new profile starts from Recommended with the vignette off; in the per-frame vignette alpha log, the change per
       frame is at most 0.05 at 90 Hz and there are at most 2 pulse onsets in any 1 s window
@@ -703,7 +786,15 @@ Required for v1
       from there through our NGX interposition during VR sessions only, never written into the game
       folder (T-094, `docs/rig-findings/dlss-dll.md`); NGX's own work passes through our layer untouched
       (T-033). History resets on the R07 event list. The launcher shows the DLL version in use; preset
-      forcing
+      forcing. As built (checked 2026-11-12): DLSS per eye with NVIDIA's 310.x DLL (310.9.16 since v0.1.87),
+      downloaded on the player's request into the data folder with its size and SHA-256 checked (`DlssDownloads`),
+      passed to the layer from there (the launcher e2e, section 8; nothing is copied into the game folder), loaded
+      through the NGX interposition in VR sessions only with the preset set at feature creation, K by default (the
+      rig check of 2026-09-30, `docs/rig-findings/dlss-dll.md` section 7; the merge QA's DLSS scenarios with 310.9.1);
+      the Play tab names the DLSS version that runs. History: the engine's own resets reach both eyes' features
+      together, and eye R's after a missed tick (`TaaResetPlanner`, `NgxResetBook`, unit tests). Still open: the rest
+      of R07's list (snap turn, recenter, tracking loss, scripted teleports, a world frozen under a menu) raises no
+      reset of the layer's own, and NGX's own work passing through untouched has no check of its own
 - [ ] AMD and Intel through OptiScaler (D-031, T-065, T-072; its priority follows the number of AMD and
       Intel players, and v1 may ship the game's native TAA on them, D-049). With the user's consent, the launcher
       downloads the pinned OptiScaler release into the EternalVR data folder, verifies its SHA-256
@@ -768,7 +859,7 @@ v1 if time allows
 
 ## M10: Beta and public release
 
-Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.75 (2026-09-28 to 2026-10-21) and
+Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.93 (2026-09-28 to 2026-11-13) and
 players reporting through GitHub issues.
 
 **Beta (owner's decision, 2026-10-13):** v0.2.0 is the first beta. It does not wait for every fault to be
@@ -781,7 +872,8 @@ fixed: players have finished the base game and both DLCs on the alphas. The beta
 - the notices audit and a clang-tidy check are done, and the code-signing choice (open question 7) is
   made (an unsigned beta with the SmartScreen steps in INSTALL.md is acceptable). Status 2026-11-09: the notices
   audit is done (`docs/release/notices-audit.md`) and the beta ships unsigned (open question 7); the clang-tidy
-  check runs as the merge QA gate (no new finding on any merge), with 96 older findings still in its baseline;
+  check runs as the merge QA gate (no new finding on any merge), with 40 older findings still in its baseline
+  (2026-11-12);
 - the legibility protocol (foundation step 5) is written and passed at default settings;
 - the playthrough log (foundation step 4) is met by players' full runs of the base game and both DLCs;
 - the owner has looked at the beta build in a headset;
@@ -814,28 +906,52 @@ Required for v1
       safetyhook, Zydis, Zycore, the OpenXR loader with JsonCpp, Vulkan-Headers and the static MSVC runtime
       listed with their licences; `make-release.ps1` refuses an unlisted third-party binary and copies the
       file into the zip, where the v0.1.75 zip has it; re-audited at v0.1.89, done 2026-11-09, docs/release/notices-audit.md)
-- [ ] Uninstall (T-093): on a clean machine (T-105), after install, VR sessions and the launcher's uninstall
-      action, the layer registry key and the game folder listing match a pre-install snapshot, and the
-      flat settings equal the pre-VR snapshot. 2026-10-13: the default route writes no registry value; the
-      clean-machine check without the game is `tools/rig/uninstall/start-sandbox.ps1` (Windows Sandbox), run
-      2026-10-16 on the published v0.1.50 zip: no EternalVR file, folder or key left after the uninstall steps;
-      the launcher has no uninstall action yet (INSTALL.md's three steps stand in); the VR sessions and the game folder listing need the game (`docs/rig-findings/uninstall.md`)
-- [ ] Updates (T-123, which superseded T-093's update-check clause): the check disclosed in the launcher,
+- [x] Uninstall (T-093): ticked for the clean-machine part only. The criterion as first written also asked for VR
+      sessions, the launcher's own uninstall action and the game folder listing against a pre-install snapshot; the
+      listing moved to the M4.5 multiplayer-safety box (open), and there is no uninstall action. Reworded 2026-11-12
+      to what the clean-machine check (T-105) covers: in
+      Windows Sandbox (no Steam, no game), the release zip checked against its SHA-256 and `SHA256SUMS.txt` and
+      extracted, the launcher opened and closed, a dry run, an HKCU registration left as a killed session leaves it
+      and removed by the next start, then INSTALL.md's three uninstall steps (the launcher has no uninstall action of
+      its own; the default route writes no registry value): afterwards no EternalVR file, folder, registry key,
+      environment entry, shortcut, task or service differs from the snapshot taken before the install
+      (`tools/rig/uninstall/start-sandbox.ps1`, run 2026-10-16 on the published v0.1.50 zip,
+      `docs/rig-findings/uninstall.md`). What needs the game stays open under other criteria: the game folder
+      listing unchanged by a launcher session (M4.5, multiplayer safety, no record of a run yet) and the flat settings put back
+      after VR (M4.5, settings and saves, open for its killed-game run)
+- [x] Updates (T-123, which superseded T-093's update-check clause): the check disclosed in the launcher,
       at most once an hour, switchable off; the download and in-place install only when the player
       agrees, checked against the published SHA-256 and `SHA256SUMS.txt` (done since v0.1.5,
       `launcher/src/EternalVR.Launcher.Core/Update/`); the release notes or the zip's
       `BUILD-INFO.txt` list the supported game builds with their exe hashes, and, once the OptiScaler path
-      is built (D-049), its pinned version with its hash (T-094)
+      is built (D-049), its pinned version with its hash (T-094). Checked 2026-11-12: `UpdateTests` (at most once an
+      hour, off when turned off; a zip that is not a whole checked release refused; the install over the old folder,
+      put back on a failure) and `UserDataTests`; INSTALL.md discloses the check; the published v0.1.92 and v0.1.50
+      zips' `BUILD-INFO.txt` list the Steam build with its exe's SHA-256 and the Game Pass version
+      (`tools/release/verify-release.ps1`). The OptiScaler path is not built (D-049), so it has no line yet
 - [x] Windows builds on hosted runners; no self-hosted runner can run fork pull requests (T-060)
 - [ ] `SHA256SUMS.txt` published with the release zip and verified against the uploaded files by a CI
       job (T-105); Defender false-positive submissions done; the owner's code
-      signing choice (open question 7) applied or filed
+      signing choice (open question 7) applied or filed. 2026-11-12: CI's "Published release" job
+      (`tools/release/verify-release.ps1`) checks the newest public release on every run and each release as it is
+      published: the zip against its `.sha256` and GitHub's digest, every file in it against `SHA256SUMS.txt`, and
+      `BUILD-INFO.txt`'s supported builds; by hand it passed on v0.1.92 and v0.1.50 and failed each of three planted
+      faults (a changed file, an unlisted file, a wrong `.sha256`). The signing choice is made and applied: the beta
+      ships unsigned, with INSTALL.md's SmartScreen steps (open question 7). Microsoft Defender found nothing in the
+      v0.1.92 zip on the test PC (signatures 1.463.267.0); each release's notes link its VirusTotal scan, and on some
+      players' PCs Defender's cloud model flags the files (INSTALL.md, "Antivirus"). Still open: the false-positive
+      submissions to Microsoft, which no record shows as made
 - [ ] README, install guide, controls reference, troubleshooting page and release notes (with known
       limitations, T-076) written. The install guide covers: SmartScreen ("More info", "Run anyway") on
       an unsigned build, the expected Defender verdicts and how to report a false positive, checking the
       download against `SHA256SUMS.txt`, extracting outside `Program Files`, Steam running before
       launch, the health notice, and uninstall (T-095). (Making the repository public is the owner's
-      decision, D-030, and not a criterion.)
+      decision, D-030, and not a criterion.) Checked 2026-11-12: README.md, and in the zip README-ALPHA.md,
+      INSTALL.md, CONTROLS.md, TROUBLESHOOTING.md and KNOWN-ISSUES.md (with the untested hardware and runtimes),
+      each release's notes on GitHub; INSTALL.md covers SmartScreen, Defender's false positives and how to report
+      one, checking the zip and every file against the published SHA-256 and `SHA256SUMS.txt` (both since
+      2026-11-12), extracting outside `Program Files`, Steam running first and uninstall. Still open: the health
+      notice, which waits for the first-launch notice itself (foundation step 7)
 
 ## Risks
 

@@ -2,7 +2,7 @@
 
 // The loaded game module, read in place: its .text and .rdata, unique signature matches, RIP-relative
 // targets, strings, MSVC RTTI class names and function starts. Shared by the camera hooks
-// (view_hook.cpp) and the multiplayer guard (mp_guard.cpp).
+// (view_hook.cpp) and the multiplayer guard (mp_guard.cpp, mp_guard_points.cpp).
 //
 // Every address handed out or read here is checked against the module's bounds first. Nothing is
 // written.

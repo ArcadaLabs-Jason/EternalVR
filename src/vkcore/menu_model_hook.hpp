@@ -44,4 +44,9 @@ void notePanel(bool showing,
 // view the game asked for (its own fov_x, before the layer's).
 void noteHead(const menu::WorldHead& head, float gameFovX);
 
+// Any thread: a menu's 3D model was placed in the last 0.25 s (the first hook ran, panel or not): a menu
+// that shows one is up (the mod bot's weapon mod screen, the Dossier's customize screen). With a pad the mod
+// bot's menu shows no cursor and no backdrop (menu::padMenuOverGame). False when the hooks are not in.
+bool modelShown();
+
 } // namespace evr::vkcore::menu_model

@@ -30,11 +30,13 @@ void PickupView::frame(const std::byte* player,
                        float unitsPerMetre) {
     const bool pickup = !cutscene && controllers::syncPickupActive(player);
     const double seconds = qpcSeconds(qpcNow());
+    const bool forced = controllers::forcedView() && !cutscene; // the gate as the last game view left it
+    holdFrame(player, pickup, gameAxis, seconds);
+    following_ = pickup && camera_ != comfort::PickupCamera::Play;
     if (camera_ != comfort::PickupCamera::Play) {
-        stillFrame(player, pickup, gameAxis, seconds);
+        logStillEpisode(episode_.update(pickup, forced, seconds, menu));
         return;
     }
-    const bool forced = controllers::forcedView() && !cutscene; // the gate as the last game view left it
     const comfort::GloryEpisode::Step step = episode_.update(pickup, forced, seconds, menu);
     endSet_.step(step.ended, forced, seconds);
     comfort::PickupHeading::Frame f;
@@ -83,17 +85,19 @@ void PickupView::frame(const std::byte* player,
     }
 }
 
-void PickupView::stillFrame(const std::byte* player,
-                            bool pickup,
-                            const xr_math::IdViewAxis& gameAxis,
-                            double seconds) {
+void PickupView::holdFrame(const std::byte* player,
+                           bool pickup,
+                           const xr_math::IdViewAxis& gameAxis,
+                           double seconds) {
     // The player's view angles, outside pickups too (the hold keeps them for a pickup's first view), only
     // from the idPlayer.
     std::optional<float> anglesYaw;
     float view[3];
+    viewAngles_.reset();
     if (controllers::isPlayerSafe(player) &&
         controllers::safeCopy(view, player + kPlayerViewAngles, sizeof(view))) {
         anglesYaw = view[1];
+        viewAngles_ = xr_math::IdAngles{view[0], view[1], view[2]};
     }
     heldTurn_ = hold_.update(xr_math::anglesFromAxis(gameAxis).yaw, anglesYaw, seconds, pickup);
     if (!std::isfinite(heldTurn_)) {
@@ -113,12 +117,46 @@ void PickupView::stillFrame(const std::byte* player,
     }
 }
 
+void PickupView::logStillEpisode(const comfort::GloryEpisode::Step& step) {
+    // Still view keeps no state of its own over a pickup: the episode (the sync flag, then the game's forced
+    // view settling after it) is only for these two lines.
+    if (step.started) {
+        frames_ = 0;
+        if (episode_.episodes() <= kLoggedEpisodes) {
+            EVR_LOG(
+                "pickup: pickup %llu starts (Still view: the view follows the camera's heading, its pitch "
+                "and roll left out)",
+                episode_.episodes());
+        }
+    }
+    if (episode_.active()) {
+        ++frames_;
+    }
+    if (step.ended && episode_.episodes() <= kLoggedEpisodes) {
+        EVR_LOG("pickup: pickup %llu ends after %llu game frame(s)%s", episode_.episodes(), frames_,
+                step.timedOut ? " (still running at the time limit)" : "");
+    }
+}
+
 xr_math::IdViewAxis PickupView::followed(const xr_math::IdViewAxis& gameAxis) const {
+    return camera_ == comfort::PickupCamera::Play ? gameAxis : withoutFlick(gameAxis);
+}
+
+xr_math::IdViewAxis PickupView::withoutFlick(const xr_math::IdViewAxis& gameAxis) const {
     return heldTurn_ == 0.0f ? gameAxis : xr_math::turnYaw(gameAxis, heldTurn_);
 }
 
 bool PickupView::endSetView(bool forcedNow, double seconds) const {
     return camera_ == comfort::PickupCamera::Play && endSet_.covers(forcedNow, seconds);
+}
+
+void PickupView::noteBody(float yaw, bool own, bool menu) {
+    // Only Camera moves keeps a heading (Still view's step never tells the heading of a menu).
+    if (heading_.noteBody(yaw, own, menu) && camera_ == comfort::PickupCamera::Play &&
+        lateMenus_++ < kLoggedEpisodes) {
+        EVR_LOG("pickup: a menu came up within a game view (head aim held the body for it after the pickup "
+                "view read no menu); the heading from before it stays the one a pickup keeps");
+    }
 }
 
 void PickupView::noteRestored(float degrees) {

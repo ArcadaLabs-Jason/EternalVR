@@ -42,6 +42,7 @@ configure_file(refused_arguments.cpp.in "${CMAKE_CURRENT_BINARY_DIR}/refused_arg
 
 evr_add_module(evr_mp_policy
     SOURCES
+        guard_refusal.cpp
         mp_policy.cpp
         profile_cvars.cpp
         saved_cvars.cpp

@@ -78,6 +78,8 @@ namespace EternalVR.Launcher.Core.Preflight
         public IReadOnlyList<string> CloudRecordUnreadable { get; set; } = new string[0];
         /// <summary>The last session's eye size when it was below the plan (<see cref="RenderCap"/>); null otherwise.</summary>
         public RenderCap LastRenderCap { get; set; }
+        /// <summary>The route and headset of the runtime the next launch uses, for the untested-hardware notice; null when not known.</summary>
+        public Headsets.HeadsetIdentity Headset { get; set; }
     }
 
     public sealed class PreflightResult
@@ -198,6 +200,7 @@ namespace EternalVR.Launcher.Core.Preflight
             if (f.ArgumentRefusal != null) Add("single-player", Severity.Fail, f.ArgumentRefusal);
 
             c.AddRange(CompatibilityChecks.Evaluate(f.Compatibility, f.GameRoot));
+            c.AddRange(UntestedHardware.Evaluate(f.Compatibility?.Gpus, f.Headset));
             return new PreflightResult(c);
         }
 

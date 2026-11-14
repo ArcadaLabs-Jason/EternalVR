@@ -165,6 +165,80 @@ TEST_CASE("camera turn: a cut over two frames is left out, both steps") {
     CHECK(turn.cuts() == 2);
 }
 
+TEST_CASE("camera turn: the start's cut spread over the pickup's first two frames is left out") {
+    // Exultia's rune under head aim (rig, 2026-11-12, run pa3, traces 847 to 851): the player 9.6 degrees off
+    // the rune's heading, its camera went there in two frames, 4.02 then 5.55 degrees of yaw, then held.
+    CameraTurn turn;
+    double t = 0.0;
+    step(turn, true, {0.0f, 169.83f, 0.0f}, t);
+    step(turn, true, {0.01f, 173.85f, 0.0f}, t);
+    step(turn, true, {0.01f, 179.40f, 0.0f}, t);
+    step(turn, true, {0.02f, 179.40f, 0.0f}, t);
+    auto r = step(turn, true, {0.03f, 179.40f, 0.0f}, t);
+    REQUIRE(r.has_value());
+    CHECK(approxEqual(r->yaw, 0.0f, 1e-2f));
+    CHECK(approxEqual(r->pitch, 0.01f, 1e-3f)); // the motion after it is played, a frame late
+    CHECK(turn.cuts() == 2);
+}
+
+TEST_CASE("camera turn: the start's jump into a huge cut is left out with it") {
+    // The Sentinel Crystal under head aim (rig, 2026-11-12, run pa5, traces 832 to 842): its first frame 15.7
+    // degrees of yaw off the player's heading and 9.7 down, the next 21.1 back to the crystal's own heading,
+    // then nearly still. The first step alone is not a lone one (the huge step after it): it was played.
+    CameraTurn turn;
+    double t = 0.0;
+    step(turn, true, {0.0f, 129.61f, 0.0f}, t);
+    step(turn, true, {-9.66f, 113.92f, 0.0f}, t);
+    step(turn, true, {-9.67f, 135.00f, 0.0f}, t);
+    step(turn, true, {-9.67f, 135.00f, 0.0f}, t);
+    step(turn, true, {-10.02f, 135.00f, 0.0f}, t);
+    auto r = step(turn, true, {-10.02f, 135.00f, 0.0f}, t);
+    REQUIRE(r.has_value());
+    CHECK(approxEqual(r->yaw, 0.0f, 1e-2f));
+    CHECK(approxEqual(r->pitch, -0.36f, 2e-2f)); // the motion after it is played
+    CHECK(turn.cuts() == 2);
+    // A first step under the cut size before a huge one is motion as before (the step after the start's cut).
+    CameraTurn small;
+    t = 0.0;
+    step(small, true, {0.0f, 0.0f, 0.0f}, t);
+    step(small, true, {0.0f, 3.0f, 0.0f}, t);
+    step(small, true, {0.0f, 33.0f, 0.0f}, t);
+    step(small, true, {0.0f, 33.0f, 0.0f}, t);
+    r = step(small, true, {0.0f, 33.0f, 0.0f}, t);
+    REQUIRE(r.has_value());
+    CHECK(approxEqual(r->yaw, 3.0f, 1e-2f));
+    CHECK(small.cuts() == 1);
+}
+
+TEST_CASE("camera turn: two fast first steps that go on are motion") {
+    CameraTurn turn;
+    double t = 0.0;
+    float yaw = 0.0f;
+    step(turn, true, {0.0f, yaw, 0.0f}, t);
+    for (const float d :
+         {4.0f, 5.6f, 4.0f, 0.0f, 0.0f}) { // the third step is over a quarter of the first two
+        yaw += d;
+        step(turn, true, {0.0f, yaw, 0.0f}, t);
+    }
+    auto r = step(turn, true, {0.0f, yaw, 0.0f}, t);
+    REQUIRE(r.has_value());
+    CHECK(approxEqual(r->yaw, 13.6f, 1e-2f));
+    CHECK(turn.cuts() == 0);
+    // The same pair later in a pickup (not its opening) is motion, as a gore nest's heart pull is.
+    CameraTurn later;
+    t = 0.0;
+    yaw = 0.0f;
+    step(later, true, {0.0f, yaw, 0.0f}, t);
+    for (const float d : {0.5f, 0.5f, 0.5f, 0.0f, 4.0f, 5.6f, 0.0f, 0.0f, 0.0f}) {
+        yaw += d;
+        step(later, true, {0.0f, yaw, 0.0f}, t);
+    }
+    r = step(later, true, {0.0f, yaw, 0.0f}, t);
+    REQUIRE(r.has_value());
+    CHECK(approxEqual(r->yaw, 11.1f, 1e-2f));
+    CHECK(later.cuts() == 0);
+}
+
 TEST_CASE("camera turn: a huge step inside a fast motion is still a cut") {
     CameraTurn turn;
     double t = 0.0;
@@ -301,4 +375,28 @@ TEST_CASE("camera turn on the body: its yaw only on the player's own heading, ne
     const IdAngles twice = turnOnBody(turn, true);
     const IdAngles c = anglesFromAxis(composeHeadAxis(*game, headWithCameraAnim(*game, ahead, twice)));
     CHECK(approxEqual(normalize180(c.yaw - 80.0f), 0.0f, 1e-2f)); // what the fix keeps out
+}
+
+TEST_CASE("camera turn: the opening pair without the rule, and a pickup that ends right after the pair") {
+    // Without openingPair the rune's two-frame start is played, as before the rule.
+    CameraTurnTiming off;
+    off.openingPair = false;
+    CameraTurn turn(off);
+    double t = 0.0;
+    step(turn, true, {0.0f, 169.83f, 0.0f}, t);
+    step(turn, true, {0.01f, 173.85f, 0.0f}, t);
+    step(turn, true, {0.01f, 179.40f, 0.0f}, t);
+    auto r = step(turn, true, {0.01f, 179.40f, 0.0f}, t);
+    REQUIRE(r.has_value());
+    CHECK(approxEqual(r->yaw, 9.57f, 1e-2f));
+    CHECK(turn.cuts() == 0);
+    // A pickup that ends with the pair still waiting: the pair is left out, nothing to ease back.
+    CameraTurn ends;
+    t = 0.0;
+    step(ends, true, {0.0f, 169.83f, 0.0f}, t);
+    step(ends, true, {0.01f, 173.85f, 0.0f}, t);
+    step(ends, true, {0.01f, 179.40f, 0.0f}, t);
+    r = step(ends, false, {0.01f, 179.40f, 0.0f}, t);
+    CHECK((!r.has_value() || approxEqual(r->yaw, 0.0f, 1e-2f)));
+    CHECK(ends.cuts() == 2);
 }

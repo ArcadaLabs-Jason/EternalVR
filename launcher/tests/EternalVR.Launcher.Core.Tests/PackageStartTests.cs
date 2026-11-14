@@ -71,6 +71,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void TheDoomEternalLauncherAndItsSettingsAreInTheGameFolder()
         {
+            if (!System.OperatingSystem.IsWindows()) return; // a Game Pass install's Windows path, split by Windows' rules
             const string exe = @"C:\XboxGames\Doom Eternal - PC\Content\DOOMEternalx64vk.exe";
             Assert.Equal(@"C:\XboxGames\Doom Eternal - PC\Content\launcher\idTechLauncher.exe", PackageStart.BethesdaLauncher(exe));
             Assert.Equal(@"C:\XboxGames\Doom Eternal - PC\Content\doom-launcher-settings.json", PackageStart.BethesdaSettings(exe));

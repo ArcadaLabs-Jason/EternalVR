@@ -109,11 +109,13 @@ struct Settings {
     // ETERNALVR_TEST_HEAD_SWAY=yaw,pitch,period: a sinusoidal head turn (degrees, seconds) added to the
     // tracked pose, for checking head tracking and head aim without a moving headset. An optional fourth
     // value (yaw,pitch,period,base) turns the head by `base` degrees of yaw first, so runs can be compared
-    // around one view (a zero amplitude holds it).
+    // around one view (a zero amplitude holds it), and a fifth tilts it by that pitch (up positive), the sway
+    // turning about the vertical from there (xr_math::headSwayAround): a head looking down at a gore nest.
     float swayYaw = 0.0f;
     float swayPitch = 0.0f;
     float swayPeriod = 0.0f;
     float swayBaseYaw = 0.0f;
+    float swayBasePitch = 0.0f;
     StereoSettings stereo;   // ETERNALVR_MODE=stereo (head-tracked plus the engine's two views)
     ui_layer::UiSettings ui; // ETERNALVR_UI_LAYER and the quad's placement
     // ETERNALVR_MIRROR: what the game's window shows during stereo pairs (presenter_mirror.hpp).

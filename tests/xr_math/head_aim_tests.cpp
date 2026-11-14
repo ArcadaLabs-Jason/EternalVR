@@ -174,6 +174,23 @@ TEST_CASE("the held test head turn is the sway's quarter-period peak") {
     CHECK(approxAngles(headAngles(openXrToIdTech(headTurn(-150.0f, 0.0f))), {0.0f, -150.0f, 0.0f}));
 }
 
+TEST_CASE("the test sway around a held view turns about the vertical with the head held tilted") {
+    using evr::xr_math::headSway;
+    using evr::xr_math::headSwayAround;
+    using evr::xr_math::headTurn;
+    // No base: the sway itself; a yaw base alone: the sway turned by it (the four-value form).
+    CHECK(approxAngles(headAngles(openXrToIdTech(headSwayAround(0.0f, 0.0f, 20.0f, 0.0f, 4.0f, 1.0))),
+                       headAngles(openXrToIdTech(headSway(20.0f, 0.0f, 4.0f, 1.0)))));
+    CHECK(approxAngles(headAngles(openXrToIdTech(headSwayAround(180.0f, 0.0f, 0.0f, 0.0f, 4.0f, 1.0))),
+                       headAngles(openXrToIdTech(headTurn(180.0f, 0.0f)))));
+    // Held 60 degrees down (id Tech pitch 60), the yaw sway changes the yaw only, at every phase.
+    for (const double t : {0.0, 0.5, 1.0, 2.5, 3.0}) {
+        const IdAngles a = headAngles(openXrToIdTech(headSwayAround(30.0f, -60.0f, 8.0f, 0.0f, 4.0f, t)));
+        const float sway = 8.0f * static_cast<float>(std::sin(2.0 * std::numbers::pi * t / 4.0));
+        CHECK(approxAngles(a, {60.0f, 30.0f + sway, 0.0f}));
+    }
+}
+
 TEST_CASE("angles read from game memory must be plausible before head aim writes from them") {
     CHECK(evr::xr_math::plausible(IdAngles{-15.0f, 179.9f, 0.0f}));
     CHECK(evr::xr_math::plausible(IdAngles{720.0f, -540.0f, 3.0f}));

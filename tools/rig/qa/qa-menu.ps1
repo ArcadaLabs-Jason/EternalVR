@@ -242,6 +242,7 @@ for ($i = 0; $i -lt $rows.Count; $i++) {
 # save slots up, where Mission Select's point is slot 2's row and Continue Game's is slot 1's: those steps click once,
 # so such a slip opens that slot's menu and fails there, never a second click into the wrong slot's save.
 function Invoke-QaMenuMission($Ctx, $Scenario) {
+    if ($Scenario.Pad) { return Invoke-QaMenuMissionPad $Ctx $Scenario }
     $slot = if ($Scenario.MenuSlot) { [int]$Scenario.MenuSlot } else { 1 }
     if ($Scenario.MenuMission -eq 'continue') {
         $target = @{ Name = 'continue game'; X = $script:QaMenuRowX; Y = $script:QaMenuRowY; Map = $Scenario.MenuMap; From = 13; Tries = 1 }
@@ -301,4 +302,60 @@ function Invoke-QaMenuMission($Ctx, $Scenario) {
     }
     Write-QaInput $Ctx @($Scenario.Input | Where-Object { $_ })
     return $result
+}
+
+# A gamepad-mode scenario's path (Pad: the virtual pad, no cursor with a pad): the same screens by the pad, measured on
+# the rig (2026-11-12, runs pa1 and pa2): A at the title (it connects to Bethesda.net and opens the main menu, screen
+# 3), A on Campaign (highlighted first: the save slots, screen 13), the D-pad down to the slot (Game Slot 1 highlighted
+# first) and A (the slot's menu, Continue Game highlighted first), A on Continue Game (the map load). Only Continue Game
+# ($Scenario.MenuMission 'continue'); returns as Invoke-QaMenuMission.
+function Invoke-QaMenuMissionPad($Ctx, $Scenario) {
+    $slot = if ($Scenario.MenuSlot) { [int]$Scenario.MenuSlot } else { 1 }
+    if ($Scenario.MenuMission -ne 'continue' -or -not $Scenario.MenuMap -or $slot -lt 1 -or $slot -gt 3) {
+        Add-QaResult $Ctx 'menu: the mission is on the pad''s path' $false "MenuMission '$($Scenario.MenuMission)' (the pad's path has Continue Game only), MenuSlot $slot, MenuMap '$($Scenario.MenuMap)'"
+        return 'fail'
+    }
+    $start = Get-Date
+    $title = Wait-QaLogAfter $Ctx 0 'mp guard: main menu screen 2 ' 120
+    Add-QaResult $Ctx 'menu: title screen up' ($null -ne $title) $(if ($title) { '{0:N1} s after the launch returned' -f ((Get-Date) - $start).TotalSeconds } else { 'no main menu screen 2 within 120 s' })
+    if (-not $title) { Save-QaGameWindowShot $Ctx 'menu-title'; return 'fail' }
+    Wait-QaSeconds $Ctx 4 # the title's fade-in
+    # One step: $Press (a pad state or several, each pressed 0.2 s with 0.6 s between) while the main menu is on screen
+    # $From, then up to $Timeout s for $Until; up to $Tries times.
+    $step = {
+        param([string]$Name, [string[]]$Press, $From, [string]$Until, [double]$Timeout, [int]$Tries)
+        $mark = Get-QaLogMark $Ctx
+        $began = Get-Date
+        for ($try = 1; $try -le $Tries; $try++) {
+            if ($null -ne $From -and (Get-QaMenuScreen (Get-QaLogText $Ctx)) -ne $From) { break }
+            foreach ($p in $Press) { Invoke-QaPadPress $Ctx $p 0.2; Wait-QaSeconds $Ctx 0.6 }
+            $m = Wait-QaLogAfter $Ctx $mark $Until $Timeout
+            if ($m) {
+                Add-QaResult $Ctx "menu: $Name (pad)" $true ('{0:N1} s, try {1}: {2}' -f ((Get-Date) - $began).TotalSeconds, $try, $m.Value.Trim())
+                return $m
+            }
+            Save-QaGameWindowShot $Ctx "menu-$($Name -replace ' ', '-')-try$try"
+        }
+        $state = Get-QaMenuState $Ctx $mark
+        return [pscustomobject]@{ Failed = $true; Detail = "no '$Until' after pad $($Press -join ' then ') ($Tries time(s)); $($state.Text)" }
+    }
+    $m = & $step 'title' @('a') 2 'mp guard: main menu screen 3 ' 15 4
+    if ($m.Failed) {
+        $Ctx.SkipReason = "the title screen never opened the main menu (Bethesda.net connection or sign-in); $($m.Detail)"
+        Add-QaNote $Ctx "menu: title: $($Ctx.SkipReason)"
+        return 'skip'
+    }
+    Wait-QaSeconds $Ctx 2
+    $m = & $step 'campaign' @('a') 3 'mp guard: main menu screen 13 ' 8 2
+    if ($m.Failed) { Add-QaResult $Ctx 'menu: campaign (pad)' $false $m.Detail; return 'fail' }
+    Wait-QaSeconds $Ctx 1.5
+    $press = @(for ($i = 1; $i -lt $slot; $i++) { 'down' }) + 'a'
+    foreach ($p in $press) { Invoke-QaPadPress $Ctx $p 0.2; Wait-QaSeconds $Ctx 0.6 }
+    Add-QaNote $Ctx "menu: game slot $slot by the pad ($($press -join ', '))"
+    Wait-QaSeconds $Ctx 1.5
+    $m = & $step 'continue game' @('a') 13 "mp guard: map load '([^']+)'" 15 1
+    if ($m.Failed) { Save-QaGameWindowShot $Ctx 'menu-continue-game'; Add-QaResult $Ctx "menu: continue game loads $($Scenario.MenuMap)" $false $m.Detail; return 'fail' }
+    $ok = $m.Groups[1].Value -eq $Scenario.MenuMap
+    Add-QaResult $Ctx "menu: continue game loads $($Scenario.MenuMap)" $ok $(if ($ok) { '' } else { "it loaded '$($m.Groups[1].Value)': Game Slot $slot does not hold $($Scenario.MenuSaveNote)" })
+    if ($ok) { return 'ok' } else { return 'fail' }
 }

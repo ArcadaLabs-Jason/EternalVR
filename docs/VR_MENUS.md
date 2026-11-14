@@ -33,7 +33,9 @@ XR worker, every XR frame                                     game (message pump
   depends on the frame: over a head-tracked frame (pause, the in-game screens) the UI quad moves onto the
   panel; on the cinema path (title screen, main menu, their sub-screens) the game's whole frame, 3D menu
   scene and GUI, is shown on the panel instead of the 2.5 m cinema screen. Loading screens keep the cinema
-  screen.
+  screen. Each run of the game's frames off the head-tracked path (a loading screen, the title and main menus, a
+  cutscene or glory kill on the flat screen) is logged as it starts and ends (`xr: screen run N starts: ...`,
+  `xr: screen run N ends after X s: head-tracked frames again`, the first 40).
 - **The desktop window.** Over a head-tracked frame the GUI is only on the panel, so the game's window
   (the desktop mirror) shows the panel's image, the GUI over black, fitted like an eye
   (`ETERNALVR_MIRROR_CROP`); before, it was black for the whole pause menu (`docs/VR_STEREO.md`, Desktop

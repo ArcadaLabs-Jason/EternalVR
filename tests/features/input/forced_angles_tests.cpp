@@ -333,6 +333,23 @@ TEST_CASE("climb frames: on a wall from the first step, held over frames without
     CHECK(climb.climbs() == 2);
 }
 
+TEST_CASE("climb frames: each climb counts its own frames, kept after it ends for the end line") {
+    ClimbFrames climb(1);
+    CHECK(climb.climbFrames() == 0);
+    CHECK(climb.update(1));
+    CHECK(climb.update(1));
+    CHECK(climb.update(0)); // held one frame without a tick
+    CHECK(climb.climbFrames() == 3);
+    CHECK_FALSE(climb.update(0)); // off the wall: the count stays for the climb that ended
+    CHECK(climb.climbFrames() == 3);
+    CHECK_FALSE(climb.update(0));
+    CHECK(climb.climbFrames() == 3);
+    CHECK(climb.update(1)); // the next climb starts its own count
+    CHECK(climb.climbFrames() == 1);
+    CHECK(climb.climbs() == 2);
+    CHECK(climb.frames() == 4);
+}
+
 TEST_CASE("climb frames without a hold follow the ticks exactly") {
     ClimbFrames climb(0);
     CHECK(climb.update(1));

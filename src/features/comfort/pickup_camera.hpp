@@ -67,10 +67,11 @@ public:
     void step(const Frame& frame);
     // Each game view, after the body is built: its yaw and whether it is the player's own heading (head aim
     // gave it, not a camera the game drives or a menu's hold). Kept as the heading to hold only outside a
-    // pickup and its restore window. Under a menu (step's Frame::menu) a body that is not the player's own
-    // leaves the heading from before the menu as it was: the Sentinel Crystal's sync starts as its upgrade
-    // menu closes.
-    void noteBody(float yaw, bool own);
+    // pickup and its restore window. Under a menu (step's Frame::menu, or `menu`: the body is a menu's hold
+    // as head aim saw it in this view, a menu that came up after step() read it) a body that is not the
+    // player's own leaves the heading from before the menu as it was: the Sentinel Crystal's sync starts as
+    // its upgrade menu closes. Returns true when only `menu` kept it (the menu came up within the view).
+    bool noteBody(float yaw, bool own, bool menu = false);
 
     // While the pickup runs: the heading the body keeps; nullopt without one.
     [[nodiscard]] std::optional<float> held() const { return running_ ? held_ : std::nullopt; }

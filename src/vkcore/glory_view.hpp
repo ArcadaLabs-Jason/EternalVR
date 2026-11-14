@@ -34,6 +34,8 @@ public:
     [[nodiscard]] bool onScreen() const { return view_ == comfort::GloryView::Screen && episode_.active(); }
     // Fade: the view is held black.
     [[nodiscard]] bool black() const { return view_ == comfort::GloryView::Fade && episode_.active(); }
+    // Follow: the kill's camera drives every head-tracked view of the kill (comfort::killCameraDrivesView).
+    [[nodiscard]] bool drivesView() const { return comfort::killCameraDrivesView(view_, episode_.active()); }
     // Steady: the body yaw the view keeps while the kill runs (the one before it started); nullopt otherwise.
     [[nodiscard]] std::optional<float> steadyYaw() const;
     // Steady, just after a kill: the body yaw head aim turns the game's aim back to (the view never turned

@@ -149,7 +149,11 @@ items and do not block v1.
     in the game folder, OptiScaler's among them (`CompatibilityChecks.cs`).
   - Other implicit layers (RTSS, OBS game capture, ReShade's Vulkan layer, Overwolf and similar) are
     either tested alongside ours or named and disabled for the launch through their
-    `disable_environment` variables; the known-bad list is data, not code (T-095).
+    `disable_environment` variables; the known-bad list is data, not code (T-095). As built (rig,
+    2026-11-13, `docs/release/RELEASE-CHECKLIST.md` item 7): OBS game capture works and is not named;
+    RTSS works and is named with a warning (a frame limit in it halves the headset's rate, and its
+    variable does not switch it off, since RTSS also hooks the game directly); ReShade's Vulkan layer is
+    disabled, and the game's own layer blacklist keeps it out as well.
   - `+r_allowBlackListedLayers 1` is available if the game's layer warning ever fires (R02).
 - **Preflight** (launcher): Steam running and logged in,
   elevation (silently disables HKCU layers; the launcher refuses to run elevated), an unwritable data

@@ -9,7 +9,9 @@ $script:QaWorkspace = $env:EVR_WORKSPACE
 if (-not $script:QaWorkspace) {
     $d = $script:QaRepo
     while ($d -and -not (Test-Path (Join-Path $d 'tmp-vr'))) { $d = Split-Path -Parent $d }
-    $script:QaWorkspace = $d
+    # None above it (a CI checkout, where the rig-script tests dot-source this file): the repo, so every path below
+    # is still well formed; the tests set the paths they use.
+    $script:QaWorkspace = if ($d) { $d } else { $script:QaRepo }
 }
 $script:QaStopFile = Join-Path $script:QaWorkspace 'tmp-vr\STOP-RIG'
 $script:QaStageRoot = Join-Path $script:QaWorkspace 'tmp-vr\rs'
@@ -97,16 +99,16 @@ function Assert-QaCanStart {
     if (Test-QaGameRunning) { throw "$script:QaGameProcess.exe is already running; the suite starts only on an idle rig" }
 }
 
-# A new scenario context: what the scenario's timeline and assertions read and write.
+# A new scenario context: what the scenario's timeline and assertions read and write (Scenario: its own fields).
 function New-QaContext($Scenario, [string]$Out) {
     $dir = Join-Path $Out $Scenario.Name
     New-Item -ItemType Directory -Force $dir | Out-Null
     return @{
-        Name = $Scenario.Name; Label = "qa-$($Scenario.Name)"; Out = $Out; Dir = $dir; Since = Get-Date
+        Name = $Scenario.Name; Scenario = $Scenario; Label = "qa-$($Scenario.Name)"; Out = $Out; Dir = $dir; Since = Get-Date
         Stage = $null; LogsDir = $null; RunDir = $null; InputPath = $null; Vdd = $null; DumpWatch = $null; Env = @()
         Shots = New-Object System.Collections.ArrayList; Results = New-Object System.Collections.ArrayList
         Notes = New-Object System.Collections.ArrayList; Stopped = $false; Abort = $false; Skipped = $false; CloudRestore = $false
-        Try = 1; Timing = $null; LateBy = $null
+        Try = 1; Timing = $null; LateBy = $null; Pad = $null; PadPath = $null; PadLog = $null; PadExitedEarly = $false
     }
 }
 
@@ -145,6 +147,63 @@ function Write-QaInput($Ctx, [string[]]$Lines) {
         if ($try -ge 100) { throw "could not replace $($Ctx.InputPath): Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
         Start-Sleep -Milliseconds 5
     }
+}
+
+# A gamepad-mode scenario's virtual pad (qa-pad.py, ViGEmBus; README "Gamepad mode scenarios"): plugged in before the
+# game starts, so the game reads it from its first frame, and set from <stage>-pad.txt as Write-QaPad rewrites it.
+$script:QaPadDll = Join-Path $script:QaWorkspace 'tools\bin\vigem\ViGEmClient.dll'
+$script:QaPadPython = Join-Path $script:QaWorkspace 'venv\Scripts\python.exe'
+$script:QaPadScript = Join-Path $PSScriptRoot 'qa-pad.py'
+function Start-QaPad($Ctx) {
+    if (-not (Test-Path -LiteralPath $script:QaPadDll)) { throw "no ViGEm client at $script:QaPadDll (gamepad-mode scenarios need it and ViGEmBus)" }
+    $python = if (Test-Path -LiteralPath $script:QaPadPython) { $script:QaPadPython } else { 'python' }
+    $Ctx.PadPath = "$($Ctx.Stage)-pad.txt"
+    $Ctx.PadLog = "$($Ctx.Stage)-pad.log"
+    [IO.File]::WriteAllText($Ctx.PadPath, "`n")
+    if (Test-Path -LiteralPath $Ctx.PadLog) { Remove-Item -LiteralPath $Ctx.PadLog -Force }
+    $Ctx.Pad = Start-Process -FilePath $python -PassThru -WindowStyle Hidden -ArgumentList @(
+        '-I', "`"$script:QaPadScript`"", "`"$script:QaPadDll`"", "`"$($Ctx.PadPath)`"", "`"$($Ctx.PadLog)`"", "$PID")
+    for ($i = 0; $i -lt 50; $i++) {
+        $log = if (Test-Path -LiteralPath $Ctx.PadLog) { Get-Content -LiteralPath $Ctx.PadLog -Raw } else { '' }
+        if ($log -match 'pad plugged in') { Write-QaLine '  pad: a virtual Xbox 360 pad plugged in'; return }
+        if ($log -match 'failed' -or $Ctx.Pad.HasExited) { throw "the virtual pad did not plug in: $log" }
+        Start-Sleep -Milliseconds 100
+    }
+    throw 'the virtual pad did not plug in within 5 s'
+}
+
+# The pad's state until the next call (qa-pad.py's line: 'rs', 'a', 'down', 'rx=20000', 'lb,a'; '' at rest), written
+# in one step as Write-QaInput writes the input file.
+function Write-QaPad($Ctx, [string]$State) {
+    if (-not $Ctx.PadPath) { throw 'Write-QaPad: no pad in this scenario (Pad = $true)' }
+    if ($Ctx.Pad -and $Ctx.Pad.HasExited) { $Ctx.PadExitedEarly = $true; throw "the virtual pad exited before the state '$State'" }
+    $tmp = "$($Ctx.PadPath).tmp"
+    [IO.File]::WriteAllText($tmp, "$State`n")
+    for ($try = 0; -not [QaNative]::MoveFileExW($tmp, $Ctx.PadPath, 0x1 -bor 0x8); $try++) {
+        if ($try -ge 100) { throw "could not replace $($Ctx.PadPath): Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+        Start-Sleep -Milliseconds 5
+    }
+}
+
+# A press: the state held $Seconds, then the pad at rest.
+function Invoke-QaPadPress($Ctx, [string]$State, [double]$Seconds = 0.2) {
+    Write-QaPad $Ctx $State; Wait-QaSeconds $Ctx $Seconds
+    Write-QaPad $Ctx ''
+}
+
+# Unplugs the pad (its log copied into the scenario's folder), then one result: the pad stayed plugged in until the
+# stop and applied every state (no failed update, no state it could not parse).
+function Stop-QaPad($Ctx) {
+    if (-not $Ctx.Pad) { return }
+    $early = $Ctx.PadExitedEarly -or $Ctx.Pad.HasExited
+    try { Write-QaPad $Ctx 'end' } catch {}
+    if (-not $Ctx.Pad.WaitForExit(3000)) { Stop-Process -Id $Ctx.Pad.Id -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $Ctx.PadLog) { Copy-Item -LiteralPath $Ctx.PadLog (Join-Path $Ctx.Dir 'pad.log') -ErrorAction SilentlyContinue }
+    $log = if (Test-Path -LiteralPath $Ctx.PadLog) { Get-Content -LiteralPath $Ctx.PadLog -Raw } else { '' }
+    $states = @([regex]::Matches($log, "state '")).Count
+    $bad = @([regex]::Matches($log, 'failed|not applied|state file gone|is gone: unplugged|s: unplugged|could not be loaded')).Count
+    Add-QaResult $Ctx 'pad: the virtual pad stayed plugged in and applied every state' (-not $early -and $log -match 'pad plugged in' -and $log -match 'pad unplugged' -and $bad -eq 0) ("$states state(s), $bad problem line(s)$(if ($early) { '; it exited before the stop' })")
+    $Ctx.Pad = $null
 }
 
 # procdump waits for the game and writes a dump if it dies of an unhandled exception.

@@ -5,6 +5,7 @@
 #include "xr_math/camera_turn.hpp"
 
 #include "xr_math/head_aim.hpp"
+#include "xr_math/head_view.hpp"
 
 #include "support/approx.hpp"
 
@@ -191,6 +192,37 @@ TEST_CASE("camera heading hold: a cut that stays is followed two views late, onc
         CHECK(r.out[5] == doctest::Approx(-180.0f));
         CHECK(r.out[6] == doctest::Approx(-180.0f));
         CHECK(r.out[7] == doctest::Approx(kNest[2]));
+    }
+}
+
+// View aim: no head aim, the body is the game camera's own yaw (yawOnly), which held the crystal's flick: its
+// sync's first view showed the camera at (-9.66, 124.49) against 135 before and after, the player's angles at
+// 135 (rig 2026-11-12, run pv2, menu-crystal-view: the view turned -10.5 and back in one frame each). The
+// body built on the camera turned back by the hold (PickupView::withoutFlick) stays on 135.
+TEST_CASE("camera heading hold: view aim's body on the game's yaw leaves the crystal's flick out") {
+    using evr::xr_math::anglesFromAxis;
+    using evr::xr_math::axisFromAngles;
+    using evr::xr_math::IdAngles;
+    for (const double rate : kRates) {
+        CAPTURE(rate);
+        std::vector<IdAngles> camera(10, IdAngles{0.0f, 135.0f, 0.0f});
+        camera.push_back({-9.66f, 124.49f, 0.0f});
+        camera.insert(camera.end(), 20, IdAngles{-9.67f, 135.0f, 0.0f});
+        CameraHeadingHold hold;
+        double t = 1.0;
+        int starts = 0;
+        std::vector<float> body;
+        for (const IdAngles& c : camera) {
+            const float turn = hold.update(c.yaw, 135.0f, t, true);
+            starts += hold.started() ? 1 : 0;
+            const auto yaw = evr::xr_math::yawOnly(evr::xr_math::turnYaw(axisFromAngles(c), turn));
+            REQUIRE(yaw.has_value());
+            body.push_back(anglesFromAxis(*yaw).yaw);
+            t += 1.0 / rate;
+        }
+        CHECK(starts == 1);
+        CHECK(largestStep(body) < 0.01f);
+        CHECK(body.back() == doctest::Approx(135.0f).epsilon(1e-4));
     }
 }
 

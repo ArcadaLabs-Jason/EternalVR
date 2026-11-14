@@ -8,10 +8,12 @@
 #include "game/eternal/usercmd_buttons.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/dossier_screen_hook.hpp"
+#include "vkcore/gamepad_mode.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/menu_cursor.hpp"
 #include "vkcore/menu_cursor_hide.hpp"
 #include "vkcore/menu_input.hpp"
+#include "vkcore/menu_model_hook.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/prompt_hint_keys.hpp"
 #include "vkcore/prompt_load_tips.hpp"
@@ -20,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 #include <utility>
 
@@ -49,6 +52,15 @@ Pose pointerAim(input::Hand hand, const input::HandState& h, const input::InputF
 }
 int g_unaskedScreens = 0;
 constexpr int kUnaskedScreenLines = 10;
+int g_padMenuLines = 0;       // gamepad mode's menus without a cursor, logged as they come and go
+menu::PadMenuWatch g_padMenu; // XR worker only
+constexpr int kPadMenuLines = 40;
+bool g_menuModel = false; // a menu's 3D model placed (menu_model::modelShown), logged as it comes and goes
+int g_menuModelLines = 0;
+constexpr int kMenuModelLines = 40;
+bool g_dossierOpen =
+    false; // the Dossier open by its own calls (menu::dossierOpen), logged as it comes and goes
+int g_dossierLines = 0;
 
 // The pointer's drawing (presenter_menu.cpp has the beam's thickness and the images): the beam's length when
 // it misses the panel, the dot's angular size and its offset.
@@ -254,6 +266,62 @@ void XrPresenter::Impl::updateMenu(XrTime time, bool panelContent) {
     }
     menuHeld = menuHeld && menuPanelPlaced && menuPanel.width > 0.0f;
     menuUp.store(cursorActive || menuOn || menuHeld, std::memory_order_relaxed);
+    // Gamepad mode: a menu the pad navigates shows no cursor; head aim holds the body under it as under a
+    // menu (menu::padMenuOverGame, menuOverGame). The mod bot's shows its weapon's model, not the backdrop;
+    // the Dossier's map and CODEX pages neither, but the Dossier's own open and close tell it
+    // (menu::padDossierOverGame), with no wait.
+    std::uint32_t dossierOpens = 0;
+    bool dossierLastOpen = false;
+    std::uint32_t loadsAtOpen = 0;
+    dossier_screen::readOpen(dossierOpens, dossierLastOpen, loadsAtOpen);
+    const bool dossierOpen =
+        menu::dossierOpen(dossierOpens, dossierLastOpen, loadsAtOpen, mp_guard::mapLoads());
+    if (dossierOpen != g_dossierOpen && g_dossierLines < kMenuModelLines) {
+        ++g_dossierLines;
+        if (dossierOpen) {
+            EVR_LOG("menu: the Dossier opens (its open call %u)%s", dossierOpens,
+                    controllers::gamepadView() ? "; gamepad mode: a menu over the game while it is open"
+                                               : "");
+        } else {
+            EVR_LOG("menu: the Dossier is closed%s", dossierLastOpen ? " (a map load ended it)" : "");
+        }
+    }
+    g_dossierOpen = dossierOpen;
+    const bool model = menu_model::modelShown();
+    if (model != g_menuModel && g_menuModelLines < kMenuModelLines) {
+        ++g_menuModelLines;
+        if (model) {
+            EVR_LOG("menu: a menu's 3D model is placed every tick (a weapon mod or customize screen)");
+        } else {
+            EVR_LOG("menu: no menu's 3D model placed any more");
+        }
+    }
+    g_menuModel = model;
+    const bool gamepad = controllers::gamepadView();
+    const bool cursorMenu = cursorActive || menuOn || menuHeld;
+    const bool seen =
+        allowed && menu::padMenuOverGame(gamepad, cursorMenu, uiBackdrop.backdrop(), shownHasView, model);
+    const bool known = allowed && menu::padDossierOverGame(gamepad, cursorMenu, dossierOpen, shownHasView);
+    const menu::PadMenuWatch::Step pad = g_padMenu.update(seen, now, mp_guard::mapLoads(), known);
+    const bool padMenu = pad.up;
+    if (pad.capped && g_padMenuLines++ < kPadMenuLines) {
+        EVR_LOG(
+            "menu: the menu without a cursor has been up %.0f s: head aim no longer holds the body for it",
+            menu::PadMenuWatch::kMaxSeconds);
+    }
+    if (padMenuUp.exchange(padMenu, std::memory_order_relaxed) != padMenu &&
+        g_padMenuLines++ < kPadMenuLines) {
+        EVR_LOG(
+            "%s",
+            padMenu
+                ? (known ? "menu: a menu over the game without a cursor (gamepad mode: the pad navigates it, "
+                           "the Dossier open over the head-tracked view); head aim holds the body until it "
+                           "goes"
+                         : "menu: a menu over the game without a cursor (gamepad mode: the pad navigates it, "
+                           "the GUI's backdrop or a menu's 3D model over the head-tracked view for 0.5 s); "
+                           "head aim holds the body until it goes")
+                : "menu: the menu without a cursor is gone");
+    }
     controllers::updateLoadTipsKeys(frame, now, cursorActive || menuOn || menuHeld, shownHasView);
 
     menu::RouterInput in;

@@ -36,6 +36,37 @@ void CameraTurn::play(const IdAngles& step) {
     keepLarger(largest_.roll, turn_.roll);
 }
 
+bool CameraTurn::openingPair(float a, float b) const {
+    const float share = timing_.cutShare;
+    const bool split = a < timing_.hugeDegrees && b < timing_.hugeDegrees && a >= share * b &&
+                       b >= share * a && a + b > timing_.cutDegrees;
+    const bool intoHuge = a > timing_.cutDegrees && b >= timing_.hugeDegrees; // a jump, then a cut
+    return timing_.openingPair && (split || intoHuge);
+}
+
+void CameraTurn::settleOpening(float after) {
+    if (!opening_) {
+        settle(after);
+        return;
+    }
+    const float a = largestAngle(*opening_);
+    const float b = held_ ? largestAngle(*held_) : 0.0f;
+    if (openingPair(a, b) && after < timing_.cutShare * (a + b)) {
+        cuts_ += 2; // the cut to the animation's start over two frames: both steps left out
+        before_ = 0.0f;
+        opening_.reset();
+        held_.reset();
+        return;
+    }
+    // Not one: the two steps settle one after the other as any (the first before the second).
+    const std::optional<IdAngles> second = held_;
+    held_ = opening_;
+    opening_.reset();
+    settle(b);
+    held_ = second;
+    settle(after);
+}
+
 void CameraTurn::settle(float after) {
     if (!held_) {
         return;
@@ -64,6 +95,8 @@ std::optional<IdAngles> CameraTurn::update(bool follow, const IdViewAxis& camera
             }
             releasing_ = false;
             held_.reset();
+            opening_.reset();
+            steps_ = 0;
             before_ = 0.0f;
             if (finite(now)) {
                 last_ = now;
@@ -76,12 +109,22 @@ std::optional<IdAngles> CameraTurn::update(bool follow, const IdViewAxis& camera
         const IdAngles step{normalize180(now.pitch - last_->pitch), normalize180(now.yaw - last_->yaw),
                             normalize180(now.roll - last_->roll)};
         last_ = now;
-        settle(largestAngle(step));
+        // The follow's first two steps that may be the start's cut over two frames: the first waits for the
+        // step after the second (a frame more); any other first step settles as every step does.
+        const bool second = steps_ == 1; // this is the follow's second step
+        if (steps_ < 2) {
+            ++steps_;
+        }
+        if (second && held_ && openingPair(largestAngle(*held_), largestAngle(step))) {
+            opening_ = held_;
+        } else {
+            settleOpening(largestAngle(step));
+        }
         held_ = step;
         return turn_;
     }
     if (last_) {
-        settle(0.0f); // the camera's last step: nothing after it
+        settleOpening(0.0f); // the camera's last step: nothing after it
         last_.reset();
         releasing_ = true;
         releaseFrom_ = turn_;

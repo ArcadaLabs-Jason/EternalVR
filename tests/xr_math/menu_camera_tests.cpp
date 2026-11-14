@@ -4,8 +4,16 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+
 using evr::test::approxEqual;
+using evr::xr_math::anglesFromAxis;
 using evr::xr_math::axisFromAngles;
+using evr::xr_math::cameraDrivesView;
+using evr::xr_math::drivenBodyYaw;
 using evr::xr_math::drivenCamera;
 using evr::xr_math::HeadAimState;
 using evr::xr_math::headAimStep;
@@ -89,4 +97,77 @@ TEST_CASE("a degenerate rendered axis leaves the held body yaw") {
     const HeadAimState state = aimed(10.0f, 20.0f);
     const IdViewAxis zero{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     CHECK(approxEqual(menuBodyYaw(state, 10.0f, axisFromAngles({0.0f, 30.0f, 0.0f}), zero), 10.0f));
+}
+
+TEST_CASE("under a menu the pad's look stick turns the game's command, not the body the menu holds") {
+    // Gamepad mode at Exultia's mod bot (rig, 2026-11-12, run pa2): the head still, the body -131.6 as the
+    // menu came up, the game holding its view there while the pad's look stick turned its command; head aim's
+    // own step took that turn into the body (53.1 as the menu closed, then a 175.3 degree turn in one frame
+    // back to the game's -131.6). Held as under a menu, the body stays.
+    HeadAimState state = aimed(-131.6f, 0.0f);
+    const float delta = -131.6f; // the delta the game's view holds (the command 0)
+    const evr::xr_math::HeadAimStep before =
+        headAimStep(state, {0.0f, -131.6f, 0.0f}, delta, {0.0f, 0.0f, 0.0f}, false);
+    CHECK(approxEqual(before.bodyYaw, -131.6f));
+    noteWritten(state, delta + before.deltaYaw);
+    const float turned = 184.7f; // the command's turn by the look stick under the menu
+    const evr::xr_math::HeadAimStep drifted =
+        headAimStep(state, {0.0f, normalize180(-131.6f + turned), 0.0f}, delta, {0.0f, 0.0f, 0.0f}, false);
+    CHECK(approxEqual(drifted.bodyYaw, 53.1f, 1e-3f));
+    const IdViewAxis held = axisFromAngles({0.0f, -131.6f, 0.0f}); // the game's view under the menu
+    CHECK(approxEqual(menuBodyYaw(state, before.bodyYaw, held, held), -131.6f));
+}
+
+TEST_CASE("a pickup's camera shown with Still view drives every view of it, not only past 15 degrees") {
+    // Head aim at the Sentinel Crystal (rig, 2026-11-12, run pa3, the head taken as still here): the player's
+    // view angles stayed at the head's 129.88 through the sync while the camera swung out past 15 degrees
+    // from them and back (its pitch and yaw in consecutive game views, traces 890 to 899 and 930 to 939).
+    // Head aim's own body was 132.28.
+    const IdViewAxis player = axisFromAngles({0.0f, 129.88f, 0.0f});
+    constexpr std::array<std::array<float, 2>, 20> kCamera = {
+        {{0.31f, 140.65f},  {0.75f, 142.20f},  {1.17f, 144.07f},  {1.60f, 146.05f},  {-0.04f, 147.63f},
+         {-2.27f, 148.99f}, {-3.80f, 150.39f}, {-4.01f, 151.62f}, {-4.22f, 152.82f}, {-4.20f, 153.98f},
+         {-2.68f, 145.86f}, {-3.08f, 144.81f}, {-3.51f, 143.71f}, {-3.91f, 142.65f}, {-4.42f, 141.87f},
+         {-4.95f, 141.05f}, {-5.48f, 140.23f}, {-5.98f, 139.45f}, {-6.44f, 138.76f}, {-6.82f, 138.23f}}};
+    const HeadAimState state = aimed(132.28f, 0.0f);
+    // The body of one view: the camera's heading when it drives the view, else head aim's own.
+    const auto body = [&](bool follow, const std::array<float, 2>& c) {
+        const IdViewAxis camera = axisFromAngles({c[0], c[1], 0.0f});
+        return cameraDrivesView(follow, player, camera)
+                   ? drivenBodyYaw(state, anglesFromAxis(camera).yaw, 0.0f, false)
+                   : 132.28f;
+    };
+    float alone = 0.0f;  // the largest step of the body by the 15 degrees alone
+    float follow = 0.0f; // and with the pickup's camera driving every view
+    float camera = 0.0f; // the camera's own largest step
+    for (std::size_t i = 1; i < kCamera.size(); ++i) {
+        if (i == 10) {
+            continue; // the two runs of views are apart
+        }
+        alone =
+            std::max(alone, std::fabs(normalize180(body(false, kCamera[i]) - body(false, kCamera[i - 1]))));
+        follow =
+            std::max(follow, std::fabs(normalize180(body(true, kCamera[i]) - body(true, kCamera[i - 1]))));
+        camera = std::max(camera, std::fabs(kCamera[i][1] - kCamera[i - 1][1]));
+    }
+    // The 15 degrees alone: in to the camera's heading 13.8 degrees in one view (9.5 with the rig's head) and
+    // back.
+    CHECK(alone > 13.0f);
+    // Followed in every view the body steps no more than the camera does.
+    CHECK(follow <= camera + 1e-3f);
+    CHECK(camera < 2.5f);
+    // The camera within 15 degrees of the player's angles still drives the view of a pickup.
+    CHECK_FALSE(drivenCamera(player, axisFromAngles({1.17f, 144.07f, 0.0f})));
+    CHECK(cameraDrivesView(true, player, axisFromAngles({1.17f, 144.07f, 0.0f})));
+    CHECK(cameraDrivesView(false, player, axisFromAngles({1.60f, 146.05f, 0.0f})));
+}
+
+TEST_CASE(
+    "under a menu over a pickup shown with Still view the camera drives the view within 15 degrees too") {
+    HeadAimState state = aimed(129.9f, 0.0f);
+    const IdViewAxis player = axisFromAngles({0.0f, 129.9f, 0.0f});
+    const IdViewAxis camera =
+        axisFromAngles({0.0f, 135.0f, 0.0f}); // the crystal's own heading, 5.1 degrees off
+    CHECK(approxEqual(menuBodyYaw(state, 129.9f, player, camera), 129.9f));
+    CHECK(approxEqual(menuBodyYaw(state, 129.9f, player, camera, true), 135.0f, 1e-3f));
 }

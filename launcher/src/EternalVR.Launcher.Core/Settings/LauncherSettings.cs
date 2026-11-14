@@ -58,7 +58,8 @@ namespace EternalVR.Launcher.Core.Settings
     /// <summary>
     /// The launcher's own per-machine settings (<c>%LOCALAPPDATA%\EternalVR\launcher.ini</c>), a flat
     /// <c>key = value</c> file with a <c>schema_version</c> (T-093, T-106). A newer schema is refused and
-    /// the file left untouched. This is not the layer's TOML settings file (ARCHITECTURE section 12),
+    /// the file left untouched; an older one is read, and kept as <c>launcher.ini.schema&lt;n&gt;.bak</c> the first time it is
+    /// saved over (<see cref="Save"/>). This is not the layer's TOML settings file (ARCHITECTURE section 12),
     /// which a later launcher version writes.
     /// Schema 2 added the mode, the controllers and hand aim. The room-scale keys (posture, height, ipd_mm,
     /// recenter_hold) are optional in schema 2: a file without them takes the defaults, and an older launcher
@@ -478,21 +479,6 @@ namespace EternalVR.Launcher.Core.Settings
                 foreach (var kv in UnknownKeys) sb.AppendLine(kv.Key + " = " + OneLine(kv.Value));
             }
             return sb.ToString();
-        }
-
-        public static LauncherSettings Load(string path) =>
-            File.Exists(path) ? Parse(File.ReadAllText(path)) : new LauncherSettings();
-
-        /// <summary>Writes atomically (temporary file, then replace).</summary>
-        public void Save(string path)
-        {
-            if (File.Exists(path))
-            {
-                // Never overwrite a file from a newer launcher.
-                Parse(File.ReadAllText(path));
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            FileUtil.WriteAllTextAtomic(path, Serialize());
         }
 
         /// <summary>The layer's <c>ETERNALVR_AIM</c> value.</summary>

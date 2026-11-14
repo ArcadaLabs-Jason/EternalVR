@@ -3,15 +3,16 @@
 // Internal state of the XR presenter (xr_presenter.hpp), shared by its source files: xr_presenter.cpp
 // (settings, shutdown, public entry points), presenter_copy.cpp and presenter_copy_record.cpp (the present
 // hook's copy into the ring), presenter_ring.cpp (the shared ring: creation, import, rebuild, its slots),
-// presenter_head.cpp (the camera hook, head aim, the render latch), presenter_xr.cpp (OpenXR start-up and
-// events), presenter_worker.cpp and presenter_frame.cpp (the XR worker and its frame loop),
-// presenter_stereo.cpp (the per-eye hook, stereo settings and experiments), presenter_seq.cpp (Route S: eye
-// pairs in the ring), presenter_ui.cpp and presenter_ui_xr.cpp (the UI layer: the game's GUI target on its
-// own quad), presenter_reticle.cpp (the hand-aim dot and static images), presenter_menu.cpp and
-// presenter_menu_update.cpp (menus), presenter_window.cpp (which presents reach the game's window, the render
-// size's statistics), presenter_depth_glue.cpp (the depth layer's start, presenter_depth.hpp) and
-// keep_active.cpp. The plain types they share are in presenter_types.hpp; the state of some parts (the D3D12
-// and OpenXR objects, Route S, the UI layer, menus, the window) is in presenter_impl_state.hpp.
+// presenter_head.cpp (the camera hook), presenter_aim.cpp (head aim), presenter_latch.cpp (the render latch),
+// presenter_xr.cpp (OpenXR start-up and events), presenter_worker.cpp and presenter_frame.cpp (the XR worker
+// and its frame loop), presenter_stereo.cpp (the per-eye hook, stereo settings and experiments),
+// presenter_seq.cpp (Route S: eye pairs in the ring), presenter_ui.cpp and presenter_ui_xr.cpp (the UI layer:
+// the game's GUI target on its own quad), presenter_reticle.cpp (the hand-aim dot and static images),
+// presenter_menu.cpp and presenter_menu_update.cpp (menus), presenter_window.cpp (which presents reach the
+// game's window, the render size's statistics), presenter_depth_glue.cpp (the depth layer's start,
+// presenter_depth.hpp) and keep_active.cpp. The plain types they share are in presenter_types.hpp; the state
+// of some parts (the D3D12 and OpenXR objects, Route S, the UI layer, menus, the window) is in
+// presenter_impl_state.hpp.
 
 #include "common/retire_queue.hpp"
 #include "stereo_seq/centered_matrix.hpp"
@@ -201,6 +202,13 @@ struct XrPresenter::Impl final : ViewHookSink,
     // did (first-person play with a verified layout), nullopt to fall back to the game's own yaw.
     std::optional<xr_math::IdViewAxis>
     aimWithHead(std::byte* player, const xr_math::IdViewAxis& gameAxis, Quat headInIdTech);
+    // A menu is over the game for head aim, the pickups, the cutscene re-base and the trace: the cursor's
+    // (menuUp), or in gamepad mode one the pad navigates without a cursor (padMenuUp), never in a cutscene
+    // (its fades are a backdrop without a cursor too). Camera hook thread (cutscene).
+    [[nodiscard]] bool menuOverGame() const {
+        return menuUp.load(std::memory_order_relaxed) ||
+               (padMenuUp.load(std::memory_order_relaxed) && !cutscene);
+    }
     void onRenderLatch(const std::byte* renderView, const float* previousProjection) override;
     bool latestView(ViewRecord& out, std::uint64_t& gap);
     // The view a present shows: latestView's, or under Parallel Eye game frame `pick` (eye 1's; 0: none).

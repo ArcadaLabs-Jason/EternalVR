@@ -316,6 +316,39 @@ $hudScenarios = @(
             $text = if ($txt) { Read-QaShared $txt.FullName } else { '' }
             Add-QaResult $c 'the in-headset capture names the hand HUD cuts' ($text -match 'cut for the hand HUD: \(\d+, \d+\) \d+ x \d+') "$(if ($txt) { $txt.Name } else { 'no capture' })"
         }
+    },
+    @{
+        # docs/rig-findings/ui-layer.md sections 12 and 13: the hit and low-health vignette the HUD draws into the
+        # GUI target is taken off the HUD quad; 0.1.46's rule left squares and orange boxes there. A measurement
+        # for a look at the shots, not a check of every merge.
+        Name = 'hud-hit'; Kind = 'game'; OnlyByName = $true
+        Proves = 'Hits and low health with the launcher''s defaults (the HUD panel, the wash filter on): e1m2''s start, the player teleported into the trenches'' fire hazard (trenches_envhazard_volume_fire_3, no god mode): the wash filter''s start-up line, the first GUI image filtered, no filter off or images not made; XR shots before, during the hits and at low health, and an in-headset capture (its -HUD.png), for a look at the HUD panel (no squares, no orange boxes, no red tint left on the panel)'
+        Map = 'game/sp/e1m2_battle/e1m2_battle'
+        Env = @('ETERNALVR_DEBUG_COMMANDS=10:g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0|18:teleport trenches_envhazard_volume_fire_3')
+        UiCaptures = 10
+        Input = @()
+        Timeline = {
+            param($c)
+            Wait-QaSeconds $c 6
+            Save-QaXrShot $c 'before'
+            if (-not (Wait-QaLog $c 'debug-commands: [\d.]+ s: teleport trenches_envhazard' 40)) { Add-QaNote $c 'the teleport into the fire never ran'; return }
+            foreach ($s in @(1, 1.5, 1.5, 2)) { Wait-QaSeconds $c $s; Save-QaXrShot $c "hit-$s-$((Get-Date).ToString('HHmmss'))" }
+            # The in-headset capture (left Menu held, then a trigger) at low health.
+            Write-QaInput $c @('left.menu = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c @('left.menu = 1', 'left.trigger = 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c @(); Wait-QaSeconds $c 1
+            Save-QaXrShot $c 'low'
+            Wait-QaSeconds $c 3
+            Save-QaXrShot $c 'end'
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'ui: the full-screen additive wash (hit and low-health vignette) is removed from the HUD'
+            Test-QaPresent $c 'ui: first GUI image filtered for the wash'
+            Test-QaAbsent $c 'ui: wash filter off'
+            Test-QaAbsent $c 'wash filter images'
+            Test-QaPresent $c 'debug-commands: [\d.]+ s: teleport trenches_envhazard_volume_fire_3' -Regex
+        }
     }
 )
 

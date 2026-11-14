@@ -26,6 +26,17 @@ TEST_CASE("glory view: names parse back, any case and spacing") {
     CHECK_FALSE(parseGloryView("fades").has_value());
 }
 
+TEST_CASE(
+    "glory view: with follow the camera the kill's camera drives every view of the kill, no other time") {
+    CHECK(killCameraDrivesView(GloryView::Follow, true));
+    CHECK_FALSE(killCameraDrivesView(GloryView::Follow, false));
+    // Steady keeps its own heading; the fade and the flat screen show no head-tracked view of the kill.
+    for (const GloryView view : {GloryView::Steady, GloryView::Fade, GloryView::Screen}) {
+        CHECK_FALSE(killCameraDrivesView(view, true));
+        CHECK_FALSE(killCameraDrivesView(view, false));
+    }
+}
+
 TEST_CASE("glory view: a kill's sync entity counts, a pickup's animation does not") {
     // Names traced in headset sessions and on the rig (docs/BHAPTICS.md).
     CHECK(isKillSync("syncmelee/imp"));

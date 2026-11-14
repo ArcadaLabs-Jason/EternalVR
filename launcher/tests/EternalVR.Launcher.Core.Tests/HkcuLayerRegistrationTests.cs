@@ -60,6 +60,27 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
+        public void TheNextStartRemovesTheRegistrationOfAKilledLauncher()
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            // The session's launcher registers and is killed: nothing removes the value then.
+            New().Register(Manifest);
+            Assert.True(File.Exists(Marker));
+            using (var k = Registry.CurrentUser.OpenSubKey(Layers)) Assert.Equal(0, k.GetValue(Path.GetFullPath(Manifest)));
+
+            // The next start: a new registration on the same marker, as SessionRunner.Recover runs first at every start.
+            New().RemoveStale();
+
+            Assert.False(Exists(root));
+            Assert.False(File.Exists(Marker));
+            Assert.Contains(log, l => l.StartsWith("removed the HKCU layer registration: ", StringComparison.Ordinal) && l.Contains("VK_LAYER_ETERNALVR.json"));
+            // Nothing is left for a later start.
+            int lines = log.Count;
+            New().RemoveStale();
+            Assert.Equal(lines, log.Count);
+        }
+
+        [Fact]
         public void ACreatedKeyThatHoldsSomethingElseIsKept()
         {
             if (!OperatingSystem.IsWindows()) return;

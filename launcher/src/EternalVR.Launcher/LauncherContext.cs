@@ -321,6 +321,7 @@ namespace EternalVR.Launcher
             f.RuntimeFromEnvironment = LaunchPlanBuilder.RuntimeFromEnvironment(Settings.Runtime, InheritedRuntime);
             f.RuntimeManifest = EffectiveRuntime();
             f.RuntimeManifestExists = !string.IsNullOrEmpty(f.RuntimeManifest) && File.Exists(f.RuntimeManifest);
+            f.Headset = NextRoute(f.RuntimeManifest);
             if (LaunchPlanBuilder.IsSteamVr(f.RuntimeManifest))
             {
                 f.SteamVrBindings = Core.Report.SteamVrSummary.ReadCustomBindings(SteamRoot);
@@ -423,6 +424,18 @@ namespace EternalVR.Launcher
         /// <summary>The headset and route for a probe's names, with SteamVR's last seen headset and the table of headsets.</summary>
         public HeadsetIdentity Identify(string runtimeName, string systemName) =>
             HeadsetIdentity.Identify(runtimeName, systemName, SteamVrSeen, Data.Headsets);
+
+        /// <summary>
+        /// The route the next launch takes, by its runtime manifest's name, with the headset the last probe read when that
+        /// probe went through the same route; null when the manifest names no runtime.
+        /// </summary>
+        private HeadsetIdentity NextRoute(string runtimeManifest)
+        {
+            var runtime = HeadsetIdentity.ManifestRuntimeName(runtimeManifest);
+            if (runtime == null) return null;
+            bool sameRoute = HeadsetIdentity.RouteOf(Headset.RuntimeName) == HeadsetIdentity.RouteOf(runtime);
+            return Identify(runtime, sameRoute ? Headset.SystemName : null);
+        }
 
         /// <summary>Reads SteamVR's last seen headset again (a SteamVR session may have changed it).</summary>
         public void ReadSteamVrSeen() => SteamVrSeen = SteamVrSummary.ReadLastKnown(SteamRoot);

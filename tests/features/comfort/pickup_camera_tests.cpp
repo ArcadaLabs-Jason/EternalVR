@@ -135,6 +135,26 @@ TEST_CASE("pickup heading: a menu before the pickup keeps the heading the player
     CHECK_FALSE(driven.held().has_value());
 }
 
+// The crystal's upgrade menu coming up within a game view: the pickup's step read no menu, then head aim saw
+// it and held the body for it (the likely cause of `no heading held` in rig run pv5, menu-crystal-play under
+// hand aim, 2026-11-12). That view's body is the menu's hold, not the player's own: the heading stays.
+TEST_CASE("pickup heading: a menu that comes up within a view keeps the heading from before it") {
+    for (const bool late : {true, false}) {
+        CAPTURE(late);
+        PickupHeading heading;
+        at(heading, 0.0);
+        CHECK_FALSE(heading.noteBody(135.0f, true));
+        at(heading, 0.1);                                     // the step reads no menu
+        CHECK(heading.noteBody(135.0f, false, late) == late); // head aim held the body for the menu
+        for (int i = 2; i <= 50; ++i) {
+            at(heading, 0.1 * i, false, false, {}, 1, false, true);
+            CHECK_FALSE(heading.noteBody(135.0f, false, true));
+        }
+        at(heading, 5.1, true, false, {}, 1, false, true);
+        CHECK(heading.held().has_value() == late); // without the flag the view dropped the heading
+    }
+}
+
 TEST_CASE("pickup heading: a pickup right after another keeps the first one's heading") {
     PickupHeading heading;
     at(heading, 0.0);

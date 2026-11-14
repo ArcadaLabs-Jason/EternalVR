@@ -12,6 +12,9 @@ bool finite(Vec3 v) {
 }
 
 constexpr float kDegreesPerRadian = 180.0f / std::numbers::pi_v<float>;
+// yawOnly: how far off the horizon (degrees) the view's up starts to give the heading, and gives all of it.
+constexpr float kUpHeadingFrom = 75.0f;
+constexpr float kUpHeadingFull = 85.0f;
 
 } // namespace
 
@@ -47,14 +50,31 @@ std::optional<IdViewAxis> yawOnly(const IdViewAxis& gameAxis) {
     if (!finite(gameAxis.forward) || !finite(gameAxis.up)) {
         return std::nullopt;
     }
-    Vec3 flat{gameAxis.forward.x, gameAxis.forward.y, 0.0f};
-    if (length(flat) < 1e-3f) {
-        // Straight down: the view's up points along the heading; straight up: against it.
-        const float sign = gameAxis.forward.z < 0.0f ? 1.0f : -1.0f;
-        flat = Vec3{gameAxis.up.x, gameAxis.up.y, 0.0f} * sign;
+    // Straight down the view's up points along the heading; straight up, against it. Near there the
+    // forward's own heading is the small part of it off the vertical, which a rolled camera swings round
+    // while its image hardly turns (the death camera: 100 degrees a frame at 86 degrees down): from
+    // kUpHeadingFrom off the horizon the heading moves over to the up's, all of it from kUpHeadingFull.
+    const Vec3 forwardFlat{gameAxis.forward.x, gameAxis.forward.y, 0.0f};
+    const float sign = gameAxis.forward.z < 0.0f ? 1.0f : -1.0f;
+    const Vec3 upFlat = Vec3{gameAxis.up.x, gameAxis.up.y, 0.0f} * sign;
+    const float off = std::asin(std::fmin(std::fabs(gameAxis.forward.z), 1.0f)) * kDegreesPerRadian;
+    const float t =
+        std::fmin(std::fmax((off - kUpHeadingFrom) / (kUpHeadingFull - kUpHeadingFrom), 0.0f), 1.0f);
+    const bool forwardHeading = length(forwardFlat) >= 1e-3f;
+    const bool upHeading = length(upFlat) >= 1e-3f;
+    Vec3 flat = forwardFlat;
+    if (t > 0.0f && upHeading) {
+        // The two headings' unit vectors weighted by the share t. Not their angles: a camera rolled past 180
+        // degrees flips the shorter way round between them, a jump of t times a full turn in one frame. The
+        // sum is continuous; only the two opposite at exactly half and half leave no heading (the larger
+        // share's then).
+        const Vec3 fromUp = normalize(upFlat);
+        flat = forwardHeading && t < 1.0f ? normalize(forwardFlat) * (1.0f - t) + fromUp * t : fromUp;
         if (length(flat) < 1e-3f) {
-            return std::nullopt;
+            flat = t >= 0.5f ? fromUp : forwardFlat;
         }
+    } else if (!forwardHeading) {
+        return std::nullopt;
     }
     flat = normalize(flat);
     IdViewAxis body;

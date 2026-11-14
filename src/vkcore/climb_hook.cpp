@@ -104,6 +104,8 @@ float g_wallLargestTurn = 0.0f;
 std::uintptr_t g_wallLargestTurnCaller = 0;
 std::uint64_t g_loggedFrames = 0;
 ULONGLONG g_lastStats = 0;
+// Climbs logged at their start and end.
+constexpr std::uint64_t kLoggedClimbs = 30;
 
 bool switchOn() {
     static const bool on = [] {
@@ -285,7 +287,13 @@ bool climbFrame() {
     if (!g_installed) {
         return false;
     }
+    const bool wasOnWall = g_frames.onWall();
     const bool onWall = g_frames.update(g_stepsSinceFrame.exchange(0, std::memory_order_relaxed));
+    if (wasOnWall && !onWall && g_frames.climbs() <= kLoggedClimbs) {
+        EVR_LOG("%s: climb %llu ends after %llu frame(s) on the wall", kTag,
+                static_cast<unsigned long long>(g_frames.climbs()),
+                static_cast<unsigned long long>(g_frames.climbFrames()));
+    }
     noteWallViewWrites(onWall);
     const bool wanted = switchOn() && settings().aim != input::AimSource::View;
     const bool allowed = mp_guard::allowsGameTouch();
@@ -310,6 +318,10 @@ bool climbFrame() {
             "%s: on a climbable wall (wallclimb_takeoverViewAngles %d, wallclimb_deadZone_enable %d): %s%s",
             kTag, cvarInt(g_cvars[0]), cvarInt(g_cvars[1]), stateText(wanted, held),
             held ? ", so the jump goes where the player looks" : "");
+    }
+    if (onWall && !wasOnWall && g_frames.climbs() <= kLoggedClimbs) {
+        EVR_LOG("%s: climb %llu starts: %s", kTag, static_cast<unsigned long long>(g_frames.climbs()),
+                stateText(wanted, held));
     }
     logStats(wanted, held);
     return onWall && held;

@@ -96,6 +96,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void AStartThatCannotFinishTheRenameKeepsTheLockAndTheNextFinishesIt()
         {
+            if (!OperatingSystem.IsWindows()) return; // only Windows refuses to move a folder with a file held open in it
             using (var t = new TempDir())
             {
                 Stopped(t);

@@ -21,8 +21,8 @@ namespace {
 struct Sim {
     std::string live;
     std::optional<std::string> file;
-    SavedCvars<int> book;
-    std::optional<std::string> loaded;
+    SavedCvars<int> book{};
+    std::optional<std::string> loaded{};
     bool fixed = true; // the profile hooks are in
     std::string name = "view_skipShakes";
 

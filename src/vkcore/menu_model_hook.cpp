@@ -182,8 +182,12 @@ void writeCamera(std::byte* view, const menu::ModelCamera& c) {
     std::memcpy(view + render_view::kViewAxis, axis, sizeof(axis));
 }
 
+// When a model's UpdatePosition last ran (nowSeconds; -1: never), read by modelShown on any thread.
+std::atomic<double> g_lastPlaced{-1.0};
+
 // After RenderViewForIndex(0): the view the model is placed from becomes the panel camera.
 void onRenderView(HookRegisters& regs) {
+    g_lastPlaced.store(nowSeconds(), std::memory_order_relaxed); // also with the panel down (modelShown)
     ThreadState& t = t_state;
     t.pending = false;
     t.placedAt = 0;
@@ -511,6 +515,11 @@ void notePanel(bool showing,
     std::lock_guard lock(g_shared.mutex);
     g_shared.panel = image;
     g_shared.panelSeconds = nowSeconds();
+}
+
+bool modelShown() {
+    const double last = g_lastPlaced.load(std::memory_order_relaxed);
+    return last >= 0.0 && nowSeconds() - last <= kFreshSeconds;
 }
 
 void noteHead(const menu::WorldHead& head, float gameFovX) {

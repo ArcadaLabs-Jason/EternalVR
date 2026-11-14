@@ -1,5 +1,6 @@
 #include "features/menu/menu_kind.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace evr::menu {
@@ -60,6 +61,50 @@ const char* menuKindName(MenuKind kind) {
         return "dossier";
     }
     return "?";
+}
+
+bool padMenuOverGame(bool gamepadMode, bool cursorMenu, bool backdrop, bool overGame, bool menuModel) {
+    return gamepadMode && !cursorMenu && (backdrop || menuModel) && overGame;
+}
+
+bool padDossierOverGame(bool gamepadMode, bool cursorMenu, bool dossierOpen, bool overGame) {
+    return gamepadMode && !cursorMenu && dossierOpen && overGame;
+}
+
+bool dossierOpen(std::uint32_t opens, bool lastOpen, std::uint32_t loadsAtOpen, std::uint32_t mapLoads) {
+    return opens != 0 && lastOpen && loadsAtOpen == mapLoads;
+}
+
+PadMenuWatch::Step PadMenuWatch::update(bool seen, double seconds, std::uint32_t mapLoads, bool known) {
+    Step step;
+    if (mapLoads != loads_) {
+        loadedAt_ = seconds;
+    }
+    seen = known || (seen && seconds - loadedAt_ >= kAfterLoadSeconds);
+    if (known) {
+        knownAt_ = seconds;
+    }
+    if (!seen || mapLoads != loads_ || !(seconds >= since_)) {
+        since_ = seen ? seconds : -1.0; // a map load (or a clock gone back) starts the wait again
+        up_ = false;
+        capped_ = capped_ && seen && mapLoads == loads_;
+    } else if (since_ < 0.0) {
+        since_ = seconds;
+    }
+    loads_ = mapLoads;
+    if (!seen || capped_) {
+        return step;
+    }
+    const double held = seconds - since_;
+    if (!known && seconds - std::max(since_, knownAt_) >= kSettleSeconds + kMaxSeconds) {
+        capped_ = true;
+        step.capped = up_;
+        up_ = false;
+        return step;
+    }
+    up_ = known || held >= kSettleSeconds;
+    step.up = up_;
+    return step;
 }
 
 } // namespace evr::menu

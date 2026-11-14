@@ -352,7 +352,10 @@ bug that shows in one eye (`ReportLinks.CaptureLine`); the button's tooltip carr
   a Game Pass folder that is not the game's Content folder and a game never started on this PC (no settings folder), and **warns**
   about 8 GB of video memory or less, more than one GPU, injector DLLs in the game folder (ReShade, SpecialK,
   OptiScaler), a system Vulkan loader older than 1.3.234 and paths outside ASCII
-  (`Preflight/CompatibilityChecks.cs`).
+  (`Preflight/CompatibilityChecks.cs`), and with an "untested on this hardware" notice (T-076, T-095) for a graphics
+  card that is not NVIDIA RTX (the one with the most video memory, by vendor and Radeon generation) and for a route
+  other than VDXR or SteamVR with a Quest (Meta Horizon Link, Pimax Play, Varjo Base, another runtime, or SteamVR with
+  a headset the launcher can name: `Preflight/UntestedHardware.cs`).
 - **The status line** under the buttons shows each session's outcome: a refusal, the Steam hand-off, an early
   exit, the layer's `eternalvr-status.txt` (starting, waiting for the headset, VR in stereo or mono, VR off with
   the reason; a problem only after it has stood 5 s with the game running) and a mod that never wrote

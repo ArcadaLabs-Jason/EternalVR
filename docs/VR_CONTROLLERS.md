@@ -107,6 +107,15 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
     the Revenant aims where the head looks as the Slayer does under head aim (`demon_view.hpp`);
   - **bHaptics** (`startBhaptics`) with the fire hook's shots, the camera hook's frame and its own hooks; a
     Flame Belch shot is told by its fire info (`belchFireInfo`), since no held action names it.
+  - **menus**: with a pad the game hides its cursor in menus, so no panel or pointer comes up; the menu shows on
+    the HUD quad. The layer instead takes the menu's dark full-screen background, over the game's view for half a
+    second, as a menu, and keeps the view still under it as under any menu (`menu::padMenuOverGame`,
+    `menu::PadMenuWatch`, docs/VR_HEAD_TRACKED.md "Gamepad mode's menus"). The mod bot's menu shows the weapon's
+    model in its middle instead of that background: a menu's 3D model placed in the last 0.25 s counts the same
+    (`menu_model::modelShown`), as in the Dossier's Arsenal and CUSTOMIZE WEAPON; the hold ends as the screen
+    closes (rig, docs/rig-findings/camera-animations.md section 9). The Dossier's map and CODEX pages show
+    neither; the Dossier's own open and close tell those (`menu::padDossierOverGame`, `dossier_screen_hook.hpp`),
+    so the whole Dossier holds the view from the frame it opens to the frame it closes (rig, same section).
   Still controllers-only: the capture chord (on a pad every button and chord is the game's, and the chord
   takes its buttons away from the game), a dash or the equipment launcher for the vignette and bHaptics (the
   pad's binds are the game's), and keyboard or mouse motion for the vignette.
@@ -843,7 +852,9 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   inhibit bits still take the view. The stick turns as it did.
   Log: `climb: wall-climb step hook at RVA 0x13B88F0`, the two cvar writes
   (`climb: wallclimb_takeoverViewAngles 1 -> 0 (reads 0)`), once `climb: on a climbable wall
-  (...): the view there is the player's own, so the jump goes where the player looks`, under hand aim
+  (...): the view there is the player's own, so the jump goes where the player looks`, each climb's start and
+  end (`climb: climb N starts: the view there is the player's own` and `climb: climb N ends after F frame(s) on
+  the wall`, the first 30), under hand aim
   `controllers: forced view starts (climbable wall; inhibit 0x7)`, and every 10 s with something new
   `climb: N frame(s) on a climbable wall in C climb(s) (S wall-climb step(s)), hand aim on the head in H;
   the game set the view W time(s) on the wall, T of them turned it (largest D deg, from RVA 0x...)`: T

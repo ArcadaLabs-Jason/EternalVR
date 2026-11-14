@@ -2043,7 +2043,8 @@ process's threads are, so a player's log says how busy the processor is. On by d
 `ETERNALVR_CPU_TIMING=0` turns it off: no extra hook is handed out and every timer returns at once. It
 combines with GPU timing; the two hooks of `vkQueueSubmit` chain.
 
-How it measures (`src/vkcore/cpu_timing.cpp`, pure logic in `src/gpu_timing/cpu_split.cpp`):
+How it measures (`src/vkcore/cpu_timing.cpp`, the Vulkan call hooks in `src/vkcore/cpu_timing_hooks.cpp`,
+pure logic in `src/gpu_timing/cpu_split.cpp`):
 
 - A tick runs from the start of one frame-end job that is not eye R's own (`seq_hooks.cpp`'s wrapper) to
   the next: one game frame, which under Route S is eye L, then eye R.

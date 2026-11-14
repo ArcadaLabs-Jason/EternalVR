@@ -19,13 +19,16 @@ known to be incomplete, **unverified** may be fine but nothing records it.
        The launcher's updater (`launcher/src/EternalVR.Launcher.Core/Update/`) relies on this shape: a tag
        `vX.Y.Z` on the public repo, the zip uploaded as `EternalVR-*.zip` (the symbols zip is never uploaded)
        with its `.sha256` next to it, one top folder holding `SHA256SUMS.txt` for every other file, and the
-       launcher's file version equal to the tag.
+       launcher's file version equal to the tag. Then
+       `powershell -NoProfile -ExecutionPolicy Bypass -File tools\release\verify-release.ps1 -Folder <that folder>`
+       checks the zip against its `.sha256` and every file in it against `SHA256SUMS.txt`, and that `BUILD-INFO.txt`
+       lists the supported builds with their exe hashes.
 3. [ ] **Play the zip's own build once.** Rig runs so far used the Debug layer (`windows-msvc`); this is
        an optimised build. Unzip it outside the checkout, start the launcher from there, and play 15
        minutes: a save loaded, a fight, pause and resume, a menu with the pointer, quit. Check the
        session log shows the guard armed and no errors, and that the settings were restored afterwards.
-4. [ ] Continue a save (not a new campaign) during that run; make sure the new-campaign fullscreen
-       problem is still the only one of its kind (`KNOWN-ISSUES.md`).
+4. [ ] Continue a save and start a new campaign during that run (the new-campaign fullscreen problem of the
+       first alpha is fixed; make sure it stays so).
 5. [ ] Add anything found to "More known issues" in `docs/release/KNOWN-ISSUES.md`, commit, and
        repackage (step 2) so the zip carries it.
 6. [ ] Keep the `-symbols.zip` with the zip's hash; it is what turns a faulting offset in a tester's log
@@ -38,7 +41,8 @@ known to be incomplete, **unverified** may be fine but nothing records it.
        check for missing runtime files and for the first-run messages.
 9. [ ] Publish it as a prerelease on the public repository (tag `v<version>`; release notes with what
        changed, the known issues' headline and the supported game build), with the zip and its `.sha256`
-       attached.
+       attached. CI's "Published release" job then checks the upload against its checksums (the release event; by
+       hand: `tools\release\verify-release.ps1 -Tag v<version>`).
 
 ## M4.5 release track
 
@@ -50,7 +54,7 @@ known to be incomplete, **unverified** may be fine but nothing records it.
 | 4 | Settings and saves: snapshot and key restore, killed game, save-point defence, discovery on a clean machine, save backups and "Restore saves" | **Partly done** | Snapshot, key restore, killed-game restore and save backups are done on the rig. "Restore saves" is built and unit-tested; a live restore is unverified. The save-point defence (flat launch from Steam after a killed session) and the clean-machine discovery check are not recorded. |
 | 5 | Adapter steering by LUID on a two-GPU machine | **Not done** | The layer logs and checks the device LUID but does not reorder devices. |
 | 6 | Launcher preflight v0 | **Done** | Steam, elevation, data folder, Program Files warning, HAGS, anti-cheat files in the game folder, known and conflicting layers (Virtual Desktop's API layer handled) are all in `Preflight.cs`. Anti-cheat modules inside the game process are the layer's tripwire; unverified here. |
-| 7 | Coexistence with RTSS, OBS and ReShade | **Not done** | The known-layer list is data (`launcher/data/known-layers.txt`) and ReShade is disabled, but RTSS and OBS are still marked "not yet tested". |
+| 7 | Coexistence with RTSS, OBS and ReShade | **Done** on the rig (2026-11-13), not yet in a headset | 0.1.94's Release layer on the simulator, the `coexist` QA scenario (e1m2 in stereo, 45 s) with each tool. Stereo pairs a second: four runs without any tool 83.0 to 102.1 (the rig varies that much from run to run); RTSS with its counter 82.8 and 96.6, OBS installed 85.6, OBS capturing and recording (NVENC) 91.7, ReShade switched off 100.3, ReShade forced in 83.7: no cost beyond that spread. **RTSS 7.3.7** works: its counter is drawn into both eye images and counts the game's two presents per stereo pair; a limit of 60 in RTSS gave 29.5 pairs and 30 new images a second to the headset, also with `DISABLE_RTSS_LAYER=1` (RTSS hooks the game without its layer: `RTSSHooks64.dll`), so preflight warns and names the limit. **OBS 33.0** works: its layer (`graphics-hook64.dll`) loads with every launch once installed; game capture of the window records the desktop mirror (the left eye, no HUD), 10 frames skipped at the hook's start and none after; preflight no longer warns. **ReShade 6.6.2** (its Vulkan layer, set up for `DOOMEternalx64vk.exe`): the launcher sets `DISABLE_VK_LAYER_reshade_1=1`, and `ReShade64.dll` is not in the game; the game's own layer blacklist keeps it out too, flat as well; with `+r_allowBlackListedLayers 1` it loads, VR works, and its overlay shows only in the desktop window (likely because it sits below EternalVR's layer, which takes the eye images before the present reaches ReShade). Bandicam and ReShade's OpenXR layer were not run. |
 | 8 | Export report | **Partly done** | **Export report...** (and `--export-report`) writes a redacted zip whose manifest is documented in `TROUBLESHOOTING.md` (`ReportManifest.cs`), with the HAGS state, the file list and size shown before saving; collection, redaction and the manifest are unit-tested. No GitHub issue template asks for it yet. |
 | 9 | User data and updates | **Partly done** | All user data is under `%LOCALAPPDATA%\EternalVR\`; a newer `schema_version` is refused and left unchanged (unit-tested). VR settings profiles (`profiles\<name>.ini`) and the player's own controller maps (`controls\`, one set per profile) exist; an older `schema_version` is rewritten on the first save, without a backup. The update check and in-place install exist; the N to N+1 upgrade is untested. The launcher refuses a layer whose release version differs from its own (`VersionCheck.cs`, unit-tested; the layer's version is its DLL's version resource), and only warns for a Debug (`-dev`) build or a DLL without a version. |
 | 10 | CI: clang-format, rig-script suite on windows-latest, clang-tidy job, 600-line and module-boundary checks | **Not done** | clang-format and the 600-line check (`tools/check_file_size.py`) run. clang-tidy has a local check (`tools/run_clang_tidy.py`, which fails on findings not in its baseline) but no CI job. The rig-script suite and the module-boundary check are not in `ci.yml`. The release script's source check (`-Validate`) now runs on windows-latest. |

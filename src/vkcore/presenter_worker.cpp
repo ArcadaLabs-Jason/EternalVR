@@ -149,9 +149,10 @@ void XrPresenter::Impl::runWorkerStages() {
             EVR_LOG("head: pose lead on: the head and hands are predicted for when frames are shown");
         }
         if (settings.swayPeriod > 0.0f) {
-            EVR_LOG("head: test sway on: yaw %.1f deg, pitch %.1f deg, period %.1f s around a %.1f deg turn, "
-                    "added to the tracked pose",
-                    settings.swayYaw, settings.swayPitch, settings.swayPeriod, settings.swayBaseYaw);
+            EVR_LOG("head: test sway on: yaw %.1f deg, pitch %.1f deg, period %.1f s around a %.1f deg turn "
+                    "and a %.1f deg tilt, added to the tracked pose",
+                    settings.swayYaw, settings.swayPitch, settings.swayPeriod, settings.swayBaseYaw,
+                    settings.swayBasePitch);
         }
         if (!hooks.gameView) {
             EVR_LOG("head: no game view hook; the game's view stays as it is and frames show on the screen");

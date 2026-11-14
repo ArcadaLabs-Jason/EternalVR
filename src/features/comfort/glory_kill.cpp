@@ -62,6 +62,10 @@ const char* gloryViewName(GloryView view) {
     return "follow";
 }
 
+bool killCameraDrivesView(GloryView view, bool killRunning) {
+    return killRunning && view == GloryView::Follow;
+}
+
 GloryEpisode::GloryEpisode(GloryTiming timing) : timing_(timing) {}
 
 GloryEpisode::Step GloryEpisode::update(bool sync, bool forcedView, double seconds, bool paused) {

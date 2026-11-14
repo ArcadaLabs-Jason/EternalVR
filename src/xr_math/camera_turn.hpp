@@ -15,7 +15,8 @@
 // is played (a gore nest's heart pull turns the camera 6 degrees in one frame at 60 frames a second, then 4,
 // section 7 there; a slower frame rate makes every step of a motion larger). So each step is played a game
 // frame late, once the next one is known: the turn follows the camera's motion step for step, one frame
-// behind, and a fast step is never doubled up.
+// behind, and a fast step is never doubled up. The pickup's first step waits a frame more when it and the
+// second could be the start's cut spread over two frames (CameraTurnTiming::openingPair).
 
 #include "xr_math/head_aim.hpp"
 #include "xr_math/head_view.hpp"
@@ -41,6 +42,14 @@ struct CameraTurnTiming {
     // or one next to a fast motion): no camera motion measured on the rig came near it (the heart pull's
     // largest step 6.7 at about 60 frames a second, so about 13 at 30).
     float hugeDegrees = 20.0f;
+    // The pickup's opening: its first two steps together are a cut when the step after them is under
+    // cutShare of their sum and either each is at least cutShare of the other, neither is huge and together
+    // they pass cutDegrees (the camera's cut to the animation's own start spread over two frames: the rune's
+    // 4.0 then 5.6 degrees of yaw from a player 9.6 degrees off its heading under head aim, rig 2026-11-12,
+    // run pa3), or the first passes cutDegrees and the second is huge (the crystal's first frame 15.7
+    // degrees off the player's heading, then 21.1 back to its own, run pa5). Only the opening: a gore nest's
+    // heart pull later in the pickup is two such steps too.
+    bool openingPair = true;
 };
 
 class CameraTurn {
@@ -62,11 +71,19 @@ private:
     void play(const IdAngles& step);
     // Plays held_ (if any) or leaves it out as a cut, from the largest angle of the steps around it.
     void settle(float after);
+    // The opening's first step, kept while its second is held_ (openingPair): settled with it once the step
+    // after them is known.
+    void settleOpening(float after);
+    // The follow's first two steps (their largest angles) could be the start's cut over two frames
+    // (openingPair).
+    [[nodiscard]] bool openingPair(float a, float b) const;
 
     CameraTurnTiming timing_;
-    std::optional<IdAngles> last_; // the camera's angles last frame while followed
-    std::optional<IdAngles> held_; // last frame's step: played (or left out) once the next one is known
-    float before_ = 0.0f;          // the largest angle of the step settled before it (0 after a cut)
+    std::optional<IdAngles> last_;    // the camera's angles last frame while followed
+    std::optional<IdAngles> held_;    // last frame's step: played (or left out) once the next one is known
+    std::optional<IdAngles> opening_; // the follow's first step while its second is held_ (openingPair)
+    unsigned steps_ = 0;              // the steps since the camera was followed (up to 2)
+    float before_ = 0.0f;             // the largest angle of the step settled before it (0 after a cut)
     IdAngles turn_;
     bool releasing_ = false;
     IdAngles releaseFrom_;

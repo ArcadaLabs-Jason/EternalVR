@@ -10,9 +10,11 @@ against the exe with the same checks the layer makes (each signature matches onc
 cross-check holds). `[inferred]`: what the signal means in play is a reading of names, strings and call
 structure; the live experiments in section 4 confirm it.
 
-The code is `src/vkcore/mp_guard.{hpp,cpp}` (detection and latch wiring), `src/vkcore/game_text.{hpp,cpp}`
-(in-memory image helpers shared with the camera hooks) and `src/platform/mp_policy/` (portable rules:
-argument screening, map classes, menu screens, the latch; tested in `tests/platform/mp_policy/`).
+The code is `src/vkcore/mp_guard.{hpp,cpp}` (detection and latch wiring),
+`src/vkcore/mp_guard_points.{hpp,cpp}` (each detection point's signature, cross-checks and hook, section 2),
+`src/vkcore/game_text.{hpp,cpp}` (in-memory image helpers shared with the camera hooks) and
+`src/platform/mp_policy/` (portable rules: argument screening, map classes, menu screens, the latch; tested in
+`tests/platform/mp_policy/`).
 
 ## 1. How the guard behaves
 

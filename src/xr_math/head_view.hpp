@@ -49,9 +49,11 @@ IdViewAxis viewAxisFromQuat(Quat orientation);
 // right-handed frame (forward x left = up). Game data is checked with this before it is used.
 bool isOrthonormal(const IdViewAxis& axis, float tolerance = 1e-3f);
 
-// The body frame: the game view's heading with pitch and roll removed (up = world +Z). When the game
-// looks straight up or down the heading comes from the view's up vector instead. Returns nullopt for
-// a degenerate axis (zero or non-finite rows).
+// The body frame: the game view's heading with pitch and roll removed (up = world +Z). Looking straight
+// up or down the heading comes from the view's up vector instead: from 75 degrees off the horizon the
+// heading turns over to the up's, all of it from 85 (a rolled camera near the vertical swings its forward's
+// heading round while its image hardly turns). Returns nullopt for a degenerate axis (zero or non-finite
+// rows).
 std::optional<IdViewAxis> yawOnly(const IdViewAxis& gameAxis);
 
 // The head-tracked view axis: the headset orientation (id Tech axes, relative to the tracking space)

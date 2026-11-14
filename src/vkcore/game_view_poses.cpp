@@ -8,6 +8,7 @@
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/gamepad_mode.hpp"
+#include "vkcore/log.hpp"
 #include "vkcore/two_hand.hpp"
 
 #include <array>
@@ -42,6 +43,40 @@ WeaponAim smoothWeaponAim(State& s, XrTime poseTime, Pose& roomAim) {
     return aim;
 }
 
+// The player's death, as it comes and as a living player is back (the checkpoint's reload): no feature of
+// its own, the death camera is a camera the game drives like any other (the view keeps the head's pitch and
+// roll, docs/rig-findings/camera-takeovers.md). Camera hook only; the first kLoggedDeaths of each.
+struct DeathWatch {
+    bool dead = false;
+    double since = 0.0;
+    unsigned long long deaths = 0;
+};
+DeathWatch g_death;
+constexpr unsigned long long kLoggedDeaths = 20;
+
+void watchDeath(const std::byte* player) {
+    if (!isPlayerSafe(player)) {
+        return; // a view not built through the idPlayer tells nothing either way
+    }
+    const bool dead = playerDead(player);
+    if (dead == g_death.dead) {
+        return;
+    }
+    g_death.dead = dead;
+    const double now = qpcToSeconds(nowQpc());
+    if (dead) {
+        ++g_death.deaths;
+        g_death.since = now;
+        if (g_death.deaths <= kLoggedDeaths) {
+            EVR_LOG("game: the player died (death %llu): the death camera is the game's, the view keeps the "
+                    "head's pitch and roll",
+                    g_death.deaths);
+        }
+    } else if (g_death.deaths <= kLoggedDeaths) {
+        EVR_LOG("game: a living player is back %.1f s after death %llu", now - g_death.since, g_death.deaths);
+    }
+}
+
 } // namespace
 
 std::optional<WeaponAim> beginGameView(
@@ -56,12 +91,14 @@ std::optional<WeaponAim> beginGameView(
             updateForcedView(player, cutscene, cameraAnimation, wallClimb);
             noteBhapticsFrame(player);
             notePilotedDemon(isPilotedDemon(player, s.player));
+            watchDeath(player);
         }
         two_hand::reset("no controllers");
         return std::nullopt;
     }
     updateForcedView(player, cutscene, cameraAnimation, wallClimb);
     noteBhapticsFrame(player);
+    watchDeath(player);
     refreshTestInput();
     GameViewPoses poses;
     std::array<input::ControllerFit, 2> fits{};

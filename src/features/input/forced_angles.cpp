@@ -135,7 +135,9 @@ bool ClimbFrames::update(std::uint32_t ticks) {
         ++frames_;
         if (!was) {
             ++climbs_;
+            climbFrames_ = 0;
         }
+        ++climbFrames_;
     }
     return onWall_;
 }

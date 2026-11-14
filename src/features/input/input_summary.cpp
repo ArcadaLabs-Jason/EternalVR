@@ -19,7 +19,14 @@ void append(char* out, std::size_t size, std::size_t& length, const char* format
     if (length + 1 >= size) {
         return;
     }
-    const int n = std::snprintf(out + length, size - length, format, args...);
+    // Text without arguments goes through "%s": GCC and Clang refuse a format that is not a literal and
+    // has no arguments (-Wformat-security).
+    int n = 0;
+    if constexpr (sizeof...(Args) == 0) {
+        n = std::snprintf(out + length, size - length, "%s", format);
+    } else {
+        n = std::snprintf(out + length, size - length, format, args...);
+    }
     if (n > 0) {
         length = std::min(size - 1, length + static_cast<std::size_t>(n));
     }

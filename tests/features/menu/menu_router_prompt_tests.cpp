@@ -74,6 +74,13 @@ bool press(InputFrame& frame, const PromptControl& control) {
     case LabelInput::Menu:
         hand.menuButton = true;
         return true;
+    // A thumb rest, a touch or a stick gesture: nothing the router sees pressed.
+    case LabelInput::ThumbRest:
+    case LabelInput::PrimaryTouch:
+    case LabelInput::SecondaryTouch:
+    case LabelInput::StickTouch:
+    case LabelInput::TrackpadTouch:
+    case LabelInput::TriggerTouch:
     case LabelInput::Stick:
     case LabelInput::Count:
         break;

@@ -26,11 +26,11 @@ them is worse for you than described here.
   of sight has not been checked in a headset yet. A camera cut that turns the view more than 90 degrees puts
   the new shot in front of where you look. Close-ups can still feel very near: the game frames them for a
   narrow flat screen.
-- **Room-scale walking is new and lightly tested.** When you step around the room while standing, the
+- **Room-scale walking has had little testing.** When you step around the room while standing, the
   Slayer walks after you in short pulses, so you may hear footsteps start and stop. It has been tested
   in a headset, but not much against walls, on stairs or in heavy combat. It
-  pauses in menus, cutscenes, the air and while you use the move stick (since 0.1.8 the view then rides
-  along with the Slayer instead of fading), and it is off when seated. If it bothers you, untick
+  pauses in menus, cutscenes, the air and while you use the move stick (the view then rides along with the
+  Slayer), and it is off when seated. If it bothers you, untick
   "Room-scale" on the Play tab. Leaning more than about 60 cm while seated still fades the view to black:
   sit back, or hold both sticks pressed for 2 seconds to recenter. After a second and a half of black you
   are moved back onto your body, and "Fade in walls" on the Play tab turns the fade off. Standing up or sitting
@@ -101,6 +101,11 @@ them is worse for you than described here.
   beta restarts its stream to avoid it. If it happens to you: try the Virtual Desktop beta, or step out of the
   game and back in. The log names it (`xr: the runtime has held each frame in xrEndFrame ...`), so an export
   shows it.
+- **A frame rate limit in RivaTuner (RTSS) halves the headset's frame rate.** The game hands over each eye's
+  picture as a frame of its own, so RTSS counts every headset frame twice and its limit applies to both: 60 there
+  gave the headset 30 new frames a second on my test PC. Leave RTSS's limit off for DOOM Eternal; its counter
+  itself is fine (it shows in both eyes, top left). OBS game capture works and records the desktop window (your
+  left eye, no HUD); ReShade stays out of VR. More in TROUBLESHOOTING.md, "RivaTuner (RTSS), OBS and ReShade".
 - **While the headset is off or asleep the game slows to 8 frames a second.** So a laptop doesn't run hot
   through a break: while the headset shows none of the game (asleep, off, or its home or another app in front),
   or says nobody is wearing it, the game draws 8 frames a second, and it's back to full speed the moment the
@@ -153,21 +158,53 @@ them is worse for you than described here.
 - **Pickup animations keep your view still.** At a pickup that moves the game's camera (a Praetor token or
   an automap station) your hands play the animation in front of you, but the view stays where your head
   points instead of tilting with the camera. A gore nest is different: its camera swings far to the side, so
-  the view turns toward the nest in one go, follows that swing and stays facing that way after. "Pickup
-  animations: Camera moves" on the Play tab tilts and turns the view with the camera and then brings it back
+  the view turns toward the nest in one go, follows that swing and stays facing that way after. I checked that
+  again on my test PC after the Sentinel Crystal fix below (about 60 frames a second, not in a headset yet): the
+  turn now comes two frames after the game's camera jumps, still in one go, then follows the swing and leaves
+  you facing where the game does, as before (one gore nest, aiming with the hand). "Pickup
+  animations: Camera moves (intense)" on the Play tab tilts and turns the view with the camera and then brings it back
   to where you were facing; that one is new and not tried in a headset yet. It follows the camera's smooth
   motion only, up to 45 degrees in any direction, and leaves out the game's jumps: when a gore nest's camera
   jumps around to the nest's far side, your view doesn't. On my test PC I checked the token, the automap
   station, gore nests and the Slayer Gate's nest with both settings (after the Slayer Gate's nest the game
-  moves you into the gate's arena and turns you to face it, the same with either setting); I couldn't get a
-  rune, a mod bot or the chainsaw pickup to run there, so those aren't checked yet. A Sentinel Crystal does run
-  there now (no headset yet, aiming with the hand): its upgrade menu comes up in front of you and works with the
-  pointer. On my test PC (one save, about 60 frames a second), once you pick an upgrade your hands
-  crush the crystal in front of you with either setting and you keep facing the same way after: the view no
-  longer flicks about 10 degrees and back as the menu closes, and with "Camera moves" it no longer turns as the
-  crush ends. Other frame rates haven't been checked yet. If you look away from the crystal while your hand points
-  at it, the crush plays where the hand pointed, so you'd have to turn your head to see it. If the view freezes or
-  jumps at a pickup (the chainsaw froze in an early test), please tell me which one.
+  moves you into the gate's arena and turns you to face it, the same with either setting). A Sentinel Crystal,
+  a rune and a mod bot run there now too (no headset yet, aiming with the hand): each one's menu comes up in
+  front of you and works with the pointer. On my test PC (one save, about 60 frames a second), once you pick,
+  your hands crush the crystal, take the rune or grab the drone's case in front of you with either setting,
+  and you keep facing the same way after: the view no longer flicks about 10 degrees and back as the crystal's
+  menu closes, and with "Camera moves (intense)" it no longer turns as the crush ends. The rune and the mod bot showed
+  nothing to fix there. Other frame rates haven't been checked yet, and I couldn't get the chainsaw pickup to run
+  there. If you look away from the crystal while your hand points at it, the crush plays where the hand pointed,
+  so you'd have to turn your head to see it (checked again on my test PC in this version: with the head turned
+  right round, the crush played straight behind the view).
+
+  Aiming with your head (Aim with: Head) and with a gamepad, I've now run the token, a gore nest, the crystal, the
+  rune and the mod bot too, with both settings and the head moving during the pickup (my test PC, about 60 frames a
+  second, not in a headset yet). Three things were wrong there, and they're fixed:
+  - With "Still view", the crystal's and the rune's camera made the view jump to the side and back during the
+    pickup, and the mod bot left you turned about 13 degrees when it ended.
+  - With "Camera moves (intense)", if you weren't facing the crystal or the rune square on, the start of its
+    animation could turn the view up to about 17 degrees in one frame.
+  - With a gamepad, pushing the right stick while the crystal's or the rune's menu was up turned the world behind
+    the menu, then snapped it back when the menu closed.
+
+  The mod bot's menu did that too with a gamepad; that's fixed as well now (my test PC): the world behind it stays
+  put when you push the right stick. The Dossier's map and Codex pages had the same problem with a gamepad: on the map
+  the right stick slid the whole map off to the side instead of just rotating it, and the view snapped back when you
+  closed the Dossier. Fixed now too (my test PC, not in a headset yet). With a gamepad these menus work with the pad's
+  own buttons: hold A to unlock, and the right bumper for the mod bot's tabs. If you stand well off to the side of
+  a rune or a crystal when you use it, "Still view" turns you to face it in one go when its animation starts. With
+  a gamepad that turn can come in two steps, a small one first (about 7 to 8 degrees on my test PC with the head
+  moving as the crystal's menu came up); not fixed yet. "Camera moves (intense)" keeps you facing where you were,
+  so the animation plays off to the side.
+
+  Aiming with the mouse (Aim with: Mouse), I've run the same pickups now too, with both settings and the head moving
+  (my test PC, about 70 to 80 frames a second, not in a headset). The crystal and the rune made the view flick about
+  10 degrees to the side and back as their animation started, with either setting; that's fixed. With the mouse
+  nothing turns your aim back after a pickup, so "Camera moves (intense)" can't keep you facing where you were there:
+  at a gore nest the view turns to the nest's side once, like "Still view", and you end up facing where the game
+  does. The tilt and roll still play. If the view freezes or jumps at a pickup (the chainsaw froze in an early test),
+  please tell me which one.
 - **See-through surfaces while you turn.** In an early headset test, stained-glass windows and similar glass
   smeared while turning; back then the two eyes shared the glass's history. Each eye keeps its own now, and on
   my test PC glass under head motion looks the same in both eyes and the same as in the flat game. Not
@@ -190,7 +227,9 @@ them is worse for you than described here.
   certain spots, so an area can turn darker when you move a single step (the stairs up to the dais in the
   Fortress of Doom are one place). A fix is on by default on the Steam and Game Pass (1.0.56.0) versions of
   the game; on any other version the game keeps its own light culling and the log says why (lines starting
-  with `light-cull:`). If a spot looks wrongly lit since this fix, please tell me where.
+  with `light-cull:`). On my test PC, in this version, the stairs look the same from the spot that used to go
+  dark and the one a step up that was twice as bright. If a spot looks wrongly lit since this fix, please tell
+  me where.
 - **Wet floors and puddles were darker, and different in each eye** (the start of the second mission of The
   Ancient Gods part two, for one). The game left out wet patches (decals) just past each eye's inner edge. The
   eyes now also get the decals nearest to them in the view around both eyes, placed after the game's own list so
@@ -217,9 +256,10 @@ them is worse for you than described here.
 - **Squares on the HUD when you get hit.** In 0.1.46 and 0.1.47 hard hits (most of all in The Ancient
   Gods) and low health could leave blocky edges and orange boxes around the HUD's health and ammo panels.
   They came from the mod's filter that takes the game's red damage tint off the floating HUD panel. 0.1.48
-  replaced that filter, and on my test PC's captures the boxes are gone, but it hasn't been tried in a
-  headset yet. If the HUD still looks wrong (squares, a red tint that stays, or anything else that wasn't
-  there before), please tell me where it happened.
+  replaced that filter, and on my test PC's captures the boxes are gone (checked again in this version,
+  standing in fire down to low health in the second mission), but it hasn't been tried in a headset yet. If
+  the HUD still looks wrong (squares, a red tint that stays, or anything else that wasn't there before),
+  please tell me where it happened.
 - **A short freeze when the game saves a checkpoint.** Right after a fight or just before a cutscene the
   picture can stop for about half a second. That is the game's own checkpoint autosave, not the mod: the
   game holds everything while it writes the save. It happens in the flat game too, but in the headset a
@@ -227,7 +267,7 @@ them is worse for you than described here.
   the HUD now stays up with it instead of blinking off a quarter of a second in (checked on my test PC, not
   in a headset yet). The mod's log names it: the `stall:` line for that freeze ends with
   `the game saved a checkpoint in the gap`.
-- **Alternate eyes is new and not yet tried in a headset.** "Alternate eyes" on the launcher's Advanced tab
+- **Alternate eyes has not been tried in a headset yet.** "Alternate eyes" on the launcher's Advanced tab
   (off by default) draws one eye per frame, taking turns, so a slower processor has about half the work per
   frame. Each eye then updates at half the rate: fast motion can look doubled or smeared, moving demons can
   seem slightly nearer or farther than they are, and some people find it uncomfortable. With "Anti-aliasing"
@@ -322,8 +362,9 @@ them is worse for you than described here.
   turned way off from how you hold a controller, so the glove now takes the Heavy Cannon's grip instead (the
   same grip the Chaingun uses when you zoom). The Ballista has no real grip, so the glove closes on the ridge
   under its stock. The glove now stays on the gun while it fires and kicks too (before, it could trail the
-  Ballista's kick by up to 15 cm for a frame); for that frame the arm moves with the gun, so the shoulder end
-  can jump by up to about 17 cm for one frame with a Ballista shot. A stutter (one long frame) no longer hands
+  Ballista's kick by up to 15 cm for a frame); for that frame the glove and forearm move with the gun, but the
+  shoulder no longer rides the kick: on my test PC the shoulder end moves about 3 cm at most with a Ballista
+  shot (it was up to about 17 cm). A stutter (one long frame) no longer hands
   your arms back to the game's pose for a moment either: on these two guns that slid the glove off the grip
   and back over about half a second. In my headset the hands felt right on every gun; if a glove or a gun
   sits off your hand, please tell me which one and roughly how far.
@@ -416,8 +457,8 @@ them is worse for you than described here.
 - **Shots through thin walls should be fixed in 0.1.87.** Before, if you pushed the gun through a thin wall, the
   shot started at your hand on the other side. It now starts on your side of the wall. I couldn't recreate the
   wall case on my test PC, so if you still see a shot come out behind a wall, tell me.
-- **Vibration** (Vibration on the Play tab) is new and has only been tried on Quest 3 controllers; its
-  strength and feel may change.
+- **Vibration** (Vibration on the Play tab) has only been tried on Quest 3 controllers here; its strength and
+  feel may change.
 - **bHaptics** (bHaptics (experimental) on the Play tab) is experimental. On a real suit a player has felt
   the shots, the landing from a fall and glory kills; the other effects (portals, the Sentinel Crystal, the
   pickup waves including the new ammo wave, jump pads and the rest) have only been checked against a
@@ -433,12 +474,12 @@ them is worse for you than described here.
   them (an extra life, the equipment row) can show on the panel for a moment before it moves too. The wrist
   needs both the health and the ammo block on screen, the gun needs the ammo block: if you hid one in the
   game's HUD settings, the whole HUD stays on the floating panel.
-- **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) is
-  new and has not been tried in a headset yet. How far you need to turn your hand may change.
-- **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) is new
-  and has not been tried in a headset yet.
+- **Picking on the weapon wheel with your hand** (Weapon wheel: Point with your hand, on the Play tab) has
+  not been tried in a headset yet. How far you need to turn your hand may change.
+- **The weapon wheel on a button** (given to one in the controls editor, the turn stick pointing) has not
+  been tried in a headset yet.
 - **The weapon wheel from the thumb rest** (Quest and Rift controllers; Thumb-rest wheel on the Play tab, off
-  by default) is new and has had a few headset tests. Touch, then push is hard to get right and picking with
+  by default) has had a few headset tests. Touch, then push is hard to get right and picking with
   the game's wheel is slow to open; While touched with Weapon by direction works best so far, with one catch: it
   works from either thumb rest, so a thumb resting on the turn hand's rest (the right one, unless you swapped
   the sticks) while you walk makes the walking stick pick weapons instead (with Weapon by direction no wheel
@@ -447,16 +488,12 @@ them is worse for you than described here.
   runtime may not report the thumb rest. Once the game's wheel is open it cannot be cancelled. Turn stick picks (standing) has not been tried
   in a headset yet, nor has the thumb rest's new touch handling (0.1.41: a touch counts at once, a short loss
   is forgiven).
-- **A thumb rest as a button** (Quest and Rift controllers, in the controls editor) is new and has not been
-  tried in a headset yet. If nothing happens when you rest a thumb, your VR runtime may not report the thumb
-  rest. A controls file with a thumb rest in it makes a version of the mod older than 0.1.45 use the built-in
-  controls.
+- **A thumb rest as a button** (Quest and Rift controllers, in the controls editor) has not been tried in a
+  headset yet. If nothing happens when you rest a thumb, your VR runtime may not report the thumb rest.
 - **Touches as buttons** (A, B, X, Y, a stick, a trackpad or a trigger touched without pressing it, in the
-  controls editor) are new and have not been tried in a headset yet. If nothing happens when you touch one,
-  your VR runtime may not report that touch. A press or hold on a touch can fire when you rest a finger
-  there without thinking, and a press is on even while your thumb only brushes past, so Tap is the easiest
-  start. A controls file with a touch in it makes a version of the mod older than 0.1.46 use the built-in
-  controls.
+  controls editor) have not been tried in a headset yet. If nothing happens when you touch one, your VR
+  runtime may not report that touch. A press or hold on a touch can fire when you rest a finger there
+  without thinking, and a press is on even while your thumb only brushes past, so Tap is the easiest start.
 - **The overhead swing** (Gestures on the Play tab, off by default) has had little headset time. How hard you
   need to swing may change. A swing you did not mean still spends a Crucible charge, so turn it off if it fires by
   mistake.
@@ -468,8 +505,10 @@ them is worse for you than described here.
 - **Rumble by hand** (always on): the game does not say what a vibration is for, so the mod guesses from what you
   pressed in the last moments: a hit that lands late, or two things at once, can go to the wrong hand. Tell me if a
   vibration is on the wrong hand.
-- **The meathook and glory kills with hand aim** have had little testing.
-- **Jumping off climbable walls where you look** is new; it works on a Quest 3, other headsets are untried.
+- **The meathook and glory kills with hand aim** have had little testing in a headset. Glory kills with hand aim
+  pass a check on a headset simulator on my test PC (5 kills in each of the four Glory kills views); the meathook
+  hasn't been checked there.
+- **Jumping off climbable walls where you look** works on a Quest 3; other headsets are untried.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
   or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where.
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
@@ -517,17 +556,32 @@ them is worse for you than described here.
   game, so it may come from how the headset shows the menu; if you see it, please tell me your headset and
   your anti-aliasing setting.
 - **The Fortress of Doom** has a few rough spots: some outside surfaces look wrongly shaded, a canister can
-  show black without its texture, and the old computer is hard to use. The displays in the Slayer's office
-  looked ghosted in my headset (with DLSS); on my test PC their moving bars blur a little the same way in both
-  eyes and in the flat game, with TAA and with DLSS.
+  show black without its texture, and the old computer is hard to use. That's from a headset session in
+  October, before the fixes to reflections and wet floors; on my test PC the command deck and the dais look
+  right in this version, but I haven't found the canister or the outside spots there. The displays in the
+  Slayer's office looked ghosted in my headset (with DLSS); on my test PC their moving bars blur a little the
+  same way in both eyes and in the flat game, with TAA and with DLSS.
+
+## Moments VR doesn't handle yet
+
+- **Rides the game moves you on** (the trams in the Cultist Base and the Doom Hunter Base, the Titan carrying your
+  platform in the Blood Swamps, the jump into the Argent stream in Nekravol, the Ion Catapult and the escape pod in
+  Mars Core, the creature ride on the World Spear, long elevators) get nothing of their own from the mod. One the game
+  plays as a cutscene should go on the screen like any cutscene; otherwise you ride along as in the flat game, with no
+  fade and no vignette for the ride. I haven't checked them one by one, on my test PC or in a headset; if one makes
+  you queasy, please tell me which.
+- **Photo mode** (if you turned it on in the game's settings) hasn't been tried in VR, and the mod doesn't switch it
+  off. Its free camera may not behave in the headset; I'd leave it alone for now.
 
 ## Launcher and settings
 
 - **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
-  in a headset; its strength may change.
+  in a headset; its strength may change. It darkens the edges while the sticks move or turn you, while you
+  dash and while the game moves the camera itself (a glory kill, checked on my test PC; the Meathook pull
+  should too). Jump pads, boosters and the Sentinel Hammer's slam don't bring it up yet.
 - **Use the headset's graphics card** (Advanced tab) is for a PC with two or more graphics cards where VR
-  does not start because the game picked another card than the headset's. It is new, off by default, and
-  not yet tried on such a PC with a headset; please tell me if you need it and how it went.
+  does not start because the game picked another card than the headset's. It is off by default and not
+  yet tried on such a PC with a headset; please tell me if you need it and how it went.
 - **Performance overlay** (Advanced tab) is new: it shows the game's own frame rate counter just above the top
   right corner of the HUD panel (Detailed adds the game's average, each eye's resolution and its HDR, ray tracing
   and DLSS settings). The number is the game's frames a second; each draws both eyes, so it is the one to watch

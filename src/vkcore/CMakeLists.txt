@@ -72,6 +72,7 @@ target_link_libraries(evr_parallel_eyes_settings PUBLIC evr_stereo_seq PRIVATE e
 
 add_library(evr_layer SHARED
     adapter_steer.cpp
+    adapter_steer_probe.cpp
     backdrop_probe.cpp
     bin_tile_hooks.cpp
     body_follow.cpp
@@ -83,6 +84,7 @@ add_library(evr_layer SHARED
     client_rect.cpp
     climb_hook.cpp
     cpu_timing.cpp
+    cpu_timing_hooks.cpp
     cvar_book.cpp
     debug_commands.cpp
     demon_aim.cpp
@@ -130,6 +132,7 @@ add_library(evr_layer SHARED
     motion_capture.cpp
     moved_flag_hooks.cpp
     mp_guard.cpp
+    mp_guard_points.cpp
     decal_frustum_hooks.cpp
     object_prev_hooks.cpp
     vis_gate_hooks.cpp
@@ -171,6 +174,7 @@ add_library(evr_layer SHARED
     presenter_fov.cpp
     presenter_cutscene.cpp
     presenter_head.cpp
+    presenter_aim.cpp
     presenter_hud_lock.cpp
     presenter_markers.cpp
     presenter_perf.cpp

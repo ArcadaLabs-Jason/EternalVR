@@ -99,4 +99,62 @@ private:
 // For the log.
 const char* menuKindName(MenuKind kind);
 
+// A menu over the game that shows no cursor: gamepad mode (the motion controllers off) with a pad, where the
+// game navigates its menus by the pad and keeps the cursor hidden (the Sentinel Crystal's, the rune's and the
+// mod bot's menus: rig, 2026-11-12). The layer then sees no menu, head aim goes on as in play while the game
+// holds its view, and the pad's look stick moved the world behind the menu (60 and 175 degrees, then a turn
+// of that much in one frame as the menu closed). Such a menu shows the GUI's full-screen backdrop over a
+// head-tracked frame: `gamepadMode` (the controllers off), `cursorMenu` (a menu the cursor, its panel or the
+// panel's hold already shows), `backdrop` (the backdrop test, backdrop_probe.hpp: the GUI opaque round the
+// crosshair), `overGame` (the frame shown is head-tracked, not a loading screen). With the controllers on, a
+// backdrop without a cursor is a fade. The mod bot's menu shows the weapon's 3D model in its middle, so the
+// backdrop test does not see it: `menuModel` (a menu's 3D model placed in the last ticks,
+// menu_model_hook.hpp) tells that one.
+bool padMenuOverGame(bool gamepadMode, bool cursorMenu, bool backdrop, bool overGame, bool menuModel);
+
+// The Dossier open in gamepad mode. Its map page shows the 3D automap and its CODEX page a black frame,
+// neither with a backdrop the test sees nor a 3D model, so padMenuOverGame missed them and the look stick
+// turned the body behind them (43 and 45 degrees; it came back in one frame as the Dossier closed: rig,
+// 2026-11-13). The game's own open and close of the Dossier tell it (vkcore/dossier_screen_hook.hpp):
+// `dossierOpen` (menu::dossierOpen), the other three as for padMenuOverGame.
+bool padDossierOverGame(bool gamepadMode, bool cursorMenu, bool dossierOpen, bool overGame);
+
+// The Dossier's open and close calls as whether it is open now: from an open until a close, or until a map
+// load (a load ends any menu, so an open whose close never came is not held into the next map). `opens`: the
+// open calls so far; `lastOpen`: the last of the open and close calls was an open; `loadsAtOpen`: the map
+// loads when that open ran (taken in the open's own hook, so a load between the call and the frame that reads
+// it counts); `mapLoads`: the map loads now.
+bool dossierOpen(std::uint32_t opens, bool lastOpen, std::uint32_t loadsAtOpen, std::uint32_t mapLoads);
+
+// padMenuOverGame over time, so a fade or an overlay is not taken for a menu: up once it has held
+// kSettleSeconds in a row (a death's fade comes and goes faster than a menu the player reads), not within
+// kAfterLoadSeconds of a map load (the fade in from black after a load, a checkpoint's after a death
+// included, held its backdrop 1.4 to 1.7 s over head-tracked frames on the rig, run pa7), down when it goes,
+// and after kMaxSeconds up (a backdrop that never goes is not held for good: logged as capped, then up again
+// only once it went and came back). A menu the game's own calls tell (`known`: padDossierOverGame) is no
+// fade: up in the first frame that sees it, map load or not, and not capped (its close is the game's own; one
+// missed ends at the next map load; a player can read CODEX for more than kMaxSeconds). The cap then counts
+// only the time up without it.
+class PadMenuWatch {
+public:
+    static constexpr double kSettleSeconds = 0.5;
+    static constexpr double kMaxSeconds = 300.0;
+    static constexpr double kAfterLoadSeconds = 5.0;
+
+    struct Step {
+        bool up = false;
+        bool capped = false; // this update ended it at kMaxSeconds
+    };
+    // Each frame: padMenuOverGame now, a monotonic clock, the map loads so far, padDossierOverGame now.
+    Step update(bool seen, double seconds, std::uint32_t mapLoads, bool known = false);
+
+private:
+    double since_ = -1.0; // when `seen` began (-1: not seen)
+    bool up_ = false;
+    bool capped_ = false;   // capped until `seen` goes
+    double knownAt_ = -1e9; // the last update with `known`
+    std::uint32_t loads_ = 0;
+    double loadedAt_ = -1e9; // when the map loads last changed
+};
+
 } // namespace evr::menu

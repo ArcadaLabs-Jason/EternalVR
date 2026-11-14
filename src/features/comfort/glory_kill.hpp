@@ -31,6 +31,14 @@ bool isKillSync(std::string_view entityDefName);
 std::optional<GloryView> parseGloryView(std::string_view text);
 const char* gloryViewName(GloryView view);
 
+// Whether a running kill's camera drives the head-tracked view in every game view of it (follow the camera).
+// Otherwise only a camera more than 15 degrees off the player's view angles drives it
+// (xr_math::cameraDrivesView), and each time the kill's camera crossed that line the view jumped by up to 15
+// degrees between the camera's heading and the player's (rig, 2026-11-12,
+// docs/rig-findings/camera-takeovers.md row 1). Steady keeps its own heading, the fade and the flat screen
+// show no head-tracked view of the kill.
+bool killCameraDrivesView(GloryView view, bool killRunning);
+
 // After a glory kill shown steady, or a pickup whose camera was played on top of the head (PickupHeading),
 // how long head aim keeps turning the game's aim back to the heading the view kept.
 inline constexpr double kHeadingRestoreSeconds = 0.5;

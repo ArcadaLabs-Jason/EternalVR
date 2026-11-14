@@ -100,11 +100,13 @@ warning does not.
 | Launcher X, layer Y: not compared | Warning only. A development build, or a layer too old to carry a version; a release zip always has a matching pair. |
 | ETERNALVR_DISABLE_LAYER=1 is set | Remove that environment variable. |
 | No active OpenXR runtime is set / manifest does not exist | Start your headset software and make it the active OpenXR runtime (for Virtual Desktop: VDXR), or pick a runtime in the launcher. |
-| A layer warning (RTSS, OBS, Bandicam ...) | That overlay or capture tool is untested with the mod. If VR misbehaves, close it and try again. ReShade, Overwolf and other VR mods for DOOM Eternal are switched off for the session automatically. |
+| Vulkan layer VK_LAYER_RTSS: warning (RivaTuner Statistics Server works, but ...) | RTSS works with the mod. Leave its frame rate limit off for DOOM Eternal: a limit there halves the headset's frame rate. See "RivaTuner (RTSS), OBS and ReShade" under Problems in the game. |
+| Another layer warning (Bandicam, a layer not on the launcher's list ...) | That overlay or capture tool is untested with the mod. If VR misbehaves, close it and try again. OBS needs nothing (it works and gets no warning); ReShade, Overwolf and other VR mods for DOOM Eternal are switched off for the session automatically. |
 | OpenXR layer XR_APILAYER_MBUCCHIA_toolkit (or XR_APILAYER_NOVENDOR_toolkit): disabled for this launch | Nothing to do. OpenXR Toolkit is switched off for the game each launch (its current and older versions), so its settings, Turbo Mode included, do not apply in EternalVR; it stays on for your other games. |
 | SteamVR limits DOOM Eternal to half the refresh rate (Throttling Behavior: Limit) | Warning only. SteamVR's per-application setting holds the game at half (or a third, a quarter ...) of the headset's rate, and frame pacing follows it. It is SteamVR Settings > Video > Per-Application Video Settings > DOOM Eternal > Throttling Behavior; Auto does not limit the game and gives no warning. |
 | SteamVR uses a custom controller binding for DOOM Eternal | Warning only. SteamVR applies a binding chosen for the game instead of the mod's default: one you edited from the default in SteamVR (it works, `CONTROLS.md`), or one made for another VR mod of DOOM Eternal (it does not). If your controllers do nothing in game, see "Controllers do nothing in game (SteamVR)" below. |
 | Hardware-accelerated GPU scheduling is on | Warning only. It caused hitching on my PC; the message says how to turn it off (needs a restart). |
+| Untested on this hardware: EternalVR has not been tested with ... | Warning only. Your graphics card (AMD, Intel, or NVIDIA without RTX) or your headset's route (Meta Horizon Link, SteamVR with an Index, a PlayStation VR2 or another non-Quest headset, or another runtime) hasn't been tested on my test PCs yet; I test with NVIDIA RTX cards and a Quest 3 through Virtual Desktop and SteamVR. It may well work. Please play, and send an Export report after a session either way: that's how a card or a route gets on the tested list. |
 | DOOM Eternal has not been started on this PC yet (no settings folder) | VR is refused. Start the game once through Steam (or the Xbox app), go to the main menu, quit, then try again. |
 | Steam's cloud record is stale | Start DOOM Eternal once through Steam, wait for the main menu, quit, then use the launcher again. |
 | Extra arguments refused (single-player) | Remove the multiplayer argument from **Extra arguments**. |
@@ -207,6 +209,23 @@ new frames a second at 90 Hz"), and the Play tab's Headset box keeps it as the F
 second; headset 90 Hz, steady"), with the refresh rate your headset ran at after it. If the
 game was well below your headset's rate, see the next entries, or lower "Resolution" on the Play tab if your
 graphics card is the limit.
+
+**RivaTuner (RTSS), OBS and ReShade.** I ran each of them next to the mod on my test PC (with a headset
+simulator, not yet in a headset). None of them cost frames there beyond what runs without them vary by.
+
+- **RTSS** (the on-screen display that comes with MSI Afterburner) works, with three things to know. Its counter is
+  drawn into both eyes, in the top left corner of each. It counts every headset frame twice (the game shows each
+  eye's picture as a frame of its own), so 180 there means about 90 new frames a second; the `rates:` line above has
+  the real number. And a frame rate limit set in RTSS halves your headset's frame rate: a limit of 60 gave the
+  headset 30 new frames a second. Leave RTSS's limit off for DOOM Eternal (its profile for the game, or the global
+  one); the headset already paces the game. The launcher warns while RTSS is installed. It cannot switch RTSS off for
+  you: RTSS also hooks the game without its Vulkan layer.
+- **OBS** game capture works. It captures the game's small desktop window, which shows your left eye without the HUD
+  (the menus do show there), not what your headset shows. To stream or record the headset's view, capture your headset software's own view of it
+  instead (SteamVR's Display VR View, for example).
+- **ReShade** is switched off for the session by the launcher. DOOM Eternal also keeps ReShade's Vulkan layer out by
+  itself, flat as well, unless the game is started with `+r_allowBlackListedLayers 1`. Even then VR works, but
+  ReShade only draws into the small desktop window: its effects do not reach the headset.
 
 **The launcher says the game was held to half the refresh rate.** When the game falls behind, Virtual Desktop's
 SSW, Meta's ASW, Pimax's Smart Smoothing and SteamVR's Motion Smoothing or throttling ask the game for only half
@@ -439,10 +458,11 @@ load. The usual reasons:
 | Reason | What to do |
 |---|---|
 | This DOOM Eternal version is not the one this EternalVR supports | The game was updated; wait for an EternalVR update |
+| The mod could not find (some parts) in the game, which it watches to keep VR out of online play | Your game's version is a supported one, but its code is not where the mod expects it, so it keeps VR off rather than guess. Send an Export report |
 | The graphics driver lacks a feature, or Direct3D 12 could not start | Update the graphics driver |
 | The game's graphics device (or its Vulkan instance) could not be set up for the headset | Turn off overlays and other Vulkan layers (recording, FPS counters, tuning tools), then update the graphics driver; if it stays, send an Export report |
 | No headset found yet | Connect the headset and start its runtime (Virtual Desktop, SteamVR, Link) |
-| The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics). On a PC with two or more dedicated graphics cards, tick "Use the headset's graphics card" on the launcher's Advanced tab: the game then renders on the card the headset's runtime uses. It is new and not yet tried on a two-GPU PC with a headset; if VR still does not start, send an Export report. |
+| The headset runtime uses a different graphics card than the game | On a laptop with two GPUs, make Windows run DOOM Eternal on the GPU the headset uses (Settings, Display, Graphics). On a PC with two or more dedicated graphics cards, tick "Use the headset's graphics card" on the launcher's Advanced tab: the game then renders on the card the headset's runtime uses. It hasn't been tried on a two-GPU PC with a headset yet; if VR still does not start, send an Export report. |
 | The headset disconnected or its runtime stopped | Quit the game and start again from the launcher |
 | The headset runtime would not start VR for the game | Restart the headset runtime (Virtual Desktop, SteamVR, Link), then the game |
 | An online mode or a multiplayer invite switched VR off | By design; restart from the launcher |
@@ -454,6 +474,8 @@ check that the whole zip was extracted, and that your antivirus did not remove `
 
 `EternalVR.dll` is not code-signed and, like every mod of its kind, it changes the running game's code in
 memory (in the game's own process, only for the VR session). Some antivirus programs may flag or
-quarantine it. If the launcher reports the layer missing, or the mod never loads, check your antivirus'
-quarantine, restore the file and allow the EternalVR folder. The release's `SHA256SUMS.txt` lets you check
-that the files are the ones I built.
+quarantine it (Microsoft Defender on some PCs as "Trojan:Win32/Wacatac.C!ml" or "Trojan:Win32/Bearfoos.A!ml", a
+false positive). If the launcher reports the layer missing, or the mod never loads, check your antivirus'
+quarantine (Windows Security, Virus & threat protection, Protection history), restore the file and allow the
+EternalVR folder. The release's `SHA256SUMS.txt` lets you check that the files are the ones I built:
+`INSTALL.md`, "Checking the download", has the steps and how to report a false positive.

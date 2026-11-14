@@ -1,6 +1,6 @@
 // Motion controllers, hand aim and shots (controllers.hpp, docs/rig-findings/input-aim.md section 2, T-055).
 //
-// - Hand aim reuses head aim's closed loop (presenter_head.cpp): each game frame it reads the game's own
+// - Hand aim reuses head aim's closed loop (presenter_aim.cpp): each game frame it reads the game's own
 //   angles back and moves them to body + target, where the target here is the weapon hand's aim ray
 //   instead of the head. The render camera stays on the head.
 // - Forced views: an entry hook on idPlayer::SetViewAngles (RVA 0x1454480) counts calls from anywhere but

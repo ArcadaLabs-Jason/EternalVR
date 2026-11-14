@@ -54,7 +54,7 @@ struct ArmTargets {
     Vec3 pole;               // the direction the elbow bends toward
     // The twist (ArmSolution::twist) of the last tick this arm was solved, so the twist stays continuous;
     // none for the first tick, which takes the branch within half a turn of the centre.
-    std::optional<float> lastTwist;
+    std::optional<float> lastTwist{};
     bool limitSwing = true; // the wrist's swing limited (the off hand); the weapon arm keeps the game's wrist
     // The solve as before when nothing is given; the layer passes the setting's (vkcore/arm_solve_mode.hpp,
     // bind by default).

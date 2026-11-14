@@ -366,6 +366,24 @@ namespace EternalVR.Launcher.Core.Tests
             var steam = new InstalledLayer(LayerApi.Vulkan, "VK_LAYER_VALVE_steam_overlay_64", "s.json", "HKLM", true, "DISABLE_VK_LAYER_VALVE_steam_overlay_1", "1");
             Assert.Equal(LayerAction.Ignore, Known().Evaluate(new[] { steam }, false).Single().Action);
         }
+
+        [Fact]
+        public void OverlayAndCaptureToolsAsRunOnTheRig()
+        {
+            // RTSS, OBS and ReShade next to the layer (RELEASE-CHECKLIST.md item 7): OBS works, RTSS warns about its frame
+            // limit (its variable does not switch it off), ReShade stays off.
+            var obs = new InstalledLayer(LayerApi.Vulkan, "VK_LAYER_OBS_HOOK", "o.json", "HKLM", true, "DISABLE_VULKAN_OBS_CAPTURE", "1");
+            Assert.Equal(LayerAction.Ignore, Known().Evaluate(new[] { obs }, false).Single().Action);
+            var rtss = new InstalledLayer(LayerApi.Vulkan, "VK_LAYER_RTSS", "r.json", "HKLM", true, "DISABLE_RTSS_LAYER", "1");
+            var d = Known().Evaluate(new[] { rtss }, false).Single();
+            Assert.Equal(LayerAction.Warn, d.Action);
+            Assert.Null(d.Environment);
+            Assert.Contains("frame rate limit", d.Message);
+            var reshade = new InstalledLayer(LayerApi.Vulkan, "VK_LAYER_reshade", "s.json", "HKLM", true, "DISABLE_VK_LAYER_reshade_1", "1");
+            var r = Known().Evaluate(new[] { reshade }, false).Single();
+            Assert.Equal(LayerAction.Disable, r.Action);
+            Assert.Equal(new KeyValuePair<string, string>("DISABLE_VK_LAYER_reshade_1", "1"), r.Environment.Value);
+        }
     }
 
     public class AntiCheatTests

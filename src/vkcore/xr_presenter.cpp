@@ -128,14 +128,15 @@ Settings readSettings() {
     }
     s.testLossRemovesDevice = readEnv(L"ETERNALVR_TEST_XR_LOSS_REMOVE", value) && value == L"1";
     if (readEnv(L"ETERNALVR_TEST_HEAD_SWAY", value) && !value.empty()) {
-        float yaw = 0.0f, pitch = 0.0f, period = 0.0f, base = 0.0f;
-        if (swscanf_s(value.c_str(), L"%f,%f,%f,%f", &yaw, &pitch, &period, &base) >= 3 &&
+        float yaw = 0.0f, pitch = 0.0f, period = 0.0f, base = 0.0f, basePitch = 0.0f;
+        if (swscanf_s(value.c_str(), L"%f,%f,%f,%f,%f", &yaw, &pitch, &period, &base, &basePitch) >= 3 &&
             std::isfinite(yaw) && std::isfinite(pitch) && std::isfinite(period) && std::isfinite(base) &&
-            period > 0.1f) {
+            std::isfinite(basePitch) && period > 0.1f) {
             s.swayYaw = yaw;
             s.swayPitch = pitch;
             s.swayPeriod = period;
             s.swayBaseYaw = base;
+            s.swayBasePitch = basePitch;
         }
     }
     s.depthLayer =

@@ -334,7 +334,8 @@ function Write-RelBuildInfo($state, [string]$Path, $builds) {
         "launcher: $($state.LauncherVersion) (.NET Framework 4.8)"
         "launcher and layer: built from the same commit; the launcher refuses a layer of another version"
         ''
-        'Supported DOOM Eternal builds (sha256 of DOOMEternalx64vk.exe | Steam build id | description):'
+        'Supported DOOM Eternal builds (Steam: sha256 of DOOMEternalx64vk.exe | Steam build id | description;'
+        'Game Pass, whose exe cannot be read: gamepass | package name | package version | description):'
     ) + @($builds | ForEach-Object { '  ' + $_.Trim() })
     [IO.File]::WriteAllText($Path, (($lines -join "`r`n") + "`r`n"), $script:Utf8)
 }

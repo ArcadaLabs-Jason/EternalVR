@@ -61,10 +61,11 @@ function Test-Output([string]$Path, [string]$Pattern) {
 function Wait-Marker($t, [string]$State) {
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline) {
-        # The launcher may be writing the marker: a read that meets it busy is tried again.
+        # The launcher may be writing the marker: a read that meets it busy, or gone between the check and the
+        # read while the launcher replaces it, is tried again.
         try {
             if ((Test-Path "$($t.Data)\SESSION_PENDING") -and ((Get-Content "$($t.Data)\SESSION_PENDING") -contains "state = $State")) { return $true }
-        } catch [System.IO.IOException] { }
+        } catch [System.IO.IOException], [System.Management.Automation.ItemNotFoundException] { }
         Start-Sleep -Milliseconds 100
     }
     return $false

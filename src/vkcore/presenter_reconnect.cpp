@@ -58,6 +58,7 @@ void resetSessionState(XrPresenter::Impl& p) {
     p.acquiredWaited = false;
     p.hasImage = false;
     p.shownHasView = false;
+    p.padMenuUp.store(false, std::memory_order_relaxed);
     p.quadPlaced = false;
     p.placeAttempts = 0;
     p.fovWatch.reset();

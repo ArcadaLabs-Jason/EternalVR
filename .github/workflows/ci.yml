@@ -6,6 +6,9 @@ on:
   pull_request:
   # Any branch, by hand: gh workflow run CI --ref <branch>.
   workflow_dispatch:
+  # A release just published is checked against its own checksums (job "Published release").
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -77,6 +80,12 @@ jobs:
       - name: Test
         run: ctest --preset windows-msvc
 
+      # The rig scripts' own tests (T-108): the build's test app plays the game, with fake settings trees; no game,
+      # Steam or display is touched.
+      - name: Test rig scripts
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/rig/tests/run-tests.ps1
+
       # Sources only (versions agree, tester docs and notices present); no build, game or GPU needed.
       - name: Validate release sources
         shell: powershell
@@ -103,3 +112,25 @@ jobs:
       - name: Build launcher (Windows)
         if: runner.os == 'Windows'
         run: dotnet build launcher/EternalVR.sln -c Release
+
+  release:
+    name: Published release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The public repository's newest release (or the one just published): the uploaded zip against its .sha256 and
+      # GitHub's digest, every file in it against its SHA256SUMS.txt, and BUILD-INFO.txt's supported builds (T-105).
+      - name: Verify the release against its checksums
+        shell: powershell
+        # The tag reaches the script as data through the environment, never as part of the command line.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVR_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if ($env:EVR_TAG) {
+            powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/verify-release.ps1 -Repo ArcadaLabs-Jason/EternalVR -Tag "$env:EVR_TAG" -WaitSeconds 600
+          } else {
+            powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/verify-release.ps1 -Repo ArcadaLabs-Jason/EternalVR
+          }
+          exit $LASTEXITCODE

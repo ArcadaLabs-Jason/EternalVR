@@ -7,9 +7,11 @@ vulkan | VK_LAYER_VALVE_steam_fossilize* | ignore | Steam shader pre-caching
 vulkan | VK_LAYER_EOS_Overlay | ignore | Epic Online Services overlay, inert outside Epic games
 vulkan | VK_LAYER_RENDERDOC_Capture | ignore | RenderDoc, inert unless capturing
 vulkan | VK_LAYER_KHARVOX* | disable | another VR layer for DOOM Eternal
-vulkan | VK_LAYER_RTSS | warn | RivaTuner overlay, not yet tested with EternalVR
-vulkan | VK_LAYER_OBS_HOOK | warn | OBS game capture, not yet tested with EternalVR
-vulkan | VK_LAYER_reshade* | disable | ReShade post-processing breaks the stereo image
+# RTSS, OBS and ReShade were run next to the layer on the test PC (RELEASE-CHECKLIST.md item 7). RTSS stays a
+# warning: it also hooks the game without its layer, so its variable does not switch it off.
+vulkan | VK_LAYER_RTSS | warn | RivaTuner Statistics Server works, but its counter shows in both eyes and counts each headset frame twice, and a frame rate limit set in RTSS halves the headset's frame rate (60 gives 30): leave its limit off for DOOM Eternal
+vulkan | VK_LAYER_OBS_HOOK | ignore | OBS game capture works; it captures the game's desktop window (the left eye, without the HUD)
+vulkan | VK_LAYER_reshade* | disable | ReShade's effects do not reach the headset, and the game keeps ReShade out by itself too
 vulkan | VK_LAYER_OW_OVERLAY | disable | Overwolf overlay
 vulkan | VK_LAYER_OW_OBS_HOOK | disable | Overwolf capture
 vulkan | VK_LAYER_bandicam* | warn | Bandicam capture, not yet tested with EternalVR

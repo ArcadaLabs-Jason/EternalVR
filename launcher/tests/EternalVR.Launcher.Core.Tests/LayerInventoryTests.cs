@@ -126,6 +126,7 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void LaunchLogIsCapped()
         {
+            if (!OperatingSystem.IsWindows()) return; // the registry's manifest paths are Windows paths (C:\...)
             var regs = Enumerable.Range(0, 20).Select(i => Reg(LayerApi.Vulkan, @"C:\l" + i + ".json", 0, i % 2 == 0 ? "HKLM" : "HKCU"));
             var lines = LayerInventory.LaunchLines(LayerInventory.Read(regs, p => @"{ ""layer"": { ""name"": ""VK_LAYER_"
                 + Path.GetFileNameWithoutExtension(p) + @""", ""disable_environment"": { ""DISABLE_L"": ""1"" } } }"), Env());

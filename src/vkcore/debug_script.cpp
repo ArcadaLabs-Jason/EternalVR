@@ -56,6 +56,9 @@ constexpr std::string_view kAllowedCommands[] = {
     "ai_Show", "ai_Hide", "nextActiveAI", "nextAI", "prevAI", "ai_teleportToPlayer", "moveToFacingPlayer",
     "ai_forceIdle", "ai_forceFreeze", "ai_forceAnim", "killAI", "removeAI", "healAI", "encounter_clearWait",
     "gibalicious",
+    // Glory kills on the rig (tools/rig/qa/qa-scenarios-takeover.ps1): a demon staggers on any hit and dies
+    // only by a glory kill, so a melee after a shot starts one.
+    "ai_alwaysStagger", "ai_sync_onlyDieFromGK",
     // Cvars set in the map (rig scripts, tools/rig/cpu-cvar-ab.ps1); a change of r_hdrDisplay makes the next
     // frame recreate the swapchain.
     "g_dumpSpawnedEntities", "g_setting_hud_auto_dismiss_tutorials", "g_setting_tutorials",

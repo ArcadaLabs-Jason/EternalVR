@@ -218,6 +218,7 @@ evr_add_test(evr_input_tests
         features/input/rumble_route_tests.cpp
         features/input/rest_touch_bindings_tests.cpp
         features/input/rest_wheel_tests.cpp
+        features/input/rest_wheel_direction_tests.cpp
         features/input/rest_wheel_stats_tests.cpp
         features/input/rest_wheel_extreme_tests.cpp
         features/input/rest_wheel_touch_tests.cpp
@@ -302,6 +303,7 @@ evr_add_test(evr_layer_gate_tests
 evr_add_test(evr_mp_policy_tests
     SOURCES
         platform/mp_policy/argument_cases_tests.cpp
+        platform/mp_policy/guard_refusal_tests.cpp
         platform/mp_policy/mp_policy_tests.cpp
         platform/mp_policy/profile_cvars_tests.cpp
         platform/mp_policy/saved_cvars_tests.cpp

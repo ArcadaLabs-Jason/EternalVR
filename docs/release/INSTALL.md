@@ -14,6 +14,32 @@ data (settings, logs, backups) lives in `%LOCALAPPDATA%\EternalVR\`.
 The launcher and the mod are not code-signed, so the first time you run the launcher Windows SmartScreen
 may say "Windows protected your PC". Click **More info**, then **Run anyway**.
 
+**Antivirus.** On most PCs Microsoft Defender finds nothing (it found nothing in the 0.1.92 zip on my test PC).
+On some PCs it quarantines the launcher or the mod's DLL (`layer\EternalVR.dll`) as "Trojan:Win32/Wacatac.C!ml",
+or the launcher as "Trojan:Win32/Bearfoos.A!ml". That's a false positive: the mod isn't code-signed and every
+release is a new file Windows hasn't seen, so Defender's cloud model sometimes guesses (the "!ml"). Each release's
+notes link its VirusTotal scan. If Defender or another antivirus takes a file:
+
+1. Check the download (below). If the files match, it's the false positive.
+2. Get the file back: in Windows Security, **Virus & threat protection**, **Protection history**, open the entry,
+   **Actions**, **Restore** (another antivirus: restore it from its quarantine), and allow the EternalVR folder.
+3. Tell me which antivirus and the name of what it detected (a GitHub issue or Discord). For Microsoft Defender
+   you can also report it to Microsoft as a false positive at https://www.microsoft.com/wdsi/filesubmission
+   (choose "Incorrectly detected as malware/malicious").
+
+**Checking the download (optional).** Every release lists a SHA-256 for its zip: next to the zip on the release
+page, and in the `.sha256` file you can download with it. In PowerShell, in the folder you downloaded to:
+
+    Get-FileHash .\EternalVR-alpha-0.1.93-xxxxxxx.zip
+
+(use your zip's name) and compare the `Hash` it prints with the release's (one is in capitals, the other isn't;
+that doesn't matter). After unzipping, `SHA256SUMS.txt` lists every other file in the folder with its SHA-256.
+In PowerShell, in the unzipped folder, this prints any file that doesn't match, and nothing when all of them do:
+
+    Get-Content .\SHA256SUMS.txt | ForEach-Object { $h, $f = $_ -split '  ', 2; if ((Get-FileHash -LiteralPath $f).Hash -ne $h) { "changed: $f" } }
+
+The launcher's own updates check both of these by themselves.
+
 ## 2. Every time you play
 
 1. **Steam copy: start Steam** and make sure you are logged in. The launcher refuses to start the Steam
@@ -34,8 +60,7 @@ may say "Windows protected your PC". Click **More info**, then **Run anyway**.
 5. Click **Launch VR**. The game starts. A small 1280x720 game window opens on your desktop (a virtual
    display if you have one); that is expected, the headset gets its own full-size images. Put the
    headset on.
-6. In the game, use **Campaign, Continue** or load a save. Starting a new campaign currently has a
-   problem, see `KNOWN-ISSUES.md`.
+6. In the game, use **Campaign**: continue, load a save or start a new one.
 7. When you are done, quit the game normally. The launcher then puts your settings back. You can leave the
    launcher open or close it: if you close it while the game runs, a small helper it started with the game
    (no window) puts your settings back when the game exits. If that helper could not run either (the PC was

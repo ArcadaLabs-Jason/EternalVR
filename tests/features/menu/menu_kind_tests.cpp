@@ -11,6 +11,7 @@ using evr::menu::MenuChain;
 using evr::menu::MenuKind;
 using evr::menu::MenuKindInput;
 using evr::menu::menuKindOnCursor;
+using evr::menu::padMenuOverGame;
 using evr::menu::screenBecomesPopup;
 
 TEST_CASE("a menu asked for is a screen, one over the game nobody asked for is a popup") {
@@ -271,4 +272,169 @@ TEST_CASE("chain: a menu asked for since the last cursor went begins a new chain
         CHECK(step.kind == MenuKind::Dossier);
         CHECK(chain.asked());
     }
+}
+
+TEST_CASE("gamepad mode: a menu the pad navigates is told by the backdrop over a head-tracked frame") {
+    // The Sentinel Crystal's, the rune's and the mod bot's menus with a pad (rig, 2026-11-12, runs pa1 and
+    // pa2): no cursor, the GUI's backdrop up over the head-tracked view.
+    CHECK(padMenuOverGame(true, false, true, true, false));
+    // No backdrop (play), or a loading screen behind it (no head-tracked frame): not a menu over the game.
+    CHECK_FALSE(padMenuOverGame(true, false, false, true, false));
+    CHECK_FALSE(padMenuOverGame(true, false, true, false, false));
+    // A menu the cursor shows (a mouse in gamepad mode) is the cursor's already.
+    CHECK_FALSE(padMenuOverGame(true, true, true, true, false));
+    // With the motion controllers on every menu shows the cursor: a backdrop without one is a fade.
+    CHECK_FALSE(padMenuOverGame(false, false, true, true, false));
+}
+
+TEST_CASE("gamepad mode: the mod bot's menu is told by its 3D model, without a backdrop") {
+    // CHOOSE A WEAPON MOD with a pad: the weapon's model in its middle, no backdrop round the crosshair, the
+    // model placed every tick.
+    CHECK(padMenuOverGame(true, false, false, true, true));
+    // Over a loading screen, under the cursor's menu, or with the motion controllers on: as for the backdrop.
+    CHECK_FALSE(padMenuOverGame(true, false, false, false, true));
+    CHECK_FALSE(padMenuOverGame(true, true, false, true, true));
+    CHECK_FALSE(padMenuOverGame(false, false, false, true, true));
+}
+
+TEST_CASE("gamepad mode's menu without a cursor: up after half a second, not for a fade, capped, and new "
+          "after a load") {
+    using evr::menu::PadMenuWatch;
+    PadMenuWatch watch;
+    watch.update(false, 0.0, 1); // the map loaded at 0
+    // The fade in after a load (1.4 to 1.7 s on the rig) is not a menu.
+    CHECK_FALSE(watch.update(true, 1.0, 1).up);
+    CHECK_FALSE(watch.update(true, 2.2, 1).up);
+    CHECK_FALSE(watch.update(false, 2.3, 1).up);
+    double t = 10.0;
+    // A fade (a checkpoint's, a death's) shorter than the settle: never up.
+    CHECK_FALSE(watch.update(true, t, 1).up);
+    CHECK_FALSE(watch.update(true, t + 0.4, 1).up);
+    CHECK_FALSE(watch.update(false, t + 0.45, 1).up);
+    // A menu: up once it held half a second, down when it goes.
+    t = 20.0;
+    CHECK_FALSE(watch.update(true, t, 1).up);
+    CHECK_FALSE(watch.update(true, t + 0.3, 1).up);
+    CHECK(watch.update(true, t + 0.6, 1).up);
+    CHECK(watch.update(true, t + 100.0, 1).up);
+    CHECK_FALSE(watch.update(false, t + 100.1, 1).up);
+    // A map load while it shows starts the wait again.
+    t = 200.0;
+    watch.update(true, t, 1);
+    CHECK(watch.update(true, t + 1.0, 1).up);
+    CHECK_FALSE(watch.update(true, t + 1.1, 2).up);
+    CHECK_FALSE(watch.update(true, t + 1.7, 2).up); // within kAfterLoadSeconds of the load
+    watch.update(true, t + 1.1 + PadMenuWatch::kAfterLoadSeconds, 2);
+    CHECK(watch.update(true, t + 1.7 + PadMenuWatch::kAfterLoadSeconds, 2).up);
+    // Capped after kMaxSeconds up, and down until it goes and comes back.
+    const PadMenuWatch::Step capped = watch.update(
+        true,
+        t + 1.2 + PadMenuWatch::kAfterLoadSeconds + PadMenuWatch::kSettleSeconds + PadMenuWatch::kMaxSeconds,
+        2);
+    CHECK(capped.capped);
+    CHECK_FALSE(capped.up);
+    CHECK_FALSE(watch.update(true, t + 400.0, 2).up);
+    CHECK_FALSE(watch.update(false, t + 401.0, 2).up);
+    watch.update(true, t + 402.0, 2);
+    CHECK(watch.update(true, t + 402.6, 2).up);
+}
+
+TEST_CASE("gamepad mode: the Dossier open is a menu over the game, its map and CODEX pages included") {
+    using evr::menu::padDossierOverGame;
+    // The map page (the 3D automap) and the CODEX page (a black frame): no backdrop, no model, the Dossier
+    // open (rig, 2026-11-13, run x4 of pad-model-menus).
+    CHECK(padDossierOverGame(true, false, true, true));
+    // Closed (play), or nothing head-tracked behind it, or a cursor's menu, or the motion controllers on (the
+    // Dossier shows the cursor then): not this rule's.
+    CHECK_FALSE(padDossierOverGame(true, false, false, true));
+    CHECK_FALSE(padDossierOverGame(true, false, true, false));
+    CHECK_FALSE(padDossierOverGame(true, true, true, true));
+    CHECK_FALSE(padDossierOverGame(false, false, true, true));
+}
+
+TEST_CASE("the Dossier's open and close calls: open from an open until the close or a map load") {
+    using evr::menu::dossierOpen;
+    // No hooks (another game build) or no open yet.
+    CHECK_FALSE(dossierOpen(0, false, 0, 1));
+    CHECK_FALSE(dossierOpen(0, true, 0, 1));
+    // Open (in map 1), then the close.
+    CHECK(dossierOpen(1, true, 1, 1));
+    CHECK_FALSE(dossierOpen(1, false, 1, 1));
+    // Opened again: the page changes call no open.
+    CHECK(dossierOpen(2, true, 1, 1));
+    // A map load with no close seen: closed, and stays so until the next open.
+    CHECK_FALSE(dossierOpen(2, true, 1, 2));
+    // A second open with no close, after that load: a new open, held.
+    CHECK(dossierOpen(3, true, 2, 2));
+    // Its own map load ends it too.
+    CHECK_FALSE(dossierOpen(3, true, 2, 3));
+    CHECK(dossierOpen(4, true, 3, 3));
+    // An open and its close between two frames: closed.
+    CHECK_FALSE(dossierOpen(5, false, 3, 3));
+    // A load between the open call and the frame that reads it: the open's own count of loads is older, so it
+    // is not held into the new map.
+    CHECK_FALSE(dossierOpen(6, true, 3, 4));
+}
+
+TEST_CASE("gamepad mode: the Dossier holds at once, map load or not, and lets go as it closes") {
+    using evr::menu::PadMenuWatch;
+    PadMenuWatch watch;
+    watch.update(false, 0.0, 1, false);
+    // The Dossier opened on its map (run x4: no backdrop, no model): up in the frame it opened, the look
+    // stick pushed under it 4 s later.
+    double t = 70.0;
+    CHECK_FALSE(watch.update(false, t - 0.01, 1, false).up);
+    CHECK(watch.update(false, t, 1, true).up);
+    CHECK(watch.update(false, t + 4.0, 1, true).up);
+    // B closes it: down in the frame the close came.
+    CHECK_FALSE(watch.update(false, t + 5.8, 1, false).up);
+    // Opened on the way to CODEX: the Arsenal's backdrop and model, then the CODEX page with neither.
+    t = 157.0;
+    CHECK(watch.update(true, t, 1, true).up);
+    CHECK(watch.update(true, t + 3.0, 1, true).up);
+    CHECK(watch.update(false, t + 6.0, 1, true).up);
+    CHECK_FALSE(watch.update(false, t + 14.4, 1, false).up);
+    // Closed while its backdrop still fades (the backdrop test's off readings): held to the backdrop's end,
+    // as for any menu without a cursor.
+    t = 300.0;
+    CHECK(watch.update(true, t, 1, true).up);
+    CHECK(watch.update(true, t + 1.0, 1, true).up);
+    CHECK(watch.update(true, t + 1.1, 1, false).up);
+    CHECK_FALSE(watch.update(false, t + 1.3, 1, false).up);
+    // Within kAfterLoadSeconds of a load the Dossier holds all the same (no fade to wait out); a backdrop
+    // alone there does not.
+    t = 400.0;
+    watch.update(false, t, 2, false);
+    CHECK_FALSE(watch.update(true, t + 1.0, 2, false).up);
+    CHECK_FALSE(watch.update(true, t + 1.6, 2, false).up);
+    CHECK(watch.update(true, t + 2.0, 2, true).up);
+    CHECK_FALSE(watch.update(false, t + 2.5, 2, false).up);
+    // A death's fade after it: not held (shorter than the settle).
+    CHECK_FALSE(watch.update(true, t + 20.0, 2, false).up);
+    CHECK_FALSE(watch.update(true, t + 20.4, 2, false).up);
+    CHECK_FALSE(watch.update(false, t + 20.5, 2, false).up);
+    // Not capped: CODEX read for longer than kMaxSeconds stays held until the close.
+    t = 1000.0;
+    CHECK(watch.update(false, t, 2, true).up);
+    const PadMenuWatch::Step long1 =
+        watch.update(false, t + PadMenuWatch::kSettleSeconds + PadMenuWatch::kMaxSeconds, 2, true);
+    CHECK(long1.up);
+    CHECK_FALSE(long1.capped);
+    CHECK(watch.update(false, t + 900.0, 2, true).up);
+    CHECK_FALSE(watch.update(false, t + 901.0, 2, false).up);
+    // Its backdrop's tail after a long read is held as before, the cap counted from the Dossier's close.
+    t = 2000.0;
+    CHECK(watch.update(true, t, 2, true).up);
+    CHECK(watch.update(true, t + 600.0, 2, true).up);
+    CHECK(watch.update(true, t + 600.2, 2, false).up);
+    CHECK_FALSE(watch.update(false, t + 600.4, 2, false).up);
+    // A backdrop with no Dossier is still capped after kMaxSeconds, until it goes.
+    t = 3000.0;
+    watch.update(true, t, 2, false);
+    CHECK(watch.update(true, t + PadMenuWatch::kMaxSeconds, 2, false).up);
+    const PadMenuWatch::Step capped =
+        watch.update(true, t + PadMenuWatch::kSettleSeconds + PadMenuWatch::kMaxSeconds, 2, false);
+    CHECK(capped.capped);
+    CHECK_FALSE(capped.up);
+    CHECK_FALSE(watch.update(true, t + 400.0, 2, false).up);
 }

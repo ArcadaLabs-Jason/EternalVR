@@ -37,7 +37,7 @@ public:
         std::string name;
         std::string value; // before the layer's first write (cvarValueText)
         Target target{};
-        std::optional<std::string> trip; // what a trip gives back instead of `value` (setTripValue)
+        std::optional<std::string> trip{}; // what a trip gives back instead of `value` (setTripValue)
     };
 
     // Before the layer writes over `name`: keeps `value`, its value now, unless a value is kept already (a

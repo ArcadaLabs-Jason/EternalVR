@@ -1,6 +1,7 @@
 #include "xr_math/head_view.hpp"
 
 #include "support/approx.hpp"
+#include "xr_math/head_aim.hpp"
 
 #include <doctest/doctest.h>
 
@@ -126,6 +127,74 @@ TEST_CASE("the body heading survives a game view looking straight down or up") {
     const auto up = yawOnly(gameAxis(-45.0f, 90.0f));
     REQUIRE(up.has_value());
     CHECK(approxEqual(up->forward, Vec3{std::cos(radians(-45.0f)), std::sin(radians(-45.0f)), 0.0f}));
+}
+
+namespace {
+
+// The body heading (degrees) yawOnly gives a game camera at these angles (the game's convention, pitch
+// positive looking down).
+float bodyHeading(float pitch, float yaw, float roll) {
+    const auto body = yawOnly(evr::xr_math::axisFromAngles({pitch, yaw, roll}));
+    REQUIRE(body.has_value());
+    return std::atan2(body->forward.y, body->forward.x) * 180.0f / kPi;
+}
+
+float headingGap(float a, float b) {
+    return std::fabs(evr::xr_math::normalize180(a - b));
+}
+
+} // namespace
+
+TEST_CASE("a rolled camera looking almost straight down keeps the heading its image has") {
+    // The death camera on the rig (2026-11-12, run tq2 death-camera): three game frames in a row at 86 to 89
+    // degrees down, its yaw swinging 168 degrees while its yaw less its roll stayed at 180. The view's up
+    // gives that heading; the forward's heading swung with the yaw and spun the headset's world.
+    CHECK(headingGap(bodyHeading(85.96f, 155.22f, -24.23f), 180.0f) < 2.0f);
+    CHECK(headingGap(bodyHeading(85.95f, 87.52f, -91.05f), 180.0f) < 2.0f);
+    CHECK(headingGap(bodyHeading(88.84f, -12.68f, 167.22f), 180.0f) < 2.0f);
+    // Looking up the up's heading is the other way round.
+    CHECK(headingGap(bodyHeading(-88.0f, 30.0f, 0.0f), 30.0f) < 0.01f);
+}
+
+TEST_CASE("a camera 75 degrees or less off the horizon keeps its forward's heading, rolled or not") {
+    CHECK(headingGap(bodyHeading(60.0f, 40.0f, 25.0f), 40.0f) < 0.01f);
+    CHECK(headingGap(bodyHeading(-74.0f, -120.0f, -60.0f), -120.0f) < 0.01f);
+    CHECK(headingGap(bodyHeading(0.0f, 95.0f, 170.0f), 95.0f) < 0.01f);
+    // Without a roll the up and the forward give one heading at any pitch.
+    for (float pitch = -89.0f; pitch <= 89.0f; pitch += 1.0f) {
+        CHECK(headingGap(bodyHeading(pitch, 70.0f, 0.0f), 70.0f) < 0.01f);
+    }
+}
+
+TEST_CASE("the heading moves over to the up's without a jump as the camera nears the vertical") {
+    // A tenth of a degree of pitch at a time; the steepest is where the two headings are furthest apart and
+    // weigh the same (150 degrees apart at 80 down: about 4 degrees a step), never a jump.
+    for (const float roll : {-150.0f, -60.0f, 30.0f, 90.0f}) {
+        float before = bodyHeading(70.0f, 40.0f, roll);
+        float largest = 0.0f;
+        for (float pitch = 70.1f; pitch <= 90.0f; pitch += 0.1f) {
+            const float now = bodyHeading(pitch, 40.0f, roll);
+            largest = std::fmax(largest, headingGap(now, before));
+            before = now;
+        }
+        CHECK(largest < 6.0f);
+    }
+}
+
+TEST_CASE("a camera rolling through upside down between 75 and 85 degrees off the horizon turns no jump") {
+    // The forward's heading and the up's are nearly opposite there. Blending their angles took the shorter
+    // way round, which changed sides as the roll crossed 180: a jump of a share of a full turn in one frame
+    // (108 degrees at both 78 and 82 down). Off the exact half and half (80 down) the heading barely moves.
+    for (const float pitch : {-82.0f, -78.0f, 78.0f, 82.0f}) {
+        float before = bodyHeading(pitch, 40.0f, 170.0f);
+        float largest = 0.0f;
+        for (float roll = 170.1f; roll <= 190.0f; roll += 0.1f) {
+            const float now = bodyHeading(pitch, 40.0f, roll);
+            largest = std::fmax(largest, headingGap(now, before));
+            before = now;
+        }
+        CHECK(largest < 1.0f);
+    }
 }
 
 TEST_CASE("degenerate game axes are rejected") {

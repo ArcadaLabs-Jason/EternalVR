@@ -30,6 +30,41 @@
 
 namespace evr::vkcore {
 
+namespace {
+
+// The game's frames on the cinema screen instead of head-tracked, in head-tracked mode: images the camera
+// hook gave no head-tracked view within kViewStaleSeconds (a loading screen, the title and main menus; a
+// video [inferred]) and a cutscene or glory kill on the flat screen. Logged as each run starts and ends, the
+// first kLoggedScreenRuns (XR worker only).
+struct ScreenRun {
+    bool on = false;
+    LONGLONG sinceQpc = 0;
+    unsigned long long runs = 0;
+};
+ScreenRun g_screenRun;
+constexpr unsigned long long kLoggedScreenRuns = 40;
+
+void noteScreenRun(bool onScreen) {
+    ScreenRun& r = g_screenRun;
+    if (onScreen == r.on) {
+        return;
+    }
+    r.on = onScreen;
+    if (onScreen) {
+        r.sinceQpc = qpcNow();
+        if (++r.runs <= kLoggedScreenRuns) {
+            EVR_LOG("xr: screen run %llu starts: the game's frames go on the screen, no head-tracked view (a "
+                    "loading screen, a menu screen, a video, a cutscene or glory kill on the flat screen)",
+                    r.runs);
+        }
+    } else if (r.runs <= kLoggedScreenRuns) {
+        EVR_LOG("xr: screen run %llu ends after %.2f s: head-tracked frames again", r.runs,
+                qpcSeconds(qpcNow() - r.sinceQpc));
+    }
+}
+
+} // namespace
+
 void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     // The frames table's reason until a new image is taken or nothing newer is found handed over.
     frameLogEyes.repeat = FrameRepeat::Waiting;
@@ -276,6 +311,10 @@ void XrPresenter::Impl::frame() {
         // Menus: the game's cursor decides whether a menu is up; its panel shows the UI quad over a
         // head-tracked frame, or the game's whole frame on the cinema path (presenter_menu_update.cpp).
         const bool headTracked = hasImage && shownHasView && !guardOff;
+        if (settings.mode == Mode::HeadTracked && hasImage && !guardOff &&
+            trackingReady.load(std::memory_order_acquire)) {
+            noteScreenRun(!headTracked);
+        }
         updateMenu(state.predictedDisplayTime, headTracked ? settings.ui.enabled && uiFresh() : hasImage);
         if (headTracked) {
             // Mono: both eyes get the whole image with the head pose and FOV it was rendered with. Stereo:

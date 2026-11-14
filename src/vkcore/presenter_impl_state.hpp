@@ -192,6 +192,9 @@ struct PresenterMenuState {
     // Worker writes, present hook reads: a menu is up (the cursor, the panel or its hold); no crosshair
     // mask meanwhile.
     std::atomic<bool> menuUp{false};
+    // Worker writes, camera hook reads: gamepad mode's menu over the game without a cursor
+    // (menu::padMenuOverGame).
+    std::atomic<bool> padMenuUp{false};
     std::optional<menu::MenuRouter> menuRouter;
     input::CaptureChord menuChord;   // the capture chord's hold on the triggers (capture_chord.hpp)
     MenuPointer menuPointer;         // rebuilt every frame
