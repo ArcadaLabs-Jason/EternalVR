@@ -213,6 +213,9 @@ public:
     void pause(double nowSeconds, std::uint64_t handOvers);
 
     [[nodiscard]] bool held() const { return held_; }
+    // A hold has fallen behind in play at least once (the held render thread then spins before each headset
+    // frame: frame_pacing, T-232).
+    [[nodiscard]] bool hasFallenBehind() const { return fellBehind_; }
     [[nodiscard]] std::uint64_t switches() const { return switches_; }
     [[nodiscard]] double backOffSeconds() const { return backOff_; }
     // The last change, and the last window that decided: its share of headset frames without a new image and
@@ -225,9 +228,10 @@ private:
     bool held_ = true;
     std::uint64_t switches_ = 0;
     double backOff_ = kWindowSeconds;
-    double changedAt_ = 0.0; // when held_ last changed (the first frame's time until then)
-    bool holdTried_ = false; // held again by the game's rate (not by a menu): a let-go judges that hold
-    int badWindows_ = 0;     // bad windows in a row, held
+    double changedAt_ = 0.0;  // when held_ last changed (the first frame's time until then)
+    bool holdTried_ = false;  // held again by the game's rate (not by a menu): a let-go judges that hold
+    bool fellBehind_ = false; // a hold fell behind in play at least once
+    int badWindows_ = 0;      // bad windows in a row, held
     Change lastChange_ = Change::None;
     double lastRepeatShare_ = 0.0;
     double lastRate_ = 0.0;

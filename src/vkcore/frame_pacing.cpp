@@ -5,6 +5,7 @@
 #include "features/pacing/slot_choice.hpp"
 #include "features/pacing/unseen_hold.hpp"
 #include "stereo_seq/adaptive_eyes.hpp"
+#include "vkcore/held_wait.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/new_frame_wait.hpp"
 #include "vkcore/present_latency.hpp"
@@ -248,6 +249,8 @@ bool configure() {
             std::lock_guard lock(g_state.mutex);
             g_state.hold.setLatencyGate(true);
         }
+        held_wait::configure(mode == pacing::PaceMode::Headset, narrowEnv(L"ETERNALVR_TEST_HOLD_SPIN"),
+                             narrowEnv(L"ETERNALVR_TEST_HOLD_SPIN_MS"));
         g_switching.store(mode == pacing::PaceMode::Headset && !repeat, std::memory_order_release);
         return mode == pacing::PaceMode::Headset;
     }();
@@ -325,6 +328,7 @@ void onHeadsetFrame(std::int64_t periodNs, long long frameStartQpc, double waitF
         const std::uint64_t handOvers = g_handOvers.load(std::memory_order_acquire);
         g_handOversAtFrame = handOvers;
         ++g_state.loop.frames;
+        held_wait::frameBegun(g_state.loop.frames);
         g_state.loop.lastFrameSeconds = now;
         g_state.loop.periodSeconds = static_cast<double>(periodNs) / 1e9;
         g_state.cadence.frame(handOvers);
@@ -420,9 +424,9 @@ bool afterPresent() {
         return false;
     }
     const Clock::time_point start = Clock::now();
-    const bool begun = g_state.begun.wait_for(
-        lock, std::chrono::microseconds(static_cast<long long>(step.timeoutSeconds * 1e6)),
-        [&step] { return g_state.loop.frames >= step.untilFrame; });
+    const bool begun =
+        held_wait::wait(lock, g_state.begun, g_state.loop, step, g_state.hold.hasFallenBehind(),
+                        level == pacing::HoldLevel::Low, inPlay());
     g_state.pacer.waited(g_state.loop.frames, std::chrono::duration<double>(Clock::now() - start).count(),
                          begun);
     return begun;

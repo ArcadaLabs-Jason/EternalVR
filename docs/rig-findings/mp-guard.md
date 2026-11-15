@@ -123,7 +123,11 @@ where stated, structure displacements, which are then checked on their own).
 
 The layer checks RTTI names through the complete-object locator before each vtable (signature 1, self
 RVA matching), every address against the module's bounds, and reads game memory in the hooks and the poll
-under SEH, so a freed or changed object means "no signal", never a crash.
+under SEH, so a freed or changed object means "no signal", never a crash. S1's map name is copied a page at a
+time up to its NUL (`game_string.hpp`): the name is a short heap string, and a fixed 259-byte copy ran past it
+into an unmapped page now and then, a handled fault on a good pointer (`map-load-name-read.md`). A name not
+read to its NUL (a page of it unreadable, or longer than the 259-byte buffer) is a prefix that could have lost an
+online segment: it classifies as unknown (`mp_policy::classifyMapRead`), so it trips.
 
 ## 3. Classifications
 

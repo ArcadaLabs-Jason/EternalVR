@@ -10,6 +10,7 @@
 #include <vector>
 
 using evr::mp_policy::classifyMap;
+using evr::mp_policy::classifyMapRead;
 using evr::mp_policy::GuardState;
 using evr::mp_policy::isOnlineMenuScreen;
 using evr::mp_policy::isPlayMap;
@@ -135,6 +136,16 @@ TEST_CASE("campaign, DLC, hub, Horde, shell and campaign tutorial maps are singl
         CHECK((classifyMap(map) == MapClass::SinglePlayer));
         CHECK_FALSE(mapTripsGuard(map));
     }
+}
+
+TEST_CASE("a map name read only in part classifies as unknown, so it trips") {
+    // Cut at the buffer or at an unreadable page: a single-player prefix with an online tail lost.
+    CHECK((classifyMapRead("game/sp/e1m1_intro/e1m1_intro", true) == MapClass::SinglePlayer));
+    CHECK((classifyMapRead("game/sp/e1m1_intro/e1m1_intro", false) == MapClass::Unknown));
+    CHECK((classifyMapRead("game/sp/e1m1_intro/e1m", false) == MapClass::Unknown));
+    CHECK((classifyMapRead("game/pvp/pvp_laser/pvp_laser", true) == MapClass::Online));
+    CHECK((classifyMapRead("", true) == MapClass::Unknown));
+    CHECK((classifyMapRead("", false) == MapClass::Unknown));
 }
 
 TEST_CASE("map paths are normalised before classification") {

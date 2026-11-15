@@ -236,6 +236,9 @@ function Test-QaCloudState($Ctx) {
         foreach ($c in $changes) {
             $line = "$($loc.name) $($c.Name) $(Format-QaProfileValue $c.Before) -> $(Format-QaProfileValue $c.After)"
             if ($c.Carried) { $carried++ }
+            # A cvar the scenario itself holds through ETERNALVR_DEBUG_CVARS (a rig knob: the bench routes' RT off) is
+            # expected there; the cloud files still go back before the next scenario.
+            elseif ($c.Text -and $c.Name -cmatch $script:QaProfileCvarName -and @($Ctx.Scenario.ProfileHeld) -contains $c.Name) { $others += "$line (held by the scenario's ETERNALVR_DEBUG_CVARS)" }
             elseif ($c.Text -and $c.Name -cmatch $script:QaProfileCvarName) { $leaks += "text field changed: $line" }
             else { $others += $line }
         }

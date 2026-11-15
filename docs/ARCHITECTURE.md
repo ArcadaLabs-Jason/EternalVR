@@ -24,7 +24,8 @@ section 16 lists them in the order we intend to run them.
   through fixed addresses.
 - **Vendor-neutral performance features:**
   - DLSS 4.x as the baseline, with DLSS 5 as a stretch goal.
-  - AMD and Intel through OptiScaler (FSR 3.1, XeSS; FSR 4 where the GPU supports it, if time
+  - AMD and Intel through OptiScaler, planned for v1, not built and not in the beta (2026-11-13; AMD and
+    Intel run the game's own TAA until then) (FSR 3.1, XeSS; FSR 4 where the GPU supports it, if time
     allows), with the game's DLSS option unlocked by our gate patch (T-072) and the game's native TAA
     as the fallback (D-031). No FSR1.
   - Fixed foveation on every headset. Eye-tracked foveation where gaze is available is a v1 if time
@@ -143,7 +144,7 @@ items and do not block v1.
 - **Coexistence:**
   - Never occupy the `XINPUT1_3.dll` proxy slot; Meathook uses it (R03).
   - idStudio/decl mods load normally.
-  - OptiScaler is downloaded by our launcher, with the user's consent, into the EternalVR data folder
+  - Planned for v1 (not built, not in the beta): OptiScaler is downloaded by our launcher, with the user's consent, into the EternalVR data folder
     (section 11). A copy the user installed in the game folder as a proxy DLL conflicts with ours;
     preflight names it. As built: there is no OptiScaler download; preflight warns about injector DLLs
     in the game folder, OptiScaler's among them (`CompatibilityChecks.cs`).
@@ -999,7 +1000,8 @@ documentation say so.
   becomes two, one per eye, each fed a view of one layer.
   - Whether NGX honours a layer view is **[rig]**; the fallback is per-eye copies.
   - NGX's own pipelines and dispatches pass through our layer untouched (section 7, T-033).
-- **AMD and Intel: OptiScaler (D-031, T-065, T-072, provisional).** On non-NVIDIA GPUs the game never
+- **AMD and Intel: OptiScaler (D-031, T-065, T-072, provisional). Planned for v1: none of this is built yet, and it
+  is not in the beta (2026-11-13); AMD and Intel GPUs run the game's own TAA until it is.** On non-NVIDIA GPUs the game never
   offers DLSS or calls NGX by itself, and a vendor-ID spoof does not change that: OptiScaler's Vulkan
   spoof, including driver vendor, name and info, fails on DOOM Eternal, and Goghor's DLSS Unlocker is
   the only known way (`reference/_cache/OptiScaler/Features.md`, `Changelog.md`, `Spoofing.md`). Our

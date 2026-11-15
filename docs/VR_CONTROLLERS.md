@@ -8,8 +8,8 @@ the gun, and the game's arms and weapon are drawn at the controller. The hook po
 
 **Status.** Built, unit-tested and checked live on the rig with OpenXR-Simulator and scripted input (the
 live checks below); on by default (`ETERNALVR_CONTROLLERS=0` turns it off). Still for the headset: glory
-kills and the meathook under hand aim, the viewmodel offsets per weapon, the aim error over a real play
-session, and the real controllers' bindings.
+kills and the Meat Hook under hand aim (on the rig the hook's target follows the gun: "The Meat Hook" below),
+the viewmodel offsets per weapon, the aim error over a real play session, and the real controllers' bindings.
 
 ## How it works
 
@@ -662,6 +662,37 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
     every 2 s), and a shot while a melee or equipment button is held
     with its decl (`action aim: a Flame Belch shot while flame_belch held, decl '...'` for a Belch shot, the first 12). Nothing changes
     under head or view aim, or with both left on the weapon hand (the default).
+- **The Meat Hook** (the Super Shotgun's mod; `src/vkcore/meathook_watch.cpp`, QA `meathook-hand` and
+  `meathook-head`). The game takes the hook's target from its own view (the player's view angles) [rig, static]:
+  within the cone and range of the gun's decl (`targetHorizontalFov` 10, `targetVerticalFov` 90,
+  `maxTargetDistance` 25 m, read live from `idDoubleBarrelShotgun::meatHookDecl`); on the rig a zombie 9.7 m out
+  was taken with the view up to about 7 degrees beside it and from about 2 degrees above its feet. The hook fires
+  only with a target. Its lock-on mark (the small green hook on the demon) is one of the HUD's world-attached
+  markers, placed through the HUD's marker matrix like the objective markers (T-145, T-178), and shows in the same
+  game frame as the target is taken; it is not part of the crosshair, so the crosshair hold under hand aim does
+  not hide it. What each aim feeds it: hand aim (the default) writes the view angles from the weapon hand, so the
+  target is where the gun points, wherever the head looks; head aim (and gamepad mode, which uses it) the head's;
+  under view aim nothing writes them, so it is the game's own view, turned by the stick. The view's line starts at
+  the eye, not at the gun: up close it runs beside the gun's own line by the hand's offset from the eye (0.2 m
+  right and 0.3 m down in the rig's pose, 2.3 and 3.4 degrees at 5 m), less than the cone [inferred]. When the
+  hook connects the game turns the view once (`meatHook_playerViewOverrideMode 1`, forced; `SetViewAngles` from
+  RVA 0x166FB81): a forced view of 5 or 6 game frames, hand aim yields, the camera stays on the head. Those frames
+  are all the comfort vignette counts as the game moving the camera: the pull's travel itself is not a forced view
+  and moves no stick, so it brings no vignette [inferred from the vignette's inputs; the rig's fodder zombies were
+  pulled to the player, not the player to them]. Log: `meat hook: the Super Shotgun's hook takes targets within
+  10.0 x 90.0 deg of the game's view (horizontal x vertical) and 25.0 m` once, then the first 60 changes as `meat
+  hook: target <entity decl> (its origin at yaw Y pitch P, D m) (new), hooked <decl>, available yes (the last
+  state held S s); the game's view pitch P yaw Y` (the origin is the demon's feet, seen from the eye). Steam build
+  only (the class layouts are the Steam build's; the Game Pass build's were not compared, so nothing is read or
+  logged there); every read is guarded and only logged, and the decl's values are logged only when they read as a
+  cone and a range. Rig (2026-11-13, OpenXR-Simulator, e1m1's barge with the zombies frozen, the head still): with
+  the gun 20 degrees left of the head on a zombie and 0.5 degrees of tracking noise, the target was taken 0.03 s
+  after the hand's input reached the layer (in both runs), held to the press, and the hook connected; with the
+  head on a zombie and the gun 25 degrees off, no target; the gun back on it, 0.03 and 0.05 s and connected. Under
+  head aim the target stayed on the head's zombie with the gun 20 and 25 degrees away. The mark came with the
+  first target in every run (within 0.02 s). Not shown by the rig: a real hand's aim and tremor, and how the mark
+  reads in a headset; a mark for a demon the gun points at outside the HUD's band (where the head does not look)
+  may not show [inferred].
 - **Aim smoothing** (`ETERNALVR_AIM_SMOOTHING`, `features/input/aim_smoothing.hpp`,
   `src/vkcore/game_view_poses.cpp`). Where the hands are located for a game view, the weapon hand's aim
   orientation goes through a one-euro filter (Casiez et al. 2012) in LOCAL: a low-pass whose cutoff rises
@@ -803,7 +834,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   component. Experimental, untested on hardware.
 - **Comfort vignette** (`ETERNALVR_VIGNETTE`, `src/features/comfort/vignette.hpp`,
   `src/vkcore/presenter_vignette.cpp`). While the stick turns or moves the player, or the game moves the
-  camera itself (the dash action held, or a forced view: a glory kill, the Meathook pull, a scripted
+  camera itself (the dash action held, or a forced view: a glory kill, the Meathook's catch, a scripted
   camera), the edges of the view darken and leave a clear centre; head motion never counts. Each mapper run
   publishes the turn rate (the turn's degrees over the frame) and the move stick's magnitude, both zero
   while a menu holds the controllers back. The XR worker turns them into an amount (full from 120 degrees
@@ -1498,6 +1529,7 @@ Each run: `launch-ht.ps1 -Layer <staged build> -Label <label> -Map game/sp/e1m2_
 | 16 | Melee and equipment aim (`tools/rig/qa` scenario `action-aim`: e1m3 `cp_03_shoot_gate`, hand aim, `ETERNALVR_MELEE_AIM=offhand`, `ETERNALVR_EQUIPMENT_AIM=head`, the weapon hand 90 degrees to the left) | Pass (2026-10-02, Debug, runs QA-aim-actions-2 and -3): each melee press held back 1 command (6.0 to 8.8 ms) until the view took the off hand; the first game frame after it has the game's view on the off hand (yaw -90.0, and pitch 15.0 with the off hand at the token) while the weapon hand is at +90; back to the weapon hand 0.5 s after; a frag launched about 0.15 s after the press from the weapon hand's side along yaw 135 (`dir (-0.707 0.707 0.035)`) was moved to the eye and turned to the head's yaw 45 with the same arc (`dir (0.707 0.707 0.035)`), and in screenshots it explodes in front of the head instead of out of view to the left; Flame Belch shots turned the same way. The Praetor token's Use is a trigger box (picked up with the view 90 degrees away), so a target picked by the view (a lunge, a glory kill) is for the headset |
 | 17 | Gamepad mode (`ETERNALVR_CONTROLLERS=0`, `+in_joystick 1`, a virtual Xbox 360 pad through ViGEmBus; the 0.1.68 layer against this one) | Pass: e1m2: both sticks held 2.6 s give `both sticks pressed (the recenter hold)`, `recenter binding held for 2.00 s` and a user recenter, 1 s gives `released after 1.00 s` (0.1.68: none); the move stick and the look stick give `vignette: light, shown 570 of 898 frame(s) ... move up to 1.00, pad turn up to 1.00` (0.1.68: shown 0 in every line); RT fires (`bhaptics: firing 'weapon/player/shotgun'`) and Y counts `belch 2` (0.1.68: no bHaptics); RB held gives `forced view starts (weapon wheel; inhibit 0x18)` and `ui: weapon wheel straight ahead (panel HUD)` (0.1.68: neither). With the move stick held forward and the pause menu, then the Dossier, opened by injected keys (ESC, TAB): `shown 0 of 900 frame(s) ... move up to 1.00 ... 900 frame(s) held back (menu)` in the pause menu and 3 of 899 (the frames after it closed) in the Dossier: the layer's menu test keeps the vignette off, as for the controllers. e1m3 `cp_03_shoot_gate`, the stick click at the Praetor Suit token: `controllers: sync 'interact/preator_suit_token/preator_suit_token_sync' (not a kill)`, body follow blocked `cutscene or forced view 182` (0.1.68: 0) and the token's wave for bHaptics. e1m3 `cp_12_possession`: `piloting a demon` and `demon aim: the demon follows the head` (0.1.68: no piloting line, and head aim kept writing the Slayer's angles while piloting: 645 rewrites by the game in 10 s). Controllers on, unchanged: the same game hooks line, 4 forced-view episodes each, body follow 4.32 m (0.1.68: 4.25 m) over 17 legs; the virtual gamepad's import line the same |
 | 18 | The shoulder launcher and the Flame Belch under equipment aim (public issue 14; e1m3 `cp_03_shoot_gate`, hand aim, the weapon hand 60 degrees right of the head, in-headset capture bursts 0.15 and 0.4 s into a Belch held 1.8 s; the 0.1.70 layer against this one) | Pass: `ETERNALVR_EQUIPMENT_AIM=head`: 0.1.70 turned the flames onto the head, but the launcher popped up in front of the face about 20 degrees right, pointing along the weapon hand, the flames a haze in front of it; now the launcher pops up top left in both eyes along the head, the jet and fireball leave its muzzle along the head, `shoulder launcher (slot 5, 'equipmentlauncher/equipmentlauncherleft'): ... at the head, along the head; ... launcher 0.28 from the head` and the five Belch shots start at its muzzle along the head (`shot: game start ... dir (-0.259 0.965 0.035) -> ... dir (-0.259 0.966 0.000)`, the head's forward). `offhand` with the off hand 40 degrees left: the flames go left along it. Same and Aim = head (the launcher hooks not installed: `equipment launch off, Flame Belch plume off, shoulder launcher off`) as 0.1.70: Same's jet along the weapon hand from a launcher at the hand, Aim = head's launcher top left with the flames along the view. The `action-aim` scenario passes with its frag `equipment launch (slot 5): ... -> dir (-0.707 0.707 0.035) along the head, from the launcher at the head` (the game's own axis kept). A Belch tapped (0.1 s) three times with the stand-in bHaptics Player: 0.1.70 15 `evr_shot_ForearmR` + `evr_shot_VestFront` kicks and no Belch pulse; now 6 `evr_belch` left-shoulder pulses and no kick (the layer's 10 s lines `shot 0, ... belch 12` and `belch 4`, no `bhaptics: firing` line). Weapon in the left hand (`ETERNALVR_HANDEDNESS=left`, the Belch on the right grip): the launcher top left with the flames along the head; with `offhand` the flames follow the right controller. With the off hand 40 degrees off the view the launcher turns about its joint behind the shoulder and is out of the view; the flames still leave its muzzle along the off hand. Hand aim's grip sweep GRIP PASS, SIGHTS PASS (0.334 deg), the hands check 0 regressions, also with `ETERNALVR_EQUIPMENT_AIM=head` |
+| 19 | The Meat Hook's target under hand and head aim (QA `meathook-hand`, `meathook-head`: e1m1's barge, `give all`, the zombies frozen, the Super Shotgun up; a zombie brought onto the game's view about 9.5 m out, the gun raised to it, the right grip) | Pass (2026-11-13, Debug): hand aim, the gun 20 degrees left of the head on the zombie with 0.5 degrees of tracking noise: `meat hook: target ... (new)` 0.03 s after the hand's input, held to the press, `hooked`; the head on the zombie and the gun 25 degrees off: no target; the gun back: 0.03 and 0.05 s, `hooked` (two runs). Head aim: the target stays the head's with the gun 20 and 25 degrees away, `hooked` on both presses. The lock-on mark (`ui: first HUD markers on their own quads`) within 0.02 s of the first target |
 
 Fixes the rig found: the jump key sets the command's up-move (+0x1A) to 127 as well as its bit, and the
 player jumps on the axis (jump now does both); the keys also set BUTTON_ANY (1 << 57), which is now sent

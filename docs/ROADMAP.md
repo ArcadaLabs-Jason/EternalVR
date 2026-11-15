@@ -95,8 +95,8 @@ Foundation, in order:
 6. **Profiles** (REQ-10, M8): a base preset with personal edits, changed-from-preset markers, rename.
    Exit: the M8 profile criterion passes (built and checked by unit tests and a driven launcher window,
    2026-10-13; see M8).
-7. **Comfort presets and the first-launch health notice** (REQ-15): only once the comfort options are
-   settled (D-048). A profile based on a new preset is written with every setting while older launchers do
+7. **Comfort presets and the first-launch health notice** (REQ-15): during the beta, once the comfort
+   options are settled (D-048; 2026-11-13). A profile based on a new preset is written with every setting while older launchers do
    not know the preset, so a downgrade does not read it against Recommended (T-134).
 8. **Release hygiene** (REQ-18, REQ-19, M10): the notices audit, a clang-tidy check and the
    code-signing choice (open question 7).
@@ -211,9 +211,10 @@ Required for v1
       display (resolution and refresh rate) and the current HAGS state recorded (T-085)
 - [ ] The frame-rate cap and dynamic-resolution cvars identified from type info and the cvar list,
       before M2 (T-047)
-- [ ] *(later)* [owner] Benchmark routes defined in a new `docs/rig-findings/bench-routes.md` (to be
-      written): combat arena, outdoor, and hub (Fortress); each starts from a named checkpoint and lasts
-      60 s
+- [x] *(later)* Benchmark routes defined in `docs/rig-findings/bench-routes.md`: combat arena (Cultist
+      Base's Slayer Gate from checkpoint `cp_03_shoot_gate`), outdoor (Exultia's start) and hub (the Fortress
+      from Game Slot 1's Continue Game), each from a named start, 60 s measured, scripted as the by-name QA
+      scenarios `bench-*`; first numbers on the test PC (RTX 3080 Ti, simulator) in `perf-baselines.md`
 - [ ] *(later)* [owner] Unit scale and eye height measured; usercmd layout and fire-axis fields located
 - [x] *(later)* Collision trace searched for (R10 open question 6); result recorded either way
 - [ ] *(later, needed by M4.5)* Runtime-set cvars checked for persistence (T-100, in both settings
@@ -600,8 +601,10 @@ Required for v1
       pause and quit, and played in the owner's headset sessions since (the weapon upgrade screen's ghost was seen
       there, KNOWN-ISSUES.md); still open: a curved panel (the next box) and the rest of the R12 inventory checked
       screen by screen
-- [ ] HUD split onto the wrist panel and the message panel (T-077); the body-locked HUD with look-down
-      reveal is available as an option. Built, unit-tested and checked on the rig with OpenXR-Simulator
+- [ ] HUD split onto a message panel in the lower centre of view (T-077), with the body-locked HUD's look-down
+      reveal as an option: neither is built (checked in the code on 2026-11-13; subtitles, notifications and
+      pop-ups stay on the head-locked HUD quad). The wrist half is built, with a headset check still to come.
+      Built, unit-tested and checked on the rig with OpenXR-Simulator
       (shown at a watch glance, hidden with the hand down or turned away, hidden under the pause menu;
       `docs/VR_HANDS_HUD.md`): the corner blocks on the off hand's wrist, or the ammo block above the gun
       in the weapon hand, the rest on the head-locked quad; both are options (the launcher's "Health and
@@ -609,11 +612,14 @@ Required for v1
       (T-160), the wrist and weapon blocks follow where the game draws them at any HUD scale (v0.1.77, not yet seen
       in a headset), and the HUD in front, on the wrist and on the weapon are separate switches (v0.1.89, not yet seen
       in a headset). The wrist HUD was tried in the owner's headset: it worked, could come up upside down, and the
-      palm side is an odd place to look, so a better one is in the works before it can become a default; glory
+      palm side is an odd place to look, so a better one is in the works before it can become a default (the
+      HUD in front of you stays the default and the wrist HUD stays off by default for the beta, 2026-11-13); glory
       kills, cutscenes and respawns with the wrist HUD are untested
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere
 - [ ] The UI image joins the presenter's shared-image slots (`src/vkcore/presenter_copy.cpp`), and its
-      copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3)
+      copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3). The join is done (the ring
+      slot carries the GUI target's copy, `recordUiCopy` in `src/vkcore/presenter_copy_record.cpp`); what is left is
+      its entry in `presenter.md`, which does not mention it yet
 - [x] Screen-projected markers (T-058, T-145): the HUD's objective and POI markers and damage numbers follow
       the head-locked quad, those above or below the 16:9 band clamped to its edge; built and measured on the
       rig with OpenXR-Simulator (docs/rig-findings/hud-markers.md: 6 to 23 degrees off before, under 1 after;
@@ -622,7 +628,8 @@ Required for v1
       turns (KNOWN-ISSUES.md); each eye seeing them at the target's distance (v0.1.87) is not yet seen in a headset
 - [ ] [owner] Legibility protocol written in a new `docs/test-protocols/ui-legibility.md` (T-077); each of
       the following passes it at default settings, read by the owner and one tester where available (the
-      protocol is written, v0.1.57; its readings in a headset are still to come):
+      protocol is written, v0.1.57, and its Part 1 size measurements are in it; its readings in a headset are
+      still to come and need a headset):
   - wrist-glance HUD: health, armor and ammo read correctly on 10 of 10 prompted glances during the
     combat benchmark route
   - subtitles: 10 of 10 lines read completely
@@ -631,7 +638,9 @@ Required for v1
   - tutorial prompts: 3 of 3 read completely
 
 v1 if time allows
-- [ ] Rest of tier B: ammo on the weapon, crosshair replaced by a projected reticle
+- [ ] Rest of tier B: crosshair replaced by a reticle projected at the hit surface. Ammo on the weapon is
+      built (the weapon HUD, v0.1.77 and v0.1.89, not yet seen in a headset); under hand aim a dot is placed from
+      the weapon's own ray (`src/vkcore/presenter_reticle.cpp`, `docs/VR_CONTROLLERS.md`), but the docs do not say it sits at the hit surface
 
 ## M7: Game states and comfort
 
@@ -742,7 +751,7 @@ Required for v1
       SteamVR with an Index, a PlayStation VR2 or another headset it can name); one acceptance test per entry and
       none for the tested ones (`UntestedHardwareTests`). Not detectable: a gaze-capable headset, and the headset
       on SteamVR when SteamVR names none the launcher knows
-- [ ] Health notice and comfort defaults (T-096, D-048; once the comfort options are settled): the
+- [ ] Health notice and comfort defaults (T-096, D-048; during the beta, once the comfort options are settled, 2026-11-13): the
       first-launch health notice appears; a new profile starts from Recommended with the vignette off; in the per-frame vignette alpha log, the change per
       frame is at most 0.05 at 90 Hz and there are at most 2 pulse onsets in any 1 s window
 - [ ] [owner] Posture override (REQ-06): in one headset session, each launcher option (Auto / Seated /
@@ -796,7 +805,9 @@ Required for v1
       of R07's list (snap turn, recenter, tracking loss, scripted teleports, a world frozen under a menu) raises no
       reset of the layer's own, and NGX's own work passing through untouched has no check of its own
 - [ ] AMD and Intel through OptiScaler (D-031, T-065, T-072; its priority follows the number of AMD and
-      Intel players, and v1 may ship the game's native TAA on them, D-049). With the user's consent, the launcher
+      Intel players, and v1 may ship the game's native TAA on them, D-049). Not in the beta (2026-11-13): it is
+      not built yet and there is no AMD tester, so AMD and Intel GPUs run the game's own TAA in VR, as on every
+      alpha; it stays a v1 item. With the user's consent, the launcher
       downloads the pinned OptiScaler release into the EternalVR data folder, verifies its SHA-256
       against the hash pinned in the release's `BUILD-INFO.txt` and refuses a mismatch, and shows its version (T-094). Rig tests on the RTX 4080 with
       OptiScaler's FSR backend forced: it loads from our folder, not as a game-folder proxy; two feature
@@ -880,7 +891,17 @@ fixed: players have finished the base game and both DLCs on the alphas. The beta
 - every known fault is fixed or listed in KNOWN-ISSUES.
 
 Comfort presets and the first-launch health notice (foundation step 7) come during the beta, once the
-features they cover have settled. A two-GPU combination without a headset test is listed as untested.
+features they cover have settled (2026-11-13: they are not an open question for the beta). A two-GPU
+combination without a headset test is listed as untested.
+
+Calls on the beta's open points (2026-11-13):
+- Timing: the first beta (v0.2.0) is the alpha build the owner looked at in a headset, re-labelled, and it is
+  published after that look if the look found no blocker.
+- AMD and Intel GPUs run the game's own TAA in VR for the beta, as on every alpha. OptiScaler (D-031, T-072) is
+  not in the beta: it is not built yet (no download, no game-gate patch) and there is no AMD tester. It stays
+  a v1 item.
+- The HUD in front of you stays the default. The wrist HUD stays off by default: it is experimental and not yet
+  approved in a headset.
 
 The launcher checks the public releases (at most once an hour;
 the check can be turned off) and installs an update in place when the player agrees, the zip checked

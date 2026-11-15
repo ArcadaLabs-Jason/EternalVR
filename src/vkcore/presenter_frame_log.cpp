@@ -7,6 +7,7 @@
 #include "features/pacing/runtime_hold_watch.hpp"
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
+#include "vkcore/held_wait.hpp"
 #include "vkcore/new_frame_wait.hpp"
 #include "vkcore/present_latency.hpp"
 #include "vkcore/presenter_result.hpp"
@@ -204,6 +205,7 @@ void XrPresenter::Impl::logRates() {
     lastRates = {presents, ticks, pairs, xrFrames, xrCopies, now};
     checkGamePresents(*this);      // a line once the game stops presenting (presenter_result.hpp)
     frame_pacing::logSummary();    // the headset's cadence, and ETERNALVR_PACE's waits
+    held_wait::logSummary();       // held: the wait's spin (T-232)
     new_frame_wait::logSummary();  // ETERNALVR_PACE=new or headset: the XR worker's waits for a new image
     present_latency::logSummary(); // with CPU timing: release to present
     vram::logSummary();

@@ -200,6 +200,10 @@ MapClass classifyMap(std::string_view path) {
     return MapClass::Unknown;
 }
 
+MapClass classifyMapRead(std::string_view path, bool complete) {
+    return complete && !path.empty() ? classifyMap(path) : MapClass::Unknown;
+}
+
 bool isPlayMap(std::string_view path) {
     constexpr std::string_view kShell = "game/shell/";
     return classifyMap(path) == MapClass::SinglePlayer &&

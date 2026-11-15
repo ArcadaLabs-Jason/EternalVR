@@ -31,6 +31,13 @@ target_include_directories(evr_code_refs PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(evr_code_refs PUBLIC cxx_std_20)
 target_link_libraries(evr_code_refs PRIVATE evr_warnings PUBLIC evr_resolver)
 
+# Strings in game memory copied a page at a time (game_string.hpp), tested on pages of its own.
+add_library(evr_game_string STATIC game_string.cpp)
+target_include_directories(evr_game_string PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(evr_game_string PUBLIC cxx_std_20)
+target_compile_definitions(evr_game_string PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(evr_game_string PRIVATE evr_warnings)
+
 # The debug command schedule (debug_commands.cpp), tested without the game.
 add_library(evr_debug_script STATIC debug_script.cpp)
 target_include_directories(evr_debug_script PUBLIC "${PROJECT_SOURCE_DIR}/src")
@@ -100,10 +107,12 @@ add_library(evr_layer SHARED
     eye_capture.cpp
     exposure_hooks.cpp
     frame_pacing.cpp
+    held_wait.cpp
     new_frame_wait.cpp
     present_latency.cpp
     game_build.cpp
     zoom_look.cpp
+    meathook_watch.cpp
     game_code.cpp
     game_settings.cpp
     game_text.cpp
@@ -381,6 +390,7 @@ target_link_libraries(evr_layer PRIVATE
     evr_dlss_dll
     evr_dump_format
     evr_game_settings_line
+    evr_game_string
     evr_parallel_eyes_settings
     evr_vrs_khr_plan
     evr_ssr_fade_patch

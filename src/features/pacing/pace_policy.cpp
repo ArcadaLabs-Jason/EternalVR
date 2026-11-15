@@ -197,6 +197,7 @@ bool HoldSwitch::frame(double nowSeconds, std::uint64_t handOvers, double period
         changedAt_ = nowSeconds;
         lastChange_ = why;
         badWindows_ = 0;
+        fellBehind_ = fellBehind_ || why == Change::FellBehind;
     };
     if (!windowStart_) {
         restart();

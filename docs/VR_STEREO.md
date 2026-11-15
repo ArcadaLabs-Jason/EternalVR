@@ -1374,6 +1374,24 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   rate); `ETERNALVR_TEST_HOLD_GATE=1` makes the hold switch let a game go only when most of its images took
   longer than a period (a hitch above the refresh no longer lets it go). Both off by default; the rig A/B and
   why: docs/rig-findings/present-latency.md and T-201.
+- **The held wait (T-232).** Held, the game's render thread waits after each hand-over for the headset's next
+  frame. On the test PC (i7-9700K, Windows' Balanced power plan) sleeping through that wait let the CPU's clock
+  fall to 84-114% of its rated clock against 125-128% let go; the held tick then no longer fitted in the period,
+  10-20% of the headset's frames had no new image and the switch let the game go within 2 s of every hold. So
+  once a hold has fallen behind in play, the render thread sleeps until 5 ms before the headset's frame is due (a
+  high-resolution waitable timer: a condition variable's timed wait woke 1.6 ms late on average; without one a
+  plain timer, without that the condition variable) and spins the rest, giving the core up at each turn
+  (`SwitchToThread`), at most 6 ms a frame: a late or stalled headset frame sleeps out the rest of the timeout.
+  The clock stays up and the game stays held (rig: the outdoor and hub routes held the whole minute). Only in
+  play: menus and loading screens sleep, as does the low hold. Until a hold falls behind it only sleeps, so a PC
+  whose clock stays up spins only after a hitch makes one fall behind; once one has, the spin stays on for the session (a hold that slept again
+  would let the clock fall and the switch flap). The spin is at most the last 6 ms of each held frame (rig: 18-37%
+  of one core). Log: `pace: the held wait sleeps before its spin on a high-resolution timer` (or what it fell
+  back to), `pace: a hold fell behind; from now on, in play, the held render thread spins the last 5.0 ms ...`
+  once, then every 10 s `pace: last 10 s: the hold spun N ms in all (P% of one core); K sleep(s) before it,
+  woken L ms late on average`. Rig tests: `ETERNALVR_TEST_HOLD_SPIN=0` only sleeps, `=1` spins through the whole
+  wait in play from the start, `ETERNALVR_TEST_HOLD_SPIN_MS=<ms>` sets the spin; the A/B and its limits (one
+  Intel desktop CPU): docs/rig-findings/pace-hold.md.
 - **Pose.** The camera hook predicts the head and hands for `predictedDisplayTime` plus one period, plus the
   measured lead under `ETERNALVR_POSE_LEAD` (`xr_math/display_lead.hpp`). The period added is at most 1.5 times
   the headset's refresh period (the runtime's own refresh rate when it gives one, else the base of "Headset
@@ -1720,6 +1738,8 @@ axis).
 | `ETERNALVR_TEST_LATENCY_CSV` | unset | test knob: `1` writes every image's release-to-present times to `eternalvr-latency-<pid>.csv` in the log folder ("Release-to-present timing"); needs CPU timing on |
 | `ETERNALVR_TEST_HOLD_GATE` | unset | test knob: `1` with `ETERNALVR_PACE=headset` (the hold switch) lets a held game go only when more than half of a window's images took longer than a display period from their release to their hand-over ("Frame pacing", Slower PCs; docs/rig-findings/present-latency.md). Log: `pace: the hold lets the game go only when most of its images take longer than a display period ...` once |
 | `ETERNALVR_TEST_LATE_WAIT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` makes a headset frame that begins while the held game is still drawing its image wait for it, within the frame's own time ("Frame pacing", Late images). Log: `pace: held, a headset frame that begins while the game is still drawing its image waits for it ...` once, and every 10 s `pace: last 10 s: N headset frame(s) waited for a late image: ...` |
+| `ETERNALVR_TEST_HOLD_SPIN` | unset | test knob with `ETERNALVR_PACE=headset`: `0` makes the held render thread only sleep until the headset's next frame (no spin once a hold has fallen behind, as before T-232); `1` makes it spin through its whole wait in play from the start ("Frame pacing", The held wait; docs/rig-findings/pace-hold.md). Log: `pace: held, the render thread only sleeps ... (ETERNALVR_TEST_HOLD_SPIN=0, a rig test)` or `pace: held, the render thread spins through its whole wait ... (ETERNALVR_TEST_HOLD_SPIN=1, a rig test)` |
+| `ETERNALVR_TEST_HOLD_SPIN_MS` | unset | test knob with `ETERNALVR_PACE=headset`: the held wait's spin before the headset's frame, in ms (above 0, under 20; default 5; each frame spins at most this plus 1 ms), once a hold has fallen behind in play ("Frame pacing", The held wait). Log: `pace: held, the spin before the headset's frame is N ms (ETERNALVR_TEST_HOLD_SPIN_MS, a rig test)` |
 | `ETERNALVR_TEST_PACE_REPEAT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` keeps the game held and submits the newest image at every headset frame, as before T-194 ("Frame pacing", Slower PCs), for a rig A/B. Log: `pace: the game is always held and the headset's frames do not wait for a new image (ETERNALVR_TEST_PACE_REPEAT=1, a rig test)` |
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end (under Parallel Eye Rendering once a render frame at its view dispatch), as a slower processor (`alternate-eye.md` 10.4) |
 | `ETERNALVR_TEST_PRESENT_OUT_OF_DATE` | unset | test knob: `<seconds>`: the first game present that reaches the driver that long after the first one returns `VK_ERROR_OUT_OF_DATE_KHR` to the game (the driver took it), once, so the game's swapchain recreate and the layer's hand-back of held images (Desktop window) run on any GPU; VR on only |

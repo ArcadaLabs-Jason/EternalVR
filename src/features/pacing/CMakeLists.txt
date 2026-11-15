@@ -3,12 +3,14 @@
 # runtime's menu, the runtime's frame clock and the copy wait (frame_clock_watch.hpp), how often a stalled clock
 # restarts the session (restart_budget.hpp), the runtime holding frames in xrEndFrame (runtime_hold_watch.hpp),
 # how far ahead the head is predicted (prediction_period.hpp), which image the XR worker shows (slot_choice.hpp),
-# how far the game is held back while nobody can see its frames (unseen_hold.hpp).
+# how far the game is held back while nobody can see its frames (unseen_hold.hpp), how the held game waits for the
+# headset's frame (held_spin.hpp).
 # No OpenXR or Windows here.
 evr_add_module(evr_pacing
     SOURCES
         display_period_watch.cpp
         frame_clock_watch.cpp
+        held_spin.cpp
         late_image.cpp
         pace_policy.cpp
         prediction_period.cpp

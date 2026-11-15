@@ -8,6 +8,7 @@
 #include "common/finishes.hpp"
 #include "platform/mp_policy/guard_refusal.hpp"
 #include "vkcore/game_build.hpp"
+#include "vkcore/game_string.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -111,28 +112,25 @@ void checkScreen(Signal signal, int screen, const char* which) {
 // Hook callbacks (game threads)
 
 void onMapLoad(const HookRegisters& regs) {
+    // A page at a time (game_string.hpp): the name often ends near the end of a page, and a fixed-size
+    // copy past it faulted on a good pointer. A name not read to its NUL (a page unreadable, or longer than
+    // the buffer) is a prefix that could have lost an online segment: it classifies Unknown and trips.
     char name[260] = {};
-    const auto* text = reinterpret_cast<const std::byte*>(regs.rdx);
-    if (!text || !safeCopy(name, text, sizeof(name) - 1)) {
-        // The name may sit near the end of a page: read it byte by byte up to the first NUL.
-        std::size_t i = 0;
-        for (; text && i + 1 < sizeof(name) && safeRead(text + i, name[i]) && name[i]; ++i) {
-        }
-        name[i] = '\0';
-    }
-    name[sizeof(name) - 1] = '\0';
+    const GameString read = copyGameString(name, sizeof(name), reinterpret_cast<const void*>(regs.rdx));
     g_startup.mapLoadStarted();
     {
         std::lock_guard lock(g_lastMapMutex);
         g_lastMap = name;
     }
-    g_playMap.store(mp_policy::isPlayMap(name), std::memory_order_release); // before the count it goes with
+    // Before the count it goes with.
+    g_playMap.store(read.complete && mp_policy::isPlayMap(name), std::memory_order_release);
     g_mapLoads.fetch_add(1, std::memory_order_release);
-    const mp_policy::MapClass mapClass = mp_policy::classifyMap(name);
-    EVR_LOG("%s: map load '%s' (%s)", kTag, name, mp_policy::toString(mapClass));
+    const mp_policy::MapClass mapClass = mp_policy::classifyMapRead(name, read.complete);
+    const char* unread = read.complete ? "" : ", name unreadable or over-long";
+    EVR_LOG("%s: map load '%s' (%s%s)", kTag, name, mp_policy::toString(mapClass), unread);
     if (mapClass != mp_policy::MapClass::SinglePlayer) {
-        char detail[300];
-        std::snprintf(detail, sizeof(detail), "map '%s', %s", name, mp_policy::toString(mapClass));
+        char detail[320];
+        std::snprintf(detail, sizeof(detail), "map '%s', %s%s", name, mp_policy::toString(mapClass), unread);
         tripWith(Signal::MapLoad, detail);
     }
 }

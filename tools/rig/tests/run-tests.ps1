@@ -1380,6 +1380,21 @@ Test-Case 'qa-cloud-a-held-text-value-fails-as-a-leak' {
     Check ($c.CloudRestore) 'a leak does not send the cloud files back'
 }
 
+Test-Case 'qa-cloud-a-cvar-the-scenario-holds-itself-is-a-note-not-a-leak' {
+    # The bench routes hold r_useRayTracing 0 through ETERNALVR_DEBUG_CVARS and name it in ProfileHeld.
+    $c = New-TestQaRun 'held' (Get-TestProfileFields) (Get-TestProfileFields @{ r_sharpening = @{ Name = 'r_sharpening'; Text = '3' } })
+    $c.Scenario = @{ Name = 'held'; ProfileHeld = @('r_sharpening') }
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and $r.Ok) "held by the scenario: $($r.Ok) $($r.Detail)"
+    Check ($c.CloudRestore -and ($c.Notes -join ' ') -match "r_sharpening '2' -> '3' \(held by the scenario") "no note or no restore: $($c.Notes -join '; ')"
+    $c = New-TestQaRun 'held-other' (Get-TestProfileFields) (Get-TestProfileFields @{ view_skipShakes = @{ Name = 'view_skipShakes'; Text = '0' } })
+    $c.Scenario = @{ Name = 'held-other'; ProfileHeld = @('r_sharpening') }
+    Test-QaCloudState $c
+    $r = Get-TestQaResult $c 'profile.bin: no held value saved'
+    Check ($r -and -not $r.Ok -and $r.Detail -match "view_skipShakes '1' -> '0'") "another cvar: $($r.Ok) $($r.Detail)"
+}
+
 Test-Case 'qa-cloud-what-the-game-rewrites-every-run-carries-over' {
     $c = New-TestQaRun 'carried' (Get-TestProfileFields) (Get-TestProfileFields @{
             STAT_TIME_IN_GAME = @{ Name = 'STAT_TIME_IN_GAME'; Type = 1; Value = 0x22 }; count = @{ Name = 'count'; Type = 1; Value = 0x14 }

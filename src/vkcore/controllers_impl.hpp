@@ -538,6 +538,9 @@ ArmsTick armsTick(const std::byte* hands);
 // The viewmodel hook, each update with the controllers' viewmodel on (zoom_look.cpp): the held weapon's decls
 // get the VR zoom look (game/eternal/zoom_look.hpp) when they do not have it yet.
 void noteZoomLookHands(const std::byte* hands, const std::byte* player);
+// The viewmodel hook, at each tick of the game's hands, forced views included (meathook_watch.cpp): logs the
+// Super Shotgun's Meat Hook target as the game picks it, when `decl` (the held item's) is that gun's.
+void noteMeatHook(const std::byte* hands, const std::byte* player, const std::byte* decl);
 
 // bHaptics (bhaptics_game.cpp, docs/BHAPTICS.md). With the game hooks: starts its thread once when
 // ETERNALVR_BHAPTICS=1. The fire hook: a shot of the local player's `hands` (`belch`: the fire info was the

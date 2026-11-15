@@ -132,3 +132,18 @@ TEST_CASE("hold switch: menus and loading screens hold the game and decide nothi
     CHECK_FALSE(sw.held());
     CHECK(sw.backOffSeconds() == doctest::Approx(HoldSwitch::kWindowSeconds));
 }
+
+TEST_CASE("hold switch: hasFallenBehind turns on at the first fall in play and stays on; a menu does not") {
+    HoldSwitch sw;
+    Feeder f;
+    CHECK_FALSE(sw.hasFallenBehind());
+    f.run(sw, 5.0, [](bool, double) { return 30.0; }, false); // a loading screen repeating: nothing decided
+    CHECK_FALSE(sw.hasFallenBehind());
+    f.run(sw, 10.0, [](bool, double) { return 90.0; }); // keeps up
+    CHECK_FALSE(sw.hasFallenBehind());
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1); // falls behind
+    CHECK(sw.hasFallenBehind());
+    f.run(sw, 30.0, [](bool held, double) { return held ? 90.0 : 100.0; }); // held again, keeps up
+    CHECK(sw.held());
+    CHECK(sw.hasFallenBehind());
+}

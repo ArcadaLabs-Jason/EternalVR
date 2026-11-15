@@ -70,3 +70,7 @@ else is left out of the schedule and logged once (`debug-commands: left out of t
 `moveToFacingPlayer`, `ai_forceIdle`, `ai_forceFreeze`, `ai_forceAnim`, `ai_Show` / `ai_Hide`, `killAI`,
 `removeAI`, `healAI`, `encounter_clearWait`, `setviewpos`, `teleport`, `teleportposition`, `activatetargets`,
 `trigger`, `getviewpos`, `where`.
+
+The Meat Hook scenarios (2026-11-13, e1m1's barge): `ai_freezeMovement 1` (a cvar, "don't let AI move at all") kept
+a zombie brought by `nextActiveAI;ai_teleportToPlayer trace` where it landed for several seconds (others of the
+encounter still came closer); each trial ends with `removeAI` on its debug target (its effect not checked).

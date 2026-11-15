@@ -506,8 +506,13 @@ them is worse for you than described here.
   pressed in the last moments: a hit that lands late, or two things at once, can go to the wrong hand. Tell me if a
   vibration is on the wrong hand.
 - **The meathook and glory kills with hand aim** have had little testing in a headset. Glory kills with hand aim
-  pass a check on a headset simulator on my test PC (5 kills in each of the four Glory kills views); the meathook
-  hasn't been checked there.
+  pass a check on a headset simulator on my test PC (5 kills in each of the four Glory kills views). The meathook
+  passes one there too: it locks onto the demon your gun points at, not the one you look at, and its lock mark
+  (the small green hook on the demon) shows within a few frames of the gun getting there. The hook only fires
+  once that mark is up, and the game is picky: the gun has to point within a few degrees of the demon's body,
+  closer than 25 m. Point the gun (the aim dot) at the demon, wait for the green hook, then pull. If it still
+  feels slow or the mark comes and goes, please tell me and send the log: it now notes when the game takes and
+  drops the hook's target.
 - **Jumping off climbable walls where you look** works on a Quest 3; other headsets are untried.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
   or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where.
@@ -577,8 +582,9 @@ them is worse for you than described here.
 
 - **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
   in a headset; its strength may change. It darkens the edges while the sticks move or turn you, while you
-  dash and while the game moves the camera itself (a glory kill, checked on my test PC; the Meathook pull
-  should too). Jump pads, boosters and the Sentinel Hammer's slam don't bring it up yet.
+  dash and while the game moves the camera itself (a glory kill, checked on my test PC). The Meathook pull
+  probably only brings it up for the moment the hook catches, not while you fly (not checked yet). Jump pads,
+  boosters and the Sentinel Hammer's slam don't bring it up yet.
 - **Use the headset's graphics card** (Advanced tab) is for a PC with two or more graphics cards where VR
   does not start because the game picked another card than the headset's. It is off by default and not
   yet tried on such a PC with a headset; please tell me if you need it and how it went.

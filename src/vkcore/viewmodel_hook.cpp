@@ -25,6 +25,7 @@
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
 #include "vkcore/frame_placement.hpp"
+#include "vkcore/game_string.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hands_surfaces.hpp"
 #include "vkcore/head_gun.hpp"
@@ -127,17 +128,10 @@ std::string declName(const std::byte* decl) {
     if (!safeRead(decl + kDeclName, name) || !name) {
         return {};
     }
+    // A page at a time (game_string.hpp): a fixed-size copy past a name that ends near the end of its page
+    // faults on a good pointer.
     char buffer[128] = {};
-    if (!safeCopy(buffer, name, sizeof(buffer) - 1)) {
-        // The string may end near the end of its page; read it a byte at a time.
-        for (std::size_t i = 0; i + 1 < sizeof(buffer); ++i) {
-            if (!safeCopy(buffer + i, name + i, 1) || buffer[i] == '\0') {
-                break;
-            }
-        }
-    }
-    buffer[sizeof(buffer) - 1] = '\0';
-    const std::string_view text(buffer);
+    const std::string_view text(buffer, copyGameString(buffer, sizeof(buffer), name).length);
     for (const char c : text) {
         if (c < 0x20 || c > 0x7E) {
             return {};
@@ -276,6 +270,7 @@ void onViewmodel(const HookRegisters& regs) {
     // (view_pose_clock.hpp).
     const TickView view = handsTick();
     const ArmsTick arms = noteArmsTick(hands); // the tick's arms' item, for every hook of the tick
+    noteMeatHook(hands, owner, arms.held);     // the Meat Hook's target in the log (meathook_watch.cpp)
     if (!cfg.viewmodel || !s.attached.load(std::memory_order_acquire) || s.yielding.load()) {
         return; // forced views (glory kills, cutscenes) keep the game's own hands animation
     }

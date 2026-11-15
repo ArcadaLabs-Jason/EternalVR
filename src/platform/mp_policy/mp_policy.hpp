@@ -63,6 +63,11 @@ inline bool mapTripsGuard(std::string_view path) {
     return classifyMap(path) != MapClass::SinglePlayer;
 }
 
+// The class of a map name read from game memory: as classifyMap when the whole name was read (`complete`,
+// its NUL seen), else Unknown. A name cut at the reader's buffer or at an unreadable page is a prefix,
+// which can match a single-player path while the online segment was in the part lost.
+MapClass classifyMapRead(std::string_view path, bool complete);
+
 const char* toString(MapClass mapClass);
 
 // True for a single-player map the player plays in: not the shell (the main menu, game/shell/), and nothing

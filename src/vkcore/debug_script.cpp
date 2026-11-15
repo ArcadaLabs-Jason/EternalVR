@@ -59,6 +59,8 @@ constexpr std::string_view kAllowedCommands[] = {
     // Glory kills on the rig (tools/rig/qa/qa-scenarios-takeover.ps1): a demon staggers on any hit and dies
     // only by a glory kill, so a melee after a shot starts one.
     "ai_alwaysStagger", "ai_sync_onlyDieFromGK",
+    // The Meat Hook on the rig (tools/rig/qa/qa-scenarios-meathook.ps1): demons held where they were brought.
+    "ai_freezeMovement",
     // Cvars set in the map (rig scripts, tools/rig/cpu-cvar-ab.ps1); a change of r_hdrDisplay makes the next
     // frame recreate the swapchain.
     "g_dumpSpawnedEntities", "g_setting_hud_auto_dismiss_tutorials", "g_setting_tutorials",

@@ -110,6 +110,25 @@ TEST_CASE("debug script: the glory kill scenarios' stagger cvars and demon telep
     CHECK(script.steps[1].commands[1] == "ai_teleportToPlayer trace");
 }
 
+TEST_CASE("debug script: the Meat Hook scenarios' give, frozen demons and removal pass the allow-list") {
+    const auto script = parseDebugScript("27:give all|30:ai_freezeMovement 1|40:setviewpos 36 -1590 18.75 90|"
+                                         "41:nextActiveAI;ai_teleportToPlayer trace|53:removeAI");
+    CHECK(script.error.empty());
+    CHECK(script.refused.empty());
+    REQUIRE(script.steps.size() == 5);
+    CHECK(script.steps[1].commands[0] == "ai_freezeMovement 1");
+    CHECK(script.steps[4].commands[0] == "removeAI");
+}
+
+TEST_CASE("debug script: a near miss of the Meat Hook scenarios' freeze cvar is refused") {
+    const auto script = parseDebugScript("30:ai_freezeMovementX 1;ai_freezeMovement 1");
+    CHECK(script.error.empty());
+    REQUIRE(script.refused.size() == 1);
+    REQUIRE(script.steps.size() == 1);
+    REQUIRE(script.steps[0].commands.size() == 1);
+    CHECK(script.steps[0].commands[0] == "ai_freezeMovement 1");
+}
+
 TEST_CASE("debug script: command names are matched without case, cvars take a value") {
     const auto script = parseDebugScript("1:GOD;SetViewPos 1 2 3 4|2:r_sharpening 2.5;give armor/sp_armor_5");
     CHECK(script.refused.empty());

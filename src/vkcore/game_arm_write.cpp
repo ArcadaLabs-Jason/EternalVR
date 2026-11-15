@@ -7,6 +7,8 @@
 #include "features/arm/parent_frames.hpp"
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/game_arm_cache.hpp"
+#include "vkcore/game_arm_joints.hpp"
+#include "vkcore/log.hpp"
 #include "vkcore/seh_filter.hpp"
 
 #include <algorithm>
@@ -29,6 +31,14 @@ using detail::kTicksCap;
 namespace {
 
 constexpr std::int32_t kReleaseWrites = 3; // no-change writes that reach both lists (one a tick); then none
+
+// The cached modifier node while it is still the hands' own, else nullptr. A map load frees the old node
+// and the hands after it can have the old address, so `hands == c.hands` alone let the release read a
+// freed node (a handled access violation each tick after a load, docs/rig-findings/map-load-name-read.md).
+// The live hands' own pointer is read instead; readArm adds the layer's modifiers to a new node.
+const std::byte* liveNode(const Cache& c, const std::byte* hands) {
+    return hands && hands == c.hands && c.node && offhand_mods::modNode(hands) == c.node ? c.node : nullptr;
+}
 
 // The game's call, apart from anything with a destructor (__try needs that). False when it faulted.
 bool callSetJointMod(
@@ -83,8 +93,7 @@ bool writeArm(arm::ArmSide side,
               const std::array<xr_math::ModelPose, arm::kFingerModCount>* fingers,
               std::uint16_t fingerMask) {
     Cache& c = cacheOf(side);
-    if (detail::faulted() || hands != c.hands ||
-        !offhand_mods::layerModsInPlace(c.node, c.base, idsOf(c, side))) {
+    if (detail::faulted() || !offhand_mods::layerModsInPlace(liveNode(c, hands), c.base, idsOf(c, side))) {
         return false;
     }
     if (glove) {
@@ -153,10 +162,19 @@ bool releaseArm(arm::ArmSide side, const std::byte* hands, bool bothLists) {
     c.ticksSinceOverride = std::min(c.ticksSinceOverride + 1, kTicksCap);
     c.wristQuietTicks = std::min(c.wristQuietTicks + 1, kTicksCap);
     if (bothLists) { // memory writes only, no call into the game: also after a faulted call
-        return hands && hands == c.hands && offhand_mods::clearLayerMods(c.node, c.base, idsOf(c, side));
+        if (const std::byte* node = liveNode(c, hands)) {
+            return offhand_mods::clearLayerMods(node, c.base, idsOf(c, side));
+        }
+        // The multiplayer guard's trip calls this once: the hands' node is no longer the cached one, so the
+        // live node is cleared too when the layer's modifiers are in its lists (the joint check finds them).
+        const std::byte* live = offhand_mods::modNode(hands);
+        if (live && offhand_mods::layerModsInPlace(live, c.base, idsOf(c, side))) {
+            return offhand_mods::clearLayerMods(live, c.base, idsOf(c, side));
+        }
+        EVR_LOG("%s: arm release: node changed, nothing of ours found", sideText(side).prefix);
+        return false;
     }
-    if (detail::faulted() || !hands || hands != c.hands ||
-        !offhand_mods::layerModsInPlace(c.node, c.base, idsOf(c, side))) {
+    if (detail::faulted() || !offhand_mods::layerModsInPlace(liveNode(c, hands), c.base, idsOf(c, side))) {
         return false;
     }
     for (std::int32_t k = 0; k < offhand_mods::layerCount(side) && c.releaseWrites < kReleaseWrites; ++k) {
@@ -170,8 +188,7 @@ bool releaseArm(arm::ArmSide side, const std::byte* hands, bool bothLists) {
 
 std::array<std::int32_t, 2> overridesLeft(arm::ArmSide side, const std::byte* hands) {
     const Cache& c = cacheOf(side);
-    return hands && hands == c.hands ? offhand_mods::overridesInLists(c.node, c.base, idsOf(c, side))
-                                     : std::array<std::int32_t, 2>{-1, -1};
+    return offhand_mods::overridesInLists(liveNode(c, hands), c.base, idsOf(c, side));
 }
 
 bool gameCallFaulted() {
