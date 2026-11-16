@@ -17,7 +17,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: controls
         AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, WeaponHandAngle, OffHandAngle, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, Foveation, FramePacing, DepthLayer, TextureStreaming, ParallelEyes, CpuSaver,
+        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, EdgeMargin, Foveation, FramePacing, DepthLayer, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
@@ -139,6 +139,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.TextureStreaming:
                 case Setting.CpuSaver:
                 case Setting.DesktopWindow:
+                case Setting.EdgeMargin:
                     return stereo ? null : NeedsStereo;
                 case Setting.DesktopMonitor:
                 case Setting.DesktopSize:

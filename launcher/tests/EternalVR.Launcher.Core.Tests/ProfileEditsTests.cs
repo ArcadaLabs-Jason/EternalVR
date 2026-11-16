@@ -64,6 +64,7 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.AntiAliasing] = s => s.AntiAliasing = AntiAliasingMode.Dlss,
             [Setting.Sharpening] = s => s.Sharpening = SharpeningMode.Off,
             [Setting.ScreenReflections] = s => s.Reflections = ReflectionsMode.Off,
+            [Setting.EdgeMargin] = s => s.EdgeMargin = LauncherSettings.DefaultEdgeMargin == EdgeMarginMode.Large ? EdgeMarginMode.Off : EdgeMarginMode.Large,
             [Setting.Foveation] = s => s.Foveation = FoveationMode.Balanced,
             [Setting.FramePacing] = s => s.Pacing = FramePacing.Off,
             [Setting.DepthLayer] = s => s.DepthLayer = true,

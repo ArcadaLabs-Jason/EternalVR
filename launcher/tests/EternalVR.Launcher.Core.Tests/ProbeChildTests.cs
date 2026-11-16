@@ -161,6 +161,8 @@ namespace EternalVR.Launcher.Core.Tests
             }
         }
 
+        private const int ChildSleepSeconds = 20;
+
         [Fact]
         public void ACopyThatAnswersButDoesNotExitStillGivesItsAnswer()
         {
@@ -168,17 +170,19 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 var marker = dir.Combine("still-running.txt");
                 var (exe, args) = Script(dir,
-                    AnswerLines + SleepCmd(10) + "echo late> \"" + marker + "\"\n",
-                    AnswerLines + SleepSh(10) + "echo late > \"" + marker + "\"\n");
+                    AnswerLines + SleepCmd(ChildSleepSeconds) + "echo late> \"" + marker + "\"\n",
+                    AnswerLines + SleepSh(ChildSleepSeconds) + "echo late > \"" + marker + "\"\n");
                 var watch = Stopwatch.StartNew();
-                var r = ProbeChild.Run(exe, args, null, timeoutMs: 20000, graceMs: 2000);
+                var r = ProbeChild.Run(exe, args, null, timeoutMs: 60000, graceMs: 2000);
                 watch.Stop();
                 Assert.True(r.Ok, r.Error);
                 Assert.Equal(new Extent(1832, 1920), r.Limits.Recommended);
-                // Well under the 10 s the copy sleeps after answering (waiting for its exit would take that long), with
-                // room for a slow start while the other tests run in parallel (5 s failed now and then).
-                Assert.True(watch.ElapsedMilliseconds < 8000, watch.ElapsedMilliseconds + " ms");
-                Thread.Sleep(11000);
+                // Well under the 20 s the copy sleeps after answering (waiting for its exit would take that long), with a
+                // gap wide enough for a slow start on a loaded runner (5 s, then 8 s against a 10 s sleep, failed now
+                // and then; 8.5 s was measured).
+                Assert.True(watch.ElapsedMilliseconds < ChildSleepSeconds * 1000 - 5000, watch.ElapsedMilliseconds + " ms");
+                // Killed: the script never reaches the line after its sleep.
+                Thread.Sleep(ChildSleepSeconds * 1000 + 1000);
                 Assert.False(File.Exists(marker));
             }
         }

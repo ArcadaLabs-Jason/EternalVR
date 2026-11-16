@@ -2,6 +2,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/presenter_alt.hpp"
 #include "vkcore/seq_alternate.hpp"
 
@@ -41,9 +42,13 @@ VkSemaphore hold(XrPresenter::Impl& p,
              : VK_NULL_HANDLE;
     const stereo_seq::PresentKind kind = kindOf(step.freshIndex);
     const bool toWindow = p.decideWindow(info, kind);
-    const std::uint64_t value = p.submitCopy(
-        queue, family, info, sc, imageIndex, fc, slotIndex,
-        CopyTarget{eye, 1, false, false, p.windowMirrorStep(eye, toWindow), toWindow, kind}, buffer);
+    CopyTarget target{eye, 1, false, false, p.windowMirrorStep(eye, toWindow), toWindow, kind};
+    // The window: this eye's view without the margin (only with one: the lookup copies the record).
+    if (ViewRecord fresh; edgeMarginFovFactor() > 1.0f && p.viewBySeq(step.freshTick, fresh)) {
+        target.viewRect = eyeViewRectOf(fresh, eye);
+    }
+    const std::uint64_t value =
+        p.submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex, target, buffer);
     if (value == 0) {
         p.ring[slotIndex].state.store(kSlotFree);
         p.alt.pairing.carryNotStored();
@@ -90,6 +95,9 @@ VkSemaphore publish(XrPresenter::Impl& p,
     const bool toWindow = p.decideWindow(info, kind);
     CopyTarget target{eye, 1, true, p.settings.ui.enabled, p.windowMirrorStep(eye, toWindow), toWindow, kind};
     target.carrySlot = carry;
+    if (ViewRecord fresh; edgeMarginFovFactor() > 1.0f && p.viewBySeq(step.freshTick, fresh)) {
+        target.viewRect = eyeViewRectOf(fresh, eye);
+    }
     const std::uint64_t value =
         p.submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex, target, buffer);
     if (value == 0) {

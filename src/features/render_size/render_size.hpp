@@ -27,6 +27,9 @@ struct Request {
     Mode mode = Mode::Off;
     Extent fixed;       // Mode::Fixed
     float scale = 1.0f; // Mode::Auto: ETERNALVR_RENDER_SCALE
+    // Mode::Auto: the edge margin's factor (edge_margin.hpp), both sides times it after the scale; 1 without
+    // one.
+    double growth = 1.0;
     friend bool operator==(const Request&, const Request&) = default;
 };
 
@@ -61,10 +64,13 @@ struct ViewLimits {
     std::uint32_t eyesSideBySide = 1;
 };
 
-// Auto: the recommendation scaled uniformly into `budget` pixels (never up), times `scale`, then fitted.
-// nullopt when the recommendation is empty or the scale is not a positive finite number.
-std::optional<Extent>
-autoSize(const ViewLimits& limits, float scale, std::uint64_t budget = kDefaultPixelBudget);
+// Auto: the recommendation scaled uniformly into `budget` pixels (never up), times `scale` and `growth` (the
+// edge margin's, past the budget like a scale above 1), then fitted. nullopt when the recommendation is empty
+// or the scale or the growth is not a positive finite number.
+std::optional<Extent> autoSize(const ViewLimits& limits,
+                               float scale,
+                               std::uint64_t budget = kDefaultPixelBudget,
+                               double growth = 1.0);
 
 // `size` scaled down uniformly, if needed, to fit the runtime's limits (and kMaxSide), then rounded to
 // multiples of kAlign (at least kMinSide per side, aspect kept as closely as the rounding allows).
@@ -73,6 +79,18 @@ Extent fitToLimits(Extent size, const ViewLimits& limits);
 // The size a request gives: Off gives nullopt; Fixed its size (fitted when the limits are known); Auto needs
 // the limits (nullopt without them).
 std::optional<Extent> selectSize(const Request& request, const std::optional<ViewLimits>& limits);
+
+// The edge margin a size keeps once fitted (docs/VR_STEREO.md, "Edge margin"). `wanted` is a size grown by
+// `growth` on both sides. When the runtime's limits scale it down more than they scale the ungrown size
+// (wanted / growth), the fitted image holds only part of the margin at the ungrown size's density: that part,
+// never below 1 (the FOV is then widened by it, not by `growth`). `growth` when the grown size fits; 1 when
+// `growth` is not a finite number above 1.
+double fittedGrowth(Extent wanted, double growth, const ViewLimits& limits);
+
+// fittedGrowth for the size `request` gives with the margin `growth`: Auto's size before its fit (grown by
+// `growth`), Fixed's as a size already grown (the launcher passes its fixed sizes grown), Off keeps `growth`
+// (the window's size is not chosen for the view).
+double requestGrowth(const Request& request, const ViewLimits& limits, double growth);
 
 // A window's client area on the desktop (ETERNALVR_WINDOW, ETERNALVR_MIRROR_WINDOW).
 struct WindowRect {
@@ -85,7 +103,7 @@ struct WindowRect {
 // `x,y,width,height` with a positive size; nullopt otherwise.
 std::optional<WindowRect> parseWindowRect(std::wstring_view text);
 
-// For the log: "off", "auto x1.00" or "WxH".
+// For the log: "off", "auto x1.00" (with ", edge margin x1.20" when it grows) or "WxH".
 std::string describe(const Request& request);
 
 } // namespace evr::render_size

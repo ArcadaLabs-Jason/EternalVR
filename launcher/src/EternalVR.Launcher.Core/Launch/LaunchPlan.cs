@@ -164,7 +164,11 @@ namespace EternalVR.Launcher.Core.Launch
             // The game starts at its final render size when it is known before the launch: the layer applies a fixed
             // size before the first swapchain and the game's video init takes its output size from r_windowWidth and
             // r_windowHeight, so nothing is resized mid-session (a resize can fail on cards with 12 GB or less).
-            var renderChoice = mirror ? RenderSizeChoice.Decide(renderSize, s.RenderScale, inputs.RuntimeProbe, s.ResolutionBase, inputs.Panel) : null;
+            // The edge margin grows an automatic size by its factor on both sides, so the middle keeps its detail.
+            var renderChoice = mirror
+                ? RenderSizeChoice.Decide(renderSize, s.RenderScale, inputs.RuntimeProbe, s.ResolutionBase, inputs.Panel,
+                    LauncherSettings.EdgeMarginGrowth(s.EdgeMargin))
+                : null;
             int outputWidth = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Width : window?.Width ?? 0;
             int outputHeight = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Height : window?.Height ?? 0;
 
@@ -241,6 +245,12 @@ namespace EternalVR.Launcher.Core.Launch
                 Set("ETERNALVR_MIRROR_CROP", s.MirrorCrop ? "16:9" : "full");
             }
             if (stereo) Set("ETERNALVR_CINEMA_ASPECT", MirrorSettings.CinemaName(s.Cinema));
+            // Each eye wider than its view, so a fast head turn shows picture at the edges (docs/VR_STEREO.md "Edge margin");
+            // stereo only, explicit either way. When the runtime's limits cut a size grown here, the margin that size keeps; a
+            // fixed render_size set by hand is not grown, and renders the whole margin at its size.
+            if (stereo)
+                Set("ETERNALVR_EDGE_MARGIN", LauncherSettings.EdgeMarginValue(s.EdgeMargin,
+                    renderChoice?.Size != null && renderChoice.Growth > 1.0 ? renderChoice.KeptGrowth : (double?)null));
             Set("ETERNALVR_SKIP_CINEMATICS", s.SkipCinematics ? "1" : "0");
             // Room-scale, posture and eye height (docs/VR_ROOMSCALE.md).
             Set("ETERNALVR_POSTURE", LauncherSettings.PostureName(s.Posture));

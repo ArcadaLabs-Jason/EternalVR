@@ -7,6 +7,7 @@
 // Plain logic: the settings, the band of an image and the window's rectangle on a list of displays.
 
 #include "features/render_size/render_size.hpp"
+#include "xr_math/edge_margin.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -29,6 +30,14 @@ struct Band {
 // to whole pixels. The whole image for an aspect of 0 or less, or when the image is not taller than the band
 // (0.5 % tolerance, the rounding of window sizes).
 Band centredBand(std::uint32_t width, std::uint32_t height, double aspect);
+
+// What the desktop window shows of a `width` x `height` eye image: the view's rectangle (the edge margin's,
+// EyeRecord::viewRect; nullopt: the whole image) in whole pixels, and of that the centred band of `aspect`
+// (ETERNALVR_MIRROR_CROP; 0 or less: all of it).
+xr_math::PixelBox windowBox(const std::optional<xr_math::ImageRect>& view,
+                            std::uint32_t width,
+                            std::uint32_t height,
+                            double aspect);
 
 // ETERNALVR_MIRROR_DISPLAY: `launcher` (or empty: the launcher's rectangle, ETERNALVR_MIRROR_WINDOW, as it
 // is), `primary`, a display number `N` (1 = the first display Windows lists; the log lists them), or a

@@ -36,6 +36,7 @@ evr_add_test(evr_xr_math_tests
         xr_math/cinema_quad_tests.cpp
         xr_math/cutscene_cuts_tests.cpp
         xr_math/display_lead_tests.cpp
+        xr_math/edge_margin_tests.cpp
         xr_math/enclosing_fov_tests.cpp
         xr_math/eye_clip_transform_tests.cpp
         xr_math/hand_aim_tests.cpp
@@ -448,6 +449,7 @@ evr_add_test(evr_menu_tests
 
 evr_add_test(evr_render_size_tests
     SOURCES
+        features/render_size/edge_margin_tests.cpp
         features/render_size/mirror_window_tests.cpp
         features/render_size/render_cap_tests.cpp
         features/render_size/render_size_tests.cpp

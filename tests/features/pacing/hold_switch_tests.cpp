@@ -133,7 +133,8 @@ TEST_CASE("hold switch: menus and loading screens hold the game and decide nothi
     CHECK(sw.backOffSeconds() == doctest::Approx(HoldSwitch::kWindowSeconds));
 }
 
-TEST_CASE("hold switch: hasFallenBehind turns on at the first fall in play and stays on; a menu does not") {
+TEST_CASE(
+    "hold switch: hasFallenBehind needs two falls in play within the latch window; a menu does not count") {
     HoldSwitch sw;
     Feeder f;
     CHECK_FALSE(sw.hasFallenBehind());
@@ -141,9 +142,87 @@ TEST_CASE("hold switch: hasFallenBehind turns on at the first fall in play and s
     CHECK_FALSE(sw.hasFallenBehind());
     f.run(sw, 10.0, [](bool, double) { return 90.0; }); // keeps up
     CHECK_FALSE(sw.hasFallenBehind());
-    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1); // falls behind
-    CHECK(sw.hasFallenBehind());
-    f.run(sw, 30.0, [](bool held, double) { return held ? 90.0 : 100.0; }); // held again, keeps up
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1); // one fall
+    CHECK_FALSE(sw.hasFallenBehind());
+    f.run(sw, 300.0, [](bool held, double) { return held ? 90.0 : 100.0; }); // held again, keeps up
     CHECK(sw.held());
+    CHECK_FALSE(sw.hasFallenBehind());
+}
+
+TEST_CASE("hold switch: a game that keeps falling latches hasFallenBehind at the second fall, and it stays") {
+    HoldSwitch sw;
+    Feeder f;
+    f.run(sw, 30.0, [](bool held, double) { return held ? 80.0 : 100.0; }); // falls again and again
+    CHECK(sw.switches() >= 3);
     CHECK(sw.hasFallenBehind());
+    f.run(sw, 300.0, [](bool held, double) { return held ? 90.0 : 100.0; });
+    CHECK(sw.hasFallenBehind());
+}
+
+TEST_CASE("hold switch: two falls further apart than the latch window do not latch") {
+    HoldSwitch sw;
+    Feeder f;
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1);
+    f.run(sw, HoldSwitch::kLatchWindowSeconds + 10.0, [](bool held, double) { return held ? 90.0 : 100.0; });
+    REQUIRE(sw.held());
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1); // the second fall, late
+    CHECK_FALSE(sw.hasFallenBehind());
+    // A third within the window of the second does latch.
+    f.run(sw, 10.0, [](bool held, double) { return held ? 80.0 : 100.0; });
+    CHECK(sw.hasFallenBehind());
+}
+
+TEST_CASE("hold switch: the latch window's end is inclusive") {
+    // Frames 1/64 s apart so every time is exact: a window is 64 frames. Two bad windows make a fall.
+    for (const int extra : {0, 1}) {
+        HoldSwitch sw;
+        double t = 0.0;
+        std::uint64_t handOvers = 0;
+        sw.frame(t, handOvers, kPeriod);
+        const auto window = [&](std::uint64_t imagesPerFrame) {
+            for (int i = 0; i < 64; ++i) {
+                t += 1.0 / 64.0;
+                handOvers += imagesPerFrame;
+                sw.frame(t, handOvers, kPeriod);
+            }
+        };
+        window(0);
+        window(0);
+        REQUIRE(sw.switches() == 1); // the first fall, at t = 2
+        REQUIRE(t == 2.0);
+        REQUIRE_FALSE(sw.hasFallenBehind());
+        window(2); // let go, the game's rate above the refresh's: held again at t = 3
+        REQUIRE(sw.held());
+        const int gap = static_cast<int>(HoldSwitch::kLatchWindowSeconds) + extra;
+        while (t < gap) {
+            window(1);
+        }
+        window(0);
+        window(0); // the second fall at t = gap + 2, gap seconds after the first
+        REQUIRE(sw.switches() == 3);
+        INFO("gap " << gap);
+        CHECK(sw.hasFallenBehind() == (extra == 0));
+    }
+}
+
+TEST_CASE("hold switch: a menu or a loading screen between two falls forgets the first") {
+    HoldSwitch sw;
+    Feeder f;
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1);
+    f.run(sw, 3.0, [](bool, double) { return 30.0; }, false); // a loading screen
+    f.run(sw, 10.0, [](bool held, double) { return held ? 90.0 : 100.0; });
+    REQUIRE(sw.held());
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1);
+    CHECK_FALSE(sw.hasFallenBehind());
+}
+
+TEST_CASE("hold switch: the unseen hold's pause forgets the first fall") {
+    HoldSwitch sw;
+    Feeder f;
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1);
+    sw.pause(f.t, f.handOvers);
+    f.t += 1.0;
+    f.run(sw, 10.0, [](bool held, double) { return held ? 90.0 : 100.0; });
+    REQUIRE(f.run(sw, 2.5, [](bool, double) { return 80.0; }) == 1);
+    CHECK_FALSE(sw.hasFallenBehind());
 }

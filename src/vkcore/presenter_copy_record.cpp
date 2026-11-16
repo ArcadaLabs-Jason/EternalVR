@@ -8,10 +8,12 @@
 #include "vkcore/ui_engine.hpp"
 #include "vkcore/view_snapshot.hpp"
 #include "vkcore/vrs_nv.hpp"
+#include "xr_math/edge_margin.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace evr::vkcore {
@@ -134,9 +136,12 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     }
     // The motion-vector capture: with eye R's copy, both eyes of the pair have rendered.
     motionCapture.record(dev, cb, family, target.kind == stereo_seq::PresentKind::EyeR);
-    // The desktop mirror, after the eye is in the ring: keep this eye, or put the kept one in its place.
+    // The desktop mirror, after the eye is in the ring: keep this eye, or put the kept one in its place; a
+    // stereo eye's window shows its view without the edge margin (the presented frame's own rectangle).
+    const std::optional<xr_math::ImageRect> view =
+        target.kind == stereo_seq::PresentKind::Mono ? std::nullopt : target.viewRect;
     const VkImageLayout sourceLayout =
-        mirror.record(dev, cb, family, source, sc.format, sc.extent, panel.step, target.toWindow);
+        mirror.record(dev, cb, family, source, sc.format, sc.extent, panel.step, target.toWindow, view);
 
     std::array<VkImageMemoryBarrier, 3> after{};
     // The swapchain image goes back to PRESENT_SRC for the present.

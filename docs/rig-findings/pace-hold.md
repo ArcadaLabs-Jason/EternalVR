@@ -84,10 +84,11 @@ Processor Performance while held (let go it is 125 to 128 in every Balanced run)
 ## Decision (T-232)
 
 Held, the render thread sleeps until 5 ms before the headset's frame is due (a high-resolution waitable timer)
-and spins the rest, once a hold has fallen behind in play; until then it only sleeps. A PC like this one loses at
-most its first hold (the spin turned on 17 to 44 s into each run, before the measured route), then holds. A PC
-whose clock stays up spins only once a hold falls behind there too: on High performance 4 of 6 route runs never
-spun, and in combat one hitch turned it on 101 s in (below). Once on, it stays on for the session: a spin that
+and spins the rest, once a hold has fallen behind in play twice within 2 minutes; until then it only sleeps. (First
+measured and merged with the latch at the first fall; see "Latch at the second fall" below for the second-fall latch's own runs.) With the first-fall latch (the numbers
+of the tables above) a PC like this one lost at most its
+first hold (the spin turned on 17 to 44 s into each run, before the measured route), then held. On High
+performance 4 of 6 route runs never spun, and in combat one hitch turned it on 101 s in (below). Once on, it stays on for the session: a spin that
 decays lets the clock fall again and brings the flapping back. Only in play (menus and loading screens sleep),
 never in the low hold while nobody looks (T-228). `ETERNALVR_TEST_HOLD_SPIN=0` only sleeps, `=1` spins through
 the whole wait in play from the start, `ETERNALVR_TEST_HOLD_SPIN_MS` sets the spin (rig tests).
@@ -130,3 +131,30 @@ performance run:
   (45% of a core at 90 Hz). A PC whose clock does not fall would not spin at all.
 - `present-latency.md` (2026-10-30) put the old hold's repeats on this PC down to the game's priority; its runs
   were on Balanced too, and the clock falling while held likely explains part of them [inferred].
+
+## Latch at the second fall
+
+The first version latched the spin at the first fall in play. On High performance the combat route latched at
+101 s from a single hitch: 20% of a core, about 4 W more, no frame gain. Now the spin latches at the second
+fall within 120 s (`HoldSwitch::kLatchWindowSeconds`). Why 120 s, from the timings: a fall takes two bad
+windows (2 s or more), a let-go lasts at least the back-off (1 s, doubling to 32 s while holds do not last 10 s),
+so a game that cannot keep up falls again within about 10 s and at the latest within a minute; a single hitch
+falls once. A menu, a loading screen or the unseen hold (T-228) forgets the first fall: the hitch around a load
+is not evidence. Unit tests: `hold_switch_tests.cpp` (one fall latches nothing, repeated falls latch and stay,
+two falls further apart than the window do not, a menu or the unseen hold between falls forgets the first).
+Rig, 2026-11-14 (my test PC, one suite per power plan, the three routes at the auto size, no switches; the
+numbers of r8 above for comparison; analysis as for the other rows) [rig]:
+
+| | Balanced, second-fall latch | Balanced, r8 (first-fall latch) | High performance, second-fall latch | High performance, r8 |
+|---|---|---|---|---|
+| Held, s of 70 (combat / outdoor / hub) | 67 / 70 / 70 | 69 / 70 / 70 | 69 / 70 / 70 | 69 / 70 / 70 |
+| Missed periods (combat / outdoor / hub) | 2.30 / 0.81 / 0.24% | 2.13 / 0.35 / 0.48% | 1.33 / 0.41 / 0.07% | 2.19 / 0.46 / 0.19% |
+| Spin, % of a core (combat / outdoor / hub) | 18 / 23 / 37 | 19 / 22 / 36 | none in any route | |
+| Latch in the log (s into the run) | 24.6 / 22.2 / 46.5 | | none of the three | |
+| CPU held, % performance | 128 / 127 / 127 | 126-128 | 127 / 127 / 127 | 127 |
+
+Balanced: the PC that needs the spin latched in all three routes before the measured route (the second fall
+came within about 25 s of the first in each), held 67 to 70 s, and the spin cost is the same as before; combat
+held 67 s against 69 (the kept build's four runs spanned 67 to 70), outdoor's missed periods 0.81% against
+0.35% (earlier runs 0.33 to 0.63%): one run each, so within what I cannot tell from run-to-run spread.
+High performance: no latch in any of the three runs, so no spin; held 69 to 70 s, missed periods no higher than r8's.

@@ -222,6 +222,10 @@ struct XrPresenter::Impl final : ViewHookSink,
     std::uint64_t eyesMissing = 0; // camera hook thread
     // Camera hook: each eye's pose, FOV, world offset and axis for this frame (xrLocateViews in VIEW space).
     void prepareEyes(ViewRecord& record, const xr_math::IdViewAxis& body, Quat headOpenXr);
+    // The edge margin's FOVs for prepareEyes (edge_margin_setting.hpp): each eye's widened in place, and
+    // where its view lies in the image noted for the desktop window. Camera hook thread.
+    void widenEyes(std::array<xr_math::EyeInHead, 2>& eyes);
+    std::array<bool, 2> loggedEdgeMargin{};
     // StereoHookSink
     void onEyeView(std::byte* renderView, int viewIndex, const std::byte* firstViewG) override;
     void onEyeLatched(std::byte* renderView, int screenView) override;
@@ -243,6 +247,8 @@ struct XrPresenter::Impl final : ViewHookSink,
     void startStereo();
     // Worker: the projection layer's views for the shown image; false when it has no view.
     bool fillProjectionViews(std::array<XrCompositionLayerProjectionView, 2>& views);
+    void logMarginSubmitted(std::size_t eye, const XrCompositionLayerProjectionView& v);
+    std::array<bool, 2> loggedMarginSubmit{}; // XR worker
 
     // ---- The depth layer (presenter_depth.hpp, presenter_depth_glue.cpp)
     // ------------------------------------

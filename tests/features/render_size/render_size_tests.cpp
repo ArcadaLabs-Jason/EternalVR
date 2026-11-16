@@ -1,7 +1,10 @@
 #include "features/render_size/render_size.hpp"
 
+#include "features/render_size/edge_margin.hpp"
+
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <optional>
 #include <string>
 
@@ -17,13 +20,18 @@ struct StringMaker<evr::render_size::Extent> {
 using evr::render_size::autoSize;
 using evr::render_size::describe;
 using evr::render_size::Extent;
+using evr::render_size::fittedGrowth;
 using evr::render_size::fitToLimits;
 using evr::render_size::kDefaultPixelBudget;
+using evr::render_size::kEdgeMarginLarge;
+using evr::render_size::kEdgeMarginMedium;
+using evr::render_size::kEdgeMarginSmall;
 using evr::render_size::Mode;
 using evr::render_size::parseRenderScale;
 using evr::render_size::parseRenderSize;
 using evr::render_size::parseWindowRect;
 using evr::render_size::Request;
+using evr::render_size::requestGrowth;
 using evr::render_size::selectSize;
 using evr::render_size::ViewLimits;
 using evr::render_size::WindowRect;
@@ -105,6 +113,32 @@ TEST_CASE("auto: the render scale multiplies the budgeted size, past the budget 
     CHECK(static_cast<std::uint64_t>(more->width) * more->height > kDefaultPixelBudget);
 }
 
+TEST_CASE("auto: the edge margin's growth multiplies both sides after the scale, past the budget") {
+    // The launcher's sizes (edge_margin.hpp) on Quest 3 through VDXR at 100 %: 2056 x 2216 without.
+    CHECK(*autoSize(quest3Vdxr(), 1.0f, kDefaultPixelBudget, 1.0) == Extent{2056, 2216});
+    CHECK(*autoSize(quest3Vdxr(), 1.0f, kDefaultPixelBudget, static_cast<double>(kEdgeMarginSmall)) ==
+          Extent{2264, 2440});
+    CHECK(*autoSize(quest3Vdxr(), 1.0f, kDefaultPixelBudget, static_cast<double>(kEdgeMarginMedium)) ==
+          Extent{2472, 2656});
+    CHECK(*autoSize(quest3Vdxr(), 1.0f, kDefaultPixelBudget, static_cast<double>(kEdgeMarginLarge)) ==
+          Extent{2672, 2880});
+    // The test PC's simulator (1280 x 1400, 2048 per eye side by side).
+    ViewLimits sim;
+    sim.recommended = {1280, 1400};
+    sim.maxSwapchain = {4096, 4096};
+    sim.eyesSideBySide = 2;
+    CHECK(*autoSize(sim, 1.0f, kDefaultPixelBudget, static_cast<double>(kEdgeMarginMedium)) ==
+          Extent{1536, 1680});
+    // Through the request, as the layer selects it.
+    Request r;
+    r.mode = Mode::Auto;
+    r.growth = static_cast<double>(kEdgeMarginMedium);
+    CHECK(*selectSize(r, quest3Vdxr()) == Extent{2472, 2656});
+    // A bad growth gives nothing, as a bad scale does.
+    CHECK_FALSE(autoSize(quest3Vdxr(), 1.0f, kDefaultPixelBudget, 0.0));
+    CHECK_FALSE(autoSize(quest3Vdxr(), 1.0f, kDefaultPixelBudget, -1.0));
+}
+
 TEST_CASE("auto: sides are multiples of 8") {
     ViewLimits l;
     l.recommended = {1833, 1917};
@@ -162,6 +196,55 @@ TEST_CASE("select: off, fixed with and without limits, auto only with limits") {
     CHECK(*selectSize(automatic, quest3Vdxr()) == Extent{1648, 1776});
 }
 
+TEST_CASE("edge margin: the margin a fitted size keeps") {
+    const auto medium = static_cast<double>(kEdgeMarginMedium);
+    const auto small = static_cast<double>(kEdgeMarginSmall);
+    Request automatic;
+    automatic.mode = Mode::Auto;
+    SUBCASE("the grown size fits: the whole margin") {
+        CHECK(requestGrowth(automatic, quest3Vdxr(), medium) == medium);
+        ViewLimits sim;
+        sim.recommended = {1280, 1400};
+        sim.maxSwapchain = {4096, 4096};
+        sim.eyesSideBySide = 2;
+        CHECK(requestGrowth(automatic, sim, medium) == medium);
+    }
+    SUBCASE("clamped: the margin shrinks to what the fitted size holds at the centre's density") {
+        // Quest 3's 2496 x 2688 in the budget is 2057 x 2215; Medium wants 2469 x 2658. An image limit of
+        // 2300 holds 2300 / 2469 of it, x1.118 of the view at the ungrown density.
+        ViewLimits narrow = quest3Vdxr();
+        narrow.maxImageRect = {2300, 4096};
+        CHECK(requestGrowth(automatic, narrow, medium) == doctest::Approx(1.1178615).epsilon(1e-6));
+        // Small's 2263 wide still fits: all of it.
+        CHECK(requestGrowth(automatic, narrow, small) == small);
+        // The simulator's 2048 per eye cuts the ungrown size too, by the same share: no margin is left.
+        ViewLimits sim = quest3Vdxr();
+        sim.maxImageRect = {};
+        sim.maxSwapchain = {4096, 4096};
+        CHECK(requestGrowth(automatic, sim, medium) == doctest::Approx(1.0));
+    }
+    SUBCASE("a fixed size is taken as already grown (the launcher's)") {
+        Request fixed;
+        fixed.mode = Mode::Fixed;
+        fixed.fixed = {2472, 2656};
+        CHECK(requestGrowth(fixed, quest3Vdxr(), medium) == medium);
+        ViewLimits narrow = quest3Vdxr();
+        narrow.maxImageRect = {2300, 4096};
+        CHECK(requestGrowth(fixed, narrow, medium) == doctest::Approx(1.1165049).epsilon(1e-6));
+        // Never below 1, even when the limits cut the ungrown size more than the grown one.
+        narrow.maxImageRect = {2000, 4096};
+        CHECK(requestGrowth(fixed, narrow, medium) == doctest::Approx(1.0));
+        CHECK(fittedGrowth({2472, 2656}, medium, narrow) >= 1.0);
+    }
+    SUBCASE("off keeps the margin; no margin or a bad one is 1") {
+        CHECK(requestGrowth(Request{}, quest3Vdxr(), medium) == medium);
+        CHECK(requestGrowth(automatic, quest3Vdxr(), 1.0) == 1.0);
+        CHECK(requestGrowth(automatic, quest3Vdxr(), 0.5) == 1.0);
+        CHECK(requestGrowth(automatic, quest3Vdxr(), std::nan("")) == 1.0);
+        CHECK(fittedGrowth({}, medium, quest3Vdxr()) == medium);
+    }
+}
+
 TEST_CASE("window rectangles") {
     CHECK(*parseWindowRect(L"2560,0,2064,2100") == WindowRect{2560, 0, 2064, 2100});
     CHECK(*parseWindowRect(L" -1920, 10 ,1280,720 ") == WindowRect{-1920, 10, 1280, 720});
@@ -179,6 +262,8 @@ TEST_CASE("describe") {
     a.mode = Mode::Auto;
     a.scale = 0.8f;
     CHECK(describe(a) == "auto x0.80");
+    a.growth = 1.2;
+    CHECK(describe(a) == "auto x0.80, edge margin x1.20");
     Request f;
     f.mode = Mode::Fixed;
     f.fixed = {2064, 2208};

@@ -7,6 +7,7 @@
 #include "stereo_seq/alternate_eyes.hpp"
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/dlss_menu_hooks.hpp"
+#include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/exposure_hooks.hpp"
 #include "vkcore/flare_views.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -373,6 +374,10 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
                         stereo_seq::PresentKind::EyeL};
         left.depth = true; // the depth layer, when on (presenter_depth.hpp), with this tick's planes
         left.depthTick = match.tag.tick;
+        // The window: this tick's view without the margin (only with one: the lookup copies the record).
+        if (ViewRecord tickView; edgeMarginFovFactor() > 1.0f && viewBySeq(match.tag.tick, tickView)) {
+            left.viewRect = eyeViewRectOf(tickView, 0);
+        }
         const std::uint64_t value =
             submitCopy(queue, family, info, sc, imageIndex, fc, slotIndex, left, buffer);
         if (value == 0) {
@@ -397,6 +402,9 @@ VkSemaphore XrPresenter::Impl::seqCopyForPresent(VkQueue queue,
             1, 1, true, false, windowMirrorStep(1, toWindow), toWindow, stereo_seq::PresentKind::EyeR};
         right.depth = true;
         right.depthTick = match.tag.tick;
+        if (ViewRecord tickView; edgeMarginFovFactor() > 1.0f && viewBySeq(match.tag.tick, tickView)) {
+            right.viewRect = eyeViewRectOf(tickView, 1);
+        }
         const std::uint64_t value = slotIndex < kRingSize ? submitCopy(queue, family, info, sc, imageIndex,
                                                                        fc, slotIndex, right, buffer)
                                                           : 0;

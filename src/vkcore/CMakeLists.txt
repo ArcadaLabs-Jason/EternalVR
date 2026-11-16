@@ -104,6 +104,7 @@ add_library(evr_layer SHARED
     device_entry.cpp
     dlss_dll.cpp
     dlss_menu_hooks.cpp
+    edge_margin_setting.cpp
     eye_capture.cpp
     exposure_hooks.cpp
     frame_pacing.cpp

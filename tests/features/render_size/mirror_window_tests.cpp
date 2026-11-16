@@ -17,6 +17,14 @@ struct StringMaker<evr::render_size::WindowRect> {
     }
 };
 template <>
+struct StringMaker<evr::xr_math::PixelBox> {
+    static String convert(const evr::xr_math::PixelBox& b) {
+        return (std::to_string(b.x) + "," + std::to_string(b.y) + " " + std::to_string(b.width) + "x" +
+                std::to_string(b.height))
+            .c_str();
+    }
+};
+template <>
 struct StringMaker<evr::render_size::Band> {
     static String convert(const evr::render_size::Band& b) {
         return ("rows " + std::to_string(b.y) + "+" + std::to_string(b.height)).c_str();
@@ -37,6 +45,7 @@ using evr::render_size::parseMirrorDisplay;
 using evr::render_size::parseMirrorSize;
 using evr::render_size::placeMirror;
 using evr::render_size::shapeToImage;
+using evr::render_size::windowBox;
 using evr::render_size::WindowRect;
 
 namespace {
@@ -284,4 +293,34 @@ TEST_CASE("mirror window: the frame stays on the screen") {
     // A second display to the right: only its own corner counts.
     CHECK(keepFrameOnScreen(WindowRect{3832, -31, 684, 759}, WindowRect{3840, 0, 2560, 1380}) ==
           WindowRect{3840, 0, 684, 759});
+}
+
+TEST_CASE("window box: the view without the edge margin, then the crop's band") {
+    using evr::xr_math::Fov;
+    using evr::xr_math::PixelBox;
+    constexpr float kRadians = 3.14159265358979f / 180.0f;
+    // No margin (a mono, cinema or E4 frame, or the margin off): the whole image, or its band.
+    CHECK(windowBox(std::nullopt, 1536, 1680, 0.0) == PixelBox{0, 0, 1536, 1680});
+    CHECK(windowBox(std::nullopt, 2056, 2216, 16.0 / 9.0) == PixelBox{0, 529, 2056, 1157});
+    // Medium on the simulator's eye L (1280 x 1400 grown to 1536 x 1680): the view's 1280 x 1400, off-centre
+    // as the eye's FOV is, then 16:9 of it.
+    const Fov view{-54.0f * kRadians, 40.0f * kRadians, 43.98f * kRadians, -54.27f * kRadians};
+    const auto wide = evr::xr_math::widenFov(view, 1.2f);
+    REQUIRE(wide.has_value());
+    const auto rect = evr::xr_math::marginViewRect(*wide, view);
+    REQUIRE(rect.has_value());
+    const PixelBox box = windowBox(rect, 1536, 1680, 0.0);
+    CHECK(box.width >= 1279);
+    CHECK(box.width <= 1281);
+    CHECK(box.height >= 1399);
+    CHECK(box.height <= 1401);
+    CHECK(box.x > (1536 - 1280) / 2); // the temporal (left) side has more of the margin
+    CHECK(box.x + box.width <= 1536);
+    CHECK(box.y + box.height <= 1680);
+    const PixelBox band = windowBox(rect, 1536, 1680, 16.0 / 9.0);
+    const Band expected = centredBand(box.width, box.height, 16.0 / 9.0);
+    CHECK(band.x == box.x);
+    CHECK(band.width == box.width);
+    CHECK(band.height == expected.height);
+    CHECK(band.y == box.y + expected.y);
 }

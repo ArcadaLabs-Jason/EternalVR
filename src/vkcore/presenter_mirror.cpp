@@ -221,6 +221,7 @@ bool DesktopMirror::keepPanel(DeviceData& dev,
     }
     inGeneral_ = true;
     kept_ = true;
+    keptView_ = std::nullopt; // the panel has no margin
     ++counters_.panels;
     if (!panelLogged_) {
         panelLogged_ = true;
@@ -233,12 +234,8 @@ bool DesktopMirror::keepPanel(DeviceData& dev,
     return true;
 }
 
-void DesktopMirror::blitBand(DeviceData& dev,
-                             VkCommandBuffer cb,
-                             VkImage source,
-                             VkExtent2D extent,
-                             std::uint32_t y,
-                             std::uint32_t height) {
+void DesktopMirror::blitBand(
+    DeviceData& dev, VkCommandBuffer cb, VkImage source, VkExtent2D extent, xr_math::PixelBox box) {
     const std::array<VkImageMemoryBarrier, 2> before{
         barrier(source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT),
@@ -249,9 +246,9 @@ void DesktopMirror::blitBand(DeviceData& dev,
     VkImageBlit region{};
     region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.srcOffsets[0] = {0, static_cast<std::int32_t>(y), 0};
-    region.srcOffsets[1] = {static_cast<std::int32_t>(extent.width), static_cast<std::int32_t>(y + height),
-                            1};
+    region.srcOffsets[0] = {static_cast<std::int32_t>(box.x), static_cast<std::int32_t>(box.y), 0};
+    region.srcOffsets[1] = {static_cast<std::int32_t>(box.x + box.width),
+                            static_cast<std::int32_t>(box.y + box.height), 1};
     region.dstOffsets[1] = {static_cast<std::int32_t>(extent.width), static_cast<std::int32_t>(extent.height),
                             1};
     dev.vk.CmdBlitImage(cb, image_, VK_IMAGE_LAYOUT_GENERAL, source, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
@@ -266,12 +263,28 @@ VkImageLayout DesktopMirror::record(DeviceData& dev,
                                     VkFormat format,
                                     VkExtent2D extent,
                                     stereo_seq::MirrorStep step,
-                                    bool toWindow) {
+                                    bool toWindow,
+                                    const std::optional<xr_math::ImageRect>& view) {
     using stereo_seq::MirrorStep;
-    const double aspect =
-        toWindow && step != MirrorStep::Clear && !failed_ ? virtual_client::mirrorCropAspect() : 0.0;
-    const render_size::Band band = render_size::centredBand(extent.width, extent.height, aspect);
-    const bool crop = band.height != extent.height && canBlit(dev, format) && blitsOn(dev, family);
+    const bool sameShape =
+        image_ && format_ == format && extent_.width == extent.width && extent_.height == extent.height;
+    // What reaches the window: the kept image after a load (unless nothing of this shape is kept), else this
+    // one; only its view's part (the edge margin), and of that the centred band (ETERNALVR_MIRROR_CROP).
+    const bool loads = step == MirrorStep::Load && sameShape && kept_;
+    const std::optional<xr_math::ImageRect>& shown = loads ? keptView_ : view;
+    const bool cuts = toWindow && step != MirrorStep::Clear && !failed_;
+    const double aspect = cuts ? virtual_client::mirrorCropAspect() : 0.0;
+    const xr_math::PixelBox box = render_size::windowBox(cuts ? shown : std::optional<xr_math::ImageRect>{},
+                                                         extent.width, extent.height, aspect);
+    const bool cut = box.x != 0 || box.y != 0 || box.width != extent.width || box.height != extent.height;
+    const bool crop = cut && canBlit(dev, format) && blitsOn(dev, family);
+    if (crop && shown && !marginLogged_) {
+        marginLogged_ = true;
+        EVR_LOG(
+            "mirror: the window shows the eye's view without the edge margin: %ux%u at %u,%u of the %ux%u "
+            "image",
+            box.width, box.height, box.x, box.y, extent.width, extent.height);
+    }
     if (step == MirrorStep::None && !crop) {
         return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     }
@@ -286,9 +299,7 @@ VkImageLayout DesktopMirror::record(DeviceData& dev,
         ++counters_.clears;
         return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     }
-    const bool sameShape =
-        image_ && format_ == format && extent_.width == extent.width && extent_.height == extent.height;
-    if (step == MirrorStep::Load && (!sameShape || !kept_)) {
+    if (step == MirrorStep::Load && !loads) {
         ++counters_.skipped; // nothing of this shape kept yet: the image goes out as rendered
         if (!crop) {
             return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -316,17 +327,18 @@ VkImageLayout DesktopMirror::record(DeviceData& dev,
         inGeneral_ = true;
         // Only a store keeps an eye for the other present; a crop's own copy replaces what was kept.
         kept_ = step == MirrorStep::Store;
+        keptView_ = kept_ ? view : std::nullopt;
         counters_.stores += kept_ ? 1 : 0;
         if (!crop) {
             return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         }
-        blitBand(dev, cb, source, extent, band.y, band.height);
+        blitBand(dev, cb, source, extent, box);
         return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     }
     if (crop) {
         // Load, cut: the kept eye's band goes straight over this present's image.
         ++counters_.loads;
-        blitBand(dev, cb, source, extent, band.y, band.height);
+        blitBand(dev, cb, source, extent, box);
         return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     }
     // Load: the kept eye image replaces this present's image.

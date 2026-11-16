@@ -18,7 +18,7 @@ using pacing::HeldSpin;
 
 std::atomic<HeldSpin> g_mode{HeldSpin::OnceBehind};          // set once (configure)
 std::atomic<double> g_spinSeconds{pacing::kHeldSpinSeconds}; // set once (configure)
-std::atomic<bool> g_on{false};                  // the spin runs: Always, or OnceBehind after the first fall
+std::atomic<bool> g_on{false}; // the spin runs: Always, or OnceBehind after the second fall within the window
 std::atomic<std::uint64_t> g_frames{0};         // HeadsetLoop::frames (frameBegun)
 std::atomic<std::uint64_t> g_sleeps{0};         // timer sleeps before a spin since the last 10 s line
 std::atomic<std::uint64_t> g_wakeLateMicros{0}; // ... their wake past the time asked for
@@ -159,7 +159,8 @@ bool wait(std::unique_lock<std::mutex>& lock,
     }
     if (!g_on.exchange(true, std::memory_order_relaxed)) {
         EVR_LOG(
-            "pace: a hold fell behind; from now on, in play, the held render thread spins the last %.1f ms "
+            "pace: a hold fell behind twice within the latch window; from now on, in play, the held render "
+            "thread spins the last %.1f ms "
             "before each headset frame instead of sleeping, so the CPU's clock stays up while the game is "
             "held "
             "(T-232)",

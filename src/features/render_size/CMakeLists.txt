@@ -2,7 +2,10 @@
 # the OpenXR runtime's limits and the desktop window rectangles. No Windows, Vulkan or OpenXR here.
 evr_add_module(evr_render_size
     SOURCES
+        edge_margin.cpp
         mirror_window.cpp
         render_cap.cpp
         render_size.cpp
-        window_steps.cpp)
+        window_steps.cpp
+    DEPENDS
+        evr_xr_math)

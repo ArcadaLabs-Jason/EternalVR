@@ -197,7 +197,12 @@ bool HoldSwitch::frame(double nowSeconds, std::uint64_t handOvers, double period
         changedAt_ = nowSeconds;
         lastChange_ = why;
         badWindows_ = 0;
-        fellBehind_ = fellBehind_ || why == Change::FellBehind;
+        if (why == Change::FellBehind) {
+            if (lastFallAt_ && nowSeconds - *lastFallAt_ <= kLatchWindowSeconds) {
+                fellBehind_ = true;
+            }
+            lastFallAt_ = nowSeconds;
+        }
     };
     if (!windowStart_) {
         restart();
@@ -205,7 +210,9 @@ bool HoldSwitch::frame(double nowSeconds, std::uint64_t handOvers, double period
         return false;
     }
     if (!inPlay) {
-        // A menu or a loading screen: held, nothing decided. Not a hold the back-off judges.
+        // A menu or a loading screen: held, nothing decided. Not a hold the back-off judges, and the hitch
+        // around a load is no evidence for the latch.
+        lastFallAt_.reset();
         const bool changed = !held_;
         if (changed) {
             change(Change::LeftPlay);
@@ -257,6 +264,7 @@ void HoldSwitch::pause(double nowSeconds, std::uint64_t handOvers) {
     if (!std::isfinite(nowSeconds)) {
         return;
     }
+    lastFallAt_.reset(); // nobody looked: the time since the first fall says nothing about the hold
     if (!windowStart_) {
         changedAt_ = nowSeconds; // as frame()'s first frame
     }

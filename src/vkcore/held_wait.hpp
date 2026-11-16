@@ -3,10 +3,10 @@
 // The held game's wait for the headset's next frame under ETERNALVR_PACE=headset (T-232; docs/VR_STEREO.md
 // "Frame pacing", The held wait; docs/rig-findings/pace-hold.md). Carries out pacing::planHeldWait
 // (features/pacing/held_spin.hpp): sleep on the pacing condition variable, or, once a hold has fallen behind
-// in play, sleep on the thread's high-resolution waitable timer until the spin's length before the frame is
-// due, spin (yielding the core at each turn) at most the spin's length plus 1 ms, and sleep what is left of
-// the timeout. Rig tests: ETERNALVR_TEST_HOLD_SPIN=0 never spins, =1 spins through the whole wait in play;
-// ETERNALVR_TEST_HOLD_SPIN_MS sets the spin.
+// in play twice within the latch window, sleep on the thread's high-resolution waitable timer until the
+// spin's length before the frame is due, spin (yielding the core at each turn) at most the spin's length plus
+// 1 ms, and sleep what is left of the timeout. Rig tests: ETERNALVR_TEST_HOLD_SPIN=0 never spins, =1 spins
+// through the whole wait in play; ETERNALVR_TEST_HOLD_SPIN_MS sets the spin.
 
 #include "features/pacing/pace_policy.hpp"
 

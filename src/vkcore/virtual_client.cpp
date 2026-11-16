@@ -4,6 +4,7 @@
 
 #include "features/render_size/window_steps.hpp"
 #include "vkcore/client_rect.hpp"
+#include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -311,6 +312,7 @@ void onViewLimits(const render_size::ViewLimits& limits) {
                 limits.maxImageRect.height, limits.maxSwapchain.width, limits.maxSwapchain.height,
                 limits.eyesSideBySide, render_size::describe(settings().request).c_str(),
                 size ? size->width : 0, size ? size->height : 0);
+        noteSizeLimits(settings().request, limits); // the edge margin as wide as that size holds
         update(s);
     }
     placePending(s);

@@ -221,6 +221,14 @@ namespace EternalVR.Launcher.Core.Settings
                 "The game's setting follows Reflections in its video menu (off at Low); Off turns screen-space reflections off "
                 + "in VR, a little lighter on the graphics card, and leaves your flat game's setting as it was.",
                 "The game's setting", "Off"),
+            [Setting.EdgeMargin] = new Text("Edge margin",
+                "Renders each eye a little wider than you can see, so turning your head fast shows picture at the edges of "
+                + "your view instead of black bars: while a new frame is on its way, your headset's runtime turns the last one "
+                + "to where your head is now, and without a margin that frame has nothing past its edges. On a Quest 3 Small, "
+                + "Medium and Large add about 2.5, 5 and 7 degrees past each edge; Resolution's automatic sizes grow with it so "
+                + "the middle keeps its detail, which costs 21, 44 or 69% more pixels (a fixed render_size in launcher.ini stays "
+                + "as it is). It only helps where the runtime shows what the frame has past your view. Off shows exactly your view.",
+                "Off", "Small", "Medium", "Large"),
             [Setting.Foveation] = new Text("Foveated rendering (experimental)",
                 "Shades the edges of each eye at a lower rate, where the lenses blur anyway, so the graphics card does less "
                 + "work (about 16% more frames per second with Balanced at a Quest 3's size on the test rig). "

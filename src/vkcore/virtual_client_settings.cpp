@@ -2,6 +2,7 @@
 
 #include "vkcore/virtual_client_settings.hpp"
 
+#include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
 
@@ -30,6 +31,11 @@ const Settings& settings() {
             } else {
                 EVR_LOG("size: ETERNALVR_RENDER_SCALE '%ls' is not auto or 0.5 to 2; 1.0", scale.c_str());
             }
+        }
+        // The edge margin grows a size the layer works out itself; a fixed size (the launcher's, already
+        // grown) is used as it is.
+        if (out.request.mode == render_size::Mode::Auto) {
+            out.request.growth = static_cast<double>(edgeMarginFactor());
         }
         if (readEnv(L"ETERNALVR_MIRROR_WINDOW", mirror) && !mirror.empty()) {
             out.mirror = render_size::parseWindowRect(mirror);

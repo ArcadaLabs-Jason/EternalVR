@@ -190,6 +190,11 @@ public:
     static constexpr double kMaxBackOffSeconds = 32.0;
     static constexpr double kMaxWindowSeconds = 2.0 * kWindowSeconds;
     static constexpr std::uint64_t kMinWindowFrames = 30;
+    // hasFallenBehind() turns on at the second fall in play within this many seconds of the first. A fall
+    // takes two bad windows (2 s or more) and a let-go lasts at least the back-off (1 s, doubling to 32 s
+    // while holds do not last), so a game that cannot keep up falls again within about ten seconds and at the
+    // latest within a minute; one hitch falls once. A menu or a loading screen forgets the first fall.
+    static constexpr double kLatchWindowSeconds = 120.0;
 
     // Why held() last changed.
     enum class Change { None, FellBehind, KeptUp, LeftPlay };
@@ -213,8 +218,8 @@ public:
     void pause(double nowSeconds, std::uint64_t handOvers);
 
     [[nodiscard]] bool held() const { return held_; }
-    // A hold has fallen behind in play at least once (the held render thread then spins before each headset
-    // frame: frame_pacing, T-232).
+    // A hold has fallen behind in play twice within kLatchWindowSeconds (the held render thread then spins
+    // before each headset frame: frame_pacing, T-232). Stays on for the session.
     [[nodiscard]] bool hasFallenBehind() const { return fellBehind_; }
     [[nodiscard]] std::uint64_t switches() const { return switches_; }
     [[nodiscard]] double backOffSeconds() const { return backOff_; }
@@ -230,8 +235,9 @@ private:
     double backOff_ = kWindowSeconds;
     double changedAt_ = 0.0;  // when held_ last changed (the first frame's time until then)
     bool holdTried_ = false;  // held again by the game's rate (not by a menu): a let-go judges that hold
-    bool fellBehind_ = false; // a hold fell behind in play at least once
-    int badWindows_ = 0;      // bad windows in a row, held
+    bool fellBehind_ = false; // two falls in play within kLatchWindowSeconds
+    std::optional<double> lastFallAt_; // the previous fall in play, until the window passes or a menu comes
+    int badWindows_ = 0;               // bad windows in a row, held
     Change lastChange_ = Change::None;
     double lastRepeatShare_ = 0.0;
     double lastRate_ = 0.0;

@@ -77,7 +77,8 @@ tried on the Quest 3.
    the right half and hands the slot to the XR worker; a half whose partner is missing is dropped (never
    shown alone), mono frames go into both halves.
 5. **Projection layer.** The ring and the XR swapchain are two eye images wide. A pair is submitted with
-   each eye's half, pose and FOV; a mono frame (menus, loading, a mono tick) with the head pose and the
+   each eye's half, pose and FOV (with the edge margin, the wider FOV the eye rendered: section "Edge margin"); a
+   mono frame (menus, loading, a mono tick) with the head pose and the
    game's FOV in both halves; the cinema quad shows the left half.
 
 Both presents also reach the game's window, and the window is only a mirror that must not pace the game: the
@@ -1378,16 +1379,18 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   frame. On the test PC (i7-9700K, Windows' Balanced power plan) sleeping through that wait let the CPU's clock
   fall to 84-114% of its rated clock against 125-128% let go; the held tick then no longer fitted in the period,
   10-20% of the headset's frames had no new image and the switch let the game go within 2 s of every hold. So
-  once a hold has fallen behind in play, the render thread sleeps until 5 ms before the headset's frame is due (a
+  once a hold has fallen behind in play twice within 2 minutes, the render thread sleeps until 5 ms before the headset's frame is due (a
   high-resolution waitable timer: a condition variable's timed wait woke 1.6 ms late on average; without one a
   plain timer, without that the condition variable) and spins the rest, giving the core up at each turn
   (`SwitchToThread`), at most 6 ms a frame: a late or stalled headset frame sleeps out the rest of the timeout.
   The clock stays up and the game stays held (rig: the outdoor and hub routes held the whole minute). Only in
-  play: menus and loading screens sleep, as does the low hold. Until a hold falls behind it only sleeps, so a PC
-  whose clock stays up spins only after a hitch makes one fall behind; once one has, the spin stays on for the session (a hold that slept again
-  would let the clock fall and the switch flap). The spin is at most the last 6 ms of each held frame (rig: 18-37%
+  play: menus and loading screens sleep, as does the low hold. Until then it only sleeps: one fall (a single hitch) latches nothing,
+  so a PC whose clock stays up spins only when its hold falls behind again within 2 minutes (a game that cannot
+  keep up falls again within about ten seconds; a menu, a loading screen or the unseen hold forgets the first
+  fall); once latched, the spin stays on for the session (a hold that slept again would let the clock fall and
+  the switch flap). The spin is at most the last 6 ms of each held frame (rig: 18-37%
   of one core). Log: `pace: the held wait sleeps before its spin on a high-resolution timer` (or what it fell
-  back to), `pace: a hold fell behind; from now on, in play, the held render thread spins the last 5.0 ms ...`
+  back to), `pace: a hold fell behind twice within the latch window; from now on, in play, the held render thread spins the last 5.0 ms ...`
   once, then every 10 s `pace: last 10 s: the hold spun N ms in all (P% of one core); K sleep(s) before it,
   woken L ms late on average`. Rig tests: `ETERNALVR_TEST_HOLD_SPIN=0` only sleeps, `=1` spins through the whole
   wait in play from the start, `ETERNALVR_TEST_HOLD_SPIN_MS=<ms>` sets the spin; the A/B and its limits (one
@@ -1672,6 +1675,127 @@ FOV onto the whole image, so any aspect works; the recommended size gives square
 window gave non-square ones, which the compositor maps back correctly, only the pixel density differing by
 axis).
 
+## Edge margin (`ETERNALVR_EDGE_MARGIN`, the launcher's Edge margin)
+
+A runtime shows each frame turned to the head pose at its display time: the frame was rendered for a pose the
+camera hook predicted 25 to 40 ms earlier (Frame pacing, Logs and counters), and the compositor (on a Quest
+through Virtual Desktop, the headset) moves the image by whatever that prediction missed. Without a margin each
+eye's image ends exactly at the view's edges, so on a fast head turn the side the head turns toward shows black
+where the image has nothing: a player's report (Quest 3 through VDXR at 80 Hz, "black bars on either side when I
+turn my head quickly"). His frames table had every frame of the fast turns new (no repeats) and each frame's pose
+predicted for the display time it was shown at (`display_minus_pose_time_ms` 0), so the bars are the prediction's
+error over the horizon, not old frames. Estimated from his own head track (a constant-velocity prediction over 37.5
+ms): a median of 1.5 degrees and 5 at the 90th percentile on the frames turning faster than 100 degrees a second,
+12 at the 99th.
+
+With a margin each eye renders more than its view and the projection layer is submitted with that wider FOV, so the
+compositor has picture to show there. The FOV is widened in tangent space: each of the eye's four tangents times
+the margin's factor (`xr_math::widenFov`, `src/xr_math/edge_margin.*`), which grows the image plane by the factor on
+both axes; an automatic render size grows by the same factor (`render_size::Request::growth`, after the budget fit,
+like a scale above 1), so the pixels at the centre keep their size and the pixel count grows by the factor's square.
+The launcher's sizes (`src/features/render_size/edge_margin.hpp`; on a Quest 3, 54/40/44/55 degrees):
+
+| Setting | Factor | Degrees past each edge (left / right / up / down, eye L) | Pixels |
+|---|---|---|---|
+| `off` | 1 | none | 1 |
+| `small` | 1.10 | 2.6 / 2.7 / 2.7 / 2.5 | 1.21 |
+| `medium` | 1.20 | 4.8 / 5.2 / 5.2 / 4.7 | 1.44 |
+| `large` | 1.30 | 6.8 / 7.5 / 7.5 / 6.7 | 1.69 |
+
+**Off by default, and not yet tested in a headset.** The simulator does no reprojection, so whether the margin
+takes the black edges away on a real headset, and whether Virtual Desktop keeps the margin at all (below), has not
+been seen; the default stays Off until a headset confirms it.
+
+A whole percentage 1 to 50 (`15`: 1.15) is a rig's own size; `none` is Off too. Stereo only (Route S, its alternate eyes, Parallel Eye
+Rendering): the factor is read once with `ETERNALVR_MODE=stereo` (`src/vkcore/edge_margin_setting.*`; `edge
+margin: x1.20 (medium): ...` at start). Mono keeps its one symmetric image, which already reaches past each eye's
+inner edge but not its outer one.
+
+Where it acts, and what follows from it (`presenter_stereo.cpp`, `prepareEyes` and `widenEyes`): each eye's FOV is
+widened once, right after the runtime's views pass the FOV check, and everything after takes the image's FOV:
+
+- the eye's explicit projection (`writeEyePose`, Route S and Parallel Eye Rendering alike), and with it everything
+  derived from that matrix: Umbra's per-eye query, the decal pair frustum, the bin tiles, the light frustum test, the
+  hands-and-guns matrices' frustum rows, the lens flares, the screen-space shear (`m2 / m0` follows the matrix; the
+  SSR fade's `m2` does not change with the factor);
+- the projection layer's views (`fillProjectionViews`; `edge margin: the projection layer's eye N is submitted with
+  ...` once per eye), and with them the depth layer, whose depth goes with each projection view and so has the colour
+  image's FOV;
+- foveation's eye shapes (`vrs_nv::noteEye`): its regions are angles around head-forward mapped into the image
+  through the image's FOV, so they stay where they were on the view and the margin is shaded at the lowest rate;
+- the in-headset capture's text (`rendered FOV eye L`), which now says the image's FOV.
+
+What does not see the margin: the HUD, the menu panel, the reticle and the aim dot are quads of their own; the HUD's
+world markers follow the head-locked quad's projection (`marker_hooks.cpp`), not the eye's; the cinema screen's
+stereo pairs (`presenter_cinema3d.cpp`) and mono frames (menus, loading, a mono tick) keep the game's FOV, with
+which they are submitted; DLSS renders its share of the grown size and its jitter is in its own pixels.
+
+Culling follows the eye's matrix: Umbra's per-eye query (geometry, lights, world areas) culls with the latched
+projection, which is the widened explicit one, and the hands-and-guns matrices the latch builds from the symmetric
+weapon FOV are retargeted to it (`presenter_seq.cpp`); the decal pair frustum takes the larger of the eye's side and
+the game's `fov_x` / `fov_y`. What still uses the game's own FOV: the game's FOV setting stays the symmetric FOV
+enclosing the runtime's eyes without the margin (`updateTargetFov`), and so does the weapon FOV the hands model is
+culled with before its matrices, so a hand held wholly inside the margin and outside that FOV may be missing there;
+game logic that asks whether something is on screen most likely asks it of that FOV too (not checked).
+
+The desktop window shows the view, not the margin: each eye's record carries where its view lies in its image
+(`EyeRecord::viewRect`, from the same FOV pair the layer's view gets, `xr_math::marginViewRect`), the present that
+copies that eye's image takes the rectangle from the record of the frame it presents, and the mirror's crop
+(`presenter_mirror.cpp`, `render_size::windowBox`) blits that rectangle, then `ETERNALVR_MIRROR_CROP`'s band of it,
+over the image the window gets (`mirror: the window shows the eye's view without the edge margin: WxH at x,y of the
+WxH image`). A frame without a margin (a stereo cutscene on the cinema screen, a mono frame, an eye whose FOV could
+not be widened) has no rectangle and shows whole. Route S's eye presents only; under Parallel Eye Rendering the window
+shows the whole image, margin included.
+
+The FOV is widened only as far as the render size holds at the centre's density. When the runtime's limits cut the
+grown size (`render_size::fittedGrowth`: the grown size scaled down more than the ungrown one), the layer widens the
+FOV by the part of the margin the fitted size keeps, never below 1, and logs it once (`edge margin: the runtime's
+limits hold each eye to WxH, which keeps x1.118 of the x1.20 (medium) margin ...`). A fixed
+`ETERNALVR_RENDER_SIZE=WxH` is taken as a size already grown: the launcher passes the size it grew for each of
+Resolution's bases, fitted to the limits it read, and with it the margin that size keeps (`ETERNALVR_EDGE_MARGIN` as
+a whole percentage, rounded down, or `off`, when the limits cut it); the layer grows only a size it works out itself
+(`auto`). A `render_size` set by hand in launcher.ini is used as it is, so with a margin it renders the wider FOV at
+the same size, a little less detail. The launcher's Each eye line is its plan from the limits it last read; the layer
+fits that size to the limits the session reports and logs the size it uses (`size: ... gives WxH`), so a runtime
+whose limits changed since can render smaller than the line says. The factor follows the size only when the runtime's
+limits are read: a later cut (the graphics driver holding each eye at the window's size, `window_cap`, or the render
+size turned off, `size: render size off: ...`) leaves the FOV widened by the same factor at less detail, and the layer
+logs it once (`edge margin: each eye renders WxH, below the WxH its x1.200 margin was fitted to ...`).
+
+The margin helps only where the compositor reprojects with the image as submitted. A runtime that recomposes the
+layer into an image of the view's own FOV before it reprojects (a streaming runtime that encodes only the view's FOV
+and reprojects on the headset) would cut it off again; whether Virtual Desktop's does is not known: headset test.
+
+**Cost.** My test PC (RTX 3080 Ti, the OpenXR simulator at 90 Hz recommending 1280 x 1400 per eye, the Release
+layer, the rig QA's bench routes with the launcher's defaults): the GPU's time per tick, median in ms, one run each
+unless said. Each eye's size with Auto is 1280 x 1400, 1408 x 1544, 1536 x 1680 and 1664 x 1824; the `-q3` routes ask
+a fixed 2496 x 2688, which the simulator's swapchain (4096 wide for both eyes) fits to 2048 x 2208 at every margin:
+the wider FOV over the same pixels. (These runs were made before the FOV followed the fitted size; the layer now
+gives the `-q3` routes no margin on the simulator, since 2048 per eye cuts the ungrown size as much as the grown one.)
+
+| Route | Off | Small | Medium | Large |
+|---|---|---|---|---|
+| bench-combat, Auto | 5.0 | 5.1 | 5.1 | 7.1 |
+| bench-outdoor, Auto | 6.3 | 6.5 | 7.0 | 7.8 |
+| bench-hub, Auto | 4.7 | 5.1 | 5.5 | 6.0 |
+| bench-combat-q3, fixed | 7.0, 9.1, 6.7 (3 runs) | 9.3 | 8.3, 9.9, 10.8 (3 runs) | 10.9 |
+| bench-outdoor-q3, fixed | 11.2 | 11.2 | 11.2 | 11.4 |
+| bench-hub-q3, fixed | 8.5 | 8.3 | 7.5 | 7.8 |
+
+With Auto at the simulator's size the routes are held back by the CPU (the GPU busy 43 to 71% of the tick), so the
+ticks a second did not change; the GPU's time grows with the pixels, about 1 to 1.7 ms per million pixels added. At a
+fixed size the wider FOV cost nothing measurable outdoors and in the hub; in the combat arena Medium's three runs
+averaged about 2 ms more than Off's, within a spread of 2.4 ms between Off's own runs (more of the arena's effects in
+view is the likely cause, not shown). A Quest 3 on Auto (2056 x 2216, 4.56 million pixels) renders 2264 x 2440,
+2472 x 2656 and 2672 x 2880 with the three sizes (5.5, 6.6 and 7.7 million pixels): past what the simulator allows
+(2048 wide per eye), so not measured; from the rates above, Medium adds roughly 2 to 3.5 ms of GPU time a tick there
+on this card, enough to take the outdoor route (11.2 ms already at Off) below 90 and 80 frames a second.
+
+The simulator composes the layer with the FOV it is given and does no reprojection, so it cannot show the black
+edges or their absence: the rig QA's `edge-margin` scenario checks everything up to the runtime (each tangent x1.20,
+the views submitted with exactly that FOV, the grown size, the scene in the margin of both eyes' captures, the
+window cut to the view).
+
 ## Settings (environment)
 
 | Variable | Default | Effect |
@@ -1688,6 +1812,7 @@ axis).
 | `ETERNALVR_MIRROR` | left | what the game's window shows during stereo pairs: `left`, `right` (one tick late) or `off` (black); while a menu is up over the game, the menu panel's image (Desktop window, Menus in the window) |
 | `ETERNALVR_RENDER_SIZE` | off (launcher: auto) | `auto`: each eye at the runtime's recommended size (budget 2064 x 2208 pixels) times the scale; `WxH`: that size; `off`: the window's size (docs/rig-findings/render-size.md) |
 | `ETERNALVR_RENDER_SCALE` | 1.0 | 0.5 to 2.0, multiplies the `auto` size (above 1 past the budget) |
+| `ETERNALVR_EDGE_MARGIN` | off (launcher: off) | stereo: `small`, `medium`, `large` or a whole percentage 1 to 50: each eye renders its FOV's tangents times 1.10, 1.20, 1.30 (or 1 + the percentage) and is submitted with that FOV; an `auto` size grows by the same factor and the FOV widens only as far as the fitted size holds (section "Edge margin"); `off`, `none` or `0`: the view only. Not yet tested in a headset |
 | `ETERNALVR_DEPTH_LAYER` | 0 | 1: each eye's depth to the runtime with its projection view (Depth layer; the launcher's Depth for headset smoothing) |
 | `ETERNALVR_TEST_DEPTH_READBACK` | 0 | 1 (rig): with the depth layer, one shown image's depth read back every 10 s and its distances logged |
 | `ETERNALVR_TEST_DEPTH_FAULT` | 0 | 1 (rig): the depth layer's planted fault, eye R's depth copied into eye L's half too |
@@ -1738,7 +1863,7 @@ axis).
 | `ETERNALVR_TEST_LATENCY_CSV` | unset | test knob: `1` writes every image's release-to-present times to `eternalvr-latency-<pid>.csv` in the log folder ("Release-to-present timing"); needs CPU timing on |
 | `ETERNALVR_TEST_HOLD_GATE` | unset | test knob: `1` with `ETERNALVR_PACE=headset` (the hold switch) lets a held game go only when more than half of a window's images took longer than a display period from their release to their hand-over ("Frame pacing", Slower PCs; docs/rig-findings/present-latency.md). Log: `pace: the hold lets the game go only when most of its images take longer than a display period ...` once |
 | `ETERNALVR_TEST_LATE_WAIT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` makes a headset frame that begins while the held game is still drawing its image wait for it, within the frame's own time ("Frame pacing", Late images). Log: `pace: held, a headset frame that begins while the game is still drawing its image waits for it ...` once, and every 10 s `pace: last 10 s: N headset frame(s) waited for a late image: ...` |
-| `ETERNALVR_TEST_HOLD_SPIN` | unset | test knob with `ETERNALVR_PACE=headset`: `0` makes the held render thread only sleep until the headset's next frame (no spin once a hold has fallen behind, as before T-232); `1` makes it spin through its whole wait in play from the start ("Frame pacing", The held wait; docs/rig-findings/pace-hold.md). Log: `pace: held, the render thread only sleeps ... (ETERNALVR_TEST_HOLD_SPIN=0, a rig test)` or `pace: held, the render thread spins through its whole wait ... (ETERNALVR_TEST_HOLD_SPIN=1, a rig test)` |
+| `ETERNALVR_TEST_HOLD_SPIN` | unset | test knob with `ETERNALVR_PACE=headset`: `0` makes the held render thread only sleep until the headset's next frame (no spin once a hold has fallen behind twice, as before T-232); `1` makes it spin through its whole wait in play from the start ("Frame pacing", The held wait; docs/rig-findings/pace-hold.md). Log: `pace: held, the render thread only sleeps ... (ETERNALVR_TEST_HOLD_SPIN=0, a rig test)` or `pace: held, the render thread spins through its whole wait ... (ETERNALVR_TEST_HOLD_SPIN=1, a rig test)` |
 | `ETERNALVR_TEST_HOLD_SPIN_MS` | unset | test knob with `ETERNALVR_PACE=headset`: the held wait's spin before the headset's frame, in ms (above 0, under 20; default 5; each frame spins at most this plus 1 ms), once a hold has fallen behind in play ("Frame pacing", The held wait). Log: `pace: held, the spin before the headset's frame is N ms (ETERNALVR_TEST_HOLD_SPIN_MS, a rig test)` |
 | `ETERNALVR_TEST_PACE_REPEAT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` keeps the game held and submits the newest image at every headset frame, as before T-194 ("Frame pacing", Slower PCs), for a rig A/B. Log: `pace: the game is always held and the headset's frames do not wait for a new image (ETERNALVR_TEST_PACE_REPEAT=1, a rig test)` |
 | `ETERNALVR_TEST_CPU_LOAD_MS` | unset | test knob: `<ms>[,<s on>,<s off>]` busy-waits at every render's frame end (under Parallel Eye Rendering once a render frame at its view dispatch), as a slower processor (`alternate-eye.md` 10.4) |

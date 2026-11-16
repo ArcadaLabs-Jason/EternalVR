@@ -93,7 +93,7 @@ Cached game pointers read on a path that runs through a map load (cause 2):
 | body follow, bHaptics | the player | safe: the player is the hook's argument, checked by its vtable (`PlayerAim::isPlayer`) |
 | head sweep | the map instance, its collision world | safe: the map instance read again from the exe's global every call, the collision world taken again when it changes |
 | mp_guard's menu poll | the main menu | safe: read again from the exe's global every poll |
-| `game_arm.cpp` `readHand` | the animator of the last `readArm` | not checked to the end: it calls the game's GetJointTransforms (guarded) on that animator; its callers in play follow `readArm` in the same tick, the rig dump's (`arm_dump`, a rig switch) not always |
+| `game_arm.cpp` `readHand` | the animator of the last `readArm` | same class (checked 2026-11-14, not seen in a log): it called the game's GetJointTransforms on that cached animator, which a map load can free while the hands keep their address, so a read could fault (a handled access violation, after which no call into the arms is made again) or read another object's joints. Its callers in play (`weapon_arm`, `offhand_fingers`) follow `readArm` in the same tick, which clears the cached animator and sets it again only after a good read; the rig dump's (`weapon_finger`, `arm_dump`) and a tick where `readArm` was not called did not. Fixed: `readHand` reads the animator from the hands' render model again (`liveAnimator`) and returns false unless it is the cached one |
 
 Not checked: the crash notes in older bench and QA logs (other builds, their PDBs gone) cannot be put to a
 function, so the audit does not say whether other places faulted the same way before.
@@ -113,3 +113,9 @@ The name fault did not come back in 107 loads, against 2 in 30 bench-combat laun
 the name's heap block at the end of committed memory, and these runs' heaps (a different environment from the
 bench routes' measuring switches) did not put it there. For it the evidence is the code and the unit tests; the
 arms' fault came back once before the fixes and not after, a small count either way.
+
+## After the readHand fix (2026-11-14) [rig]
+
+`readHand` reads the hands' animator again and returns false unless it is the cached one. QA `map-load-loop`
+on my test PC, release build with the fix: one process, 31 loads (the launch's and 30 from the debug schedule),
+every load reaches the map load hook, 0 crash notes, no guard trip, no crash dump: pass. The stale animator itself was not seen to fault before the change (the fix rests on the code reading above), and this run did not turn the rig dump (`arm_dump`) on.

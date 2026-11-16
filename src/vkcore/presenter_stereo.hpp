@@ -9,6 +9,7 @@
 #include "stereo_seq/seq_settings.hpp"
 #include "vkcore/presenter_cinema3d.hpp"
 #include "vkcore/stereo_hooks.hpp"
+#include "xr_math/edge_margin.hpp"
 #include "xr_math/stereo_view.hpp"
 
 #include <openxr/openxr.h>
@@ -28,6 +29,9 @@ struct EyeRecord {
     XrFovf fov{};                                               // the eye's own (asymmetric) FOV
     std::array<float, 3> offset{};                              // world offset from the head-centred origin
     std::array<float, 9> axis{};                                // the eye's viewaxis (forward, left, up rows)
+    // With the edge margin, where the view lies in the image rendered with `fov` (the desktop window shows
+    // that part); nullopt when the image is the view (no margin, a cinema or E4 frame).
+    std::optional<xr_math::ImageRect> viewRect;
 };
 
 struct StereoSettings {

@@ -290,3 +290,11 @@ anti-cheat tripwire's negative test.
   What would close it: each cvar's value read on the rig in a launch without the forced cvars (for
   example `ETERNALVR_DEBUG_CVARS=pm_noBob=?;...`, which only logs), recorded here as a table the layer can
   use, or the launcher handing the layer the player's own values from its config snapshot.
+
+## Beta candidate 0.1.95 (2026-11-14)
+
+Results for the beta candidate package, from runs on my test PC today.
+
+- **Package QA (25 of 25 PASS).** The guard armed with no trip in the four Steam campaign scenarios (the maps shell, e1m2_battle and e1m3_cult); the in-play test trip tripped it (and the cinema fallback); the stand-in refused the multiplayer arguments and the unknown exe; and on Game Pass the guard armed with the Xbox join points, with no trip.
+- **Game-folder listing.** The first time a hashed listing was run: the SHA-256 of all 623 files of the Steam game folder, before and after the package QA's Steam sessions plus one launcher session with DLSS Version "newest" (the downloaded DLSS 310.9.1). No file was added, removed or changed. The two files the docs say the DOOM Eternal launcher rewrites did not change either, because the launcher's Steam route starts the game's exe directly. NVIDIA's NGX tried to open `base/generated/nvngx.log` in the game folder, found it unwritable and wrote nothing.
+- **Online features with the layer loaded (A7 (b)): pass.** The campaign's sign-ins, events and profile calls behave the same with the 0.1.95 layer as without it, on Steam and on Game Pass, with the guard armed and no trip in any run; see the 0.1.95 section of `online-features.md`.

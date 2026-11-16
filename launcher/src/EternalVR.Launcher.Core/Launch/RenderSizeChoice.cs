@@ -37,6 +37,14 @@ namespace EternalVR.Launcher.Core.Launch
         public string BaseNote { get; private set; }
         /// <summary>The headset's native panel per eye, when the base is the native panel.</summary>
         public Extent? Panel { get; private set; }
+        /// <summary>The edge margin's growth of an automatic size (1: none; a fixed setting never grows).</summary>
+        public double Growth { get; private set; } = 1.0;
+        /// <summary>
+        /// The part of <see cref="Growth"/> the size keeps once fitted to the runtime's limits (<see cref="RenderSize.FittedGrowth"/>):
+        /// <see cref="Growth"/> when the grown size fits, less when the limits cut it (the layer is then told the smaller margin, so
+        /// the FOV is widened only as far as the size holds at the centre's density). <see cref="Growth"/> without a size.
+        /// </summary>
+        public double KeptGrowth { get; private set; } = 1.0;
 
         public bool IsAuto => Setting == LauncherSettings.RenderSizeAuto;
 
@@ -56,7 +64,10 @@ namespace EternalVR.Launcher.Core.Launch
         /// <param name="probe">The runtime probe; null when none was made.</param>
         /// <param name="resolutionBase">What the scale multiplies with an auto setting.</param>
         /// <param name="panel">The headset's native panel per eye (<c>data\headsets.txt</c>); null when it is not known.</param>
-        public static RenderSizeChoice Decide(string setting, double renderScale, OpenXrProbeResult probe, ResolutionBase resolutionBase, Extent? panel)
+        /// <param name="growth">The edge margin's factor (<see cref="LauncherSettings.EdgeMarginGrowth"/>): an auto setting's size
+        /// grows by it on both sides, after the scale, whatever the base; a fixed one stays as it is.</param>
+        public static RenderSizeChoice Decide(string setting, double renderScale, OpenXrProbeResult probe, ResolutionBase resolutionBase, Extent? panel,
+            double growth = 1.0)
         {
             var c = new RenderSizeChoice
             {
@@ -68,6 +79,8 @@ namespace EternalVR.Launcher.Core.Launch
             if (request.Mode == RenderSizeMode.Off) request.Mode = RenderSizeMode.Auto;
             request.Scale = c.Scale;
             c.Setting = request.Mode == RenderSizeMode.Fixed ? request.Fixed.ToString() : LauncherSettings.RenderSizeAuto;
+            c.Growth = request.Mode == RenderSizeMode.Auto && growth > 1.0 && !double.IsInfinity(growth) ? growth : 1.0;
+            request.Growth = c.Growth;
 
             c.Base = request.Mode == RenderSizeMode.Auto ? resolutionBase : ResolutionBase.Auto;
             if (c.Base == ResolutionBase.Panel && (panel == null || panel.Value.IsEmpty))
@@ -82,9 +95,13 @@ namespace EternalVR.Launcher.Core.Launch
             }
             if (c.Base == ResolutionBase.Panel) c.Panel = panel;
 
-            var size = c.Base == ResolutionBase.Ask ? Scaled(c.Limits.Recommended, c.Scale, c.Limits)
-                : c.Base == ResolutionBase.Panel ? Scaled(panel.Value, c.Scale, c.Limits)
+            var size = c.Base == ResolutionBase.Ask ? Scaled(c.Limits.Recommended, c.Scale, c.Growth, c.Limits)
+                : c.Base == ResolutionBase.Panel ? Scaled(panel.Value, c.Scale, c.Growth, c.Limits)
                 : RenderSize.SelectSize(request, c.Limits);
+            c.KeptGrowth = c.Base == ResolutionBase.Ask ? RenderSize.FittedGrowth(Wanted(c.Limits.Recommended, c.Scale, c.Growth), c.Growth, Capped(c.Limits))
+                : c.Base == ResolutionBase.Panel ? RenderSize.FittedGrowth(Wanted(panel.Value, c.Scale, c.Growth), c.Growth, Capped(c.Limits))
+                : c.Limits != null && request.Mode == RenderSizeMode.Auto ? RenderSize.RequestGrowth(request, c.Limits, c.Growth)
+                : c.Growth;
             if (size == null)
             {
                 c.Reason = probe == null ? "the runtime was not asked" : "the runtime did not answer: " + probe.Error;
@@ -105,22 +122,29 @@ namespace EternalVR.Launcher.Core.Launch
         }
 
         /// <summary>
-        /// <paramref name="from"/> times <paramref name="scale"/> (rounded as the layer rounds), fitted to the runtime's limits
-        /// and to the largest fixed size the layer takes (8192 per side), sides rounded to multiples of 8.
+        /// <paramref name="from"/> times <paramref name="scale"/> and <paramref name="growth"/> (rounded as the layer rounds),
+        /// fitted to the runtime's limits and to the largest fixed size the layer takes (8192 per side), sides rounded to
+        /// multiples of 8.
         /// </summary>
-        private static Extent Scaled(Extent from, float scale, ViewLimits limits)
+        private static Extent Scaled(Extent from, float scale, double growth, ViewLimits limits) =>
+            RenderSize.FitToLimits(Wanted(from, scale, growth), Capped(limits));
+
+        // `from` times the scale and the growth, rounded as the layer rounds: the size before it is fitted.
+        private static Extent Wanted(Extent from, float scale, double growth) =>
+            new Extent((uint)Math.Round(from.Width * (double)scale * growth, MidpointRounding.AwayFromZero),
+                (uint)Math.Round(from.Height * (double)scale * growth, MidpointRounding.AwayFromZero));
+
+        // The runtime's limits and the largest fixed size the layer takes (8192 per side).
+        private static ViewLimits Capped(ViewLimits limits)
         {
-            var wanted = new Extent((uint)Math.Round(from.Width * (double)scale, MidpointRounding.AwayFromZero),
-                (uint)Math.Round(from.Height * (double)scale, MidpointRounding.AwayFromZero));
             uint Cap(uint v) => v == 0 ? RenderSize.MaxFixedSide : Math.Min(v, RenderSize.MaxFixedSide);
-            var capped = new ViewLimits
+            return new ViewLimits
             {
                 Recommended = limits.Recommended,
                 MaxImageRect = new Extent(Cap(limits.MaxImageRect.Width), Cap(limits.MaxImageRect.Height)),
                 MaxSwapchain = limits.MaxSwapchain,
                 EyesSideBySide = limits.EyesSideBySide,
             };
-            return RenderSize.FitToLimits(wanted, capped);
         }
 
         /// <summary>The base in the log's words.</summary>
@@ -133,6 +157,9 @@ namespace EternalVR.Launcher.Core.Launch
             var note = BaseNote == null ? string.Empty : "; " + BaseNote;
             if (Size == null) return "render size auto, decided in-game (" + Reason + ")" + note;
             var scale = ((double)Scale).ToString("0.00", CultureInfo.InvariantCulture);
+            if (Growth > 1.0) scale += " and the edge margin's " + Growth.ToString("0.00", CultureInfo.InvariantCulture);
+            if (Size != null && KeptGrowth < Growth - 1e-9)
+                scale += " (the runtime's limits keep x" + KeptGrowth.ToString("0.000", CultureInfo.InvariantCulture) + " of the margin)";
             if (IsAuto && Base == ResolutionBase.Ask)
                 return $"render size {Size} from what the runtime asks for, {Limits.Recommended}, times {scale}";
             if (IsAuto && Base == ResolutionBase.Panel)

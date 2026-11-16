@@ -164,3 +164,54 @@ From the game's own strings and logs (build 25216728) and public sources:
 BATTLEMODE (the multiplayer guard latches every game-touching feature off on any multiplayer signal and fails closed,
 `docs/rig-findings/mp-guard.md`); the launcher refuses multiplayer arguments (`launcher/data/refused-args.txt`); an
 anti-cheat tripwire keeps VR off if an anti-cheat module is in the process or the game folder (DECISIONS T-109).
+
+## Beta candidate 0.1.95 (2026-11-14)
+
+The same check, run again on the beta candidate package (EternalVR 0.1.95, packaged layer and launcher) on my test PC: Steam build 25216728, Game Pass 1.0.56.0, OpenXR Simulator as the headset, both platforms signed in to Bethesda.net. Evidence labels as above.
+
+### What ran
+
+Runs A to F as in section 1 (A and D Steam, layer off; B Steam, mono; C Steam, stereo; E Game Pass, layer off through the launcher; F Game Pass, stereo through the launcher), once each, the same script (about 9 minutes), the same captures. Differences in how it was run:
+
+- B and C take the environment from the 0.1.95 launcher's own launch plan for default settings (built by the package's launcher code), not from a copied list; the launcher's defaults are TAA, the HUD panel in front, foveation off, the CPU Saver's default item. The Game Pass runs (E, F) used a new launcher data root holding only the extra arguments, so they ran on the launcher's defaults.
+- The DNS-cache captures came back empty this time, so the hosts below are named by looking the names up at analysis time and matching addresses [inferred]; in 10-12 the cache gave the names directly.
+- Two runs missed their menu path and were run again, once each: A (the title screen took longer than the script waited, so its keys landed on the BATTLEMODE menu, where the "complete the Cultist Base mission first" notice came up and was cancelled; no match or matchmaking line in the log, only that menu's screens loading) and E (its keys stayed on the Events screen). The rows below are the reruns; both first runs showed the same sign-ins and no failure other than the Game Pass ones listed for E.
+- As in 10-12, E and F do not reach Milestones in that account's Campaign menu and were ended by the run's stop step, not from the menu.
+
+### Per-run results
+
+| Run | Sign-ins | Failed requests (`structured.log`) | Game connections (all TCP) | Cheat, achievement or prohibition lines | Guard | Ended |
+|---|---|---|---|---|---|---|
+| A | Bethesda.net user signed in; PlayFab login at start and again past the title screen | none | 3 addresses, port 443 | none | (no layer) | quit from the menu |
+| B | the same | none | the same 3, port 443 | none | armed; maps load single-player; no trip | quit from the menu |
+| C | the same | none | the same 3, port 443 | none | armed; no trip; CPU Saver holds `is_cacheGreedily 0` | quit from the menu |
+| D | the same as A | none | the same 3, port 443 | none | (no layer) | quit from the menu |
+| E | Game Pass account signed in; PlayFab login twice | `GetPlayerCombinedInfo` 400 x6 right after the second login; one `inventory.xboxlive.com` request that never connected (-1), with `Xboxlive CheckXboxliveOnlineEntitlement: transport error` in the console | the 3 above plus Xbox services, all 443 | none | (no layer) | stop step |
+| F | the same as E | `GetPlayerCombinedInfo` 400 x6 at the same point; nothing else | the 3 above plus Xbox services, all 443 | none | armed; no trip; CPU Saver holds `is_cacheGreedily 0` | stop step |
+
+"None" in the flags column means the same as in 10-12: no `qconsole.log` line about cheats (other than the names of the campaign's cheat-code collectibles, written in every run), no "achievements disabled", no "Not allowed" or "Resetting cheat cvar", no prohibition or ban line. Cvars the console logs as modified: A 57, B 58, C 76, D 56, E 51, F 74 (the stereo run holds the per-eye temporal set, the CPU Saver item and the comfort set, as in 10-12). Every run reached Hell on Earth's start and played the scripted 5 minutes there (screenshots); a glory kill is still not confirmed, since no log names one. The solo lobby line (`joined lobby`) the game writes for its own party appears once in the Steam runs and seven times on Game Pass, with and without the layer.
+
+### Hosts
+
+Steam runs (A to D, layer on or off): three addresses, port 443 only: CloudFront (`api.bethesda.net`), Azure Front Door (`e6125.playfabapi.com`, `ghostrc.game.idtech.services`, `titleplayer.playfabapi.com`; one shared address, so which of them each connection was cannot be told without packet capture) and Azure text to speech (`westus.tts.speech.microsoft.com`, held open for the session). Game Pass runs (E, F): the same three plus Xbox services (`inventory`, `userpresence`, `social`, `achievements` on `xboxlive.com`, and other Microsoft addresses that did not resolve to a name), all 443; which of them a session reaches varies from run to run, with the layer or without it. No other port than 443 in any run (10-12's E also had one UPnP connection to the router; none now). The layer adds no connection of its own.
+
+### Verdict by section 5's rules
+
+| Rule | Result |
+|---|---|
+| The same hosts and ports as A | pass: B, C and D contacted the same three services on 443 as A; F the same publisher services as E, and Xbox services from the same set |
+| Sign-ins succeed | pass: Bethesda.net and PlayFab in every run, on both platforms |
+| No new HTTP failure class (no 401/403, telemetry 2xx) | pass: no failed request at all on Steam; on Game Pass the 400 is the same with and without the layer, and the one store connection failure (no HTTP status) came in E, the layer-off run, and not in F |
+| No cheating, achievements-disabled or prohibition lines | pass in every run, also in C and F with the stereo cvar holds |
+| D clean | pass: no failed request, and no Bethesda.net 504 |
+| Game Pass E against F `GetPlayerCombinedInfo` | the same: 400 x6 in E and in F, so it is not the layer's |
+
+So, on the rig: the campaign's online features still do not react to a client running EternalVR 0.1.95. Evidence level: rig-level, client side, as in section 5; the limits there apply unchanged (one Steam account, one Game Pass account, about 9 minutes each, scripted play, nothing inside the HTTPS traffic).
+
+### Differences from 10-12
+
+- No failed request on Steam in any run; the two Bethesda.net 504s of the old D did not come back.
+- The `inventory.xboxlive.com` connection failure moved from F to E: it is a transport-level failure of a Microsoft Store service that shows with the layer absent, so not the layer's; in 10-12 it showed in one of the two F runs, now in one of the two Game Pass runs.
+- No UPnP connection on E.
+- The six `GetPlayerCombinedInfo` 400s are unchanged, with and without the layer.
+- No repeat of D or F was needed; A and E were run again for a missed menu path, not for a result.

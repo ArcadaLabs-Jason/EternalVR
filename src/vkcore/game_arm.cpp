@@ -401,9 +401,24 @@ std::optional<ArmRead> readArm(arm::ArmSide side,
     return out;
 }
 
+// The animator the hands' render model has now (read again, as readArm reads it), or nullptr. The animator
+// cached by the last readArm can be freed by a map load while the hands keep their address, and the game's
+// GetJointTransforms on it would read freed memory (a handled access violation, which turns the arms' calls
+// off for the session) or another object's joints.
+static const std::byte* liveAnimator(const std::byte* hands) {
+    const std::byte* model = nullptr;
+    const std::byte* animator = nullptr;
+    if (!safeRead(hands + kHandsRenderModel, model) || !model ||
+        !safeRead(model + kModelAnimator, animator)) {
+        return nullptr;
+    }
+    return animator;
+}
+
 bool readHand(arm::ArmSide side, const std::byte* hands, HandRead& out) {
     Cache& c = cacheOf(side);
-    if (g_gameCallFaulted || offhand_mods::fingerCount(side) == 0 || !c.animator || hands != c.hands) {
+    if (g_gameCallFaulted || offhand_mods::fingerCount(side) == 0 || !c.animator || hands != c.hands ||
+        liveAnimator(hands) != c.animator) {
         return false;
     }
     std::array<std::int16_t, 1 + arm::kHandJointCount> joints{};

@@ -161,6 +161,20 @@ Band centredBand(std::uint32_t width, std::uint32_t height, double aspect) {
     return Band{(height - band) / 2, band};
 }
 
+xr_math::PixelBox windowBox(const std::optional<xr_math::ImageRect>& view,
+                            std::uint32_t width,
+                            std::uint32_t height,
+                            double aspect) {
+    xr_math::PixelBox box{0, 0, width, height};
+    if (view) {
+        box = xr_math::toPixels(*view, width, height);
+    }
+    const Band band = centredBand(box.width, box.height, aspect);
+    box.y += band.y;
+    box.height = band.height;
+    return box;
+}
+
 std::optional<MirrorDisplay> parseMirrorDisplay(std::wstring_view text) {
     text = trim(text);
     if (text.empty() || equalsIgnoringCase(text, L"launcher")) {

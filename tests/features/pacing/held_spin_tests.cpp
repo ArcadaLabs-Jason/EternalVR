@@ -38,7 +38,7 @@ TEST_CASE("held spin: a menu or a loading screen never spins, in any mode, falle
     }
 }
 
-TEST_CASE("held spin: the low hold never spins; before the first fall, or with the rig's 0, it only sleeps") {
+TEST_CASE("held spin: the low hold never spins; before the latch, or with the rig's 0, it only sleeps") {
     HeldWaitInput low = heldAfterFall();
     low.low = true;
     CHECK_FALSE(planHeldWait(low).spin);

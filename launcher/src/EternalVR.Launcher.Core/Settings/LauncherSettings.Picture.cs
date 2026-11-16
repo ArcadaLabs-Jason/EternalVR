@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace EternalVR.Launcher.Core.Settings
@@ -25,6 +27,12 @@ namespace EternalVR.Launcher.Core.Settings
     /// own Reflections setting from the game's menu (off at Low), or off.</summary>
     public enum ReflectionsMode { Game, Off }
 
+    /// <summary>How much wider than its view each eye renders in stereo (<c>edge_margin</c>, the layer's <c>ETERNALVR_EDGE_MARGIN</c>,
+    /// docs/VR_STEREO.md "Edge margin"), so a fast head turn shows picture at the edges instead of black while the runtime turns
+    /// the last frame to your head. On a Quest 3 Small, Medium and Large add about 2.5, 5 and 7 degrees past each edge, for 21,
+    /// 44 and 69% more pixels (an automatic Resolution grows with it).</summary>
+    public enum EdgeMarginMode { Off, Small, Medium, Large }
+
     /// <summary>
     /// The Play tab's picture settings in launcher.ini: <c>resolution_base = auto|ask|panel</c>, <c>anti_aliasing</c>,
     /// <c>dlss_quality</c>, <c>dlss_version = newest|game|file</c>, <c>dlss_dll_path</c>, <c>dlss_preset</c>, <c>sharpening =
@@ -48,6 +56,11 @@ namespace EternalVR.Launcher.Core.Settings
         public ReflectionsMode Reflections { get; set; } = ReflectionsMode.Game;
         /// <summary>What Resolution's number multiplies; Auto by default (<see cref="ResolutionBase"/>).</summary>
         public ResolutionBase ResolutionBase { get; set; } = ResolutionBase.Auto;
+        /// <summary>The edge margin in stereo (<see cref="EdgeMarginMode"/>); <see cref="DefaultEdgeMargin"/> by default.</summary>
+        public EdgeMarginMode EdgeMargin { get; set; } = DefaultEdgeMargin;
+
+        /// <summary>The edge margin a fresh data folder (and a settings file without <c>edge_margin</c>) has.</summary>
+        public const EdgeMarginMode DefaultEdgeMargin = EdgeMarginMode.Off;
 
         private void ReadPicture(IDictionary<string, string> map)
         {
@@ -73,6 +86,9 @@ namespace EternalVR.Launcher.Core.Settings
                 Sharpening = Pick(sh, SharpeningMode.Game, ("off", SharpeningMode.Off), ("low", SharpeningMode.Low),
                     ("medium", SharpeningMode.Medium), ("high", SharpeningMode.High));
             if (map.TryGetValue("screen_reflections", out var sr)) Reflections = Pick(sr, ReflectionsMode.Game, ("off", ReflectionsMode.Off));
+            if (map.TryGetValue("edge_margin", out var em))
+                EdgeMargin = Pick(em, DefaultEdgeMargin, ("off", EdgeMarginMode.Off), ("none", EdgeMarginMode.Off), ("small", EdgeMarginMode.Small),
+                    ("medium", EdgeMarginMode.Medium), ("large", EdgeMarginMode.Large));
         }
 
         private void WritePicture(StringBuilder sb)
@@ -85,7 +101,34 @@ namespace EternalVR.Launcher.Core.Settings
             sb.AppendLine("dlss_preset = " + Settings.DlssDll.NormalisePreset(DlssPreset));
             sb.AppendLine("sharpening = " + SharpeningName(Sharpening));
             sb.AppendLine("screen_reflections = " + ReflectionsName(Reflections));
+            sb.AppendLine("edge_margin = " + EdgeMarginName(EdgeMargin));
         }
+
+        /// <summary>The settings file's <c>edge_margin</c> value and the layer's <c>ETERNALVR_EDGE_MARGIN</c>: off, small, medium or large.</summary>
+        public static string EdgeMarginName(EdgeMarginMode m) =>
+            m == EdgeMarginMode.Small ? "small" : m == EdgeMarginMode.Medium ? "medium" : m == EdgeMarginMode.Large ? "large" : "off";
+
+        /// <summary>
+        /// The layer's <c>ETERNALVR_EDGE_MARGIN</c> for the setting and the margin the launch's render size keeps
+        /// (<see cref="Launch.RenderSizeChoice.KeptGrowth"/>; null: none worked out here). The setting's name, unless the runtime's
+        /// limits cut the grown size: then the margin it keeps as a whole percentage, rounded down so the view never gets less
+        /// detail than without the margin, or <c>off</c> below 1%.
+        /// </summary>
+        public static string EdgeMarginValue(EdgeMarginMode m, double? kept)
+        {
+            double growth = EdgeMarginGrowth(m);
+            // A kept factor an ulp or so under the growth (rounding) is the whole margin.
+            if (m == EdgeMarginMode.Off || kept == null || !(kept.Value < growth - 1e-9)) return EdgeMarginName(m);
+            int percent = (int)Math.Floor((kept.Value - 1.0) * 100.0 + 1e-9);
+            return percent < 1 ? "off" : percent.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// The factor an automatic render size grows by on both sides, as the layer's (<c>src/features/render_size/edge_margin.hpp</c>:
+        /// its float constants, taken as doubles): 1 when off.
+        /// </summary>
+        public static double EdgeMarginGrowth(EdgeMarginMode m) =>
+            m == EdgeMarginMode.Small ? (double)1.10f : m == EdgeMarginMode.Medium ? (double)1.20f : m == EdgeMarginMode.Large ? (double)1.30f : 1.0;
 
         /// <summary>The layer's <c>ETERNALVR_STEREO_DLSS_QUALITY</c> value (and the settings file's).</summary>
         public static string DlssQualityName(DlssQuality q) =>

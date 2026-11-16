@@ -9,12 +9,14 @@
 
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/decal_frustum_hooks.hpp"
+#include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/pe_flares.hpp"
 #include "vkcore/presenter_eyes.hpp"
 #include "vkcore/view_slots.hpp"
 #include "vkcore/view_snapshot.hpp"
 #include "vkcore/vrs_nv.hpp"
+#include "xr_math/edge_margin.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -109,6 +111,41 @@ StereoSettings readStereoSettings() {
 
 // ---- Camera hook (game-frame thread) -----------------------------------------------------------------
 
+void XrPresenter::Impl::widenEyes(std::array<xr_math::EyeInHead, 2>& eyes) {
+    const float factor = edgeMarginFovFactor();
+    if (!(factor > 1.0f)) {
+        return;
+    }
+    for (std::size_t i = 0; i < eyes.size(); ++i) {
+        const xr_math::Fov view = eyes[i].fov;
+        const std::optional<xr_math::Fov> wide = xr_math::widenFov(view, factor);
+        if (!wide) {
+            if (!loggedEdgeMargin[i]) {
+                loggedEdgeMargin[i] = true;
+                EVR_LOG(
+                    "edge margin: eye %zu's FOV (%.2f / %.2f / %.2f / %.2f deg) cannot be widened x%.2f; it "
+                    "renders its view only",
+                    i, view.angleLeft * kDegrees, view.angleRight * kDegrees, view.angleUp * kDegrees,
+                    view.angleDown * kDegrees, static_cast<double>(factor));
+            }
+            continue; // this frame's eye keeps the runtime's FOV
+        }
+        eyes[i].fov = *wide;
+        if (!loggedEdgeMargin[i]) {
+            loggedEdgeMargin[i] = true;
+            EVR_LOG(
+                "edge margin: eye %zu renders left %.2f right %.2f up %.2f down %.2f deg for its view's %.2f "
+                "/ %.2f / %.2f / %.2f (%.2f / %.2f / %.2f / %.2f more)",
+                i, wide->angleLeft * kDegrees, wide->angleRight * kDegrees, wide->angleUp * kDegrees,
+                wide->angleDown * kDegrees, view.angleLeft * kDegrees, view.angleRight * kDegrees,
+                view.angleUp * kDegrees, view.angleDown * kDegrees,
+                (view.angleLeft - wide->angleLeft) * kDegrees,
+                (wide->angleRight - view.angleRight) * kDegrees, (wide->angleUp - view.angleUp) * kDegrees,
+                (view.angleDown - wide->angleDown) * kDegrees);
+        }
+    }
+}
+
 void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxis& body, Quat headOpenXr) {
     std::array<XrView, 2> views{};
     for (XrView& v : views) {
@@ -175,6 +212,14 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
     // (ETERNALVR_FOV_CHECK).
     const tracking::FovProblem fovProblem =
         settings.checkFov ? tracking::fovProblem({eyes[0].fov, eyes[1].fov}) : tracking::FovProblem::None;
+    // The edge margin (edge_margin_setting.hpp): each eye renders, and is submitted with, its FOV widened, so
+    // a runtime's reprojection to a newer head pose has picture past the view's edges. Everything below takes
+    // the image's FOV: the projection, the layer's view and foveation's eye shapes (regions are angles around
+    // head-forward, mapped into the image through its FOV, so they stay where they were on the view). Each
+    // eye's record keeps where its view lies in its image (EyeRecord::viewRect) for the desktop window.
+    const std::array<xr_math::Fov, 2> viewFovs{eyes[0].fov, eyes[1].fov};
+    const bool margin = edgeMarginFovFactor() > 1.0f; // without it, no rectangle is worked out
+    widenEyes(eyes);
     if (fovProblem == tracking::FovProblem::None) {
         for (std::size_t i = 0; i < 2; ++i) {
             vrs_nv::noteEye(static_cast<int>(i), eyes[i].fov, eyes[i].pose.orientation);
@@ -212,6 +257,9 @@ void XrPresenter::Impl::prepareEyes(ViewRecord& record, const xr_math::IdViewAxi
                                 inSpace.orientation.w};
         out.pose.position = {inSpace.position.x, inSpace.position.y, inSpace.position.z};
         out.fov = toXr(eye.fov);
+        // From the same FOV the layer gets: E4's head-centred FOV has no margin.
+        out.viewRect =
+            margin && settings.stereo.eyePoses ? xr_math::marginViewRect(eye.fov, viewFovs[i]) : std::nullopt;
         out.offset = {idEye.offset.x, idEye.offset.y, idEye.offset.z};
         out.axis = {idEye.axis.forward.x, idEye.axis.forward.y, idEye.axis.forward.z,
                     idEye.axis.left.x,    idEye.axis.left.y,    idEye.axis.left.z,
@@ -468,6 +516,20 @@ void XrPresenter::Impl::startStereo() {
             settings.stereo.testWeaponFov > 0.0f ? ", weapon FOV test on" : "");
 }
 
+// The edge margin's first stereo pair as the projection layer submits it (XR worker), each eye once.
+void XrPresenter::Impl::logMarginSubmitted(std::size_t eye, const XrCompositionLayerProjectionView& v) {
+    if (eye > 1 || loggedMarginSubmit[eye] || !shownView.showEyes || !(edgeMarginFovFactor() > 1.0f)) {
+        return;
+    }
+    loggedMarginSubmit[eye] = true;
+    EVR_LOG("edge margin: the projection layer's eye %zu is submitted with left %.2f right %.2f up %.2f down "
+            "%.2f deg "
+            "over its %dx%d half",
+            eye, v.fov.angleLeft * kDegrees, v.fov.angleRight * kDegrees, v.fov.angleUp * kDegrees,
+            v.fov.angleDown * kDegrees, v.subImage.imageRect.extent.width,
+            v.subImage.imageRect.extent.height);
+}
+
 bool XrPresenter::Impl::fillProjectionViews(std::array<XrCompositionLayerProjectionView, 2>& views) {
     const bool twoViews = shownView.stereo && stereoHooks.twoViews && settings.stereo.views == 2;
     const bool leftEyeExperiment =
@@ -487,12 +549,14 @@ bool XrPresenter::Impl::fillProjectionViews(std::array<XrCompositionLayerProject
             v.pose = shownView.showEyes ? shownView.eyes[i].pose : shownView.pose;
             v.fov = shownView.showEyes ? shownView.eyes[i].fov : shownView.fov;
             v.subImage.imageRect = {{rect.x, rect.y}, {rect.width, rect.height}};
+            logMarginSubmitted(i, v);
         } else if (twoViews) {
             // Each eye's half of the side-by-side image, with the pose and FOV it was rendered with.
             const xr_math::PixelRect rect = xr_math::sideBySideRect(static_cast<int>(i), width, height);
             v.pose = shownView.eyes[i].pose;
             v.fov = shownView.eyes[i].fov;
             v.subImage.imageRect = {{rect.x, rect.y}, {rect.width, rect.height}};
+            logMarginSubmitted(i, v);
         } else if (leftEyeExperiment) {
             // One view rendered as the left eye (E2): both eyes see it.
             v.pose = shownView.eyes[0].pose;

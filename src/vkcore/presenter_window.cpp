@@ -8,6 +8,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/stereo_present.hpp"
@@ -148,6 +149,7 @@ void XrPresenter::Impl::logWindowStats() {
 }
 
 void XrPresenter::Impl::logSizeStats() {
+    noteEyeExtent(eyeExtent.width, eyeExtent.height); // the edge margin's size, also after a later cut
     const std::optional<render_size::Extent> size = virtual_client::activeExtent();
     if (!size) {
         return;

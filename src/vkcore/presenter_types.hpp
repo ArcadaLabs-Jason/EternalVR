@@ -192,6 +192,12 @@ struct ViewRecord {
     bool weaponWheel = false;
 };
 
+// The view's part of eye `eye`'s image in `record` (EyeRecord::viewRect): what the desktop window shows of
+// that eye's present; nullopt for a mono record or an image without a margin.
+inline std::optional<xr_math::ImageRect> eyeViewRectOf(const ViewRecord& record, std::size_t eye) {
+    return record.stereo && eye < record.eyes.size() ? record.eyes[eye].viewRect : std::nullopt;
+}
+
 // A D3D12 copy that did not finish within the frame's wait (XR worker only): its slot and swapchain image
 // stay held until it does (presenter_frame.cpp).
 struct HeldCopy {
@@ -252,6 +258,9 @@ struct CopyTarget {
     // (presenter_depth.hpp). Every other copy clears the slot's depth.
     bool depth = false;
     std::uint64_t depthTick = 0;
+    // An eye present with the edge margin: where the view lies in this image, from the record of the frame
+    // presented (eyeViewRectOf), so the desktop window shows that part; nullopt: the whole image.
+    std::optional<xr_math::ImageRect> viewRect;
 };
 
 // What an in-headset capture holds (the text file's kind line).

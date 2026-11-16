@@ -114,3 +114,31 @@ validation layer over the copy; a runtime that really refuses depth; the `D32_FL
 hold where the game presents from its compute queue; whether `_upscaledOpaqueDepth` is written in every frame of
 every mode (it is the output size in all three modes tried, and its contents match the eye images in TAA and DLSS);
 a ring rebuild (a window size change) with the layer on; AMD and Intel GPUs.
+
+## The UI image join (code reading)
+
+How the game's GUI target reaches the headset next to the eyes' images (on by default in Route S stereo, `ETERNALVR_UI_LAYER` decides either way; the UI layer's
+quad, docs/ARCHITECTURE.md section 6). Labels: [code] only; no run was made for this entry.
+
+- Each ring slot owns, besides its eye image, a shared GUI image: a D3D12 committed resource (`R8G8B8A8_UNORM`,
+  the game's output size, shared handle) imported into Vulkan as a transfer-destination image
+  (`createUiImages`, `importUiImage` in `src/vkcore/presenter_ui.cpp`). If one cannot be made the layer logs
+  `ui: the shared GUI images ... could not be made` and the UI layer is off for the session.
+- `recordUiCopy` (same file) runs in the present hook, on the render thread under the presenter's mutex, in the
+  command buffer that copies the eye image (`presenter_copy_record.cpp`), for a mono frame or eye L only (eye R
+  keeps the pair's; a copy that is not for the GUI leaves `slot.ui.written` false). It reads the GUI target the
+  game draws (`ui_engine::readTarget`), looks it up in the Vulkan image tracker (record, layout, last queue
+  family) and checks it (`ui_layer::checkTarget`, plus its size against the shared image's); a target that fails
+  is counted (`uiNotCaptured`, the last reason in the 10 s `ui:` line) and the slot carries no GUI image.
+- On a pass it records a barrier pair (the target to transfer-source in the layout the game's tracking has it,
+  the shared image from undefined to transfer-destination, handed over from the external queue family), the copy,
+  and the barriers back (the target to its layout, the shared image to general and to the external family).
+  Under hand aim the game's crosshair square, the centre of the target, is left out of the copy
+  (`copyRegionsWithoutCentre`: the image is cleared first when the copy is in several regions) unless a menu or a
+  full-screen backdrop is up or the crosshair hold is confirmed; the reticle quad marks the hand's ray instead.
+- The same command buffer also records, from the same target: the menu's panel for the desktop window
+  (`mirror.keepPanel`), the backdrop test's and the weapon wheel's reads, and the GUI capture's buffer copy.
+- The XR worker then takes the slot (`presenter_frame.cpp`): when `slot.ui.written`, it acquires the UI swapchain
+  image and copies the shared image into it with a D3D12 copy (`recordUiXrCopy`, `presenter_ui_xr.cpp`), outside
+  menus through the wash filter first (`ui_wash`), and the HUD markers' image is drawn from it; the quad layer
+  then shows that image. A slot without a GUI image goes without one (no UI copy for that frame).

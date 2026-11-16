@@ -93,6 +93,7 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios-fxsync.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-pickup.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-depth.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-margin.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-coexist.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-bench.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-mapload.ps1')

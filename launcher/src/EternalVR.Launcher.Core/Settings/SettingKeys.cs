@@ -72,6 +72,7 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.AntiAliasing] = new[] { "anti_aliasing" },
             [Setting.Sharpening] = new[] { "sharpening" },
             [Setting.ScreenReflections] = new[] { "screen_reflections" },
+            [Setting.EdgeMargin] = new[] { "edge_margin" },
             [Setting.Foveation] = new[] { "foveation" },
             [Setting.FramePacing] = new[] { "frame_pacing" },
             [Setting.DepthLayer] = new[] { "depth_layer" },

@@ -278,7 +278,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Resolution, Setting.EachEye, Setting.AntiAliasing, Setting.TextureStreaming, Setting.ParallelEyes, Setting.CpuSaver, Setting.DesktopWindow, Setting.Foveation,
-                Setting.FramePacing,
+                Setting.FramePacing, Setting.EdgeMargin,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             // The UI layer runs in mono too, so its settings apply.

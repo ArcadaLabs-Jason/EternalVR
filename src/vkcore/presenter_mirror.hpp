@@ -16,13 +16,19 @@
 // only for a present whose image the window needs), and a Load puts it over the image the window gets,
 // cut to the band as an eye would be (stereo_seq::panelMirror decides which present does what).
 //
+// With the edge margin (edge_margin_setting.hpp) a stereo eye's image is wider than its view: the window
+// shows the view's part only (the band is then cut from it), stretched over the image as the band is. A Load
+// shows the kept image's part, a panel all of itself.
+//
 // A blit needs a graphics queue. A present from a family without one (the game has presented from its
 // compute queue) gets no crop, and no panel for a swapchain that is not RGBA8: the window shows the eye.
 
 #include "stereo_seq/desktop_window.hpp"
 #include "vkcore/dispatch.hpp"
+#include "xr_math/edge_margin.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace evr::vkcore {
 
@@ -31,7 +37,7 @@ public:
     // Records `step` into `cb` (of queue family `family`) for the swapchain image `source`
     // (TRANSFER_SRC_OPTIMAL on entry), then the crop when the image reaches the window (`toWindow`). Returns
     // the layout `source` is left in: TRANSFER_SRC_OPTIMAL, or TRANSFER_DST_OPTIMAL after a load, a clear or
-    // a crop.
+    // a crop. `view`: where this present's view lies in its image (the edge margin's; nullopt: all of it).
     VkImageLayout record(DeviceData& dev,
                          VkCommandBuffer cb,
                          std::uint32_t family,
@@ -39,7 +45,8 @@ public:
                          VkFormat format,
                          VkExtent2D extent,
                          stereo_seq::MirrorStep step,
-                         bool toWindow);
+                         bool toWindow,
+                         const std::optional<xr_math::ImageRect>& view = std::nullopt);
     // What a present does for the window: `eyeStep` in gameplay; while `menu` is up over a head-tracked frame
     // (the GUI not in the eye image), the panel's steps (stereo_seq::panelMirror). Each change of menu is
     // logged, and a panel kept for an earlier menu (or an eye kept before one) is never loaded after it.
@@ -73,13 +80,9 @@ public:
 
 private:
     bool ensureImage(DeviceData& dev, VkFormat format, VkExtent2D extent);
-    // The eye's rows [y, y + height) of the private image stretched over the whole of `source`.
-    void blitBand(DeviceData& dev,
-                  VkCommandBuffer cb,
-                  VkImage source,
-                  VkExtent2D extent,
-                  std::uint32_t y,
-                  std::uint32_t height);
+    // The part `box` of the private image stretched over the whole of `source`.
+    void
+    blitBand(DeviceData& dev, VkCommandBuffer cb, VkImage source, VkExtent2D extent, xr_math::PixelBox box);
     bool canBlit(DeviceData& dev, VkFormat format);
     // A blit needs a graphics queue; the game has presented from a compute-only family.
     bool blitsOn(DeviceData& dev, std::uint32_t family);
@@ -92,6 +95,9 @@ private:
     VkExtent2D extent_{};
     bool inGeneral_ = false; // the private image has left UNDEFINED
     bool kept_ = false;      // it holds an eye image of this size and format
+    // Where the kept image's view lies in it (the edge margin's; nullopt: all of it, and the menu panel).
+    std::optional<xr_math::ImageRect> keptView_;
+    bool marginLogged_ = false; // the first present cut to its view is in the log
     bool failed_ = false;
     VkFormat blitChecked_ = VK_FORMAT_UNDEFINED;
     bool blitOk_ = false;

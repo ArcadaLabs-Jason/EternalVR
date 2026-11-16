@@ -164,6 +164,47 @@ namespace EternalVR.Launcher.Platform
             return $"{name}, {Environment.ProcessorCount} logical processors";
         }
 
+        /// <summary>The active power scheme as the report prints it (name and GUID, <see cref="PowerPlan.Describe"/>); "unknown"
+        /// when the query fails.</summary>
+        public static string PowerPlanDescription()
+        {
+            try
+            {
+                if (PowerGetActiveScheme(IntPtr.Zero, out var guidPtr) != 0 || guidPtr == IntPtr.Zero) return PowerPlan.Unknown;
+                try
+                {
+                    var scheme = (Guid)Marshal.PtrToStructure(guidPtr, typeof(Guid));
+                    string name = null;
+                    uint size = 0;
+                    var first = PowerReadFriendlyName(IntPtr.Zero, ref scheme, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, ref size);
+                    if ((first == 0 || first == ErrorMoreData) && size >= 2 && size <= 1024)
+                    {
+                        var buffer = Marshal.AllocHGlobal((int)size);
+                        try
+                        {
+                            if (PowerReadFriendlyName(IntPtr.Zero, ref scheme, IntPtr.Zero, IntPtr.Zero, buffer, ref size) == 0)
+                                name = Marshal.PtrToStringUni(buffer);
+                        }
+                        finally { Marshal.FreeHGlobal(buffer); }
+                    }
+                    return PowerPlan.Describe(name, scheme);
+                }
+                finally { LocalFree(guidPtr); }
+            }
+            catch (Exception) { return PowerPlan.Unknown; }
+        }
+
+        private const uint ErrorMoreData = 234;
+
+        [DllImport("powrprof.dll")]
+        private static extern uint PowerGetActiveScheme(IntPtr userRootPowerKey, out IntPtr activePolicyGuid);
+
+        [DllImport("powrprof.dll")]
+        private static extern uint PowerReadFriendlyName(IntPtr rootPowerKey, ref Guid schemeGuid, IntPtr subGroupGuid, IntPtr powerSettingGuid, IntPtr buffer, ref uint bufferSize);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr LocalFree(IntPtr mem);
+
         /// <summary>The installed memory in GB (GlobalMemoryStatusEx's total physical memory); null when it fails.</summary>
         public static string MemoryDescription()
         {

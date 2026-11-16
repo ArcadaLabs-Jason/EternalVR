@@ -616,10 +616,10 @@ Required for v1
       HUD in front of you stays the default and the wrist HUD stays off by default for the beta, 2026-11-13); glory
       kills, cutscenes and respawns with the wrist HUD are untested
 - [ ] Cylinder layers on runtimes that support them, quad fallback elsewhere
-- [ ] The UI image joins the presenter's shared-image slots (`src/vkcore/presenter_copy.cpp`), and its
-      copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3). The join is done (the ring
-      slot carries the GUI target's copy, `recordUiCopy` in `src/vkcore/presenter_copy_record.cpp`); what is left is
-      its entry in `presenter.md`, which does not mention it yet
+- [x] The UI image joins the presenter's shared-image slots (`src/vkcore/presenter_copy.cpp`), and its
+      copy is added to the presenter record (`docs/rig-findings/presenter.md`, M3). Done: the ring slot carries
+      the GUI target's copy (`recordUiCopy`, `src/vkcore/presenter_ui.cpp`, called from
+      `presenter_copy_record.cpp`); its entry is in `presenter.md` ("The UI image join")
 - [x] Screen-projected markers (T-058, T-145): the HUD's objective and POI markers and damage numbers follow
       the head-locked quad, those above or below the 16:9 band clamped to its edge; built and measured on the
       rig with OpenXR-Simulator (docs/rig-findings/hud-markers.md: 6 to 23 degrees off before, under 1 after;

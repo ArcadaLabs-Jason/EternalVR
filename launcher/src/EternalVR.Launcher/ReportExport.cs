@@ -36,6 +36,7 @@ namespace EternalVR.Launcher
             Add("version check", VersionCheck.Evaluate(LauncherContext.LauncherVersion, layerVersion, ctx.LayerDir).ToString());
             Add("windows", WindowsSystem.OsDescription());
             Add("cpu", WindowsSystem.CpuDescription());
+            Add("power plan", WindowsSystem.PowerPlanDescription());
             Add("memory", WindowsSystem.MemoryDescription());
             var adapters = WindowsSystem.DisplayAdapters();
             if (adapters.Count == 0) Add("gpu", null);

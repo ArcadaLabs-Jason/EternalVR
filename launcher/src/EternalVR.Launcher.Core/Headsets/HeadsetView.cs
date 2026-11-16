@@ -161,7 +161,7 @@ namespace EternalVR.Launcher.Core.Headsets
             var limits = facts?.Limits;
             var probe = limits == null ? null : new OpenXrProbeResult { Limits = limits };
             var panel = identity?.Known?.Panel;
-            var choice = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel);
+            var choice = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel, LauncherSettings.EdgeMarginGrowth(s.EdgeMargin));
             if (choice.Size == null)
                 return limits == null ? "Set from your headset at Launch VR" : "Decided in-game (too large for a fixed size)";
             var size = choice.Size.Value;
@@ -174,6 +174,8 @@ namespace EternalVR.Launcher.Core.Headsets
             lines.Add(first);
             if (s.ResolutionBase == ResolutionBase.Panel && choice.Base != ResolutionBase.Panel)
                 lines.Add("This headset's panel is not known: Auto is used");
+            if (choice.Growth > 1.0)
+                lines.Add(MarginLine(s, setting, probe, panel, choice, size));
             if (s.AntiAliasing == AntiAliasingMode.Dlss)
             {
                 int q = Math.Max(0, Math.Min(DlssDll.QualityNames.Length - 1, (int)s.Dlss));
@@ -190,6 +192,29 @@ namespace EternalVR.Launcher.Core.Headsets
                         + "% more pixels than Auto");
             }
             return string.Join("\n", lines);
+        }
+
+        // The Each eye line's edge margin: what it costs in pixels against the same Resolution without it (always shown, so
+        // Small's 21% is said too), and when the runtime's limits keep only part of it, how much.
+        private static string MarginLine(LauncherSettings s, string setting, OpenXrProbeResult probe, Extent? panel, RenderSizeChoice choice, Extent size)
+        {
+            var line = "With the edge margin (" + SettingTexts.For(Setting.EdgeMargin).Choices[(int)s.EdgeMargin] + ")";
+            var without = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel).Size;
+            if (without != null && !without.Value.IsEmpty)
+            {
+                double extra = (double)size.Width * size.Height / ((double)without.Value.Width * without.Value.Height) - 1.0;
+                line += ": " + Math.Round(extra * 100, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture)
+                    + "% more pixels";
+            }
+            if (choice.KeptGrowth < choice.Growth - 1e-9)
+            {
+                // As the launch passes it (LauncherSettings.EdgeMarginValue): a whole percentage, or off.
+                var passed = LauncherSettings.EdgeMarginValue(s.EdgeMargin, choice.KeptGrowth);
+                line += int.TryParse(passed, NumberStyles.None, CultureInfo.InvariantCulture, out int percent)
+                    ? ", cut to x" + (1.0 + percent / 100.0).ToString("0.00", CultureInfo.InvariantCulture) + " by the runtime's limits"
+                    : ", none of it within the runtime's limits";
+            }
+            return line;
         }
 
         /// <summary>

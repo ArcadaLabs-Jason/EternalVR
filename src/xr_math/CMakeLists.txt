@@ -10,6 +10,7 @@ evr_add_module(evr_xr_math
         cinema_quad.cpp
         cutscene_cuts.cpp
         display_lead.cpp
+        edge_margin.cpp
         fov.cpp
         hand_aim.cpp
         head_aim.cpp

@@ -78,6 +78,39 @@ std::uint32_t limitOf(std::uint32_t value) {
     return value == 0 ? kMaxSide : std::min(value, kMaxSide);
 }
 
+// The largest sides the runtime's limits allow (and kMaxSide), at least kMinSide each.
+Extent maxSides(const ViewLimits& limits) {
+    const std::uint32_t eyes = std::max<std::uint32_t>(1, limits.eyesSideBySide);
+    const std::uint32_t maxWidth =
+        std::min(limitOf(limits.maxImageRect.width), limitOf(limits.maxSwapchain.width) / eyes);
+    const std::uint32_t maxHeight =
+        std::min(limitOf(limits.maxImageRect.height), limitOf(limits.maxSwapchain.height));
+    return {std::max(maxWidth, kMinSide), std::max(maxHeight, kMinSide)};
+}
+
+// How much fitToLimits scales a `w` x `h` size down (1: it fits).
+double limitScale(double w, double h, const ViewLimits& limits) {
+    const Extent top = maxSides(limits);
+    return std::min({1.0, static_cast<double>(top.width) / w, static_cast<double>(top.height) / h});
+}
+
+// Auto's size before it is fitted to the limits (autoSize).
+std::optional<Extent> autoWanted(const ViewLimits& limits, float scale, std::uint64_t budget, double growth) {
+    if (limits.recommended.width == 0 || limits.recommended.height == 0 || !std::isfinite(scale) ||
+        scale <= 0.0f || !std::isfinite(growth) || growth <= 0.0) {
+        return std::nullopt;
+    }
+    const double w = limits.recommended.width;
+    const double h = limits.recommended.height;
+    const double pixels = w * h;
+    const double fit = budget > 0 && pixels > static_cast<double>(budget)
+                           ? std::sqrt(static_cast<double>(budget) / pixels)
+                           : 1.0;
+    const double factor = fit * static_cast<double>(scale) * growth;
+    return Extent{static_cast<std::uint32_t>(std::lround(w * factor)),
+                  static_cast<std::uint32_t>(std::lround(h * factor))};
+}
+
 } // namespace
 
 std::optional<Request> parseRenderSize(std::wstring_view text) {
@@ -133,35 +166,53 @@ Extent fitToLimits(Extent size, const ViewLimits& limits) {
     if (size.width == 0 || size.height == 0) {
         return {};
     }
-    const std::uint32_t eyes = std::max<std::uint32_t>(1, limits.eyesSideBySide);
-    std::uint32_t maxWidth =
-        std::min(limitOf(limits.maxImageRect.width), limitOf(limits.maxSwapchain.width) / eyes);
-    std::uint32_t maxHeight =
-        std::min(limitOf(limits.maxImageRect.height), limitOf(limits.maxSwapchain.height));
-    maxWidth = std::max(maxWidth, kMinSide);
-    maxHeight = std::max(maxHeight, kMinSide);
+    const Extent top = maxSides(limits);
     const double w = size.width;
     const double h = size.height;
-    const double down =
-        std::min({1.0, static_cast<double>(maxWidth) / w, static_cast<double>(maxHeight) / h});
-    return {alignSide(w * down, maxWidth), alignSide(h * down, maxHeight)};
+    const double down = limitScale(w, h, limits);
+    return {alignSide(w * down, top.width), alignSide(h * down, top.height)};
 }
 
-std::optional<Extent> autoSize(const ViewLimits& limits, float scale, std::uint64_t budget) {
-    if (limits.recommended.width == 0 || limits.recommended.height == 0 || !std::isfinite(scale) ||
-        scale <= 0.0f) {
+std::optional<Extent> autoSize(const ViewLimits& limits, float scale, std::uint64_t budget, double growth) {
+    const std::optional<Extent> wanted = autoWanted(limits, scale, budget, growth);
+    if (!wanted) {
         return std::nullopt;
     }
-    const double w = limits.recommended.width;
-    const double h = limits.recommended.height;
-    const double pixels = w * h;
-    const double fit = budget > 0 && pixels > static_cast<double>(budget)
-                           ? std::sqrt(static_cast<double>(budget) / pixels)
-                           : 1.0;
-    const double factor = fit * static_cast<double>(scale);
-    const Extent wanted{static_cast<std::uint32_t>(std::lround(w * factor)),
-                        static_cast<std::uint32_t>(std::lround(h * factor))};
-    return fitToLimits(wanted, limits);
+    return fitToLimits(*wanted, limits);
+}
+
+double fittedGrowth(Extent wanted, double growth, const ViewLimits& limits) {
+    if (!std::isfinite(growth) || !(growth > 1.0)) {
+        return 1.0;
+    }
+    if (wanted.width == 0 || wanted.height == 0) {
+        return growth;
+    }
+    const double w = wanted.width;
+    const double h = wanted.height;
+    // The fitted image covers `growth` times the ungrown size's view at the ungrown size's density only as
+    // far as the limits scale the grown size down no more than they scale the ungrown one.
+    const double kept = growth * limitScale(w, h, limits) / limitScale(w / growth, h / growth, limits);
+    return std::clamp(kept, 1.0, growth);
+}
+
+double requestGrowth(const Request& request, const ViewLimits& limits, double growth) {
+    if (!std::isfinite(growth) || !(growth > 1.0)) {
+        return 1.0;
+    }
+    switch (request.mode) {
+    case Mode::Off:
+        return growth;
+    case Mode::Fixed:
+        return fittedGrowth(request.fixed, growth, limits);
+    case Mode::Auto:
+        if (const std::optional<Extent> wanted =
+                autoWanted(limits, request.scale, kDefaultPixelBudget, growth)) {
+            return fittedGrowth(*wanted, growth, limits);
+        }
+        return growth;
+    }
+    return growth;
 }
 
 std::optional<Extent> selectSize(const Request& request, const std::optional<ViewLimits>& limits) {
@@ -174,7 +225,7 @@ std::optional<Extent> selectSize(const Request& request, const std::optional<Vie
         if (!limits) {
             return std::nullopt;
         }
-        return autoSize(*limits, request.scale);
+        return autoSize(*limits, request.scale, kDefaultPixelBudget, request.growth);
     }
     return std::nullopt;
 }
@@ -211,7 +262,12 @@ std::string describe(const Request& request) {
     case Mode::Off:
         return "off";
     case Mode::Auto:
-        std::snprintf(text, sizeof(text), "auto x%.2f", static_cast<double>(request.scale));
+        if (request.growth > 1.0) {
+            std::snprintf(text, sizeof(text), "auto x%.2f, edge margin x%.2f",
+                          static_cast<double>(request.scale), request.growth);
+        } else {
+            std::snprintf(text, sizeof(text), "auto x%.2f", static_cast<double>(request.scale));
+        }
         return text;
     case Mode::Fixed:
         std::snprintf(text, sizeof(text), "%ux%u", request.fixed.width, request.fixed.height);
