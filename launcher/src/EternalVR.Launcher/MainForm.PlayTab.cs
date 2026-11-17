@@ -46,6 +46,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox steadiness = Choices(Setting.AimSteadiness);
         private readonly CheckBox aimDot = new CheckBox { AutoSize = true };
         private readonly NumericUpDown dotSize = Number(LauncherSettings.MinAimDotSize, LauncherSettings.MaxAimDotSize, 0.1, 1);
+        private readonly ComboBox gameCrosshair = Choices(Setting.GameCrosshair);
         private readonly ComboBox showArms = Choices(Setting.Arms);
         private readonly NumericUpDown weaponHandAngle =
             Number(LauncherSettings.MinControllerAngle, LauncherSettings.MaxControllerAngle, 5, 0);
@@ -170,6 +171,10 @@ namespace EternalVR.Launcher
                 Row(Setting.AimDotSize, WithUnit(dotSize, "°"),
                     s => dotSize.Value = Clamped(s.AimDotSize, dotSize, LauncherSettings.DefaultAimDotSize),
                     s => s.AimDotSize = (double)dotSize.Value),
+                // Under the aim dot it needs (greyed out with the dot off, SettingRules).
+                Row(Setting.GameCrosshair, gameCrosshair,
+                    s => gameCrosshair.SelectedIndex = (int)s.GameCrosshair,
+                    s => s.GameCrosshair = (GameCrosshairMode)Math.Max(0, gameCrosshair.SelectedIndex)),
                 Row(Setting.Vibration, vibration, LoadVibration, ReadVibration),
                 Row(Setting.Bhaptics, bhaptics, s => bhaptics.Checked = s.Bhaptics, s => s.Bhaptics = bhaptics.Checked),
                 // Nothing to save: the buttons open the controls editor and the folder, the caption says what it holds.

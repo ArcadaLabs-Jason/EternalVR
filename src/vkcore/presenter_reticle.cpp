@@ -5,12 +5,15 @@
 
 #include "common/quat.hpp"
 #include "common/vector.hpp"
+#include "ui_layer/gun_crosshair.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/reticle_depth.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -172,14 +175,16 @@ bool XrPresenter::Impl::fillReticleQuad(XrCompositionLayerQuad& quad) {
         quad.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -dotDistance}};
         return true;
     }
-    // Where the ray meets the world (reticle_depth.hpp), else at the set distance; the same angular size.
-    const bool traced = shownHasView && shownView.weaponAimValid && shownView.weaponAimHitMetres > 0.0f;
-    const float d = traced ? shownView.weaponAimHitMetres : settings.ui.reticleDistanceMetres;
+    const std::optional<AimMark> mark = aimMark();
+    if (!mark) {
+        return false;
+    }
+    const float d = mark->metres;
     const float side = ui_layer::reticleSideMetres(d, settings.ui.reticleDegrees);
     if (const double now = qpcSeconds(qpcNow()); now >= g_nextDotLog) {
         g_nextDotLog = now + kDotLogSeconds;
         EVR_LOG("ui: the aim dot at %.1f m (%s)", d,
-                !traced                    ? "the set distance"
+                !mark->traced              ? "the set distance"
                 : d >= kReticleReachMetres ? "the ray is clear"
                                            : "where the ray meets the world");
     }
@@ -191,20 +196,70 @@ bool XrPresenter::Impl::fillReticleQuad(XrCompositionLayerQuad& quad) {
     quad.subImage.imageArrayIndex = 0;
     quad.size = {side, side};
     // On the ray (-Z of the aim pose), facing back along it toward the hand and the eyes.
+    quad.space = mark->space;
+    quad.pose = mark->pose;
+    return true;
+}
+
+std::optional<XrPresenter::Impl::AimMark> XrPresenter::Impl::aimMark() const {
+    const XrSpace aim = controllers::weaponAimSpace();
+    if (aim == XR_NULL_HANDLE) {
+        return std::nullopt;
+    }
+    AimMark mark;
+    // Where the ray meets the world (reticle_depth.hpp), else at the set distance.
+    mark.traced = shownHasView && shownView.weaponAimValid && shownView.weaponAimHitMetres > 0.0f;
+    mark.metres = mark.traced ? shownView.weaponAimHitMetres : settings.ui.reticleDistanceMetres;
     if (shownHasView && shownView.weaponAimValid) {
         // The ray the shown frame's gun and shots were made with (smoothed, at the view's pose time), placed
-        // in LOCAL like the frame itself, so the dot stays on the barrel's line and where the shots go.
+        // in LOCAL like the frame itself, so the mark stays on the barrel's line and where the shots go.
         const XrPosef& ray = shownView.weaponAim;
         const Quat q{ray.orientation.x, ray.orientation.y, ray.orientation.z, ray.orientation.w};
         const Vec3 point =
-            rotate(q, Vec3{0.0f, 0.0f, -d}) + Vec3{ray.position.x, ray.position.y, ray.position.z};
-        quad.space = localSpace;
-        quad.pose = {ray.orientation, {point.x, point.y, point.z}};
-        return true;
+            rotate(q, Vec3{0.0f, 0.0f, -mark.metres}) + Vec3{ray.position.x, ray.position.y, ray.position.z};
+        mark.space = localSpace;
+        mark.pose = {ray.orientation, {point.x, point.y, point.z}};
+        mark.local = true;
+        return mark;
     }
     // No ray with the shown frame (hand tracking lost): the hand's own space, as tracked.
-    quad.space = aim;
-    quad.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -d}};
+    mark.space = aim;
+    mark.pose = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -mark.metres}};
+    return mark;
+}
+
+bool XrPresenter::Impl::fillGunCrosshairQuad(XrCompositionLayerQuad& quad,
+                                             const XrCompositionLayerQuad& panel) {
+    if (!gunCrosshair.shown()) {
+        return false;
+    }
+    const std::optional<AimMark> mark = aimMark();
+    if (!mark) {
+        return false;
+    }
+    // The angle the rectangle spans on the HUD quad: the pixels its image rect spreads over its width, at its
+    // distance straight ahead of the head.
+    const ui_layer::GunCrosshairSize size = ui_layer::gunCrosshairSize(
+        gunCrosshair.rect(), static_cast<std::uint32_t>(std::max(0, panel.subImage.imageRect.extent.width)),
+        panel.size.width, -panel.pose.position.z, mark->metres);
+    if (!(size.width > 0.0f) || !(size.height > 0.0f)) {
+        return false;
+    }
+    // Centred on the dot, upright for the head as the HUD is (the crosshair's bars and texts read level
+    // whatever the wrist's roll), facing it as the HUD quad does.
+    XrPosef pose = mark->pose;
+    if (mark->local && shownHasView) {
+        pose.orientation = shownView.pose.orientation;
+    }
+    gunCrosshair.fill(quad, mark->space, pose, size);
+    if (!gunCrosshairLogged) {
+        gunCrosshairLogged = true;
+        EVR_LOG("ui: the game's crosshair on the gun's ray: its quad %.3f x %.3f m at %.1f m (%s), %s",
+                static_cast<double>(size.width), static_cast<double>(size.height),
+                static_cast<double>(mark->metres),
+                mark->traced ? "where the ray meets the world" : "the set distance",
+                mark->local ? "upright for the head" : "in the hand's aim space");
+    }
     return true;
 }
 

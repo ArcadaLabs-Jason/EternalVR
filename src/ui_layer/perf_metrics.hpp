@@ -31,6 +31,11 @@ inline constexpr std::uint32_t kMaxFrameLayers = 16;
 // Whether the metrics' quad fits a frame that has `before` layers already and `after` more to come.
 bool perfQuadFits(std::uint32_t before, std::uint32_t after);
 
+// The layers a head-tracked frame may still add after the metrics' quad: the HUD markers' two quads (when
+// their layer runs and the HUD is one quad), the game's crosshair on the gun's ray (only when this frame
+// shows it: vkcore/presenter_gun_crosshair.hpp), the aim dot and the fade.
+std::uint32_t layersAfterPerfQuad(bool markerQuads, bool gunCrosshairQuad);
+
 // The level whose quad a frame shows: none while the GUI target holds a full-screen backdrop (a fade, as at a
 // cinematic's start, or a menu's backdrop; the backdrop test of backdrop.hpp), which fills the corner too and
 // would stand above the panel as an opaque rectangle; `level` otherwise.

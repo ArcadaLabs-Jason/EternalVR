@@ -15,7 +15,7 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: gestures
         RollWrist, SwingGesture, HandsJump, PunchSpeed,
         // Play: controls
-        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, WeaponHandAngle, OffHandAngle, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, Vibration, Bhaptics, ButtonLayout,
+        AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, WeaponHandAngle, OffHandAngle, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, GameCrosshair, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
         Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, EdgeMargin, Foveation, FramePacing, DepthLayer, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
@@ -36,6 +36,7 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NotWithWristHud = "Not with the HUD on your wrist on: there is one hand HUD at a time.";
         public const string NeedsStereo = "Only in stereo (VR mode on the Advanced tab).";
         public const string NeedsHandAim = "Only when the weapon hand aims (Aim with).";
+        public const string NeedsAimDot = "Only with the aim dot on.";
         public const string NeedsHeadOrHandAim = "Only when the weapon hand or the head aims (Aim with).";
         public const string NeedsSmoothTurn = "Only with smooth turning.";
         public const string NeedsSnapTurn = "Only with snap turning.";
@@ -124,7 +125,9 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.AimDotSize:
                     if (!s.Controllers) return NeedsControllers;
                     if (!handAim) return NeedsHandAim;
-                    return setting == Setting.AimDotSize && !s.AimDot ? "Only with the aim dot on." : null;
+                    return setting == Setting.AimDotSize && !s.AimDot ? NeedsAimDot : null;
+                case Setting.GameCrosshair:
+                    return s.GameCrosshairWhyNot();
                 case Setting.TwoHandAim:
                     return s.TwoHandWhyNot();
                 case Setting.MenuLaser:

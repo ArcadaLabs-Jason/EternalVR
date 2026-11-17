@@ -137,6 +137,7 @@ struct HapticEvents {
     std::array<input::WheelTick, 2> wheel{};
     std::array<bool, 2> melee{};
     bool shoulder = false;
+    std::array<bool, 2> grip{};
     input::GameRumble rumble; // the game's motors as its rumble hook last saw them (a level)
     LONGLONG rumbleQpc = 0;   // when; 0 for never
 };

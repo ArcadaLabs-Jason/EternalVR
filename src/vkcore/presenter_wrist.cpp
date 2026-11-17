@@ -234,10 +234,11 @@ std::uint32_t WristHud::addHandQuads(const ui_layer::UiSettings& settings,
     const input::HandState& hand = left ? frame.left : frame.right;
     ui_layer::WristSettings ws =
         weapon ? ui_layer::weaponShowSettings(settings.weapon, settings.wrist) : settings.wrist;
-    // Under hand aim there is no abilities quad: with ETERNALVR_UI_CROSSHAIR=mask, or until the crosshair
-    // hold is confirmed, the UI copy leaves the centre of the target out (the game's crosshair and the
-    // ability rings around it, presenter_ui.cpp), so the quad could be empty. With the hold the rings stay on
-    // the head-locked quad; moving them to the wrist under hand aim is a separate decision.
+    // Under hand aim there is no abilities quad: with ETERNALVR_UI_CROSSHAIR=gun (opt-in) the centre of
+    // the target, the game's crosshair with the ability rings around it, goes to the crosshair's quad on the
+    // gun's ray (presenter_gun_crosshair.hpp); with mask, or until the crosshair hold is confirmed, the UI
+    // copy leaves it out (presenter_ui.cpp), so the quad could be empty. With the hold the rings stay on the
+    // head-locked quad; moving them to the wrist under hand aim is a separate decision.
     if (!weapon && ws.abilities && controllers::weaponAimSpace() != XR_NULL_HANDLE) {
         ws.abilities = false;
         if (!loggedNoAbilities_) {

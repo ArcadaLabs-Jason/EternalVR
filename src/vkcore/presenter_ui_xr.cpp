@@ -4,6 +4,8 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "vkcore/mp_guard.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -50,6 +52,14 @@ bool XrPresenter::Impl::createUiSwapchain() {
     if (settings.ui.hud == ui_layer::HudMode::Panel && settings.ui.front) {
         hudMarkers.create(xr, session, xrSwapchains, d3dDevice.Get(), uiXrImages, uiExtent.width,
                           uiExtent.height, kUiSwapchainFormat);
+    }
+    // The game's crosshair on the gun's ray under hand aim (with the aim dot on); until (unless) its quad is
+    // up the present hook holds the crosshair hidden instead (ui_layer::effectiveCrosshairMode). In any other
+    // mode the layer is never made and its record and quad are no-ops.
+    if (settings.ui.crosshair == ui_layer::CrosshairMode::Gun && settings.ui.reticle) {
+        uiGunReady.store(gunCrosshair.create(xr, session, xrSwapchains, d3dDevice.Get(), uiXrImages,
+                                             uiExtent.width, uiExtent.height, kUiSwapchainFormat),
+                         std::memory_order_release);
     }
     if (settings.ui.removeWash) {
         const char* why = "";
@@ -125,6 +135,22 @@ void XrPresenter::Impl::recordUiXrCopy(RingSlot& slot) {
                       markerParallax(settings.ui, uiExtent.width, uiExtent.height, settings.unitsPerMetre),
                       markerEyes(slot.hasView ? &slot.view : nullptr),
                       !menuUp.load(std::memory_order_relaxed));
+    // Under hand aim the game's crosshair off the head-locked quad, onto its own on the gun's ray, as the
+    // present hook decided with the copy, when the frame that shows this copy draws that quad and the copy's
+    // own border shows no full-screen layer (presenter_gun_crosshair.hpp).
+    if (gunCrosshair.ready()) {
+        GunCopy copy;
+        copy.wanted = slot.ui.moveCentre;
+        // The test presenter_frame.cpp makes for the quad: a head-tracked frame (this slot's view, not a
+        // stereo cutscene pair, the multiplayer guard on) with the UI quad and no menu panel. The menu state
+        // is the last frame's; one that comes up with this frame still draws the quad (presenter_frame.cpp).
+        copy.frameShows = slot.hasView && !slot.view.cinema3D && mp_guard::allowsGameTouch() &&
+                          settings.ui.enabled && !menuOn && !menuHeld;
+        copy.borderRead = slot.ui.borderProbed &&
+                          gunBorder.reading(static_cast<std::uint32_t>(&slot - ring.data()), copy.border);
+        gunCrosshair.record(xr, d3dList.Get(), src.pResource, static_cast<std::uint32_t>(uiAcquired), target,
+                            ui_layer::wideContentRect(uiExtent.width, uiExtent.height), copy);
+    }
     for (auto& b : barriers) {
         std::swap(b.Transition.StateBefore, b.Transition.StateAfter);
     }
@@ -150,6 +176,7 @@ void XrPresenter::Impl::finishUiXrCopy() {
     XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xr.xrReleaseSwapchainImage(uiSwapchain, &release);
     hudMarkers.release(xr);
+    gunCrosshair.release(xr);
     uiAcquired = -1;
     uiAcquiredWaited = false;
     if (!uiHasImage) {
@@ -224,6 +251,9 @@ XrSwapchain XrPresenter::Impl::detachUiSwapchain() {
     uiFailed = false;
     uiWash.destroy();
     hudMarkers.detach(xr, xrSwapchains);
+    // The present hook holds the crosshair again until the next UI swapchain's crosshair quad is up.
+    uiGunReady.store(false, std::memory_order_release);
+    gunCrosshair.detach(xr, xrSwapchains);
     return swapchain;
 }
 
@@ -231,6 +261,7 @@ void XrPresenter::Impl::destroyUiXrObjects() {
     XrSwapchain ui = detachUiSwapchain();
     xrSwapchains.destroy(xr, ui);
     hudMarkers.destroy(xr, xrSwapchains);
+    gunCrosshair.destroy(xr, xrSwapchains);
     xrSwapchains.destroy(xr, reticleSwapchain);
     reticleFailed = false;
     destroyMenuXrObjects();

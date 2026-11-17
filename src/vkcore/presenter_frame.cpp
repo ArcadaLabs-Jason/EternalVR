@@ -10,6 +10,7 @@
 #include "features/comfort/vignette.hpp"
 #include "features/pacing/pace_policy.hpp"
 #include "game/eternal/game_action.hpp"
+#include "ui_layer/perf_metrics.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/frame_pacing.hpp"
 #include "vkcore/gpu_timing.hpp"
@@ -261,6 +262,7 @@ void XrPresenter::Impl::frame() {
     XrCompositionLayerQuad quadR{XR_TYPE_COMPOSITION_LAYER_QUAD}; // eye R's screen (stereo cutscenes)
     XrCompositionLayerQuad uiQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     XrCompositionLayerQuad reticleQuad{XR_TYPE_COMPOSITION_LAYER_QUAD};
+    XrCompositionLayerQuad gunCrosshairQuad{XR_TYPE_COMPOSITION_LAYER_QUAD}; // the game's, on the gun's ray
     std::array<XrCompositionLayerQuad, 2> markerQuads{reticleQuad, reticleQuad}; // the HUD's, one per eye
     XrCompositionLayerProjection projection{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     std::array<XrCompositionLayerProjectionView, 2> projectionViews{};
@@ -352,6 +354,19 @@ void XrPresenter::Impl::frame() {
             }
             // UI layer: the game's GUI on its own quad in front (only with a fresh GUI image).
             uiShown = settings.ui.enabled && fillUiQuad(uiQuad);
+            // The HUD quad as filled (head-locked, in the view space), whose angles the game's crosshair on
+            // the gun keeps (fillGunCrosshairQuad).
+            const XrCompositionLayerQuad uiPanel = uiQuad;
+            // The game's crosshair on the gun's ray, after the UI quad, under the dot or the pointer: drawn
+            // in every branch below whenever the UI image shown had it moved there, so a rectangle cleared
+            // from that image always shows somewhere (the worker clears it only for a frame like this one,
+            // but the menu state can change with this frame).
+            const auto addGunCrosshair = [&] {
+                if (fillGunCrosshairQuad(gunCrosshairQuad, uiPanel)) {
+                    layers[layerCount++] =
+                        reinterpret_cast<const XrCompositionLayerBaseHeader*>(&gunCrosshairQuad);
+                }
+            };
             if (uiShown) {
                 // The hand HUDs and the weapon wheel straight ahead (presenter_wrist.cpp): the UI quad's
                 // head-locked pieces, the hand quads and the wheel's quad; not while the UI quad is the menu
@@ -374,16 +389,20 @@ void XrPresenter::Impl::frame() {
                     // A menu over the game (pause, the in-game screens): the UI quad becomes the
                     // world-locked menu panel, and the pointer replaces the hand-aim dot.
                     placeOnMenuPanel(uiQuad);
+                    addGunCrosshair();
                     addPointer();
                 } else if (menuHeld) {
                     // The cursor went but the menu's backdrop is still up: the panel stays, no pointer.
                     placeOnMenuPanel(uiQuad);
+                    addGunCrosshair();
                 } else {
                     // The game's Performance Metrics just above the HUD panel (presenter_perf.hpp).
-                    // After it: the markers' two quads (below), the reticle and the fade.
+                    // After it: the markers' two quads (below), the game's crosshair on the gun, the
+                    // reticle and the fade.
                     const bool perf = fillPerfMetricsQuad(
                         wrist.perfLevel, uiExtent.width, uiExtent.height, uiQuad, layerCount,
-                        (hudMarkers.ready() && hud == 0 ? 2u : 0u) + 2u, perfQuad);
+                        ui_layer::layersAfterPerfQuad(hudMarkers.ready() && hud == 0, gunCrosshair.shown()),
+                        perfQuad);
                     if (perf) {
                         layers[layerCount++] =
                             reinterpret_cast<const XrCompositionLayerBaseHeader*>(&perfQuad);
@@ -400,6 +419,8 @@ void XrPresenter::Impl::frame() {
                         lockToRenderedHead(uiQuad, viewSpace, localSpace, shownView.pose);
                         lockToRenderedHead(perfQuad, viewSpace, localSpace, shownView.pose);
                     }
+                    // Hand aim: the game's crosshair on the weapon hand's ray, under the dot.
+                    addGunCrosshair();
                     if (fillReticleQuad(reticleQuad)) {
                         // Hand aim: the dot on the weapon hand's ray, after the UI quad.
                         layers[layerCount++] =

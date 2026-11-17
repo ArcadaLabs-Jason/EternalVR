@@ -309,6 +309,12 @@ struct XrPresenter::Impl final : ViewHookSink,
     // Present hook, under `mutex`: records the GUI target's copy into `slot`'s UI image (with `panel`, also
     // into the mirror's, for that swapchain); false when the target fails a check (no GUI image then).
     bool recordUiCopy(VkCommandBuffer cb, std::uint32_t family, RingSlot& slot, const SwapchainState* panel);
+    // Present hook: one GUI copy for the log of the copies after the weapon wheel goes down; `moving` the
+    // mode in effect is `gun` under hand aim, `wheelUp` controllers::wheelView(), `wheel` the linger's
+    // answer, at `now` (seconds).
+    void noteWheelFade(bool moving, bool wheelUp, bool wheel, double now);
+    // Wheel closes logged one by one; later ones are not.
+    static constexpr std::uint32_t kLoggedWheelFades = 6;
     void logUiStats();
     // Worker: the UI swapchain image for the next copy (acquired and waited on), its copy, its release.
     bool createUiSwapchain();
@@ -322,6 +328,21 @@ struct XrPresenter::Impl final : ViewHookSink,
     bool fillUiQuad(XrCompositionLayerQuad& quad);
     // Worker: the reticle quad on the weapon hand's ray under hand aim; false when there is none.
     bool fillReticleQuad(XrCompositionLayerQuad& quad);
+    // Worker: the game's crosshair's quad on the weapon hand's ray, where the dot is, when the GUI image
+    // shown had its crosshair moved there (presenter_gun_crosshair.hpp); false otherwise. Its size keeps the
+    // angle the rectangle spans on `panel`, the HUD quad as fillUiQuad filled it (head-locked, in the view
+    // space).
+    bool fillGunCrosshairQuad(XrCompositionLayerQuad& quad, const XrCompositionLayerQuad& panel);
+    // Worker, hand aim: where the dot goes on the weapon ray: its distance, and its point and the ray's
+    // orientation in `space` (LOCAL with the shown frame's ray; the hand's aim space as tracked without one).
+    struct AimMark {
+        float metres = 0.0f;
+        bool traced = false; // where the ray meets the world (reticle_depth.hpp), not the set distance
+        XrSpace space = XR_NULL_HANDLE;
+        XrPosef pose{};
+        bool local = false; // `space` is LOCAL (the shown frame's ray), else the aim space
+    };
+    std::optional<AimMark> aimMark() const;
     bool createReticle();
     // Worker: a one-image swapchain holding `pixels` (width x height RGBA8, premultiplied); `what` names it
     // in the log.

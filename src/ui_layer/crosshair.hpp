@@ -1,9 +1,19 @@
 #pragma once
 
 // The game's crosshair under hand aim (docs/rig-findings/ui-layer.md, "Stereo-correct crosshair"): on the
-// head-locked quad it marks the head's ray, not the gun's, so it must not show; the layer's dot marks the
-// gun's ray instead. ETERNALVR_UI_CROSSHAIR chooses how it is taken out:
+// head-locked quad it marks the head's ray, not the gun's, so it must not show there; the layer's dot marks
+// the gun's ray instead. ETERNALVR_UI_CROSSHAIR chooses what happens to it:
 //
+// - `gun` (opt-in: the launcher's "Game's crosshair (hand aim)" set to "On the gun", T-233): the crosshair
+//   moves to the gun's ray. idHUD_Reticle draws every weapon's reticle with its cues (the Lock-On Burst's
+//   lock and LOCKED ON, charge, heat and cooldown bars, the Sticky Bombs' and Micro Missiles' pips, the hit
+//   marker) in the middle of the GUI target, and under hand aim the game's view, which it draws them for, is
+//   the gun's. So the layer lets the game draw it and moves that rectangle of each GUI copy off the
+//   head-locked quad onto a quad of its own on the weapon ray, at the dot's distance and at the angle it has
+//   on the HUD (ui_layer/gun_crosshair.hpp, vkcore/presenter_gun_crosshair.hpp). The hold below stays only
+//   for a scoped zoom (its ring would cover the view, T-136), and in full while that quad is not available
+//   (its swapchain could not be made) or the aim dot is off (ETERNALVR_UI_RETICLE=0: "nothing in the middle"
+//   is what turning the dot off gives): then the mode acts as `hold` (effectiveCrosshairMode).
 // - `hold` (the default): the layer holds hud_reticle_styleOverride at 0 while hand aim is on
 //   (vkcore/runtime_cvars_reticle.hpp). Style 0 draws no reticle: it is what idHUD_Reticle's update gives
 //   g_reticleMode 2 and the player's hideReticle flag, and the override is read after both, every update. The
@@ -17,8 +27,8 @@
 //   guard, an ETERNALVR_DEBUG_CVARS value entry for the cvar, a mono session without run-time holds) shows
 //   what `mask` shows.
 //
-// Neither applies while a menu is up or the target holds a full-screen backdrop (centreMasked), nor under
-// head aim, where the game's crosshair is on the right ray.
+// None applies while a menu is up or the target holds a full-screen backdrop (centreMasked, centreMoved),
+// nor under head aim, where the game's crosshair is on the right ray.
 
 #include <cstdint>
 #include <optional>
@@ -26,12 +36,36 @@
 
 namespace evr::ui_layer {
 
-enum class CrosshairMode : std::uint8_t { Hold, Mask };
+enum class CrosshairMode : std::uint8_t { Hold, Mask, Gun };
 
 const char* crosshairModeName(CrosshairMode mode);
 
-// ETERNALVR_UI_CROSSHAIR: "hold" or "mask" (any case, spaces around ignored); nullopt for anything else.
+// ETERNALVR_UI_CROSSHAIR: "gun", "hold" or "mask" (any case, spaces around ignored); nullopt for anything
+// else.
 std::optional<CrosshairMode> parseCrosshairMode(std::wstring_view text);
+
+// The mode in effect: `gun` needs its quad (`gunReady`: the XR worker made its swapchain) and the aim dot
+// (`dotOn`, ETERNALVR_UI_RETICLE): the moved crosshair sits around the dot, and a player who turned the dot
+// off asked for nothing in the middle. Without either the crosshair is held as under `hold`, so it never
+// shows at the head's centre.
+CrosshairMode effectiveCrosshairMode(CrosshairMode chosen, bool gunReady, bool dotOn);
+
+// The weapon wheel for the crosshair's move: a GUI copy made just after controllers::wheelView() falls can
+// still hold the wheel (the game's GUI pass is a frame or two behind the state wheelView reads), so the move
+// stays off for kWheelLingerSeconds after it. Rig GUI captures timed by their copy index
+// (docs/VR_CONTROLLERS.md) over eight closes: the wheel whole in every capture before the fall and gone in
+// every one from 0.046 s after it (no fade-out drawn); twice that, about six copies at the rig's rate, during
+// which the copies stay whole as with the wheel up. `update` takes wheelView() and the time of one GUI copy
+// (seconds, any monotonic clock) and says whether that copy counts as one with the wheel up.
+inline constexpr double kWheelLingerSeconds = 0.1;
+class WheelLinger {
+public:
+    bool update(bool wheelUp, double nowSeconds);
+
+private:
+    bool seen_ = false;
+    double lastUp_ = 0.0;
+};
 
 // The centred square left out of the GUI copy by the mask, as a fraction of the target's height: the game's
 // crosshair and the ability indicators around it.
@@ -99,8 +133,9 @@ enum class ReticleWrite : std::uint8_t { None, Hide, Restore };
 // value and any set later are the player's.
 ReticleWrite reticleWrite(bool requested, int reads, ReticleKeep& keep);
 
-// The layer asks for the hold: the mode is `hold` and hand aim is on, or (any aim) a scoped weapon is zoomed
-// (`scopeZoomed`, vkcore/zoom_look.cpp): the scope's reticle would draw its ring over the view (T-136).
+// The layer asks for the hold: the mode (in effect) is `hold` and hand aim is on, or (any aim, `hold` or
+// `gun`) a scoped weapon is zoomed (`scopeZoomed`, vkcore/zoom_look.cpp): the scope's reticle would draw its
+// ring over the view (T-136). `mask` never asks.
 bool wantsReticleHold(CrosshairMode mode, bool handAim, bool scopeZoomed = false);
 
 struct CrosshairState {
@@ -108,12 +143,19 @@ struct CrosshairState {
     bool handAim = false;       // the weapon hand aims (controllers::weaponAimSpace)
     bool menu = false;          // a menu is up or its panel is held (docs/VR_MENUS.md)
     bool backdrop = false;      // the backdrop test sees a full-screen layer (ui_layer/backdrop.hpp)
+    bool wheel = false;         // the weapon wheel is up or just gone (WheelLinger): drawn in the middle
     bool holdConfirmed = false; // holdConfirmed() now
 };
 
 // The GUI copy leaves the centred square out: hand aim, no menu or backdrop, and the mode is `mask` or the
-// hold is not confirmed.
+// hold is not confirmed. Never under `gun`, whose copy keeps the square for the XR worker to move.
 bool centreMasked(const CrosshairState& state);
+
+// The XR worker moves the crosshair's square of this GUI copy to the gun's ray (ui_layer/gun_crosshair.hpp):
+// the mode in effect is `gun`, hand aim, no menu or backdrop (a menu's panel and a full-screen layer stay
+// whole, as with the mask), and no weapon wheel (the game draws it over the middle; its quad shows it whole
+// straight ahead, presenter_wrist.cpp).
+bool centreMoved(const CrosshairState& state);
 
 // The presenter's tally of the hold, for its log: the hand-aim copies under `hold` that kept their centre
 // because the hold was confirmed (not those a menu or a backdrop kept whole anyway, which the presenter

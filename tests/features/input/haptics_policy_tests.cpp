@@ -268,7 +268,20 @@ TEST_CASE("reset forgets the held fire and what plays") {
     CHECK(pulse(policy.update(firing(1.01))[kRight], HapticSource::Fire));
 }
 
+TEST_CASE("the off hand taking the gun for two-handed aim gets a short click on that hand only") {
+    HapticsPolicy policy(1.0f);
+    HapticsFrame frame = at(1.0);
+    frame.grip[kLeft] = true;
+    const auto out = policy.update(frame);
+    CHECK(pulse(out[kLeft], HapticSource::Grip));
+    CHECK(none(out[kRight]));
+    CHECK(out[kLeft].seconds < 0.1f);
+    HapticsPolicy off(0.0f);
+    CHECK(none(off.update(frame)[kLeft]));
+}
+
 TEST_CASE("every source has a name for the log") {
+    CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Grip)) == "grip");
     CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Fire)) == "fire");
     CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Game)) == "game");
     CHECK(std::string_view(evr::input::hapticSourceName(HapticSource::Capture)) == "capture");

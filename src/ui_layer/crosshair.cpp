@@ -32,11 +32,22 @@ bool sameNoCase(std::wstring_view a, std::wstring_view b) {
 } // namespace
 
 const char* crosshairModeName(CrosshairMode mode) {
-    return mode == CrosshairMode::Mask ? "mask" : "hold";
+    switch (mode) {
+    case CrosshairMode::Mask:
+        return "mask";
+    case CrosshairMode::Gun:
+        return "gun";
+    case CrosshairMode::Hold:
+        break;
+    }
+    return "hold";
 }
 
 std::optional<CrosshairMode> parseCrosshairMode(std::wstring_view text) {
     const std::wstring_view t = trimmed(text);
+    if (sameNoCase(t, L"gun")) {
+        return CrosshairMode::Gun;
+    }
     if (sameNoCase(t, L"hold")) {
         return CrosshairMode::Hold;
     }
@@ -44,6 +55,20 @@ std::optional<CrosshairMode> parseCrosshairMode(std::wstring_view text) {
         return CrosshairMode::Mask;
     }
     return std::nullopt;
+}
+
+CrosshairMode effectiveCrosshairMode(CrosshairMode chosen, bool gunReady, bool dotOn) {
+    return chosen == CrosshairMode::Gun && !(gunReady && dotOn) ? CrosshairMode::Hold : chosen;
+}
+
+bool WheelLinger::update(bool wheelUp, double nowSeconds) {
+    if (wheelUp) {
+        seen_ = true;
+        lastUp_ = nowSeconds;
+        return true;
+    }
+    // A clock that went back (another thread's stamp) counts as within the linger.
+    return seen_ && (nowSeconds < lastUp_ || nowSeconds - lastUp_ < kWheelLingerSeconds);
 }
 
 std::uint32_t nextHoldStreak(std::uint32_t streak, bool holding, bool hidden) {
@@ -87,14 +112,27 @@ std::uint32_t nextRequestPresents(std::uint32_t presents) {
 }
 
 bool wantsReticleHold(CrosshairMode mode, bool handAim, bool scopeZoomed) {
-    return mode == CrosshairMode::Hold && (handAim || scopeZoomed);
+    switch (mode) {
+    case CrosshairMode::Hold:
+        return handAim || scopeZoomed;
+    case CrosshairMode::Gun:
+        return scopeZoomed;
+    case CrosshairMode::Mask:
+        break;
+    }
+    return false;
 }
 
 bool centreMasked(const CrosshairState& state) {
-    if (!state.handAim || state.menu || state.backdrop) {
+    if (!state.handAim || state.menu || state.backdrop || state.mode == CrosshairMode::Gun) {
         return false;
     }
     return state.mode == CrosshairMode::Mask || !state.holdConfirmed;
+}
+
+bool centreMoved(const CrosshairState& state) {
+    return state.mode == CrosshairMode::Gun && state.handAim && !state.menu && !state.backdrop &&
+           !state.wheel;
 }
 
 bool HoldTally::note(bool holding, bool nowConfirmed, bool maskable) {

@@ -36,7 +36,8 @@
 // - Parallel Eye Rendering's set (runtime_cvars_pe.hpp, setParallelEyes). apply() runs from Parallel Eye
 //   Rendering's first present, on every present as under Route S (menus, loading screens and frames
 //   without a world included).
-// - Hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold, the default; runtime_cvars_reticle.hpp):
+// - Hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold, or the default gun for a scoped zoom and until
+//   its quad is up; runtime_cvars_reticle.hpp):
 //   hud_reticle_styleOverride 0 only while the presenter asks for it (hand aim), the earlier value written
 //   back when it stops asking, and each present's reading reported to the presenter's centre mask.
 // - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry

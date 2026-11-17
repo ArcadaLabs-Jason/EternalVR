@@ -6,6 +6,7 @@
 
 #include "vkcore/presenter_impl.hpp"
 
+#include "ui_layer/gun_crosshair.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/marker_hooks.hpp"
 #include "vkcore/mp_guard.hpp"
@@ -37,14 +38,17 @@ void XrPresenter::Impl::startUi() {
     if (located) {
         installMarkerHooks(); // the HUD's world-attached markers (marker_hooks.hpp)
     }
-    EVR_LOG("ui: UI layer %s; quad %.2f m wide, %.2f m ahead, %.2f m up, head-locked; GUI composite in the "
-            "eyes %s; the game's crosshair under hand aim: %s (ETERNALVR_UI_CROSSHAIR)",
-            located ? "on" : "OFF (reason above)", settings.ui.widthMetres, settings.ui.distanceMetres,
-            settings.ui.offsetYMetres,
-            ui_engine::skipHookInstalled() ? "skipped while the quad shows" : "kept",
-            settings.ui.crosshair == ui_layer::CrosshairMode::Mask
-                ? "mask (the centre of the GUI copy cleared)"
-                : "hold (hud_reticle_styleOverride 0; the centre mask until the hold reads back)");
+    EVR_LOG(
+        "ui: UI layer %s; quad %.2f m wide, %.2f m ahead, %.2f m up, head-locked; GUI composite in the "
+        "eyes %s; the game's crosshair under hand aim: %s (ETERNALVR_UI_CROSSHAIR)",
+        located ? "on" : "OFF (reason above)", settings.ui.widthMetres, settings.ui.distanceMetres,
+        settings.ui.offsetYMetres, ui_engine::skipHookInstalled() ? "skipped while the quad shows" : "kept",
+        settings.ui.crosshair == ui_layer::CrosshairMode::Mask ? "mask (the centre of the GUI copy cleared)"
+        : settings.ui.crosshair == ui_layer::CrosshairMode::Gun
+            ? (settings.ui.reticle
+                   ? "gun (moved to its own quad on the gun's ray; held as under hold until that quad is up)"
+                   : "gun, with the aim dot off: held as under hold (nothing in the middle)")
+            : "hold (hud_reticle_styleOverride 0; the centre mask until the hold reads back)");
     const ui_layer::WristSettings& w = settings.ui.wrist;
     EVR_LOG("ui: HUD %s%s, in front %s; wrist: %s (facing %.0f/%.0f deg, gaze %.0f/%.0f deg), %.2f m row "
             "at (%.3f, %.3f, %.3f), fade %.2f s %s, abilities %s",
@@ -202,6 +206,27 @@ void XrPresenter::Impl::createUiImages() {
     EVR_LOG("ui: %u shared GUI image(s) of %ux%u", kRingSize, uiExtent.width, uiExtent.height);
 }
 
+void XrPresenter::Impl::noteWheelFade(bool moving, bool wheelUp, bool wheel, double now) {
+    if (!moving || wheelUp) {
+        uiWheelFade.copies = 0; // a fade that the wheel coming up again (or the mode) cut short is not logged
+        return;
+    }
+    if (wheel) {
+        if (uiWheelFade.copies++ == 0) {
+            uiWheelFade.since = now;
+        }
+        return;
+    }
+    if (uiWheelFade.copies > 0 && uiWheelFade.logged < kLoggedWheelFades) {
+        ++uiWheelFade.logged;
+        EVR_LOG("ui: the weapon wheel went down: %u GUI copies in the %.2f s after it kept whole (the game's "
+                "crosshair not moved to the gun's ray)%s",
+                uiWheelFade.copies, now - uiWheelFade.since,
+                uiWheelFade.logged == kLoggedWheelFades ? " (the last such line)" : "");
+    }
+    uiWheelFade.copies = 0;
+}
+
 void XrPresenter::Impl::destroyUiImages() {
     for (RingSlot& slot : ring) {
         if (slot.ui.image) {
@@ -227,6 +252,8 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
                                      std::uint32_t family,
                                      RingSlot& slot,
                                      const SwapchainState* panel) {
+    slot.ui.moveCentre = false;
+    slot.ui.borderProbed = false;
     if (!uiReady || !slot.ui.image) {
         return false;
     }
@@ -289,22 +316,36 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
     before[1].subresourceRange = range;
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
                               nullptr, 0, nullptr, static_cast<std::uint32_t>(before.size()), before.data());
-    // Under hand aim the game's crosshair (the centre of the target) marks the head's ray, not the gun's:
-    // it is taken out and the reticle quad marks the hand's ray instead (ui_layer/crosshair.hpp). `hold`:
-    // the layer holds the game's "no reticle" style, and the centre is left out (cleared) only until that
-    // reads back; `mask`: always left out. Not while a menu is up, nor while the target holds a full-screen
-    // backdrop (a menu's, a cinematic's fade): the square would be a see-through hole in it. The backdrop
-    // test reads the pixels around the square of earlier copies. The crosshair stays out with the reticle
-    // off (ETERNALVR_UI_RETICLE=0): it would still mark the head.
+    // Under hand aim the game's crosshair (the centre of the target) marks the head's ray, not the gun's
+    // (ui_layer/crosshair.hpp). `gun`: the copy keeps it and the XR worker moves it to its quad on the gun's
+    // ray (presenter_gun_crosshair.hpp), while that quad is up; `hold`: the layer holds the game's "no
+    // reticle" style, and the centre is left out (cleared) only until that reads back; `mask`: always left
+    // out. Not while a menu is up, nor while the target holds a full-screen backdrop (a menu's, a
+    // cinematic's fade): the square would be a see-through hole in it. The backdrop test reads the pixels
+    // around the square of earlier copies; under `gun` each moved copy also reads the border of its own
+    // rectangle (gun_border_probe.hpp). The crosshair stays off the head's centre with the reticle off
+    // (ETERNALVR_UI_RETICLE=0): it would still mark the head, and `gun` holds it as `hold` does.
     const bool handAim = controllers::weaponAimSpace() != XR_NULL_HANDLE;
     const bool menu = menuUp.load(std::memory_order_relaxed);
     const bool backdrop = uiBackdrop.backdrop();
-    const ui_layer::CrosshairMode crosshair = settings.ui.crosshair;
+    const ui_layer::CrosshairMode crosshair = ui_layer::effectiveCrosshairMode(
+        settings.ui.crosshair, uiGunReady.load(std::memory_order_acquire), settings.ui.reticle);
     runtime_cvars::wantReticleHidden(
         ui_layer::wantsReticleHold(crosshair, handAim, controllers::scopeZoomed()));
     const bool held = crosshair == ui_layer::CrosshairMode::Hold && runtime_cvars::reticleHiddenConfirmed();
-    const bool mask = ui_layer::centreMasked(
-        {.mode = crosshair, .handAim = handAim, .menu = menu, .backdrop = backdrop, .holdConfirmed = held});
+    // The weapon wheel, and a moment after it goes down (ui_layer::WheelLinger).
+    const bool wheelUp = controllers::wheelView();
+    const double copyTime = qpcSeconds(qpcNow());
+    const bool wheel = uiWheel.update(wheelUp, copyTime);
+    noteWheelFade(crosshair == ui_layer::CrosshairMode::Gun && handAim, wheelUp, wheel, copyTime);
+    const ui_layer::CrosshairState crosshairState{.mode = crosshair,
+                                                  .handAim = handAim,
+                                                  .menu = menu,
+                                                  .backdrop = backdrop,
+                                                  .wheel = wheel,
+                                                  .holdConfirmed = held};
+    const bool mask = ui_layer::centreMasked(crosshairState);
+    slot.ui.moveCentre = ui_layer::centreMoved(crosshairState);
     if (uiHold.note(handAim && crosshair == ui_layer::CrosshairMode::Hold, held, !menu && !backdrop) &&
         uiHold.changes <= ui_layer::kLoggedHoldChanges) {
         EVR_LOG("ui: crosshair hold %s",
@@ -346,6 +387,14 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
         mirror.keepPanel(dev, cb, family, image, uiExtent, panel->format, panel->extent);
     }
     uiBackdrop.record(dev, cb, image, uiExtent, ui_layer::kCrosshairMask);
+    if (crosshair == ui_layer::CrosshairMode::Gun && handAim) {
+        // This copy's own border, for the worker's move (gun_border_probe.hpp); read for every hand-aim copy
+        // under `gun`, so the log shows the test reading real pixels (a menu's or the wheel's) even when no
+        // copy needs keeping whole.
+        slot.ui.borderProbed = gunBorder.record(dev, cb, image, uiExtent,
+                                                ui_layer::gunCrosshairRect(uiExtent.width, uiExtent.height),
+                                                static_cast<std::uint32_t>(&slot - ring.data()));
+    }
     // While the weapon wheel is up, where the game drew it; outside menus and full-screen backdrops, now and
     // then, where it drew the corner blocks a hand HUD shows or the panel hides (wheel_probe.hpp); also while
     // the game drives the view (a map's start camera, a glory kill).

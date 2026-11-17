@@ -276,6 +276,12 @@ struct UiImage {
     VkDeviceMemory memory = VK_NULL_HANDLE;
     ComPtr<ID3D12Resource> resource;
     bool written = false; // this slot's image came with a GUI copy (kSlotWriting / kSlotReading owner)
+    // That copy's crosshair goes on the gun's ray (ui_layer::centreMoved, presenter_gun_crosshair.hpp): set
+    // with the copy by the present hook, read by the worker's copy into the UI swapchain.
+    bool moveCentre = false;
+    // ... and the copy also read the points around the crosshair's rectangle into this slot's part of the
+    // border test's buffer (gun_border_probe.hpp).
+    bool borderProbed = false;
 };
 
 // Parallel Eye Rendering: the frames a ring slot's eyes are of, for the frames table

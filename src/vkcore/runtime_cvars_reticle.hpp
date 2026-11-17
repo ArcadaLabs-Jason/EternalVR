@@ -1,6 +1,7 @@
 #pragma once
 
-// Hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold, the default; ui_layer/crosshair.hpp): one more
+// Hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold; under the default, gun, only for a scoped zoom and
+// until the crosshair's quad on the gun's ray is up; ui_layer/crosshair.hpp): one more
 // cvar the layer holds at run time (runtime_cvars.hpp: through the engine's setter and the cvar book, only
 // while the multiplayer guard allows touching the game, on the presents where the held set is applied: Route
 // S and Parallel Eye Rendering), only while the UI layer is on. hud_reticle_styleOverride is held at 0 (the

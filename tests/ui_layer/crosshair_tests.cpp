@@ -11,9 +11,11 @@
 #include <vector>
 
 using evr::ui_layer::centreMasked;
+using evr::ui_layer::centreMoved;
 using evr::ui_layer::CrosshairMode;
 using evr::ui_layer::crosshairModeName;
 using evr::ui_layer::CrosshairState;
+using evr::ui_layer::effectiveCrosshairMode;
 using evr::ui_layer::holdConfirmed;
 using evr::ui_layer::holdRequested;
 using evr::ui_layer::kHoldConfirmPresents;
@@ -55,26 +57,123 @@ std::uint32_t runOf(std::uint32_t presents) {
 
 } // namespace
 
-TEST_CASE("crosshair: the mode parses hold and mask, nothing else") {
+TEST_CASE("crosshair: the mode parses gun, hold and mask, nothing else") {
     CHECK(parseCrosshairMode(L"hold") == CrosshairMode::Hold);
     CHECK(parseCrosshairMode(L" MASK ") == CrosshairMode::Mask);
     CHECK(parseCrosshairMode(L"Hold") == CrosshairMode::Hold);
+    CHECK(parseCrosshairMode(L"gun") == CrosshairMode::Gun);
+    CHECK(parseCrosshairMode(L" Gun ") == CrosshairMode::Gun);
     CHECK_FALSE(parseCrosshairMode(L""));
     CHECK_FALSE(parseCrosshairMode(L"1"));
     CHECK_FALSE(parseCrosshairMode(L"hide"));
+    CHECK_FALSE(parseCrosshairMode(L"guns"));
     CHECK(std::string(crosshairModeName(CrosshairMode::Hold)) == "hold");
     CHECK(std::string(crosshairModeName(CrosshairMode::Mask)) == "mask");
+    CHECK(std::string(crosshairModeName(CrosshairMode::Gun)) == "gun");
 }
 
 TEST_CASE("crosshair: ETERNALVR_UI_CROSSHAIR in the UI settings, hold by default") {
     std::vector<std::string> warnings;
+    // The launcher passes gun only for "On the gun"; everything else, and no launcher, is hold.
     CHECK(evr::ui_layer::readUiSettings(envOf({}), warnings).crosshair == CrosshairMode::Hold);
+    CHECK(evr::ui_layer::readUiSettings(envOf({{L"ETERNALVR_UI_CROSSHAIR", L"gun"}}), warnings).crosshair ==
+          CrosshairMode::Gun);
     CHECK(evr::ui_layer::readUiSettings(envOf({{L"ETERNALVR_UI_CROSSHAIR", L"mask"}}), warnings).crosshair ==
           CrosshairMode::Mask);
+    CHECK(evr::ui_layer::readUiSettings(envOf({{L"ETERNALVR_UI_CROSSHAIR", L"hold"}}), warnings).crosshair ==
+          CrosshairMode::Hold);
     CHECK(warnings.empty());
     const auto bad = evr::ui_layer::readUiSettings(envOf({{L"ETERNALVR_UI_CROSSHAIR", L"off"}}), warnings);
     CHECK(bad.crosshair == CrosshairMode::Hold);
     CHECK(warnings.size() == 1);
+}
+
+TEST_CASE("crosshair: gun is in effect only with its quad and the dot; without either it is held") {
+    CHECK(effectiveCrosshairMode(CrosshairMode::Gun, true, true) == CrosshairMode::Gun);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Gun, false, true) == CrosshairMode::Hold);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Hold, true, true) == CrosshairMode::Hold);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Hold, false, true) == CrosshairMode::Hold);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Mask, true, true) == CrosshairMode::Mask);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Mask, false, true) == CrosshairMode::Mask);
+    // Without the quad, hand aim then gets what hold gives: the hold asked for, the mask until it reads back.
+    const CrosshairMode fallback = effectiveCrosshairMode(CrosshairMode::Gun, false, true);
+    CHECK(wantsReticleHold(fallback, true));
+    CHECK(centreMasked(state(fallback, true, false)));
+    CHECK_FALSE(centreMoved(state(fallback, true, false)));
+}
+
+TEST_CASE("crosshair: with the aim dot off, gun gives nothing in the middle (as hold)") {
+    // ETERNALVR_UI_RETICLE=0 with ETERNALVR_UI_CROSSHAIR=gun: the player asked for no dot, so no crosshair at
+    // the gun either, and none at the head's centre.
+    const CrosshairMode noDot = effectiveCrosshairMode(CrosshairMode::Gun, true, false);
+    CHECK(noDot == CrosshairMode::Hold);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Gun, false, false) == CrosshairMode::Hold);
+    CHECK(wantsReticleHold(noDot, true));
+    CHECK_FALSE(centreMoved(state(noDot, true, true)));
+    CHECK_FALSE(centreMasked(state(noDot, true, true))); // the confirmed hold keeps the copy whole
+    CHECK(centreMasked(state(noDot, true, false)));      // until it reads back, the mask
+    // The other modes do not look at the dot.
+    CHECK(effectiveCrosshairMode(CrosshairMode::Hold, true, false) == CrosshairMode::Hold);
+    CHECK(effectiveCrosshairMode(CrosshairMode::Mask, true, false) == CrosshairMode::Mask);
+    std::vector<std::string> warnings;
+    const auto settings = evr::ui_layer::readUiSettings(
+        envOf({{L"ETERNALVR_UI_CROSSHAIR", L"gun"}, {L"ETERNALVR_UI_RETICLE", L"0"}}), warnings);
+    CHECK_FALSE(settings.reticle);
+    CHECK(effectiveCrosshairMode(settings.crosshair, true, settings.reticle) == CrosshairMode::Hold);
+}
+
+TEST_CASE("crosshair: the weapon wheel counts as up for a moment after it falls") {
+    evr::ui_layer::WheelLinger linger;
+    CHECK_FALSE(linger.update(false, 10.0)); // never up
+    CHECK(linger.update(true, 11.0));
+    CHECK(linger.update(true, 12.0));
+    CHECK(linger.update(false, 12.0 + evr::ui_layer::kWheelLingerSeconds / 2));
+    CHECK(linger.update(false, 12.0 + evr::ui_layer::kWheelLingerSeconds - 0.001));
+    CHECK_FALSE(linger.update(false, 12.0 + evr::ui_layer::kWheelLingerSeconds + 0.001));
+    CHECK_FALSE(linger.update(false, 20.0));
+    // A stamp from before the last one up (another thread's clock read) still counts as within the linger.
+    CHECK(linger.update(true, 30.0));
+    CHECK(linger.update(false, 29.9));
+    // Up again restarts the linger from then.
+    CHECK(linger.update(true, 40.0));
+    CHECK(linger.update(false, 40.0 + evr::ui_layer::kWheelLingerSeconds * 0.8));
+    CHECK_FALSE(linger.update(false, 40.0 + evr::ui_layer::kWheelLingerSeconds * 1.2));
+    // The move stays off while it lingers.
+    CrosshairState s = state(CrosshairMode::Gun, true, false);
+    s.wheel = true;
+    CHECK_FALSE(centreMoved(s));
+}
+
+TEST_CASE("crosshair: gun moves the centre of hand-aim copies outside menus and backdrops, never masks it") {
+    CHECK(centreMoved(state(CrosshairMode::Gun, true, false)));
+    CHECK(centreMoved(state(CrosshairMode::Gun, true, true)));
+    CHECK_FALSE(centreMasked(state(CrosshairMode::Gun, true, false)));
+    CHECK_FALSE(centreMasked(state(CrosshairMode::Gun, true, true)));
+    // Head aim: the game's crosshair stays where it is.
+    CHECK_FALSE(centreMoved(state(CrosshairMode::Gun, false, false)));
+    CHECK_FALSE(centreMasked(state(CrosshairMode::Gun, false, false)));
+    CrosshairState menu = state(CrosshairMode::Gun, true, false);
+    menu.menu = true;
+    CHECK_FALSE(centreMoved(menu));
+    CHECK_FALSE(centreMasked(menu));
+    CrosshairState backdrop = state(CrosshairMode::Gun, true, false);
+    backdrop.backdrop = true;
+    CHECK_FALSE(centreMoved(backdrop));
+    CHECK_FALSE(centreMasked(backdrop));
+    // The weapon wheel is drawn over the middle: it stays whole.
+    CrosshairState wheel = state(CrosshairMode::Gun, true, false);
+    wheel.wheel = true;
+    CHECK_FALSE(centreMoved(wheel));
+    // The other modes never move it.
+    CHECK_FALSE(centreMoved(state(CrosshairMode::Hold, true, true)));
+    CHECK_FALSE(centreMoved(state(CrosshairMode::Mask, true, false)));
+}
+
+TEST_CASE("crosshair: gun asks for the hold only for a scoped zoom, under either aim") {
+    CHECK_FALSE(wantsReticleHold(CrosshairMode::Gun, true));
+    CHECK_FALSE(wantsReticleHold(CrosshairMode::Gun, false));
+    CHECK(wantsReticleHold(CrosshairMode::Gun, true, true));
+    CHECK(wantsReticleHold(CrosshairMode::Gun, false, true));
 }
 
 TEST_CASE("crosshair: positive control, mask mode masks every hand-aim copy as before") {

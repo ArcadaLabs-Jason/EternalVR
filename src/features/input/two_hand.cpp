@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <utility>
 
 namespace evr::input {
 
@@ -52,6 +53,23 @@ bool finiteVec(Vec3 v) {
 }
 
 constexpr float kRadiansPerDegree = std::numbers::pi_v<float> / 180.0f;
+
+// Whether a squeeze made in this gate may have the right to take the gun: an interruption that ends the
+// hold (a switch, a throw or a melee; a forced view) can pass with the grip still down, the others (a menu,
+// the wheel, death, ...) are not the gun's.
+bool mayKeepRight(TwoHandBlock block) {
+    return block == TwoHandBlock::None || block == TwoHandBlock::GunDown || block == TwoHandBlock::ForcedView;
+}
+
+// The off hand is near enough the capture zone to be arriving at it: within kTwoHandArriveMetres of the
+// support line, from where a hand can still reach the capture's own minimum along the line (the engage line
+// less kTwoHandArriveMarginMetres) to that far past the support point (no cone: the hand is on its way). A
+// hand nearer the weapon hand than that, or behind it, is not arriving: it could never take the gun.
+bool arriving(OnGun at, SupportRow row) {
+    const float reach = length(supportInAim(row));
+    return at.along >= kTwoHandEngageLineMetres - kTwoHandArriveMarginMetres &&
+           at.along <= reach + kTwoHandArriveMetres && at.off <= kTwoHandArriveMetres;
+}
 
 } // namespace
 
@@ -222,7 +240,12 @@ TwoHandHold::TwoHandHold(AnalogThresholds grip, std::optional<OneEuroParams> smo
 void TwoHandHold::reset() {
     grip_ = AnalogButton(grip_.thresholds());
     engaged_ = false;
-    fresh_ = false;
+    wasDown_ = true;
+    right_ = false;
+    landed_ = false;
+    arriveLeft_ = 0.0f;
+    squeezed_ = false;
+    tookThisSqueeze_ = false;
     applied_ = Quat{};
     from_ = Quat{};
     ease_ = 1.0f;
@@ -238,17 +261,73 @@ TwoHandResult TwoHandHold::update(const TwoHandFrame& f) {
     const bool gripDown = grip_.isDown();
     const bool tracked = f.weaponTracked && f.offTracked;
     const bool open = f.block == TwoHandBlock::None;
-    if (!gripDown) {
-        fresh_ = true;
-    }
-    if (tracked && open) {
-        if (const std::optional<OnGun> at = onGun(f.weaponGrip, f.aim, f.offGripPoint, f.support)) {
+    const float dt = std::isfinite(f.dt) ? std::clamp(f.dt, 0.0f, 1.0f) : 0.0f;
+    // Where the off hand is on the gun, with the gate open or not (a squeeze made on the gun in an
+    // interruption keeps its right to take it).
+    std::optional<OnGun> at;
+    bool inZone = false;
+    if (tracked) {
+        at = onGun(f.weaponGrip, f.aim, f.offGripPoint, f.support);
+        if (at) {
             r.distance = at->off;
             r.along = at->along;
-            r.capturable = fresh_ && withinCapture(*at, f.support) &&
-                           length(f.offGripPoint - f.weaponGrip) >= kTwoHandEngageLineMetres;
+            inZone = withinCapture(*at, f.support) &&
+                     length(f.offGripPoint - f.weaponGrip) >= kTwoHandEngageLineMetres;
         }
     }
+
+    // The squeeze's right to take the gun: given when it starts on the gun (or with the hand arriving, which
+    // then has kTwoHandArriveSeconds to land in the zone), kept while the grip stays down.
+    const bool pressed = gripDown && !wasDown_;
+    std::optional<TwoHandMiss> missed;
+    if (!gripDown) {
+        if (squeezed_ && !tookThisSqueeze_) {
+            squeeze_.endBlock = f.block;
+            squeeze_.kept = right_;
+            missed = squeeze_;
+        }
+        squeezed_ = false;
+        tookThisSqueeze_ = false;
+        right_ = false;
+        landed_ = false;
+        arriveLeft_ = 0.0f;
+    } else if (pressed) {
+        squeezed_ = true;
+        tookThisSqueeze_ = false;
+        squeeze_ = TwoHandMiss{};
+        squeeze_.weapon = std::string(f.weapon);
+        squeeze_.pressBlock = f.block;
+        if (at) {
+            squeeze_.pressKnown = true;
+            squeeze_.along = at->along;
+            squeeze_.off = at->off;
+        }
+        landed_ = inZone && mayKeepRight(f.block);
+        right_ = landed_ || (at && mayKeepRight(f.block) && arriving(*at, f.support));
+        arriveLeft_ = landed_ ? 0.0f : kTwoHandArriveSeconds;
+    } else if (right_ && !mayKeepRight(f.block) && f.block != TwoHandBlock::NoSupport) {
+        // The gate became one that is not the gun's (a menu, the wheel, death, a demon, a swim): the
+        // squeeze's right to take it is over for this squeeze. (NoSupport is not in it: a melee shows an item
+        // with no support grip for a third of a second, and the gun is taken again after it.)
+        right_ = false;
+        landed_ = false;
+        arriveLeft_ = 0.0f;
+    } else if (right_ && !landed_) {
+        if (inZone) {
+            landed_ = mayKeepRight(f.block);
+            right_ = landed_;
+        } else {
+            arriveLeft_ -= dt;
+            right_ = arriveLeft_ > 0.0f;
+        }
+    }
+    squeeze_.peak = gripDown ? std::max(squeeze_.peak, f.offGrip) : squeeze_.peak;
+    wasDown_ = gripDown;
+    r.missed = std::move(missed);
+    // Not published while the held item takes no support grip: nothing to hold the binding back for there.
+    r.keeps = gripDown && right_ && f.block != TwoHandBlock::NoSupport;
+    r.arrivable = !gripDown && tracked && at && mayKeepRight(f.block) && arriving(*at, f.support);
+    r.capturable = open && inZone && (!gripDown || right_);
     // The held aim is built from the weapon hand's aim as tracked (the one-handed aim's own input) and then
     // smoothed, if at all, by the hold's filter.
     const Quat trackedAim = f.trackedAim.value_or(f.aim);
@@ -285,12 +364,9 @@ TwoHandResult TwoHandHold::update(const TwoHandFrame& f) {
             r.slide = line - reach;
         }
     }
-    if (gripDown) {
-        fresh_ = false; // this squeeze has taken the gun, or it never will
-    }
     r.engaged = engaged_;
     r.started = engaged_ && !was;
-    const float dt = std::isfinite(f.dt) ? std::clamp(f.dt, 0.0f, 1.0f) : 0.0f;
+    tookThisSqueeze_ = tookThisSqueeze_ || engaged_;
     clock_ += dt;
     // Held, the aim is this frame's two-handed one (`turn` is set on every path that leaves the hold
     // engaged), smoothed from the grab on (the filter starts there, so the grab's first frame is the line's

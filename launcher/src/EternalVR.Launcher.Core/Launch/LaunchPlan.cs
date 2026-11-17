@@ -291,6 +291,9 @@ namespace EternalVR.Launcher.Core.Launch
             // The player's own maps, each in place of the built-in one for its controllers (docs/release/CONTROLS.md).
             if (s.Controllers && inputs.Controls != null && inputs.Controls.HasPlayerMaps) Set("ETERNALVR_CONTROLLER_DATA", inputs.Controls.Dir);
             Set("ETERNALVR_UI_RETICLE", s.AimDot ? "1" : "0");
+            // The game's crosshair on the gun (DECISIONS T-233): passed only for On the gun with the dot on; Hidden is the
+            // layer's own default (hold), so nothing is passed for it.
+            if (s.GameCrosshairOnGun) Set("ETERNALVR_UI_CROSSHAIR", "gun");
             // The settings of the Play and Advanced tabs, always explicit (the layer's own defaults may change).
             Set("ETERNALVR_BODY_FOLLOW", s.BodyFollow ? "1" : "0");
             Set("ETERNALVR_HEAD_FADE", s.HeadFade ? "1" : "0");

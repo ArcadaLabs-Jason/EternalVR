@@ -55,7 +55,8 @@ void logSummary(State& s) {
     }
     s.hapticLoggedTotal = total;
     s.hapticLoggedRefused = refused;
-    EVR_LOG("%s: %llu pulses (fire %llu, punch %llu, menu %llu, game %llu, capture %llu, wheel %llu), %llu "
+    EVR_LOG("%s: %llu pulses (fire %llu, punch %llu, menu %llu, game %llu, capture %llu, wheel %llu, grip "
+            "%llu), %llu "
             "refused",
             kTag, static_cast<unsigned long long>(total),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Fire)),
@@ -64,6 +65,7 @@ void logSummary(State& s) {
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Game)),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Capture)),
             static_cast<unsigned long long>(pulses(s, input::HapticSource::Wheel)),
+            static_cast<unsigned long long>(pulses(s, input::HapticSource::Grip)),
             static_cast<unsigned long long>(refused));
 }
 
@@ -122,6 +124,12 @@ void noteMenuHaptic(input::Hand hand, input::MenuTick tick) {
     }
 }
 
+void noteGripHaptic(input::Hand hand) {
+    State& s = state();
+    std::lock_guard lock(s.hapticsMutex);
+    s.hapticEvents.grip[static_cast<std::size_t>(hand)] = true;
+}
+
 void noteGameRumble(float low, float high) {
     State& s = state();
     std::lock_guard lock(s.hapticsMutex);
@@ -142,13 +150,15 @@ void updateHaptics(const XrInput& xr, bool focused) {
         s.hapticEvents.wheel = {};
         s.hapticEvents.melee = {};
         s.hapticEvents.shoulder = false;
+        s.hapticEvents.grip = {};
     }
     if (!s.haptics) {
         const float strength = settings().haptics;
         s.haptics.emplace(strength, settings().rumbleRoute);
         if (strength > 0.0f) {
-            EVR_LOG("%s: on, strength %.2f (fire, punch, menu, capture, game rumble, thumb-rest wheel)", kTag,
-                    strength);
+            EVR_LOG("%s: on, strength %.2f (fire, punch, menu, capture, game rumble, thumb-rest wheel, "
+                    "two-handed grip)",
+                    kTag, strength);
         } else {
             EVR_LOG("%s: off (ETERNALVR_HAPTICS=0)", kTag);
         }
@@ -167,6 +177,7 @@ void updateHaptics(const XrInput& xr, bool focused) {
     frame.wheel = events.wheel;
     frame.melee = events.melee;
     frame.shoulder = events.shoulder;
+    frame.grip = events.grip;
     // No game rumble while a menu holds gameplay back (the game may keep its last mix under a menu).
     if (events.rumbleQpc && secondsSince(events.rumbleQpc) < kRumbleStaleSeconds &&
         !menu_input::suppressGameplay()) {

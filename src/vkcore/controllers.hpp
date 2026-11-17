@@ -155,6 +155,8 @@ bool dossierRequestedWithin(double seconds);
 
 // XR worker (the menu pointer): a light tick on `hand` for the vibration (haptics_policy.hpp).
 void noteMenuHaptic(input::Hand hand, input::MenuTick tick);
+// Camera hook (two-handed aim): `hand`'s grip took the gun; a short click for the vibration.
+void noteGripHaptic(input::Hand hand);
 // Game thread (the rumble hook): the game's rumble motors this frame, 0..1 each.
 void noteGameRumble(float low, float high);
 

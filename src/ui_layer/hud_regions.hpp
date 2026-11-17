@@ -67,8 +67,8 @@ PixelRect toPixels(const BandRect& rect, std::uint32_t width, std::uint32_t heig
 // that hand's quad shows: `drawn` (where the game drew the block) grown to the band's edges the block is
 // anchored to (the corners reach its side and bottom edges). Empty for an empty `drawn`. The centre
 // abilities are never cut (empty): under head aim the crosshair stays on the head-locked quad, and under
-// hand aim there is no abilities quad (the crosshair hold leaves the rings on the head-locked quad, the mask
-// takes them).
+// hand aim there is no abilities quad (the crosshair on the gun's ray takes the rings with it, the hold
+// leaves them on the head-locked quad, the mask takes them out).
 PixelRect cutRect(WristBlock block, const PixelRect& drawn, std::uint32_t width, std::uint32_t height);
 
 // What the hand HUDs take from the target for the blocks in `moved`: each one's cutRect (empty for a block

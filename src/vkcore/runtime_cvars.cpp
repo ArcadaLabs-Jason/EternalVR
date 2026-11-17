@@ -344,9 +344,10 @@ void start(bool stereo) {
                               : " 1 while the scattering history is per eye, else 0") +
                     (taaRequested() ? " (if per-eye TAA fails closed)" : "");
         } else if (h.object && h.reticle) {
-            list +=
-                (list.empty() ? "" : ", ") + h.name + " " + h.value +
-                " while hand aim is on (ETERNALVR_UI_CROSSHAIR=hold; the centre mask until it reads back)";
+            list += (list.empty() ? "" : ", ") + h.name + " " + h.value +
+                    " while hand aim is on (ETERNALVR_UI_CROSSHAIR=hold, or gun until the crosshair's quad "
+                    "on the "
+                    "gun's ray is up; the centre mask until it reads back) or a scoped weapon is zoomed";
         } else if (h.object && h.flares) {
             list += (list.empty() ? "" : ", ") + h.name + " " + h.value +
                     " while lens flares per view are off (" + (parallelEyeFlaresLive() ? "on" : "off") + ")";

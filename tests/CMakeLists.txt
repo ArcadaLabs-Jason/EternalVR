@@ -243,6 +243,7 @@ evr_add_test(evr_input_tests
         features/input/turn_stick_arbiter_tests.cpp
         features/input/two_hand_capture_tests.cpp
         features/input/two_hand_hold_tests.cpp
+        features/input/two_hand_rule_tests.cpp
         features/input/two_hand_smoothing_tests.cpp
         features/input/two_hand_tests.cpp
         features/input/usercmd_hook_use_tests.cpp
@@ -468,6 +469,7 @@ evr_add_test(evr_ui_layer_tests
         ui_layer/crosshair_tests.cpp
         ui_layer/gui_hold_tests.cpp
         ui_layer/gui_target_tests.cpp
+        ui_layer/gun_crosshair_tests.cpp
         ui_layer/hud_blocks_tests.cpp
         ui_layer/hud_view_tests.cpp
         ui_layer/hud_regions_tests.cpp

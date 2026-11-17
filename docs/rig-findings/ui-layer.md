@@ -302,6 +302,20 @@ Rig (the RTX 3080 Ti test PC, OpenXR-Simulator, 2026-10-12; QA scenarios `crossh
 - The pause menu and the death screen show whole in every mode (no see-through square). At the suite's 1280x720
   window the square is half the angle a headset gets, so the scenarios run with `ETERNALVR_RENDER_SIZE=auto`.
 
+**The crosshair on the gun's ray (`ETERNALVR_UI_CROSSHAIR=gun`, opt-in since 2026-11-14: the launcher's "Game's crosshair (hand aim)" set to "On the gun", with the Aim dot on; T-233).** `hold` stays the default. The hold
+took every weapon cue the reticle draws with the crosshair (the Lock-On Burst's lock and LOCKED, charge, heat and
+cooldown bars, pips, the hit marker). Under hand aim the game's view is the gun's, so the crosshair the game draws is
+right but for where the head-locked quad shows it: the layer now lets the game draw it and the XR worker moves a
+rectangle of 1.28 x 0.35 of the band's height around the middle of each GUI copy onto a quad of its own centred where
+the aim dot is, the HUD's markers' boxes kept on the HUD (`ui_layer/gun_crosshair.hpp`,
+`vkcore/presenter_gun_crosshair.hpp`). The hold stays for a scoped zoom, while that quad is not up and with the aim
+dot off; the mask is not used. Besides the backdrop test, each moved copy reads eight points around its own
+rectangle (`vkcore/gun_border_probe.hpp`, from the same Vulkan copy, read by the worker once the shared timeline
+shows it done) and stays whole when they show a full-screen layer: the backdrop test's 2-reading lag would
+otherwise move the first copies of a pause menu or a fade, a slab of backdrop cleared from the panel and shown at
+the gun. The inventory of what each weapon draws, the rig checks and what stays on the HUD are in
+docs/VR_CONTROLLERS.md, "The game's crosshair under hand aim".
+
 **The mask and full-screen backdrops (bug B3).** Menus and cinematics draw a full-screen opaque layer into
 `_gui` (the pause and settings backdrop, a cinematic's fade: alpha 255, colour 0 to 3). Masked, the square
 showed as a see-through hole in a head-locked black rectangle. The mask is therefore off while a menu is up

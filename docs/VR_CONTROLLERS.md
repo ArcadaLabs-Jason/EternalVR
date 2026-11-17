@@ -489,15 +489,26 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   it seen from the weapon hand's grip (DECISIONS T-195). The weapon hand's aim is then turned so the support line
   lies on the line between the two controllers' grips: the view angles, the shots, the gun and the aim dot follow
   in the same frame, the turn eased in over 70 ms, and the held aim goes through Aim steadiness as one-handed aim
-  does. The squeeze must start there: a grip already held as the hand arrives, as the gate opens or after a
-  release takes nothing until squeezed again. Letting go of the grip, sliding more than 16 cm past the support
-  point, bringing the hands within 10 cm or any gate (death, a cutscene, a forced view, a demon, a menu, the weapon
-  wheel, a swim, a switch or melee) lets go, the aim easing back to the weapon hand's alone over 70 ms (the hold,
-  the glove and the grip's binding in the same frame). **What the grip no longer does:**
-  while two-handed aim can hold, that grip pressed on the gun, and until it is let go, never fires its
-  own binding (`MapperContext::supportHandOnWeapon`): with the default maps the Flame Belch (the left grip; the right
+  does. The squeeze must START on the gun, or with the hand arriving (within 12 cm of the support line and at least
+  9 cm along it from the weapon hand's grip, taking it if the zone is reached within 0.2 s of the press; hands
+  closer together than that, or the off hand behind the grip, are never arriving); a squeeze that started away from the gun takes nothing
+  however the hand drifts in. A squeeze that started on the gun has the right to take it for as long as the grip is
+  down: letting go of the grip ends the squeeze, but sliding more than 16 cm past the support point, bringing the
+  hands within 10 cm, a hand lost or a gate that closes during a switch, melee, throw or forced view lets go of the
+  gun with the squeeze's right kept, and the gun is taken again on the first frame the zone and the gate allow
+  (the 70 ms ease again). Any other gate (death, a demon, a menu, the weapon wheel, a swim; a gun with no support
+  grip for a squeeze made on it) lets go the same way, a squeeze made in it has no right, and a right a squeeze
+  had is dropped when the gate becomes one of the first five mid-squeeze (the gun is not taken again when it ends; release and squeeze again). The aim eases back to the weapon hand's alone over 70 ms (the hold, the
+  glove and the grip's binding in the same frame). The off controller gets a short haptic click (the `grip`
+  source of Vibration) each time the gun is taken. **What the grip no longer does:**
+  while two-handed aim can hold, that grip pressed on the gun (or arriving, or kept through an interruption), and
+  until it is let go, never fires its own binding (`MapperContext::supportHandOnWeapon`): with the default maps the Flame Belch (the left grip; the right
   one with the weapon in the left hand) on Touch, Index, Windows Mixed Reality, HP Reverb G2, Vive Cosmos, Pico 4
   and Steam Frame controllers, and on the Vive wands the grip's tap (switch equipment) and hold (the Dossier).
+  **A grip squeezed with the off hand within about 12 cm of the gun's line is never the Flame Belch, even when it
+  misses the gun** (the hand never lands, or the gate is closed for the whole squeeze): the binding stays held
+  back until the grip is let go (a late Belch from a squeeze meant for the gun is what a player reported). Let go
+  and squeeze again away from the gun for the Belch.
   Squeezed away from the gun (more than 8 cm off its support line, or more than 15 degrees off it seen from the
   weapon hand) it does what it always did, so nothing is lost; the Steam Frame also has the Flame Belch on Y. A player's own map that puts another action on the off
   grip has it held back the same way near the gun. Design and rig: docs/VR_HANDS_HUD.md, "Two-handed aim";
@@ -751,6 +762,138 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
 - **Reticle.** Under hand aim the dot is placed from the shown frame's own weapon ray (smoothed, at that
   frame's pose time), so it stays where the gun drawn in that frame points and its shots go
   (`src/vkcore/presenter_reticle.cpp`).
+- **The game's crosshair under hand aim** (`ETERNALVR_UI_CROSSHAIR`, T-233; `ui_layer/crosshair.hpp`,
+  `ui_layer/gun_crosshair.hpp`, `vkcore/presenter_gun_crosshair.hpp`). The game draws its crosshair in the
+  middle of its GUI target, which the head-locked HUD shows in the middle of the head's view; under hand aim
+  that marks the head's ray, not the gun's. Up to 0.1.96 it was therefore held hidden under hand aim (the
+  crosshair hold, `hud_reticle_styleOverride 0`, docs/rig-findings/ui-layer.md), and every cue the game draws
+  in it went with it. What idHUD_Reticle draws there, per weapon and mod [static: the `weaponreticle` decls,
+  `weaponreticleswfinfo/base` and the sprite names in `swf/hud/hud_reticle.swf`; rig below]:
+
+  | Weapon / mod (reticle decl) | Cues in the crosshair |
+  |---|---|
+  | Every weapon | the reticle and its spread, the hit marker (`hit_marker_pin`), the colour over a demon (`hostileTargetSpritePaths`: Heavy Cannon, Rocket Launcher, BFG) |
+  | Combat Shotgun (`shotgun`) | the cooldown bar and the burst bars |
+  | Sticky Bombs (`shotgun_poprocket`, mastery) | the bombs' recharge pips (3, mastery 5), the weak point while zoomed |
+  | Full Auto (`shotgun_full_auto`) | the spin-up bar and its pips, the ammo it gives back |
+  | Heavy Cannon (`heavy_cannon`) | the burst and cooldown bars |
+  | Precision Bolt (`heavy_cannon_bolt_action`, `_zoomed`) | the charge and the cooldown rings; zoomed, the scope (held hidden, T-136) |
+  | Micro Missiles (`heavy_cannon_burst_detonate`) | the missiles left (one pip each), the burst and cooldown bars, the mastery's supercharge bar |
+  | Plasma Rifle (`plasma_rifle_base`) | the heat (cooldown) bar |
+  | Heat Blast (`plasma_rifle_aoe`) | the charge and cooldown bars, the supercharge meter |
+  | Microwave Beam (`plasma_microwave`) | the charge and cooldown bars, the target's health bars |
+  | Rocket Launcher (`rocket_launcher`, `_base`) | the reticle; Remote Detonate's detonate cue (`mc_rocketDetonate`) |
+  | Lock-On Burst (`rocket_launcher_lockon_mod`) | the lock (four pieces closing in, each with a pulse), LOCKED ON (`#str_hud_reticle_locked_on`), the cooldown over the whole reticle |
+  | Super Shotgun, Meat Hook (`shotgun_db_meathook`) | the hook's cooldown and charge bars |
+  | Ballista: Arbalest, Destroyer Blade (`gauss_ballista`, `gauss_siege`, mastery) | the charge bars (three for the Arbalest) |
+  | Chaingun (`chaingun_base`), Mobile Turret, Energy Shield (`chaingun_turret`, `chaingun_energy_shell`) | the spin-up (charge) bar; the turret's heat; the shield's charge |
+  | BFG 9000 (`bfg`) | the charge and cooldown |
+  | Crucible (`crucible`) | its charge pips |
+  | Chainsaw (`chainsaw_base`) | the chainsaw reticle (a target in reach or not) |
+
+  Not in the crosshair, and shown under every mode: the world-attached markers the HUD draws for the head's
+  view (`hud_poi.swf`: the Lock-On Burst's targeting triangle on its target, the Microwave Beam's lock, the
+  Meat Hook's mark, objective markers), the ability rings (`hud_abilityindicators`), the low ammo and chainsaw
+  texts (`hud_lowwarning.swf`) and a pickup's name (`idHUD_FocusInfo`).
+
+  The default stays the hold (Hidden): hand aim is the default path and the moved crosshair has not been looked
+  at in a headset yet (T-233). With the launcher's "Game's crosshair (hand aim)" (Play tab, under the Aim dot)
+  set to "On the gun" (`game_crosshair = gun`, passed as `ETERNALVR_UI_CROSSHAIR=gun`, only with the Aim dot
+  on) the layer lets the game draw its crosshair under hand aim and moves it: with each GUI copy, the present
+  hook marks the copy (hand aim, no menu, no full-screen backdrop, no weapon wheel, nor for 0.1 s after it
+  goes down: `ui_layer::centreMoved`, `ui_layer::WheelLinger`), every hand-aim copy also reads eight points
+  around the rectangle (`vkcore/gun_border_probe.hpp`), and the XR worker, when the frame that shows the
+  copy draws the crosshair's quad (a head-tracked frame with the UI quad and no menu panel, the test
+  `presenter_frame.cpp` makes) and those points show no full-screen layer, copies a rectangle of 1.28 x 0.35 of the HUD band's height,
+  centred in the band (922 x 252 pixels of a 1280 x 1400 GUI target), into a swapchain of its own and clears
+  it out of the UI image; the HUD's markers'
+  boxes stay on the HUD (cleared from the moved image, kept in the UI image). The presenter shows that image
+  on a quad centred on the weapon ray where the aim dot is (where the ray meets the world, else the set
+  distance), at the angle the rectangle spans on the HUD quad, upright for the head as the HUD is, under the
+  dot. The dot stays (Aim dot on the Play tab). Under head aim nothing moves: the game's crosshair stays in
+  the middle of the HUD, as before. The game's view, which the game draws the crosshair for, is the gun's
+  under hand aim (the view angles follow the weapon hand), so its lock, its colour over a demon and its hit
+  marker are the gun's. The hold stays for a scoped zoom (the Precision Bolt's ring, T-136) under either aim,
+  and in full under hand aim while the crosshair's quad is not up (before the first UI swapchain, or when its
+  swapchain could not be made) or the Aim dot is off (`ETERNALVR_UI_RETICLE=0`: the player asked for nothing in
+  the middle; `ui_layer::effectiveCrosshairMode`), so the crosshair never shows at the head's centre. One known
+  gap: when a UI swapchain rebuild cannot make the crosshair's swapchain, the copies already marked for the move
+  (at most the ring's few in flight) stay whole, so the crosshair flashes at the head's centre for those frames
+  before the hold takes over. A copy kept whole for a full-screen layer is what the backdrop test would also
+  have kept whole two readings later: the menu or fade shows whole, as under `hold`. The frame draws the quad
+  in every branch that shows a moved image (a menu that comes up with that very frame included), so a
+  rectangle cleared from the HUD always shows at the gun; the Performance Metrics' quad reserves a layer for it
+  only when the frame shows it. Only GPU copies and clears and one more quad: no shader, no game memory read or written for it
+  (with the hold gone it writes one cvar less). What else moves with the crosshair because the game draws it
+  in that rectangle: the low ammo and chainsaw texts, a pickup's name, the ability rings in the layouts
+  around the crosshair (no abilities quad on the wrist under hand aim either way). `hold` (the default) and
+  `mask` keep the earlier behaviours. Log: `ui: the game's crosshair under hand
+  aim: gun (...)` in the UI layer's line; `ui: the game's crosshair goes on the gun's ray under hand aim: WxH
+  at (X, Y) of the WxH GUI target ...` once its swapchain is made; `ui: first GUI copy with the game's
+  crosshair moved to the gun's ray`; `ui: the game's crosshair on the gun's ray: its quad W x H m at D m
+  (...)` at its first placement; every 10 s `ui: the gun's crosshair: N GUI copies, M with the crosshair
+  moved to the gun's ray (K with markers kept on the HUD), J cleared from the HUD without a crosshair image ...;
+  kept whole: B for a full-screen layer around the rectangle (the border test), F for a frame without the
+  quad`; the first 8 copies the border test keeps whole one by one, with the points' alphas; once, `ui: the
+  gun's crosshair's border test: first reading with something drawn around the rectangle (alpha ...)`; for
+  the first 6 runs of moves that end, `ui: the gun's crosshair: moves stop after N copies; the border tests of
+  the last 3 ...` (whether a full-screen layer was already coming in); for the first 6 wheel closes `ui: the
+  weapon wheel went down: N GUI copies in the S s after it kept whole`. With the dot off
+  the UI layer's line says `gun, with the aim dot off: held as under hold` and no swapchain is made.
+  Rig (2026-11-14, my test PC, OpenXR-Simulator, Debug, scripted input; QA `crosshair-gun-lockon`,
+  `crosshair-hold-lockon`, `crosshair-gun-lockon-head`, `crosshair-gun-sweep`, `crosshair-gun`):
+  - Lost under the hold, confirmed: with `hold` the GUI captures after `give all` hold no crosshair at all
+    (up to 379 drawn pixels in the moved rectangle: the ability indicator beside the crosshair, about 210,
+    which no reticle style takes, and while locking the lock-on's targeting brackets on the zombie, a world
+    marker), so the Lock-On Burst's lock pieces, LOCKED and its cooldown showed nowhere; the brackets on the
+    target did show, then as now.
+  - With `gun` the game draws it (no `-> 0` write once the quad is up; 620 to 1100 drawn pixels while the
+    lock builds and holds) and every GUI copy after the first move went to the gun's ray (3302 of 3302 in the
+    10 s lines). The composed frames show the Lock-On Burst's hexagon around the aim dot on the zombie 20
+    degrees left of the head, its pieces closing in while the lock builds and LOCKED under it once it holds,
+    then the cooldown, and the lock-on's targeting brackets on the zombie (a world marker: kept on the HUD,
+    89 and 100 copies in two 10 s lines with marker boxes inside the rectangle). The quad measured 10.17 x
+    2.78 m at 10.6 m (where the ray met the barge's far wall; mostly transparent).
+  - Every slot with both mods (the sweep): the reticles of the Combat Shotgun (Sticky Bombs' pips, Full
+    Auto's spin bar), the Heavy Cannon (Micro Missiles' pips; the Precision Bolt's scope held hidden as
+    before), the Plasma Rifle (Heat Blast's and the Microwave Beam's bars), the Rocket Launcher (both mods),
+    the Super Shotgun, the Chaingun (turret, Energy Shield), the BFG and the chainsaw (NO TARGET) are drawn
+    within 0.10 of the middle (band heights; the chainsaw's NO TARGET within 0.15); the Ballista's reach
+    further: the Destroyer Blade's charge bars 0.52 to each side, the Arbalest's zoom ring 0.21 from the
+    middle with its ammo count out to 0.62 right of it, hence the rectangle's width. The low ammo banner's
+    glow starts 0.18 below the middle (the banner itself 0.20), hence the height of 0.175 each way: the banner
+    stays on the HUD, and the Arbalest zoom's faint outer ring loses its top and bottom arcs (0.175 to 0.21)
+    to the HUD, the one cue left split. GUI captures in a 0.40 x 0.30 rectangle first: the Ballista's were cut.
+  - Head aim (`crosshair-gun-lockon-head`): nothing moved, no hold, the crosshair drawn in the middle of
+    every capture, as before.
+  - Cost: on e1m3 (`crosshair-gun` against b221's `crosshair-hold`, the same route) 41.8 against 42.2 stereo
+    pairs a second and the worker's copy wait 0.36 against 0.34 ms on average; on e1m1 (`gun` against `hold`)
+    55.0 against 54.7 pairs and 0.72 against 0.67 ms: within run-to-run spread.
+  Rig, opt-in round (2026-11-14, the same setup; QA `crosshair-default-lockon`, `crosshair-gun-nodot`,
+  `crosshair-gun-lockon-margin`, `crosshair-gun-wheel` and the earlier ones):
+  - The default path (no `ETERNALVR_UI_CROSSHAIR`, as the launcher's Hidden passes nothing): `hold`, the hold's
+    write, no gun layer made, no crosshair drawn in the middle of any of 40 GUI captures. `gun` with the dot
+    off: `gun, with the aim dot off`, the hold's write, no gun layer, no dot, nothing drawn in the middle.
+  - `gun` again on the lock-on (every copy after the first move moved, 2734 of 2734) and every slot and mod
+    (the sweep).
+  - Pause and death (`crosshair-gun`, e1m3): the border test reads real pixels (its first reading with
+    anything drawn was the loading screen's backdrop, 255 at all eight points, on a copy not marked for the
+    move), and when the moves stopped for the pause menu and for the death screen's popup, the last three
+    moved copies read 0 at all eight points: the menu came up before any of its backdrop reached a moved
+    copy, so the border test had nothing to keep whole there (it kept no copy whole in any run). It stays as
+    the guard for a layer that comes before its menu. The death itself draws no full-screen GUI layer (the
+    world turns grey).
+  - The weapon wheel (`crosshair-gun-wheel`, 8 closes): GUI captures timed by their copy index show the
+    wheel whole in every capture before `controllers::wheelView()` fell and gone in every one from 0.038 s
+    after it (no fade-out is drawn), so the move stays off for 0.1 s after the wheel goes down: 4 or 5 GUI
+    copies kept whole per close.
+  - The edge margin (`ETERNALVR_EDGE_MARGIN=small`: each eye 1408 x 1544): the rectangle scales with the
+    target (1014 x 277 at (197, 633)), the quad keeps its size (10.163 x 2.776 m at 10.6 m against 10.166 x
+    2.779 m without), it sits on the dot in the shots and the HUD's blocks sit where they do without it.
+  - Cost on e1m1: 54.9 stereo pairs a second under `gun`, `hold` and the default alike; the worker's copy wait
+    0.73 ms against 0.67 ms.
+  Not shown by the rig: how big and sharp the crosshair reads in a headset's lenses at the dot's distance, a
+  real hand's tremor moving it, and whether players prefer it over the dot alone.
 - **Forced views.** An entry hook on `idPlayer::SetViewAngles` (RVA 0x1454480) counts calls whose return
   address is not the per-tick view update (0x14562A8, found as the only call to SetViewAngles inside
   `UpdateViewAngles`) and whose player (rcx) is the one the camera hook sees; each distinct caller is

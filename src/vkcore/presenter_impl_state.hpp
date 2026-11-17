@@ -11,15 +11,18 @@
 #include "features/tracking/fov_watch.hpp"
 #include "stereo_seq/desktop_window.hpp"
 #include "stereo_seq/eye_pairing.hpp"
+#include "ui_layer/crosshair.hpp"
 #include "ui_layer/gui_hold.hpp"
 #include "ui_layer/gui_target.hpp"
 #include "vkcore/backdrop_probe.hpp"
 #include "vkcore/cinema_view.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/eye_capture.hpp"
+#include "vkcore/gun_border_probe.hpp"
 #include "vkcore/motion_capture.hpp"
 #include "vkcore/presenter_alt.hpp"
 #include "vkcore/presenter_fade.hpp"
+#include "vkcore/presenter_gun_crosshair.hpp"
 #include "vkcore/presenter_markers.hpp"
 #include "vkcore/presenter_mirror.hpp"
 #include "vkcore/presenter_refresh.hpp"
@@ -148,6 +151,20 @@ struct PresenterUiState {
     std::uint64_t uiCaptures = 0;    // present hook
     std::uint64_t uiNotCaptured = 0; // present hook
     BackdropProbe uiBackdrop;        // the crosshair mask's backdrop test (present hook)
+    // Worker writes, present hook reads: the game's crosshair can go on the gun's ray (gunCrosshair below is
+    // ready), so ETERNALVR_UI_CROSSHAIR=gun is in effect (ui_layer::effectiveCrosshairMode).
+    std::atomic<bool> uiGunReady{false};
+    // The gun's crosshair's same-copy border test: recorded by the present hook, read by the worker
+    // (gun_border_probe.hpp); freed with the Vulkan objects.
+    GunBorderProbe gunBorder;
+    ui_layer::WheelLinger uiWheel; // present hook: the wheel up or just gone, for the crosshair's move
+    // Present hook: the GUI copies just after the wheel went down that `gun` kept whole, for the log
+    // (noteWheelFade).
+    struct WheelFade {
+        std::uint32_t copies = 0;
+        double since = 0.0;
+        std::uint32_t logged = 0;
+    } uiWheelFade;
     std::uint64_t uiUnmaskedBackdrop = 0; // present hook: hand-aim copies not masked for a backdrop
     std::uint64_t uiUnmaskedMenu = 0;     // ... for a menu
     ui_layer::HoldTally uiHold; // ... for the crosshair hold, and its changes (ui_layer/crosshair.hpp)
@@ -168,7 +185,9 @@ struct PresenterUiState {
     std::uint32_t uiGapLines = 0;
     std::uint64_t uiXrCopies = 0;
     UiWash uiWash; // ETERNALVR_UI_WASH: the additive wash taken out before the copy (off in menus)
-    HudMarkerLayer hudMarkers; // the HUD's markers on their own quad (presenter_markers.hpp)
+    HudMarkerLayer hudMarkers;       // the HUD's markers on their own quad (presenter_markers.hpp)
+    GunCrosshairLayer gunCrosshair;  // the game's crosshair on the gun's ray (presenter_gun_crosshair.hpp)
+    bool gunCrosshairLogged = false; // its quad's first placement is logged
     XrSwapchain reticleSwapchain = XR_NULL_HANDLE; // hand aim: a static dot image
     bool reticleFailed = false;
 };

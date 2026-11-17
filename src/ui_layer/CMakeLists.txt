@@ -7,6 +7,7 @@ evr_add_module(evr_ui_layer
         crosshair.cpp
         gui_hold.cpp
         gui_target.cpp
+        gun_crosshair.cpp
         hud_blocks.cpp
         hud_view.cpp
         hud_regions.cpp

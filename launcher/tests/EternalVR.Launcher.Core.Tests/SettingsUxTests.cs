@@ -210,7 +210,7 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var setting in new[]
             {
                 Setting.Turning, Setting.TurnSpeed, Setting.WeaponHand, Setting.WeaponHandAngle, Setting.OffHandAngle, Setting.MoveToward,
-                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.RollWrist, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize,
+                Setting.XButton, Setting.DossierMapSticks, Setting.WeaponWheel, Setting.ThumbRestWheel, Setting.ThumbRestPicks, Setting.ThumbRestFaceTouch, Setting.ThumbRestSlowdown, Setting.RollWrist, Setting.SwingGesture, Setting.AimSteadiness, Setting.AimDot, Setting.ButtonLayout, Setting.ShotsFrom, Setting.AimDotSize, Setting.GameCrosshair,
                 Setting.MenuLaser, Setting.HudWrist, Setting.HudWeapon, Setting.Vibration, Setting.RevenantAimWith,
                 Setting.MeleeAimWith, Setting.EquipmentAimWith,
             })
@@ -238,7 +238,7 @@ namespace EternalVR.Launcher.Core.Tests
         public void HandAimSettingsNeedHandAimInEitherMode()
         {
             var head = new LauncherSettings { Aim = AimMode.Head };
-            foreach (var setting in new[] { Setting.AimSteadiness, Setting.AimDot, Setting.ShotsFrom, Setting.AimDotSize, Setting.MeleeAimWith, Setting.EquipmentAimWith })
+            foreach (var setting in new[] { Setting.AimSteadiness, Setting.AimDot, Setting.ShotsFrom, Setting.AimDotSize, Setting.GameCrosshair, Setting.MeleeAimWith, Setting.EquipmentAimWith })
                 Assert.Equal(SettingRules.NeedsHandAim, SettingRules.WhyNot(setting, head));
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             Assert.Null(SettingRules.WhyNot(Setting.AimDot, mono));

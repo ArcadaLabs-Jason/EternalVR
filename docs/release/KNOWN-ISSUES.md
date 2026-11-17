@@ -403,6 +403,17 @@ them is worse for you than described here.
   Guns with no sight parts (Plasma Rifle, Rocket Launcher, Ballista, BFG 9000, Unmaykr) line up along the barrel,
   and the Chaingun along its zoom axis. Shots always go along your controller's aim, and the Aim dot sits exactly
   on that line at any distance.
+- **With hand aim the game's crosshair is hidden, and the weapon cues in it with it.** The game draws its
+  crosshair in the middle of your view, not on the gun, so with hand aim it's hidden and the Aim dot shows where
+  you aim. Everything the weapons show in the crosshair goes with it: the Lock-On Burst's lock and LOCKED, the
+  Sticky Bombs' and Micro Missiles' charges, the Ballista's charge, heat and cooldown bars, the hit marker. New,
+  to try: "Game's crosshair (hand aim)" on the Play tab, set to On the gun, puts the game's crosshair around the
+  Aim dot at the size it has on the HUD, with all of that back (only with the Aim dot on; with the dot off nothing
+  shows in the middle, as before). Only checked on my test PC so far, not in a headset: tell me if it's too big,
+  too small, hard to read or in the way. With it on, still missing: the Precision Bolt's scope ring (no scope
+  overlay, as below), and with the Ballista's Arbalest zoomed, the top and bottom of its thin outer ring stay in
+  the middle of your view. The ability indicator next to the crosshair and the chainsaw's NO TARGET move with it,
+  as they sit by the crosshair on a flat screen. Head aim is unchanged.
 - **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
   Aim dot shows where shots go. With head aim, since 0.1.87 the Aim dot sits in the middle of your view while
@@ -442,16 +453,25 @@ them is worse for you than described here.
   arms shown, which looked right. I checked that on the test PC, not yet in the headset. While the game plays its own
   arm animations (a melee, a glory kill) it draws the whole arms for that moment, and with head aim (Aim with: Head)
   the arms are the game's, so they show whole all the time.
-- **Two-handed aim is new and I haven't tried it in a headset yet.** "Two-handed aim" on the Advanced tab (off by
-  default) lets your off hand take the gun: squeeze that hand's grip anywhere along the front of the gun (the
-  pump, the shroud, the front grip, the barrel) and the gun aims along the line between your hands, let go and
-  your gun hand aims on its own again (the gun eases over in about 70 ms each way). Your off hand's glove stays
-  where your hand is on the gun, and Aim steadiness (Play tab) smooths two-handed aim the same as one-handed aim.
-  Near the gun that grip no longer fires the Flame Belch (squeeze it away from the gun for that); a grip you were
-  already holding when your hand got to the gun doesn't take it, squeeze again. Not on the Chaingun, the Crucible,
-  the hammer, the chainsaw or the fists. I checked it on the test PC only, with scripted hands, on every gun it
-  works with but the Unmaykr: how it feels at arm's length and how much real tracking wobbles the line between
-  your hands are still open. With "Ammo on your weapon" on (Advanced tab), the ammo readout stays
+- **Two-handed aim is new and I've only tried it with scripted hands on my test PC.** "Two-handed aim" on the
+  Advanced tab (off by default) lets your off hand take the gun: squeeze that hand's grip anywhere along the front
+  of the gun (the pump, the shroud, the front grip, the barrel) and the gun aims along the line between your hands,
+  let go and your gun hand aims on its own again (the gun eases over in about 70 ms each way). Your off hand's
+  glove stays where your hand is on the gun, and Aim steadiness (Play tab) smooths two-handed aim the same as
+  one-handed aim. Near the gun that grip no longer fires the Flame Belch (squeeze it away from the gun for that).
+  A player's first headset report said taking the gun with the off grip was finicky (several squeezes, and
+  easy to lose after a mod switch or a throw), and that the left grip is also the Flame Belch. In 0.1.97 a
+  squeeze that starts on the gun, or while your hand is still on its way to it (a fifth of a second to get
+  there), takes it as soon as your hand is on it, and if something lets go of the gun while you keep the grip
+  down (a mod switch, an equipment throw, a melee, a glory kill, losing a hand for a moment) it takes the gun
+  back by itself when that is over, no need to squeeze again. Your off controller gives a short click when it
+  takes the gun. A squeeze that started away from the gun is still the Flame Belch's and never takes it, and a squeeze with
+  your off hand within about 12 cm of the gun's line is never the Flame Belch, even when it misses the gun:
+  let go and squeeze again away from the gun for the Belch. Not on
+  the Chaingun, the Crucible, the hammer, the chainsaw or the fists. I checked it on my test PC only, with
+  scripted hands, on every gun it works with but the Unmaykr: how it feels at arm's length, how much real
+  tracking wobbles the line between your hands, and whether the click and the 0.2 s are right are still open.
+  If it still misses, the log says why (a line "a squeeze on '<gun>' took nothing" with where your hand was). With "Ammo on your weapon" on (Advanced tab), the ammo readout stays
   lined up with your gun hand's controller rather than the gun while you hold it with both hands, so it can sit
   a little off the gun. There's no virtual stock (the gun resting on your shoulder).
 - **Shots through thin walls should be fixed in 0.1.87.** Before, if you pushed the gun through a thin wall, the

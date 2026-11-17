@@ -57,7 +57,9 @@ void addReticleHold(std::vector<Held>& held) {
             return text;
         },
         warnings);
-    if (!ui.enabled || ui.crosshair != ui_layer::CrosshairMode::Hold) {
+    // `gun` holds it too: for a scoped zoom, and under hand aim while its quad is not up
+    // (ui_layer::effectiveCrosshairMode).
+    if (!ui.enabled || ui.crosshair == ui_layer::CrosshairMode::Mask) {
         return;
     }
     Held h;
@@ -93,9 +95,11 @@ bool applyReticle(Held& h, cvar_book::SetStringFn set) {
     case ui_layer::ReticleWrite::Restore:
         static_assert(ui_layer::kHoldStaleMs == 500 && ui_layer::kHoldStalePresents == 4, "named in the log");
         value = std::to_string(h.reticleKeep.before);
-        why = asked ? "the hold's request lapsed (no GUI copy for 0.5 s and 4 presents): the game's "
-                      "crosshair back"
-                    : "the hold's request ended (no hand aim) and no scoped zoom: the game's crosshair back";
+        why = asked
+                  ? "the hold's request lapsed (no GUI copy for 0.5 s and 4 presents): the game's "
+                    "crosshair back"
+                  : "the hold's request ended (no hand aim, or its crosshair on the gun's ray) and no scoped "
+                    "zoom: the game's crosshair back";
         break;
     case ui_layer::ReticleWrite::None:
         break;

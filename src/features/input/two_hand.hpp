@@ -14,10 +14,13 @@
 //   support point, and within kTwoHandCaptureDegrees of it as seen from the weapon hand's grip (the most the
 //   gun turns at a grab). So the gun can be taken anywhere along its fore-end and barrel, not only where the
 //   game's own hand holds it (the Plasma Rifle's support point is 76 cm ahead of the weapon hand, further
-//   than an arm reaches with the other hand on the grip). The squeeze must start there, with the gate open: a
-//   grip already held when the hand arrives, when the gate opens or after a release is its binding's (or
-//   nothing's) until it is let go and squeezed again, so one press is either the gun's or the binding's,
-//   never both (the mapper holds back only a press made there).
+//   than an arm reaches with the other hand on the grip). A squeeze that STARTS on the gun (in that zone, or
+//   within kTwoHandArriveMetres of it with the hand arriving, so the zone is reached within
+//   kTwoHandArriveSeconds) has the right to take the gun for as long as the grip stays down: the gate may be
+//   closed at the press (a mod switch, an equipment throw, a melee) and the hold may end for any reason, and
+//   it is taken, or taken again, on the first frame the zone and the gate allow it. A squeeze that started
+//   away from the gun (the Flame Belch's, say) never takes it, however the hand drifts in, so one press is
+//   the gun's or the binding's, never both (the mapper holds back only a press that has the right).
 // - Held: the aim is turned by the shortest turn that takes the gun's grip-to-support direction onto the line
 //   from the weapon hand's grip to the off hand's. So when the off hand sits on the gun's support line,
 //   nothing moves at the grab; the weapon hand keeps the gun's roll about that line (its twist is kept);
@@ -30,7 +33,8 @@
 //   aim goes through the same filter as the one-handed aim, built from the weapon hand's aim as tracked, so
 //   the line's tracking noise is smoothed as the weapon hand's is, and the roll once.
 // - Release: the grip let go, the off hand slid past the support point by more than kTwoHandReleaseMetres,
-//   the hands too close, the gate closed or a hand lost.
+//   the hands too close, the gate closed or a hand lost. All but the grip let go leave the squeeze's right to
+//   take the gun as it was (above), so the hold comes back by itself.
 // - The turn is eased in at the grab and out at the release over kTwoHandRampSeconds (from wherever it was,
 //   so a grab during a release's ease does not jump), so a trigger pulled at either edge does not shoot along
 //   a sudden jump of up to 26 degrees (the Rocket Launcher). The ease ends exactly on the two-handed aim, or
@@ -46,6 +50,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <string_view>
 
 namespace evr::input {
 
@@ -59,6 +65,21 @@ inline constexpr float kTwoHandCaptureDegrees = 15.0f;
 // A held grip lets go when slid past the support point by more than this (twice the capture's reach past it,
 // so it does not chatter).
 inline constexpr float kTwoHandReleaseMetres = 0.16f;
+// A squeeze made within this of the gun's support line (the hand on its way to the gun) keeps the right to
+// take the gun for kTwoHandArriveSeconds, to reach the zone in. One and a half times the capture's radius: a
+// hand a few centimetres from the fore-end counts as arriving, and a Flame Belch squeeze made with the off
+// hand further from the gun does not (the squeeze is then spent on the belch's hold-back, so no wider).
+inline constexpr float kTwoHandArriveMetres = 0.12f;
+// An arriving hand is already at least kTwoHandEngageLineMetres less this far along the line (the capture's
+// 12 cm): nearer the weapon hand than that, it cannot take the gun in the window however it moves, so the
+// squeeze is the Flame Belch's. 3 cm is what a slow hand (15 cm a second) covers in kTwoHandArriveSeconds.
+inline constexpr float kTwoHandArriveMarginMetres = 0.03f;
+// How long an arriving hand has to enter the capture zone after the squeeze starts. Hands close the grip
+// while they arrive: a pull of the grip takes ~0.1 s to pass the press threshold, and a hand moving at half a
+// metre a second covers the arriving radius in 0.24 s (a metre a second, 0.12 s), so 0.2 s lets a hand that
+// starts closing on the way in make it and is still shorter than a deliberate belch squeeze held with the
+// hand drifting about.
+inline constexpr float kTwoHandArriveSeconds = 0.2f;
 // The hands closer than this end the hold: the line's direction would follow a few millimetres of tracking.
 inline constexpr float kTwoHandMinLineMetres = 0.10f;
 // A hold starts only with the hands at least this far apart, so a hand hovering at the shortest line does not
@@ -163,6 +184,22 @@ struct TwoHandFrame {
     Vec3 offGripPoint;  // the off hand's grip position
     SupportRow support; // supportRowFor's
     float dt = 0.0f;    // seconds since the last frame (the ease's clock)
+    // The held item's name, for a miss's line: read at the press (the view must outlive the update call
+    // only).
+    std::string_view weapon;
+};
+
+// A squeeze on a gun that takes a support grip, ended (the grip let go) without taking the gun: what the
+// layer's log line shows.
+struct TwoHandMiss {
+    float peak = 0.0f;       // the grip's highest level during the squeeze
+    bool pressKnown = false; // the off hand and the weapon hand were tracked at the press
+    float along = 0.0f;      // at the press: the off hand along the gun's support line from the grip (m)
+    float off = 0.0f;        // ... and off it (m)
+    TwoHandBlock pressBlock = TwoHandBlock::None; // the gate at the press
+    TwoHandBlock endBlock = TwoHandBlock::None;   // ... and at the release
+    bool kept = false;                            // the squeeze had the right to take the gun until it ended
+    std::string weapon;                           // the held item's name at the press (TwoHandFrame::weapon)
 };
 
 enum class TwoHandEnd : std::uint8_t {
@@ -179,9 +216,19 @@ const char* twoHandEndName(TwoHandEnd end);
 struct TwoHandResult {
     bool engaged = false;
     // A squeeze now takes the gun: the gate open, both hands tracked, the off hand within the capture radius,
-    // the hands kTwoHandEngageLineMetres apart, and the grip not held since before. The mapper holds the
-    // grip's binding back meanwhile (MapperContext::supportHandOnWeapon).
+    // the hands kTwoHandEngageLineMetres apart, and the grip up or squeezed with the right to take the gun
+    // (`keeps`). The mapper holds the grip's binding back meanwhile (MapperContext::supportHandOnWeapon).
     bool capturable = false;
+    // The grip is down and its squeeze has the right to take the gun (started on it, or arriving), whether
+    // or not the gate lets it now: the mapper holds the binding back for the whole squeeze.
+    bool keeps = false;
+    // The grip is up and a squeeze made now would have the right to take the gun by arriving (the hand within
+    // kTwoHandArriveMetres of the support line, the gate one a squeeze may keep its right in): the mapper
+    // holds the grip's binding back from the press itself, so the Flame Belch does not fire as the hand comes
+    // in.
+    bool arrivable = false;
+    // The squeeze that just ended (the grip let go) took nothing; see TwoHandMiss.
+    std::optional<TwoHandMiss> missed;
     Quat aim;               // the aim to use: two-handed while engaged (eased in), else the frame's own
     Quat target;            // engaged: the two-handed aim the ease goes to
     bool easing = false;    // the turn is still easing in or out
@@ -207,10 +254,17 @@ public:
 private:
     AnalogButton grip_;
     bool engaged_ = false;
-    bool fresh_ = false;                    // the grip has been up since its last squeeze (or the reset)
-    Quat applied_;                          // the turn applied last frame
-    Quat from_;                             // the turn the current ease started from
-    float ease_ = 1.0f;                     // 0..1 through the current ease; 1 settled
+    bool wasDown_ = true;          // the grip was down last frame (true at the start and after a reset:
+                                   // a grip held through either has no right to take the gun)
+    bool right_ = false;           // this squeeze has the right to take the gun
+    bool landed_ = false;          // ... and its hand has been in the capture zone
+    float arriveLeft_ = 0.0f;      // seconds left for an arriving hand to land
+    bool squeezed_ = false;        // a squeeze (a press seen) is under way
+    bool tookThisSqueeze_ = false; // ... and has taken the gun
+    TwoHandMiss squeeze_;          // ... and what is known of it for a miss's line
+    Quat applied_;                 // the turn applied last frame
+    Quat from_;                    // the turn the current ease started from
+    float ease_ = 1.0f;            // 0..1 through the current ease; 1 settled
     std::optional<OneEuroRotation> filter_; // the held aim's smoothing
     double clock_ = 0.0;                    // the filter's clock (the frames' dt summed)
 };

@@ -121,6 +121,7 @@ add_library(evr_layer SHARED
     glory_view.cpp
     pickup_view.cpp
     gpu_timing.cpp
+    gun_border_probe.cpp
     gpu_timing_report.cpp
     head_sweep.cpp
     head_sweep_sites.cpp
@@ -187,6 +188,7 @@ add_library(evr_layer SHARED
     presenter_aim.cpp
     presenter_hud_lock.cpp
     presenter_markers.cpp
+    presenter_gun_crosshair.cpp
     presenter_perf.cpp
     presenter_latch.cpp
     presenter_ring.cpp

@@ -345,6 +345,7 @@ namespace EternalVR.Launcher.Core.Settings
             s.ReadThumbRest(map);
             s.ReadGestures(map);
             s.ReadTwoHand(map);
+            s.ReadGameCrosshair(map);
             s.ReadPicture(map);
             s.ReadPacing(map);
             if (map.TryGetValue("foveation", out var fv))
@@ -440,6 +441,7 @@ namespace EternalVR.Launcher.Core.Settings
             WriteGestures(sb);
             WriteTwoHand(sb);
             sb.AppendLine("aim_dot = " + (AimDot ? "1" : "0"));
+            WriteGameCrosshair(sb);
             WritePicture(sb);
             sb.AppendLine("foveation = " + FoveationName(Foveation));
             WritePacing(sb);

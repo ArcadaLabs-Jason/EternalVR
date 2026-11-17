@@ -75,10 +75,10 @@ void addWindowSet(std::vector<Held>& held);
 // The cvar's integer value as the engine keeps it (the values block, +0x08).
 int readValue(const std::byte* object);
 
-// runtime_cvars_reticle.cpp: hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold, ui_layer/crosshair.hpp)
-// added to `held` while the UI layer is on, else nothing. From the first apply, under heldMutex(), before the
-// ETERNALVR_DEBUG_CVARS list (whose value entry for the cvar replaces it: the hold is then never confirmed
-// and the mask stays).
+// runtime_cvars_reticle.cpp: hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold or gun,
+// ui_layer/crosshair.hpp) added to `held` while the UI layer is on, else nothing. From the first apply, under
+// heldMutex(), before the ETERNALVR_DEBUG_CVARS list (whose value entry for the cvar replaces it: the hold is
+// then never confirmed and the mask stays).
 void addReticleHold(std::vector<Held>& held);
 
 // One present's turn of the hold `h` (h.reticle, h.object found): counts the present against the presenter's

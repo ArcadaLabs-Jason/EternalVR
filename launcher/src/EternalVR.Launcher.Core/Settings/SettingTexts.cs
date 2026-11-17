@@ -366,6 +366,13 @@ namespace EternalVR.Launcher.Core.Settings
                 "Your weapon hand", "Your eyes"),
             [Setting.AimDotSize] = new Text("Aim dot size",
                 "How big the aim dot looks, in degrees of your view (1.0 is about the width of a finger at arm's length)."),
+            [Setting.GameCrosshair] = new Text("Game's crosshair (hand aim)",
+                "With your weapon hand aiming, the game's own crosshair is hidden by default and the aim dot marks where your gun "
+                + "points. On the gun shows the game's crosshair around the aim dot instead, at the size it has on your HUD, with "
+                + "the weapon cues it draws: the Lock-On Burst's lock and LOCKED, the charge, heat and cooldown bars, the Sticky "
+                + "Bombs' and Micro Missiles' charges, the hit marker. Needs the aim dot on. Not yet tried in a headset: tell us "
+                + "how it looks.",
+                "Hidden", "On the gun"),
             [Setting.MenuLaser] = new Text("Menu laser",
                 "A laser from your hand to the menu panel. Off keeps only the dot on the panel."),
             [Setting.TwoHandAim] = new Text("Two-handed aim (testing)",

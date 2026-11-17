@@ -454,6 +454,25 @@ TEST_CASE("a grip held for support stays suppressed until it is released") {
     CHECK(contains(mapper.update(grip, {}, kFrame).pressed, GameAction::FlameBelch));
 }
 
+TEST_CASE("a squeeze whose arrival failed is never the Flame Belch, even when the support ends at once") {
+    // The two-handed hold held the binding back at the press (the hand arriving) and then lost the right (the
+    // hand never landed): the squeeze is the gun's for its whole length.
+    InputMapper mapper(questTouchProfile());
+    InputFrame grip = restingFrame();
+    grip.left.grip = 1.0f;
+    MapperContext supporting;
+    supporting.supportHandOnWeapon = Hand::Left;
+    CHECK_FALSE(contains(mapper.update(grip, supporting, kFrame).pressed, GameAction::FlameBelch));
+    for (int i = 0; i < 90; ++i) {
+        const GameInput input = mapper.update(grip, {}, kFrame);
+        REQUIRE_FALSE(contains(input.pressed, GameAction::FlameBelch));
+        REQUIRE_FALSE(contains(input.down, GameAction::FlameBelch));
+    }
+    mapper.update(restingFrame(), {}, kFrame);
+    // Released and squeezed again with no support: the Belch.
+    CHECK(contains(mapper.update(grip, {}, kFrame).pressed, GameAction::FlameBelch));
+}
+
 TEST_CASE("a support grip bound to a tap does not tap when it is released") {
     const auto resolved = resolveBindings(questTouchBindings(), R"(left.grip.press = "none"
 left.grip.tap = "automap"

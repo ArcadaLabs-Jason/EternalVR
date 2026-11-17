@@ -66,6 +66,7 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.AimSteadiness] = new[] { "aim_smoothing" },
             [Setting.AimDot] = new[] { "aim_dot" },
             [Setting.AimDotSize] = new[] { "aim_dot_size" },
+            [Setting.GameCrosshair] = new[] { "game_crosshair" },
             [Setting.Vibration] = new[] { "vibration" },
             [Setting.Bhaptics] = new[] { "bhaptics" },
             [Setting.Resolution] = new[] { "resolution_base", "render_scale" },

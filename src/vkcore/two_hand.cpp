@@ -68,6 +68,15 @@ std::string g_traceLast;
 int g_traceLeft = 0;
 std::uint32_t g_eventLines = 0;
 std::uint32_t g_noRowLines = 0;
+// The default log's lines for squeezes that took nothing: the first kMissLines, then one per
+// kMissGapSeconds.
+constexpr std::uint32_t kMissLines = 20;
+constexpr double kMissGapSeconds = 30.0;
+// A squeeze that took nothing is logged only if the off hand was this near the gun's line at the press (or
+// the squeeze kept its right): further away it was a Flame Belch.
+constexpr float kMissNearMetres = 0.25f;
+std::uint32_t g_missLines = 0;
+LONGLONG g_lastMissQpc = 0;
 
 // The turn from `b` to `a` (degrees); exactly 0 for the same orientation.
 float degreesBetween(Quat a, Quat b) {
@@ -100,6 +109,41 @@ const std::optional<input::SupportRow>& rowFor(State& s, const std::byte* decl) 
         }
     }
     return g_row;
+}
+
+// The line for a squeeze on a gun with a support grip that ended without taking it, so a player's export
+// shows why: where the hand was at the press, the gate, the grip's peak.
+void logMiss(const input::TwoHandMiss& m, LONGLONG now) {
+    // Only a squeeze that could have been a take: the gate one a squeeze may keep its right in, and the right
+    // kept or the off hand within kMissNearMetres of the gun's line at the press. A Flame Belch squeezed away
+    // from the gun is not logged, so it does not use the budget.
+    const bool interesting = m.pressBlock == input::TwoHandBlock::None ||
+                             m.pressBlock == input::TwoHandBlock::GunDown ||
+                             m.pressBlock == input::TwoHandBlock::ForcedView;
+    const bool plausible = m.kept || (m.pressKnown && m.off < kMissNearMetres);
+    if (!interesting || !plausible || m.weapon.empty()) {
+        return;
+    }
+    if (g_missLines >= kMissLines && g_lastMissQpc != 0 && secondsSince(g_lastMissQpc) < kMissGapSeconds) {
+        return;
+    }
+    ++g_missLines;
+    g_lastMissQpc = now;
+    char where[96];
+    if (m.pressKnown) {
+        std::snprintf(where, sizeof(where), "%.1f cm along the gun, %.1f cm off its line, %.1f deg from it",
+                      static_cast<double>(m.along * 100.0f), static_cast<double>(m.off * 100.0f),
+                      static_cast<double>(std::atan2(m.off, m.along) * kDegreesPerRadian));
+    } else {
+        std::snprintf(where, sizeof(where), "not tracked");
+    }
+    EVR_LOG(
+        "%s: a squeeze on '%s' took nothing (grip peak %.2f; at the press the off hand was %s; gate at the "
+        "press: %s, at the release: %s; %s)",
+        kTag, m.weapon.c_str(), static_cast<double>(m.peak), where, input::twoHandBlockName(m.pressBlock),
+        input::twoHandBlockName(m.endBlock),
+        m.kept ? "it had the right to take the gun until the grip was let go"
+               : "it started away from the gun or the hand never arrived");
 }
 
 void trace(const char* line) {
@@ -218,6 +262,7 @@ void aim(State& s, const std::byte* player, GameViewPoses& poses, std::optional<
         weapon ? std::optional(normalize(roomFromLocal * weapon->tracked.orientation)) : std::nullopt;
     f.offGripPoint = poses.grip[o].position;
     f.support = row ? input::supportRowFor(*row, hand) : input::SupportRow{};
+    f.weapon = g_rowName;
     f.dt = static_cast<float>(std::min(dt, static_cast<double>(input::kMaxFrameSeconds)));
     const input::TwoHandResult r = hold(cfg).update(f);
     const bool fault = cfg.testArmFault == input::ArmFault::TwoHand;
@@ -242,7 +287,13 @@ void aim(State& s, const std::byte* player, GameViewPoses& poses, std::optional<
     if (weapon) {
         weapon->twoHanded = r.engaged || r.easing || g_lateLeft > 0;
     }
-    g_supports.store(r.engaged || r.capturable, std::memory_order_relaxed);
+    g_supports.store(r.engaged || r.capturable || r.keeps || r.arrivable, std::memory_order_relaxed);
+    if (r.missed) {
+        logMiss(*r.missed, now);
+    }
+    if (r.started) {
+        noteGripHaptic(off); // the cue that the gun is taken (haptics_policy.hpp)
+    }
     g_engaged.store(r.engaged, std::memory_order_relaxed);
     g_supportMetres.store(length(input::supportInAim(f.support)), std::memory_order_relaxed);
     g_aimQpc.store(now, std::memory_order_relaxed);

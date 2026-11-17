@@ -49,6 +49,10 @@ bool perfQuadFits(std::uint32_t before, std::uint32_t after) {
     return before < kMaxFrameLayers && after < kMaxFrameLayers - before;
 }
 
+std::uint32_t layersAfterPerfQuad(bool markerQuads, bool gunCrosshairQuad) {
+    return (markerQuads ? 2u : 0u) + (gunCrosshairQuad ? 1u : 0u) + 2u;
+}
+
 int perfLevelShown(int level, bool fullScreenBackdrop) {
     return fullScreenBackdrop ? 0 : level;
 }

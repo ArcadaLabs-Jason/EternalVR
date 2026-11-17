@@ -58,6 +58,7 @@ namespace EternalVR.Launcher.Core.Tests
             [Setting.AimSteadiness] = s => s.AimSmoothing = 0.5,
             [Setting.AimDot] = s => s.AimDot = false,
             [Setting.AimDotSize] = s => s.AimDotSize = 2.0,
+            [Setting.GameCrosshair] = s => s.GameCrosshair = GameCrosshairMode.Gun,
             [Setting.Vibration] = s => s.Vibration = 1.0,
             [Setting.Bhaptics] = s => s.Bhaptics = true,
             [Setting.Resolution] = s => s.RenderScale = 1.2,

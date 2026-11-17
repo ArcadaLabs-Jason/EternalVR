@@ -269,11 +269,32 @@ function Test-QaHoldOnlyScoped($Ctx) {
         ($zoomLines -lt $script:QaLoggedZooms -and -not $capped) "$zoomLines zoom line(s) of $script:QaLoggedZooms, cvar log capped: $capped"
 }
 
+# ETERNALVR_UI_CROSSHAIR=gun under hand aim: once the crosshair's quad on the gun's ray is up, hud_reticle_styleOverride
+# is written to 0 only inside a scoped zoom (`zoom look: scoped zoom starts` ... `ends`): the game draws its crosshair
+# and the layer moves it. A hold before that line (the start-up's, until the quad is made) is given back.
+function Test-QaGunHoldOnlyScoped($Ctx) {
+    $lines = @(Get-QaLogSpan $Ctx "ui: the game's crosshair goes on the gun's ray" '(?!)')
+    $scoped = $false
+    $writes = 0
+    $outside = 0
+    foreach ($line in $lines) {
+        if ($line.Contains('zoom look: scoped zoom starts')) { $scoped = $true }
+        elseif ($line.Contains('zoom look: scoped zoom ends')) { $scoped = $false }
+        if ($line -match 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\)') {
+            $writes++
+            if (-not $scoped) { $outside++ }
+        }
+    }
+    Add-QaResult $Ctx 'gun: after the crosshair''s quad is up, hud_reticle_styleOverride written to 0 only in a scoped zoom' `
+        ($lines.Count -gt 0 -and $outside -eq 0) "$writes write(s), $outside outside a scoped zoom, in $($lines.Count) line(s)"
+}
+
 function New-QaCrosshairScenario([string]$Mode, [string]$Aim) {
     $name = if ($Aim -eq 'head') { "crosshair-$Mode-head" } else { "crosshair-$Mode" }
     $proves = switch ($name) {
         'crosshair-hold' { 'ETERNALVR_UI_CROSSHAIR=hold: hud_reticle_styleOverride 0 reaches the game under hand aim, the hold is confirmed and the GUI copy keeps its centre (map markers, the ability indicators and the chainsaw text visible; the game''s crosshair not)' }
         'crosshair-mask' { 'ETERNALVR_UI_CROSSHAIR=mask (the earlier behaviour, the positive control): the centre square of the GUI copy is cleared under hand aim and no cvar is held for it' }
+        'crosshair-gun' { 'ETERNALVR_UI_CROSSHAIR=gun (opt-in, the launcher''s Game''s crosshair On the gun; set here): under hand aim the game draws its crosshair and the layer moves it to its own quad on the gun''s ray, the HUD''s markers kept on the HUD; held at none only while the Precision Bolt is zoomed (T-136); the pause menu''s and the death screen''s first copies kept whole by the border test' }
         default { 'ETERNALVR_UI_CROSSHAIR=hold under head aim: the game''s crosshair stays, held at none only while the Precision Bolt is zoomed (no scope ring, T-136)' }
     }
     return @{
@@ -345,6 +366,18 @@ function New-QaCrosshairScenario([string]$Mode, [string]$Aim) {
                 'crosshair-mask' {
                     Test-QaPresent $c "the game's crosshair under hand aim: mask"
                     Test-QaAbsent $c 'hud_reticle_styleOverride'
+                }
+                'crosshair-gun' {
+                    Test-QaPresent $c "the game's crosshair under hand aim: gun"
+                    Test-QaPresent $c "ui: the game's crosshair goes on the gun's ray under hand aim"
+                    Test-QaPresent $c "ui: first GUI copy with the game's crosshair moved to the gun's ray"
+                    Test-QaPresent $c "ui: the game's crosshair on the gun's ray: its quad"
+                    Test-QaGunHoldOnlyScoped $c
+                    # The pause menu's and the death screen's first copies, which the backdrop test sees only a few
+                    # copies later, kept whole by the same-copy border test (gun_border_probe.hpp).
+                    $border = @(Get-QaMatches $c "ui: the gun's crosshair: a GUI copy kept whole, a full-screen layer around its rectangle")
+                    Add-QaNote $c ("the border test kept {0} GUI copies whole (logged one by one up to 8): {1}" -f $border.Count, ($border -join ' | '))
+                    Test-QaScopeLook $c
                 }
                 'crosshair-hold-head' {
                     Test-QaPresent $c "the game's crosshair under hand aim: hold"
@@ -579,7 +612,7 @@ $script:QaScenarios = @(
             Test-QaPresent $c 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\); hand aim' -Regex
             Test-QaPresent $c 'controllers: piloting a demon'
             # Given back for the aim switch (not a lapsed request), and not hidden again while piloting.
-            Test-QaPresent $c 'hud_reticle_styleOverride 0 -> -1 \(reads -1\); the hold''s request ended \(no hand aim\)' -Regex
+            Test-QaPresent $c 'hud_reticle_styleOverride 0 -> -1 \(reads -1\); the hold''s request ended \(no hand aim' -Regex
             $piloting = @(Get-QaLogSpan $c 'controllers: piloting a demon' "controllers: back in the Slayer's body")
             $hides = @($piloting | Where-Object { $_ -match 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\); hand aim' })
             Add-QaResult $c 'while piloting: no hud_reticle_styleOverride -> 0 write' ($piloting.Count -gt 0 -and $hides.Count -eq 0) `
@@ -593,6 +626,7 @@ $script:QaScenarios = @(
                 "last logged count $last"
         }
     },
+    (New-QaCrosshairScenario 'gun' 'hand'),
     (New-QaCrosshairScenario 'hold' 'hand'),
     (New-QaCrosshairScenario 'mask' 'hand'),
     (New-QaCrosshairScenario 'hold' 'head'),

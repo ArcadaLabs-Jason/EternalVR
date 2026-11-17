@@ -95,8 +95,9 @@ struct UiSettings {
     bool reticle = true;
     float reticleDistanceMetres = 10.0f;
     float reticleDegrees = 1.0f;
-    // ETERNALVR_UI_CROSSHAIR=hold|mask: how the game's own crosshair is taken out under hand aim
-    // (crosshair.hpp).
+    // ETERNALVR_UI_CROSSHAIR=gun|hold|mask: what becomes of the game's own crosshair under hand aim
+    // (crosshair.hpp): taken out (hold, the default), or moved to the gun's ray (gun, which the launcher
+    // passes for its "Game's crosshair (hand aim)" set to "On the gun").
     CrosshairMode crosshair = CrosshairMode::Hold;
     // Menus (docs/VR_MENUS.md): while the game shows its menu cursor, the menu is on a world-locked panel
     // placed in front of the head, and the controllers point at it with a laser (ETERNALVR_MENU_POINTER).

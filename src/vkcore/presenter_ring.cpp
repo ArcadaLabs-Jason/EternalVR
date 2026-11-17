@@ -232,6 +232,7 @@ void XrPresenter::Impl::destroyVulkanObjects() {
     capture.destroy(dev);
     mirror.destroy(dev);
     destroyUiImages();
+    gunBorder.destroy(dev); // not with the UI images: the worker may read it until it stops
     depthLayer.destroyBuffers(dev, true);
 }
 

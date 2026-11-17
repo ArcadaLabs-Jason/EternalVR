@@ -32,9 +32,11 @@ XR worker, every XR frame (presenter_wrist.cpp)
 - **What moves to the wrist.** The HUD's bottom-left block (health, armor, extra lives), its bottom-right
   block (ammo, equipment, flame belch) and the ability rings around the crosshair (cooldowns;
   `ETERNALVR_WRIST_ABILITIES=0` leaves them out). Under hand aim there is no abilities quad (logged once): with
-  `ETERNALVR_UI_CROSSHAIR=mask`, or until the crosshair hold is confirmed, the UI copy clears the centre of
-  the GUI target (the game's crosshair marks the head's ray; `presenter_ui.cpp`), which takes the ability
-  rings with it; with the hold (the default) the rings stay on the head-locked quad. In practice the rings
+  `ETERNALVR_UI_CROSSHAIR=gun` (the launcher's Game's crosshair On the gun) the game's crosshair goes to its own
+  quad on the weapon ray, and the rings around it go with it, as they sit around the crosshair in the flat game (docs/VR_CONTROLLERS.md, "The
+  game's crosshair under hand aim"); with `mask`, or until the crosshair hold is confirmed, the UI copy clears
+  the centre of the GUI target (the game's crosshair marks the head's ray; `presenter_ui.cpp`), which takes
+  the ability rings with it; with the hold (the default) the rings stay on the head-locked quad. In practice the rings
   show on the wrist only under head aim. Everything else on the GUI target stays on the
   head-locked quad: subtitles, prompts, pop-ups, boss and encounter bars, markers, the damage direction.
   With the HUD in front off (`ETERNALVR_HUD_FRONT=0`, what `ETERNALVR_HUD=wrist` alone means) the corners are
@@ -1540,14 +1542,48 @@ to 8 cm past the support point, and within 15 degrees of it seen from the weapon
 taken anywhere along its front, not only where the game's own hand holds it: the Plasma Rifle's support point is
 76 cm ahead of the weapon hand, which no arm reaches with the other hand on the grip, and the 15 degrees keeps the
 turn at a grab to what 8 cm round the combat shotgun's fore-end gives (8 cm round the Rocket Launcher's, 16 cm
-from the grip, would turn it 26 degrees). The squeeze has to start there: a grip already held as the hand comes
-in, when the gate opens (after a weapon switch, a menu, a glory kill) or after a release takes nothing until it is
-let go and squeezed again. That way one squeeze is either the gun's or its binding's, never both: a squeeze away
-from the gun has already fired the Flame Belch, and only a squeeze made on the gun is held back from it (below).
-It holds while the grip is held, the off hand is no more than 16 cm past the support point along the line between
-the hands (it may slide along the gun, back toward the weapon hand too) and the hands stay at least 10 cm apart;
-anything else lets go. 16 cm past against 8 cm to take it, and 12 cm to start against 10 cm to end, so a hand on
-either edge does not take and drop the gun on alternate frames.
+from the grip, would turn it 26 degrees). The squeeze has to start there (round 4 changed this, below): a squeeze
+that starts on the gun, or with the hand arriving, has the right to take the gun for as long as the grip stays
+down; a squeeze that started away from the gun has already fired the Flame Belch and never takes it, so one
+squeeze is either the gun's or its binding's, never both, and only a squeeze with the right is held back from the
+binding (below). It holds while the grip is held, the off hand is no more than 16 cm past the support point along
+the line between the hands (it may slide along the gun, back toward the weapon hand too) and the hands stay at
+least 10 cm apart; anything else lets go. 16 cm past against 8 cm to take it, and 12 cm to start against 10 cm to
+end, so a hand on either edge does not take and drop the gun on alternate frames.
+
+**The squeeze's right to take the gun** (round 4, from the first real-headset report: the off grip took several
+squeezes and was easy to lose after other actions). Rounds 1 to 3 let only the first frame of a squeeze take the
+gun, and any end of the hold (a gate, too far, too close, a lost hand) left the grip's squeeze spent until it was
+let go and squeezed again: a hand still arriving when the grip passed 0.65 needed several squeezes, and a mod
+switch (1.56 to 1.67 s), a throw or a melee dropped the gun for good. Now (`TwoHandHold`):
+- at the press frame (the grip passing its press threshold) the squeeze **has the right** if the off hand is in
+  the capture zone and the gate is open or one of the interruptions (a switch, raise, melee or throw: `GunDown`;
+  `ForcedView`), or the hand is **arriving**: within `kTwoHandArriveMetres` (12 cm, one and a half times the capture radius) of
+  the support line, from `kTwoHandEngageLineMetres - kTwoHandArriveMarginMetres` (9 cm: a hand nearer the weapon
+  hand than the capture's own 12 cm line less 3 cm, what a slow 15 cm/s hand covers in the window, can never
+  take the gun, so hands together, or a hand behind the grip, are the Belch's) to 12 cm past the support point,
+  with no cone. An arriving squeeze has
+  `kTwoHandArriveSeconds` (0.2 s) to get the hand into the capture zone, else the right is gone until a new
+  squeeze. 0.2 s: a grip pull takes about 0.1 s to pass the press threshold, a hand moving at half a metre a
+  second covers 12 cm in 0.24 s (a metre a second, 0.12 s), and a belch squeeze made with the off hand further than
+  12 cm from the gun's line (nearer, the belch has to give way: the right suppresses it) or held with the hand
+  drifting about is not the gun's. A squeeze made in any other gate (a menu, the wheel, death, a demon, a swim, a gun with no
+  support grip) gets no right: the grip is the player's there. A right already held is dropped when the gate
+  becomes one of those mid-squeeze (a take after it needs a new squeeze). A held item with no row (a melee shows
+  one for a third of a second) keeps the right but publishes no hold-back while it lasts, and the gun is taken
+  again when the item has a row again.
+- a failed arrival (the hand never lands in the window, or the gate stays closed) still holds the binding back
+  until the grip is let go: it was never the Belch's, and a late Belch is what was reported. The mapper's latch
+  (`gripHeldForSupport`) does this; the hold publishes `arrivable` before the press so the press frame itself is
+  held back, not only the frames after it.
+- with the right, the gun is taken on the first frame the zone, the tracking and the gate (open) all allow, and
+  again after any end except the grip being let go: a mod switch and its raise, a throw, a melee, a glory kill, a
+  hand lost for a few frames, the hands too close for a moment, the hand slid out past the release radius and
+  back into the capture zone. The 70 ms ease is the same each time. The mapper's hold-back of the grip's
+  binding (`keeps`, `supportsWeapon()`) lasts for the whole squeeze with the right, so a take after an
+  interruption never fires a Belch.
+- a grip held through a level load or a reset has no right (the squeeze was not seen to start), and neither has a
+  grip held at the start.
 
 **The aim.** While held, the weapon hand's aim is turned by the shortest turn that takes the gun's support line
 onto the line from the weapon controller's grip to the off controller's. So:
@@ -1608,7 +1644,13 @@ Belch is on Y too. A player's own map that puts something else on that grip lose
 Logs: `two-handed aim: on; the held aim smoothed as the one-handed aim is (<setting>)` once, `two-handed aim: held
 on '<weapon>' (the off hand N cm along the gun from the grip, N cm off its line; the support point at N cm; the gun
 turned N deg)`, `two-handed aim: let go (<why>): the weapon hand aims again`, once per weapon `'<item>' takes no
-support grip`; with `ETERNALVR_OFFHAND_TRACE=1` also the gate's changes (`can hold` / `blocked: <why>`) and,
+support grip`, and for a squeeze on a gun with a support grip that ended without taking it (the gate at the press
+open, a switch or a forced view; the first 20, then one per 30 s) `two-handed aim: a squeeze on '<weapon>' took
+nothing (grip peak N; at the press the off hand was N cm along the gun, N cm off its line, N deg from it; gate at
+the press: <why>, at the release: <why>; it had the right to take the gun until the grip was let go | it started
+away from the gun or the hand never arrived)`; only squeezes that could have been a take are logged (the right kept, or the off hand within 25 cm of the gun's
+line at the press), so Flame Belch squeezes made away from the gun do not use the line budget, and the gun's name is the one at
+the press; with `ETERNALVR_OFFHAND_TRACE=1` also the gate's changes (`can hold` / `blocked: <why>`) and,
 around every take and release, the frame before, the frames of the ease and the next three: `frame t=<the dump's
 clock> grip <0..1> held|free aim <deg> deg from the weapon hand's, the hold's <deg> deg` (the turn applied, and the
 hold's full turn while it holds); a hold dropped by a load or the controllers going is `the hold reset (<why>)`.
@@ -1621,8 +1663,17 @@ Aim steadiness says; the noise check must fail it. The scripted input's `noise` 
 input for rig tests") gives the rig's hands tracking noise. Rig: docs/rig-findings/hands-rig.md, sections 27 and
 28.
 
+**The cue.** The off controller gets a short click (0.5 amplitude for 40 ms, scaled by Vibration's strength; the
+`grip` source of `input::HapticsPolicy`) when the hold takes, including after an interruption.
+
+**The zone, round 4.** Not changed: it still measures from the controller's grip pose and keeps the 15 degree cone
+(about 4.3 cm at 16 cm along). The reports say the squeezes were missed because only the first frame counted, not
+that the hand was outside the zone for long; the arriving radius and the missed-squeeze log (along, off, angle at the
+press) now show how far outside real squeezes land. If those lines show a cluster just past 15 degrees at the
+Rocket Launcher, the cone is next, with a minimum radius near the grip.
+
 **Not tried in a headset.** Whether 8 cm and 15 degrees feel right for taking the gun and 16 cm past the fore-end
-for letting go, how much two tracked hands wobble the line at arm's length (the frame table's `aim_two_handed`
+for letting go, whether 0.2 s is right for an arriving hand, whether the click reads, how much two tracked hands wobble the line at arm's length (the frame table's `aim_two_handed`
 column and `tools/frames/aim_jitter.py` measure it from a session), how the turn at the grab and its ease feel,
 how the off arm looks reaching across to the gun, and whether the Flame Belch on the off grip is missed near the
 gun.

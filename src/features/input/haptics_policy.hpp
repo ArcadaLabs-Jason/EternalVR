@@ -11,6 +11,7 @@
 // - capture: the capture chord (capture_chord.hpp) pulses both hands to confirm the capture;
 // - wheel: the thumb-rest wheel (rest_wheel.hpp) ticks the picking stick's hand lightly when picking starts,
 //   and more firmly when a weapon is picked;
+// - grip: the off hand taking the gun for two-handed aim (two_hand.hpp) gives that hand a short firm click;
 // - game: the game's own rumble as it mixes it each frame, two motors: the low-frequency one on both hands,
 //   the high-frequency one on the weapon hand only (it is the sharp, weapon-like one). Played as pulses of
 //   kRumbleHoldSeconds renewed while the level lasts, so it ends by itself if the frames stop coming, and
@@ -47,6 +48,7 @@ enum class HapticSource : std::uint8_t {
     Game,
     Capture,
     Wheel,
+    Grip,
     Count,
 };
 
@@ -76,6 +78,7 @@ struct HapticsFrame {
     std::array<WheelTick, 2> wheel{}; // per hand
     std::array<bool, 2> melee{};      // per hand: a melee press this frame (the punch or the button)
     bool shoulder = false;            // the equipment launcher or the Flame Belch went down this frame
+    std::array<bool, 2> grip{};       // per hand: its grip took the gun (two-handed aim) this frame
     GameRumble rumble;
 };
 
