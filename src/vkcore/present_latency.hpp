@@ -29,8 +29,9 @@ void onChoice(long long waitReturnedQpc, double waitFrameMs);
 void onTaken(std::uint64_t value);
 void onCopied(std::uint64_t value);
 
-// XR worker, right before xrEndFrame.
-void beforeEndFrame();
+// XR worker, right before xrEndFrame; the head pose it submits was located at `poseLocatedQpc`
+// (QueryPerformanceCounter; 0: none).
+void beforeEndFrame(long long poseLocatedQpc);
 
 // XR worker, every 10 s with the rates line: the `latency:` lines.
 void logSummary();

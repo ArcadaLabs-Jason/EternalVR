@@ -17,11 +17,11 @@ namespace EternalVR.Launcher.Core.Settings
         // Play: controls
         AimWith, RevenantAimWith, MeleeAimWith, EquipmentAimWith, WeaponHand, Arms, WeaponHandAngle, OffHandAngle, MoveToward, XButton, DossierMapSticks, WeaponWheel, ThumbRestWheel, ThumbRestPicks, WeaponDirections, ThumbRestFaceTouch, ThumbRestSlowdown, HoldTime, AimSteadiness, AimDot, AimDotSize, GameCrosshair, Vibration, Bhaptics, ButtonLayout,
         // Play: picture
-        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, EdgeMargin, Foveation, FramePacing, DepthLayer, TextureStreaming, ParallelEyes, CpuSaver,
+        Resolution, EachEye, AntiAliasing, Sharpening, ScreenReflections, EdgeMargin, Foveation, FramePacing, LateWait, DepthLayer, TextureStreaming, ParallelEyes, CpuSaver,
         // Play: DLSS
         DlssQuality, DlssVersion, DlssPreset, DlssInHeadset,
         // Advanced
-        VrMode, AlternateEyes, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms, Cutscene3D,
+        VrMode, AlternateEyes, SharedSun, WorldSize, EyeDistance, DesktopWindow, DesktopMonitor, DesktopSize, DesktopCrop, CutsceneView, CutsceneShape, CutsceneArms, Cutscene3D,
         HudDistance, HudSize, HudHeight, HudFront, HudWrist, HudWeapon,
         MotionControllers, ShotsFrom, MenuLaser, TwoHandAim, GameFolder, Runtime, AdapterSteer, PerformanceLog, PerformanceOverlay, ExtraArguments, TestBuilds,
     }
@@ -55,6 +55,7 @@ namespace EternalVR.Launcher.Core.Settings
         public const string NotWithParallelEyes = "Not with Parallel Eye Rendering (Play tab).";
         public const string NeedsParallelEyesBuild = "Not on this game version yet.";
         public const string NeedsNewerDlss = "Only with a newer DLSS than the game's (Version).";
+        public const string NeedsMatchedPacing = "Only with Frame pacing Matched to the headset.";
         public const string NotWithAutoEyes =
             "Not with Alternate eyes on Auto (Advanced tab): Auto decides by how fast the game runs, which this holds to the headset's rate.";
 
@@ -177,6 +178,19 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.FramePacing:
                     if (!stereo) return NeedsStereo;
                     return s.AlternateEyes == AlternateEyesMode.Auto && !parallel ? NotWithAutoEyes : null;
+                case Setting.LateWait:
+                    // The layer waits only while it holds the game to the headset (src/vkcore/frame_pacing.cpp); measured
+                    // with the standard renderer's eye pairs, both eyes each game frame (docs/rig-findings/frame-tails.md).
+                    if (!stereo) return NeedsStereo;
+                    if (parallel) return NotWithParallelEyes;
+                    if (s.AlternateEyes != AlternateEyesMode.Off) return NotWithAlternateEyes;
+                    return s.Pacing == FramePacing.Headset ? null : NeedsMatchedPacing;
+                case Setting.SharedSun:
+                    // Route S's eye pairs only (src/vkcore/shared_sun_hooks.hpp): the layer installs it neither with
+                    // Parallel Eye Rendering, whose shadow-cache hooks patch the same code, nor with Alternate eyes.
+                    if (!stereo) return NeedsStereo;
+                    if (parallel) return NotWithParallelEyes;
+                    return s.AlternateEyes == AlternateEyesMode.Off ? null : NotWithAlternateEyes;
                 case Setting.DepthLayer:
                     // Each eye's depth goes with the standard renderer's eye pairs only (src/vkcore/presenter_depth.hpp);
                     // Alternate eyes' images (on or auto) pair eyes of different presents and carry none.

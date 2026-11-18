@@ -19,6 +19,7 @@
 #include "ui_layer/gui_target.hpp"
 #include "ui_layer/ui_settings.hpp"
 #include "vkcore/controllers.hpp"
+#include "vkcore/copy_gpu_timer.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/player_aim.hpp"
 #include "vkcore/presenter_cutscene.hpp"
@@ -254,6 +255,7 @@ struct XrPresenter::Impl final : ViewHookSink,
     // ------------------------------------
 
     DepthLayer depthLayer{settings.depthLayer, settings.unitsPerMetre};
+    CopyGpuTimer copyGpu; // ETERNALVR_TEST_COPY_GPU: the interop copies' GPU time (copy_gpu_timer.hpp)
     // Worker, while the ring is built (no present copies): whether the depth layer runs, its shared buffers.
     void createDepthBuffers();
 

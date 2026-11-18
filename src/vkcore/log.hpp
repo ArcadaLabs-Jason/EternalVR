@@ -66,6 +66,13 @@ void logLoaderVersion();
 // setting's default; hook_guard.hpp).
 bool readEnv(const wchar_t* name, std::wstring& value) noexcept;
 
+// ETERNALVR_TEST_SLOW_CALLS=1 (a rig test): a log line that took over 2 ms to write and a camera hook call
+// over 4 ms (view_hook.cpp) each get a line, at most kSlowCallLines of each.
+bool slowCallsLogged();
+inline constexpr int kSlowCallLines = 200;
+// A QueryPerformanceCounter difference in milliseconds.
+double qpcMs(long long ticks);
+
 } // namespace evr::vkcore
 
 #define EVR_LOG(...) ::evr::vkcore::logf(__VA_ARGS__)

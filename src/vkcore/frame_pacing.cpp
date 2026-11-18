@@ -1,13 +1,11 @@
 #include "vkcore/frame_pacing.hpp"
 
-#include "features/pacing/late_image.hpp"
 #include "features/pacing/pace_policy.hpp"
-#include "features/pacing/slot_choice.hpp"
 #include "features/pacing/unseen_hold.hpp"
 #include "stereo_seq/adaptive_eyes.hpp"
 #include "vkcore/held_wait.hpp"
+#include "vkcore/late_wait.hpp"
 #include "vkcore/log.hpp"
-#include "vkcore/new_frame_wait.hpp"
 #include "vkcore/present_latency.hpp"
 #include "vkcore/stall_watch.hpp"
 #include "vkcore/view_slots.hpp"
@@ -15,14 +13,12 @@
 
 #include <windows.h>
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <mutex>
 #include <string>
-#include <utility>
 
 namespace evr::vkcore::frame_pacing {
 
@@ -40,18 +36,6 @@ std::string narrowEnv(const wchar_t* name) {
         }
     }
     return narrow;
-}
-
-// The seconds from a QueryPerformanceCounter reading to now.
-double qpcSecondsSince(long long qpc) {
-    static const double frequency = [] {
-        LARGE_INTEGER f;
-        QueryPerformanceFrequency(&f);
-        return static_cast<double>(f.QuadPart);
-    }();
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return static_cast<double>(now.QuadPart - qpc) / frequency;
 }
 
 double secondsNow() {
@@ -92,22 +76,13 @@ std::atomic<std::uint8_t> g_holdLevel{0};  // pacing::HoldLevel: setBackgroundHo
 std::atomic<std::uint64_t> g_handOvers{0}; // images handed to the XR worker (publishSlot)
 std::atomic<std::uint64_t> g_seen{0};      // the hand-overs the present hook has looked at
 std::atomic<double> g_lastHandOver{0.0};   // when the last image was handed over (secondsNow)
-std::atomic<bool> g_lateWait{false};       // held: a headset frame waits for a late image (late_image.hpp)
 std::atomic<double> g_lastRelease{0.0};    // the present hook of the last hand-over returned (secondsNow)
 std::atomic<bool> g_holdGate{false};       // HoldSwitch's latency gate (ETERNALVR_TEST_HOLD_GATE=1); set once
 std::atomic<double> g_lowEnded{0.0};       // when the last low hold ended, until the line after it (0: none)
 std::atomic<std::uint64_t> g_lowEndedHandOvers{0};
 
-// The XR worker's alone: the hand-overs at the last headset frame, and the late-image waits since the last
-// 10 s line.
+// The XR worker's alone: the hand-overs at the last headset frame.
 std::uint64_t g_handOversAtFrame = 0;
-struct LateWaits {
-    std::uint64_t got = 0;    // the image came
-    std::uint64_t ranOut = 0; // it did not: the previous image again
-    double seconds = 0.0;
-    double longest = 0.0;
-};
-LateWaits g_lateWaits;
 
 pacing::HoldLevel holdLevel() {
     return static_cast<pacing::HoldLevel>(g_holdLevel.load(std::memory_order_acquire));
@@ -228,16 +203,15 @@ bool configure() {
                     "(ETERNALVR_TEST_PACE_REPEAT=1, a rig test)");
         }
         g_newFrames.store(mode == pacing::PaceMode::NewFrames, std::memory_order_release);
-        // ETERNALVR_TEST_LATE_WAIT=1 (a rig A/B): held, a headset frame waits for the image the game is still
-        // drawing (late_image.hpp).
-        const bool lateWait =
-            mode == pacing::PaceMode::Headset && narrowEnv(L"ETERNALVR_TEST_LATE_WAIT") == "1";
-        if (lateWait) {
-            EVR_LOG("pace: held, a headset frame that begins while the game is still drawing its image waits "
-                    "for it until %.1f ms before the period ends (ETERNALVR_TEST_LATE_WAIT=1, a rig test)",
-                    (pacing::kSubmitMarginSeconds + pacing::kLateImageGpuSeconds) * 1000.0);
-        }
-        g_lateWait.store(lateWait, std::memory_order_relaxed);
+        // ETERNALVR_PACE_LATE_WAIT=1 (opt-in, T-235): held, a frame waits for a late image (late_wait.hpp);
+        // both eyes each game frame only, as measured.
+        pacing::LateWaitAsk late;
+        late.asked = narrowEnv(L"ETERNALVR_PACE_LATE_WAIT") == "1";
+        late.headset = mode == pacing::PaceMode::Headset;
+        late.parallelEyes = parallelEyesChangedEngine();
+        late.alternateEyes = stereo_seq::alternateMode(narrowEnv(L"ETERNALVR_ALTERNATE_EYES")) !=
+                             stereo_seq::AlternateMode::Off;
+        late_wait::configure(late, narrowEnv(L"ETERNALVR_TEST_LATE_WAIT_GPU_MS"));
         // ETERNALVR_TEST_HOLD_GATE=1 (a rig A/B): the hold switch lets a game go only when most of its images
         // took longer than a display period from their release (HoldSwitch::noteGameTime).
         const bool holdGate =
@@ -264,7 +238,7 @@ bool newFramesOnly() {
 }
 
 void onHandOver() {
-    if (g_holdGate.load(std::memory_order_relaxed) || g_lateWait.load(std::memory_order_relaxed)) {
+    if (g_holdGate.load(std::memory_order_relaxed) || late_wait::on()) {
         g_lastHandOver.store(secondsNow(), std::memory_order_relaxed);
     }
     g_handOvers.fetch_add(1, std::memory_order_release);
@@ -273,41 +247,17 @@ void onHandOver() {
 std::uint64_t awaitLateImage(const std::atomic<std::uint64_t>& latest,
                              long long frameStartQpc,
                              const std::atomic<bool>& stop) {
-    if (!g_lateWait.load(std::memory_order_relaxed) || !g_on.load(std::memory_order_acquire)) {
+    if (!late_wait::on() || !g_on.load(std::memory_order_acquire)) {
         return latest.load();
     }
-    const double sinceFrameStartSeconds = qpcSecondsSince(frameStartQpc);
-    pacing::LateImageOffer offer;
-    offer.held = true;
-    offer.newImage = g_handOvers.load(std::memory_order_acquire) != g_handOversAtFrame;
-    const double start = secondsNow();
-    offer.sinceHandOverSeconds = start - g_lastHandOver.load(std::memory_order_relaxed);
-    offer.sinceFrameStartSeconds = sinceFrameStartSeconds;
+    late_wait::Frame frame;
+    frame.newImage = g_handOvers.load(std::memory_order_acquire) != g_handOversAtFrame;
+    frame.sinceHandOverSeconds = secondsNow() - g_lastHandOver.load(std::memory_order_relaxed);
     {
         std::lock_guard lock(g_state.mutex);
-        offer.periodSeconds = g_state.loop.periodSeconds;
+        frame.periodSeconds = g_state.loop.periodSeconds;
     }
-    const double wait = pacing::lateImageWaitSeconds(offer);
-    if (wait <= 0.0) {
-        return latest.load();
-    }
-    const double deadline = start + wait;
-    bool got = false;
-    while (!stop.load(std::memory_order_acquire)) {
-        if (g_handOvers.load(std::memory_order_acquire) != g_handOversAtFrame) {
-            got = true;
-            break;
-        }
-        const double left = deadline - secondsNow();
-        if (left <= 0.0) {
-            break;
-        }
-        new_frame_wait::waitPublished(left);
-    }
-    const double took = secondsNow() - start;
-    ++(got ? g_lateWaits.got : g_lateWaits.ranOut);
-    g_lateWaits.seconds += took;
-    g_lateWaits.longest = std::max(g_lateWaits.longest, took);
+    late_wait::await(frame, frameStartQpc, g_handOvers, g_handOversAtFrame, stop);
     return latest.load();
 }
 
@@ -373,8 +323,8 @@ void onHeadsetFrame(std::int64_t periodNs, long long frameStartQpc, double waitF
     }
 }
 
-void beforeEndFrame() {
-    present_latency::beforeEndFrame();
+void beforeEndFrame(long long poseLocatedQpc) {
+    present_latency::beforeEndFrame(poseLocatedQpc);
 }
 
 void noteShown(std::uint64_t seq, std::int64_t lateNs) {
@@ -575,14 +525,7 @@ void logSummary() {
         name, held, static_cast<unsigned long long>(c.frames), static_cast<unsigned long long>(c.none),
         static_cast<unsigned long long>(c.one), static_cast<unsigned long long>(c.several),
         static_cast<unsigned long long>(c.notShown), perFrame, lateMs);
-    const LateWaits late = std::exchange(g_lateWaits, LateWaits{});
-    if (late.got + late.ranOut > 0) {
-        EVR_LOG("pace: last 10 s: %llu headset frame(s) waited for a late image: %llu got it, %llu ran out "
-                "(the previous image again); average %.2f ms, longest %.2f ms",
-                static_cast<unsigned long long>(late.got + late.ranOut),
-                static_cast<unsigned long long>(late.got), static_cast<unsigned long long>(late.ranOut),
-                late.seconds / static_cast<double>(late.got + late.ranOut) * 1000.0, late.longest * 1000.0);
-    }
+    late_wait::logSummary();
     if (!g_on.load(std::memory_order_relaxed)) {
         return;
     }

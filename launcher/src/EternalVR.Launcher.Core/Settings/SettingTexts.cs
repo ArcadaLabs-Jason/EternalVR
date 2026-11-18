@@ -253,6 +253,16 @@ namespace EternalVR.Launcher.Core.Settings
                 + "itself, as for a native game below your refresh rate. Above your refresh rate the game is not held, so it "
                 + "draws frames your headset never shows. Matched to the headset by default.",
                 "As fast as the game runs", "Matched to the headset (default)", "New game frames only (experimental)"),
+            [Setting.LateWait] = new Text("Wait for a late frame (testing)",
+                "While the game is matched to your headset, a game frame now and then takes a little longer than one of your "
+                + "headset's frames and misses it, so your headset shows the frame before it again (a small stutter). Ticked, "
+                + "your headset's frame waits for the late one, for part of its own time, and shows it on time. On the test rig "
+                + "this cut the frames shown twice by about three quarters in combat; your headset's frame is handed over a "
+                + "few milliseconds later when it waits. Where the graphics card is the limit (large sizes) the late frame still "
+                + "needs more of the graphics card's time than is left, so it mostly steps aside by itself and helps little "
+                + "there. Only with Frame pacing Matched to the headset, in stereo, without "
+                + "Alternate eyes or Parallel Eye Rendering. Off by default. For testing: not yet tried in a headset; a stutter "
+                + "or a headset that drops frames while it is ticked is what to look for."),
             [Setting.DepthLayer] = new Text("Depth for headset smoothing (experimental)",
                 "Hands your headset each eye's depth along with its picture. When the frame rate drops, your headset's own "
                 + "smoothing (Meta's ASW, Virtual Desktop's SSW, SteamVR's Motion Smoothing on headsets whose driver takes depth) "
@@ -286,6 +296,13 @@ namespace EternalVR.Launcher.Core.Settings
                 + "motion can look doubled or smeared, and some people find it uncomfortable. Auto does this only when "
                 + "your processor cannot keep up with your headset, and draws both eyes again once it can.",
                 "Off", "Auto (when needed)", "On (for slower processors)"),
+            [Setting.SharedSun] = new Text("Shared sun shadows (testing)",
+                "The right eye uses the sun's shadows the left eye drew in the same game frame instead of drawing them "
+                + "again. The sun's shadows are placed around you, not fitted to each eye's view, so both eyes would draw "
+                + "the same ones; on the test rig this gave about 5% more frames per second in a sunlit arena when the "
+                + "processor sets the pace, and nothing when the graphics card does. Only in stereo, without Parallel Eye "
+                + "Rendering or Alternate eyes. Off by default. For testing: not yet tried in a headset; a shadow that "
+                + "looks different in one eye is what to look for."),
             [Setting.WorldSize] = new Text("World size",
                 "How big the world feels around you. 1.00 is the game's own scale."),
             [Setting.EyeDistance] = new Text("Eye distance",

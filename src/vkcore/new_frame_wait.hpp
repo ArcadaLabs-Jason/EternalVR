@@ -22,9 +22,10 @@ void onPublished();
 // would begin every refresh), after the wait limit for `periodSeconds`, or when `stop` is set.
 void wait(const std::atomic<std::uint64_t>& latest, double periodSeconds, const std::atomic<bool>& stop);
 
-// XR worker: waits at most `seconds` for a hand-over (onPublished), or returns at once for one not waited for
-// yet; the caller checks what it waits for again.
-void waitPublished(double seconds);
+// XR worker: waits at most `seconds` (rounded down to the millisecond) for a hand-over (onPublished), or
+// returns at once for one not waited for yet; the caller checks what it waits for again. False when there is
+// no event to wait on (the caller stops waiting).
+bool waitPublished(double seconds);
 
 // XR worker, every 10 s with the rates line: the waits of the last 10 s (nothing when none ran).
 void logSummary();

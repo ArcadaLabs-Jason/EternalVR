@@ -12,6 +12,7 @@ evr_add_module(evr_pacing
         frame_clock_watch.cpp
         held_spin.cpp
         late_image.cpp
+        late_wait_gate.cpp
         pace_policy.cpp
         prediction_period.cpp
         present_latency.cpp

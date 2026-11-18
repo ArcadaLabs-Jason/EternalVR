@@ -173,6 +173,7 @@ void XrPresenter::Impl::afterFrame(const XrFrameState& state) {
     logSizeStats();
     vignette.logStats(settings.ui.vignette);
     depthLayer.logStats();
+    copyGpu.logSummary();
     if (frameLog) {
         std::fflush(frameLog);
     }

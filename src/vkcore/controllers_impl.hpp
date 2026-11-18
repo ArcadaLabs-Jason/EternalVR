@@ -228,12 +228,11 @@ struct State {
     std::mutex roomMutex;
     Pose roomFromLocal;
 
-    // Scripted input (ETERNALVR_TEST_INPUT): re-read by the camera hook when the file changes, read by the
-    // worker's sync, the camera hook and the mapper.
+    // Scripted input (ETERNALVR_TEST_INPUT): re-read by its own thread when the file changes
+    // (refreshTestInput), read by the worker's sync, the camera hook and the mapper.
     std::mutex testMutex;
     std::optional<input::TestInput> test;
-    ULONGLONG testFileTime = 0;   // refreshTestInput only (under its own lock)
-    std::uint64_t testChecks = 0; // refreshTestInput only
+    ULONGLONG testFileTime = 0; // the reader thread's only
 
     // The weapon hand's aim smoothing (ETERNALVR_AIM_SMOOTHING; none when 0): created by settingsOnce,
     // then used by the camera hook only (beginGameView).
@@ -482,8 +481,8 @@ std::optional<std::string> readTextFile(const std::string& utf8Path);
 // not a folder.
 std::optional<std::vector<std::string>> folderFileNames(const std::string& utf8Path);
 
-// Camera hook and XR worker: re-reads the ETERNALVR_TEST_INPUT file when it has changed (cheap; call every
-// frame).
+// Camera hook and XR worker: with an ETERNALVR_TEST_INPUT file, starts the thread that re-reads it when it
+// has changed, at the first call (cheap; call every frame).
 void refreshTestInput();
 // The scripted input in force, if any (any thread).
 std::optional<input::TestInput> testInput();

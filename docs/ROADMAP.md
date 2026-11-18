@@ -2,7 +2,7 @@
 
 ## At a glance
 
-Status as of 2026-11-13 (v0.1.93). The order of the work left is under "Plan from v0.1.49".
+Status as of 2026-11-15 (v0.1.95). The order of the work left is under "Plan from v0.1.49".
 
 | Milestone | What a player sees or plays | Needs a person? | Status |
 |---|---|---|---|
@@ -17,7 +17,7 @@ Status as of 2026-11-13 (v0.1.93). The order of the work left is under "Plan fro
 | M7 Game states and comfort | Glory kills and cutscenes handled; the whole game played through | Plays (seated campaign pass) | In progress: cutscenes on a screen (in 3D by default since v0.1.83), around the player (option) or skipped, comfort effects off, a comfort vignette (option), look-at triggers that test the head, the Cultist Base Revenant piloted, glory kills with four views (follow the camera, the default; steady; fade out; flat screen); climbing that follows the head (v0.1.12); in v0.1.87, not yet seen in a headset: the steady glory kill view holds its place, the flat-screen kill plays in 3D and cutscene subtitles sit in front of the screen; in v0.1.88, not yet seen in a headset: the piloted Revenant's cannons and arms stay where the flat game shows them; pickup animations with a Still view or Camera moves choice (v0.1.92) and pickups under head aim and with a gamepad (v0.1.93), not yet seen in a headset |
 | M8 Profiles, bindings, launcher | Per-player profiles and a bindings editor in the launcher | Tries the launcher | In progress: launcher with Play and Advanced tabs, VR settings profiles (Recommended plus the player's changes, marked in the window), each with its own controls, the controls editor, preflight, update alerts with in-place updates, an Export report for bug reports, and a start watchdog that tells a slow start from one that stalls (v0.1.50); the log notes a crash (v0.1.84) or a freeze and carries CPU and GPU timing (v0.1.87); test builds offered from the launcher as an option (v0.1.88); a warning after a session that ran over the card's video memory budget (v0.1.89); an error inside the mod stays inside the mod and the log says what turned off, a stricter multiplayer guard, and the flat game gets its screen images back when VR stops mid-session (v0.1.91, not yet seen in a headset) |
 | M9 Performance | DLSS per eye, foveation, 90 Hz | Wears the headset | In progress: DLSS per eye with NVIDIA's newest DLL (310.9.16 since v0.1.87), downloaded on request (experimental), Sharpening, CPU Saver and Alternate eyes; fixed foveated rendering on NVIDIA RTX with the menus and HUD at full rate (experimental, off by default, since v0.1.6), gentler toward the edges (v0.1.82), and on AMD and Intel through the KHR path since v0.1.56 (a contributor's change; a player's RX 6750 XT runs it, Intel Arc not tried yet); frame pacing to the headset (on by default), with New game frames only as an experimental choice (v0.1.87), each new frame shown once when the PC falls below the headset's rate (v0.1.89) and the game drawing 8 frames a second while nobody wears the headset (v0.1.89, not yet seen in a headset); each eye's depth handed to the headset's runtime for its smoothing, an experimental option (v0.1.93, not yet seen in a headset); Parallel Eye Rendering as an opt-in, highly experimental option (v0.1.40) that has not met its own bar yet |
-| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.93; v0.2.0 is the first beta |
+| M10 Beta and release | A public release | Code signing choice; going public | In progress: the repository is public; alpha prereleases v0.1.0 to v0.1.95, v0.1.95 the beta candidate (every beta check passed on the test PC); v0.2.0 is the first beta |
 | M4.5 Release track (parallel from M4) | Builds testers can run | Tester recruitment (Flat2VR Discord); a 30-minute headset session; a SteamVR run on the Quest 3 | Done |
 
 The Status column says what has shipped. The boxes in the milestones below are ticked only when a
@@ -786,8 +786,8 @@ of one game frame, their render work at the same time) ships as an opt-in, highl
 testers, off by default: through `Launch-Parallel-Eye-Test.cmd` in v0.1.38 and v0.1.39, on the Play tab
 since v0.1.40; Steam build only, tried on NVIDIA only. It has not met its own bar (Stretch goals): the
 known issues list effects that still differ between the eyes, stutter and a higher video memory need, and
-on the test PC it drew about 12% more frames only when the processor was the limit, and none more at
-90 Hz with ray tracing on (`docs/release/README-ALPHA.md`).
+on the test PC it draws 9 to 27% more frames with ray tracing off (2026-11-15, `docs/VR_STEREO.md`
+"Parallel Eye Rendering"), and none more at 90 Hz with ray tracing on (`docs/release/README-ALPHA.md`).
 
 Required for v1
 - [ ] Per-eye DLSS 4.x from the game's NGX call, with a 310.x DLL (the game's own 2.3.0 gives DLSS 2,
@@ -842,7 +842,14 @@ Required for v1
       with Balanced fixed foveation alone: p99 frame time against the 11.1 ms period and missed frames; Route S's stereo overhead against the mono reference (the multiview
       budgets went with T-131); the interop copies against their budget of 1.0 ms GPU per
       frame at Quest 3 size (T-075); the longest shader-compile hitch after the first run (target 50 ms);
-      each record carries the HAGS state (T-085)
+      each record carries the HAGS state (T-085). Measured on the test PC (2026-11-16,
+      `docs/rig-findings/perf-targets.md`) at 2048 x 2208 per eye, the simulator's largest (67% of Quest 3's
+      pixels), on an RTX 3080 Ti: p99 within the period with Balanced foveation on the hub only (1.0-3.5% of
+      the periods missed elsewhere), never with DLSS Quality (preset K gave the GPU nothing back; preset E did,
+      27-31%); the GPU overhead over the mono reference 1.14-1.40 times (1.17-1.51 at the auto size; over
+      T-075's 30% outdoors), the CPU's 1.5-1.7 times (within twice); the copies 0.3 ms a frame; the longest
+      pipeline creation in play 0.4 ms; HAGS on. Still open: the targets at Quest 3 size itself, on the RTX 4080
+      and in a headset's runtime
 
 v1 if time allows
 - [ ] 120 Hz at Quest 3 size with DLSS Quality, fixed foveation and about 0.85 render scale (R11
@@ -870,7 +877,7 @@ v1 if time allows
 
 ## M10: Beta and public release
 
-Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.93 (2026-09-28 to 2026-11-13) and
+Status: the repository is public, with alpha prereleases v0.1.0 to v0.1.95 (2026-09-28 to 2026-11-15) and
 players reporting through GitHub issues.
 
 **Beta (owner's decision, 2026-10-13):** v0.2.0 is the first beta. It does not wait for every fault to be

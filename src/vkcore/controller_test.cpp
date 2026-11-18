@@ -10,6 +10,7 @@
 #include <iterator>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -18,8 +19,8 @@ namespace evr::vkcore::controllers {
 namespace {
 
 constexpr const char* kTag = "controllers";
-// How often the file's write time is looked at (game frames).
-constexpr std::uint64_t kTestCheckFrames = 10;
+// How often the reader thread looks at the file's write time.
+constexpr DWORD kTestCheckMs = 50;
 
 std::wstring widen(const std::string& text) {
     const int size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0);
@@ -69,16 +70,11 @@ std::optional<std::vector<std::string>> folderFileNames(const std::string& utf8P
     return names;
 }
 
-void refreshTestInput() {
-    // The camera hook and the XR worker both call this (menus run without the game view).
-    static std::mutex refreshMutex;
+namespace {
+
+// The reader thread's: the file again when its write time changed.
+void checkTestInput(State& s, const std::string& path) {
     const LONGLONG start = nowQpc();
-    std::lock_guard refreshLock(refreshMutex);
-    State& s = state();
-    const std::string& path = settings().testInputPath;
-    if (path.empty() || s.testChecks++ % kTestCheckFrames != 0) {
-        return;
-    }
     WIN32_FILE_ATTRIBUTE_DATA attributes{};
     if (!GetFileAttributesExW(widen(path).c_str(), GetFileExInfoStandard, &attributes)) {
         if (s.testFileTime != 0) {
@@ -103,13 +99,56 @@ void refreshTestInput() {
     for (const std::string& issue : parsed.issues) {
         EVR_LOG("%s: test input %s", kTag, issue.c_str());
     }
-    // How long this call held its thread (the camera hook's or the XR worker's), the other caller's turn
-    // included, for the rig.
+    // How long the reader thread took for it (a freshly written file can take tens of ms to open).
     EVR_LOG("%s: test input '%s' read (%zu issue(s)) in %.1f ms", kTag, path.c_str(), parsed.issues.size(),
             secondsSince(start) * 1000.0);
     std::lock_guard lock(s.testMutex);
     input::startSweeps(parsed, s.test ? &*s.test : nullptr, qpcToSeconds(nowQpc()));
     s.test = std::move(parsed);
+}
+
+void testInputReader(const std::string& path) {
+    using SetDescriptionFn = HRESULT(WINAPI*)(HANDLE, PCWSTR);
+    if (const auto set = reinterpret_cast<SetDescriptionFn>(
+            GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription"))) {
+        set(GetCurrentThread(), L"EternalVR test input");
+    }
+    bool failedBefore = false;
+    for (;;) {
+        try {
+            checkTestInput(state(), path);
+        } catch (...) {
+            // No memory for the file or its parse: tried again at the next check, logged once.
+            if (!std::exchange(failedBefore, true)) {
+                EVR_LOG("%s: test input '%s' could not be read (no memory); trying again", kTag,
+                        path.c_str());
+            }
+        }
+        Sleep(kTestCheckMs);
+    }
+}
+
+} // namespace
+
+void refreshTestInput() {
+    // The camera hook and the XR worker both call this (menus run without the game view). The first call
+    // reads the file itself, so the script is in force from the first frame, then starts the thread that
+    // reads it from then on: read in either caller, opening a freshly written file stalled the game's frame
+    // or the headset's for up to 99 ms (docs/rig-findings/frame-tails.md).
+    static std::once_flag started;
+    const std::string& path = settings().testInputPath;
+    if (path.empty()) {
+        return;
+    }
+    std::call_once(started, [&path] {
+        try {
+            checkTestInput(state(), path); // before the thread: it owns testFileTime from then on
+            std::thread(testInputReader, path).detach();
+        } catch (...) {
+            EVR_LOG("%s: test input '%s' not read (no memory or no thread for it); the runtime's input only",
+                    kTag, path.c_str());
+        }
+    });
 }
 
 bool isPlayerSafe(const std::byte* object) {

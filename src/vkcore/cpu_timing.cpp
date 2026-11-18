@@ -18,6 +18,8 @@
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
+#include <cwchar>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -50,6 +52,15 @@ Totals& g_totals = *new Totals;
 std::atomic<DWORD> g_frontendThread{0};
 std::atomic<DWORD> g_presentThread{0};
 
+// ETERNALVR_TEST_CPU_CSV=1 (a rig test): every tick to eternalvr-cpu-<pid>.csv in the log folder, written by
+// the reporting thread with each 10 s window; `startS` is the tick's start in seconds on the performance
+// counter, the clock of the release-to-present table (present_latency.cpp).
+struct CsvTick {
+    double startS = 0.0;
+    gt::CpuTick tick;
+};
+bool g_csvWanted = false; // set once in start()
+
 // Frontend state, touched only by the frontend (one frame-end job at a time).
 struct Frontend {
     bool started = false;
@@ -65,6 +76,7 @@ struct Frontend {
     gt::CpuSplitWindow window;
     std::int64_t windowStart = 0;
     std::uint64_t windowTicks = 0;
+    std::vector<CsvTick> csv; // ETERNALVR_TEST_CPU_CSV only
 };
 Frontend& g_frontend = *new Frontend;
 
@@ -76,6 +88,7 @@ struct Window {
     std::uint64_t ticks = 0;
     std::uint64_t threadSwitches = 0;
     std::uint64_t probes = 0;
+    std::vector<CsvTick> csv;
 };
 struct Reporter {
     std::mutex mutex;
@@ -86,6 +99,8 @@ struct Reporter {
     std::vector<gt::ThreadCycles> threads;
     std::int64_t threadsAt = 0;
     double lastMs = 0.0; // the last summary's own cost (on the reporting thread)
+    bool csvTried = false;
+    std::FILE* csv = nullptr;
 };
 Reporter& g_reporter = *new Reporter;
 
@@ -150,6 +165,46 @@ void start() {
     g_probeUs = 1000.0 * ticksToMs(nowTicks() - begin) / kProbeCalibration * 2.0;
     EVR_LOG("cpu: CPU timing on: one stage timer costs about %.2f us (%llu)", g_probeUs,
             static_cast<unsigned long long>(sink & 1));
+    std::wstring csv;
+    g_csvWanted = readEnv(L"ETERNALVR_TEST_CPU_CSV", csv) && csv == L"1";
+    if (g_csvWanted) {
+        EVR_LOG(
+            "cpu: every tick to eternalvr-cpu-<pid>.csv in the log folder (ETERNALVR_TEST_CPU_CSV=1, a rig "
+            "test)");
+    }
+}
+
+// The reporting thread's: the window's ticks to the table (ETERNALVR_TEST_CPU_CSV).
+void writeCsv(Reporter& rep, const std::vector<CsvTick>& ticks) {
+    if (!rep.csvTried) {
+        rep.csvTried = true;
+        const std::wstring dir = logDirectory();
+        if (!dir.empty()) {
+            wchar_t name[96];
+            swprintf_s(name, L"\\eternalvr-cpu-%lu.csv", GetCurrentProcessId());
+            rep.csv = _wfsopen((dir + name).c_str(), L"w", _SH_DENYWR);
+        }
+        if (rep.csv) {
+            std::fputs("start_s,period_ms,frontend_cpu_ms,process_cpu_ms", rep.csv);
+            for (const char* stage : {"frame_end_left", "right_eye", "drain", "submit", "fence_wait",
+                                      "semaphore_wait", "present"}) {
+                std::fprintf(rep.csv, ",%s_wall_ms,%s_cpu_ms,%s_calls", stage, stage, stage);
+            }
+            std::fputc('\n', rep.csv);
+        }
+    }
+    if (!rep.csv) {
+        return;
+    }
+    for (const CsvTick& t : ticks) {
+        std::fprintf(rep.csv, "%.6f,%.3f,%.3f,%.3f", t.startS, t.tick.periodMs, t.tick.frontendCpuMs,
+                     t.tick.processCpuMs);
+        for (std::size_t i = 0; i < kCpuStages; ++i) {
+            std::fprintf(rep.csv, ",%.3f,%.3f,%u", t.tick.wallMs[i], t.tick.cpuMs[i], t.tick.calls[i]);
+        }
+        std::fputc('\n', rep.csv);
+    }
+    std::fflush(rep.csv);
 }
 
 void add(CpuStage stage, std::int64_t ticks, std::uint64_t cycles) {
@@ -269,6 +324,9 @@ void logWindow(Reporter& rep, const Window& w, std::uint64_t dropped) {
             threadMs > 0.0 ? total * ticks / threadMs : 0.0, list.empty() ? "none" : list.c_str());
     rep.threads = std::move(threads);
     rep.threadsAt = at;
+    if (!w.csv.empty()) {
+        writeCsv(rep, w.csv);
+    }
     rep.lastMs = ticksToMs(nowTicks() - began);
 }
 
@@ -301,6 +359,7 @@ void handOff(Frontend& f, std::int64_t now) {
     w->ms = ticksToMs(now - f.windowStart);
     w->ticks = f.windowTicks;
     w->threadSwitches = f.threadSwitches;
+    w->csv = std::exchange(f.csv, {});
     const std::uint64_t probes = g_totals.probes.load(std::memory_order_relaxed);
     w->probes = probes - f.probes;
     {
@@ -388,6 +447,9 @@ void frontendTick() {
             ++f.threadSwitches; // the frame-end job ran on another thread: its CPU time is unknown
         }
         f.window.add(tick);
+        if (g_csvWanted) {
+            f.csv.push_back({ticksToMs(f.tickStart) / 1000.0, tick});
+        }
     } else {
         std::thread(reporterMain).detach(); // first: with no thread, nothing starts and the next tick retries
         f.started = true;

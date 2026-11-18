@@ -3,6 +3,7 @@
 # every platform.
 evr_add_module(evr_gpu_timing
     SOURCES
+        copy_window.cpp
         cpu_split.cpp
         frame_gpu.cpp
         present_hang.cpp

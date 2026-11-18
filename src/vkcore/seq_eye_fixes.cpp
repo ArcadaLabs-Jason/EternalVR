@@ -8,6 +8,8 @@
 #include "vkcore/moved_flag_hooks.hpp"
 #include "vkcore/object_prev_hooks.hpp"
 #include "vkcore/screen_space_view_hooks.hpp"
+#include "vkcore/seq_hooks.hpp"
+#include "vkcore/shared_sun_hooks.hpp"
 #include "vkcore/ssr_noise_hooks.hpp"
 #include "vkcore/vis_gate_hooks.hpp"
 #include "vkcore/world_gui_hooks.hpp"
@@ -26,6 +28,11 @@ void installSeqEyeFixes() {
     installSsrNoiseHooks();       // the screen-space reflections' noise index
     installScreenSpaceViewHook(); // and their march along each eye's own screen
     installDecalFrustumHook();    // decals from the frustum around the eye pair
+    // Eye R on the sun cascades eye L rendered (ETERNALVR_SHARED_SUN, off unless asked for). Alternate eyes
+    // render one eye per tick: no eye L render in the tick to take cascade 0 from.
+    if (!seqAlternateEyes()) {
+        installSharedSunHooks();
+    }
 }
 
 } // namespace evr::vkcore

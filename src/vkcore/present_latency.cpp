@@ -107,7 +107,7 @@ void writeCsv(State& s, const std::vector<pacing::LatencyRecord>& records) {
             std::fputs(
                 "log_s,value,released,held,held_choice,first_present,hand_over,present_returned,deadline,"
                 "frames_at_release,frames_at_hand_over,shown_frame,wait_called,wait_returned,chosen,"
-                "taken,copied,end_called\n",
+                "taken,copied,end_called,pose_located\n",
                 s.csv);
         }
     }
@@ -118,13 +118,13 @@ void writeCsv(State& s, const std::vector<pacing::LatencyRecord>& records) {
     for (const pacing::LatencyRecord& r : records) {
         std::fprintf(
             s.csv,
-            "%.3f,%llu,%.6f,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+            "%.3f,%llu,%.6f,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%llu,%llu,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
             logged, static_cast<unsigned long long>(r.value), cell(r.released), r.held ? 1 : 0,
             cell(r.heldChoice), cell(r.firstPresent), cell(r.handOver), cell(r.presentReturned),
             cell(r.deadline), static_cast<unsigned long long>(r.framesAtRelease),
             static_cast<unsigned long long>(r.framesAtHandOver),
             static_cast<unsigned long long>(r.shownFrame), cell(r.waitCalled), cell(r.waitReturned),
-            cell(r.chosen), cell(r.taken), cell(r.copied), cell(r.endCalled));
+            cell(r.chosen), cell(r.taken), cell(r.copied), cell(r.endCalled), cell(r.poseLocated));
     }
     std::fflush(s.csv);
 }
@@ -191,14 +191,15 @@ void onCopied(std::uint64_t value) {
     s.latency.copied(value, t);
 }
 
-void beforeEndFrame() {
+void beforeEndFrame(long long poseLocatedQpc) {
     if (!enabled()) {
         return;
     }
     State& s = state();
     const double t = now();
+    const double located = poseLocatedQpc != 0 ? secondsOf(poseLocatedQpc) : pacing::kNoTime;
     std::lock_guard lock(s.mutex);
-    s.latency.endCalled(t);
+    s.latency.endCalled(t, located);
 }
 
 void logSummary() {

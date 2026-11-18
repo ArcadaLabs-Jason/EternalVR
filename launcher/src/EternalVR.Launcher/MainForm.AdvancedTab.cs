@@ -16,6 +16,7 @@ namespace EternalVR.Launcher
     {
         private readonly ComboBox mode = Choices(Setting.VrMode);
         private readonly ComboBox alternateEyes = Choices(Setting.AlternateEyes);
+        private readonly CheckBox sharedSun = new CheckBox { AutoSize = true };
         private readonly NumericUpDown worldScale = Number(LauncherSettings.MinWorldScale, LauncherSettings.MaxWorldScale, 0.05, 2);
         private readonly CheckBox ipdOverride = new CheckBox { Text = "Set my own:", AutoSize = true };
         private readonly NumericUpDown ipd = Number(LauncherSettings.MinIpdMm, LauncherSettings.MaxIpdMm, 0.5, 1);
@@ -68,6 +69,7 @@ namespace EternalVR.Launcher
                 Row(Setting.AlternateEyes, alternateEyes,
                     s => alternateEyes.SelectedIndex = (int)s.AlternateEyes,
                     s => s.AlternateEyes = (AlternateEyesMode)alternateEyes.SelectedIndex),
+                Row(Setting.SharedSun, sharedSun, s => sharedSun.Checked = s.SharedSun, s => s.SharedSun = sharedSun.Checked),
                 Row(Setting.WorldSize, worldScale,
                     s => worldScale.Value = (decimal)LauncherSettings.ClampWorldScale(s.WorldScale),
                     s => s.WorldScale = (double)worldScale.Value),

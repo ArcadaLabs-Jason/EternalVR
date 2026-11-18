@@ -116,12 +116,53 @@ void logf(const char* format, ...) {
     char line[2200];
     std::snprintf(line, sizeof(line), "[%9.3f] [%5lu] %s\n", logSeconds(), GetCurrentThreadId(), message);
 
+    const bool timed = slowCallsLogged();
+    LARGE_INTEGER begin{};
+    LARGE_INTEGER locked{};
+    if (timed) {
+        QueryPerformanceCounter(&begin);
+    }
     std::lock_guard lock(g_mutex);
+    if (timed) {
+        QueryPerformanceCounter(&locked);
+    }
     if (g_file) {
         std::fputs(line, g_file);
         std::fflush(g_file);
     }
     OutputDebugStringA(line);
+    if (timed) {
+        // ETERNALVR_TEST_SLOW_CALLS=1: a line that held its thread over 2 ms, the lock's wait included.
+        LARGE_INTEGER end;
+        QueryPerformanceCounter(&end);
+        const double ms = qpcMs(end.QuadPart - begin.QuadPart);
+        static int slowLines = 0;
+        if (ms > 2.0 && slowLines < kSlowCallLines && g_file) {
+            ++slowLines;
+            std::fprintf(g_file,
+                         "[%9.3f] [%5lu] log: the line before took %.1f ms to write (%.1f ms of it waiting "
+                         "for the log's lock; ETERNALVR_TEST_SLOW_CALLS)\n",
+                         logSeconds(), GetCurrentThreadId(), ms, qpcMs(locked.QuadPart - begin.QuadPart));
+            std::fflush(g_file);
+        }
+    }
+}
+
+bool slowCallsLogged() {
+    static const bool on = [] {
+        std::wstring value;
+        return readEnv(L"ETERNALVR_TEST_SLOW_CALLS", value) && value == L"1";
+    }();
+    return on;
+}
+
+double qpcMs(long long ticks) {
+    static const double perMs = [] {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        return static_cast<double>(f.QuadPart) / 1000.0;
+    }();
+    return static_cast<double>(ticks) / perMs;
 }
 
 void logCrashLine(const char* message) {

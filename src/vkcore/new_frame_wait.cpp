@@ -77,10 +77,16 @@ void wait(const std::atomic<std::uint64_t>& latest, double periodSeconds, const 
     g_begun = latest.load(std::memory_order_acquire) >> 2;
 }
 
-void waitPublished(double seconds) {
-    if (const HANDLE e = event(); e && seconds > 0.0) {
-        WaitForSingleObject(e, static_cast<DWORD>(std::max(1.0, std::ceil(seconds * 1000.0))));
+bool waitPublished(double seconds) {
+    const HANDLE e = event();
+    if (!e) {
+        return false;
     }
+    // Rounded down: the caller's deadline ends the wait, never a millisecond past it.
+    if (seconds > 0.0) {
+        WaitForSingleObject(e, static_cast<DWORD>(std::max(0.0, std::floor(seconds * 1000.0))));
+    }
+    return true;
 }
 
 void logSummary() {

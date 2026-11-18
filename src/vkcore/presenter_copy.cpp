@@ -253,6 +253,7 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
     uiBackdrop.poll(dev, completed);
     motionCapture.poll(dev, completed);
     depthLayer.poll(dev, completed); // the depth layer: GPU times, views no longer in use
+    copyGpu.poll(dev, completed);
     logUiStats();
     handBackImages(completed);
 

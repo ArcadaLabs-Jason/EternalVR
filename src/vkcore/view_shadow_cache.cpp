@@ -3,6 +3,7 @@
 #include "vkcore/job_nodes.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
+#include "vkcore/shared_sun_hooks.hpp"
 #include "vkcore/view_slots.hpp"
 
 #include <windows.h>
@@ -336,6 +337,12 @@ bool prepareViewShadowCache(const std::byte* base) {
 }
 
 bool installViewShadowCache(const std::byte* base) {
+    // The record function's stale check is this feature's or Route S's shared sun's, never both's
+    // (shared_sun_hooks.hpp).
+    if (!claimShadowCheck(ShadowCheckOwner::ParallelEye)) {
+        EVR_LOG("%s: the shadow setup's stale check is hooked by the shared sun; not changed", kTag);
+        return false;
+    }
     g_base = reinterpret_cast<std::uintptr_t>(base);
     LARGE_INTEGER frequency;
     QueryPerformanceFrequency(&frequency);

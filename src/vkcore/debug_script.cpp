@@ -71,7 +71,10 @@ constexpr std::string_view kAllowedCommands[] = {
     "swf_anchorProfile",
     // The piloted Revenant's rockets, their paths drawn (tools/rig/qa/qa-scenarios-demon.ps1,
     // revenant-rockets).
-    "g_projectileDebug", "g_projectileDebugLifetime"};
+    "g_projectileDebug", "g_projectileDebugLifetime",
+    // Ray tracing off for a mono reference run, where the layer holds no cvars at run time and the profile's
+    // value wins over the command line (docs/rig-findings/perf-targets.md).
+    "r_useRayTracing"};
 
 char lower(char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;

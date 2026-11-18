@@ -80,10 +80,10 @@ Please do not try to play multiplayer with it anyway.
 
 Parallel Eye Rendering is an experimental way to draw the two eyes. Normally the game draws the whole frame
 for the left eye and then again for the right. With Parallel Eye Rendering it draws both eyes as two views of
-one game frame, their work at the same time. That saves processor time, not graphics card time, so it can only
-help when your processor is what holds the frame rate back; a PC held back by its graphics card gains little.
-On the test rig (RTX 3080 Ti, i7-9700K, a desktop test runtime instead of a headset) it drew about 12% more
-frames a second when the graphics load was turned down so the processor was the limit, but with ray tracing on
+one game frame, their work at the same time. That saves mostly processor time, so it helps most when your
+processor is what holds the frame rate back; a PC held back by its graphics card gains little.
+On the test rig (RTX 3080 Ti, i7-9700K, a desktop test runtime instead of a headset) it draws 9 to 27% more
+frames a second with ray tracing off (the most in heavy fights, the least in the hub), but with ray tracing on
 at a Quest 3's resolution both ways ran close to 90 frames a second, so the headset got no more new frames.
 How it does in real headsets is what this test is for. It is off by default and still has known problems (`docs\KNOWN-ISSUES.md`, "Parallel Eye
 Rendering").

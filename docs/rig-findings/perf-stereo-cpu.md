@@ -133,10 +133,23 @@ the critical path.
   so this needs the device context's per-view slots enlarged: about 30 renderer sites index them.
 - **Overlap eye R with the next tick's game frame.** The game frame outside the renders is small (a stereo
   render costs about what a whole mono frame costs), so this gains little.
-- **Share eye L's shadow casters with eye R** (lever 3): worth measuring the same way before building, since
-  shadow gathering also runs as parallel jobs.
+- **Share eye L's shadow casters with eye R** (lever 3): measured in `perf-eye-r-casters.md`, closed beyond Shared
+  sun shadows. The gathering runs only for the slices a render lists; beyond the sun's cascades (T-234) eye R gathers
+  the player's slices and next to nothing else, and a ceiling that skipped those did not shorten the tick.
 - **The layer's per-present copy**: record the copy command buffers once per ring slot and swapchain image
   instead of for every present (about 1% of the serial stretches).
 - Simulator runs of the same build land in one of two groups (about 134 and 150 ticks/s, with more CPU and
   GPU work per tick in the slow group, from the same view path). Compare interleaved pairs, at least four of
   each, by median.
+- **The eye-pair decal scan** (`choosePairDecals`, about 0.19 ms per stereo tick at 1280x1400 in combat on the
+  serial chain) now walks only the clear bits of the visible-decal words instead of testing all 30,720
+  records; the chosen decals and their order are unchanged (unit-tested against the old scan on randomized
+  tables). A unit-test micro-benchmark on a synthetic 30,720-record table (15% active, release build, warm
+  cache) went from about 195 us to about 135 us per scan; most of what remains is reading the active records
+  (the table is 2.4 MB) and the nearest-2048 selection. In game (Release, 1280x1400, pacing off, 4 interleaved pairs of
+  origin/main aa899b47 against this branch, median of the per-run tick CPU p50): bench-combat 9.31 ms old, 9.09 ms
+  new (-0.22 ms, per-run p50 spread about 0.7 ms, so inside the noise); bench-hub 7.48 ms old, 7.44 ms new
+  (-0.04 ms, noise). The gather counters match in kind (eye-pair gathers per tick 3.2 old, 3.4 new in combat; 2.99 and
+  2.93 in the hub; decals kept and scored per view within the routes' own run-to-run spread, the combat demons
+  moving differently each run); the same-input equality is the unit test's. The layer does not log the gather's own
+  time.

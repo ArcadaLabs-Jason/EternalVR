@@ -106,6 +106,13 @@ them is worse for you than described here.
   gave the headset 30 new frames a second on my test PC. Leave RTSS's limit off for DOOM Eternal; its counter
   itself is fine (it shows in both eyes, top left). OBS game capture works and records the desktop window (your
   left eye, no HUD); ReShade stays out of VR. More in TROUBLESHOOTING.md, "RivaTuner (RTSS), OBS and ReShade".
+- **DLSS with preset K may not speed things up on an RTX 3080 Ti at large render sizes.** On my test PC's RTX
+  3080 Ti at 2048 x 2208 per eye, DLSS Quality with preset K (the launcher's default) took as much graphics card
+  time as the default TAA at full size on the outdoor and hub routes, so it gave no extra frames there; preset E
+  ("older model, faster" under DLSS's Preset) took about 30% less, and Foveated rendering at Balanced about 20%
+  less outdoors and in the hub (combat showed no clear gain at the same load). That's one card, a simulator and
+  no headset, so other cards may differ. If your frame rate is short with DLSS on, try preset E or Balanced
+  foveation.
 - **While the headset is off or asleep the game slows to 8 frames a second.** So a laptop doesn't run hot
   through a break: while the headset shows none of the game (asleep, off, or its home or another app in front),
   or says nobody is wearing it, the game draws 8 frames a second, and it's back to full speed the moment the

@@ -210,6 +210,9 @@ namespace EternalVR.Launcher.Core.Launch
             // (async compute off among them) itself, DLSS in both views with the launcher's DLSS. Stereo only; absent
             // when off, and on any build but the one it runs on (Game Pass: the standard renderer).
             if (parallel) Set("ETERNALVR_PARALLEL_EYES", "1");
+            // Shared sun shadows (testing; docs/VR_STEREO.md "Shared sun cascades"): the right eye on the left eye's sun
+            // cascades of the tick. Route S's eye pairs only, the same rule as the window's greying; absent when off.
+            if (LauncherSettings.SharedSunOn(s, inputs.ParallelEyesGame)) Set("ETERNALVR_SHARED_SUN", "1");
             // The HUD, menus and subtitles on their own quad and out of both eyes (docs/rig-findings/ui-layer.md), in
             // mono too: a menu over the game (pause, the Dossier, a tutorial popup) gets its panel and pointer from it.
             Set("ETERNALVR_UI_LAYER", "1");
@@ -355,6 +358,9 @@ namespace EternalVR.Launcher.Core.Launch
             // explicit either way (the layer's default may change).
             var paced = stereo && (s.AlternateEyes != AlternateEyesMode.Auto || parallel) ? s.Pacing : FramePacing.Off;
             Set("ETERNALVR_PACE", LauncherSettings.PacingName(paced));
+            // Wait for a late frame (testing; docs/VR_STEREO.md "Frame pacing", Late images): held, a headset frame waits for
+            // the image the game is still drawing. The same rule as the window's greying; absent when off.
+            if (LauncherSettings.LateWaitOn(s, inputs.ParallelEyesGame)) Set("ETERNALVR_PACE_LATE_WAIT", "1");
             // Each eye's depth for the headset's reprojection (src/vkcore/presenter_depth.hpp): the standard renderer's
             // eye pairs only (not with Alternate eyes, on or auto), the same rule as the window's greying; explicit
             // either way.

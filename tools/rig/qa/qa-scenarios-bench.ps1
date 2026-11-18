@@ -304,8 +304,11 @@ function Measure-QaBench($Ctx) {
         $r.Over250, $r.GpuWindows, $r.XrWindows, $r.OutsideMs, $r.EyeRMs, $r.MissedPeriodsPct, $r.Periods, $r.TicksOver72Pct, $r.GpuOver72Pct
     $r.Line = $line
     Add-QaNote $Ctx $line
-    # The two tables beside the log copy (the stage's folder is emptied by the next run of the scenario).
-    foreach ($t in "eternalvr-gpu-$procId.csv", "eternalvr-frames-$procId.csv") {
+    # The tables beside the log copy (the stage's folder is emptied by the next run of the scenario); the
+    # release-to-present and per-tick CPU tables only when a rig switch wrote them (ETERNALVR_TEST_LATENCY_CSV,
+    # ETERNALVR_TEST_CPU_CSV).
+    foreach ($t in "eternalvr-gpu-$procId.csv", "eternalvr-frames-$procId.csv", "eternalvr-latency-$procId.csv",
+        "eternalvr-cpu-$procId.csv") {
         Copy-Item -LiteralPath (Join-Path $logDir $t) -Destination $Ctx.Dir -ErrorAction SilentlyContinue
     }
     ($r | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath (Join-Path $Ctx.Dir 'bench.json') -Encoding utf8

@@ -125,6 +125,7 @@ evr_add_test(evr_pacing_tests
         features/pacing/hold_gate_tests.cpp
         features/pacing/hold_switch_tests.cpp
         features/pacing/late_image_tests.cpp
+        features/pacing/late_wait_gate_tests.cpp
         features/pacing/pace_policy_tests.cpp
         features/pacing/prediction_period_tests.cpp
         features/pacing/present_latency_tests.cpp
@@ -418,6 +419,7 @@ evr_add_test(evr_stereo_seq_tests
         stereo_seq/screen_space_view_tests.cpp
         stereo_seq/seq_settings_tests.cpp
         stereo_seq/setting_follow_tests.cpp
+        stereo_seq/shared_sun_tests.cpp
         stereo_seq/ssdo_history_tests.cpp
         stereo_seq/ssr_noise_tests.cpp
         stereo_seq/stack_budget_tests.cpp
@@ -486,6 +488,7 @@ evr_add_test(evr_ui_layer_tests
 
 evr_add_test(evr_gpu_timing_tests
     SOURCES
+        gpu_timing/copy_window_tests.cpp
         gpu_timing/cpu_split_tests.cpp
         gpu_timing/submit_census_tests.cpp
         gpu_timing/frame_stats_tests.cpp

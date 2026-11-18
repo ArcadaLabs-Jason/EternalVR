@@ -4,6 +4,7 @@
 #include "vkcore/stall_watch.hpp"
 
 #include "gpu_timing/present_stall.hpp"
+#include "gpu_timing/stats.hpp"
 #include "vkcore/hang_note.hpp"
 #include "vkcore/hook_guard.hpp"
 #include "vkcore/log.hpp"
@@ -18,6 +19,7 @@
 #include <cstring>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
 #include <unordered_map>
 
 namespace evr::vkcore::stall_watch {
@@ -157,6 +159,58 @@ double ms(std::uint64_t micros) {
     return static_cast<double>(micros) / 1000.0;
 }
 
+// ETERNALVR_TEST_PIPELINES=1 (a rig switch, off by default): the game's pipeline creations of each 10 s in a
+// summary line of their own, so a route's windows say whether the game compiled anything during it (the
+// stall line only sees gaps over kStallGapMs).
+struct PipelineWindow {
+    std::atomic<std::uint64_t> pipelines{0};
+    std::atomic<std::uint64_t> calls{0};
+    std::atomic<std::uint64_t> micros{0};
+    std::atomic<std::uint64_t> maxMicros{0};
+};
+PipelineWindow g_pipelineWindow;
+
+bool pipelineLines() {
+    static const bool on = [] {
+        std::wstring value;
+        return readEnv(L"ETERNALVR_TEST_PIPELINES", value) && gt::parseEnabled(value);
+    }();
+    return on;
+}
+
+// One pipeline creation call of the game's: into the present gap's accumulators and, with the switch, the
+// window's.
+void notePipelines(std::uint32_t count, std::uint64_t took) {
+    g_spent.pipelines.fetch_add(count, std::memory_order_relaxed);
+    g_spent.pipelineCalls.fetch_add(1, std::memory_order_relaxed);
+    g_spent.pipelineMicros.fetch_add(took, std::memory_order_relaxed);
+    raiseMax(g_spent.pipelineMaxMicros, took);
+    if (pipelineLines()) {
+        g_pipelineWindow.pipelines.fetch_add(count, std::memory_order_relaxed);
+        g_pipelineWindow.calls.fetch_add(1, std::memory_order_relaxed);
+        g_pipelineWindow.micros.fetch_add(took, std::memory_order_relaxed);
+        raiseMax(g_pipelineWindow.maxMicros, took);
+    }
+}
+
+void logPipelineWindow() {
+    if (!pipelineLines()) {
+        return;
+    }
+    const auto t = [](std::atomic<std::uint64_t>& a) {
+        return a.exchange(0, std::memory_order_relaxed);
+    };
+    const std::uint64_t pipelines = t(g_pipelineWindow.pipelines);
+    const std::uint64_t calls = t(g_pipelineWindow.calls);
+    const std::uint64_t micros = t(g_pipelineWindow.micros);
+    const std::uint64_t longest = t(g_pipelineWindow.maxMicros);
+    EVR_LOG(
+        "pipelines: last 10 s: the game created %llu pipeline(s) in %llu call(s), %.1f ms (longest call %.1f "
+        "ms)",
+        static_cast<unsigned long long>(pipelines), static_cast<unsigned long long>(calls), ms(micros),
+        ms(longest));
+}
+
 void logStall(double gapMs, bool ticksKnown, std::uint32_t line, const Spent& s) {
     const vram::Reading v = vram::latest();
     char memory[64] = "unknown";
@@ -228,11 +282,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device,
     const std::uint64_t start = window_timing::nowMicros();
     const VkResult result =
         next.createGraphicsPipelines(device, cache, count, pInfos, pAllocator, pPipelines);
-    const std::uint64_t took = window_timing::nowMicros() - start;
-    g_spent.pipelines.fetch_add(count, std::memory_order_relaxed);
-    g_spent.pipelineCalls.fetch_add(1, std::memory_order_relaxed);
-    g_spent.pipelineMicros.fetch_add(took, std::memory_order_relaxed);
-    raiseMax(g_spent.pipelineMaxMicros, took);
+    notePipelines(count, window_timing::nowMicros() - start);
     return result;
 }
 
@@ -251,11 +301,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device,
     }
     const std::uint64_t start = window_timing::nowMicros();
     const VkResult result = next.createComputePipelines(device, cache, count, pInfos, pAllocator, pPipelines);
-    const std::uint64_t took = window_timing::nowMicros() - start;
-    g_spent.pipelines.fetch_add(count, std::memory_order_relaxed);
-    g_spent.pipelineCalls.fetch_add(1, std::memory_order_relaxed);
-    g_spent.pipelineMicros.fetch_add(took, std::memory_order_relaxed);
-    raiseMax(g_spent.pipelineMaxMicros, took);
+    notePipelines(count, window_timing::nowMicros() - start);
     return result;
 }
 
@@ -415,6 +461,7 @@ void logSummary() {
     g_stalls.summaryInPlay = c.inPlay;
     g_stalls.summaryOutsidePlay = c.outsidePlay;
     g_stalls.windowLongestMs = 0.0;
+    logPipelineWindow();
 }
 
 } // namespace evr::vkcore::stall_watch

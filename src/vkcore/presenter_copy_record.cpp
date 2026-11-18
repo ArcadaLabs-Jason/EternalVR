@@ -58,6 +58,7 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
         dev.vk.BeginCommandBuffer(cb, &begin) != VK_SUCCESS) {
         return false;
     }
+    copyGpu.begin(cb, family); // ETERNALVR_TEST_COPY_GPU
 
     const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     // Alternate eyes: the slot held for the next present takes the same image in the same half.
@@ -134,6 +135,7 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
             depthLayer.beginSlot(target.carrySlot, false);
         }
     }
+    copyGpu.mark(cb); // the interop part ends; the captures and the desktop mirror follow
     // The motion-vector capture: with eye R's copy, both eyes of the pair have rendered.
     motionCapture.record(dev, cb, family, target.kind == stereo_seq::PresentKind::EyeR);
     // The desktop mirror, after the eye is in the ring: keep this eye, or put the kept one in its place; a
@@ -170,6 +172,7 @@ bool XrPresenter::Impl::recordCopy(VkCommandBuffer cb,
     after[2].image = carry;
     dev.vk.CmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
                               nullptr, 0, nullptr, barriers, after.data());
+    copyGpu.end(cb);
     return dev.vk.EndCommandBuffer(cb) == VK_SUCCESS;
 }
 
@@ -185,7 +188,9 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
     RingSlot& slot = ring[slotIndex];
     const std::size_t buffer = std::size_t{slotIndex} * 2 + (target.keepOther ? 1 : 0);
     VkCommandBuffer cb = fc.buffers[buffer];
+    copyGpu.setup(dev);
     if (!recordCopy(cb, sc, sc.images[imageIndex], family, slot, target, captureBuffer)) {
+        copyGpu.submitted(0);
         uiCapture.cancel();
         uiBackdrop.cancel();
         motionCapture.cancel();
@@ -235,11 +240,13 @@ std::uint64_t XrPresenter::Impl::submitCopy(VkQueue queue,
         motionCapture.cancel();
         depthLayer.submitted(static_cast<std::uint32_t>(buffer), 0, queue, timeline);
         copyFailed = true;
+        copyGpu.submitted(0);
         EVR_LOG("presenter: vkQueueSubmit failed (%d); copies off, presents pass through", submitted);
         return 0;
     }
     timelineValue = value;
     lastSubmittedValue = value;
+    copyGpu.submitted(value);
     if (target.ui) {
         uiCapture.submitted(value);
         uiBackdrop.submitted(value);

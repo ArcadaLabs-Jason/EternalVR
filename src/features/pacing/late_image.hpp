@@ -13,6 +13,8 @@
 //
 // No OpenXR or Windows here: times are seconds.
 
+#include <string_view>
+
 namespace evr::pacing {
 
 // Left after the wait for the late image's GPU work (the slot choice's fence wait) and the copy.
@@ -26,9 +28,14 @@ struct LateImageOffer {
     double sinceHandOverSeconds = 0.0;   // since the game's last hand-over
     double sinceFrameStartSeconds = 0.0; // since this headset frame's xrWaitFrame returned
     double periodSeconds = 0.0;          // the display period (not positive or not finite: not known)
+    double gpuSeconds = kLateImageGpuSeconds; // left after the wait for the image's GPU work and the copy
 };
 
 // How long this headset frame waits for the image the game is drawing; 0: no wait.
 double lateImageWaitSeconds(const LateImageOffer& offer);
+
+// ETERNALVR_TEST_LATE_WAIT_GPU_MS (a rig test): the time left for the GPU after the wait, in ms from 0.5 to
+// 8; anything else (unset among it) is kLateImageGpuSeconds. Seconds.
+double lateImageGpuSeconds(std::string_view ms);
 
 } // namespace evr::pacing

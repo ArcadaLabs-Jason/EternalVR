@@ -1464,9 +1464,11 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
 
 ## Scripted input for rig tests
 
-`ETERNALVR_TEST_INPUT=<file>` lays a small text file over the runtime's controllers; the camera hook
-re-reads it when its write time changes (every 10 game frames), so a script can drive a test by rewriting
-it. When the XR worker's snapshot is stale the mapper builds its frame from the file alone:
+`ETERNALVR_TEST_INPUT=<file>` lays a small text file over the runtime's controllers; the first camera hook
+or XR worker sync reads it, then a thread of its own re-reads it when its write time changes (looked at every
+50 ms), so a script can drive a test by rewriting it. (Before 2026-11-15 the camera hook and the XR worker read it
+themselves; opening a freshly written file took up to 99 ms on the test PC and stalled the game's or the
+headset's frame: docs/rig-findings/frame-tails.md.) When the XR worker's snapshot is stale the mapper builds its frame from the file alone:
 
 ```
 right.trigger = 1          # 0..1 (also grip, and grip_curl: the fingers round the grip apart from its

@@ -109,6 +109,7 @@ add_library(evr_layer SHARED
     exposure_hooks.cpp
     frame_pacing.cpp
     held_wait.cpp
+    late_wait.cpp
     new_frame_wait.cpp
     present_latency.cpp
     game_build.cpp
@@ -151,6 +152,7 @@ add_library(evr_layer SHARED
     player_aim.cpp
     presenter_alt.cpp
     presenter_cinema3d.cpp
+    copy_gpu_timer.cpp
     presenter_copy.cpp
     presenter_copy_record.cpp
     presenter_depth_glue.cpp
@@ -220,6 +222,7 @@ add_library(evr_layer SHARED
     seq_locate.cpp
     seq_prev.cpp
     seq_stack.cpp
+    shared_sun_hooks.cpp
     screen_space_view_hooks.cpp
     ssr_fade_hooks.cpp
     shader_dump.cpp

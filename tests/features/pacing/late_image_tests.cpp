@@ -37,6 +37,23 @@ TEST_CASE("held, the game still drawing: the frame waits until the submit margin
     CHECK(lateImageWaitSeconds(o) == doctest::Approx(kPeriod - kSubmitMarginSeconds - kLateImageGpuSeconds));
 }
 
+TEST_CASE("the GPU's share left after the wait can be set for the rig, from 0.5 to 8 ms") {
+    LateImageOffer o = drawing();
+    o.gpuSeconds = 0.0035;
+    CHECK(lateImageWaitSeconds(o) == doctest::Approx(kPeriod - kSubmitMarginSeconds - 0.0035 - 0.0003));
+    o.gpuSeconds = std::numeric_limits<double>::quiet_NaN(); // not a time: the default share
+    CHECK(lateImageWaitSeconds(o) ==
+          doctest::Approx(kPeriod - kSubmitMarginSeconds - kLateImageGpuSeconds - 0.0003));
+    o.gpuSeconds = 0.008; // more than the frame has: no wait
+    CHECK(lateImageWaitSeconds(o) == 0.0);
+    CHECK(lateImageGpuSeconds("3.5") == doctest::Approx(0.0035));
+    CHECK(lateImageGpuSeconds("0.5") == doctest::Approx(0.0005));
+    CHECK(lateImageGpuSeconds("8") == doctest::Approx(0.008));
+    for (const char* text : {"", "0.4", "8.1", "-1", "3ms", "abc", "nan"}) {
+        CHECK(lateImageGpuSeconds(text) == kLateImageGpuSeconds);
+    }
+}
+
 TEST_CASE("no wait with a new image there, or with the game not held") {
     LateImageOffer o = drawing();
     o.newImage = true;

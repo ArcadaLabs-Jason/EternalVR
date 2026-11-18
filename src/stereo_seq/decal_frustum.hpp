@@ -218,11 +218,23 @@ std::vector<std::uint16_t> nearestDecals(std::span<const std::uint64_t> visible,
     // One list per thread, kept between calls: the gather runs for each eye every frame.
     static thread_local std::vector<Candidate> candidates;
     candidates.clear();
-    for (std::size_t i = 0; i < n; ++i) {
-        if (((visible[i / 64] >> (i % 64)) & 1) != 0 || !active(i) || !inside(i)) {
-            continue;
+    // Word by word over the decals the engine's list lacks: a word with every bit set is skipped whole, and
+    // inside one only the clear bits are visited, in ascending order (the same candidates, in the same order,
+    // as testing every index).
+    for (std::size_t w = 0; w * 64 < n; ++w) {
+        std::uint64_t open = ~visible[w];
+        const std::size_t base = w * 64;
+        if (n - base < 64) {
+            open &= (std::uint64_t{1} << (n - base)) - 1;
         }
-        candidates.push_back({distance2(i), static_cast<std::uint16_t>(i)});
+        while (open != 0) {
+            const std::size_t i = base + static_cast<std::size_t>(std::countr_zero(open));
+            open &= open - 1;
+            if (!active(i) || !inside(i)) {
+                continue;
+            }
+            candidates.push_back({distance2(i), static_cast<std::uint16_t>(i)});
+        }
     }
     const auto nearer = [](const Candidate& a, const Candidate& b) {
         return a.distance < b.distance || (a.distance == b.distance && a.index < b.index);

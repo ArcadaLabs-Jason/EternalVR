@@ -5,6 +5,9 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 
+#include <windows.h>
+
+#include <atomic>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -55,10 +58,28 @@ std::intptr_t g_rFromRdi = 0;    // idRenderView::r = rdi + this
 constexpr const char* kTag = "hooks";
 
 void onGameViewHook(const HookRegisters& regs) {
-    std::shared_lock lock(g_sinkMutex);
-    if (g_sink) {
-        g_sink->onGameView(reinterpret_cast<std::byte*>(static_cast<std::intptr_t>(regs.r14) + g_viewFromR14),
-                           reinterpret_cast<std::byte*>(regs.r15));
+    const bool timed = slowCallsLogged();
+    LARGE_INTEGER begin{};
+    if (timed) {
+        QueryPerformanceCounter(&begin);
+    }
+    {
+        std::shared_lock lock(g_sinkMutex);
+        if (g_sink) {
+            g_sink->onGameView(
+                reinterpret_cast<std::byte*>(static_cast<std::intptr_t>(regs.r14) + g_viewFromR14),
+                reinterpret_cast<std::byte*>(regs.r15));
+        }
+    }
+    if (timed) {
+        // ETERNALVR_TEST_SLOW_CALLS=1: a camera hook call that held the game's frame over 4 ms.
+        LARGE_INTEGER end;
+        QueryPerformanceCounter(&end);
+        const double ms = qpcMs(end.QuadPart - begin.QuadPart);
+        static std::atomic<int> slow{0};
+        if (ms > 4.0 && slow.fetch_add(1, std::memory_order_relaxed) < kSlowCallLines) {
+            EVR_LOG("hooks: the camera hook took %.1f ms (ETERNALVR_TEST_SLOW_CALLS)", ms);
+        }
     }
 }
 

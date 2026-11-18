@@ -48,6 +48,7 @@ struct LatencyRecord {
     double taken = kNoTime;        // the slot was taken (after any wait for the GPU work)
     double copied = kNoTime;       // the copy to the runtime's image finished
     double endCalled = kNoTime;    // xrEndFrame was called
+    double poseLocated = kNoTime;  // the head pose that frame submitted was located (the camera hook)
 };
 
 // The samples of a window (ms), and its counts.
@@ -96,8 +97,9 @@ public:
     void slotTaken(std::uint64_t value, double now);
     // The copy of image `value` finished: the current headset frame shows it.
     void copied(std::uint64_t value, double now);
-    // The current headset frame calls xrEndFrame.
-    void endCalled(double now);
+    // The current headset frame calls xrEndFrame, with the head pose located at `poseLocated` (kNoTime:
+    // none).
+    void endCalled(double now, double poseLocated = kNoTime);
 
     // Keep every finished image in LatencyWindow::records (a rig test's table); off by default.
     void keepRecords(bool keep) { keepRecords_ = keep; }

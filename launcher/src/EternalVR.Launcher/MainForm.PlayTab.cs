@@ -70,6 +70,7 @@ namespace EternalVR.Launcher
         private readonly ComboBox pacing = Choices(Setting.FramePacing);
         private readonly CheckBox parallelEyes = new CheckBox { AutoSize = true };
         private readonly CheckBox depthLayer = new CheckBox { AutoSize = true };
+        private readonly CheckBox lateWait = new CheckBox { AutoSize = true };
 
         /// <summary>A hand-set smoothing that is none of the named steps: shown as a fifth, "Custom" choice.</summary>
         private double customSmoothing = -1;
@@ -203,6 +204,7 @@ namespace EternalVR.Launcher
                 Row(Setting.FramePacing, pacing,
                     s => pacing.SelectedIndex = (int)s.Pacing,
                     s => s.Pacing = (FramePacing)Math.Max(0, pacing.SelectedIndex)),
+                Row(Setting.LateWait, lateWait, s => lateWait.Checked = s.LateWait, s => s.LateWait = lateWait.Checked),
                 Row(Setting.DepthLayer, depthLayer, s => depthLayer.Checked = s.DepthLayer, s => s.DepthLayer = depthLayer.Checked),
             };
             // Texture streaming and the CPU Saver: one checkbox per item of data\cpu-saver.txt (MainForm.CpuSaver.cs).

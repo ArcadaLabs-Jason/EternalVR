@@ -105,11 +105,12 @@ void PresentLatency::copied(std::uint64_t value, double now) {
     copiedThisFrame_.push_back(value);
 }
 
-void PresentLatency::endCalled(double now) {
+void PresentLatency::endCalled(double now, double poseLocated) {
     for (const std::uint64_t value : copiedThisFrame_) {
         for (auto it = open_.begin(); it != open_.end(); ++it) {
             if (it->value == value) {
                 it->endCalled = now;
+                it->poseLocated = poseLocated;
                 finish(*it, true);
                 open_.erase(it);
                 break;

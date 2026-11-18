@@ -34,6 +34,7 @@ evr_add_module(evr_stereo_seq
         screen_space_view.cpp
         seq_settings.cpp
         setting_follow.cpp
+        shared_sun.cpp
         ssdo_history.cpp
         ssr_noise.cpp
         stack_budget.cpp

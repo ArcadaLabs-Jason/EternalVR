@@ -348,6 +348,8 @@ namespace EternalVR.Launcher.Core.Settings
             s.ReadGameCrosshair(map);
             s.ReadPicture(map);
             s.ReadPacing(map);
+            s.ReadLateWait(map);
+            s.ReadSharedSun(map);
             if (map.TryGetValue("foveation", out var fv))
                 s.Foveation = Pick(fv, FoveationMode.Off, ("subtle", FoveationMode.Subtle), ("balanced", FoveationMode.Balanced), ("aggressive", FoveationMode.Aggressive), ("maximum", FoveationMode.Maximum));
             if (map.TryGetValue("cpu_saver", out var cs)) s.CpuSaverAllOn = On(cs);
@@ -445,6 +447,8 @@ namespace EternalVR.Launcher.Core.Settings
             WritePicture(sb);
             sb.AppendLine("foveation = " + FoveationName(Foveation));
             WritePacing(sb);
+            WriteLateWait(sb);
+            WriteSharedSun(sb);
             if (CpuSaverAllOn) sb.AppendLine("cpu_saver = on");
             foreach (var kv in CpuSaverChoices) sb.AppendLine(CpuSaverKeyPrefix + kv.Key + " = " + (kv.Value ? "on" : "off"));
             WriteRoom(sb);

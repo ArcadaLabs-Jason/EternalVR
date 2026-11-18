@@ -86,8 +86,8 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void ItIsAPictureRowWithAnHonestTooltip()
         {
-            // In the Picture group, right after Frame pacing (SettingRules.Setting is in window order).
-            Assert.Equal(Setting.FramePacing + 1, Setting.DepthLayer);
+            // In the Picture group, after Frame pacing and Wait for a late frame (SettingRules.Setting is in window order).
+            Assert.Equal(Setting.LateWait + 1, Setting.DepthLayer);
             var text = SettingTexts.For(Setting.DepthLayer);
             Assert.Contains("experimental", text.Label);
             Assert.Contains("Off by default", text.Tooltip);

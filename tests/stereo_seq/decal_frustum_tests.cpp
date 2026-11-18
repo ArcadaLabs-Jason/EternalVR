@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -500,4 +501,97 @@ TEST_CASE("what is not a view or not a box adds nothing") {
     const float mins[3] = {nan, -1.0f, -1.0f};
     const float maxs[3] = {nan, 1.0f, 1.0f};
     CHECK(boxOutside(*f, mins, maxs));
+}
+
+namespace {
+
+// The gather's scan as it was before the word-skipping loop: every index tested in turn.
+template <class Active, class Inside, class Distance2>
+std::vector<std::uint16_t> referenceNearest(std::span<const std::uint64_t> visible,
+                                            std::size_t count,
+                                            std::size_t limit,
+                                            Active&& active,
+                                            Inside&& inside,
+                                            Distance2&& distance2) {
+    struct Candidate {
+        float distance;
+        std::uint16_t index;
+    };
+    const std::size_t n = std::min({count, visible.size() * 64, std::size_t{0x10000}});
+    std::vector<Candidate> candidates;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (((visible[i / 64] >> (i % 64)) & 1) != 0 || !active(i) || !inside(i)) {
+            continue;
+        }
+        candidates.push_back({distance2(i), static_cast<std::uint16_t>(i)});
+    }
+    const auto nearer = [](const Candidate& a, const Candidate& b) {
+        return a.distance < b.distance || (a.distance == b.distance && a.index < b.index);
+    };
+    if (candidates.size() > limit) {
+        std::nth_element(candidates.begin(), candidates.begin() + static_cast<std::ptrdiff_t>(limit),
+                         candidates.end(), nearer);
+        candidates.resize(limit);
+    }
+    std::vector<std::uint16_t> indices;
+    for (const Candidate& c : candidates) {
+        indices.push_back(c.index);
+    }
+    return indices;
+}
+
+} // namespace
+
+TEST_CASE("the word-skipping scan returns exactly what the index-by-index scan returned") {
+    using evr::stereo_seq::nearestDecals;
+    std::uint32_t seed = 12345;
+    const auto next = [&seed] {
+        seed = seed * 1664525u + 1013904223u;
+        return seed >> 8;
+    };
+    constexpr std::size_t kWords = 480; // 30,720 records
+    // Densities in 1/16: listed, active, inside; counts include ones that end inside a word.
+    const std::size_t counts[] = {0, 1, 63, 64, 65, 1000, kWords * 64 - 3, kWords * 64};
+    const std::size_t limits[] = {0, 1, 7, 2048, 100000};
+    for (int round = 0; round < 60; ++round) {
+        const std::uint32_t listedD = round % 5 == 0 ? 16 : round % 5 == 1 ? 0 : next() % 17;
+        const std::uint32_t activeD = round % 7 == 0 ? 0 : round % 7 == 1 ? 16 : next() % 17;
+        const std::uint32_t insideD = next() % 17;
+        std::vector<std::uint64_t> visible(kWords, 0);
+        std::vector<char> act(kWords * 64), in(kWords * 64);
+        std::vector<float> dist(kWords * 64);
+        for (std::size_t i = 0; i < kWords * 64; ++i) {
+            if (next() % 16 < listedD) {
+                visible[i / 64] |= std::uint64_t{1} << (i % 64);
+            }
+            act[i] = next() % 16 < activeD;
+            in[i] = next() % 16 < insideD;
+            dist[i] = static_cast<float>(next() % 50) * 0.5f; // many ties
+        }
+        const auto active = [&](std::size_t i) {
+            return act[i] != 0;
+        };
+        const auto inside = [&](std::size_t i) {
+            return in[i] != 0;
+        };
+        const auto distance2 = [&](std::size_t i) {
+            return dist[i];
+        };
+        for (const std::size_t count : counts) {
+            for (const std::size_t limit : limits) {
+                CHECK(nearestDecals(visible, count, limit, active, inside, distance2) ==
+                      referenceNearest(visible, count, limit, active, inside, distance2));
+            }
+        }
+    }
+    // A table shorter than the count asks for.
+    const std::array<std::uint64_t, 2> small{};
+    const auto yes = [](std::size_t) {
+        return true;
+    };
+    const auto zero = [](std::size_t) {
+        return 0.0f;
+    };
+    CHECK(nearestDecals(small, 1000, 5000, yes, yes, zero) ==
+          referenceNearest(small, 1000, 5000, yes, yes, zero));
 }

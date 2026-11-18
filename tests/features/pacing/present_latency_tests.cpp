@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <cstdint>
 
 using namespace evr::pacing;
@@ -195,4 +196,21 @@ TEST_CASE("records are kept only when asked, and a window starts over after take
     const LatencyWindow empty = p.take();
     CHECK(empty.handOvers == 0);
     CHECK(empty.handOverToEnd.empty());
+}
+
+TEST_CASE("a record keeps when the pose its frame submitted was located, or none") {
+    PresentLatency p;
+    p.keepRecords(true);
+    p.handOver(1, 0.99);
+    frameAt(p, 1.0);
+    p.slotTaken(1, 1.0 + 0.5 * kMs);
+    p.copied(1, 1.0 + 1.0 * kMs);
+    p.endCalled(1.0 + 1.5 * kMs, 0.98);
+    p.handOver(2, 1.0 + 6.0 * kMs);
+    frameAt(p, 1.0 + kPeriod);
+    show(p, 2, 1.0 + kPeriod); // no pose given
+    const LatencyWindow w = p.take();
+    REQUIRE(w.records.size() == 2);
+    CHECK(w.records[0].poseLocated == doctest::Approx(0.98));
+    CHECK(std::isnan(w.records[1].poseLocated));
 }

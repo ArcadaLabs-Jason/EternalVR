@@ -142,6 +142,7 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
 
     d3dAllocator->Reset();
     d3dList->Reset(d3dAllocator.Get(), nullptr);
+    copyGpu.beginList(d3dDevice.Get(), d3dQueue.Get(), d3dList.Get()); // ETERNALVR_TEST_COPY_GPU
     std::array<D3D12_RESOURCE_BARRIER, 2> barriers{};
     barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barriers[0].Transition.pResource = slot.resource.Get();
@@ -167,12 +168,14 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
         std::swap(b.Transition.StateBefore, b.Transition.StateAfter);
     }
     d3dList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+    copyGpu.markList(d3dList.Get());
     if (slotUi) {
         recordUiXrCopy(slot);
     }
     if (slotDepth) {
         depthLayer.recordXrCopy(d3dList.Get(), slotIndex);
     }
+    copyGpu.endList(d3dList.Get());
     const HRESULT closed = d3dList->Close();
     if (FAILED(closed)) {
         // A list that failed to close must never be executed (the device would be removed).
@@ -185,6 +188,7 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
                     static_cast<long long>(acquiredIndex), xrImages.size());
         }
         slot.state.store(kSlotFree);
+        copyGpu.listDone(false);
         // Nothing was copied into the UI image either: it stays acquired, and the next copy records into it
         // again, so a later image without a GUI copy is never taken for one with it (finishUiXrCopy).
         uiCopyPending = false;
@@ -203,6 +207,7 @@ void XrPresenter::Impl::updateImage(LONGLONG frameStart) {
     const LONGLONG waitStart = qpcNow();
     const bool copied = waitFence(copyFence.Get(), copyFenceValue, copyEvent, waitMs);
     copyWait.add(qpcSeconds(qpcNow() - waitStart) * 1000.0);
+    copyGpu.listDone(copied);
     if (!copied) {
         // The slot stays marked as being read, so the game never writes it while D3D12 might, and
         // nothing is recorded again (the allocator may still be executing) until the copy is done.
@@ -484,7 +489,7 @@ void XrPresenter::Impl::frame() {
     endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     endInfo.layerCount = layerCount;
     endInfo.layers = layerCount ? layers.data() : nullptr;
-    frame_pacing::beforeEndFrame();
+    frame_pacing::beforeEndFrame(layerCount && shownHasView ? shownView.locatedQpc : 0);
     const XrResult r = timedCall(inRuntime.endFrame, xr.xrEndFrame, session, &endInfo);
     // A runtime refusing the depth would refuse every frame: on a result that names the layers (not a loss of
     // the session or the runtime, which take their own path below) the depth goes and the next frames are

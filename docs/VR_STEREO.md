@@ -503,6 +503,62 @@ or Off, so the entry showed the profile's choice ("Off" with the launcher's DLSS
 - Not hooked (a signature or self-check failed, or the multiplayer guard not armed): the entry shows the
   profile's index as before, and an apply writes it through the game's own setter.
 
+## Shared sun cascades (`ETERNALVR_SHARED_SUN=1`, off by default, testing)
+
+Eye R shades with the sun's shadow cascades eye L rendered in the same tick instead of rendering them again
+(`src/stereo_seq/shared_sun.*`, `src/vkcore/shared_sun_hooks.*`, installed from `seq_eye_fixes.cpp` under Route S,
+never with alternate eyes; findings and rig numbers in `docs/rig-findings/perf-sun-cascades.md`). The launcher's
+"Shared sun shadows (testing)" on the Advanced tab (View group, off by default) passes `ETERNALVR_SHARED_SUN=1` in
+stereo without Parallel Eye Rendering or Alternate eyes, and nothing otherwise (`launcher/README.md`).
+
+- **Why it can.** The sun's cascades are placed around the view's origin and kept while it stays within
+  `r_shadowParallelMoveMargin` (5%) of a cascade's radius, across the sun's direction; nothing in the placement reads
+  the view's direction or field of view. Cascade 0 and the far cascade due in turn are released and rendered again,
+  static casters too, in every render, and both eyes of a tick render view slot 0 with the same shadow cache, the
+  same casters and, the eyes being 6.4 cm apart, almost always the same centre. Each view's light parameter build
+  (0x1CF0B80) takes a cascade's rect and matrix from its cache entry, so eye R samples eye L's cascade with the
+  projection eye L rendered it with (Parallel Eye Rendering's view 1 does the same).
+- **The hooks** (Steam build 25216728, the record function 0x1CFE2B0; signature at RVA 0x1CFF2B8, unique in `.text`,
+  the `lea rcx` in it checked to be the module base, the listing's bytes checked): a mid hook on the stale check
+  (`cmp edx, eax`, RVA 0x1CFF33E) and one on the listing (`test bl, 6`, RVA 0x1CFF357). Each render's eye and game
+  frame come from its tag, looked up by the backend counter the job sees on every call (not cached: a counter that
+  starts again or a tag book that resynchronises would hand an old tag back).
+  - At the listing, each sun world slice (light type 2 at `[rsp + 0x48]`, an even slice of the four cascades) that
+    eye L lists for rendering is stamped with the tick, keyed by the light and the slice: eye L's stale check
+    releases the cascade's entry and its listing allocates a new one, so the entry eye R later checks is not the one
+    eye L checked. A tick lower than the highest stamped (a map load) or the multiplayer guard closing empties the
+    stamps.
+  - At the stale check, in eye R's render of a known tick, a sun world slice keeps its entry when eye L stamped it
+    in this tick and the entry's counter is 1 there (eye L's render or allocation set it to 0, eye R's check raised
+    it): `eax` takes the counter (no release), `bl`'s bits 2 and 4 are cleared (not listed: neither gathered nor
+    rendered) and the counter goes back to 0 as eye R's render would have set it. **Eye R so never shades with a
+    cascade older than eye L's of the same tick: the worst-case staleness is zero ticks.** A counter left at 0 by an
+    allocation or a map load, a light that left eye L's list or an eye L render that did not happen has no stamp of
+    the tick, and eye R renders the slice as the engine would; so does a counter of 2 or more. The player's slices
+    (odd: the player model is placed per render), spot and point lights, eye L, mono and untagged renders are left
+    to the engine. A far cascade due on eye R's turn is not eye L's of the tick, so eye R still renders it.
+  - Both register changes are made at the two decisions only (`ja` and `test bl, 4` at the check, `test bl, 6` at
+    the listing). On the path they lead to (`je` at 0x1CFF35A to 0x1CFF4BE) `bl` is not read again: the slice loop
+    sets `ebx` from the slice at 0x1CFE81C before any read, and the function's exit pops `rbx` [disasm]. The counter
+    at entry + 0x88 is set to 0 by the render-list job 0x1CA2610 (stores at 0x1CA2EF3 and 0x1CA2F96) and by the
+    atlas allocation 0x1D05220 (stores at 0x1D0537A and 0x1D05673) [disasm], hence the stamp of the tick.
+- **Exclusive with Parallel Eye Rendering**, whose `view_shadow_cache.cpp` patches the same stretch (0x1CFF2B8 to
+  0x1CFF357): not installed when Parallel Eye Rendering is requested or changed the engine, and the first of the two
+  to claim the check (`claimShadowCheck`) keeps it for the process; a failed install (nothing hooked) lets the claim
+  go. The stale check is hooked first and the listing second: without the listing nothing is stamped, so `1` keeps
+  nothing. The multiplayer guard is asked at install and at every call.
+- **Values:** unset, `0`, `off`, `false` or `no`: nothing located, nothing hooked, no log line; `count`: the hooks
+  count and change nothing; `1`, `on`, `true`, `yes` or `shared`: as above; `ceiling` (a rig bound): eye R keeps
+  every sun world slice's entry at the check, whatever its counter or tick, and leaves any other at the listing.
+- **Log:** `seq-sun: shadow setup hooked (stale check RVA 0x1CFF33E, listing RVA 0x1CFF357), mode <mode>: ...` at
+  install, then every 10 s `seq-sun: last 10 s (<mode>): N stereo ticks; listed sun/spot/point/player: eye L
+  a/b/c/d, eye R a/b/c/d, other a/b/c/d; sun by cascade c0/c1/c2/c3: eye L a/b/c/d (n released at the check), eye
+  R a/b/c/d (n); eye R's sun checks n, eye L's of the tick n, kept by cascade a/b/c/d, left off at the listing n`
+  (spot, point and player listings are counted with `count` only). A missing piece logs why and installs nothing
+  (`not installed; eye R renders its own sun cascades`).
+- QA: `shared-sun` (by name) checks the log lines on the combat bench route; `sun-eyes-*` capture still scenes for
+  `tools/stereo/eye_diff.py` (`tools/rig/qa/qa-scenarios-sharedsun.ps1`).
+
 ## Alternate eyes (`ETERNALVR_ALTERNATE_EYES=1` or `auto`, off by default)
 
 An option for slower processors (the launcher's "Alternate eyes" on the Advanced tab): each game tick renders
@@ -660,8 +716,12 @@ Measured on early builds, before the fixes it needed for testers (Release, OpenX
 interleaved rounds of 120 s, median game ticks a second after 60 s): +41.7% in e1m2 and +28.7% in e1m3 on an
 RTX 3080 Ti with an i7-9700K, +16.7% earlier on the RTX 4080 rig. The version testers got (0.1.38) drew about
 12% more frames a second on the RTX 3080 Ti with the graphics load turned down so the processor was the limit;
-with ray tracing on at a Quest 3's resolution both ways ran close to 90 (`docs/release/README-ALPHA.md`). The
-GPU's work is not reduced.
+with ray tracing on at a Quest 3's resolution both ways ran close to 90 (`docs/release/README-ALPHA.md`).
+Measured again on 0.1.97's code (2026-11-15, the same PC, Release, the QA bench routes with the launcher's
+defaults, ray tracing off, pacing off, three interleaved runs per cell, median ticks a second): at 1280x1400 per
+eye +27% in the combat arena, +22% outdoors, +9% in the hub; at 2048x2208 +27%, +9% and +2%. Each cell is then
+GPU-bound (88-92% busy). The GPU's work per tick also goes down at 2048x2208 (combat 8.2 against 10.6 ms):
+view 1 renders no shadow map tiles of its own and async compute is off.
 
 **Turning it on.** `ETERNALVR_MODE=stereo` and `ETERNALVR_PARALLEL_EYES=1`; nothing else. The launcher's
 "Parallel Eye Rendering (highly experimental)" (Play tab, stereo only; shown to everyone since 2026-10-10) sets
@@ -1368,13 +1428,23 @@ decision and its counters; `src/vkcore/frame_pacing.*`, the glue):
   game keeps up with the headset: held again (its own rate R images/s; S% ...; ... now B s)` and `pace: a menu or
   a loading screen: held again ...`; the 10 s line names the state and counts the changes in those 10 s.
   `ETERNALVR_TEST_PACE_REPEAT=1` (a rig A/B) keeps the game held, as before.
-- **Late images (rig test switches).** Held, the game's frame starts when a headset frame chooses its image
-  and its image is due when the next one chooses, one period later: a late image left that frame without a new
-  image. `ETERNALVR_TEST_LATE_WAIT=1` makes such a frame wait for it within its own time (until 6 ms before the
-  period ends; `pacing::lateImageWaitSeconds`, only while the game hands images over at about the headset's
-  rate); `ETERNALVR_TEST_HOLD_GATE=1` makes the hold switch let a game go only when most of its images took
-  longer than a period (a hitch above the refresh no longer lets it go). Both off by default; the rig A/B and
-  why: docs/rig-findings/present-latency.md and T-201.
+- **Late images.** Held, the game's frame starts when a headset frame chooses its image and its image is due
+  when the next one chooses, one period later: a late image left that frame without a new image.
+  `ETERNALVR_PACE_LATE_WAIT=1` (opt-in, the launcher's "Wait for a late frame (testing)" under Frame pacing;
+  T-235; the rig's `ETERNALVR_TEST_LATE_WAIT` before) makes such a frame wait for it within its own time
+  (`vkcore/late_wait.*`: until the submit margin of 4 ms plus the GPU's share before the period ends;
+  `pacing::lateImageWaitSeconds`, only while the game hands images over at about the headset's rate), then
+  choose: the image's GPU work gets what is left before the submit margin, and the game's next image is released
+  by that later choice. The GPU's share is the larger of 2 ms and the slot choice's recent fence waits (the
+  largest of the last 8 frames, down only after 30 frames in a row under 1 ms; `pacing::GpuShareEstimate`), so
+  where the graphics card sets the pace the frame does not wait. Only with both eyes each game frame: not with
+  Parallel Eye Rendering or Alternate eyes (on or auto); asked for and refused, the log says why
+  (`features/pacing/late_wait_gate.*`). On the test PC at the auto size it cut the frames
+  without a new image by more than half on the three benchmark routes (combat 75 to 86%); at the Quest 3 size, where the graphics card
+  sets the pace, it now mostly steps aside (docs/rig-findings/frame-tails.md). `ETERNALVR_TEST_HOLD_GATE=1`
+  (a rig test) makes the hold switch let a game go only when most of its images took longer than a period (a
+  hitch above the refresh no longer lets it go). Both off by default; the first rig A/B and why:
+  docs/rig-findings/present-latency.md and T-201.
 - **The held wait (T-232).** Held, the game's render thread waits after each hand-over for the headset's next
   frame. On the test PC (i7-9700K, Windows' Balanced power plan) sleeping through that wait let the CPU's clock
   fall to 84-114% of its rated clock against 125-128% let go; the held tick then no longer fitted in the period,
@@ -1482,7 +1552,8 @@ Every 10 s after the `pace:` lines (ms, mean/p50/p95/p99/max):
 
 `ETERNALVR_TEST_LATENCY_CSV=1` (a rig test) also writes every image's times to `eternalvr-latency-<pid>.csv`
 in the log folder (seconds on the performance counter, -1 for none; `log_s` is the time of the 10 s line the
-image was finished in).
+image was finished in; `pose_located` is when the camera hook located the head pose the frame that showed
+the image submitted, so `end_called` less it is the pose's age at xrEndFrame).
 
 ## Depth layer (`ETERNALVR_DEPTH_LAYER=1`, off by default, experimental)
 
@@ -1802,6 +1873,7 @@ window cut to the view).
 |---|---|---|
 | `ETERNALVR_MODE` | head-tracked | `stereo`: Route S (or an experiment, below) |
 | `ETERNALVR_STEREO_SAME_VIEW` | 0 | 1: both eyes render the game's own view (S1); pairs are shown with the head pose |
+| `ETERNALVR_SHARED_SUN` | unset | `1`: eye R shades with the sun cascades eye L rendered in the same tick (Route S; "Shared sun cascades" above; the launcher's Shared sun shadows (testing)); `count` only counts; `ceiling` a rig bound (eye R renders no sun cascade) |
 | `ETERNALVR_CAPTURE_EYES` | unset | `<dir>[,<N>]`: every Nth pair (default 60) written as `eyes-<pid>-p<pair>-t<tick>-L.png` / `-R.png`, uncompressed (one pair is written at a time and compression would take about 0.7 s per pair; the in-headset capture's files are compressed) |
 | `ETERNALVR_CAPTURE_BURST` | 1 | `<n>`, 1 to 16: each in-headset capture (docs/VR_CONTROLLERS.md) saves n consecutive frames instead of one: Route S pairs or Parallel Eye Rendering frames (both eyes each; under Parallel Eye Rendering both halves of the ring slot the headset gets) as `-f00-L.png` / `-f00-R.png` and on, or mono frames (head-tracked play, a menu or loading screen) as `-f00-mono.png` and on; the text file has a line per frame (`burst frame NN: stereo pair P, game tick T`; under Parallel Eye Rendering `burst frame NN: game frame record R` and the copy of view 1 that eye R shows; for a mono frame its game frame record). A frame of the other kind (a menu's mono frame in a burst of pairs, a pair in a burst of mono frames), a new render size or a frame given up ends a burst early with the frames it has. The GUI image comes with frame 00 only. Host memory: one buffer per image, about 18 MB at a 2056x2216 render size (36 MB per pair, about 580 MB for 16 pairs), taken for each burst and freed once its frames are written; a burst whose buffers would take more than half the physical memory free, or that cannot have them, is one frame instead. A burst counts each of its frames against the session's 50 frames (`bug_capture::kMaxFramesPerSession`, about 650 MB of PNG at most) and takes no more than are left. One background thread compresses the images in turn, straight from those buffers (about 0.35 s per eye image: about 11 s for 16 pairs, and no other capture starts until it is done); on disk about 12 MB per pair. The launcher's Export report takes a burst's text file and GUI image, then its frames in order while they fit in its 20 MB: at that render size the first frame |
 | `ETERNALVR_STEREO_PREV_MATRICES` | 1 | 0: no previous-matrix hook (the eyes share the engine's) |
@@ -1861,8 +1933,13 @@ window cut to the view).
 | `ETERNALVR_TEST_UNFOCUSED_CAP` | unset | test knob: `0` turns off the hold behind a runtime's menu ("Frame pacing", Behind a runtime's menu) for rig rate measurements: the OpenXR simulator's session is VISIBLE whenever its window is not in front, which otherwise holds every such run to one image per display period. The low hold while nobody looks (SYNCHRONIZED, the user not present) stays; the simulator has neither. Log: `pace: a runtime menu is over the game; not held (ETERNALVR_TEST_UNFOCUSED_CAP=0, a rig test)` once |
 | `ETERNALVR_TEST_UNSEEN_VISIBLE` | unset | test knob: `1` takes the session VISIBLE after focus as nobody looking, so the OpenXR simulator (VISIBLE while its window is not the active one, never SYNCHRONIZED, no user presence) drives the low hold ("Frame pacing", While nobody looks) by its window's focus, from the game's first tick on (the start and the map's load run as in every rig run); the rig QA scenario `unseen-hold`. Wins over `ETERNALVR_TEST_UNFOCUSED_CAP=0`. Log: the low hold's lines with the reason `the session is VISIBLE, taken as nobody looking (ETERNALVR_TEST_UNSEEN_VISIBLE=1, a rig test)` |
 | `ETERNALVR_TEST_LATENCY_CSV` | unset | test knob: `1` writes every image's release-to-present times to `eternalvr-latency-<pid>.csv` in the log folder ("Release-to-present timing"); needs CPU timing on |
+| `ETERNALVR_TEST_CPU_CSV` | unset | test knob: `1` writes every tick's CPU split to `eternalvr-cpu-<pid>.csv` in the log folder ("CPU timing"); needs CPU timing on |
+| `ETERNALVR_TEST_LATE_WAIT_GPU_MS` | unset | test knob with `ETERNALVR_PACE_LATE_WAIT=1`: the time left for the late image's GPU work after the wait, 0.5 to 8 ms (2 by default; the wait then ends that much, or the recent fence waits if larger, plus the 4 ms submit margin before the period ends; docs/rig-findings/frame-tails.md) |
+| `ETERNALVR_TEST_SLOW_CALLS` | unset | test knob: `1` logs every log line that took over 2 ms to write (`log: the line before took ...`) and every camera hook call over 4 ms (`hooks: the camera hook took ...`), at most 200 of each ("Stalls") |
+| `ETERNALVR_TEST_COPY_GPU` | unset | test knob: `1` timestamps the interop copies (the present hook's copy into the ring, the XR worker's D3D12 copy into the headset's images) and logs their GPU time every 10 s (`copy-gpu: last 10 s: ...`, per present and per new headset image; `docs/rig-findings/perf-targets.md`) |
+| `ETERNALVR_TEST_PIPELINES` | unset | test knob: `1` logs the game's pipeline creations of every 10 s (`pipelines: last 10 s: the game created ...`), so a route's windows say whether the game compiled anything during it ("Stalls") |
 | `ETERNALVR_TEST_HOLD_GATE` | unset | test knob: `1` with `ETERNALVR_PACE=headset` (the hold switch) lets a held game go only when more than half of a window's images took longer than a display period from their release to their hand-over ("Frame pacing", Slower PCs; docs/rig-findings/present-latency.md). Log: `pace: the hold lets the game go only when most of its images take longer than a display period ...` once |
-| `ETERNALVR_TEST_LATE_WAIT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` makes a headset frame that begins while the held game is still drawing its image wait for it, within the frame's own time ("Frame pacing", Late images). Log: `pace: held, a headset frame that begins while the game is still drawing its image waits for it ...` once, and every 10 s `pace: last 10 s: N headset frame(s) waited for a late image: ...` |
+| `ETERNALVR_PACE_LATE_WAIT` | unset | opt-in (the launcher's "Wait for a late frame (testing)", T-235; the rig's `ETERNALVR_TEST_LATE_WAIT` before): `1` with `ETERNALVR_PACE=headset` makes a headset frame that begins while the held game is still drawing its image wait for it, within the frame's own time ("Frame pacing", Late images). Log: `pace: held, a headset frame that begins while the game is still drawing its image waits for it ...` once, and every 10 s `pace: last 10 s: N headset frame(s) waited for a late image: ...` |
 | `ETERNALVR_TEST_HOLD_SPIN` | unset | test knob with `ETERNALVR_PACE=headset`: `0` makes the held render thread only sleep until the headset's next frame (no spin once a hold has fallen behind twice, as before T-232); `1` makes it spin through its whole wait in play from the start ("Frame pacing", The held wait; docs/rig-findings/pace-hold.md). Log: `pace: held, the render thread only sleeps ... (ETERNALVR_TEST_HOLD_SPIN=0, a rig test)` or `pace: held, the render thread spins through its whole wait ... (ETERNALVR_TEST_HOLD_SPIN=1, a rig test)` |
 | `ETERNALVR_TEST_HOLD_SPIN_MS` | unset | test knob with `ETERNALVR_PACE=headset`: the held wait's spin before the headset's frame, in ms (above 0, under 20; default 5; each frame spins at most this plus 1 ms), once a hold has fallen behind in play ("Frame pacing", The held wait). Log: `pace: held, the spin before the headset's frame is N ms (ETERNALVR_TEST_HOLD_SPIN_MS, a rig test)` |
 | `ETERNALVR_TEST_PACE_REPEAT` | unset | test knob: `1` with `ETERNALVR_PACE=headset` keeps the game held and submits the newest image at every headset frame, as before T-194 ("Frame pacing", Slower PCs), for a rig A/B. Log: `pace: the game is always held and the headset's frames do not wait for a new image (ETERNALVR_TEST_PACE_REPEAT=1, a rig test)` |
@@ -2219,6 +2296,14 @@ Logs (all lines start with `cpu:`):
 
 Cost when on: about 0.01 ms per tick of timers (measured at start-up and logged), one map lookup per timed
 Vulkan call, and a Toolhelp snapshot every 10 s off the game's threads.
+
+`ETERNALVR_TEST_CPU_CSV=1` (a rig test) also writes every tick to `eternalvr-cpu-<pid>.csv` in the log
+folder, from the reporting thread with each 10 s window: `start_s` (the tick's start in seconds on the
+performance counter, the clock of `eternalvr-latency-<pid>.csv`), `period_ms`, `frontend_cpu_ms` (-1 when
+the tick's jobs ran on two threads), `process_cpu_ms`, then for each stage (`frame_end_left`, `right_eye`,
+`drain`, `submit`, `fence_wait`, `semaphore_wait`, `present`) its wall and CPU ms and calls in the tick.
+The time outside the frame-end jobs is `period_ms` less the first three stages' wall times. Off: nothing is
+kept (docs/rig-findings/frame-tails.md uses it).
 
 ## Stalls
 

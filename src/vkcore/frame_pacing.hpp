@@ -52,12 +52,13 @@ void onHandOver();
 // choice first).
 void onHeadsetFrame(std::int64_t periodNs, long long frameStartQpc, double waitFrameMs);
 
-// XR worker, right before xrEndFrame (release-to-present timing).
-void beforeEndFrame();
+// XR worker, right before xrEndFrame (release-to-present timing), with when the head pose it submits was
+// located (QueryPerformanceCounter; 0: none).
+void beforeEndFrame(long long poseLocatedQpc);
 
 // XR worker, when a headset frame begins (before updateImage chooses), its xrWaitFrame having returned at
 // `frameStartQpc` (QueryPerformanceCounter): held, waits for the image the game is still drawing, within the
-// frame's own time (features/pacing/late_image.hpp; ETERNALVR_TEST_LATE_WAIT=1, a rig test); at once
+// frame's own time (features/pacing/late_image.hpp; ETERNALVR_PACE_LATE_WAIT=1, opt-in, T-235); at once
 // otherwise. Returns `latest` (the presenter's newest image, timeline value << 2 | slot) as read after it.
 std::uint64_t awaitLateImage(const std::atomic<std::uint64_t>& latest,
                              long long frameStartQpc,

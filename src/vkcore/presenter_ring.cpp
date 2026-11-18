@@ -6,6 +6,7 @@
 #include "vkcore/presenter_impl.hpp"
 
 #include "vkcore/frame_pacing.hpp"
+#include "vkcore/late_wait.hpp"
 #include "vkcore/new_frame_wait.hpp"
 #include "vkcore/present_latency.hpp"
 #include "vkcore/status_file.hpp"
@@ -234,6 +235,7 @@ void XrPresenter::Impl::destroyVulkanObjects() {
     destroyUiImages();
     gunBorder.destroy(dev); // not with the UI images: the worker may read it until it stops
     depthLayer.destroyBuffers(dev, true);
+    copyGpu.destroy(dev, !workerLeftBehind);
 }
 
 bool XrPresenter::Impl::createRing() {
@@ -510,6 +512,9 @@ bool XrPresenter::Impl::takeRenderedSlot(std::uint32_t& slotIndex,
         case pacing::SlotChoice::TakeNewest:
             if (take(newest)) {
                 ++xrNewestTaken;
+                if (waitSeconds > 0.0) {
+                    late_wait::noteFenceWait(0.0); // rendered at the choice (not the take after a wait)
+                }
                 return true;
             }
             return offer.previousReady && take(before);
@@ -517,8 +522,10 @@ bool XrPresenter::Impl::takeRenderedSlot(std::uint32_t& slotIndex,
             ++xrNewestWaits;
             const LONGLONG waitStart = qpcNow();
             const bool rendered = waitFenceFor(sharedFence.Get(), newest >> 2, copyEvent, waitSeconds);
-            newestWait.add(qpcSeconds(qpcNow() - waitStart) * 1000.0);
-            if (rendered && take(newest)) { // even if the game published again meanwhile
+            const double waited = qpcSeconds(qpcNow() - waitStart);
+            newestWait.add(waited * 1000.0);
+            late_wait::noteFenceWait(waited); // the late-image wait's GPU share (late_wait.hpp)
+            if (rendered && take(newest)) {   // even if the game published again meanwhile
                 ++xrNewestTaken;
                 return true;
             }
