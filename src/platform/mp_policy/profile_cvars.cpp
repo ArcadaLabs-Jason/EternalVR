@@ -11,7 +11,8 @@
 namespace evr::mp_policy {
 
 const std::vector<std::string_view>& profileStoredCvars() {
-    static const std::vector<std::string_view> cvars{"view_skipShakes", "r_sharpening", "swf_anchorProfile"};
+    static const std::vector<std::string_view> cvars{"view_skipShakes", "r_sharpening", "swf_anchorProfile",
+                                                     "g_setting_photomode"};
     return cvars;
 }
 
@@ -22,6 +23,10 @@ bool profileStoredCvar(std::string_view name) {
         }
     }
     return false;
+}
+
+bool profileOptionalCvar(std::string_view name) {
+    return sameCvarName(name, "g_setting_photomode");
 }
 
 bool sameCvarValue(std::string_view a, std::string_view b) {

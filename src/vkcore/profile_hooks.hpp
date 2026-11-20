@@ -56,4 +56,9 @@ void installProfileHooks();
 // multiplayer guard trip gives it back.
 void profilePlayerChoice(std::string_view name, const std::string& value);
 
+// Any thread: the hooks are in and keep the player's own value of `name` in profile.bin. An optional cvar
+// (mp_policy::profileOptionalCvar, photo mode) is held at run time only then (runtime_cvars.cpp): a build
+// without it, or without the hooks, leaves it as the player has it.
+bool profileKeeps(std::string_view name);
+
 } // namespace evr::vkcore

@@ -7,6 +7,7 @@
 #include "vkcore/controllers_impl.hpp"
 #include "vkcore/controllers_input_logs.hpp"
 #include "vkcore/demon_view.hpp"
+#include "vkcore/game_motion.hpp"
 #include "vkcore/gamepad_mode.hpp"
 #include "vkcore/key_inject.hpp"
 #include "vkcore/launcher_place.hpp"
@@ -83,6 +84,7 @@ void install() {
         installDemonModelHooks(); // the Revenant's cannons and arms on the view (logged)
         s.facingHook = installFacingHook();
         s.climbHook = installClimbHook();
+        installGameMotionHooks(); // the vignette's launch pulse (game_motion.hpp)
         // The equipment launcher aims from its own joint, not the view: only for ETERNALVR_EQUIPMENT_AIM.
         if (cfg.aim == input::AimSource::Hand && cfg.actionAim.equipment != input::ActionAimSource::Same) {
             s.equipmentHook = installEquipmentLaunchHook();
@@ -173,6 +175,9 @@ void installGamepadMode() {
     }
     if (use.bhaptics) {
         startBhaptics();
+    }
+    if (use.viewGate) {
+        installGameMotionHooks(); // the vignette's launch pulse (game_motion.hpp), with the build known
     }
     EVR_LOG(
         "%s: gamepad mode (motion controllers off): the game's pad, keyboard and mouse input stays as the "

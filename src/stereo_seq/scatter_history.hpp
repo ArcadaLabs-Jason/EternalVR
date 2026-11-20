@@ -16,6 +16,7 @@
 // An eye whose own last render is not two renders back (a skipped eye R, a mono stretch, a load) starts
 // its history over.
 
+#include "engine/eternal/scatter_state.hpp"
 #include "stereo_seq/eye_tags.hpp"
 
 #include <array>
@@ -31,12 +32,10 @@ struct ScatterPair {
     friend constexpr bool operator==(ScatterPair, ScatterPair) = default;
 };
 
-// The filter's state: the engine's struct from +0x60 to +0x94. `kScatterLastFrame` is the last frame the
-// volume was computed for; 0 makes the next compute clear its history first.
-inline constexpr std::size_t kScatterStateOffset = 0x60;
-inline constexpr std::size_t kScatterStateBytes = 0x34;
-inline constexpr std::size_t kScatterLastFrame = 0x70 - kScatterStateOffset;
-using ScatterState = std::array<std::byte, kScatterStateBytes>;
+// The filter's state (engine/eternal/scatter_state.hpp). `kScatterLastFrame` is the last frame the volume was
+// computed for; 0 makes the next compute clear its history first.
+inline constexpr std::size_t kScatterLastFrame = engine::kScatterLastFrame;
+using ScatterState = std::array<std::byte, engine::kScatterStateBytes>;
 
 struct ScatterPlan {
     // The device context's pairs: [counter & 1] is written this render, the other one read.

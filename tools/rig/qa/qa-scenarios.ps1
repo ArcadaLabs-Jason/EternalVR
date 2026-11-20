@@ -271,9 +271,11 @@ function Test-QaHoldOnlyScoped($Ctx) {
 
 # ETERNALVR_UI_CROSSHAIR=gun under hand aim: once the crosshair's quad on the gun's ray is up, hud_reticle_styleOverride
 # is written to 0 only inside a scoped zoom (`zoom look: scoped zoom starts` ... `ends`): the game draws its crosshair
-# and the layer moves it. A hold before that line (the start-up's, until the quad is made) is given back.
+# and the layer moves it. A hold before that line (the start-up's, until the quad is made) is given back. The span
+# starts at the quad's own line: the earlier 'goes on the gun's ray' line is logged when the UI swapchain is made, and
+# the start-up hold's write and give-back can land on either side of it (thread timing, seen in full suites).
 function Test-QaGunHoldOnlyScoped($Ctx) {
-    $lines = @(Get-QaLogSpan $Ctx "ui: the game's crosshair goes on the gun's ray" '(?!)')
+    $lines = @(Get-QaLogSpan $Ctx "ui: the game's crosshair on the gun's ray: its quad" '(?!)')
     $scoped = $false
     $writes = 0
     $outside = 0

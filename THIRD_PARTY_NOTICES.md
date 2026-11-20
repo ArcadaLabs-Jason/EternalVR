@@ -300,8 +300,9 @@ The launcher's icon and header strip are the EternalVR logo, which is not covere
 ## Not redistributed
 
 - The launcher uses only .NET Framework 4.8, which is part of Windows.
-- The Windows system DLLs the layer loads (`d3d12.dll`, `dxgi.dll`, `d3dcompiler_47.dll`, `version.dll`,
-  `vulkan-1.dll` from the graphics driver) come with Windows or the driver; none is in the zip.
+- The Windows system DLLs the layer loads (`kernel32.dll`, `user32.dll`, `d3d12.dll`, `dxgi.dll`,
+  `d3dcompiler_47.dll`, `version.dll`, `winhttp.dll` for the bHaptics link, and `vulkan-1.dll` from the graphics
+  driver) come with Windows or the driver; none is in the zip.
 - NVIDIA's DLSS DLL (`nvngx_dlss.dll`) is not shipped: on the player's request the launcher downloads it
   from NVIDIA's GitHub repository after the player accepts NVIDIA's licence
   (`launcher/data/dlss-downloads.txt` names each file, its SHA-256 and its licence). The layer only loads the

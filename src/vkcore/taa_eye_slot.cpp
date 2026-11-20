@@ -154,7 +154,7 @@ void* select(stereo_seq::AccumRole role,
     }
     const std::optional<stereo_seq::RenderTag> tag = seqTagInFlight();
     const stereo_seq::AccumPick pick = stereo_seq::pickAccumulation(role, tag ? &*tag : nullptr, true);
-    if (pick.engine) {
+    if (pick.engine || !tag) { // no tag is always the engine's pick
         ++g_counters.enginePicks;
         return original(renderSystem, renderView);
     }

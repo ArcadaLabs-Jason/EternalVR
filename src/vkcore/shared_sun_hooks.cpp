@@ -1,5 +1,6 @@
 #include "vkcore/shared_sun_hooks.hpp"
 
+#include "engine/eternal/sun_keep_registers.hpp"
 #include "stereo_seq/shared_sun.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
@@ -207,7 +208,7 @@ void onCheck(HookRegisters& r) {
     if (!stereo_seq::sharedSunKeeps(g_mode, c)) {
         return;
     }
-    const stereo_seq::SunKeepRegisters k = stereo_seq::sunKeepRegisters(r.rax, r.rbx, c.counter);
+    const engine::SunKeepRegisters k = engine::sunKeepRegisters(r.rax, r.rbx, c.counter);
     r.rax = static_cast<std::uintptr_t>(k.rax);
     r.rbx = static_cast<std::uintptr_t>(k.rbx);
     const std::uint32_t zero = 0;
@@ -236,7 +237,7 @@ void onListed(HookRegisters& r) {
         g_stamps.stamp(r.rdi, slice, tick);
     }
     if (stereo_seq::sharedSunSkipsListing(g_mode, eye, tick, type, slice)) {
-        r.rbx = static_cast<std::uintptr_t>(stereo_seq::sunKeepRegisters(r.rax, r.rbx, 0).rbx);
+        r.rbx = static_cast<std::uintptr_t>(engine::sunKeepRegisters(r.rax, r.rbx, 0).rbx);
         ++g_counters.leftOff;
         report();
         return;

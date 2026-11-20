@@ -83,7 +83,7 @@ bool knobDue() {
         return false;
     }
     std::lock_guard lock(g_knobMutex);
-    if (!g_knob->due(nowSeconds())) {
+    if (!g_knob || !g_knob->due(nowSeconds())) { // armed only once g_knob is set
         return false;
     }
     g_knobArmed.store(false, std::memory_order_release);

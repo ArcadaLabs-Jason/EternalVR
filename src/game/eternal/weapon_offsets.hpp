@@ -133,6 +133,7 @@ enum class OffsetPosture : unsigned char {
 // frame.
 inline constexpr WeaponOffset kRowsWrist{-0.08f, -0.035f, 0.0f, 0.0f, 0.0f, 0.0f};
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct WeaponOffsetTable {
     std::map<std::string, WeaponOffset, std::less<>> standing;
     std::map<std::string, WeaponOffset, std::less<>> seated;

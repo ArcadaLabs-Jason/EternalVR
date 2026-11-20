@@ -10,6 +10,7 @@
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/pe_flares.hpp"
+#include "vkcore/profile_hooks.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
@@ -291,6 +292,15 @@ void start(bool stereo) {
     addReticleHold(g_held); // before the debug list, whose value entry for the cvar replaces it
     addDebugList();
     addPromptPlatform();
+    // An optional profile cvar (photo mode) only while the profile hooks keep the player's value: held
+    // without them, its VR value would be saved into the flat game's profile.
+    std::erase_if(g_held, [](const Held& h) {
+        if (!mp_policy::profileOptionalCvar(h.name) || profileKeeps(h.name)) {
+            return false;
+        }
+        EVR_LOG("%s: %s not held: the profile hooks do not keep it in this session", kTag, h.name.c_str());
+        return true;
+    });
     GameImage image;
     if (g_held.empty() || !locateGameImage(image, kTag)) {
         return;
@@ -514,7 +524,7 @@ void apply(bool stereo) {
             }
             continue;
         }
-        if (before == std::atoi(h.value.c_str())) {
+        if (before == static_cast<int>(std::strtol(h.value.c_str(), nullptr, 10))) {
             continue;
         }
         if (!cvar_book::write(h.name, h.object, g_setString, h.value.c_str())) {

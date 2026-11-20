@@ -465,7 +465,7 @@ void startBhaptics() {
         if (!installBhapticsPortalHooks()) {
             EVR_LOG("%s: no portal hooks: going through a portal plays nothing", kTag);
         }
-        if (!installBhapticsLaunchHooks()) {
+        if (!installLaunchHooks()) {
             EVR_LOG("%s: no launch hooks: jump pads and boosters play nothing", kTag);
         }
         if (!installBhapticsAmmoHooks()) {

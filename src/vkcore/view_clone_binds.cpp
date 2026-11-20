@@ -3,6 +3,7 @@
 // it (view_slots.hpp). They also count each clone's uses for the census (view_clone_census.cpp), including
 // clones that turn up on other command contexts than view 1's.
 
+#include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
 #include "vkcore/view_clone_map.hpp"
@@ -136,7 +137,7 @@ bool decodeStore(const std::byte* p, Store& out) {
     out.source = ((rex >> 2) & 1) << 3 | ((modrm >> 3) & 7);
     out.base = (rex & 1) << 3 | rm;
     if (mod == 1) {
-        out.disp = static_cast<std::int8_t>(std::to_integer<std::uint8_t>(p[at]));
+        out.disp = disp8(p[at]);
     } else {
         std::memcpy(&out.disp, p + at, sizeof(out.disp));
     }

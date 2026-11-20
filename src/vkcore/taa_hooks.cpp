@@ -91,11 +91,12 @@ bool setCvar(std::string_view name, const char* value) {
         return false;
     }
     const int before = cvarInt(cvar);
+    const int want = static_cast<int>(std::strtol(value, nullptr, 10));
     if (taaLeftToDebugCvars(name)) {
-        return before == std::atoi(value);
+        return before == want;
     }
-    if (before == std::atoi(value) || !cvar_book::write(name, cvar, g_setCvar, value)) {
-        return before == std::atoi(value);
+    if (before == want || !cvar_book::write(name, cvar, g_setCvar, value)) {
+        return before == want;
     }
     const std::uint64_t writes = ++g_cvarWrites;
     if (writes <= 30 || writes % 100 == 0) {

@@ -23,7 +23,7 @@ void XrPresenter::Impl::onRenderLatch(const std::byte* renderView, const float* 
         newest = latestSeq;
         for (std::size_t i = 0; i < kHistorySize && i < newest; ++i) {
             const ViewRecord& record = history[(newest - i) % kHistorySize];
-            if (std::memcmp(record.axis.data(), axis, sizeof(record.axis)) == 0) {
+            if (sameAxisBits(record, axis)) {
                 seq = record.seq;
                 fov = record.fov;
                 break;

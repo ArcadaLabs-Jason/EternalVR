@@ -103,9 +103,9 @@ them is worse for you than described here.
   shows it.
 - **A frame rate limit in RivaTuner (RTSS) halves the headset's frame rate.** The game hands over each eye's
   picture as a frame of its own, so RTSS counts every headset frame twice and its limit applies to both: 60 there
-  gave the headset 30 new frames a second on my test PC. Leave RTSS's limit off for DOOM Eternal; its counter
-  itself is fine (it shows in both eyes, top left). OBS game capture works and records the desktop window (your
-  left eye, no HUD); ReShade stays out of VR. More in TROUBLESHOOTING.md, "RivaTuner (RTSS), OBS and ReShade".
+  gave the headset 30 new frames a second on my test PC. Leave RTSS's limit off for DOOM Eternal (the launcher warns
+  when RTSS's profiles set one); its counter itself is fine (it shows in both eyes, top left). OBS game capture works
+  and records the desktop window (your left eye, no HUD); ReShade stays out of VR. More in TROUBLESHOOTING.md, "RivaTuner (RTSS), OBS and ReShade".
 - **DLSS with preset K may not speed things up on an RTX 3080 Ti at large render sizes.** On my test PC's RTX
   3080 Ti at 2048 x 2208 per eye, DLSS Quality with preset K (the launcher's default) took as much graphics card
   time as the default TAA at full size on the outdoor and hub routes, so it gave no extra frames there; preset E
@@ -596,22 +596,36 @@ them is worse for you than described here.
 
 ## Moments VR doesn't handle yet
 
-- **Rides the game moves you on** (the trams in the Cultist Base and the Doom Hunter Base, the Titan carrying your
-  platform in the Blood Swamps, the jump into the Argent stream in Nekravol, the Ion Catapult and the escape pod in
-  Mars Core, the creature ride on the World Spear, long elevators) get nothing of their own from the mod. One the game
-  plays as a cutscene should go on the screen like any cutscene; otherwise you ride along as in the flat game, with no
-  fade and no vignette for the ride. I haven't checked them one by one, on my test PC or in a headset; if one makes
-  you queasy, please tell me which.
-- **Photo mode** (if you turned it on in the game's settings) hasn't been tried in VR, and the mod doesn't switch it
-  off. Its free camera may not behave in the headset; I'd leave it alone for now.
+- **Rides the game moves you on** (trams, lifts, platforms that carry you): with the Vignette on (Play tab), the
+  edges now darken while the game carries you, about as much as walking that fast with the stick would. The mod
+  tells a ride by your body moving faster than your own running, jumping or dashing explains, so it needs no list of
+  places. On my test PC that worked on the long elevator in Mars Core and the Cultist Base tram at the end of the
+  mission, and fights, jumps, dashes, walking, running into walls and corners, running with the weapon wheel
+  open and jump pads didn't count as rides. While you walk, only level carrying counts, so a lift moving under
+  you while you walk isn't a ride until you stand still. The Doom Hunter Base tram gets no vignette: on my test
+  PC your car never moves (the cars behind it do, when the coupling breaks), so the ride is what goes past
+  outside, which the mod can't see. The jump into the Argent stream in Nekravol, the creature ride on the World
+  Spear and the Titan carrying your platform in the Blood Swamps are cutscenes, so they go on the screen like any
+  other (checked on my test PC); the Ion Catapult and the escape pod in Mars Core look like cutscenes too, from
+  the game's files (I haven't started them on my test PC). None of it has been tried in a headset. With the
+  Vignette off nothing changes. If a ride makes you queasy, please tell me which.
+- **Photo mode** is now kept off in VR (with Mono picked on the Advanced tab it still isn't): its free camera
+  doesn't follow the headset. On my test PC it went straight back off when I turned it on during play. Your own
+  Photo mode setting should come back in the flat game: the mod keeps the VR value out of your saved settings the
+  same way it does for camera shake, though I haven't checked that over a real session yet. If the mod can't
+  find the setting in your copy of the game (I could only check the Steam version), it leaves photo mode as
+  you set it.
 
 ## Launcher and settings
 
 - **The comfort vignette** (Vignette on the Play tab) has been checked on a headset simulator, not yet
   in a headset; its strength may change. It darkens the edges while the sticks move or turn you, while you
   dash and while the game moves the camera itself (a glory kill, checked on my test PC). The Meathook pull
-  probably only brings it up for the moment the hook catches, not while you fly (not checked yet). Jump pads,
-  boosters and the Sentinel Hammer's slam don't bring it up yet.
+  probably only brings it up for the moment the hook catches, not while you fly (not checked yet). A jump pad now
+  brings it up quickly and keeps it while the pad throws you, until you land (checked on my test PC with an e1m2
+  pad), and a booster does the same (checked on my test PC with the one in e1m2); so should the Sentinel Hammer's
+  slam (I think the mod spots it, but I haven't had a save with the hammer to check). Rides the game carries you
+  on bring it up too (above, Moments VR doesn't handle yet).
 - **Use the headset's graphics card** (Advanced tab) is for a PC with two or more graphics cards where VR
   does not start because the game picked another card than the headset's. It is off by default and not
   yet tried on such a PC with a headset; please tell me if you need it and how it went.

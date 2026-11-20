@@ -156,7 +156,7 @@ namespace {
 
 // The render view carries the axis the camera hook wrote for `record`'s game frame.
 bool sameAxis(const std::byte* renderView, const ViewRecord& record) {
-    return std::memcmp(renderView + render_view::kViewAxis, record.axis.data(), sizeof(record.axis)) == 0;
+    return sameAxisBits(record, renderView + render_view::kViewAxis);
 }
 
 } // namespace

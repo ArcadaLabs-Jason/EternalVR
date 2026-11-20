@@ -1,15 +1,16 @@
 # Implicit Vulkan and OpenXR layers the launcher knows (T-095, T-110). The list is data; the
 # variable used to turn a layer off comes from its own manifest's disable_environment.
-# api | layer name (or prefix*) | ignore | warn | disable | disable-unless-vdxr | reason
+# api | layer name (or prefix*) | ignore | warn | warn-if-rtss-limit | disable | disable-unless-vdxr | reason
 vulkan | VK_LAYER_ETERNALVR | warn | an EternalVR layer registered in the registry; the launcher loads its own copy through the environment
 vulkan | VK_LAYER_VALVE_steam_overlay* | ignore | Steam overlay
 vulkan | VK_LAYER_VALVE_steam_fossilize* | ignore | Steam shader pre-caching
 vulkan | VK_LAYER_EOS_Overlay | ignore | Epic Online Services overlay, inert outside Epic games
 vulkan | VK_LAYER_RENDERDOC_Capture | ignore | RenderDoc, inert unless capturing
 vulkan | VK_LAYER_KHARVOX* | disable | another VR layer for DOOM Eternal
-# RTSS, OBS and ReShade were run next to the layer on the test PC (RELEASE-CHECKLIST.md item 7). RTSS stays a
-# warning: it also hooks the game without its layer, so its variable does not switch it off.
-vulkan | VK_LAYER_RTSS | warn | RivaTuner Statistics Server works, but its counter shows in both eyes and counts each headset frame twice, and a frame rate limit set in RTSS halves the headset's frame rate (60 gives 30): leave its limit off for DOOM Eternal
+# RTSS, OBS and ReShade were run next to the layer on the test PC (RELEASE-CHECKLIST.md item 7). RTSS is not switched
+# off (it also hooks the game without its layer, so its variable does not stop it): it warns only while its profiles
+# limit DOOM Eternal's frame rate, or cannot be read (RtssProfiles.cs).
+vulkan | VK_LAYER_RTSS | warn-if-rtss-limit | RivaTuner Statistics Server works, but a frame rate limit set in RTSS halves the headset's frame rate (60 gives 30), since each headset frame is two of the game's: set the limit to 0 for DOOM Eternal
 vulkan | VK_LAYER_OBS_HOOK | ignore | OBS game capture works; it captures the game's desktop window (the left eye, without the HUD)
 vulkan | VK_LAYER_reshade* | disable | ReShade's effects do not reach the headset, and the game keeps ReShade out by itself too
 vulkan | VK_LAYER_OW_OVERLAY | disable | Overwolf overlay

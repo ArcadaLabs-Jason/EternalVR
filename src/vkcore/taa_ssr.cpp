@@ -43,7 +43,8 @@ void ssrDecide(bool perEye, bool located, bool debugListed) {
 
 const char* ssrHoldTick(int upscaleQuality) {
     const stereo_seq::SsrHold::Tick t = g_hold.tick(upscaleQuality);
-    const int followed = g_hold.followed() ? std::atoi(g_hold.value().c_str()) : -1;
+    const int followed =
+        g_hold.followed() ? static_cast<int>(std::strtol(g_hold.value().c_str(), nullptr, 10)) : -1;
     const bool first = followed >= 0 && g_followed.exchange(followed) < 0;
     if (t.changed || first) {
         EVR_LOG("%s: r_SSR held at %s from now on (the game's Reflections setting: %s)", kTag,

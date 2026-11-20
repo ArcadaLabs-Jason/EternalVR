@@ -99,7 +99,10 @@ Foundation, in order:
    options are settled (D-048; 2026-11-13). A profile based on a new preset is written with every setting while older launchers do
    not know the preset, so a downgrade does not read it against Recommended (T-134).
 8. **Release hygiene** (REQ-18, REQ-19, M10): the notices audit, a clang-tidy check and the
-   code-signing choice (open question 7).
+   code-signing choice (open question 7). Status 2026-11-16: the notices re-checked for the sources from 0.1.75 to
+   0.1.97 (`docs/release/notices-audit.md`), clang-tidy at no finding (its baseline empty), `tools/check_scope.py`
+   keeps engine internals in their folders (T-236), and the beta ships unsigned (open question 7); clang-tidy has
+   a CI job of its own since 2026-11-17 (the M4.5 CI box).
 
 Continuous tracks: performance (the benchmark routes and the REQ-20 gates, M9), the hardware matrix
 (testers, T-076), and FSR once enough AMD players need it (D-049).
@@ -474,7 +477,8 @@ Required for v1
 - [x] Coexistence (T-095): one stereo session each with RTSS, OBS game capture and ReShade's Vulkan
       layer installed, each either working or named and disabled by preflight; the known-bad list is
       data. Rig, 0.1.94 on the simulator (`coexist` QA scenario, 2026-11-13): RTSS works (its counter in
-      both eyes; a frame limit in it halves the headset's rate, so preflight warns), OBS game capture works
+      both eyes; a frame limit in it halves the headset's rate, so preflight warns while RTSS's profiles set
+      one or cannot be read, since 2026-11-17), OBS game capture works
       and records the desktop window (no warning), ReShade stays out (the launcher's switch and the game's
       own layer blacklist; forced in with `+r_allowBlackListedLayers 1` VR still works and ReShade reaches
       only the desktop window). Not yet in a headset
@@ -502,19 +506,34 @@ Required for v1
       clang-format 18.1.8, the 600-line check and the standard-header includes check (Linux), the portable build and
       tests (Linux, macOS), and on `windows-latest` the MSVC build and tests, the rig-script suite (since
       2026-11-12), the release sources check and the launcher's tests (Linux too). clang-tidy is a gate of every
-      merge QA rather than a CI job: `tools/run_clang_tidy.py` (all of `src/`, the windows-msvc build's compile
-      commands, clang-tidy 23.1.2) fails on any finding not in its baseline, which holds 40 older findings in 32
-      entries (`tools/clang_tidy_baseline.txt`). No CI run passed from 2026-10-03 to 2026-11-12: launcher tests that
+      merge QA and, since 2026-11-17, a CI job of its own on `windows-latest` (the windows-msvc preset configured,
+      LLVM's 23.1.2 archive checked against its SHA256 by `tools/fetch_clang_tidy.py`): `tools/run_clang_tidy.py`
+      (all of `src/`, the windows-msvc build's compile
+      commands, clang-tidy 23.1.2) fails on any finding not in its baseline (`tools/clang_tidy_baseline.txt`), which
+      is empty since 2026-11-16: of the 40 older findings, 31 were fixed in the code without a change in behaviour
+      and 9 (bugprone-exception-escape on the implicit moves of structs that hold a `std::map`, whose move
+      constructor allocates on MSVC) are kept by a NOLINT with its reason. No CI run passed from 2026-10-03 to 2026-11-12: launcher tests that
       held only on Windows, then the portable build on GCC and Clang (a printf format, members left out of brace
-      initialisers, a switch); fixed 2026-11-12. Still open: no tool checks that engine internals and game data stay
-      in their folders (SCOPE, REQ-18)
+      initialisers, a switch); fixed 2026-11-12. Since 2026-11-16 `tools/check_scope.py` (CI on Linux and macOS, and
+      a merge QA gate) fails on engine internals outside `src/vkcore`, `src/engine/eternal` and `src/game/eternal`:
+      byte signatures, game addresses, game-memory offsets, hook registers and id Tech type names (T-236; the 12
+      lines it found on the 0.1.97 sources moved to `src/engine/eternal`); game-design data has no form a script
+      can tell and stays a review point. Still open: a check for game data outside `src/game/eternal`; a green run on
+      GitHub, where no job has started since 2026-11-14 (the account's billing hold), so the clang-tidy job has
+      run only as the same steps on the test PC (2026-11-17, a clean configure: baseline 0, 0 findings); and the
+      job is not the one worded (it uses the windows-msvc preset's compile commands and all of `src/`, not a
+      clang-cl preset and the changed files)
 - [ ] No stall or deadlock (T-023): in a 30-minute simulator soak and an [owner] 30-minute headset
       session, the frame log shows no `xrEndFrame` gap over 1 s outside loading, and the run ends
       cleanly through `stop.ps1` (the simulator half passed on v0.1.49, 2026-10-13, and again on v0.1.75, 2026-10-22:
       31 minutes in play, the largest XR frame gap 48.6 ms, none over 100 ms, video memory flat, a clean stop; and
       on the 0.1.92 code, 2026-11-11: 31.3 minutes in play, the largest XR frame gap 55.1 ms, none over 100 ms,
       no game present stall over 50 ms in play, XR 89.8 fps on average, video memory +0.55 MB/min with no reading
-      over budget, handles and threads flat, no crash dumps; the headset session is still to come)
+      over budget, handles and threads flat, no crash dumps; and on the 0.1.97 code with the release hygiene changes
+      (the clang-tidy fixes and the moves to `src/engine/eternal`), Release build, 2026-11-16: 31.4 minutes played,
+      the largest XR frame gap in play 42.0 ms, none over 100 ms, no game present stall over 50 ms in play, XR
+      89.8 fps on average, video memory +0.21 MB/min with no reading over budget, handles 2124 to 2119 and threads
+      115 to 115, no crash dumps, stopped cleanly through `stop.ps1`; the headset session is still to come)
 - [ ] [owner] SteamVR: the stereo build runs on SteamVR (Quest 3 over Steam Link); a tester on SteamVR with
       Index or on PSVR2 has run it and sent an "Export report", or the gap is recorded for the release
       notes (T-076)
@@ -645,7 +664,8 @@ v1 if time allows
 ## M7: Game states and comfort
 
 Status: cutscenes play on a flat screen, around the player (an option) or are skipped, the game's camera
-shakes, blur and damage washes are off, and a comfort vignette is an option. Look-at triggers (the Doom
+shakes, blur and damage washes are off, and a comfort vignette is an option (since 2026-11-17 also for jump
+pads and boosters and for rides the game carries the player on; photo mode held off). Look-at triggers (the Doom
 Hunter Base ladder and others) test where the head looks (v0.1.4), and piloting the Cultist Base Revenant
 works with head or hand aim (v0.1.3, v0.1.5). A whole-game audit found the Revenant to be the only body
 swap. Glory kills have four presentations in the launcher (v0.1.6; follow the camera, the default; a
@@ -659,8 +679,12 @@ Required for v1
       and exit (T-132); a state with none is listed in `docs/release/KNOWN-ISSUES.md`. Walked against the code
       on 2026-11-12 (`docs/rig-findings/camera-takeovers.md`, one row per state): 23 handled, by a feature of
       their own or by the general rule (the game camera's pitch and roll never reach the headset), 1 in part
-      (row 4, the Hammer's slam: the Crucible's kill is handled, the slam is not) and 3 not handled (jump pads,
-      scripted rides, photo mode); the slam and the 3 are listed. Lines were added for the
+      (row 4, the Hammer's slam) and 3 not handled (jump pads, scripted rides, photo mode). On 2026-11-17 (the
+      `game-motion` branch, not yet seen in a headset) the comfort vignette took the jump pads, boosters and the
+      slam (a launch pulse; the slam's reading inferred, no hammer save on the rig) and rides that carry the body
+      (one general rule; the Phobos elevator and the Cultist Base tram on the rig), and photo mode is held off
+      (not in mono): 26 handled, 1 in part (row 20: the Doom Hunter Base tram did not carry the player on the
+      rig, four other rides not run), all listed in KNOWN-ISSUES. Lines were added for the
       handled states that logged none (pickups with Still view, climbs, deaths, the cinema screen's runs, which
       cover loading screens); still without a line of their own: a teleport seated with bHaptics off and a turn
       under 90 degrees, and a camera only head aim's 15 degrees sees. The rig (2026-11-12, the `takeover-qa`
@@ -891,7 +915,8 @@ fixed: players have finished the base game and both DLCs on the alphas. The beta
   made (an unsigned beta with the SmartScreen steps in INSTALL.md is acceptable). Status 2026-11-09: the notices
   audit is done (`docs/release/notices-audit.md`) and the beta ships unsigned (open question 7); the clang-tidy
   check runs as the merge QA gate (no new finding on any merge), with 40 older findings still in its baseline
-  (2026-11-12);
+  (2026-11-12). Met 2026-11-16: the notices re-checked from 0.1.75 to 0.1.97, and the clang-tidy baseline is empty
+  (31 findings fixed, 9 kept by a NOLINT with its reason);
 - the legibility protocol (foundation step 5) is written and passed at default settings;
 - the playthrough log (foundation step 4) is met by players' full runs of the base game and both DLCs;
 - the owner has looked at the beta build in a headset;
@@ -933,7 +958,9 @@ Required for v1
       the one function signature taken from DE Advanced Options now credited with its BSD 2-Clause text;
       safetyhook, Zydis, Zycore, the OpenXR loader with JsonCpp, Vulkan-Headers and the static MSVC runtime
       listed with their licences; `make-release.ps1` refuses an unlisted third-party binary and copies the
-      file into the zip, where the v0.1.75 zip has it; re-audited at v0.1.89, done 2026-11-09, docs/release/notices-audit.md)
+      file into the zip, where the v0.1.75 zip has it; re-audited at v0.1.89, done 2026-11-09, docs/release/notices-audit.md;
+      re-checked 2026-11-16 for every change from 0.1.75 to 0.1.97: nothing new is redistributed or adapted, and the
+      list of Windows DLLs the layer loads was completed)
 - [x] Uninstall (T-093): ticked for the clean-machine part only. The criterion as first written also asked for VR
       sessions, the launcher's own uninstall action and the game folder listing against a pre-install snapshot; the
       listing moved to the M4.5 multiplayer-safety box (open), and there is no uninstall action. Reworded 2026-11-12

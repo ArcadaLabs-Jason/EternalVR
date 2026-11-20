@@ -290,8 +290,7 @@ bool XrPresenter::Impl::recordForView(const std::byte* renderView, ViewRecord& o
     std::lock_guard lock(historyMutex);
     for (std::size_t i = 0; i < kHistorySize && i < latestSeq; ++i) {
         const ViewRecord& r = history[(latestSeq - i) % kHistorySize];
-        if (std::memcmp(r.axis.data(), axis, sizeof(r.axis)) == 0 &&
-            (!r.cinema3D || sameGameFov(r, renderView))) {
+        if (sameAxisBits(r, axis) && (!r.cinema3D || sameGameFov(r, renderView))) {
             out = r;
             return true;
         }

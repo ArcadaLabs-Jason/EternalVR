@@ -134,7 +134,7 @@ bool holdCvars() {
     bool held = g_setString != nullptr;
     for (std::size_t i = 0; i < g_cvars.size() && held; ++i) {
         const std::string value(input::kClimbLookCvars[i].value);
-        const int want = std::atoi(value.c_str());
+        const int want = static_cast<int>(std::strtol(value.c_str(), nullptr, 10));
         const int before = cvarInt(g_cvars[i]);
         if (before != want && mp_guard::allowsGameTouch()) {
             g_saved[i].beforeWrite(before);

@@ -1,0 +1,5 @@
+# Justified exceptions to tools/check_scope.py (engine internals outside src/vkcore, src/engine/eternal and
+# src/game/eternal), one per line: <path> <kind> <text>: <reason>
+# <kind> is signature, address, offset, register or type; <text> is what the finding shows. An entry covers that
+# text everywhere in the file, and one that matches nothing fails the check. Move the code rather than adding a
+# line here, unless what was found is not an engine internal at all.

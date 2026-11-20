@@ -1,4 +1,5 @@
-// bHaptics suits and sleeves: launched by a jump pad or a booster (bhaptics_game.cpp, docs/BHAPTICS.md).
+// Launched by a jump pad or a booster: for bHaptics suits and sleeves (bhaptics_game.cpp, docs/BHAPTICS.md)
+// and for the comfort vignette's pulse (game_motion.hpp).
 //
 // Two mid hooks on the game's own paths, Steam build 25216728 (docs/rig-findings/bhaptics-launch.md):
 // - Jump pads: idPlayer's handler of the "touchedBouncePad" event (RVA 0x13E5650). The event ("Player
@@ -14,12 +15,14 @@
 //   (+0x54): rsi = the trigger, rdi = the player. A trigger with isLandingPad (+0xD28) ends a blast instead.
 // A trigger may run again on the next frames while the player is still in its volume, so LaunchFilter takes
 // touches less than kLaunchRepeatSeconds apart for one launch. Field offsets from the type-info tables of
-// that build; the hooks go in only with bHaptics on, which needs the build PlayerAim confirmed. Each only
-// notes.
+// that build; the hooks go in only with bHaptics or the vignette on, either of which needs the build
+// PlayerAim confirmed, and once for both. Each only notes.
 
 #include "vkcore/controllers_impl.hpp"
 
 #include "features/bhaptics/launch.hpp"
+#include "features/comfort/launch_pulse.hpp"
+#include "vkcore/game_motion.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mid_hook.hpp"
@@ -35,7 +38,7 @@ namespace evr::vkcore::controllers {
 
 namespace {
 
-constexpr const char* kTag = "bhaptics";
+constexpr const char* kTag = "launch";
 
 // The touchedBouncePad handler: its prologue, the cast's call, then cmp byte [rbx+0x2F4F3], 0.
 constexpr const char* kJumpPadSignature =
@@ -78,8 +81,11 @@ double seconds() {
     return static_cast<double>(nowQpc()) / frequency;
 }
 
-// One touch of a pad or a booster by the player; `detail` is for the log.
-void touched(bhaptics::LaunchSource source, const std::byte* trigger, const std::string& detail) {
+// One touch of a pad or a booster by the player; `detail` is for the log, `size` for the vignette's pulse.
+void touched(bhaptics::LaunchSource source,
+             const std::byte* trigger,
+             const std::string& detail,
+             const comfort::LaunchSize& size) {
     const double now = seconds();
     const std::string name = itemDeclName(trigger + kEntityName);
     std::lock_guard lock(g_mutex);
@@ -93,9 +99,9 @@ void touched(bhaptics::LaunchSource source, const std::byte* trigger, const std:
         return;
     }
     noteBhapticsLaunch();
+    noteGameLaunch(bhaptics::launchSourceName(source), name, size);
     if (g_loggedLaunches++ < kLoggedLaunches) {
-        EVR_LOG("%s: launch: %s '%s' (%s)", kTag, bhaptics::launchSourceName(source), name.c_str(),
-                detail.c_str());
+        EVR_LOG("%s: %s '%s' (%s)", kTag, bhaptics::launchSourceName(source), name.c_str(), detail.c_str());
     }
 }
 
@@ -117,14 +123,17 @@ void onJumpPad(const HookRegisters& regs) {
     safeRead(pad + kPadUseFlightTime, useFlightTime);
     safeRead(pad + kPadFlightTime, flightTime);
     char detail[128];
+    comfort::LaunchSize size;
     if (useFlightTime != 0) {
         std::snprintf(detail, sizeof(detail), "flight time %.2f s, during a pad's flight %d", flightTime,
                       inFlight != 0 ? 1 : 0);
+        size.flightSeconds = flightTime;
     } else {
         std::snprintf(detail, sizeof(detail), "launch speed %.1f, during a pad's flight %d", speed,
                       inFlight != 0 ? 1 : 0);
+        size.speed = speed;
     }
-    touched(bhaptics::LaunchSource::JumpPad, pad, detail);
+    touched(bhaptics::LaunchSource::JumpPad, pad, detail, size);
 }
 
 void onBooster(const HookRegisters& regs) {
@@ -149,7 +158,9 @@ void onBooster(const HookRegisters& regs) {
     }
     char detail[64];
     std::snprintf(detail, sizeof(detail), "speed %.1f", speed);
-    touched(bhaptics::LaunchSource::Booster, trigger, detail);
+    comfort::LaunchSize size;
+    size.speed = speed;
+    touched(bhaptics::LaunchSource::Booster, trigger, detail, size);
 }
 
 bool install(const char* what, const char* signature, std::size_t offset, MidHookCallback callback) {
@@ -168,13 +179,18 @@ bool install(const char* what, const char* signature, std::size_t offset, MidHoo
 
 } // namespace
 
-bool installBhapticsLaunchHooks() {
-    if (!locateGameImage(g_image, kTag)) {
-        return false;
-    }
-    const bool jumpPad = install("jump pad", kJumpPadSignature, kJumpPadHook, &onJumpPad);
-    const bool booster = install("booster", kBoosterSignature, kBoosterHook, &onBooster);
-    return jumpPad || booster;
+bool installLaunchHooks() {
+    static std::once_flag once;
+    static bool installed = false;
+    std::call_once(once, [] {
+        if (!locateGameImage(g_image, kTag)) {
+            return;
+        }
+        const bool jumpPad = install("jump pad", kJumpPadSignature, kJumpPadHook, &onJumpPad);
+        const bool booster = install("booster", kBoosterSignature, kBoosterHook, &onBooster);
+        installed = jumpPad || booster;
+    });
+    return installed;
 }
 
 } // namespace evr::vkcore::controllers

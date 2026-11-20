@@ -34,20 +34,22 @@ bool debugCvarsTakeSsr(const std::vector<std::string>& names);
 // and drops any later one, so only `entry` writes that cvar; appended when there is none.
 template <class Entry>
 void replaceSameName(std::vector<Entry>& held, Entry entry) {
-    const std::string name = entry.name; // entry is moved into place below
-    bool placed = false;
+    bool found = false;
+    std::size_t first = 0; // the first entry for the same cvar, when found
     for (std::size_t i = 0; i < held.size();) {
-        if (!sameCvarName(held[i].name, name)) {
+        if (!sameCvarName(held[i].name, entry.name)) {
             ++i;
-        } else if (!placed) {
-            held[i] = std::move(entry);
-            placed = true;
+        } else if (!found) {
+            found = true;
+            first = i;
             ++i;
         } else {
             held.erase(held.begin() + static_cast<std::ptrdiff_t>(i));
         }
     }
-    if (!placed) {
+    if (found) {
+        held[first] = std::move(entry);
+    } else {
         held.push_back(std::move(entry));
     }
 }

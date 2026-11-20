@@ -152,9 +152,12 @@ items and do not block v1.
     either tested alongside ours or named and disabled for the launch through their
     `disable_environment` variables; the known-bad list is data, not code (T-095). As built (rig,
     2026-11-13, `docs/release/RELEASE-CHECKLIST.md` item 7): OBS game capture works and is not named;
-    RTSS works and is named with a warning (a frame limit in it halves the headset's rate, and its
-    variable does not switch it off, since RTSS also hooks the game directly); ReShade's Vulkan layer is
-    disabled, and the game's own layer blacklist keeps it out as well.
+    RTSS works; its variable does not switch it off, since RTSS also hooks the game directly, and a frame
+    limit in it halves the headset's rate, so it is named with a warning only while its profiles
+    (`Profiles\Global` and `Profiles\DOOMEternalx64vk.exe.cfg`, the game's overriding the global one) set
+    a limit or cannot be read (`known-layers.txt` `warn-if-rtss-limit`, `RtssProfiles.cs`, since
+    2026-11-17); ReShade's Vulkan layer is disabled, and the game's own layer blacklist keeps it out as
+    well.
   - `+r_allowBlackListedLayers 1` is available if the game's layer warning ever fires (R02).
 - **Preflight** (launcher): Steam running and logged in,
   elevation (silently disables HKCU layers; the launcher refuses to run elevated), an unwritable data
@@ -1263,9 +1266,9 @@ src/
                     input/, weapon/, ui_capture/, audio/, ngx/
 launcher/           EternalVR.sln: EternalVR.Launcher (WinForms), EternalVR.Launcher.Core
                     (netstandard2.0, tested on any OS)
-tools/              check_includes.py*, check_file_size.py*, run_clang_tidy.py*, fetch_references.sh*,
-                    rig/ (local PowerShell scripts: run, stop, cleanup, display, collect, replay,
-                    lab copy; dev only, T-108), resolver-cli/,
+tools/              check_includes.py*, check_file_size.py*, check_scope.py*, run_clang_tidy.py*,
+                    fetch_references.sh*, rig/ (local PowerShell scripts: run, stop, cleanup, display,
+                    collect, replay, lab copy; dev only, T-108), resolver-cli/,
                     fossilize runner, offline patcher check
 tests/*             mirrors src/, plus support/ (shared test helpers); doctest
 ```
@@ -1287,13 +1290,14 @@ Environment variables (the complete set; everything else is a setting):
 Standards (the clean-code rule; `CONTRIBUTING.md` has the working details):
 - C++20, warnings as errors on every compiler. clang-format 18.1.8 is checked in CI (the portable job on
   Linux). clang-tidy is configured (`.clang-tidy`); `tools/run_clang_tidy.py` checks `src/` locally on
-  Windows and fails on any finding not in its baseline (`tools/clang_tidy_baseline.txt`). Its CI job is
-  still to come (ROADMAP M4.5).
+  Windows and fails on any finding not in its baseline (`tools/clang_tidy_baseline.txt`, empty); CI runs it in
+  its clang-tidy job on `windows-latest`, with the clang-tidy the baseline was made with (ROADMAP M4.5).
 - One responsibility per file. Around 300 lines is the soft upper bound; a file past about 600 lines is
   split. A CI check enforces the 600-line limit from M4.5.
-- Engine internals (offsets, hooks, type names) only in `engine/eternal`; game-design data only in
-  `game/eternal`. Features stay generic and take game data as plain values. A CI check enforces this
-  from M4.5.
+- Engine internals (offsets, hooks, type names) only in `vkcore` and `engine/eternal`; game-design data only in
+  `game/eternal`. Features stay generic and take game data as plain values. `tools/check_scope.py` checks it in CI
+  (T-236): elsewhere under `src/` no byte signature, game address, game-memory offset, hook register or id Tech
+  type name.
 - Names over comments; comments explain why.
 - No C++ exception leaves a function the game or the Vulkan loader calls into: a layer entry point, a detour of a
   game function or an import, a hook callback, a window procedure, a thread the layer starts. Neither unwinds one,

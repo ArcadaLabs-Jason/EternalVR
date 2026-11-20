@@ -100,7 +100,8 @@ warning does not.
 | Launcher X, layer Y: not compared | Warning only. A development build, or a layer too old to carry a version; a release zip always has a matching pair. |
 | ETERNALVR_DISABLE_LAYER=1 is set | Remove that environment variable. |
 | No active OpenXR runtime is set / manifest does not exist | Start your headset software and make it the active OpenXR runtime (for Virtual Desktop: VDXR), or pick a runtime in the launcher. |
-| Vulkan layer VK_LAYER_RTSS: warning (RivaTuner Statistics Server works, but ...) | RTSS works with the mod. Leave its frame rate limit off for DOOM Eternal: a limit there halves the headset's frame rate. See "RivaTuner (RTSS), OBS and ReShade" under Problems in the game. |
+| Vulkan layer VK_LAYER_RTSS: warning (RTSS limits DOOM Eternal's frame rate: ...) | RTSS works with the mod, but its profile for the game (`Profiles\DOOMEternalx64vk.exe.cfg` in RTSS's folder) or its global profile sets a frame rate limit, and the message names it and the profile. A limit there halves the headset's frame rate: set it to 0 for DOOM Eternal in RTSS. Without a limit the launcher says nothing about RTSS. See "RivaTuner (RTSS), OBS and ReShade" under Problems in the game. |
+| Vulkan layer VK_LAYER_RTSS: warning (... its profiles could not be read ...) | The launcher found RTSS but could not read its profiles (the `Profiles` folder in RTSS's folder) to see whether they set a limit, so it warns anyway. If RTSS's limit is 0 for DOOM Eternal, nothing to do. |
 | Another layer warning (Bandicam, a layer not on the launcher's list ...) | That overlay or capture tool is untested with the mod. If VR misbehaves, close it and try again. OBS needs nothing (it works and gets no warning); ReShade, Overwolf and other VR mods for DOOM Eternal are switched off for the session automatically. |
 | OpenXR layer XR_APILAYER_MBUCCHIA_toolkit (or XR_APILAYER_NOVENDOR_toolkit): disabled for this launch | Nothing to do. OpenXR Toolkit is switched off for the game each launch (its current and older versions), so its settings, Turbo Mode included, do not apply in EternalVR; it stays on for your other games. |
 | SteamVR limits DOOM Eternal to half the refresh rate (Throttling Behavior: Limit) | Warning only. SteamVR's per-application setting holds the game at half (or a third, a quarter ...) of the headset's rate, and frame pacing follows it. It is SteamVR Settings > Video > Per-Application Video Settings > DOOM Eternal > Throttling Behavior; Auto does not limit the game and gives no warning. |
@@ -218,8 +219,9 @@ simulator, not yet in a headset). None of them cost frames there beyond what run
   eye's picture as a frame of its own), so 180 there means about 90 new frames a second; the `rates:` line above has
   the real number. And a frame rate limit set in RTSS halves your headset's frame rate: a limit of 60 gave the
   headset 30 new frames a second. Leave RTSS's limit off for DOOM Eternal (its profile for the game, or the global
-  one); the headset already paces the game. The launcher warns while RTSS is installed. It cannot switch RTSS off for
-  you: RTSS also hooks the game without its Vulkan layer.
+  one); the headset already paces the game. The launcher reads RTSS's profiles and warns only when they set a limit
+  for DOOM Eternal (or when it can't read them). It cannot switch RTSS off for you: RTSS also hooks the game without
+  its Vulkan layer.
 - **OBS** game capture works. It captures the game's small desktop window, which shows your left eye without the HUD
   (the menus do show there), not what your headset shows. To stream or record the headset's view, capture your headset software's own view of it
   instead (SteamVR's Display VR View, for example).

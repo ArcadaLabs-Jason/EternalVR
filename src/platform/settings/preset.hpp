@@ -17,6 +17,7 @@
 
 namespace evr::settings {
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct Preset {
     std::string name;
     std::map<std::string, SettingValue, std::less<>> values;

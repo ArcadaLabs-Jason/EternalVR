@@ -273,7 +273,7 @@ std::string WebSocketLink::firstReply() const {
 void WebSocketLink::close() {
     if (impl_ && !impl_->closeAll()) {
         // A reader that did not end still uses its Impl: left to it rather than freed under it.
-        static_cast<void>(impl_.release());
+        [[maybe_unused]] Impl* const leftToReader = impl_.release();
     }
     impl_.reset();
 }

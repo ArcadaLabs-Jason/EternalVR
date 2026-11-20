@@ -71,7 +71,7 @@ FloorCheck::afterSpaceChange(std::optional<float> headAboveFloor, float headLoca
         return std::nullopt;
     }
     const float move = last_ ? *headAboveFloor - *last_ : 0.0f;
-    if (std::fabs(move) <= kFloorMoveMetres) {
+    if (!last_ || std::fabs(move) <= kFloorMoveMetres) {
         // No move yet; a floor the runtime moves a moment later is still seen.
         if (plausibleHeadHeight(*headAboveFloor) && std::isfinite(headLocalY) && std::isfinite(seconds)) {
             floorBefore_ = headLocalY - *headAboveFloor;

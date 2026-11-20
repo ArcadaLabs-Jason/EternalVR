@@ -1,10 +1,11 @@
 #pragma once
 
 // The comfort vignette (ETERNALVR_VIGNETTE, docs/VR_CONTROLLERS.md): while the stick moves or turns the
-// player, or the game moves the camera itself (a dash, a glory kill, the Meathook pull), the edges of the
-// view darken and leave a clear centre, and they clear again once the motion stops. Less moving picture in
-// the corner of the eye is what keeps artificial motion comfortable for many people. Real head motion never
-// shows it: only the stick, the turn and the game's own camera moves count.
+// player, or the game moves the camera itself (a dash, a glory kill, the Meathook pull) or the player (a
+// launch: launch_pulse.hpp; a ride: ride.hpp), the edges of the view darken and leave a clear centre, and
+// they clear again once the motion stops. Less moving picture in the corner of the eye is what keeps
+// artificial motion comfortable for many people. Real head motion never shows it: only the stick, the turn
+// and the game's own moves count.
 //
 // VignettePolicy turns the motion of each frame into an amount from 0 (clear) to 1 (the look's full
 // vignette), rate-limited so it comes in quickly and goes out gently. The layer shows the amount with a few
@@ -24,6 +25,12 @@ struct VignetteMotion {
     // Gamepad mode: the pad's look stick sideways past its deadzone, 0 to 1 (pad_watch.hpp). The turn rate it
     // makes is the game's (its look sensitivity), so the deflection counts on the move stick's scale.
     float turnStick = 0.0f;
+    // A ride the game moves the player on (RideDetector::amount, ride.hpp), 0 to 1: a target like the others,
+    // so it comes and goes at their pace.
+    float ride = 0.0f;
+    // A launch's pulse (LaunchPulse::amount, launch_pulse.hpp), 0 to 1: already shaped (in faster than the
+    // policy's rise), so the policy shows at least this much and leaves its own amount as it was.
+    float launch = 0.0f;
 };
 
 struct VignetteTiming {
@@ -37,8 +44,9 @@ struct VignetteTiming {
     float fallSeconds = 0.5f; // full to clear at most this long
 };
 
-// The amount the motion asks for: the largest of the turn's, the move's, the pad's turn stick's and the
-// game's (1 while it moves the camera). Non-finite motion counts as none.
+// The amount the motion asks for: the largest of the turn's, the move's, the pad's turn stick's, the ride's
+// and the game's (1 while it moves the camera). Non-finite motion counts as none. The launch is not a target
+// (VignettePolicy::update).
 float vignetteTarget(const VignetteMotion& motion, const VignetteTiming& timing);
 
 class VignettePolicy {
@@ -46,17 +54,23 @@ public:
     // Out-of-range or non-finite timing values take their defaults.
     explicit VignettePolicy(VignetteTiming timing = {});
 
-    // Moves the amount toward the target of `motion` over `dtSeconds` and returns it. A non-finite or
-    // negative step changes nothing; a step above 1 s counts as 1 s.
+    // Moves the amount toward the target of `motion` over `dtSeconds` and returns what to show: that amount,
+    // or the launch's pulse when it is larger. A non-finite or negative step changes nothing; a step above
+    // 1 s counts as 1 s.
     float update(const VignetteMotion& motion, double dtSeconds);
 
-    [[nodiscard]] float value() const { return value_; }
+    // What the last update showed.
+    [[nodiscard]] float value() const { return shown_; }
     [[nodiscard]] const VignetteTiming& timing() const { return timing_; }
-    void reset() { value_ = 0.0f; }
+    void reset() {
+        value_ = 0.0f;
+        shown_ = 0.0f;
+    }
 
 private:
     VignetteTiming timing_;
-    float value_ = 0.0f;
+    float value_ = 0.0f; // the rate-limited amount of the targets
+    float shown_ = 0.0f;
 };
 
 // The vignette's shape at one amount, in degrees from the view's axis: clear inside `clearDegrees`, darker

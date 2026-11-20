@@ -49,9 +49,11 @@ variables the layer reads are listed in `docs/ARCHITECTURE.md` section 15.
   performance checks and a few modernize and readability ones; the file says why each check left out
   is off). `tools/run_clang_tidy.py` runs it over `src/` with the windows-msvc preset's compile
   commands and fails on any finding that is not in `tools/clang_tidy_baseline.txt`, the accepted ones
-  (no line numbers, so other edits do not disturb it). Fix a new finding rather than adding it there;
-  after fixing a baselined one, `--update-baseline` rewrites the file. It runs locally, not yet in CI
-  (it needs the MSVC build's compile commands). Compiler warnings are errors on every compiler.
+  (no line numbers, so other edits do not disturb it; empty since 2026-11-16). Fix a new finding rather than
+  adding it there; only where the fix would change what the code does, or a hook's bytes, a
+  `// NOLINTNEXTLINE(<check>): <reason>` keeps it, with the reason in one line. After fixing a baselined one,
+  `--update-baseline` rewrites the file. It runs locally and in CI (the clang-tidy job on `windows-latest`).
+  Compiler warnings are errors on every compiler.
 - One responsibility per file. Keep files small; around 300 lines is a good upper bound, and
   anything past about 600 should be split (a CI check enforces 600 from M4.5).
 - Namespaces are `evr::` plus the module's own name, the last meaningful part of its path; the game
@@ -60,9 +62,12 @@ variables the layer reads are listed in `docs/ARCHITECTURE.md` section 15.
   `game/eternal` is `evr::game` and `engine/eternal/resolver` is `evr::resolver`.
 - Prefer clear names to comments. Comments explain *why*: the constraint, the spec rule, the bug
   that motivated a choice. Don't restate what the code says.
-- Engine internals (offsets, hooks, type names) only in `src/engine/eternal`; game-design data
-  (actions, default bindings, player dimensions) only in `src/game/eternal`. Features stay generic
-  and take game data as plain values.
+- Engine internals (offsets, hooks, type names) only in `src/vkcore` and `src/engine/eternal`;
+  game-design data (actions, default bindings, player dimensions) only in `src/game/eternal`. Features
+  stay generic and take game data as plain values. `tools/check_scope.py` fails on a byte signature, a
+  game address, a game-memory offset, an x64 register or an id Tech type name anywhere else under
+  `src/` (cvar names are fine anywhere; DECISIONS T-236); a justified exception goes in
+  `tools/scope_allow.txt` with its reason.
 - Portable modules (`common`, `xr_math`, `platform/settings`, `features/*`, `game/eternal`, the
   resolver) must not include Windows, Vulkan or OpenXR headers. They are plain logic and fully
   unit-tested.
@@ -82,6 +87,7 @@ clang-format -i $(git ls-files '*.cpp' '*.hpp')
 clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.hpp')   # the check CI runs
 python3 tools/check_includes.py
 python3 tools/check_file_size.py
+python3 tools/check_scope.py
 cmake --build --preset dev && ctest --preset dev
 ```
 
@@ -90,7 +96,10 @@ On Windows, with LLVM installed (`winget install LLVM.LLVM --version 23.1.2`, th
 warns when they differ; the script also finds clang-tidy in LLVM's install folder) and the
 windows-msvc preset configured, also run the clang-tidy check
 (about two minutes for all of `src/`, four clang-tidy processes at a time; pass files or folders
-to check only those):
+to check only those). CI gets that version with `python tools/fetch_clang_tidy.py --out <folder>`
+(it needs `pip install zstandard==0.25.0`; it checks LLVM's archive against its SHA256 and unpacks
+only clang-tidy), which works locally too: then pass `--clang-tidy <folder>\bin\clang-tidy.exe`
+to the check:
 
 ```sh
 python tools/run_clang_tidy.py

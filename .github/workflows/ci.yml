@@ -42,6 +42,11 @@ jobs:
       - name: Check file sizes
         run: python3 tools/check_file_size.py
 
+      # Engine internals (signatures, game addresses and offsets, hook registers, id Tech type names) only in
+      # src/vkcore, src/engine/eternal and src/game/eternal (DECISIONS T-236).
+      - name: Check that engine internals stay in their folders
+        run: python3 tools/check_scope.py
+
       # One pinned version, because clang-format releases format some constructs differently. A venv
       # keeps pip away from the runner's system Python.
       - name: Check formatting (Linux)
@@ -90,6 +95,40 @@ jobs:
       - name: Validate release sources
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/make-release.ps1 -Validate
+
+  # clang-tidy over all of src/ with the windows-msvc build's compile commands (REQ-18): any finding not in
+  # tools/clang_tidy_baseline.txt fails the job. A job of its own beside the MSVC build, since configuring is all
+  # clang-tidy needs (the generated sources and the fetched dependencies come from the configure).
+  clang-tidy:
+    name: clang-tidy (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure
+        run: cmake --preset windows-msvc
+
+      # The version the baseline was made with, not the runner's own LLVM: LLVM's release archive, checked against
+      # the SHA256 pinned in the script before anything is unpacked.
+      - name: Install clang-tidy
+        run: |
+          python -m venv "$env:RUNNER_TEMP\tidy-venv"
+          & "$env:RUNNER_TEMP\tidy-venv\Scripts\python" -m pip install --quiet zstandard==0.25.0
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP\tidy-venv\Scripts\python" tools/fetch_clang_tidy.py --out "$env:RUNNER_TEMP\clang-tidy"
+          exit $LASTEXITCODE
+
+      - name: Test the clang-tidy scripts
+        run: python -m unittest discover -s tools/tests
+
+      - name: clang-tidy
+        run: python tools/run_clang_tidy.py --clang-tidy "$env:RUNNER_TEMP\clang-tidy\bin\clang-tidy.exe"
 
   launcher:
     name: Launcher (${{ matrix.os }})

@@ -69,6 +69,9 @@ constexpr std::string_view kAllowedCommands[] = {
     // The HUD Scale changed in play as the game's menu changes it (a write the layer did not make; the
     // hold yields to it: runtime_cvars_yield.cpp).
     "swf_anchorProfile",
+    // Photo mode turned on in play as the game's menu turns it on: the comfort set's hold puts it back to 0
+    // (tools/rig/qa/qa-scenarios-motion.ps1, photo-mode-held).
+    "g_setting_photomode",
     // The piloted Revenant's rockets, their paths drawn (tools/rig/qa/qa-scenarios-demon.ps1,
     // revenant-rockets).
     "g_projectileDebug", "g_projectileDebugLifetime",

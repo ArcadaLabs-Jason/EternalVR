@@ -7,6 +7,7 @@
 #include "features/input/controller_tilt.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/demon_view.hpp"
+#include "vkcore/game_motion.hpp"
 #include "vkcore/gamepad_mode.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/two_hand.hpp"
@@ -92,6 +93,7 @@ std::optional<WeaponAim> beginGameView(
             noteBhapticsFrame(player);
             notePilotedDemon(isPilotedDemon(player, s.player));
             watchDeath(player);
+            noteGameMotionFrame(player, cutscene, wallClimb);
         }
         two_hand::reset("no controllers");
         return std::nullopt;
@@ -99,6 +101,7 @@ std::optional<WeaponAim> beginGameView(
     updateForcedView(player, cutscene, cameraAnimation, wallClimb);
     noteBhapticsFrame(player);
     watchDeath(player);
+    noteGameMotionFrame(player, cutscene, wallClimb);
     refreshTestInput();
     GameViewPoses poses;
     std::array<input::ControllerFit, 2> fits{};

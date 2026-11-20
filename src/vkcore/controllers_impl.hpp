@@ -547,9 +547,10 @@ void noteMeatHook(const std::byte* hands, const std::byte* player, const std::by
 // Flame Belch's; its button is not asked, as the burst outlasts a tap). The camera hook, once a game
 // frame: the player's health, armor, hits and sync kill. The portal hooks (bhaptics_portal.cpp, installed by
 // startBhaptics): the player went through a portal, a pad or a level exit, or fast travelled. The launch
-// hooks (bhaptics_launch.cpp, the same): a jump pad or a booster launched the player (once per launch,
-// already filtered). The ammo hooks (bhaptics_ammo.cpp, the same): the player picked up ammo. All only note;
-// nothing waits on the network.
+// hooks (bhaptics_launch.cpp, installed once by startBhaptics or for the vignette, game_motion.hpp): a jump
+// pad or a booster launched the player (once per launch, already filtered). The ammo hooks
+// (bhaptics_ammo.cpp, installed by startBhaptics): the player picked up ammo. All only note; nothing waits on
+// the network.
 void startBhaptics();
 void noteBhapticsShot(const std::byte* hands, bool belch);
 void noteBhapticsFrame(const std::byte* player);
@@ -557,7 +558,7 @@ void noteBhapticsPortal();
 void noteBhapticsLaunch();
 void noteBhapticsAmmo();
 bool installBhapticsPortalHooks();
-bool installBhapticsLaunchHooks();
+bool installLaunchHooks();
 bool installBhapticsAmmoHooks();
 
 // Installers (each logs what it did); `image` checks were made by the caller.

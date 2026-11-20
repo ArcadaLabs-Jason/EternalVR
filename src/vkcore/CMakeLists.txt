@@ -306,6 +306,7 @@ target_sources(evr_layer PRIVATE
     controller_test.cpp
     controllers.cpp
     equipment_launch_hook.cpp
+    game_motion.cpp
     game_view_poses.cpp
     gamepad_mode.cpp
     haptics_xr.cpp

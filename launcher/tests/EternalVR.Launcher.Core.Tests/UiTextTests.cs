@@ -81,5 +81,16 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.Contains("16%", tip);
             Assert.Contains("on the test rig", tip);
         }
+
+        [Fact]
+        public void ThePresetTooltipSaysWhatItsNumberMeasured()
+        {
+            var tip = SettingTexts.For(Setting.DlssPreset).Tooltip;
+            Assert.Contains("RTX 3080 Ti", tip);
+            Assert.Contains("2048 x 2208 per eye", tip);
+            Assert.Contains("DLSS Quality used about 30% less graphics card time with E than with K", tip);
+            Assert.Contains("with K it used about as much as TAA without DLSS", tip);
+            Assert.Contains("Other cards may differ", tip);
+        }
     }
 }

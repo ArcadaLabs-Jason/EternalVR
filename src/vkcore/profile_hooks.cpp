@@ -1,6 +1,7 @@
 #include "vkcore/profile_hooks.hpp"
 
 #include "platform/mp_policy/profile_cvars.hpp"
+#include "platform/mp_policy/saved_cvars.hpp"
 #include "vkcore/cvar_book.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hook_guard.hpp"
@@ -55,6 +56,7 @@ SerializeFn g_original = nullptr;
 cvar_book::SetStringFn g_set = nullptr;
 std::vector<ProfileCvar> g_cvars; // filled before the hook goes in, then only `loaded` changes
 std::once_flag g_installOnce;
+std::atomic<bool> g_hooked{false}; // the hook is in; g_cvars no longer changes in size
 std::atomic<int> g_calls{0};
 // The one-time repair (mp_policy::profileRepair), decided at the first load; under heldMutex.
 bool g_repairAsked = false;
@@ -163,7 +165,9 @@ void afterLoad() {
         reportRepair(false);
     }
     for (const ProfileCvar& c : g_cvars) {
-        cvar_book::setTripValue(c.name, *c.loaded);
+        if (c.loaded) { // always: the first loop read each
+            cvar_book::setTripValue(c.name, *c.loaded);
+        }
     }
 }
 
@@ -296,7 +300,12 @@ bool locate(const GameImage& image, const std::byte*& serializer) {
     }
     for (std::size_t i = 0; i < names.size(); ++i) {
         if (!objects[i]) {
-            return false;
+            if (!mp_policy::profileOptionalCvar(names[i])) {
+                return false;
+            }
+            EVR_LOG("%s: %.*s not found in this build: left out of the profile's protection, and not held",
+                    kTag, static_cast<int>(names[i].size()), names[i].data());
+            continue;
         }
         g_cvars.push_back(ProfileCvar{names[i], objects[i], std::nullopt});
     }
@@ -346,11 +355,27 @@ void installProfileHooks() {
                     kTag, error.c_str());
             return;
         }
-        EVR_LOG(
-            "%s: profile cvar serializer hooked at RVA 0x%X: the profile keeps the player's view_skipShakes, "
-            "r_sharpening and swf_anchorProfile while the layer holds them",
-            kTag, image.rva(serializer));
+        std::string kept;
+        for (const ProfileCvar& c : g_cvars) {
+            kept += (kept.empty() ? "" : ", ") + std::string(c.name);
+        }
+        g_hooked.store(true, std::memory_order_release);
+        EVR_LOG("%s: profile cvar serializer hooked at RVA 0x%X: the profile keeps the player's %s while the "
+                "layer holds them",
+                kTag, image.rva(serializer), kept.c_str());
     });
+}
+
+bool profileKeeps(std::string_view name) {
+    if (!g_hooked.load(std::memory_order_acquire)) {
+        return false;
+    }
+    for (const ProfileCvar& c : g_cvars) {
+        if (mp_policy::sameCvarName(c.name, name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace evr::vkcore

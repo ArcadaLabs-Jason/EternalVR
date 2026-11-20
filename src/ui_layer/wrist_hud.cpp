@@ -73,12 +73,12 @@ float wristGazeDegrees(const Pose& hand, const Pose& head, const WristSettings& 
 }
 
 bool WristFacing::update(float facingDegrees, float gazeDegrees, const WristSettings& s) {
-    if (s.always) {
+    const bool hide = !(facingDegrees <= s.hideDegrees) || !(gazeDegrees <= s.gazeHideDegrees); // also NaN
+    const bool show = facingDegrees <= s.showDegrees && gazeDegrees <= s.gazeShowDegrees;
+    if (s.always || (!hide && show)) {
         shown_ = true;
-    } else if (!(facingDegrees <= s.hideDegrees) || !(gazeDegrees <= s.gazeHideDegrees)) {
-        shown_ = false; // also for NaN
-    } else if (facingDegrees <= s.showDegrees && gazeDegrees <= s.gazeShowDegrees) {
-        shown_ = true;
+    } else if (hide) {
+        shown_ = false;
     }
     return shown_;
 }

@@ -106,17 +106,6 @@ constexpr bool sharedSunKeeps(SharedSunMode mode, const SunCheck& c) {
     return mode == SharedSunMode::Shared && c.counter == 1 && c.listedByLeftThisTick;
 }
 
-// The registers the stale check's hook hands back for a kept slice: eax takes the counter (`cmp edx, eax`
-// finds no excess, so `ja` does not release the entry; rax's upper half kept), and bl loses bits 2 and 4
-// (`test bl, 4` and `test bl, 6` find nothing, so the slice is not listed; the rest of rbx kept).
-struct SunKeepRegisters {
-    std::uint64_t rax = 0;
-    std::uint64_t rbx = 0;
-};
-constexpr SunKeepRegisters sunKeepRegisters(std::uint64_t rax, std::uint64_t rbx, std::uint32_t counter) {
-    return {(rax & ~std::uint64_t{0xFFFFFFFF}) | counter, rbx & ~std::uint64_t{6}};
-}
-
 // True when eye R leaves a listed slice off its list at the listing (Ceiling only: a sun world slice that
 // never reached the stale check).
 constexpr bool sharedSunSkipsListing(

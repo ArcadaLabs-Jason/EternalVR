@@ -48,8 +48,9 @@
 // then the first 12 later writes; the rest are counted. Only while the multiplayer guard allows touching the
 // game. Every write goes through the cvar book (cvar_book.hpp): a trip sets each cvar written back to its
 // value before the layer's first write, except the window set and r_hdrDisplay, which stay (logged). The game
-// saves view_skipShakes, r_sharpening and swf_anchorProfile into the player's profile: profile_hooks.hpp puts
-// the player's own value into each profile save.
+// saves view_skipShakes, r_sharpening, swf_anchorProfile and g_setting_photomode (photo mode, held off in VR
+// with the comfort set) into the player's profile: profile_hooks.hpp puts the player's own value into each
+// profile save.
 
 #include "stereo_seq/seq_settings.hpp"
 

@@ -42,8 +42,9 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.SnapAngle] = new Text("Snap angle",
                 "How far one flick of the stick turns you with snap turning, in degrees."),
             [Setting.Vignette] = new Text("Vignette",
-                "Darkens the edges of your view while the stick moves or turns you (and during a dash or a glory kill), "
-                + "leaving the middle clear. Less motion at the edges of your eyes helps if moving with the stick makes you "
+                "Darkens the edges of your view while the stick moves or turns you, during a dash or a glory kill, and "
+                + "while the game moves you itself (a jump pad's launch, a ride on a tram or a lift), leaving the middle "
+                + "clear. Less motion at the edges of your eyes helps if motion you don't make with your body makes you "
                 + "feel sick. Strong narrows the view more than light. Moving your head never shows it.",
                 "Off", "Light", "Strong"),
             [Setting.GloryKills] = new Text("Glory kills",
@@ -369,8 +370,10 @@ namespace EternalVR.Launcher.Core.Settings
                 "Newest from NVIDIA (recommended)", "The game's (2.3)", "Load file..."),
             [Setting.DlssPreset] = new Text("Preset",
                 "How the newer DLSS renders. K is the transformer model at every quality, the sharpest picture; J, M and L "
-                + "are its variants. E and F are the older model: E costs the GPU less than K (on the test PC about 14% "
-                + "more frames at Quality) but smears more in motion. Automatic lets NVIDIA pick for each quality.",
+                + "are its variants. E and F are the older model, which smears more in motion but is lighter on the graphics "
+                + "card. On the test PC (an RTX 3080 Ti) at 2048 x 2208 per eye, DLSS Quality used about 30% less graphics "
+                + "card time with E than with K; with K it used about as much as TAA without DLSS. Other cards may differ. "
+                + "Automatic lets NVIDIA pick for each quality.",
                 DlssDll.PresetNames),
             [Setting.DlssInHeadset] = new Text("In the headset",
                 "The DLSS that will run in VR with these settings, both eyes the same. The mod's log and Export report "

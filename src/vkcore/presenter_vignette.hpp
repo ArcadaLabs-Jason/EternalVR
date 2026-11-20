@@ -64,8 +64,10 @@ private:
     // Since the last summary line.
     std::uint64_t frames_ = 0;
     std::uint64_t shown_ = 0;
-    std::uint64_t heldBack_ = 0;   // frames with a menu up
-    std::uint64_t gameFrames_ = 0; // frames the game moved the camera
+    std::uint64_t heldBack_ = 0;     // frames with a menu up
+    std::uint64_t gameFrames_ = 0;   // frames the game moved the camera
+    std::uint64_t launchFrames_ = 0; // frames with a launch's pulse up (game_motion.hpp)
+    std::uint64_t rideFrames_ = 0;   // frames on a ride (game_motion.hpp)
     int maxLevel_ = 0;
     float maxTurn_ = 0.0f;
     float maxMove_ = 0.0f;

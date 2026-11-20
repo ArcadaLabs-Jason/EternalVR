@@ -64,6 +64,12 @@ evr_add_test(evr_resolver_tests
         engine/eternal/resolver/string_search_tests.cpp
     DEPENDS evr_resolver)
 
+# Engine facts kept as plain values (header-only files in src/engine/eternal).
+evr_add_test(evr_engine_tests
+    SOURCES
+        engine/eternal/sun_keep_registers_tests.cpp
+    DEPENDS evr_common)
+
 evr_add_test(evr_settings_tests
     SOURCES
         platform/settings/builtin_tests.cpp
@@ -113,7 +119,9 @@ evr_add_test(evr_roomscale_tests
 evr_add_test(evr_comfort_tests
     SOURCES
         features/comfort/glory_kill_tests.cpp
+        features/comfort/launch_pulse_tests.cpp
         features/comfort/pickup_camera_tests.cpp
+        features/comfort/ride_tests.cpp
         features/comfort/vignette_tests.cpp
     DEPENDS evr_comfort)
 
@@ -378,7 +386,8 @@ if(Python3_Interpreter_FOUND)
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/tools/stereo")
     set_tests_properties(evr_eye_diff_tests PROPERTIES
         ENVIRONMENT "TMPDIR=${CMAKE_BINARY_DIR}/tmp;TEMP=${CMAKE_BINARY_DIR}/tmp;TMP=${CMAKE_BINARY_DIR}/tmp")
-    # The clang-tidy check's baseline comparison (tools/run_clang_tidy.py); needs no clang-tidy.
+    # The Python checks' own tests: the clang-tidy check's baseline comparison (tools/run_clang_tidy.py; needs no
+    # clang-tidy) and the engine-internals check (tools/check_scope.py).
     add_test(NAME evr_run_clang_tidy_tests
         COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s tools/tests -v
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")

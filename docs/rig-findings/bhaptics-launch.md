@@ -4,7 +4,8 @@ Static analysis only, 2026-10-01; the game was not run. Input: `DOOMEternalx64vk
 (Rev 3.2), the same exe as `engine-facts.md`. Tools: the analysis scripts of `engine-facts.md` section 8,
 Ghidra 12.1 headless, the type-info reader, and the maps' `.entities` and entityDef decls pulled from the
 game's `.resources`. All addresses are RVAs in this build. Used by `src/vkcore/bhaptics_launch.cpp` and
-`docs/BHAPTICS.md` (the Launch effect, a player's idea in public issue #1).
+`docs/BHAPTICS.md` (the Launch effect, a player's idea in public issue #1), and since 2026-11-17 by the comfort
+vignette's launch pulse (`src/vkcore/game_motion.hpp`).
 
 `[static-verified]`: read from the code or data end to end, and every signature below matches exactly once
 in `.text`. `[inferred]`: a reading that a live run must confirm (section 5).
@@ -94,8 +95,9 @@ in `.text`. `[inferred]`: a reading that a live run must confirm (section 5).
 - `trenches_trigger_bounce_pad_2` (-20.9 -552.5, trigger origin z -5.6, floor about -6.7, `launchSpeed` 21,
   destination 10.4 m straight above, in no layer, no `triggerFirst`), 32 m from the checkpoint. `setviewpos`
   takes the eye height, so the 6 s step puts the player about 1.4 m above the floor, falling into the pad.
-  Expected: `bhaptics: jump pad hook at RVA 0x13E5686` and `bhaptics: booster hook at RVA 0xDAF404` at the
-  start; at about 6 s one `bhaptics: launch: jump pad 'trenches_trigger_bounce_pad_2' (launch speed 21.0,
+  Expected: `launch: jump pad hook at RVA 0x13E5686` and `launch: booster hook at RVA 0xDAF404` at the
+  start (since 2026-11-17 the hooks' lines read `launch:`; they go in for bHaptics or the comfort vignette);
+  at about 6 s one `launch: jump pad 'trenches_trigger_bounce_pad_2' (launch speed 21.0,
   during a pad's flight 0)`, perhaps `same launch` lines; getviewpos at 7.5 s well above the pad.
 - Negative control: two jumps, two double jumps and two dashes from the start (the script's right primary
   and secondary) from about 12 s: `landing:` lines as before, no `launch:`.

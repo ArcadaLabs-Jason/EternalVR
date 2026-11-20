@@ -63,11 +63,22 @@ struct Sim {
 } // namespace
 
 TEST_CASE(
-    "profile cvars: view_skipShakes, r_sharpening and the HUD scale, not the cvars the load sets again") {
+    "profile cvars: view_skipShakes, r_sharpening, the HUD scale and photo mode, not the cvars the load sets "
+    "again") {
     CHECK(profileStoredCvar("view_skipShakes"));
     CHECK(profileStoredCvar("VIEW_SKIPSHAKES"));
     CHECK(profileStoredCvar("r_sharpening"));
     CHECK(profileStoredCvar("swf_anchorProfile"));
+    CHECK(profileStoredCvar("g_setting_photomode"));
+    // Photo mode is optional: a build without it keeps the hooks for the others; those three are not.
+    CHECK(evr::mp_policy::profileOptionalCvar("g_setting_photomode"));
+    CHECK(evr::mp_policy::profileOptionalCvar("G_SETTING_PHOTOMODE"));
+    for (const char* required : {"view_skipShakes", "r_sharpening", "swf_anchorProfile"}) {
+        CHECK_FALSE(evr::mp_policy::profileOptionalCvar(required));
+    }
+    for (const auto name : evr::mp_policy::profileStoredCvars()) {
+        CHECK(profileStoredCvar(name)); // every optional one is also profile-stored
+    }
     CHECK_FALSE(profileStoredCvar("r_antialiasing"));
     CHECK_FALSE(profileStoredCvar("r_raytracedReflectionsTemporalUpscaleQuality"));
     CHECK_FALSE(profileStoredCvar("view_skipKicks")); // not in the profile

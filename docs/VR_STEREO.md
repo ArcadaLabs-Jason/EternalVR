@@ -273,8 +273,9 @@ resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_
 blur and the dash's radial blur (`r_blurRadialScale 0`: the game writes 1 there itself when `r_motionblur` goes
 to 0), depth of field, chromatic aberration, vignette, view bob, the view kicks and shakes, the damage tint and
 blur, the view effects' screen overlays, the underwater screen warp (`r_waterPostProcess 0`: it moves the
-picture the same way in both eyes' screen coordinates, so it has no depth in a headset), the weapon's FOV scale
-and the Meathook's single view turn. The game's
+picture the same way in both eyes' screen coordinates, so it has no depth in a headset), the weapon's FOV scale,
+the Meathook's single view turn and the game's Photo mode (`g_setting_photomode 0`: a free camera the headset
+does not follow; the game starts photo mode only with that setting on, RVA 0x143DFB0). The game's
 own settings override the command line here as well (a rig run with them on the command line still wrote
 `pm_noBob 0 -> 1`, `view_damageBlur 1 -> 0` and six more), so in stereo the launcher no longer puts them on the
 command line: the layer's hold sets them, from Route S's first present (`presenter_copy.cpp`, before the
@@ -283,11 +284,15 @@ runtime's session and the first map), and a multiplayer guard trip gives the pla
 start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these, so mono launches
 keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`), all but the underwater warp (one
 picture for both eyes, so it stays as the game has it). The launcher's session restore puts the player's values
-back in the game's text configs either way. Three held cvars are saved into the player's profile (`profile.bin`)
-instead, which no restore covers: `view_skipShakes`, `r_sharpening` (the launcher's Sharpening) and
-`swf_anchorProfile` (below). The profile hooks (`vkcore/profile_hooks.hpp`) put the player's own value into every
-profile save and the held one back after it; before them every stereo session left `view_skipShakes 1` (no camera
-shake) in the flat game, which the launcher's one-time repair puts back (`docs/rig-findings/profile-leak.md`). A
+back in the game's text configs either way. Four held cvars are saved into the player's profile (`profile.bin`)
+instead, which no restore covers: `view_skipShakes`, `r_sharpening` (the launcher's Sharpening),
+`g_setting_photomode` and `swf_anchorProfile` (below). In mono none of them is held, and photo mode stays the
+player's setting (a command line value would not hold it either: the profile's load sets it after). Photo
+mode is also held only while the profile hooks keep it (`profileKeeps`): a build whose code lacks the cvar
+leaves it to the player, and the hooks keep the other three. The profile hooks (`vkcore/profile_hooks.hpp`)
+put the player's own value into every profile save and the held one back after it; before them every stereo
+session left `view_skipShakes 1` (no camera shake) in the flat game, which the launcher's one-time repair
+puts back (`docs/rig-findings/profile-leak.md`). A
 change to one of these settings in the game's menu during a VR session is not saved: the hold overrides it, and
 the save writes the value the profile's load gave.
 

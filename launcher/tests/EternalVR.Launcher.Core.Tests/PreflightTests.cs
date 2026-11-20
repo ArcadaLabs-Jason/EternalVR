@@ -370,8 +370,9 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void OverlayAndCaptureToolsAsRunOnTheRig()
         {
-            // RTSS, OBS and ReShade next to the layer (RELEASE-CHECKLIST.md item 7): OBS works, RTSS warns about its frame
-            // limit (its variable does not switch it off), ReShade stays off.
+            // RTSS, OBS and ReShade next to the layer (RELEASE-CHECKLIST.md item 7): OBS works, RTSS is never switched off (its
+            // variable does not stop it) and warns about a frame limit, here because its profiles cannot be found
+            // (RtssProfilesTests has the rest), ReShade stays off.
             var obs = new InstalledLayer(LayerApi.Vulkan, "VK_LAYER_OBS_HOOK", "o.json", "HKLM", true, "DISABLE_VULKAN_OBS_CAPTURE", "1");
             Assert.Equal(LayerAction.Ignore, Known().Evaluate(new[] { obs }, false).Single().Action);
             var rtss = new InstalledLayer(LayerApi.Vulkan, "VK_LAYER_RTSS", "r.json", "HKLM", true, "DISABLE_RTSS_LAYER", "1");

@@ -44,6 +44,12 @@ const std::byte* findUnique(const GameImage& image, const char* tag, const char*
 
 std::int32_t readI32(const std::byte* at);
 
+// The signed 8-bit displacement (disp8) in `b`, sign-extended.
+inline std::int32_t disp8(std::byte b) {
+    const int value = std::to_integer<int>(b);
+    return value < 0x80 ? value : value - 0x100;
+}
+
 // The target of a RIP-relative operand: `dispAt` holds the disp32 and `nextInstruction` is the address
 // after the instruction. nullptr when the target lies outside the module.
 const std::byte* ripTarget(const GameImage& image, const std::byte* dispAt, const std::byte* nextInstruction);

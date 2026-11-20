@@ -13,8 +13,9 @@ namespace EternalVR.Launcher.Core.Tests
     /// </summary>
     public class ComfortCvarsTests
     {
-        /// <summary>stereo_seq::stereoComfortCvars without r_hdrDisplay and r_waterPostProcess (held in stereo only, never on the
-        /// command line; session-keys.txt restores it).</summary>
+        /// <summary>stereo_seq::stereoComfortCvars without r_hdrDisplay, r_waterPostProcess (held in stereo only, never on the
+        /// command line; session-keys.txt restores it) and g_setting_photomode (held in stereo only: on the command line the game's
+        /// profile would set it again; the layer's profile hooks keep the player's value in profile.bin).</summary>
         private static readonly string[] ComfortSet =
         {
             "r_motionblur", "r_blurRadialScale", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale",
@@ -38,6 +39,15 @@ namespace EternalVR.Launcher.Core.Tests
             foreach (var name in ComfortSet)
                 Assert.DoesNotContain("+" + name + " ", line);
             Assert.Contains("+r_hdrDisplay 0 ", line);
+        }
+
+        [Fact]
+        public void PhotoModeIsNeverOnTheCommandLine()
+        {
+            // The game's profile load sets it after the command line, and the restore covers no profile.bin key.
+            foreach (var mode in new[] { VrMode.Stereo, VrMode.Mono })
+                Assert.DoesNotContain("g_setting_photomode", CommandLine(mode));
+            Assert.DoesNotContain(Shipped.All, c => c.Name == "g_setting_photomode");
         }
 
         [Fact]

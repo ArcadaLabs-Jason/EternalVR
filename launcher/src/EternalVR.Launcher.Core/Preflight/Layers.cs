@@ -78,12 +78,13 @@ namespace EternalVR.Launcher.Core.Preflight
 
     public sealed class KnownLayer
     {
-        public KnownLayer(LayerApi api, string namePattern, LayerAction action, string reason)
+        public KnownLayer(LayerApi api, string namePattern, LayerAction action, string reason, bool onlyWithRtssLimit = false)
         {
             Api = api;
             NamePattern = namePattern;
             Action = action;
             Reason = reason;
+            OnlyWithRtssLimit = onlyWithRtssLimit;
         }
 
         public LayerApi Api { get; }
@@ -91,6 +92,11 @@ namespace EternalVR.Launcher.Core.Preflight
         public string NamePattern { get; }
         public LayerAction Action { get; }
         public string Reason { get; }
+        /// <summary>
+        /// <c>warn-if-rtss-limit</c>: a warning only while RTSS's profiles limit the game's frame rate, or cannot be read
+        /// (<see cref="RtssProfiles"/>); otherwise ignored.
+        /// </summary>
+        public bool OnlyWithRtssLimit { get; }
 
         public bool Matches(InstalledLayer layer)
         {
@@ -120,7 +126,7 @@ namespace EternalVR.Launcher.Core.Preflight
 
     /// <summary>
     /// The known-layer list (T-095, T-110), data in <c>data\known-layers.txt</c>:
-    /// <c>vulkan|openxr | name or prefix* | ignore|warn|disable|disable-unless-vdxr | reason</c>.
+    /// <c>vulkan|openxr | name or prefix* | ignore|warn|warn-if-rtss-limit|disable|disable-unless-vdxr | reason</c>.
     /// </summary>
     public sealed class KnownLayers
     {
@@ -139,15 +145,17 @@ namespace EternalVR.Launcher.Core.Preflight
                     : api == "openxr" ? LayerApi.OpenXR
                     : throw new FormatException("known-layers: unknown api " + api);
                 LayerAction parsedAction;
+                var onlyWithRtssLimit = false;
                 switch (action)
                 {
                     case "ignore": parsedAction = LayerAction.Ignore; break;
                     case "warn": parsedAction = LayerAction.Warn; break;
+                    case "warn-if-rtss-limit": parsedAction = LayerAction.Warn; onlyWithRtssLimit = true; break;
                     case "disable": parsedAction = LayerAction.Disable; break;
                     case "disable-unless-vdxr": parsedAction = LayerAction.DisableUnlessVdxr; break;
                     default: throw new FormatException("known-layers: unknown action " + action);
                 }
-                list.Add(new KnownLayer(parsedApi, DataFile.Field(r, 1), parsedAction, DataFile.Field(r, 3)));
+                list.Add(new KnownLayer(parsedApi, DataFile.Field(r, 1), parsedAction, DataFile.Field(r, 3), onlyWithRtssLimit));
             }
             return new KnownLayers(list);
         }
@@ -155,10 +163,13 @@ namespace EternalVR.Launcher.Core.Preflight
         /// <summary>
         /// One decision per installed layer that is enabled in the registry. Unlisted layers are
         /// reported as "not tested with EternalVR" warnings; a listed layer whose manifest has no
-        /// disable variable cannot be disabled and is a warning instead.
+        /// disable variable cannot be disabled and is a warning instead. <paramref name="rtss"/> reads RTSS's profiles for a
+        /// <c>warn-if-rtss-limit</c> layer (default: <see cref="RtssProfiles.Read"/> next to its manifest).
         /// </summary>
-        public IReadOnlyList<LayerDecision> Evaluate(IEnumerable<InstalledLayer> installed, bool runtimeIsVdxr)
+        public IReadOnlyList<LayerDecision> Evaluate(IEnumerable<InstalledLayer> installed, bool runtimeIsVdxr,
+                                                     Func<InstalledLayer, RtssLimit> rtss = null)
         {
+            rtss = rtss ?? (l => RtssProfiles.Read(l.ManifestPath));
             var decisions = new List<LayerDecision>();
             foreach (var layer in installed.Where(l => l.EnabledInRegistry))
             {
@@ -167,6 +178,11 @@ namespace EternalVR.Launcher.Core.Preflight
                 if (known == null)
                 {
                     decisions.Add(new LayerDecision(layer, LayerAction.Warn, $"{api} layer {layer.Name} is not on the known list (untested with EternalVR)", null));
+                    continue;
+                }
+                if (known.OnlyWithRtssLimit)
+                {
+                    decisions.Add(RtssDecision(layer, api, known.Reason, rtss(layer)));
                     continue;
                 }
                 var action = known.Action == LayerAction.DisableUnlessVdxr
@@ -184,6 +200,17 @@ namespace EternalVR.Launcher.Core.Preflight
                 decisions.Add(new LayerDecision(layer, action, $"{api} layer {layer.Name}: {verb} ({known.Reason})", env));
             }
             return decisions;
+        }
+
+        private static LayerDecision RtssDecision(InstalledLayer layer, string api, string reason, RtssLimit limit)
+        {
+            if (!limit.Readable)
+                return new LayerDecision(layer, LayerAction.Warn,
+                    $"{api} layer {layer.Name}: warning ({reason}; its profiles could not be read to see whether it sets one: {limit.Problem})", null);
+            if (limit.LimitsTheGame)
+                return new LayerDecision(layer, LayerAction.Warn,
+                    $"{api} layer {layer.Name}: warning (RTSS limits DOOM Eternal's frame rate: {string.Join("; ", limit.Limits)}. {reason})", null);
+            return new LayerDecision(layer, LayerAction.Ignore, $"{api} layer {layer.Name}: ok (no frame rate limit for DOOM Eternal in RTSS's profiles)", null);
         }
     }
 }

@@ -30,7 +30,7 @@ bool reorderCanMatter(const std::vector<Device>& devices) {
 std::optional<std::size_t> findLuid(const std::vector<Device>& devices, const Luid& luid) {
     std::optional<std::size_t> first;
     for (std::size_t i = 0; i < devices.size(); ++i) {
-        if (devices[i].luid && *devices[i].luid == luid) {
+        if (devices[i].luid == luid) { // an empty LUID matches none
             if (ruleTakes(devices[i])) {
                 return i;
             }
@@ -42,7 +42,7 @@ std::optional<std::size_t> findLuid(const std::vector<Device>& devices, const Lu
 
 std::optional<std::size_t> firstOther(const std::vector<Device>& devices, const Luid& luid) {
     for (std::size_t i = 0; i < devices.size(); ++i) {
-        if (!devices[i].luid || *devices[i].luid != luid) {
+        if (devices[i].luid != luid) { // an empty LUID is another adapter
             return i;
         }
     }

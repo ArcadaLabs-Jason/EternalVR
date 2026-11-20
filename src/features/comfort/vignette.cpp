@@ -60,14 +60,15 @@ float vignetteTarget(const VignetteMotion& motion, const VignetteTiming& timing)
         ramp(std::fabs(motion.turnDegreesPerSecond), t.turnStartDegreesPerSecond, t.turnFullDegreesPerSecond);
     const float move = ramp(std::fabs(motion.moveMagnitude), t.moveStart, t.moveFull);
     const float turnStick = ramp(std::fabs(motion.turnStick), t.moveStart, t.moveFull);
-    return std::max({turn, move, turnStick});
+    const float ride = std::isfinite(motion.ride) ? std::clamp(motion.ride, 0.0f, 1.0f) : 0.0f;
+    return std::max({turn, move, turnStick, ride});
 }
 
 VignettePolicy::VignettePolicy(VignetteTiming timing) : timing_(sanitized(timing)) {}
 
 float VignettePolicy::update(const VignetteMotion& motion, double dtSeconds) {
     if (!std::isfinite(dtSeconds) || dtSeconds < 0.0) {
-        return value_;
+        return shown_;
     }
     const float target = vignetteTarget(motion, timing_);
     const float dt = static_cast<float>(std::min(dtSeconds, 1.0));
@@ -78,7 +79,9 @@ float VignettePolicy::update(const VignetteMotion& motion, double dtSeconds) {
         const float step = timing_.fallSeconds > 0.0f ? dt / timing_.fallSeconds : 1.0f;
         value_ = std::max(target, value_ - step);
     }
-    return value_;
+    const float launch = std::isfinite(motion.launch) ? std::clamp(motion.launch, 0.0f, 1.0f) : 0.0f;
+    shown_ = std::max(value_, launch);
+    return shown_;
 }
 
 VignetteShape vignetteShape(float amount, const VignetteLook& look) {

@@ -131,6 +131,7 @@ enum class TouchRetry : std::uint8_t {
     WithoutRestTouch,    // without any of the bindings this file adds
 };
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct TouchRetryStep {
     TouchRetry retry = TouchRetry::WithoutVeto;
     ControllerData data; // what is suggested

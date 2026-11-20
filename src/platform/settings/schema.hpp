@@ -51,6 +51,7 @@ struct Validation {
     }
 };
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 class Schema {
 public:
     // Registers a definition. Returns false (and changes nothing) if the key already exists or the

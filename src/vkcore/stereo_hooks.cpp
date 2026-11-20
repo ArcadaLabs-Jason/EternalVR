@@ -187,7 +187,8 @@ bool patchWorldVtable(std::byte* world) {
         return true;
     }
     auto** vtable = *reinterpret_cast<void***>(world);
-    void** slot = vtable + kRenderViewForIndexSlot / sizeof(void*);
+    constexpr std::size_t kEntry = kRenderViewForIndexSlot / sizeof(void*); // the slot's index
+    void** slot = vtable + kEntry;
     if (*slot != reinterpret_cast<void*>(g_renderViewForIndex)) {
         EVR_LOG("stereo: world %p vtable slot 0x%zX is not RenderViewForIndex; two views off",
                 static_cast<void*>(world), kRenderViewForIndexSlot);
@@ -443,7 +444,7 @@ bool installTwoViewHooks(const GameText& text) {
         layout - world > 0x200) {
         return false;
     }
-    g_worldSlot = static_cast<std::int8_t>(std::to_integer<std::uint8_t>(world[kBuildWorldDisp8]));
+    g_worldSlot = disp8(world[kBuildWorldDisp8]);
     g_new = reinterpret_cast<NewFn>(const_cast<std::byte*>(relativeTarget(alloc + kViewAllocNewCall)));
     g_viewCtor =
         reinterpret_cast<ViewCtorFn>(const_cast<std::byte*>(relativeTarget(alloc + kViewAllocCtorCall)));

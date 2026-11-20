@@ -288,7 +288,7 @@ bool XrPresenter::Impl::recordUiCopy(VkCommandBuffer cb,
          static_cast<std::uint32_t>(fields->height) != uiExtent.height)) {
         check = ui_layer::TargetCheck::SizeMismatch; // the shared images have the swapchain's size
     }
-    if (check != ui_layer::TargetCheck::Ok) {
+    if (check != ui_layer::TargetCheck::Ok || !state) { // no state is NoLayout
         return fail(check);
     }
     const VkImageLayout layout = state->layout;

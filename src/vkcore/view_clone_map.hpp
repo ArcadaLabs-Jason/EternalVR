@@ -88,7 +88,7 @@ struct Map {
 template <typename T>
 T read(std::uintptr_t p) {
     T v{};
-    std::memcpy(&v, reinterpret_cast<const void*>(p), sizeof(v));
+    std::memcpy(&v, reinterpret_cast<const void*>(p), sizeof(T));
     return v;
 }
 

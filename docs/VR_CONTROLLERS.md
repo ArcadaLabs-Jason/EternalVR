@@ -978,7 +978,8 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
 - **Comfort vignette** (`ETERNALVR_VIGNETTE`, `src/features/comfort/vignette.hpp`,
   `src/vkcore/presenter_vignette.cpp`). While the stick turns or moves the player, or the game moves the
   camera itself (the dash action held, or a forced view: a glory kill, the Meathook's catch, a scripted
-  camera), the edges of the view darken and leave a clear centre; head motion never counts. Each mapper run
+  camera), or the game moves the player (a launch or a ride, below), the edges of the view darken and leave a
+  clear centre; head motion never counts. Each mapper run
   publishes the turn rate (the turn's degrees over the frame) and the move stick's magnitude, both zero
   while a menu holds the controllers back. The XR worker turns them into an amount (full from 120 degrees
   per second or two thirds of the stick; in within 0.2 s, out within 0.5 s) and shows the nearest of 8
@@ -987,8 +988,40 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   so the HUD stays readable. Never with a menu up or on the flat screen (cutscenes, the multiplayer guard).
   `light` closes to 40 degrees with 80 % dark edges, `strong` to 25 degrees with black edges. Log:
   `vignette: <look>, 8 level(s) of 256x256 ready ...` once, then every 10 s `vignette: <look>, shown N of
-  M frame(s), max level L of 8; turn up to D deg/s, move up to X, pad turn up to P, game camera G frame(s), H
-  frame(s) held back (menu)`. In gamepad mode the move and the pad turn are the pad's sticks (above).
+  M frame(s), max level L of 8; turn up to D deg/s, move up to X, pad turn up to P, game camera G frame(s),
+  launch l frame(s), ride r frame(s), H frame(s) held back (menu)`. In gamepad mode the move and the pad turn
+  are the pad's sticks (above).
+  - **Launches** (`src/features/comfort/launch_pulse.hpp`, `src/vkcore/game_motion.hpp`): a jump pad or a
+    booster throwing the player (the launch hooks bHaptics has, `bhaptics_launch.cpp`, which go in once for
+    either; with the vignette and bHaptics both off nothing is hooked), or the player physics' ground pound
+    (the Sentinel Hammer's slam [inferred]), brings up a pulse: in within 0.08 s, full while the launch carries
+    the player (until the physics has the feet on the ground again; at least 0.3 s, at most the pad's flight
+    time and a quarter second, else a throw straight up at its launch speed under the game's gravity, within
+    0.5 to 4 s), out over 0.6 s. It is shown over the amount above (the larger of the two), not rate-limited
+    by it. Log: the hooks' `launch: jump pad '<entity>' (...)` or `launch: booster '<entity>' (...)`, then
+    `vignette: launch N (<what>) held X s: on the ground again Y s after it` (or `its limit`), the first 40.
+  - **Rides** (`src/features/comfort/ride.hpp`, `src/vkcore/game_motion.hpp`): on the ground, the player's body
+    carried at 1 m/s or more beyond what the player physics' own velocity explains, for half a second, is a
+    ride (`comfort::CarriedSpeed` over a 0.2 to 0.4 s window of game views: while the player's own level speed
+    is a walk or more, the level speed by which the body outruns it, never below 0 and the vertical left out for
+    stairs, so a lift moving under a walking player is missed until the player stands; below that, the body's
+    velocity less its own without the part that only falls short of it; a step over 20 m, a teleport, starts
+    over). It ends when the carrying slows under 0.5 m/s for 0.4 s, the player is off the ground for over a
+    second (a jump on a tram keeps it), a reading fails or the frames stop, or a cutscene, a climb, swimming, a
+    piloted demon or death comes; any of those starts the window over (`comfort::RideWatch`), so motion under
+    them counts for nothing after. No list of maps: a body slower than its own velocity (a wall, a corner, a
+    stuck spot, the weapon wheel's slow motion, a stalled frame) is never carried, and falls, the Meathook and
+    monkey bars are off the ground. On the rig running, double jumps, dashes, jump pad throws, a glory-kill
+    fight, running into the trench's walls and corners and running with the wheel open gave no ride
+    (`launch-pad`, `glory-follow`, `motion-negative`). A mover carries the body without that velocity (the
+    rig, 2026-11-17: the Phobos elevator 6.4 m/s down with it 0; the Cultist Base tram, the player bound to
+    it; docs/rig-findings/camera-takeovers.md row 20). The amount follows the carried speed on the move
+    stick's scale (0 at 1 m/s, full from 6.5 m/s) at the policy's pace. Only with the vignette on (or the
+    trace below) is anything read: with it off the layer does nothing per frame for rides or launches. Log:
+    `game: ride N starts: the player carried at S m/s or more for T s, more than the player's own motion
+    (...)` and `game: ride N ends after X s (<why>); fastest V m/s, at ...`, the first 40.
+    `ETERNALVR_GAME_MOTION_TRACE=1` (rig) reads and logs the readings every 0.25 s while anything moves,
+    whatever the vignette.
 - **Multiplayer guard.** Every hook is installed only while the guard is armed (`installGameHooks` is
   called next to the camera hook's install), and every callback that writes asks
   `mp_guard::allowsGameTouch()` first and again just before it writes (`docs/rig-findings/mp-guard.md`).

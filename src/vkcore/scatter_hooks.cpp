@@ -1,5 +1,6 @@
 #include "vkcore/scatter_hooks.hpp"
 
+#include "engine/eternal/scatter_state.hpp"
 #include "stereo_seq/scatter_history.hpp"
 #include "stereo_seq/stereo_taa.hpp"
 #include "vkcore/game_code.hpp"
@@ -272,10 +273,10 @@ void onSetup(const HookRegisters& r) {
         ++g_counters.inFlightDiffers;
     }
     stereo_seq::ScatterState current{};
-    std::memcpy(current.data(), state + stereo_seq::kScatterStateOffset, current.size());
+    std::memcpy(current.data(), state + engine::kScatterStateOffset, current.size());
     const stereo_seq::ScatterPlan plan = g_history.beforeRender(eye, counter, current);
     if (plan.load) {
-        std::memcpy(state + stereo_seq::kScatterStateOffset, plan.load->data(), plan.load->size());
+        std::memcpy(state + engine::kScatterStateOffset, plan.load->data(), plan.load->size());
         ++g_counters.swaps;
     }
     if (plan.restarted) {

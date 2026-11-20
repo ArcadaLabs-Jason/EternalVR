@@ -9,6 +9,7 @@
 #include <vector>
 
 using evr::vkcore::callReturns;
+using evr::vkcore::disp8;
 using evr::vkcore::findLeaReferences;
 using evr::vkcore::GameImage;
 
@@ -126,4 +127,12 @@ TEST_CASE("call returns are empty for a function outside .text") {
     CHECK(callReturns(m.image, m.bytes.data() + 0x3F, target, 0x100).empty());
     CHECK(callReturns(m.image, m.text(0x100), target, 0x10).empty());
     CHECK(callReturns(m.image, m.text(0x100 - 4), target, 0x10).empty());
+}
+
+TEST_CASE("disp8 sign-extends the byte") {
+    CHECK(disp8(std::byte{0x00}) == 0);
+    CHECK(disp8(std::byte{0x7F}) == 127);
+    CHECK(disp8(std::byte{0x80}) == -128);
+    CHECK(disp8(std::byte{0xF8}) == -8);
+    CHECK(disp8(std::byte{0xFF}) == -1);
 }

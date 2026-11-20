@@ -31,6 +31,7 @@ inline constexpr const char* kAdvanced = "Advanced";
 inline constexpr const char* kIntense = "Intense";
 } // namespace preset_names
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct BuiltinSettings {
     Schema schema;
     // Comfortable, Recommended, Advanced and Intense, in that order.

@@ -70,8 +70,8 @@ RefractionPlan RefractionHistory::plan(Eye eye, std::uint32_t counter, int updat
         return out;
     }
     const auto u = static_cast<std::size_t>(update);
-    if (p.decided[u]) {
-        out.updateRestart = *p.decided[u];
+    if (const std::optional<RefractionRestart>& decided = p.decided[u]) {
+        out.updateRestart = *decided;
         out.updateRepeated = true;
         return out;
     }

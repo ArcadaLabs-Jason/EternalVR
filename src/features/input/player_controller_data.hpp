@@ -37,6 +37,7 @@ std::vector<BindingIssue> controlMapIssues(const ControllerData& data);
 std::vector<BindingIssue> takeSkippedEntries(ControllerData& data);
 
 // A player's controller data file read the way the layer reads it (vkcore readPlayerData).
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct UsablePlayerData {
     // Without the skipped entries.
     ControllerData data;

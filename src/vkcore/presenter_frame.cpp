@@ -13,6 +13,7 @@
 #include "ui_layer/perf_metrics.hpp"
 #include "vkcore/controllers.hpp"
 #include "vkcore/frame_pacing.hpp"
+#include "vkcore/game_motion.hpp"
 #include "vkcore/gpu_timing.hpp"
 #include "vkcore/keep_active.hpp"
 #include "vkcore/marker_hooks.hpp"
@@ -347,6 +348,11 @@ void XrPresenter::Impl::frame() {
                 motion.turnStick = stick.turnStick;
                 motion.gameMotion = controllers::forcedView() ||
                                     game::contains(controllers::heldActions(), game::GameAction::Dash);
+                // A launch the game makes (a jump pad, a booster, the Hammer's slam) and a ride it moves the
+                // player on (a tram, an elevator): game_motion.hpp.
+                const controllers::GameMotionVignette game = controllers::gameMotionVignette();
+                motion.launch = game.launch;
+                motion.ride = game.ride;
                 const auto make = [this](XrSwapchain& swapchain, const std::vector<std::uint8_t>& pixels,
                                          std::uint32_t width, std::uint32_t height, const char* what) {
                     return createStaticImage(swapchain, pixels, width, height, what);

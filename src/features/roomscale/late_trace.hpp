@@ -12,6 +12,7 @@
 // later.
 
 #include "common/vector.hpp"
+#include "engine/eternal/trace_contents.hpp"
 
 #include <array>
 #include <cstddef>
@@ -38,8 +39,9 @@ struct PhysicsState {
 // if any, read and finished. Anything unread counts as a step in flight.
 [[nodiscard]] bool syncQueryAllowed(const PhysicsState& physics);
 
-// The post-step hook's `rbx` is the physics object of the collision world the asks were made for.
-[[nodiscard]] bool postStepIsOurs(std::uintptr_t rbx, std::uintptr_t ourPhysics);
+// Whether a finished step's physics object (the post-step hook's rbx) is the one of the collision world the
+// asks were made for.
+[[nodiscard]] bool postStepIsOurs(std::uintptr_t stepPhysics, std::uintptr_t ourPhysics);
 
 // How many of a channel's own asks an answer may lag behind when it is used. A deferred answer is one ask
 // old when the camera hook reads it (the hook asks again first); an answer is never more than a few asks
@@ -100,8 +102,8 @@ struct LateQuery {
     std::int32_t contents = 0;
     bool weaponShape = false;
 };
-inline constexpr std::int32_t kHeadContents = 0x100009;
-inline constexpr std::int32_t kShotContents = 0x140001;
+inline constexpr std::int32_t kHeadContents = engine::kHeadTraceContents;
+inline constexpr std::int32_t kShotContents = engine::kShotTraceContents;
 [[nodiscard]] LateQuery lateQuery(std::size_t channel);
 
 // Every channel with the collision world and the ignored spawn id its asks were made for.

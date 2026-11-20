@@ -31,6 +31,7 @@ namespace evr::input {
 // Binding key to value, both as written.
 using BindingMap = std::map<std::string, std::string, std::less<>>;
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct BindingTextResult {
     BindingMap entries;
     std::map<std::string, int, std::less<>> lineOf; // 1-based line each kept entry came from

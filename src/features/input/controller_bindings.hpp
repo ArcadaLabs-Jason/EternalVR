@@ -51,6 +51,7 @@ struct SuggestedBinding {
     friend bool operator==(const SuggestedBinding&, const SuggestedBinding&) = default;
 };
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct ControllerData {
     std::string profilePath; // Empty if the [profile] section has no usable "path".
     // Ordered by action set, hand and action, one entry per bound action and hand.

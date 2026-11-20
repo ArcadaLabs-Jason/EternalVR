@@ -75,3 +75,38 @@ section, so it was not changed.
   linked runtime (recorded as in the earlier audit, 2026-10-21).
 - The M10 bullet "the notices audit and a clang-tidy check are done, and the code-signing choice is made" stays open
   for the code-signing choice (open question 7); the notices part is done.
+
+## Re-check 2026-11-16 (the sources from 0.1.75 to 0.1.97)
+
+Scope: every change from the 0.1.75 version commit (6a2e235b) to the 0.1.97 sources (5e92cc77), so the audit above
+(0.1.89) is checked again together with what came after it; the layer's imports read from a release build of the
+same code (`llvm-readobj --coff-imports`).
+
+Checked, nothing to add:
+
+- `cmake/`: unchanged since 0.1.75 (safetyhook 0.7.0, doctest 2.4.12, the OpenXR loader and headers 1.1.63,
+  Vulkan-Headers 1.4.357); no FetchContent, find_package or download was added. `CMakeLists.txt` and
+  `launcher/Directory.Build.props` changed only their version.
+- The launcher's projects: the same package references (xUnit, xunit.runner.visualstudio, Microsoft.NET.Test.Sdk
+  and Microsoft.NETFramework.ReferenceAssemblies, at the versions listed); no package reaches the output. The
+  launcher's update check and download fetch only EternalVR's own releases from GitHub.
+- DLSS: `launcher/data/dlss-downloads.txt` is unchanged since 0.1.89 (310.9.1 and 310.9.16 from NVIDIA's
+  repository, each with its licence link); the zip holds no NVIDIA file and the layer still only loads the file the
+  player chose (or the game's own).
+- No file copied or adapted from another project was added: no origin or licence header, no new signature taken
+  from another project (DE Advanced Options' stays the only one), no vendored source.
+- The depth layer's compute shader (`src/vkcore/shaders/depth_copy.comp`, ours) is embedded as SPIR-V that the
+  Vulkan SDK's `glslc` compiles (`tools/depth_shader.py`); compiler output, and neither the SDK nor its tools are
+  fetched by the build or shipped.
+- ViGEm: only the rig's QA suite uses it (`tools/rig/qa/qa-pad.py` drives an installed ViGEmBus through its client
+  DLL, which stays on the test PC outside the repository); nothing of it is in the repository or a release. The
+  launcher's preflight only names it.
+- Images and data in the zip: `branding/` is unchanged; `data/` changed only our own controller and weapon files.
+- `tools/release/make-release.ps1`: only the BUILD-INFO wording; its notices and binary checks are unchanged.
+
+Gap found: the "Not redistributed" list of Windows DLLs left out `user32.dll` (imported) and `winhttp.dll` (loaded
+at run time by the bHaptics link, since 2026-09-30). Added, with `kernel32.dll`. The table above also reads as if the
+layer imported `openxr_loader.dll`: it loads it at run time from its own folder (`presenter_xr.cpp`), as it loads
+`nvngx_dlss.dll`; the notices were right either way.
+
+Changed: `THIRD_PARTY_NOTICES.md` ("Not redistributed").

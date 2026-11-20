@@ -169,6 +169,11 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
         // motion blur is (it can make players sick); a float, so a scale such as 0.5 is held too.
         // session-keys.txt restores the player's value after the session.
         {"r_blurRadialScale", "0", true},
+        // Photo mode (the game's Game settings, off by default): a free camera the headset does not follow,
+        // the game paused under it. The game starts it only with this setting on (and g_allowPhotoMode,
+        // Steam build 25216728, RVA 0x143DFB0), so in VR it stays off. The game saves it into profile.bin,
+        // where the profile hooks keep the player's own value (mp_policy::profileStoredCvars).
+        {"g_setting_photomode", "0"},
     };
     return cvars;
 }

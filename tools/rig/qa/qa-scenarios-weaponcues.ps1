@@ -291,8 +291,8 @@ $cueScenarios = @(
         Test-QaPresent $c "ui: first GUI copy with the game's crosshair moved to the gun's ray"
         Test-QaPresent $c "ui: the game's crosshair on the gun's ray: its quad"
         # Once the quad is up, no hold: the game draws its crosshair (a write before it, from the start-up's hold, is
-        # given back).
-        $after = @(Get-QaLogSpan $c "ui: the game's crosshair goes on the gun's ray" '(?!)')
+        # given back; the span starts at the quad's own line, as Test-QaGunHoldOnlyScoped's does).
+        $after = @(Get-QaLogSpan $c "ui: the game's crosshair on the gun's ray: its quad" '(?!)')
         $hides = @($after | Where-Object { $_ -match 'hud_reticle_styleOverride -?\d+ -> 0 \(reads 0\)' })
         Add-QaResult $c 'after the crosshair''s quad is up: no hud_reticle_styleOverride -> 0 write' ($after.Count -gt 0 -and $hides.Count -eq 0) "$($hides.Count) write(s) in $($after.Count) line(s)"
         $m = Get-QaCueMoves $c

@@ -90,7 +90,9 @@ bool EyeCapture::ensureBuffers(
         return true;
     }
     freeBuffers(dev);
-    if (failed_ || !stereo_seq::pixelLayoutOfVkFormat(static_cast<std::int32_t>(format))) {
+    const std::optional<stereo_seq::PixelLayout> layout =
+        stereo_seq::pixelLayoutOfVkFormat(static_cast<std::int32_t>(format));
+    if (failed_ || !layout) {
         if (!failed_) {
             EVR_LOG("capture: swapchain format %d is not handled; capture off", format);
         }
@@ -152,6 +154,7 @@ bool EyeCapture::ensureBuffers(
         return false;
     }
     format_ = format;
+    layout_ = *layout;
     extent_ = extent;
     return true;
 }
@@ -216,7 +219,7 @@ VkBuffer EyeCapture::bufferFor(DeviceData& dev,
         bool made = (frames == 1 || !reshape || poolFits(count, extent)) &&
                     ensureBuffers(dev, format, extent, count, frames > 1);
         monoBurst_ = mono;
-        if (!made && frames > 1 && !failed_) {
+        if (!made && once_ && frames > 1 && !failed_) { // frames > 1 only for a one-shot
             once_->frames = 1;
             monoBurst_ = false;
             made = ensureBuffers(dev, format, extent, 2, false);
@@ -332,7 +335,7 @@ void EyeCapture::poll(DeviceData& dev, std::uint64_t completedTimeline) {
     std::memcpy(left->data(), mapped_[0], left->size());
     std::memcpy(right->data(), mapped_[1], right->size());
     writerBusy_->store(true);
-    const auto layout = *stereo_seq::pixelLayoutOfVkFormat(static_cast<std::int32_t>(format_));
+    const stereo_seq::PixelLayout layout = layout_;
     const VkExtent2D extent = extent_;
     const bool logIt = ++written_ <= 10;
     const std::uint64_t pair = pairIndex_;
@@ -395,7 +398,7 @@ void EyeCapture::writeOnce(const OneShot& shot) {
     }
     writerBusy_->store(true);
     guard_ = std::make_shared<WriterGuard>(); // the last writer is done (writerBusy_ was clear)
-    const auto layout = *stereo_seq::pixelLayoutOfVkFormat(static_cast<std::int32_t>(format_));
+    const stereo_seq::PixelLayout layout = layout_;
     const VkExtent2D extent = extent_;
     const auto write = [busy = writerBusy_, guard = guard_, pixels, shot, layout, extent, seconds, images,
                         frames] {

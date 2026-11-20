@@ -14,6 +14,7 @@
 //
 // All calls except the writer thread run on the present hook under the presenter's mutex.
 
+#include "stereo_seq/png_writer.hpp"
 #include "stereo_seq/seq_settings.hpp"
 #include "vkcore/dispatch.hpp"
 
@@ -131,6 +132,7 @@ private:
     std::uint64_t value_ = 0;
     std::uint64_t lastCopy_ = 0; // timeline value of the last copy submitted into the buffers
     VkFormat format_ = VK_FORMAT_UNDEFINED;
+    stereo_seq::PixelLayout layout_ = stereo_seq::PixelLayout::Bgra8; // format_'s, set with it
     VkExtent2D extent_{};
     bool coherent_ = true;
     bool failed_ = false;

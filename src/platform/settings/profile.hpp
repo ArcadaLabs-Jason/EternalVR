@@ -24,6 +24,7 @@
 
 namespace evr::settings {
 
+// NOLINTNEXTLINE(bugprone-exception-escape): moving a std::map allocates on MSVC (never noexcept)
 struct Profile {
     std::string name;
     std::string basePreset;

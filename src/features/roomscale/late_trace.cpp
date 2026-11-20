@@ -15,8 +15,8 @@ bool syncQueryAllowed(const PhysicsState& physics) {
     return !physics.taskPresent || (physics.taskState && taskFinished(*physics.taskState));
 }
 
-bool postStepIsOurs(std::uintptr_t rbx, std::uintptr_t ourPhysics) {
-    return ourPhysics != 0 && rbx == ourPhysics;
+bool postStepIsOurs(std::uintptr_t stepPhysics, std::uintptr_t ourPhysics) {
+    return ourPhysics != 0 && stepPhysics == ourPhysics;
 }
 
 void LateTrace::ask(Vec3 from, Vec3 to) {

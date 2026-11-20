@@ -280,6 +280,9 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
     CHECK(value("r_water") == "absent");
     // The dash's radial blur goes with motion blur.
     CHECK(value("r_blurRadialScale") == "0");
+    // Photo mode's free camera, which the headset does not follow, stays off (the profile keeps the
+    // player's own value: profile_cvars_tests.cpp).
+    CHECK(value("g_setting_photomode") == "0");
     for (const auto& c : held) {
         // Float scales: held as floats, so 0.5 is not read as the integer 0, nor 1.15 as 1.
         CHECK(c.fraction == (c.name == "r_blurRadialScale" || c.name == "hands_fovScale"));

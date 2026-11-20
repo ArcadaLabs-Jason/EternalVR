@@ -36,6 +36,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -191,6 +192,17 @@ struct ViewRecord {
     // update): its GUI image shows the wheel, which then goes straight ahead (ui_layer/weapon_wheel.hpp).
     bool weaponWheel = false;
 };
+
+// Whether the nine floats at `axis` (a render view's viewaxis) hold the same bits as `record`'s, the latch's
+// match key: the bits the camera hook wrote, so +0 and -0 differ and a NaN matches itself.
+inline bool sameAxisBits(const ViewRecord& record, const void* axis) {
+    std::array<std::uint32_t, 9> mine{};
+    std::array<std::uint32_t, 9> theirs{};
+    static_assert(sizeof(mine) == sizeof(record.axis));
+    std::memcpy(mine.data(), record.axis.data(), sizeof(mine));
+    std::memcpy(theirs.data(), axis, sizeof(theirs));
+    return mine == theirs;
+}
 
 // The view's part of eye `eye`'s image in `record` (EyeRecord::viewRect): what the desktop window shows of
 // that eye's present; nullopt for a mono record or an image without a margin.

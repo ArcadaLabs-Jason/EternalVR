@@ -154,7 +154,7 @@ MapDragOutput MapDrag::update(const MapDragInput& in) {
         phase_ = Phase::Seeking;
         seekStart_ = now;
     }
-    if (phase_ == Phase::Seeking) {
+    if (phase_ == Phase::Seeking && want) { // seeking always has a wanted button (just above)
         button_ = *want;
         const CursorPixel middle{static_cast<std::int32_t>(in.width / 2),
                                  static_cast<std::int32_t>(in.height / 2)};
