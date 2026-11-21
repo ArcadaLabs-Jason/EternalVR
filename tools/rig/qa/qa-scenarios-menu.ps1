@@ -502,8 +502,11 @@ function New-QaCrystalScenario([string]$Name, [string]$Proves, [string[]]$ExtraE
                     # camera's heading less that head yaw) or keeps the player's own heading with the camera's motion on
                     # it (Camera moves; the player not facing the pickup's own heading exactly: a pad turns in steps of
                     # about 20 degrees): its gap from the camera's heading stays put through the sync after its opening.
-                    # With Still view the gap is the head's turn since the camera took the view: within the sweep.
-                    $gapCap = if ($c.Scenario.Camera -eq 'play') { 180 } else { $script:QaHeadSwayYaw + 2 }
+                    # With Still view the gap is the head's turn since the player's view angles last took head aim's
+                    # write: with a pad, Use makes the game put back an older write until the menu is up (camera-
+                    # animations.md, the pad's two-step turn), so that can be from before the menu; within the
+                    # sweep's whole range, one side to the other (14.5 degrees on the rig, tl-f1).
+                    $gapCap = if ($c.Scenario.Camera -eq 'play') { 180 } else { 2 * $script:QaHeadSwayYaw + 2 }
                     Add-QaResult $c "trace: the view keeps one gap from the camera's heading in the sync after its opening ($gapCap deg at most; each line within $on deg of it as a median, 15 at most)" ($traced -and [Math]::Abs($t.GapRef) -le $gapCap -and $t.SpreadMedian -le $on -and $t.SpreadMax -le 15) ('gap {0:N1}; lines off it by {1:N1} (median) to {2:N1}' -f $t.GapRef, $t.SpreadMedian, $t.SpreadMax)
                 } else {
                     Add-QaResult $c "trace: the view faces the camera's heading in the sync (median within $on deg, all within 15)" ($traced -and $t.GapMedian -le $on -and $t.GapMax -le 15) ('{0:N1} median, {1:N1} at most' -f $t.GapMedian, $t.GapMax)

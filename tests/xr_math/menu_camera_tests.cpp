@@ -12,6 +12,7 @@
 using evr::test::approxEqual;
 using evr::xr_math::anglesFromAxis;
 using evr::xr_math::axisFromAngles;
+using evr::xr_math::cameraBodyYaw;
 using evr::xr_math::cameraDrivesView;
 using evr::xr_math::drivenBodyYaw;
 using evr::xr_math::drivenCamera;
@@ -21,6 +22,7 @@ using evr::xr_math::IdViewAxis;
 using evr::xr_math::menuBodyYaw;
 using evr::xr_math::normalize180;
 using evr::xr_math::noteWritten;
+using evr::xr_math::viewHeadYaw;
 
 namespace {
 
@@ -170,4 +172,48 @@ TEST_CASE(
         axisFromAngles({0.0f, 135.0f, 0.0f}); // the crystal's own heading, 5.1 degrees off
     CHECK(approxEqual(menuBodyYaw(state, 129.9f, player, camera), 129.9f));
     CHECK(approxEqual(menuBodyYaw(state, 129.9f, player, camera, true), 135.0f, 1e-3f));
+}
+
+TEST_CASE(
+    "a delta the game puts back as a pad's Use opens a menu is the head yaw a pickup's camera starts from") {
+    // Gamepad mode at the Sentinel Crystal (rig, 2026-11-12, run pa9), the head sweeping: as Use opened the
+    // upgrade menu the game put back a delta head aim had written with the head at -6.38 and kept it there,
+    // while head aim went on injecting the head, last at 1.87. The player's view angles, and the crystal's
+    // camera from them, held the -6.38: taken as 1.87, the view turned 8.2 degrees as the camera took over
+    // and again as the camera cut to the crystal.
+    constexpr float kBody = 178.51f;
+    HeadAimState state = aimed(kBody, 0.0f);
+    auto step = headAimStep(state, {0.0f, kBody, 0.0f}, 0.0f, {0.0f, -6.38f, 0.0f}, false);
+    noteWritten(state, -6.38f);
+    step = headAimStep(state, {0.0f, kBody - 6.38f, 0.0f}, -6.38f, {0.0f, 1.87f, 0.0f}, false);
+    CHECK(approxEqual(step.bodyYaw, kBody, 1e-3f));
+    noteWritten(state, 1.87f);
+    CHECK(approxEqual(viewHeadYaw(state), 1.87f, 1e-3f)); // the write took
+    // Use: the game puts the -6.38 delta back, frame after frame; head aim's own step keeps the body.
+    for (int i = 0; i < 3; ++i) {
+        step = headAimStep(state, {0.0f, kBody - 6.38f, 0.0f}, -6.38f, {0.0f, 1.87f, 0.0f}, true);
+        CHECK(step.restoredWrite);
+        CHECK(approxEqual(step.bodyYaw, kBody, 1e-3f));
+        noteWritten(state, -6.38f + step.deltaYaw);
+    }
+    CHECK(approxEqual(viewHeadYaw(state), -6.38f, 1e-3f));
+    // The menu is up and the crystal's camera starts at the player's view angles: the body stays.
+    const IdViewAxis player = axisFromAngles({0.0f, kBody - 6.38f, 0.0f});
+    CHECK(approxEqual(menuBodyYaw(state, kBody, player, player, true), kBody, 1e-3f));
+    // Its cut to the crystal (135) turns the view once, by the camera's own turn, under the menu or after it.
+    const float cut = menuBodyYaw(state, kBody, player, axisFromAngles({0.0f, 135.0f, 0.0f}), true);
+    CHECK(approxEqual(cut, 141.38f, 1e-3f));
+    CHECK(approxEqual(cameraBodyYaw(state, 135.0f), cut, 1e-3f));
+    // The sync ends with the game setting the player's angles to its camera's (131.52): head aim takes that
+    // value of the game's own with the head yaw the view held, so the body does not turn there either.
+    step = headAimStep(state, {0.0f, 131.52f, 0.0f}, 131.52f, {0.0f, 3.0f, 0.0f}, true);
+    CHECK_FALSE(step.restoredWrite);
+    CHECK(approxEqual(step.bodyYaw, cameraBodyYaw(state, 131.52f), 1e-3f));
+    CHECK(approxEqual(step.bodyYaw, 137.9f, 1e-3f));
+    noteWritten(state, 131.52f + step.deltaYaw);
+    // Once head aim's write holds again, the view holds the head injected last.
+    step = headAimStep(state, {0.0f, 131.52f + step.deltaYaw, 0.0f}, 131.52f + step.deltaYaw,
+                       {0.0f, 3.0f, 0.0f}, false);
+    CHECK(approxEqual(step.bodyYaw, 137.9f, 1e-3f));
+    CHECK(approxEqual(viewHeadYaw(state), 3.0f, 1e-3f));
 }

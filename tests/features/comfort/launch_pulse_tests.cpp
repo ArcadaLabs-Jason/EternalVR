@@ -3,6 +3,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <limits>
 
 using namespace evr::comfort;
@@ -201,4 +202,84 @@ TEST_CASE("vignette policy: a launch's pulse shows as it is, over the rate-limit
     CHECK(other.update(odd, kFrame) == 0.0f);
     other.reset();
     CHECK(other.value() == 0.0f);
+}
+
+namespace {
+
+// The player read with the hammer held and its slam start time, or not held.
+HammerReading held(std::int64_t slamStart) {
+    return {true, true, slamStart};
+}
+constexpr HammerReading kNotHeld{true, false, 0};
+constexpr HammerReading kUnread{};
+
+} // namespace
+
+TEST_CASE("slam watch: a slam starts when the held hammer's slam start time changes") {
+    SlamWatch watch;
+    CHECK_FALSE(watch.update(kNotHeld));
+    // A press with the meter empty: the hammer never comes up, nothing.
+    CHECK_FALSE(watch.update(kNotHeld));
+    // The first time the hammer is read its time only sets the base (0: never slammed yet).
+    CHECK_FALSE(watch.update(held(0)));
+    // A frame later the time is new: the slam, once, not for every frame it stays.
+    CHECK(watch.update(held(22724880)));
+    CHECK_FALSE(watch.update(held(22724880)));
+    CHECK_FALSE(watch.update(kNotHeld));
+    // The next slam: the hammer comes up with the last slam's time, then the new one.
+    CHECK_FALSE(watch.update(held(22724880)));
+    CHECK(watch.update(held(43774199)));
+    CHECK_FALSE(watch.update(kNotHeld));
+    // A slam whose new time is there in the hammer's first frame (the base kept while it was put away).
+    CHECK(watch.update(held(60000000)));
+    // The hammer shown without a slam (its old time): nothing.
+    CHECK_FALSE(watch.update(kNotHeld));
+    CHECK_FALSE(watch.update(held(60000000)));
+    CHECK_FALSE(watch.update(held(60000000)));
+}
+
+TEST_CASE("slam watch: one start per slam on the test PC's readings, at the hammer's second frame") {
+    // e5m2_earth, a standing slam (rig y3): the press, the hammer up with its old time, the new time a frame
+    // later as the player is thrown up (24 m/s), then 0.8 s in the air and the landing with the same time.
+    SlamWatch watch;
+    CHECK_FALSE(watch.update(kNotHeld));
+    CHECK_FALSE(watch.update(kNotHeld)); // the press's frame
+    CHECK_FALSE(watch.update(held(0)));  // the hammer up, its old time
+    CHECK(watch.update(held(22724880))); // the new time: the slam starts here
+    for (int i = 0; i < 52; ++i) {
+        CHECK_FALSE(watch.update(held(22724880))); // up and down, and the landing
+    }
+    CHECK_FALSE(watch.update(kNotHeld)); // the hammer put away
+}
+
+TEST_CASE("slam watch: a failed read only sets the base again") {
+    SlamWatch watch;
+    CHECK_FALSE(watch.update(held(5)));
+    // The player could not be read (a load): the hammer's next time is a base, whatever it is.
+    CHECK_FALSE(watch.update(kUnread));
+    CHECK_FALSE(watch.update(kNotHeld));
+    CHECK_FALSE(watch.update(held(9)));
+    CHECK(watch.update(held(12)));
+    // A failed read in the middle of a slam, then the same time: no second start.
+    CHECK_FALSE(watch.update(kUnread));
+    CHECK_FALSE(watch.update(held(12)));
+    CHECK_FALSE(watch.update(held(12)));
+    // A time of 0 (none) is never a slam.
+    CHECK_FALSE(watch.update(held(0)));
+    // reset() forgets the base.
+    watch.reset();
+    CHECK_FALSE(watch.update(held(30)));
+    CHECK(watch.update(held(31)));
+}
+
+TEST_CASE("slam watch: a lower time after a load is a new base, not a slam") {
+    SlamWatch watch;
+    CHECK_FALSE(watch.update(held(0)));
+    CHECK(watch.update(held(43774199)));
+    // A checkpoint load restarts the game's clock: the hammer comes up with a lower time.
+    CHECK_FALSE(watch.update(kNotHeld));
+    CHECK_FALSE(watch.update(held(1200000)));
+    CHECK_FALSE(watch.update(held(1200000)));
+    // The next slam after the load still starts.
+    CHECK(watch.update(held(2500000)));
 }

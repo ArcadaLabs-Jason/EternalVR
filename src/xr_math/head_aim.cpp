@@ -91,7 +91,18 @@ float headYawHeld(const HeadAimState& state, float deltaYaw, bool gameRewrote) {
     if (const HeadAimState::Written* w = findWritten(state, deltaYaw)) {
         return w->injectedYaw;
     }
-    return last;
+    return viewHeadYaw(state);
+}
+
+float viewHeadYaw(const HeadAimState& state) {
+    if (state.hasRestored) {
+        return state.restored.injectedYaw;
+    }
+    return state.injected ? state.injectedYaw : 0.0f;
+}
+
+float cameraBodyYaw(const HeadAimState& state, float cameraYaw) {
+    return normalize180(cameraYaw - viewHeadYaw(state));
 }
 
 float drivenBodyYaw(const HeadAimState& state, float gameYaw, float deltaYaw, bool gameRewrote) {
@@ -118,8 +129,7 @@ float menuBodyYaw(const HeadAimState& state,
     if (!camera) {
         return heldYaw;
     }
-    // A scripted camera ignores the delta, so the head yaw it holds is the one injected last.
-    return drivenBodyYaw(state, anglesFromAxis(*camera).yaw, 0.0f, false);
+    return cameraBodyYaw(state, anglesFromAxis(*camera).yaw);
 }
 
 HeadAimStep headAimStep(HeadAimState& state,
@@ -129,6 +139,8 @@ HeadAimStep headAimStep(HeadAimState& state,
                         bool gameRewrote,
                         float pitchLimit) {
     HeadAimStep step;
+    // What the view held in the last frame: a value of the game's own re-aims that view.
+    const float inView = viewHeadYaw(state);
     // The head yaw the delta holds now.
     float inDelta = state.injected ? state.injectedYaw : 0.0f;
     if (!gameRewrote) {
@@ -140,9 +152,14 @@ HeadAimStep headAimStep(HeadAimState& state,
                 state.restored = *w;
                 state.restoredIsOurs = true;
             } else {
-                // The game's own value: it re-aimed the view that held the last injected head yaw. Kept, so
-                // a delta the game holds there frame after frame keeps the body still.
-                state.restored = {deltaYaw, inDelta};
+                // The game's own value: it re-aimed the view, which held the last injected head yaw, or, when
+                // the game was holding a delta at the last frame (hasRestored: head aim's writes since never
+                // reached the view), the head yaw that delta carries (viewHeadYaw). That is the head yaw the
+                // body was taken without in those frames, so the body goes on from where it was instead of
+                // jumping by the head's motion while the game held its delta (after a cutscene with the
+                // motion controllers too); with no delta held it is the last injected, as before. Kept, so a
+                // delta the game holds there frame after frame keeps the body still.
+                state.restored = {deltaYaw, inView};
                 state.restoredIsOurs = false;
             }
             state.hasRestored = true;

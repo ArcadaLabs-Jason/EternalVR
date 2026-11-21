@@ -1,5 +1,5 @@
 # The camera takeovers the other scenario files leave out (docs/rig-findings/camera-takeovers.md, ROADMAP M7): glory
-# kills in each of the four views, the player's death, a cutscene in both Cutscene views, swimming. Each checks the
+# kills in each of the four views, the player's death, a cutscene in both Cutscene views, swimming, climbable walls. Each checks the
 # takeover's entry and exit lines and, from the camera trace (ETERNALVR_TEST_CAMERA_TRACE), what the view did: the
 # general rule (the game camera's pitch and roll never reach the headset; the written view's pitch and roll are the
 # head's) and the view's own rule. The simulator's head sways (ETERNALVR_TEST_HEAD_SWAY) so a view that only takes the
@@ -29,8 +29,8 @@
 #       started (shown as a fade)` within 0.5 s of each kill's start. screen: each kill's start followed within 0.5 s
 #       by an `xr: screen run N starts` line whose run ends within 1 s of the kill's end, the stereo pair run
 #       started, no trace line of a head-tracked view inside a kill.
-#   glory-follow-head, glory-steady-head
-#       The same two under head aim, the head swaying round 20 degrees down so the teleported demon lands in reach and
+#   glory-follow-head, glory-steady-head, glory-fade-head, glory-screen-head
+#       The same four under head aim, the head swaying round 20 degrees down so the teleported demon lands in reach and
 #       the shots hit it; follow takes the body as the camera's yaw less one offset per kill (the head yaw the game's
 #       aim holds).
 #   death-camera
@@ -53,6 +53,30 @@
 #       with the hand held 20 degrees down and 30 to the side: `controllers: swimming: the view follows the head` and
 #       then `controllers: out of the water: the weapon hand aims again`; while swimming, the game's view yaw follows
 #       the head's sway (over 4 deg of range in the trace) and the written pitch is the head's (within 0.5 deg).
+#   climb-hand, climb-head
+#       Exultia's climbable rock by its first signal (e1m2 `cp_09_first_signal`, `hell_func_dynamic_4057`, a half shell)
+#       under hand or head aim, the head swaying, god. The game starts a climb on the melee button with the view's ray
+#       on a climbable face (camera-takeovers.md row 8). Standing at the shell's axis facing its inner face: no press;
+#       the stick click with the weapon hand turned 70 degrees off the wall (no climb under hand aim, a climb under
+#       head aim); hand: the click with the hand at the wall. Then in the air 6 m out facing its outer face, stick clicks
+#       from 1 s before the placement until a climb starts. A standing climb is held 5 s, then A jumps off (the game
+#       jumps through the inner face); one from the air is held 3 s, the right stick turns the view 0.6 s, then A
+#       jumps off. Checks: exactly the expected climbs per try, each `climb: climb N starts` with its `ends` line and
+#       the gate's `controllers: forced view starts (climbable wall; ...)` within 0.1 s; held on the wall (trace) the
+#       written pitch and roll are the head's (within 0.5 deg), the game's view yaw follows the head's sway (over 4
+#       deg) and the body does not turn; within 1 s of each start and end the written view less the head's angles
+#       steps 0.5 deg or less a game frame (no flick); the stick turned the view over 90 deg on the wall; each jump
+#       off the wall heads where the view looked as the climb ended (within 10 deg, the game motion trace's first
+#       velocity of 5 m/s or more). Positive control: `ETERNALVR_CLIMB_LOOK=0` (the game keeps the view on the wall)
+#       fails the sway check.
+#   climb-dash, climb-dash-head
+#       As climb-hand and climb-head with the dash for the grab (`give ability_dash` first; the game's default
+#       `dash_autoAttachWallClimb`: a dash along the view with the view's ray on a climbable face grabs it). Hand aim:
+#       B with the weapon hand at the inner face, then with the hand 25 degrees off and the move stick forward; head
+#       aim: B with the hand 70 degrees off and the stick forward; then in the air at the outer face, B and the stick
+#       forward as soon after the placement as the input gets there (timed from the schedule's `where` 1 s before it by
+#       the log's own clock; on the rig a dash 0.36 s or more after the placement came 1.5 m lower and missed the
+#       face). The same checks as climb-hand.
 
 # The camera trace line (camera_anim_hook.cpp traceView), `trace` (a forced view's and the 120 game views after it) or
 # `sync trace` (any other, with ETERNALVR_TEST_CAMERA_TRACE=all), with the line's time in the log.
@@ -336,10 +360,10 @@ $takeoverScenarios = @(
     })
 )
 
-# Head aim (ETERNALVR_AIM=head; hand aim is the launcher's default): follow and steady once more, the head swaying
-# 8 degrees of yaw and 8 of pitch round 20 down (the schedule's teleport puts the demon where the view looks, 3 to
-# 10 m ahead, and the shots go where the head looks).
-$takeoverScenarios += @(foreach ($base in @($takeoverScenarios | Where-Object { $_.GloryView -in 'follow', 'steady' })) {
+# Head aim (ETERNALVR_AIM=head; hand aim is the launcher's default): the four views once more, the head swaying 8
+# degrees of yaw and 8 of pitch round 20 down (the schedule's teleport puts the demon where the view looks, 3 to 10 m
+# ahead, and the shots go where the head looks).
+$takeoverScenarios += @(foreach ($base in @($takeoverScenarios | Where-Object { $_.GloryView })) {
     $v = $base.Clone()
     $v.Name = "$($base.Name)-head"
     $v.Aim = 'head'
@@ -493,6 +517,209 @@ $takeoverScenarios += @{
         }
     }
 }
+
+# ---- Climbable walls --------------------------------------------------------------------------------------------
+
+# Exultia's climbable rock by its first signal (e1m2 cp_09_first_signal), hell_func_dynamic_4057: a half shell of
+# about 4 m round (-52.8, -615.6), facing 52.5 degrees. The game starts a climb when the melee button goes down while
+# the view's ray hits a climbable face within 7.5 m (camera-takeovers.md row 8). Two places: 'inner', standing at the
+# shell's axis facing its inner face about 4 m away (52.5 degrees), and 'outer', in the air 6 m out from the axis
+# facing its outer face (232.5 degrees), where the player starts to fall into the pit at once.
+$script:QaClimbPlaces = @{ inner = '-52.80 -615.60 -11.9 52.5'; outer = '-48.54 -610.05 -12.0 232.5' }
+$script:QaClimbPer = 16
+$script:QaClimbMotion = '^\[\s*([\d.]+)\] \[\s*\d+\] game motion trace: .*?; velocity (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) \((-?[\d.]+)\)'
+
+function Get-QaClimbPose([string]$Aim) {
+    return @("right.aim = $Aim", 'right.position = 0.2, -0.3, -0.35', 'left.aim = 0, 30', 'left.position = -0.2, -0.45, -0.25')
+}
+
+function Get-QaClimbStarts($Ctx) { return ([regex]::Matches((Get-QaLogText $Ctx), 'climb: climb \d+ starts')).Count }
+
+# Each try (Face, Hand, Do, Climb: whether a climb is expected), with the weapon hand at the wall for the placement:
+#   'none'   inner: no press;
+#   'melee'  inner: the hand turned to Hand (yaw, pitch from the body) 1 s after the placement, then a stick click;
+#            a climb is held 5 s, then A jumps off (looking at the inner face: the game jumps through it);
+#   'air'    outer: stick clicks every 0.2 s from before the placement until a climb starts or 0.8 s after it; a
+#            climb is held 3 s, the right stick turns the view 0.6 s (about 140 degrees), then A jumps off.
+#   'dash'   inner: as 'melee' with B (dash) for the stick click, the move stick held at Stick (if any) with it;
+#   'dash-air' outer: B with the move stick forward as soon after the placement as the input gets there (the
+#            placement's fall soon takes the player below the face); held and jumped off as 'air'.
+$script:QaClimbTimeline = {
+    param($c)
+    $t = 6
+    $k = 0
+    foreach ($p in $c.Scenario.ClimbTries) {
+        $k++
+        $pose = Get-QaClimbPose '0, 0'
+        Write-QaInput $c $pose
+        $pat = 'debug-commands: {0}\.0 s: setviewpos' -f $t
+        $t += $script:QaClimbPer
+        if ($p.Do -eq 'dash-air') {
+            # Timed from the schedule's `where` 1 s before the placement by the log's own clock (the log is polled
+            # only every 0.5 s): B meant 0.05 s after the placement reached the game 0.08 to 0.13 s after it on the
+            # rig. Dashes up to 0.28 s after the placement grabbed the outer face under hand and head aim; under hand
+            # aim ones 0.36 and 0.64 s after it (the player 1.5 m or more lower, timed by the log's poll) did not.
+            $mark = 'debug-commands: {0}\.0 s: where' -f ($t - $script:QaClimbPer - 1)
+            if (-not (Wait-QaLog $c $mark 90)) { Add-QaNote $c "try $k : the mark before the placement was not logged"; continue }
+            $before = Get-QaClimbStarts $c
+            $markAt = Get-QaLogLineTime (Get-QaLogText $c) $mark
+            if ($null -eq $markAt) { Add-QaNote $c "try $k : the mark's time was not read"; continue }
+            $left = ($markAt.AddSeconds(1.05) - (Get-Date)).TotalSeconds
+            if ($left -gt 0) { Wait-QaSeconds $c $left } else { Add-QaNote $c ('try {0} : B {1:N2} s late' -f $k, -$left) }
+            Write-QaInput $c ($pose + 'right.secondary = 1' + 'left.stick = 0, 1'); Wait-QaSeconds $c 0.15; Write-QaInput $c $pose
+            Wait-QaSeconds $c 1.0
+            if ((Get-QaClimbStarts $c) -eq $before) { Add-QaNote $c "try $k : no climb from the dash in the air"; continue }
+            if ($k -eq $c.Scenario.ClimbShot) { Save-QaXrShot $c 'on-wall' }
+            Wait-QaSeconds $c 2.0
+            Write-QaInput $c ($pose + 'right.stick = 1, 0'); Wait-QaSeconds $c 0.6; Write-QaInput $c $pose; Wait-QaSeconds $c 0.3
+            Write-QaInput $c ($pose + 'right.primary = 1'); Wait-QaSeconds $c 0.2; Write-QaInput $c $pose
+            continue
+        }
+        if ($p.Do -eq 'air') {
+            # From the schedule's `where` 1 s before the placement.
+            if (-not (Wait-QaLog $c ('debug-commands: {0}\.0 s: where' -f ($t - $script:QaClimbPer - 1)) 90)) { Add-QaNote $c "try $k : the mark before the placement was not logged"; continue }
+            $before = Get-QaClimbStarts $c
+            $end = (Get-Date).AddSeconds(90); $stop = $null
+            while ((Get-Date) -lt $end) {
+                Write-QaInput $c ($pose + 'right.click = 1'); Wait-QaSeconds $c 0.1
+                Write-QaInput $c $pose; Wait-QaSeconds $c 0.1
+                if ((Get-QaClimbStarts $c) -gt $before) { break }
+                if (-not $stop -and (Get-QaLogText $c) -match $pat) { $stop = (Get-Date).AddSeconds(0.8) }
+                if ($stop -and (Get-Date) -gt $stop) { break }
+            }
+            if ((Get-QaClimbStarts $c) -eq $before) { Add-QaNote $c "try $k : no climb from the air"; continue }
+            Wait-QaSeconds $c 1.0
+            if ($k -eq $c.Scenario.ClimbShot) { Save-QaXrShot $c 'on-wall' }
+            Wait-QaSeconds $c 2.0
+            Write-QaInput $c ($pose + 'right.stick = 1, 0'); Wait-QaSeconds $c 0.6; Write-QaInput $c $pose; Wait-QaSeconds $c 0.3
+            Write-QaInput $c ($pose + 'right.primary = 1'); Wait-QaSeconds $c 0.2; Write-QaInput $c $pose
+            continue
+        }
+        if (-not (Wait-QaLog $c $pat 90)) { Add-QaNote $c "try $k : the placement was not logged"; continue }
+        Wait-QaSeconds $c 1.0
+        $pose = Get-QaClimbPose $p.Hand
+        Write-QaInput $c $pose; Wait-QaSeconds $c 1.0
+        if ($p.Do -eq 'melee') { Write-QaInput $c ($pose + 'right.click = 1'); Wait-QaSeconds $c 0.3; Write-QaInput $c $pose }
+        $hold = 5.0
+        if ($p.Do -eq 'dash') {
+            $stick = if ($p.Stick) { @("left.stick = $($p.Stick)") } else { @() }
+            Write-QaInput $c ($pose + 'right.secondary = 1' + $stick); Wait-QaSeconds $c 0.15; Write-QaInput $c $pose
+            if ($k -eq $c.Scenario.ClimbShot) { Wait-QaSeconds $c 1.0; Save-QaXrShot $c 'on-wall'; $hold = 4.0 }
+        }
+        Wait-QaSeconds $c $hold
+        Write-QaInput $c ($pose + 'right.primary = 1'); Wait-QaSeconds $c 0.2; Write-QaInput $c $pose
+    }
+    Wait-QaSeconds $c 11
+}
+
+function New-QaClimbScenario([string]$Aim, [string]$Proves, $Tries, [string]$Name = "climb-$Aim", [string]$Extra = '') {
+    $steps = @("3:god;g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0;ai_freezeMovement 1$Extra")
+    for ($i = 0; $i -lt $Tries.Count; $i++) {
+        $at = 6 + $i * $script:QaClimbPer
+        if ($Tries[$i].Do -in 'air', 'dash-air') { $steps += '{0}:where' -f ($at - 1) }
+        $steps += '{0}:setviewpos {1}' -f $at, $script:QaClimbPlaces[$Tries[$i].Face]
+    }
+    $shot = 1 + [Array]::IndexOf(@($Tries | ForEach-Object { $_.Do -in 'air', 'dash-air' }), $true)
+    if ($shot -eq 0) { $shot = 1 + [Array]::IndexOf(@($Tries | ForEach-Object { $_.Do -eq 'dash' }), $true) }
+    return @{
+        Name = $Name; Kind = 'game'; OnlyByName = $true
+        Proves = $Proves
+        Map = 'game/sp/e1m2_battle/e1m2_battle -checkpoint cp_09_first_signal'
+        Env = @("ETERNALVR_AIM=$Aim", 'ETERNALVR_TEST_CAMERA_TRACE=all', 'ETERNALVR_GAME_MOTION_TRACE=1', $script:QaTqSway, "ETERNALVR_DEBUG_COMMANDS=$($steps -join '|')")
+        Input = Get-QaClimbPose '0, 0'
+        ClimbTries = $Tries; ClimbShot = $shot
+        Timeline = $script:QaClimbTimeline
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'climb: wall-climb step hook at RVA'
+            $tries = @($c.Scenario.ClimbTries)
+            $places = @(Get-QaTqEvents $c 'debug-commands: [\d.]+ s: setviewpos')
+            $climbs = @(Get-QaTqEpisodes $c 'climb: climb (\d+) starts' 'climb: climb (\d+) ends after')
+            $gates = @(Get-QaTqEvents $c 'controllers: forced view starts \(climbable wall; inhibit 0x[0-9A-F]+\): shots and viewmodel leave the game alone; hand aim aims with the head')
+            # Per try (from its placement to the next): the climbs expected, each with its end and the gate's line.
+            $ok = $places.Count -eq $tries.Count; $text = @(); $airClimbs = @()
+            for ($i = 0; $i -lt $tries.Count -and $i -lt $places.Count; $i++) {
+                $from = $places[$i].T; $to = if ($i + 1 -lt $places.Count) { $places[$i + 1].T } else { [double]::MaxValue }
+                $in = @($climbs | Where-Object { $_.Start -ge $from -and $_.Start -lt $to })
+                $gated = @($in | Where-Object { $s = $_.Start; $_.End -ge 0 -and @($gates | Where-Object { [Math]::Abs($_.T - $s) -le 0.1 }).Count -ge 1 })
+                $want = if ($tries[$i].Climb) { 1 } else { 0 }
+                if ($in.Count -ne $want -or $gated.Count -ne $want) { $ok = $false }
+                if ($tries[$i].Do -in 'air', 'dash-air') { $airClimbs += @($in | ForEach-Object { $_.N }) }
+                $text += 'try {0} ({1} {2}, hand {3}): {4} climb(s){5}' -f ($i + 1), $tries[$i].Face, $tries[$i].Do, $tries[$i].Hand, $in.Count, $(if ($in.Count) { ' ' + (($in | ForEach-Object { '{0:N2}-{1:N2} s' -f $_.Start, $_.End }) -join ', ') } else { '' })
+            }
+            Add-QaResult $c 'climbs exactly where expected: each try''s climb N starts / ends, with the gate''s forced view starts (climbable wall; ...) within 0.1 s of its start; none where the try expects none' $ok ($text -join '; ')
+            $rows = Get-QaTqTrace $c
+            $teleports = @(Get-QaTqEvents $c 'game: teleport \d+: the player moved')
+            $motion = @([regex]::Matches((Get-QaLogText $c), $script:QaClimbMotion, 'Multiline') | ForEach-Object {
+                [pscustomobject]@{ T = [double]$_.Groups[1].Value; VX = [double]$_.Groups[2].Value; VY = [double]$_.Groups[3].Value } })
+            $wall = $true; $flick = 0.0; $aimStep = 0.0; $jump = $true; $turned = $true; $wt = @(); $jt = @(); $tt = @()
+            foreach ($e in @($climbs | Where-Object { $_.End -ge 0 })) {
+                # Held still: the first 2.8 s on the wall (the outer tries turn with the stick after 3 s).
+                $m = Measure-QaTqSpan (Select-QaTqSpan $rows ($e.Start + 0.2) ([Math]::Min($e.End - 0.2, $e.Start + 2.8)))
+                if ($m.Lines -lt 100 -or $m.Tilt -gt 0.5 -or $m.GameY -le 4 -or $m.BodyTurn -gt 0.5) { $wall = $false }
+                $wt += 'climb {0}: {1}' -f $e.N, (Format-QaTqSpan $m)
+                # From 1 s before the start (after the try's placement: the debug teleport's game frame turns the view)
+                # to 1 s after it, and from 1 s before the end (0.25 s for a climb from the air, after its stick turn) to
+                # 1 s after.
+                $from = $e.Start - 1
+                $placed = @($places | Where-Object { $_.T -le $e.Start } | Select-Object -Last 1)
+                if ($placed.Count) {
+                    $tp = @($teleports | Where-Object { $_.T -ge $placed[0].T -and $_.T -le $e.Start } | Select-Object -Last 1)
+                    $from = [Math]::Max($from, $(if ($tp.Count) { $tp[0].T + 0.005 } else { $placed[0].T + 0.1 }))
+                }
+                $air = $airClimbs -contains $e.N
+                foreach ($w in @(@($from, ($e.Start + 1)), @(($e.End - $(if ($air) { 0.25 } else { 1 })), ($e.End + 1)))) {
+                    $span = @(Select-QaTqSpan $rows $w[0] $w[1])
+                    for ($i = 1; $i -lt $span.Count; $i++) {
+                        $flick = [Math]::Max($flick, [Math]::Abs((Get-QaTqWrap (($span[$i].WY - $span[$i].HY) - ($span[$i - 1].WY - $span[$i - 1].HY)))))
+                        $flick = [Math]::Max($flick, [Math]::Abs($span[$i].WP - $span[$i].HP))
+                        if (-not [double]::IsNaN($span[$i].AY) -and -not [double]::IsNaN($span[$i - 1].AY)) { $aimStep = [Math]::Max($aimStep, [Math]::Abs((Get-QaTqWrap ($span[$i].AY - $span[$i - 1].AY)))) }
+                    }
+                }
+                # A climb from the air: the stick turned the view on the wall (over 90 deg).
+                if ($air) {
+                    $turn = Measure-QaTqSpan (Select-QaTqSpan $rows ($e.Start + 2.8) $e.End)
+                    if ($turn.BodyTurn -le 90) { $turned = $false }
+                    $tt += 'climb {0}: the body turned {1:N1} deg on the wall' -f $e.N, $turn.BodyTurn
+                }
+                # The jump off the wall: the player's first horizontal velocity of 5 m/s or more after the end goes where
+                # the view looked as the climb ended (the written yaw, the head's on the wall).
+                $last = @(Select-QaTqSpan $rows ($e.End - 0.1) $e.End) | Select-Object -Last 1
+                $v = $motion | Where-Object { $_.T -ge $e.End -and $_.T -le $e.End + 1 -and [Math]::Sqrt($_.VX * $_.VX + $_.VY * $_.VY) -ge 5 } | Select-Object -First 1
+                if (-not $last -or -not $v) { $jump = $false; $jt += 'climb {0}: no view or velocity' -f $e.N; continue }
+                $heading = [Math]::Atan2($v.VY, $v.VX) * 180 / [Math]::PI
+                $off = Get-QaTqWrap ($heading - $last.WY)
+                if ([Math]::Abs($off) -gt 10) { $jump = $false }
+                $jt += 'climb {0}: off the wall at {1:N1} deg, the view at {2:N1} ({3:N1} off)' -f $e.N, $heading, $last.WY, $off
+            }
+            $n = @($climbs | Where-Object { $_.End -ge 0 }).Count
+            $airTries = @($tries | Where-Object { $_.Do -in 'air', 'dash-air' }).Count
+            Add-QaResult $c 'trace: held on the wall the written pitch and roll are the head''s (within 0.5 deg), the game''s view yaw follows the head''s sway (over 4 deg of range) and the body does not turn (0.5 deg)' ($n -ge 1 -and $wall) ($wt -join '; ')
+            Add-QaResult $c 'trace: no flick at a climb''s start or end: the written view less the head''s angles steps 0.5 deg or less a game frame within 1 s of each' ($n -ge 1 -and $flick -le 0.5) ('{0:N2} deg at most; the game''s own view yaw stepped up to {1:N1} deg there (the aim handed between the weapon hand and the head)' -f $flick, $aimStep)
+            Add-QaResult $c 'trace: the right stick turned the view on the wall (over 90 deg) in each climb from the air' ($tt.Count -eq $airTries -and $turned) ($tt -join '; ')
+            Add-QaResult $c 'game motion: each jump off the wall goes where the view looked (within 10 deg)' ($n -ge 1 -and $jump) ($jt -join '; ')
+        }
+    }
+}
+
+$takeoverScenarios += @(
+    (New-QaClimbScenario 'hand' 'Climbable walls under hand aim: a climb starts only on the melee button with the weapon hand''s ray on the wall, standing or from the air, logs its start and end, the view on the wall is the head''s with no flick, the stick turns it there, and the jump off goes where the view looks' @(
+        @{ Face = 'inner'; Hand = '0, 0'; Do = 'none'; Climb = $false },
+        @{ Face = 'inner'; Hand = '70, 0'; Do = 'melee'; Climb = $false },
+        @{ Face = 'inner'; Hand = '0, 0'; Do = 'melee'; Climb = $true },
+        @{ Face = 'outer'; Hand = '0, 0'; Do = 'air'; Climb = $true })),
+    (New-QaClimbScenario 'head' 'Climbable walls under head aim: the melee button climbs where the head looks, wherever the weapon hand points, with the same lines and view checks as climb-hand' @(
+        @{ Face = 'inner'; Hand = '0, 0'; Do = 'none'; Climb = $false },
+        @{ Face = 'inner'; Hand = '70, 0'; Do = 'melee'; Climb = $true },
+        @{ Face = 'outer'; Hand = '0, 0'; Do = 'air'; Climb = $true })),
+    (New-QaClimbScenario 'hand' 'Climbable walls by a dash under hand aim (the dash given first: the checkpoint loads without it): B with the weapon hand at the wall grabs it with the game''s default dash_autoAttachWallClimb, standing, with the hand 25 degrees off and the move stick forward, and from the air; the same lines and view checks as climb-hand' @(
+        @{ Face = 'inner'; Hand = '0, 0'; Do = 'dash'; Climb = $true },
+        @{ Face = 'inner'; Hand = '25, 0'; Do = 'dash'; Stick = '0, 1'; Climb = $true },
+        @{ Face = 'outer'; Hand = '0, 0'; Do = 'dash-air'; Climb = $true }) 'climb-dash' ';give ability_dash'),
+    (New-QaClimbScenario 'head' 'Climbable walls by a dash under head aim (the dash given first): as climb-dash' @(
+        @{ Face = 'inner'; Hand = '70, 0'; Do = 'dash'; Stick = '0, 1'; Climb = $true },
+        @{ Face = 'outer'; Hand = '0, 0'; Do = 'dash-air'; Climb = $true }) 'climb-dash-head' ';give ability_dash')
+)
 
 # Before the launcher's end-to-end suite, which stays last.
 $e2e = @($script:QaScenarios | Where-Object { $_.Kind -eq 'e2e' })

@@ -622,6 +622,26 @@ the numbers of sections 7 and 8 [rig, log]. The other three:
   head aim's menu hold, outside this change; with a pad, a player who stands off a crystal or a rune and moves the head
   as its menu comes up can see that small turn just before the cut to the pickup's heading.
 
+  Cause and fix (2026-11-18, the `takeover-left` branch): with a pad, Use (the right stick's click) at a crystal or a
+  rune makes the game put back a delta head aim had written some frames before, frame after frame until the menu
+  is up: `aim: rewrite 2 ... (a value head aim wrote)` and `rewrite 3` at the press in every `-pad` crystal and rune
+  run on the rig (pa4, pa5, pa6, pa8, pa9), never at the motion controllers' Use. Head aim's own step keeps the body
+  there (the delta's head yaw is the one that value carried), but the view angles never take its writes, so the
+  head yaw in them is the put-back value's, not the one injected last. Under the menu the crystal's camera starts
+  from those angles, and the body it gives (`xr_math::menuBodyYaw`, and the camera branch after the menu) took off
+  the head yaw injected last: in pa9 the put-back value carried -6.38 degrees, the last write 1.87, so the camera at
+  the player's own 172.13 gave a body of 170.26 instead of the held 178.51, the -8.2 step [log]. A camera now takes
+  off the head yaw the view angles held (`xr_math::viewHeadYaw`, `cameraBodyYaw`), and a value of the game's own
+  that replaces a put-back delta (the sync's end) is taken with it too (`headAimStep`), so the body stays on through
+  the sync's end; unit tests `menu_camera_tests.cpp` from pa9's numbers and `forced_view_tests.cpp`. This differs
+  from before only when the game was holding a delta at the last frame head aim aimed (head aim's writes not
+  reaching the view: a value head aim wrote earlier, as at the pad's Use, or one of the game's own, as for some
+  frames after a cutscene): a camera or menu that starts then, and a new value of the game's own, take the head yaw
+  that held delta carries instead of the one injected last, by which the body would have jumped. With no delta
+  held, as at the motion controllers' Use, the values are the ones of before. Rig, tl-x4 and the runs below: `as the menu handed over to the sync the
+  view turned 0.0 deg in one frame (body yaw 166.8 from 166.8)`, then the one cut to the crystal's heading (28.7),
+  the heading after the sync the one at its end (0.01 off) [rig].
+
 Not checked: a headset; a mouse turning the view during a pickup under view aim; view aim with a gamepad (Aim with: Mouse, Motion controllers unticked), at the automap station,
 gore nest 1 or the golden nest; frame rates other than the rig's (about 70 to 80 game frames a second here). The
 Dossier's screens, the Fortress and combat with a pad: below.

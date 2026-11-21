@@ -202,9 +202,14 @@ void XrPresenter::Impl::onGameView(std::byte* renderView, std::byte* player) {
     glory.noteBody(xr_math::anglesFromAxis(*body).yaw);
     pickup.noteBody(xr_math::anglesFromAxis(*body).yaw, headAimed && aimBodyOwn, aimMenuFrames != menuViews);
     watchBodyYaw(xr_math::anglesFromAxis(*body).yaw, headAimed, roomIn.forcedView, cutscene, menuOverGame());
+    // The game drives the view: last frame's gate, this frame's (beginGameView updated it), a kill's or a
+    // pickup's camera. A sync's snap onto a demon is no teleport (comfort::TeleportWatch).
+    const bool driven =
+        roomIn.forcedView || controllers::forcedView() || glory.drivesView() || pickup.followsCamera();
+    watchTeleport(player, qpcSeconds(qpcNow()), xr_math::anglesFromAxis(*body).yaw, driven, cutscene);
     if (camera_anim::tracing()) {
         camera_anim::noteTraceAim({xr_math::anglesFromAxis(*body).yaw, xr_math::headAngles(headId),
-                                   aimState.injected, aimState.injectedYaw, menuOverGame(),
+                                   aimState.injected, xr_math::viewHeadYaw(aimState), menuOverGame(),
                                    !cutscene && controllers::syncPickupActive(player), headAimed});
     }
     // Aim and the body above follow the head; the view and the eyes turn by the game's camera on top of it (a

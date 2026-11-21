@@ -122,6 +122,7 @@ evr_add_test(evr_comfort_tests
         features/comfort/launch_pulse_tests.cpp
         features/comfort/pickup_camera_tests.cpp
         features/comfort/ride_tests.cpp
+        features/comfort/teleport_tests.cpp
         features/comfort/vignette_tests.cpp
     DEPENDS evr_comfort)
 

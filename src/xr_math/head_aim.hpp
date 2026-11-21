@@ -81,10 +81,21 @@ HeadAimStep headAimStep(HeadAimState& state,
                         bool gameRewrote,
                         float pitchLimit = 89.0f);
 
-// The head yaw the game's yaw holds now, for a frame head aim does not write (a forced view or a scripted
-// camera): what headAimStep would subtract, without changing the state. `deltaYaw` and `gameRewrote` as for
-// headAimStep; a scripted camera, which ignores the delta, passes false.
+// The head yaw the game's yaw holds now, for a frame head aim does not write (a forced view): what
+// headAimStep would subtract, without changing the state. `deltaYaw` and `gameRewrote` as for headAimStep.
+// A value of the game's own holds what the delta held before it (viewHeadYaw).
 float headYawHeld(const HeadAimState& state, float deltaYaw, bool gameRewrote);
+
+// The head yaw the player's view angles held in the last frame head aim aimed: the one the delta the game
+// held then carries (a value head aim wrote earlier, which the game put back, or its own), else the head yaw
+// injected last. While the game keeps putting a delta back, head aim's writes never reach the view, so the
+// head yaw injected last is not in it: in gamepad mode Use at a Sentinel Crystal put back a delta written
+// with the head 8 degrees from where it was when the menu came up (rig, 2026-11-12, run pa9).
+float viewHeadYaw(const HeadAimState& state);
+
+// The body yaw under a scripted camera, which starts from the player's view angles and ignores the delta:
+// the camera's heading less the head yaw those angles held (viewHeadYaw).
+float cameraBodyYaw(const HeadAimState& state, float cameraYaw);
 
 // The body yaw of a view the game drives (a forced view's angles or a scripted camera's heading): that yaw
 // without the head yaw it holds. The head-tracked view (body + head) then faces where the game points it
@@ -110,8 +121,8 @@ bool cameraDrivesView(bool pickupFollow, const IdViewAxis& playerView, const IdV
 // stays put while the head looks around. Under a camera the game drives with the menu up (the Fortress's
 // collectible viewer: its orbit camera faces the toy or album from a side of the game's choosing, 90 degrees
 // from the player's heading for the toys' close-up), it is the camera's heading without the head yaw the
-// game's yaw holds (drivenBodyYaw): the view faces what the camera shows while the head is where it was when
-// the menu came up.
+// player's view angles hold (cameraBodyYaw): the view faces what the camera shows while the head is where it
+// was when the menu came up.
 // `pickupFollow`: a pickup's camera shown with Still view, which drives every view (cameraDrivesView).
 float menuBodyYaw(const HeadAimState& state,
                   float heldYaw,

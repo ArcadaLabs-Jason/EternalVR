@@ -1,11 +1,14 @@
 #pragma once
 
 // The comfort vignette's pulse for a launch (vignette.hpp): a jump pad or a booster throws the player (the
-// launch hooks, vkcore/bhaptics_launch.cpp), or the Sentinel Hammer's slam drives the player down (the
-// player physics' ground pound, vkcore/game_motion.cpp). That is motion the player sees but does not make
-// with the body, like the stick's. The pulse comes in fast, holds while the launch carries the player (until
-// the feet are on the ground again, within a limit sized to the launch) and goes out gently; the vignette's
-// look (Light, Strong) stays the player's. Pure: time in seconds on any steady clock.
+// launch hooks, vkcore/bhaptics_launch.cpp), or the Sentinel Hammer's slam throws the player up and drives
+// them down (the held hammer's slam start time, SlamWatch below, vkcore/game_motion.cpp). That is motion the
+// player sees but does not make with the body, like the stick's. The pulse comes in fast, holds while the
+// launch carries the player (until the feet are on the ground again, within a limit sized to the launch) and
+// goes out gently; the vignette's look (Light, Strong) stays the player's. Pure: time in seconds on any
+// steady clock.
+
+#include <cstdint>
 
 namespace evr::comfort {
 
@@ -65,6 +68,33 @@ private:
     bool leftGround_ = false;
     bool landed_ = false;
     double landedAt_ = 0.0;
+};
+
+// One game frame's reading of the Sentinel Hammer: whether it is the hands' held item and, while it is,
+// its idHammerWeapon::slamStartTime (game time, any unit). `valid` false when the player could not be read.
+struct HammerReading {
+    bool valid = false;
+    bool held = false;
+    std::int64_t slamStartTime = 0;
+};
+
+// The Sentinel Hammer's slam: the hammer is in the hands only for a slam (a press with its meter empty
+// brings nothing up), and its slam start time takes a new value one game frame after it comes up, as the
+// player is thrown up (the test PC: 0.03 s after the press, the landing 0.8 s later). A slam starts when
+// the held hammer's start time differs from the last one read off it (kept while it is put away), unless
+// it is 0. The first time the hammer is read, and the first after a failed read (a load), its time only
+// sets the base, so a hammer that shows without a slam starting (its old time) is never one. The slam
+// flags the type info names did not tell it on the rig (`slamInProgress` set only as the slam landed;
+// `slamming` a byte that held 0 in one run and 0x4F in another).
+class SlamWatch {
+public:
+    // One game frame's reading. True when a slam started.
+    bool update(const HammerReading& r);
+    void reset() { *this = SlamWatch(); }
+
+private:
+    bool have_ = false;
+    std::int64_t last_ = 0;
 };
 
 } // namespace evr::comfort

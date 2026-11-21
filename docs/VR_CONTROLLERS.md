@@ -991,14 +991,15 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   M frame(s), max level L of 8; turn up to D deg/s, move up to X, pad turn up to P, game camera G frame(s),
   launch l frame(s), ride r frame(s), H frame(s) held back (menu)`. In gamepad mode the move and the pad turn
   are the pad's sticks (above).
-  - **Launches** (`src/features/comfort/launch_pulse.hpp`, `src/vkcore/game_motion.hpp`): a jump pad or a
-    booster throwing the player (the launch hooks bHaptics has, `bhaptics_launch.cpp`, which go in once for
-    either; with the vignette and bHaptics both off nothing is hooked), or the player physics' ground pound
-    (the Sentinel Hammer's slam [inferred]), brings up a pulse: in within 0.08 s, full while the launch carries
-    the player (until the physics has the feet on the ground again; at least 0.3 s, at most the pad's flight
-    time and a quarter second, else a throw straight up at its launch speed under the game's gravity, within
-    0.5 to 4 s), out over 0.6 s. It is shown over the amount above (the larger of the two), not rate-limited
-    by it. Log: the hooks' `launch: jump pad '<entity>' (...)` or `launch: booster '<entity>' (...)`, then
+  - **Launches** (`src/features/comfort/launch_pulse.hpp`, `src/vkcore/game_motion.hpp`): a jump pad or a booster
+    throwing the player (the launch hooks bHaptics has, `bhaptics_launch.cpp`, which go in once for either; with
+    the vignette and bHaptics both off nothing is hooked), or the Sentinel Hammer's slam (the held hammer's slam
+    start time new, a game frame after it comes up), brings up a pulse: in within 0.08 s, full while the launch
+    carries the player (until the physics has the feet on the ground again; at least 0.3 s, at most the pad's
+    flight time and a quarter second, else a throw straight up at its launch speed under the game's gravity,
+    within 0.5 to 4 s), out over 0.6 s. It is shown over the amount above (the larger of the two), not
+    rate-limited by it. Log: the hooks' `launch: jump pad '<entity>' (...)` or `launch: booster '<entity>' (...)`,
+    then `vignette: launch N: the Sentinel Hammer's slam, from the ground` (or `in the air`) for a slam, and
     `vignette: launch N (<what>) held X s: on the ground again Y s after it` (or `its limit`), the first 40.
   - **Rides** (`src/features/comfort/ride.hpp`, `src/vkcore/game_motion.hpp`): on the ground, the player's body
     carried at 1 m/s or more beyond what the player physics' own velocity explains, for half a second, is a

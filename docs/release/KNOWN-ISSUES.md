@@ -201,8 +201,9 @@ them is worse for you than described here.
   closed the Dossier. Fixed now too (my test PC, not in a headset yet). With a gamepad these menus work with the pad's
   own buttons: hold A to unlock, and the right bumper for the mod bot's tabs. If you stand well off to the side of
   a rune or a crystal when you use it, "Still view" turns you to face it in one go when its animation starts. With
-  a gamepad that turn can come in two steps, a small one first (about 7 to 8 degrees on my test PC with the head
-  moving as the crystal's menu came up); not fixed yet. "Camera moves (intense)" keeps you facing where you were,
+  a gamepad that turn used to come in two steps, a small one first (about 7 to 8 degrees on my test PC with the head
+  moving as the crystal's menu came up); that's fixed now, it's one turn as with the controllers (my test PC, the
+  crystal and the rune, not in a headset yet). "Camera moves (intense)" keeps you facing where you were,
   so the animation plays off to the side.
 
   Aiming with the mouse (Aim with: Mouse), I've run the same pickups now too, with both settings and the head moving
@@ -543,6 +544,11 @@ them is worse for you than described here.
 - **Jumping off climbable walls where you look** works on a Quest 3; other headsets are untried.
   While you hang on the wall the view is yours: the game no longer limits how far you can look to the side
   or down, and your gun follows your head there, not your hand. If it misbehaves, please tell me where.
+  To grab the wall, point your gun at it (the game shows its Climb Wall prompt) and press melee, the right
+  stick click; with head aim, look at it. If you'd rather look at the wall than point at it, set Melee aim with
+  to Head on the Play tab. A dash at the wall (B) grabs it too, standing or in the air, as in the flat game;
+  with hand aim the dash goes where the gun points, so point it at the wall. On my test PC's headset simulator the
+  view stayed steady as the grab started and ended, and the jump off went where the head looked.
 - **Piloting the Revenant** in Cultist Base: it turns with the stick, moves where you face and aims where
   your weapon hand points (where you look, with head aim). Its cannons and arms used to follow your hand, so
   pointing away from where you looked swung a cannon into the middle of the view and showed the inside of
@@ -607,7 +613,7 @@ them is worse for you than described here.
   outside, which the mod can't see. The jump into the Argent stream in Nekravol, the creature ride on the World
   Spear and the Titan carrying your platform in the Blood Swamps are cutscenes, so they go on the screen like any
   other (checked on my test PC); the Ion Catapult and the escape pod in Mars Core look like cutscenes too, from
-  the game's files (I haven't started them on my test PC). None of it has been tried in a headset. With the
+  the game's files (I haven't got either going on my test PC yet). None of it has been tried in a headset. With the
   Vignette off nothing changes. If a ride makes you queasy, please tell me which.
 - **Photo mode** is now kept off in VR (with Mono picked on the Advanced tab it still isn't): its free camera
   doesn't follow the headset. On my test PC it went straight back off when I turned it on during play. Your own
@@ -623,9 +629,10 @@ them is worse for you than described here.
   dash and while the game moves the camera itself (a glory kill, checked on my test PC). The Meathook pull
   probably only brings it up for the moment the hook catches, not while you fly (not checked yet). A jump pad now
   brings it up quickly and keeps it while the pad throws you, until you land (checked on my test PC with an e1m2
-  pad), and a booster does the same (checked on my test PC with the one in e1m2); so should the Sentinel Hammer's
-  slam (I think the mod spots it, but I haven't had a save with the hammer to check). Rides the game carries you
-  on bring it up too (above, Moments VR doesn't handle yet).
+  pad), and a booster does the same (checked on my test PC with the one in e1m2). The Sentinel Hammer's slam
+  brings it up too, as the slam throws you up, and keeps it until you land (checked on my test PC in Reclaimed
+  Earth, standing and after a double jump). Rides the game carries you on bring it up too (above, Moments VR
+  doesn't handle yet).
 - **Use the headset's graphics card** (Advanced tab) is for a PC with two or more graphics cards where VR
   does not start because the game picked another card than the headset's. It is off by default and not
   yet tried on such a PC with a headset; please tell me if you need it and how it went.

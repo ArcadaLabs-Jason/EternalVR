@@ -10,6 +10,7 @@
 #include "vkcore/demon_view.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
+#include "vkcore/weapon_mods.hpp"
 
 #include <cstdint>
 #include <mutex>
@@ -36,11 +37,16 @@ constexpr std::size_t kPhysicsCurrent = 0x3F28;
 constexpr std::size_t kStateWorldOrigin = 0x0C;
 constexpr std::size_t kStateVelocity = 0x18;
 constexpr std::size_t kStateGroundPlane = 0xA0;
-// idHavokPhysics_Player::groundPounding: the slam down the Sentinel Hammer makes [inferred: the only ground
-// pound of the Slayer; the rig has no save with the hammer].
-constexpr std::size_t kPhysicsGroundPounding = 0x46C9;
-// A slam lasts until the feet are down; this long at most.
-constexpr float kGroundPoundHoldSeconds = 2.0f;
+// The Sentinel Hammer's slam (comfort::SlamWatch): idPlayer::hands (an idHands held in the idPlayer, the
+// viewmodel hook's hands), whose right item's object (weapon_mods.hpp) is an idHammerWeapon while its decl
+// is the hammer's; its slamStartTime (an idTypesafeTime, int64), new one game frame after the hammer comes
+// up. On the rig the player physics' groundPounding (+0x46C9) stayed 0 through every slam, and
+// idPlayer::lastSlamTime (+0x4D08) and the hammer's slamInProgress (+0x3C0A) changed only as it landed.
+constexpr std::size_t kPlayerHands = 0xD2C8;
+constexpr std::size_t kHammerSlamStartTime = 0x3BE0;
+constexpr std::string_view kHammerDecl = "weapon/player/hammer";
+// A slam lasts until the feet are down (under 1 s on the rig); this long at most.
+constexpr float kSlamHoldSeconds = 2.0f;
 constexpr int kLoggedLaunches = 40;
 constexpr int kLoggedRides = 40;
 // No game frame for this long (a menu, a load, the flat screen): the ride shows nothing.
@@ -56,10 +62,13 @@ double nowSeconds() {
 // Under g_mutex.
 std::mutex g_mutex;
 comfort::LaunchPulse g_pulse;
-int g_launches = 0;        // the pulses so far
-bool g_launchOpen = false; // the latest launch's hold has not been logged as over
-std::string g_launchWhat;  // what launched the player, for the end line
-bool g_pounding = false;   // the ground pound seen in the last frame
+int g_launches = 0;                    // the pulses so far
+bool g_launchOpen = false;             // the latest launch's hold has not been logged as over
+std::string g_launchWhat;              // what launched the player, for the end line
+comfort::SlamWatch g_slams;            // the Sentinel Hammer's slams
+const std::byte* g_heldDecl = nullptr; // the hands' held decl last named
+bool g_heldHammer = false;             // ... and whether it is the hammer's
+bool g_wasOnGround = false;            // the feet in the last frame read (the slam's line)
 float g_launchCap = 0.0f;
 comfort::RideWatch g_watch;
 int g_rides = 0;
@@ -124,7 +133,7 @@ bool traceOn() {
 struct Reading {
     bool valid = false;
     bool onGround = false;
-    bool pounding = false;
+    comfort::HammerReading hammer;
     Vec3 origin;
     Vec3 velocity;
 };
@@ -137,17 +146,40 @@ Reading readPhysics(const std::byte* player) {
     const std::byte* physics = player + kPlayerPhysics;
     const std::byte* current = physics + kPhysicsCurrent;
     std::uint8_t ground = 0;
-    std::uint8_t pound = 0;
     float origin[3] = {};
     float velocity[3] = {};
     r.valid = safeRead(current + kStateGroundPlane, ground) &&
-              safeRead(physics + kPhysicsGroundPounding, pound) &&
               safeRead(current + kStateWorldOrigin, origin) && safeRead(current + kStateVelocity, velocity);
     r.onGround = ground != 0;
-    r.pounding = pound != 0;
     r.origin = {origin[0], origin[1], origin[2]};
     r.velocity = {velocity[0], velocity[1], velocity[2]};
     return r;
+}
+
+// Under g_mutex: the hands' held item, and the hammer's slam start time while it is the hammer.
+void readHammer(const std::byte* player, Reading& r) {
+    if (!r.valid) {
+        g_heldDecl = nullptr; // a load: a decl's pointer can name another item after it
+        return;
+    }
+    const std::byte* hands = player + kPlayerHands;
+    const std::byte* decl = heldItemDecl(hands);
+    r.hammer.valid = true;
+    if (decl != g_heldDecl) {
+        g_heldDecl = decl;
+        g_heldHammer = decl && itemDeclName(decl) == kHammerDecl;
+    }
+    const std::byte* hammer = g_heldHammer ? heldItemObject(hands, decl) : nullptr;
+    if (!hammer) {
+        return;
+    }
+    std::int64_t start = 0;
+    if (!safeRead(hammer + kHammerSlamStartTime, start)) {
+        r.hammer.valid = false; // the watch's base goes: an unread time is no new slam
+        return;
+    }
+    r.hammer.held = true;
+    r.hammer.slamStartTime = start;
 }
 
 // Under g_mutex.
@@ -160,11 +192,11 @@ void trace(const Reading& r, float carried, bool excluded, double now) {
     }
     g_lastTrace = now;
     ++g_traceLines;
-    EVR_LOG("game motion trace: ground %d pound %d excluded %d riding %d; origin %.2f %.2f %.2f; velocity "
-            "%.2f %.2f %.2f (%.2f); carried %.2f",
-            r.onGround ? 1 : 0, r.pounding ? 1 : 0, excluded ? 1 : 0, g_watch.ride().riding() ? 1 : 0,
-            r.origin.x, r.origin.y, r.origin.z, r.velocity.x, r.velocity.y, r.velocity.z, length(r.velocity),
-            carried);
+    EVR_LOG("game motion trace: ground %d hammer %d slam %lld excluded %d riding %d; origin %.2f %.2f %.2f; "
+            "velocity %.2f %.2f %.2f (%.2f); carried %.2f",
+            r.onGround ? 1 : 0, r.hammer.held ? 1 : 0, static_cast<long long>(r.hammer.slamStartTime),
+            excluded ? 1 : 0, g_watch.ride().riding() ? 1 : 0, r.origin.x, r.origin.y, r.origin.z,
+            r.velocity.x, r.velocity.y, r.velocity.z, length(r.velocity), carried);
 }
 
 // Under g_mutex.
@@ -201,6 +233,19 @@ bool vignetteOn() {
     return on;
 }
 
+std::optional<PlayerPlace> playerPhysicsPlace(const std::byte* player) {
+    if (!mp_guard::allowsGameTouch() || !isPlayerSafe(player)) {
+        return std::nullopt;
+    }
+    const std::byte* current = player + kPlayerPhysics + kPhysicsCurrent;
+    float origin[3] = {};
+    float velocity[3] = {};
+    if (!safeRead(current + kStateWorldOrigin, origin) || !safeRead(current + kStateVelocity, velocity)) {
+        return std::nullopt;
+    }
+    return PlayerPlace{{origin[0], origin[1], origin[2]}, {velocity[0], velocity[1], velocity[2]}};
+}
+
 void installGameMotionHooks() {
     if (!vignetteOn()) {
         return;
@@ -226,27 +271,35 @@ void noteGameMotionFrame(const std::byte* player, bool cutscene, bool wallClimb)
     if ((!vignetteOn() && !traceOn()) || !mp_guard::allowsGameTouch()) {
         return;
     }
-    const Reading r = readPhysics(player);
+    Reading r = readPhysics(player);
     // Not rides: a cutscene (on the screen or around the player), a climb, swimming, a piloted demon, death.
     const bool excluded =
         cutscene || wallClimb || swimFistsHeld() || pilotingDemon() || (r.valid && playerDead(player));
     const double now = nowSeconds();
     std::lock_guard lock(g_mutex);
+    if (g_lastFrame >= 0.0 && now - g_lastFrame > kRideStaleSeconds) {
+        // Frames stopped (a load, a menu, the flat screen): the slam's base and the feet start again.
+        g_slams.reset();
+        g_wasOnGround = false;
+    }
     g_lastFrame = now;
+    readHammer(player, r);
     rideFrame(r, excluded, now);
     if (!vignetteOn()) {
         return;
     }
-    if (r.valid) {
-        if (r.pounding && !g_pounding) {
-            startPulse(now, "the ground pound (the Sentinel Hammer's slam)", kGroundPoundHoldSeconds);
-            if (g_launches <= kLoggedLaunches) {
-                EVR_LOG("vignette: launch %d: the ground pound (the Sentinel Hammer's slam), %s", g_launches,
-                        r.onGround ? "on the ground" : "in the air");
-            }
+    if (g_slams.update(r.hammer)) {
+        startPulse(now, "the Sentinel Hammer's slam", kSlamHoldSeconds);
+        // The feet the frame before: the slam's time is new a frame after the hammer comes up, when a
+        // standing slam has already thrown the player up.
+        if (g_launches <= kLoggedLaunches) {
+            EVR_LOG("vignette: launch %d: the Sentinel Hammer's slam, %s", g_launches,
+                    g_wasOnGround ? "from the ground" : "in the air");
         }
-        g_pounding = r.pounding;
+    }
+    if (r.valid) {
         g_pulse.ground(now, r.onGround);
+        g_wasOnGround = r.onGround;
     }
     logLaunchEnd(now);
 }

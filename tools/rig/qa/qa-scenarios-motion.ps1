@@ -51,6 +51,14 @@
 #       (village_trigger_trigger_8): the torch scene and the flight above the clouds start within 2 s.
 #       ride-swamp-titan: e4m2_swamp CP_10_BOSS_post_combat, the boss's end relay, then Use 2.5 m from the
 #       platform's use proxy (titan_level_raise_volume_use_proxy): the Titan's lift starts within 15 s of the step.
+#   launch-hammer
+#       e5m2_earth from its start, whose inventory has the Sentinel Hammer with its meter empty: a press of its button
+#       (the left stick click), a double jump and a double jump with a press (no launch), then the player put on four
+#       of the map's hammer charge pickups 20 s apart, a slam standing on the first and third and after a double
+#       jump on the second and fourth. One `vignette: launch N: the Sentinel Hammer's slam, from the ground` (or
+#       `in the air`) within 0.4 s of each charged press (the held hammer's new slam start time, a game frame after
+#       it comes up: on the rig 0.03 s after the press), none before the first pickup, every pulse held 0.3 to 2 s
+#       and ended by the ground, launch frames, no jump pad or booster line and no ride.
 
 $script:QaMotionEnv = @('ETERNALVR_VIGNETTE=light', 'ETERNALVR_GAME_MOTION_TRACE=1')
 $script:QaMotionQuiet = 'god;g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0'
@@ -104,6 +112,20 @@ function Test-QaMotionCutscene($Ctx, [string]$StepPattern, [double]$MaxSeconds =
     Add-QaResult $Ctx "a cutscene starts within $MaxSeconds s of the step" ([bool]$step -and [bool]$cut -and ($cut.T - $step.T) -le $MaxSeconds) $(if ($cut) { '{0:N2} s after the step: {1}' -f ($cut.T - $step.T), $cut.M.Value } elseif ($step) { 'no cutscene after the step' } else { 'the step is not in the log' })
     Test-QaAbsent $Ctx 'game: ride'
     Test-QaAbsent $Ctx 'vignette: launch'
+}
+
+# launch-hammer: e5m2_earth's start, then the player put on four of the map's hammer charge pickups
+# (propitem/ammo/hammer, 125 of the meter's 120) 20 s apart.
+$script:QaMotionHammerPickups = @('237.5 -849.0 -143.0 0', '165.1 -708.6 -139.0 0', '33.3 -653.5 -138.0 0', '-31.0 -794.4 -136.5 0')
+$script:QaMotionHammerSchedule = "3:$script:QaMotionQuiet|4:getviewpos|" + ((0..3 | ForEach-Object { '{0}:setviewpos {1}|{2}:getviewpos' -f (16 + $_ * 20), $script:QaMotionHammerPickups[$_], (18 + $_ * 20) }) -join '|')
+
+# A button's press (0.2 s) and a double jump (A twice, 0.4 s apart), from the pose $Pose.
+function Invoke-QaMotionPress($Ctx, [string[]]$Pose, [string]$Button) {
+    Write-QaInput $Ctx ($Pose + "$Button = 1"); Wait-QaSeconds $Ctx 0.2; Write-QaInput $Ctx $Pose
+}
+function Invoke-QaMotionDoubleJump($Ctx, [string[]]$Pose) {
+    Invoke-QaMotionPress $Ctx $Pose 'right.primary'; Wait-QaSeconds $Ctx 0.2
+    Invoke-QaMotionPress $Ctx $Pose 'right.primary'; Wait-QaSeconds $Ctx 0.3
 }
 
 $script:QaMotionPadSchedule ="3:$script:QaMotionQuiet|4:getviewpos|34:setviewpos -20.9 -552.5 -3.6 0|35.5:getviewpos|37:setviewpos -39.4 -579.1 -4.95 0|50:setviewpos -20.9 -552.5 -3.6 0|51.5:getviewpos"
@@ -345,6 +367,55 @@ $motionScenarios = @(
             Wait-QaSeconds $c 12
         }
         Asserts = { param($c) Test-QaMotionCutscene $c 'debug-commands: 7\.0 s: setviewpos' 15 }
+    },
+    @{
+        Name = 'launch-hammer'; Kind = 'game'; OnlyByName = $true
+        Proves = 'The Sentinel Hammer''s slam brings up the vignette''s pulse at the press: e5m2_earth''s start gives the hammer with its meter empty (presses and double jumps then are no launch), then on four of the map''s hammer charge pickups a slam standing or after a double jump: one slam line within 0.4 s of each press, from the ground or in the air as it was, each pulse held 0.3 to 2 s until the feet are down, launch frames, no jump pad or booster line and no ride'
+        Map = 'game/dlc2/e5m2_earth/e5m2_earth'
+        Env = $script:QaMotionEnv + @("ETERNALVR_DEBUG_COMMANDS=$script:QaMotionHammerSchedule")
+        Input = $script:QaRestPose
+        Timeline = {
+            param($c)
+            $p = $script:QaRestPose
+            # The meter empty: a standing press, a double jump, and a double jump with a press.
+            Wait-QaSeconds $c 1; Invoke-QaMotionPress $c $p 'left.click'; Wait-QaSeconds $c 2
+            Invoke-QaMotionDoubleJump $c $p; Wait-QaSeconds $c 2
+            Invoke-QaMotionDoubleJump $c $p; Invoke-QaMotionPress $c $p 'left.click'
+            for ($k = 0; $k -lt 4; $k++) {
+                if (-not (Wait-QaLog $c ('debug-commands: {0}\.0 s: setviewpos' -f (16 + $k * 20)) 120)) { Add-QaNote $c "pickup $k : not placed"; continue }
+                Wait-QaSeconds $c 2.5
+                if ($k % 2 -eq 1) { Invoke-QaMotionDoubleJump $c $p }
+                Invoke-QaMotionPress $c $p 'left.click'
+                if ($k -eq 0) { Wait-QaSeconds $c 0.3; Save-QaXrShot $c 'slam' }
+            }
+            Wait-QaSeconds $c 12
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'vignette: the launch hooks are in'
+            $first = @(Get-QaMotionEvents $c 'debug-commands: 16\.0 s: setviewpos') | Select-Object -First 1
+            $presses = @(Get-QaMotionEvents $c 'controllers: action crucible' | Where-Object { $first -and $_.T -gt $first.T })
+            $slams = @(Get-QaMotionEvents $c 'vignette: launch (\d+): the Sentinel Hammer''s slam, (from the ground|in the air)')
+            $early = @($slams | Where-Object { -not $first -or $_.T -lt $first.T })
+            Add-QaResult $c 'no slam line with the meter empty (before the first pickup)' ($first -and $early.Count -eq 0) ('{0} slam line(s) before {1}' -f $early.Count, $(if ($first) { '{0:N1} s' -f $first.T } else { 'no placement' }))
+            # One slam line per charged press, within 0.4 s of it (the hammer comes up about 30 ms after the press;
+            # the landing, which an earlier reading started the pulse at, is 0.5 to 0.8 s later).
+            $text = @(); $ok = $presses.Count -eq 4 -and $slams.Count -eq 4; $want = @('from the ground', 'in the air', 'from the ground', 'in the air')
+            for ($i = 0; $i -lt $presses.Count; $i++) {
+                $s = @($slams | Where-Object { $_.T -ge $presses[$i].T -and $_.T -le $presses[$i].T + 0.4 })
+                if ($s.Count -ne 1 -or ($i -lt 4 -and $s[0].M.Groups[3].Value -ne $want[$i])) { $ok = $false }
+                $text += 'press {0} at {1:N2} s: {2}' -f ($i + 1), $presses[$i].T, $(if ($s.Count) { '{0:N2} s on, {1}' -f ($s[0].T - $presses[$i].T), $s[0].M.Groups[3].Value } else { 'no slam line' })
+            }
+            Add-QaResult $c 'four charged presses, each with one slam line within 0.4 s, standing from the ground and after a double jump in the air' $ok ($text -join '; ')
+            $held = @(Get-QaMotionEvents $c 'vignette: launch (\d+) \(the Sentinel Hammer''s slam\) held ([\d.]+) s: (on the ground again|its limit)')
+            $bad = @($held | Where-Object { [double]$_.M.Groups[3].Value -lt 0.3 -or [double]$_.M.Groups[3].Value -gt 2.0 -or $_.M.Groups[4].Value -ne 'on the ground again' })
+            Add-QaResult $c 'every slam pulse held 0.3 to 2 s, ended by the ground' ($held.Count -eq $slams.Count -and $held.Count -gt 0 -and $bad.Count -eq 0) (($held | ForEach-Object { $_.M.Value -replace '^.*vignette: ', '' }) -join '; ')
+            $f = Get-QaMotionFrames $c
+            Add-QaResult $c 'the 10 s vignette lines count launch frames' ($f.Launch -gt 0) ('{0} line(s), {1} launch frame(s), {2} ride frame(s)' -f $f.Lines, $f.Launch, $f.Ride)
+            Test-QaAbsent $c "launch: jump pad '"
+            Test-QaAbsent $c "launch: booster '"
+            Test-QaAbsent $c 'game: ride'
+        }
     }
 )
 

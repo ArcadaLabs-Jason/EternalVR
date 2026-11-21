@@ -499,10 +499,13 @@ Required for v1
       copied (also in the launcher e2e, section 3); the layer of another version is refused by the `version` check
       (`PreflightTests`, `VersionTests`)
 - [ ] CI (REQ-18): the clang-format check stays green; the rig-script suite runs on `windows-latest`
-      (T-108); a clang-tidy job (clang-cl preset, changed files)
+      (T-108); a clang-tidy job over all of `src/` (a Windows preset's compile commands)
       passes with zero warnings under the checks configured in `.clang-tidy`; a check fails on any source
-      file over 600 lines and on engine internals or game data outside `src/vkcore`,
-      `src/engine/eternal` and `src/game/eternal`. As built (2026-11-12): CI (`.github/workflows/ci.yml`) runs
+      file over 600 lines and on engine internals outside `src/vkcore`, `src/engine/eternal` and
+      `src/game/eternal` (T-236), with game-design data outside `src/game/eternal` a review point; all of it green
+      in a run on GitHub. (Reworded 2026-11-18: the box first asked for a clang-cl preset on the changed files, which
+      the job as built covers and goes past, and for a script check on game data, which has no form a script can
+      tell, T-236.) As built (2026-11-12): CI (`.github/workflows/ci.yml`) runs
       clang-format 18.1.8, the 600-line check and the standard-header includes check (Linux), the portable build and
       tests (Linux, macOS), and on `windows-latest` the MSVC build and tests, the rig-script suite (since
       2026-11-12), the release sources check and the launcher's tests (Linux too). clang-tidy is a gate of every
@@ -518,11 +521,9 @@ Required for v1
       a merge QA gate) fails on engine internals outside `src/vkcore`, `src/engine/eternal` and `src/game/eternal`:
       byte signatures, game addresses, game-memory offsets, hook registers and id Tech type names (T-236; the 12
       lines it found on the 0.1.97 sources moved to `src/engine/eternal`); game-design data has no form a script
-      can tell and stays a review point. Still open: a check for game data outside `src/game/eternal`; a green run on
-      GitHub, where no job has started since 2026-11-14 (the account's billing hold), so the clang-tidy job has
-      run only as the same steps on the test PC (2026-11-17, a clean configure: baseline 0, 0 findings); and the
-      job is not the one worded (it uses the windows-msvc preset's compile commands and all of `src/`, not a
-      clang-cl preset and the changed files)
+      can tell and stays a review point. Still open: a green run on GitHub, where no job has started since
+      2026-11-14 (the account's billing hold), so the clang-tidy job has run only as the same steps on the test PC
+      (2026-11-17, a clean configure: baseline 0, 0 findings)
 - [ ] No stall or deadlock (T-023): in a 30-minute simulator soak and an [owner] 30-minute headset
       session, the frame log shows no `xrEndFrame` gap over 1 s outside loading, and the run ends
       cleanly through `stop.ps1` (the simulator half passed on v0.1.49, 2026-10-13, and again on v0.1.75, 2026-10-22:
@@ -681,18 +682,20 @@ Required for v1
       their own or by the general rule (the game camera's pitch and roll never reach the headset), 1 in part
       (row 4, the Hammer's slam) and 3 not handled (jump pads, scripted rides, photo mode). On 2026-11-17 (the
       `game-motion` branch, not yet seen in a headset) the comfort vignette took the jump pads, boosters and the
-      slam (a launch pulse; the slam's reading inferred, no hammer save on the rig) and rides that carry the body
-      (one general rule; the Phobos elevator and the Cultist Base tram on the rig), and photo mode is held off
-      (not in mono): 26 handled, 1 in part (row 20: the Doom Hunter Base tram did not carry the player on the
-      rig, four other rides not run), all listed in KNOWN-ISSUES. Lines were added for the
+      slam (a launch pulse; the slam's reading fixed and seen on the rig on 2026-11-20, `launch-hammer`) and
+      rides that carry the body (one general rule; the Phobos elevator and the Cultist Base tram on the rig), and
+      photo mode is held off (not in mono): 26 handled, 1 in part (row 20: the Doom Hunter Base tram did not carry
+      the player on the rig, four other rides not run), all listed in KNOWN-ISSUES. Lines were added for the
       handled states that logged none (pickups with Still view, climbs, deaths, the cinema screen's runs, which
-      cover loading screens); still without a line of their own: a teleport seated with bHaptics off and a turn
-      under 90 degrees, and a camera only head aim's 15 degrees sees. The rig (2026-11-12, the `takeover-qa`
+      cover loading screens) and, on 2026-11-18, teleports (row 12: a line of its own whatever the settings); still
+      without a line of their own: a camera only head aim's 15 degrees sees. The rig (2026-11-12, the `takeover-qa`
       scenarios) showed the added lines of Still pickups, deaths and the screen's runs, glory kills in all four
-      views, a cutscene in both Cutscene views and swimming, each by its scenario; still awaiting the rig: the
-      climbs' lines (no climbable wall reached on the rig), the teleport, and the rows whose recognition is
-      inferred (Seek and Destroy, the Crucible, monkey bars, ledges, scripted first-person shots, boss intros,
-      the extra life, videos)
+      views, a cutscene in both Cutscene views and swimming, each by its scenario, and (2026-11-18, `teleport-fall`)
+      the teleport line for debug teleports and the game's way back after a fall, and (2026-11-18, `climb-hand`
+      and `climb-head`) the climbs' lines, once the scenarios pressed melee at the wall (the game grabs a
+      climbable wall only on a melee press); still awaiting the rig: the
+      rows whose recognition is inferred (Seek and Destroy, the Crucible, monkey bars, ledges, scripted first-person
+      shots, boss intros, the extra life, videos)
 - [x] Glory kills: for each of the four views (follow the camera, steady, fade out, flat screen), 5
       glory kills log the takeover state on entry and exit (T-132), and with the steady view the
       logged render rotation change during the kill equals the head's alone. [owner] Default chosen by
@@ -701,7 +704,8 @@ Required for v1
       headset), all under hand aim (the launcher's default): 5 real kills in each view, each with its start and
       end lines, and with steady the view less the head's angles kept within 0.00 degrees through every kill
       (docs/rig-findings/camera-takeovers.md row 1). Under head aim follow and steady passed the same checks
-      (`glory-follow-head`, `glory-steady-head`, run tq7); fade and flat screen were not run under head aim
+      (`glory-follow-head`, `glory-steady-head`, run tq7), and fade and flat screen too (`glory-fade-head`,
+      `glory-screen-head`, 2026-11-18)
 - [ ] Cutscenes and videos presented per policy. Third-person cutscenes never move the player's view
       rotation
 - [ ] Vignette with event pulses, off by default (D-048); Comfortable, Recommended, Advanced and Intense

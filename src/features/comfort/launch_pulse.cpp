@@ -104,4 +104,19 @@ void LaunchPulse::reset() {
     *this = LaunchPulse(timing_);
 }
 
+bool SlamWatch::update(const HammerReading& r) {
+    if (!r.valid) {
+        have_ = false;
+        return false;
+    }
+    if (!r.held) {
+        return false;
+    }
+    // Only a later time is a slam: a lower one (a load restarting the game's clock) is a new base.
+    const bool slam = have_ && r.slamStartTime > last_ && r.slamStartTime != 0;
+    have_ = true;
+    last_ = r.slamStartTime;
+    return slam;
+}
+
 } // namespace evr::comfort

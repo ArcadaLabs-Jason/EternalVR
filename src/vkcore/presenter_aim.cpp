@@ -195,8 +195,7 @@ XrPresenter::Impl::aimWithHead(std::byte* player, const xr_math::IdViewAxis& gam
             return std::nullopt;
         }
         const float cameraYaw = xr_math::anglesFromAxis(*camera).yaw;
-        return xr_math::axisFromAngles(
-            {0.0f, xr_math::drivenBodyYaw(aimState, cameraYaw, 0.0f, false), 0.0f});
+        return xr_math::axisFromAngles({0.0f, xr_math::cameraBodyYaw(aimState, cameraYaw), 0.0f});
     }
     const xr_math::IdAngles current =
         aimField == PlayerAim::DeltaField::Physics ? sample.delta : sample.stateDelta;

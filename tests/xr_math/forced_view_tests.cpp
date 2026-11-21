@@ -121,3 +121,32 @@ TEST_CASE("before head aim has written, a driven view is the game's own yaw") {
     CHECK(approxEqual(headYawHeld(state, 10.0f, true), 0.0f));
     CHECK(approxEqual(drivenBodyYaw(state, 123.0f, 0.0f, false), 123.0f));
 }
+
+TEST_CASE("a value of the game's own after one it held keeps the body: the head yaw the held one carried") {
+    // After a cutscene the game holds a delta of its own (45) for frames while the head turns from 10 to 30;
+    // head aim's writes never reach the view, and the body stays at 45 less 10. Then the game sets another
+    // value of its own (60): it re-aimed the view that held 10, so the body is 60 less 10, not 60 less 30
+    // (the head yaw injected last, a 20 degree jump of the body).
+    HeadAimState state = aimedAt(10.0f);
+    for (float h : {10.0f, 20.0f, 30.0f}) {
+        const auto step = headAimStep(state, {0.0f, 45.0f, 0.0f}, 45.0f, {0.0f, h, 0.0f}, true);
+        CHECK(sameYaw(step.bodyYaw, 35.0f));
+        noteWritten(state, 45.0f + step.deltaYaw);
+    }
+    CHECK(approxEqual(evr::xr_math::viewHeadYaw(state), 10.0f));
+    const auto next = headAimStep(state, {0.0f, 60.0f, 0.0f}, 60.0f, {0.0f, 30.0f, 0.0f}, true);
+    CHECK_FALSE(next.restoredWrite);
+    CHECK(sameYaw(next.bodyYaw, 50.0f));
+    CHECK(approxEqual(headYawHeld(state, 60.0f, true), 10.0f));
+}
+
+TEST_CASE("with no delta held, a value of the game's own takes the head yaw injected last, as before") {
+    HeadAimState state = aimedAt(30.0f);
+    // Head aim's write took (no rewrite): the head at 50 is in the view.
+    headAimStep(state, {0.0f, 30.0f, 0.0f}, 30.0f, {0.0f, 50.0f, 0.0f}, false);
+    noteWritten(state, 50.0f);
+    CHECK(approxEqual(evr::xr_math::viewHeadYaw(state), 50.0f));
+    const auto step = headAimStep(state, {0.0f, 99.0f, 0.0f}, 99.0f, {0.0f, 50.0f, 0.0f}, true);
+    CHECK_FALSE(step.restoredWrite);
+    CHECK(sameYaw(step.bodyYaw, 49.0f));
+}

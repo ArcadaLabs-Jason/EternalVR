@@ -99,6 +99,7 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'qa-scenarios-sharedsun.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-mapload.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-takeover.ps1')
+. (Join-Path $PSScriptRoot 'qa-scenarios-teleport.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-motion.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-meathook.ps1')
 . (Join-Path $PSScriptRoot 'qa-scenarios-weaponcues.ps1')
