@@ -162,6 +162,74 @@ at the 90 Hz limit of an RTX 4080 without upscaling. VDXR's 2496 x 2688 at 100 %
 simulator reports the same recommendation); the owner's Virtual Desktop at "57 %" recommends less than the
 budget and renders at exactly its recommendation. A scale above 1 goes past the budget on purpose.
 
+**With DLSS the budget holds what DLSS renders** (since 0.1.101; `render_size::Request::dlssInput`, the
+launcher's `RenderSizeRequest.DlssInput`). The size above is the game's output size, the swapchain's, and DLSS
+renders below it: NGX's optimal render size for that output (section 2.1), about 2/3 per side at Quality, 0.58
+at Balanced, 1/2 at Performance and 1/3 at Ultra Performance (DLAA: the output size). Up to 0.1.100 Auto
+budgeted the output, so DLSS Quality on VDXR's 2496 x 2688 output 2056 x 2216 and rendered about 1371 x 1477
+(2.0 Mpix), well under what TAA renders on Auto. Now, with the launcher's DLSS on (stereo,
+`ETERNALVR_STEREO_DLSS=1` with a quality in `ETERNALVR_STEREO_DLSS_QUALITY`), the recommendation is scaled into
+the budget as if it were DLSS's input: the output is the size whose input fits the budget, never above the
+recommendation and never above **1.5 times the budget** (about 6.84 Mpix per eye, `render_size::kDlssOutputCap`,
+the launcher's `RenderSize.DlssOutputCap`), then times the scale and the edge margin's growth and fitted to the
+limits as before (a scale above 1 and the margin go past the cap on purpose, as past the budget with TAA). TAA,
+Off and DLAA keep the size above; a quality the layer does not know (the game's own `r_dlssQuality`) keeps it
+too. The launcher applies it only when the graphics card the game runs on is an NVIDIA RTX card by its name (the
+preflight's `UntestedHardware.MainGpu`; `LaunchInputs.NvidiaRtx`): on any other card DLSS cannot run per eye, the
+layer falls back to TAA, and TAA at the larger size would be the costly way, so the size stays TAA's. The layer's
+own Auto (no runtime answer before the launch) does not know the card and applies it with the launcher's DLSS. The
+cap keeps VDXR's 2496 x 2688 (6.71 Mpix) whole and holds larger recommendations near VDXR's cost (below):
+without it Godlike's output would be 3072 x 3264, about 60 to 80% more graphics card time than before.
+
+| Recommendation | TAA, Off, DLAA | DLSS Quality | Balanced | Performance, Ultra Performance |
+|---|---|---|---|---|
+| VDXR 2496 x 2688 (Quest 3, High) | 2056 x 2216 | 2496 x 2688 (input about 1664 x 1792) | 2496 x 2688 | 2496 x 2688 |
+| Virtual Desktop Godlike 3072 x 3264 | 2072 x 2200 | 2536 x 2696, capped (input about 1691 x 1797) | 2536 x 2696 | 2536 x 2696 |
+| 3840 x 3840 | 2136 x 2136 | 2616 x 2616, capped | 2616 x 2616 | 2616 x 2616 |
+| The simulator 1280 x 1400 | 1280 x 1400 | 1280 x 1400 | 1280 x 1400 | 1280 x 1400 |
+
+The tests of both sides hold the same cases (`tests/features/render_size/render_size_dlss_tests.cpp`, the
+launcher's `RenderSizeDlssTests`), with the scale and the edge margin's growth: VDXR at Quality renders 2000 x 2152
+at 0.80 and 2992 x 3224 at 1.20 or with Medium; Godlike at Quality 2032 x 2160 at 0.80, 3048 x 3232 at 1.20 and
+3296 x 3504 with Large; with 1.20 and Large it wants 3957 x 4204 and is fitted to 3856 x 4096, keeping x1.267 of
+the margin.
+
+On the rig (simulator, Route S, `ETERNALVR_RENDER_SIZE=auto` with DLSS Quality): `size: render size auto x1.00,
+the budget on DLSS's input x0.667`, the swapchain at the simulator's 1280 x 1400 and eye R's feature `853x933 ->
+1280x1400, PerfQualityValue 2`; at fixed sizes NGX's Quality input is the output times 2/3 rounded to the nearest
+pixel (`1365x1472 -> 2048x2208`, `1125x1211 -> 1688x1816`), Performance half (`1024x1104 -> 2048x2208`), DLAA the
+output.
+
+**What it costs** [rig, partly extrapolated]: the output, DLSS itself and the game's effects after it are larger.
+The test PC's RTX 3080 Ti on the three bench routes (bench-routes.md; `ETERNALVR_PACE=off`, NVIDIA's DLSS 310.9.1
+with preset K, RT off), the GPU's busy time per stereo tick (both eyes), mean of two runs where two were made. The
+simulator stops at 2048 per eye, so the pairs stand in at the sizes it allows:
+
+| Per eye (DLSS input) | Combat | Outdoor | Hub |
+|---|---|---|---|
+| DLSS Quality 1688 x 1816 (1125 x 1211) | 7.6 ms | 9.7 ms | 8.1 ms |
+| DLSS Quality 2048 x 2208 (1365 x 1472) | 10.2 ms | 11.0 ms | 9.7 ms |
+| DLSS Quality 1384 x 1472 (923 x 981) | 6.3 ms | 7.8 ms | 6.4 ms |
+| DLSS Performance 2048 x 2208 (1024 x 1104) | 8.7 ms | 10.7 ms | 9.0 ms |
+| DLAA 2048 x 2208 | 11.4 ms | 13.4 ms | 12.3 ms |
+| TAA 1688 x 1816 | 7.5 ms | 8.6 ms | 7.4 ms |
+| TAA 2048 x 2208 | 10.7 ms | 10.8 ms | 9.2 ms |
+| DLSS Quality, preset E, 2048 x 2208 | 6.5 ms | 9.3 ms | 7.8 ms |
+
+1688 x 1816 to 2048 x 2208 is VDXR's step from the old Auto (2056 x 2216) to the new (2496 x 2688), 1.21 per side,
+at 82% of the real sizes: +34%, +13% and +20% (the combat route at 1688 x 1816 is CPU-bound, ticking at 106 a
+second). The capped Godlike step (2072 x 2200 to 2536 x 2696) is 1.22 per side, the same as VDXR's, so the same
+pair stands in for it. Without the cap Godlike's step would be 1.48 per side (1384 x 1472 to 2048 x 2208 here,
+standing in for 2048 x 2176): +63%, +40% and +52%. At the same output DLSS Quality with preset K costs about what
+TAA does, so the new Auto with DLSS Quality costs about what TAA at the runtime's own size (or the cap) costs.
+Fitted per route (time = a + b x input Mpix + c x
+output Mpix over the nine preset K runs; b 0.8 to 1.0 ms and c 0.9 to 1.1 ms per Mpix) and extrapolated to the real
+sizes: VDXR at Quality 9.7, 11.3 and 9.9 ms before, 12.9, 14.1 and 12.7 ms now (TAA on Auto 10.8, 10.8 and 9.3);
+VDXR at Performance 9.0, 10.6 and 9.0 before, 11.8, 13.0 and 11.4 now; Godlike at Quality 9.7, 11.3 and 9.9
+before, 13.1, 14.3 and 12.9 now with the cap (17.8, 18.3 and 17.1 without it). Preset E took 15 to 36% less than K
+at 2048 x 2208, so at VDXR's new size it
+would be about TAA on Auto's cost (extrapolated from two sizes). One card, a simulator and no headset.
+
 The eye image is near-square, as the headset's views are; the projection already maps each eye's FOV onto the
 whole image (VR_STEREO.md, render size), so the pixels become square.
 
@@ -188,7 +256,8 @@ never had this; a headset whose eye image is wider than 16:9, or a render size o
 
 ## 7. Launcher
 
-Stereo launches set `ETERNALVR_RENDER_SIZE` (`render_size` in `launcher.ini`, default `auto`) and
+Mono launches do all of this too, for their one image at one eye's size (section 11). Stereo launches set
+`ETERNALVR_RENDER_SIZE` (`render_size` in `launcher.ini`, default `auto`) and
 `ETERNALVR_RENDER_SCALE` (`render_scale`, 0.50 to 2.00, in the settings window as "Render scale"), and no
 longer fit the window to a display: the window is a 1280 x 720 desktop mirror (`ETERNALVR_WINDOW` and
 `ETERNALVR_MIRROR_WINDOW`, `r_windowWidth/Height`) at the top-left of a virtual display when there is one (a
@@ -349,3 +418,84 @@ Rig runs (simulator, RTX 4080, the virtual display alone at 0,0 1280x800, work a
 |---|---|
 | aw2, `ETERNALVR_TEST_NO_PRESENT_SCALING=1`, render size 1280x1400 | window placed at 314,31 with client 652x713 (the mirror's eye shape would have been 658x720, whose frame does not fit the work area); one `vkCreateSwapchainKHR` at 652x713; XR swapchain 1304x713 (two eyes of 652x713); `render_capped=1`; the cvars read 652x713 already (no write); no present errors |
 | aw3, without the knob | unchanged: render size on at 1280x1400 scaled into the 658x720 mirror; `render_capped=0` |
+
+## 11. Mono at the render size
+
+Head-tracked mono (the launcher's Mono, VR mode on the Advanced tab) renders one image both eyes see, from the
+head's centre with the symmetric FOV that encloses both eyes (docs/VR_HEAD_TRACKED.md). Up to this change the
+launcher passed mono no render size and no window: the game drew that image at the flat game's own window and
+resolution. A player on a Quest 3 (Virtual Desktop, Godlike preset) found Mono blurry where Stereo was sharp
+[player]. On the rig [log]: a mono run with the render size off draws at its window's size, and the headset gets
+that size (`xr: swapchain 1280x720 (1 eye image(s) of 1280x720)` for the suite's 1280 x 720 window, run
+`moff-c-1`); a launcher mono launch has no `+r_fullscreen`, `+r_windowWidth` or `ETERNALVR_WINDOW` [code], so the
+player's own video mode decides (a full-screen 1920 x 1080 desktop gives 1920 x 1080 over 108 x 110 degrees:
+about 700 pixels per unit of tangent across and 380 up and down, against about 930 in a stereo eye at Auto).
+
+**The change.** A mono launch with the render size on (the default) gets what a stereo launch gets for one eye
+(section 7): the runtime probe first, the size by the same rule (`RenderSizeChoice.Decide` with Resolution's base
+and number, no edge margin, `MonoEyesSideBySide` 1: one image per swapchain, so the runtime's swapchain width is
+not halved), `ETERNALVR_RENDER_SIZE=WxH`, the desktop mirror and the window set from `forced-cvars.txt` (`|
+window`: `+r_fullscreen 0 +r_windowWidth W +r_windowHeight H`), and nothing else of the stereo set (the game's own
+anti-aliasing, sharpening, dynamic resolution and vsync stay the player's). The layer needed one addition: with
+`ETERNALVR_MODE` not stereo and the render size wanted, the present hook holds the window set less
+`r_swapInterval` from the first present (`runtime_cvars::applyMonoWindow`, `stereo_seq::monoWindowCvars`), so a
+load path that applies the player's video mode cannot take the image back to the display's size or to full
+screen (logged `cvars: head-tracked mono with the render size: only the window's mode and size are held`, then
+`held at run time: r_fullscreen 0, r_windowWidth W, r_windowHeight H`). Everything else (the client-area answer,
+present scaling, the late size, window_cap's fallback on AMD) was already mode-independent. The QA suite's
+`mono-size` scenario checks it on the simulator (1280 x 1400, one image per swapchain, the hold's lines) through the
+harness's own launch: it sets `ETERNALVR_MODE=mono` itself (the launcher leaves it unset in Mono, the layer's
+default) and its command line carries the window's 1280 x 720, so there the hold keeps 1280 x 720 and writes it back
+over the render size the game sets, while the image keeps the render size.
+
+**The launcher's own Mono launch [rig].** Three sessions of the built launcher (`EternalVR.Launcher.exe --launch`
+with `--test-exe` naming the game's own exe, so the plan, the settings snapshot and the restore are the launcher's),
+the simulator, the virtual display at 3840 x 2160 (work area 3840 x 2040), `+map` e1m2 from Extra game arguments and
+one level load of the same map 30 s in (the debug schedule), then the game closed by its window:
+
+| Session | Command line (the launcher log's `args:`) | Game window | Swapchain, headset | Flat config after the restore |
+|---|---|---|---|---|
+| `render_size = auto` | `... +r_fullscreen 0 +r_windowWidth 1280 +r_windowHeight 1400 +map ...` (the probe's 1280 x 1400) | a framed window at client 1280 x 1400, then the mirror at 0,0 with client 658 x 720 | 1280 x 1400 from the first swapchain to the end, the level load included; `xr: swapchain 1280x1400 (1 eye image(s) of 1280x1400)` | every window key as before the session |
+| `render_size = 2472x2656` (taller than the display) | `... +r_windowWidth 2472 +r_windowHeight 2656 ...` | the game clamped its framed window to the work area (client 2472 x 1952), then the mirror (client 670 x 720) | 2472 x 2656 throughout (`the game's window reports a 2472x2656 client area`) | the game had saved `r_windowWidth 2472`, `r_windowHeight 2656`; the restore put the player's 784 x 513 back |
+| `auto`, the flat config at `r_fullscreen 1` | as the first | a framed window (not full screen), then the mirror at client 658 x 720 | 1280 x 1400 throughout | the game had saved `r_fullscreen 0`, `r_windowWidth 1280`, `r_windowHeight 1400`, `r_mode 0`; the restore put `r_fullscreen 1`, `r_mode 25` and the window keys back |
+
+In each the layer logged `held at run time: r_fullscreen 0, r_windowWidth W, r_windowHeight H` at the launch size
+and no hold write (the game kept those values; no load path applied the player's video mode in these sessions, so
+the hold was not put to work). No `WARNING` but the simulator's controller bindings note.
+
+**Sizes.** Within the runtime's limits mono's Auto size is one stereo eye's: VDXR's 2496 x 2688 gives 2056 x 2216,
+Godlike's 3072 x 3264 gives 2072 x 2200, the simulator's 1280 x 1400 stays (the shared cases in
+`render_size_tests.cpp` "auto in mono" and `RenderSizeMonoTests`). Where the swapchain's width limits stereo, mono
+gets more: the simulator's 4096-wide swapchains give stereo 2048 x 2240 per eye at Resolution x2.00 and mono
+2560 x 2800. The image spans the enclosing FOV, wider than one eye (Quest 3: 2.75 x 2.86 units of tangent against
+an eye's 2.22 x 2.39), so at the same size it holds about 0.80 of a stereo eye's pixels per degree across and 0.84
+up and down [inferred from the FOVs]; Resolution x1.20 (2472 x 2656 on a Quest 3) is about a stereo eye's density.
+
+**Cost [rig].** RTX 3080 Ti, the OpenXR Simulator at 90 Hz, the bench routes (`bench-routes.md`) with pacing off
+(mono's pacing), per-eye TAA in stereo and the game's TAA in mono, ray tracing off, two interleaved rounds per
+route; mono sizes as fixed render sizes standing for each case (the simulator recommends only 1280 x 1400):
+1920 x 1080 and 2560 x 1440 for today's Mono on a 1080p and a 1440p desktop, 2056 x 2216 for the new Mono on a
+Quest 3 at Auto, 2472 x 2656 for it at Resolution x1.20; stereo at 2048 x 2208 per eye (the `-q3` routes, the
+simulator's largest, 0.8% fewer pixels than 2056 x 2216). GPU busy time per mono frame or stereo tick, the mean
+of each run:
+
+| Route | Mono 1920 x 1080 | Mono 2560 x 1440 | **Mono 2056 x 2216 (new Auto)** | Mono 2472 x 2656 (x1.20) | Stereo 2048 x 2208 per eye |
+|---|---|---|---|---|---|
+| combat | 3.05, 3.30 ms (0.37 of stereo) | 4.00, 4.38 (0.48) | **5.27, 5.26 (0.61)** | 7.11, 5.94 (0.75) | 7.96, 9.34 |
+| outdoor | 3.98, 4.01 (0.36) | 4.97, 4.87 (0.44) | **5.35, 5.46 (0.49)** | 6.51, 6.50 (0.59) | 11.14, 10.98 |
+| hub | 3.25, 3.28 (0.35) | 4.31, 4.07 (0.45) | **4.67, 4.78 (0.51)** | 5.85, 5.84 (0.63) | 9.30, 9.26 |
+
+- The new default costs a mono frame 1.4 to 1.7 times a 1080p desktop's and 1.1 to 1.3 times a 1440p desktop's,
+  and stays at half to 0.6 of a stereo tick at the same size per eye: clearly cheaper than Stereo. Mono's GPU time
+  per pixel is higher than a stereo eye's (its wider view holds more of the scene, and stereo's eye R skips part of
+  eye L's work), so it is not the 0.5 the pixel counts alone give.
+- The CPU frame (present to present, p50) went from 4.1 to 5.0 ms at 1080p to 5.4 to 6.1 ms; the VRAM peak from
+  7.1 to 7.3 GB to 7.7 to 7.9 GB (stereo 8.0 to 8.1 GB).
+- The simulator skipped more display periods as the mono image grew (2.2 to 3.0% at 2056 x 2216, 4.9 to 9.8% at
+  x1.20, under 1% at 1080p; stereo 0.1 to 5.0%), with every frame it showed a new image: its compositor competes
+  with an uncapped game for the card. A headset runtime reprojects instead; not checked in a headset.
+- Not chosen as the default: the x1.20 density match (0.59 to 0.75 of stereo here). It stays the player's choice
+  through Resolution; whether the default should be larger is a question for a headset look at both.
+
+Runs under the test PC's evidence folder for this job (`mnew-*`, `m1080-*`, `m1440-*`, `m12-*`, `st-*`, `moff-c-1`,
+`mauto-c-1`, `scen-monosize-1`), 2026-11-20.

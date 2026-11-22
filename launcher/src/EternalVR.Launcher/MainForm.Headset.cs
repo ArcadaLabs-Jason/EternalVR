@@ -179,7 +179,7 @@ namespace EternalVR.Launcher
             OwnTip(panelLine, view.PanelTip);
             OwnTip(asksLine, view.AsksTip);
             OwnTip(refreshLine, view.RefreshTip);
-            eachEye.Text = Lines(HeadsetView.EachEye(ctx.Settings, facts, identity, ctx.LastRenderCap));
+            eachEye.Text = Lines(HeadsetView.EachEye(ctx.Settings, facts, identity, ctx.LastRenderCap, ctx.NvidiaRtx));
             FillResolutionBases(ctx.Settings.ResolutionBase);
             OwnTip(resolutionBase, HeadsetView.ResolutionTip(identity, runtimeName));
             ShowPacingChoice(HeadsetView.PacingChoice(facts));

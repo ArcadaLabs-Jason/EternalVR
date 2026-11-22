@@ -111,23 +111,6 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void MonoKeepsTheGameWindowAndTheStereoCvarsOut()
-        {
-            var p = LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono, Aim = AimMode.Head, HudWrist = true }));
-            var env = Env(p);
-            Assert.False(env.ContainsKey("ETERNALVR_MODE"));
-            Assert.False(env.ContainsKey("ETERNALVR_WINDOW"));
-            // The UI layer stays on: menus over the game need it for their panel and pointer.
-            Assert.Equal("1", env["ETERNALVR_UI_LAYER"]);
-            Assert.Equal("wrist", env["ETERNALVR_HUD"]);
-            Assert.Equal("head", env["ETERNALVR_AIM"]);
-            Assert.Null(p.Window);
-            foreach (var name in new[] { "r_TAASafeMode", "r_antialiasing", "r_TAAAntiGhosting", "rs_enable", "r_swapInterval", "r_fullscreen", "r_windowWidth" })
-                Assert.DoesNotContain("+" + name, p.CommandLine);
-            Assert.Contains("+r_hdrDisplay 0", p.CommandLine);
-        }
-
-        [Fact]
         public void HandAimWithoutControllersFallsBackToTheHead()
         {
             var env = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Controllers = false })));

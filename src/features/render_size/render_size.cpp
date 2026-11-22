@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
+#include <iterator>
 #include <string>
 
 namespace evr::render_size {
@@ -95,17 +96,25 @@ double limitScale(double w, double h, const ViewLimits& limits) {
 }
 
 // Auto's size before it is fitted to the limits (autoSize).
-std::optional<Extent> autoWanted(const ViewLimits& limits, float scale, std::uint64_t budget, double growth) {
+std::optional<Extent>
+autoWanted(const ViewLimits& limits, float scale, std::uint64_t budget, double growth, double dlssInput) {
     if (limits.recommended.width == 0 || limits.recommended.height == 0 || !std::isfinite(scale) ||
         scale <= 0.0f || !std::isfinite(growth) || growth <= 0.0) {
         return std::nullopt;
     }
+    const double input = std::isfinite(dlssInput) && dlssInput > 0.0 && dlssInput < 1.0 ? dlssInput : 1.0;
     const double w = limits.recommended.width;
     const double h = limits.recommended.height;
-    const double pixels = w * h;
-    const double fit = budget > 0 && pixels > static_cast<double>(budget)
-                           ? std::sqrt(static_cast<double>(budget) / pixels)
-                           : 1.0;
+    // What renders at the recommendation: the recommendation itself, or DLSS's input for it.
+    const double pixels = w * h * input * input;
+    double fit = budget > 0 && pixels > static_cast<double>(budget)
+                     ? std::sqrt(static_cast<double>(budget) / pixels)
+                     : 1.0;
+    // With DLSS the size it scales up to stays within kDlssOutputCap times the budget.
+    const double cap = static_cast<double>(budget) * kDlssOutputCap;
+    if (input < 1.0 && budget > 0 && w * h * fit * fit > cap) {
+        fit = std::sqrt(cap / (w * h));
+    }
     const double factor = fit * static_cast<double>(scale) * growth;
     return Extent{static_cast<std::uint32_t>(std::lround(w * factor)),
                   static_cast<std::uint32_t>(std::lround(h * factor))};
@@ -173,8 +182,16 @@ Extent fitToLimits(Extent size, const ViewLimits& limits) {
     return {alignSide(w * down, top.width), alignSide(h * down, top.height)};
 }
 
-std::optional<Extent> autoSize(const ViewLimits& limits, float scale, std::uint64_t budget, double growth) {
-    const std::optional<Extent> wanted = autoWanted(limits, scale, budget, growth);
+double dlssInputShare(int dlssQuality, bool dlaa) {
+    if (dlaa || dlssQuality < 0 || dlssQuality >= static_cast<int>(std::size(kDlssInputShare))) {
+        return 1.0;
+    }
+    return kDlssInputShare[dlssQuality];
+}
+
+std::optional<Extent>
+autoSize(const ViewLimits& limits, float scale, std::uint64_t budget, double growth, double dlssInput) {
+    const std::optional<Extent> wanted = autoWanted(limits, scale, budget, growth, dlssInput);
     if (!wanted) {
         return std::nullopt;
     }
@@ -207,7 +224,7 @@ double requestGrowth(const Request& request, const ViewLimits& limits, double gr
         return fittedGrowth(request.fixed, growth, limits);
     case Mode::Auto:
         if (const std::optional<Extent> wanted =
-                autoWanted(limits, request.scale, kDefaultPixelBudget, growth)) {
+                autoWanted(limits, request.scale, kDefaultPixelBudget, growth, request.dlssInput)) {
             return fittedGrowth(*wanted, growth, limits);
         }
         return growth;
@@ -225,7 +242,7 @@ std::optional<Extent> selectSize(const Request& request, const std::optional<Vie
         if (!limits) {
             return std::nullopt;
         }
-        return autoSize(*limits, request.scale, kDefaultPixelBudget, request.growth);
+        return autoSize(*limits, request.scale, kDefaultPixelBudget, request.growth, request.dlssInput);
     }
     return std::nullopt;
 }
@@ -261,14 +278,20 @@ std::string describe(const Request& request) {
     switch (request.mode) {
     case Mode::Off:
         return "off";
-    case Mode::Auto:
+    case Mode::Auto: {
         if (request.growth > 1.0) {
             std::snprintf(text, sizeof(text), "auto x%.2f, edge margin x%.2f",
                           static_cast<double>(request.scale), request.growth);
         } else {
             std::snprintf(text, sizeof(text), "auto x%.2f", static_cast<double>(request.scale));
         }
-        return text;
+        std::string out = text;
+        if (std::isfinite(request.dlssInput) && request.dlssInput > 0.0 && request.dlssInput < 1.0) {
+            std::snprintf(text, sizeof(text), ", the budget on DLSS's input x%.3f", request.dlssInput);
+            out += text;
+        }
+        return out;
+    }
     case Mode::Fixed:
         std::snprintf(text, sizeof(text), "%ux%u", request.fixed.width, request.fixed.height);
         return text;

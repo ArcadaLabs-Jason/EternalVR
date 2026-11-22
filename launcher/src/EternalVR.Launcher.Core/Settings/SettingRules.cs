@@ -138,6 +138,8 @@ namespace EternalVR.Launcher.Core.Settings
                     return !s.Controllers ? NeedsControllers : s.HudWrist ? NotWithWristHud : null;
                 case Setting.Resolution:
                 case Setting.EachEye:
+                    // Mono renders its one image at one eye's size by the same rule (docs/VR_HEAD_TRACKED.md "Render size").
+                    return null;
                 case Setting.AntiAliasing:
                 case Setting.Sharpening:
                 case Setting.TextureStreaming:
@@ -148,7 +150,7 @@ namespace EternalVR.Launcher.Core.Settings
                 case Setting.DesktopMonitor:
                 case Setting.DesktopSize:
                 case Setting.DesktopCrop:
-                    if (!stereo) return NeedsStereo;
+                    // The desktop mirror of either mode's render size.
                     return LauncherSettings.NormaliseRenderSize(s.RenderSize) == LauncherSettings.RenderSizeOff ? NeedsRenderSize : null;
                 case Setting.DlssQuality:
                 case Setting.DlssVersion:

@@ -234,3 +234,17 @@ Rig check (not run yet): the simulator, stereo, `ETERNALVR_STEREO_DLSS=1`, `ETER
 `ETERNALVR_DLSS_DLL` naming 310.9.1, `+r_antialiasing 2`: the lines above, `_viewColor` at the eye image's size, both eyes
 evaluated each tick with no fallback to TAA; then without `ETERNALVR_DLSS_DLL`: the `needs a newer DLSS` line and
 `Created DLSS feature` at two thirds of the output size.
+
+DLAA on the rig (2026-11-20, the bench runs on the test PC: simulator, Route S, a fixed 2048 x 2208, 310.9.1 with preset K):
+every DLSS feature created with `, DLAA`, eye R's twin `2048x2208 -> 2048x2208, PerfQualityValue 5`, no fallback to TAA
+in the three bench routes. The half without `ETERNALVR_DLSS_DLL` is still not run.
+
+## 9. The render size on Resolution's Auto
+
+DLSS renders NGX's optimal size for the game's output, so on Resolution's Auto (render-size.md section 5) the layer and
+the launcher budget that input, not the output, when the launcher's DLSS is on (since 0.1.101): the output is the size
+whose DLSS input fits the 2064 x 2208 budget, never above the runtime's recommendation nor above 1.5 times the budget
+(`render_size::kDlssOutputCap`, about 6.84 Mpix), with each quality's share of a
+side (Quality 2/3, Balanced 0.58, Performance 1/2, Ultra Performance 1/3; `render_size::kDlssInputShare`, the launcher's
+`DlssDll.QualityFactors`). DLAA counts as the full size, so Auto keeps the TAA size with it; DLAA without a newer DLL runs
+at Quality (above) at that size, as before. What the larger output costs is in render-size.md section 5.

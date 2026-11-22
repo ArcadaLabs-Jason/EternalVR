@@ -311,7 +311,7 @@ function Invoke-Session($t, [string]$Name) {
 
 function Has-Line($record, [string]$Like) { [bool]($record | Where-Object { $_ -like $Like }) }
 
-Write-Host "7. mono: no stereo cvars, window, render size, DLSS or headset probe"
+Write-Host "7. mono: the render size (the default), no stereo cvars, mode or DLSS"
 $t = New-Tree (Join-Path $Root 'mono')
 Set-FakeGame $t 100
 Set-Settings $t @('mode = mono', 'anti_aliasing = dlss')
@@ -320,12 +320,36 @@ Check (-not (Has-Line $record 'env:ETERNALVR_MODE=*')) 'no ETERNALVR_MODE'
 Check ($record -contains 'env:ETERNALVR_ALTERNATE_EYES=0') 'alternate eyes off'
 Check ($record -contains 'env:ETERNALVR_PACE=off') 'frame pacing off'
 Check ($record -contains 'env:ETERNALVR_UI_LAYER=1') 'UI layer on in mono too'
-Check (-not (Has-Line $record 'env:ETERNALVR_WINDOW=*')) 'the layer places no window'
-Check (-not (Has-Line $record 'env:ETERNALVR_RENDER_SIZE=*')) 'no render size'
+# The one image at the render size, as a stereo eye (docs/VR_HEAD_TRACKED.md "Render size"): the probe asks the runtime
+# first (the fake layer folder has no OpenXR loader, so it answers nothing and the layer decides in-game), the layer places
+# the desktop mirror, and the game starts windowed at the mirror's size.
+Check (Test-Output "$($t.Dir)\mono.out" 'failed: the OpenXR loader is missing') 'the headset probe ran in mono too'
+Check ($record -contains 'env:ETERNALVR_RENDER_SIZE=auto') 'no answer from the runtime: the render size is Auto'
+Check (Has-Line $record 'env:ETERNALVR_WINDOW=*,*,*,*') 'the layer places the window (the desktop mirror)'
+Check (Has-Line $record 'env:ETERNALVR_MIRROR_WINDOW=*,*,*,*') 'the mirror window'
+Check (-not (Has-Line $record 'env:ETERNALVR_EDGE_MARGIN=*')) 'no edge margin in mono'
+Check (Has-Line $record 'cmdline=*+r_fullscreen 0 +r_windowWidth * +r_windowHeight *') 'the window set on the command line'
 Check (-not (Has-Line $record 'env:ETERNALVR_STEREO_DLSS=*')) 'no DLSS in mono'
 Check (Has-Line $record 'cmdline=*+r_hdrDisplay 0*') 'forced cvars on the command line'
+Check (-not (Has-Line $record 'cmdline=*r_TAASafeMode*') -and -not (Has-Line $record 'cmdline=*r_antialiasing*') -and
+    -not (Has-Line $record 'cmdline=*r_swapInterval*') -and -not (Has-Line $record 'cmdline=*rs_enable*')) 'no stereo cvars on the command line'
+$replaced = @(Get-ChildItem "$($t.Data)\snapshots" -Recurse -Filter 'DOOMEternalConfig.local' | Where-Object { $_.FullName -like '*\replaced\*' })
+$sessionText = if ($replaced.Count -eq 1) { [IO.File]::ReadAllText($replaced[0].FullName) } else { '' }
+Check ($sessionText -match 'r_fullscreen "0"' -and $sessionText -match 'r_windowWidth "\d+"') 'the stand-in saved the placed window on exit'
+Check ([IO.File]::ReadAllText($t.Local) -eq $expected) 'forced and window keys restored, the player''s change kept'
+
+Write-Host "7b. mono with the render size off: the flat game's own window, as before"
+$t = New-Tree (Join-Path $Root 'mono-off')
+Set-FakeGame $t 100
+Set-Settings $t @('mode = mono', 'render_size = off')
+$record = Invoke-Session $t 'mono-off'
+Check (-not (Has-Line $record 'env:ETERNALVR_MODE=*')) 'no ETERNALVR_MODE'
+Check (-not (Has-Line $record 'env:ETERNALVR_WINDOW=*')) 'the layer places no window'
+Check (-not (Has-Line $record 'env:ETERNALVR_RENDER_SIZE=*')) 'no render size'
+Check (-not (Has-Line $record 'env:ETERNALVR_MIRROR_WINDOW=*')) 'no mirror'
+Check (-not (Has-Line $record 'cmdline=*r_fullscreen*') -and -not (Has-Line $record 'cmdline=*r_windowWidth*')) 'no window cvars on the command line'
 Check (-not (Has-Line $record 'cmdline=*r_TAASafeMode*') -and -not (Has-Line $record 'cmdline=*r_antialiasing*')) 'no stereo cvars on the command line'
-Check (-not (Test-Output "$($t.Dir)\mono.out" 'openxr probe')) 'no headset probe in mono'
+Check (-not (Test-Output "$($t.Dir)\mono-off.out" 'openxr probe')) 'no headset probe'
 Check ([IO.File]::ReadAllText($t.Local) -eq $expected) 'forced and window keys restored, the player''s change kept'
 
 Write-Host "8. anti-aliasing: DLSS with the player's DLL, a download that fails its pin, and off"

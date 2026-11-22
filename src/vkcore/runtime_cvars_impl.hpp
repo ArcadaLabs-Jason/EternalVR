@@ -68,9 +68,10 @@ std::string narrowEnv(const wchar_t* name);
 // One of the comfort set (stereo_seq::stereoComfortCvars); a float one is compared as a float.
 Held comfortHeld(const stereo_seq::CvarExpectation& c);
 
-// The window and present set (stereo_seq::stereoWindowCvars), as the command line and ETERNALVR_WINDOW size
-// it, added to `held`; r_windowWidth / r_windowHeight follow the render size (windowSizeLeft).
-void addWindowSet(std::vector<Held>& held);
+// The window and present set (stereo_seq::stereoWindowCvars; with `mono`, stereo_seq::monoWindowCvars), as
+// the command line and ETERNALVR_WINDOW size it, added to `held`; r_windowWidth / r_windowHeight follow the
+// render size (windowSizeLeft).
+void addWindowSet(std::vector<Held>& held, bool mono = false);
 
 // The cvar's integer value as the engine keeps it (the values block, +0x08).
 int readValue(const std::byte* object);

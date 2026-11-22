@@ -143,25 +143,32 @@ namespace EternalVR.Launcher.Core.Headsets
         /// native panel; with DLSS, about what it draws; past a quarter more pixels than Auto at 1.00, how many more. Lines are
         /// separated by '\n'. When the last session rendered below its plan (<paramref name="cap"/>: the graphics driver held
         /// each eye at the window's size), it first says what that session really got, then the plan as "Planned: ...".
+        /// <paramref name="nvidiaRtx"/>: the game's graphics card is an NVIDIA RTX card, so DLSS on Auto gets its budget on what
+        /// DLSS draws (<see cref="RenderSizeChoice.DlssInputFor"/>).
+        /// In mono the size is the one image both eyes see (one eye's rule, no edge margin, the game's own anti-aliasing).
         /// </summary>
-        public static string EachEye(LauncherSettings s, HeadsetFacts facts, HeadsetIdentity identity, RenderCap cap = null)
+        public static string EachEye(LauncherSettings s, HeadsetFacts facts, HeadsetIdentity identity, RenderCap cap = null, bool nvidiaRtx = false)
         {
-            if (s.Mode != VrMode.Stereo) return "The game's own resolution (mono)";
             var setting = LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto;
-            if (setting == LauncherSettings.RenderSizeOff) return "The game window's size (render_size off)";
-            var plan = Plan(s, setting, facts, identity, out bool sized);
+            if (setting == LauncherSettings.RenderSizeOff)
+                return s.Mode == VrMode.Stereo ? "The game window's size (render_size off)" : "The game's own resolution (mono, render_size off)";
+            var plan = Plan(s, setting, facts, identity, nvidiaRtx, out bool sized);
             if (cap == null || !cap.Capped) return plan;
             return cap.EachEyeText() + "\n" + (sized ? "Planned: " : string.Empty) + plan;
         }
 
         // The Each eye line's plan for these settings; sized: it starts with the size.
-        private static string Plan(LauncherSettings s, string setting, HeadsetFacts facts, HeadsetIdentity identity, out bool sized)
+        private static string Plan(LauncherSettings s, string setting, HeadsetFacts facts, HeadsetIdentity identity, bool nvidiaRtx, out bool sized)
         {
             sized = false;
             var limits = facts?.Limits;
             var probe = limits == null ? null : new OpenXrProbeResult { Limits = limits };
             var panel = identity?.Known?.Panel;
-            var choice = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel, LauncherSettings.EdgeMarginGrowth(s.EdgeMargin));
+            bool stereo = s.Mode == VrMode.Stereo;
+            uint eyes = stereo ? RenderSizeChoice.StereoEyesSideBySide : RenderSizeChoice.MonoEyesSideBySide;
+            double dlssInput = RenderSizeChoice.DlssInputFor(s, nvidiaRtx);
+            var choice = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel,
+                stereo ? LauncherSettings.EdgeMarginGrowth(s.EdgeMargin) : 1.0, dlssInput, eyes);
             if (choice.Size == null)
                 return limits == null ? "Set from your headset at Launch VR" : "Decided in-game (too large for a fixed size)";
             var size = choice.Size.Value;
@@ -176,14 +183,19 @@ namespace EternalVR.Launcher.Core.Headsets
                 lines.Add("This headset's panel is not known: Auto is used");
             if (choice.Growth > 1.0)
                 lines.Add(MarginLine(s, setting, probe, panel, choice, size));
-            if (s.AntiAliasing == AntiAliasingMode.Dlss)
+            if (!stereo) lines.Add("Mono: one image at this size for both eyes");
+            if (stereo && s.AntiAliasing == AntiAliasingMode.Dlss)
             {
                 int q = Math.Max(0, Math.Min(DlssDll.QualityNames.Length - 1, (int)s.Dlss));
                 double f = DlssDll.QualityFactors[q];
                 var drawn = new Extent((uint)Math.Round(size.Width * f, MidpointRounding.AwayFromZero), (uint)Math.Round(size.Height * f, MidpointRounding.AwayFromZero));
-                lines.Add((s.Dlss == DlssQuality.Dlaa ? "DLAA" : "DLSS " + DlssDll.QualityNames[q]) + " draws about " + Spaced(drawn));
+                lines.Add(s.Dlss == DlssQuality.Dlaa ? "DLAA draws about " + Spaced(drawn)
+                    : "DLSS " + DlssDll.QualityNames[q] + " draws about " + Spaced(drawn) + ", scaled up to " + Spaced(size));
+                var larger = choice.DlssInput < 1.0 ? DlssAutoLine(s, setting, probe, size) : null;
+                if (larger != null) lines.Add(larger);
             }
-            var auto = RenderSizeChoice.Decide(setting, 1.0, probe).Size;
+            // Against Auto at 1.00 with the same anti-aliasing.
+            var auto = RenderSizeChoice.Decide(setting, 1.0, probe, ResolutionBase.Auto, null, 1.0, dlssInput, eyes).Size;
             if (auto != null && !auto.Value.IsEmpty)
             {
                 double extra = (double)size.Width * size.Height / ((double)auto.Value.Width * auto.Value.Height) - 1.0;
@@ -199,7 +211,7 @@ namespace EternalVR.Launcher.Core.Headsets
         private static string MarginLine(LauncherSettings s, string setting, OpenXrProbeResult probe, Extent? panel, RenderSizeChoice choice, Extent size)
         {
             var line = "With the edge margin (" + SettingTexts.For(Setting.EdgeMargin).Choices[(int)s.EdgeMargin] + ")";
-            var without = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel).Size;
+            var without = RenderSizeChoice.Decide(setting, s.RenderScale, probe, s.ResolutionBase, panel, 1.0, choice.DlssInput).Size;
             if (without != null && !without.Value.IsEmpty)
             {
                 double extra = (double)size.Width * size.Height / ((double)without.Value.Width * without.Value.Height) - 1.0;
@@ -256,6 +268,18 @@ namespace EternalVR.Launcher.Core.Headsets
                 if (facts.SessionParallelEyes != null) Add("last session parallel eyes", facts.SessionParallelEyes);
             }
             return lines;
+        }
+
+        // With DLSS on Auto: the budget holds what DLSS draws, so the size it scales up to can be larger than TAA's at the same
+        // Resolution and edge margin; how much larger, since DLSS and the effects after it run at that size. Null when it is not.
+        private static string DlssAutoLine(LauncherSettings s, string setting, OpenXrProbeResult probe, Extent size)
+        {
+            var taa = RenderSizeChoice.Decide(setting, s.RenderScale, probe, ResolutionBase.Auto, null, LauncherSettings.EdgeMarginGrowth(s.EdgeMargin)).Size;
+            if (taa == null || taa.Value.IsEmpty) return null;
+            double extra = (double)size.Width * size.Height / ((double)taa.Value.Width * taa.Value.Height) - 1.0;
+            if (extra < 0.005) return null;
+            return Math.Round(extra * 100, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture)
+                + "% more pixels than Auto with TAA: sharper, but more work for the graphics card";
         }
 
         /// <summary>The Each eye line says the share of pixels more than Auto at 1.00 past this one.</summary>

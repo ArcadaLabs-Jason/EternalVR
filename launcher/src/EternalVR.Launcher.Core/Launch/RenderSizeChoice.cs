@@ -5,7 +5,8 @@ using EternalVR.Launcher.Core.Settings;
 namespace EternalVR.Launcher.Core.Launch
 {
     /// <summary>
-    /// The size a stereo launch starts the game at (docs/rig-findings/render-size.md, section 7). With a size, the
+    /// The size a launch starts the game at (docs/rig-findings/render-size.md, section 7): each eye's in stereo, the one image's in
+    /// mono (one eye's rule, no edge margin; docs/VR_HEAD_TRACKED.md "Render size"). With a size, the
     /// game gets it as <c>ETERNALVR_RENDER_SIZE=WxH</c> and <c>+r_windowWidth/Height</c>, so its first swapchain is
     /// already at the final size and nothing is resized mid-session. Without one (auto and no runtime answer), the
     /// layer decides in-game (<c>ETERNALVR_RENDER_SIZE=auto</c>) and the game starts at the mirror's size.
@@ -18,6 +19,8 @@ namespace EternalVR.Launcher.Core.Launch
     {
         /// <summary>Route S keeps both eyes side by side in one swapchain image, as the layer's ring does in stereo.</summary>
         public const uint StereoEyesSideBySide = 2;
+        /// <summary>Head-tracked mono's ring holds its one image alone: the swapchain's width is not shared.</summary>
+        public const uint MonoEyesSideBySide = 1;
 
         /// <summary>The per-eye size; null: decided in-game.</summary>
         public Extent? Size { get; private set; }
@@ -45,6 +48,11 @@ namespace EternalVR.Launcher.Core.Launch
         /// the FOV is widened only as far as the size holds at the centre's density). <see cref="Growth"/> without a size.
         /// </summary>
         public double KeptGrowth { get; private set; } = 1.0;
+        /// <summary>
+        /// With DLSS on Auto: the share of each side DLSS renders (<see cref="RenderSize.DlssInputShare"/>), so the pixel budget holds
+        /// what DLSS renders; 1 without DLSS, with DLAA, or when the base is not Auto (no budget).
+        /// </summary>
+        public double DlssInput { get; private set; } = 1.0;
 
         public bool IsAuto => Setting == LauncherSettings.RenderSizeAuto;
 
@@ -66,14 +74,18 @@ namespace EternalVR.Launcher.Core.Launch
         /// <param name="panel">The headset's native panel per eye (<c>data\headsets.txt</c>); null when it is not known.</param>
         /// <param name="growth">The edge margin's factor (<see cref="LauncherSettings.EdgeMarginGrowth"/>): an auto setting's size
         /// grows by it on both sides, after the scale, whatever the base; a fixed one stays as it is.</param>
+        /// <param name="dlssInput">With DLSS, the share of each side it renders (<see cref="DlssInputFor"/>): on Auto the pixel budget
+        /// holds what DLSS renders, not the size it scales up to; 1 without DLSS.</param>
+        /// <param name="eyesSideBySide">Images side by side in the layer's swapchain: <see cref="StereoEyesSideBySide"/> in stereo,
+        /// <see cref="MonoEyesSideBySide"/> in mono (the one image both eyes see).</param>
         public static RenderSizeChoice Decide(string setting, double renderScale, OpenXrProbeResult probe, ResolutionBase resolutionBase, Extent? panel,
-            double growth = 1.0)
+            double growth = 1.0, double dlssInput = 1.0, uint eyesSideBySide = StereoEyesSideBySide)
         {
             var c = new RenderSizeChoice
             {
                 Setting = setting,
                 Scale = RenderSize.ParseRenderScale(ScaleText(renderScale)) ?? 1.0f,
-                Limits = probe != null && probe.Ok ? probe.Limits.WithEyesSideBySide(StereoEyesSideBySide) : null,
+                Limits = probe != null && probe.Ok ? probe.Limits.WithEyesSideBySide(eyesSideBySide) : null,
             };
             var request = RenderSize.ParseRenderSize(setting) ?? new RenderSizeRequest { Mode = RenderSizeMode.Auto };
             if (request.Mode == RenderSizeMode.Off) request.Mode = RenderSizeMode.Auto;
@@ -94,6 +106,9 @@ namespace EternalVR.Launcher.Core.Launch
                 c.Base = ResolutionBase.Auto;
             }
             if (c.Base == ResolutionBase.Panel) c.Panel = panel;
+            if (c.Base == ResolutionBase.Auto && request.Mode == RenderSizeMode.Auto && dlssInput > 0.0 && dlssInput < 1.0)
+                c.DlssInput = dlssInput;
+            request.DlssInput = c.DlssInput;
 
             var size = c.Base == ResolutionBase.Ask ? Scaled(c.Limits.Recommended, c.Scale, c.Growth, c.Limits)
                 : c.Base == ResolutionBase.Panel ? Scaled(panel.Value, c.Scale, c.Growth, c.Limits)
@@ -147,6 +162,15 @@ namespace EternalVR.Launcher.Core.Launch
             };
         }
 
+        /// <summary>
+        /// The share of each side DLSS renders for these settings (<see cref="RenderSize.DlssInputShare"/>): stereo with Anti-aliasing
+        /// DLSS, as the launch passes it to the layer, on an NVIDIA RTX card (<paramref name="rtxCard"/>,
+        /// <see cref="Preflight.UntestedHardware.MainGpuIsNvidiaRtx"/>); 1 otherwise (TAA, Off, mono), for DLAA, and on any other or an
+        /// unknown card: there DLSS cannot run, the layer falls back to TAA, and TAA at the larger size would be the costly way.
+        /// </summary>
+        public static double DlssInputFor(LauncherSettings s, bool rtxCard) =>
+            rtxCard && s != null && s.Mode == VrMode.Stereo && s.AntiAliasing == AntiAliasingMode.Dlss ? RenderSize.DlssInputShare(s.Dlss) : 1.0;
+
         /// <summary>The base in the log's words.</summary>
         public static string BaseText(ResolutionBase b) =>
             b == ResolutionBase.Ask ? "what the runtime asks for" : b == ResolutionBase.Panel ? "the native panel" : "Auto";
@@ -164,6 +188,9 @@ namespace EternalVR.Launcher.Core.Launch
                 return $"render size {Size} from what the runtime asks for, {Limits.Recommended}, times {scale}";
             if (IsAuto && Base == ResolutionBase.Panel)
                 return $"render size {Size} from the headset's native panel {Panel} times {scale} (the runtime asks for {Limits.Recommended})";
+            if (IsAuto && DlssInput < 1.0)
+                return $"render size {Size} from the runtime's recommendation {Limits.Recommended} (scale {scale}), the pixel budget on what DLSS renders (x"
+                    + DlssInput.ToString("0.000", CultureInfo.InvariantCulture) + " per side)" + note;
             if (IsAuto) return $"render size {Size} from the runtime's recommendation {Limits.Recommended} (scale {scale})" + note;
             return $"render size {Size} from the setting {Setting}"
                 + (Limits == null ? " (the runtime's limits unknown)" : Size.Value.ToString() == Setting ? string.Empty : " fitted to the runtime's limits");

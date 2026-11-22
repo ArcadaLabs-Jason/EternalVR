@@ -94,6 +94,14 @@ them is worse for you than described here.
 
 ## Image and performance
 
+- **Mono is a little softer than Stereo at the same Resolution.** Mono (VR mode on the Advanced tab) used to draw
+  its picture at your flat game's resolution, so on a 1080p or 1440p monitor it looked blurry in the headset.
+  Now it draws at the size of one eye in Stereo (Resolution and Each eye on the Play tab work in Mono too), which
+  on my test PC took the graphics card half to 60% of Stereo's time per frame. That one picture
+  covers what both eyes see, a wider view than one eye's, so its detail is spread a bit thinner: about 80% of
+  Stereo's sharpness across and 84% up and down on a Quest 3. Resolution at 1.20 gets about Stereo's sharpness
+  for a bit more of the graphics card. Anti-aliasing, Sharpening and DLSS in the launcher still only work in
+  Stereo; in Mono the game's own settings from its video menu are used. Not tried in a headset yet.
 - **Long sessions on Virtual Desktop can slow down.** A player on a Quest 3 with Virtual Desktop saw 90 fps
   fall to the low 70s over about an hour of play, and a trip out of the game and back (hold the headset's home
   button, then return) brought 90 back. His logs show Virtual Desktop holding each frame longer and longer, not
@@ -106,6 +114,16 @@ them is worse for you than described here.
   gave the headset 30 new frames a second on my test PC. Leave RTSS's limit off for DOOM Eternal (the launcher warns
   when RTSS's profiles set one); its counter itself is fine (it shows in both eyes, top left). OBS game capture works
   and records the desktop window (your left eye, no HUD); ReShade stays out of VR. More in TROUBLESHOOTING.md, "RivaTuner (RTSS), OBS and ReShade".
+- **DLSS on Resolution Auto draws a larger picture since 0.1.101, which costs more.** Up to 0.1.100 Auto kept the
+  picture DLSS scales up to within about 4.6 million pixels per eye, so DLSS Quality drew only two thirds of that
+  per side and could look soft at Virtual Desktop's higher presets. Now the 4.6 million are what DLSS draws, and
+  it scales up to what the runtime asks for, up to about 6.8 million pixels per eye: on a Quest 3 through Virtual
+  Desktop at High, 2496 x 2688 per eye instead of 2056 x 2216, and at Godlike 2536 x 2696 (the Play tab's Each eye
+  line says both sizes). It's sharper, but DLSS and the game's effects after it run at that larger size: on my
+  test PC's RTX 3080 Ti with preset K that works out to about a quarter to a third more graphics card time than
+  before (measured at the sizes my test PC's simulator allows and worked out from there, no headset yet). If your frame
+  rate drops, set Resolution to 0.80 (about the old size at High) or try preset E. TAA, the default, and DLAA
+  are unchanged.
 - **DLSS with preset K may not speed things up on an RTX 3080 Ti at large render sizes.** On my test PC's RTX
   3080 Ti at 2048 x 2208 per eye, DLSS Quality with preset K (the launcher's default) took as much graphics card
   time as the default TAA at full size on the outdoor and hub routes, so it gave no extra frames there; preset E

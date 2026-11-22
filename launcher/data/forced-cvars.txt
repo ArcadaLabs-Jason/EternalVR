@@ -1,7 +1,8 @@
 # Cvars a VR launch forces on the command line (T-092). The launcher restores these keys in the
 # game's text configs after the session (T-036). The list follows the rig's launch recipe
 # (docs/VR_HEAD_TRACKED.md on the head-tracked branch).
-# name | value [| stereo|mono [| steam]]: forced in both modes, only in stereo, or only in mono; with "steam" only
+# name | value [| stereo|mono|window [| steam]]: forced in both modes, only in stereo, or only in mono; "window": in
+# stereo, and in mono when the game renders at the headset's size (the render size, on by default); with "steam" only
 # for the Steam build of the game.
 # The console log (qconsole.log) for the report export. 1, not 2: each line is still handed to Windows at once, so
 # a game crash loses nothing, but 2 also flushed every line to disk on the game's thread, and a checkpoint save
@@ -65,6 +66,10 @@ r_refractionTAA | 0 | stereo
 r_raytracedReflectionsTemporalUpscaleQuality | 0 | stereo
 rs_enable | 0 | stereo
 r_swapInterval | 0 | stereo
-r_fullscreen | 0 | stereo
-r_windowWidth | $eye_width | stereo
-r_windowHeight | $eye_height | stereo
+# The window's mode and size, in mono too with the render size: the one image then starts at the render size (the
+# runtime's recommendation fitted into one eye's pixel budget, docs/VR_HEAD_TRACKED.md "Render size") in a small
+# windowed mirror, not at the flat game's full-screen resolution. Without the render size mono keeps the player's
+# own window and resolution, as before.
+r_fullscreen | 0 | window
+r_windowWidth | $eye_width | window
+r_windowHeight | $eye_height | window

@@ -197,12 +197,17 @@ namespace EternalVR.Launcher.Core.Settings
                 + "built-in controls."),
             [Setting.Resolution] = new Text("Resolution",
                 "How many pixels each eye renders: a size times the number beside it (0.50 to 2.00). Auto is what the runtime "
-                + "asks for, fitted within about 4.6 million pixels per eye; Virtual Desktop native (SteamVR native...) is exactly "
-                + "what the runtime asks for; Quest 3 native (Index native...) is your headset's own panel.",
+                + "asks for, fitted within about 4.6 million pixels per eye; with DLSS (on an RTX card; not the game's own DLSS "
+                + "setting under TAA) those are the pixels DLSS draws, so the "
+                + "picture it scales up to can be as large as what the runtime asks for, up to about 6.8 million: sharper, but more work for the graphics "
+                + "card than TAA on Auto (Each eye says how much larger; a lower number brings it down). Virtual Desktop native (SteamVR native...) "
+                + "is exactly what the runtime asks for; Quest 3 native (Index native...) is your headset's own panel. In Mono the one "
+                + "image both eyes see renders at this size too.",
                 "Auto (fits about 4.6 MP per eye)", "Runtime native", "Headset native"),
             [Setting.EachEye] = new Text("Each eye",
                 "The size each eye renders at, per side against what the runtime asks for and the native panel; with DLSS, about "
-                + "the size DLSS draws. After a session held to the window's size (AMD Radeon RX 5000 and 6000), that size first."),
+                + "the size DLSS draws and the size it scales up to. After a session held to the window's size (AMD Radeon RX 5000 "
+                + "and 6000), that size first. In Mono, the size of the one image both eyes see."),
             [Setting.AntiAliasing] = new Text("Anti-aliasing",
                 "How edges are smoothed in each eye. TAA (the default) is the game's own: smooth edges, with each eye "
                 + "keeping its own history. DLSS needs an NVIDIA RTX card: it renders a smaller image and scales it up, which "
@@ -289,7 +294,9 @@ namespace EternalVR.Launcher.Core.Settings
                 + "24% more frames per second on the test rig. All off by default. The game's own settings are put back after "
                 + "you play. Experimental: the list is still being measured."),
             [Setting.VrMode] = new Text("VR mode",
-                "Stereo renders one image per eye, for real depth. Mono renders one image for both eyes: flat, but faster.",
+                "Stereo renders one image per eye, for real depth. Mono renders one image for both eyes: flat, but faster. "
+                + "Mono's image is as large as one eye's in Stereo (Resolution, Each eye), so it costs about half of Stereo's "
+                + "pixels; the game's own anti-aliasing and sharpening from its video menu apply in Mono.",
                 "Stereo (one image per eye)", "Mono (one for both eyes)"),
             [Setting.AlternateEyes] = new Text("Alternate eyes",
                 "Draws one eye per game frame instead of both, taking turns. The processor does about half the work per "
@@ -360,6 +367,8 @@ namespace EternalVR.Launcher.Core.Settings
             [Setting.DlssQuality] = new Text("Quality",
                 "How large the image DLSS scales up from: DLAA renders each eye at its full size, Quality at two thirds, "
                 + "Balanced at 58%, Performance at half and Ultra Performance at a third. The smaller, the faster and the softer. "
+                + "On Resolution's Auto, DLSS draws within the same 4.6 million pixels and scales up to a larger picture, up to "
+                + "what the runtime asks for and at most about 6.8 million pixels. "
                 + "DLAA needs a newer DLSS than the game's (Version); with the game's it runs as Quality.",
                 DlssDll.QualityChoiceNames()),
             [Setting.DlssVersion] = new Text("Version",

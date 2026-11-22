@@ -145,6 +145,13 @@ struct CvarHold {
 // (docs/VR_STEREO.md, Cvars).
 std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::string_view windowSetting = {});
 
+// The window set head-tracked mono holds with the render size on (vkcore/runtime_cvars.hpp):
+// only r_fullscreen 0 and the size of stereoWindowCvars, named one by one: r_swapInterval stays the player's
+// (one present a frame, the flat game's vsync), and a cvar later added to the stereo set is not held in mono
+// unless it is added here too. r_fullscreen 0 and the size keep the one image at the render size when a load
+// path applies the player's video mode.
+std::vector<CvarHold> monoWindowCvars(std::string_view commandLine, std::string_view windowSetting = {});
+
 // Whether a held cvar is the window's size (r_windowWidth / r_windowHeight, compared case-insensitively). The
 // layer stops holding these once the render size is off (vkcore/virtual_client.hpp): the game then renders
 // at its window's size, and a size that differs from the window's makes the game resize its window, which

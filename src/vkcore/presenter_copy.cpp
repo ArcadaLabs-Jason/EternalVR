@@ -195,6 +195,8 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
         runtime_cvars::apply(true);
     } else if (parallelEyesChangedEngine()) { // the same for Parallel Eye Rendering's set, every frame
         runtime_cvars::apply(false);
+    } else if (!settings.stereo.requested && virtual_client::wanted()) { // mono at the render size
+        runtime_cvars::applyMonoWindow();
     }
     const stereo_seq::PresentMatch match = seq ? seqTakePresent() : stereo_seq::PresentMatch{};
     if (seq && match.tagged) {

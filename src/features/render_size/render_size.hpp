@@ -30,6 +30,10 @@ struct Request {
     // Mode::Auto: the edge margin's factor (edge_margin.hpp), both sides times it after the scale; 1 without
     // one.
     double growth = 1.0;
+    // Mode::Auto: the share of each side DLSS renders before it scales up to the render size
+    // (dlssInputShare); the pixel budget then holds what DLSS renders. 1 without DLSS, with DLAA and when
+    // DLSS's quality is not known: the budget holds the render size itself.
+    double dlssInput = 1.0;
     friend bool operator==(const Request&, const Request&) = default;
 };
 
@@ -55,6 +59,20 @@ inline constexpr float kMaxScale = 2.0f;
 // A render scale above 1 goes past the budget on purpose (supersampling).
 inline constexpr std::uint64_t kDefaultPixelBudget = 2064ull * 2208ull;
 
+// The share of each side DLSS renders before it scales up to its output (NVIDIA's factors; the launcher's
+// DlssDll.QualityFactors are the same numbers), per r_dlssQuality: 0 Ultra Performance, 1 Performance,
+// 2 Balanced, 3 Quality. DLAA renders at the output's size.
+inline constexpr double kDlssInputShare[] = {1.0 / 3.0, 0.5, 0.58, 2.0 / 3.0};
+
+// With DLSS, Auto's output (the size DLSS scales up to) stays within this many times the pixel budget, before
+// the scale and the edge margin's growth (about 6.84 Mpix per eye at the default budget): VDXR's 2496 x 2688
+// fits, larger recommendations are scaled down to it (the launcher's RenderSize.DlssOutputCap).
+inline constexpr double kDlssOutputCap = 1.5;
+
+// The share for an r_dlssQuality value (stereo_seq::dlssQualityValue) and whether DLAA runs: 1 with DLAA
+// and for an unknown quality (anything but 0 to 3).
+double dlssInputShare(int dlssQuality, bool dlaa);
+
 // What the runtime allows (xrEnumerateViewConfigurationViews, xrGetSystemProperties).
 struct ViewLimits {
     Extent recommended;  // the largest recommended image rect over the views
@@ -65,12 +83,16 @@ struct ViewLimits {
 };
 
 // Auto: the recommendation scaled uniformly into `budget` pixels (never up), times `scale` and `growth` (the
-// edge margin's, past the budget like a scale above 1), then fitted. nullopt when the recommendation is empty
-// or the scale or the growth is not a positive finite number.
+// edge margin's, past the budget like a scale above 1), then fitted. With DLSS (`dlssInput` below 1, the
+// share of each side it renders) the budget holds what DLSS renders: the size is the one whose DLSS input
+// fits it, never above the recommendation nor above kDlssOutputCap times the budget. nullopt when the
+// recommendation is empty or the scale or the growth is not a positive finite number; a `dlssInput` that is
+// not a number in (0, 1) counts as 1.
 std::optional<Extent> autoSize(const ViewLimits& limits,
                                float scale,
                                std::uint64_t budget = kDefaultPixelBudget,
-                               double growth = 1.0);
+                               double growth = 1.0,
+                               double dlssInput = 1.0);
 
 // `size` scaled down uniformly, if needed, to fit the runtime's limits (and kMaxSide), then rounded to
 // multiples of kAlign (at least kMinSide per side, aspect kept as closely as the rounding allows).
@@ -103,7 +125,8 @@ struct WindowRect {
 // `x,y,width,height` with a positive size; nullopt otherwise.
 std::optional<WindowRect> parseWindowRect(std::wstring_view text);
 
-// For the log: "off", "auto x1.00" (with ", edge margin x1.20" when it grows) or "WxH".
+// For the log: "off", "auto x1.00" (with ", edge margin x1.20" when it grows and ", the budget on DLSS's
+// input x0.667" with DLSS) or "WxH".
 std::string describe(const Request& request);
 
 } // namespace evr::render_size

@@ -129,9 +129,9 @@ items and do not block v1.
     (T-094).
   - It checks that the runtime is up and the headset connected before launching, because the layer
     needs an OpenXR system when the game creates its Vulkan instance (section 6, T-082). As built: a
-    stereo launch with the render size on (the default) asks the runtime for the headset first
-    (`OpenXrProbe`, up to 30 s) and asks the player before launching without one; a mono launch has no
-    check.
+    launch with the render size on (the default, stereo or mono) asks the runtime for the headset first
+    (`OpenXrProbe`, up to 30 s) and asks the player before launching without one; a launch with the render
+    size off has no check.
   - It isolates known-bad OpenXR API layers through their `disable_environment` variables: OpenXR
     Toolkit, the ReShade OpenXR layer, and Virtual Desktop's compatibility layer when the chosen
     runtime is not VDXR (R01, R02, T-110).

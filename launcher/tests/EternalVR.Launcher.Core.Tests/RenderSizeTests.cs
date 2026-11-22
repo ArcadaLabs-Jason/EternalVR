@@ -135,7 +135,9 @@ namespace EternalVR.Launcher.Core.Tests
         {
             Assert.True(LaunchPlanBuilder.WantsRenderSize(new LauncherSettings()));
             Assert.False(LaunchPlanBuilder.WantsRenderSize(new LauncherSettings { RenderSize = "off" }));
-            Assert.False(LaunchPlanBuilder.WantsRenderSize(new LauncherSettings { Mode = VrMode.Mono }));
+            // Mono renders its one image at the render size too.
+            Assert.True(LaunchPlanBuilder.WantsRenderSize(new LauncherSettings { Mode = VrMode.Mono }));
+            Assert.False(LaunchPlanBuilder.WantsRenderSize(new LauncherSettings { Mode = VrMode.Mono, RenderSize = "off" }));
             Assert.Empty(LaunchPlanBuilder.OpenXrEnvironment(new LauncherSettings(), null));
             var env = LaunchPlanBuilder.OpenXrEnvironment(new LauncherSettings { Runtime = @"E:\rt\sim.json" }, null);
             Assert.Equal("XR_RUNTIME_JSON", Assert.Single(env).Key);

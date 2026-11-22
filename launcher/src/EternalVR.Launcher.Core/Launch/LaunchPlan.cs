@@ -43,6 +43,8 @@ namespace EternalVR.Launcher.Core.Launch
         public ControlsFolder Controls { get; set; }
         /// <summary>The newest listed DLSS the launcher has downloaded (checked; an older listed one until the newest is); null when none.</summary>
         public string NewestDlss { get; set; }
+        /// <summary>The graphics card the game runs on is an NVIDIA RTX card (Auto's budget then holds what DLSS draws); false when not or not known.</summary>
+        public bool NvidiaRtx { get; set; }
         /// <summary>The player's own <c>r_SSDO</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
         public string PlayerSsdo { get; set; }
         /// <summary>The player's own <c>r_SSR</c> from their config (<see cref="GameLayout.PlayerCvar"/>); null when it is not set there.</summary>
@@ -68,9 +70,10 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>Variables added to (or replacing in) the launcher's own environment for the game process only.</summary>
         public IReadOnlyList<KeyValuePair<string, string>> Environment { get; set; }
         public LayerRoute Route { get; set; }
-        /// <summary>The stereo game window; null in mono.</summary>
+        /// <summary>The game window: the desktop mirror with the render size (both modes), the eye-sized stereo window without it;
+        /// null in mono with the render size off (the flat game's own window).</summary>
         public StereoWindowPlan Window { get; set; }
-        /// <summary>The stereo render size; null in mono and with the render size off.</summary>
+        /// <summary>The render size: each eye's in stereo, the one image's in mono; null with the render size off.</summary>
         public RenderSizeChoice RenderSize { get; set; }
         /// <summary>
         /// Why the headset looks unready from the runtime probe ("no headset", the runtime not answering), for the
@@ -155,26 +158,30 @@ namespace EternalVR.Launcher.Core.Launch
             bool stereo = s.Mode == VrMode.Stereo;
             // Parallel Eye Rendering asked and on a build it runs on; elsewhere the layer refuses it and keeps the standard renderer.
             bool parallel = s.ParallelEyesOn(inputs.ParallelEyesGame);
-            // With the render size (the default) the eyes do not depend on the window: it is only the desktop mirror.
+            // With the render size (the default) the eyes do not depend on the window: it is only the desktop mirror. In mono too:
+            // the one image both eyes see renders at one eye's size (the same rule, no edge margin), not at the flat game's
+            // resolution (docs/VR_HEAD_TRACKED.md "Render size"); with it off mono keeps the flat game's window, as before.
             var renderSize = LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto;
-            bool mirror = stereo && renderSize != LauncherSettings.RenderSizeOff;
-            var window = !stereo ? null
-                : mirror ? MirrorPlan(inputs.Displays, s)
-                : StereoWindow.Fit(inputs.Displays, s.EyeWidth, s.EyeHeight);
+            bool mirror = renderSize != LauncherSettings.RenderSizeOff;
+            var window = mirror ? MirrorPlan(inputs.Displays, s)
+                : stereo ? StereoWindow.Fit(inputs.Displays, s.EyeWidth, s.EyeHeight)
+                : null;
             // The game starts at its final render size when it is known before the launch: the layer applies a fixed
             // size before the first swapchain and the game's video init takes its output size from r_windowWidth and
             // r_windowHeight, so nothing is resized mid-session (a resize can fail on cards with 12 GB or less).
-            // The edge margin grows an automatic size by its factor on both sides, so the middle keeps its detail.
+            // The edge margin grows an automatic size by its factor on both sides, so the middle keeps its detail. With DLSS,
+            // Auto's pixel budget holds what DLSS renders, as the layer's own Auto does.
             var renderChoice = mirror
                 ? RenderSizeChoice.Decide(renderSize, s.RenderScale, inputs.RuntimeProbe, s.ResolutionBase, inputs.Panel,
-                    LauncherSettings.EdgeMarginGrowth(s.EdgeMargin))
+                    stereo ? LauncherSettings.EdgeMarginGrowth(s.EdgeMargin) : 1.0, RenderSizeChoice.DlssInputFor(s, inputs.NvidiaRtx),
+                    stereo ? RenderSizeChoice.StereoEyesSideBySide : RenderSizeChoice.MonoEyesSideBySide)
                 : null;
             int outputWidth = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Width : window?.Width ?? 0;
             int outputHeight = renderChoice?.Size != null ? (int)renderChoice.Size.Value.Height : window?.Height ?? 0;
 
             var args = new List<string>();
             if (inputs.ForceCvars)
-                foreach (var cvar in inputs.ForcedCvars.For(stereo, inputs.Platform))
+                foreach (var cvar in inputs.ForcedCvars.For(stereo, inputs.Platform, mirror))
                 {
                     args.Add("+" + cvar.Name);
                     args.Add(cvar.Value == ForcedCvars.EyeWidth ? outputWidth.ToString(CultureInfo.InvariantCulture)
@@ -440,10 +447,9 @@ namespace EternalVR.Launcher.Core.Launch
 
         private static bool IsAntiAliasing(string cvar) => string.Equals(cvar, "r_antialiasing", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>A stereo launch with the render size on: the one that asks the runtime for its size first.</summary>
+        /// <summary>A launch with the render size on (stereo or mono): the one that asks the runtime for its size first.</summary>
         public static bool WantsRenderSize(LauncherSettings s) =>
-            s.Mode == VrMode.Stereo
-            && (LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto) != LauncherSettings.RenderSizeOff;
+            (LauncherSettings.NormaliseRenderSize(s.RenderSize) ?? LauncherSettings.RenderSizeAuto) != LauncherSettings.RenderSizeOff;
 
         /// <summary>
         /// The game's OpenXR environment: the chosen runtime (none: the system default, <see cref="EffectiveRuntime"/>) and the

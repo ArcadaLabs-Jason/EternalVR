@@ -32,6 +32,15 @@ namespace EternalVR.Launcher.Core.Preflight
         }
 
         /// <summary>
+        /// Whether the graphics card the game most likely runs on (<see cref="MainGpu"/>) is an NVIDIA RTX card by its name, the
+        /// cards DLSS runs on; false for any other card and when no hardware adapter is known.
+        /// </summary>
+        public static bool MainGpuIsNvidiaRtx(IReadOnlyList<GpuAdapter> gpus) => IsNvidiaRtx(MainGpu(gpus)?.Name);
+
+        /// <summary>An NVIDIA card with RTX in its name (the tested cards, and the ones with DLSS).</summary>
+        public static bool IsNvidiaRtx(string adapterName) => IsNvidia(adapterName) && Has(adapterName, "RTX");
+
+        /// <summary>
         /// The untested entry a graphics card belongs to, by its name ("AMD Radeon RX 6000 cards (RDNA 2)"); null for a tested
         /// one (NVIDIA RTX) or a name the launcher cannot place.
         /// </summary>

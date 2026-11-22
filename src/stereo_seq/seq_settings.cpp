@@ -287,6 +287,16 @@ std::vector<CvarHold> stereoWindowCvars(std::string_view commandLine, std::strin
     return held;
 }
 
+std::vector<CvarHold> monoWindowCvars(std::string_view commandLine, std::string_view windowSetting) {
+    std::vector<CvarHold> held = stereoWindowCvars(commandLine, windowSetting);
+    // An allow-list, not "all but r_swapInterval": a cvar added to the stereo window set is not held in mono
+    // until it is named here (seq_settings_tests.cpp pins both sets).
+    std::erase_if(held, [](const CvarHold& c) {
+        return !sameName(c.name, "r_fullscreen") && !isWindowSizeCvar(c.name);
+    });
+    return held;
+}
+
 bool isWindowSizeCvar(std::string_view name) {
     return sameName(name, "r_windowWidth") || sameName(name, "r_windowHeight");
 }

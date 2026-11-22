@@ -362,7 +362,13 @@ keep their own DLSS choice for flat play. With the launcher's TAA the game's own
 it is on, DLSS runs in VR too, and changing it in the menu works as usual. If DLSS cannot run per eye,
 the mod switches to TAA (the log says `DLSS has no per-eye feature`) and the menu shows DLSS as off. The
 mod tries DLSS again by itself a few times (after 5, 10 and 20 seconds); choosing a DLSS quality in the
-game's menu tries it again at once.
+game's menu tries it again at once. On Resolution's Auto with the launcher's DLSS and an NVIDIA RTX card, Auto's
+4.6 million pixels per eye are what DLSS draws (since 0.1.101), so the picture it scales up to is larger than
+with TAA, up to what the runtime asks for and at most about 6.8 million pixels per eye; the Play tab's Each eye
+line shows both sizes. That picture is sharper and costs the graphics card more (see KNOWN-ISSUES.md); a lower
+Resolution brings it down. On any other card DLSS can't run, so Auto keeps TAA's size; with the launcher's TAA
+and the game's own DLSS setting on, Auto keeps TAA's size too. The size is set when the game starts, so if DLSS
+can't run per eye and the mod switches to TAA during a session, TAA draws that larger size until the next launch.
 
 **A newer DLSS is experimental too.** The game ships DLSS 2.3. The DLSS group's "Version" offers NVIDIA's
 newest by default: **Download** fetches it once, straight from NVIDIA's GitHub after you accept NVIDIA's

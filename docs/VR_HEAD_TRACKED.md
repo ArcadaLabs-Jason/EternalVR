@@ -327,8 +327,42 @@ yet).
 
 ## Render size
 
-The game renders the 108 x 110 degree FOV into its window, so pixels are stretched horizontally in the
-image and the runtime maps them back. On the owner's 2560x1440 display the window is 2542x1333, and
+**Mono at the headset's size (the launcher's Mono).** Before this, the launcher passed mono no render size and
+no window: the game drew its one image at the flat game's own window and
+resolution (full screen at the desktop's mode, or the player's windowed size), whatever the headset asked for.
+On a 1920x1080 display that is about 700 pixels per unit tangent across and 380 up and down over a Quest 3's
+108 x 110 degrees, against about 930 in each eye in stereo: a player found Mono blurry where Stereo was sharp
+(Quest 3, Virtual Desktop's Godlike preset). Now a mono launch with the render size on (`render_size`, `auto` by
+default) gets what a stereo launch gets for one eye:
+
+- the launcher asks the runtime first (`OpenXrProbe`) and works out the size with the same rule as a stereo eye
+  (`RenderSizeChoice.Decide`: Auto's budget of 2064 x 2208 pixels, Resolution's base and number; no edge margin,
+  which is stereo only), with one image per swapchain (`eyesSideBySide` 1, so the runtime's swapchain width is
+  not shared as Route S's two eyes share it). It passes `ETERNALVR_RENDER_SIZE=WxH` (`auto` when the runtime
+  did not answer), `ETERNALVR_RENDER_SCALE`, the desktop mirror (`ETERNALVR_WINDOW`, `ETERNALVR_MIRROR_*`) and
+  the window set from `launcher/data/forced-cvars.txt` (`| window`: `+r_fullscreen 0 +r_windowWidth W
+  +r_windowHeight H`), and nothing else of the stereo set: the game's own anti-aliasing (its video menu's TAA or
+  DLSS), sharpening, dynamic resolution and vsync stay as the player has them;
+- the layer answers the game's client area with that size as in stereo (docs/rig-findings/render-size.md), and
+  from the first present holds the window's mode and size (`runtime_cvars::applyMonoWindow`,
+  `stereo_seq::monoWindowCvars`: `r_fullscreen 0`, `r_windowWidth` / `r_windowHeight` from the command line;
+  not `r_swapInterval`), so a load path that applies the player's video mode cannot take the image back to the
+  display's size or to full screen. It holds nothing else in mono; a multiplayer guard trip leaves the window
+  set as in stereo. The launcher's session restore puts the player's window keys back after the session.
+
+The size: VDXR's 2496 x 2688 (and anything above the budget, Godlike's 3072 x 3264 too) gives 2056 x 2216 or
+2072 x 2200, the size of one stereo eye, so a mono frame renders about half of a stereo tick's pixels. The one
+image spans the symmetric FOV that encloses both eyes, wider than one eye (on a Quest 3, 2.75 x 2.86 units of
+tangent against an eye's 2.22 x 2.39), so at the same Resolution it holds about 0.80 of a stereo eye's pixels per
+degree across and 0.84 up and down; Resolution at 1.20 (2472 x 2656 on a Quest 3) is about a stereo eye's
+density. The launcher's Each eye line shows mono's size ("Mono: one image at this size for both eyes"). With
+`render_size = off` mono keeps the flat game's window and resolution, as before. On the test PC (RTX 3080 Ti, the
+simulator, the bench routes, pacing off) a mono frame at 2056 x 2216 took 4.7 to 5.5 ms of GPU time against 3.2 to
+4.0 ms at 1920 x 1080 and 8.7 to 11.1 ms for a stereo tick at 2048 x 2208 per eye: 0.49 to 0.61 of Stereo's
+(docs/rig-findings/render-size.md, section 11, with the 1440p and x1.20 cases). Not tried in a headset yet.
+
+Before the launcher passed a size, the game rendered the 108 x 110 degree FOV into its window, so pixels are
+stretched horizontally in the image and the runtime maps them back. On the owner's 2560x1440 display the window is 2542x1333, and
 vertical density is the limit (about 470 pixels per unit tangent against about 920 horizontally;
 VDXR's recommended 2496x2688 per eye is about 1120). The game clamps `r_windowWidth/Height` to the
 primary display's work area, and `r_windowPosX` does not change that. The rig's virtual display offers

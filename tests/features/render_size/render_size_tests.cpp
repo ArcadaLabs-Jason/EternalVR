@@ -94,6 +94,41 @@ TEST_CASE("auto: Quest 3 through VDXR at 100 % fits the default budget, near-squ
     CHECK(static_cast<double>(size->width) / size->height == doctest::Approx(2496.0 / 2688.0).epsilon(0.01));
 }
 
+TEST_CASE("auto in mono: the one image gets one stereo eye's budget, and the swapchain's width to itself") {
+    // Head-tracked mono's ring holds one image (eyesSideBySide 1): the same cases as the launcher's
+    // RenderSizeMonoTests. Within the limits mono's size is one stereo eye's.
+    for (const ViewLimits& stereo :
+         {quest3Vdxr(), [] {
+              ViewLimits godlike = quest3Vdxr();
+              godlike.recommended = {3072, 3264}; // Virtual Desktop's Godlike on a Quest 3
+              return godlike;
+          }()}) {
+        ViewLimits mono = stereo;
+        mono.eyesSideBySide = 1;
+        for (const float scale : {0.5f, 1.0f, 1.5f, 2.0f}) {
+            CHECK(*autoSize(mono, scale) == *autoSize(stereo, scale));
+        }
+    }
+    ViewLimits vdxr = quest3Vdxr();
+    vdxr.eyesSideBySide = 1;
+    CHECK(*autoSize(vdxr, 1.0f) == Extent{2056, 2216});
+    vdxr.recommended = {3072, 3264};
+    CHECK(*autoSize(vdxr, 1.0f) == Extent{2072, 2200});
+    CHECK(*autoSize(vdxr, 1.5f) == Extent{3104, 3304});
+    // The OpenXR Simulator (4096 x 4096 swapchains): two eyes share the width, one image does not.
+    ViewLimits sim;
+    sim.recommended = {1280, 1400};
+    sim.maxImageRect = {4096, 4096};
+    sim.maxSwapchain = {4096, 4096};
+    sim.eyesSideBySide = 2;
+    CHECK(*autoSize(sim, 1.0f) == Extent{1280, 1400});
+    CHECK(*autoSize(sim, 2.0f) == Extent{2048, 2240});
+    sim.eyesSideBySide = 1;
+    CHECK(*autoSize(sim, 1.0f) == Extent{1280, 1400});
+    CHECK(*autoSize(sim, 2.0f) == Extent{2560, 2800});
+    CHECK(fitToLimits({2496, 2688}, sim) == Extent{2496, 2688});
+}
+
 TEST_CASE("auto: a recommendation within the budget is used as it is, never scaled up") {
     ViewLimits l;
     l.recommended = {1440, 1584};

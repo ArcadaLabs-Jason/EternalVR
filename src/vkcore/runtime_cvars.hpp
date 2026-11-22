@@ -23,6 +23,7 @@
 //   off (virtual_client::sizeOff: the surface cannot scale to it, as on an AMD driver), r_windowWidth /
 //   r_windowHeight are left to the game (logged): the eyes render at the window's size, and a held size that
 //   differs from it would make the game resize its window and put the swapchain out of date.
+// - Head-tracked mono with the render size on: that set less r_swapInterval (applyMonoWindow), nothing else.
 // - ETERNALVR_CPU_SAVER="name=value;name=value": the launcher's CPU Saver (launcher/data/cpu-saver.txt,
 //   docs/rig-findings/perf-cpu-cvars.md), cvars that cut the CPU work of each render. A cvar the sets above
 //   hold keeps their value. Unset, empty or "0": nothing.
@@ -72,6 +73,14 @@ inline constexpr std::size_t kRegistrationObject = 14;
 // Locates the setter and the cvars on the first call, then writes any cvar that differs from its value.
 // `stereo`: Route S is on, so the stereo set applies. Cheap after the first call.
 void apply(bool stereo);
+
+// Head-tracked mono with the render size on (the launcher's Mono at the headset's size): from the first
+// present, only the window set of stereo_seq::monoWindowCvars (r_fullscreen 0 and the command line's
+// r_windowWidth / r_windowHeight, as under Route S, and nothing else), so a load path that applies the
+// player's video mode cannot take the one image to the display's size or to full screen. Once the render size
+// is off the size is left to the game as under Route S. Never after apply(true) or Parallel Eye Rendering's
+// apply(false).
+void applyMonoWindow();
 
 // Writes so far (the first write of each cvar included).
 std::uint64_t writes();

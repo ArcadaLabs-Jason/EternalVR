@@ -8,13 +8,14 @@ namespace EternalVR.Launcher.Core.Launch
 {
     public sealed class ForcedCvar
     {
-        public ForcedCvar(string name, string value, bool stereoOnly = false, bool monoOnly = false, bool steamOnly = false)
+        public ForcedCvar(string name, string value, bool stereoOnly = false, bool monoOnly = false, bool steamOnly = false, bool windowSet = false)
         {
             Name = name;
             Value = value;
-            StereoOnly = stereoOnly;
-            MonoOnly = monoOnly && !stereoOnly;
+            StereoOnly = stereoOnly && !windowSet;
+            MonoOnly = monoOnly && !stereoOnly && !windowSet;
             SteamOnly = steamOnly;
+            WindowSet = windowSet;
         }
 
         public string Name { get; }
@@ -27,11 +28,14 @@ namespace EternalVR.Launcher.Core.Launch
         public bool MonoOnly { get; }
         /// <summary>Forced only for the Steam build of the game.</summary>
         public bool SteamOnly { get; }
+        /// <summary>The game window's mode and size: forced in stereo, and in mono only when the game renders at the headset's
+        /// size (the render size; otherwise mono keeps the flat game's window and resolution).</summary>
+        public bool WindowSet { get; }
     }
 
     /// <summary>
     /// The one list of cvars a VR launch forces on the command line (T-092), kept as data in
-    /// <c>data\forced-cvars.txt</c> (<c>name | value [| stereo|mono [| steam]]</c>). The same names, stereo and mono ones
+    /// <c>data\forced-cvars.txt</c> (<c>name | value [| stereo|mono|window [| steam]]</c>). The same names, stereo and mono ones
     /// included, are the keys the settings restore puts back after the session (T-036).
     /// </summary>
     public sealed class ForcedCvars
@@ -46,12 +50,16 @@ namespace EternalVR.Launcher.Core.Launch
 
         public IEnumerable<string> Names => All.Select(c => c.Name);
 
-        /// <summary>The cvars one launch forces: the stereo ones only in stereo, the mono ones only in mono, the others in both.</summary>
-        public IEnumerable<ForcedCvar> For(bool stereo) => All.Where(c => stereo ? !c.MonoOnly : !c.StereoOnly);
+        /// <summary>
+        /// The cvars one launch forces: the stereo ones only in stereo, the mono ones only in mono, the window set in stereo and,
+        /// with <paramref name="renderSize"/> (the game renders at the headset's size), in mono; the others in both.
+        /// </summary>
+        public IEnumerable<ForcedCvar> For(bool stereo, bool renderSize = false) =>
+            All.Where(c => stereo ? !c.MonoOnly : c.WindowSet ? renderSize : !c.StereoOnly);
 
         /// <summary>The cvars one launch of the given build of the game forces.</summary>
-        public IEnumerable<ForcedCvar> For(bool stereo, GamePlatform platform) =>
-            For(stereo).Where(c => !c.SteamOnly || platform == GamePlatform.Steam);
+        public IEnumerable<ForcedCvar> For(bool stereo, GamePlatform platform, bool renderSize = false) =>
+            For(stereo, renderSize).Where(c => !c.SteamOnly || platform == GamePlatform.Steam);
 
         public static ForcedCvars Parse(string text)
         {
@@ -67,16 +75,17 @@ namespace EternalVR.Launcher.Core.Launch
                     throw new FormatException("forced-cvars: the fourth field of " + name + " is 'steam' or nothing, not " + build);
                 bool stereoOnly = string.Equals(when, "stereo", StringComparison.OrdinalIgnoreCase);
                 bool monoOnly = string.Equals(when, "mono", StringComparison.OrdinalIgnoreCase);
-                if (when.Length > 0 && !stereoOnly && !monoOnly)
-                    throw new FormatException("forced-cvars: the third field of " + name + " is 'stereo', 'mono' or nothing, not " + when);
-                if (value.StartsWith("$", StringComparison.Ordinal) && (!stereoOnly || (value != EyeWidth && value != EyeHeight)))
-                    throw new FormatException("forced-cvars: " + value + " is not a placeholder of a stereo cvar");
+                bool windowSet = string.Equals(when, "window", StringComparison.OrdinalIgnoreCase);
+                if (when.Length > 0 && !stereoOnly && !monoOnly && !windowSet)
+                    throw new FormatException("forced-cvars: the third field of " + name + " is 'stereo', 'mono', 'window' or nothing, not " + when);
+                if (value.StartsWith("$", StringComparison.Ordinal) && (!(stereoOnly || windowSet) || (value != EyeWidth && value != EyeHeight)))
+                    throw new FormatException("forced-cvars: " + value + " is not a placeholder of a stereo or window cvar");
                 if (name.Length == 0 || name.StartsWith("+", StringComparison.Ordinal) || name.Contains(" "))
                     throw new FormatException("forced-cvars: bad cvar name: " + name);
                 if (value.Length == 0) throw new FormatException("forced-cvars: no value for " + name);
                 if (list.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)))
                     throw new FormatException("forced-cvars: listed twice: " + name);
-                list.Add(new ForcedCvar(name, value, stereoOnly, monoOnly, steamOnly));
+                list.Add(new ForcedCvar(name, value, stereoOnly, monoOnly, steamOnly, windowSet));
             }
             return new ForcedCvars(list);
         }

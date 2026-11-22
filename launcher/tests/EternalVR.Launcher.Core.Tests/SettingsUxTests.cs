@@ -277,13 +277,15 @@ namespace EternalVR.Launcher.Core.Tests
             var mono = new LauncherSettings { Mode = VrMode.Mono };
             foreach (var setting in new[]
             {
-                Setting.Resolution, Setting.EachEye, Setting.AntiAliasing, Setting.TextureStreaming, Setting.ParallelEyes, Setting.CpuSaver, Setting.DesktopWindow, Setting.Foveation,
+                Setting.AntiAliasing, Setting.TextureStreaming, Setting.ParallelEyes, Setting.CpuSaver, Setting.DesktopWindow, Setting.Foveation,
                 Setting.FramePacing, Setting.EdgeMargin,
             })
                 Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, mono));
             // The UI layer runs in mono too, so its settings apply.
             foreach (var setting in new[] { Setting.VrMode, Setting.WorldSize, Setting.EyeDistance, Setting.CutsceneView, Setting.Runtime, Setting.HudDistance,
-                                            Setting.HudSize, Setting.HudHeight, Setting.MenuLaser, Setting.HudFront, Setting.HudWrist, Setting.HudWeapon })
+                                            Setting.HudSize, Setting.HudHeight, Setting.MenuLaser, Setting.HudFront, Setting.HudWrist, Setting.HudWeapon,
+                                            // Mono renders its one image at the render size too, in the same desktop mirror.
+                                            Setting.Resolution, Setting.EachEye, Setting.DesktopMonitor, Setting.DesktopSize, Setting.DesktopCrop })
                 Assert.Null(SettingRules.WhyNot(setting, mono));
         }
 

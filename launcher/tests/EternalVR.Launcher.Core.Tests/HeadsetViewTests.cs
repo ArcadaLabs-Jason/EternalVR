@@ -37,9 +37,9 @@ namespace EternalVR.Launcher.Core.Tests
         private static HeadsetIdentity Id(HeadsetFacts f, SteamVrHeadset seen = null) => HeadsetIdentity.Identify(f.RuntimeName, f.SystemName, seen, Table);
 
         private static string EachEye(HeadsetFacts f, double scale = 1.0, ResolutionBase b = ResolutionBase.Auto, string renderSize = "auto",
-            AntiAliasingMode aa = AntiAliasingMode.Taa, DlssQuality q = DlssQuality.Quality, SteamVrHeadset seen = null) =>
+            AntiAliasingMode aa = AntiAliasingMode.Taa, DlssQuality q = DlssQuality.Quality, SteamVrHeadset seen = null, bool rtx = true) =>
             HeadsetView.EachEye(new LauncherSettings { RenderScale = scale, ResolutionBase = b, RenderSize = renderSize, AntiAliasing = aa, Dlss = q },
-                f, f == null ? null : Id(f, seen));
+                f, f == null ? null : Id(f, seen), null, rtx);
 
         [Fact]
         public void EachEyeBeforeAnyProbeIsSetAtLaunch()
@@ -71,16 +71,44 @@ namespace EternalVR.Launcher.Core.Tests
         }
 
         [Fact]
-        public void EachEyeWithDlssSaysAboutWhatItDraws()
+        public void EachEyeWithDlssSaysWhatItDrawsAndWhatItScalesUpTo()
         {
-            Assert.Equal("2496 x 2688   100% of what VD asks for, 121% of the native panel\nDLSS Quality draws about 1664 x 1792\n"
-                + "47% more pixels than Auto",
+            // Auto with DLSS: the budget holds what DLSS draws, so Quest 3 through VD renders what VD asks for, against TAA's
+            // 2056 x 2216; Auto at 1.00 with DLSS is the same size, so no "more than Auto" note.
+            Assert.Equal("2496 x 2688   100% of what VD asks for, 121% of the native panel\n"
+                + "DLSS Quality draws about 1664 x 1792, scaled up to 2496 x 2688\n"
+                + "47% more pixels than Auto with TAA: sharper, but more work for the graphics card",
+                EachEye(Quest3, aa: AntiAliasingMode.Dlss));
+            // What the runtime asks for has no budget: the same size, and nothing more than Auto with DLSS.
+            Assert.Equal("2496 x 2688   100% of what VD asks for, 121% of the native panel\n"
+                + "DLSS Quality draws about 1664 x 1792, scaled up to 2496 x 2688",
                 EachEye(Quest3, 1.0, ResolutionBase.Ask, aa: AntiAliasingMode.Dlss));
-            Assert.Contains("DLSS Performance draws about 1028 x 1108", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Performance));
-            Assert.Contains("DLSS Balanced draws about 1192 x 1285", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Balanced));
-            Assert.Contains("DLSS Ultra Performance draws about 685 x 739", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.UltraPerformance));
-            Assert.Contains("DLAA draws about 2056 x 2216", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Dlaa));
+            Assert.Contains("DLSS Performance draws about 1248 x 1344, scaled up to 2496 x 2688", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Performance));
+            Assert.Contains("DLSS Balanced draws about 1448 x 1559, scaled up to 2496 x 2688", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Balanced));
+            Assert.Contains("DLSS Ultra Performance draws about 832 x 896, scaled up to 2496 x 2688", EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.UltraPerformance));
+            // DLAA draws the full size: Auto as with TAA.
+            Assert.Equal("2056 x 2216   82% of what VD asks for, 100% of the native panel\nDLAA draws about 2056 x 2216",
+                EachEye(Quest3, aa: AntiAliasingMode.Dlss, q: DlssQuality.Dlaa));
             Assert.DoesNotContain("DLSS", EachEye(Quest3, aa: AntiAliasingMode.Off));
+            // Virtual Desktop's Godlike: the output is capped at 1.5 times the budget, so 2536 x 2696, 50% more than TAA's Auto.
+            var godlike = Read("VirtualDesktopXR", "Meta Quest 3", 3072, 3264);
+            Assert.Equal("2536 x 2696   83% of what VD asks for, 123% of the native panel\n"
+                + "DLSS Quality draws about 1691 x 1797, scaled up to 2536 x 2696\n"
+                + "50% more pixels than Auto with TAA: sharper, but more work for the graphics card",
+                EachEye(godlike, aa: AntiAliasingMode.Dlss));
+            // Not an NVIDIA RTX card (or none known): DLSS falls back to TAA in the game, so Auto keeps TAA's size.
+            Assert.Equal("2056 x 2216   82% of what VD asks for, 100% of the native panel\nDLSS Quality draws about 1371 x 1477, scaled up to 2056 x 2216",
+                EachEye(Quest3, aa: AntiAliasingMode.Dlss, rtx: false));
+            // A recommendation within the budget (the simulator's): the same size as TAA's, no note.
+            var sim = Read("OpenXR Simulator", "Simulator", 1280, 1400);
+            Assert.Equal("1280 x 1400   100% of what the runtime asks for\nDLSS Quality draws about 853 x 933, scaled up to 1280 x 1400",
+                EachEye(sim, aa: AntiAliasingMode.Dlss));
+            // A scale above 1 is said against Auto at 1.00 with DLSS too, and against TAA at the same scale.
+            Assert.Equal("2992 x 3224   120% of what VD asks for, 145% of the native panel\n"
+                + "DLSS Quality draws about 1995 x 2149, scaled up to 2992 x 3224\n"
+                + "47% more pixels than Auto with TAA: sharper, but more work for the graphics card\n"
+                + "44% more pixels than Auto",
+                EachEye(Quest3, 1.2, aa: AntiAliasingMode.Dlss));
         }
 
         [Fact]
@@ -108,9 +136,17 @@ namespace EternalVR.Launcher.Core.Tests
             // The layer rounds a fixed size to multiples of 8 too.
             Assert.Equal("2064 x 2104 (fixed size, render_size in launcher.ini)", EachEye(null, 1.0, ResolutionBase.Auto, "2060x2100"));
             Assert.Equal("The game window's size (render_size off)", EachEye(Quest3, 1.0, ResolutionBase.Auto, "off"));
-            var mono = new LauncherSettings { Mode = VrMode.Mono };
-            Assert.Equal("The game's own resolution (mono)", HeadsetView.EachEye(mono, Quest3, Id(Quest3)));
-            Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(Setting.EachEye, mono));
+            // Mono: the one image both eyes see, at one eye's size, with no edge margin and no DLSS line (the game's own
+            // anti-aliasing runs in mono).
+            var mono = new LauncherSettings { Mode = VrMode.Mono, EdgeMargin = EdgeMarginMode.Large, AntiAliasing = AntiAliasingMode.Dlss };
+            Assert.Equal("2056 x 2216   82% of what VD asks for, 100% of the native panel\nMono: one image at this size for both eyes",
+                HeadsetView.EachEye(mono, Quest3, Id(Quest3)));
+            Assert.Equal("2472 x 2656   99% of what VD asks for, 120% of the native panel\nMono: one image at this size for both eyes\n"
+                + "44% more pixels than Auto", HeadsetView.EachEye(new LauncherSettings { Mode = VrMode.Mono, RenderScale = 1.2 }, Quest3, Id(Quest3)));
+            Assert.Equal("The game's own resolution (mono, render_size off)",
+                HeadsetView.EachEye(new LauncherSettings { Mode = VrMode.Mono, RenderSize = "off" }, Quest3, Id(Quest3)));
+            Assert.Null(SettingRules.WhyNot(Setting.EachEye, mono));
+            Assert.Null(SettingRules.WhyNot(Setting.Resolution, mono));
             Assert.Null(SettingRules.WhyNot(Setting.EachEye, new LauncherSettings()));
         }
 
@@ -133,9 +169,10 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.EndsWith("\nPlanned: 2064 x 2208 (fixed size, render_size in launcher.ini)",
                 HeadsetView.EachEye(new LauncherSettings { RenderSize = "2064x2208" }, Quest3, Id(Quest3), cap));
             Assert.EndsWith("the window's size\nSet from your headset at Launch VR", HeadsetView.EachEye(s, null, null, cap));
-            // Off and mono say what they always say.
+            // Off says what it always says; mono's plan comes after the capped session's line as stereo's does.
             Assert.Equal("The game window's size (render_size off)", HeadsetView.EachEye(new LauncherSettings { RenderSize = "off" }, Quest3, Id(Quest3), cap));
-            Assert.Equal("The game's own resolution (mono)", HeadsetView.EachEye(new LauncherSettings { Mode = VrMode.Mono }, Quest3, Id(Quest3), cap));
+            Assert.EndsWith("\nPlanned: 2056 x 2216   82% of what VD asks for, 100% of the native panel\nMono: one image at this size for both eyes",
+                HeadsetView.EachEye(new LauncherSettings { Mode = VrMode.Mono }, Quest3, Id(Quest3), cap));
         }
 
         [Fact]

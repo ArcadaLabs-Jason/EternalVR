@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using EternalVR.Launcher.Core.Settings;
 
 namespace EternalVR.Launcher.Core.Launch
 {
@@ -50,6 +51,11 @@ namespace EternalVR.Launcher.Core.Launch
         public float Scale { get; set; } = 1.0f;
         /// <summary>Auto: the edge margin's factor, both sides times it after the scale; 1 without one.</summary>
         public double Growth { get; set; } = 1.0;
+        /// <summary>
+        /// Auto: the share of each side DLSS renders before it scales up to the render size (<see cref="RenderSize.DlssInputShare"/>);
+        /// the pixel budget then holds what DLSS renders. 1 without DLSS and with DLAA: the budget holds the render size itself.
+        /// </summary>
+        public double DlssInput { get; set; } = 1.0;
     }
 
     /// <summary>
@@ -70,6 +76,18 @@ namespace EternalVR.Launcher.Core.Launch
         public const float MaxScale = 2.0f;
         /// <summary>The default pixel budget per eye: 2064 x 2208 (4.56 Mpix); the recommendation is scaled down into it, never up.</summary>
         public const ulong DefaultPixelBudget = 2064UL * 2208UL;
+        /// <summary>
+        /// With DLSS, Auto's output (the size DLSS scales up to) stays within this many times the pixel budget, before the scale and
+        /// the edge margin's growth (about 6.84 Mpix per eye): VDXR's 2496 x 2688 fits (the layer's <c>render_size::kDlssOutputCap</c>).
+        /// </summary>
+        public const double DlssOutputCap = 1.5;
+
+        /// <summary>
+        /// The share of each side DLSS renders at <paramref name="quality"/> before it scales up (<see cref="DlssDll.QualityFactors"/>,
+        /// the layer's <c>render_size::kDlssInputShare</c>): 1 for DLAA.
+        /// </summary>
+        public static double DlssInputShare(DlssQuality quality) =>
+            DlssDll.QualityFactors[Math.Max(0, Math.Min(DlssDll.QualityFactors.Length - 1, (int)quality))];
 
         /// <summary>Unset or empty, <c>off</c>, <c>0</c>: Off. <c>auto</c>. <c>WxH</c> with each side 256..8192. Null for anything else.</summary>
         public static RenderSizeRequest ParseRenderSize(string text)
@@ -146,7 +164,7 @@ namespace EternalVR.Launcher.Core.Launch
             {
                 case RenderSizeMode.Fixed: return FittedGrowth(request.Fixed, growth, limits);
                 case RenderSizeMode.Auto:
-                    var wanted = limits == null ? null : AutoWanted(limits, request.Scale, DefaultPixelBudget, growth);
+                    var wanted = limits == null ? null : AutoWanted(limits, request.Scale, DefaultPixelBudget, growth, request.DlssInput);
                     return wanted == null ? growth : FittedGrowth(wanted.Value, growth, limits);
                 default: return growth;
             }
@@ -155,23 +173,32 @@ namespace EternalVR.Launcher.Core.Launch
         /// <summary>
         /// Auto: the recommendation scaled uniformly into <paramref name="budget"/> pixels (never up), times
         /// <paramref name="scale"/> and <paramref name="growth"/> (the edge margin's, past the budget like a scale above 1), then
-        /// fitted. Null when the recommendation is empty or the scale or the growth is not a positive finite number.
+        /// fitted. With DLSS (<paramref name="dlssInput"/> below 1, the share of each side it renders) the budget holds what DLSS
+        /// renders: the size is the one whose DLSS input fits it, never above the recommendation nor above <see cref="DlssOutputCap"/>
+        /// times the budget. Null when the recommendation is
+        /// empty or the scale or the growth is not a positive finite number; a <paramref name="dlssInput"/> that is not a number
+        /// between 0 and 1 counts as 1.
         /// </summary>
-        public static Extent? AutoSize(ViewLimits limits, float scale, ulong budget = DefaultPixelBudget, double growth = 1.0)
+        public static Extent? AutoSize(ViewLimits limits, float scale, ulong budget = DefaultPixelBudget, double growth = 1.0, double dlssInput = 1.0)
         {
-            var wanted = AutoWanted(limits, scale, budget, growth);
+            var wanted = AutoWanted(limits, scale, budget, growth, dlssInput);
             return wanted == null ? (Extent?)null : FitToLimits(wanted.Value, limits);
         }
 
         // Auto's size before it is fitted to the limits (render_size.cpp's autoWanted).
-        private static Extent? AutoWanted(ViewLimits limits, float scale, ulong budget, double growth)
+        private static Extent? AutoWanted(ViewLimits limits, float scale, ulong budget, double growth, double dlssInput)
         {
             if (limits == null || limits.Recommended.IsEmpty || float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0.0f) return null;
             if (double.IsNaN(growth) || double.IsInfinity(growth) || growth <= 0.0) return null;
             double w = limits.Recommended.Width;
             double h = limits.Recommended.Height;
-            double pixels = w * h;
+            double input = !double.IsNaN(dlssInput) && dlssInput > 0.0 && dlssInput < 1.0 ? dlssInput : 1.0;
+            // What renders at the recommendation: the recommendation itself, or DLSS's input for it.
+            double pixels = w * h * input * input;
             double fit = budget > 0 && pixels > budget ? Math.Sqrt(budget / pixels) : 1.0;
+            // With DLSS the size it scales up to stays within DlssOutputCap times the budget.
+            double cap = budget * DlssOutputCap;
+            if (input < 1.0 && budget > 0 && w * h * fit * fit > cap) fit = Math.Sqrt(cap / (w * h));
             double factor = fit * scale * growth;
             return new Extent((uint)LRound(w * factor), (uint)LRound(h * factor));
         }
@@ -198,19 +225,22 @@ namespace EternalVR.Launcher.Core.Launch
             switch (request.Mode)
             {
                 case RenderSizeMode.Fixed: return FitToLimits(request.Fixed, limits ?? new ViewLimits());
-                case RenderSizeMode.Auto: return limits == null ? (Extent?)null : AutoSize(limits, request.Scale, DefaultPixelBudget, request.Growth);
+                case RenderSizeMode.Auto: return limits == null ? (Extent?)null : AutoSize(limits, request.Scale, DefaultPixelBudget, request.Growth, request.DlssInput);
                 default: return null;
             }
         }
 
-        /// <summary>For the log: "off", "auto x1.00" (with ", edge margin x1.20" when it grows) or "WxH".</summary>
+        /// <summary>For the log: "off", "auto x1.00" (with ", edge margin x1.20" when it grows and ", the budget on DLSS's input
+        /// x0.667" with DLSS) or "WxH".</summary>
         public static string Describe(RenderSizeRequest request)
         {
             switch (request.Mode)
             {
                 case RenderSizeMode.Auto:
                     return "auto x" + ((double)request.Scale).ToString("0.00", CultureInfo.InvariantCulture)
-                        + (request.Growth > 1.0 ? ", edge margin x" + request.Growth.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty);
+                        + (request.Growth > 1.0 ? ", edge margin x" + request.Growth.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty)
+                        + (request.DlssInput > 0.0 && request.DlssInput < 1.0
+                            ? ", the budget on DLSS's input x" + request.DlssInput.ToString("0.000", CultureInfo.InvariantCulture) : string.Empty);
                 case RenderSizeMode.Fixed: return request.Fixed.ToString();
                 default: return "off";
             }

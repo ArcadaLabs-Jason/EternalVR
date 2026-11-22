@@ -5,11 +5,34 @@
 #include "vkcore/edge_margin_setting.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mirror_place.hpp"
+#include "vkcore/taa_hooks.hpp"
 
 #include <cstdio>
+#include <cwchar>
 #include <string>
 
 namespace evr::vkcore::virtual_client {
+
+namespace {
+
+// The share of each side DLSS renders at the launcher's DLSS (render_size::dlssInputShare): stereo with
+// ETERNALVR_STEREO_DLSS on and anti-aliasing not off (ETERNALVR_STEREO_TAA=0), as Route S and Parallel Eye
+// Rendering run it; 1 without DLSS, with DLAA or when ETERNALVR_STEREO_DLSS_QUALITY names no quality (the
+// game's own r_dlssQuality is not known this early).
+double dlssInputAtLaunch() {
+    std::wstring mode;
+    std::wstring taa;
+    const bool stereo = readEnv(L"ETERNALVR_MODE", mode) && _wcsicmp(mode.c_str(), L"stereo") == 0;
+    readEnv(L"ETERNALVR_STEREO_TAA", taa);
+    const bool antiAliasingOff = _wcsicmp(taa.c_str(), L"0") == 0 || _wcsicmp(taa.c_str(), L"false") == 0 ||
+                                 _wcsicmp(taa.c_str(), L"off") == 0;
+    if (!stereo || antiAliasingOff || !taaDlssRequested()) {
+        return 1.0;
+    }
+    return render_size::dlssInputShare(taaDlssQuality(), taaDlssDlaa());
+}
+
+} // namespace
 
 const Settings& settings() {
     static const Settings s = [] {
@@ -36,6 +59,8 @@ const Settings& settings() {
         // grown) is used as it is.
         if (out.request.mode == render_size::Mode::Auto) {
             out.request.growth = static_cast<double>(edgeMarginFactor());
+            // With DLSS the pixel budget holds what DLSS renders, not the size it scales up to.
+            out.request.dlssInput = dlssInputAtLaunch();
         }
         if (readEnv(L"ETERNALVR_MIRROR_WINDOW", mirror) && !mirror.empty()) {
             out.mirror = render_size::parseWindowRect(mirror);

@@ -13,6 +13,12 @@
 #                (the map's fade-in is left out: each eye's captures before its view first reaches 85% of its median
 #                brightness). The
 #                render size is the launcher's auto, so the simulator's 1280x1400 grows to 1536x1680
+#   mono-size    Mono at the render size: e1m2's start head-tracked mono with ETERNALVR_RENDER_SIZE=auto, the one
+#                image at the simulator's 1280x1400 (one image per swapchain), the game's and the headset's swapchains
+#                at it, and only r_fullscreen 0 and the window's size held (docs/VR_HEAD_TRACKED.md "Render size").
+#                The harness's launch: ETERNALVR_MODE=mono set here and launch-ht.ps1's 1280x720 window size on the
+#                command line (the size the hold keeps); the launcher's own Mono launch is checked by hand
+#                (docs/rig-findings/render-size.md section 11)
 
 $script:QaMarginRenders = 'edge margin: eye (\d) renders left ([\d.-]+) right ([\d.-]+) up ([\d.-]+) down ([\d.-]+) deg for its view''s ([\d.-]+) / ([\d.-]+) / ([\d.-]+) / ([\d.-]+)'
 $script:QaMarginSubmitted = 'edge margin: the projection layer''s eye (\d) is submitted with left ([\d.-]+) right ([\d.-]+) up ([\d.-]+) down ([\d.-]+) deg over its (\d+)x(\d+) half'
@@ -174,6 +180,25 @@ $marginScenarios = @(
         Input = $script:QaRestPose
         Timeline = { param($c) Wait-QaSeconds $c 25; Save-QaShot $c 'window'; Save-QaXrShot $c 'end' }
         Asserts = $script:QaMarginAsserts
+    }
+    @{
+        # The launcher's Mono (docs/VR_HEAD_TRACKED.md "Render size"): the one image at one eye's automatic size, its own
+        # swapchain width, and only the window's mode and size held.
+        Name = 'mono-size'; Kind = 'game'
+        Proves = 'Head-tracked mono at the render size (ETERNALVR_MODE=mono, ETERNALVR_RENDER_SIZE=auto, as the launcher''s Mono passes it): the simulator''s 1280x1400 for the one image, one image per swapchain, the game''s swapchain and the headset''s at that size, and only r_fullscreen and the window''s size held (not r_swapInterval)'
+        Env = @('ETERNALVR_MODE=mono', 'ETERNALVR_RENDER_SIZE=auto', 'ETERNALVR_RENDER_SCALE=1.00')
+        Input = $script:QaRestPose
+        Timeline = { param($c) Wait-QaSeconds $c 20; Save-QaXrShot $c 'end' }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'size: the runtime recommends 1280x1400 per eye \(.*1 eye\(s\) side by side\); render size auto x1\.00 gives 1280x1400' -Regex
+            Test-QaPresent $c "size: the game's swapchain has the render size 1280x1400"
+            Test-QaPresent $c 'xr: swapchain 1280x1400 (1 eye image(s) of 1280x1400)'
+            Test-QaPresent $c "cvars: head-tracked mono with the render size: only the window's mode and size are held"
+            Test-QaPresent $c 'cvars: held at run time: r_fullscreen 0, r_windowWidth \d+, r_windowHeight \d+' -Regex
+            Test-QaAbsent $c 'seq: Route S on'
+            Test-QaAbsent $c 'cvars: r_swapInterval'
+        }
     }
 )
 

@@ -281,7 +281,9 @@ own settings override the command line here as well (a rig run with them on the 
 command line: the layer's hold sets them, from Route S's first present (`presenter_copy.cpp`, before the
 runtime's session and the first map), and a multiplayer guard trip gives the player's own values back
 (`cvar_book.hpp`). Only `r_hdrDisplay 0` stays on the command line, since the game picks the swapchain's format at
-start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these, so mono launches
+start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these (with the render
+size on, only the window set's `r_fullscreen 0` and size, not `r_swapInterval`: `stereo_seq::monoWindowCvars`,
+docs/VR_HEAD_TRACKED.md "Render size"), so mono launches
 keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`), all but the underwater warp (one
 picture for both eyes, so it stays as the game has it). The launcher's session restore puts the player's values
 back in the game's text configs either way. Four held cvars are saved into the player's profile (`profile.bin`)
@@ -1751,6 +1753,23 @@ FOV onto the whole image, so any aspect works; the recommended size gives square
 window gave non-square ones, which the compositor maps back correctly, only the pixel density differing by
 axis).
 
+With the launcher's DLSS (`ETERNALVR_STEREO_DLSS=1` and a quality in `ETERNALVR_STEREO_DLSS_QUALITY`) the budget
+holds what DLSS renders, not the size it scales up to (since 0.1.101): the render size is the game's output, and
+DLSS renders NGX's optimal size for it (about 2/3 per side at Quality, 0.58 at Balanced, 1/2 at Performance, 1/3 at
+Ultra Performance), so Auto picks the output whose DLSS input fits the budget, never above the recommendation and
+never above 1.5 times the budget (about 6.84 Mpix, `render_size::kDlssOutputCap`), then the scale, the edge
+margin's growth and the limits as before (`render_size::autoSize`'s `dlssInput`; docs/rig-findings/render-size.md
+section 5). Quest 3 through VDXR at DLSS Quality renders 2496 x 2688 and DLSS draws about 1664 x 1792 of it; up to
+0.1.100 it was 2056 x 2216 with about 1371 x 1477 drawn. Virtual Desktop's Godlike (3072 x 3264) is capped at
+2536 x 2696. TAA, Off, DLAA and a
+quality the layer does not know keep the size above, and so does the launcher on a graphics card that is not an
+NVIDIA RTX card (where DLSS cannot run per eye). The size is decided at the start: when DLSS falls back to TAA
+(no per-eye feature for eye R) TAA renders the larger size until the next launch. Log:
+`size: render size auto x1.00, the budget on DLSS's input x0.667 (T-031)`, and the runtime's line ends with
+`render size auto x1.00, the budget on DLSS's input x0.667 gives 2496x2688`; the launcher, which starts the game at
+the size it works out the same way, logs `render size 2496x2688 from the runtime's recommendation 2496x2688
+(scale 1.00), the pixel budget on what DLSS renders (x0.667 per side)`.
+
 ## Edge margin (`ETERNALVR_EDGE_MARGIN`, the launcher's Edge margin)
 
 A runtime shows each frame turned to the head pose at its display time: the frame was rendered for a pose the
@@ -1887,7 +1906,7 @@ window cut to the view).
 | `ETERNALVR_STEREO_SWAP_IMAGES` | 4 | the game's swapchain image count under Route S (0: the game's own, 2) |
 | `ETERNALVR_WINDOW_PRESENTS` | gated on NVIDIA | `all`: every present reaches the game's window (no image is handed back); `gated`: hand images back on any GPU |
 | `ETERNALVR_MIRROR` | left | what the game's window shows during stereo pairs: `left`, `right` (one tick late) or `off` (black); while a menu is up over the game, the menu panel's image (Desktop window, Menus in the window) |
-| `ETERNALVR_RENDER_SIZE` | off (launcher: auto) | `auto`: each eye at the runtime's recommended size (budget 2064 x 2208 pixels) times the scale; `WxH`: that size; `off`: the window's size (docs/rig-findings/render-size.md) |
+| `ETERNALVR_RENDER_SIZE` | off (launcher: auto) | `auto`: each eye at the runtime's recommended size (budget 2064 x 2208 pixels; with DLSS per eye the budget holds DLSS's input, "Render size") times the scale; `WxH`: that size; `off`: the window's size (docs/rig-findings/render-size.md). In mono the one image at the same size (one image per swapchain; the launcher's Mono passes it too, docs/VR_HEAD_TRACKED.md "Render size") |
 | `ETERNALVR_RENDER_SCALE` | 1.0 | 0.5 to 2.0, multiplies the `auto` size (above 1 past the budget) |
 | `ETERNALVR_EDGE_MARGIN` | off (launcher: off) | stereo: `small`, `medium`, `large` or a whole percentage 1 to 50: each eye renders its FOV's tangents times 1.10, 1.20, 1.30 (or 1 + the percentage) and is submitted with that FOV; an `auto` size grows by the same factor and the FOV widens only as far as the fitted size holds (section "Edge margin"); `off`, `none` or `0`: the view only. Not yet tested in a headset |
 | `ETERNALVR_DEPTH_LAYER` | 0 | 1: each eye's depth to the runtime with its projection view (Depth layer; the launcher's Depth for headset smoothing) |

@@ -577,7 +577,7 @@ xrSyncActions -> snapshot  ----+    head located -> controller poses       user 
   viewmodel: head aim: game origin (...) -> at the head (...); eye (...), head offset (...), model from the
   eye D; N placed`, the first five and then every 10 s; the `controllers: on:` line reads `viewmodel at the
   head (the game's view)`. Rig (OpenXR-Simulator, both hands low by the hip pointing 50 degrees down, the
-  head level; dev main, then this change): before, the grip 0.55 m below the rendered eye
+  head level; the code before this change, then with it): before, the grip 0.55 m below the rendered eye
   and the gun pitched 50 degrees off the aim, only its tip at the bottom edge of the left eye's image; after,
   the model's origin at the rendered eye (the game's origin is its eye; the head stood 0.25 m above it), the
   gun along the view in both eyes with the combat shotgun, the Heavy Cannon zoomed (its scope on the line of

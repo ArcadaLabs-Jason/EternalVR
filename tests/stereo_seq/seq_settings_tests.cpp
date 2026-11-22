@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 using evr::stereo_seq::cvarsOnCommandLine;
 using evr::stereo_seq::kMaxCaptureBurst;
@@ -177,6 +178,47 @@ TEST_CASE("window cvars: the window's size is told apart from the rest of the se
     CHECK(evr::stereo_seq::isWindowSizeCvar("R_WINDOWWIDTH"));
     CHECK_FALSE(evr::stereo_seq::isWindowSizeCvar("r_windowWidthX"));
     CHECK_FALSE(evr::stereo_seq::isWindowSizeCvar(""));
+}
+
+TEST_CASE("mono window cvars: fullscreen off and the launch size, the player's vsync left alone") {
+    // The launcher's Mono at the render size: the game starts at it, the window is the desktop mirror.
+    const auto held = evr::stereo_seq::monoWindowCvars(
+        "game.exe +r_fullscreen 0 +r_windowWidth 2056 +r_windowHeight 2216 +map e1m1", "0,0,1280,720");
+    REQUIRE(held.size() == 3);
+    CHECK(held[0].name == "r_fullscreen");
+    CHECK(held[0].value == "0");
+    CHECK(held[1].name == "r_windowWidth");
+    CHECK(held[1].value == "2056");
+    CHECK(held[2].name == "r_windowHeight");
+    CHECK(held[2].value == "2216");
+    for (const auto& c : held) {
+        CHECK(c.name != "r_swapInterval");
+    }
+    // Without a size anywhere only the window mode is held; ETERNALVR_WINDOW's size as in stereo.
+    const auto bare = evr::stereo_seq::monoWindowCvars("game.exe +map e1m1");
+    REQUIRE(bare.size() == 1);
+    CHECK(bare[0].name == "r_fullscreen");
+    const auto window = evr::stereo_seq::monoWindowCvars("game.exe", "0,0,1280,720");
+    REQUIRE(window.size() == 3);
+    CHECK(window[1].value == "1280");
+    CHECK(window[2].value == "720");
+}
+
+TEST_CASE("mono window cvars: only the window's mode and size, whatever the stereo set holds") {
+    // The stereo window set as it is: a new entry there fails this check, so whether mono holds it too is
+    // decided in monoWindowCvars (an allow-list), not inherited.
+    const auto stereo =
+        evr::stereo_seq::stereoWindowCvars("game.exe +r_windowWidth 2056 +r_windowHeight 2216");
+    std::vector<std::string> names;
+    for (const auto& c : stereo) {
+        names.push_back(c.name);
+    }
+    CHECK(names ==
+          std::vector<std::string>{"r_fullscreen", "r_swapInterval", "r_windowWidth", "r_windowHeight"});
+    for (const auto& c :
+         evr::stereo_seq::monoWindowCvars("game.exe +r_windowWidth 2056 +r_windowHeight 2216")) {
+        CHECK((c.name == "r_fullscreen" || evr::stereo_seq::isWindowSizeCvar(c.name)));
+    }
 }
 
 TEST_CASE("launch size watch: the first swapchain is the launch size, a change reports the pixel ratio") {

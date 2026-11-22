@@ -53,6 +53,13 @@ namespace EternalVR.Launcher
         /// <summary>The last session's eye size when it was below the plan (<see cref="RenderCap"/>); null otherwise.</summary>
         public RenderCap LastRenderCap { get; private set; }
 
+        private bool? nvidiaRtx;
+        /// <summary>
+        /// The graphics card the game most likely runs on is an NVIDIA RTX card (<see cref="UntestedHardware.MainGpuIsNvidiaRtx"/>), read
+        /// once: with DLSS, Resolution's Auto then budgets what DLSS draws (<see cref="RenderSizeChoice.DlssInputFor"/>).
+        /// </summary>
+        public bool NvidiaRtx => nvidiaRtx ?? (nvidiaRtx = UntestedHardware.MainGpuIsNvidiaRtx(WindowsSystem.GpuAdapters())).Value;
+
         public bool TestMode => Options.TestExe != null;
 
         /// <summary>The player's controls in the data folder: the no-profile set and each VR settings profile's own.</summary>
@@ -396,6 +403,7 @@ namespace EternalVR.Launcher
                 Panel = probe != null && probe.Ok ? Identify(probe.RuntimeName, probe.SystemName).Known?.Panel : null,
                 Controls = Controls,
                 NewestDlss = PresentDlssPath(verify: true),
+                NvidiaRtx = NvidiaRtx,
                 PlayerSsdo = GameLayout.PlayerCvar(g.Locations, "r_SSDO"),
                 PlayerSsr = GameLayout.PlayerCvar(g.Locations, "r_SSR"),
                 ParallelEyesGame = g.Facts.Build?.RunsParallelEyes == true,

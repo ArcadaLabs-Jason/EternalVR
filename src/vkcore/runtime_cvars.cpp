@@ -52,6 +52,7 @@ std::mutex g_mutex;
 bool g_started = false;
 SetStringFn g_setString = nullptr;
 std::vector<Held> g_held;
+bool g_monoWindow = false; // applyMonoWindow() before the first apply: the mono window set only
 int g_loggedWrites = 0;
 std::atomic<std::uint64_t> g_writes{0};
 int g_profileIo = 0; // profile loads and saves under way (setProfileIo), under g_mutex
@@ -255,7 +256,8 @@ std::string commandLine() {
     return line;
 }
 
-void start(bool stereo) {
+// The sets a stereo or Parallel Eye Rendering session holds.
+void collect(bool stereo) {
     std::wstring off;
     if (stereo && !(readEnv(L"ETERNALVR_STEREO_RUNTIME_CVARS", off) && off == L"0")) {
         for (const auto& c : stereo_seq::stereoRuntimeCvars(stereo_seq::StereoTemporal::Off)) {
@@ -292,6 +294,15 @@ void start(bool stereo) {
     addReticleHold(g_held); // before the debug list, whose value entry for the cvar replaces it
     addDebugList();
     addPromptPlatform();
+}
+
+void start(bool stereo) {
+    if (g_monoWindow) {
+        EVR_LOG("%s: head-tracked mono with the render size: only the window's mode and size are held", kTag);
+        addWindowSet(g_held, true);
+    } else {
+        collect(stereo);
+    }
     // An optional profile cvar (photo mode) only while the profile hooks keep the player's value: held
     // without them, its VR value would be saved into the flat game's profile.
     std::erase_if(g_held, [](const Held& h) {
@@ -424,14 +435,15 @@ Held comfortHeld(const stereo_seq::CvarExpectation& c) {
     return h;
 }
 
-void addWindowSet(std::vector<Held>& held) {
+void addWindowSet(std::vector<Held>& held, bool mono) {
     std::wstring window;
     readEnv(L"ETERNALVR_WINDOW", window);
     std::string narrowWindow;
     for (const wchar_t ch : window) {
         narrowWindow.push_back(ch < 0x80 ? static_cast<char>(ch) : '?');
     }
-    for (const auto& c : stereo_seq::stereoWindowCvars(commandLine(), narrowWindow)) {
+    for (const auto& c : mono ? stereo_seq::monoWindowCvars(commandLine(), narrowWindow)
+                              : stereo_seq::stereoWindowCvars(commandLine(), narrowWindow)) {
         held.push_back(Held{c.name, c.value, true, false});
         held.back().windowSize = stereo_seq::isWindowSizeCvar(c.name);
     }
@@ -541,6 +553,16 @@ void apply(bool stereo) {
                               : "");
         }
     }
+}
+
+void applyMonoWindow() {
+    {
+        std::lock_guard lock(g_mutex);
+        if (!g_started) {
+            g_monoWindow = true;
+        }
+    }
+    apply(false);
 }
 
 void setStereoTemporal(stereo_seq::StereoTemporal temporal) {

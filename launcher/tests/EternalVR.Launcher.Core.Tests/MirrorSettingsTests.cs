@@ -69,10 +69,13 @@ namespace EternalVR.Launcher.Core.Tests
             Assert.False(off.ContainsKey("ETERNALVR_MIRROR_SIZE"));
             Assert.False(off.ContainsKey("ETERNALVR_MIRROR_CROP"));
             Assert.Equal("16:9", off["ETERNALVR_CINEMA_ASPECT"]);
-            // Mono: no stereo window and no cutscene screen.
+            // Mono: no cutscene screen; the mirror of its render size, and none with the render size off.
             var mono = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono })));
-            Assert.False(mono.ContainsKey("ETERNALVR_MIRROR_DISPLAY"));
+            Assert.True(mono.ContainsKey("ETERNALVR_MIRROR_DISPLAY"));
             Assert.False(mono.ContainsKey("ETERNALVR_CINEMA_ASPECT"));
+            var monoOff = Env(LaunchPlanBuilder.Build(Inputs(new LauncherSettings { Mode = VrMode.Mono, RenderSize = LauncherSettings.RenderSizeOff })));
+            Assert.False(monoOff.ContainsKey("ETERNALVR_MIRROR_DISPLAY"));
+            Assert.False(monoOff.ContainsKey("ETERNALVR_MIRROR_SIZE"));
         }
 
         [Fact]
@@ -106,8 +109,13 @@ namespace EternalVR.Launcher.Core.Tests
             {
                 Assert.Null(SettingRules.WhyNot(setting, new LauncherSettings()));
                 Assert.Equal(SettingRules.NeedsRenderSize, SettingRules.WhyNot(setting, new LauncherSettings { RenderSize = LauncherSettings.RenderSizeOff }));
-                Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(setting, new LauncherSettings { Mode = VrMode.Mono }));
+                // Mono's render size has the same mirror.
+                Assert.Null(SettingRules.WhyNot(setting, new LauncherSettings { Mode = VrMode.Mono }));
+                Assert.Equal(SettingRules.NeedsRenderSize,
+                    SettingRules.WhyNot(setting, new LauncherSettings { Mode = VrMode.Mono, RenderSize = LauncherSettings.RenderSizeOff }));
             }
+            // What the window shows during stereo pairs: stereo only.
+            Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(Setting.DesktopWindow, new LauncherSettings { Mode = VrMode.Mono }));
             Assert.Null(SettingRules.WhyNot(Setting.CutsceneShape, new LauncherSettings()));
             Assert.Equal(SettingRules.NeedsCinema, SettingRules.WhyNot(Setting.CutsceneShape, new LauncherSettings { Cutscenes = CutsceneView.Immersive }));
             Assert.Equal(SettingRules.NeedsStereo, SettingRules.WhyNot(Setting.CutsceneShape, new LauncherSettings { Mode = VrMode.Mono }));
